@@ -5,6 +5,7 @@ import { vi, describe, it, expect, beforeEach } from "vitest";
 
 import { setIdToken } from "@/auth/tokenStore";
 import { useFileUploadStore } from "@/hooks/files/useFileUploadStore";
+import { clientOperationHandlerRegistry } from "@/lib/clientOperations/handlers";
 import {
   chatMessagesQuery,
   fetchChatMessages,
@@ -1423,6 +1424,45 @@ describe("useChatMessaging", () => {
       kind: "action_required",
       startedAt: requestedAt,
     });
+  });
+
+  it("requests a client-operation sweep when the turn parks on a client tool", async () => {
+    const sweep = vi.fn<() => void>();
+    const unsubscribe = clientOperationHandlerRegistry.subscribe(sweep);
+    try {
+      const { startStreaming, sendSSEEvent } = setupChatMessagingTest();
+
+      await startStreaming("When am I free this week?");
+      await sendSSEEvent({
+        message_type: "assistant_message_started",
+        message_id: "assistant-parked-2",
+      });
+      expect(sweep).not.toHaveBeenCalled();
+      await sendSSEEvent({
+        message_type: "assistant_message_completed",
+        message_id: "assistant-parked-2",
+        message: {
+          id: "assistant-parked-2",
+          role: "assistant",
+          created_at: "2026-02-18T12:00:01.000Z",
+          updated_at: "2026-02-18T12:00:11.000Z",
+          content: [
+            {
+              content_type: "client_tool_pending",
+              attempt_id: "attempt-1",
+              tool_call_id: "call-1",
+              pending_tool_calls: [],
+            },
+          ],
+          input_files_ids: [],
+          is_message_in_active_thread: true,
+        },
+      });
+
+      expect(sweep).toHaveBeenCalledTimes(1);
+    } finally {
+      unsubscribe();
+    }
   });
 
   it("should force completion refetch via newly created chat id when hook chatId is null", async () => {

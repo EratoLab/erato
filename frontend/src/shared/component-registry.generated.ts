@@ -57,6 +57,7 @@ export { DefaultStarterPromptsSection } from "@/components/ui/Chat/StarterPrompt
 export { StarterPromptsSection } from "@/components/ui/Chat/StarterPromptsSection";
 export type { StarterPromptsRendererProps } from "@/components/ui/Chat/StarterPromptsSection";
 export type { StarterPromptsSectionProps } from "@/components/ui/Chat/StarterPromptsSection";
+export { SubmissionNotice } from "@/components/ui/Chat/SubmissionNotice";
 export { Card } from "@/components/ui/Container/Card";
 export type { CardControl } from "@/components/ui/Container/Card";
 export type { CardProps } from "@/components/ui/Container/Card";

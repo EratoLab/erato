@@ -54,6 +54,13 @@ export interface WordSelectionSupport {
    * OOXML already leaves out the sectPr, and a whole-text rewrite deletes a bookmark it misses.
    */
   listsBookmarks: boolean;
+  /**
+   * A comment a paragraph's OOXML leaves out may be found to lie around it by reading its anchor
+   * (queueWordCommentAnchors). On Word for the web Comment.getRange unhides hidden text in the
+   * anchored paragraph, and the change is saved (ERMAIN-948 F1), so there such a comment keeps
+   * its paragraph context only.
+   */
+  comparesCommentAnchors: boolean;
   reason: "host_unsupported" | null;
 }
 
@@ -120,6 +127,7 @@ export function wordSelectionSupport(
     keptItemParagraphs: desktop ? null : WORD_WEB_REVERT_MAX_PARAGRAPHS,
     listsBookmarks:
       platform === "Mac" && has(WORD_SELECTION_REQUIREMENTS.bookmarks),
+    comparesCommentAnchors: desktop,
     reason: canRewrite ? null : "host_unsupported",
   };
 }

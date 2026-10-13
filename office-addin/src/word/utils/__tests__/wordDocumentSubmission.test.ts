@@ -8,6 +8,12 @@ import {
   readySnapshot,
   examplePlan,
 } from "../../../test/mocks/word/authoringFixtures";
+import { installWordOoxmlHost } from "../../../test/mocks/word/ooxmlHost";
+import {
+  captureRealisticSnapshot,
+  realisticWordPackageXml,
+  statusRewritePlan,
+} from "../../../test/mocks/word/realisticWordFixtures";
 import { buildWordArtifact } from "../buildWordArtifact";
 import { WordDocumentReadSession } from "../wordDocumentReadTool";
 import {
@@ -47,6 +53,36 @@ async function setup() {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("structured Word submissions", () => {
+  it("classifies oversized full plans for scoped-read recovery", async () => {
+    const { snapshot, submit, plan } = await setup();
+    snapshot.completeReadIssue = "too-large";
+    expect(await submit(plan, context)).toMatchObject({
+      ok: false,
+      validationErrors: [{ code: "too-large" }],
+      submissionFeedback: { recovery: "read_current_context", terminal: false },
+    });
+  });
+
+  it("distinguishes stale tokens from a consumed capture", async () => {
+    const { snapshot, submit, plan } = await setup();
+    expect(await submit({ ...plan, snapshot: "stale" }, context)).toMatchObject(
+      {
+        ok: false,
+        submissionFeedback: {
+          recovery: "read_current_context",
+          terminal: false,
+        },
+      },
+    );
+    snapshot.used = true;
+    expect(
+      await submit(plan, { ...context, toolCallId: "used-capture" }),
+    ).toMatchObject({
+      ok: false,
+      submissionFeedback: { recovery: "cannot_continue", terminal: true },
+    });
+  });
+
   it("stages a deterministic receipt without entering the Word write host", async () => {
     const { submit, snapshot, plan } = await setup();
     const run = vi.fn(() => {
@@ -70,6 +106,48 @@ describe("structured Word submissions", () => {
     expect(
       await submit(plan, { ...context, toolCallId: "after-apply" }),
     ).toMatchObject({ ok: false });
+  });
+
+  it("accepts full plans on Word for the web unchanged, leaving the confirmation to the card", async () => {
+    installWordOoxmlHost(realisticWordPackageXml());
+    const snapshot = await captureRealisticSnapshot(context.messageId);
+    const session = new WordDocumentReadSession();
+    session.activate(snapshot, context);
+    expect(
+      (
+        await session.execute(
+          { snapshot: snapshot.token },
+          { ...context, toolCallId: "read-A" },
+        )
+      ).ok,
+    ).toBe(true);
+    const plan = {
+      ...statusRewritePlan(snapshot, "Status: revised."),
+      readToken: snapshot.readToken!,
+      sections: [
+        {
+          id: "final",
+          source: "section-1",
+          layout: { orientation: "landscape" as const },
+        },
+      ],
+    };
+    expect(
+      await createWordDocumentSubmissionExecutor(session)(plan, context),
+    ).toEqual({
+      ok: true,
+      result: {
+        draft_id: "submit-A",
+        snapshot: snapshot.token,
+        action: "word.apply_document_plan",
+      },
+    });
+
+    vi.stubGlobal("Office", {
+      context: { diagnostics: { platform: "OfficeOnline" } },
+    });
+    const body = await setup();
+    expect((await body.submit(body.plan, context)).ok).toBe(true);
   });
 
   it("corrects a bad style using the parser's path, then accepts the same draft", async () => {

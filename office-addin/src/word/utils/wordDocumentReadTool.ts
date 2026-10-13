@@ -248,6 +248,25 @@ export class WordDocumentReadSession {
   }
 
   execute: ClientToolExecutor = async (input, context) => {
+    const result = await this.executeRead(input, context);
+    if (result.ok) return result;
+    const snapshot = context && this.snapshotForSubmission(context);
+    if (
+      !snapshot ||
+      snapshot.used ||
+      snapshot.revoked ||
+      snapshot.issue ||
+      context?.signal?.aborted
+    ) {
+      return {
+        ...result,
+        submissionFeedback: { terminal: true, recovery: "cannot_continue" },
+      };
+    }
+    return result;
+  };
+
+  private executeRead: ClientToolExecutor = async (input, context) => {
     const session = this.session;
     const fail = (error: string, code: string, path = "/snapshot") => ({
       ok: false as const,

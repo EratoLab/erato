@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { allowWordWebImport } from "../../../test/mocks/word/applyPolicy";
 import {
   duplicateWordCustomXml,
   editWordPackage,
@@ -83,6 +84,7 @@ describe("repeated full-document Apply", { timeout: 60_000 }, () => {
   beforeEach(() => {
     window.WORD_FORCE_IMPORT_APPLY = true;
   });
+  beforeEach(allowWordWebImport);
   afterEach(() => {
     delete window.WORD_FORCE_IMPORT_APPLY;
   });

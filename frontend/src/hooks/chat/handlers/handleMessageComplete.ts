@@ -67,6 +67,7 @@ export const handleMessageComplete = (
       isStreaming: false,
       isFinalizing: true, // Signal that we're in the finalization phase
       content: finalContent,
+      submissionOutcome: realMessageData.submission_outcome,
       currentMessageId: realMessageId || null, // Update to real ID
     },
     streamKey,

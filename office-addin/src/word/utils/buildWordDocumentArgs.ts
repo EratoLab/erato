@@ -1,3 +1,4 @@
+import type { WordDocumentReadNote } from "./readWordDocument";
 import type { WordAuthoringSnapshot } from "@erato/frontend/word-review";
 
 export interface WordParagraphRead {
@@ -34,6 +35,7 @@ export interface WordDocumentHeading {
 
 export interface WordDocumentBuild {
   authoring?: WordAuthoringSnapshot;
+  readNote?: WordDocumentReadNote;
   args: WordDocumentArgs;
   coverage: WordDocumentCoverage;
   ordinalMap: Map<number, { uniqueLocalId: string | null; text: string }>;

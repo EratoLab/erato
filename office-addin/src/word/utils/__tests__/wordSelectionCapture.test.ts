@@ -4,6 +4,7 @@ import {
   installWordSelectionHost,
   SV2_MAIN_DOCUMENT,
   uninstallWordSelectionHost,
+  V3C_MULTI_DOCUMENT,
 } from "../../../test/mocks/word/selectionHost";
 import { wordKeptItemsArg } from "../wordSelectionArgs";
 import {
@@ -1604,6 +1605,209 @@ describe.each(HOSTS)(
       expect(host.calls().filter((call) => call.endsWith(".expandTo"))).toEqual(
         [],
       );
+    });
+  },
+);
+
+describe.each(HOSTS)(
+  "captureWordSelection around a comment whose anchor spans paragraphs on %s",
+  (flavour) => {
+    const ALL = new Set<WordSelectionShape>([
+      "paragraph",
+      "inline",
+      "multi_paragraph",
+    ]);
+    const capture = async (
+      target: MockSelectionTarget,
+      document: MockSelectionDocument = V3C_MULTI_DOCUMENT,
+      options: WordSelectionHostOptions = {},
+    ) => {
+      const host = installWordSelectionHost(document, {
+        host: flavour,
+        ...options,
+      });
+      host.select(target);
+      const read = await captureWordSelection("user", 15_000, ALL);
+      if (read.status !== "ok") throw new Error("capture failed");
+      return { host, selection: read.value };
+    };
+
+    // The rows of the ERMAIN-947 follow-up probe (Task A), on the v3c-multi fixture.
+    it.each<[string, MockSelectionTarget]>([
+      ["A1 whole P1", { p: "MA1" }],
+      ["A3 whole P3", { p: "MA3" }],
+      ["A4 inline P1, after the start", { p: "MA1", text: "alpha bravo" }],
+      ["A7 inline P3, before the end", { p: "MA3", text: "echo foxtrot" }],
+      ["A8 P1-P3 exactly", { p: "MA1", to: { p: "MA3" } }],
+      ["B1 whole P1", { p: "MB1" }],
+      ["B3 whole P3", { p: "MB3" }],
+      ["B4 inline P1, after the start", { p: "MB1", text: "india juliet" }],
+      ["B4b inline P1, at the start", { p: "MB1", text: "anchor starts" }],
+      ["B5 inline P1, before the start", { p: "MB1", text: "golf hotel" }],
+      ["B7 inline P3, before the end", { p: "MB3", text: "ends mike" }],
+      ["B7b inline P3, after the end", { p: "MB3", text: "oscar papa" }],
+      ["B7c inline P3, at the end", { p: "MB3", text: "november here" }],
+      [
+        "B8 P1-P3 exactly",
+        {
+          p: "MB1",
+          text: "anchor starts india juliet words.",
+          to: { p: "MB3", text: "MB3 Anchor ends mike november here" },
+        },
+      ],
+    ])("keeps %s context only", async (_, target) => {
+      const { host, selection } = await capture(target);
+      expect(selection).toMatchObject({
+        role: "context_only",
+        reasonCode: "comment_mark",
+      });
+      // ERMAIN-948 F1: on the web Comment.getRange can unhide hidden text, so no anchor is read.
+      expect(host.calls().includes("Comment.getRange")).toBe(flavour !== "web");
+    });
+
+    it.each<[string, MockSelectionTarget]>([
+      ["A2 whole P2", { p: "MA2" }],
+      ["A6 inline P2", { p: "MA2", text: "charlie delta" }],
+      ["B2 whole P2", { p: "MB2" }],
+      ["B6 inline P2", { p: "MB2", text: "kilo lima" }],
+    ])(
+      "offers %s, which lies strictly inside the anchor, for rewriting",
+      async (_, target) => {
+        const { host, selection } = await capture(target);
+        expect(selection).toMatchObject({ role: "rewrite", reasonCode: null });
+        expect(selection!.paragraphs[0].kept).toBeUndefined();
+        // Desktop finds the comment it lists to lie around the paragraph; F-11: the web lists none.
+        expect(host.calls().includes("Comment.getRange")).toBe(
+          flavour !== "web",
+        );
+      },
+    );
+
+    it.each<[string, MockSelectionTarget]>([
+      ["C1 whole paragraph", { p: "MC1" }],
+      ["C2 exactly the anchor", { p: "MC1", text: "sierra tango" }],
+      ["C3 outside the anchor", { p: "MC1", text: "quebec romeo" }],
+    ])(
+      "offers the single-paragraph control, %s, for rewriting with its comment kept",
+      async (_, target) => {
+        const { selection } = await capture(target);
+        expect(selection).toMatchObject({ role: "rewrite", reasonCode: null });
+        expect(selection!.paragraphs[0].kept?.kinds).toEqual(["comment"]);
+      },
+    );
+
+    it("keeps a paragraph with a kept comment context only when it also holds part of another's anchor", async () => {
+      const { selection } = await capture(
+        { p: "MD1" },
+        {
+          body: [
+            {
+              runs: [
+                "MD1 Kept ",
+                { text: "single words", commented: "MS" },
+                { comment: "MS" },
+                " then ",
+                { text: "spanning start", commented: "MD" },
+              ],
+            },
+            {
+              runs: [
+                { text: "MD2 spanning end", commented: "MD" },
+                { comment: "MD" },
+                " tail.",
+              ],
+            },
+          ],
+        },
+      );
+      expect(selection).toMatchObject({
+        role: "context_only",
+        reasonCode: "comment_mark",
+      });
+    });
+
+    it("reads no comment anchor while each listed comment is in its paragraph's OOXML", async () => {
+      const { host: plain } = await capture({ p: "SC1" });
+      const plainSyncs = plain.syncCount();
+      const { host, selection } = await capture({ p: "MC1" });
+      expect(selection?.role).toBe("rewrite");
+      expect(host.calls()).toContain("Paragraph.getComments");
+      expect(host.calls()).not.toContain("Comment.getRange");
+      expect(host.syncCount()).toBe(plainSyncs);
+    });
+
+    it.runIf(flavour !== "web")(
+      "compares the anchors of the comments it lacks in one more sync",
+      async () => {
+        const { host: plain } = await capture({ p: "SC1" });
+        const plainSyncs = plain.syncCount();
+        const { host } = await capture({ p: "MA1" });
+        const compared = host
+          .syncLog()
+          .filter((entry) => entry.commands.includes("Comment.getRange"));
+        expect(compared).toHaveLength(1);
+        expect(host.syncCount()).toBe(plainSyncs + 1);
+      },
+    );
+
+    it.runIf(flavour === "web")(
+      "keeps a paragraph whose OOXML lacks a listed comment context only without reading the comment's anchor",
+      async () => {
+        const { host: plain } = await capture({ p: "SC1" });
+        const plainSyncs = plain.syncCount();
+        const { host, selection } = await capture({ p: "MA1" });
+        expect(selection).toMatchObject({
+          role: "context_only",
+          reasonCode: "comment_mark",
+        });
+        expect(host.calls()).toContain("Paragraph.getComments");
+        expect(host.calls()).not.toContain("Comment.getRange");
+        expect(host.syncCount()).toBe(plainSyncs);
+      },
+    );
+
+    describe("in a legacy file without commentsIds", () => {
+      const legacy = { legacyComments: true };
+
+      it("offers the control for rewriting, its comment counted in its paragraph", async () => {
+        const { selection } = await capture(
+          { p: "MC1" },
+          V3C_MULTI_DOCUMENT,
+          legacy,
+        );
+        expect(selection).toMatchObject({ role: "rewrite", reasonCode: null });
+      });
+
+      it("keeps a paragraph that holds a counted comment and part of another's anchor context only", async () => {
+        const { host, selection } = await capture(
+          { p: "MD1" },
+          {
+            body: [
+              {
+                runs: [
+                  "MD1 Kept ",
+                  { text: "single words", commented: "MS" },
+                  { comment: "MS" },
+                  " then ",
+                  { text: "spanning start", commented: "MD" },
+                ],
+              },
+              {
+                runs: [
+                  { text: "MD2 spanning end", commented: "MD" },
+                  { comment: "MD" },
+                ],
+              },
+            ],
+          },
+          legacy,
+        );
+        expect(selection).toMatchObject({
+          role: "context_only",
+          reasonCode: "comment_mark",
+        });
+        expect(host.calls()).not.toContain("Comment.getRange");
+      });
     });
   },
 );

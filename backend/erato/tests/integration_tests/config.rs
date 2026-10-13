@@ -4,7 +4,8 @@ use crate::test_utils::hermetic_app_config;
 use crate::{MIGRATOR, test_app_state};
 use erato_config::config::{
     AppConfig, ConfigSourceFile, FileTypeDetectionMode, GenerationConfig, McpRuntimeConfig,
-    ModelReasoningEffort, ModelVerbosity, MsOfficeAddinLaunchEventType, PromptSourceSpecification,
+    ModelReasoningEffort, ModelVerbosity, MsOfficeAddinLaunchEventType,
+    MsOfficeAddinWordApplyPolicy, MsOfficeAddinWordWholeDocumentImport, PromptSourceSpecification,
     RuntimeConfigurationConfig, ServerConfig, SharepointAllDrivesSource,
 };
 use sqlx::Pool;
@@ -244,6 +245,9 @@ icon_80_path = "https://cdn.example.com/contoso/icon-80.png"
 
 [integrations.ms_office.addin.default_settings]
 word_include_document = false
+
+[integrations.ms_office.addin.default_settings.word_apply.web]
+package_read = false
 "#;
 
     temp_file
@@ -298,6 +302,27 @@ word_include_document = false
             .default_settings
             .word_include_document
     );
+    let word_apply = &config
+        .integrations
+        .ms_office
+        .addin
+        .default_settings
+        .word_apply;
+    assert_eq!(
+        word_apply.web_policy(),
+        MsOfficeAddinWordApplyPolicy {
+            in_place: true,
+            whole_document_import: MsOfficeAddinWordWholeDocumentImport::Confirm,
+            package_read: false,
+        }
+    );
+    let desktop = MsOfficeAddinWordApplyPolicy {
+        in_place: false,
+        whole_document_import: MsOfficeAddinWordWholeDocumentImport::Allowed,
+        package_read: true,
+    };
+    assert_eq!(word_apply.pc_policy(), desktop);
+    assert_eq!(word_apply.mac_policy(), desktop);
 }
 
 #[test]
@@ -3473,6 +3498,183 @@ parameters = '{"type":"object","properties":{"title":{"type":"typo"}}}'
 [client_tools.tools.submit.submission]
 "#,
     );
+}
+
+fn migrate_durable_tool(durable_toml: &str) -> AppConfig {
+    migrate_config_with_action_facets(&format!(
+        r#"
+[client_tools.tools.availability]
+name = "fetch_availability"
+namespace = "outlook"
+description = "Free/busy"
+parameters = '{{"type":"object"}}'
+[client_tools.tools.availability.durable]
+{durable_toml}
+"#
+    ))
+}
+
+#[test]
+fn durable_opt_in_loads_with_defaults() {
+    let config = migrate_durable_tool(
+        r#"host_context = "outlook_mailbox"
+result_schema = '{"type":"object","required":["busy"]}'"#,
+    );
+    let durable = config.client_tools.tools["availability"]
+        .durable
+        .as_ref()
+        .unwrap();
+    assert_eq!(
+        durable.host_context,
+        erato::config::ClientToolHostContext::OutlookMailbox
+    );
+    assert_eq!(durable.attempt_expiry_secs, 3600);
+    assert_eq!(durable.claim_lease_secs, 120);
+    assert!(durable.result_schema.is_some());
+}
+
+#[test]
+#[should_panic(expected = "cannot combine durable with submission")]
+fn durable_opt_in_rejects_submission_tools() {
+    migrate_config_with_action_facets(
+        r#"
+[client_tools.tools.submit]
+name = "submit_draft"
+description = "Stage draft"
+parameters = '{"type":"object"}'
+[client_tools.tools.submit.submission]
+[client_tools.tools.submit.durable]
+host_context = "outlook_mailbox"
+"#,
+    );
+}
+
+#[test]
+#[should_panic(expected = "invalid durable.result_schema")]
+fn durable_opt_in_rejects_an_invalid_result_schema() {
+    migrate_durable_tool(
+        r#"host_context = "outlook_mailbox"
+result_schema = '{"type":"object","properties":{"busy":{"type":"typo"}}}'"#,
+    );
+}
+
+#[test]
+#[should_panic(expected = "invalid durable.result_schema")]
+fn durable_opt_in_rejects_a_non_object_result_schema() {
+    migrate_durable_tool(
+        r#"host_context = "outlook_mailbox"
+result_schema = '{"type":"array"}'"#,
+    );
+}
+
+#[test]
+#[should_panic(expected = "invalid durable.result_schema")]
+fn durable_opt_in_rejects_an_unparseable_result_schema() {
+    migrate_durable_tool(
+        r#"host_context = "outlook_mailbox"
+result_schema = 'not json'"#,
+    );
+}
+
+#[test]
+#[should_panic(expected = "durable.attempt_expiry_secs must be 60–86400")]
+fn durable_opt_in_rejects_a_short_expiry() {
+    migrate_durable_tool(
+        r#"host_context = "outlook_mailbox"
+attempt_expiry_secs = 59
+claim_lease_secs = 60"#,
+    );
+}
+
+#[test]
+#[should_panic(expected = "durable.attempt_expiry_secs must be 60–86400")]
+fn durable_opt_in_rejects_a_long_expiry() {
+    migrate_durable_tool(
+        r#"host_context = "outlook_mailbox"
+attempt_expiry_secs = 86401"#,
+    );
+}
+
+#[test]
+#[should_panic(expected = "durable.claim_lease_secs must be 60–900")]
+fn durable_opt_in_rejects_a_short_lease() {
+    migrate_durable_tool(
+        r#"host_context = "outlook_mailbox"
+claim_lease_secs = 59"#,
+    );
+}
+
+#[test]
+#[should_panic(expected = "durable.claim_lease_secs must be 60–900")]
+fn durable_opt_in_rejects_a_long_lease() {
+    migrate_durable_tool(
+        r#"host_context = "outlook_mailbox"
+claim_lease_secs = 901"#,
+    );
+}
+
+#[test]
+#[should_panic(expected = "durable.claim_lease_secs must be 60–900")]
+fn durable_opt_in_rejects_a_lease_longer_than_the_expiry() {
+    migrate_durable_tool(
+        r#"host_context = "outlook_mailbox"
+attempt_expiry_secs = 300
+claim_lease_secs = 301"#,
+    );
+}
+
+fn migrate_timed_durable_tool(timeout_ms: u64, durable_toml: &str) -> AppConfig {
+    migrate_config_with_action_facets(&format!(
+        r#"
+[client_tools.tools.availability]
+name = "fetch_availability"
+namespace = "outlook"
+description = "Free/busy"
+parameters = '{{"type":"object"}}'
+timeout_ms = {timeout_ms}
+[client_tools.tools.availability.durable]
+host_context = "outlook_mailbox"
+{durable_toml}
+"#
+    ))
+}
+
+#[test]
+fn durable_opt_in_reads_explicit_durations() {
+    let config =
+        migrate_timed_durable_tool(810_000, "attempt_expiry_secs = 900\nclaim_lease_secs = 90");
+    let durable = config.client_tools.tools["availability"]
+        .durable
+        .as_ref()
+        .unwrap();
+    assert_eq!(durable.attempt_expiry_secs, 900);
+    assert_eq!(durable.claim_lease_secs, 90);
+}
+
+#[test]
+#[should_panic(
+    expected = "durable.attempt_expiry_secs must cover timeout_ms plus claim_lease_secs"
+)]
+fn durable_opt_in_rejects_an_expiry_that_the_default_timeout_uses_up() {
+    migrate_durable_tool(
+        r#"host_context = "outlook_mailbox"
+attempt_expiry_secs = 60
+claim_lease_secs = 60"#,
+    );
+}
+
+#[test]
+#[should_panic(
+    expected = "durable.attempt_expiry_secs must cover timeout_ms plus claim_lease_secs"
+)]
+fn durable_opt_in_rejects_a_timeout_longer_than_the_expiry_allows() {
+    migrate_timed_durable_tool(810_001, "attempt_expiry_secs = 900\nclaim_lease_secs = 90");
+}
+
+#[test]
+#[should_panic(expected = "host_context")]
+fn durable_opt_in_requires_a_host_context() {
+    migrate_durable_tool("attempt_expiry_secs = 3600");
 }
 
 #[test]

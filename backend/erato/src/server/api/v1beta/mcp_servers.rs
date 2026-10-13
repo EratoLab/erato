@@ -9,6 +9,7 @@ use crate::services::mcp_oauth::{
     start_oauth_authorization,
 };
 use crate::services::mcp_session_manager::{McpServerConnectionStatus, is_tool_allowed_to_wait};
+use crate::services::mcp_tool_annotations::{McpToolAnnotationSources, ResolvedMcpTool};
 use crate::services::mcp_tool_approval::{
     McpToolEffectiveState, effective_mcp_tool_state, evaluate_mcp_tool_approval,
 };
@@ -64,9 +65,11 @@ pub struct McpServerToolAnnotations {
     pub destructive_hint: bool,
     pub idempotent_hint: bool,
     pub open_world_hint: bool,
-    /// Whether the server declared any hints at all. Defaults are the
-    /// pessimistic reading, so an unannotated tool is not read-only.
+    /// Whether effective annotations are present, from the server or operator
+    /// configuration. This flag does not describe their source.
     pub annotated: bool,
+    /// The winning declaration for each hint, resolved by the backend.
+    pub sources: McpToolAnnotationSources,
 }
 
 /// What the configured approval policy does before running the tool.
@@ -239,7 +242,7 @@ pub async fn list_mcp_server_tools(
         .tools
         .iter()
         .map(|tool| {
-            let name = tool.name.as_ref();
+            let name = tool.tool.name.as_ref();
             project_mcp_server_tool(
                 &global.approval,
                 tool,
@@ -264,10 +267,11 @@ pub async fn list_mcp_server_tools(
 /// here untouched and only the display text is cleaned.
 fn project_mcp_server_tool(
     approval: &crate::config::McpToolApprovalConfig,
-    tool: &rmcp::model::Tool,
+    resolved: &ResolvedMcpTool,
     user_decision: Option<UserToolDecision>,
     is_wait_tool: bool,
 ) -> McpServerTool {
+    let tool = &resolved.tool;
     let verdict = evaluate_mcp_tool_approval(approval, tool);
     let name = tool.name.to_string();
     let display = crate::services::tool_display::tool_display_metadata(tool);
@@ -281,6 +285,7 @@ fn project_mcp_server_tool(
             idempotent_hint: verdict.annotations.idempotent_hint,
             open_world_hint: verdict.annotations.open_world_hint,
             annotated: verdict.annotated,
+            sources: resolved.sources,
         },
         policy: if verdict.requires_approval {
             McpServerToolPolicy::Ask
@@ -591,6 +596,7 @@ mod tests {
                 idempotent_hint: false,
                 open_world_hint: true,
                 annotated: false,
+                sources: Default::default(),
             },
             policy: McpServerToolPolicy::Auto,
             user_decision: McpServerToolUserDecision::None,
@@ -623,7 +629,17 @@ mod tests {
             preset: crate::config::McpToolApprovalPreset::Restrictive,
             allow_always: true,
         };
-        project_mcp_server_tool(&approval, &tool, Some(UserToolDecision::Denied), false)
+        let config = serde_json::from_value(serde_json::json!({
+            "transport_type": "streamable_http", "url": "https://example.com/mcp"
+        }))
+        .unwrap();
+        let resolved = crate::services::mcp_tool_annotations::resolve_tool_annotations(
+            tool,
+            &config,
+            &Default::default(),
+            &Default::default(),
+        );
+        project_mcp_server_tool(&approval, &resolved, Some(UserToolDecision::Denied), false)
     }
 
     #[test]

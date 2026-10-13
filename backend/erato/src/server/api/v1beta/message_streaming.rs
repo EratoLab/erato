@@ -124,6 +124,26 @@ fn non_empty_vec<T: Clone>(value: &[T]) -> Option<Vec<T>> {
     (!value.is_empty()).then(|| value.to_vec())
 }
 
+fn assistant_content_for_replay(content: &MessageContent, summary: &str) -> MessageContent {
+    // Responses requires a summary even when empty. genai also duplicates each
+    // reasoning item as a bare signature, which must not be replayed separately.
+    MessageContent::from_parts(
+        content
+            .parts()
+            .iter()
+            .filter(|part| !matches!(part, genai::chat::ContentPart::ThoughtSignature(_)))
+            .cloned()
+            .map(|part| match part {
+                genai::chat::ContentPart::ReasoningItem(mut item) if item.summary.is_empty() => {
+                    item.summary.push(reasoning_summary_part(Some(summary)));
+                    genai::chat::ContentPart::ReasoningItem(item)
+                }
+                other => other,
+            })
+            .collect::<Vec<_>>(),
+    )
+}
+
 fn reasoning_summary_part(summary: Option<&str>) -> ReasoningSummaryText {
     ReasoningSummaryText::new(summary.unwrap_or_default())
 }
@@ -1826,6 +1846,7 @@ fn streaming_event_to_sse(event: &StreamingEvent) -> Result<Event, Report> {
             tool_call_id,
             tool_name,
             input,
+            ..
         } => {
             let data = serde_json::to_string(&serde_json::json!({
                 "message_type": "client_tool_call",
@@ -1882,8 +1903,8 @@ fn streaming_event_to_sse(event: &StreamingEvent) -> Result<Event, Report> {
     Ok(Event::default().event(event_name).data(data))
 }
 
-type SseEventStream = Pin<Box<dyn Stream<Item = Result<Event, Report>> + Send>>;
-type SseEventStreamWithKeepAlive = axum::response::sse::KeepAliveStream<SseEventStream>;
+pub(crate) type SseEventStream = Pin<Box<dyn Stream<Item = Result<Event, Report>> + Send>>;
+pub(crate) type SseEventStreamWithKeepAlive = axum::response::sse::KeepAliveStream<SseEventStream>;
 
 fn streaming_events_to_sse<S>(events: S) -> SseEventStream
 where
@@ -1893,10 +1914,53 @@ where
         futures::future::ready(match result {
             Ok(streaming_event) => match streaming_event_to_sse(&streaming_event) {
                 Ok(sse_event) => Some(Ok(sse_event)),
-                Err(error) => Some(Err(error)),
+                Err(error) => {
+                    log_and_capture_error("SSE serialization", &error);
+                    Some(Err(error))
+                }
             },
             Err(error) => Some(Err(error)),
         })
+    }))
+}
+
+pub(crate) fn live_streaming_events(
+    receiver: tokio::sync::broadcast::Receiver<StreamingEvent>,
+) -> impl Stream<Item = Result<StreamingEvent, Report>> + Send {
+    futures::StreamExt::filter_map(
+        tokio_stream::wrappers::BroadcastStream::new(receiver),
+        |event| {
+            futures::future::ready(match event {
+                Ok(event) => Some(Ok(event)),
+                Err(tokio_stream::wrappers::errors::BroadcastStreamRecvError::Lagged(count)) => {
+                    tracing::warn!(count, "Client lagged behind streaming events");
+                    None
+                }
+            })
+        },
+    )
+}
+
+pub(crate) fn owned_streaming_events_to_sse<S>(
+    events: S,
+    guard: ClientStreamGuard,
+) -> SseEventStream
+where
+    S: Stream<Item = Result<StreamingEvent, Report>> + Send + 'static,
+{
+    let guard = Arc::new(guard);
+    streaming_events_to_sse(futures::StreamExt::filter_map(events, move |result| {
+        let guard = Arc::clone(&guard);
+        async move {
+            if let Ok(StreamingEvent::ClientToolCall {
+                requires_transport, ..
+            }) = &result
+                && !guard.allows_client_call(*requires_transport).await
+            {
+                return None;
+            }
+            Some(result)
+        }
     }))
 }
 
@@ -2228,6 +2292,9 @@ pub struct ContinueStreamRequest {
     /// The `X-Erato-Client-Tools` of the device answering, when it sent one.
     #[serde(skip)]
     registered_client_tools: Option<Vec<String>>,
+    /// The `X-Erato-Executor` of the device answering, when it sent a valid one.
+    #[serde(skip)]
+    executor: Option<crate::services::client_operations::ExecutorBinding>,
 }
 
 impl ContinueStreamRequest {
@@ -2248,6 +2315,7 @@ impl ContinueStreamRequest {
                 .collect(),
             decision: None,
             registered_client_tools: None,
+            executor: None,
         }
     }
 }
@@ -2587,6 +2655,9 @@ pub struct ClientToolResultResponse {
     /// True if a suspended generation received this result; false if it was a
     /// benign no-op (already delivered, timed out, aborted, or unknown id).
     delivered: bool,
+    /// True if this result settled a parked client operation, which the
+    /// sender then continues.
+    stored: bool,
 }
 
 #[derive(Serialize, ToSchema)]
@@ -5652,7 +5723,7 @@ async fn stream_generate_chat_completion<'a>(
     // iteration against `max_tool_calls_per_message`, but this park time is NOT a
     // generation wall-clock budget. A per-facet `client_tool.timeout_ms` (see
     // the park below) overrides this default per tool.
-    const DEFAULT_CLIENT_TOOL_PARK_TIMEOUT_MS: u64 = 60_000;
+    const DEFAULT_CLIENT_TOOL_PARK_TIMEOUT_MS: u64 = crate::config::DEFAULT_CLIENT_TOOL_TIMEOUT_MS;
     struct PendingWait {
         /// Where the call sat in the batch, so its answer is fed back in call
         /// order like every other.
@@ -5674,6 +5745,45 @@ async fn stream_generate_chat_completion<'a>(
     let continuing_client_tools = resume
         .as_ref()
         .and_then(|resume| resume.continuing_client_tools.clone());
+    // Approval on a different device keeps decision-gated calls on the legacy path.
+    // An attached operation continuation already checked its original binding.
+    let approving_executor = resume
+        .as_ref()
+        .filter(|resume| resume.operation_attempt.is_none())
+        .map(|resume| resume.continuing_executor.clone());
+    if app_state.config.client_tools.durable_operations_enabled
+        && let Some(task) = streaming_task
+    {
+        for offered in offered_client_tools.values() {
+            let Some(durable) = &offered.config.durable else {
+                continue;
+            };
+            let Some(binding) = &offered.executor else {
+                continue;
+            };
+            let Some(kind) = app_state
+                .client_operations
+                .for_operation(&offered.config.qualified_name())
+            else {
+                continue;
+            };
+            if kind.consent() == crate::services::client_operations::ConsentPolicy::None
+                && approving_executor
+                    .as_ref()
+                    .is_none_or(|executor| executor.as_ref() == Some(binding))
+                && binding.validate()
+                && binding.realm == kind.realm()
+                && binding
+                    .host_context
+                    .as_ref()
+                    .is_some_and(|host| host.kind == durable.host_context.as_str())
+            {
+                task.initialize_client_transport(binding, kind.operation_id())
+                    .await?;
+                break;
+            }
+        }
+    }
     let (mut unfinished_tool_calls, approved_task_call_ids): (
         std::collections::VecDeque<genai::chat::ToolCall>,
         HashSet<String>,
@@ -5692,6 +5802,14 @@ async fn stream_generate_chat_completion<'a>(
     // budget may still make client calls, and the other way round.
     let mut task_server_tool_calls: u32 = consumption.server_tool_calls;
     let mut task_client_tool_calls: u32 = consumption.client_tool_calls;
+    let mut submission_correction = consumption.submission_correction;
+    if let Some(correction) = submission_correction.as_mut() {
+        correction.restore(
+            offered_client_tools
+                .values()
+                .find(|tool| tool.config.qualified_name() == correction.tool),
+        );
+    }
     let mut submission_attempts = consumption.submission_attempts;
     let mut tool_charges = consumption.tool_charges;
 
@@ -5820,6 +5938,7 @@ async fn stream_generate_chat_completion<'a>(
                     // whatever a continuation owed this message it no longer
                     // does.
                     continuation_in_flight: None,
+                    submission_outcome: None,
                 })
             } else {
                 None
@@ -5871,6 +5990,40 @@ async fn stream_generate_chat_completion<'a>(
                         server_tool_calls: task_server_tool_calls,
                         client_tool_calls: task_client_tool_calls,
                         submission_attempts: submission_attempts.clone(),
+                        submission_correction: submission_correction.clone(),
+                        tool_charges: tool_charges.clone(),
+                        client_action_proposed: client_action_already_proposed,
+                    },
+                )
+                .await?;
+            }
+        };
+    }
+
+    macro_rules! persist_correction {
+        () => {
+            if let Some(correction) = submission_correction.as_ref() {
+                let name = correction
+                    .tool
+                    .rsplit('/')
+                    .next()
+                    .expect("qualified submission name");
+                submission_attempts.insert(name.to_owned(), correction.outcome.attempts_used);
+            }
+            if submission_correction.is_some()
+                && let Some(task) = streaming_task
+            {
+                crate::services::client_operations::store::save_consumption(
+                    &app_state.db,
+                    assistant_message_id,
+                    task.generation_id,
+                    &crate::services::client_operations::TurnConsumption {
+                        model_turns: current_turn,
+                        tool_calls: current_tool_call_count,
+                        server_tool_calls: task_server_tool_calls,
+                        client_tool_calls: task_client_tool_calls,
+                        submission_attempts: submission_attempts.clone(),
+                        submission_correction: submission_correction.clone(),
                         tool_charges: tool_charges.clone(),
                         client_action_proposed: client_action_already_proposed,
                     },
@@ -5884,6 +6037,19 @@ async fn stream_generate_chat_completion<'a>(
         // A parked iteration was already counted before its checkpoint.
         if !std::mem::take(&mut resume_iteration) {
             current_turn += 1;
+        }
+        if submission_correction
+            .as_ref()
+            .is_some_and(|correction| !correction.pending())
+        {
+            // No inference ran in this continuation; retain the parked turn's usage and trace.
+            let message =
+                get_message_by_id(&app_state.db, policy, subject, &assistant_message_id).await?;
+            let metadata = message
+                .generation_metadata
+                .map(serde_json::from_value::<GenerationMetadata>)
+                .transpose()?;
+            break 'loop_call_turns Ok((current_message_content, metadata));
         }
         tracing::debug!("Starting chat completion turn {}", current_turn);
         let chat_provider_metric_label = chat_provider_id.unwrap_or("unknown");
@@ -5902,7 +6068,8 @@ async fn stream_generate_chat_completion<'a>(
         let turn_langfuse_generation_name =
             langfuse_turn_name(langfuse_generation_name.as_deref(), current_turn);
 
-        if current_turn != 1 && unfinished_tool_calls.is_empty() {
+        if current_turn != 1 && unfinished_tool_calls.is_empty() && submission_correction.is_none()
+        {
             tracing::warn!(
                 "Trying to progress chat completion after first iteration without open tool calls. Will likely result in error."
             )
@@ -5913,6 +6080,25 @@ async fn stream_generate_chat_completion<'a>(
         // Paired with the call's position in the batch: task runs settle out
         // of order, and the model is answered in the order it asked.
         let batch_call_count = unfinished_tool_calls.len();
+        // Reserve semantic attempts before either ordinary budgets or task approval can park a batch.
+        for call in &unfinished_tool_calls {
+            if allowed_tool_names.contains(&call.fn_name)
+                && let Some(tool) = offered_client_tools
+                    .get(&call.fn_name)
+                    .filter(|tool| tool.submission.is_some())
+            {
+                let correction = submission_correction.get_or_insert_with(|| {
+                    crate::services::submission_correction::SubmissionCorrection::new(tool)
+                });
+                let charge = tool_charges.entry(call.call_id.clone()).or_default();
+                charge.submission_mixed_batch |= batch_call_count != 1;
+                if charge.submission_attempt.is_none() {
+                    let attempt = correction.charge_submission();
+                    charge.submission_attempt = Some(attempt);
+                }
+            }
+        }
+        persist_correction!();
         let mut current_turn_tool_responses: Vec<(usize, genai::chat::ToolResponse)> = vec![];
         let mut retrieved_images = Vec::new();
         let mut retrieved_files = Vec::new();
@@ -6100,6 +6286,32 @@ async fn stream_generate_chat_completion<'a>(
             // hallucinations drain a real allowance — and, with a budget of
             // `0`, would answer an invalid name with "you are out of budget",
             // telling the model nothing about what was actually wrong with it.
+            let is_submission = tool_charges
+                .get(&unfinished_tool_call.call_id)
+                .is_some_and(|charge| charge.submission_attempt.is_some());
+            let is_recovery_read = allowed_tool_names.contains(&unfinished_tool_call.fn_name)
+                && offered_client_tools
+                    .get(&unfinished_tool_call.fn_name)
+                    .is_some_and(|tool| {
+                        submission_correction
+                            .as_ref()
+                            .is_some_and(|correction| correction.is_recovery_read(tool))
+                    });
+            if is_recovery_read && !tool_charges.contains_key(&unfinished_tool_call.call_id) {
+                if !submission_correction
+                    .as_mut()
+                    .expect("recovery state")
+                    .charge_read()
+                {
+                    exit_after_join = true;
+                    break 'pop_calls;
+                }
+                tool_charges
+                    .entry(unfinished_tool_call.call_id.clone())
+                    .or_default()
+                    .recovery_read = true;
+            }
+            let reserved = is_submission || is_recovery_read;
             let already_charged = tool_charges.get(&unfinished_tool_call.call_id);
             let budget_refusal = if let Some(charge) = already_charged {
                 charge.budget_refusal.clone()
@@ -6147,7 +6359,10 @@ async fn stream_generate_chat_completion<'a>(
             // `{"status":"failed"}` with nothing in it. Ending the turn
             // gracefully keeps what the child has and reports it as the
             // partial, resumable result it is.
-            if already_charged.is_none() && current_tool_call_count >= max_tool_calls_per_message {
+            if !reserved
+                && already_charged.is_none()
+                && current_tool_call_count >= max_tool_calls_per_message
+            {
                 if let Some(task) = streaming_task.filter(|_| task_tool_budgets.is_some()) {
                     tracing::warn!(
                         chat_id = %chat_id,
@@ -6924,8 +7139,9 @@ async fn stream_generate_chat_completion<'a>(
                 let tool_policy = offered_client_tools.get(&tool_name);
                 // Read on every call like an MCP decision, so one stored while
                 // the turn runs holds. A call the user just approved on a card
-                // is not asked about again, and a registered operation kind
-                // asks through its own consent policy instead.
+                // is not asked about again. A compiled operation kind asks
+                // through its own consent policy instead; a configured durable
+                // tool keeps the user's decision.
                 let gate = match tool_policy {
                     Some(policy) if !approved_task_call_ids.contains(&call_id) => {
                         let qualified_name = policy.config.qualified_name();
@@ -6945,7 +7161,7 @@ async fn stream_generate_chat_completion<'a>(
                                 && app_state
                                     .client_operations
                                     .for_operation(&qualified_name)
-                                    .is_some();
+                                    .is_some_and(|kind| !kind.gated_by_user_decision());
                         match gate_client_tool_call(
                             policy.config.namespace_or_default(),
                             &unfinished_tool_call,
@@ -7040,6 +7256,14 @@ async fn stream_generate_chat_completion<'a>(
                         Some(&response_text),
                     )
                     .await;
+                    if tool_charges.get(&call_id).is_some_and(|charge| {
+                        charge.submission_attempt.is_some() || charge.recovery_read
+                    }) && let Some(correction) = submission_correction.as_mut()
+                    {
+                        correction.stop(crate::services::submission_correction::SubmissionReason::CapabilityUnavailable);
+                        persist_correction!();
+                        exit_after_join = true;
+                    }
                     current_turn_tool_responses.push((
                         batch_position,
                         genai::chat::ToolResponse {
@@ -7048,30 +7272,24 @@ async fn stream_generate_chat_completion<'a>(
                             content: response_text,
                         },
                     ));
+                    if exit_after_join {
+                        break 'pop_calls;
+                    }
                     continue;
                 };
                 let submission = tool_policy.and_then(|policy| policy.submission.as_ref());
-                let attempt = if submission.is_some() {
-                    *tool_charges
-                        .entry(call_id.clone())
-                        .or_default()
-                        .submission_attempt
-                        .get_or_insert_with(|| {
-                            let count = submission_attempts.entry(tool_name.clone()).or_default();
-                            *count += 1;
-                            *count
-                        })
-                } else {
-                    0
-                };
-                if app_state.config.client_tools.durable_operations_enabled
-                    && tool_policy.is_some_and(|policy| {
+                let attempt = tool_charges
+                    .get(&call_id)
+                    .and_then(|charge| charge.submission_attempt)
+                    .unwrap_or(0);
+                let operation_kind = tool_policy
+                    .filter(|_| app_state.config.client_tools.durable_operations_enabled)
+                    .and_then(|policy| {
                         app_state
                             .client_operations
                             .for_operation(&policy.config.qualified_name())
-                            .is_some()
-                    })
-                {
+                    });
+                if let Some(kind) = operation_kind {
                     tool_charges
                         .entry(call_id.clone())
                         .or_default()
@@ -7079,7 +7297,7 @@ async fn stream_generate_chat_completion<'a>(
                         .get_or_insert_with(|| {
                             crate::services::client_operations::OperationIdentity {
                                 attempt_id: Uuid::new_v4(),
-                                expires_at: chrono::Utc::now() + chrono::Duration::hours(24),
+                                expires_at: chrono::Utc::now() + kind.attempt_ttl(),
                             }
                         });
                 }
@@ -7091,7 +7309,14 @@ async fn stream_generate_chat_completion<'a>(
                 let mut validation_failure = submission.and_then(|submission| {
                     if attempt > submission.max_attempts {
                         Some(ClientToolOutcome::Cancelled { reason: "submission_attempt_limit".into() })
-                    } else if batch_call_count != 1 {
+                    } else if submission_correction.as_ref().is_some_and(|correction| tool_policy.is_none_or(|tool| tool.config.qualified_name() != correction.tool)) {
+                        Some(ClientToolOutcome::ValidationFailed(vec![
+                            crate::services::client_tools::ClientToolValidationIssue {
+                                path: String::new(), code: "submission_tool_changed".into(),
+                                message: "Correct the proposal with the originally selected submission tool.".into(),
+                            }
+                        ], None))
+                    } else if tool_charges.get(&call_id).is_some_and(|charge| charge.submission_mixed_batch) {
                         Some(ClientToolOutcome::ValidationFailed(vec![
                             crate::services::client_tools::ClientToolValidationIssue {
                                 path: String::new(),
@@ -7103,10 +7328,17 @@ async fn stream_generate_chat_completion<'a>(
                 });
                 let durable_request = if app_state.config.client_tools.durable_operations_enabled {
                     tool_policy.and_then(|policy| {
-                        let kind = app_state
-                            .client_operations
-                            .for_operation(&policy.config.qualified_name())?;
+                        let kind = operation_kind?;
                         let binding = policy.executor.as_ref()?;
+                        // An approval answered by another executor never parks
+                        // the call for the device that submitted the turn.
+                        if kind.gated_by_user_decision()
+                            && approving_executor
+                                .as_ref()
+                                .is_some_and(|approving| approving.as_ref() != Some(binding))
+                        {
+                            return None;
+                        }
                         (kind.realm() == binding.realm
                             && kind.validate_input(&tool_input, binding).is_ok())
                         .then(|| {
@@ -7135,21 +7367,17 @@ async fn stream_generate_chat_completion<'a>(
                 } else {
                     None
                 };
-                if app_state.config.client_tools.durable_operations_enabled
-                    && durable_request.is_none()
-                    && tool_policy.is_some_and(|policy| {
-                        app_state
-                            .client_operations
-                            .for_operation(&policy.config.qualified_name())
-                            .is_some()
-                    })
+                // A configured durable tool without an eligible binding keeps
+                // today's in-memory path instead of failing.
+                if durable_request.is_none()
+                    && operation_kind.is_some_and(|kind| kind.requires_binding())
                 {
                     validation_failure = Some(ClientToolOutcome::Error(
                         "Client operation binding is unavailable.".into(),
                     ));
                 }
                 if let Some(request) = &durable_request {
-                    task.register_client_operation(request.clone()).await;
+                    task.register_client_operation(request.clone()).await?;
                 }
                 let server_refused = validation_failure.is_some();
                 let outcome = if let Some(failure) = validation_failure {
@@ -7170,6 +7398,8 @@ async fn stream_generate_chat_completion<'a>(
                         send_background_event(
                             task,
                             StreamingEvent::ClientToolCall {
+                                requires_transport: durable_request.is_some()
+                                    && task.uses_shared_client_transport(),
                                 message_id: assistant_message_id,
                                 content_index,
                                 tool_call_id: call_id.clone(),
@@ -7192,7 +7422,10 @@ async fn stream_generate_chat_completion<'a>(
                         // during the park, so a dropped SSE connection here must NOT
                         // abort the generation. The broadcast + resume history is the
                         // durable signal path.
-                        if let Err(error) = call_message.send_event_report(tx.clone()).await {
+                        if (durable_request.is_none()
+                            || task.original_transport_can_execute().await)
+                            && let Err(error) = call_message.send_event_report(tx.clone()).await
+                        {
                             warn_and_capture_error(
                                 "send best-effort client tool call SSE event",
                                 &error,
@@ -7225,25 +7458,48 @@ async fn stream_generate_chat_completion<'a>(
                             },
                             _ = task.wait_for_abort() => Park::Aborted,
                             _ = task.wait_for_client_disconnect(), if durable_request.is_some() => Park::TimedOut,
-                            _ = tx.closed(), if durable_request.is_some() => Park::TimedOut,
                             _ = tokio::time::sleep(tokio::time::Duration::from_millis(
                                 park_timeout_ms,
                             )) => Park::TimedOut,
                         }
                     };
 
+                    // The gate read the decision before dispatch. A Never saved while
+                    // the call waited settles it as withdrawn: no park, no raced-in result.
+                    let withdrawn = match (&park, &durable_request, operation_kind) {
+                        (Park::TimedOut, Some(request), Some(kind))
+                            if kind.gated_by_user_decision() =>
+                        {
+                            crate::models::user_preference::find_client_tool_decision(
+                                &app_state.db,
+                                &request.account_id,
+                                &request.operation_id,
+                            )
+                            .await?
+                                == Some(
+                                    crate::models::user_preference::ClientToolDecision::NeverAllow,
+                                )
+                        }
+                        _ => false,
+                    };
+                    let escalate =
+                        matches!(park, Park::TimedOut) && durable_request.is_some() && !withdrawn;
+
                     // Drop the pending entry, then settle the timeout/abort-vs-
                     // delivery boundary race: if the client's result landed just as
                     // we gave up, prefer it over discarding (and over the endpoint
                     // having reported a spurious success).
-                    if !matches!(park, Park::TimedOut) || durable_request.is_none() {
+                    if !escalate {
                         task.remove_pending_client_tool(&call_id).await;
                     }
                     let raced_in = result_rx.try_recv().ok();
 
                     match park {
                         Park::Delivered(outcome) => outcome,
-                        Park::TimedOut if raced_in.is_none() && durable_request.is_some() => {
+                        Park::TimedOut if withdrawn => ClientToolOutcome::Cancelled {
+                            reason: "withdrawn".to_string(),
+                        },
+                        Park::TimedOut if raced_in.is_none() && escalate => {
                             upsert_tool_use(
                                 &mut current_message_content,
                                 ToolUse {
@@ -7382,10 +7638,36 @@ async fn stream_generate_chat_completion<'a>(
                     output_value = output;
                     response_text = output_value.to_string();
                 }
+                if tool_charges
+                    .get(&call_id)
+                    .is_some_and(|charge| charge.recovery_read)
+                    && let Some(correction) = submission_correction.as_mut()
+                {
+                    use crate::services::submission_correction::SubmissionReason;
+                    match &outcome {
+                        ClientToolOutcome::ValidationFailed(_, Some(feedback)) if feedback.recovery == crate::services::client_tools::SubmissionRecovery::CannotContinue => correction.stop(SubmissionReason::ContextUnavailable),
+                        ClientToolOutcome::Cancelled { reason } => correction.stop(if reason == "timeout" { SubmissionReason::Timeout } else { SubmissionReason::Cancelled }),
+                        ClientToolOutcome::Error(_) => correction.stop(SubmissionReason::CapabilityUnavailable),
+                        _ => {},
+                    }
+                    exit_after_join |= !correction.pending();
+                }
                 if let Some(submission) = submission {
                     submission.annotate(&mut output_value, &outcome, attempt);
                     response_text = output_value.to_string();
-                    if submission.finish_after(&outcome, attempt) {
+                    if let Some(correction) = submission_correction.as_mut() {
+                        correction.record(&outcome);
+                        output_value["submission_outcome"] =
+                            serde_json::to_value(&correction.outcome)?;
+                        if !correction.pending() && correction.outcome.status != crate::services::submission_correction::SubmissionStatus::Accepted {
+                            output_value["submission"] = json!({"status":"failed", "attempts_remaining":0});
+                        }
+                        response_text = output_value.to_string();
+                    }
+                    if submission_correction
+                        .as_ref()
+                        .is_some_and(|correction| !correction.pending())
+                    {
                         exit_after_join = true;
                         exit_metadata = build_generation_metadata(
                             total_prompt_tokens,
@@ -7401,6 +7683,7 @@ async fn stream_generate_chat_completion<'a>(
                         );
                     }
                 }
+                persist_correction!();
                 let tool_error =
                     matches!(status, ToolCallStatus::Error).then(|| response_text.clone());
 
@@ -7487,6 +7770,9 @@ async fn stream_generate_chat_completion<'a>(
                         content: response_text,
                     },
                 ));
+                if exit_after_join {
+                    break 'pop_calls;
+                }
                 continue;
             }
 
@@ -8285,6 +8571,7 @@ async fn stream_generate_chat_completion<'a>(
                         server_tool_calls: task_server_tool_calls,
                         client_tool_calls: task_client_tool_calls,
                         submission_attempts: submission_attempts.clone(),
+                        submission_correction: submission_correction.clone(),
                         tool_charges: tool_charges.clone(),
                         client_action_proposed: client_action_already_proposed,
                     },
@@ -8326,6 +8613,7 @@ async fn stream_generate_chat_completion<'a>(
                     server_tool_calls: task_server_tool_calls,
                     client_tool_calls: task_client_tool_calls,
                     submission_attempts: submission_attempts.clone(),
+                    submission_correction: submission_correction.clone(),
                     tool_charges: tool_charges.clone(),
                     client_action_proposed: client_action_already_proposed,
                 },
@@ -8358,7 +8646,21 @@ async fn stream_generate_chat_completion<'a>(
             );
         }
         if exit_after_join {
-            break 'loop_call_turns Ok((current_message_content, exit_metadata));
+            let metadata = exit_metadata.or_else(|| {
+                build_generation_metadata(
+                    total_prompt_tokens,
+                    total_completion_tokens,
+                    total_total_tokens,
+                    total_reasoning_tokens,
+                    langfuse_trace_id.clone(),
+                    false,
+                    None,
+                    non_empty_string(&captured_reasoning_summary),
+                    non_empty_vec(&captured_reasoning_items),
+                    non_empty_vec(&captured_reasoning_item_encrypted_content),
+                )
+            });
+            break 'loop_call_turns Ok((current_message_content, metadata));
         }
 
         persist_operation_turn!();
@@ -9388,6 +9690,55 @@ async fn stream_generate_chat_completion<'a>(
                 }
             }
 
+            if let Some(correction) = submission_correction
+                .as_mut()
+                .filter(|correction| correction.pending())
+            {
+                let calls = stream_end.captured_tool_calls().unwrap_or_default();
+                let progresses = calls.iter().any(|call| {
+                    allowed_tool_names.contains(&call.fn_name)
+                        && offered_client_tools.get(&call.fn_name).is_some_and(|tool| {
+                            tool.submission.is_some() || correction.is_declared_read(tool)
+                        })
+                });
+                if !progresses {
+                    let retry = correction.no_progress(current_turn);
+                    if !retry {
+                        break 'loop_call_turns Ok((
+                            current_message_content,
+                            build_generation_metadata(
+                                total_prompt_tokens,
+                                total_completion_tokens,
+                                total_total_tokens,
+                                total_reasoning_tokens,
+                                langfuse_trace_id.clone(),
+                                false,
+                                None,
+                                non_empty_string(&captured_reasoning_summary),
+                                non_empty_vec(&captured_reasoning_items),
+                                non_empty_vec(&captured_reasoning_item_encrypted_content),
+                            ),
+                        ));
+                    }
+                    if calls.is_empty() {
+                        if let Some(content) = stream_end.captured_content.as_ref() {
+                            current_turn_chat_request.messages.push(GenAiChatMessage {
+                                role: ChatRole::Assistant,
+                                content: assistant_content_for_replay(
+                                    content,
+                                    &current_turn_captured_reasoning_summary,
+                                ),
+                                options: None,
+                            });
+                        }
+                        current_turn_chat_request
+                            .messages
+                            .push(GenAiChatMessage::user(correction.reminder()));
+                        continue 'loop_call_turns;
+                    }
+                }
+            }
+
             if let Some(captured_tool_calls) = stream_end.captured_tool_calls() {
                 if !captured_tool_calls.is_empty() {
                     // Track tool names for Langfuse metadata
@@ -9395,39 +9746,13 @@ async fn stream_generate_chat_completion<'a>(
                         all_tool_names.insert(tool_call.fn_name.clone());
                     }
 
-                    // OpenAI Responses API rejects reasoning items without a `summary` field.
-                    // Two issues to handle here:
-                    //   1. genai's StreamEnd duplicates each captured reasoning event as both a
-                    //      full ReasoningItem and a bare ThoughtSignature (encrypted_content only).
-                    //      The ThoughtSignature serializes without `summary` — drop it.
-                    //   2. The captured ReasoningItem itself may have `summary: vec![]` when the
-                    //      model emitted no summary chunks. genai's `skip_serializing_if =
-                    //      "Vec::is_empty"` then omits the field. Inject a placeholder summary
-                    //      so it serializes (mirrors build_openai_responses_reasoning_replay_parts).
                     let assistant_turn_content = stream_end
                         .captured_content
                         .as_ref()
-                        .map(|captured_content| {
-                            MessageContent::from_parts(
-                                captured_content
-                                    .parts()
-                                    .iter()
-                                    .filter(|p| {
-                                        !matches!(p, genai::chat::ContentPart::ThoughtSignature(_))
-                                    })
-                                    .cloned()
-                                    .map(|part| match part {
-                                        genai::chat::ContentPart::ReasoningItem(mut item)
-                                            if item.summary.is_empty() =>
-                                        {
-                                            item.summary.push(reasoning_summary_part(Some(
-                                                current_turn_captured_reasoning_summary.as_str(),
-                                            )));
-                                            genai::chat::ContentPart::ReasoningItem(item)
-                                        }
-                                        other => other,
-                                    })
-                                    .collect::<Vec<_>>(),
+                        .map(|content| {
+                            assistant_content_for_replay(
+                                content,
+                                &current_turn_captured_reasoning_summary,
                             )
                         })
                         .unwrap_or_else(|| {
@@ -9672,7 +9997,33 @@ async fn stream_generate_chat_completion<'a>(
             ));
         }
     };
-    completion.map(|(content, metadata)| (without_preparing_tools(&content), metadata))
+    if let Ok((content, metadata)) = &completion
+        && let Some(correction) = submission_correction.as_mut()
+        && correction.pending()
+        && !crate::models::message::is_durable_stop(content)
+    {
+        correction.stop(
+            if metadata
+                .as_ref()
+                .is_some_and(|meta| meta.was_aborted == Some(true))
+            {
+                crate::services::submission_correction::SubmissionReason::Cancelled
+            } else if metadata.as_ref().is_some_and(|meta| meta.error.is_some()) {
+                crate::services::submission_correction::SubmissionReason::ProviderError
+            } else {
+                crate::services::submission_correction::SubmissionReason::ModelStopped
+            },
+        );
+    }
+    persist_correction!();
+    completion.map(|(content, mut metadata)| {
+        if let Some(correction) = submission_correction {
+            metadata
+                .get_or_insert_with(GenerationMetadata::default)
+                .submission_outcome = Some(correction.outcome);
+        }
+        (without_preparing_tools(&content), metadata)
+    })
 }
 
 /// Mark the task's outcome as parked when the finalized message stops on an
@@ -10337,7 +10688,7 @@ pub(crate) struct GenerationMcpToolInputs<'a> {
     pub subject: &'a Subject,
     pub user_groups: &'a [String],
     pub user_id: Option<Uuid>,
-    /// The chat's write toggle. Off, only tools whose server marks them
+    /// The chat's write toggle. Off, only tools whose effective hints mark them
     /// read-only survive; an unannotated tool is not read-only.
     pub write_tools_enabled: bool,
     /// Servers the user switched off for the chat; their tools are dropped.
@@ -10515,7 +10866,7 @@ async fn resolve_generation_mcp_tools(
     })
 }
 
-/// With writes off, keep only tools whose server marks them read-only. The
+/// With writes off, keep only tools whose effective hints mark them read-only. The
 /// hint is normalized the way the approval gate reads it, so a tool without
 /// annotations counts as a write and is dropped; the dropped pairs are
 /// returned so a continuation can name the reason it refuses one.
@@ -11136,6 +11487,58 @@ mod tests {
     }
 
     #[test]
+    fn write_filter_and_approval_use_the_same_operator_resolved_hints() {
+        use crate::config::{
+            McpToolAnnotationsConfig, McpToolApprovalConfig, McpToolApprovalPreset,
+        };
+        use crate::services::mcp_tool_annotations::resolve_tool_annotations;
+
+        let config = serde_json::from_value(json!({
+            "transport_type": "streamable_http", "url": "https://example.com/mcp",
+            "default_tool_annotations": { "read_only_hint": true, "destructive_hint": false, "open_world_hint": false },
+            "tools": { "write_one": { "override_tool_annotations": { "read_only_hint": false } } }
+        })).unwrap();
+        let tools: Vec<_> = ["read_one", "write_one"]
+            .into_iter()
+            .map(|name| {
+                managed_tool(
+                    "files",
+                    resolve_tool_annotations(
+                        Tool::new(name, "fixture", Map::new()),
+                        &config,
+                        &McpToolAnnotationsConfig::default(),
+                        &McpToolAnnotationsConfig::default(),
+                    )
+                    .tool,
+                )
+            })
+            .collect();
+        for preset in [
+            McpToolApprovalPreset::Permissive,
+            McpToolApprovalPreset::Restrictive,
+        ] {
+            assert!(
+                !evaluate_mcp_tool_approval(
+                    &McpToolApprovalConfig {
+                        enabled: true,
+                        preset,
+                        allow_always: false
+                    },
+                    &tools[0].tool
+                )
+                .requires_approval
+            );
+        }
+        let (kept, suppressed) = filter_mcp_tools_by_write_access(tools, false);
+        assert_eq!(kept[0].tool.name.as_ref(), "read_one");
+        assert_eq!(kept.len(), 1);
+        assert_eq!(
+            suppressed,
+            HashSet::from([("files".into(), "write_one".into())])
+        );
+    }
+
+    #[test]
     fn disabled_servers_lose_every_tool_and_other_servers_keep_theirs() {
         let tools = vec![
             managed_tool("files", Tool::new("read_file", "reads", Map::new())),
@@ -11510,6 +11913,7 @@ mod tests {
             decisions: Vec::new(),
             decision: Some(decision),
             registered_client_tools: None,
+            executor: None,
         }
     }
 
@@ -11525,6 +11929,7 @@ mod tests {
                 .collect(),
             decision: None,
             registered_client_tools: None,
+            executor: None,
         }
     }
 
@@ -11723,6 +12128,7 @@ mod tests {
             decisions: Vec::new(),
             decision: None,
             registered_client_tools: None,
+            executor: None,
         };
         assert!(matches!(
             resolve_submitted_decisions(&empty, &open),
@@ -12888,35 +13294,8 @@ pub async fn message_submit_sse(
     )
     .await?;
 
-    // Convert broadcast receiver to SSE stream
-    let event_stream = {
-        use futures::StreamExt;
-        let broadcast_stream = tokio_stream::wrappers::BroadcastStream::new(broadcast_rx);
-        futures::StreamExt::filter_map(broadcast_stream, |result| {
-            futures::future::ready(match result {
-                Ok(streaming_event) => {
-                    // Convert StreamingEvent to SSE Event
-                    match streaming_event_to_sse(&streaming_event) {
-                        Ok(sse_event) => Some(Ok(sse_event)),
-                        Err(e) => Some(Err(e)),
-                    }
-                }
-                Err(tokio_stream::wrappers::errors::BroadcastStreamRecvError::Lagged(n)) => {
-                    tracing::warn!("Client lagged behind by {} events", n);
-                    None
-                }
-            })
-        })
-        .inspect(|event| {
-            if let Err(err) = event {
-                log_and_capture_error("submit SSE serialization", err);
-            }
-        })
-    };
-
-    let event_stream = futures::StreamExt::inspect(event_stream, move |_| {
-        let _ = &client_stream_guard;
-    });
+    let events = live_streaming_events(broadcast_rx);
+    let event_stream = owned_streaming_events_to_sse(events, client_stream_guard);
     Ok(Sse::new(event_stream).keep_alive(
         axum::response::sse::KeepAlive::new()
             .interval(Duration::from_secs(1))
@@ -13098,6 +13477,7 @@ mod reasoning_replay_tests {
             mcp_servers_disabled_by_user: None,
             mcp_tools_disabled_by_user: None,
             continuation_in_flight: None,
+            submission_outcome: None,
         }
     }
 
@@ -13761,6 +14141,7 @@ fn generation_metadata_for_error(error: GenerationErrorType) -> GenerationMetada
         mcp_servers_disabled_by_user: None,
         mcp_tools_disabled_by_user: None,
         continuation_in_flight: None,
+        submission_outcome: None,
     }
 }
 
@@ -13777,12 +14158,28 @@ async fn persist_background_generation_failure(
     let generation_error = internal_generation_error(report);
     report_chat_provider_generation_error(chat_provider_id, &generation_error);
 
+    let mut metadata = generation_metadata_for_error(generation_error.clone());
+    if let Ok(message) = get_message_by_id(
+        &app_state.db,
+        policy,
+        &me_user.to_subject(),
+        &assistant_message_id,
+    )
+    .await
+        && let Some(parameters) = message
+            .generation_parameters
+            .and_then(|value| serde_json::from_value::<GenerationParameters>(value).ok())
+        && let Some(mut correction) = parameters.turn_consumption.submission_correction
+    {
+        correction.stop(crate::services::submission_correction::SubmissionReason::ProviderError);
+        metadata.submission_outcome = Some(correction.outcome);
+    }
     if let Err(error) = update_message_generation_metadata(
         &app_state.db,
         policy,
         &me_user.to_subject(),
         &assistant_message_id,
-        generation_metadata_for_error(generation_error.clone()),
+        metadata,
     )
     .await
     {
@@ -15876,7 +16273,10 @@ pub async fn client_tool_result(
                         .await,
                     ClientToolDelivery::Delivered
                 ) {
-                    return Ok(Json(ClientToolResultResponse { delivered: true }));
+                    return Ok(Json(ClientToolResultResponse {
+                        delivered: true,
+                        stored: false,
+                    }));
                 }
             }
             let row = crate::services::client_operations::store::for_call(
@@ -15973,7 +16373,10 @@ pub async fn client_tool_result(
                             "Operation is no longer open".into(),
                         )
                     })?;
-                    return Ok(Json(ClientToolResultResponse { delivered: true }));
+                    return Ok(Json(ClientToolResultResponse {
+                        delivered: true,
+                        stored: true,
+                    }));
                 }
             }
         }
@@ -16012,6 +16415,12 @@ pub async fn client_tool_result(
             payload["result"] = result;
             payload["file_upload_ids"] = json!(file_ids);
         }
+        if app_state.config.client_tools.durable_operations_enabled {
+            payload["operation_executor"] = serde_json::to_value(
+                crate::services::client_operations::ExecutorBinding::from_headers(&headers),
+            )
+            .unwrap_or(JsonValue::Null);
+        }
         app_state
             .background_tasks
             .enqueue_client_tool_result(generation_id, &request.tool_call_id, payload)
@@ -16022,7 +16431,10 @@ pub async fn client_tool_result(
                     format!("Failed to deliver client tool result: {error}"),
                 )
             })?;
-        return Ok(Json(ClientToolResultResponse { delivered: true }));
+        return Ok(Json(ClientToolResultResponse {
+            delivered: true,
+            stored: false,
+        }));
     }
 
     let task = task.expect("task checked above");
@@ -16060,6 +16472,7 @@ pub async fn client_tool_result(
     // aborted) is a benign idempotent no-op — never a 4xx/5xx.
     Ok(Json(ClientToolResultResponse {
         delivered: matches!(delivery, ClientToolDelivery::Delivered),
+        stored: false,
     }))
 }
 
@@ -16755,6 +17168,7 @@ fn resolve_submitted_decisions(
 pub(crate) struct StartedContinuation {
     pub chat_id: Uuid,
     pub events: tokio::sync::broadcast::Receiver<StreamingEvent>,
+    pub client_stream_guard: ClientStreamGuard,
 }
 
 /// Validate an approval decision, take the chat's lease and resume the parked
@@ -16884,6 +17298,8 @@ pub(crate) async fn start_continuation(
     let (events, task) =
         acquire_user_generation_lease(app_state, chat_id, request.message_id).await?;
 
+    let client_stream_guard = task.client_stream_guard();
+
     tokio::spawn(async move {
         let mut cleanup_guard = TaskCleanupGuard::new(
             app_state_for_worker.background_tasks.clone(),
@@ -16935,7 +17351,11 @@ pub(crate) async fn start_continuation(
         .await;
     });
 
-    Ok(StartedContinuation { chat_id, events })
+    Ok(StartedContinuation {
+        chat_id,
+        events,
+        client_stream_guard,
+    })
 }
 
 #[utoipa::path(
@@ -16966,9 +17386,15 @@ pub async fn continue_message_sse(
     request.registered_client_tools = headers
         .contains_key("X-Erato-Client-Tools")
         .then(|| crate::services::client_tools::registered_client_tools(&headers));
+    request.executor = crate::services::client_operations::ExecutorBinding::from_headers(&headers);
     let (tx, rx) = tokio::sync::mpsc::channel::<Result<Event, Report>>(100);
-    start_continuation(&app_state, &policy, &me_user, request, tx).await?;
-    let stream: SseEventStream = Box::pin(tokio_stream::wrappers::ReceiverStream::new(rx));
+    let started = start_continuation(&app_state, &policy, &me_user, request, tx).await?;
+    let stream: SseEventStream = Box::pin(futures::StreamExt::inspect(
+        tokio_stream::wrappers::ReceiverStream::new(rx),
+        move |_| {
+            let _ = &started.client_stream_guard;
+        },
+    ));
     Ok(Sse::new(stream).keep_alive(
         axum::response::sse::KeepAlive::new()
             .interval(Duration::from_secs(1))
@@ -16991,6 +17417,8 @@ pub(crate) struct ParkedTurnResume {
     /// The client tools the device continuing this turn registered, when it
     /// said. `None` keeps the registration the turn started with.
     pub continuing_client_tools: Option<Vec<String>>,
+    /// The executor binding of the device answering an approval, if it sent one.
+    pub continuing_executor: Option<crate::services::client_operations::ExecutorBinding>,
 }
 
 /// How a continuation reached the worker, decided before the generation lease
@@ -17202,6 +17630,7 @@ async fn resume_parked_child(
                 .collect(),
             decision: None,
             registered_client_tools: None,
+            executor: None,
         };
         let resumed = run_child_approval_continuation(
             app_state.clone(),
@@ -17643,11 +18072,17 @@ pub(crate) async fn run_continuation(
             parsed.content.clone(),
         )
         .await?;
-        if crate::services::tool_call_budget::choices(&parsed.content)
+        let budget_choice = crate::services::tool_call_budget::choices(&parsed.content)
             .last()
-            .is_some_and(|(_, choice)| {
-                choice == crate::services::tool_call_budget::BudgetChoice::Stop
-            })
+            .map(|(_, choice)| choice);
+        let pending_correction = generation_parameters
+            .turn_consumption
+            .submission_correction
+            .as_ref()
+            .filter(|correction| correction.pending());
+        if budget_choice == Some(crate::services::tool_call_budget::BudgetChoice::Stop)
+            || (budget_choice == Some(crate::services::tool_call_budget::BudgetChoice::Answer)
+                && pending_correction.is_some())
         {
             let mut metadata = message
                 .generation_metadata
@@ -17655,7 +18090,27 @@ pub(crate) async fn run_continuation(
                 .and_then(|value| serde_json::from_value::<GenerationMetadata>(value.clone()).ok())
                 .unwrap_or_default();
             metadata.continuation_in_flight = None;
-            metadata.was_aborted = Some(true);
+            metadata.was_aborted = (budget_choice
+                == Some(crate::services::tool_call_budget::BudgetChoice::Stop))
+            .then_some(true);
+            if let Some(correction) = pending_correction {
+                let mut correction = correction.clone();
+                correction.stop(if budget_choice == Some(crate::services::tool_call_budget::BudgetChoice::Stop) {
+                    crate::services::submission_correction::SubmissionReason::UserStopped
+                } else {
+                    crate::services::submission_correction::SubmissionReason::UserRequestedAnswer
+                });
+                metadata.submission_outcome = Some(correction.outcome.clone());
+                let mut consumption = generation_parameters.turn_consumption.clone();
+                consumption.submission_correction = Some(correction);
+                crate::services::client_operations::store::save_consumption(
+                    &app_state.db,
+                    message.id,
+                    task.generation_id,
+                    &consumption,
+                )
+                .await?;
+            }
             update_message_generation_metadata(
                 &app_state.db,
                 policy,
@@ -18385,6 +18840,7 @@ pub(crate) async fn run_continuation(
         approval_request.pending_tool_calls,
         None,
         request.registered_client_tools.clone(),
+        request.executor.clone(),
     )
     .await
 }
@@ -18409,7 +18865,7 @@ fn append_operation_kind_offers(
         return Ok(());
     }
     let mut kinds: Vec<_> = app_state.client_operations.kinds().collect();
-    kinds.sort_by_key(|kind| kind.operation_id());
+    kinds.sort_by(|a, b| a.operation_id().cmp(b.operation_id()));
     for kind in kinds {
         if original_selection.is_some_and(|selection| {
             !selection
@@ -18485,6 +18941,7 @@ async fn resume_parked_generation(
     pending_from_park: Vec<crate::models::message::PendingToolCall>,
     operation_attempt: Option<Uuid>,
     continuing_client_tools: Option<Vec<String>>,
+    continuing_executor: Option<crate::services::client_operations::ExecutorBinding>,
 ) -> Result<(), Report> {
     let mcp = app_state.mcp_state().await;
     let me_profile_input = MeProfileChatRequestInput::from_me_profile(me_user);
@@ -18903,6 +19360,7 @@ async fn resume_parked_generation(
         initial_unfinished_tool_calls: pending_tool_calls,
         approved_task_call_ids,
         continuing_client_tools,
+        continuing_executor,
     });
 
     let chat_options =
@@ -19062,10 +19520,8 @@ pub(crate) async fn run_client_operation_continuation(
     policy: &PolicyEngine,
     me_user: &MeProfile,
     attempt_id: Uuid,
+    context: Option<GenerationRequestContext>,
 ) -> Result<(), Report> {
-    // This API starts a detached generation. Registered client calls use the
-    // account inbox immediately until an interactive transport owns a turn.
-    task.mark_client_disconnected();
     let account_id = Uuid::parse_str(&me_user.id)?;
     let row = crate::services::client_operations::store::begin_continuation(
         &app_state.db,
@@ -19191,7 +19647,10 @@ pub(crate) async fn run_client_operation_continuation(
         Vec::new(),
         pending_calls,
         Some(attempt_id),
-        None,
+        context
+            .as_ref()
+            .map(|context| context.registered_client_tools.clone()),
+        context.and_then(|context| context.executor),
     )
     .await
 }
@@ -19214,6 +19673,7 @@ pub async fn resume_message_sse(
     State(app_state): State<AppState>,
     Extension(policy): Extension<PolicyEngine>,
     Extension(me_user): Extension<MeProfile>,
+    headers: HeaderMap,
     Json(request): Json<ResumeStreamRequest>,
 ) -> Result<Sse<SseEventStreamWithKeepAlive>, (axum::http::StatusCode, String)> {
     // Verify user has access to this chat
@@ -19239,41 +19699,46 @@ pub async fn resume_message_sse(
     })?
     .0;
 
-    let event_stream: SseEventStream =
-        if let Some(task) = app_state.background_tasks.get_task(&request.chat_id).await {
-            // The owner pod can use its in-memory history and broadcast channel.
-            let event_history = task.get_event_history().await;
-            let broadcast_rx = task.subscribe();
-            use futures::stream;
-            let history_stream = stream::iter(event_history.into_iter().map(Ok::<_, eyre::Report>));
-            let broadcast_stream = tokio_stream::wrappers::BroadcastStream::new(broadcast_rx);
-            let live_stream = futures::StreamExt::filter_map(broadcast_stream, |result| {
-                futures::future::ready(match result {
-                    Ok(event) => Some(Ok(event)),
-                    Err(tokio_stream::wrappers::errors::BroadcastStreamRecvError::Lagged(n)) => {
-                        tracing::warn!("Resume client lagged behind by {} events", n);
-                        None
-                    }
-                })
-            });
-            streaming_events_to_sse(futures::StreamExt::chain(history_stream, live_stream))
-        } else if let Some((generation_id, _message_id)) = app_state
-            .background_tasks
-            .get_shared_generation(&request.chat_id)
-            .await
-        {
-            // A request routed to another pod tails the shared event log instead of
-            // looking for a task in that pod's process-local map.
-            streaming_events_to_sse(shared_generation_event_stream(
-                app_state.background_tasks.clone(),
-                generation_id,
-            ))
-        } else {
-            return Err((
-                axum::http::StatusCode::NOT_FOUND,
-                "No active generation task found for this chat".to_string(),
-            ));
-        };
+    let local = app_state.background_tasks.get_task(&request.chat_id).await;
+    let generation_id = if let Some(task) = &local {
+        task.generation_id
+    } else if let Some((generation_id, _)) = app_state
+        .background_tasks
+        .get_shared_generation(&request.chat_id)
+        .await
+    {
+        generation_id
+    } else {
+        return Err((
+            axum::http::StatusCode::NOT_FOUND,
+            "No active generation task found for this chat".to_string(),
+        ));
+    };
+    let db = app_state
+        .config
+        .client_tools
+        .durable_operations_enabled
+        .then(|| app_state.db.clone());
+    let guard = ClientStreamGuard::resume(
+        db,
+        request.chat_id,
+        generation_id,
+        crate::services::client_operations::ExecutorBinding::from_headers(&headers),
+        crate::services::client_tools::registered_client_tools(&headers),
+    )
+    .await;
+    let event_stream = if let Some(task) = local {
+        let event_history = task.get_event_history().await;
+        let broadcast_rx = task.subscribe();
+        let history = futures::stream::iter(event_history.into_iter().map(Ok::<_, Report>));
+        let live = live_streaming_events(broadcast_rx);
+        owned_streaming_events_to_sse(futures::StreamExt::chain(history, live), guard)
+    } else {
+        owned_streaming_events_to_sse(
+            shared_generation_event_stream(app_state.background_tasks.clone(), generation_id),
+            guard,
+        )
+    };
 
     Ok(Sse::new(event_stream).keep_alive(
         axum::response::sse::KeepAlive::new()

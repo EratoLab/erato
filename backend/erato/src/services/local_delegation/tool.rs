@@ -6,6 +6,8 @@ use serde_json::{Value, json};
 
 pub const NAME: &str = erato_config::config::LOCAL_COLLECT_EVIDENCE_TOOL_NAME;
 pub const QUALIFIED_NAME: &str = "erato/local_collect_evidence";
+/// The attempt expiry, which the signed plan's `expiresAt` repeats.
+const ATTEMPT_TTL_SECS: i64 = 86400;
 pub fn build(omit_strict: bool) -> Tool {
     Tool {
         name: NAME.into(),
@@ -32,7 +34,7 @@ pub fn plan(input: &Value, now: i64) -> Result<Value, contract::Invalid> {
     if object.len() != 1 || !object.contains_key("queryVariants") {
         return Err(contract::Invalid);
     }
-    let plan = json!({"operation":"collect_evidence","queryVariants":input["queryVariants"],"maxHits":40,"maxArtifacts":8,"maxBytes":1048576,"executionSeconds":60,"expiresAt":now.checked_add(86400).ok_or(contract::Invalid)?});
+    let plan = json!({"operation":"collect_evidence","queryVariants":input["queryVariants"],"maxHits":40,"maxArtifacts":8,"maxBytes":1048576,"executionSeconds":60,"expiresAt":now.checked_add(ATTEMPT_TTL_SECS).ok_or(contract::Invalid)?});
     contract::validate("plan", &plan)?;
     if plan["queryVariants"]
         .as_array()
@@ -107,6 +109,9 @@ impl crate::services::client_operations::OperationKind for LocalEvidenceKind {
     }
     fn consent(&self) -> crate::services::client_operations::ConsentPolicy {
         crate::services::client_operations::ConsentPolicy::Native
+    }
+    fn attempt_ttl(&self) -> chrono::Duration {
+        chrono::Duration::seconds(ATTEMPT_TTL_SECS)
     }
     fn reoffer_after_result(
         &self,
@@ -257,7 +262,7 @@ pub fn request_plan(
         request
             .expires_at
             .timestamp()
-            .checked_sub(86400)
+            .checked_sub(ATTEMPT_TTL_SECS)
             .ok_or(contract::Invalid)?,
     )
 }

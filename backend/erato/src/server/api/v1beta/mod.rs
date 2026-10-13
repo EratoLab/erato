@@ -1685,6 +1685,9 @@ pub struct MentionedAssistant {
 /// A message in a chat
 #[derive(Debug, Clone, ToSchema, Serialize, Deserialize)]
 pub struct ChatMessage {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    submission_outcome: Option<crate::services::submission_correction::SubmissionOutcome>,
     /// The unique ID of the message
     id: String,
     /// The ID of the chat this message belongs to
@@ -2577,6 +2580,9 @@ impl ChatMessage {
             .and_then(|metadata| metadata.mcp_tools_disabled_by_user.clone());
         let chat_provider_id = get_generation_chat_provider_id_from_message(&msg)?;
         Ok(ChatMessage {
+            submission_outcome: generation_metadata
+                .as_ref()
+                .and_then(|metadata| metadata.submission_outcome.clone()),
             id: msg.id.to_string(),
             chat_id: msg.chat_id.to_string(),
             role: parsed_message.role.to_string(),

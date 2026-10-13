@@ -1,3 +1,5 @@
+import { wordReadScope } from "@erato/frontend/word-review";
+
 import {
   captureWordAuthoringSnapshot,
   compileWordDocumentPlan,
@@ -7,12 +9,14 @@ import { classifyWordInPlacePlan } from "./wordInPlacePlan";
 import { isWordTrackingMode } from "./wordInPlaceSwitch";
 
 import type { WordRouteReason } from "./wordApplyDiagnostics";
+import type { WordApplyPolicy } from "./wordApplyPolicy";
 import type { WordInPlaceCapabilities } from "./wordInPlaceCapabilities";
 import type { WordInPlaceOp } from "./wordInPlacePlan";
 import type { WordInPlaceAvailability } from "./wordInPlaceSwitch";
 import type {
   WordAuthoringSnapshot,
   WordDocumentPlan,
+  WordReadScope,
 } from "@erato/frontend/word-review";
 
 export type WordPlanRoute =
@@ -77,6 +81,44 @@ export function routeWordDocumentPlan(
     // A classifier failure must never block the import that worked before.
     return needsImport("program-mismatch");
   }
+}
+
+export type WordWholeDocumentRefusal =
+  | "import-disabled"
+  /** A scoped read authorizes one passage, object or cell; it never becomes a whole-document write. */
+  | "scoped-needs-in-place";
+
+/** Whether a route replaces the whole document (the import, or the body route's whole-body
+ * insertOoxml Replace), and what the host's policy lets it do. */
+export type WordWholeDocumentWrite =
+  | { write: "none" }
+  | { write: "allowed" }
+  | { write: "confirm" }
+  | { write: "refuse"; reason: WordWholeDocumentRefusal };
+
+/** The read scope a plan was submitted under, if it came from a scoped read rather than a complete one. */
+export function wordPlanReadScope(
+  plan: WordDocumentPlan,
+  snapshot: WordAuthoringSnapshot,
+): WordReadScope["kind"] | undefined {
+  return wordReadScope(snapshot, plan.readToken)?.kind;
+}
+
+/** In-place and Track Changes-blocked routes never replace the whole document. */
+export function wordWholeDocumentWrite(
+  route: Pick<WordPlanRoute, "route">,
+  plan: WordDocumentPlan,
+  snapshot: WordAuthoringSnapshot,
+  policy: Pick<WordApplyPolicy, "wholeDocumentImport">,
+): WordWholeDocumentWrite {
+  if (route.route !== "import" && route.route !== "body")
+    return { write: "none" };
+  if (policy.wholeDocumentImport === "allowed") return { write: "allowed" };
+  if (wordPlanReadScope(plan, snapshot))
+    return { write: "refuse", reason: "scoped-needs-in-place" };
+  return policy.wholeDocumentImport === "off"
+    ? { write: "refuse", reason: "import-disabled" }
+    : { write: "confirm" };
 }
 
 /** Plain-language groups for why a plan replaces the whole document. */

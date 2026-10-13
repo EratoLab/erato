@@ -17,9 +17,12 @@ import {
   checkTargetVerification,
   proveWordSelectionTarget,
   queueTargetVerification,
+  queueWordCommentAnchors,
   showWordSelection,
   showWrittenWordSelection,
+  WORD_COMMENT_ANCHOR_CHECK_MS,
   WORD_SELECTION_SHOW_TIMEOUT_MS,
+  wordCommentsOutsidePackage,
 } from "../wordSelectionTarget";
 
 import type {
@@ -678,3 +681,203 @@ describe.each(HOSTS)(
     });
   },
 );
+
+describe("wordCommentsOutsidePackage", () => {
+  const W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
+  const part = (name: string, xml: string) =>
+    `<pkg:part pkg:name="${name}"><pkg:xmlData>${xml}</pkg:xmlData></pkg:part>`;
+  const pkg = (paragraph: string, ...parts: string[]) =>
+    `<pkg:package xmlns:pkg="http://schemas.microsoft.com/office/2006/xmlPackage">${part(
+      "/word/document.xml",
+      `<w:document xmlns:w="${W}"><w:body>${paragraph}<w:p/></w:body></w:document>`,
+    )}${parts.join("")}</pkg:package>`;
+  const marked = (...ids: number[]) =>
+    `<w:p>${ids.map((id) => `<w:commentRangeStart w:id="${id}"/>`).join("")}<w:r><w:t>Text</w:t></w:r>${ids
+      .map(
+        (id) =>
+          `<w:commentRangeEnd w:id="${id}"/><w:r><w:commentReference w:id="${id}"/></w:r>`,
+      )
+      .join("")}</w:p>`;
+  const comments = (...paraIds: string[]) =>
+    part(
+      "/word/comments.xml",
+      `<w:comments xmlns:w="${W}" xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml">${paraIds
+        .map(
+          (paraId, id) =>
+            `<w:comment w:id="${id}"><w:p w14:paraId="${paraId}"><w:r><w:t>Note</w:t></w:r></w:p></w:comment>`,
+        )
+        .join("")}</w:comments>`,
+    );
+  const ids = (...entries: [string, string][]) =>
+    part(
+      "/word/commentsIds.xml",
+      `<w16cid:commentsIds xmlns:w16cid="http://schemas.microsoft.com/office/word/2016/wordml/cid">${entries
+        .map(
+          ([paraId, durableId]) =>
+            `<w16cid:commentId w16cid:paraId="${paraId}" w16cid:durableId="${durableId}"/>`,
+        )
+        .join("")}</w16cid:commentsIds>`,
+    );
+  const extended = (...entries: [string, string | null][]) =>
+    part(
+      "/word/commentsExtended.xml",
+      `<w15:commentsEx xmlns:w15="http://schemas.microsoft.com/office/word/2012/wordml">${entries
+        .map(
+          ([paraId, parent]) =>
+            `<w15:commentEx w15:paraId="${paraId}"${parent ? ` w15:paraIdParent="${parent}"` : ""} w15:done="0"/>`,
+        )
+        .join("")}</w15:commentsEx>`,
+    );
+  const modern = pkg(
+    marked(0),
+    comments("1A2B3C4D"),
+    extended(["1A2B3C4D", null]),
+    ids(["1A2B3C4D", "2C93DE4F"]),
+  );
+
+  it("holds a listed comment whose durableId commentsIds gives in hex", () => {
+    expect(wordCommentsOutsidePackage(modern, ["747888207"])).toEqual({
+      missing: [],
+      uncertain: false,
+    });
+  });
+
+  it("reports a listed comment commentsIds does not give", () => {
+    expect(
+      wordCommentsOutsidePackage(modern, ["747888207", "2010680536"]),
+    ).toEqual({ missing: ["2010680536"], uncertain: false });
+  });
+
+  it("takes the web's numeric ids as their decimal strings", () => {
+    expect(wordCommentsOutsidePackage(modern, [747888207, 2010680536])).toEqual(
+      { missing: ["2010680536"], uncertain: false },
+    );
+  });
+
+  it("reports every listed comment of a paragraph whose package has no comment parts", () => {
+    expect(
+      wordCommentsOutsidePackage(pkg("<w:p><w:r><w:t>Text</w:t></w:r></w:p>"), [
+        "2010680536",
+        27818680,
+      ]),
+    ).toEqual({ missing: ["2010680536", "27818680"], uncertain: false });
+  });
+
+  it.each([
+    [
+      "start",
+      `<w:p><w:commentRangeStart w:id="0"/><w:r><w:t>Text</w:t></w:r></w:p>`,
+    ],
+    [
+      "end",
+      `<w:p><w:r><w:t>Text</w:t></w:r><w:commentRangeEnd w:id="0"/><w:r><w:commentReference w:id="0"/></w:r></w:p>`,
+    ],
+  ])(
+    "reports every listed comment of a cell paragraph cut from its row, holding only the %s of one, though commentsIds gives it",
+    (_, paragraph) => {
+      expect(
+        wordCommentsOutsidePackage(
+          pkg(
+            paragraph,
+            comments("1A2B3C4D"),
+            extended(["1A2B3C4D", null]),
+            ids(["1A2B3C4D", "2C93DE4F"]),
+          ),
+          ["747888207"],
+        ),
+      ).toEqual({ missing: ["747888207"], uncertain: true });
+    },
+  );
+
+  it("reports nothing for a paragraph without comments", () => {
+    expect(wordCommentsOutsidePackage(modern, [])).toEqual({
+      missing: [],
+      uncertain: false,
+    });
+  });
+
+  describe("in a legacy package without commentsIds", () => {
+    it("holds as many listed comments as its paragraph marks", () => {
+      expect(
+        wordCommentsOutsidePackage(pkg(marked(0), comments("1A2B3C4D")), [
+          "1234",
+        ]),
+      ).toEqual({ missing: [], uncertain: false });
+    });
+
+    it("reports every listed comment once more are listed than marked", () => {
+      expect(
+        wordCommentsOutsidePackage(pkg(marked(0), comments("1A2B3C4D")), [
+          "1234",
+          "5678",
+        ]),
+      ).toEqual({ missing: ["1234", "5678"], uncertain: true });
+    });
+
+    it("leaves replies out of the marks it counts", () => {
+      const listed = ["1234", "5678"];
+      const thread = comments("1A2B3C4D", "5E6F7A8B");
+      expect(
+        wordCommentsOutsidePackage(pkg(marked(0, 1), thread), listed),
+      ).toEqual({ missing: [], uncertain: false });
+      expect(
+        wordCommentsOutsidePackage(
+          pkg(
+            marked(0, 1),
+            thread,
+            extended(["1A2B3C4D", null], ["5E6F7A8B", "1A2B3C4D"]),
+          ),
+          listed,
+        ),
+      ).toEqual({ missing: listed, uncertain: true });
+    });
+  });
+});
+
+describe("queueWordCommentAnchors", () => {
+  const listedOutside = () => {
+    const comment = {
+      id: 747888207,
+      getRange: vi.fn(() => ({
+        compareLocationWith: vi.fn(() => ({ value: "Contains" })),
+      })),
+    };
+    const paragraph = { getRange: vi.fn(() => ({})) };
+    return {
+      comment,
+      paragraph,
+      outside: {
+        paragraph: paragraph as unknown as Word.Paragraph,
+        comments: [comment as unknown as Word.Comment],
+      },
+    };
+  };
+
+  it("reads no comment's anchor on a host that does not compare them, as on Word for the web", () => {
+    const { comment, paragraph, outside } = listedOutside();
+    const extendTimeout = vi.fn();
+    expect(
+      queueWordCommentAnchors(
+        [outside],
+        { comparesCommentAnchors: false },
+        { extendTimeout },
+      ),
+    ).toBeNull();
+    expect(comment.getRange).not.toHaveBeenCalled();
+    expect(paragraph.getRange).not.toHaveBeenCalled();
+    expect(extendTimeout).not.toHaveBeenCalled();
+  });
+
+  it("finds a comment whose anchor contains its paragraph on desktop", () => {
+    const { comment, outside } = listedOutside();
+    const extendTimeout = vi.fn();
+    const anchors = queueWordCommentAnchors(
+      [outside, null],
+      { comparesCommentAnchors: true },
+      { extendTimeout },
+    );
+    expect(comment.getRange).toHaveBeenCalledOnce();
+    expect(extendTimeout).toHaveBeenCalledWith(WORD_COMMENT_ANCHOR_CHECK_MS);
+    expect(anchors?.()).toEqual([new Set(["747888207"]), new Set()]);
+  });
+});

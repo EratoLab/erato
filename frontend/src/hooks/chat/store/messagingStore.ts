@@ -22,6 +22,7 @@ export interface StreamingState {
   isFinalizing: boolean; // True during post-streaming refetch/cleanup phase
   currentMessageId: string | null;
   content: ContentPart[];
+  submissionOutcome?: Message["submission_outcome"];
   createdAt: string | null; // Timestamp for message ordering
   /** Host preparation still running before the request is sent. */
   pendingLabel?: string | null;
@@ -176,6 +177,7 @@ export const useMessagingStore = create<MessagingStore>()(
           [currentStreaming.currentMessageId]: {
             id: currentStreaming.currentMessageId,
             content: currentStreaming.content,
+            submission_outcome: currentStreaming.submissionOutcome,
             role: "assistant",
             createdAt: currentStreaming.createdAt ?? new Date().toISOString(),
             status: currentStreaming.isStreaming ? "sending" : "complete",

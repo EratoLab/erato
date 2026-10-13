@@ -4,6 +4,11 @@ import type {
   WordDocumentDiagnostic,
 } from "./wordApplyDocumentPlan";
 import type { WordApplyStage } from "./wordApplyProgress";
+import type {
+  WordPlanRoute,
+  WordWholeDocumentRefusal,
+  WordWholeDocumentWrite,
+} from "./wordInPlaceRoute";
 import type { WordReplaceSelectionResult } from "./wordReplaceSelection";
 import type { WordReviewAnchor, WordTrackingMode } from "./wordReviewLocation";
 import type { WordWriteBlockReason } from "./wordWriteGate";
@@ -48,6 +53,9 @@ export interface WordReviewState {
   /** A selection Replace refused because another version from the same answer holds the passage.
    * The card stays idle, so it can be replaced once that version is undone. */
   refusedForSibling?: boolean;
+  /** A document plan's Apply that stopped before writing because the host's policy asks before, or
+   * refuses, replacing the whole document. The card stays idle and offers that choice, not an error. */
+  wholeDocumentBlock?: WordWholeDocumentBlock;
 }
 export const EMPTY_WORD_REVIEW: WordReviewState = {
   status: "idle",
@@ -94,4 +102,44 @@ export function wordMismatchedPassages(
       return match ? [match[1]] : [];
     }),
   ).size;
+}
+
+export type WordWholeDocumentBlock = WordDocumentDiagnostic & {
+  reason: "import-needs-confirmation" | WordWholeDocumentRefusal;
+};
+
+const WHOLE_DOCUMENT_BLOCKS = new Set<WordDocumentDiagnostic["reason"]>([
+  "import-needs-confirmation",
+  "import-disabled",
+  "scoped-needs-in-place",
+]);
+
+/** Apply's own policy check, which the card offers as its confirm or refusal choice. */
+export function isWordWholeDocumentBlock(
+  diagnostic: WordDocumentDiagnostic | undefined,
+): diagnostic is WordWholeDocumentBlock {
+  return (
+    diagnostic?.stage === "validate" &&
+    WHOLE_DOCUMENT_BLOCKS.has(diagnostic.reason)
+  );
+}
+
+export function wordWholeDocumentBlockWrite(
+  block: WordWholeDocumentBlock,
+): WordWholeDocumentWrite {
+  return block.reason === "import-needs-confirmation"
+    ? { write: "confirm" }
+    : { write: "refuse", reason: block.reason };
+}
+
+/** The route Apply found live, for the card's reason line. */
+export function wordWholeDocumentBlockRoute(
+  block: WordWholeDocumentBlock,
+): WordPlanRoute {
+  return block.details?.route === "body"
+    ? { route: "body" }
+    : {
+        route: "import",
+        reason: block.details?.routeReason ?? "program-mismatch",
+      };
 }

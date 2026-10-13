@@ -2185,6 +2185,11 @@
                 "schema": {
                   "$ref": "#/components/schemas/ClientOperationResponse"
                 }
+              },
+              "text/event-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageSubmitStreamingResponseMessage"
+                }
               }
             }
           },
@@ -6229,6 +6234,9 @@
             "type": "string",
             "description": "The unique ID of the sibling message, if any"
           },
+          "submission_outcome": {
+            "$ref": "#/components/schemas/SubmissionOutcome"
+          },
           "task_result": {
             "$ref": "#/components/schemas/TaskResultInput",
             "description": "Present on a user message the server appended to deliver a finished\ndelegated task's result. The client uses it to tell such a row apart\nfrom one a person wrote, and to decide whether it still needs a\nreaction."
@@ -6562,12 +6570,17 @@
       "ClientToolResultResponse": {
         "type": "object",
         "required": [
-          "delivered"
+          "delivered",
+          "stored"
         ],
         "properties": {
           "delivered": {
             "type": "boolean",
             "description": "True if a suspended generation received this result; false if it was a\nbenign no-op (already delivered, timed out, aborted, or unknown id)."
+          },
+          "stored": {
+            "type": "boolean",
+            "description": "True if this result settled a parked client operation, which the\nsender then continues."
           }
         }
       },
@@ -6584,6 +6597,9 @@
                 "$ref": "#/components/schemas/ClientToolDraftReference"
               }
             ]
+          },
+          "recovery": {
+            "$ref": "#/components/schemas/SubmissionRecovery"
           },
           "terminal": {
             "type": "boolean",
@@ -8975,12 +8991,13 @@
           "destructive_hint",
           "idempotent_hint",
           "open_world_hint",
-          "annotated"
+          "annotated",
+          "sources"
         ],
         "properties": {
           "annotated": {
             "type": "boolean",
-            "description": "Whether the server declared any hints at all. Defaults are the\npessimistic reading, so an unannotated tool is not read-only."
+            "description": "Whether effective annotations are present, from the server or operator\nconfiguration. This flag does not describe their source."
           },
           "destructive_hint": {
             "type": "boolean"
@@ -8993,6 +9010,10 @@
           },
           "read_only_hint": {
             "type": "boolean"
+          },
+          "sources": {
+            "$ref": "#/components/schemas/McpToolAnnotationSources",
+            "description": "The winning declaration for each hint, resolved by the backend."
           }
         }
       },
@@ -9013,6 +9034,44 @@
           "ask",
           "denied"
         ]
+      },
+      "McpToolAnnotationSource": {
+        "type": "string",
+        "description": "The winning declaration for one effective MCP tool hint.",
+        "enum": [
+          "tool_override",
+          "server_override",
+          "global_override",
+          "server_supplied",
+          "tool_default",
+          "server_default",
+          "global_default",
+          "protocol_default"
+        ]
+      },
+      "McpToolAnnotationSources": {
+        "type": "object",
+        "description": "Sources are independent: a tool can inherit each hint from a different scope.",
+        "required": [
+          "read_only_hint",
+          "destructive_hint",
+          "idempotent_hint",
+          "open_world_hint"
+        ],
+        "properties": {
+          "destructive_hint": {
+            "$ref": "#/components/schemas/McpToolAnnotationSource"
+          },
+          "idempotent_hint": {
+            "$ref": "#/components/schemas/McpToolAnnotationSource"
+          },
+          "open_world_hint": {
+            "$ref": "#/components/schemas/McpToolAnnotationSource"
+          },
+          "read_only_hint": {
+            "$ref": "#/components/schemas/McpToolAnnotationSource"
+          }
+        }
       },
       "McpToolEffectiveState": {
         "type": "string",
@@ -9960,6 +10019,10 @@
         "properties": {
           "code": {
             "type": "string"
+          },
+          "message": {
+            "type": "string",
+            "description": "Executor text, at most 1024 characters. Only a kind validator may forward it."
           }
         },
         "additionalProperties": false
@@ -11313,6 +11376,72 @@
         "enum": [
           "user_pick",
           "audience_pin"
+        ]
+      },
+      "SubmissionOutcome": {
+        "type": "object",
+        "required": [
+          "status",
+          "attempts_used",
+          "max_attempts"
+        ],
+        "properties": {
+          "attempts_used": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "max_attempts": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "reason": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/SubmissionReason"
+              }
+            ]
+          },
+          "status": {
+            "$ref": "#/components/schemas/SubmissionStatus"
+          }
+        }
+      },
+      "SubmissionReason": {
+        "type": "string",
+        "enum": [
+          "validation_failed",
+          "attempts_exhausted",
+          "model_stopped",
+          "recovery_reads_exhausted",
+          "terminal_validation",
+          "context_unavailable",
+          "capability_unavailable",
+          "provider_error",
+          "timeout",
+          "cancelled",
+          "user_requested_answer",
+          "user_stopped"
+        ]
+      },
+      "SubmissionRecovery": {
+        "type": "string",
+        "enum": [
+          "repair_arguments",
+          "read_current_context",
+          "cannot_continue"
+        ]
+      },
+      "SubmissionStatus": {
+        "type": "string",
+        "enum": [
+          "correcting",
+          "accepted",
+          "unresolved"
         ]
       },
       "TaskResultInput": {

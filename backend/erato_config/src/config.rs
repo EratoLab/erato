@@ -1652,6 +1652,22 @@ impl AppConfig {
                                 qualified
                             );
                         }
+                        if submission.max_recovery_reads > 128 {
+                            panic!(
+                                "Client tool '{}' submission.max_recovery_reads must be 0–128.",
+                                qualified
+                            );
+                        }
+                        for name in &submission.recovery_read_tools {
+                            if !config.client_tools.tools.values().any(|read| {
+                                read.qualified_name() == *name && read.submission.is_none()
+                            }) {
+                                panic!(
+                                    "Client tool '{}' recovery read '{}' must name a configured non-submission client tool.",
+                                    qualified, name
+                                );
+                            }
+                        }
                         if let Err(error) = crate::client_tool_schema::compile(&value) {
                             panic!(
                                 "Client tool '{}' has an invalid submission schema: {}",
@@ -1668,6 +1684,50 @@ impl AppConfig {
                     "Client tool '{}' has unparseable JSON parameters: {}",
                     qualified, e
                 ),
+            }
+            if let Some(durable) = &tool.durable {
+                if tool.submission.is_some() {
+                    panic!(
+                        "Client tool '{}' cannot combine durable with submission.",
+                        qualified
+                    );
+                }
+                if let Some(schema) = &durable.result_schema {
+                    let compiled = serde_json::from_str::<serde_json::Value>(schema)
+                        .map_err(|error| error.to_string())
+                        .and_then(|value| crate::client_tool_schema::compile(&value));
+                    if let Err(error) = compiled {
+                        panic!(
+                            "Client tool '{}' has an invalid durable.result_schema: {}",
+                            qualified, error
+                        );
+                    }
+                }
+                if !(60..=86400).contains(&durable.attempt_expiry_secs) {
+                    panic!(
+                        "Client tool '{}' durable.attempt_expiry_secs must be 60–86400.",
+                        qualified
+                    );
+                }
+                // The floor keeps a slow mailbox read from outliving its claim.
+                if !(60..=900).contains(&durable.claim_lease_secs)
+                    || durable.claim_lease_secs > durable.attempt_expiry_secs
+                {
+                    panic!(
+                        "Client tool '{}' durable.claim_lease_secs must be 60–900 and at most attempt_expiry_secs.",
+                        qualified
+                    );
+                }
+                // Expiry counts from dispatch, so a timeout park must still leave a full lease.
+                let timeout_ms = tool.timeout_ms.unwrap_or(DEFAULT_CLIENT_TOOL_TIMEOUT_MS);
+                if durable.attempt_expiry_secs.saturating_mul(1000)
+                    < timeout_ms.saturating_add(durable.claim_lease_secs.saturating_mul(1000))
+                {
+                    panic!(
+                        "Client tool '{}' durable.attempt_expiry_secs must cover timeout_ms plus claim_lease_secs.",
+                        qualified
+                    );
+                }
             }
         }
 
@@ -3000,6 +3060,15 @@ pub struct McpServerConfig {
     // Wildcard patterns selecting tools to remove after `allow_tools` is applied.
     #[serde(default)]
     pub exclude_tools: Vec<String>,
+    /// Hints used when a tool omits the corresponding server-supplied hint.
+    #[serde(default)]
+    pub default_tool_annotations: McpToolAnnotationsConfig,
+    /// Hints that take precedence over server-supplied tool annotations.
+    #[serde(default)]
+    pub override_tool_annotations: McpToolAnnotationsConfig,
+    /// Annotation settings keyed by exact, case-sensitive MCP tool name.
+    #[serde(default)]
+    pub tools: HashMap<String, McpToolConfig>,
     // Wildcard patterns selecting tools that may ask the model to wait before
     // continuing the current generation. An empty list disables waiting for
     // this server unless the global setting is enabled.
@@ -3012,6 +3081,54 @@ pub struct McpServerConfig {
     // When omitted, the global `mcp_servers_global.max_session_idle_seconds` is used.
     #[serde(default)]
     pub max_session_idle_seconds: Option<u64>,
+}
+
+/// Optional operator assertions about MCP tool behavior. Missing hints inherit.
+#[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone, Copy, Facet)]
+#[serde(deny_unknown_fields)]
+pub struct McpToolAnnotationsConfig {
+    #[serde(default, deserialize_with = "deserialize_optional_mcp_hint")]
+    pub read_only_hint: Option<bool>,
+    #[serde(default, deserialize_with = "deserialize_optional_mcp_hint")]
+    pub destructive_hint: Option<bool>,
+    #[serde(default, deserialize_with = "deserialize_optional_mcp_hint")]
+    pub idempotent_hint: Option<bool>,
+    #[serde(default, deserialize_with = "deserialize_optional_mcp_hint")]
+    pub open_world_hint: Option<bool>,
+}
+
+// The config crate's bool deserializer also coerces strings and numbers.
+// Hints affect approval and write visibility, so accept actual booleans only.
+fn deserialize_optional_mcp_hint<'de, D: de::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Option<bool>, D::Error> {
+    struct Hint(bool);
+    impl<'de> Deserialize<'de> for Hint {
+        fn deserialize<D: de::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+            struct Visitor;
+            impl de::Visitor<'_> for Visitor {
+                type Value = Hint;
+                fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+                    formatter.write_str("a boolean MCP tool hint")
+                }
+                fn visit_bool<E: de::Error>(self, value: bool) -> Result<Hint, E> {
+                    Ok(Hint(value))
+                }
+            }
+            deserializer.deserialize_any(Visitor)
+        }
+    }
+    Option::<Hint>::deserialize(deserializer).map(|hint| hint.map(|hint| hint.0))
+}
+
+/// Settings for one exact tool within its configured MCP server.
+#[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone, Facet)]
+#[serde(deny_unknown_fields)]
+pub struct McpToolConfig {
+    #[serde(default)]
+    pub default_tool_annotations: McpToolAnnotationsConfig,
+    #[serde(default)]
+    pub override_tool_annotations: McpToolAnnotationsConfig,
 }
 
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet, Default)]
@@ -3104,6 +3221,15 @@ fn default_mcp_fixed_auth_prefix() -> String {
 
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
 pub struct McpServersGlobalConfig {
+    /// Fallback hints for tools across all configured MCP servers.
+    #[serde(default)]
+    pub default_tool_annotations: McpToolAnnotationsConfig,
+
+    /// Operator hints overriding server declarations across all MCP servers.
+    /// More specific server and tool overrides take precedence.
+    #[serde(default)]
+    pub override_tool_annotations: McpToolAnnotationsConfig,
+
     // Global default maximum idle time (in seconds) before MCP sessions are evicted.
     // Individual MCP servers can override this via `mcp_servers.<id>.max_session_idle_seconds`.
     // Defaults to 3600 seconds (1 hour) when not set.
@@ -3143,6 +3269,8 @@ pub struct McpServersGlobalConfig {
 impl Default for McpServersGlobalConfig {
     fn default() -> Self {
         Self {
+            default_tool_annotations: McpToolAnnotationsConfig::default(),
+            override_tool_annotations: McpToolAnnotationsConfig::default(),
             max_session_idle_seconds: None,
             show_frontend_tab: false,
             show_in_chat_input: None,
@@ -4967,8 +5095,9 @@ pub const ACTION_FACET_PRESENTATIONS: [&str; 2] = ["render_buttons", "auto_promp
 /// `[client_tools]` sibling keys that set global settings for all client tools.
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default, Facet)]
 pub struct ClientToolsConfig {
-    /// Enable durable escalation for compiled, registered operation kinds.
-    /// No production kinds are registered by the neutral foundation.
+    /// Enable durable escalation for compiled, registered operation kinds:
+    /// native local evidence, and configured tools that opt in with a
+    /// `[client_tools.tools.<id>.durable]` table.
     #[serde(default)]
     pub durable_operations_enabled: bool,
     /// Client tools keyed by config tool id. The id is the override handle; the
@@ -5041,6 +5170,62 @@ pub struct ClientToolConfig {
     /// stored message keeps the complete arguments and result.
     #[serde(default)]
     pub replay: ClientToolReplayConfig,
+
+    /// Opt this tool into durable client operations. While
+    /// `client_tools.durable_operations_enabled` is on, a call whose stream
+    /// drops or times out parks durably for the same device and host context
+    /// instead of ending as a timeout. Not allowed together with `submission`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub durable: Option<ClientToolDurableConfig>,
+}
+
+/// `[client_tools.tools.<id>.durable]`. Selects a compiled host family, never
+/// an executor, realm or device.
+#[derive(Debug, Deserialize, Serialize, PartialEq, Eq, Clone, Facet)]
+pub struct ClientToolDurableConfig {
+    /// Host context an executor binding must carry for the call to park, e.g.
+    /// `outlook_mailbox`. Calls without a matching binding keep the in-memory path.
+    pub host_context: ClientToolHostContext,
+    /// Optional JSON Schema (as a JSON string, top-level `type = "object"`) that
+    /// a successful result must satisfy. A failing result reaches the model as
+    /// fixed feedback, never verbatim.
+    #[serde(default)]
+    pub result_schema: Option<String>,
+    /// Seconds from dispatch that a call stays claimable once parked. Must be
+    /// 60–86400 and cover the tool's `timeout_ms` plus `claim_lease_secs`.
+    /// Default: 3600.
+    #[serde(default = "default_durable_attempt_expiry_secs")]
+    pub attempt_expiry_secs: u64,
+    /// Seconds a claiming executor holds the call before another claim may
+    /// replace it. Must be 60–900 and at most `attempt_expiry_secs`. Default: 120.
+    #[serde(default = "default_durable_claim_lease_secs")]
+    pub claim_lease_secs: u64,
+}
+
+fn default_durable_attempt_expiry_secs() -> u64 {
+    3600
+}
+
+fn default_durable_claim_lease_secs() -> u64 {
+    120
+}
+
+#[derive(Debug, Deserialize, Serialize, PartialEq, Eq, Clone, Copy, Facet)]
+#[facet(rename_all = "snake_case")]
+#[serde(rename_all = "snake_case")]
+#[repr(C)]
+pub enum ClientToolHostContext {
+    /// The Outlook add-in's signed-in mailbox.
+    OutlookMailbox,
+}
+
+impl ClientToolHostContext {
+    /// The `host_context.kind` an executor binding carries for this family.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::OutlookMailbox => "outlook_mailbox",
+        }
+    }
 }
 
 /// `[client_tools.tools.<id>.replay]`. Applies only to calls from earlier user
@@ -5102,10 +5287,19 @@ pub fn parse_receipt_field_path(path: &str) -> Result<Vec<String>, String> {
 
 #[derive(Debug, Deserialize, Serialize, PartialEq, Eq, Clone, Facet)]
 pub struct ClientToolSubmissionConfig {
-    /// Maximum submissions of this tool per generation, including the initial
-    /// attempt and schema/client failures. Must be 1–10. Default: 3.
+    /// Maximum attempts per logical editing step, including the initial
+    /// submission, schema/client failures and replies without progress.
+    /// Independent of ordinary tool budgets. Must be 1–10. Default: 3.
     #[serde(default = "default_submission_max_attempts")]
     pub max_attempts: u32,
+    /// Already-authorized client read tools eligible for correction recovery,
+    /// identified by their qualified names. Does not grant tool access.
+    #[serde(default)]
+    pub recovery_read_tools: Vec<String>,
+    /// Maximum recovery read calls per editing step, including pagination.
+    /// Must be 0–128. Default: 32.
+    #[serde(default = "default_submission_recovery_reads")]
+    pub max_recovery_reads: u32,
     /// Native enforcement supplements mandatory server and client validation.
     /// Auto uses it only for a compatible schema, adapter and explicitly capable
     /// model; off uses validation/feedback only; required rejects an unsupported
@@ -5118,10 +5312,16 @@ fn default_submission_max_attempts() -> u32 {
     3
 }
 
+fn default_submission_recovery_reads() -> u32 {
+    32
+}
+
 impl Default for ClientToolSubmissionConfig {
     fn default() -> Self {
         Self {
             max_attempts: default_submission_max_attempts(),
+            recovery_read_tools: Vec::new(),
+            max_recovery_reads: default_submission_recovery_reads(),
             native_schema: ClientToolNativeSchema::Auto,
         }
     }
@@ -5140,6 +5340,9 @@ pub enum ClientToolNativeSchema {
 
 /// Default namespace for a client tool when none is configured.
 pub const DEFAULT_CLIENT_TOOL_NAMESPACE: &str = "client";
+
+/// Park timeout of a client tool without `timeout_ms`.
+pub const DEFAULT_CLIENT_TOOL_TIMEOUT_MS: u64 = 60_000;
 
 impl ClientToolConfig {
     /// The tool's namespace, or the `client` default.
@@ -6515,6 +6718,9 @@ pub struct MsOfficeAddinDefaultSettings {
     /// Whether new Word chats include the open document until the user changes it.
     #[serde(default = "default_ms_office_addin_word_include_document")]
     pub word_include_document: bool,
+    /// How Word document plans are applied on each host. Users cannot change these.
+    #[serde(default)]
+    pub word_apply: MsOfficeAddinWordApplySettings,
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone, Copy, Default, Facet)]
@@ -6534,7 +6740,88 @@ impl Default for MsOfficeAddinDefaultSettings {
             mode: MsOfficeAddinSessionMode::default(),
             compose_inherits_from_read: default_ms_office_addin_compose_inherits_from_read(),
             word_include_document: default_ms_office_addin_word_include_document(),
+            word_apply: MsOfficeAddinWordApplySettings::default(),
         }
+    }
+}
+
+/// Unset keys keep that host's own default; read them through [`Self::pc_policy`],
+/// [`Self::mac_policy`] and [`Self::web_policy`].
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default, Facet)]
+pub struct MsOfficeAddinWordApplySettings {
+    #[serde(default)]
+    pub pc: MsOfficeAddinWordApplyHostSettings,
+    #[serde(default)]
+    pub mac: MsOfficeAddinWordApplyHostSettings,
+    #[serde(default)]
+    pub web: MsOfficeAddinWordApplyHostSettings,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default, Facet)]
+pub struct MsOfficeAddinWordApplyHostSettings {
+    /// Write plans through Word's object model where a probed mechanism applies.
+    pub in_place: Option<bool>,
+    /// Whether a plan may replace the whole document by import.
+    pub whole_document_import: Option<MsOfficeAddinWordWholeDocumentImport>,
+    /// Read the complete .docx file; off falls back to reading the document body.
+    pub package_read: Option<bool>,
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone, Copy, Facet)]
+#[serde(rename_all = "snake_case")]
+#[facet(rename_all = "snake_case")]
+#[repr(C)]
+pub enum MsOfficeAddinWordWholeDocumentImport {
+    Allowed,
+    /// Only after the user confirms the import for that plan.
+    Confirm,
+    Off,
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub struct MsOfficeAddinWordApplyPolicy {
+    pub in_place: bool,
+    pub whole_document_import: MsOfficeAddinWordWholeDocumentImport,
+    pub package_read: bool,
+}
+
+impl MsOfficeAddinWordApplyHostSettings {
+    fn resolve(&self, defaults: MsOfficeAddinWordApplyPolicy) -> MsOfficeAddinWordApplyPolicy {
+        MsOfficeAddinWordApplyPolicy {
+            in_place: self.in_place.unwrap_or(defaults.in_place),
+            whole_document_import: self
+                .whole_document_import
+                .unwrap_or(defaults.whole_document_import),
+            package_read: self.package_read.unwrap_or(defaults.package_read),
+        }
+    }
+}
+
+impl MsOfficeAddinWordApplySettings {
+    // Word PC and Mac keep the import for every rewrite until their in-place probes are signed off.
+    const DESKTOP_DEFAULTS: MsOfficeAddinWordApplyPolicy = MsOfficeAddinWordApplyPolicy {
+        in_place: false,
+        whole_document_import: MsOfficeAddinWordWholeDocumentImport::Allowed,
+        package_read: true,
+    };
+    // On the web the import attributes its tracked changes to "Unknown", rewrites comment dates
+    // and resolved flags, and Word Undo cannot take it back (ERMAIN-960).
+    const WEB_DEFAULTS: MsOfficeAddinWordApplyPolicy = MsOfficeAddinWordApplyPolicy {
+        in_place: true,
+        whole_document_import: MsOfficeAddinWordWholeDocumentImport::Confirm,
+        package_read: true,
+    };
+
+    pub fn pc_policy(&self) -> MsOfficeAddinWordApplyPolicy {
+        self.pc.resolve(Self::DESKTOP_DEFAULTS)
+    }
+
+    pub fn mac_policy(&self) -> MsOfficeAddinWordApplyPolicy {
+        self.mac.resolve(Self::DESKTOP_DEFAULTS)
+    }
+
+    pub fn web_policy(&self) -> MsOfficeAddinWordApplyPolicy {
+        self.web.resolve(Self::WEB_DEFAULTS)
     }
 }
 

@@ -63,8 +63,16 @@ export interface MockSelectionRun {
   deleted?: string;
   picture?: boolean;
   footnote?: boolean;
-  /** The reference mark at the end of a comment's range. */
-  comment?: boolean;
+  /**
+   * The reference mark at the end of a comment's range. A name ties it to the runs `commented` by
+   * that name; without one, the comment has no text of its own.
+   */
+  comment?: boolean | string;
+  /**
+   * Names of comments whose range holds this run's text. Runs with the same name form one range,
+   * across paragraphs too, from the first of them to that comment's reference.
+   */
+  commented?: string | readonly string[];
   /**
    * Bookmark name, or several names for bookmarks around the same text; consecutive runs with the
    * same name form one bookmark around their text, its bookmarkStart and bookmarkEnd inside the
@@ -94,6 +102,8 @@ export interface MockSelectionDocument {
   footnotes?: readonly MockSelectionParagraph[];
   textBox?: readonly MockSelectionParagraph[];
   comments?: readonly MockSelectionParagraph[];
+  /** durableIds (hex) of named comments; the others get one of the mock's. */
+  commentIds?: Readonly<Record<string, string>>;
 }
 
 export interface MockSelectionStyle {
@@ -146,6 +156,8 @@ export interface WordSelectionHostOptions {
    * What Word returns there was not measured.
    */
   paragraphOoxml?: (ooxml: string, text: string) => string;
+  /** OOXML packages carry no commentsIds part, as a legacy file's do (F-2a). */
+  legacyComments?: boolean;
 }
 
 /** Rewrites the hits a search returns; the hits are opaque, so it can only reorder, drop or repeat. */
@@ -231,6 +243,13 @@ export interface WordSelectionHost {
   format(target: MockSelectionTarget, run: MockSelectionRun): void;
   /** Takes the target's text, at the edge of its bookmarks, out of them, as if they had moved. */
   clearBookmarks(target: MockSelectionTarget): void;
+  /** Comments the target's text, its reference right after that text; returns Comment.id. */
+  addComment(target: MockSelectionTarget): string;
+  /**
+   * The body's comments in reference order: Comment.id as a string, and its range's text as
+   * Range.text gives it, without the web's U+0005.
+   */
+  comments(): { id: string; anchor: string }[];
   setTrackingMode(mode: MockTrackingMode): void;
   /** Body paragraph tags, in document order, whose mark ends a section. */
   setSectionBreaks(tags: readonly string[]): void;
@@ -300,6 +319,8 @@ export const WORD_SELECTION_API_SETS: Readonly<
   "Range.fields": ["WordApi", "1.4"],
   "Range.getReviewedText": ["WordApi", "1.4"],
   "Range.getBookmarks": ["WordApi", "1.4"],
+  "Range.getComments": ["WordApi", "1.4"],
+  "Comment.getRange": ["WordApi", "1.4"],
   "Table.getRange": ["WordApi", "1.3"],
 };
 
@@ -393,12 +414,82 @@ export const SV2_MAIN_DOCUMENT: MockSelectionDocument = {
   comments: [{ runs: [{ comment: true }, "Probe comment text."] }],
 };
 
+/**
+ * The v3c-multi.docx fixture of the ERMAIN-947 follow-up probe (multi-fixture.mjs), without its
+ * replies. MA spans MA1-MA3 whole, MB runs from mid MB1 to mid MB3, and MC is a control within MC1.
+ */
+export const V3C_MULTI_DOCUMENT: MockSelectionDocument = {
+  body: [
+    { runs: "H1 V3C multi-paragraph anchor fixture", style: "Heading 1" },
+    "SA1 Separator before group A.",
+    {
+      runs: [
+        {
+          text: "MA1 First anchored paragraph alpha bravo words.",
+          commented: "MA",
+        },
+      ],
+    },
+    {
+      runs: [
+        {
+          text: "MA2 Middle anchored paragraph charlie delta words.",
+          commented: "MA",
+        },
+      ],
+    },
+    {
+      runs: [
+        {
+          text: "MA3 Last anchored paragraph echo foxtrot words.",
+          commented: "MA",
+        },
+        { comment: "MA" },
+      ],
+    },
+    "SB1 Separator before group B.",
+    {
+      runs: [
+        "MB1 Opening golf hotel words, ",
+        { text: "anchor starts india juliet words.", commented: "MB" },
+      ],
+    },
+    { runs: [{ text: "MB2 Middle kilo lima words.", commented: "MB" }] },
+    {
+      runs: [
+        { text: "MB3 Anchor ends mike november here", commented: "MB" },
+        { comment: "MB" },
+        " and after oscar papa.",
+      ],
+    },
+    "SC1 Separator before the control.",
+    {
+      runs: [
+        "MC1 Control quebec romeo ",
+        { text: "sierra tango", commented: "MC" },
+        { comment: "MC" },
+        " uniform victor.",
+      ],
+    },
+    "CL1 Closing paragraph.",
+  ],
+  commentIds: { MA: "77D88CD8", MB: "01A87AB8", MC: "6AF6A98C" },
+};
+
 const W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
 const R = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
 const PKG = "http://schemas.microsoft.com/office/2006/xmlPackage";
+const W14 = "http://schemas.microsoft.com/office/word/2010/wordml";
+const W15 = "http://schemas.microsoft.com/office/word/2012/wordml";
+const W16CID = "http://schemas.microsoft.com/office/word/2016/wordml/cid";
 const WP =
   "http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing";
 const AUTHOR = "Mock Author";
+const COMMENT_RELATIONSHIPS = [
+  `<Relationship Id="rIdComments" Type="${R}/comments" Target="comments.xml"/>`,
+  `<Relationship Id="rIdCommentsExtended" Type="http://schemas.microsoft.com/office/2011/relationships/commentsExtended" Target="commentsExtended.xml"/>`,
+  `<Relationship Id="rIdCommentsIds" Type="http://schemas.microsoft.com/office/2016/09/relationships/commentsIds" Target="commentsIds.xml"/>`,
+];
 const REVISION_DATE = "2026-10-08T00:00:00Z";
 const SELECTION_CHANGED = "documentSelectionChanged";
 const PLATFORM: Record<WordSelectionHostFlavour, string> = {
@@ -608,11 +699,20 @@ interface BookmarkState {
   name: string;
   id: number;
 }
+interface CommentState {
+  /** Hex, as commentsIds.xml writes it; Comment.id is its decimal value (F-2). */
+  durableId: string;
+  /** Its w:id and its comments.xml paragraph's w14:paraId in every package. */
+  wid: number;
+  paraId: string;
+}
 interface RunState {
   font: MockSelectionFont;
   rStyle?: string;
   /** Not wrappers: their starts and ends sit between runs, in the order they were opened. */
   bookmarks?: readonly BookmarkState[];
+  /** The comments whose range holds the run; each range ends at its comment's reference. */
+  comments?: readonly CommentState[];
   link?: LinkState;
   field?: FieldState;
   sdt?: SdtState;
@@ -651,6 +751,8 @@ interface Token {
   para?: ParaState;
   /** rowEnd: its table, and the cells around that table. */
   table?: TableState;
+  /** A comment reference: its comment. */
+  comment?: CommentState;
   outer?: readonly CellState[];
   dead?: boolean;
   next?: Token;
@@ -684,10 +786,8 @@ const isInline = (t: Token | undefined): boolean =>
 
 const edgeToken = (): Token => ({ kind: "edge", ch: "", run: { font: {} } });
 
-const sameBookmarks = (
-  a: readonly BookmarkState[] = [],
-  b: readonly BookmarkState[] = [],
-) => a.length === b.length && a.every((bookmark, i) => bookmark === b[i]);
+const sameMarks = <T>(a: readonly T[] = [], b: readonly T[] = []) =>
+  a.length === b.length && a.every((mark, i) => mark === b[i]);
 
 function paraOf(token: Token): ParaState {
   if (!token.para) throw new Error("mock: not a paragraph mark");
@@ -878,6 +978,35 @@ export function installWordSelectionHost(
   };
   const namesOf = (names: string | readonly string[]) =>
     typeof names === "string" ? [names] : names;
+  let commentSeed = 0;
+  const commentsByDurableId = new Map<string, CommentState>();
+  /** The comment a durableId names, as an insertOoxml finds it again; a new one without it. */
+  const commentState = (durableId?: string): CommentState => {
+    const known = durableId && commentsByDurableId.get(durableId.toUpperCase());
+    if (known) return known;
+    const wid = commentSeed;
+    commentSeed += 1;
+    const comment: CommentState = {
+      durableId: (durableId ?? (0x2c93de4f + wid).toString(16))
+        .toUpperCase()
+        .padStart(8, "0"),
+      wid,
+      paraId: (0x1c000000 + wid).toString(16).toUpperCase(),
+    };
+    commentsByDurableId.set(comment.durableId, comment);
+    return comment;
+  };
+  const namedComments = new Map<string, CommentState>();
+  const commentNamed = (name: string): CommentState => {
+    let comment = namedComments.get(name);
+    if (!comment) {
+      comment = commentState(documentSpec.commentIds?.[name]);
+      namedComments.set(name, comment);
+    }
+    return comment;
+  };
+  const commentId = (comment: CommentState) =>
+    String(parseInt(comment.durableId, 16));
 
   const styleTable = new Map<string, StyleDef>(
     BUILT_IN_STYLES.map((def) => [def.name, def]),
@@ -987,6 +1116,10 @@ export function installWordSelectionHost(
                   previous?.state.bookmarks?.find((b) => b.name === name) ??
                   bookmarkState(name),
               ),
+        comments:
+          run.commented === undefined
+            ? undefined
+            : namesOf(run.commented).map(commentNamed),
         ins:
           run.inserted === undefined
             ? undefined
@@ -1005,7 +1138,15 @@ export function installWordSelectionHost(
       else if (run.footnote)
         tokens.push({ kind: "footnote", ch: "", run: state });
       else if (run.comment)
-        tokens.push({ kind: "comment", ch: "", run: state });
+        tokens.push({
+          kind: "comment",
+          ch: "",
+          run: state,
+          comment:
+            typeof run.comment === "string"
+              ? commentNamed(run.comment)
+              : commentState(),
+        });
       for (const ch of (run.text ?? "").split(""))
         tokens.push({ kind: "char", ch, run: state });
     }
@@ -1701,13 +1842,56 @@ export function installWordSelectionHost(
       t.run.rStyle ?? null,
       t.run.formatChange?.revision.id ?? null,
     ]);
+  /** A comment's range: from the first token it holds to its reference, which must still be there. */
+  const commentBounds = (
+    st: Story,
+    comment: CommentState,
+  ): Bounds | undefined => {
+    const reference = st.tokens.findIndex((t) => t.comment === comment);
+    if (reference < 0) return undefined;
+    const start = st.tokens.findIndex(
+      (t) => !!t.run.comments?.includes(comment),
+    );
+    return {
+      story: st,
+      s: start >= 0 && start < reference ? start : reference,
+      e: reference,
+    };
+  };
+  /**
+   * The comments whose range or reference meets `b`: in reference order on desktop, in start order
+   * on the web (F-10). The web leaves out one whose range lies around all of `b` (F-11).
+   */
+  const commentsOn = (b: Bounds): CommentState[] => {
+    const found = b.story.tokens.flatMap((t) => {
+      const range = t.comment && commentBounds(b.story, t.comment);
+      if (!t.comment || !range || range.s >= b.e || range.e + 1 <= b.s)
+        return [];
+      if (web && relation(range, b) === "Contains") return [];
+      return [{ comment: t.comment, range }];
+    });
+    if (web) found.sort((x, y) => x.range.s - y.range.s);
+    return found.map(({ comment }) => comment);
+  };
+  /** F-13: a package holds a comment's marks and parts only when it holds all of its range. */
+  const commentsWithin = (b: Bounds): CommentState[] =>
+    b.story.tokens.slice(b.s, b.e).flatMap((t) => {
+      const range = t.comment && commentBounds(b.story, t.comment);
+      return t.comment && range && range.s >= b.s ? [t.comment] : [];
+    });
   let objectSeed = 0;
+  /** The comments a package holds whole, and those whose start it has written so far. */
+  interface CommentMarks {
+    held: ReadonlySet<CommentState>;
+    started: Set<CommentState>;
+  }
   const runsXml = (
     st: Story,
     from: number,
     to: number,
     links: Map<LinkState, string>,
     clipped: ReadonlySet<unknown>,
+    comments: CommentMarks,
   ) => {
     const kept = <T>(wrapper: T | undefined) =>
       wrapper === undefined || clipped.has(wrapper) ? undefined : wrapper;
@@ -1759,6 +1943,11 @@ export function installWordSelectionHost(
       // Between the wrappers that close and those that open, so a bookmark next to a field or
       // around one stays outside it.
       moveBookmarks(t.run.bookmarks);
+      for (const comment of t.run.comments ?? [])
+        if (comments.held.has(comment) && !comments.started.has(comment)) {
+          comments.started.add(comment);
+          out.push(`<w:commentRangeStart w:id="${comment.wid}"/>`);
+        }
       if (!sdt && tSdt) {
         sdt = tSdt;
         out.push(
@@ -1785,15 +1974,26 @@ export function installWordSelectionHost(
         );
       }
       const props = runProperties(t.run);
+      if (t.kind === "comment") {
+        objectSeed += 1;
+        const { comment } = t;
+        if (comment && comments.held.has(comment)) {
+          if (comments.started.has(comment))
+            out.push(`<w:commentRangeEnd w:id="${comment.wid}"/>`);
+          out.push(
+            `<w:r>${props}<w:commentReference w:id="${comment.wid}"/></w:r>`,
+          );
+        }
+        i += 1;
+        continue;
+      }
       if (t.kind !== "char") {
         objectSeed += 1;
         out.push(
           `<w:r>${props}${
             t.kind === "picture"
               ? `<w:drawing><wp:inline><wp:extent cx="952500" cy="952500"/><wp:docPr id="${objectSeed}" name="Picture ${objectSeed}"/></wp:inline></w:drawing>`
-              : t.kind === "footnote"
-                ? `<w:footnoteReference w:id="${objectSeed}"/>`
-                : `<w:commentReference w:id="${objectSeed}"/>`
+              : `<w:footnoteReference w:id="${objectSeed}"/>`
           }</w:r>`,
         );
         i += 1;
@@ -1809,7 +2009,8 @@ export function installWordSelectionHost(
           u.run.link !== t.run.link ||
           (u.run.ins ?? u.run.del) !== tRev ||
           u.run.field !== t.run.field ||
-          !sameBookmarks(u.run.bookmarks, t.run.bookmarks) ||
+          !sameMarks(u.run.bookmarks, t.run.bookmarks) ||
+          !sameMarks(u.run.comments, t.run.comments) ||
           runKey(u) !== runKey(t)
         )
           break;
@@ -1831,6 +2032,7 @@ export function installWordSelectionHost(
     links: Map<LinkState, string>,
     clipped: ReadonlySet<unknown>,
     withProperties: boolean,
+    comments: CommentMarks,
   ) => {
     const markTokenAt = st.tokens[mark];
     const para = paraOf(markTokenAt);
@@ -1842,7 +2044,7 @@ export function installWordSelectionHost(
     const markRev = markTokenAt.run.ins ?? markTokenAt.run.del;
     if (markRev)
       pPr.push(`<w:rPr><w:${markRev.kind}${revisionAttrs(markRev)}/></w:rPr>`);
-    return `<w:p>${pPr.length && withProperties ? `<w:pPr>${pPr.join("")}</w:pPr>` : ""}${runsXml(st, from, to, links, clipped)}</w:p>`;
+    return `<w:p>${pPr.length && withProperties ? `<w:pPr>${pPr.join("")}</w:pPr>` : ""}${runsXml(st, from, to, links, clipped, comments)}</w:p>`;
   };
   const stylesXml = () =>
     `<w:styles xmlns:w="${W}"><w:docDefaults><w:rPrDefault><w:rPr>${rPrContent({
@@ -1858,6 +2060,38 @@ export function installWordSelectionHost(
       .join("")}</w:styles>`;
   const pkgPart = (name: string, type: string, xml: string) =>
     `<pkg:part pkg:name="${name}" pkg:contentType="${type}"><pkg:xmlData>${xml}</pkg:xmlData></pkg:part>`;
+  const commentPartsXml = (held: readonly CommentState[]) =>
+    [
+      pkgPart(
+        "/word/comments.xml",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.comments+xml",
+        `<w:comments xmlns:w="${W}" xmlns:w14="${W14}">${held
+          .map(
+            (c) =>
+              `<w:comment w:id="${c.wid}" w:author="${AUTHOR}" w:date="${REVISION_DATE}" w:initials="MA"><w:p w14:paraId="${c.paraId}" w14:textId="77777777"><w:r><w:t>Mock comment.</w:t></w:r></w:p></w:comment>`,
+          )
+          .join("")}</w:comments>`,
+      ),
+      pkgPart(
+        "/word/commentsExtended.xml",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.commentsExtended+xml",
+        `<w15:commentsEx xmlns:w15="${W15}">${held
+          .map((c) => `<w15:commentEx w15:paraId="${c.paraId}" w15:done="0"/>`)
+          .join("")}</w15:commentsEx>`,
+      ),
+      options.legacyComments
+        ? ""
+        : pkgPart(
+            "/word/commentsIds.xml",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.commentsIds+xml",
+            `<w16cid:commentsIds xmlns:w16cid="${W16CID}">${held
+              .map(
+                (c) =>
+                  `<w16cid:commentId w16cid:paraId="${c.paraId}" w16cid:durableId="${c.durableId}"/>`,
+              )
+              .join("")}</w16cid:commentsIds>`,
+          ),
+    ].join("");
   /**
    * PF3: the wrappers a range's own OOXML drops. A range inside a hyperlink (desktop also for exactly
    * the link text) keeps only rStyle, one inside or partly over a content control has no w:sdt, and
@@ -1903,6 +2137,8 @@ export function installWordSelectionHost(
     const clipped = clippedWrappers(b);
     const marks = marksIn(st, s, e);
     const withProperties = !web || marks.length > 1;
+    const held = commentsWithin(b);
+    const comments: CommentMarks = { held: new Set(held), started: new Set() };
     let open: readonly CellState[] = common;
     for (const m of marks) {
       const path = paraOf(st.tokens[m]).cells;
@@ -1933,6 +2169,7 @@ export function installWordSelectionHost(
           links,
           clipped,
           withProperties,
+          comments,
         ),
       );
     }
@@ -1955,7 +2192,7 @@ export function installWordSelectionHost(
       pkgPart(
         "/word/_rels/document.xml.rels",
         "application/vnd.openxmlformats-package.relationships+xml",
-        `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rIdStyles" Type="${R}/styles" Target="styles.xml"/>${rels}</Relationships>`,
+        `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rIdStyles" Type="${R}/styles" Target="styles.xml"/>${rels}${held.length ? COMMENT_RELATIONSHIPS.slice(0, options.legacyComments ? 2 : 3).join("") : ""}</Relationships>`,
       ),
       pkgPart(
         "/word/document.xml",
@@ -1967,6 +2204,7 @@ export function installWordSelectionHost(
         "application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml",
         stylesXml(),
       ),
+      held.length ? commentPartsXml(held) : "",
       `</pkg:package>`,
     ].join("");
   };
@@ -2147,6 +2385,42 @@ export function installWordSelectionHost(
         "The OOXML has no body.",
         "insertOoxml",
       );
+    // A comment is found again by the durableId its paragraph's paraId has in commentsIds.
+    const commentParagraphs = new Map<string, string>();
+    for (const comment of Array.from(
+      partRoot("/word/comments.xml")?.getElementsByTagNameNS(W, "comment") ??
+        [],
+    )) {
+      const paragraphs = comment.getElementsByTagNameNS(W, "p");
+      commentParagraphs.set(
+        attrW(comment, "id") ?? "",
+        paragraphs[paragraphs.length - 1]?.getAttributeNS(W14, "paraId") ?? "",
+      );
+    }
+    const durableIds = new Map<string, string>();
+    for (const entry of Array.from(
+      partRoot("/word/commentsIds.xml")?.getElementsByTagNameNS(
+        W16CID,
+        "commentId",
+      ) ?? [],
+    ))
+      durableIds.set(
+        entry.getAttributeNS(W16CID, "paraId") ?? "",
+        entry.getAttributeNS(W16CID, "durableId") ?? "",
+      );
+    const parsedComments = new Map<string, CommentState>();
+    const commentOf = (element: Element): CommentState => {
+      const wid = attrW(element, "id") ?? "";
+      let comment = parsedComments.get(wid);
+      if (!comment) {
+        comment = commentState(
+          durableIds.get(commentParagraphs.get(wid) ?? "") || undefined,
+        );
+        parsedComments.set(wid, comment);
+      }
+      return comment;
+    };
+    let openComments: CommentState[] = [];
     const out: ParsedParagraph[] = [];
     for (const element of Array.from(body.children)) {
       if (element.namespaceURI !== W) continue;
@@ -2171,6 +2445,7 @@ export function installWordSelectionHost(
           font,
           rStyle,
           bookmarks: open.length ? [...open] : undefined,
+          comments: openComments.length ? [...openComments] : undefined,
           link: context.link,
           sdt: context.sdt,
           ins: context.ins,
@@ -2233,7 +2508,12 @@ export function installWordSelectionHost(
               tokens.push({ kind: "footnote", ch: "", run: current() });
               break;
             case "commentReference":
-              tokens.push({ kind: "comment", ch: "", run: current() });
+              tokens.push({
+                kind: "comment",
+                ch: "",
+                run: current(),
+                comment: commentOf(node),
+              });
               break;
             default:
               break;
@@ -2294,6 +2574,16 @@ export function installWordSelectionHost(
             case "bookmarkEnd": {
               const ending = bookmarks.get(attrW(node, "id") ?? "");
               open = open.filter((bookmark) => bookmark !== ending);
+              break;
+            }
+            case "commentRangeStart":
+              openComments = [...openComments, commentOf(node)];
+              break;
+            case "commentRangeEnd": {
+              const ending = commentOf(node);
+              openComments = openComments.filter(
+                (comment) => comment !== ending,
+              );
               break;
             }
             default:
@@ -3331,6 +3621,27 @@ export function installWordSelectionHost(
     return list;
   };
 
+  /** F-2: Comment.id is the decimal durableId, a number on the web. */
+  const makeComment = (ctx: Ctx, st: Story, state: CommentState): Obj => {
+    const comment: Obj = {};
+    register(comment, ctx, "Comment");
+    defineProps(comment, ctx, "Comment", {
+      id: {
+        get: () => (web ? Number(commentId(state)) : commentId(state)),
+      },
+    });
+    comment.getRange = () => {
+      calls.push("Comment.getRange");
+      return makeRange(ctx, comment, "Comment.getRange", () => {
+        gate("Comment.getRange");
+        const b = commentBounds(st, state);
+        if (!b) throw itemNotFound("Comment");
+        return b;
+      });
+    };
+    return comment;
+  };
+
   function decorate(obj: Obj, ctx: Ctx, target: Target): void {
     targets.set(obj, target);
     const type = target.type;
@@ -3672,6 +3983,26 @@ export function installWordSelectionHost(
         }
         return [...names];
       });
+    };
+    obj.getComments = () => {
+      method("getComments");
+      let source: Story | undefined;
+      const { list } = collection(
+        ctx,
+        obj,
+        "CommentCollection",
+        () => {
+          gate("Range.getComments");
+          const b = target.whole();
+          source = b.story;
+          return commentsOn(b);
+        },
+        (comment) => {
+          if (!source) throw new Error("mock: comments used before their sync");
+          return makeComment(ctx, source, comment);
+        },
+      );
+      return list;
     };
     obj.getTrackedChanges = () => {
       method("getTrackedChanges");
@@ -4280,6 +4611,36 @@ export function installWordSelectionHost(
         if (isInline(t)) t.run = { ...t.run, bookmarks: undefined };
       }
     },
+    addComment: (target) => {
+      const b = resolveTarget(target);
+      const comment = commentState();
+      let end = b.s;
+      for (let i = b.s; i < b.e; i += 1) {
+        const t = b.story.tokens[i];
+        if (t.kind !== "char") continue;
+        t.run = { ...t.run, comments: [...(t.run.comments ?? []), comment] };
+        end = i + 1;
+      }
+      b.story.tokens.splice(end, 0, {
+        kind: "comment",
+        ch: "",
+        run: { font: {} },
+        comment,
+      });
+      return commentId(comment);
+    },
+    comments: () =>
+      stories.body.tokens.flatMap((t) => {
+        const range = t.comment && commentBounds(stories.body, t.comment);
+        return t.comment && range
+          ? [
+              {
+                id: commentId(t.comment),
+                anchor: renderRange(range).replace(/\u0005/g, ""),
+              },
+            ]
+          : [];
+      }),
     setTrackingMode: (mode) => {
       trackingMode = mode;
     },

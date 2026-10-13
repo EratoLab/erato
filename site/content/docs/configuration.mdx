@@ -3139,7 +3139,8 @@ The path must contain the Office add-in frontend artifacts including `manifest.x
 {/* erato_toml_config_key: integrations.ms_office.addin.default_settings.word_include_document */}
 
 Default behavior for the Office add-in. These values apply only until a user
-chooses their own preferences in the add-in.
+chooses their own preferences in the add-in. `word_apply` is different: see
+below.
 
 `mode` controls what happens when switching to another Outlook item. Supported
 values are `resume`, `ask`, and `new`. `compose_inherits_from_read` controls
@@ -3150,6 +3151,53 @@ document; users can still remove it from any chat.
 **Default value:** `{ mode = "resume", compose_inherits_from_read = true, word_include_document = true }`
 
 **Type:** `object`
+
+##### `integrations.ms_office.addin.default_settings.word_apply`
+
+{/* erato_toml_config_key: integrations.ms_office.addin.default_settings.word_apply.pc.in_place */}
+{/* erato_toml_config_key: integrations.ms_office.addin.default_settings.word_apply.pc.whole_document_import */}
+{/* erato_toml_config_key: integrations.ms_office.addin.default_settings.word_apply.pc.package_read */}
+{/* erato_toml_config_key: integrations.ms_office.addin.default_settings.word_apply.mac.in_place */}
+{/* erato_toml_config_key: integrations.ms_office.addin.default_settings.word_apply.mac.whole_document_import */}
+{/* erato_toml_config_key: integrations.ms_office.addin.default_settings.word_apply.mac.package_read */}
+{/* erato_toml_config_key: integrations.ms_office.addin.default_settings.word_apply.web.in_place */}
+{/* erato_toml_config_key: integrations.ms_office.addin.default_settings.word_apply.web.whole_document_import */}
+{/* erato_toml_config_key: integrations.ms_office.addin.default_settings.word_apply.web.package_read */}
+
+How the Word add-in applies document changes on each Word host: `pc` (Word for
+Windows), `mac` (Word for Mac) and `web` (Word for the web). These are
+deployment switches that users cannot change. The per-device Compatibility mode
+in the add-in only sends more rewrites to the whole-document import.
+
+Each table takes:
+
+- `in_place`: write changes through Word's object model where the add-in
+  supports that change on the host, leaving the rest of the document untouched.
+  When off, rewrites use the whole-document import.
+- `whole_document_import`: whether a change may replace the whole document by
+  import. `allowed` imports without asking, `confirm` only after the user
+  confirms that change, and `off` never imports.
+- `package_read`: read the complete `.docx` file from Word. When off, the
+  add-in reads only the document body, and in-place writing is unavailable
+  because it keeps the complete file as its backup.
+
+A key left out of a table keeps that host's default. On Word for the web the
+import cannot be undone with Word Undo, co-authors may lose concurrent edits,
+comment dates and resolved flags may change, and the add-in cannot verify the
+result, so it needs confirmation there by default. Unless the import is
+`allowed`, undoing an in-place change that did not verify never falls back to
+it.
+
+**Default value:** `{ pc = { in_place = false, whole_document_import = "allowed", package_read = true }, mac = { in_place = false, whole_document_import = "allowed", package_read = true }, web = { in_place = true, whole_document_import = "confirm", package_read = true } }`
+
+**Type:** `object`
+
+**Example:**
+
+```toml
+[integrations.ms_office.addin.default_settings.word_apply.web]
+package_read = false
+```
 
 ##### `integrations.ms_office.addin.manifest`
 
@@ -3695,6 +3743,321 @@ List of wildcard patterns selecting tools to remove from the tools permitted by 
 allow_tools = ["get_*"]
 exclude_tools = ["get_secret_*"]
 ```
+
+### MCP tool annotation defaults and overrides
+
+Tool annotations can be configured globally, per server, or per exact tool. All settings come from `erato.toml` sources. The backend resolves each hint independently in this order (highest priority first):
+
+1. Tool override
+2. Server override
+3. Global override
+4. Server-supplied hint
+5. Tool default
+6. Server default
+7. Global default
+8. MCP protocol fallback
+
+An explicit `false` participates in the merge. Omitted hints inherit from the next layer, including hints missing from partial, empty, or title-only server annotations. Server titles and unrelated metadata are preserved. Empty sections have no effect. Protocol fallbacks remain `read_only_hint = false`, `destructive_hint = true`, `idempotent_hint = false`, and `open_world_hint = true`.
+
+The same effective hints drive tool-call approval, the chat's write toggle, and tool enumeration. Annotation settings belong outside `mcp_servers_global.approval` because they also affect tools when approval is disabled. `destructive_hint = false` permits execution without an approval prompt under the permissive preset; it does not imply read-only behavior. `read_only_hint = true` permits a tool through the write-disabled filter, but restrictive approval still checks destructive and open-world hints separately. Idempotent hints do not change approval or retry behavior.
+
+Operator hints are assertions about tool behavior. Broad defaults and overrides also apply to newly discovered tools; prefer exact-tool settings or pair broad settings with an `allow_tools` allowlist when a server may gain write tools. Server declarations supersede defaults; use overrides when operator hints must win over server metadata. Overrides are metadata, not mandatory approval rules: existing honored “Always allow” decisions still apply. Access control and user denials remain in effect.
+
+Runtime reloads invalidate cached sessions for a changed server/tool, or across servers when global annotation hints change. Removed hints are resolved again from original server declarations. Deploy a supporting Erato build before relying on these sections: older builds can silently ignore unfamiliar keys.
+
+**Example:**
+
+```toml
+[mcp_servers_global.default_tool_annotations]
+open_world_hint = true
+
+[mcp_servers.company_search]
+transport_type = "streamable_http"
+url = "https://mcp.example.com/mcp"
+
+[mcp_servers.company_search.default_tool_annotations]
+read_only_hint = true
+destructive_hint = false
+
+[mcp_servers.company_search.tools.rebuild_index.override_tool_annotations]
+read_only_hint = false
+destructive_hint = true
+```
+
+#### `mcp_servers.<server-id>.tools`
+
+{/* erato_toml_config_key: mcp_servers.<server-id>.tools */}
+{/* erato_toml_config_key: mcp_servers.<server-id>.tools.<tool-name> */}
+
+**Type:** `object<string, object>`
+
+**Default:** `{}`
+
+Annotation settings keyed by exact, case-sensitive, original MCP tool name within that server. Wildcards are not supported for these entries. Quote TOML key segments when a name contains punctuation, for example `[mcp_servers.files.tools."Read.File".default_tool_annotations]`. Entries do not expose excluded tools or create new tools. A configured name may be absent from discovery, since tools can depend on authentication or change over time. Per-tool entries accept only `default_tool_annotations` and `override_tool_annotations`.
+
+#### `mcp_servers_global.default_tool_annotations`
+
+{/* erato_toml_config_key: mcp_servers_global.default_tool_annotations */}
+
+**Type:** `object`
+
+**Default:** all hints omitted.
+
+Optional fallback hints for missing server declarations. More specific defaults take precedence.
+
+Only the following optional boolean keys are accepted. Unknown keys, camelCase spellings, strings, and numeric values are rejected at startup and runtime reload.
+
+##### `mcp_servers_global.default_tool_annotations.read_only_hint`
+
+{/* erato_toml_config_key: mcp_servers_global.default_tool_annotations.read_only_hint */}
+
+**Type:** `boolean | None`
+
+Whether the tool leaves its environment unmodified. Omitted values inherit.
+
+##### `mcp_servers_global.default_tool_annotations.destructive_hint`
+
+{/* erato_toml_config_key: mcp_servers_global.default_tool_annotations.destructive_hint */}
+
+**Type:** `boolean | None`
+
+Whether the tool can make destructive updates. Omitted values inherit.
+
+##### `mcp_servers_global.default_tool_annotations.idempotent_hint`
+
+{/* erato_toml_config_key: mcp_servers_global.default_tool_annotations.idempotent_hint */}
+
+**Type:** `boolean | None`
+
+Whether repeated calls with identical arguments have no additional effect. Omitted values inherit.
+
+##### `mcp_servers_global.default_tool_annotations.open_world_hint`
+
+{/* erato_toml_config_key: mcp_servers_global.default_tool_annotations.open_world_hint */}
+
+**Type:** `boolean | None`
+
+Whether the tool can interact with external entities beyond a closed domain. Omitted values inherit.
+
+#### `mcp_servers_global.override_tool_annotations`
+
+{/* erato_toml_config_key: mcp_servers_global.override_tool_annotations */}
+
+**Type:** `object`
+
+**Default:** all hints omitted.
+
+Optional hints overriding server declarations and all defaults. More specific overrides take precedence.
+
+Only the following optional boolean keys are accepted. Unknown keys, camelCase spellings, strings, and numeric values are rejected at startup and runtime reload.
+
+##### `mcp_servers_global.override_tool_annotations.read_only_hint`
+
+{/* erato_toml_config_key: mcp_servers_global.override_tool_annotations.read_only_hint */}
+
+**Type:** `boolean | None`
+
+Whether the tool leaves its environment unmodified. Omitted values inherit.
+
+##### `mcp_servers_global.override_tool_annotations.destructive_hint`
+
+{/* erato_toml_config_key: mcp_servers_global.override_tool_annotations.destructive_hint */}
+
+**Type:** `boolean | None`
+
+Whether the tool can make destructive updates. Omitted values inherit.
+
+##### `mcp_servers_global.override_tool_annotations.idempotent_hint`
+
+{/* erato_toml_config_key: mcp_servers_global.override_tool_annotations.idempotent_hint */}
+
+**Type:** `boolean | None`
+
+Whether repeated calls with identical arguments have no additional effect. Omitted values inherit.
+
+##### `mcp_servers_global.override_tool_annotations.open_world_hint`
+
+{/* erato_toml_config_key: mcp_servers_global.override_tool_annotations.open_world_hint */}
+
+**Type:** `boolean | None`
+
+Whether the tool can interact with external entities beyond a closed domain. Omitted values inherit.
+
+#### `mcp_servers.<server-id>.default_tool_annotations`
+
+{/* erato_toml_config_key: mcp_servers.<server-id>.default_tool_annotations */}
+
+**Type:** `object`
+
+**Default:** all hints omitted.
+
+Optional fallback hints for missing server declarations. More specific defaults take precedence.
+
+Only the following optional boolean keys are accepted. Unknown keys, camelCase spellings, strings, and numeric values are rejected at startup and runtime reload.
+
+##### `mcp_servers.<server-id>.default_tool_annotations.read_only_hint`
+
+{/* erato_toml_config_key: mcp_servers.<server-id>.default_tool_annotations.read_only_hint */}
+
+**Type:** `boolean | None`
+
+Whether the tool leaves its environment unmodified. Omitted values inherit.
+
+##### `mcp_servers.<server-id>.default_tool_annotations.destructive_hint`
+
+{/* erato_toml_config_key: mcp_servers.<server-id>.default_tool_annotations.destructive_hint */}
+
+**Type:** `boolean | None`
+
+Whether the tool can make destructive updates. Omitted values inherit.
+
+##### `mcp_servers.<server-id>.default_tool_annotations.idempotent_hint`
+
+{/* erato_toml_config_key: mcp_servers.<server-id>.default_tool_annotations.idempotent_hint */}
+
+**Type:** `boolean | None`
+
+Whether repeated calls with identical arguments have no additional effect. Omitted values inherit.
+
+##### `mcp_servers.<server-id>.default_tool_annotations.open_world_hint`
+
+{/* erato_toml_config_key: mcp_servers.<server-id>.default_tool_annotations.open_world_hint */}
+
+**Type:** `boolean | None`
+
+Whether the tool can interact with external entities beyond a closed domain. Omitted values inherit.
+
+#### `mcp_servers.<server-id>.override_tool_annotations`
+
+{/* erato_toml_config_key: mcp_servers.<server-id>.override_tool_annotations */}
+
+**Type:** `object`
+
+**Default:** all hints omitted.
+
+Optional hints overriding server declarations and all defaults. More specific overrides take precedence.
+
+Only the following optional boolean keys are accepted. Unknown keys, camelCase spellings, strings, and numeric values are rejected at startup and runtime reload.
+
+##### `mcp_servers.<server-id>.override_tool_annotations.read_only_hint`
+
+{/* erato_toml_config_key: mcp_servers.<server-id>.override_tool_annotations.read_only_hint */}
+
+**Type:** `boolean | None`
+
+Whether the tool leaves its environment unmodified. Omitted values inherit.
+
+##### `mcp_servers.<server-id>.override_tool_annotations.destructive_hint`
+
+{/* erato_toml_config_key: mcp_servers.<server-id>.override_tool_annotations.destructive_hint */}
+
+**Type:** `boolean | None`
+
+Whether the tool can make destructive updates. Omitted values inherit.
+
+##### `mcp_servers.<server-id>.override_tool_annotations.idempotent_hint`
+
+{/* erato_toml_config_key: mcp_servers.<server-id>.override_tool_annotations.idempotent_hint */}
+
+**Type:** `boolean | None`
+
+Whether repeated calls with identical arguments have no additional effect. Omitted values inherit.
+
+##### `mcp_servers.<server-id>.override_tool_annotations.open_world_hint`
+
+{/* erato_toml_config_key: mcp_servers.<server-id>.override_tool_annotations.open_world_hint */}
+
+**Type:** `boolean | None`
+
+Whether the tool can interact with external entities beyond a closed domain. Omitted values inherit.
+
+#### `mcp_servers.<server-id>.tools.<tool-name>.default_tool_annotations`
+
+{/* erato_toml_config_key: mcp_servers.<server-id>.tools.<tool-name>.default_tool_annotations */}
+
+**Type:** `object`
+
+**Default:** all hints omitted.
+
+Optional fallback hints for missing server declarations. More specific defaults take precedence.
+
+Only the following optional boolean keys are accepted. Unknown keys, camelCase spellings, strings, and numeric values are rejected at startup and runtime reload.
+
+##### `mcp_servers.<server-id>.tools.<tool-name>.default_tool_annotations.read_only_hint`
+
+{/* erato_toml_config_key: mcp_servers.<server-id>.tools.<tool-name>.default_tool_annotations.read_only_hint */}
+
+**Type:** `boolean | None`
+
+Whether the tool leaves its environment unmodified. Omitted values inherit.
+
+##### `mcp_servers.<server-id>.tools.<tool-name>.default_tool_annotations.destructive_hint`
+
+{/* erato_toml_config_key: mcp_servers.<server-id>.tools.<tool-name>.default_tool_annotations.destructive_hint */}
+
+**Type:** `boolean | None`
+
+Whether the tool can make destructive updates. Omitted values inherit.
+
+##### `mcp_servers.<server-id>.tools.<tool-name>.default_tool_annotations.idempotent_hint`
+
+{/* erato_toml_config_key: mcp_servers.<server-id>.tools.<tool-name>.default_tool_annotations.idempotent_hint */}
+
+**Type:** `boolean | None`
+
+Whether repeated calls with identical arguments have no additional effect. Omitted values inherit.
+
+##### `mcp_servers.<server-id>.tools.<tool-name>.default_tool_annotations.open_world_hint`
+
+{/* erato_toml_config_key: mcp_servers.<server-id>.tools.<tool-name>.default_tool_annotations.open_world_hint */}
+
+**Type:** `boolean | None`
+
+Whether the tool can interact with external entities beyond a closed domain. Omitted values inherit.
+
+#### `mcp_servers.<server-id>.tools.<tool-name>.override_tool_annotations`
+
+{/* erato_toml_config_key: mcp_servers.<server-id>.tools.<tool-name>.override_tool_annotations */}
+
+**Type:** `object`
+
+**Default:** all hints omitted.
+
+Optional hints overriding server declarations and all defaults. More specific overrides take precedence.
+
+Only the following optional boolean keys are accepted. Unknown keys, camelCase spellings, strings, and numeric values are rejected at startup and runtime reload.
+
+##### `mcp_servers.<server-id>.tools.<tool-name>.override_tool_annotations.read_only_hint`
+
+{/* erato_toml_config_key: mcp_servers.<server-id>.tools.<tool-name>.override_tool_annotations.read_only_hint */}
+
+**Type:** `boolean | None`
+
+Whether the tool leaves its environment unmodified. Omitted values inherit.
+
+##### `mcp_servers.<server-id>.tools.<tool-name>.override_tool_annotations.destructive_hint`
+
+{/* erato_toml_config_key: mcp_servers.<server-id>.tools.<tool-name>.override_tool_annotations.destructive_hint */}
+
+**Type:** `boolean | None`
+
+Whether the tool can make destructive updates. Omitted values inherit.
+
+##### `mcp_servers.<server-id>.tools.<tool-name>.override_tool_annotations.idempotent_hint`
+
+{/* erato_toml_config_key: mcp_servers.<server-id>.tools.<tool-name>.override_tool_annotations.idempotent_hint */}
+
+**Type:** `boolean | None`
+
+Whether repeated calls with identical arguments have no additional effect. Omitted values inherit.
+
+##### `mcp_servers.<server-id>.tools.<tool-name>.override_tool_annotations.open_world_hint`
+
+{/* erato_toml_config_key: mcp_servers.<server-id>.tools.<tool-name>.override_tool_annotations.open_world_hint */}
+
+**Type:** `boolean | None`
+
+Whether the tool can interact with external entities beyond a closed domain. Omitted values inherit.
 
 #### `mcp_servers.<server-id>.wait_tools`
 
@@ -4995,7 +5358,9 @@ validation. Enabling this setting does not register an executor or make arbitrar
 client tools durable. Native local evidence is registered only when
 `desktop_sidecar.local_delegation.enabled` is also enabled and its signing policy
 is valid. Its scoped child offer additionally requires an authenticated native
-context and matching executor capability from the submitting frontend.
+context and matching executor capability from the submitting frontend. Configured
+client tools become durable only through their own
+[`durable`](#client_toolstoolskeydurable) table.
 
 Eligible `consent: none` calls retain the ordinary in-memory fast path. Native
 review operations enter the durable inbox immediately. On disconnect or timeout,
@@ -5003,6 +5368,61 @@ they may park in the logged operation inbox and later continue under a fresh
 authenticated request. Existing generation leases coordinate backend replicas;
 no backend credentials are stored with an operation. Kinds may impose narrower
 rollout restrictions, including single-replica execution.
+
+Turning the setting on also enables the generation lease identity guard and its
+compare-and-set path. After a durable park, a short SSE drop no longer ends the
+call as a timeout: the turn detaches and the frontend resumes it from the
+operation inbox.
+
+#### `client_tools.tools.<key>.durable`
+
+{/* erato_toml_config_key: client_tools.tools.<key>.durable.host_context */}
+{/* erato_toml_config_key: client_tools.tools.<key>.durable.result_schema */}
+{/* erato_toml_config_key: client_tools.tools.<key>.durable.attempt_expiry_secs */}
+{/* erato_toml_config_key: client_tools.tools.<key>.durable.claim_lease_secs */}
+
+Opts one configured client tool into durable operations. It takes effect only
+while `client_tools.durable_operations_enabled` is on. A call that runs keeps the
+in-memory fast path. If the client's stream drops or the call reaches its
+`timeout_ms`, the call parks in the operation inbox instead of ending as a
+timeout. An executor with the same device and host context can then answer it,
+for example after a reconnect or from a second tab, and the turn resumes.
+
+```toml
+[client_tools.tools.outlook_fetch_availability.durable]
+host_context = "outlook_mailbox"
+attempt_expiry_secs = 3600
+claim_lease_secs = 120
+result_schema = '''{"type":"object","required":["busy"],"properties":{"busy":{"type":"array"}}}'''
+```
+
+- **`host_context`** _(required)_ - The host family whose executor binding the
+  call needs. `outlook_mailbox` is the Outlook add-in's signed-in mailbox. A call
+  without a matching `X-Erato-Executor` binding keeps the in-memory path. This
+  happens with older clients, Teams, or a desktop sidecar binding.
+- **`result_schema`** _(optional)_ - A JSON Schema string with top-level
+  `type = "object"` that a successful result must satisfy. A result that fails
+  it, or any malformed result, reaches the model as fixed feedback, never verbatim.
+- **`attempt_expiry_secs`** _(default: 3600, range: 60–86400)_ - How long a
+  parked call stays claimable, counted from when the call was dispatched. It must
+  cover the tool's `timeout_ms` (default 60000) plus `claim_lease_secs`. An
+  expired call continues the turn as `expired`.
+- **`claim_lease_secs`** _(default: 120, range: 60–900)_ - How long a claiming
+  executor holds the call before another claim may replace it. It must not
+  exceed `attempt_expiry_secs`.
+
+Per-tool decisions still apply. `ask` shows the approval card before the call
+runs. Once approved, the call parks like any other, and it does not prompt again
+when it completes later on the same device. If an approval is answered from another
+device or client, no call of an opted-in tool parks for the rest of that turn;
+they keep the in-memory path. `never_allow` tools are neither offered nor run.
+A decision changed to `never_allow` after a call parked withdraws it. Claims are
+never allowed across devices. A tool with `submission` cannot be durable. Results
+must be JSON; tools that return files must not opt in. Opting in also drops the
+client's per-field validation errors: a result the client rejects reaches the
+model as fixed `validation_failed` text, on the live path too, so tools that rely
+on correctable validation errors must not opt in. Every backend replica must load
+the same `durable` tables.
 
 #### `client_tools.tools.<key>.requires_client_registration`
 
@@ -5437,7 +5857,7 @@ description = "Validate and stage a draft for review. Call alone after reading."
 parameters = '''{"type":"object","properties":{"title":{"type":"string"}},"required":["title"],"additionalProperties":false}'''
 
 [client_tools.tools.submit_draft.submission]
-max_attempts = 3
+max_attempts = 5
 native_schema = "auto"
 ```
 
@@ -5447,9 +5867,13 @@ is absent. Schemas support local references, and never fetch external schemas.
 
 {/* erato_toml_config_key: client_tools.tools.<key>.submission.max_attempts */}
 {/* erato_toml_config_key: client_tools.tools.<key>.submission.native_schema */}
+{/* erato_toml_config_key: client_tools.tools.<key>.submission.recovery_read_tools.[] */}
+{/* erato_toml_config_key: client_tools.tools.<key>.submission.max_recovery_reads */}
 
-- **`max_attempts`** _(default: 3, range: 1–10)_ - Total attempts per tool and generation, including the initial call. Schema errors and client failures return bounded feedback for correction; the final failed attempt ends generation. A timeout ends generation without retrying a possibly staged draft.
+- **`max_attempts`** _(default: 3, range: 1–10)_ - Total attempts per logical editing step, including the initial call and plain-text replies during correction. These attempts are reserved independently of ordinary tool budgets. Switching submission tools or draft identifiers does not reset the allowance. Schema errors and client failures return bounded feedback for correction; the final failed attempt ends generation with a persisted unresolved outcome. A timeout ends generation without retrying a possibly staged draft.
 - **`native_schema`** _(default: `"auto"`)_ - `auto` uses native enforcement when the adapter, explicit model capability and schema are compatible; otherwise it uses local validation and feedback. `off` always uses local validation. `required` rejects request preparation if native enforcement is unavailable, including when `compat_omit_strict` is enabled.
+- **`recovery_read_tools`** _(default: `[]`)_ - Qualified names of configured non-submission client tools permitted to read current context when the host returns `submission_feedback.recovery = "read_current_context"`. These reads use their separate allowance without spending the ordinary tool budget. Configure only tools that read the current source context.
+- **`max_recovery_reads`** _(default: 32, range: 0–128)_ - Maximum recovery reads across the editing step, including approval continuations. Exhaustion ends with an unresolved outcome. The host can end recovery immediately with `submission_feedback.recovery = "cannot_continue"` when the source context is unavailable.
 
 Native enforcement does not replace the host's parser or domain checks. A schema
 must already fit the provider subset: object properties are all required and

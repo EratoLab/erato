@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { injectFrontendEnv } from "../env";
 
@@ -64,52 +64,57 @@ describe("injectFrontendEnv assistants flags", () => {
   });
 });
 
-describe("injectFrontendEnv Word in-place kill switch", () => {
-  afterEach(() => {
+describe("injectFrontendEnv Word apply overrides", () => {
+  const clear = () => {
     vi.unstubAllEnvs();
     Reflect.deleteProperty(window, "WORD_FORCE_IMPORT_APPLY");
-  });
+    Reflect.deleteProperty(window, "WORD_IN_PLACE_APPLY");
+  };
+  beforeEach(clear);
+  afterEach(clear);
 
-  it("forces the import in production builds by default", () => {
+  it("leaves a production build to the deployment's per-host settings", () => {
     vi.stubEnv("PROD", true);
     vi.stubEnv("VITE_WORD_FORCE_IMPORT_APPLY", "");
-    vi.stubEnv("VITE_WORD_IN_PLACE_APPLY", "");
+
+    injectFrontendEnv();
+
+    expect(window.WORD_FORCE_IMPORT_APPLY).toBeUndefined();
+    expect(window.WORD_IN_PLACE_APPLY).toBeUndefined();
+  });
+
+  it("forces the import when the build asks for it", () => {
+    vi.stubEnv("PROD", true);
+    vi.stubEnv("VITE_WORD_FORCE_IMPORT_APPLY", "true");
 
     injectFrontendEnv();
 
     expect(window.WORD_FORCE_IMPORT_APPLY).toBe(true);
   });
 
-  it("leaves in-place writing on for a production build that opts in", () => {
-    vi.stubEnv("PROD", true);
-    vi.stubEnv("VITE_WORD_FORCE_IMPORT_APPLY", "");
-    vi.stubEnv("VITE_WORD_IN_PLACE_APPLY", "true");
-
-    injectFrontendEnv();
-
-    expect(window.WORD_FORCE_IMPORT_APPLY).toBeUndefined();
-  });
-
-  it("leaves in-place writing on in development unless forced off", () => {
+  it("writes in place everywhere in development only", () => {
     vi.stubEnv("PROD", false);
     vi.stubEnv("VITE_WORD_FORCE_IMPORT_APPLY", "");
-    vi.stubEnv("VITE_WORD_IN_PLACE_APPLY", "");
-
     injectFrontendEnv();
+    expect(window.WORD_IN_PLACE_APPLY).toBe(true);
     expect(window.WORD_FORCE_IMPORT_APPLY).toBeUndefined();
 
-    vi.stubEnv("VITE_WORD_FORCE_IMPORT_APPLY", "true");
+    Reflect.deleteProperty(window, "WORD_IN_PLACE_APPLY");
+    vi.stubEnv("PROD", true);
+    vi.stubEnv("VITE_WORD_IN_PLACE_APPLY", "true");
     injectFrontendEnv();
-    expect(window.WORD_FORCE_IMPORT_APPLY).toBe(true);
+    expect(window.WORD_IN_PLACE_APPLY).toBeUndefined();
   });
 
-  it("keeps a value the serving backend injected", () => {
-    vi.stubEnv("PROD", true);
-    vi.stubEnv("VITE_WORD_IN_PLACE_APPLY", "");
+  it("keeps values the serving backend injected", () => {
+    vi.stubEnv("PROD", false);
+    vi.stubEnv("VITE_WORD_FORCE_IMPORT_APPLY", "true");
     window.WORD_FORCE_IMPORT_APPLY = false;
+    window.WORD_IN_PLACE_APPLY = false;
 
     injectFrontendEnv();
 
     expect(window.WORD_FORCE_IMPORT_APPLY).toBe(false);
+    expect(window.WORD_IN_PLACE_APPLY).toBe(false);
   });
 });

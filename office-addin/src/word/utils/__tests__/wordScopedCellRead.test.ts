@@ -2,14 +2,20 @@ import {
   parseWordDocumentPlan,
   validateWordDocumentPlan,
 } from "@erato/frontend/word-review";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, onTestFinished, vi } from "vitest";
 
+import { setWordWebImport } from "../../../test/mocks/word/applyPolicy";
 import {
   packageXml,
   paragraph,
   readySnapshot,
   W,
 } from "../../../test/mocks/word/authoringFixtures";
+import { installWordOoxmlHost } from "../../../test/mocks/word/ooxmlHost";
+import {
+  captureRealisticSnapshot,
+  realisticWordPackageXml,
+} from "../../../test/mocks/word/realisticWordFixtures";
 import {
   resolveWordActionFacet,
   WORD_AUTHORING_FACET_ID,
@@ -22,8 +28,16 @@ import {
   compileWordDocumentPlan,
   verifyWordPlanOutput,
 } from "../wordDocumentXml";
+import {
+  latchWordInPlace,
+  resetWordInPlaceLatchForTests,
+} from "../wordInPlaceSwitch";
+import { noteWordParagraphIds } from "../wordParagraphIds";
 
-import type { WordDocumentPlan } from "@erato/frontend/word-review";
+import type {
+  WordAuthoringSnapshot,
+  WordDocumentPlan,
+} from "@erato/frontend/word-review";
 
 const context = {
   chatId: "chat-A",
@@ -435,5 +449,141 @@ describe("bounded table-cell reads", () => {
       diagnostic: { reason: "source-changed" },
     });
     expect(insert).not.toHaveBeenCalled();
+  });
+});
+
+describe("table-cell edits where the whole-document import needs confirmation", () => {
+  afterEach(() => {
+    resetWordInPlaceLatchForTests();
+    noteWordParagraphIds([]);
+    window.WORD_IN_PLACE_APPLY = true;
+  });
+
+  async function cellEdit(
+    profile?: "word-pc-16.0.20326",
+    read: "scoped" | "complete" = "scoped",
+  ) {
+    installWordOoxmlHost(realisticWordPackageXml(), { profile });
+    const snapshot = await captureRealisticSnapshot(context.messageId);
+    const session = new WordDocumentReadSession();
+    session.activate(snapshot, context);
+    const scoped = await session.execute(
+      {
+        snapshot: snapshot.token,
+        documentIdentity: snapshot.identity,
+        table_cell: { header: "budget", rowLabel: "north" },
+      },
+      context,
+    );
+    if (!scoped.ok) throw new Error(scoped.error);
+    const { readToken, target } = scoped.result as {
+      readToken: string;
+      target: Record<string, unknown>;
+    };
+    if (read === "complete") {
+      const complete = await session.execute(
+        { snapshot: snapshot.token },
+        { ...context, toolCallId: "read-complete" },
+      );
+      if (!complete.ok) throw new Error(complete.error);
+    }
+    const submit = () =>
+      createWordDocumentSubmissionExecutor(session)(
+        {
+          snapshot: snapshot.token,
+          readToken: read === "complete" ? snapshot.readToken : readToken,
+          table_cell: { ...target, text: "43" },
+        },
+        { ...context, toolCallId: "submit" },
+      );
+    return { submit, snapshot };
+  }
+
+  it("accepts a cell rewrite Word for the web writes in place", async () => {
+    const { submit } = await cellEdit();
+    expect((await submit()).ok).toBe(true);
+  });
+
+  it.each([
+    ["latched", () => latchWordInPlace("verify-mismatch")],
+    ["no-paragraph-ids", () => noteWordParagraphIds([null])],
+  ] as const)(
+    "points a scoped cell rewrite to a full plan on Word for the web once in-place writing is %s",
+    async (reason, disable) => {
+      const { submit } = await cellEdit();
+      disable();
+      expect(await submit()).toMatchObject({
+        ok: false,
+        error: "Scoped edit needs a full-document rewrite.",
+        validationErrors: [
+          {
+            path: "",
+            code: "in-place-unavailable",
+            message: expect.stringMatching(
+              new RegExp(
+                `because of: ${reason}\\..*complete the full read and submit a full-document plan instead`,
+              ),
+            ),
+          },
+        ],
+        submissionFeedback: {
+          recovery: "read_current_context",
+          terminal: false,
+        },
+      });
+    },
+  );
+
+  it.each([
+    [
+      "the deployment turned the import off",
+      () => onTestFinished(setWordWebImport("off")),
+    ],
+    [
+      "the document is too large for a complete read",
+      (snapshot: WordAuthoringSnapshot) => {
+        snapshot.completeReadIssue = "too-large";
+      },
+    ],
+  ] as const)("tells the user instead where %s", async (_case, restrict) => {
+    const { submit, snapshot } = await cellEdit();
+    restrict(snapshot);
+    latchWordInPlace("verify-mismatch");
+    expect(await submit()).toMatchObject({
+      ok: false,
+      validationErrors: [
+        {
+          code: "web-needs-whole-document",
+          message: expect.stringMatching(
+            /because of: latched\..*tell the user that this change can't be made in this version of Word right now\.$/,
+          ),
+        },
+      ],
+      submissionFeedback: { recovery: "repair_arguments", terminal: false },
+    });
+  });
+
+  it("accepts a cell rewrite from the complete read, which Apply then asks to confirm", async () => {
+    const { submit, snapshot } = await cellEdit(undefined, "complete");
+    latchWordInPlace("verify-mismatch");
+    const submitted = await submit();
+    if (!submitted.ok) throw new Error(JSON.stringify(submitted));
+    const plan = (submitted.result as { plan: unknown }).plan;
+    expect(
+      await applyWordDocumentPlan(
+        JSON.stringify(plan),
+        snapshot,
+        context.messageId,
+      ),
+    ).toMatchObject({
+      status: "blocked",
+      diagnostic: { reason: "import-needs-confirmation" },
+    });
+  });
+
+  it("accepts it on Word PC with default settings, where it takes the import", async () => {
+    delete window.WORD_IN_PLACE_APPLY;
+    const { submit } = await cellEdit("word-pc-16.0.20326");
+    expect((await submit()).ok).toBe(true);
   });
 });

@@ -28,6 +28,7 @@ import {
   queueParagraphSpanChecks,
   queueWordSections,
   readWordStory,
+  settleWordCommentAnchors,
   wordParagraphsEndingSection,
 } from "./wordSelectionTarget";
 
@@ -656,7 +657,8 @@ export async function captureWordSelection(
           origin,
           enabledShapes,
         );
-      // Every covered paragraph is checked whole, in one sync: its OOXML, controls and fields.
+      // Every covered paragraph is checked whole, in one sync: its OOXML, controls, fields and
+      // comments.
       const covered = read.paragraphs;
       guard.extendTimeout(
         covered.length * WORD_SELECTION_SPAN_CHECK_MS_PER_PARAGRAPH,
@@ -678,7 +680,12 @@ export async function captureWordSelection(
           : null;
       });
       await context.sync();
-      const reads = checks.map((check) => check());
+      const reads = await settleWordCommentAnchors(
+        context,
+        checks.map((check) => check()),
+        support,
+        guard,
+      );
       const { kept, formats } = markedParts(reads, rangeTexts, parts, support);
       let searchMismatch = false;
       for (const [i, hits] of dryRuns.entries())

@@ -265,6 +265,34 @@ describe("useWordDocumentSource", () => {
     expect(build?.authoring?.issueDetails).toEqual(["package-too-large"]);
   });
 
+  it("keeps body authoring with its note when Word for the web withheld the file, without retrying", async () => {
+    read.mockResolvedValue({
+      ok: true,
+      paragraphs: paragraphs(["Alpha"]),
+      authoring: {
+        ooxml: packageXml(paragraph("Alpha")),
+        tracking: "Off",
+        fullDocument: false,
+      },
+      note: "package-blocked",
+    });
+    const { result } = renderSource({ authoringEnabled: true });
+    await waitFor(() =>
+      expect(result.current.preview.authoringNote).toBe("package-blocked"),
+    );
+    expect(result.current.preview.authoringIssue).toBeUndefined();
+
+    let build: Awaited<ReturnType<typeof result.current.capture>> = null;
+    await act(async () => {
+      build = await result.current.capture();
+    });
+
+    expect(read).toHaveBeenCalledTimes(1);
+    expect(build!.readNote).toBe("package-blocked");
+    expect(build!.authoring?.issue).toBeUndefined();
+    expect(build!.authoring?.fullDocument).toBeFalsy();
+  });
+
   it("keeps the earlier capture available after the document changed", async () => {
     readsText(["Alpha"]);
     const { result } = renderSource();

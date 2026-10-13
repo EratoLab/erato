@@ -145,6 +145,157 @@ describe("readWordDocument", () => {
     });
   });
 
+  describe("on Word for the web", () => {
+    const onPlatform = (platform: string) => {
+      (Office.context as unknown as Record<string, unknown>).diagnostics = {
+        platform,
+      };
+    };
+    beforeEach(() => onPlatform("OfficeOnline"));
+    afterEach(() => {
+      delete (Office.context as unknown as Record<string, unknown>).diagnostics;
+    });
+
+    it("reads the body for authoring when Word refuses to open the file, as for a labelled document", async () => {
+      vi.mocked(supportsWordDocumentPackage).mockReturnValueOnce(true);
+      vi.mocked(captureWordDocumentPackage).mockRejectedValueOnce(
+        new WordDocumentTransferError(
+          "Word could not capture the document.",
+          true,
+          11001,
+        ),
+      );
+      word.word.setTrackingMode("TrackAll");
+
+      const result = await readWordDocument(true);
+
+      expect(word.word.run).toHaveBeenCalledTimes(2);
+      expect(result.ok && result.paragraphs).toHaveLength(3);
+      expect(result.ok && result.authoringUnavailable).toBeUndefined();
+      expect(result.ok && result.note).toBe("package-blocked");
+      expect(result.ok && result.authoring).toMatchObject({
+        fullDocument: false,
+        tracking: "TrackAll",
+      });
+      expect(result.ok && result.authoring?.ooxml).toContain("Revenue grew.");
+    });
+
+    it.each([
+      [
+        "a transfer that fails part-way",
+        new WordDocumentTransferError("Word could not read a document slice."),
+      ],
+      [
+        "a document that changes during capture",
+        new WordDocumentTransferError(
+          "The open document changed during capture.",
+        ),
+      ],
+      [
+        "both file handles held",
+        new WordDocumentTransferError(
+          "Word could not capture the document.",
+          true,
+          11000,
+        ),
+      ],
+      [
+        "a refusal with another Office code",
+        new WordDocumentTransferError(
+          "Word could not capture the document.",
+          true,
+          5001,
+        ),
+      ],
+      [
+        "a refusal without an Office code",
+        new WordDocumentTransferError(
+          "Word could not capture the document.",
+          true,
+        ),
+      ],
+    ])("keeps today's result for %s", async (_, error) => {
+      vi.mocked(supportsWordDocumentPackage).mockReturnValueOnce(true);
+      vi.mocked(captureWordDocumentPackage).mockRejectedValueOnce(error);
+
+      const result = await readWordDocument(true);
+
+      expect(word.word.run).toHaveBeenCalledTimes(1);
+      expect(result.ok && result.note).toBeUndefined();
+      expect(result.ok && result.authoring).toBeUndefined();
+      expect(result.ok && result.authoringUnavailable).toMatchObject({
+        issue: "unavailable",
+        detail: "package-failed",
+      });
+    });
+
+    it("keeps today's result when the body read fails as well", async () => {
+      vi.mocked(supportsWordDocumentPackage).mockReturnValueOnce(true);
+      vi.mocked(captureWordDocumentPackage).mockRejectedValueOnce(
+        new WordDocumentTransferError(
+          "Word could not capture the document.",
+          true,
+          11001,
+        ),
+      );
+      const run = word.word.run.getMockImplementation()!;
+      word.word.run
+        .mockImplementationOnce(run)
+        .mockRejectedValueOnce(new Error("Body unavailable"));
+
+      const result = await readWordDocument(true);
+
+      expect(result.ok && result.note).toBeUndefined();
+      expect(result.ok && result.authoring).toBeUndefined();
+      expect(result.ok && result.authoringUnavailable).toMatchObject({
+        issue: "unavailable",
+        detail: "package-failed",
+      });
+    });
+
+    it.each([
+      [
+        new WordDocumentTooLargeError("The expanded document is too large."),
+        "too-large",
+        "package-too-large",
+      ],
+      [new WordDocumentCaptureTimeoutError(), "unavailable", "package-timeout"],
+    ] as const)("keeps today's result for %s", async (error, issue, detail) => {
+      vi.mocked(supportsWordDocumentPackage).mockReturnValueOnce(true);
+      vi.mocked(captureWordDocumentPackage).mockRejectedValueOnce(error);
+
+      const result = await readWordDocument(true);
+
+      expect(word.word.run).toHaveBeenCalledTimes(1);
+      expect(result.ok && result.note).toBeUndefined();
+      expect(result.ok && result.authoringUnavailable).toMatchObject({
+        issue,
+        detail,
+      });
+    });
+
+    it("keeps today's result for a failed transfer on Word PC", async () => {
+      onPlatform("PC");
+      vi.mocked(supportsWordDocumentPackage).mockReturnValueOnce(true);
+      vi.mocked(captureWordDocumentPackage).mockRejectedValueOnce(
+        new WordDocumentTransferError(
+          "Word could not capture the document.",
+          true,
+          11001,
+        ),
+      );
+
+      const result = await readWordDocument(true);
+
+      expect(word.word.run).toHaveBeenCalledTimes(1);
+      expect(result.ok && result.authoring).toBeUndefined();
+      expect(result.ok && result.authoringUnavailable).toMatchObject({
+        issue: "unavailable",
+        detail: "package-failed",
+      });
+    });
+  });
+
   it.each([
     [
       new WordDocumentTooLargeError("The expanded document is too large."),

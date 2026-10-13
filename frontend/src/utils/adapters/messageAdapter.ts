@@ -76,6 +76,7 @@ export function mapApiMessageToUiMessage(
     feedback: apiMessage.feedback ?? undefined,
     error: isMessageError(error) ? error : undefined,
     error_report: apiMessage.error_report ?? undefined,
+    submission_outcome: apiMessage.submission_outcome,
     mcp_servers_unavailable: apiMessage.mcp_servers_unavailable ?? undefined,
     mcp_servers_needing_auth: apiMessage.mcp_servers_needing_auth ?? undefined,
     mcp_servers_disabled_by_user:

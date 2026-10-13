@@ -1497,6 +1497,7 @@ async fn test_delegation_happy_path_runs_child_and_returns_envelope(pool: Pool<P
             timeout_ms: None,
             submission: None,
             replay: Default::default(),
+            durable: None,
         },
     );
     app_config.facets.tool_call_allowlist = vec!["client/*".to_string()];
@@ -2360,6 +2361,9 @@ async fn test_delegation_refuses_approval_gated_mcp_in_child(pool: Pool<Postgres
             wait_tools: vec![],
             authentication: erato::config::McpServerAuthenticationConfig::None,
             max_session_idle_seconds: None,
+            default_tool_annotations: Default::default(),
+            override_tool_annotations: Default::default(),
+            tools: Default::default(),
         },
     );
     app_config.mcp_server_permissions.rules.insert(
@@ -5163,6 +5167,7 @@ fn answer_metadata(
         mcp_servers_disabled_by_user: None,
         mcp_tools_disabled_by_user: None,
         continuation_in_flight: None,
+        submission_outcome: None,
     }
 }
 
@@ -6844,6 +6849,9 @@ async fn test_continued_turn_does_not_reoffer_the_delegation_tool(pool: Pool<Pos
             wait_tools: vec![],
             authentication: erato::config::McpServerAuthenticationConfig::None,
             max_session_idle_seconds: None,
+            default_tool_annotations: Default::default(),
+            override_tool_annotations: Default::default(),
+            tools: Default::default(),
         },
     );
     app_config.mcp_server_permissions.rules.insert(
@@ -7521,6 +7529,9 @@ fn gate_mock_mcp_tools_on_approval(config: &mut erato::config::AppConfig) {
             wait_tools: vec![],
             authentication: erato::config::McpServerAuthenticationConfig::None,
             max_session_idle_seconds: None,
+            default_tool_annotations: Default::default(),
+            override_tool_annotations: Default::default(),
+            tools: Default::default(),
         },
     );
     config.mcp_server_permissions.rules.insert(
@@ -8269,6 +8280,7 @@ async fn a_task_planned_on_a_word_turn_gets_no_word_client_tools(pool: Pool<Post
                 timeout_ms: None,
                 submission: None,
                 replay: Default::default(),
+                durable: None,
             },
         );
         let mut word_tools = config.facets.facets["files"].clone();
@@ -8664,6 +8676,9 @@ async fn a_task_that_spends_its_server_budget_finishes_with_a_partial_answer(poo
                     wait_tools: vec![],
                     authentication: erato::config::McpServerAuthenticationConfig::None,
                     max_session_idle_seconds: None,
+                    default_tool_annotations: Default::default(),
+                    override_tool_annotations: Default::default(),
+                    tools: Default::default(),
                 },
             );
             config.mcp_server_permissions.rules.insert(
@@ -10027,6 +10042,9 @@ fn approval_fixture_server() -> erato::config::McpServerConfig {
         wait_tools: vec![],
         authentication: erato::config::McpServerAuthenticationConfig::None,
         max_session_idle_seconds: None,
+        default_tool_annotations: Default::default(),
+        override_tool_annotations: Default::default(),
+        tools: Default::default(),
     }
 }
 
@@ -12753,6 +12771,7 @@ async fn react_offers_optional_client_tools_only_when_registered(pool: Pool<Post
                 timeout_ms: None,
                 submission: None,
                 replay: Default::default(),
+                durable: None,
             },
         );
     }

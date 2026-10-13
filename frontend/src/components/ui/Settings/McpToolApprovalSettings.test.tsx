@@ -45,6 +45,12 @@ const tool = (overrides: Partial<McpServerTool>): McpServerTool => ({
     idempotent_hint: true,
     open_world_hint: false,
     annotated: true,
+    sources: {
+      read_only_hint: "server_supplied",
+      destructive_hint: "server_supplied",
+      idempotent_hint: "server_supplied",
+      open_world_hint: "server_supplied",
+    },
   },
   policy: "ask",
   user_decision: "none",
@@ -62,6 +68,12 @@ const writeTool = (overrides: Partial<McpServerTool>): McpServerTool =>
       idempotent_hint: false,
       open_world_hint: false,
       annotated: true,
+      sources: {
+        read_only_hint: "server_supplied",
+        destructive_hint: "server_supplied",
+        idempotent_hint: "server_supplied",
+        open_world_hint: "server_supplied",
+      },
     },
     ...overrides,
   });
@@ -342,6 +354,12 @@ describe("McpToolApprovalSettings", () => {
             idempotent_hint: false,
             open_world_hint: true,
             annotated: false,
+            sources: {
+              read_only_hint: "protocol_default",
+              destructive_hint: "protocol_default",
+              idempotent_hint: "protocol_default",
+              open_world_hint: "protocol_default",
+            },
           },
           policy: "ask",
         }),

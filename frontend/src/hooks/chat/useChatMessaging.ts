@@ -30,6 +30,7 @@ import { getIdToken } from "@/auth/tokenStore";
 import { useChatHistory } from "@/hooks";
 import { BUDGET_QUERY_KEY } from "@/hooks/budget/useBudgetStatus";
 import { useFileUploadStore } from "@/hooks/files/useFileUploadStore";
+import { requestClientOperationSweep } from "@/lib/clientOperations/handlers";
 import {
   chatMessagesQuery as buildChatMessagesQuery,
   fetchChatMessages,
@@ -1196,6 +1197,9 @@ export function useChatMessaging(
                 lastPart?.content_type === "tool_approval_request" ||
                 lastPart?.content_type === "client_tool_pending"
               ) {
+                // A parked call may be this pane's to finish; skip the poll wait.
+                if (lastPart.content_type === "client_tool_pending")
+                  requestClientOperationSweep();
                 useGenerationStatusStore
                   .getState()
                   .seedActionRequired(
@@ -1433,6 +1437,7 @@ export function useChatMessaging(
         {
           method: "POST",
           headers: {
+            ...getClientToolHeaders(),
             [X_ERATO_PLATFORM_HEADER]: platform,
           },
           body: JSON.stringify({ chat_id: effectiveChatId }),
