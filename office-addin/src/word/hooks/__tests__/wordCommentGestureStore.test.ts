@@ -55,6 +55,10 @@ describe("one-message gestures a Send spent", () => {
     store.set({ includeOpenComments: true });
     store.pick({ kind: "pick", ref: "t1k", selectionKey: null });
     const spent = store.sent();
+    expect(store.getSnapshot().pick).toEqual({
+      ref: "t1k",
+      selectionKey: null,
+    });
     store.pick({ kind: "dismiss" });
 
     store.unspend(spent);

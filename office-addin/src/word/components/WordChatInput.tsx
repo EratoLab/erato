@@ -10,7 +10,13 @@ import {
 import { plural, t } from "@lingui/core/macro";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { WordCommentChip, wordCommentChipView } from "./WordCommentChip";
+import {
+  WORD_COMMENT_LINK_CLASS,
+  WordCommentChip,
+  wordCommentChipView,
+  wordCommentChooseText,
+  wordCommentSendWithoutText,
+} from "./WordCommentChip";
 import {
   WordCommentCoverage,
   wordCommentCoverageInfo,
@@ -58,14 +64,16 @@ import {
   readWordComments,
   wordCommentInventoryFromCapture,
 } from "../utils/wordCommentReader";
-import { wordCommentRefRegistry } from "../utils/wordCommentRefs";
+import {
+  wordCommentIdOfRef,
+  wordCommentRefRegistry,
+} from "../utils/wordCommentRefs";
 import {
   resolveWordCommentSend,
   withWordCommentRefs,
   wordAnchoredCommentsArg,
   wordCommentAdvertised,
   wordCommentsAdvertised,
-  wordCommentIdOfRef,
   wordCommentMapArg,
   wordCommentSendExact,
   wordCommentSendable,
@@ -1164,10 +1172,7 @@ export function WordChatInput({
                   variant="secondary"
                   onClick={() => setPickerOpen(true)}
                 >
-                  {t({
-                    id: "officeAddin.word.comments.choose",
-                    message: "Choose comment…",
-                  })}
+                  {wordCommentChooseText()}
                 </Button>
               )}
               <Button
@@ -1176,10 +1181,7 @@ export function WordChatInput({
                 variant="secondary"
                 onClick={() => decideCommentsRef.current?.({ kind: "without" })}
               >
-                {t({
-                  id: "officeAddin.word.comments.sendWithout",
-                  message: "Send without comments",
-                })}
+                {wordCommentSendWithoutText()}
               </Button>
             </div>
           </Alert>
@@ -1365,13 +1367,10 @@ export function WordChatInput({
             {!chipOffersChoose && (
               <button
                 type="button"
-                className="font-medium underline underline-offset-2 hover:text-theme-fg-primary"
+                className={WORD_COMMENT_LINK_CLASS}
                 onClick={() => setPickerOpen(true)}
               >
-                {t({
-                  id: "officeAddin.word.comments.choose",
-                  message: "Choose comment…",
-                })}
+                {wordCommentChooseText()}
               </button>
             )}
           </div>

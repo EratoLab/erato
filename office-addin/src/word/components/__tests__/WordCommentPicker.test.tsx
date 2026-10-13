@@ -22,12 +22,13 @@ import type {
   WordCommentListThread,
 } from "../../hooks/useWordComments";
 import type { WordCommentPickerProps } from "../WordCommentPicker";
-import type { ReactNode } from "react";
+import type { ComponentProps, ReactNode } from "react";
 
 vi.mock("@erato/frontend/library", async () => {
   const mock = await import("../../../test/helpers/eratoLibraryMock");
   return mock.createEratoLibraryMock({
     SpinnerIcon: () => <span>spinner</span>,
+    Select: (props: ComponentProps<"select">) => <select {...props} />,
     ModalBase: ({
       isOpen,
       title,
@@ -69,7 +70,6 @@ const listOf = (
 ): WordCommentList => ({
   ...NO_WORD_COMMENT_LIST,
   status: "ready",
-  detailed: true,
   threads,
   counts: {
     open: threads.filter((t) => t.status === "open").length,
@@ -179,7 +179,7 @@ describe("WordCommentPicker", () => {
     fireEvent.click(screen.getByRole("button", { name: "All (12)" }));
     expect(rowRefs()).toEqual(TWELVE.map((t) => t.ref));
 
-    fireEvent.change(screen.getByLabelText("Sort"), {
+    fireEvent.change(screen.getByRole("combobox", { name: "Sort" }), {
       target: { value: "activity" },
     });
     expect(rowRefs()).toEqual(
@@ -270,32 +270,19 @@ describe("WordCommentPicker", () => {
     );
   });
 
-  it("refreshes when it opens, on pane focus and on Refresh, and never on a timer", async () => {
+  it("refreshes when it opens and on Refresh, and never on a timer", async () => {
     vi.useFakeTimers();
     const picker = props({ isOpen: false });
     const { rerender } = render(<WordCommentPicker {...picker} />);
-    act(() => {
-      globalThis.dispatchEvent(new Event("focus"));
-    });
     expect(picker.onRefresh).not.toHaveBeenCalled();
 
     rerender(<WordCommentPicker {...picker} isOpen />);
     expect(picker.onRefresh).toHaveBeenCalledTimes(1);
-    act(() => {
-      globalThis.dispatchEvent(new Event("focus"));
-    });
-    expect(picker.onRefresh).toHaveBeenCalledTimes(2);
     fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
-    expect(picker.onRefresh).toHaveBeenCalledTimes(3);
+    expect(picker.onRefresh).toHaveBeenCalledTimes(2);
 
     await act(() => vi.advanceTimersByTimeAsync(10 * 60_000));
-    expect(picker.onRefresh).toHaveBeenCalledTimes(3);
-
-    rerender(<WordCommentPicker {...picker} isOpen={false} />);
-    act(() => {
-      globalThis.dispatchEvent(new Event("focus"));
-    });
-    expect(picker.onRefresh).toHaveBeenCalledTimes(3);
+    expect(picker.onRefresh).toHaveBeenCalledTimes(2);
   });
 
   it("shows progress while the replies are listed", () => {

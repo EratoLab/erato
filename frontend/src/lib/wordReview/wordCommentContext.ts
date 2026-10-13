@@ -136,13 +136,11 @@ export interface WordCommentMapRow {
   /** The heading chain, outermost first, joined by WORD_COMMENT_SECTION_SEPARATOR. */
   sec?: string;
   para: number;
-  /** Short anchor quote. */
   q?: string;
   by: string;
   st: WordCommentStatus;
   /** Reply count; null when the replies were not listed, which Word for Mac does slowly. */
   r: number | null;
-  /** last_at of the thread. */
   at: string | null;
   /** Gist of the thread's comment, about WORD_COMMENT_GIST_CHARS long. */
   g?: string;
@@ -195,9 +193,7 @@ export interface WordCommentContextSummary {
   envelope: WordCommentEnvelope | null;
   /** Every thread sent with its text, a picked thread first. */
   threads: readonly WordCommentThread[];
-  mapCount: number;
   notShown: number;
-  selectionThreadCount: number;
   picked: WordCommentThread | null;
 }
 
@@ -209,8 +205,10 @@ const IN_SELECTION: ReadonlySet<WordCommentVs> = new Set([
   "at_caret",
 ]);
 
-export const wordCommentInSelection = (thread: WordCommentThread): boolean =>
-  thread.where.vs !== undefined && IN_SELECTION.has(thread.where.vs);
+/** The anchor reaches the selected passage or touches the caret. */
+export const wordCommentVsInSelection = (
+  vs: WordCommentVs | undefined,
+): boolean => vs !== undefined && IN_SELECTION.has(vs);
 
 type Fields = Readonly<Record<string, unknown>>;
 
@@ -523,9 +521,7 @@ function summaryOf(
     carrier,
     envelope,
     threads,
-    mapCount: envelope?.index.length ?? 0,
     notShown: envelope?.coverage.not_shown ?? 0,
-    selectionThreadCount: threads.filter(wordCommentInSelection).length,
     picked,
   };
 }

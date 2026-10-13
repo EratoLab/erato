@@ -16,6 +16,7 @@ import {
   resolveWordCommentRef,
   wordCommentEntryRef,
   wordCommentFingerprint,
+  wordCommentIdOfRef,
   wordCommentRefFor,
   wordCommentRefRegistry,
 } from "../wordCommentRefs";
@@ -242,6 +243,17 @@ describe("collisions and reuse", () => {
     );
     expect(refs.threads[0].ref).not.toBe(refs.threads[1].ref);
     expect(refs.threads.map((t) => t.commentId)).toEqual(["55", "55"]);
+  });
+
+  it("finds the comment id a ref was issued for", () => {
+    const registry = createWordCommentRefRegistry("doc");
+    registry.refs.set("id:42", "t7k");
+    registry.refs.set("id:43#2", "t2p");
+    registry.refs.set("content:abc", "t9m");
+    expect(wordCommentIdOfRef(registry, "t7k")).toBe("42");
+    expect(wordCommentIdOfRef(registry, "t2p")).toBe("43");
+    expect(wordCommentIdOfRef(registry, "t9m")).toBeNull();
+    expect(wordCommentIdOfRef(registry, "tzz")).toBeNull();
   });
 });
 

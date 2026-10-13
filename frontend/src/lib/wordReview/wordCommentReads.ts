@@ -4,16 +4,7 @@ import {
 } from "./wordCommentContext";
 
 import type { WordCommentStatus } from "./wordCommentContext";
-
-/** What a read row needs of a stored content part; kept structural so the add-in can run it too. */
-export interface WordCommentReadPart {
-  content_type: string;
-  tool_call_id?: string;
-  tool_name?: string;
-  status?: string;
-  input?: unknown;
-  output?: unknown;
-}
+import type { ContentPart } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
 export type WordCommentReadView = "near" | "section" | "document" | "map";
 
@@ -53,7 +44,7 @@ function statusOf(input: unknown): WordCommentStatus | "all" | null {
   return typeof args.cursor === "string" && args.cursor !== "" ? null : "open";
 }
 
-function readRowOf(part: WordCommentReadPart): WordCommentReadRow | null {
+function readRowOf(part: ContentPart): WordCommentReadRow | null {
   if (
     part.content_type !== "tool_use" ||
     part.tool_name !== WORD_READ_COMMENTS_TOOL ||
@@ -86,7 +77,7 @@ function readRowOf(part: WordCommentReadPart): WordCommentReadRow | null {
 
 /** A row per settled word_read_comments call, in call order; a result that is not a read is left out. */
 export function wordCommentReadRows(
-  content: readonly WordCommentReadPart[],
+  content: readonly ContentPart[],
 ): WordCommentReadRow[] {
   const rows = new Map<string, WordCommentReadRow>();
   for (const part of content) {

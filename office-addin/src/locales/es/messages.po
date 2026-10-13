@@ -3111,7 +3111,6 @@ msgid "officeAddin.word.comments.changeDefault"
 msgstr "Cambiar predeterminado"
 
 #. js-lingui-explicit-id
-#: src/word/components/WordChatInput.tsx
 #: src/word/components/WordCommentChip.tsx
 msgid "officeAddin.word.comments.choose"
 msgstr "Elegir comentario…"
@@ -3317,7 +3316,6 @@ msgid "officeAddin.word.comments.readingProgress"
 msgstr "Leyendo comentarios… {done} de {total}"
 
 #. js-lingui-explicit-id
-#: src/word/components/WordChatInput.tsx
 #: src/word/components/WordCommentChip.tsx
 msgid "officeAddin.word.comments.sendWithout"
 msgstr "Enviar sin comentarios"

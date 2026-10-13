@@ -79,12 +79,7 @@ export const wordCommentGestureStore = {
       withoutComments: snapshot.withoutComments,
     };
     spent = given;
-    publish({
-      ...snapshot,
-      pick: nextWordCommentPick(snapshot.pick, { kind: "send" }),
-      override: null,
-      withoutComments: false,
-    });
+    publish({ ...snapshot, override: null, withoutComments: false });
     return given;
   },
   /**

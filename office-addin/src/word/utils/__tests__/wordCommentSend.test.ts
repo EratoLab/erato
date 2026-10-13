@@ -16,7 +16,6 @@ import {
   withWordCommentRefs,
   wordAnchoredCommentsArg,
   wordCommentAdvertised,
-  wordCommentIdOfRef,
   wordCommentMapArg,
   wordCommentRefsOf,
   wordCommentsDue,
@@ -435,21 +434,19 @@ describe("sending without comments", () => {
 describe("the pick's lifetime", () => {
   const pick: WordCommentPick = { ref: "t7k", selectionKey: "sel-1" };
 
-  it("stays across sends and the selection it was made on", () => {
+  it("stays on the selection it was made on and when nothing is selected", () => {
     let state: WordCommentPick | null = nextWordCommentPick(null, {
       kind: "pick",
       ref: "t7k",
       selectionKey: "sel-1",
     });
     expect(state).toEqual(pick);
-    state = nextWordCommentPick(state, { kind: "send" });
-    state = nextWordCommentPick(state, { kind: "send" });
     state = nextWordCommentPick(state, { kind: "selection", key: "sel-1" });
     state = nextWordCommentPick(state, { kind: "selection", key: null });
     expect(state).toEqual(pick);
   });
 
-  it("ends with another pick, its ×, a new non-empty selection, or another chat", () => {
+  it("ends with another pick, its × or a new non-empty selection", () => {
     expect(
       nextWordCommentPick(pick, {
         kind: "pick",
@@ -467,8 +464,6 @@ describe("the pick's lifetime", () => {
         { kind: "selection", key: "sel-1" },
       ),
     ).toBeNull();
-    expect(nextWordCommentPick(pick, { kind: "context" })).toBeNull();
-    expect(nextWordCommentPick(null, { kind: "send" })).toBeNull();
   });
 });
 
@@ -511,17 +506,6 @@ describe("refs and exact anchors at Send", () => {
         pickedId: "12",
       }),
     ).toEqual(["12"]);
-  });
-
-  it("finds the comment id a ref was issued for", () => {
-    const registry = createWordCommentRefRegistry("doc");
-    registry.refs.set("id:42", "t7k");
-    registry.refs.set("id:43#2", "t2p");
-    registry.refs.set("content:abc", "t9m");
-    expect(wordCommentIdOfRef(registry, "t7k")).toBe("42");
-    expect(wordCommentIdOfRef(registry, "t2p")).toBe("43");
-    expect(wordCommentIdOfRef(registry, "t9m")).toBeNull();
-    expect(wordCommentIdOfRef(registry, "tzz")).toBeNull();
   });
 });
 

@@ -19,7 +19,6 @@ export type AddinSettingsTab =
   | "audio"
   | "serversTools"
   | "host";
-type SettingsTab = AddinSettingsTab;
 
 export interface AddinSettingsHostContribution {
   /** Tool-only contributions need no host tab; content controls tab visibility. */
@@ -67,7 +66,7 @@ export function AddinSettingsDialogCore({
     hostContribution?.serversToolsEntities != null ||
     desktopSidecarEnabled ||
     mcpServersEnabled;
-  const [activeTab, setActiveTab] = useState<SettingsTab>(
+  const [activeTab, setActiveTab] = useState<AddinSettingsTab>(
     () => (isOpen && openTab) || "appearance",
   );
   const [wasOpen, setWasOpen] = useState(isOpen);
@@ -76,7 +75,7 @@ export function AddinSettingsDialogCore({
     if (isOpen && openTab) setActiveTab(openTab);
   }
 
-  const tabOrder = useMemo<SettingsTab[]>(
+  const tabOrder = useMemo<AddinSettingsTab[]>(
     () => [
       "appearance",
       "user",
@@ -87,7 +86,7 @@ export function AddinSettingsDialogCore({
     [audioSettingsEnabled, serversToolsTabEnabled, hostContribution],
   );
 
-  const tabLabels: Record<SettingsTab, string> = {
+  const tabLabels: Record<AddinSettingsTab, string> = {
     appearance: t({
       id: "officeAddin.settings.tabs.appearance",
       message: "Appearance",
@@ -109,7 +108,7 @@ export function AddinSettingsDialogCore({
 
   const tabGroupId = useId();
 
-  const tabIds: Record<SettingsTab, string> = {
+  const tabIds: Record<AddinSettingsTab, string> = {
     appearance: `${tabGroupId}-tab-appearance`,
     user: `${tabGroupId}-tab-user`,
     audio: `${tabGroupId}-tab-audio`,
@@ -117,7 +116,7 @@ export function AddinSettingsDialogCore({
     host: `${tabGroupId}-tab-host`,
   };
 
-  const panelIds: Record<SettingsTab, string> = {
+  const panelIds: Record<AddinSettingsTab, string> = {
     appearance: `${tabGroupId}-panel-appearance`,
     user: `${tabGroupId}-panel-user`,
     audio: `${tabGroupId}-panel-audio`,

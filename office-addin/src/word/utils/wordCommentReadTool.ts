@@ -6,6 +6,7 @@ import {
   WORD_READ_COMMENTS_TOOL,
   isWordCommentEntryRef,
   isWordCommentThreadRef,
+  wordCommentVsInSelection,
 } from "@erato/frontend/word-review";
 
 import { normalizeParagraphText } from "./buildWordDocumentArgs";
@@ -233,13 +234,6 @@ const NEAR_ARGUMENTS: ReadonlySet<string> = new Set([
   "below",
 ]);
 const SECTION_ARGUMENTS: ReadonlySet<string> = new Set(["para", "through"]);
-const IN_SELECTION: ReadonlySet<WordCommentVs> = new Set([
-  "inside",
-  "contains",
-  "overlaps_start",
-  "overlaps_end",
-  "at_caret",
-]);
 
 const given = (value: unknown) => value !== undefined && value !== null;
 const isOrdinal = (value: unknown): value is number =>
@@ -410,7 +404,7 @@ const sideOf = (
         ? "above"
         : vs === "after"
           ? "below"
-          : IN_SELECTION.has(vs)
+          : wordCommentVsInSelection(vs)
             ? "in"
             : "unknown";
 

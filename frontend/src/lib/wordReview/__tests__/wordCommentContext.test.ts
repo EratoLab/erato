@@ -276,9 +276,7 @@ describe("parseWordCommentContext", () => {
       carrier: "anchored_comments",
       envelope: selectionEnvelope,
       threads: [inside, inCell],
-      mapCount: 0,
       notShown: 7,
-      selectionThreadCount: 2,
       picked: null,
     });
   });
@@ -293,7 +291,6 @@ describe("parseWordCommentContext", () => {
     expect(summary?.picked).toEqual(inside);
     expect(summary?.envelope).toEqual(threadEnvelope);
     expect(summary?.threads).toEqual([inside, above]);
-    expect(summary?.selectionThreadCount).toBe(1);
     expect(summary?.notShown).toBe(8);
   });
 
@@ -307,9 +304,7 @@ describe("parseWordCommentContext", () => {
       carrier: "word_comment_thread",
       envelope: null,
       threads: [point],
-      mapCount: 0,
       notShown: 0,
-      selectionThreadCount: 1,
       picked: point,
     });
   });
@@ -323,7 +318,6 @@ describe("parseWordCommentContext", () => {
     expect(summary?.carrier).toBe("comment_map");
     expect(summary?.envelope).toEqual(mapEnvelope);
     expect(summary?.envelope?.legacy).toBe(true);
-    expect(summary?.mapCount).toBe(2);
     expect(summary?.notShown).toBe(6);
     expect(summary?.threads).toEqual([point]);
   });

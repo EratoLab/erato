@@ -1,3 +1,4 @@
+import { wordCommentReadRows } from "@erato/frontend/word-review";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -11,7 +12,6 @@ import {
   WORD_READ_COMMENTS_TOOL,
   WORD_THREAD_JSON_ARG,
 } from "../../../../../frontend/src/lib/wordReview/wordCommentContext";
-import { wordCommentReadRows } from "../../../../../frontend/src/lib/wordReview/wordCommentReads";
 import {
   generatedCommentDocument,
   installWordCommentHost,
@@ -118,10 +118,7 @@ describe("Word comment context read in the Erato web app", () => {
       selected_text: "alpha bravo",
       [WORD_ANCHORED_COMMENTS_ARG]: arg,
     });
-    expect(context).toMatchObject({
-      carrier: WORD_ANCHORED_COMMENTS_ARG,
-      selectionThreadCount: 1,
-    });
+    expect(context?.carrier).toBe(WORD_ANCHORED_COMMENTS_ARG);
     expect(context?.threads).toHaveLength(1);
   });
 
@@ -164,8 +161,8 @@ describe("Word comment context read in the Erato web app", () => {
     const arg = wordCommentMapArg(read, headings);
     roundTrips(arg);
     expect(
-      parseWordCommentContext({ [WORD_COMMENT_MAP_ARG]: arg })?.mapCount,
-    ).toBe(14);
+      parseWordCommentContext({ [WORD_COMMENT_MAP_ARG]: arg })?.envelope?.index,
+    ).toHaveLength(14);
 
     const large = await sendRead({
       document: generatedCommentDocument({ paragraphs: 120 }),
@@ -173,9 +170,9 @@ describe("Word comment context read in the Erato web app", () => {
     });
     const capped = wordCommentMapArg(large, []);
     roundTrips(capped);
-    expect(
-      parseWordCommentContext({ [WORD_COMMENT_MAP_ARG]: capped }),
-    ).toMatchObject({ mapCount: 100, notShown: 20 });
+    const context = parseWordCommentContext({ [WORD_COMMENT_MAP_ARG]: capped });
+    expect(context?.envelope?.index).toHaveLength(100);
+    expect(context?.notShown).toBe(20);
   });
 });
 
@@ -205,7 +202,7 @@ describe("word_read_comments results read in the Erato web app", () => {
         status: "success",
         input,
         output: { status: "success", result },
-      },
+      } as never,
     ]);
 
   it("parses a read as the shared envelope and shows it as one row", async () => {

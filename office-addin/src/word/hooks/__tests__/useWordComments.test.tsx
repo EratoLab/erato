@@ -197,10 +197,13 @@ describe("useWordComments", () => {
     await ready(hook);
     hook.rerender(options({ detailed: true }));
     act(() => hook.result.current.refresh());
-    await waitFor(() => expect(hook.result.current.list.detailed).toBe(true));
+    await waitFor(() =>
+      expect(
+        hook.result.current.list.threads.every((t) => t.replies !== null),
+      ).toBe(true),
+    );
     const { list } = hook.result.current;
 
-    expect(list.threads.every((t) => t.replies !== null)).toBe(true);
     expect(refOf(list, "T2").replies).toBe(1);
     expect(list.progress).toBeNull();
   });

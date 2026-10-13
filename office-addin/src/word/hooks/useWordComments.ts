@@ -1,3 +1,4 @@
+import { wordCommentVsInSelection } from "@erato/frontend/word-review";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { subscribeToOfficeSelectionChanged } from "../../hooks/officeSelectionChangedBroker";
@@ -10,12 +11,10 @@ import {
 import { readWordComments } from "../utils/wordCommentReader";
 import {
   issueWordCommentRefs,
+  wordCommentIdOfRef,
   wordCommentRefRegistry,
 } from "../utils/wordCommentRefs";
-import {
-  wordCommentIdOfRef,
-  wordCommentSendExact,
-} from "../utils/wordCommentSend";
+import { wordCommentSendExact } from "../utils/wordCommentSend";
 import {
   subscribeWordDocumentChanged,
   wordParagraphEventsActive,
@@ -27,10 +26,7 @@ import type {
   WordCommentReadResult,
 } from "../utils/wordCommentReader";
 import type { WordCommentRefRegistry } from "../utils/wordCommentRefs";
-import type {
-  WordCommentStatus,
-  WordCommentVs,
-} from "@erato/frontend/word-review";
+import type { WordCommentStatus } from "@erato/frontend/word-review";
 
 /** Word merges a drag into a burst of selection events; one read follows the last. */
 export const WORD_COMMENTS_DEBOUNCE_MS = 400;
@@ -69,8 +65,6 @@ export interface WordCommentList {
   /** Threads Word listed without a paragraph the pane could place. */
   unplaced: number;
   selection: WordCommentListSelection;
-  /** Every thread's replies were listed, as the picker needs. */
-  detailed: boolean;
   /** The replies listed so far while the picker reads. */
   progress: { done: number; total: number } | null;
 }
@@ -81,16 +75,8 @@ export const NO_WORD_COMMENT_LIST: WordCommentList = {
   counts: { open: 0, resolved: 0 },
   unplaced: 0,
   selection: { kind: "none" },
-  detailed: false,
   progress: null,
 };
-
-const IN_PASSAGE: ReadonlySet<WordCommentVs> = new Set([
-  "inside",
-  "contains",
-  "overlaps_start",
-  "overlaps_end",
-]);
 
 const oneLine = (text: string) => text.replace(/\s+/g, " ").trim();
 
@@ -137,7 +123,6 @@ export function wordCommentListOf(
       unplaced += 1;
       return;
     }
-    const vs = where.vs;
     threads.push({
       ref,
       commentId: record.id,
@@ -151,8 +136,7 @@ export function wordCommentListOf(
         ...(record.replies ?? []).map((reply) => reply.creationDate),
       ]),
       pos: position.pos,
-      inSelection:
-        !!vs && (selection?.caret ? vs === "at_caret" : IN_PASSAGE.has(vs)),
+      inSelection: wordCommentVsInSelection(where.vs),
     });
   });
   threads.sort((a, b) => a.pos - b.pos);
@@ -261,7 +245,6 @@ export function useWordComments({
           ? {
               status: "ready",
               ...wordCommentListOf(result, registry),
-              detailed: wanted.detailed,
               progress: null,
             }
           : { ...current, status: "failed", progress: null },

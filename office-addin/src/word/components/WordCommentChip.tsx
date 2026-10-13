@@ -192,7 +192,7 @@ const CHIP_CLASS =
   "rounded-[var(--theme-radius-message)] border border-theme-border bg-theme-bg-secondary px-3 py-1.5 text-xs text-theme-fg-secondary";
 const DISMISS_CLASS =
   "ml-auto shrink-0 rounded-[var(--theme-radius-control)] p-0.5 hover:bg-theme-bg-tertiary";
-const LINK_CLASS =
+export const WORD_COMMENT_LINK_CLASS =
   "font-medium underline underline-offset-2 hover:text-theme-fg-primary";
 
 function Shell({ children, testId }: { children: ReactNode; testId: string }) {
@@ -224,7 +224,11 @@ function WhyTag({
         {wordCommentWhyText(why)}
       </span>
       {canChangeDefault && (
-        <button type="button" className={LINK_CLASS} onClick={onChangeDefault}>
+        <button
+          type="button"
+          className={WORD_COMMENT_LINK_CLASS}
+          onClick={onChangeDefault}
+        >
           {t({
             id: "officeAddin.word.comments.changeDefault",
             message: "Change default",
@@ -235,10 +239,44 @@ function WhyTag({
   );
 }
 
-const sendWithoutLabel = () =>
+function DismissButton({
+  label,
+  onClick,
+  testId,
+}: {
+  label: string;
+  onClick: () => void;
+  testId?: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={DISMISS_CLASS}
+      aria-label={label}
+      data-testid={testId}
+    >
+      &#x2715;
+    </button>
+  );
+}
+
+export const wordCommentSendWithoutText = () =>
   t({
     id: "officeAddin.word.comments.sendWithout",
     message: "Send without comments",
+  });
+
+export const wordCommentChooseText = () =>
+  t({
+    id: "officeAddin.word.comments.choose",
+    message: "Choose comment…",
+  });
+
+const dismissPickText = () =>
+  t({
+    id: "officeAddin.word.comments.dismissPick",
+    message: "Remove the chosen comment",
   });
 
 /**
@@ -260,10 +298,7 @@ export function WordCommentChip({
 }: WordCommentChipProps) {
   const chooseButton = (
     <button type="button" className={ACTION_BUTTON_CLASS} onClick={onChoose}>
-      {t({
-        id: "officeAddin.word.comments.choose",
-        message: "Choose comment…",
-      })}
+      {wordCommentChooseText()}
     </button>
   );
   const coverageButton = coverage ? (
@@ -327,17 +362,7 @@ export function WordCommentChip({
               })}
             </span>
             {chooseButton}
-            <button
-              type="button"
-              onClick={onDismissPick}
-              className={DISMISS_CLASS}
-              aria-label={t({
-                id: "officeAddin.word.comments.dismissPick",
-                message: "Remove the chosen comment",
-              })}
-            >
-              &#x2715;
-            </button>
+            <DismissButton label={dismissPickText()} onClick={onDismissPick} />
           </div>
         </Shell>
       );
@@ -377,15 +402,11 @@ export function WordCommentChip({
                 }),
               })}
             </span>
-            <button
-              type="button"
+            <DismissButton
+              label={wordCommentSendWithoutText()}
               onClick={onWithoutComments}
-              className={DISMISS_CLASS}
-              aria-label={sendWithoutLabel()}
-              data-testid="word-comment-chip-dismiss"
-            >
-              &#x2715;
-            </button>
+              testId="word-comment-chip-dismiss"
+            />
           </div>
           <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
             <WhyTag
@@ -422,22 +443,13 @@ export function WordCommentChip({
                     message: "Chosen comment",
                   })}
             </span>
-            <button
-              type="button"
-              onClick={view.picked ? onDismissPick : onWithoutComments}
-              className={DISMISS_CLASS}
-              aria-label={
-                view.picked
-                  ? t({
-                      id: "officeAddin.word.comments.dismissPick",
-                      message: "Remove the chosen comment",
-                    })
-                  : sendWithoutLabel()
+            <DismissButton
+              label={
+                view.picked ? dismissPickText() : wordCommentSendWithoutText()
               }
-              data-testid="word-comment-chip-dismiss"
-            >
-              &#x2715;
-            </button>
+              onClick={view.picked ? onDismissPick : onWithoutComments}
+              testId="word-comment-chip-dismiss"
+            />
           </div>
           {thread && (
             <div className="mt-0.5 flex flex-wrap items-center gap-x-2">

@@ -4,6 +4,8 @@ import {
 } from "@erato/frontend/library";
 import { useCallback } from "react";
 
+import { WORD_COMMENT_PRECEDENCES } from "./utils/wordCommentSend";
+
 import type { WordCommentPrecedence } from "./utils/wordCommentSend";
 
 // Device-local on purpose: Office.context.document.settings would persist into the .docx.
@@ -18,7 +20,7 @@ export interface WordPreferences {
 const NO_WORD_PREFERENCES: WordPreferences = {};
 
 const isCommentPrecedence = (value: unknown): value is WordCommentPrecedence =>
-  value === "selection" || value === "comment";
+  WORD_COMMENT_PRECEDENCES.includes(value as WordCommentPrecedence);
 
 export const wordPreferencesPersistedOptions: PersistedStateOptions<WordPreferences> =
   {

@@ -4,6 +4,7 @@ import {
   WORD_COMMENT_THREAD_FACET_ID,
   WORD_COMMENTS_JSON_ARG,
   WORD_THREAD_JSON_ARG,
+  wordCommentVsInSelection,
 } from "@erato/frontend/word-review";
 
 import {
@@ -24,7 +25,6 @@ import {
   wordCommentCaretCoordinates,
   wordCommentSelection,
 } from "./wordCommentPositions";
-import { wordCommentIdOfRef } from "./wordCommentRefs";
 
 import type {
   WordCommentModel,
@@ -42,7 +42,6 @@ import type {
   WordCommentRefRegistry,
 } from "./wordCommentRefs";
 import type {
-  WordCommentVs,
   WordCommentWhy,
   WordDocumentCapture,
 } from "@erato/frontend/word-review";
@@ -59,8 +58,6 @@ import type {
  * Nothing here reads Word; the composer reads comments at every Send, and only when something is
  * advertised.
  */
-
-export { wordCommentIdOfRef };
 
 /** The "Word behavior" setting: what a rewrite-eligible selection over one thread works on. */
 export type WordCommentPrecedence = "selection" | "comment";
@@ -276,10 +273,7 @@ export type WordCommentPickEvent =
   /** The pick's ×. */
   | { kind: "dismiss" }
   /** The live selection changed; null when nothing is selected. */
-  | { kind: "selection"; key: string | null }
-  | { kind: "send" }
-  /** Another chat or document. */
-  | { kind: "context" };
+  | { kind: "selection"; key: string | null };
 
 /** A pick stays until another pick, ×, or a new non-empty selection (O-19). */
 export function nextWordCommentPick(
@@ -290,14 +284,11 @@ export function nextWordCommentPick(
     case "pick":
       return { ref: event.ref, selectionKey: event.selectionKey };
     case "dismiss":
-    case "context":
       return null;
     case "selection":
       return pick && event.key !== null && event.key !== pick.selectionKey
         ? null
         : pick;
-    case "send":
-      return pick;
   }
 }
 
@@ -326,13 +317,6 @@ export function wordCommentSendExact(
   }
   return [...new Set(ids)];
 }
-
-const IN_PASSAGE: ReadonlySet<WordCommentVs> = new Set([
-  "inside",
-  "contains",
-  "overlaps_start",
-  "overlaps_end",
-]);
 
 /** One Send's comments: refs frozen with the capture, every thread ready to send. */
 export interface WordCommentSendRead {
@@ -372,9 +356,10 @@ export function wordCommentSendRead(input: {
     ? model.threads
         .filter(({ thread }) => {
           const { vs } = thread.where;
+          // Positions treat a zero-width passage as a caret; a passage still takes no at_caret thread.
           return selection.caret
             ? vs === "at_caret"
-            : !!vs && IN_PASSAGE.has(vs);
+            : vs !== "at_caret" && wordCommentVsInSelection(vs);
         })
         .map(({ thread }) => thread.id)
     : [];

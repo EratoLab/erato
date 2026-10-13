@@ -1,6 +1,12 @@
-import { Button, Input, ModalBase, SpinnerIcon } from "@erato/frontend/library";
+import {
+  Button,
+  Input,
+  ModalBase,
+  Select,
+  SpinnerIcon,
+} from "@erato/frontend/library";
 import { plural, t } from "@lingui/core/macro";
-import { useEffect, useId, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { wordCommentQuoteText } from "./WordCommentChip";
 import { WordShowInWordButton } from "./WordShowInWordButton";
@@ -86,8 +92,8 @@ export interface WordCommentPickerProps {
 /**
  * The thread picker (contract §8): Open, Resolved or All with counts, document order or latest
  * activity, a search above eight threads, and rows naming author, replies, last activity, the
- * anchored text and status. It reads Word when it opens, when the pane gets focus and on Refresh;
- * nothing polls.
+ * anchored text and status. It reads Word when it opens and on Refresh, and useWordComments on pane
+ * focus; nothing polls.
  */
 export function WordCommentPicker({
   isOpen,
@@ -102,13 +108,9 @@ export function WordCommentPicker({
   const [filter, setFilter] = useState<WordCommentPickerFilter>("open");
   const [sort, setSort] = useState<WordCommentPickerSort>("document");
   const [query, setQuery] = useState("");
-  const sortId = useId();
 
   useEffect(() => {
-    if (!isOpen) return;
-    onRefresh();
-    globalThis.addEventListener("focus", onRefresh);
-    return () => globalThis.removeEventListener("focus", onRefresh);
+    if (isOpen) onRefresh();
   }, [isOpen, onRefresh]);
 
   const total = list.threads.length;
@@ -184,36 +186,31 @@ export function WordCommentPicker({
               </button>
             ))}
           </div>
-          <label
-            htmlFor={sortId}
-            className="ml-auto text-xs text-theme-fg-secondary"
-          >
-            {t({
-              id: "officeAddin.word.comments.picker.sort",
-              message: "Sort",
-            })}
-          </label>
-          <select
-            id={sortId}
-            value={sort}
-            onChange={(event) =>
-              setSort(event.target.value as WordCommentPickerSort)
-            }
-            className="rounded-[var(--theme-radius-control)] border border-theme-border bg-theme-bg-primary px-2 py-1 text-xs"
-          >
-            <option value="document">
-              {t({
-                id: "officeAddin.word.comments.picker.sortDocument",
-                message: "Document order",
+          <div className="ml-auto">
+            <Select
+              aria-label={t({
+                id: "officeAddin.word.comments.picker.sort",
+                message: "Sort",
               })}
-            </option>
-            <option value="activity">
-              {t({
-                id: "officeAddin.word.comments.picker.sortActivity",
-                message: "Latest activity",
-              })}
-            </option>
-          </select>
+              value={sort}
+              onChange={(event) =>
+                setSort(event.target.value as WordCommentPickerSort)
+              }
+            >
+              <option value="document">
+                {t({
+                  id: "officeAddin.word.comments.picker.sortDocument",
+                  message: "Document order",
+                })}
+              </option>
+              <option value="activity">
+                {t({
+                  id: "officeAddin.word.comments.picker.sortActivity",
+                  message: "Latest activity",
+                })}
+              </option>
+            </Select>
+          </div>
           <Button
             type="button"
             variant="secondary"
