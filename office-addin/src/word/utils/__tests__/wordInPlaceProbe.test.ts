@@ -159,7 +159,10 @@ describe("in-place native probe", { timeout: 30_000 }, () => {
   });
 
   it("fails P7's inverse that Paragraph.getOoxml cannot show, through the properties and the package", async () => {
-    const options = { paragraphOoxmlOmitsProperties: true };
+    const options = {
+      paragraphOoxmlOmitsProperties: true,
+      explicitDefaultStyle: true,
+    };
     installWordOoxmlHost(packageXml(paragraph("")), options);
     expect((await runWordInPlaceProbe({ idleMs: 0 })).probes.P7).toMatchObject({
       headingTyped: true,

@@ -13,6 +13,7 @@ import {
   queueRevisionPlacements,
   queueWordInPlaceTextWrite,
 } from "./wordInPlaceExecutor";
+import { effectiveWordStyle } from "./wordInPlacePlan";
 import {
   WORD_SPAN_ENDING_MARKS,
   planWordSpanEdits,
@@ -527,14 +528,22 @@ export async function runWordInPlaceProbe(
       await context.sync();
       const written = await signature(target);
       const after = await captureWordDocumentPackage();
-      const typed = (ooxml: string) =>
-        captureWordAuthoringSnapshot(
+      const typed = (ooxml: string) => {
+        const snapshot = captureWordAuthoringSnapshot(
           ooxml,
           "probe",
           "Off",
           true,
           "verify",
-        ).blocks.find((b) => b.text === "Probe seven");
+        );
+        const block = snapshot.blocks.find((b) => b.text === "Probe seven");
+        return (
+          block && {
+            ...block,
+            style: effectiveWordStyle(block.styleRef, snapshot.styles),
+          }
+        );
+      };
       const heading = typed(after.ooxml);
       target.styleBuiltIn = "Normal";
       await context.sync();
@@ -555,7 +564,7 @@ export async function runWordInPlaceProbe(
         inverseExact: restored.signature === original.signature,
         inverseStyle:
           String(target.styleBuiltIn) === "Normal" && !target.isListItem,
-        inversePackage: plain?.type === "paragraph" && !plain.styleRef,
+        inversePackage: plain?.type === "paragraph" && plain.style === "Normal",
       };
     });
 

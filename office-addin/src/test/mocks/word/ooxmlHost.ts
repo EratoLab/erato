@@ -1414,9 +1414,8 @@ export function installWordOoxmlHost(
       ? undefined
       : styles.find((s) => styleName(s) === "Normal");
     if (
-      (style.getAttributeNS(W, "default") === "1" &&
-        !settings.explicitDefaultStyle) ||
-      style === fallback
+      !settings.explicitDefaultStyle &&
+      (style.getAttributeNS(W, "default") === "1" || style === fallback)
     ) {
       setParagraphProperty(paragraph, "pStyle", null);
       return;
