@@ -252,6 +252,49 @@ describe("Revert of an in-place restyle where Paragraph.getOoxml shows no style"
   });
 });
 
+describe("Revert of a list-level change where Paragraph.getOoxml shows no numbering", () => {
+  const SCHEDULE = "Schedule the pilot.";
+  /** "Review at month end." moved to level 1: a plan continues a list only at a level it has. */
+  const twoLevels = () =>
+    editWordPackage(realisticWordPackageXml(), (doc) => {
+      const text = Array.from(doc.getElementsByTagNameNS(W, "t")).find(
+        (t) => t.textContent === "Review at month end.",
+      )!;
+      text
+        .parentElement!.parentElement!.getElementsByTagNameNS(W, "ilvl")[0]
+        .setAttributeNS(W, "w:val", "1");
+    });
+
+  it("moves the item back to its level and reports reverted", async () => {
+    setWordInPlaceCapabilitiesForTests({ ...WEB, list: true });
+    const host = install({}, twoLevels());
+    const snapshot = await captureRealisticSnapshot();
+    const source = snapshot.blocks.find((b) => b.text === SCHEDULE)!;
+    const applied = await apply(
+      restyle(snapshot, SCHEDULE, {
+        type: "list-item",
+        list: source.list,
+        ordered: source.ordered,
+        level: 1,
+        styleRef: source.styleRef,
+      }),
+      snapshot,
+    );
+    expect(applied.status, report(applied)).toBe("applied");
+    expect(applied.outcome?.route).toBe("in-place");
+    expect(block(host, SCHEDULE)).toMatchObject({ level: 1 });
+    host.events.length = 0;
+    const reverted = await revert(applied);
+    expect(reverted.status, report(reverted, "revert")).toBe("reverted");
+    expect(mutations(host.events)).toContain("mutation:attachToList");
+    expect(block(host, SCHEDULE)).toMatchObject({
+      type: "list-item",
+      level: 0,
+      list: source.list,
+    });
+  });
+});
+
 describe("tracked restyle where Paragraph.getOoxml shows no style", () => {
   it("rejects the formatting revision on Revert", async () => {
     setWordInPlaceCapabilitiesForTests(ALL_WORD_IN_PLACE_CAPABILITIES);
@@ -450,6 +493,7 @@ describe("wordParagraphStateIssue", () => {
     const item = {
       isListItem: true,
       listId: 7,
+      listLevel: 0,
       style: "List Paragraph",
       styleBuiltIn: "ListParagraph",
     };
@@ -460,6 +504,9 @@ describe("wordParagraphStateIssue", () => {
     };
     expect(wordParagraphStateIssue(item, target, 7)).toBeUndefined();
     expect(wordParagraphStateIssue(item, target, 8)).toBe("list");
+    expect(wordParagraphStateIssue({ ...item, listLevel: 1 }, target)).toBe(
+      "list",
+    );
     expect(
       wordParagraphStateIssue({ ...item, isListItem: false }, target),
     ).toBe("list");

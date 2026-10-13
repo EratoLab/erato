@@ -163,6 +163,7 @@ function queueWrite(
 interface ParagraphState {
   isListItem: boolean;
   listId?: number;
+  listLevel?: number;
   style: string;
   styleBuiltIn: string;
 }
@@ -171,9 +172,12 @@ function loadParagraphState(paragraph: Word.Paragraph) {
   paragraph.load("isListItem,style,styleBuiltIn");
   const list = paragraph.listOrNullObject;
   list.load("id");
+  const item = paragraph.listItemOrNullObject;
+  item.load("level");
   return (): ParagraphState => ({
     isListItem: paragraph.isListItem,
     ...(list.isNullObject ? {} : { listId: list.id }),
+    ...(item.isNullObject ? {} : { listLevel: item.level }),
     style: paragraph.style,
     styleBuiltIn: String(paragraph.styleBuiltIn),
   });
@@ -194,8 +198,8 @@ export function wordParagraphStateIssue(
   if (live.isListItem !== (target.type === "list-item")) return "list";
   if (
     target.type === "list-item" &&
-    listId !== undefined &&
-    live.listId !== listId
+    ((listId !== undefined && live.listId !== listId) ||
+      live.listLevel !== (target.level ?? 0))
   )
     return "list";
   return undefined;

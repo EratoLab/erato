@@ -1480,6 +1480,27 @@ export function installWordOoxmlHost(
       },
     };
   };
+  const listItemProxy = (resolve: () => Element) => {
+    const loaded = new Map<string, unknown>();
+    return {
+      load: () =>
+        enqueue(false, "load", () => {
+          const p = resolve();
+          loaded.set("isNullObject", numIdOf(p) === undefined);
+          const numPr = child(child(p, "pPr"), "numPr");
+          loaded.set(
+            "level",
+            Number(child(numPr, "ilvl")?.getAttributeNS(W, "val") ?? 0),
+          );
+        }),
+      get isNullObject() {
+        return loadedValue(loaded, "isNullObject");
+      },
+      get level() {
+        return loadedValue(loaded, "level");
+      },
+    };
+  };
   /** A list instance with the same definition and overrides as `numId`, as Word may create. */
   const copyNum = (numId: string): string => {
     const numbering = partRoot(live(), "/word/numbering.xml");
@@ -1628,6 +1649,9 @@ export function installWordOoxmlHost(
       },
       get listOrNullObject() {
         return listProxy(target);
+      },
+      get listItemOrNullObject() {
+        return listItemProxy(target);
       },
       get listItem() {
         return {
