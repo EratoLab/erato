@@ -17,19 +17,32 @@ interface ImportMetaEnv {
   readonly VITE_DELEGATION_TASKS_ALLOW_ASYNC?: string;
   readonly VITE_DELEGATION_TASKS_APPROVAL_MODE?: string;
   readonly VITE_WORD_FORCE_IMPORT_APPLY?: string;
-  readonly VITE_WORD_IN_PLACE_APPLY?: string;
+}
+
+interface OfficeAddinWordApplyHostSettings {
+  in_place?: boolean;
+  whole_document_import?: "allowed" | "confirm" | "off";
+  package_read?: boolean;
 }
 
 interface OfficeAddinDefaultSettings {
   mode?: "resume" | "ask" | "new";
   compose_inherits_from_read?: boolean;
   word_include_document?: boolean;
+  /** Deployment switches per Word host; see wordApplyPolicy. */
+  word_apply?: {
+    pc?: OfficeAddinWordApplyHostSettings;
+    mac?: OfficeAddinWordApplyHostSettings;
+    web?: OfficeAddinWordApplyHostSettings;
+  };
 }
 
 interface Window {
   MS_OFFICE_ADDIN_DEFAULT_SETTINGS?: OfficeAddinDefaultSettings;
   /** Kill switch: every Word document plan uses the full-document import. */
   WORD_FORCE_IMPORT_APPLY?: boolean;
+  /** Development and native probes: write in place on every host, whatever the deployment says. */
+  WORD_IN_PLACE_APPLY?: boolean;
   /** Development and native probes: read every paragraph ID as missing, as perpetual Office does. */
   WORD_FORCE_NO_PARAGRAPH_IDS?: boolean;
 }

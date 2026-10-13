@@ -1,7 +1,14 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { parseWordDocumentPlan } from "@erato/frontend/word-review";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  allowWordWebImport,
+  setWordWebImport,
+} from "../../../test/mocks/word/applyPolicy";
+import {
   examplePlan,
+  packageXml,
+  paragraph,
   readySnapshot,
   wordSerializationNoise,
 } from "../../../test/mocks/word/authoringFixtures";
@@ -15,10 +22,14 @@ import { captureWordAuthoringSnapshot } from "../wordDocumentXml";
 
 import type { WordDocumentPlan } from "@erato/frontend/word-review";
 
-function word(ooxml: string, transform = (value: string) => value) {
+function word(
+  ooxml: string,
+  transform = (value: string) => value,
+  read = (value: string) => value,
+) {
   let current = ooxml;
   let pending: string | null = null;
-  let failWrite = false;
+  let failWrite: { code: string; lands: boolean } | undefined;
   let unreadable = false;
   const insert = vi.fn((value: string) => {
     pending = value;
@@ -30,7 +41,7 @@ function word(ooxml: string, transform = (value: string) => value) {
       getOoxml: () => {
         if (unreadable && insert.mock.calls.length)
           throw new Error("Read unavailable");
-        return { value: current };
+        return { value: read(current) };
       },
       insertOoxml: insert,
     },
@@ -39,11 +50,11 @@ function word(ooxml: string, transform = (value: string) => value) {
     document,
     sync: vi.fn(async () => {
       if (pending) {
-        current = transform(pending);
+        if (!failWrite || failWrite.lands) current = transform(pending);
         pending = null;
         if (failWrite)
           throw Object.assign(new Error("private document text"), {
-            code: "GeneralException",
+            code: failWrite.code,
             debugInfo: {
               errorLocation: "Body.insertOoxml",
               statement: "private document text",
@@ -63,14 +74,15 @@ function word(ooxml: string, transform = (value: string) => value) {
       current = value;
     },
     get: () => current,
-    fail: () => {
-      failWrite = true;
+    /** Word rejects the next write with `code`, after it landed or, with `lands` false, before. */
+    fail: (code = "GeneralException", lands = true) => {
+      failWrite = { code, lands };
     },
     failRead: () => {
       unreadable = true;
     },
     resume: () => {
-      failWrite = false;
+      failWrite = undefined;
       unreadable = false;
     },
   };
@@ -448,5 +460,305 @@ describe("coherent structural execution", () => {
     );
     expect(result.diagnostic).toEqual({ stage: "validate", reason: "expired" });
     expect(host.insert).not.toHaveBeenCalled();
+  });
+});
+
+describe("whole-body writes on Word for the web", () => {
+  const context = {
+    chatId: "chat-A",
+    messageId: "message-A",
+    toolCallId: "read",
+  };
+  beforeEach(() => {
+    vi.stubGlobal("Office", {
+      context: {
+        diagnostics: { host: "Word", platform: "OfficeOnline" },
+        requirements: { isSetSupported: () => true },
+      },
+    });
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+    delete window.MS_OFFICE_ADDIN_DEFAULT_SETTINGS;
+  });
+
+  it("asks before replacing the body, then applies the same plan once confirmed and reverts it", async () => {
+    const s = readySnapshot();
+    const host = word(s.ooxml);
+    const plan = JSON.stringify(examplePlan(s.token));
+    const save = vi.fn();
+    expect(await applyWordDocumentPlan(plan, s, "message-A", save)).toEqual({
+      status: "blocked",
+      diagnostic: {
+        stage: "validate",
+        reason: "import-needs-confirmation",
+        details: { route: "body", fallbackReasons: [] },
+      },
+    });
+    expect(host.insert).not.toHaveBeenCalled();
+    expect(save).not.toHaveBeenCalled();
+    expect(s.used).toBe(false);
+
+    const applied = await applyWordDocumentPlan(
+      plan,
+      s,
+      "message-A",
+      save,
+      undefined,
+      { importConfirmed: true },
+    );
+    expect(applied.status).toBe("applied");
+    expect(applied.outcome?.route).toBe("body");
+    expect(save).toHaveBeenCalledWith(s.ooxml);
+    expect(host.insert).toHaveBeenCalledTimes(1);
+    expect(
+      (await revertWordDocumentPlan(applied.before!, applied.afterFingerprint!))
+        .status,
+    ).toBe("reverted");
+    expect(host.get()).toBe(s.ooxml);
+  });
+
+  describe("with a list, whose instances Word for the web renumbers at every body read", () => {
+    const CID = "http://schemas.microsoft.com/office/word/2016/wordml/cid";
+    const numbering = `<pkg:part pkg:name="/word/numbering.xml" pkg:contentType="application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml"><pkg:xmlData><w:numbering xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:w16cid="${CID}"><w:abstractNum w:abstractNumId="0"><w:lvl w:ilvl="0"><w:start w:val="1"/><w:numFmt w:val="decimal"/><w:lvlText w:val="%1."/></w:lvl></w:abstractNum><w:num w:numId="1" w16cid:durableId="1000"><w:abstractNumId w:val="0"/></w:num></w:numbering></pkg:xmlData></pkg:part>`;
+    let reads = 0;
+    const renumber = (value: string) =>
+      value.replace(
+        /w16cid:durableId="\d+"/g,
+        () => `w16cid:durableId="${2000 + ++reads}"`,
+      );
+    const listed = () =>
+      readySnapshot(
+        renumber(
+          readySnapshot().ooxml.replace(
+            "</pkg:package>",
+            `${numbering}</pkg:package>`,
+          ),
+        ),
+      );
+
+    it("applies a confirmed body replace, verifies it and reverts it", async () => {
+      const s = listed();
+      word(s.ooxml, undefined, renumber);
+      const applied = await applyWordDocumentPlan(
+        JSON.stringify(examplePlan(s.token)),
+        s,
+        "message-A",
+        undefined,
+        undefined,
+        { importConfirmed: true },
+      );
+      expect(applied).toMatchObject({
+        status: "applied",
+        outcome: { route: "body", tier: "strict" },
+      });
+      expect(
+        await revertWordDocumentPlan(
+          applied.before!,
+          applied.afterFingerprint!,
+        ),
+      ).toMatchObject({ status: "reverted", outcome: { tier: "strict" } });
+    });
+
+    it("still recognizes a NotAllowed refusal that left the body unchanged", async () => {
+      const s = listed();
+      const host = word(s.ooxml, undefined, renumber);
+      host.fail("NotAllowed", false);
+      expect(
+        await applyWordDocumentPlan(
+          JSON.stringify(examplePlan(s.token)),
+          s,
+          "message-A",
+          undefined,
+          undefined,
+          { importConfirmed: true },
+        ),
+      ).toMatchObject({
+        status: "blocked",
+        diagnostic: { stage: "write", reason: "not-allowed" },
+      });
+    });
+  });
+
+  it("refuses a body replace the deployment turned off for the web", async () => {
+    setWordWebImport("off");
+    const s = readySnapshot();
+    const host = word(s.ooxml);
+    const result = await applyWordDocumentPlan(
+      JSON.stringify(examplePlan(s.token)),
+      s,
+      "message-A",
+      undefined,
+      undefined,
+      { importConfirmed: true },
+    );
+    expect(result.diagnostic).toMatchObject({
+      stage: "validate",
+      reason: "import-disabled",
+      details: { route: "body" },
+    });
+    expect(host.insert).not.toHaveBeenCalled();
+    expect(s.used).toBe(false);
+  });
+
+  it("refuses a confirmed body replace Word rejects with NotAllowed, unchanged, and never retries it", async () => {
+    const s = readySnapshot();
+    const host = word(s.ooxml);
+    host.fail("NotAllowed", false);
+    const confirmed = { importConfirmed: true };
+    const plan = JSON.stringify(examplePlan(s.token));
+    const result = await applyWordDocumentPlan(
+      plan,
+      s,
+      "message-A",
+      undefined,
+      undefined,
+      confirmed,
+    );
+    expect(result).toEqual({
+      status: "blocked",
+      diagnostic: {
+        stage: "write",
+        reason: "not-allowed",
+        officeCode: "NotAllowed",
+        officeLocation: "Body.insertOoxml",
+        details: { error: "Error" },
+      },
+    });
+    expect(host.get()).toBe(s.ooxml);
+    host.resume();
+    expect(
+      (
+        await applyWordDocumentPlan(
+          plan,
+          s,
+          "message-A",
+          undefined,
+          undefined,
+          confirmed,
+        )
+      ).diagnostic?.reason,
+    ).toBe("expired");
+    expect(host.insert).toHaveBeenCalledOnce();
+  });
+
+  it("keeps a body replace that changed the document before NotAllowed interrupted", async () => {
+    const s = readySnapshot();
+    const host = word(s.ooxml);
+    host.fail("NotAllowed");
+    const result = await applyWordDocumentPlan(
+      JSON.stringify(examplePlan(s.token)),
+      s,
+      "message-A",
+      undefined,
+      undefined,
+      { importConfirmed: true },
+    );
+    expect(result).toMatchObject({
+      status: "interrupted",
+      before: s.ooxml,
+      diagnostic: {
+        stage: "write",
+        reason: "host-error",
+        officeCode: "NotAllowed",
+      },
+    });
+    expect(result.afterFingerprint).not.toBe(s.fingerprint);
+  });
+
+  it("leaves a body Revert unretried when Word rejects the restore with NotAllowed", async () => {
+    const s = readySnapshot();
+    const host = word(s.ooxml);
+    const applied = await applyWordDocumentPlan(
+      JSON.stringify(examplePlan(s.token)),
+      s,
+      "message-A",
+      undefined,
+      undefined,
+      { importConfirmed: true },
+    );
+    expect(applied.status).toBe("applied");
+    const after = host.get();
+    host.fail("NotAllowed", false);
+    expect(
+      await revertWordDocumentPlan(applied.before!, applied.afterFingerprint!),
+    ).toMatchObject({
+      status: "stale",
+      diagnostic: {
+        stage: "restore",
+        reason: "not-allowed",
+        officeCode: "NotAllowed",
+      },
+    });
+    expect(host.get()).toBe(after);
+  });
+
+  it("never replaces the body for a scoped table-cell edit, even once confirmed", async () => {
+    const cell = (text: string) => `<w:tc><w:tcPr/>${paragraph(text)}</w:tc>`;
+    const s = readySnapshot(
+      packageXml(
+        paragraph("Allocation") +
+          `<w:tbl><w:tblPr/><w:tblGrid><w:gridCol w:w="2000"/><w:gridCol w:w="2000"/></w:tblGrid><w:tr>${cell("Team")}${cell("Hours")}</w:tr><w:tr>${cell("East")}${cell("18")}</w:tr></w:tbl>` +
+          paragraph("After"),
+      ),
+    );
+    const host = word(s.ooxml);
+    const session = new WordDocumentReadSession();
+    session.activate(s, context);
+    const read = await session.execute(
+      {
+        snapshot: s.token,
+        documentIdentity: s.identity,
+        table_cell: { header: "hours", rowLabel: "east" },
+      },
+      context,
+    );
+    if (!read.ok) throw new Error(read.error);
+    const { readToken, target } = read.result as {
+      readToken: string;
+      target: Record<string, unknown>;
+    };
+    const submit = createWordDocumentSubmissionExecutor(session);
+    const edit = {
+      snapshot: s.token,
+      readToken,
+      table_cell: { ...target, text: "21" },
+    };
+    expect(
+      await submit(edit, { ...context, toolCallId: "submit" }),
+    ).toMatchObject({
+      ok: false,
+      validationErrors: [
+        {
+          code: "in-place-unavailable",
+          message: expect.stringContaining("because of: no-package."),
+        },
+      ],
+      submissionFeedback: { recovery: "read_current_context", terminal: false },
+    });
+    const restore = allowWordWebImport();
+    const submitted = await submit(edit, { ...context, toolCallId: "allowed" });
+    restore();
+    if (!submitted.ok) throw new Error(submitted.error);
+    const plan = parseWordDocumentPlan(
+      JSON.stringify((submitted.result as { plan: unknown }).plan),
+    )!;
+    expect(plan.readToken).toBe(readToken);
+    const result = await applyWordDocumentPlan(
+      JSON.stringify(plan),
+      s,
+      "message-A",
+      undefined,
+      undefined,
+      { importConfirmed: true },
+    );
+    expect(result.diagnostic).toEqual({
+      stage: "validate",
+      reason: "scoped-needs-in-place",
+      details: { route: "body", fallbackReasons: [], readScope: "table-cell" },
+    });
+    expect(host.insert).not.toHaveBeenCalled();
+    expect(s.used).toBe(false);
   });
 });

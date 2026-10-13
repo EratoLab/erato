@@ -16,6 +16,7 @@ import type {
   WordDocumentCoverage,
   WordParagraphRead,
 } from "../utils/buildWordDocumentArgs";
+import type { WordDocumentReadNote } from "../utils/readWordDocument";
 import type { WordAuthoringSnapshot } from "@erato/frontend/word-review";
 
 export type WordDocumentStatus =
@@ -28,6 +29,7 @@ export interface WordDocumentPreview {
   authoringIssue?: WordAuthoringSnapshot["issue"];
   authoringDetails?: string[];
   completeReadIssue?: WordAuthoringSnapshot["completeReadIssue"];
+  authoringNote?: WordDocumentReadNote;
   status: WordDocumentStatus;
   coverage: WordDocumentCoverage | null;
   changedSinceLastSend: boolean;
@@ -142,6 +144,7 @@ async function captureDocument(
     );
     build.authoring.documentUrl = result.authoring.documentUrl;
     assignParagraphOrdinals(build.authoring, result.paragraphs);
+    if (result.note) build.readNote = result.note;
   } else if (result.authoringUnavailable) {
     build.authoring = {
       ...captureWordAuthoringSnapshot("", documentIdentity, ""),
@@ -247,6 +250,7 @@ export function useWordDocumentSource({
           authoringIssue: build.authoring?.issue,
           authoringDetails: build.authoring?.issueDetails,
           completeReadIssue: build.authoring?.completeReadIssue,
+          authoringNote: build.readNote,
           status: build.coverage.hasContent ? "included" : "empty",
           coverage: build.coverage,
           changedSinceLastSend:

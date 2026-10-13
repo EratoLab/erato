@@ -2148,6 +2148,7 @@ export function installWordOoxmlHost(
   };
   let faultAfterWrite: string | undefined;
   let faultBeforeWrite = false;
+  let faultCode = "GeneralException";
   let faultLockId: number | undefined;
   let changeUrlOnFailure: string | undefined;
   let cannotRead = false;
@@ -2486,7 +2487,7 @@ export function installWordOoxmlHost(
         pending = undefined;
         if (changeUrlOnFailure) officeDocument.url = changeUrlOnFailure;
         throw Object.assign(new Error("Native import rejected."), {
-          code: "GeneralException",
+          code: faultCode,
           debugInfo: { errorLocation: "Document.insertFileFromBase64" },
         });
       }
@@ -2502,7 +2503,7 @@ export function installWordOoxmlHost(
       afterImport.splice(0).forEach((apply) => apply());
       if (faultAfterWrite !== undefined)
         throw Object.assign(new Error(faultAfterWrite), {
-          code: "GeneralException",
+          code: faultCode,
           debugInfo: {
             errorLocation: "Document.insertFileFromBase64",
             statement: faultAfterWrite,
@@ -2583,14 +2584,25 @@ export function installWordOoxmlHost(
       }),
     failImport: (newUrl?: string) => {
       faultBeforeWrite = true;
+      faultCode = "GeneralException";
       changeUrlOnFailure = newUrl;
+    },
+    /** Word for the web refusing the import over a content control it cannot edit, such as a date
+     * picker: nothing is written. */
+    refuseImport: () => {
+      faultBeforeWrite = true;
+      faultCode = "NotAllowed";
     },
     failUnlock: (id: number) => {
       faultLockId = id;
     },
-    /** The import lands, then Word reports an error whose message is `message`. */
-    failAfterWrite: (message = "private content must not escape") => {
+    /** The import lands, then Word reports an error with `message` and `code`. */
+    failAfterWrite: (
+      message = "private content must not escape",
+      code = "GeneralException",
+    ) => {
       faultAfterWrite = message;
+      faultCode = code;
     },
     failRead: () => {
       cannotRead = true;
@@ -2655,6 +2667,7 @@ export function installWordOoxmlHost(
     resume: () => {
       faultAfterWrite = undefined;
       faultBeforeWrite = false;
+      faultCode = "GeneralException";
       faultLockId = undefined;
       changeUrlOnFailure = undefined;
       cannotRead = false;

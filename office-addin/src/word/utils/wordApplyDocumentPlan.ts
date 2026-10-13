@@ -12,6 +12,7 @@ import {
   verifyDifferingParts,
   wordDocumentDiagnostic as diagnostic,
 } from "./wordApplyDiagnostics";
+import { wordApplyPolicy } from "./wordApplyPolicy";
 import { trackWordApply, yieldToPaint } from "./wordApplyProgress";
 import {
   unlockWordContentControlsForImport,
@@ -34,7 +35,7 @@ import {
   verifyWordPlanOutput,
   verifyWordPlanWrite,
   verifyWordRestore,
-  wordDocumentFingerprint,
+  wordBodyFingerprint,
 } from "./wordDocumentXml";
 import { finishWordEmptyDocumentImport } from "./wordEmptyDocumentImport";
 import {
@@ -50,7 +51,11 @@ import {
   WORD_IN_PLACE_FALLBACKS,
   wordInPlaceFallbacks,
 } from "./wordInPlacePlan";
-import { routeWordDocumentPlan } from "./wordInPlaceRoute";
+import {
+  routeWordDocumentPlan,
+  wordPlanReadScope,
+  wordWholeDocumentWrite,
+} from "./wordInPlaceRoute";
 import { isWordScopeFingerprint } from "./wordInPlaceState";
 import {
   isWordTrackingMode,
@@ -71,6 +76,7 @@ import type {
   WordApplyAdjustment,
   WordVerifyTier,
 } from "./wordFullDocumentComparison";
+import type { WordWholeDocumentRefusal } from "./wordInPlaceRoute";
 import type {
   WordAuthoringSnapshot,
   WordDocumentPlan,
@@ -92,7 +98,12 @@ export interface WordDocumentDiagnostic {
     | "compile-failed"
     | "output-mismatch"
     | "package-growth"
-    | "host-error";
+    | "host-error"
+    /** The host's policy asks before a whole-document write, and the user has not confirmed it. */
+    | "import-needs-confirmation"
+    | WordWholeDocumentRefusal
+    /** Word refused the write (NotAllowed) and the document is verifiably unchanged. */
+    | "not-allowed";
   officeCode?: string;
   officeLocation?: string;
   details?: WordDiagnosticDetails;
@@ -146,6 +157,27 @@ function failedTier(
     : {};
 }
 
+/**
+ * Word for the web refuses a whole-document write over content it cannot edit, such as a date
+ * picker, which no API reports beforehand. Only a document observed unchanged afterwards makes that
+ * a refusal rather than an interrupted write.
+ */
+function refusedUnchanged(
+  error: unknown,
+  stage: WordDocumentDiagnostic["stage"],
+  observed: string | undefined,
+  before: string | undefined,
+): boolean {
+  return (
+    (stage === "write" || stage === "restore") &&
+    typeof error === "object" &&
+    error !== null &&
+    (error as { code?: unknown }).code === "NotAllowed" &&
+    observed !== undefined &&
+    observed === before
+  );
+}
+
 /** Read a fresh context after a rejected batch; never retry the mutation. */
 async function observeAfterFailure(
   fullDocument = false,
@@ -163,11 +195,16 @@ async function observeAfterFailure(
     return await wordWriteHost()?.run(async (context) => {
       const body = context.document.body.getOoxml();
       await context.sync();
-      return wordDocumentFingerprint(body.value);
+      return wordBodyFingerprint(body.value);
     });
   } catch {
     return undefined;
   }
+}
+
+export interface WordDocumentApplyOptions {
+  /** The user confirmed replacing the whole document, where the host's policy asks first. */
+  importConfirmed?: boolean;
 }
 
 export async function applyWordDocumentPlan(
@@ -176,6 +213,7 @@ export async function applyWordDocumentPlan(
   messageId?: string,
   onBeforeWrite?: (before: string) => void,
   onStage?: (stage: WordApplyStage) => void,
+  options: WordDocumentApplyOptions = {},
 ): Promise<WordDocumentApplyResult> {
   const progress = trackWordApply("plan", onStage);
   const routing: { reason?: WordRouteReason } = {};
@@ -188,6 +226,7 @@ export async function applyWordDocumentPlan(
       onBeforeWrite,
       progress,
       routing,
+      options,
     );
     return result;
   } finally {
@@ -224,24 +263,80 @@ function imported(
   };
 }
 
-/** Track Changes rules the import out: it would replace the document without revisions. */
-function trackingBlocked(
+/** A whole-document write refused before anything was written or the capture was used. */
+function wholeDocumentBlocked(
+  reason: "tracking" | WordWholeDocumentGuard,
+  route: "import" | "body",
   routeReason: WordRouteReason | undefined,
   fallbackReasons: () => WordRouteReason[],
+  extra: WordDiagnosticDetails = {},
 ): WordDocumentApplyResult {
   const reasons = fallbackReasons();
   return {
     status: "blocked",
-    diagnostic: diagnostic("validate", "tracking", undefined, {
-      route: "import",
+    diagnostic: diagnostic("validate", reason, undefined, {
+      route,
       ...(routeReason ? { routeReason } : {}),
       fallbackReasons: reasons.length
         ? reasons
         : routeReason
           ? [routeReason]
           : [],
+      ...extra,
     }),
   };
+}
+
+/** Track Changes rules the import out: it would replace the document without revisions. */
+function trackingBlocked(
+  routeReason: WordRouteReason | undefined,
+  fallbackReasons: () => WordRouteReason[],
+): WordDocumentApplyResult {
+  return wholeDocumentBlocked(
+    "tracking",
+    "import",
+    routeReason,
+    fallbackReasons,
+  );
+}
+
+type WordWholeDocumentGuard =
+  | "import-needs-confirmation"
+  | WordWholeDocumentRefusal;
+
+/**
+ * The host's policy decides here, not only on the card, so no caller or automatic run reaches a
+ * whole-document write the user has not confirmed, and a scoped plan never reaches one at all.
+ */
+function wholeDocumentGuard(
+  route: "import" | "body",
+  routeReason: WordRouteReason | undefined,
+  plan: WordDocumentPlan,
+  snapshot: WordAuthoringSnapshot,
+  options: WordDocumentApplyOptions,
+  fallbackReasons: () => WordRouteReason[],
+): WordDocumentApplyResult | undefined {
+  const write = wordWholeDocumentWrite(
+    { route },
+    plan,
+    snapshot,
+    wordApplyPolicy(),
+  );
+  const reason =
+    write.write === "refuse"
+      ? write.reason
+      : write.write === "confirm" && !options.importConfirmed
+        ? "import-needs-confirmation"
+        : undefined;
+  if (!reason) return undefined;
+  const readScope = wordPlanReadScope(plan, snapshot);
+  return wholeDocumentBlocked(
+    reason,
+    route,
+    routeReason,
+    fallbackReasons,
+    readScope ? { readScope } : {},
+  );
 }
 
 function trackedFallbacks(
@@ -268,6 +363,7 @@ async function applyPlan(
   onBeforeWrite: ((before: string) => void) | undefined,
   progress: WordApplyProgress,
   routing: { reason?: WordRouteReason },
+  options: WordDocumentApplyOptions,
 ): Promise<WordDocumentApplyResult> {
   progress.stage("checking");
   // Parsing, compiling and verifying below are synchronous; let the busy button paint first.
@@ -373,6 +469,15 @@ async function applyPlan(
       };
       if (isWordTrackingMode(snapshot.trackingMode))
         return trackingBlocked(routeReason, fallbackReasons);
+      const guarded = wholeDocumentGuard(
+        "import",
+        routeReason,
+        plan,
+        snapshot,
+        options,
+        fallbackReasons,
+      );
+      if (guarded) return guarded;
       return imported(
         await applyFullDocument(
           plan,
@@ -386,6 +491,15 @@ async function applyPlan(
         fallbackDetails,
       );
     }
+    const guarded = wholeDocumentGuard(
+      "body",
+      undefined,
+      plan,
+      snapshot,
+      options,
+      () => [],
+    );
+    if (guarded) return guarded;
     stage = "preflight";
     progress.stage("backup");
     return await host.run(async (context) => {
@@ -397,7 +511,7 @@ async function applyPlan(
           ? "expired"
           : context.document.changeTrackingMode !== "Off"
             ? "tracking"
-            : wordDocumentFingerprint(live.value) !== snapshot.fingerprint
+            : wordBodyFingerprint(live.value) !== snapshot.fingerprint
               ? "source-changed"
               : null;
       if (reason)
@@ -457,11 +571,15 @@ async function applyPlan(
       };
     });
   } catch (error) {
+    const afterFingerprint = writing ? await observeAfterFailure() : undefined;
+    if (refusedUnchanged(error, stage, afterFingerprint, snapshot?.fingerprint))
+      return {
+        status: "blocked",
+        diagnostic: diagnostic("write", "not-allowed", error),
+      };
     return {
       status: writing ? "interrupted" : "blocked",
-      ...(writing
-        ? { before, afterFingerprint: await observeAfterFailure() }
-        : {}),
+      ...(writing ? { before, afterFingerprint } : {}),
       diagnostic: diagnostic(
         stage,
         stage === "compile" ? "compile-failed" : "host-error",
@@ -499,6 +617,43 @@ export function wordRevertMechanism(
   }
 }
 
+function writtenInPlace(before: string): boolean {
+  try {
+    return !!decodeWordInPlaceBackup(before).inPlace;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Revert of an in-place write that did not verify restores the complete original, a whole-document
+ * import nobody confirmed. Unless the host's policy allows the import outright, only a write whose
+ * differences all lie in its own paragraphs is undone, in place; the rest is left to Word's Undo
+ * and the downloadable original. A confirmed import's own Revert is not affected.
+ */
+export function wordRevertImportRefusal(
+  before: string,
+  expectedAfter: string | undefined,
+): Extract<
+  WordDocumentDiagnostic["reason"],
+  "import-needs-confirmation" | "import-disabled"
+> | null {
+  if (
+    !expectedAfter ||
+    !isWordDocumentBackup(before) ||
+    isWordScopeFingerprint(expectedAfter) ||
+    !writtenInPlace(before) ||
+    wordInPlaceFallbackScope(before)
+  )
+    return null;
+  const policy = wordApplyPolicy().wholeDocumentImport;
+  return policy === "allowed"
+    ? null
+    : policy === "off"
+      ? "import-disabled"
+      : "import-needs-confirmation";
+}
+
 async function revertPlan(
   before: string,
   expectedAfter: string,
@@ -506,6 +661,20 @@ async function revertPlan(
   if (isWordDocumentBackup(before)) {
     if (isWordScopeFingerprint(expectedAfter))
       return revertWordPlanInPlace(before, expectedAfter);
+    const refusal = wordRevertImportRefusal(before, expectedAfter);
+    if (refusal)
+      return {
+        status: "stale",
+        diagnostic: diagnostic("preflight", refusal, undefined, {
+          route: "in-place",
+        }),
+      };
+    const confined =
+      writtenInPlace(before) &&
+      wordApplyPolicy().wholeDocumentImport !== "allowed"
+        ? wordInPlaceFallbackScope(before)
+        : undefined;
+    if (confined) return revertWordPlanInPlace(before, confined);
     const exact = await revertFullDocument(before, expectedAfter);
     const scope =
       exact.status === "stale" &&
@@ -531,7 +700,7 @@ async function revertPlan(
       const reason =
         context.document.changeTrackingMode !== "Off"
           ? "tracking"
-          : wordDocumentFingerprint(live.value) !== expectedAfter
+          : wordBodyFingerprint(live.value) !== expectedAfter
             ? "source-changed"
             : null;
       if (reason)
@@ -580,12 +749,24 @@ async function revertPlan(
       };
     });
   } catch (error) {
+    const afterFingerprint = writing ? await observeAfterFailure() : undefined;
+    if (refusedUnchanged(error, stage, afterFingerprint, expectedAfter))
+      return notAllowedRevert(error);
     return {
       status: writing ? "interrupted" : "stale",
-      ...(writing ? { afterFingerprint: await observeAfterFailure() } : {}),
+      ...(writing ? { afterFingerprint } : {}),
       diagnostic: diagnostic(stage, "host-error", error),
     };
   }
+}
+
+/** Nothing was restored and running Revert again would meet the same refusal, so it is reported
+ * like a Revert the document's state ruled out. */
+function notAllowedRevert(error: unknown): WordDocumentRevertResult {
+  return {
+    status: "stale",
+    diagnostic: diagnostic("restore", "not-allowed", error),
+  };
 }
 
 async function applyFullDocument(
@@ -738,14 +919,17 @@ async function applyFullDocument(
       await restoreWordContentControlLocks(host, locks, {
         canRestore: () => currentWordDocumentUrl() === documentUrl,
       });
+    const afterFingerprint = writing
+      ? await observeAfterFailure(true, documentUrl)
+      : undefined;
+    if (refusedUnchanged(error, stage, afterFingerprint, snapshot.fingerprint))
+      return {
+        status: "blocked",
+        diagnostic: diagnostic("write", "not-allowed", error),
+      };
     return {
       status: writing ? "interrupted" : "blocked",
-      ...(writing
-        ? {
-            before,
-            afterFingerprint: await observeAfterFailure(true, documentUrl),
-          }
-        : {}),
+      ...(writing ? { before, afterFingerprint } : {}),
       diagnostic: diagnostic(
         stage,
         stage === "compile" ? "compile-failed" : "host-error",
@@ -882,11 +1066,14 @@ async function revertFullDocument(
       await restoreWordContentControlLocks(host, locks, {
         canRestore: () => currentWordDocumentUrl() === documentUrl,
       });
+    const afterFingerprint = writing
+      ? await observeAfterFailure(true, documentUrl)
+      : undefined;
+    if (refusedUnchanged(error, stage, afterFingerprint, expectedAfter))
+      return notAllowedRevert(error);
     return {
       status: writing ? "interrupted" : "stale",
-      ...(writing
-        ? { afterFingerprint: await observeAfterFailure(true, documentUrl) }
-        : {}),
+      ...(writing ? { afterFingerprint } : {}),
       diagnostic: diagnostic(stage, "host-error", error),
     };
   }

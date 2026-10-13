@@ -58,13 +58,12 @@ export function injectFrontendEnv() {
       import.meta.env.VITE_DELEGATION_TASKS_APPROVAL_MODE;
   }
 
-  // The in-place Word writer stays off in production builds until the native probes pass on real
-  // hosts; VITE_WORD_IN_PLACE_APPLY opts a build in.
-  if (
-    import.meta.env.VITE_WORD_FORCE_IMPORT_APPLY === "true" ||
-    (import.meta.env.PROD &&
-      import.meta.env.VITE_WORD_IN_PLACE_APPLY !== "true")
-  ) {
+  // Release builds follow the deployment's per-host `word_apply` settings (wordApplyPolicy);
+  // development builds write in place on every host so the in-place writer stays exercised.
+  if (import.meta.env.VITE_WORD_FORCE_IMPORT_APPLY === "true") {
     window.WORD_FORCE_IMPORT_APPLY ??= true;
+  }
+  if (!import.meta.env.PROD) {
+    window.WORD_IN_PLACE_APPLY ??= true;
   }
 }

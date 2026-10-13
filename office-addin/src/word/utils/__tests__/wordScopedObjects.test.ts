@@ -2,13 +2,18 @@ import {
   parseWordDocumentPlan,
   validateWordDocumentPlan,
 } from "@erato/frontend/word-review";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   packageXml,
   paragraph,
   readySnapshot,
 } from "../../../test/mocks/word/authoringFixtures";
+import { installWordOoxmlHost } from "../../../test/mocks/word/ooxmlHost";
+import {
+  captureRealisticSnapshot,
+  realisticWordPackageXml,
+} from "../../../test/mocks/word/realisticWordFixtures";
 import { WORD_AUTHORING_CONTRACT } from "../wordAuthoringContract";
 import { WordDocumentReadSession } from "../wordDocumentReadTool";
 import { createWordDocumentSubmissionExecutor } from "../wordDocumentSubmission";
@@ -1148,6 +1153,107 @@ describe("scoped object editing", () => {
           )
         ).ok,
       ).toBe(false);
+    }
+  });
+});
+
+describe("scoped edits where the whole-document import needs confirmation", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    window.WORD_IN_PLACE_APPLY = true;
+  });
+
+  async function realistic(profile?: "word-pc-16.0.20326") {
+    installWordOoxmlHost(realisticWordPackageXml(), { profile });
+    const s = setup(await captureRealisticSnapshot("message"));
+    const ref = (prefix: string) =>
+      s.snapshot.blocks.find((b) => b.text.startsWith(prefix))!.ref;
+    const section = wordTargetInventory(s.snapshot).find(
+      (t) => t.kind === "section",
+    )!;
+    const edits = {
+      insert: () =>
+        s.edit(
+          { ref: ref("Status") },
+          {
+            body: [
+              {
+                operation: "insert-after",
+                anchor: ref("Status"),
+                blocks: [textBlock("Inserted")],
+              },
+            ],
+          },
+        ),
+      delete: () =>
+        s.edit(
+          { ref: ref("Open questions") },
+          {
+            body: [
+              {
+                operation: "delete",
+                source: [ref("Open questions")],
+                reason: "Requested removal",
+              },
+            ],
+          },
+        ),
+      sections: () =>
+        s.edit(
+          { ref: section.ref },
+          {
+            sections: [
+              { id: section.sectionId, layout: { orientation: "landscape" } },
+            ],
+          },
+        ),
+      reword: () =>
+        s.edit(
+          { ref: ref("Status") },
+          {
+            body: [
+              {
+                operation: "replace",
+                source: [ref("Status")],
+                blocks: [textBlock("Status: revised.")],
+              },
+            ],
+          },
+        ),
+    };
+    return edits;
+  }
+
+  it.each(["insert", "delete", "sections"] as const)(
+    "refuses a scoped edit on Word for the web that needs the import for %s, without a receipt",
+    async (reason) => {
+      const edits = await realistic();
+      const result = await edits[reason]();
+      expect(result).toMatchObject({
+        ok: false,
+        error: "Scoped edit needs a full-document rewrite.",
+        validationErrors: [
+          {
+            path: "",
+            code: "web-needs-whole-document",
+            message: expect.stringMatching(
+              new RegExp(
+                `because of: ${reason}\\b.*Resubmit only edits that can be written in place.*tell the user that this change needs Word for Windows or Mac\\.$`,
+              ),
+            ),
+          },
+        ],
+        submissionFeedback: { recovery: "repair_arguments", terminal: false },
+      });
+      expect((await edits.reword()).ok).toBe(true);
+    },
+  );
+
+  it("accepts the same scoped edits on Word PC with default settings", async () => {
+    delete window.WORD_IN_PLACE_APPLY;
+    for (const reason of ["insert", "delete", "sections", "reword"] as const) {
+      const result = await (await realistic("word-pc-16.0.20326"))[reason]();
+      expect(result.ok, `${reason}: ${JSON.stringify(result)}`).toBe(true);
     }
   });
 });

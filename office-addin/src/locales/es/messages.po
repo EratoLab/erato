@@ -2411,6 +2411,26 @@ msgid "officeAddin.word.authoring.compileFailed"
 msgstr "No se pudo preparar la estructura de Word propuesta. No se realizó ningún cambio. Solicita una nueva reescritura."
 
 #. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.contentRefused.desktop"
+msgstr "Word no puede reemplazar este documento porque contiene contenido que no puede editar. No se ha cambiado nada. Copia el borrador o pide una edición más pequeña."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.contentRefused.interrupted"
+msgstr "Word se detuvo porque este documento contiene contenido que no puede editar, por ejemplo un selector de fecha. El documento puede haber cambiado parcialmente. El original está guardado para recuperarlo."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.contentRefused.restore"
+msgstr "Word no puede restaurar este documento porque contiene contenido que no puede editar, por ejemplo un selector de fecha. No se ha cambiado nada. Descarga el documento original en su lugar."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.contentRefused.web"
+msgstr "Word para la web no puede reemplazar este documento porque contiene contenido que no puede editar, por ejemplo un selector de fecha. No se ha cambiado nada. Copia el borrador, abre el documento en Word para Windows o Mac, o pide una edición más pequeña."
+
+#. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts
 #~ msgid "officeAddin.word.authoring.continuousSection"
 #~ msgstr "Continuar en la misma página"
@@ -2527,8 +2547,18 @@ msgstr "No se pudo aplicar la reescritura. No se realizaron cambios en el docume
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.importDisabled"
+msgstr "Este cambio requiere reescribir todo el documento, lo que está desactivado para esta versión de Word. No se aplicó nada. Pida una modificación más pequeña que pueda escribirse directamente en el documento."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
 msgid "officeAddin.word.authoring.importedContent"
 msgstr "El cuerpo contiene contenido importado que Word aún no ha convertido en bloques de documento legibles."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.importNeedsConfirmation"
+msgstr "Este cambio reemplaza todo el documento y primero necesita su confirmación. No se aplicó nada."
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordAuthoringMessages.ts
@@ -2661,6 +2691,11 @@ msgid "officeAddin.word.authoring.outputUnverified"
 msgstr "Word aplicó cambios, pero no se pudo verificar el resultado. El original está guardado para recuperarlo."
 
 #. js-lingui-explicit-id
+#: src/word/components/WordChatInput.tsx
+msgid "officeAddin.word.authoring.packageBlocked"
+msgstr "Word para la web no entregó el archivo completo, por ejemplo porque el documento tiene una etiqueta de confidencialidad. Erato solo leyó el cuerpo del documento, así que no puede cambiar encabezados, pies de página ni el diseño de página, y cualquier cambio reemplaza todo el cuerpo en lugar de editar los pasajes directamente."
+
+#. js-lingui-explicit-id
 #: src/word/utils/wordAuthoringMessages.ts
 msgid "officeAddin.word.authoring.packageGrowth"
 msgstr "Word añadió datos duplicados del documento al escribir. El original está guardado para recuperarlo."
@@ -2746,6 +2781,11 @@ msgid "officeAddin.word.authoring.reverting"
 msgstr "Comprobando y restaurando el documento…"
 
 #. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.revertNeedsImport"
+msgstr "Erato no puede deshacer este cambio aquí sin reemplazar todo el documento. Usa «Deshacer» de Word para revertirlo o descarga el documento original."
+
+#. js-lingui-explicit-id
 #: src/word/components/WordHostCardRenderer.tsx
 #: src/word/utils/wordAuthoringMessages.ts
 msgid "officeAddin.word.authoring.revertStale"
@@ -2760,6 +2800,11 @@ msgstr "El documento cambió después de aplicar la reescritura. No se revirtió
 #: src/word/components/wordPlanLabels.ts
 #~ msgid "officeAddin.word.authoring.sameOddEvenPages"
 #~ msgstr "Usar los mismos encabezados y pies de página en páginas pares e impares"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.scopedNeedsInPlace"
+msgstr "Esta modificación puntual no puede escribirse directamente en el documento, y una modificación puntual nunca reemplaza todo el documento. No se aplicó nada."
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordAuthoringMessages.ts
@@ -3007,6 +3052,91 @@ msgstr "Insertar el texto en el cursor"
 #: src/word/utils/wordClientActions.ts
 msgid "officeAddin.word.clientActions.replaceSelection"
 msgstr "Reemplazar el pasaje seleccionado"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+#~ msgid "officeAddin.word.coauthors.body"
+#~ msgstr "Otras personas están editando este documento. Reemplazar el cuerpo del documento puede sobrescribir sus últimos cambios."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.coauthors.editingBody"
+msgstr "Otra persona está editando este documento. Reemplazar el cuerpo del documento puede descartar los cambios que haga mientras se ejecuta."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.coauthors.editingImport"
+msgstr "Otra persona está editando este documento. Reemplazar todo el documento puede descartar los cambios que haga mientras se ejecuta, y su cursor vuelve al principio."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+#~ msgid "officeAddin.word.coauthors.import"
+#~ msgstr "Otras personas están editando este documento. Reemplazar todo el documento puede sobrescribir sus últimos cambios."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.coauthors.pendingBody"
+msgstr "Word tiene cambios de coautores que aún no se han combinado en tu copia; reemplazar el cuerpo del documento puede descartarlos."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.coauthors.pendingImport"
+msgstr "Word tiene cambios de coautores que aún no se han combinado en tu copia; reemplazar todo el documento puede descartarlos."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordImportConfirm.tsx
+msgid "officeAddin.word.importConfirm.askAgain"
+msgstr "Volver a pedir ediciones directas"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordDocumentPlanCard.tsx
+msgid "officeAddin.word.importConfirm.askAgainNote"
+msgstr "Tu solicitud vuelve a estar en el cuadro de mensaje, pidiendo solo ediciones directas en el documento. Revísala y envíala."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordImportConfirm.tsx
+msgid "officeAddin.word.importConfirm.coauthors"
+msgstr "Las personas que editen al mismo tiempo pueden perder sus últimos cambios."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordImportConfirm.tsx
+msgid "officeAddin.word.importConfirm.comments"
+msgstr "Las fechas de los comentarios y su estado de resuelto pueden cambiar."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordImportConfirm.tsx
+msgid "officeAddin.word.importConfirm.eratoUndo"
+msgstr "«Deshacer» de Erato solo funciona hasta que alguien edite el documento."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.importConfirm.inPlaceRequest"
+msgstr "Por favor, haz solo cambios que puedan editarse directamente en el documento, sin reemplazar todo el documento."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordImportConfirm.tsx
+msgid "officeAddin.word.importConfirm.label"
+msgstr "Confirmar el reemplazo de todo el documento"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordImportConfirm.tsx
+msgid "officeAddin.word.importConfirm.tick"
+msgstr "Lo entiendo. Reemplazar todo el documento."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordImportConfirm.tsx
+msgid "officeAddin.word.importConfirm.undo"
+msgstr "«Deshacer» de Word no puede revertir este cambio. Erato no puede verificar el resultado en Word para la web, y su restauración puede no recuperar exactamente el original, que sigue disponible para descargar."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.importRefusal.disabled"
+msgstr "Este cambio requiere reescribir todo el documento, algo que tu organización ha desactivado para esta versión de Word."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.importRefusal.scoped"
+msgstr "Esta modificación puntual no puede escribirse directamente en el documento en esta versión de Word, y una modificación puntual nunca reemplaza todo el documento."
 
 #. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts
@@ -3587,6 +3717,7 @@ msgid "officeAddin.word.review.batchScopeAll"
 msgstr "Se aplica cada cambio propuesto, incluidas las filas ocultas por filtros. Los párrafos modificados desde la solicitud se omiten y se enumeran."
 
 #. js-lingui-explicit-id
+#: src/word/components/WordImportConfirm.tsx
 #: src/word/components/WordReviewCardParts.tsx
 msgid "officeAddin.word.review.cancel"
 msgstr "Cancelar"

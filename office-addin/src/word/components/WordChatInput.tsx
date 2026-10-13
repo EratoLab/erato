@@ -212,7 +212,10 @@ export function WordChatInput({
   const [authoringNotice, setAuthoringNotice] = useState<
     Pick<
       WordDocumentPreview,
-      "authoringIssue" | "authoringDetails" | "completeReadIssue"
+      | "authoringIssue"
+      | "authoringDetails"
+      | "completeReadIssue"
+      | "authoringNote"
     > & {
       readOnly?: boolean;
     }
@@ -408,6 +411,7 @@ export function WordChatInput({
             authoringIssue: capturedIssue,
             authoringDetails: capturedDetails,
             completeReadIssue: authoringSnapshot?.completeReadIssue,
+            authoringNote: build?.readNote,
             readOnly: !!capturedIssue && !build?.authoring,
           });
           const actionFacet = resolveWordActionFacet({
@@ -737,6 +741,21 @@ export function WordChatInput({
                 )}
               </Alert>
             ))}
+          {chipEnabled &&
+            authoringRoute &&
+            !notice.authoringIssue &&
+            notice.authoringNote === "package-blocked" && (
+              <p
+                className="mt-1 text-xs text-theme-fg-secondary"
+                data-testid="word-document-read-note"
+              >
+                {t({
+                  id: "officeAddin.word.authoring.packageBlocked",
+                  message:
+                    "Word for the web didn't hand over the complete file, for example because the document has a sensitivity label. Erato read the body only, so it can't change headers, footers or page layout, and any change replaces the whole body instead of editing passages in place.",
+                })}
+              </p>
+            )}
         </div>
       )}
 
