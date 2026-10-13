@@ -11,11 +11,11 @@ import { describe, expect, it, vi } from "vitest";
 
 import nativeSource from "../../../test/fixtures/word-authoring-state/mixed-source.xml?raw";
 import {
-  escapeXml,
   packageXml,
   paragraph,
   W,
 } from "../../../test/mocks/word/authoringFixtures";
+import { escapeXml } from "../../../utils/escapeXml";
 import { checkWordAuthoringBudget } from "../wordAuthoringBudget";
 import { WORD_AUTHORING_CONTRACT } from "../wordAuthoringContract";
 import { wordReadableSourceBlock } from "../wordAuthoringReadData";

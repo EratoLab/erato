@@ -1,3 +1,5 @@
+import { escapeXml } from "../../../utils/escapeXml";
+
 /**
  * Hand-built getOoxml() packages modelled on the ERMAIN-947 fixture v3c-comments.docx
  * (erato-word-benchmarks, fixtures/v3c), with its ids, dates and anchors from ground-truth.json.
@@ -318,11 +320,8 @@ const threadOf = (key: string) => [
   ...Object.keys(V3C_COMMENTS).filter((k) => V3C_COMMENTS[k].parent === key),
 ];
 
-const escape = (text: string) =>
-  text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-
 const run = (text: string, rPr = "") =>
-  `<w:r>${rPr ? `<w:rPr>${rPr}</w:rPr>` : ""}<w:t xml:space="preserve">${escape(text)}</w:t></w:r>`;
+  `<w:r>${rPr ? `<w:rPr>${rPr}</w:rPr>` : ""}<w:t xml:space="preserve">${escapeXml(text)}</w:t></w:r>`;
 
 const keyOf = (segment: Segment) =>
   typeof segment === "string"
@@ -393,7 +392,7 @@ function paragraphXml(
       if (typeof segment === "string") return run(segment);
       if ("hidden" in segment) return run(segment.hidden, "<w:vanish/>");
       if ("del" in segment)
-        return `<w:del w:id="${numbering.next++}" w:author="Other Author" w:date="2026-09-08T12:00:00Z"><w:r><w:delText xml:space="preserve">${escape(segment.del)}</w:delText></w:r></w:del>`;
+        return `<w:del w:id="${numbering.next++}" w:author="Other Author" w:date="2026-09-08T12:00:00Z"><w:r><w:delText xml:space="preserve">${escapeXml(segment.del)}</w:delText></w:r></w:del>`;
       if ("pageBreak" in segment) return `<w:r><w:br w:type="page"/></w:r>`;
       const key = keyOf(segment) as string;
       if (!keep.has(key) && !options.openMarks) return "";
@@ -443,7 +442,7 @@ function packageXml(
     const paragraphs = options.twoParagraphs?.includes(key)
       ? `<w:p w14:paraId="0F0F0F0F" w14:textId="77777777"><w:pPr><w:pStyle w:val="CommentText"/></w:pPr>${annotation}${run("First paragraph of the comment.")}</w:p>${own.replace(annotation, "")}`
       : own;
-    return `<w:comment w:id="${local(key)}" w:author="${escape(c.author)}" w:date="${c.date}" w:initials="${c.initials}">${paragraphs}</w:comment>`;
+    return `<w:comment w:id="${local(key)}" w:author="${escapeXml(c.author)}" w:date="${c.date}" w:initials="${c.initials}">${paragraphs}</w:comment>`;
   };
   const parts = [
     part(
@@ -514,7 +513,7 @@ function packageXml(
           ]
             .map(
               (p) =>
-                `<w15:person w15:author="${escape(p.author)}"><w15:presenceInfo w15:providerId="None" w15:userId="${escape(p.author)}"/></w15:person>`,
+                `<w15:person w15:author="${escapeXml(p.author)}"><w15:presenceInfo w15:providerId="None" w15:userId="${escapeXml(p.author)}"/></w15:person>`,
             )
             .join("")}</w15:people>`,
         ),

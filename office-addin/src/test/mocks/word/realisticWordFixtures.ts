@@ -1,6 +1,7 @@
 import { wordSourceReadRefs } from "@erato/frontend/word-review";
 
-import { escapeXml, W } from "./authoringFixtures";
+import { W } from "./authoringFixtures";
+import { escapeXml } from "../../../utils/escapeXml";
 import { captureWordDocumentPackage } from "../../../word/utils/wordDocumentPackage";
 import { captureWordAuthoringSnapshot } from "../../../word/utils/wordDocumentXml";
 

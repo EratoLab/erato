@@ -1,7 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
-  escapeXml,
   packageXml,
   paragraph,
 } from "../../../test/mocks/word/authoringFixtures";
@@ -14,6 +13,7 @@ import {
   realisticWordPackageXml,
   statusRewritePlan,
 } from "../../../test/mocks/word/realisticWordFixtures";
+import { escapeXml } from "../../../utils/escapeXml";
 import { renderWordDiagnosticReport } from "../wordApplyDiagnostics";
 import {
   applyWordDocumentPlan,

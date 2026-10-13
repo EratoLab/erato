@@ -6,6 +6,7 @@ import {
   installMockMailbox,
   uninstallMockMailbox,
 } from "../../../test/mocks/outlook/mailbox";
+import { escapeXml } from "../../../utils/escapeXml";
 import {
   EwsProxySessionExpiredError,
   EwsRequestError,
@@ -44,15 +45,6 @@ const SOAP_CLOSE = "</s:Body></s:Envelope>";
 
 function soap(body: string): string {
   return SOAP_OPEN + body + SOAP_CLOSE;
-}
-
-/** Escape values interpolated into element text in the fixtures (the real
- * server emits escaped text, e.g. `<abc@host>` → `&lt;abc@host&gt;`). */
-function xe(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
 }
 
 interface MockResponse {
@@ -151,9 +143,11 @@ function getItemMimeResponse(opts: {
       "<m:Items><t:Message>" +
       '<t:ItemId Id="item-1"/>' +
       `<t:MimeContent CharacterSet="UTF-8">${opts.mimeBase64}</t:MimeContent>` +
-      (opts.subject ? `<t:Subject>${xe(opts.subject)}</t:Subject>` : "") +
+      (opts.subject
+        ? `<t:Subject>${escapeXml(opts.subject)}</t:Subject>`
+        : "") +
       (opts.internetMessageId
-        ? `<t:InternetMessageId>${xe(opts.internetMessageId)}</t:InternetMessageId>`
+        ? `<t:InternetMessageId>${escapeXml(opts.internetMessageId)}</t:InternetMessageId>`
         : "") +
       "</t:Message></m:Items>" +
       "</m:GetItemResponseMessage>" +

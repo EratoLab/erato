@@ -1,10 +1,9 @@
+import { escapeXml } from "../../../utils/escapeXml";
 import { captureWordAuthoringSnapshot } from "../../../word/utils/wordDocumentXml";
 
 import type { WordDocumentPlan } from "@erato/frontend/word-review";
 
 export const W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
-export const escapeXml = (text: string) =>
-  text.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
 export const paragraph = (text: string) =>
   `<w:p><w:r><w:t xml:space="preserve">${escapeXml(text)}</w:t></w:r></w:p>`;
 export function packageXml(body: string): string {

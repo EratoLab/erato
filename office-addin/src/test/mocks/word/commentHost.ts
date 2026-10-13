@@ -7,6 +7,7 @@ import {
   v3cRangePackage,
   v3cRowPackage,
 } from "./commentPackages";
+import { escapeXml } from "../../../utils/escapeXml";
 
 import type { V3cComment, V3cPackageOptions } from "./commentPackages";
 import type { Mock } from "vitest";
@@ -343,9 +344,6 @@ function relation(a: Span, b: Span): string {
   if (s1 >= e2) return s1 === e2 ? "AdjacentAfter" : "After";
   return s1 < s2 ? "OverlapsBefore" : "OverlapsAfter";
 }
-
-const escapeXml = (text: string) =>
-  text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
 function plainPackage(texts: readonly string[]): string {
   const body = texts
