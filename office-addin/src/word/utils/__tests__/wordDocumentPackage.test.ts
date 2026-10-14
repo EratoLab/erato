@@ -13,8 +13,11 @@ import {
   WORD_FILE_OPEN_TIMEOUT_MS,
   WordDocumentCaptureTimeoutError,
   wordDocumentFileToOoxml,
+  wordDocumentImportedAt,
   wordDocumentOoxmlToFile,
   wordPackageFingerprint,
+  wordPackagesDifferInDetectedLanguageOnly,
+  wordProofingComplete,
 } from "../wordDocumentPackage";
 import {
   readWordPackage,
@@ -103,7 +106,9 @@ describe("complete Word document package transport", () => {
       document: { insertFileFromBase64: insert },
     } as unknown as Word.RequestContext;
     const bytes = wordDocumentOoxmlToFile(fixture());
+    const queued = Date.now();
     insertWordDocumentFile(context, bytes);
+    expect(wordDocumentImportedAt()).toBeGreaterThanOrEqual(queued);
     expect(insert).toHaveBeenCalledExactlyOnceWith(
       expect.any(String),
       "Replace",
@@ -369,5 +374,65 @@ describe("native complete-document capture", () => {
     officeFile(wordDocumentOoxmlToFile(fixture("Later footer")));
     const after = await captureWordDocumentPackage();
     expect(before.fingerprint).not.toBe(after.fingerprint);
+  });
+});
+
+describe("Word for Mac's proofing pass", () => {
+  const SETTINGS =
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml";
+  const lang = (extra = "") => `<w:rPr><w:lang w:val="en-GB"${extra}/></w:rPr>`;
+  const RELS = "application/vnd.openxmlformats-package.relationships+xml";
+  const read = ({
+    paragraph = `<w:p><w:r><w:t>Revenue grew.</w:t></w:r></w:p>`,
+    settings = "",
+  } = {}) =>
+    `<pkg:package xmlns:pkg="${PKG}"><pkg:part pkg:name="/_rels/.rels" pkg:contentType="${RELS}"><pkg:xmlData><Relationships xmlns="${REL}"><Relationship Id="root" Type="${R}/officeDocument" Target="word/document.xml"/></Relationships></pkg:xmlData></pkg:part><pkg:part pkg:name="/word/document.xml" pkg:contentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"><pkg:xmlData><w:document xmlns:w="${W}"><w:body>${paragraph}</w:body></w:document></pkg:xmlData></pkg:part><pkg:part pkg:name="/word/_rels/document.xml.rels" pkg:contentType="${RELS}"><pkg:xmlData><Relationships xmlns="${REL}"><Relationship Id="settings" Type="${R}/settings" Target="settings.xml"/></Relationships></pkg:xmlData></pkg:part><pkg:part pkg:name="/word/settings.xml" pkg:contentType="${SETTINGS}"><pkg:xmlData><w:settings xmlns:w="${W}">${settings}</w:settings></pkg:xmlData></pkg:part></pkg:package>`;
+  const tagged = (extra = "") =>
+    read({
+      paragraph: `<w:p w:rsidRPr="00DC4D6D"><w:pPr>${lang(extra)}</w:pPr><w:r w:rsidRPr="00DC4D6D">${lang(extra)}<w:t>Revenue grew.</w:t></w:r></w:p>`,
+    });
+
+  it("is done once Word marks spelling clean", () => {
+    const clean = read({
+      settings: `<w:proofState w:spelling="clean" w:grammar="clean"/>`,
+    });
+    expect(wordProofingComplete(clean)).toBe(true);
+    expect(
+      wordProofingComplete(
+        wordDocumentFileToOoxml(wordDocumentOoxmlToFile(clean)),
+      ),
+    ).toBe(true);
+    expect(wordProofingComplete(read())).toBe(false);
+    expect(
+      wordProofingComplete(
+        read({
+          settings: `<w:proofState w:spelling="dirty" w:grammar="clean"/>`,
+        }),
+      ),
+    ).toBe(false);
+  });
+
+  it("tells Word's language tags apart from other changes", () => {
+    expect(wordPackagesDifferInDetectedLanguageOnly(read(), tagged())).toBe(
+      true,
+    );
+    expect(
+      wordPackagesDifferInDetectedLanguageOnly(
+        read(),
+        tagged(' w:eastAsia="ja-JP"'),
+      ),
+    ).toBe(false);
+    expect(
+      wordPackagesDifferInDetectedLanguageOnly(
+        read(),
+        read({ paragraph: `<w:p><w:r><w:t>Revenue fell.</w:t></w:r></w:p>` }),
+      ),
+    ).toBe(false);
+  });
+
+  it("leaves the fingerprint Apply and Revert compare seeing a language added later", () => {
+    expect(wordPackageFingerprint(tagged())).not.toBe(
+      wordPackageFingerprint(read()),
+    );
   });
 });

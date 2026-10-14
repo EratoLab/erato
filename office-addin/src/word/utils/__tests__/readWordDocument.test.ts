@@ -8,12 +8,17 @@ import {
   readWordDocument,
   WORD_PACKAGE_CAPTURE_TIMEOUT_MS,
   WORD_PARAGRAPH_READ_TIMEOUT_MS,
+  WORD_PROOFING_SETTLE_MS,
+  WORD_PROOFING_WINDOW_MS,
 } from "../readWordDocument";
 import {
   captureWordDocumentPackage,
+  insertWordDocumentFile,
   supportsWordDocumentPackage,
   WordDocumentCaptureTimeoutError,
   WordDocumentTransferError,
+  wordDocumentOoxmlToFile,
+  wordPackageFingerprint,
 } from "../wordDocumentPackage";
 import { WordDocumentTooLargeError } from "../wordDocumentPackageCodec";
 import { wordInPlaceAvailability } from "../wordInPlaceSwitch";
@@ -424,5 +429,224 @@ describe("readWordDocument without paragraph IDs", () => {
       null,
     ]);
     expect(wordParagraphIdsMissing()).toBe(true);
+  });
+});
+
+describe("readWordDocument on Word for Mac while its proofing pass is pending", () => {
+  const W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
+  const PKG = "http://schemas.microsoft.com/office/2006/xmlPackage";
+  const REL = "http://schemas.openxmlformats.org/package/2006/relationships";
+  const R =
+    "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
+  const TEXTS = ["The Annual Report", "Der Umsatz stieg.", "Revenue grew."];
+  /** A de-DE document as Word for Mac exports it: English paragraphs gain w:lang en-GB, mark and
+   * runs, as its proofing pass reaches them; w:proofState follows once the pass is done. */
+  const macPackage = ({
+    tagged = [] as number[],
+    clean = false,
+    texts = TEXTS,
+  } = {}) => {
+    const lang = `<w:rPr><w:lang w:val="en-GB"/></w:rPr>`;
+    const body = texts
+      .map((text, i) =>
+        tagged.includes(i)
+          ? `<w:p w:rsidRPr="00DC4D6D"><w:pPr>${lang}</w:pPr><w:r w:rsidRPr="00DC4D6D">${lang}<w:t>${text}</w:t></w:r></w:p>`
+          : `<w:p><w:r><w:t>${text}</w:t></w:r></w:p>`,
+      )
+      .join("");
+    const part = (name: string, type: string, xml: string) =>
+      `<pkg:part pkg:name="${name}" pkg:contentType="${type}"><pkg:xmlData>${xml}</pkg:xmlData></pkg:part>`;
+    return `<pkg:package xmlns:pkg="${PKG}">${[
+      part(
+        "/_rels/.rels",
+        "application/vnd.openxmlformats-package.relationships+xml",
+        `<Relationships xmlns="${REL}"><Relationship Id="root" Type="${R}/officeDocument" Target="word/document.xml"/></Relationships>`,
+      ),
+      part(
+        "/word/document.xml",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml",
+        `<w:document xmlns:w="${W}"><w:body>${body}<w:sectPr/></w:body></w:document>`,
+      ),
+      part(
+        "/word/_rels/document.xml.rels",
+        "application/vnd.openxmlformats-package.relationships+xml",
+        `<Relationships xmlns="${REL}"><Relationship Id="settings" Type="${R}/settings" Target="settings.xml"/></Relationships>`,
+      ),
+      part(
+        "/word/settings.xml",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml",
+        `<w:settings xmlns:w="${W}">${clean ? `<w:proofState w:spelling="clean" w:grammar="clean"/>` : ""}<w:themeFontLang w:val="de-DE"/></w:settings>`,
+      ),
+    ].join("")}</pkg:package>`;
+  };
+  const snapshot = (ooxml: string, documentUrl: string) =>
+    ({
+      ooxml,
+      documentUrl,
+      bytes: new Uint8Array(),
+      get fingerprint() {
+        return wordPackageFingerprint(ooxml);
+      },
+    }) as Awaited<ReturnType<typeof captureWordDocumentPackage>>;
+  /** Word's reads in order; the last one repeats. */
+  const reads = (documentUrl: string, ...packages: string[]) => {
+    let next = 0;
+    vi.mocked(captureWordDocumentPackage).mockImplementation(async () =>
+      snapshot(packages[Math.min(next++, packages.length - 1)], documentUrl),
+    );
+    return () => next;
+  };
+  const onPlatform = (platform: string) => {
+    (Office.context as unknown as Record<string, unknown>).diagnostics = {
+      platform,
+    };
+  };
+  /** Starts the window as an import does. */
+  const imported = () =>
+    insertWordDocumentFile(
+      {
+        document: { insertFileFromBase64: vi.fn() },
+      } as unknown as Word.RequestContext,
+      wordDocumentOoxmlToFile(macPackage()),
+    );
+  const capture = async (advanceMs: number) => {
+    const read = readWordDocument(true);
+    await vi.advanceTimersByTimeAsync(advanceMs);
+    const result = await read;
+    return result.ok ? result.authoring?.ooxml : undefined;
+  };
+
+  beforeEach(() => {
+    installMockWordDocument(TEXTS.map((text) => ({ text })));
+    vi.mocked(supportsWordDocumentPackage).mockReturnValue(true);
+    onPlatform("Mac");
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.mocked(supportsWordDocumentPackage).mockReset();
+    vi.mocked(supportsWordDocumentPackage).mockReturnValue(false);
+    vi.mocked(captureWordDocumentPackage).mockReset();
+    delete (Office.context as unknown as Record<string, unknown>).diagnostics;
+    uninstallMockWordDocument();
+  });
+
+  it("waits until Word reports the pass done and captures Word's language tags with it", async () => {
+    imported();
+    const done = macPackage({ tagged: [0, 2], clean: true });
+    const count = reads(
+      "https://contoso.example/opened.docx",
+      macPackage(),
+      macPackage(),
+      macPackage(),
+      macPackage({ tagged: [0] }),
+      done,
+    );
+
+    expect(await capture(10_000)).toBe(done);
+    expect(count()).toBe(5);
+  });
+
+  it("captures at once when Word reports the pass done", async () => {
+    const count = reads(
+      "https://contoso.example/settled.docx",
+      macPackage({ tagged: [0, 2], clean: true }),
+    );
+
+    await capture(0);
+    expect(count()).toBe(1);
+  });
+
+  it.each(["PC", "OfficeOnline"])("does not wait on %s", async (platform) => {
+    onPlatform(platform);
+    const count = reads(
+      `https://contoso.example/${platform}.docx`,
+      macPackage(),
+      macPackage({ tagged: [0, 2], clean: true }),
+    );
+
+    expect(await capture(WORD_PROOFING_SETTLE_MS)).toBe(macPackage());
+    expect(count()).toBe(1);
+  });
+
+  it("stops at a change that is not Word's tagging and keeps the read before it", async () => {
+    imported();
+    const first = macPackage();
+    const count = reads(
+      "https://contoso.example/edited.docx",
+      first,
+      macPackage({ texts: ["The Annual Report", "Edited.", "Revenue grew."] }),
+      macPackage({ tagged: [0, 2], clean: true }),
+    );
+
+    expect(await capture(10_000)).toBe(first);
+    expect(count()).toBe(2);
+  });
+
+  it("stops after the window once nothing happens, and then no longer waits for that document", async () => {
+    vi.setSystemTime(Date.now() + 10 * WORD_PROOFING_WINDOW_MS);
+    const count = reads("https://contoso.example/quiet.docx", macPackage());
+
+    expect(await capture(WORD_PROOFING_SETTLE_MS)).toBe(macPackage());
+    expect(count()).toBe(4);
+
+    await capture(WORD_PROOFING_SETTLE_MS);
+    expect(count()).toBe(5);
+  });
+
+  it("waits through the window after an import for a pass that has not started", async () => {
+    vi.setSystemTime(Date.now() + 20 * WORD_PROOFING_WINDOW_MS);
+    imported();
+    const done = macPackage({ tagged: [0, 2], clean: true });
+    const count = reads(
+      "https://contoso.example/reimported.docx",
+      ...Array.from({ length: 9 }, () => macPackage()),
+      done,
+    );
+
+    expect(await capture(WORD_PROOFING_WINDOW_MS)).toBe(done);
+    expect(count()).toBe(10);
+  });
+
+  it("bounds the wait while Word keeps tagging", async () => {
+    imported();
+    const texts = Array.from({ length: 40 }, (_, i) => `Paragraph ${i}.`);
+    const count = reads(
+      "https://contoso.example/long.docx",
+      ...texts.map((_, i) =>
+        macPackage({ texts, tagged: Array.from({ length: i }, (_, j) => j) }),
+      ),
+    );
+
+    const captured = await capture(2 * WORD_PROOFING_SETTLE_MS);
+    expect(count()).toBe(1 + WORD_PROOFING_SETTLE_MS / 1_000);
+    expect(captured).toBe(
+      macPackage({
+        texts,
+        tagged: Array.from({ length: count() - 1 }, (_, j) => j),
+      }),
+    );
+  });
+
+  it("fails the capture when another document becomes active while it waits", async () => {
+    imported();
+    let next = 0;
+    vi.mocked(captureWordDocumentPackage).mockImplementation(async () =>
+      snapshot(
+        macPackage(),
+        next++
+          ? "https://contoso.example/other.docx"
+          : "https://contoso.example/first.docx",
+      ),
+    );
+
+    const read = readWordDocument(true);
+    await vi.advanceTimersByTimeAsync(2_000);
+    const result = await read;
+    expect(result.ok && result.authoring).toBeUndefined();
+    expect(result.ok && result.authoringUnavailable).toMatchObject({
+      issue: "unavailable",
+      detail: "package-failed",
+    });
   });
 });

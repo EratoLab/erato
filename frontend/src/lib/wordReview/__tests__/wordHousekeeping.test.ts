@@ -7,6 +7,7 @@ import {
 } from "../wordHousekeeping";
 import {
   createWordXmlComparison,
+  removeWordDetectedLanguages,
   removeWordRedetectedLanguage,
 } from "../wordXmlComparison";
 
@@ -254,6 +255,33 @@ describe("proofing-language", () => {
         ),
       ).fingerprint,
     ).not.toBe(base);
+  });
+
+  it("removeWordDetectedLanguages drops each language in Word's detected form, wherever it sits", () => {
+    const scripts = `<w:p><w:r>${tag("en-US", ' w:eastAsia="ja-JP"')}<w:t>Delta.</w:t></w:r></w:p>`;
+    const styles = `<w:docDefaults><w:rPrDefault>${tag("de-DE")}</w:rPrDefault></w:docDefaults>`;
+    const doc = parse(
+      pkg({
+        body: kept + paragraph("Bravo.", { lang: "fr-FR" }) + german + scripts,
+        styles,
+      }),
+    );
+
+    expect(removeWordDetectedLanguages(doc)).toBe(4);
+    expect(createWordXmlComparison(doc).fingerprint()).toBe(
+      createWordXmlComparison(
+        parse(
+          pkg({
+            body:
+              paragraph("Alpha is kept.") +
+              paragraph("Bravo.") +
+              german +
+              scripts,
+            styles,
+          }),
+        ),
+      ).fingerprint(),
+    );
   });
 
   it("still sees a language that sets more than w:val", () => {

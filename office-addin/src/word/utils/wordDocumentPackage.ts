@@ -1,11 +1,14 @@
 import {
   createWordXmlComparison,
+  removeWordDetectedLanguages,
   removeWordRedetectedLanguage,
+  wordXmlElements,
 } from "@erato/frontend/word-review";
 
 import { wordApplyPolicy } from "./wordApplyPolicy";
 import {
   MAX_WORD_DOCX_BYTES,
+  WORD_XML_NS,
   WordDocumentTooLargeError,
   encodeWordXml,
   isWordXmlPart,
@@ -24,6 +27,10 @@ import type { WordInPlaceOp, WordInPlaceStoryTarget } from "./wordInPlacePlan";
 const PKG = "http://schemas.microsoft.com/office/2006/xmlPackage";
 const CT = "http://schemas.openxmlformats.org/package/2006/content-types";
 const BACKUP_PREFIX = "erato-word-document-backup-v1:";
+const SETTINGS_TYPE =
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml";
+
+let importedAt = 0;
 
 export interface WordDocumentPackageSnapshot {
   /** Host-only original file, retained independently of the native Undo stack. */
@@ -308,6 +315,39 @@ export function wordWrittenPackageFingerprint(
   };
 }
 
+/** Word for Mac writes w:proofState spelling="clean" once its proofing pass, language detection
+ * included, has been through the whole document; opening or importing a document clears it. */
+export function wordProofingComplete(ooxml: string): boolean {
+  // Parses only the settings part of wordDocumentFileToOoxml's serialization.
+  const type = ooxml.indexOf(`pkg:contentType="${SETTINGS_TYPE}"`);
+  const start = ooxml.lastIndexOf("<pkg:part ", type);
+  const end = ooxml.indexOf("</pkg:part>", type);
+  if (type < 0 || start < 0 || end < 0) return false;
+  const settings = parseWordXml(
+    `<pkg:package xmlns:pkg="${PKG}">${ooxml.slice(start, end)}</pkg:part></pkg:package>`,
+  );
+  const state = wordXmlElements(settings, WORD_XML_NS, "proofState")[0];
+  return state?.getAttributeNS(WORD_XML_NS, "spelling") === "clean";
+}
+
+/** Whether two reads differ in nothing but w:lang in the form Word's language detection writes. */
+export function wordPackagesDifferInDetectedLanguageOnly(
+  a: string,
+  b: string,
+): boolean {
+  const without = (ooxml: string) => {
+    const doc = parseWordXml(ooxml);
+    removeWordDetectedLanguages(doc);
+    return createWordXmlComparison(doc).fingerprint();
+  };
+  return without(a) === without(b);
+}
+
+/** When this pane last queued a whole-document import, or 0. */
+export function wordDocumentImportedAt(): number {
+  return importedAt;
+}
+
 export async function captureWordDocumentPackage(): Promise<WordDocumentPackageSnapshot> {
   const documentUrl = currentWordDocumentUrl();
   const bytes = await readWordDocumentFile();
@@ -340,6 +380,7 @@ export function insertWordDocumentFile(
     "Replace",
     WORD_DOCUMENT_IMPORT_OPTIONS,
   );
+  importedAt = Date.now();
 }
 
 /** One change of an in-place write, recorded in pane memory next to the exact original file so it

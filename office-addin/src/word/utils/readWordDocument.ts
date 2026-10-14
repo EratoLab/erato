@@ -4,6 +4,9 @@ import {
   WordDocumentTransferError,
   captureWordDocumentPackage,
   supportsWordDocumentPackage,
+  wordDocumentImportedAt,
+  wordPackagesDifferInDetectedLanguageOnly,
+  wordProofingComplete,
 } from "./wordDocumentPackage";
 import { WordDocumentTooLargeError } from "./wordDocumentPackageCodec";
 import { wordHostPlatform } from "./wordHostPlatform";
@@ -11,6 +14,7 @@ import { noteWordParagraphIds, wordParagraphId } from "./wordParagraphIds";
 import { withWordTimeout } from "./wordTimeout";
 
 import type { WordParagraphRead } from "./buildWordDocumentArgs";
+import type { WordDocumentPackageSnapshot } from "./wordDocumentPackage";
 
 export type WordDocumentReadResult =
   | {
@@ -53,6 +57,83 @@ export interface WordAuthoringUnavailable {
 export const WORD_PARAGRAPH_READ_TIMEOUT_MS = 30_000;
 /** Bounds the whole transfer however many slices Word returns, so a slow file keeps its text. */
 export const WORD_PACKAGE_CAPTURE_TIMEOUT_MS = 45_000;
+
+/** Word for Mac starts its proofing pass, which tags each paragraph with the language it detects,
+ * 7–15 s after a document opens or is imported (ERMAIN-974). */
+export const WORD_PROOFING_WINDOW_MS = 20_000;
+/** The pass tags a few paragraphs at a time, about a second apart at most. */
+const WORD_PROOFING_QUIET_MS = 3_000;
+const WORD_PROOFING_POLL_MS = 1_000;
+export const WORD_PROOFING_SETTLE_MS = 30_000;
+
+const paneLoadedAt = Date.now();
+/** Documents whose proofing pass never reported done while a capture waited, e.g. with spell
+ * checking off; their captures no longer wait. */
+const proofingQuiet = new Set<string>();
+
+/**
+ * A capture taken on Word for Mac before its proofing pass is done lacks the language tags Word
+ * adds next, which Apply and Revert would refuse as a change. Reads again until Word reports the
+ * pass done and captures that read, so no comparison has to set a language aside. A change other
+ * than a w:lang in Word's detected form ends the wait with the read before it. Bounded, and only
+ * paid while the pass is pending.
+ */
+async function settleWordProofing(
+  first: WordDocumentPackageSnapshot,
+): Promise<WordDocumentPackageSnapshot> {
+  if (
+    wordHostPlatform() !== "Mac" ||
+    proofingQuiet.has(first.documentUrl) ||
+    wordProofingComplete(first.ooxml)
+  )
+    return first;
+  const started = Date.now();
+  const windowEnd =
+    Math.max(paneLoadedAt, wordDocumentImportedAt()) + WORD_PROOFING_WINDOW_MS;
+  let current = first;
+  let changedAt = started;
+  for (;;) {
+    const now = Date.now();
+    const remaining = started + WORD_PROOFING_SETTLE_MS - now;
+    if (
+      remaining <= 0 ||
+      (now >= windowEnd && now - changedAt >= WORD_PROOFING_QUIET_MS)
+    )
+      break;
+    await new Promise((resolve) =>
+      setTimeout(resolve, Math.min(WORD_PROOFING_POLL_MS, remaining)),
+    );
+    let next: WordDocumentPackageSnapshot;
+    try {
+      next = await withWordTimeout(
+        captureWordDocumentPackage(),
+        Math.max(
+          started + WORD_PROOFING_SETTLE_MS - Date.now(),
+          WORD_PROOFING_POLL_MS,
+        ),
+        () => new WordDocumentCaptureTimeoutError(),
+      );
+    } catch {
+      return current;
+    }
+    if (next.documentUrl !== first.documentUrl)
+      throw new WordDocumentTransferError(
+        "The open document changed during capture.",
+      );
+    if (
+      next.ooxml !== current.ooxml &&
+      next.fingerprint !== current.fingerprint
+    ) {
+      if (!wordPackagesDifferInDetectedLanguageOnly(current.ooxml, next.ooxml))
+        return current;
+      current = next;
+      changedAt = Date.now();
+    }
+    if (wordProofingComplete(next.ooxml)) return next;
+  }
+  if (current === first) proofingQuiet.add(first.documentUrl);
+  return current;
+}
 
 interface WordGlobal {
   run: <T>(
@@ -128,10 +209,12 @@ export async function readWordDocument(
       // back to the body route, whose capture says it is not the whole document; any other failed
       // transfer, or a document that changes during capture, is retried at the next send.
       try {
-        const full = await withWordTimeout(
-          captureWordDocumentPackage(),
-          WORD_PACKAGE_CAPTURE_TIMEOUT_MS,
-          () => new WordDocumentCaptureTimeoutError(),
+        const full = await settleWordProofing(
+          await withWordTimeout(
+            captureWordDocumentPackage(),
+            WORD_PACKAGE_CAPTURE_TIMEOUT_MS,
+            () => new WordDocumentCaptureTimeoutError(),
+          ),
         );
         return {
           ...result,
