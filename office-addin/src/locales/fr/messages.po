@@ -4703,8 +4703,8 @@ msgstr "Restaurer le corps du document ?"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordHostCardRenderer.tsx
-msgid "officeAddin.word.review.revertTracking"
-msgstr "Le rétablissement n’a pas été effectué, car le suivi des modifications est activé. Refusez plutôt ces modifications dans Word."
+#~ msgid "officeAddin.word.review.revertTracking"
+#~ msgstr "Le rétablissement n’a pas été effectué, car le suivi des modifications est activé. Refusez plutôt ces modifications dans Word."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordHostCardRenderer.tsx

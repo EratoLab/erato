@@ -473,17 +473,11 @@ function WordActionCard({
             message:
               "The document changed after applying. Revert was not run because it could remove later edits.",
           })
-        : review.tracking === "on"
-          ? t({
-              id: "officeAddin.word.review.revertTracking",
-              message:
-                "Revert was not run because Track Changes is on. Reject these changes in Word instead.",
-            })
-          : t({
-              id: "officeAddin.word.review.revertTrackingOff",
-              message:
-                "Revert was not run because Track Changes is on. Turn off Track Changes, then revert the batch again.",
-            })
+        : t({
+            id: "officeAddin.word.review.revertTrackingOff",
+            message:
+              "Revert was not run because Track Changes is on. Turn off Track Changes, then revert the batch again.",
+          })
       : review.status === "write-failed"
         ? t({
             id: "officeAddin.word.review.writeFailed",

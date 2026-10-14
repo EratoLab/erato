@@ -4703,8 +4703,8 @@ msgstr "Dokumentinhalt wiederherstellen?"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordHostCardRenderer.tsx
-msgid "officeAddin.word.review.revertTracking"
-msgstr "Das Rückgängigmachen wurde nicht ausgeführt, weil die Änderungsverfolgung aktiv ist. Lehnen Sie diese Änderungen stattdessen in Word ab."
+#~ msgid "officeAddin.word.review.revertTracking"
+#~ msgstr "Das Rückgängigmachen wurde nicht ausgeführt, weil die Änderungsverfolgung aktiv ist. Lehnen Sie diese Änderungen stattdessen in Word ab."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordHostCardRenderer.tsx

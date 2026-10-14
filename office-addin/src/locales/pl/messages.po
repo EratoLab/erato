@@ -4703,8 +4703,8 @@ msgstr "Przywrócić treść dokumentu?"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordHostCardRenderer.tsx
-msgid "officeAddin.word.review.revertTracking"
-msgstr "Nie cofnięto zmian, ponieważ śledzenie zmian jest włączone. Zamiast tego odrzuć te zmiany w programie Word."
+#~ msgid "officeAddin.word.review.revertTracking"
+#~ msgstr "Nie cofnięto zmian, ponieważ śledzenie zmian jest włączone. Zamiast tego odrzuć te zmiany w programie Word."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordHostCardRenderer.tsx

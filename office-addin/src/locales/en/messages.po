@@ -4703,8 +4703,8 @@ msgstr "Restore the document body?"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordHostCardRenderer.tsx
-msgid "officeAddin.word.review.revertTracking"
-msgstr "Revert was not run because Track Changes is on. Reject these changes in Word instead."
+#~ msgid "officeAddin.word.review.revertTracking"
+#~ msgstr "Revert was not run because Track Changes is on. Reject these changes in Word instead."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordHostCardRenderer.tsx

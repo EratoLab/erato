@@ -4703,8 +4703,8 @@ msgstr "¿Restaurar el contenido del documento?"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordHostCardRenderer.tsx
-msgid "officeAddin.word.review.revertTracking"
-msgstr "No se revirtió el lote porque el control de cambios está activado. En su lugar, rechace estos cambios en Word."
+#~ msgid "officeAddin.word.review.revertTracking"
+#~ msgstr "No se revirtió el lote porque el control de cambios está activado. En su lugar, rechace estos cambios en Word."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordHostCardRenderer.tsx
