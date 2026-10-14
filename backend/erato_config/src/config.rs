@@ -82,14 +82,6 @@ pub fn validate_mcp_server_ids(
         ));
     }
 
-    for (id, server) in mcp_servers {
-        if server.transport_type == "sse" && server.protocol_mode == McpProtocolMode::Stateless {
-            return Err(eyre!(
-                "MCP server '{id}': stateless protocol requires streamable_http"
-            ));
-        }
-    }
-
     Ok(())
 }
 
@@ -3047,16 +3039,6 @@ impl StorageProviderSpecificConfigMerged {
     }
 }
 
-#[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone, Copy, Facet)]
-#[serde(rename_all = "snake_case")]
-#[repr(u8)]
-pub enum McpProtocolMode {
-    #[default]
-    Auto,
-    Legacy,
-    Stateless,
-}
-
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
 pub struct McpServerConfig {
     // The type of transport that the MCP server uses.
@@ -3064,9 +3046,6 @@ pub struct McpServerConfig {
     // - "sse" (Server-Sent Events)
     // - "streamable_http" (Streamable HTTP)
     pub transport_type: String,
-    /// Protocol selection for Streamable HTTP: auto prefers stateless with legacy fallback.
-    #[serde(default)]
-    pub protocol_mode: McpProtocolMode,
     // Url of the server.
     // For `transport_type = "sse"`, this will conventionally end with `/sse`.
     // For `transport_type = "streamable_http"`, this should be the base HTTP endpoint.

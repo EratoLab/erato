@@ -21,7 +21,6 @@ use crate::test_utils::{
 
 fn files_server_config() -> McpServerConfig {
     McpServerConfig {
-        protocol_mode: Default::default(),
         transport_type: "streamable_http".to_string(),
         url: "http://127.0.0.1:44321/mcp/file".to_string(),
         http_headers: None,

@@ -1117,95 +1117,19 @@ impl ServerHandler for EmptyToolServer {
     }
 }
 
-/// Explicit fixtures prevent modern-capable SDK defaults from hiding legacy regressions.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum MockProtocolMode {
-    Legacy,
-    Stateless,
-    Dual,
-}
-
-struct ProtocolServer<S> {
-    inner: S,
-    mode: MockProtocolMode,
-}
-
-impl<S: ServerHandler> ServerHandler for ProtocolServer<S> {
-    fn supported_protocol_versions(
-        &self,
-    ) -> std::borrow::Cow<'static, [rmcp::model::ProtocolVersion]> {
-        use rmcp::model::ProtocolVersion as V;
-        std::borrow::Cow::Owned(match self.mode {
-            MockProtocolMode::Legacy => vec![V::V_2025_11_25],
-            MockProtocolMode::Stateless => vec![V::V_2026_07_28],
-            MockProtocolMode::Dual => vec![V::V_2026_07_28, V::V_2025_11_25],
-        })
-    }
-
-    fn get_info(&self) -> ServerInfo {
-        self.inner.get_info()
-    }
-
-    async fn call_tool(
-        &self,
-        request: CallToolRequestParams,
-        context: RequestContext<RoleServer>,
-    ) -> Result<CallToolResponse, McpError> {
-        self.inner.call_tool(request, context).await
-    }
-
-    async fn list_tools(
-        &self,
-        request: Option<PaginatedRequestParams>,
-        context: RequestContext<RoleServer>,
-    ) -> Result<ListToolsResult, McpError> {
-        let mut result = self.inner.list_tools(request, context).await?;
-        if self.mode != MockProtocolMode::Legacy {
-            result.ttl_ms = Some(30_000);
-            result.cache_scope = Some(rmcp::model::CacheScope::Private);
-        }
-        Ok(result)
-    }
-
-    fn get_tool(&self, name: &str) -> Option<rmcp::model::Tool> {
-        self.inner.get_tool(name)
-    }
-}
-
 fn create_streamable_http_service<S>(
-    mode: MockProtocolMode,
     factory: impl Fn() -> Result<S, std::io::Error> + Clone + Send + Sync + 'static,
-) -> Router
+) -> StreamableHttpService<S, LocalSessionManager>
 where
     S: ServerHandler + Send + Sync + 'static,
 {
     let mut config = StreamableHttpServerConfig::default();
-    config.legacy_session_mode = mode != MockProtocolMode::Stateless;
-    config.stateless_protocol_metadata_required = mode == MockProtocolMode::Stateless;
+    config.legacy_session_mode = true;
     config.sse_keep_alive = None;
     config.allowed_hosts.clear();
     config.allowed_origins.clear();
-    let service = StreamableHttpService::new(
-        move || factory().map(|inner| ProtocolServer { inner, mode }),
-        Arc::new(LocalSessionManager::default()),
-        config,
-    );
-    Router::new()
-        .fallback_service(service)
-        .layer(axum::middleware::from_fn(
-            move |request: Request<Body>, next: axum::middleware::Next| async move {
-                if mode == MockProtocolMode::Legacy
-                    && request
-                        .headers()
-                        .get("mcp-method")
-                        .is_some_and(|v| v == "server/discover")
-                {
-                    return (StatusCode::BAD_REQUEST, "Legacy server requires initialize")
-                        .into_response();
-                }
-                next.run(request).await
-            },
-        ))
+
+    StreamableHttpService::new(factory, Default::default(), config)
 }
 
 fn unauthorized(message: &str) -> Response {
@@ -1581,46 +1505,28 @@ fn log_startup(addr: &str, mechanisms: &[MechanismSummary]) {
 }
 
 pub fn app() -> Router {
-    app_with_default_protocol(MockProtocolMode::Legacy)
-}
-
-pub fn app_with_default_protocol(mode: MockProtocolMode) -> Router {
-    Router::new()
-        .route("/health", get(health))
-        .nest("/mcp", app_with_protocol(mode))
-        .nest("/mcp/legacy", app_with_protocol(MockProtocolMode::Legacy))
-        .nest(
-            "/mcp/stateless",
-            app_with_protocol(MockProtocolMode::Stateless),
-        )
-        .nest("/mcp/dual", app_with_protocol(MockProtocolMode::Dual))
-}
-
-/// Routes relative to the MCP endpoint prefix; also used by integration tests.
-pub fn app_with_protocol(mode: MockProtocolMode) -> Router {
-    let file_service = create_streamable_http_service(mode, || Ok(FileServer::new()));
-    let error_service = create_streamable_http_service(mode, || Ok(ErrorFileServer::new()));
-    let progress_service = create_streamable_http_service(mode, || Ok(ProgressFileServer::new()));
+    let file_service = create_streamable_http_service(|| Ok(FileServer::new()));
+    let error_service = create_streamable_http_service(|| Ok(ErrorFileServer::new()));
+    let progress_service = create_streamable_http_service(|| Ok(ProgressFileServer::new()));
     let content_filter_service =
-        create_streamable_http_service(mode, || Ok(ContentFilterFileServer::new()));
+        create_streamable_http_service(|| Ok(ContentFilterFileServer::new()));
     let image_generation_service =
-        create_streamable_http_service(mode, || Ok(ImageGenerationServer::new()));
+        create_streamable_http_service(|| Ok(ImageGenerationServer::new()));
     let deep_research_state = DeepResearchState::default();
-    let deep_research_service = create_streamable_http_service(mode, move || {
+    let deep_research_service = create_streamable_http_service(move || {
         Ok(DeepResearchServer::new(deep_research_state.clone()))
     });
     let approval_policy_service =
-        create_streamable_http_service(mode, || Ok(ApprovalPolicyServer::new()));
-    let untrusted_text_service = create_streamable_http_service(mode, || Ok(UntrustedTextServer));
+        create_streamable_http_service(|| Ok(ApprovalPolicyServer::new()));
+    let untrusted_text_service = create_streamable_http_service(|| Ok(UntrustedTextServer));
 
-    let none_auth_service = create_streamable_http_service(mode, || Ok(NoneAuthProbeServer::new()));
-    let fixed_auth_service =
-        create_streamable_http_service(mode, || Ok(FixedApiKeyProbeServer::new()));
+    let none_auth_service = create_streamable_http_service(|| Ok(NoneAuthProbeServer::new()));
+    let fixed_auth_service = create_streamable_http_service(|| Ok(FixedApiKeyProbeServer::new()));
     let forwarded_access_allowed_service =
-        create_streamable_http_service(mode, || Ok(ForwardedAccessProbeServer::new()));
+        create_streamable_http_service(|| Ok(ForwardedAccessProbeServer::new()));
     let forwarded_oidc_allowed_service =
-        create_streamable_http_service(mode, || Ok(ForwardedOidcProbeServer::new()));
-    let empty_tool_service = create_streamable_http_service(mode, || Ok(EmptyToolServer));
+        create_streamable_http_service(|| Ok(ForwardedOidcProbeServer::new()));
+    let empty_tool_service = create_streamable_http_service(|| Ok(EmptyToolServer));
     let none_auth_service_route = none_auth_service.clone();
     let fixed_auth_service_route = fixed_auth_service.clone();
     let fixed_auth_custom_service_route = fixed_auth_service.clone();
@@ -1630,38 +1536,39 @@ pub fn app_with_protocol(mode: MockProtocolMode) -> Router {
     let forwarded_oidc_denied_route = empty_tool_service.clone();
 
     Router::new()
-        .route("/list-tools-500", any(always_500))
-        .nest_service("/file", file_service)
-        .nest_service("/error", error_service)
-        .nest_service("/progress", progress_service)
-        .nest_service("/content-filter", content_filter_service)
-        .nest_service("/image-generation", image_generation_service)
-        .nest_service("/deep-research", deep_research_service)
-        .nest_service("/approval-policy", approval_policy_service)
-        .nest_service("/untrusted-text", untrusted_text_service)
+        .route("/health", get(health))
+        .route("/mcp/list-tools-500", any(always_500))
+        .nest_service("/mcp/file", file_service)
+        .nest_service("/mcp/error", error_service)
+        .nest_service("/mcp/progress", progress_service)
+        .nest_service("/mcp/content-filter", content_filter_service)
+        .nest_service("/mcp/image-generation", image_generation_service)
+        .nest_service("/mcp/deep-research", deep_research_service)
+        .nest_service("/mcp/approval-policy", approval_policy_service)
+        .nest_service("/mcp/untrusted-text", untrusted_text_service)
         .route(
-            "/auth-none",
+            "/mcp/auth-none",
             any(move |request| {
                 let service = none_auth_service_route.clone();
                 async move { serve_without_auth(service, request).await }
             }),
         )
         .route(
-            "/auth-fixed",
+            "/mcp/auth-fixed",
             any(move |request| {
                 let service = fixed_auth_service_route.clone();
                 async move { serve_with_fixed_api_key(service, request).await }
             }),
         )
         .route(
-            "/auth-fixed-custom",
+            "/mcp/auth-fixed-custom",
             any(move |request| {
                 let service = fixed_auth_custom_service_route.clone();
                 async move { serve_with_fixed_api_key_custom_header(service, request).await }
             }),
         )
         .route(
-            "/auth-forwarded-access",
+            "/mcp/auth-forwarded-access",
             any(move |request| {
                 let allowed_service = forwarded_access_allowed_route.clone();
                 let denied_service = forwarded_access_denied_route.clone();
@@ -1672,7 +1579,7 @@ pub fn app_with_protocol(mode: MockProtocolMode) -> Router {
             }),
         )
         .route(
-            "/auth-forwarded-oidc",
+            "/mcp/auth-forwarded-oidc",
             any(move |request| {
                 let allowed_service = forwarded_oidc_allowed_route.clone();
                 let denied_service = forwarded_oidc_denied_route.clone();
@@ -1693,19 +1600,7 @@ pub async fn serve(addr: SocketAddr) {
 
     let oauth_base_url =
         std::env::var("OAUTH_BASE_URL").unwrap_or_else(|_| format!("http://{addr}"));
-    let mode = match std::env::var("MCP_PROTOCOL_MODE")
-        .as_deref()
-        .unwrap_or("legacy")
-    {
-        "legacy" => MockProtocolMode::Legacy,
-        "stateless" => MockProtocolMode::Stateless,
-        "dual" => MockProtocolMode::Dual,
-        other => panic!("Unknown MCP_PROTOCOL_MODE '{other}': expected legacy, stateless, or dual"),
-    };
-    let app = app_with_default_protocol(mode).merge(oauth::router_with_protocol(
-        oauth::OAuthConfig::entra(oauth_base_url),
-        mode,
-    ));
+    let app = app().merge(oauth::router(oauth::OAuthConfig::entra(oauth_base_url)));
     axum::serve(listener, app)
         .with_graceful_shutdown(async move {
             let _ = tokio::signal::ctrl_c().await;

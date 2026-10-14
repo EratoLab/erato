@@ -14,18 +14,6 @@ The server exposes several MCP servers on different streamable HTTP endpoints:
 - `streamable HTTP /mcp/image-generation` - image generation server (`generate_image`, returns the shared cat image fixture)
 - `streamable HTTP /mcp/deep-research` - deep-research simulation (`deep_research_dispatch`, `deep_research_poll`); the first poll is pending and the next poll completes
 
-All tool/auth fixtures are also exposed under `/mcp/legacy/`, `/mcp/stateless/`,
-and `/mcp/dual/` (for example `/mcp/stateless/progress`). Legacy fixtures require
-initialization with the existing `2025-11-25` protocol; stateless fixtures require
-`2026-07-28` request metadata. Dual fixtures accept both. The existing paths default
-to legacy, preserving old-version regression coverage.
-
-Set `MCP_PROTOCOL_MODE=stateless` (or `dual`) to change the default paths, including
-`/mcp/oauth`, when exercising the whole integration/E2E suite against the modern
-protocol. Explicit variant paths retain their selected protocol. Library tests
-can use `app_with_default_protocol` and `oauth::router_with_protocol` on ephemeral
-listeners.
-
 Default bind: `127.0.0.1:44321`
 
 ## Run
