@@ -1,3 +1,11 @@
+import {
+  createWordConditionalTableStyles,
+  isWordDetectedLanguage,
+  isWordInertTableLook,
+  isWordListInstanceId,
+  wordThemeFontLanguage,
+} from "./wordHousekeeping";
+
 const W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
 const PKG = "http://schemas.microsoft.com/office/2006/xmlPackage";
 const REL = "http://schemas.openxmlformats.org/package/2006/relationships";
@@ -191,7 +199,15 @@ export interface WordXmlComparison {
   signature: (node: Node, owner?: string) => string;
 }
 
-export function createWordXmlComparison(doc: Document): WordXmlComparison {
+export interface WordXmlComparisonOptions {
+  /** A Body.getOoxml read: compared through WORD_HOUSEKEEPING's body-read entries. */
+  bodyRead?: boolean;
+}
+
+export function createWordXmlComparison(
+  doc: Document,
+  options: WordXmlComparisonOptions = {},
+): WordXmlComparison {
   const parts = new Map(
     wordXmlElements(doc, PKG, "part").map((part) => [
       part.getAttributeNS(PKG, "name") ?? "",
@@ -281,6 +297,9 @@ export function createWordXmlComparison(doc: Document): WordXmlComparison {
         ["1", "true", "on"].includes(s.getAttributeNS(W, "default") ?? ""),
     )
     ?.getAttributeNS(W, "styleId");
+  const conditionalTableStyles = options.bodyRead
+    ? createWordConditionalTableStyles(doc)
+    : undefined;
   const activeParts = new Set<string>();
   const numberingRoot = roots.get("/word/numbering.xml");
   const abstracts = new Map(
@@ -353,6 +372,17 @@ export function createWordXmlComparison(doc: Document): WordXmlComparison {
           !unknownDrawingReferences.has(value)
         )
           return [];
+        if (options.bodyRead && isWordListInstanceId(element, attribute))
+          return [];
+        if (
+          options.bodyRead &&
+          owner === "/word/settings.xml" &&
+          ns === W &&
+          name === "val" &&
+          element.namespaceURI === W &&
+          element.localName === "themeFontLang"
+        )
+          value = wordThemeFontLanguage(value);
         // Word can reorder abstract definitions; resolve them while retaining numId/durableId list identity.
         if (content && ns === W && element.namespaceURI === W) {
           if (element.localName === "abstractNum" && name === "abstractNumId")
@@ -397,6 +427,8 @@ export function createWordXmlComparison(doc: Document): WordXmlComparison {
         local === "Relationship" &&
         isWordHostStateRelationship(element)) ||
       (ns === W && ["proofErr", "lastRenderedPageBreak"].includes(local)) ||
+      (!!conditionalTableStyles &&
+        isWordInertTableLook(element, conditionalTableStyles)) ||
       (ns === W &&
         local === "rsid" &&
         element.parentElement?.namespaceURI === W &&
@@ -592,4 +624,91 @@ export function createWordXmlComparison(doc: Document): WordXmlComparison {
     signature: (node, owner = "/word/document.xml") =>
       canonical(node, owner, true),
   };
+}
+
+function documentBody(doc: Document): Element | undefined {
+  const part = wordXmlElements(doc, PKG, "part").find(
+    (p) => p.getAttributeNS(PKG, "name") === "/word/document.xml",
+  );
+  const root = part
+    ? wordXmlElements(part, PKG, "xmlData")[0]?.firstElementChild
+    : doc.documentElement;
+  return root ? wordXmlElements(root, W, "body")[0] : undefined;
+}
+
+function ownLanguages(paragraph: Element): Element[] {
+  return wordXmlElements(paragraph, W, "lang").filter((lang) => {
+    let owner = lang.parentElement;
+    while (owner && !(owner.namespaceURI === W && owner.localName === "p"))
+      owner = owner.parentElement;
+    return owner === paragraph && isWordDetectedLanguage(lang);
+  });
+}
+
+function dropLanguage(lang: Element): void {
+  const properties = lang.parentElement;
+  lang.remove();
+  if (
+    properties &&
+    !properties.children.length &&
+    Array.from(properties.attributes).every((a) => a.namespaceURI === XMLNS)
+  )
+    properties.remove();
+}
+
+/**
+ * proofing-language (wordHousekeeping): in the paragraphs `written` has and `original` lacks, drops
+ * each w:lang that Word re-detects after a write, valued as one of the paragraphs the write
+ * replaced. Mutates `written` and returns how many it dropped; a language set to anything else,
+ * or on a paragraph the write kept, stays.
+ */
+export function removeWordRedetectedLanguage(
+  written: Document,
+  replaced: Document | (() => Document),
+): number {
+  const writtenBody = documentBody(written);
+  if (
+    !writtenBody ||
+    !wordXmlElements(writtenBody, W, "lang").some(isWordDetectedLanguage)
+  )
+    return 0;
+  const original = typeof replaced === "function" ? replaced() : replaced;
+  const originalBody = documentBody(original);
+  if (!originalBody) return 0;
+  const keyed = (doc: Document, body: Element) => {
+    const comparison = createWordXmlComparison(doc);
+    return wordXmlElements(body, W, "p").map((paragraph) => {
+      const clone = paragraph.cloneNode(true) as Element;
+      wordXmlElements(clone, W, "lang")
+        .filter(isWordDetectedLanguage)
+        .forEach(dropLanguage);
+      return { paragraph, key: comparison.signature(clone) };
+    });
+  };
+  const before = keyed(original, originalBody);
+  const after = keyed(written, writtenBody);
+  const unmatched = <T extends { key: string }>(items: T[], others: T[]) => {
+    const available = new Map<string, number>();
+    for (const { key } of others)
+      available.set(key, (available.get(key) ?? 0) + 1);
+    return items.filter(({ key }) => {
+      const left = available.get(key) ?? 0;
+      if (left) available.set(key, left - 1);
+      return !left;
+    });
+  };
+  const languages = new Set(
+    unmatched(before, after).flatMap(({ paragraph }) =>
+      ownLanguages(paragraph).map((lang) => lang.getAttributeNS(W, "val")),
+    ),
+  );
+  if (!languages.size) return 0;
+  let dropped = 0;
+  for (const { paragraph } of unmatched(after, before))
+    for (const lang of ownLanguages(paragraph))
+      if (languages.has(lang.getAttributeNS(W, "val"))) {
+        dropLanguage(lang);
+        dropped++;
+      }
+  return dropped;
 }

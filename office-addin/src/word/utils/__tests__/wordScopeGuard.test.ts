@@ -19,10 +19,8 @@ import {
   applyWordDocumentPlan,
   revertWordDocumentPlan,
 } from "../wordApplyDocumentPlan";
-import {
-  captureWordAuthoringSnapshot,
-  wordDocumentFingerprint,
-} from "../wordDocumentXml";
+import { wordPackageFingerprint } from "../wordDocumentPackage";
+import { captureWordAuthoringSnapshot } from "../wordDocumentXml";
 import {
   ALL_WORD_IN_PLACE_CAPABILITIES,
   setWordInPlaceCapabilitiesForTests,
@@ -46,7 +44,7 @@ const capture = (ooxml: string) =>
   captureWordAuthoringSnapshot(ooxml, "doc", "Off", true);
 const live = (ooxml: string) => ({
   ooxml,
-  fingerprint: wordDocumentFingerprint(ooxml),
+  fingerprint: wordPackageFingerprint(ooxml),
 });
 const body = (texts: string[]) => packageXml(texts.map(paragraph).join(""));
 const rebase = (

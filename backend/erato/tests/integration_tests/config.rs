@@ -312,7 +312,7 @@ package_read = false
         word_apply.web_policy(),
         MsOfficeAddinWordApplyPolicy {
             in_place: true,
-            whole_document_import: MsOfficeAddinWordWholeDocumentImport::Confirm,
+            whole_document_import: MsOfficeAddinWordWholeDocumentImport::Off,
             package_read: false,
         }
     );

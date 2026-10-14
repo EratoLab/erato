@@ -21,6 +21,7 @@ interface ImportMetaEnv {
 
 interface OfficeAddinWordApplyHostSettings {
   in_place?: boolean;
+  /** Defaults: "allowed" on Word PC and Mac, "off" on Word for the web. */
   whole_document_import?: "allowed" | "confirm" | "off";
   package_read?: boolean;
 }

@@ -3,6 +3,7 @@ import {
   normalizeWordDocumentPlan,
   parseWordDocumentPlan,
   validateWordDocumentPlan,
+  wordHousekeepingDifferences,
 } from "@erato/frontend/word-review";
 
 import {
@@ -28,6 +29,7 @@ import {
   isWordDocumentBackup,
   supportsWordDocumentPackage,
   wordDocumentOoxmlToFile,
+  wordWrittenPackageFingerprint,
 } from "./wordDocumentPackage";
 import {
   captureWordAuthoringSnapshot,
@@ -36,6 +38,7 @@ import {
   verifyWordPlanWrite,
   verifyWordRestore,
   wordBodyFingerprint,
+  wordBodyRead,
 } from "./wordDocumentXml";
 import { finishWordEmptyDocumentImport } from "./wordEmptyDocumentImport";
 import {
@@ -80,6 +83,7 @@ import type { WordWholeDocumentRefusal } from "./wordInPlaceRoute";
 import type {
   WordAuthoringSnapshot,
   WordDocumentPlan,
+  WordHousekeepingCounts,
   WordPlanIssue,
 } from "@erato/frontend/word-review";
 
@@ -121,6 +125,8 @@ export interface WordApplyOutcome {
   /** Written as tracked revisions (true), or written directly although the capture was tracked
    * because Track Changes was off by then (false). */
   tracked?: boolean;
+  /** Differences the checks left to WORD_HOUSEKEEPING, by rule. */
+  housekeeping?: WordHousekeepingCounts;
 }
 export interface WordDocumentApplyResult {
   status: WordDocumentApplyStatus;
@@ -140,12 +146,28 @@ export interface WordDocumentRevertResult {
 function outcome(
   route: "import" | "body",
   verification: Extract<WordWriteVerification, { ok: true }>,
+  checked: WordHousekeepingCounts = {},
 ): WordApplyOutcome {
+  const housekeeping: WordHousekeepingCounts = {
+    ...verification.housekeeping,
+  };
+  for (const [id, n] of Object.entries(checked) as [
+    keyof WordHousekeepingCounts,
+    number,
+  ][])
+    housekeeping[id] = (housekeeping[id] ?? 0) + n;
   return {
     route,
     tier: verification.tier,
     adjustments: verification.adjustments,
+    ...(Object.keys(housekeeping).length ? { housekeeping } : {}),
   };
+}
+
+function housekeepingDetails(
+  counts: WordHousekeepingCounts,
+): Pick<WordDiagnosticDetails, "housekeeping"> {
+  return Object.keys(counts).length ? { housekeeping: counts } : {};
 }
 
 /** A content mismatch means the lenient tier failed too; growth is decided before any comparison. */
@@ -178,19 +200,23 @@ function refusedUnchanged(
   );
 }
 
-/** Read a fresh context after a rejected batch; never retry the mutation. */
+/** Read a fresh context after a rejected batch; never retry the mutation. `replaced` is the
+ * complete package the write started from, so the fingerprint matches what Revert compares. */
 async function observeAfterFailure(
   fullDocument = false,
   expectedUrl?: string,
+  replaced?: string,
 ): Promise<string | undefined> {
   try {
     if (fullDocument) {
       if (expectedUrl !== undefined && currentWordDocumentUrl() !== expectedUrl)
         return undefined;
       const after = await captureWordDocumentPackage();
-      return expectedUrl === undefined || after.documentUrl === expectedUrl
+      if (expectedUrl !== undefined && after.documentUrl !== expectedUrl)
+        return undefined;
+      return replaced === undefined
         ? after.fingerprint
-        : undefined;
+        : wordWrittenPackageFingerprint(after.ooxml, replaced).fingerprint;
     }
     return await wordWriteHost()?.run(async (context) => {
       const body = context.document.body.getOoxml();
@@ -433,7 +459,8 @@ async function applyPlan(
           ops: route.ops,
           onBeforeWrite,
           progress,
-          observePackage: (url) => observeAfterFailure(true, url),
+          observePackage: (url, replaced) =>
+            observeAfterFailure(true, url, replaced),
         });
         if (!("fallback" in result)) return result;
         // Track Changes is on and the write needs something tracked writing does not cover.
@@ -506,12 +533,17 @@ async function applyPlan(
       context.document.load("changeTrackingMode");
       const live = context.document.body.getOoxml();
       await context.sync();
+      const read = wordBodyRead(live.value);
+      const checked = wordHousekeepingDifferences(
+        snapshot.housekeeping,
+        read.housekeeping,
+      );
       const reason =
         snapshot.revoked || snapshot.used
           ? "expired"
           : context.document.changeTrackingMode !== "Off"
             ? "tracking"
-            : wordBodyFingerprint(live.value) !== snapshot.fingerprint
+            : read.fingerprint !== snapshot.fingerprint
               ? "source-changed"
               : null;
       if (reason)
@@ -522,7 +554,10 @@ async function applyPlan(
             reason,
             undefined,
             reason === "source-changed"
-              ? strictDifferingParts(snapshot.ooxml, live.value)
+              ? {
+                  ...strictDifferingParts(snapshot.ooxml, live.value),
+                  ...housekeepingDetails(checked),
+                }
               : {},
           ),
         };
@@ -567,7 +602,7 @@ async function applyPlan(
         status: "applied",
         before,
         afterFingerprint,
-        outcome: outcome("body", verification),
+        outcome: outcome("body", verification, checked),
       };
     });
   } catch (error) {
@@ -888,8 +923,12 @@ async function applyFullDocument(
         true,
         "verify",
       );
-      // The snapshot fingerprints the same package; the lazy package fingerprint is only a fallback.
-      const afterFingerprint = actual.fingerprint || after.fingerprint;
+      // Revert compares against this, written the same way from the package it would restore.
+      const afterFingerprint = wordWrittenPackageFingerprint(
+        after.ooxml,
+        live.ooxml,
+        actual.fingerprint,
+      ).fingerprint;
       const verification = verifyWordPlanWrite(plan, snapshot, actual);
       if (!verification.ok)
         return {
@@ -920,7 +959,7 @@ async function applyFullDocument(
         canRestore: () => currentWordDocumentUrl() === documentUrl,
       });
     const afterFingerprint = writing
-      ? await observeAfterFailure(true, documentUrl)
+      ? await observeAfterFailure(true, documentUrl, liveOoxml)
       : undefined;
     if (refusedUnchanged(error, stage, afterFingerprint, snapshot.fingerprint))
       return {
@@ -956,16 +995,22 @@ async function revertFullDocument(
   let stage: WordDocumentDiagnostic["stage"] = "preflight";
   let writing = false;
   let documentUrl: string | undefined;
+  let originalOoxml: string | undefined;
   let locks: WordContentControlLocks = [];
   let imported = false;
   try {
     const original = decodeWordDocumentBackup(before);
     documentUrl = original.documentUrl;
+    originalOoxml = original.ooxml;
     return await host.run(async (context) => {
       const live = await captureWordDocumentPackage();
       context.document.load("changeTrackingMode");
       await context.sync();
-      const contentChanged = live.fingerprint !== expectedAfter;
+      const written = wordWrittenPackageFingerprint(live.ooxml, original.ooxml);
+      const contentChanged = written.fingerprint !== expectedAfter;
+      const checked: WordHousekeepingCounts = written.redetected
+        ? { "proofing-language": written.redetected }
+        : {};
       const urlChanged =
         live.documentUrl !== original.documentUrl ||
         currentWordDocumentUrl() !== live.documentUrl;
@@ -985,6 +1030,7 @@ async function revertFullDocument(
             reason === "source-changed"
               ? {
                   ...(urlChanged ? { urlChanged } : {}),
+                  ...housekeepingDetails(checked),
                   ...packageStats([
                     ["source", original.ooxml],
                     ["live", live.ooxml],
@@ -1039,8 +1085,12 @@ async function revertFullDocument(
         true,
         "verify",
       );
-      const afterFingerprint = restored.fingerprint || after.fingerprint;
-      const verification = verifyWordRestore(expected, restored);
+      const afterFingerprint = wordWrittenPackageFingerprint(
+        after.ooxml,
+        original.ooxml,
+        restored.fingerprint,
+      ).fingerprint;
+      const verification = verifyWordRestore(expected, restored, live.ooxml);
       if (!verification.ok)
         return {
           status: "interrupted",
@@ -1058,7 +1108,7 @@ async function revertFullDocument(
       return {
         status: "reverted",
         afterFingerprint,
-        outcome: outcome("import", verification),
+        outcome: outcome("import", verification, checked),
       };
     });
   } catch (error) {
@@ -1067,7 +1117,7 @@ async function revertFullDocument(
         canRestore: () => currentWordDocumentUrl() === documentUrl,
       });
     const afterFingerprint = writing
-      ? await observeAfterFailure(true, documentUrl)
+      ? await observeAfterFailure(true, documentUrl, originalOoxml)
       : undefined;
     if (refusedUnchanged(error, stage, afterFingerprint, expectedAfter))
       return notAllowedRevert(error);

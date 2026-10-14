@@ -3197,12 +3197,16 @@ Each table takes:
 
 A key left out of a table keeps that host's default. On Word for the web the
 import cannot be undone with Word Undo, co-authors may lose concurrent edits,
-comment dates and resolved flags may change, and the add-in cannot verify the
-result, so it needs confirmation there by default. Unless the import is
-`allowed`, undoing an in-place change that did not verify never falls back to
-it.
+comment dates and resolved flags may change, and Word rewrites styles, settings
+and comment metadata on every import, so the add-in cannot verify the result.
+The import is therefore `off` there by default: a change that needs it is
+refused, with the proposed text to copy, and can be applied in Word for Windows
+or Mac instead. In-place and scoped changes are not affected. `confirm` is an
+explicit opt-in on the web; its result still can't be verified there. Unless
+the import is `allowed`, undoing an in-place change that did not verify never
+falls back to it.
 
-**Default value:** `{ pc = { in_place = false, whole_document_import = "allowed", package_read = true }, mac = { in_place = false, whole_document_import = "allowed", package_read = true }, web = { in_place = true, whole_document_import = "confirm", package_read = true } }`
+**Default value:** `{ pc = { in_place = false, whole_document_import = "allowed", package_read = true }, mac = { in_place = false, whole_document_import = "allowed", package_read = true }, web = { in_place = true, whole_document_import = "off", package_read = true } }`
 
 **Type:** `object`
 

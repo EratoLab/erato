@@ -19,7 +19,7 @@ export type WordApplyHost = "pc" | "mac" | "web";
 const DEFAULTS: Record<WordApplyHost, WordApplyPolicy> = {
   pc: { inPlace: false, wholeDocumentImport: "allowed", packageRead: true },
   mac: { inPlace: false, wholeDocumentImport: "allowed", packageRead: true },
-  web: { inPlace: true, wholeDocumentImport: "confirm", packageRead: true },
+  web: { inPlace: true, wholeDocumentImport: "off", packageRead: true },
 };
 
 const IMPORT_VALUES: readonly WordWholeDocumentImport[] = [

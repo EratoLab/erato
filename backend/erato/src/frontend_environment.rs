@@ -1588,7 +1588,7 @@ mod tests {
                 "word_apply": {
                     "pc": {"in_place": false, "whole_document_import": "allowed", "package_read": true},
                     "mac": {"in_place": false, "whole_document_import": "allowed", "package_read": true},
-                    "web": {"in_place": true, "whole_document_import": "confirm", "package_read": true},
+                    "web": {"in_place": true, "whole_document_import": "off", "package_read": true},
                 },
             }))
         );

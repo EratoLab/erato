@@ -2,7 +2,15 @@ import {
   parseWordDocumentPlan,
   validateWordDocumentPlan,
 } from "@erato/frontend/word-review";
-import { afterEach, describe, expect, it, onTestFinished, vi } from "vitest";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  onTestFinished,
+  vi,
+} from "vitest";
 
 import { setWordWebImport } from "../../../test/mocks/word/applyPolicy";
 import {
@@ -453,6 +461,7 @@ describe("bounded table-cell reads", () => {
 });
 
 describe("table-cell edits where the whole-document import needs confirmation", () => {
+  beforeEach(() => setWordWebImport("confirm"));
   afterEach(() => {
     resetWordInPlaceLatchForTests();
     noteWordParagraphIds([]);
@@ -555,7 +564,7 @@ describe("table-cell edits where the whole-document import needs confirmation", 
         {
           code: "web-needs-whole-document",
           message: expect.stringMatching(
-            /because of: latched\..*tell the user that this change can't be made in this version of Word right now\.$/,
+            /because of: latched\..*tell the user that this change needs Word for Windows or Mac\.$/,
           ),
         },
       ],

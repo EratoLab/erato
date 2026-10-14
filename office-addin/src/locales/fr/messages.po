@@ -2418,12 +2418,12 @@ msgstr "Word ne peut pas remplacer ce document, car il contient du contenu qu’
 #. js-lingui-explicit-id
 #: src/word/utils/wordAuthoringMessages.ts
 msgid "officeAddin.word.authoring.contentRefused.interrupted"
-msgstr "Word s’est arrêté, car ce document contient du contenu qu’il ne peut pas modifier, par exemple un sélecteur de date. Le document peut avoir été partiellement modifié. L’original est enregistré pour la récupération."
+msgstr "Word s’est arrêté, car ce document contient du contenu qu’il ne peut pas modifier. Le document peut avoir été partiellement modifié. L’original est enregistré pour la récupération."
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordAuthoringMessages.ts
 msgid "officeAddin.word.authoring.contentRefused.restore"
-msgstr "Word ne peut pas restaurer ce document, car il contient du contenu qu’il ne peut pas modifier, par exemple un sélecteur de date. Rien n’a été modifié. Téléchargez plutôt le document d’origine."
+msgstr "Word ne peut pas restaurer ce document, car il contient du contenu qu’il ne peut pas modifier. Rien n’a été modifié. Téléchargez plutôt le document d’origine."
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordAuthoringMessages.ts
@@ -2549,6 +2549,11 @@ msgstr "La réécriture n’a pas pu être appliquée. Le document n’a pas ét
 #: src/word/utils/wordAuthoringMessages.ts
 msgid "officeAddin.word.authoring.importDisabled"
 msgstr "Cette modification nécessite de réécrire tout le document, ce qui est désactivé pour cette version de Word. Rien n'a été appliqué. Demandez une modification plus limitée qui puisse être écrite directement dans le document."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.importDisabled.web"
+msgstr "Cette modification nécessite de réécrire tout le document, ce qu’Erato ne peut pas vérifier dans Word pour le web : rien n’a donc été appliqué. Copiez le brouillon et appliquez-le dans Word pour Windows ou Mac, ou demandez une modification plus limitée."
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordAuthoringMessages.ts
@@ -3439,6 +3444,11 @@ msgstr "Cette modification nécessite de réécrire tout le document, ce que vot
 #: src/word/utils/wordAuthoringMessages.ts
 msgid "officeAddin.word.importRefusal.scoped"
 msgstr "Cette modification ciblée ne peut pas être écrite directement dans le document dans cette version de Word, et une modification ciblée ne remplace jamais tout le document."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.importRefusal.web"
+msgstr "Cette modification nécessite de réécrire tout le document, ce qu’Erato ne peut pas vérifier dans Word pour le web : elle n’est donc pas appliquée ici. Copiez le brouillon et appliquez-le dans Word pour Windows ou Mac, ou redemandez des modifications directes."
 
 #. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts

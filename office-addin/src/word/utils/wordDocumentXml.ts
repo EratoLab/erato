@@ -34,12 +34,13 @@ import {
   compileWordStories,
   compileWordTableBlock,
   createWordXmlComparison,
+  wordHousekeepingDifferences,
+  wordHousekeepingTokens,
   wordParagraphStyleLooks,
 } from "@erato/frontend/word-review";
 
 import { wordReadableSourceBlock } from "./wordAuthoringReadData";
 import {
-  sameWordFullDocumentContent,
   wordFullDocumentDifferences,
   wordPackageGrew,
 } from "./wordFullDocumentComparison";
@@ -55,14 +56,15 @@ import type {
 } from "./wordFullDocumentComparison";
 import type {
   WordAuthoringSnapshot,
+  WordBodyReadHousekeeping,
   WordDocumentPlan,
+  WordHousekeepingCounts,
   WordPlanBlock,
   WordSourceBlock,
 } from "@erato/frontend/word-review";
 
 const W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
 const PKG = "http://schemas.microsoft.com/office/2006/xmlPackage";
-const CID = "http://schemas.microsoft.com/office/word/2016/wordml/cid";
 const REL = "http://schemas.openxmlformats.org/package/2006/relationships";
 const OFFICE_REL =
   "http://schemas.openxmlformats.org/officeDocument/2006/relationships/";
@@ -91,35 +93,24 @@ function parse(value: string): Document {
   return doc;
 }
 
-export function wordDocumentFingerprint(value: string): string {
-  return createWordXmlComparison(parse(value)).fingerprint();
+/** Body.getOoxml is not stable between reads of an unchanged body on Word for the web, so body
+ * reads are compared through WORD_HOUSEKEEPING's body-read entries; a complete package is not. */
+const BODY_READ = { bodyRead: true } as const;
+
+/** A Body.getOoxml read as a body capture records it, with what its housekeeping rules treat alike. */
+export function wordBodyRead(value: string): {
+  fingerprint: string;
+  housekeeping: WordBodyReadHousekeeping;
+} {
+  const doc = parse(value);
+  return {
+    fingerprint: createWordXmlComparison(doc, BODY_READ).fingerprint(),
+    housekeeping: wordHousekeepingTokens(doc),
+  };
 }
 
-/**
- * Word for the web's Body.getOoxml gives every list instance (w:num) a new w16cid:durableId on each
- * read, so two reads of an unchanged body differ there. Body reads are compared without it; a
- * complete package keeps it.
- */
-function withoutListInstanceIds(doc: Document): Document {
-  for (const num of Array.from(doc.getElementsByTagNameNS(W, "num")))
-    num.removeAttributeNS(CID, "durableId");
-  return doc;
-}
-
-function bodyComparable(ooxml: string): string {
-  if (!ooxml.includes("durableId")) return ooxml;
-  try {
-    return xml(withoutListInstanceIds(parse(ooxml)));
-  } catch {
-    return ooxml;
-  }
-}
-
-/** The fingerprint of a Body.getOoxml read, as a body capture records it. */
 export function wordBodyFingerprint(value: string): string {
-  return createWordXmlComparison(
-    withoutListInstanceIds(parse(value)),
-  ).fingerprint();
+  return wordBodyRead(value).fingerprint;
 }
 
 function paragraphText(p: Element): string {
@@ -164,10 +155,12 @@ export function captureWordAuthoringSnapshot(
   };
   try {
     const doc = parse(ooxml);
-    // Same result as wordDocumentFingerprint(ooxml), or wordBodyFingerprint for a body read, without
-    // a second parse; nothing below reads list instance IDs.
+    // Same result as wordPackageFingerprint(ooxml), or wordBodyFingerprint for a body read, without
+    // a second parse.
+    if (!fullDocument) base.housekeeping = wordHousekeepingTokens(doc);
     const fingerprint = createWordXmlComparison(
-      fullDocument ? doc : withoutListInstanceIds(doc),
+      doc,
+      fullDocument ? {} : BODY_READ,
     ).fingerprint();
     const body = wordMainBody(doc)!;
     const styleNodes = all(doc, "style");
@@ -827,8 +820,25 @@ export function wordPlanDraftText(
 }
 
 export type WordWriteVerification =
-  | { ok: true; tier: WordVerifyTier; adjustments: WordApplyAdjustment[] }
+  | {
+      ok: true;
+      tier: WordVerifyTier;
+      adjustments: WordApplyAdjustment[];
+      /** Differences WORD_HOUSEKEEPING hid, by rule; absent when none. */
+      housekeeping?: WordHousekeepingCounts;
+    }
   | { ok: false; reason: "output-mismatch" | "package-growth" };
+
+interface WordComparison {
+  ok: boolean;
+  adjustments: WordApplyAdjustment[];
+  housekeeping?: WordHousekeepingCounts;
+}
+
+const hidden = (
+  counts: WordHousekeepingCounts | undefined,
+): { housekeeping?: WordHousekeepingCounts } =>
+  counts && Object.keys(counts).length ? { housekeeping: counts } : {};
 
 /** The only check for compiling and submitting a plan; write verification extends it. */
 export function verifyWordPlanOutput(
@@ -857,26 +867,62 @@ export function verifyWordPlanWrite(
       before.fullDocument,
       "verify",
     ));
-  if (comparePlanOutput(plan, before, after, "strict", compiled).ok)
-    return { ok: true, tier: "strict", adjustments: [] };
+  const strict = comparePlanOutput(plan, before, after, "strict", compiled);
+  if (strict.ok)
+    return {
+      ok: true,
+      tier: "strict",
+      adjustments: [],
+      ...hidden(strict.housekeeping),
+    };
   const content = comparePlanOutput(plan, before, after, "content", compiled);
   return content.ok
-    ? { ok: true, tier: "content", adjustments: content.adjustments }
+    ? {
+        ok: true,
+        tier: "content",
+        adjustments: content.adjustments,
+        ...hidden(content.housekeeping),
+      }
     : { ok: false, reason: "output-mismatch" };
 }
 
-/** Restoring the saved original is an import too; it gets the same tiers and growth guard. */
+/** Restoring the saved original is an import too; it gets the same tiers and growth guard.
+ * `replaced` is the complete package the restore wrote over. */
 export function verifyWordRestore(
   original: WordAuthoringSnapshot,
   restored: WordAuthoringSnapshot,
+  replaced?: string,
 ): WordWriteVerification {
   if (wordPackageGrew(original.ooxml, restored.ooxml))
     return { ok: false, reason: "package-growth" };
-  if (compareSnapshots(original, restored, "strict").ok)
-    return { ok: true, tier: "strict", adjustments: [] };
-  const content = compareSnapshots(original, restored, "content", true);
+  const strict = compareSnapshots(
+    original,
+    restored,
+    "strict",
+    false,
+    replaced,
+  );
+  if (strict.ok)
+    return {
+      ok: true,
+      tier: "strict",
+      adjustments: [],
+      ...hidden(strict.housekeeping),
+    };
+  const content = compareSnapshots(
+    original,
+    restored,
+    "content",
+    true,
+    replaced,
+  );
   return content.ok
-    ? { ok: true, tier: "content", adjustments: content.adjustments }
+    ? {
+        ok: true,
+        tier: "content",
+        adjustments: content.adjustments,
+        ...hidden(content.housekeeping),
+      }
     : { ok: false, reason: "output-mismatch" };
 }
 
@@ -924,7 +970,7 @@ function comparePlanOutput(
       before.fullDocument,
       "verify",
     ),
-): { ok: boolean; adjustments: WordApplyAdjustment[] } {
+): WordComparison {
   const touchedNative =
     plan.entries.some(
       (e) =>
@@ -964,10 +1010,11 @@ function comparePlanOutput(
       after,
       tier,
       tier === "content" && firstParagraphFormatKept(plan, before),
+      before.fullDocument ? before.ooxml : undefined,
     );
   const expected = wordPlanOutput(plan, before);
-  const beforeNative = createNativeContentSignature(before.ooxml);
-  const afterNative = createNativeContentSignature(after.ooxml);
+  const beforeNative = createNativeContentSignature(before.ooxml, BODY_READ);
+  const afterNative = createNativeContentSignature(after.ooxml, BODY_READ);
   const actualBlocks = verifiedBodyBlocks(
     expected.map((e) => e.block),
     after.blocks,
@@ -976,9 +1023,11 @@ function comparePlanOutput(
   const ok =
     !after.issue &&
     sameWordPreservedParts(
-      bodyComparable(before.ooxml),
-      bodyComparable(after.ooxml),
+      before.ooxml,
+      after.ooxml,
       tier,
+      undefined,
+      BODY_READ,
     ) &&
     expected.length === actualBlocks.length &&
     expected.every((e, i) => {
@@ -1005,6 +1054,9 @@ function comparePlanOutput(
   return {
     ok,
     adjustments: ok && tier === "content" ? ["numbering-identity"] : [],
+    ...hidden(
+      wordHousekeepingDifferences(before.housekeeping, after.housekeeping),
+    ),
   };
 }
 
@@ -1015,46 +1067,42 @@ export function sameWordBodyContent(
   return compareSnapshots(a, b, "strict").ok;
 }
 
+/** `replaced`: the complete package the write that produced `b` wrote over. */
 function compareSnapshots(
   a: WordAuthoringSnapshot,
   b: WordAuthoringSnapshot,
   tier: WordVerifyTier,
   allowFirstParagraphSpacing = false,
-): { ok: boolean; adjustments: WordApplyAdjustment[] } {
+  replaced?: string,
+): WordComparison {
   if (a.fullDocument && b.fullDocument) {
-    if (a.issue || b.issue) return { ok: false, adjustments: [] };
-    if (tier === "strict")
-      return {
-        ok: sameWordFullDocumentContent(a.ooxml, b.ooxml),
-        adjustments: [],
-      };
+    const failed = { ok: false, adjustments: [] };
+    if (a.issue || b.issue) return failed;
     try {
-      const { parts, adjustments } = wordFullDocumentDifferences(
+      const { parts, adjustments, housekeeping } = wordFullDocumentDifferences(
         a.ooxml,
         b.ooxml,
         false,
         tier,
         allowFirstParagraphSpacing,
+        replaced,
       );
       return {
         ok: !parts.length,
         adjustments: parts.length ? [] : adjustments,
+        ...hidden(housekeeping),
       };
     } catch {
-      return { ok: false, adjustments: [] };
+      return failed;
     }
   }
-  const beforeNative = createNativeContentSignature(a.ooxml);
-  const afterNative = createNativeContentSignature(b.ooxml);
+  const beforeNative = createNativeContentSignature(a.ooxml, BODY_READ);
+  const afterNative = createNativeContentSignature(b.ooxml, BODY_READ);
   const actualBlocks = verifiedBodyBlocks(a.blocks, b.blocks, afterNative);
   const ok =
     !a.issue &&
     !b.issue &&
-    sameWordPreservedParts(
-      bodyComparable(a.ooxml),
-      bodyComparable(b.ooxml),
-      tier,
-    ) &&
+    sameWordPreservedParts(a.ooxml, b.ooxml, tier, undefined, BODY_READ) &&
     a.blocks.length === actualBlocks.length &&
     a.blocks.every(
       (block, i) =>
@@ -1063,6 +1111,7 @@ function compareSnapshots(
   return {
     ok,
     adjustments: ok && tier === "content" ? ["numbering-identity"] : [],
+    ...hidden(wordHousekeepingDifferences(a.housekeeping, b.housekeeping)),
   };
 }
 

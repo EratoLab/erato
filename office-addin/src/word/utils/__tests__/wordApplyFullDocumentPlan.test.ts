@@ -23,6 +23,7 @@ import {
   insertWordDocumentFile,
   wordDocumentFileToOoxml,
   wordDocumentOoxmlToFile,
+  wordPackageFingerprint,
 } from "../wordDocumentPackage";
 import { wordDocxBase64 } from "../wordDocumentPackageCodec";
 import { WordDocumentReadSession } from "../wordDocumentReadTool";
@@ -31,7 +32,6 @@ import {
   captureWordAuthoringSnapshot,
   compileWordDocumentPlan,
   verifyWordPlanOutput,
-  wordDocumentFingerprint,
 } from "../wordDocumentXml";
 
 import type { WordOoxmlHostOptions } from "../../../test/mocks/word/ooxmlHost";
@@ -578,7 +578,7 @@ describe("complete-document writer", { timeout: 15_000 }, () => {
     expect(result.before).toBe(backup.mock.calls[0][0]);
     expect(decodeWordDocumentBackup(result.before!).bytes).toEqual(bytes);
     expect(result.afterFingerprint).toBe(
-      wordDocumentFingerprint(wordDocumentFileToOoxml(host.get())),
+      wordPackageFingerprint(wordDocumentFileToOoxml(host.get())),
     );
     expect(host.insert).toHaveBeenCalledOnce();
     host.resume();
@@ -673,6 +673,7 @@ describe(
   "whole-document writes on Word for the web",
   { timeout: 30_000 },
   () => {
+    beforeEach(() => setWordWebImport("confirm"));
     const context = {
       chatId: "chat-A",
       messageId: "message-A",
@@ -1025,3 +1026,176 @@ describe(
     });
   },
 );
+
+describe(
+  "proofing language Word re-detects after an import (ERMAIN-969)",
+  { timeout: 30_000 },
+  () => {
+    const W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
+    const STATUS = "Status: revised in plain English.";
+    const QUESTIONS = "Open questions follow.";
+    /** Sets the proofing language of the body paragraph starting `prefix`, on its mark and runs,
+     * as Word PC tags English text in a German document (ERMAIN-970 lang probe). */
+    const tag = (xml: string, prefix: string, lang = "en-US") => {
+      const doc = new DOMParser().parseFromString(xml, "application/xml");
+      const paragraph = Array.from(doc.getElementsByTagNameNS(W, "p")).find(
+        (p) =>
+          Array.from(p.getElementsByTagNameNS(W, "t"))
+            .map((t) => t.textContent)
+            .join("")
+            .startsWith(prefix),
+      );
+      if (!paragraph) throw new Error(`No paragraph starting ${prefix}`);
+      const own = (parent: Element, local: string, first: boolean) => {
+        const existing = Array.from(parent.children).find(
+          (e) => e.namespaceURI === W && e.localName === local,
+        );
+        if (existing) return existing;
+        const created = doc.createElementNS(W, `w:${local}`);
+        if (first) parent.insertBefore(created, parent.firstChild);
+        else parent.append(created);
+        return created;
+      };
+      const properties = own(paragraph, "pPr", true);
+      const runs = Array.from(paragraph.children).filter(
+        (e) => e.namespaceURI === W && e.localName === "r",
+      );
+      for (const rPr of [
+        own(properties, "rPr", false),
+        ...runs.map((r) => own(r, "rPr", true)),
+      ]) {
+        const language = own(rPr, "lang", false);
+        language.setAttributeNS(W, "w:val", lang);
+      }
+      return new XMLSerializer().serializeToString(doc);
+    };
+    const original = () =>
+      tag(tag(realisticWordPackageXml(), "Status"), QUESTIONS);
+    async function applied(wordTagsBeforeVerify = false): Promise<{
+      host: ReturnType<typeof installWordOoxmlHost>;
+      result: Awaited<ReturnType<typeof applyWordDocumentPlan>>;
+    }> {
+      const host = installWordOoxmlHost(original(), {
+        profile: "word-pc-16.0.20326",
+      });
+      const snapshot = await captureRealisticSnapshot();
+      if (wordTagsBeforeVerify)
+        host.userEdit((xml) => tag(xml, STATUS), "after-import");
+      const result = await applyWordDocumentPlan(
+        JSON.stringify(statusRewritePlan(snapshot, STATUS)),
+        snapshot,
+        "message-A",
+      );
+      expect(result).toMatchObject({
+        status: "applied",
+        outcome: { route: "import" },
+      });
+      return { host, result };
+    }
+    const revert = (
+      result: Awaited<ReturnType<typeof applyWordDocumentPlan>>,
+    ) => revertWordDocumentPlan(result.before!, result.afterFingerprint!);
+
+    beforeEach(() => {
+      delete window.WORD_IN_PLACE_APPLY;
+    });
+    afterEach(() => {
+      window.WORD_IN_PLACE_APPLY = true;
+    });
+
+    it("reverts once Word has tagged the written paragraph with its source's language", async () => {
+      const { host, result } = await applied();
+      expect(result.outcome?.housekeeping).toBeUndefined();
+      host.userEdit((xml) => tag(xml, STATUS));
+      expect(await revert(result)).toMatchObject({
+        status: "reverted",
+        outcome: { route: "import", housekeeping: { "proofing-language": 2 } },
+      });
+      expect(host.ooxml()).not.toContain(STATUS);
+    });
+
+    it("verifies an import Word tagged before the verify read, and reverts it", async () => {
+      const { result } = await applied(true);
+      expect(result.outcome?.housekeeping).toEqual({ "proofing-language": 2 });
+      expect((await revert(result)).status).toBe("reverted");
+    });
+
+    it("still refuses Revert after the user sets another language on the written paragraph", async () => {
+      const { host, result } = await applied();
+      host.userEdit((xml) => tag(tag(xml, STATUS), STATUS, "fr-FR"));
+      expect(await revert(result)).toMatchObject({
+        status: "stale",
+        diagnostic: { stage: "preflight", reason: "source-changed" },
+      });
+      expect(host.insert).toHaveBeenCalledOnce();
+    });
+
+    it("still refuses Revert after the user sets a language on a paragraph the import kept", async () => {
+      const { host, result } = await applied();
+      host.userEdit((xml) => tag(tag(xml, STATUS), QUESTIONS, "fr-FR"));
+      expect(await revert(result)).toMatchObject({
+        status: "stale",
+        diagnostic: {
+          reason: "source-changed",
+          details: { housekeeping: { "proofing-language": 2 } },
+        },
+      });
+      expect(host.insert).toHaveBeenCalledOnce();
+    });
+  },
+);
+
+describe("whole-document writes on Word for the web by default", () => {
+  const sections = (snapshot: WordAuthoringSnapshot) =>
+    JSON.stringify({
+      ...statusRewritePlan(snapshot, "Status: revised."),
+      sections: [
+        {
+          id: "final",
+          source: "section-1",
+          layout: { orientation: "landscape" },
+        },
+      ],
+    } satisfies WordDocumentPlan);
+
+  it("refuses a plan that needs the import, even confirmed, before anything is saved", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const host = installWordOoxmlHost(realisticWordPackageXml());
+    const snapshot = await captureRealisticSnapshot();
+    const save = vi.fn();
+    const result = await applyWordDocumentPlan(
+      sections(snapshot),
+      snapshot,
+      "message-A",
+      save,
+      undefined,
+      { importConfirmed: true },
+    );
+    expect(result).toMatchObject({
+      status: "blocked",
+      diagnostic: {
+        stage: "validate",
+        reason: "import-disabled",
+        details: { route: "import", routeReason: "sections" },
+      },
+    });
+    expect(host.insert).not.toHaveBeenCalled();
+    expect(save).not.toHaveBeenCalled();
+    expect(snapshot.used).toBe(false);
+  });
+
+  it("still writes a reword in place", async () => {
+    const host = installWordOoxmlHost(realisticWordPackageXml());
+    const snapshot = await captureRealisticSnapshot();
+    const result = await applyWordDocumentPlan(
+      JSON.stringify(statusRewritePlan(snapshot, "Status: reworded in place.")),
+      snapshot,
+      "message-A",
+    );
+    expect(result).toMatchObject({
+      status: "applied",
+      outcome: { route: "in-place" },
+    });
+    expect(host.insert).not.toHaveBeenCalled();
+  });
+});

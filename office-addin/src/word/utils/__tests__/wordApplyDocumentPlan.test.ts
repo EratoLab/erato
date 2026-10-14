@@ -469,6 +469,7 @@ describe("whole-body writes on Word for the web", () => {
     messageId: "message-A",
     toolCallId: "read",
   };
+  beforeEach(() => setWordWebImport("confirm"));
   beforeEach(() => {
     vi.stubGlobal("Office", {
       context: {
@@ -578,6 +579,86 @@ describe("whole-body writes on Word for the web", () => {
         status: "blocked",
         diagnostic: { stage: "write", reason: "not-allowed" },
       });
+    });
+  });
+
+  describe("with a table and theme fonts, which Word for the web reads out two ways", () => {
+    const W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
+    const look = (val: string, flags: string) => {
+      const [firstRow, firstColumn, noVBand] = flags;
+      return `<w:tblLook w:val="${val}" w:firstRow="${firstRow}" w:lastRow="0" w:firstColumn="${firstColumn}" w:lastColumn="0" w:noHBand="0" w:noVBand="${noVBand}"/>`;
+    };
+    const [NONE, FALLBACK, HEADER] = [
+      look("0000", "000"),
+      look("04A0", "111"),
+      look("0020", "100"),
+    ];
+    const settings = `<pkg:part pkg:name="/word/settings.xml" pkg:contentType="application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml"><pkg:xmlData><w:settings xmlns:w="${W}"><w:themeFontLang w:val="en-GB" w:eastAsia="ja-JP" w:bidi="ar-SA"/></w:settings></pkg:xmlData></pkg:part>`;
+    const source = (tableLook = NONE) =>
+      readySnapshot()
+        .ooxml.replace(
+          "<w:sectPr>",
+          `<w:tbl><w:tblPr><w:tblW w:w="0" w:type="auto"/>${tableLook}</w:tblPr><w:tblGrid><w:gridCol w:w="2000"/></w:tblGrid><w:tr><w:tc><w:p><w:r><w:t>Cell</w:t></w:r></w:p></w:tc></w:tr></w:tbl><w:sectPr>`,
+        )
+        .replace("</pkg:package>", `${settings}</pkg:package>`);
+    let reads = 0;
+    // Every other read, as base-web.docx (table look) and v3c-multi.docx (theme fonts) gave them.
+    const alternate = (value: string) =>
+      reads++ % 2
+        ? value
+        : value
+            .replace(NONE, FALLBACK)
+            .replace('w:val="en-GB"', 'w:val="en-US"');
+    const plan = (token: string) => {
+      const value = examplePlan(token);
+      value.entries.push({ kind: "keep", source: ["b7"] });
+      return JSON.stringify(value);
+    };
+
+    it("applies and reverts a confirmed body replace across those reads", async () => {
+      reads = 0;
+      const s = readySnapshot(source());
+      word(s.ooxml, undefined, alternate);
+      const applied = await applyWordDocumentPlan(
+        plan(s.token),
+        s,
+        "message-A",
+        undefined,
+        undefined,
+        { importConfirmed: true },
+      );
+      expect(applied).toMatchObject({
+        status: "applied",
+        outcome: {
+          route: "body",
+          tier: "strict",
+          housekeeping: { "table-look": 1, "theme-font-language": 1 },
+        },
+      });
+      expect(
+        await revertWordDocumentPlan(
+          applied.before!,
+          applied.afterFingerprint!,
+        ),
+      ).toMatchObject({ status: "reverted", outcome: { tier: "strict" } });
+    });
+
+    it("still finds the body changed when the table's look really changed", async () => {
+      const s = readySnapshot(source());
+      const host = word(source(HEADER));
+      const result = await applyWordDocumentPlan(
+        plan(s.token),
+        s,
+        "message-A",
+        undefined,
+        undefined,
+        { importConfirmed: true },
+      );
+      expect(result).toMatchObject({
+        status: "stale",
+        diagnostic: { stage: "preflight", reason: "source-changed" },
+      });
+      expect(host.insert).not.toHaveBeenCalled();
     });
   });
 

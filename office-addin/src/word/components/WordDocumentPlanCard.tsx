@@ -107,8 +107,19 @@ import type {
   WordClientAction,
   WordClientActionEntry,
 } from "../utils/wordClientActions";
+import type { WordCoauthoringState } from "../utils/wordCoauthoring";
 import type { WordInPlaceBackup } from "../utils/wordDocumentPackage";
 import type { WordDocumentPlan } from "@erato/frontend/word-review";
+
+function coauthorNotice(
+  state: WordCoauthoringState | undefined,
+): "editing" | "pending" | undefined {
+  return state?.othersEditing
+    ? "editing"
+    : state?.pendingUpdates
+      ? "pending"
+      : undefined;
+}
 
 export function WordDocumentPlanCard({
   entry,
@@ -251,26 +262,23 @@ export function WordDocumentPlanCard({
     if (!checkCoauthors || coauthorsRead.current) return;
     coauthorsRead.current = true;
     void readWordCoauthoring().then((state) =>
-      setCoauthors(
-        state?.othersEditing
-          ? "editing"
-          : state?.pendingUpdates
-            ? "pending"
-            : undefined,
-      ),
+      setCoauthors(coauthorNotice(state)),
     );
   }, [checkCoauthors]);
   const run = useCallback(
     async (importConfirmed: boolean) => {
       // Always allow and auto-prompt reach this too; only the card's own tick confirms.
-      if (
-        !ready ||
-        !capture ||
-        refusal ||
-        (confirmImport && !importConfirmed) ||
-        !host.beginOperation()
-      )
+      if (!ready || !capture || refusal || (confirmImport && !importConfirmed))
         return false;
+      if (checkCoauthors) {
+        // Someone who joined since the card was read is shown before anything is replaced.
+        const now = coauthorNotice(await readWordCoauthoring());
+        if (now !== coauthors) {
+          setCoauthors(now);
+          if (now) return false;
+        }
+      }
+      if (!host.beginOperation()) return false;
       host.updateReview(key, {
         status: "applying",
         applyStage: "checking",
@@ -362,6 +370,8 @@ export function WordDocumentPlanCard({
       capture,
       refusal,
       confirmImport,
+      checkCoauthors,
+      coauthors,
       host,
       key,
       entry,

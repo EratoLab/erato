@@ -21,11 +21,9 @@ import {
 import {
   decodeWordDocumentBackup,
   decodeWordInPlaceBackup,
+  wordPackageFingerprint,
 } from "../wordDocumentPackage";
-import {
-  captureWordAuthoringSnapshot,
-  wordDocumentFingerprint,
-} from "../wordDocumentXml";
+import { captureWordAuthoringSnapshot } from "../wordDocumentXml";
 import {
   setWordInPlaceCapabilitiesForTests,
   wordInPlaceCapabilities,
@@ -325,7 +323,7 @@ describe("in-place apply", { timeout: 30_000 }, () => {
   it("reverts an in-place write to the exact original package", async () => {
     withMarks();
     const host = install();
-    const original = wordDocumentFingerprint(host.ooxml());
+    const original = wordPackageFingerprint(host.ooxml());
     const snapshot = await captureRealisticSnapshot();
     const applied = await apply(
       rewrite(snapshot, [
@@ -344,7 +342,7 @@ describe("in-place apply", { timeout: 30_000 }, () => {
       snapshot,
     );
     expect(applied.status, report(applied)).toBe("applied");
-    expect(wordDocumentFingerprint(host.ooxml())).not.toBe(original);
+    expect(wordPackageFingerprint(host.ooxml())).not.toBe(original);
     const reverted = await revertWordDocumentPlan(
       applied.before!,
       applied.afterFingerprint!,
@@ -354,13 +352,13 @@ describe("in-place apply", { timeout: 30_000 }, () => {
       route: "in-place",
       tier: "block",
     });
-    expect(wordDocumentFingerprint(host.ooxml())).toBe(original);
+    expect(wordPackageFingerprint(host.ooxml())).toBe(original);
     expect(host.insert).not.toHaveBeenCalled();
   });
 
   it("still undoes an in-place write in place after the kill switch was turned on", async () => {
     const host = install();
-    const original = wordDocumentFingerprint(host.ooxml());
+    const original = wordPackageFingerprint(host.ooxml());
     const snapshot = await captureRealisticSnapshot();
     const applied = await apply(
       rewrite(snapshot, [[STATUS, { text: "Status: rewritten." }]]),
@@ -375,7 +373,7 @@ describe("in-place apply", { timeout: 30_000 }, () => {
     expect(reverted.status, report(reverted, "revert")).toBe("reverted");
     expect(reverted.outcome?.route).toBe("in-place");
     expect(host.insert).not.toHaveBeenCalled();
-    expect(wordDocumentFingerprint(host.ooxml())).toBe(original);
+    expect(wordPackageFingerprint(host.ooxml())).toBe(original);
   });
 
   it("applies a plan without changes as a no-op", async () => {
@@ -396,6 +394,7 @@ describe("in-place apply", { timeout: 30_000 }, () => {
 
 describe("in-place routing", { timeout: 30_000 }, () => {
   it("sends the same plan to the import while the kill switch is on", async () => {
+    onTestFinished(setWordWebImport("confirm"));
     window.WORD_FORCE_IMPORT_APPLY = true;
     const host = install({ profile: "word-web" });
     const snapshot = await captureRealisticSnapshot();
@@ -440,7 +439,7 @@ describe("in-place routing", { timeout: 30_000 }, () => {
     ]);
     expect(report(result)).toContain("Route: in-place");
     expect(result.before).toBeTruthy();
-    expect(result.afterFingerprint).toBe(wordDocumentFingerprint(host.ooxml()));
+    expect(result.afterFingerprint).toBe(wordPackageFingerprint(host.ooxml()));
     const record = decodeWordInPlaceBackup(result.before!).inPlace!;
     expect(record.scopedFallback).toBe(true);
     expect(record.mismatched).toEqual([0]);
@@ -472,6 +471,7 @@ describe("in-place routing", { timeout: 30_000 }, () => {
   });
 
   it("falls back to the import before saving anything when body.paragraphs differs from the package, on the web only once confirmed", async () => {
+    onTestFinished(setWordWebImport("confirm"));
     const xml = inPlaceFixture((doc) => {
       const body = doc.getElementsByTagNameNS(W, "body")[0];
       const holder = new DOMParser().parseFromString(
@@ -574,7 +574,7 @@ describe("in-place failure and recovery", { timeout: 30_000 }, () => {
 
   it("reports a batch Word rejected midway by change and reverts the written part exactly", async () => {
     const host = install();
-    const original = wordDocumentFingerprint(host.ooxml());
+    const original = wordPackageFingerprint(host.ooxml());
     vi.spyOn(console, "warn").mockImplementation(() => {});
     const snapshot = await captureRealisticSnapshot();
     host.failAtCommand(2);
@@ -616,12 +616,12 @@ describe("in-place failure and recovery", { timeout: 30_000 }, () => {
       result.afterFingerprint!,
     );
     expect(reverted.status, report(reverted, "revert")).toBe("reverted");
-    expect(wordDocumentFingerprint(host.ooxml())).toBe(original);
+    expect(wordPackageFingerprint(host.ooxml())).toBe(original);
   });
 
   it("counts a region Word left half written per change", async () => {
     const host = install();
-    const original = wordDocumentFingerprint(host.ooxml());
+    const original = wordPackageFingerprint(host.ooxml());
     vi.spyOn(console, "warn").mockImplementation(() => {});
     const snapshot = await captureRealisticSnapshot();
     // Adjacent list items form one region, written last to first: the second write is rejected.
@@ -646,7 +646,7 @@ describe("in-place failure and recovery", { timeout: 30_000 }, () => {
       result.afterFingerprint!,
     );
     expect(reverted.status, report(reverted, "revert")).toBe("reverted");
-    expect(wordDocumentFingerprint(host.ooxml())).toBe(original);
+    expect(wordPackageFingerprint(host.ooxml())).toBe(original);
   });
 
   it("reverts around a later edit to another paragraph and keeps that edit", async () => {
@@ -871,7 +871,7 @@ describe(
         replaceDropsRunProperties: true,
       });
       vi.spyOn(console, "warn").mockImplementation(() => {});
-      const original = wordDocumentFingerprint(host.ooxml());
+      const original = wordPackageFingerprint(host.ooxml());
       const snapshot = await captureRealisticSnapshot();
       const applied = await apply(closingRewrite(snapshot), snapshot);
       expect(applied.status).toBe("interrupted");
@@ -882,7 +882,7 @@ describe(
       expect(reverted.status, report(reverted, "revert")).toBe("reverted");
       expect(reverted.outcome?.route).toBe("import");
       expect(host.insert).toHaveBeenCalledOnce();
-      expect(wordDocumentFingerprint(host.ooxml())).toBe(original);
+      expect(wordPackageFingerprint(host.ooxml())).toBe(original);
     });
 
     it("undoes only the written paragraphs when a later edit elsewhere blocks the exact restore", async () => {
@@ -983,7 +983,7 @@ describe(
         boldStatus,
       );
       vi.spyOn(console, "warn").mockImplementation(() => {});
-      const original = wordDocumentFingerprint(host.ooxml());
+      const original = wordPackageFingerprint(host.ooxml());
       const snapshot = await captureRealisticSnapshot();
       const applied = await apply(
         rewrite(snapshot, [
@@ -1009,7 +1009,7 @@ describe(
       expect(reverted.status, report(reverted, "revert")).toBe("reverted");
       expect(reverted.outcome?.route).toBe("in-place");
       expect(host.insert).not.toHaveBeenCalled();
-      expect(wordDocumentFingerprint(host.ooxml())).toBe(original);
+      expect(wordPackageFingerprint(host.ooxml())).toBe(original);
     });
 
     it.each([
@@ -1054,7 +1054,7 @@ describe(
       onTestFinished(allowWordWebImport());
       const host = install({ profile: "word-web" });
       vi.spyOn(console, "warn").mockImplementation(() => {});
-      const original = wordDocumentFingerprint(host.ooxml());
+      const original = wordPackageFingerprint(host.ooxml());
       const snapshot = await captureRealisticSnapshot();
       host.setReplaceFault("edits-next");
       const applied = await apply(
@@ -1068,7 +1068,7 @@ describe(
         `/word/document.xml body block ${next}: signature`,
       ]);
       expect(applied.afterFingerprint).toBe(
-        wordDocumentFingerprint(host.ooxml()),
+        wordPackageFingerprint(host.ooxml()),
       );
       expect(
         decodeWordInPlaceBackup(applied.before!).inPlace?.scopedFallback,
@@ -1080,7 +1080,7 @@ describe(
       );
       expect(reverted.status, report(reverted, "revert")).toBe("reverted");
       expect(reverted.outcome?.route).toBe("import");
-      expect(wordDocumentFingerprint(host.ooxml())).toBe(original);
+      expect(wordPackageFingerprint(host.ooxml())).toBe(original);
     });
 
     it("keeps later edits and the download when Word also changed a paragraph it was not asked to", async () => {

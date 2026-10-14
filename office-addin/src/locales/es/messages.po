@@ -2418,12 +2418,12 @@ msgstr "Word no puede reemplazar este documento porque contiene contenido que no
 #. js-lingui-explicit-id
 #: src/word/utils/wordAuthoringMessages.ts
 msgid "officeAddin.word.authoring.contentRefused.interrupted"
-msgstr "Word se detuvo porque este documento contiene contenido que no puede editar, por ejemplo un selector de fecha. El documento puede haber cambiado parcialmente. El original está guardado para recuperarlo."
+msgstr "Word se detuvo porque este documento contiene contenido que no puede editar. El documento puede haber cambiado parcialmente. El original está guardado para recuperarlo."
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordAuthoringMessages.ts
 msgid "officeAddin.word.authoring.contentRefused.restore"
-msgstr "Word no puede restaurar este documento porque contiene contenido que no puede editar, por ejemplo un selector de fecha. No se ha cambiado nada. Descarga el documento original en su lugar."
+msgstr "Word no puede restaurar este documento porque contiene contenido que no puede editar. No se ha cambiado nada. Descarga el documento original en su lugar."
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordAuthoringMessages.ts
@@ -2549,6 +2549,11 @@ msgstr "No se pudo aplicar la reescritura. No se realizaron cambios en el docume
 #: src/word/utils/wordAuthoringMessages.ts
 msgid "officeAddin.word.authoring.importDisabled"
 msgstr "Este cambio requiere reescribir todo el documento, lo que está desactivado para esta versión de Word. No se aplicó nada. Pida una modificación más pequeña que pueda escribirse directamente en el documento."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.importDisabled.web"
+msgstr "Este cambio requiere reescribir todo el documento, algo que Erato no puede verificar en Word para la web, así que no se aplicó nada. Copia el borrador y aplícalo en Word para Windows o Mac, o pide una edición más pequeña."
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordAuthoringMessages.ts
@@ -3439,6 +3444,11 @@ msgstr "Este cambio requiere reescribir todo el documento, algo que tu organizac
 #: src/word/utils/wordAuthoringMessages.ts
 msgid "officeAddin.word.importRefusal.scoped"
 msgstr "Esta modificación puntual no puede escribirse directamente en el documento en esta versión de Word, y una modificación puntual nunca reemplaza todo el documento."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.importRefusal.web"
+msgstr "Este cambio requiere reescribir todo el documento, algo que Erato no puede verificar en Word para la web, así que no se aplica aquí. Copia el borrador y aplícalo en Word para Windows o Mac, o vuelve a pedir ediciones directas."
 
 #. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts

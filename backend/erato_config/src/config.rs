@@ -6865,10 +6865,12 @@ impl MsOfficeAddinWordApplySettings {
         package_read: true,
     };
     // On the web the import attributes its tracked changes to "Unknown", rewrites comment dates
-    // and resolved flags, and Word Undo cannot take it back (ERMAIN-960).
+    // and resolved flags, and Word Undo cannot take it back (ERMAIN-960). Its result can't be
+    // verified either: Word for the web rewrites styles, settings and comment metadata on every
+    // import (ERMAIN-970).
     const WEB_DEFAULTS: MsOfficeAddinWordApplyPolicy = MsOfficeAddinWordApplyPolicy {
         in_place: true,
-        whole_document_import: MsOfficeAddinWordWholeDocumentImport::Confirm,
+        whole_document_import: MsOfficeAddinWordWholeDocumentImport::Off,
         package_read: true,
     };
 

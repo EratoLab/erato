@@ -15,6 +15,7 @@ import type {
   WordParagraphFormatting,
   WordRunFormatting,
 } from "./wordBlockFormatting";
+import type { WordBodyReadHousekeeping } from "./wordHousekeeping";
 import type { WordImageAsset, WordImageAssetIssue } from "./wordImageAssetData";
 import type {
   WordFieldSpec,
@@ -144,6 +145,8 @@ export interface WordAuthoringSnapshot {
   preservedStories?: string[];
   /** True only when all DOCX parts were read, including out-of-body stories. */
   fullDocument?: boolean;
+  /** What WORD_HOUSEKEEPING normalized in a body read, for content-free diagnostics. */
+  housekeeping?: WordBodyReadHousekeeping;
   documentUrl?: string;
   stories?: WordStorySource[];
   sections?: WordSectionSource[];
