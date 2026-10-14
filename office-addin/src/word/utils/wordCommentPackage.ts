@@ -9,9 +9,10 @@ import type { WordCommentWhere } from "@erato/frontend/word-review";
  * Every host's paragraph package carries the comments parts, so a mark's package-local w:id leads
  * to Comment.id: w:id → the comment's last paragraph's w14:paraId → commentsIds durableId (hex),
  * whose decimal String() is Comment.id (probe ERMAIN-947, G1 and P-JOIN). A comment that spans
- * paragraphs has no marks in either end paragraph's own package; the package of the range from
- * the first to the last paragraph has them, and so does the comment's getRange().text by text
- * arithmetic, which is the only route on the web.
+ * paragraphs has no marks in either end paragraph's own package; on desktop the package of the
+ * range from the first to the last paragraph has them, and so does the comment's getRange().text by
+ * text arithmetic. Word for the web reads neither (wordReadsCommentRanges), so there such an anchor
+ * gets no offsets.
  */
 
 const W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
@@ -44,6 +45,8 @@ export interface WordPackageComment {
    * session's on desktop, but not Comment.id on the web.
    */
   commentId: string | null;
+  /** w:author. */
+  author: string;
   /** The w:id of the comment this one replies to (commentsExtended). */
   parentWId: string | null;
   /** commentsExtensible's dateUtc; null when the file has none for this comment. */
@@ -538,6 +541,7 @@ function packageComments(doc: Document): WordPackageComment[] {
     return {
       wId: attr(comment, "id") ?? "",
       commentId: durableId ? String(parseInt(durableId, 16)) : null,
+      author: attr(comment, "author") ?? "",
       parentWId: parent ? (wIdByParaId.get(parent) ?? null) : null,
       dateUtc: (durableId && dateUtc.get(durableId)) || null,
       content: commentText(comment),
@@ -710,6 +714,16 @@ export interface WordListedComment {
   content: string;
   /** Comment.getRange().text */
   rangeText?: string;
+  /** Comment.authorName; when every listed comment has one, it must match the package's w:author. */
+  author?: string;
+}
+
+export interface WordCommentContentJoinOptions {
+  /**
+   * `listed` is in document order, so equal comments pair up in that order. Without an order, as
+   * when a paragraph's own getComments() is all that names them, only a unique match joins.
+   */
+  ordered?: boolean;
 }
 
 const squash = (text: string) => text.replace(/\s+/g, " ").trim();
@@ -728,18 +742,25 @@ function spanText(
 
 /**
  * The fallback for a package without commentsIds (contract §4.5): each span the package could not
- * join is matched to a listed comment of the same paragraph by its content and anchored text. Equal ones pair up in order; `listed` must be in document order, never in
- * items order (F-10). A group whose counts or anchors disagree stays unjoined.
+ * join is matched to a listed comment of the same paragraph by its content and anchored text, and
+ * by author where `listed` gives one. Equal ones pair up in order; `listed` must then be in document
+ * order, never in items order (F-10). A group whose counts or anchors disagree stays unjoined.
  */
 export function joinWordCommentSpansByContent(
   read: WordCommentPackageRead,
   listed: readonly WordListedComment[],
+  options: WordCommentContentJoinOptions = {},
 ): WordCommentSpan[] {
   const byWId = new Map(read.comments.map((c) => [c.wId, c]));
   const taken = new Set(
     read.spans.flatMap((span) => (span.commentId ? [span.commentId] : [])),
   );
   const open = read.spans.filter((span) => !span.commentId);
+  const byAuthor =
+    listed.length > 0 &&
+    listed.every((comment) => comment.author !== undefined);
+  const keyOf = (content: string, author: string | undefined) =>
+    byAuthor ? `${squash(content)}\u001f${author ?? ""}` : squash(content);
   const groups = new Map<
     string,
     { spans: WordCommentSpan[]; listed: WordListedComment[] }
@@ -751,14 +772,15 @@ export function joinWordCommentSpansByContent(
   };
   for (const span of open) {
     const comment = byWId.get(span.wId);
-    if (comment) group(squash(comment.content)).spans.push(span);
+    if (comment) group(keyOf(comment.content, comment.author)).spans.push(span);
   }
   for (const comment of listed)
     if (!taken.has(comment.id))
-      group(squash(comment.content)).listed.push(comment);
+      group(keyOf(comment.content, comment.author)).listed.push(comment);
   const joined = new Map<WordCommentSpan, string>();
   for (const { spans, listed: candidates } of groups.values()) {
     if (spans.length === 0 || spans.length !== candidates.length) continue;
+    if (options.ordered === false && spans.length > 1) continue;
     const agrees = spans.every((span, i) => {
       const ours = spanText(read, span);
       const theirs = candidates[i].rangeText;

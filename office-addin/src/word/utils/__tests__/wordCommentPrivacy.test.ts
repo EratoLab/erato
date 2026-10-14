@@ -22,15 +22,18 @@ const EMAIL = `maya.${SENTINEL.toLowerCase()}@contoso.test`;
 const LEVELS = ["log", "info", "warn", "error", "debug"] as const;
 const HOSTS: readonly CommentHostFlavour[] = ["pc", "mac", "web"];
 
-const document = generatedCommentDocument({
-  paragraphs: 6,
-  repliesPerThread: 1,
-  author: AUTHOR,
-  email: EMAIL,
-  text: (i) => `${SENTINEL} paragraph ${i}`,
-  anchor: (i) => `${SENTINEL} anchor ${i}`,
-  content: (i) => `${SENTINEL} comment ${i}`,
-});
+const document = {
+  ...generatedCommentDocument({
+    paragraphs: 6,
+    repliesPerThread: 1,
+    author: AUTHOR,
+    email: EMAIL,
+    text: (i) => `${SENTINEL} paragraph ${i}`,
+    anchor: (i) => `${SENTINEL} anchor ${i}`,
+    content: (i) => `${SENTINEL} comment ${i}`,
+  }),
+  v3c: true,
+};
 
 /** Office errors that quote the document, as some host messages do. */
 const failing: CommentHostOptions = {
@@ -78,9 +81,10 @@ describe("comment read privacy", () => {
       expect(g1?.replies?.[0].authorEmail).toBe(EMAIL);
       expect(g1?.placement?.anchor.quote).toBe(`${SENTINEL} anchor 1`);
       expect(result.diagnostics.errors.length).toBeGreaterThan(0);
+      // Word for the web reads no comment range, so G3's failing one is never asked for.
       expect(result.diagnostics.counts).toMatchObject({
         repliesFailed: 1,
-        anchorsFailed: 1,
+        anchorsFailed: host === "web" ? 0 : 1,
       });
       expect(leaks(result)).toEqual([]);
     },

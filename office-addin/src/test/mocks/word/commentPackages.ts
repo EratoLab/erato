@@ -315,10 +315,16 @@ export const V3C_PARAGRAPHS: Readonly<Record<string, readonly Segment[]>> = {
 
 export type V3cHost = "desktop" | "web";
 
-const threadOf = (key: string) => [
-  key,
-  ...Object.keys(V3C_COMMENTS).filter((k) => V3C_COMMENTS[k].parent === key),
-];
+const threadOf = (key: string, options: V3cPackageOptions) => {
+  const comments = options.comments ?? V3C_COMMENTS;
+  return [
+    key,
+    ...Object.keys(comments).filter((k) => comments[k].parent === key),
+  ];
+};
+
+const segmentsOf = (tag: string, options: V3cPackageOptions) =>
+  (options.paragraphs ?? V3C_PARAGRAPHS)[tag];
 
 const run = (text: string, rPr = "") =>
   `<w:r>${rPr ? `<w:rPr>${rPr}</w:rPr>` : ""}<w:t xml:space="preserve">${escapeXml(text)}</w:t></w:r>`;
@@ -335,10 +341,13 @@ const keyOf = (segment: Segment) =>
           : null;
 
 /** Threads with both ends in these paragraphs; Word leaves the others' marks out of a package. */
-function containedThreads(tags: readonly string[]): Set<string> {
+function containedThreads(
+  tags: readonly string[],
+  options: V3cPackageOptions,
+): Set<string> {
   const starts = new Set<string>();
   const ends = new Set<string>();
-  for (const segment of tags.flatMap((tag) => V3C_PARAGRAPHS[tag])) {
+  for (const segment of tags.flatMap((tag) => segmentsOf(tag, options))) {
     const key = keyOf(segment);
     if (!key || typeof segment === "string") continue;
     if (!("ce" in segment)) starts.add(key);
@@ -368,6 +377,10 @@ export interface V3cPackageOptions {
   openMarks?: boolean;
   /** Comments whose text Word writes as two paragraphs; the first gets a paraId commentsIds lacks. */
   twoParagraphs?: readonly string[];
+  /** Another document's comments, or the fixture's with authors and texts a test changed. */
+  comments?: Readonly<Record<string, V3cComment>>;
+  /** Another document's paragraphs, by tag. */
+  paragraphs?: Readonly<Record<string, readonly Segment[]>>;
 }
 
 interface Numbering {
@@ -388,7 +401,7 @@ function paragraphXml(
 ): string {
   const reference = (key: string) =>
     `<w:r><w:rPr><w:rStyle w:val="CommentReference"/></w:rPr><w:commentReference w:id="${localId(numbering, key)}"/></w:r>`;
-  const xml = V3C_PARAGRAPHS[tag]
+  const xml = segmentsOf(tag, options)
     .map((segment) => {
       if (typeof segment === "string") return run(segment);
       if ("hidden" in segment) return run(segment.hidden, "<w:vanish/>");
@@ -397,7 +410,7 @@ function paragraphXml(
       if ("pageBreak" in segment) return `<w:r><w:br w:type="page"/></w:r>`;
       const key = keyOf(segment) as string;
       if (!keep.has(key) && !options.openMarks) return "";
-      const thread = threadOf(key);
+      const thread = threadOf(key, options);
       if ("cs" in segment)
         return thread
           .map((k) => `<w:commentRangeStart w:id="${localId(numbering, k)}"/>`)
@@ -424,10 +437,10 @@ function paragraphXml(
 const part = (name: string, type: string, xml: string) =>
   `<pkg:part pkg:name="${name}" pkg:contentType="${type}"><pkg:xmlData>${xml}</pkg:xmlData></pkg:part>`;
 
-const commentContent = (key: string) =>
-  key === "T11"
+const commentContent = (key: string, options: V3cPackageOptions) =>
+  key === "T11" && !options.comments?.T11
     ? `${run("T11 root: see ")}${run("this point", "<w:b/><w:bCs/>")}${run(" and ")}<w:hyperlink r:id="rIdCmLink" w:history="1">${run("the spec", '<w:rStyle w:val="Hyperlink"/>')}</w:hyperlink>${run(".")}`
-    : run(V3C_COMMENTS[key].content);
+    : run((options.comments ?? V3C_COMMENTS)[key].content);
 
 function packageXml(
   body: string,
@@ -435,11 +448,12 @@ function packageXml(
   options: V3cPackageOptions,
 ): string {
   const keys = [...numbering.ids.keys()];
+  const comments = options.comments ?? V3C_COMMENTS;
   const local = (key: string) => numbering.ids.get(key) as number;
   const annotation = `<w:r><w:rPr><w:rStyle w:val="CommentReference"/></w:rPr><w:annotationRef/></w:r>`;
   const commentXml = (key: string) => {
-    const c = V3C_COMMENTS[key];
-    const own = `<w:p w14:paraId="${c.paraId}" w14:textId="77777777"><w:pPr><w:pStyle w:val="CommentText"/></w:pPr>${annotation}${commentContent(key)}</w:p>`;
+    const c = comments[key];
+    const own = `<w:p w14:paraId="${c.paraId}" w14:textId="77777777"><w:pPr><w:pStyle w:val="CommentText"/></w:pPr>${annotation}${commentContent(key, options)}</w:p>`;
     const paragraphs = options.twoParagraphs?.includes(key)
       ? `<w:p w14:paraId="0F0F0F0F" w14:textId="77777777"><w:pPr><w:pStyle w:val="CommentText"/></w:pPr>${annotation}${run("First paragraph of the comment.")}</w:p>${own.replace(annotation, "")}`
       : own;
@@ -461,8 +475,7 @@ function packageXml(
       ),
     );
     const durableId = (key: string) =>
-      (options.legacy && options.sessionIds?.(key)) ||
-      V3C_COMMENTS[key].durableId;
+      (options.legacy && options.sessionIds?.(key)) || comments[key].durableId;
     if (!options.idless)
       parts.push(
         part(
@@ -470,10 +483,10 @@ function packageXml(
           `${WML}.commentsExtended+xml`,
           `<w15:commentsEx xmlns:mc="${MC}" xmlns:w15="${W15}" mc:Ignorable="w15">${keys
             .map((key) => {
-              const c = V3C_COMMENTS[key];
+              const c = comments[key];
               const parent =
                 c.parent && !options.legacy
-                  ? ` w15:paraIdParent="${V3C_COMMENTS[c.parent].paraId}"`
+                  ? ` w15:paraIdParent="${comments[c.parent].paraId}"`
                   : "";
               return `<w15:commentEx w15:paraId="${c.paraId}"${parent} w15:done="${c.done ? 1 : 0}"/>`;
             })
@@ -485,7 +498,7 @@ function packageXml(
           `<w16cid:commentsIds xmlns:mc="${MC}" xmlns:w16cid="${W16CID}" mc:Ignorable="w16cid">${keys
             .map(
               (key) =>
-                `<w16cid:commentId w16cid:paraId="${V3C_COMMENTS[key].paraId}" w16cid:durableId="${durableId(key)}"/>`,
+                `<w16cid:commentId w16cid:paraId="${comments[key].paraId}" w16cid:durableId="${durableId(key)}"/>`,
             )
             .join("")}</w16cid:commentsIds>`,
         ),
@@ -496,10 +509,10 @@ function packageXml(
                 "/word/commentsExtensible.xml",
                 `${WML}.commentsExtensible+xml`,
                 `<w16cex:commentsExtensible xmlns:mc="${MC}" xmlns:w16cex="${W16CEX}" mc:Ignorable="w16cex">${keys
-                  .filter((key) => V3C_COMMENTS[key].dateUtc)
+                  .filter((key) => comments[key].dateUtc)
                   .map(
                     (key) =>
-                      `<w16cex:commentExtensible w16cex:durableId="${V3C_COMMENTS[key].durableId}" w16cex:dateUtc="${V3C_COMMENTS[key].dateUtc}"/>`,
+                      `<w16cex:commentExtensible w16cex:durableId="${comments[key].durableId}" w16cex:dateUtc="${comments[key].dateUtc}"/>`,
                   )
                   .join("")}</w16cex:commentsExtensible>`,
               ),
@@ -538,7 +551,12 @@ export function v3cParagraphPackage(
   options: V3cPackageOptions = {},
 ): string {
   const numbering: Numbering = { ids: new Map(), next: 0 };
-  const xml = paragraphXml(tag, numbering, containedThreads([tag]), options);
+  const xml = paragraphXml(
+    tag,
+    numbering,
+    containedThreads([tag], options),
+    options,
+  );
   return packageXml(`${xml}${TRAILING}`, numbering, options);
 }
 
@@ -548,7 +566,7 @@ export function v3cRowPackage(
   options: V3cPackageOptions = {},
 ): string {
   const numbering: Numbering = { ids: new Map(), next: 0 };
-  const keep = containedThreads(cellTags);
+  const keep = containedThreads(cellTags, options);
   const cells = cellTags.map((tag) =>
     paragraphXml(tag, numbering, keep, options),
   );
@@ -561,7 +579,7 @@ export function v3cRangePackage(
   options: V3cPackageOptions = {},
 ): string {
   const numbering: Numbering = { ids: new Map(), next: 0 };
-  const keep = containedThreads(tags);
+  const keep = containedThreads(tags, options);
   const paragraphs = tags.map((tag) =>
     paragraphXml(tag, numbering, keep, options),
   );

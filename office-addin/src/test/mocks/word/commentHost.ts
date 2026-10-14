@@ -14,19 +14,24 @@ import type { Mock } from "vitest";
 
 /**
  * A Word host for comment reads (ERMAIN-948): body.getComments(), replies, Comment.getRange(),
- * paragraphs, compareLocationWith and getOoxml(), as the ERMAIN-947 probe measured them per host.
- * office-addin-mock cannot model collections, so this is hand-written, and kept apart from
- * selectionHost.ts. Calls queue commands that run at context.sync(); properties must be loaded
- * before they are read; a command that throws rejects its sync.
+ * paragraphs and their own getComments(), the selection's getComments(), compareLocationWith and
+ * getOoxml(), as the ERMAIN-947 and ERMAIN-983 probes measured them per host. office-addin-mock
+ * cannot model collections, so this is hand-written, and kept apart from selectionHost.ts. Calls
+ * queue commands that run at context.sync(); properties must be loaded before they are read; a
+ * command that throws rejects its sync.
  *
  * Per host (probe report, Tier 2):
  * - pc, mac: Comment.id is a string; items come in end-mark order; creationDate is dateUtc cut to
  *   the minute, or w:date read in the host's zone (UTC+2) without one.
  * - web: Comment.id is a number; items come in start order; creationDate keeps seconds, and is
- *   null without dateUtc; paragraph.text shows U+0005 at references and hidden text; a comment's
- *   range text ends in its U+0005 and joins cells with "\r"; `repliesWithRoot` models comments.xml
- *   out of w:id order, where replies list the root and drop a real reply; reading the range of a
- *   comment whose paragraph has hidden text unhides it (gate F1), which `unhidden()` reports.
+ *   null without dateUtc; paragraph.text shows U+0005 at references, hidden text and U+000C at a
+ *   page break, which getText() leaves out; `repliesWithRoot` models comments.xml out of w:id
+ *   order, where replies list the root and drop a real reply; a legacy file's packages carry ids
+ *   that are not Comment.id (gate F2). Comment.getRange() unhides hidden text in the anchored
+ *   paragraph there (gate F1), so the web host throws on it and uninstallWordCommentHost() fails
+ *   the test that called it.
+ * - every host: a paragraph's own getComments() names the comments whose anchor starts or ends in
+ *   it; the selection's names those that touch it, as the web measured (touchesSelection).
  */
 
 export type CommentHostFlavour = "pc" | "mac" | "web";
@@ -51,7 +56,10 @@ export interface CommentHostDocument {
   comments: Readonly<Record<string, V3cComment>>;
   /** Author name → Entra email. */
   emails?: Readonly<Record<string, string>>;
-  /** Paragraph and range packages come from commentPackages.ts; otherwise they carry no comments. */
+  /**
+   * Paragraph and range packages come from commentPackages.ts, built from the paragraphs' own
+   * segments; otherwise they carry text and no comments.
+   */
   v3c?: boolean;
 }
 
@@ -172,6 +180,12 @@ export interface CommentHostOptions {
   failRanges?: readonly string[];
   /** body.getComments() throws. */
   failList?: boolean;
+  /** These paragraphs' own getComments() throw. */
+  failParagraphComments?: readonly string[];
+  /** No paragraph's own getComments() names these comments. */
+  unlistedByParagraphs?: readonly string[];
+  /** These paragraphs' packages carry their text but none of their comments. */
+  bareParagraphPackages?: readonly string[];
   /** The message of injected Office errors, which may quote the document as hosts sometimes do. */
   errorMessage?: string;
   /**
@@ -208,6 +222,8 @@ export interface CommentHost {
   listedIds(): (string | number)[];
   /** Comment keys whose getRange() was called, in call order. */
   rangesRead(): string[];
+  /** Paragraph tags whose getOoxml() was read, in call order. */
+  packagesRead(): string[];
   /** Paragraphs whose hidden text a comment range read unhid on the web (gate F1). */
   unhidden(): string[];
   /** String(Comment.id) of a comment key. */
@@ -292,6 +308,8 @@ function lay(segments: readonly Segment[], web: boolean): Laid {
       visible += segment;
     } else if ("hidden" in segment) {
       if (web) rangeText += segment.hidden;
+    } else if ("pageBreak" in segment) {
+      if (web) rangeText += "\u000C";
     } else if ("del" in segment) rangeText += segment.del;
     else if ("cs" in segment) starts.set(segment.cs, rangeText.length);
     else if ("ce" in segment) {
@@ -340,6 +358,27 @@ function relation(a: Span, b: Span): string {
   if (e1 <= s2) return e1 === s2 ? "AdjacentBefore" : "Before";
   if (s1 >= e2) return s1 === e2 ? "AdjacentAfter" : "After";
   return s1 < s2 ? "OverlapsBefore" : "OverlapsAfter";
+}
+
+/**
+ * Whether the selection's own getComments() names a comment, as Word for the web answered in probe
+ * ERMAIN-983, where only the part of an anchor in its first paragraph counts (`firstEnd`): a caret
+ * from that part's start up to, not at, its end; a caret on a point comment; a passage that
+ * overlaps that part, or holds the point.
+ */
+function touchesSelection(
+  anchor: Span,
+  selection: Span,
+  firstEnd: number,
+): boolean {
+  const end = Math.min(anchor.e, firstEnd);
+  if (selection.s === selection.e)
+    return anchor.s === anchor.e
+      ? selection.s === anchor.s
+      : anchor.s <= selection.s && selection.s < end;
+  if (anchor.s === anchor.e)
+    return selection.s <= anchor.s && anchor.s <= selection.e;
+  return anchor.s < selection.e && selection.s < end;
 }
 
 function plainPackage(texts: readonly string[]): string {
@@ -392,13 +431,22 @@ export function installWordCommentHost(
     compare: 0,
   };
   const message = options.errorMessage ?? "The operation failed.";
-  const packageOptions: V3cPackageOptions = options.legacy
-    ? {
-        legacy: true,
-        sessionIds: (key) =>
-          Number(idOf(key)).toString(16).toUpperCase().padStart(8, "0"),
-      }
-    : {};
+  const segments: Record<string, readonly Segment[]> = {};
+  const packageOptions: V3cPackageOptions = {
+    comments: document.comments,
+    paragraphs: segments,
+    ...(options.legacy
+      ? {
+          legacy: true,
+          // Desktop's packages carry the session's ids; the web's carry others.
+          sessionIds: (key: string) =>
+            (Number(idOf(key)) + (web ? 500_000 : 0))
+              .toString(16)
+              .toUpperCase()
+              .padStart(8, "0"),
+        }
+      : {}),
+  };
 
   const paragraphs: Para[] = [];
   let tables = 0;
@@ -434,6 +482,9 @@ export function installWordCommentHost(
     offset += p.laid.rangeText.length + 1;
   }
   const byTag = new Map(paragraphs.map((p) => [p.tag, p]));
+  for (const block of document.body)
+    for (const spec of "table" in block ? block.table.flat() : [block])
+      segments[spec.tag] = spec.segments;
 
   const keys = Object.keys(document.comments);
   const roots = keys.filter((key) => !document.comments[key].parent);
@@ -491,6 +542,7 @@ export function installWordCommentHost(
   let clock = 0;
   const callLog: string[] = [];
   const rangeLog: string[] = [];
+  const packageLog: string[] = [];
   const unhid = new Set<string>();
   const syncEntries: CommentHostSync[] = [];
   const enqueue = (command: Command) => {
@@ -623,7 +675,9 @@ export function installWordCommentHost(
   }
 
   const packageOf = (tags: readonly string[]): string => {
-    const known = document.v3c && tags.every((tag) => tag in V3C_PARAGRAPHS);
+    const known =
+      document.v3c &&
+      !tags.some((tag) => options.bareParagraphPackages?.includes(tag));
     if (!known)
       return plainPackage(tags.map((tag) => byTag.get(tag)!.laid.visible));
     if (tags.length > 1) {
@@ -682,10 +736,36 @@ export function installWordCommentHost(
       return result("paragraph.getText", () => this.p.laid.shown(options));
     }
     getOoxml() {
+      packageLog.push(this.p.tag);
       return result(
         "paragraph.getOoxml",
         () => packageOf([this.p.tag]),
         costs.ooxml,
+      );
+    }
+    getComments() {
+      callLog.push("paragraph.getComments");
+      const index = this.p.index;
+      const tag = this.p.tag;
+      return new Collection<MockComment>(
+        "comments",
+        () =>
+          listed
+            .filter((key) => {
+              const span = anchors.get(key)!;
+              return (
+                (span.first === index || span.last === index) &&
+                !options.unlistedByParagraphs?.includes(key)
+              );
+            })
+            .map((key) => new MockComment(key)),
+        {
+          cost: 0,
+          failure: () =>
+            options.failParagraphComments?.includes(tag)
+              ? officeError("GeneralException", message)
+              : null,
+        },
       );
     }
     getRange(_location?: string) {
@@ -806,7 +886,20 @@ export function installWordCommentHost(
     }
     getComments() {
       callLog.push("range.getComments");
-      return new Collection<Loadable>("comments", () => []);
+      const span = this.span;
+      return new Collection<MockComment>("comments", () =>
+        listed
+          .filter((key) => {
+            const anchor = anchors.get(key)!;
+            const first = paragraphs[anchor.first];
+            return touchesSelection(
+              anchor,
+              span,
+              first.base + first.laid.rangeText.length,
+            );
+          })
+          .map((key) => new MockComment(key)),
+      );
     }
     select(_mode?: string) {
       const span = { ...this.span };
@@ -867,7 +960,12 @@ export function installWordCommentHost(
       rangeLog.push(this.key);
       const anchor = anchors.get(this.key)!;
       const first = paragraphs[anchor.first];
-      if (web && first.laid.hidden) unhid.add(first.tag);
+      if (web) {
+        if (first.laid.hidden) unhid.add(first.tag);
+        throw new Error(
+          "mock: Comment.getRange() on Word for the web changes the document (gate F1)",
+        );
+      }
       return new MockRange(anchor, this.key);
     }
   }
@@ -939,6 +1037,10 @@ export function installWordCommentHost(
     delete ctx.requirements;
     delete ctx.diagnostics;
     delete (globalThis as Record<string, unknown>).Word;
+    if (web && rangeLog.length > 0)
+      throw new Error(
+        `mock: Comment.getRange() was called on Word for the web for ${rangeLog.join(", ")}`,
+      );
   };
 
   return {
@@ -948,6 +1050,7 @@ export function installWordCommentHost(
     now: () => clock,
     listedIds: () => listed.map(officeId),
     rangesRead: () => [...rangeLog],
+    packagesRead: () => [...packageLog],
     unhidden: () => [...unhid],
     commentId: idOf,
     ordinalOf: (tag) => {
@@ -983,6 +1086,7 @@ export function installWordCommentHost(
 }
 
 export function uninstallWordCommentHost(): void {
-  teardown?.();
+  const done = teardown;
   teardown = undefined;
+  done?.();
 }

@@ -114,12 +114,14 @@ describe("readWordCommentParagraphPackage", () => {
         parentWId: null,
         dateUtc: "2026-09-03T08:15:30Z",
         content: "T1 root: please check the alpha bravo wording.",
+        author: "Maya Krüger",
       },
       expect.objectContaining({
         wId: "1",
         commentId: "123940964",
         parentWId: "0",
         dateUtc: "2026-09-03T09:20:11Z",
+        author: "Jonas Weber",
       }),
       expect.objectContaining({
         wId: "2",
@@ -418,6 +420,41 @@ describe("readWordCommentParagraphPackage", () => {
         listed[2],
       ]);
       expect(joined.map((s) => s.commentId)).toEqual([null, "902", "903"]);
+    });
+
+    it("without a document order, pairs only unique matches, told apart by author too", () => {
+      const read = readParagraph("T6P", "desktop", { idless: true });
+      const all = {
+        ...read,
+        comments: read.comments.map((c) => ({ ...c, content: "Same." })),
+      };
+      // T6, T7 and T7b have three authors.
+      const authors = all.comments.map((c) => c.author);
+      const listedAs = (by: (i: number) => string) =>
+        ["a", "b", "c"].map((id, i) => ({
+          id,
+          content: "Same.",
+          author: by(i),
+        }));
+
+      expect(
+        joinWordCommentSpansByContent(
+          all,
+          listedAs(() => authors[0]),
+          { ordered: false },
+        ).map((s) => s.commentId),
+      ).toEqual([null, null, null]);
+      expect(
+        joinWordCommentSpansByContent(
+          all,
+          listedAs((i) => authors[i]),
+          { ordered: false },
+        ).map((s) => [s.commentId, s.joinedBy]),
+      ).toEqual([
+        ["a", "content"],
+        ["b", "content"],
+        ["c", "content"],
+      ]);
     });
 
     it("joins nothing a durableId already joined", () => {

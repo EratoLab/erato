@@ -29,21 +29,25 @@ describe("showWordComment", () => {
     },
   );
 
+  /** A whole paragraph as the host reports a select of its Content range. */
+  const paragraph = (tag: string) =>
+    expect.objectContaining({ first: tag, last: tag, from: 0 });
+
   it("never selects across paragraphs on the web: the first paragraph stands in", async () => {
     const word = installWordCommentHost({ host: "web" });
 
     expect(await showWordComment(word.commentId("T3"))).toBe("selected");
-    const selected = word.selected();
-    expect(selected?.first).toBe("T3A");
-    expect(selected?.last).toBe("T3A");
+    expect(word.selected()).toEqual(paragraph("T3A"));
     expect(word.calls()).not.toContain("range.expandTo");
   });
 
-  it("selects a single-paragraph anchor itself on the web", async () => {
+  it("selects the paragraph an anchor is in on the web, never the comment's range", async () => {
     const word = installWordCommentHost({ host: "web" });
 
     expect(await showWordComment(word.commentId("T1"))).toBe("selected");
-    expect(word.selected()).toEqual(word.anchorOf("T1"));
+    expect(word.selected()).toEqual(paragraph("T1P"));
+    expect(word.calls()).toContain("paragraph.getComments");
+    expect(word.rangesRead()).toEqual([]);
   });
 
   it("marks the select as Erato's, so the selection is not taken for the user's", async () => {
@@ -66,15 +70,25 @@ describe("showWordComment", () => {
     expect(typeof word.listedIds()[0]).toBe("number");
 
     expect(await showWordComment(word.commentId("T8"))).toBe("selected");
-    expect(word.selected()).toEqual(word.anchorOf("T8"));
+    expect(word.selected()).toEqual(paragraph("T8P"));
   });
 
-  it("does not show a web anchor whose range would unhide text before it (gate F1)", async () => {
+  it("shows T10's paragraph on the web and leaves its hidden text hidden (gate F1)", async () => {
     const word = installWordCommentHost({ host: "web" });
 
-    expect(await showWordComment(word.commentId("T10"))).toBe("unavailable");
+    expect(await showWordComment(word.commentId("T10"))).toBe("selected");
+    expect(word.selected()).toEqual(paragraph("T10P"));
     expect(word.rangesRead()).toEqual([]);
     expect(word.unhidden()).toEqual([]);
+  });
+
+  it("selects nothing on the web for a comment no paragraph lists", async () => {
+    const word = installWordCommentHost({
+      host: "web",
+      unlistedByParagraphs: ["T1"],
+    });
+
+    expect(await showWordComment(word.commentId("T1"))).toBe("changed");
     expect(word.selected()).toBeNull();
   });
 

@@ -92,6 +92,8 @@ export interface WordCommentSource {
   where: WordCommentWhere | null;
   pos: number;
   matchedByContent: boolean;
+  /** WordCommentPosition.touches: in the selection, though `where` names no vs. */
+  touches?: true;
 }
 
 export interface WordCommentModelThread {
@@ -99,6 +101,8 @@ export interface WordCommentModelThread {
   thread: WordCommentThread;
   /** Replies Word listed; null when they were not read, as Word for Mac lists them slowly. */
   replies: number | null;
+  /** Pane-only, never sent: the thread touches the selection, though its `where` names no vs. */
+  touchesSelection?: true;
 }
 
 /** Every thread of the document, ready to send. */
@@ -265,6 +269,7 @@ function wordCommentSources(
       where: wordCommentWhere(record, position),
       pos: position.pos,
       matchedByContent: entry.matchedBy === "content",
+      ...(position.touches ? { touches: true as const } : {}),
     };
   });
 }
@@ -340,6 +345,7 @@ export function buildWordCommentModel(input: {
       pos: source.pos,
       i,
       replies: record.replies?.length ?? null,
+      ...(source.touches ? { touchesSelection: true as const } : {}),
       thread: {
         id: source.ref,
         pos: source.pos,
@@ -358,7 +364,11 @@ export function buildWordCommentModel(input: {
   });
   threads.sort((a, b) => a.pos - b.pos || a.i - b.i);
   return {
-    threads: threads.map(({ thread, replies }) => ({ thread, replies })),
+    threads: threads.map(({ thread, replies, touchesSelection }) => ({
+      thread,
+      replies,
+      ...(touchesSelection ? { touchesSelection } : {}),
+    })),
     unplaced,
     legacy: input.legacy === true,
   };

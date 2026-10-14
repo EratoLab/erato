@@ -89,7 +89,8 @@ function latest(dates: readonly (Date | null)[]): Date | null {
 
 /**
  * Where Word's selection was at the read, in paragraphs only: the light read has no offsets, so
- * anchors in the selection's own paragraphs are placed by Word's compareLocationWith instead.
+ * anchors in the selection's own paragraphs are placed by Word's compareLocationWith instead, or on
+ * Word for the web by the selection's own getComments().
  */
 function liveCoordinates(
   live: Extract<WordCommentReadResult, { ok: true }>["selection"],
@@ -136,7 +137,8 @@ export function wordCommentListOf(
         ...(record.replies ?? []).map((reply) => reply.creationDate),
       ]),
       pos: position.pos,
-      inSelection: wordCommentVsInSelection(where.vs),
+      inSelection:
+        wordCommentVsInSelection(where.vs) || position.touches === true,
     });
   });
   threads.sort((a, b) => a.pos - b.pos);
@@ -172,12 +174,11 @@ export interface UseWordCommentsOptions {
  * and never on a timer: every Send and every write read again anyway. Each read lists the threads,
  * their coarse anchors and the selection's relation to them; replies only for the threads at the
  * selection and the pick, or for all while the picker is open (Word for Mac lists them slowly).
- * No package is read for exact anchors, so a read costs no OOXML on the web unless a commented
- * paragraph has hidden text; on desktop the first read of a document learns whether it is legacy,
- * so even the picker's refs come from content where ids do not last (O-17). Reads never overlap;
- * one asked for during a read runs once after it. A selection change while Word lists the same
- * comments and no paragraph event has fired since keeps the earlier read's anchors; focus, refresh
- * and every Send read them all again.
+ * No package is read for exact anchors, so a read costs no OOXML on the web; on desktop the first
+ * read of a document learns whether it is legacy, so even the picker's refs come from content where
+ * ids do not last (O-17). Reads never overlap; one asked for during a read runs once after it. A
+ * selection change while Word lists the same comments and no paragraph event has fired since keeps
+ * the earlier read's anchors; focus, refresh and every Send read them all again.
  */
 export function useWordComments({
   documentIdentity,
