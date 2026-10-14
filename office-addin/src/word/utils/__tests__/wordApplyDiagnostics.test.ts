@@ -236,7 +236,7 @@ describe("Word apply diagnostics", () => {
       "Route: import (alignment)",
       "Needs full rewrite: alignment",
       "Read scope: table-cell",
-      expect.stringMatching(/^Host: .*· Policy web: .*, import confirm, /),
+      expect.stringMatching(/^Host: .*· Policy web: .*, import off, /),
     ]);
     expect(
       renderWordDiagnosticReport("apply", "blocked", {
@@ -302,5 +302,28 @@ describe("Word apply diagnostics", () => {
     ).toMatch(
       /^Word add-in revert succeeded with adjustments\nVerify tier: content\nAdjustments: none\nHost: /,
     );
+  });
+
+  it("names Word's housekeeping the checks set aside, by rule and count only", () => {
+    expect(
+      renderWordOutcomeReport("revert", {
+        route: "import",
+        tier: "strict",
+        adjustments: [],
+        housekeeping: {
+          "proofing-language": 2,
+          "<private>": 9,
+        } as never,
+      }),
+    ).toContain("\nWord housekeeping: proofing-language 2\n");
+    expect(
+      renderWordDiagnosticReport("apply", "stale", {
+        stage: "preflight",
+        reason: "source-changed",
+        details: {
+          housekeeping: { "table-look": 1, "theme-font-language": 0 },
+        },
+      }),
+    ).toContain("\nWord housekeeping: table-look 1\n");
   });
 });

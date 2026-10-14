@@ -1,4 +1,7 @@
-import { createWordXmlComparison } from "@erato/frontend/word-review";
+import {
+  createWordXmlComparison,
+  removeWordRedetectedLanguage,
+} from "@erato/frontend/word-review";
 
 import { wordApplyPolicy } from "./wordApplyPolicy";
 import {
@@ -278,6 +281,33 @@ function decodeWordBase64(value: string): Uint8Array {
   return Uint8Array.from(decoded, (character) => character.charCodeAt(0));
 }
 
+/** The fingerprint of a complete package, as stale checks compare it. */
+export function wordPackageFingerprint(ooxml: string): string {
+  return createWordXmlComparison(parseWordXml(ooxml)).fingerprint();
+}
+
+/** The fingerprint of a complete package a write produced, against `replaced`, the package before
+ * that write: Word's re-detected proofing language in the written paragraphs is left out
+ * (WORD_HOUSEKEEPING "proofing-language"), and `redetected` counts it. `strict` is the package's
+ * own fingerprint where the caller has it, used when nothing was left out. */
+export function wordWrittenPackageFingerprint(
+  ooxml: string,
+  replaced: string,
+  strict?: string,
+): { fingerprint: string; redetected: number } {
+  const doc = parseWordXml(ooxml);
+  const redetected = removeWordRedetectedLanguage(doc, () =>
+    parseWordXml(replaced),
+  );
+  return {
+    fingerprint:
+      !redetected && strict
+        ? strict
+        : createWordXmlComparison(doc).fingerprint(),
+    redetected,
+  };
+}
+
 export async function captureWordDocumentPackage(): Promise<WordDocumentPackageSnapshot> {
   const documentUrl = currentWordDocumentUrl();
   const bytes = await readWordDocumentFile();
@@ -293,9 +323,7 @@ export async function captureWordDocumentPackage(): Promise<WordDocumentPackageS
     ooxml,
     documentUrl,
     get fingerprint() {
-      fingerprint ??= createWordXmlComparison(
-        parseWordXml(ooxml),
-      ).fingerprint();
+      fingerprint ??= wordPackageFingerprint(ooxml);
       return fingerprint;
     },
   };

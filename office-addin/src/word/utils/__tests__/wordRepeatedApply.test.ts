@@ -19,8 +19,8 @@ import {
 import {
   wordDocumentFileToOoxml,
   wordDocumentOoxmlToFile,
+  wordPackageFingerprint,
 } from "../wordDocumentPackage";
-import { wordDocumentFingerprint } from "../wordDocumentXml";
 import { wordPackageCounts } from "../wordFullDocumentComparison";
 import {
   ALL_WORD_IN_PLACE_CAPABILITIES,
@@ -256,7 +256,7 @@ describe("repeated in-place Apply", { timeout: 60_000 }, () => {
       customXmlItems: 3,
       webextensionParts: 3,
     });
-    const beforeLast = wordDocumentFingerprint(
+    const beforeLast = wordPackageFingerprint(
       editWordPackage(host.ooxml(), (doc) => {
         const text = Array.from(
           doc.getElementsByTagNameNS(
@@ -273,7 +273,7 @@ describe("repeated in-place Apply", { timeout: 60_000 }, () => {
       last.afterFingerprint!,
     );
     expect(reverted.status).toBe("reverted");
-    expect(wordDocumentFingerprint(host.ooxml())).toBe(beforeLast);
+    expect(wordPackageFingerprint(host.ooxml())).toBe(beforeLast);
   });
 });
 

@@ -2418,12 +2418,12 @@ msgstr "Word can't replace this document because it contains content it can't ed
 #. js-lingui-explicit-id
 #: src/word/utils/wordAuthoringMessages.ts
 msgid "officeAddin.word.authoring.contentRefused.interrupted"
-msgstr "Word stopped because this document contains content it can't edit, for example a date picker. The document may be partially changed. Your original is saved for recovery."
+msgstr "Word stopped because this document contains content it can't edit. The document may be partially changed. Your original is saved for recovery."
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordAuthoringMessages.ts
 msgid "officeAddin.word.authoring.contentRefused.restore"
-msgstr "Word can't restore this document because it contains content it can't edit, for example a date picker. Nothing was changed. Download the original document instead."
+msgstr "Word can't restore this document because it contains content it can't edit. Nothing was changed. Download the original document instead."
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordAuthoringMessages.ts
@@ -2549,6 +2549,11 @@ msgstr "The rewrite could not be applied. No document changes were made."
 #: src/word/utils/wordAuthoringMessages.ts
 msgid "officeAddin.word.authoring.importDisabled"
 msgstr "This change needs a full-document rewrite, which is turned off for this version of Word. Nothing was applied. Ask for a smaller edit that can be written in place."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.importDisabled.web"
+msgstr "This change needs a full-document rewrite, which Erato can't verify on Word for the web, so nothing was applied. Copy the draft and apply it in Word for Windows or Mac, or ask for a smaller edit."
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordAuthoringMessages.ts
@@ -3439,6 +3444,11 @@ msgstr "This change needs a full-document rewrite, which your organization has t
 #: src/word/utils/wordAuthoringMessages.ts
 msgid "officeAddin.word.importRefusal.scoped"
 msgstr "This targeted edit can't be written in place in this version of Word, and a targeted edit never replaces the whole document."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.importRefusal.web"
+msgstr "This change needs a full-document rewrite, which Erato can't verify on Word for the web, so it isn't applied here. Copy the draft and apply it in Word for Windows or Mac, or ask again for edits that can be made in place."
 
 #. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts

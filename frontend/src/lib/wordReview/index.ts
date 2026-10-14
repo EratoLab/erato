@@ -7,6 +7,7 @@ export * from "./wordDocumentCapture";
 export * from "./wordDocumentPlan";
 export * from "./wordEditPlan";
 export * from "./wordHistory";
+export * from "./wordHousekeeping";
 export * from "./wordImageAssetData";
 export * from "./wordInlineStructures";
 export * from "./wordMediaComparison";

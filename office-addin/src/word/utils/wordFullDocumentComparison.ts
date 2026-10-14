@@ -6,6 +6,7 @@ import {
   normalizeWordInlineForComparison,
   normalizeWordMediaForComparison,
   removeWordNumberingIdentity,
+  removeWordRedetectedLanguage,
   wordXmlElements as all,
 } from "@erato/frontend/word-review";
 
@@ -15,6 +16,8 @@ import {
   wordRelationshipTarget,
 } from "./wordDocumentPackageCodec";
 import { normalizeWordTablesForComparison } from "./wordTableComparison";
+
+import type { WordHousekeepingCounts } from "@erato/frontend/word-review";
 
 const W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
 const R = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
@@ -1550,20 +1553,36 @@ export function wordFullDocumentDifferingParts(
 
 /** With `locate`, also names where each differing content part first diverges (structure only, no text or values).
  * The content tier adds the normalizations named by WORD_APPLY_ADJUSTMENTS; it is only for write and
- * restore verification after strict comparison failed. */
+ * restore verification after strict comparison failed. With `replaced`, the package the write wrote
+ * over, both sides leave out what WORD_HOUSEKEEPING's "proofing-language" names. */
 export function wordFullDocumentDifferences(
   expectedXml: string,
   actualXml: string,
   locate = false,
   tier: WordVerifyTier = "strict",
   allowFirstParagraphSpacing = false,
+  replaced?: string,
 ): {
   parts: string[];
   locations: string[];
   adjustments: WordApplyAdjustment[];
+  /** Differences WORD_HOUSEKEEPING hid, by rule; absent when none. */
+  housekeeping?: WordHousekeepingCounts;
 } {
   const expected = view(expectedXml),
     actual = view(actualXml);
+  let redetected = 0;
+  if (replaced !== undefined) {
+    let original: Document | undefined;
+    const parsed = () => (original ??= parseWordXml(replaced));
+    redetected = Math.abs(
+      removeWordRedetectedLanguage(actual.doc, parsed) -
+        removeWordRedetectedLanguage(expected.doc, parsed),
+    );
+  }
+  const housekeeping: { housekeeping?: WordHousekeepingCounts } = redetected
+    ? { housekeeping: { "proofing-language": redetected } }
+    : {};
   for (const v of [expected, actual]) {
     normalizeWordMediaForComparison(v.doc);
     normalizeWordInlineForComparison(v.doc);
@@ -1593,7 +1612,7 @@ export function wordFullDocumentDifferences(
   const parts = [...new Set([...a.keys(), ...b.keys()])].filter(
     (path) => a.get(path) !== b.get(path),
   );
-  if (!locate) return { parts, locations: [], adjustments };
+  if (!locate) return { parts, locations: [], adjustments, ...housekeeping };
   const ca = createWordXmlComparison(expected.doc),
     cb = createWordXmlComparison(actual.doc);
   const locations = parts
@@ -1606,7 +1625,7 @@ export function wordFullDocumentDifferences(
         ? [`${path}: ${firstDivergence(x, y, path, ca, cb)}`]
         : [`${path}: ${x ? "missing after write" : "added by Word"}`];
     });
-  return { parts, locations, adjustments };
+  return { parts, locations, adjustments, ...housekeeping };
 }
 
 const QNAME = /^[A-Za-z0-9_.:-]{1,64}$/;

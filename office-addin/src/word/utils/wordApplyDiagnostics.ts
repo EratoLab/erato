@@ -1,4 +1,7 @@
-import { createWordXmlComparison } from "@erato/frontend/word-review";
+import {
+  WORD_HOUSEKEEPING,
+  createWordXmlComparison,
+} from "@erato/frontend/word-review";
 
 import {
   wordApplyHost,
@@ -23,7 +26,10 @@ import type {
   WordApplyAdjustment,
   WordVerifyTier,
 } from "./wordFullDocumentComparison";
-import type { WordReadScope } from "@erato/frontend/word-review";
+import type {
+  WordHousekeepingCounts,
+  WordReadScope,
+} from "@erato/frontend/word-review";
 
 export const WORD_APPLY_ROUTES = ["import", "body", "in-place"] as const;
 /** Closed list: why a plan did not run in place. */
@@ -77,6 +83,8 @@ export interface WordDiagnosticDetails {
   fallbackReasons?: WordRouteReason[];
   /** The kind of scoped read a refused plan was submitted under. */
   readScope?: WordReadScope["kind"];
+  /** Differences the checks left to WORD_HOUSEKEEPING, by rule; counts only. */
+  housekeeping?: WordHousekeepingCounts;
   error?: string;
 }
 
@@ -252,6 +260,20 @@ function packageLine(p: WordPackageStats): string {
   ].join(", ")}`;
 }
 
+function housekeepingLine(
+  counts: WordHousekeepingCounts | undefined,
+): string[] {
+  const hidden = WORD_HOUSEKEEPING.filter(({ id }) => {
+    const n = counts?.[id];
+    return isCount(n) && n > 0;
+  });
+  return hidden.length
+    ? [
+        `Word housekeeping: ${hidden.map(({ id }) => `${id} ${counts?.[id]}`).join(", ")}`,
+      ]
+    : [];
+}
+
 export function renderWordDiagnosticReport(
   operation: string,
   status: string | undefined,
@@ -334,6 +356,7 @@ export function renderWordDiagnosticReport(
             .join(", ")}`,
         ]
       : []),
+    ...housekeepingLine(details?.housekeeping),
     ...(details?.parts?.length
       ? [
           `Differing parts: ${details.parts.join(", ")}${details.partsOmitted ? ` (+${details.partsOmitted} more)` : ""}`,
@@ -363,6 +386,7 @@ export function renderWordOutcomeReport(
       ? [`Verify tier: ${outcome.tier}`]
       : []),
     `Adjustments: ${adjustments.length ? adjustments.join(", ") : "none"}`,
+    ...housekeepingLine(outcome.housekeeping),
     ...(isCount(outcome.ops) ? [`In-place changes: ${outcome.ops}`] : []),
     ...(isCount(outcome.outsideChanges)
       ? [

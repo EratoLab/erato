@@ -12,11 +12,11 @@ import rewriteApplied from "../../../test/fixtures/word-authoring-state/rewrite-
 import rewritePlan from "../../../test/fixtures/word-authoring-state/rewrite-plan.json";
 import rewriteRestored from "../../../test/fixtures/word-authoring-state/rewrite-restored.xml?raw";
 import rewriteSource from "../../../test/fixtures/word-authoring-state/rewrite-source.xml?raw";
+import { wordPackageFingerprint } from "../wordDocumentPackage";
 import {
   captureWordAuthoringSnapshot,
   sameWordBodyContent,
   verifyWordPlanOutput,
-  wordDocumentFingerprint,
 } from "../wordDocumentXml";
 
 const W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
@@ -60,8 +60,8 @@ describe("native Apply/Revert verification", { timeout: 15_000 }, () => {
       body.insertBefore(doc.createElementNS(W, "w:p"), body.lastElementChild);
     });
     expect(verify(changed)).toBe(false);
-    expect(wordDocumentFingerprint(changed)).not.toBe(
-      wordDocumentFingerprint(rewriteApplied),
+    expect(wordPackageFingerprint(changed)).not.toBe(
+      wordPackageFingerprint(rewriteApplied),
     );
   });
   it("does not ignore layout properties on the terminal paragraph", () => {

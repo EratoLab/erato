@@ -12,7 +12,7 @@ const DESKTOP = {
 } as const;
 const WEB = {
   inPlace: true,
-  wholeDocumentImport: "confirm",
+  wholeDocumentImport: "off",
   packageRead: true,
 } as const;
 
@@ -114,7 +114,7 @@ describe("wordApplyPolicy", () => {
   it("names the policy on the copyable report's host line", () => {
     word("OfficeOnline");
     expect(renderWordDiagnosticReport("apply", "blocked", undefined)).toMatch(
-      /· Policy web: in-place on, import confirm, package read on · In-place: on$/,
+      /· Policy web: in-place on, import off, package read on · In-place: on$/,
     );
     word("Mac");
     window.WORD_FORCE_IMPORT_APPLY = true;

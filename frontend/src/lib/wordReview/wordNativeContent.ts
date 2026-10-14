@@ -8,6 +8,8 @@ import {
   removeWordNumberingIdentity,
 } from "./wordXmlComparison";
 
+import type { WordXmlComparisonOptions } from "./wordXmlComparison";
+
 export const WORD_NS =
   "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
 const PKG = "http://schemas.microsoft.com/office/2006/xmlPackage";
@@ -276,10 +278,11 @@ export function missingWordRelationships(doc: Document): boolean {
 /** Resolve relationships by content: Word can rename rIds and media files without changing the object. */
 export function createNativeContentSignature(
   packageXml: string,
+  options?: WordXmlComparisonOptions,
 ): (value: string, owner?: string) => string {
   const parser = new DOMParser();
   const doc = parser.parseFromString(packageXml, "application/xml");
-  const comparison = createWordXmlComparison(doc);
+  const comparison = createWordXmlComparison(doc, options);
   return (value, owner = "/word/document.xml") => {
     const fragment = parser.parseFromString(value, "application/xml");
     if (fragment.getElementsByTagName("parsererror").length)
@@ -313,6 +316,7 @@ export function sameWordPreservedParts(
   tier: "strict" | "content" = "strict",
   /** Story parts a caller compares itself, e.g. headers written in place. */
   exclude: ReadonlySet<string> = new Set(),
+  options?: WordXmlComparisonOptions,
 ): boolean {
   const parse = (v: string) =>
     new DOMParser().parseFromString(v, "application/xml");
@@ -336,8 +340,8 @@ export function sameWordPreservedParts(
   const a = parse(before),
     b = parse(after);
   if (tier === "content") acceptWordStylesUnhiddenByUse(a, b);
-  const beforeSignature = createNativeContentSignature(before);
-  const afterSignature = createNativeContentSignature(after);
+  const beforeSignature = createNativeContentSignature(before, options);
+  const afterSignature = createNativeContentSignature(after, options);
   // New style/list definitions are allowed, but existing definitions must survive.
   for (const [local, key] of [
     ["style", "styleId"],

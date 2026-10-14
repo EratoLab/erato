@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { packageXml, W } from "../../../test/mocks/word/authoringFixtures";
-import { wordDocumentFingerprint } from "../wordDocumentXml";
+import { wordPackageFingerprint } from "../wordDocumentPackage";
 import {
   acceptWordRevisions,
   acceptedWordView,
@@ -78,15 +78,15 @@ const paragraphs = (doc: Document) =>
 describe("Word revision views", () => {
   it("accepts inserted and deleted runs, paragraph marks and property changes", () => {
     const { tracked, accepted } = fixture();
-    expect(wordDocumentFingerprint(acceptedWordView(tracked))).toBe(
-      wordDocumentFingerprint(accepted),
+    expect(wordPackageFingerprint(acceptedWordView(tracked))).toBe(
+      wordPackageFingerprint(accepted),
     );
   });
 
   it("rejects them back to the original document", () => {
     const { tracked, original } = fixture();
-    expect(wordDocumentFingerprint(rejectedWordView(tracked))).toBe(
-      wordDocumentFingerprint(original),
+    expect(wordPackageFingerprint(rejectedWordView(tracked))).toBe(
+      wordPackageFingerprint(original),
     );
   });
 
@@ -116,8 +116,8 @@ describe("Word revision views", () => {
 
   it("keeps a deleted mark that ends the body", () => {
     const xml = packageXml(p(run("Only."), mark("del", 1)));
-    expect(wordDocumentFingerprint(acceptedWordView(xml))).toBe(
-      wordDocumentFingerprint(packageXml(p(run("Only.")))),
+    expect(wordPackageFingerprint(acceptedWordView(xml))).toBe(
+      wordPackageFingerprint(packageXml(p(run("Only.")))),
     );
   });
 

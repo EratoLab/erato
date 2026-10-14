@@ -2,9 +2,9 @@ import { describe, expect, it } from "vitest";
 
 import afterXml from "../../../test/fixtures/word-authoring-state/unchanged-after.xml?raw";
 import beforeXml from "../../../test/fixtures/word-authoring-state/unchanged-before.xml?raw";
+import { wordPackageFingerprint } from "../wordDocumentPackage";
 import {
   captureWordAuthoringSnapshot,
-  wordDocumentFingerprint,
   sameWordBodyContent,
   verifyWordPlanOutput,
 } from "../wordDocumentXml";
@@ -353,8 +353,8 @@ const negatives: [string, (d: Document) => void][] = [
 
 describe("stable structured Word state and retained content", () => {
   it("accepts consecutive captured native Word reads without an edit", () => {
-    expect(wordDocumentFingerprint(beforeXml)).toBe(
-      wordDocumentFingerprint(afterXml),
+    expect(wordPackageFingerprint(beforeXml)).toBe(
+      wordPackageFingerprint(afterXml),
     );
     expect(
       sameWordBodyContent(
@@ -365,8 +365,8 @@ describe("stable structured Word state and retained content", () => {
   });
   it.each(positives)("accepts representation only: %s", (_name, change) => {
     const changed = mutate(beforeXml, change);
-    expect(wordDocumentFingerprint(changed)).toBe(
-      wordDocumentFingerprint(beforeXml),
+    expect(wordPackageFingerprint(changed)).toBe(
+      wordPackageFingerprint(beforeXml),
     );
     expect(
       sameWordBodyContent(
@@ -376,8 +376,8 @@ describe("stable structured Word state and retained content", () => {
     ).toBe(true);
   });
   it.each(negatives)("detects a real change: %s", (_name, change) => {
-    expect(wordDocumentFingerprint(mutate(beforeXml, change))).not.toBe(
-      wordDocumentFingerprint(beforeXml),
+    expect(wordPackageFingerprint(mutate(beforeXml, change))).not.toBe(
+      wordPackageFingerprint(beforeXml),
     );
   });
   it("resolves paragraph IDs within their part, including IDs shared by a header and comment", () => {
@@ -391,8 +391,8 @@ describe("stable structured Word state and retained content", () => {
     );
     const before = serialize(doc);
     header.setAttributeNS(W14, "w14:paraId", "71234567");
-    expect(wordDocumentFingerprint(before)).toBe(
-      wordDocumentFingerprint(serialize(doc)),
+    expect(wordPackageFingerprint(before)).toBe(
+      wordPackageFingerprint(serialize(doc)),
     );
   });
   it("detects a dangling modern comment reference after a partial ID rename", () => {
@@ -406,8 +406,8 @@ describe("stable structured Word state and retained content", () => {
     expect(first(doc, CID, "commentId").getAttributeNS(CID, "paraId")).toBe(
       old,
     );
-    expect(wordDocumentFingerprint(serialize(doc))).not.toBe(
-      wordDocumentFingerprint(beforeXml),
+    expect(wordPackageFingerprint(serialize(doc))).not.toBe(
+      wordPackageFingerprint(beforeXml),
     );
   });
   it("keeps unknown paragraph reference namespaces significant", () => {
@@ -422,8 +422,8 @@ describe("stable structured Word state and retained content", () => {
     paragraph.append(e);
     const before = serialize(doc);
     paragraph.setAttributeNS(W14, "w14:paraId", "71234567");
-    expect(wordDocumentFingerprint(serialize(doc))).not.toBe(
-      wordDocumentFingerprint(before),
+    expect(wordPackageFingerprint(serialize(doc))).not.toBe(
+      wordPackageFingerprint(before),
     );
   });
   it("verifies a retained native table moved by the plan without treating its paragraph positions as edits", () => {
@@ -451,9 +451,7 @@ describe("stable structured Word state and retained content", () => {
       body = first(main(doc), W, "body");
     body.prepend(first(body, W, "tbl"));
     const after = captureWordAuthoringSnapshot(serialize(doc), "doc", "Off");
-    expect(wordDocumentFingerprint(serialize(doc))).not.toBe(
-      before.fingerprint,
-    );
+    expect(wordPackageFingerprint(serialize(doc))).not.toBe(before.fingerprint);
     expect(verifyWordPlanOutput(plan, before, after)).toBe(true);
   });
 
@@ -477,15 +475,15 @@ describe("stable structured Word state and retained content", () => {
     withPane.documentElement.append(pane);
     const packaged = serialize(withPane);
 
-    expect(wordDocumentFingerprint(packaged)).toBe(
-      wordDocumentFingerprint(beforeXml),
+    expect(wordPackageFingerprint(packaged)).toBe(
+      wordPackageFingerprint(beforeXml),
     );
     expect(wordFullDocumentDifferingParts(packaged, beforeXml)).toEqual([]);
 
     const edited = parse(beforeXml);
     first(main(edited), W, "t").textContent = "Changed";
-    expect(wordDocumentFingerprint(serialize(edited))).not.toBe(
-      wordDocumentFingerprint(packaged),
+    expect(wordPackageFingerprint(serialize(edited))).not.toBe(
+      wordPackageFingerprint(packaged),
     );
   });
 

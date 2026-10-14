@@ -2,7 +2,7 @@ import { createWordXmlComparison } from "@erato/frontend/word-review";
 import { describe, expect, it } from "vitest";
 
 import { packageXml, W } from "../../../test/mocks/word/authoringFixtures";
-import { wordDocumentFingerprint } from "../wordDocumentXml";
+import { wordPackageFingerprint } from "../wordDocumentPackage";
 import { normalizeWordTablesForComparison } from "../wordTableComparison";
 
 const source = (grid: number[] = [4513, 4513], extra = "") =>
@@ -22,8 +22,8 @@ describe("semantic AutoFit table comparison", () => {
     const before = source();
     const after = source([3350, 3389]);
     expect(signature(before)).toBe(signature(after));
-    expect(wordDocumentFingerprint(before)).not.toBe(
-      wordDocumentFingerprint(after),
+    expect(wordPackageFingerprint(before)).not.toBe(
+      wordPackageFingerprint(after),
     );
   });
   it("keeps fixed grid widths authoritative, including inherited fixed layout", () => {

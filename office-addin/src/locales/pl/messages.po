@@ -2418,12 +2418,12 @@ msgstr "Program Word nie może zastąpić tego dokumentu, ponieważ zawiera on t
 #. js-lingui-explicit-id
 #: src/word/utils/wordAuthoringMessages.ts
 msgid "officeAddin.word.authoring.contentRefused.interrupted"
-msgstr "Program Word przerwał operację, ponieważ ten dokument zawiera treść, której nie może edytować, na przykład selektor daty. Dokument może być częściowo zmieniony. Oryginał został zapisany do odzyskania."
+msgstr "Program Word przerwał operację, ponieważ ten dokument zawiera treść, której nie może edytować. Dokument może być częściowo zmieniony. Oryginał został zapisany do odzyskania."
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordAuthoringMessages.ts
 msgid "officeAddin.word.authoring.contentRefused.restore"
-msgstr "Program Word nie może przywrócić tego dokumentu, ponieważ zawiera on treść, której Word nie może edytować, na przykład selektor daty. Nic nie zostało zmienione. Zamiast tego pobierz oryginalny dokument."
+msgstr "Program Word nie może przywrócić tego dokumentu, ponieważ zawiera on treść, której Word nie może edytować. Nic nie zostało zmienione. Zamiast tego pobierz oryginalny dokument."
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordAuthoringMessages.ts
@@ -2549,6 +2549,11 @@ msgstr "Nie udało się zastosować nowej wersji. Nie zmieniono dokumentu."
 #: src/word/utils/wordAuthoringMessages.ts
 msgid "officeAddin.word.authoring.importDisabled"
 msgstr "Ta zmiana wymaga przepisania całego dokumentu, co jest wyłączone w tej wersji programu Word. Nic nie zostało zastosowane. Poproś o mniejszą zmianę, którą można zapisać bezpośrednio w dokumencie."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.importDisabled.web"
+msgstr "Ta zmiana wymaga przepisania całego dokumentu, czego Erato nie może zweryfikować w programie Word dla sieci Web, więc nic nie zostało zastosowane. Skopiuj wersję roboczą i zastosuj ją w programie Word dla systemu Windows lub Mac albo poproś o mniejszą zmianę."
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordAuthoringMessages.ts
@@ -3439,6 +3444,11 @@ msgstr "Ta zmiana wymaga przepisania całego dokumentu, co Twoja organizacja wy�
 #: src/word/utils/wordAuthoringMessages.ts
 msgid "officeAddin.word.importRefusal.scoped"
 msgstr "Tej ukierunkowanej zmiany nie można zapisać bezpośrednio w dokumencie w tej wersji programu Word, a ukierunkowana zmiana nigdy nie zastępuje całego dokumentu."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.importRefusal.web"
+msgstr "Ta zmiana wymaga przepisania całego dokumentu, czego Erato nie może zweryfikować w programie Word dla sieci Web, więc nie zostanie tu zastosowana. Skopiuj wersję roboczą i zastosuj ją w programie Word dla systemu Windows lub Mac albo zapytaj ponownie o edycję bezpośrednią."
 
 #. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts

@@ -8,19 +8,19 @@ import {
   insertWordDocumentFile,
   isWordDocumentBackup,
   readWordDocumentFile,
-  wordDocumentFileToOoxml,
-  wordDocumentOoxmlToFile,
   withWordInPlaceBackup,
-  WordDocumentCaptureTimeoutError,
   WORD_DOCUMENT_IMPORT_OPTIONS,
   WORD_FILE_OPEN_TIMEOUT_MS,
+  WordDocumentCaptureTimeoutError,
+  wordDocumentFileToOoxml,
+  wordDocumentOoxmlToFile,
+  wordPackageFingerprint,
 } from "../wordDocumentPackage";
 import {
   readWordPackage,
   WordDocumentTooLargeError,
   wordXmlText,
 } from "../wordDocumentPackageCodec";
-import { wordDocumentFingerprint } from "../wordDocumentXml";
 
 const W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
 const R = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
@@ -359,7 +359,7 @@ describe("native complete-document capture", () => {
     expect(
       Object.getOwnPropertyDescriptor(captured, "fingerprint")?.get,
     ).toBeTypeOf("function");
-    expect(captured.fingerprint).toBe(wordDocumentFingerprint(captured.ooxml));
+    expect(captured.fingerprint).toBe(wordPackageFingerprint(captured.ooxml));
     expect(captured.fingerprint).toBe(captured.fingerprint);
   });
 

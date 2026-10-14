@@ -52,12 +52,12 @@ import {
 import { WordWriteProvider } from "../../providers/WordWriteProvider";
 import { buildWordArtifact } from "../../utils/buildWordArtifact";
 import { WORD_CLIENT_ACTIONS } from "../../utils/wordClientActions";
+import { wordPackageFingerprint } from "../../utils/wordDocumentPackage";
 import { WordDocumentReadSession } from "../../utils/wordDocumentReadTool";
 import {
   createWordDocumentSubmissionExecutor,
   WORD_SUBMIT_PLAN_TOOL,
 } from "../../utils/wordDocumentSubmission";
-import { wordDocumentFingerprint } from "../../utils/wordDocumentXml";
 import {
   ALL_WORD_IN_PLACE_CAPABILITIES,
   setWordInPlaceCapabilitiesForTests,
@@ -270,7 +270,7 @@ function setup(
     editSource: () => {
       current = current.replace("Context", "Later context");
     },
-    fingerprint: () => wordDocumentFingerprint(current),
+    fingerprint: () => wordPackageFingerprint(current),
   };
 }
 const APPLIED = "Applied: Change 5 items";
@@ -827,7 +827,7 @@ describe("structural document review", () => {
     const word = installWordOoxmlHost(realisticWordPackageXml(), {
       profile: "word-pc-16.0.20326",
     });
-    const original = wordDocumentFingerprint(word.ooxml());
+    const original = wordPackageFingerprint(word.ooxml());
     const messageId = String(mock.artifact.messageId);
     const snapshot = await captureRealisticSnapshot(messageId);
     renderRealisticCard(
@@ -842,7 +842,7 @@ describe("structural document review", () => {
     fireEvent.click(screen.getByRole("button", { name: "Undo" }));
     await screen.findByText(/^(Restored the document|Undone: )/);
     expect(screen.queryByRole("alert")).toBeNull();
-    expect(wordDocumentFingerprint(word.ooxml())).toBe(original);
+    expect(wordPackageFingerprint(word.ooxml())).toBe(original);
     expect(word.insert).not.toHaveBeenCalled();
   });
   it("says the rewrite went in as tracked changes, then rejects them on Revert", async () => {
@@ -852,7 +852,7 @@ describe("structural document review", () => {
       trackChanges: true,
     });
     word.setTrackingMode("TrackAll");
-    const original = wordDocumentFingerprint(word.ooxml());
+    const original = wordPackageFingerprint(word.ooxml());
     const messageId = String(mock.artifact.messageId);
     const snapshot = await captureRealisticSnapshot(messageId, "TrackAll");
     renderRealisticCard(
@@ -872,7 +872,7 @@ describe("structural document review", () => {
     );
     await screen.findByText(/^(Restored the document|Undone: )/);
     expect(screen.queryByTestId("word-plan-adjustments")).toBeNull();
-    expect(wordDocumentFingerprint(word.ooxml())).toBe(original);
+    expect(wordPackageFingerprint(word.ooxml())).toBe(original);
     expect(word.insert).not.toHaveBeenCalled();
   });
   it("explains that a full rewrite cannot run while Track Changes is on", async () => {
@@ -933,7 +933,7 @@ describe("structural document review", () => {
     const word = installWordOoxmlHost(realisticWordPackageXml(), {
       profile: "word-pc-16.0.20326",
     });
-    const original = wordDocumentFingerprint(word.ooxml());
+    const original = wordPackageFingerprint(word.ooxml());
     const messageId = String(mock.artifact.messageId);
     const snapshot = await captureRealisticSnapshot(messageId);
     const plan = statusRewritePlan(snapshot, "Status: two changes.");
@@ -968,7 +968,7 @@ describe("structural document review", () => {
     ).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Undo" }));
     await screen.findByText(/^(Restored the document|Undone: )/);
-    expect(wordDocumentFingerprint(word.ooxml())).toBe(original);
+    expect(wordPackageFingerprint(word.ooxml())).toBe(original);
     expect(word.insert).not.toHaveBeenCalled();
   });
   it("respects the structural action permission independently of paragraph edits", () => {
@@ -1947,7 +1947,48 @@ function textBoxPackageXml(): string {
   });
 }
 
+const WEB_IMPORT_REFUSAL =
+  "This change needs a full-document rewrite, which Erato can't verify on Word for the web, so it isn't applied here. Copy the draft and apply it in Word for Windows or Mac, or ask again for edits that can be made in place.";
+
+describe("whole-document plans on Word for the web by default", () => {
+  it("are refused before Apply, with Copy draft and Word for Windows or Mac, and never import", async () => {
+    autoPrompt("always");
+    const execute = spyOnApply();
+    const { word } = await mountRealistic(sectionsPlan, {
+      profile: "word-web",
+    });
+    await act(async () => {});
+    expect(screen.getByText(WEB_IMPORT_REFUSAL)).toBeVisible();
+    expect(screen.queryByRole("button", { name: APPLY_LABEL })).toBeNull();
+    expect(screen.queryByRole("checkbox")).toBeNull();
+    expect(screen.getByRole("button", { name: "Copy draft" })).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Ask again for in-place edits" }),
+    ).toBeVisible();
+    expect(execute).not.toHaveBeenCalled();
+    expect(word.insert).not.toHaveBeenCalled();
+  });
+
+  it("keeps the organization wording where a desktop deployment turns the import off", async () => {
+    window.MS_OFFICE_ADDIN_DEFAULT_SETTINGS = {
+      word_apply: { pc: { whole_document_import: "off" } },
+    };
+    onTestFinished(() => {
+      delete window.MS_OFFICE_ADDIN_DEFAULT_SETTINGS;
+    });
+    await mountRealistic(sectionsPlan);
+    await act(async () => {});
+    expect(
+      screen.getByText(
+        "This change needs a full-document rewrite, which your organization has turned off for this version of Word.",
+      ),
+    ).toBeVisible();
+    expect(screen.queryByRole("button", { name: APPLY_LABEL })).toBeNull();
+  });
+});
+
 describe("confirmed whole-document replacement on Word for the web", () => {
+  beforeEach(() => setWordWebImport("confirm"));
   afterEach(() => {
     delete window.MS_OFFICE_ADDIN_DEFAULT_SETTINGS;
   });
@@ -2144,11 +2185,7 @@ describe("confirmed whole-document replacement on Word for the web", () => {
     const execute = spyOnApply();
     await mountRealistic(sectionsPlan, { profile: "word-web" });
     await act(async () => {});
-    expect(
-      screen.getByText(
-        "This change needs a full-document rewrite, which your organization has turned off for this version of Word.",
-      ),
-    ).toBeVisible();
+    expect(screen.getByText(WEB_IMPORT_REFUSAL)).toBeVisible();
     expect(screen.queryByRole("button", { name: APPLY_LABEL })).toBeNull();
     expect(execute).not.toHaveBeenCalled();
   });
@@ -2196,7 +2233,7 @@ describe("confirmed whole-document replacement on Word for the web", () => {
     apply();
     expect(
       await screen.findByText(
-        "Word stopped because this document contains content it can't edit, for example a date picker. The document may be partially changed. Your original is saved for recovery.",
+        "Word stopped because this document contains content it can't edit. The document may be partially changed. Your original is saved for recovery.",
       ),
     ).toBeVisible();
   });
@@ -2234,7 +2271,28 @@ describe("co-author warning on Word for Windows", () => {
       /^Applied/,
     );
     expect(word.insert).toHaveBeenCalledOnce();
-    expect(coauthoringRead).toHaveBeenCalledOnce();
+    expect(coauthoringRead).toHaveBeenCalledTimes(2);
+  });
+
+  it("reads co-authors again at Apply and shows one who joined before replacing anything", async () => {
+    const { word } = await mountRealistic(sectionsPlan, { coauthors: 1 });
+    await act(async () => {});
+    expect(screen.queryByTestId("word-plan-coauthors")).toBeNull();
+    (
+      word.document as unknown as {
+        coauthoring: { authors: { items: { id: string }[] } };
+      }
+    ).coauthoring.authors.items.push({ id: "author-joined" });
+    apply();
+    expect(await screen.findByTestId("word-plan-coauthors")).toHaveTextContent(
+      COAUTHORS_WARNING,
+    );
+    expect(word.insert).not.toHaveBeenCalled();
+    apply();
+    expect(await screen.findByTestId("word-review-receipt")).toHaveTextContent(
+      /^Applied/,
+    );
+    expect(word.insert).toHaveBeenCalledOnce();
   });
 
   it("warns above the consent card as well", async () => {
@@ -2322,6 +2380,7 @@ describe("co-author warning on Word for Windows", () => {
   });
 
   it("leaves Word for the web to its confirmation", async () => {
+    onTestFinished(setWordWebImport("confirm"));
     const { coauthoringRead } = await mountRealistic(sectionsPlan, {
       profile: "word-web",
       coauthors: 2,

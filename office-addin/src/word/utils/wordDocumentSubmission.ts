@@ -448,7 +448,9 @@ function scopedWholeDocumentRefusal(
     : `${host} can't write any edit in place right now ${because} An edit from a scoped read never replaces the whole document, so ${
         fullPlan
           ? "complete the full read and submit a full-document plan instead; the user is asked to confirm before it replaces the whole document."
-          : "tell the user that this change can't be made in this version of Word right now."
+          : web
+            ? "tell the user that this change needs Word for Windows or Mac."
+            : "tell the user that this change can't be made in this version of Word right now."
       }`;
   return {
     ok: false,

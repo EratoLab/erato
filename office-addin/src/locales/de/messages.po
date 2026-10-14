@@ -2418,12 +2418,12 @@ msgstr "Word kann dieses Dokument nicht ersetzen, weil es Inhalte enthält, die 
 #. js-lingui-explicit-id
 #: src/word/utils/wordAuthoringMessages.ts
 msgid "officeAddin.word.authoring.contentRefused.interrupted"
-msgstr "Word hat abgebrochen, weil dieses Dokument Inhalte enthält, die Word nicht bearbeiten kann, zum Beispiel eine Datumsauswahl. Das Dokument wurde möglicherweise teilweise geändert. Das Original ist zur Wiederherstellung gespeichert."
+msgstr "Word hat abgebrochen, weil dieses Dokument Inhalte enthält, die Word nicht bearbeiten kann. Das Dokument wurde möglicherweise teilweise geändert. Das Original ist zur Wiederherstellung gespeichert."
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordAuthoringMessages.ts
 msgid "officeAddin.word.authoring.contentRefused.restore"
-msgstr "Word kann dieses Dokument nicht wiederherstellen, weil es Inhalte enthält, die Word nicht bearbeiten kann, zum Beispiel eine Datumsauswahl. Es wurde nichts geändert. Laden Sie stattdessen das Originaldokument herunter."
+msgstr "Word kann dieses Dokument nicht wiederherstellen, weil es Inhalte enthält, die Word nicht bearbeiten kann. Es wurde nichts geändert. Laden Sie stattdessen das Originaldokument herunter."
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordAuthoringMessages.ts
@@ -2549,6 +2549,11 @@ msgstr "Die Überarbeitung konnte nicht angewendet werden. Das Dokument wurde ni
 #: src/word/utils/wordAuthoringMessages.ts
 msgid "officeAddin.word.authoring.importDisabled"
 msgstr "Diese Änderung erfordert eine Neufassung des gesamten Dokuments, die für diese Word-Version ausgeschaltet ist. Es wurde nichts angewendet. Bitten Sie um eine kleinere Änderung, die direkt im Dokument geschrieben werden kann."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.importDisabled.web"
+msgstr "Diese Änderung erfordert eine Neufassung des gesamten Dokuments, die Erato in Word für das Web nicht überprüfen kann. Daher wurde nichts angewendet. Kopieren Sie den Entwurf und wenden Sie ihn in Word für Windows oder Mac an, oder bitten Sie um eine kleinere Änderung."
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordAuthoringMessages.ts
@@ -3439,6 +3444,11 @@ msgstr "Diese Änderung erfordert eine Neufassung des gesamten Dokuments, die Ih
 #: src/word/utils/wordAuthoringMessages.ts
 msgid "officeAddin.word.importRefusal.scoped"
 msgstr "Diese gezielte Änderung kann in dieser Word-Version nicht direkt im Dokument geschrieben werden, und eine gezielte Änderung ersetzt nie das gesamte Dokument."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.importRefusal.web"
+msgstr "Diese Änderung erfordert eine Neufassung des gesamten Dokuments, die Erato in Word für das Web nicht überprüfen kann. Daher wird sie hier nicht angewendet. Kopieren Sie den Entwurf und wenden Sie ihn in Word für Windows oder Mac an, oder fragen Sie erneut nach direkten Bearbeitungen."
 
 #. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts

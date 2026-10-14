@@ -79,7 +79,7 @@ export function wordDocumentDiagnosticText(
     return t({
       id: "officeAddin.word.authoring.contentRefused.interrupted",
       message:
-        "Word stopped because this document contains content it can't edit, for example a date picker. The document may be partially changed. Your original is saved for recovery.",
+        "Word stopped because this document contains content it can't edit. The document may be partially changed. Your original is saved for recovery.",
     });
   if (diagnostic.reason === "host-error")
     return ["write", "verify", "restore"].includes(diagnostic.stage)
@@ -108,11 +108,17 @@ export function wordDocumentDiagnosticText(
         "This change replaces the whole document, which needs your confirmation first. Nothing was applied.",
     });
   if (diagnostic.reason === "import-disabled")
-    return t({
-      id: "officeAddin.word.authoring.importDisabled",
-      message:
-        "This change needs a full-document rewrite, which is turned off for this version of Word. Nothing was applied. Ask for a smaller edit that can be written in place.",
-    });
+    return wordApplyHost(wordHostPlatform()) === "web"
+      ? t({
+          id: "officeAddin.word.authoring.importDisabled.web",
+          message:
+            "This change needs a full-document rewrite, which Erato can't verify on Word for the web, so nothing was applied. Copy the draft and apply it in Word for Windows or Mac, or ask for a smaller edit.",
+        })
+      : t({
+          id: "officeAddin.word.authoring.importDisabled",
+          message:
+            "This change needs a full-document rewrite, which is turned off for this version of Word. Nothing was applied. Ask for a smaller edit that can be written in place.",
+        });
   if (diagnostic.reason === "scoped-needs-in-place")
     return t({
       id: "officeAddin.word.authoring.scopedNeedsInPlace",
@@ -142,7 +148,7 @@ function wordNotAllowedText(restoring: boolean): string {
     return t({
       id: "officeAddin.word.authoring.contentRefused.restore",
       message:
-        "Word can't restore this document because it contains content it can't edit, for example a date picker. Nothing was changed. Download the original document instead.",
+        "Word can't restore this document because it contains content it can't edit. Nothing was changed. Download the original document instead.",
     });
   return wordApplyHost(wordHostPlatform()) === "web"
     ? t({
@@ -161,11 +167,17 @@ function wordNotAllowedText(restoring: boolean): string {
 export function wordWholeDocumentRefusalText(
   reason: WordWholeDocumentRefusal,
 ): string {
-  return reason === "scoped-needs-in-place"
+  if (reason === "scoped-needs-in-place")
+    return t({
+      id: "officeAddin.word.importRefusal.scoped",
+      message:
+        "This targeted edit can't be written in place in this version of Word, and a targeted edit never replaces the whole document.",
+    });
+  return wordApplyHost(wordHostPlatform()) === "web"
     ? t({
-        id: "officeAddin.word.importRefusal.scoped",
+        id: "officeAddin.word.importRefusal.web",
         message:
-          "This targeted edit can't be written in place in this version of Word, and a targeted edit never replaces the whole document.",
+          "This change needs a full-document rewrite, which Erato can't verify on Word for the web, so it isn't applied here. Copy the draft and apply it in Word for Windows or Mac, or ask again for edits that can be made in place.",
       })
     : t({
         id: "officeAddin.word.importRefusal.disabled",

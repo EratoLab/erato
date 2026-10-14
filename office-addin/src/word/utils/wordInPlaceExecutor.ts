@@ -11,6 +11,7 @@ import {
   encodeWordDocumentBackup,
   supportsWordDocumentPackage,
   withWordInPlaceBackup,
+  wordWrittenPackageFingerprint,
 } from "./wordDocumentPackage";
 import { captureWordAuthoringSnapshot } from "./wordDocumentXml";
 import {
@@ -439,8 +440,12 @@ export interface WordInPlaceApplyInput {
   ops: readonly WordInPlaceOp[];
   onBeforeWrite?: (before: string) => void;
   progress: WordApplyProgress;
-  /** Fresh read of the whole package after a rejected batch, when the touched paragraphs cannot be read. */
-  observePackage: (documentUrl?: string) => Promise<string | undefined>;
+  /** Fresh read of the whole package after a rejected batch, when the touched paragraphs cannot be
+   * read, fingerprinted against `replaced`, the package before the write. */
+  observePackage: (
+    documentUrl?: string,
+    replaced?: string,
+  ) => Promise<string | undefined>;
 }
 
 /**
@@ -468,6 +473,7 @@ export async function applyWordPlanInPlace(
   let writing = false;
   let before: string | undefined;
   let documentUrl: string | undefined;
+  let replaced: string | undefined;
   let record: WordInPlaceBackup | undefined;
   let outside = 0;
   try {
@@ -510,6 +516,7 @@ export async function applyWordPlanInPlace(
       );
       const live = await captureWordDocumentPackage();
       documentUrl = live.documentUrl;
+      replaced = live.ooxml;
       const urlChanged =
         (snapshot.documentUrl !== undefined &&
           live.documentUrl !== snapshot.documentUrl) ||
@@ -1331,9 +1338,9 @@ export async function applyWordPlanInPlace(
         return {
           status: "interrupted",
           before,
-          afterFingerprint: record.tracked
-            ? (afterFingerprint ?? after.fingerprint)
-            : after.fingerprint,
+          afterFingerprint:
+            (record.tracked ? afterFingerprint : undefined) ??
+            wordWrittenPackageFingerprint(after.ooxml, live.ooxml).fingerprint,
           diagnostic: diagnostic("verify", "output-mismatch", undefined, {
             ...route,
             verifyTier: "block",
@@ -1394,7 +1401,8 @@ export async function applyWordPlanInPlace(
       status: "interrupted",
       before,
       afterFingerprint:
-        observed?.afterFingerprint ?? (await input.observePackage(documentUrl)),
+        observed?.afterFingerprint ??
+        (await input.observePackage(documentUrl, replaced)),
       diagnostic: diagnostic(stage, "host-error", error, {
         ...route,
         ...(observed && stage === "write" ? { partial: observed.partial } : {}),

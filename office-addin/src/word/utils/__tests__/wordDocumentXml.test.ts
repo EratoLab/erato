@@ -7,11 +7,12 @@ import {
   readySnapshot,
   W,
 } from "../../../test/mocks/word/authoringFixtures";
+import { wordPackageFingerprint } from "../wordDocumentPackage";
 import {
   captureWordAuthoringSnapshot,
   compileWordDocumentPlan,
   verifyWordPlanOutput,
-  wordDocumentFingerprint,
+  wordBodyFingerprint,
 } from "../wordDocumentXml";
 
 describe("Word structural compiler", () => {
@@ -141,7 +142,7 @@ describe("Word structural compiler", () => {
   it("detects formatting-only changes in live preconditions", () => {
     const a = packageXml(paragraph("Same text"));
     const b = a.replace("<w:r>", "<w:r><w:rPr><w:b/></w:rPr>");
-    expect(wordDocumentFingerprint(a)).not.toBe(wordDocumentFingerprint(b));
+    expect(wordPackageFingerprint(a)).not.toBe(wordPackageFingerprint(b));
   });
   it("does not verify success if Word loses kept formatting or changes a list's kind", () => {
     const source = readySnapshot(
@@ -185,5 +186,37 @@ describe("Word structural compiler", () => {
         ),
       ).toBe(false);
     }
+  });
+});
+
+describe("Word fingerprints", () => {
+  const CID = "http://schemas.microsoft.com/office/word/2016/wordml/cid";
+  const withList = (durableId: string) =>
+    packageXml(paragraph("Listed.")).replace(
+      "</pkg:package>",
+      `<pkg:part pkg:name="/word/numbering.xml" pkg:contentType="application/xml"><pkg:xmlData><w:numbering xmlns:w="${W}" xmlns:w16cid="${CID}"><w:abstractNum w:abstractNumId="0"><w:lvl w:ilvl="0"><w:numFmt w:val="decimal"/></w:lvl></w:abstractNum><w:num w:numId="1" w16cid:durableId="${durableId}"><w:abstractNumId w:val="0"/></w:num></w:numbering></pkg:xmlData></pkg:part></pkg:package>`,
+    );
+
+  it("fingerprints a body with lists alike in a capture and a body read, whatever IDs a read gives its lists", () => {
+    const captured = captureWordAuthoringSnapshot(
+      withList("111"),
+      "doc",
+      "Off",
+    );
+    expect(captured.fingerprint).toBe(wordBodyFingerprint(withList("111")));
+    expect(wordBodyFingerprint(withList("222"))).toBe(captured.fingerprint);
+  });
+
+  it("keeps list instance IDs in a complete package's fingerprint, in a capture and on its own", () => {
+    const captured = captureWordAuthoringSnapshot(
+      withList("111"),
+      "doc",
+      "Off",
+      true,
+    );
+    expect(captured.fingerprint).toBe(wordPackageFingerprint(withList("111")));
+    expect(wordPackageFingerprint(withList("222"))).not.toBe(
+      captured.fingerprint,
+    );
   });
 });

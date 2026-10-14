@@ -13,10 +13,10 @@ import {
   paragraph,
   W,
 } from "../../../test/mocks/word/authoringFixtures";
+import { wordPackageFingerprint } from "../wordDocumentPackage";
 import {
   captureWordAuthoringSnapshot,
   sameWordBodyContent,
-  wordDocumentFingerprint,
 } from "../wordDocumentXml";
 
 const PKG = "http://schemas.microsoft.com/office/2006/xmlPackage";
@@ -121,9 +121,7 @@ describe("native formatting normalization", { timeout: 15_000 }, () => {
     const source = base();
     const after = change(source, (doc) => all(doc, "pStyle")[0].remove());
     expect(matches(source, after)).toBe(true);
-    expect(wordDocumentFingerprint(source)).toBe(
-      wordDocumentFingerprint(after),
-    );
+    expect(wordPackageFingerprint(source)).toBe(wordPackageFingerprint(after));
   });
 
   it("accepts Word also dropping the paragraph-properties wrapper that became empty", () => {
@@ -132,9 +130,7 @@ describe("native formatting normalization", { timeout: 15_000 }, () => {
       all(doc, "pStyle")[0].parentElement!.remove(),
     );
     expect(matches(source, after)).toBe(true);
-    expect(wordDocumentFingerprint(source)).toBe(
-      wordDocumentFingerprint(after),
-    );
+    expect(wordPackageFingerprint(source)).toBe(wordPackageFingerprint(after));
   });
 
   it("retains otherwise empty paragraph properties with unknown extension attributes", () => {
@@ -261,8 +257,8 @@ describe("native formatting normalization", { timeout: 15_000 }, () => {
       all(doc, "fonts")[0].append(font);
     });
     expect(matches(source, after)).toBe(true);
-    expect(wordDocumentFingerprint(source)).not.toBe(
-      wordDocumentFingerprint(after),
+    expect(wordPackageFingerprint(source)).not.toBe(
+      wordPackageFingerprint(after),
     );
     expect(
       matches(
