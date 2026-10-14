@@ -93,7 +93,10 @@ export interface WordParagraphTexts {
 /** A paragraph's two text views and the map between them. */
 export interface WordParagraphView {
   rangeText: string;
-  /** No hidden text, no tracked deletions, no U+0005 or U+0002. */
+  /**
+   * No tracked deletions, no U+0005 or U+0002, and no hidden text unless the identity text shows it,
+   * as Word for the web's getText() does whatever its options say.
+   */
   visibleText: string;
   /** visibleAt[i] is the visible offset of paragraph.text offset i, for i in 0..rangeText.length. */
   visibleAt: readonly number[];
@@ -421,13 +424,19 @@ function alignWith(
 
 /**
  * Which kinds the visible text keeps. getText may or may not show a line break or an opaque item
- * as paragraph.text does, so the identity text picks the policy when it is given.
+ * as paragraph.text does, so the identity text picks the policy when it is given. Word for the web's
+ * getText() keeps hidden text even without IncludeHiddenText (ERMAIN-948 gate F1), so the text the
+ * model saw there has it too; desktop's never does, so the first four always decide there.
  */
+const SHOWN: readonly (readonly CharKind[])[] = [
+  ["text", "break", "opaque"],
+  ["text", "opaque"],
+  ["text", "break"],
+  ["text"],
+];
 const POLICIES: readonly ReadonlySet<CharKind>[] = [
-  new Set(["text", "break", "opaque"]),
-  new Set(["text", "opaque"]),
-  new Set(["text", "break"]),
-  new Set(["text"]),
+  ...SHOWN.map((kinds) => new Set(kinds)),
+  ...SHOWN.map((kinds) => new Set<CharKind>([...kinds, "hidden"])),
 ];
 
 function viewOf(

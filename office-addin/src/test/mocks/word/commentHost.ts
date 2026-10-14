@@ -25,7 +25,8 @@ import type { Mock } from "vitest";
  *   the minute, or w:date read in the host's zone (UTC+2) without one.
  * - web: Comment.id is a number; items come in start order; creationDate keeps seconds, and is
  *   null without dateUtc; paragraph.text shows U+0005 at references, hidden text and U+000C at a
- *   page break, which getText() leaves out; `repliesWithRoot` models comments.xml out of w:id
+ *   page break, which getText() leaves out but for hidden text, which it keeps whatever its options
+ *   say (gate F1); `repliesWithRoot` models comments.xml out of w:id
  *   order, where replies list the root and drop a real reply; a legacy file's packages carry ids
  *   that are not Comment.id (gate F2). Comment.getRange() unhides hidden text in the anchored
  *   paragraph there (gate F1), so the web host throws on it and uninstallWordCommentHost() fails
@@ -294,7 +295,7 @@ function lay(segments: readonly Segment[], web: boolean): Laid {
         typeof segment === "string"
           ? segment
           : "hidden" in segment
-            ? options.IncludeHiddenText
+            ? options.IncludeHiddenText || web
               ? segment.hidden
               : ""
             : "del" in segment && options.IncludeTextMarkedAsDeleted

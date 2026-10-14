@@ -605,6 +605,8 @@ describe("exact anchors", () => {
       { host: "web" },
       { exact: () => ROOTS.map(host.commentId) },
     );
+    // The web's getText() keeps T10's hidden "SECRET ", so its visible offsets count it.
+    const shownBefore = (key: string) => (key === "T10" ? "SECRET ".length : 0);
     for (const key of ROOTS.filter((k) => !ACROSS.includes(k))) {
       const placement = thread(threads, key).placement;
       expect(placement?.status, key).toBe("placed");
@@ -616,7 +618,7 @@ describe("exact anchors", () => {
       expect(
         [placement.offsets.start.visible, placement.offsets.end.visible],
         key,
-      ).toEqual([truth.start, truth.end]);
+      ).toEqual([truth.start + shownBefore(key), truth.end + shownBefore(key)]);
     }
     for (const key of ACROSS)
       expect(thread(threads, key).placement, key).toEqual({
@@ -653,7 +655,7 @@ describe("exact anchors", () => {
     }
   });
 
-  it("offsets web anchors in paragraph.text past U+0005 and hidden text", async () => {
+  it("offsets web anchors past U+0005, and in the text getText() shows, hidden text included", async () => {
     const { threads } = await read(
       { host: "web" },
       { exact: askFor("T7b", "T10") },
@@ -666,7 +668,7 @@ describe("exact anchors", () => {
       start: { range: 32, visible: 31 },
       end: { range: 50, visible: 48 },
     });
-    expect(offsets("T10")?.start).toEqual({ range: 19, visible: 12 });
+    expect(offsets("T10")?.start).toEqual({ range: 19, visible: 19 });
   });
 
   it("reads one package for threads that share a paragraph", async () => {
@@ -807,7 +809,7 @@ describe("Word for the web reads no comment range (gates F1 and F2)", () => {
       status: "placed",
       joinedBy: "durableId",
       anchor: { quote: "whiskey xray" },
-      offsets: { start: { range: 19, visible: 12 } },
+      offsets: { start: { range: 19, visible: 19 } },
     });
   });
 
