@@ -2,8 +2,8 @@ import { eratoComponentKitTestDedupe } from "@erato/frontend/component-kit/vite"
 import { defineConfig } from "vitest/config";
 
 export default defineConfig({
-  esbuild: {
-    jsx: "automatic",
+  oxc: {
+    jsx: { runtime: "automatic" },
   },
   // A kit and the host it borrows from must share these module instances.
   resolve: {

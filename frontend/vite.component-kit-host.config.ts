@@ -2,7 +2,7 @@ import path from "node:path";
 
 import { lingui } from "@lingui/vite-plugin";
 import react from "@vitejs/plugin-react";
-import { defineConfig, type Plugin } from "vite";
+import { defineConfig, esmExternalRequirePlugin, type Plugin } from "vite";
 
 import { libraryBuildStatusPlugin } from "./library-build-status";
 import {
@@ -67,6 +67,8 @@ export default defineConfig({
     }),
     lingui(),
     iconCatalogPlugin({ rootDir: __dirname }),
+    // CommonJS dependencies must import external peers in browser ESM.
+    esmExternalRequirePlugin(),
     browserOnlyBuildPlugin(),
     componentKitHostManifestPlugin(),
     libraryBuildStatusPlugin({
@@ -95,15 +97,23 @@ export default defineConfig({
       ),
       formats: ["es"],
     },
-    rollupOptions: {
+    rolldownOptions: {
       external,
-      preserveEntrySignatures: "strict",
+      // Keep every public export while allowing Rolldown to share explicit chunks.
+      preserveEntrySignatures: "allow-extension",
       output: {
         entryFileNames: "[name].mjs",
         chunkFileNames: "chunks/[name]-[hash].mjs",
         assetFileNames: "assets/[name]-[hash][extname]",
-        onlyExplicitManualChunks: true,
-        manualChunks: iconCatalogManualChunk,
+        codeSplitting: {
+          includeDependenciesRecursively: false,
+          groups: [
+            {
+              debugName: "icon-catalogs",
+              name: (id) => iconCatalogManualChunk(id) ?? null,
+            },
+          ],
+        },
       },
     },
   },
