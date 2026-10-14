@@ -2057,6 +2057,15 @@ export async function revertWordPlanInPlace(
       const moved = recount.items.findIndex(
         (p, i) => p.uniqueLocalId !== expectedIds[i],
       );
+      // A cell's paragraph reads as its whole row on Word PC and Mac, so a neighbour in that row
+      // changes with it; it is fine once the row equals the restored cell's original.
+      const restoredRows = new Set(
+        pending.flatMap((r) =>
+          r.region.before
+            .filter((k) => ops[k].kind === "cell")
+            .map((k) => ops[k].originalSignature!),
+        ),
+      );
       const locations = [
         ...(recount.items.length !== expectedIds.length
           ? ["/word/document.xml body: count"]
@@ -2087,11 +2096,13 @@ export async function revertWordPlanInPlace(
             .map((k) => blockLocation(ops[k].ref, "signature")),
         ),
         ...boundaries
-          .filter(
-            (_, i) =>
-              wordParagraphSignature(boundariesAfter[i].value) !==
-              wordParagraphSignature(boundaryReads[i].value),
-          )
+          .filter((_, i) => {
+            const after = wordParagraphSignature(boundariesAfter[i].value);
+            return (
+              after !== wordParagraphSignature(boundaryReads[i].value) &&
+              !restoredRows.has(after)
+            );
+          })
           .map((at) => paragraphLocation(at, "signature")),
         ...storyPending
           .filter(

@@ -59,6 +59,9 @@ export interface WordOoxmlHostOptions {
   /** Localized Word: Paragraph.style finds built-in styles only by their localized UI names, which
    * the package does not carry, so only custom style names resolve. */
   localizedStyleNames?: boolean;
+  /** Word PC and Mac (ERMAIN-973): Paragraph.getOoxml of a table-cell paragraph returns the cell's
+   * whole row, as a one-row table. */
+  cellParagraphOoxmlIsRow?: boolean;
   /** Word for the web (ERMAIN-967): Paragraph.getOoxml leaves out the paragraph's w:pPr, so a
    * style or list change does not show in it. */
   paragraphOoxmlOmitsProperties?: boolean;
@@ -1595,9 +1598,22 @@ export function installWordOoxmlHost(
         : "";
     const wrapper = parse(`<w:document xmlns:w="${W}"><w:body/></w:document>`);
     const body = elements(wrapper, W, "body")[0];
-    const copy = wrapper.importNode(p, true);
-    if (settings.paragraphOoxmlOmitsProperties) child(copy, "pPr")?.remove();
-    body.append(copy);
+    let row = p.parentElement;
+    while (row && !(row.namespaceURI === W && row.localName === "tr"))
+      row = row.parentElement;
+    if (settings.cellParagraphOoxmlIsRow && row) {
+      const table = wrapper.createElementNS(W, "w:tbl");
+      for (const name of ["tblPr", "tblGrid"]) {
+        const part = child(row.parentElement!, name);
+        if (part) table.append(wrapper.importNode(part, true));
+      }
+      table.append(wrapper.importNode(row, true));
+      body.append(table);
+    } else {
+      const copy = wrapper.importNode(p, true);
+      if (settings.paragraphOoxmlOmitsProperties) child(copy, "pPr")?.remove();
+      body.append(copy);
+    }
     body.append(wrapper.createElementNS(W, "w:sectPr"));
     return `<pkg:package xmlns:pkg="${PKG}">${packagePart(
       "/word/document.xml",

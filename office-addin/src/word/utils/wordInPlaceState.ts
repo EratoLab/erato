@@ -39,7 +39,9 @@ function firstParagraph(doc: Document): Element {
 }
 
 /** Canonical content of the paragraph Paragraph.getOoxml returns: revision-session IDs and run
- * splits are ignored, every property and text is compared. */
+ * splits are ignored, every property and text is compared. For a table-cell paragraph Word PC and
+ * Mac return the cell's whole row, whose first paragraph may be another cell's, so the row stands
+ * for it (ERMAIN-973). */
 export function wordParagraphSignature(paragraphOoxml: string): string {
   const doc = new DOMParser().parseFromString(
     paragraphOoxml,
@@ -47,7 +49,13 @@ export function wordParagraphSignature(paragraphOoxml: string): string {
   );
   if (doc.getElementsByTagName("parsererror").length)
     throw new Error("Word returned unreadable paragraph content.");
-  return createWordXmlComparison(doc).signature(firstParagraph(doc));
+  const first = Array.from(wordMainBody(doc)?.children ?? []).find(
+    (e) =>
+      e.namespaceURI === W && (e.localName === "p" || e.localName === "tbl"),
+  );
+  return createWordXmlComparison(doc).signature(
+    first?.localName === "tbl" ? first : firstParagraph(doc),
+  );
 }
 
 /** b/i/u of the paragraph's first run: what insertText "Replace" keeps for the new text. */

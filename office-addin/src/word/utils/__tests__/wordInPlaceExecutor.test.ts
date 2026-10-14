@@ -320,6 +320,37 @@ describe("in-place apply", { timeout: 30_000 }, () => {
     },
   );
 
+  it("reverts a table cell where Paragraph.getOoxml returns the cell's row", async () => {
+    const host = install({ cellParagraphOoxmlIsRow: true });
+    const original = wordPackageFingerprint(host.ooxml());
+    const snapshot = await captureRealisticSnapshot();
+    const table = snapshot.blocks.find((b) => b.nativeKind === "table")!;
+    const plan = expandWordTableCellSubmission(
+      {
+        snapshot: snapshot.token,
+        readToken: "read-proof",
+        table_cell: {
+          sourceRef: table.ref,
+          rowIndex: 1,
+          cellIndex: 1,
+          expectedText: "42",
+          text: "43",
+        },
+      },
+      snapshot,
+    );
+    const applied = await apply(plan, snapshot);
+    expect(applied.status, report(applied)).toBe("applied");
+    host.events.length = 0;
+    const reverted = await revertWordDocumentPlan(
+      applied.before!,
+      applied.afterFingerprint!,
+    );
+    expect(reverted.status, report(reverted)).toBe("reverted");
+    expect(mutations(host.events)).toEqual(["mutation:insertText"]);
+    expect(wordPackageFingerprint(host.ooxml())).toBe(original);
+  });
+
   it("reverts an in-place write to the exact original package", async () => {
     withMarks();
     const host = install();
