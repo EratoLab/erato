@@ -56,7 +56,7 @@ env:
 jobs:
   resolve-registry-cache-refs:
     name: Resolve registry build-cache refs
-    runs-on: ubuntu-24.04
+    runs-on: blacksmith-2vcpu-ubuntu-2404
     permissions: {}
     outputs:
       target: ${{ steps.cache-refs.outputs.target }}
@@ -105,7 +105,7 @@ jobs:
   lint-frontend:
     timeout-minutes: 20
     name: "lint (frontend)"
-    runs-on: ubuntu-24.04 # blacksmith-8vcpu-ubuntu-2404
+    runs-on: blacksmith-4vcpu-ubuntu-2404 # blacksmith-8vcpu-ubuntu-2404
     steps:
       - uses: actions/checkout@v4
       # Setup section
@@ -292,7 +292,7 @@ jobs:
   lint-backend:
     timeout-minutes: 10
     name: "lint (backend)"
-    runs-on: ubuntu-24.04 # blacksmith-8vcpu-ubuntu-2404
+    runs-on: blacksmith-4vcpu-ubuntu-2404 # blacksmith-8vcpu-ubuntu-2404
     steps:
       - uses: actions/checkout@v4
 
@@ -320,7 +320,7 @@ jobs:
     name: "lint (infrastructure)"
     env:
       KUBESCAPE_CONTROLS_VERSION: v2.0.35
-    runs-on: ubuntu-24.04 # blacksmith-8vcpu-ubuntu-2404
+    runs-on: blacksmith-4vcpu-ubuntu-2404 # blacksmith-8vcpu-ubuntu-2404
     steps:
       - uses: actions/checkout@v4
 
@@ -478,7 +478,7 @@ jobs:
   lint-site-docs:
     timeout-minutes: 10
     name: "lint (site-docs)"
-    runs-on: ubuntu-24.04 # blacksmith-8vcpu-ubuntu-2404
+    runs-on: blacksmith-4vcpu-ubuntu-2404 # blacksmith-8vcpu-ubuntu-2404
     steps:
       - uses: actions/checkout@v4
 
@@ -495,7 +495,7 @@ jobs:
     name: "lint"
     needs: [lint-frontend, lint-backend, lint-infrastructure, lint-site-docs]
     if: ${{ !cancelled() }}
-    runs-on: ubuntu-24.04
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     permissions: {}
     steps:
       - name: Verify lint jobs succeeded
@@ -506,7 +506,7 @@ jobs:
           test "${{ needs.lint-site-docs.result }}" = "success"
 
   cargo-clippy:
-    runs-on: ubuntu-24.04 # blacksmith-8vcpu-ubuntu-2404
+    runs-on: blacksmith-4vcpu-ubuntu-2404 # blacksmith-8vcpu-ubuntu-2404
     name: "cargo clippy"
     steps:
       - uses: actions/checkout@v4
@@ -530,7 +530,7 @@ jobs:
           cargo clippy --all-targets --no-default-features --features=sentry --locked
 
   cargo-deny:
-    runs-on: ubuntu-24.04 # blacksmith-8vcpu-ubuntu-2404
+    runs-on: blacksmith-4vcpu-ubuntu-2404 # blacksmith-8vcpu-ubuntu-2404
     name: "cargo deny"
     steps:
       - uses: actions/checkout@v4
@@ -540,7 +540,7 @@ jobs:
           command: check licenses
 
   test-backend:
-    runs-on: ubuntu-24.04 # blacksmith-8vcpu-ubuntu-2404
+    runs-on: blacksmith-4vcpu-ubuntu-2404 # blacksmith-8vcpu-ubuntu-2404
     name: "test backend"
     steps:
       - uses: actions/checkout@v4
@@ -594,7 +594,7 @@ jobs:
   test-frontend:
     timeout-minutes: 10
     name: "test frontend"
-    runs-on: ubuntu-24.04 # blacksmith-8vcpu-ubuntu-2404
+    runs-on: blacksmith-4vcpu-ubuntu-2404 # blacksmith-8vcpu-ubuntu-2404
     steps:
       - uses: actions/checkout@v4
       # Setup section
@@ -641,7 +641,7 @@ jobs:
   test-e2e:
     name: "test e2e (${{ matrix.scenario }}${{ matrix.shard_name || '' }})"
     needs: [build-and-push-amd64]
-    runs-on: ubuntu-24.04 # blacksmith-8vcpu-ubuntu-2404
+    runs-on: blacksmith-4vcpu-ubuntu-2404 # blacksmith-8vcpu-ubuntu-2404
     timeout-minutes: 30
     strategy:
       fail-fast: false
@@ -800,7 +800,7 @@ jobs:
     name: "test e2e (many-models)"
     needs: [test-e2e]
     if: ${{ !cancelled() }}
-    runs-on: ubuntu-24.04
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     permissions: {}
     steps:
       - name: Verify e2e matrix succeeded
@@ -811,7 +811,7 @@ jobs:
     name: "merge e2e reports"
     needs: [test-e2e]
     if: ${{ !cancelled() }}
-    runs-on: ubuntu-24.04
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     permissions:
       contents: read
     steps:
@@ -847,7 +847,7 @@ jobs:
           retention-days: 30
 
   build-and-push-helm-chart-dev:
-    runs-on: ubuntu-24.04 # blacksmith-4vcpu-ubuntu-2404
+    runs-on: blacksmith-4vcpu-ubuntu-2404 # blacksmith-4vcpu-ubuntu-2404
     if: github.ref_type != 'tag'
     permissions:
       contents: read
@@ -865,7 +865,7 @@ jobs:
         run: ./infrastructure/scripts/release_erato_chart_dev.sh --git-sha=${{ env.SHA_TAG }}
 
   build-and-push-helm-chart-release:
-    runs-on: ubuntu-24.04 # blacksmith-4vcpu-ubuntu-2404
+    runs-on: blacksmith-4vcpu-ubuntu-2404 # blacksmith-4vcpu-ubuntu-2404
     if: github.ref_type == 'tag'
     permissions:
       contents: read
@@ -884,7 +884,7 @@ jobs:
 
   build-and-push-amd64:
     needs: [resolve-registry-cache-refs]
-    runs-on: ubuntu-24.04 # blacksmith-8vcpu-ubuntu-2404
+    runs-on: blacksmith-4vcpu-ubuntu-2404 # blacksmith-8vcpu-ubuntu-2404
     env:
       CACHE_TARGET: ${{ needs.resolve-registry-cache-refs.outputs.target }}
       CACHE_SOURCE: ${{ needs.resolve-registry-cache-refs.outputs.source }}
@@ -979,7 +979,7 @@ jobs:
 
   build-and-push-arm64:
     needs: [resolve-registry-cache-refs]
-    runs-on: ubuntu-24.04-arm64-custom-large # blacksmith-8vcpu-ubuntu-2404-arm
+    runs-on: blacksmith-8vcpu-ubuntu-2404-arm # blacksmith-8vcpu-ubuntu-2404-arm
     env:
       CACHE_TARGET: ${{ needs.resolve-registry-cache-refs.outputs.target }}
       CACHE_SOURCE: ${{ needs.resolve-registry-cache-refs.outputs.source }}
@@ -1074,7 +1074,7 @@ jobs:
 
   build-and-push-component-kit-example:
     needs: [resolve-registry-cache-refs]
-    runs-on: ubuntu-24.04 # blacksmith-8vcpu-ubuntu-2404
+    runs-on: blacksmith-4vcpu-ubuntu-2404 # blacksmith-8vcpu-ubuntu-2404
     env:
       CACHE_TARGET: ${{ needs.resolve-registry-cache-refs.outputs.target }}
       CACHE_SOURCE: ${{ needs.resolve-registry-cache-refs.outputs.source }}
@@ -1114,7 +1114,7 @@ jobs:
 
   create-manifests:
     needs: [build-and-push-amd64, build-and-push-arm64]
-    runs-on: ubuntu-24.04 # blacksmith-4vcpu-ubuntu-2404
+    runs-on: blacksmith-4vcpu-ubuntu-2404 # blacksmith-4vcpu-ubuntu-2404
     steps:
       - name: Log in to Erato Labs registry
         uses: docker/login-action@v3.6.0
@@ -1182,7 +1182,7 @@ jobs:
 
   build-and-push-mock-llm-server-amd64:
     needs: [resolve-registry-cache-refs]
-    runs-on: ubuntu-24.04 # blacksmith-8vcpu-ubuntu-2404
+    runs-on: blacksmith-4vcpu-ubuntu-2404 # blacksmith-8vcpu-ubuntu-2404
     env:
       CACHE_TARGET: ${{ needs.resolve-registry-cache-refs.outputs.target }}
       CACHE_SOURCE: ${{ needs.resolve-registry-cache-refs.outputs.source }}
@@ -1223,7 +1223,7 @@ jobs:
 
   build-and-push-mock-llm-server-arm64:
     needs: [resolve-registry-cache-refs]
-    runs-on: ubuntu-24.04-arm64-custom-large # blacksmith-8vcpu-ubuntu-2404-arm
+    runs-on: blacksmith-8vcpu-ubuntu-2404-arm # blacksmith-8vcpu-ubuntu-2404-arm
     env:
       CACHE_TARGET: ${{ needs.resolve-registry-cache-refs.outputs.target }}
       CACHE_SOURCE: ${{ needs.resolve-registry-cache-refs.outputs.source }}
@@ -1264,7 +1264,7 @@ jobs:
 
   create-manifests-mock-llm-server:
     needs: [build-and-push-mock-llm-server-amd64, build-and-push-mock-llm-server-arm64]
-    runs-on: ubuntu-24.04 # blacksmith-4vcpu-ubuntu-2404
+    runs-on: blacksmith-4vcpu-ubuntu-2404 # blacksmith-4vcpu-ubuntu-2404
     steps:
       - name: Log in to Erato Labs registry
         uses: docker/login-action@v3.6.0
@@ -1292,7 +1292,7 @@ jobs:
 
   build-and-push-mock-mcp-server-amd64:
     needs: [resolve-registry-cache-refs]
-    runs-on: ubuntu-24.04 # blacksmith-8vcpu-ubuntu-2404
+    runs-on: blacksmith-4vcpu-ubuntu-2404 # blacksmith-8vcpu-ubuntu-2404
     env:
       CACHE_TARGET: ${{ needs.resolve-registry-cache-refs.outputs.target }}
       CACHE_SOURCE: ${{ needs.resolve-registry-cache-refs.outputs.source }}
@@ -1333,7 +1333,7 @@ jobs:
 
   build-and-push-mock-mcp-server-arm64:
     needs: [resolve-registry-cache-refs]
-    runs-on: ubuntu-24.04-arm64-custom-large # blacksmith-8vcpu-ubuntu-2404-arm
+    runs-on: blacksmith-8vcpu-ubuntu-2404-arm # blacksmith-8vcpu-ubuntu-2404-arm
     env:
       CACHE_TARGET: ${{ needs.resolve-registry-cache-refs.outputs.target }}
       CACHE_SOURCE: ${{ needs.resolve-registry-cache-refs.outputs.source }}
@@ -1374,7 +1374,7 @@ jobs:
 
   create-manifests-mock-mcp-server:
     needs: [build-and-push-mock-mcp-server-amd64, build-and-push-mock-mcp-server-arm64]
-    runs-on: ubuntu-24.04 # blacksmith-4vcpu-ubuntu-2404
+    runs-on: blacksmith-4vcpu-ubuntu-2404 # blacksmith-4vcpu-ubuntu-2404
     steps:
       - name: Log in to Erato Labs registry
         uses: docker/login-action@v3.6.0
@@ -1402,7 +1402,7 @@ jobs:
 
   create-github-release:
     needs: [create-manifests, create-manifests-mock-llm-server, create-manifests-mock-mcp-server]
-    runs-on: ubuntu-24.04 # blacksmith-4vcpu-ubuntu-2404
+    runs-on: blacksmith-4vcpu-ubuntu-2404 # blacksmith-4vcpu-ubuntu-2404
     if: github.ref_type == 'tag'
     permissions:
       contents: write
