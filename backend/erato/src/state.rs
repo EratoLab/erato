@@ -98,8 +98,9 @@ impl GlobalPolicyEngine {
     }
 }
 
-#[derive(Clone)]
 pub struct AppState {
+    #[doc(hidden)]
+    pub memory_reservation: Option<crate::metrics::owned::Reservation>,
     pub db: DatabaseConnection,
     pub local_delegation_signer: Option<Arc<crate::services::local_delegation::signing::Signer>>,
     /// Teams bot runtime; `None` unless `integrations.ms_office.teams.bot.enabled`.
@@ -125,11 +126,11 @@ pub struct AppState {
     /// This allows tests to inject deterministic responses and provider failures.
     pub genai_client_override: Option<Arc<dyn GenAIClient>>,
     /// Cache mapping file identity -> raw file bytes (for both text and images)
-    pub file_bytes_cache: Cache<FileCacheKey, Vec<u8>>,
+    pub file_bytes_cache: Cache<FileCacheKey, crate::metrics::owned::Cached<Vec<u8>>>,
     /// Cache mapping file identity -> parsed file contents (text files only)
-    pub file_contents_cache: Cache<FileCacheKey, String>,
+    pub file_contents_cache: Cache<FileCacheKey, crate::metrics::owned::Cached<String>>,
     /// Cache mapping file_contents -> token count
-    pub token_count_cache: Cache<String, usize>,
+    pub token_count_cache: Cache<String, crate::metrics::owned::Cached<usize>>,
     /// Global limiter for file processing work on cache misses.
     pub file_processing_semaphore: Arc<Semaphore>,
     /// Global limiter for end-to-end per-file processing concurrency.
@@ -273,30 +274,36 @@ impl AppState {
 
         // Initialize file bytes cache with MB-based weigher
         let file_bytes_cache = Cache::builder()
-            .weigher(|_key: &FileCacheKey, value: &Vec<u8>| -> u32 {
-                // Weight by byte vector length
-                value.len().try_into().unwrap_or(u32::MAX)
-            })
+            .weigher(
+                |_key: &FileCacheKey, value: &crate::metrics::owned::Cached<Vec<u8>>| -> u32 {
+                    // Weight by byte vector length
+                    value.len().try_into().unwrap_or(u32::MAX)
+                },
+            )
             .max_capacity(config.caches.file_bytes_cache_mb * 1024 * 1024)
             .time_to_idle(Duration::from_hours(12))
             .build();
 
         // Initialize file contents cache with MB-based weigher
         let file_contents_cache = Cache::builder()
-            .weigher(|_key: &FileCacheKey, value: &String| -> u32 {
-                // Weight by string byte length
-                value.len().try_into().unwrap_or(u32::MAX)
-            })
+            .weigher(
+                |_key: &FileCacheKey, value: &crate::metrics::owned::Cached<String>| -> u32 {
+                    // Weight by string byte length
+                    value.len().try_into().unwrap_or(u32::MAX)
+                },
+            )
             .max_capacity(config.caches.file_contents_cache_mb * 1024 * 1024)
             .time_to_idle(Duration::from_hours(12))
             .build();
 
         // Initialize token count cache with MB-based weigher
         let token_count_cache = Cache::builder()
-            .weigher(|key: &String, _value: &usize| -> u32 {
-                // Weight by key (content) size since that's the bulk of the data
-                key.len().try_into().unwrap_or(u32::MAX)
-            })
+            .weigher(
+                |key: &String, _value: &crate::metrics::owned::Cached<usize>| -> u32 {
+                    // Weight by key (content) size since that's the bulk of the data
+                    key.len().try_into().unwrap_or(u32::MAX)
+                },
+            )
             .max_capacity(config.caches.token_count_cache_mb * 1024 * 1024)
             .time_to_idle(Duration::from_hours(12))
             .build();
@@ -321,7 +328,8 @@ impl AppState {
                 &config.integrations.entra_id.group_overage,
             )?;
 
-        Ok(Self {
+        let mut state = Self {
+            memory_reservation: None,
             db,
             client_operations: crate::services::client_operations::registry(
                 &config,
@@ -349,7 +357,9 @@ impl AppState {
             file_processing_pipeline_semaphore,
             file_processor,
             file_type_detector,
-        })
+        };
+        state.track_owned_memory();
+        Ok(state)
     }
 
     /// Return a consistent snapshot of the currently evaluated MCP state.
@@ -1171,6 +1181,134 @@ pub fn default_endpoint(kind: AdapterKind) -> Endpoint {
             Endpoint::from_static("https://generativelanguage.googleapis.com/v1beta/openai/")
         }
         _ => unimplemented!("Default endpoint not implemented for this adapter kind"),
+    }
+}
+
+impl erato_memory::HeapSize for FileCacheKey {
+    fn heap_size(&self, c: &mut erato_memory::Context) {
+        c.measure(&self.etag);
+    }
+}
+
+impl Clone for AppState {
+    fn clone(&self) -> Self {
+        let mut state = Self {
+            memory_reservation: None,
+            db: self.db.clone(),
+            local_delegation_signer: self.local_delegation_signer.clone(),
+            ms_teams_bot: self.ms_teams_bot.clone(),
+            entra_group_overage: self.entra_group_overage.clone(),
+            default_file_storage_provider: self.default_file_storage_provider.clone(),
+            file_storage_providers: self.file_storage_providers.clone(),
+            config: self.config.clone(),
+            client_operations: self.client_operations.clone(),
+            prompt_guardrails: self.prompt_guardrails.clone(),
+            actor_manager: self.actor_manager.clone(),
+            langfuse_client: self.langfuse_client.clone(),
+            global_policy_engine: self.global_policy_engine.clone(),
+            background_tasks: self.background_tasks.clone(),
+            system_prompt_renderer: self.system_prompt_renderer.clone(),
+            distribution: self.distribution.clone(),
+            reloadable: self.reloadable.clone(),
+            genai_client_override: self.genai_client_override.clone(),
+            file_bytes_cache: self.file_bytes_cache.clone(),
+            file_contents_cache: self.file_contents_cache.clone(),
+            token_count_cache: self.token_count_cache.clone(),
+            file_processing_semaphore: self.file_processing_semaphore.clone(),
+            file_processing_pipeline_semaphore: self.file_processing_pipeline_semaphore.clone(),
+            file_processor: self.file_processor.clone(),
+            file_type_detector: self.file_type_detector.clone(),
+        };
+        state.track_owned_memory();
+        state
+    }
+}
+
+impl AppState {
+    #[doc(hidden)]
+    pub fn track_owned_memory(&mut self) {
+        if !crate::metrics::owned::enabled() {
+            return;
+        }
+        let mut c = erato_memory::Context::for_owned();
+        c.measure(&self.config);
+        c.measure(&self.default_file_storage_provider);
+        c.measure(&self.file_storage_providers);
+        self.memory_reservation = Some(crate::metrics::owned::Reservation::new(
+            "app_state.instances",
+            c.finish(),
+        ));
+    }
+}
+
+impl AppState {
+    pub(crate) fn owned_memory_snapshot(
+        &self,
+        c: &mut erato_memory::Context,
+    ) -> crate::metrics::owned::Snapshot {
+        let mut report = crate::metrics::owned::Snapshot::default();
+        report.record(c, "shared.distribution", &self.distribution);
+        if let Ok(reloadable) = self.reloadable.try_read() {
+            report.record(
+                c,
+                "shared.reloadable.distribution",
+                &reloadable.distribution_bundle,
+            );
+            report.record(c, "shared.reloadable.mcp", &reloadable.mcp);
+            if let Some(policy) = &reloadable.experience_policy {
+                report.opaque(c, "shared.reloadable.experience_policy", policy);
+            }
+        } else {
+            for owner in [
+                "shared.reloadable.distribution",
+                "shared.reloadable.mcp",
+                "shared.reloadable.experience_policy",
+            ] {
+                c.locked("reloadable state lock");
+                report.owners.insert(owner.to_owned(), c.take_usage());
+            }
+        }
+        report.opaque(c, "shared.database", &self.db);
+        self.global_policy_engine.engine.owned_memory(c);
+        report.owners.insert("shared.policy".into(), c.take_usage());
+        report.opaque(c, "shared.actors", &self.actor_manager);
+        report.opaque(c, "shared.background_tasks", &self.background_tasks);
+        report.opaque(c, "shared.prompt_renderer", &self.system_prompt_renderer);
+        report.record(c, "shared.prompt_guardrails", &self.prompt_guardrails);
+        report.opaque(c, "shared.client_operations", &self.client_operations);
+        report.opaque(c, "shared.langfuse", &self.langfuse_client);
+        report.opaque(
+            c,
+            "shared.file_bytes_cache.bookkeeping",
+            &self.file_bytes_cache,
+        );
+        report.opaque(
+            c,
+            "shared.file_contents_cache.bookkeeping",
+            &self.file_contents_cache,
+        );
+        report.opaque(
+            c,
+            "shared.token_count_cache.bookkeeping",
+            &self.token_count_cache,
+        );
+        report.opaque(c, "shared.file_processor", &self.file_processor);
+        if let Some(detector) = &self.file_type_detector {
+            report.opaque(c, "shared.file_type_detector", detector);
+        }
+        if let Some(bot) = &self.ms_teams_bot {
+            report.opaque(c, "shared.teams_bot", bot);
+        }
+        if let Some(resolver) = &self.entra_group_overage {
+            report.opaque(c, "shared.entra_groups", resolver);
+        }
+        if let Some(signer) = &self.local_delegation_signer {
+            report.opaque(c, "shared.delegation_signer", signer);
+        }
+        if let Some(client) = &self.genai_client_override {
+            report.opaque(c, "shared.genai_override", client);
+        }
+        report
     }
 }
 

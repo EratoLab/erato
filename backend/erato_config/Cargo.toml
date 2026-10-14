@@ -6,6 +6,7 @@ license = "AGPL-3.0-or-later"
 edition = "2024"
 
 [dependencies]
+erato_memory = { path = "../erato_memory" }
 base64 = "0.22.1"
 png = "0.18.0"
 config = "0.15.6"

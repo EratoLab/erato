@@ -47,6 +47,178 @@ For background on `_info` metrics, see [Prometheus Info Metrics](https://oneupti
   - Always `1` per configured chat provider
   - Labels: `chat_provider_id`, `provider_kind`, `model_name`
 
+### Owned memory metrics (ordinary builds)
+
+These gauges require only the Prometheus integration, with no profiling feature,
+special allocator, Linux requirement, or `ERATO_MEMORY_COMPONENTS` setting.
+They report where data is held rather than where an allocation was triggered.
+
+- `erato_owned_memory_bytes` (gauge)
+  - Labels: `owner`, `kind` (`capacity`, `estimated`)
+  - `capacity` counts owned String/Vec/Box backing capacities, including unused
+    capacity. `estimated` counts container tables, Arc allocation layouts,
+    public dependency size estimates and upload source-chunk lengths.
+  - Owner paths include `app_state.instances`,
+    `app_state.file_bytes_cache.values`, `app_state.file_contents_cache.values`,
+    `app_state.token_count_cache.values`, `shared.distribution`,
+    `shared.frontend_registry`, `shared.reloadable.distribution`,
+    `shared.reloadable.mcp`, `shared.policy`, `shared.prompt_guardrails`,
+    `shared.attachment_tokenizer`, `jobs.tokenizer.state`,
+    `jobs.tokenizer.input`, `jobs.parser.input`, `requests.attachments`,
+    `requests.file_resolution.input`, `requests.prepared.internal_messages`,
+    `requests.prepared.provider_request`, `requests.prepared.attachment_plans`,
+    `requests.generation.current_request`, `requests.mcp.stateless`, `provider.request_copy`,
+    `uploads.source`, and `uploads.writer_copy`.
+  - Shared descendants of active owner reservations are grouped under
+    `shared.allocations.<Rust type>`. Types and owner names are bounded by the
+    compiled application; filenames, schema keys, request IDs and secret values
+    are never labels.
+- `erato_owned_memory_unmeasured_objects` (gauge)
+  - Labels: `owner`, `type`
+  - Counts opaque child objects/handles or unavailable locked fields whose
+    internal heap is excluded from the byte gauges. Counts are references to
+    unmeasured state, not unique allocation counts or estimates of missing bytes.
+- `erato_owned_memory_tracked_objects` (gauge)
+  - Label: `owner`
+  - Number of live owner reservations. Cache-handle clones share one reservation;
+    independently owned AppState clones each carry their own. Empty owners can
+    have a reservation without owning any heap bytes. This count does not include
+    the individually visited objects inside periodic shared-state snapshots.
+- `erato_owned_memory_sample_stale` (gauge)
+  - Label: `owner`
+  - Applies to periodically sampled owners. `1` means a lock prevented a fresh
+    report; the byte gauges retain the previous available sample. `0` means the
+    owner was inspected. Opaque children can still be present in a fresh report.
+
+State/registry snapshots target five seconds and use nonblocking lock attempts.
+Immutable cache values carry one reservation shared by their handles: reporting
+does not clone their data. Shared Arc descendants are deduplicated across state
+and active-owner roots; the inspector retains only weak references and releases
+dead registrations during sampling. Weak references retain Arc control storage
+until that pruning; inline unsized backing such as `Arc<str>` can consequently
+be freed one sampling interval later. AppState clones each account for their
+independently owned configuration/storage data. Request reservations release on
+drop/cancellation, parser/tokenizer reservations follow blocking workers, and
+the current generation request is remeasured between tool-call turns.
+The shared distribution and frontend registry include owned branding configuration
+and bundle paths. MCP inspection includes legacy catalog contents, stateless HTTP
+server configuration, public and credential-partitioned tool caches, cached
+errors, creation-gate keys and generation maps. Shared tool schemas are counted
+once across these caches; HTTP client internals and weak-handle control storage
+remain explicitly opaque. Legacy tool-payload reservations follow the current
+catalog and release when a refresh replaces it or its last owner drops.
+Stateless requests account for estimated header storage and register their shared
+server/partition roots, keeping servers detached by a reload or credential
+invalidation inspectable while an in-flight request still owns them. Header
+indices and shared backing remain opaque; header names and values are never labels.
+Short-lived shared descendants can disappear before the next periodic snapshot;
+their weak registrations then report zero rather than a historical allocation.
+Tokenizer construction is measured after the completed tokenizer exists, so
+temporary construction buffers are outside its state gauge.
+
+The unmodified, pinned tokenizer is estimated externally through its public
+decoding and special-token APIs. One vocabulary scan is reused for each o200k
+instance, estimating three copies of token bytes, the sorted-token Vec and map
+tables. All tokenizer storage is classified as `estimated`: private capacities
+and compiled regex state remain explicitly unmeasured. Updating the dependency
+requires reviewing these layout assumptions. Other opaque state includes HTTP/TLS/MCP
+transport internals, database/storage clients, runtime task frames, cache
+bookkeeping, policy evaluator internals, metrics exporter state and optional
+service implementations. These gauges do not claim complete process attribution.
+
+For an approximate named-owned total, sum `capacity` and `estimated` **within
+this gauge family**. They are disjoint accounting categories, but source chunks
+can share hidden backing storage and estimates need not match allocator sizes.
+Do not add the existing payload/cache gauges or diagnostic component arenas:
+those overlap with these owners. Root inline storage is counted when its
+enclosing heap container can be inspected; stack objects and opaque enclosing
+future/framework allocations are excluded. Allocator rounding/metadata, freed
+pages, mapped files and thread stacks cannot be derived from live owners, so
+named-owned bytes divided by RSS are not exact heap coverage.
+
+### Named component memory metrics
+
+For deeper attribution, run a Linux `profiling` build with
+`ERATO_MEMORY_COMPONENTS=1` and enable the Prometheus integration. Dedicated
+jemalloc arenas attribute allocations to the component that created them,
+including private library allocations. Accounting continues after a scope
+returns, when an object moves to another thread, and when it is freed there.
+
+- `erato_component_memory_bytes` (gauge)
+  - Labels: `component`, `kind`
+  - Components: `api_schema`, `http_routing`, `metrics_exporter`, `startup_state`, `http_request`, `file_upload`, `file_bytes`, `file_text`, `file_parser`, `attachment_planning`, `tokenizer_state`, `tokenizer_work`, `mcp_http_client`, `mcp_session`, `chat_preparation`, `provider_request`, `policy_engine`, `runtime_distribution`, `profile_rendering`
+  - Kinds: `allocated` (live allocations), `active` (pages backing allocations), `dirty` (unused dirty pages), `metadata`, `resident` (allocator resident pages), `retained` (reserved address space)
+- `erato_component_memory_unattributed_bytes` (gauge)
+  - Live allocations outside the instrumented arenas; excluded from named coverage
+  - Label: `kind` (`allocated`)
+- `erato_component_memory_scope_errors_total` (counter)
+  - Failed arena switches or restores; attribution is incomplete if this increases
+  - No labels
+
+Sum components for **one kind** only. Named live-heap coverage is
+`sum(erato_component_memory_bytes{kind="allocated"}) / erato_allocator_memory_bytes{kind="allocated"}`.
+These values are collected from the same jemalloc epoch every five seconds.
+Kinds overlap; do not add `allocated`, `active`, `dirty` and `resident` together,
+or add payload/cache gauges to arena gauges. `resident` includes arena overhead
+and freed dirty pages, so it is a separate view from live heap coverage. It is
+an allocator estimate rather than a measurement of physical pages: untouched
+allocation capacity can make it exceed kernel RSS. Do not interpret
+`sum(component resident) / process RSS` as a physical-RSS coverage percentage.
+
+The labels describe allocation origin, not current ownership: for example a
+cached file and its returned clones originate in `file_bytes`. `http_request`
+is the broader request allocation bucket after more specific nested scopes;
+`startup_state` includes shared services initialized at startup. Spawned tasks
+do not inherit a component automatically. Remaining default-arena allocations,
+native allocations that bypass jemalloc, thread stacks, and executable/library
+pages are not named attribution. The `profile_rendering` bucket exposes memory
+introduced by heap-profile symbolization itself. `metrics_exporter` covers
+histogram upkeep, runtime metric reporting and scrape rendering. In this mode
+the metrics listener uses Erato-owned blocking workers for upkeep and rendering
+so their allocations are attributed; `/health` and scrape responses retain the
+exporter's existing behavior.
+
+This diagnostic mode disables the thread cache inside each component scope to
+prevent reuse of another arena's allocations. It changes allocator behavior and
+adds arena, polling and synchronization overhead; use it for investigation and
+compare runs with the mode disabled before drawing performance conclusions.
+Ordinary builds expose the owner-based payload gauges below without this mode.
+They do not expose a total live-heap gauge, so exact named live-heap coverage
+cannot be calculated in an ordinary build. A sum of named payload/capacity bytes
+divided by independently observed RSS is only a visibility indicator: capacities
+may include untouched pages, serialized sizes are not heap sizes, and RSS also
+includes allocator-retained pages and non-heap memory. Exclude configured cache
+maximum capacities, process totals and count/ratio gauges from that sum. Never
+sum individual gauge maxima taken at different times.
+
+### Process and allocator memory metrics
+
+On Linux, memory totals are sampled every five seconds on a blocking worker.
+These metrics require the Prometheus integration to be enabled.
+
+- `erato_process_memory_bytes` (gauge)
+  - Bytes read from `/proc/self/status`, available in ordinary Linux builds
+  - Labels: `kind`, with values `resident`, `resident_anonymous`, `resident_file`, `resident_shared`, `peak_resident`, `virtual`
+  - `resident` is process RSS; `peak_resident` is the process lifetime high-water mark. The three resident components split anonymous, file-backed and shared pages. `virtual` includes reserved address space, including untouched thread stacks; it is not RAM usage.
+- `erato_allocator_memory_bytes` (gauge, Linux `profiling` builds only)
+  - Jemalloc statistics, refreshed by advancing its epoch before each sample
+  - Labels: `kind`, with values `allocated`, `active`, `resident`, `mapped`, `retained`, `metadata`
+  - `allocated` measures live application allocations; `active` measures pages backing allocations; `resident` estimates allocator resident memory, including metadata and unused dirty pages, and can exceed actual RSS for untouched pages. `mapped` and `retained` describe address space and are not additional resident memory.
+- `erato_memory_stats_collection_errors_total` (counter)
+  - Failed samples, without replacing unavailable totals with zero
+  - Labels: `source`, with values `process`, `jemalloc`, `reporter`
+
+Process, allocator and payload metrics are overlapping views. Do not sum their
+`kind` series or add allocator totals to RSS. Compare live `allocated` bytes with
+payload gauges to identify unmeasured application allocations. Compare RSS with
+allocator `resident` to investigate stacks, executable/library pages, native
+allocations and profiling overhead. Container memory additionally includes page
+cache and other processes; it is not interchangeable with backend RSS. Short
+peaks can fall between samples: use `peak_resident`, input-size histograms and a
+heap profile alongside the gauges. Process, allocator and cache totals are
+sampled every five seconds by independent tasks, so changes between samples can
+still produce temporary differences.
+
 ### Chat provider metrics
 
 - `erato_chat_provider_time_to_first_token_seconds` (histogram)
@@ -64,8 +236,80 @@ For background on `_info` metrics, see [Prometheus Info Metrics](https://oneupti
 - `erato_mcp_active_sessions` (gauge)
   - Current number of retained legacy MCP sessions for each configured MCP server. Stateless HTTP pools, in-flight stateless calls and cached tool lists do not count as sessions.
   - Labels: `server_id`
+- `erato_mcp_session_tool_payload_bytes` (gauge)
+  - Sum of serialized JSON sizes of filtered catalogs retained by legacy sessions, updated on catalog creation, refresh and final drop
+  - Labels: `server_id`
+  - This measures logical tool metadata, including schemas and descriptions. It excludes TLS trust stores, connection pools, transport channels, authentication keys and allocator overhead. Shared schemas in temporary tool clones are not counted again.
+  - Stateless HTTP catalogs are covered by the owned-memory gauges.
+
+### File parsing memory metrics
+
+- `erato_file_upload_chunk_bytes` (gauge)
+  - Multipart chunk lengths and the distinct copied payload passed to the awaited storage write
+  - Label: `kind` (`source`, `writer_copy`)
+  - Excludes storage-internal buffers retained after the write returns; the source chunk may share backing storage with other chunks
+
+- `erato_attachment_buffer_bytes` (gauge)
+  - Owned text/CSV string capacities and attachment-vector backing storage retained during attachment planning
+  - No labels
+  - Excludes image payloads, input buffers, planned output copies and allocator overhead
+
+- `erato_file_resolution_input_bytes` (gauge)
+  - Raw file buffers held while checking extraction limits and building eager previews, including CSV and bounded text previews that bypass Xberg
+  - No labels
+- `erato_file_resolution_input_size_bytes` (histogram)
+  - Input size for each guarded attachment resolution, including short-lived cache-hit buffer clones
+  - No labels
+
+These resolution buffers coexist with the cached original. The gauge excludes
+the cache, preview outputs and parser internals; its histogram captures activity
+that may be too brief to observe in a scrape.
+
+- `erato_file_parser_input_bytes` (gauge)
+  - Sum of input buffer lengths held by queued or running Xberg parser jobs; released when the job completes or is dropped
+  - No labels
+- `erato_file_parser_input_size_bytes` (histogram)
+  - Input size for each parser call, including short calls that may fall between scrapes
+  - No labels
+
+These metrics describe parser inputs, not all upload or generation memory. They exclude extracted output, parser-internal copies and external extraction processes. Accounting follows blocking parser jobs even if the awaiting request is cancelled. Cached originals and parser inputs may coexist, so this gauge complements the cache metrics.
+
+### Chat context memory metrics
+
+- `erato_chat_context_payload_bytes` (gauge)
+  - Serialized sizes of prepared internal messages, provider requests (messages and tool schemas), and attachment-plan parts
+  - Label: `kind` (`internal_messages`, `provider_request`, `attachment_plans`)
+  - Sizes are captured at preparation and reservations stay with the prepared objects or their initial generation/estimation scope, including cancellation
+
+This measures distinct payload copies without constructing serialized buffers.
+It is a preparation-time snapshot: later mutations, encoding capacities, object
+overhead, stream output and transport/TLS buffers are excluded. Serialized size
+is a logical payload measure rather than an exact heap estimate. As with the
+other payload gauges, do not add it to component arena statistics.
+
+### Tokenizer memory metrics
+
+- `erato_tokenizer_input_bytes` (gauge)
+  - Text bytes held by queued or running token-count cache-miss jobs
+  - No labels
+- `erato_tokenizer_jobs` (gauge)
+  - Number of those jobs, each of which currently constructs its own tokenizer
+  - No labels
+
+These gauges follow the blocking jobs through request cancellation. Input bytes exclude tokenizer vocabulary, regex tables, encoded token vectors and allocator overhead. Job count exposes concurrent tokenizer construction; `caches.file_processing_parallelism` controls the shared parsing/tokenization semaphore. Short jobs may fall between scrapes. The token-count cache gauge measures retained cache keys separately.
+
+### Runtime distribution memory metrics
+
+- `erato_runtime_distribution_payload_bytes` (gauge)
+  - Logical payload bytes in the currently published runtime distribution, sampled every five seconds
+  - Labels: `kind` (`source` or `compiled_translation`)
+  - Source counts file contents. Compiled translations count JSON response bytes or cached compilation error text. Filenames, containers, startup frontend resources, and old response bytes retained across reloads are excluded. Shared response bytes are counted once in the published bundle.
 
 ### Cache metrics
+
+Cache gauges update every five seconds, after flushing pending cache maintenance.
+
+Cache usage measures weighted payloads, not total heap allocations or RSS. It excludes allocator overhead, cache bookkeeping, temporary copies while processing requests, and other application state. Do not subtract these gauges from RSS and interpret the difference as a leak.
 
 - `erato_cache_max_size_bytes` (gauge)
   - Maximum configured cache capacity in bytes

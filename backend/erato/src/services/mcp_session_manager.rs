@@ -28,11 +28,12 @@ pub enum McpServerConnectionStatus {
 }
 
 /// Represents a single MCP session for a specific chat and server
-#[derive(Debug)]
+#[derive(Debug, erato_memory::HeapSize)]
 struct McpSession {
     /// The rmcp running service (must be kept alive to maintain the connection)
     _service: Arc<McpConnection>,
     /// The rmcp peer instance for making requests
+    #[heap_size(opaque)]
     peer: Peer<RoleClient>,
     /// Server ID this session is for
     #[allow(dead_code)]
@@ -45,8 +46,8 @@ struct McpSession {
     max_idle_duration: Duration,
 }
 
-#[derive(Debug)]
-struct McpConnection(RunningService<RoleClient, ProgressClientHandler>);
+#[derive(Debug, erato_memory::HeapSize)]
+struct McpConnection(#[heap_size(opaque)] RunningService<RoleClient, ProgressClientHandler>);
 
 impl std::ops::Deref for McpConnection {
     type Target = RunningService<RoleClient, ProgressClientHandler>;
@@ -64,6 +65,19 @@ impl Drop for McpConnection {
 impl McpSession {
     /// Create a new session by connecting to the MCP server
     async fn new(
+        server_id: String,
+        config: &McpSessionConfig,
+        auth_context: &McpRequestAuthContext<'_>,
+    ) -> Result<Self, Report> {
+        crate::metrics::components::scope(
+            crate::metrics::components::Component::McpSession,
+            Self::new_memory_inner(server_id, config, auth_context),
+        )
+        .await
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    async fn new_memory_inner(
         server_id: String,
         config: &McpSessionConfig,
         auth_context: &McpRequestAuthContext<'_>,
@@ -89,8 +103,7 @@ impl McpSession {
         // Erato owns freshness; disable the SDK's independent stale-on-error cache.
         peer.set_response_cache_config(rmcp::service::ClientCacheConfig::disabled())
             .await;
-        let tools = LegacyTools::fetch(&peer, config).await?;
-
+        let tools = LegacyTools::fetch(&server_id, &peer, config).await?;
         Ok(Self {
             _service: Arc::new(McpConnection(service)),
             peer,
@@ -119,15 +132,21 @@ impl McpSession {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, erato_memory::HeapSize)]
 struct LegacyTools {
     tools: Vec<ResolvedMcpTool>,
     // Older servers omit TTLs: preserve session-lifetime reuse in that case.
     expires: Option<tokio::time::Instant>,
+    #[heap_size(skip)]
+    _tool_payload: crate::metrics::memory::PayloadReservation,
 }
 
 impl LegacyTools {
-    async fn fetch(peer: &Peer<RoleClient>, config: &McpSessionConfig) -> Result<Self, Report> {
+    async fn fetch(
+        server_id: &str,
+        peer: &Peer<RoleClient>,
+        config: &McpSessionConfig,
+    ) -> Result<Self, Report> {
         let mut tools = Vec::new();
         let mut cursor = None;
         let mut seen = HashSet::new();
@@ -153,9 +172,12 @@ impl LegacyTools {
             cursor = page.next_cursor;
             if cursor.is_none() {
                 tools.sort_by(|a, b| a.name.cmp(&b.name));
+                let tools = filter_tools_by_server_config(tools, &config.server);
+                let tool_payload = crate::metrics::memory::mcp_tools(server_id, &tools);
                 return Ok(Self {
                     tools: config.resolve_tools(tools),
                     expires,
+                    _tool_payload: tool_payload,
                 });
             }
             if !seen.insert(cursor.clone()) {
@@ -268,7 +290,7 @@ impl Drop for McpSessionManager {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, erato_memory::HeapSize)]
 struct McpSessionManagerConfig {
     server_configs: HashMap<String, McpServerConfig>,
     default_max_idle_seconds: u64,
@@ -277,7 +299,7 @@ struct McpSessionManagerConfig {
 }
 
 /// Everything that can affect a cached connection and its resolved tools.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, erato_memory::HeapSize)]
 struct McpSessionConfig {
     server: McpServerConfig,
     max_idle_seconds: u64,
@@ -700,7 +722,7 @@ impl McpSessionManager {
             .is_some_and(|expires| expires <= tokio::time::Instant::now())
         {
             let config = self.configuration.read().await.session_config(server_id)?;
-            *catalog = LegacyTools::fetch(connection.peer(), &config).await?;
+            *catalog = LegacyTools::fetch(server_id, connection.peer(), &config).await?;
         }
         Ok(catalog.tools.clone())
     }
@@ -1290,3 +1312,14 @@ mod tests {
 #[cfg(test)]
 #[path = "mcp_progress_tests.rs"]
 mod progress_tests;
+
+impl erato_memory::HeapSize for McpSessionManager {
+    fn heap_size(&self, c: &mut erato_memory::Context) {
+        c.measure(&self.sessions);
+        c.measure(&self.configuration);
+        c.measure(&self.http_servers);
+        c.measure(&self.creation_gates);
+        c.measure(&self.generation);
+        c.opaque(&self._cleanup_task);
+    }
+}

@@ -2031,6 +2031,26 @@ pub async fn upload_file(
     Extension(me_user): Extension<MeProfile>,
     Extension(policy): Extension<PolicyEngine>,
     axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
+    multipart: Multipart,
+) -> Result<Json<FileUploadResponse>, StatusCode> {
+    crate::metrics::components::scope(
+        crate::metrics::components::Component::FileUpload,
+        upload_file_memory_inner(
+            State(app_state),
+            Extension(me_user),
+            Extension(policy),
+            axum::extract::Query(params),
+            multipart,
+        ),
+    )
+    .await
+}
+
+async fn upload_file_memory_inner(
+    State(app_state): State<AppState>,
+    Extension(me_user): Extension<MeProfile>,
+    Extension(policy): Extension<PolicyEngine>,
+    axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
     mut multipart: Multipart,
 ) -> Result<Json<FileUploadResponse>, StatusCode> {
     let max_upload_size = app_state
@@ -2312,6 +2332,8 @@ async fn stream_multipart_field_with_limit(
         }
 
         size_bytes += chunk.len();
+        let _source_chunk = crate::metrics::memory::upload_chunk("source", chunk.len());
+        let _writer_copy = crate::metrics::memory::upload_chunk("writer_copy", chunk.len());
 
         writer.write(chunk.to_vec()).await.map_err(|e| {
             tracing::error!("Failed to write file chunk: {}", e);

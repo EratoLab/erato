@@ -3,6 +3,7 @@
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use config::builder::DefaultState;
 use config::{Config, ConfigBuilder, ConfigError, Environment, File, FileFormat};
+use erato_memory::HeapSize;
 use eyre::{OptionExt, Report, eyre};
 use facet::Facet;
 use regex::Regex;
@@ -151,7 +152,7 @@ The current {{body_format}} is the only authoritative format for this response. 
 For general feedback (tone, completeness, structure), use plain text. Output exactly one suggestion unless the user explicitly asks for alternatives. On follow-up messages without a new draft, respond normally in plain text.
 "#;
 
-#[derive(Clone, Default, Facet)]
+#[derive(Clone, Default, Facet, HeapSize)]
 #[facet(opaque)]
 pub struct SecretConfigString(SecretString);
 
@@ -222,7 +223,7 @@ impl<'de> Deserialize<'de> for SecretConfigString {
     }
 }
 
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq, HeapSize)]
 pub struct ConfigSourceFile {
     pub source_filename: String,
     pub contents: String,
@@ -247,7 +248,7 @@ pub struct LoadedAppConfig {
 /// Keeping this as a separately deserializable value lets the backend evaluate
 /// the original TOML sources together with admin-panel overrides without
 /// attempting to reconstruct unrelated (and potentially redacted) settings.
-#[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone)]
+#[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone, HeapSize)]
 pub struct McpRuntimeConfig {
     #[serde(default)]
     pub mcp_servers: HashMap<String, McpServerConfig>,
@@ -316,7 +317,7 @@ fn app_environment_source() -> Environment {
         .with_list_parse_key("integrations.experimental_sharepoint.all_drives_sources")
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Facet)]
+#[derive(Debug, Clone, PartialEq, Eq, Facet, HeapSize)]
 #[facet(untagged)]
 #[repr(C)]
 pub enum PromptSourceSpecification {
@@ -330,7 +331,7 @@ pub enum PromptSourceSpecification {
     },
 }
 
-#[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone, Facet)]
+#[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
 #[facet(untagged)]
 pub struct I18nConfig {
     #[serde(default)]
@@ -347,7 +348,7 @@ impl I18nConfig {
     }
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
 pub struct I18nLanguageConfig {
     // Ordered list of language detection sources to try.
     // The default language is appended automatically as a final fallback.
@@ -380,7 +381,7 @@ fn default_i18n_default_language() -> String {
     "en".to_string()
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default, Facet)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default, Facet, HeapSize)]
 #[serde(rename_all = "snake_case")]
 #[facet(rename_all = "snake_case")]
 #[repr(C)]
@@ -514,7 +515,7 @@ fn validate_prompt_injection_filter_config(
     Ok(())
 }
 
-#[derive(Debug, Default, Deserialize, PartialEq, Clone, Facet)]
+#[derive(Debug, Default, Deserialize, PartialEq, Clone, Facet, HeapSize)]
 pub struct AppConfig {
     // A opaque marker to signify the environment. This may be forwarded to diagnostic/observability tools to signify the environment,
     // but is never parsed/interpreted by the application to trigger environment-specific behavior.
@@ -740,7 +741,9 @@ pub struct AppConfig {
 }
 
 /// Default handling of files retrieved by client tools before they leave the device.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, ToSchema, Facet)]
+#[derive(
+    Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, ToSchema, Facet, HeapSize,
+)]
 #[serde(rename_all = "snake_case")]
 #[repr(u8)]
 pub enum ClientToolFileApproval {
@@ -760,7 +763,7 @@ impl ClientToolFileApproval {
     }
 }
 
-#[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone, Facet)]
+#[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
 pub struct DesktopSidecarConfig {
     /// Native exact-snapshot delegation. Disabled until native, recovery and host
     /// qualification are complete; independent of legacy file-upload preferences.
@@ -819,7 +822,7 @@ pub struct DesktopSidecarConfig {
     pub organization_configuration: DesktopSidecarOrganizationConfiguration,
 }
 
-#[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone, Facet)]
+#[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
 pub struct LocalDelegationConfig {
     /// Enable the authenticated local-evidence workflow. Defaults to false.
     #[serde(default)]
@@ -930,7 +933,7 @@ impl DesktopSidecarConfig {
 
 /// Configure either a fixed server identity or an intermediate CA used to issue
 /// a fresh identity for each personalized download. Omit all PEM fields for HTTP.
-#[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone, Facet)]
+#[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
 #[serde(deny_unknown_fields)]
 pub struct DesktopSidecarTlsConfig {
     /// Fixed PEM server certificate chain, leaf first.
@@ -952,7 +955,7 @@ fn default_desktop_sidecar_distribution_directory() -> String {
     "/app/desktop-sidecar-artifacts".to_string()
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
 pub struct DesktopSidecarDistributionConfig {
     /// Enable serving desktop-sidecar artifacts from the distribution directory.
     #[serde(default)]
@@ -972,7 +975,9 @@ impl Default for DesktopSidecarDistributionConfig {
     }
 }
 
-#[derive(Debug, Default, Deserialize, Serialize, PartialEq, Eq, Clone, Facet, ToSchema)]
+#[derive(
+    Debug, Default, Deserialize, Serialize, PartialEq, Eq, Clone, Facet, ToSchema, HeapSize,
+)]
 pub struct DesktopSidecarOrganizationConfiguration {
     /// Whether the desktop sidecar should show its system tray icon.
     ///
@@ -2382,7 +2387,7 @@ mod audio_config_tests {
     }
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default, Facet)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default, Facet, HeapSize)]
 pub struct ServerConfig {
     // Optional AES-256-GCM-SIV encryption key for encrypting application data at rest.
     //
@@ -2393,7 +2398,7 @@ pub struct ServerConfig {
     pub encryption_key: Option<SecretConfigString>,
 }
 
-#[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone, Facet)]
+#[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
 pub struct RuntimeConfigurationConfig {
     /// Mirror source configuration files into the runtime configuration table.
     ///
@@ -2437,7 +2442,7 @@ impl ServerConfig {
     }
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
 pub struct GenerationConfig {
     // Maximum number of tool calls that may be executed while generating one
     // assistant message.
@@ -2471,7 +2476,7 @@ fn default_max_tool_calls_per_message() -> u32 {
     15
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Copy, Default, Facet)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Copy, Default, Facet, HeapSize)]
 #[facet(rename_all = "lowercase")]
 #[serde(rename_all = "lowercase")]
 #[repr(C)]
@@ -2481,13 +2486,13 @@ pub enum LoggingFormat {
     Json,
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default, Facet)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default, Facet, HeapSize)]
 pub struct LoggingConfig {
     #[serde(default)]
     pub format: LoggingFormat,
 }
 
-#[derive(Debug, Deserialize, PartialEq, Clone, Facet)]
+#[derive(Debug, Deserialize, PartialEq, Clone, Facet, HeapSize)]
 pub struct ChatProvidersConfig {
     // Priority order of chat providers to use.
     // Each string should match a key in the providers map.
@@ -2502,7 +2507,7 @@ pub struct ChatProvidersConfig {
     pub summary: SummaryConfig,
 }
 
-#[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone, Facet)]
+#[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
 pub struct AllChatProvidersConfig {
     // Allow models to retrieve embedded PDF images. Defaults to false.
     #[serde(default)]
@@ -2511,13 +2516,13 @@ pub struct AllChatProvidersConfig {
     pub guardrails: ChatProviderGuardrailsConfig,
 }
 
-#[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone, Facet)]
+#[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
 pub struct GuardrailsConfig {
     #[serde(default)]
     pub prompt_patterns: HashMap<String, PromptPatternConfig>,
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
 #[serde(rename_all = "snake_case")]
 #[facet(rename_all = "snake_case")]
 #[repr(C)]
@@ -2526,7 +2531,7 @@ pub enum PromptPatternType {
     Regex,
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
 pub struct PromptPatternConfig {
     pub r#type: PromptPatternType,
     pub pattern: String,
@@ -2535,13 +2540,13 @@ pub struct PromptPatternConfig {
     pub tags: Vec<String>,
 }
 
-#[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone, Facet)]
+#[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
 pub struct ChatProviderGuardrailsConfig {
     #[serde(default)]
     pub filter_input_prompt_injection: PromptInjectionFilterConfig,
 }
 
-#[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone, Facet)]
+#[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
 pub struct PromptInjectionFilterConfig {
     // Enables prompt-injection filtering before requests are sent to the model.
     // Defaults to `false`.
@@ -2560,7 +2565,7 @@ pub struct PromptInjectionFilterConfig {
     pub exclude_pattern_ids: Vec<String>,
 }
 
-#[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone, Facet)]
+#[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
 pub struct SummaryConfig {
     // The chat provider ID to use for summary generation.
     // If not specified, uses the highest priority chat provider.
@@ -2582,7 +2587,7 @@ impl SummaryConfig {
     }
 }
 
-#[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone, Facet)]
+#[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
 #[serde(rename_all = "snake_case")]
 #[facet(rename_all = "snake_case")]
 #[repr(u8)]
@@ -2591,7 +2596,7 @@ pub enum ChatHistoryCompactionMode {
     Summarize,
 }
 
-#[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone, Facet)]
+#[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
 #[serde(rename_all = "snake_case")]
 #[facet(rename_all = "snake_case")]
 #[repr(u8)]
@@ -2600,7 +2605,7 @@ pub enum ChatHistoryCompactionTriggerMode {
     SuggestWithUserApproval,
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
 #[serde(default)]
 pub struct ChatHistoryCompactionConfig {
     pub enabled: bool,
@@ -2625,7 +2630,7 @@ impl Default for ChatHistoryCompactionConfig {
     }
 }
 
-#[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone, Facet)]
+#[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
 pub struct PromptOptimizerConfig {
     // Whether the prompt optimizer is enabled.
     // Defaults to `false`.
@@ -2637,7 +2642,7 @@ pub struct PromptOptimizerConfig {
     pub prompt: Option<PromptSourceSpecification>,
 }
 
-#[derive(Debug, Default, Deserialize, PartialEq, Clone, Facet)]
+#[derive(Debug, Default, Deserialize, PartialEq, Clone, Facet, HeapSize)]
 pub struct ChatProviderConfig {
     // Overrides the all_providers setting when specified. Defaults to false.
     pub enable_embedded_image_retrieval_tool: Option<bool>,
@@ -2717,7 +2722,7 @@ pub struct ChatProviderConfig {
     pub guardrails: Option<ChatProviderGuardrailsConfig>,
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
 pub struct HallucinationSuppressionConfig {
     // Whether hallucination suppression is enabled.
     // Defaults to `false`.
@@ -2929,7 +2934,7 @@ impl ChatProviderConfig {
     }
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
 pub struct FileStorageProviderConfig {
     // Name to display in the UI.
     pub display_name: Option<String>,
@@ -2967,14 +2972,14 @@ impl FileStorageProviderConfig {
     }
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
 #[repr(C)]
 pub enum StorageProviderSpecificConfig {
     S3(StorageProviderS3Config),
     AzBlob(StorageProviderAzBlobConfig),
 }
 
-#[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone, Facet)]
+#[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
 pub struct StorageProviderAzBlobConfig {
     pub root: Option<String>,
     pub container: String,
@@ -2984,7 +2989,7 @@ pub struct StorageProviderAzBlobConfig {
     pub account_key: Option<SecretConfigString>,
 }
 
-#[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone, Facet)]
+#[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
 pub struct StorageProviderS3Config {
     pub endpoint: Option<String>,
     pub root: Option<String>,
@@ -2996,7 +3001,7 @@ pub struct StorageProviderS3Config {
     pub secret_access_key: Option<SecretConfigString>,
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default, Facet)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default, Facet, HeapSize)]
 /// Merged config for storage provider specific configs.
 pub struct StorageProviderSpecificConfigMerged {
     #[facet(sensitive)]
@@ -3047,7 +3052,7 @@ impl StorageProviderSpecificConfigMerged {
     }
 }
 
-#[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone, Copy, Facet)]
+#[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone, Copy, Facet, HeapSize)]
 #[serde(rename_all = "snake_case")]
 #[repr(u8)]
 pub enum McpProtocolMode {
@@ -3057,7 +3062,7 @@ pub enum McpProtocolMode {
     Stateless,
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
 pub struct McpServerConfig {
     // The type of transport that the MCP server uses.
     // Supported values are:
@@ -3105,7 +3110,7 @@ pub struct McpServerConfig {
 }
 
 /// Optional operator assertions about MCP tool behavior. Missing hints inherit.
-#[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone, Copy, Facet)]
+#[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone, Copy, Facet, HeapSize)]
 #[serde(deny_unknown_fields)]
 pub struct McpToolAnnotationsConfig {
     #[serde(default, deserialize_with = "deserialize_optional_mcp_hint")]
@@ -3143,7 +3148,7 @@ fn deserialize_optional_mcp_hint<'de, D: de::Deserializer<'de>>(
 }
 
 /// Settings for one exact tool within its configured MCP server.
-#[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone, Facet)]
+#[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
 #[serde(deny_unknown_fields)]
 pub struct McpToolConfig {
     #[serde(default)]
@@ -3152,7 +3157,7 @@ pub struct McpToolConfig {
     pub override_tool_annotations: McpToolAnnotationsConfig,
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet, Default)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet, Default, HeapSize)]
 #[serde(tag = "mode", rename_all = "snake_case")]
 #[repr(C)]
 pub enum McpServerAuthenticationConfig {
@@ -3169,7 +3174,7 @@ pub enum McpServerAuthenticationConfig {
     },
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
 pub struct McpServerForwardedAuthenticationConfig {
     pub credential: McpServerForwardedCredential,
     #[serde(default = "default_mcp_forwarded_auth_header_name")]
@@ -3196,7 +3201,7 @@ fn default_mcp_forwarded_auth_prefix() -> String {
     "Bearer ".to_string()
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
 #[serde(rename_all = "snake_case")]
 #[repr(C)]
 pub enum McpServerForwardedCredential {
@@ -3205,7 +3210,7 @@ pub enum McpServerForwardedCredential {
     OidcIdToken,
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
 pub struct McpServerFixedAuthenticationConfig {
     #[facet(sensitive)]
     pub api_key: SecretConfigString,
@@ -3215,7 +3220,7 @@ pub struct McpServerFixedAuthenticationConfig {
     pub prefix: String,
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
 pub struct McpServerOauth2AuthenticationConfig {
     /// OAuth resource: unset discovers PRM (endpoint without query/fragment as fallback),
     /// a nonempty absolute URI overrides it, and an empty string omits the parameter.
@@ -3240,7 +3245,7 @@ fn default_mcp_fixed_auth_prefix() -> String {
     "Bearer ".to_string()
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
 pub struct McpServersGlobalConfig {
     /// Fallback hints for tools across all configured MCP servers.
     #[serde(default)]
@@ -3319,7 +3324,7 @@ fn default_mcp_wait_max_seconds() -> u64 {
 }
 
 /// The global MCP tool-call approval policy.
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
 pub struct McpToolApprovalConfig {
     /// Whether the approval gate is enabled for MCP tool calls.
     #[serde(default)]
@@ -3343,7 +3348,7 @@ impl Default for McpToolApprovalConfig {
 }
 
 /// Annotation policy presets for MCP tool-call approval.
-#[derive(Debug, Deserialize, Serialize, PartialEq, Eq, Clone, Copy, Default, Facet)]
+#[derive(Debug, Deserialize, Serialize, PartialEq, Eq, Clone, Copy, Default, Facet, HeapSize)]
 #[serde(rename_all = "snake_case")]
 #[repr(C)]
 pub enum McpToolApprovalPreset {
@@ -3354,7 +3359,7 @@ pub enum McpToolApprovalPreset {
     Restrictive,
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
 pub struct FrontendConfig {
     // Where to find the static web frontend files to serve.
     // Defaults to `./public`
@@ -3631,7 +3636,7 @@ impl FrontendConfig {
     }
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Copy, Default, Facet)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Copy, Default, Facet, HeapSize)]
 #[serde(rename_all = "snake_case")]
 #[facet(rename_all = "snake_case")]
 #[repr(C)]
@@ -3645,7 +3650,7 @@ fn default_component_kits_directory() -> String {
     "/app/component-kits".to_string()
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
 pub struct FrontendComponentKitsConfig {
     // Directory containing component kit subdirectories.
     // Defaults to `/app/component-kits`.
@@ -3661,7 +3666,7 @@ impl Default for FrontendComponentKitsConfig {
     }
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
 pub struct FrontendErrorReportConfig {
     // Whether assistant error alerts should show the backend-provided detailed error message.
     // Defaults to `false`.
@@ -3734,7 +3739,7 @@ fn default_pinned_chats_limit() -> u64 {
 }
 
 /// How assistant descriptions are displayed in the Tools menu.
-#[derive(Debug, Deserialize, Serialize, PartialEq, Eq, Clone, Copy, Default, Facet)]
+#[derive(Debug, Deserialize, Serialize, PartialEq, Eq, Clone, Copy, Default, Facet, HeapSize)]
 #[serde(rename_all = "snake_case")]
 #[repr(C)]
 pub enum AssistantToolsMenuDescriptionDisplay {
@@ -3744,7 +3749,7 @@ pub enum AssistantToolsMenuDescriptionDisplay {
     Full,
 }
 
-#[derive(Debug, Deserialize, PartialEq, Clone, Facet)]
+#[derive(Debug, Deserialize, PartialEq, Clone, Facet, HeapSize)]
 pub struct AssistantsConfig {
     /// Description display in the desktop Tools and mobile add menus.
     /// Defaults to `truncated` (up to two lines with an ellipsis).
@@ -3824,7 +3829,7 @@ impl Default for AssistantsConfig {
     }
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
 pub struct LegacyAssistantsDelegationConfig {
     // Whether in-chat delegation to @-mentioned assistants is enabled.
     // Requires `assistants.enabled` to also be enabled.
@@ -3949,7 +3954,7 @@ impl Default for LegacyAssistantsDelegationConfig {
 }
 
 /// Runtime configuration shared by both delegation offer routes.
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
 pub struct DelegationConfig {
     // Maximum wall-clock duration in seconds a delegated child run may take
     // before it is aborted. An awaited run is reported to the origin chat as
@@ -4157,7 +4162,7 @@ impl DelegationConfig {
 }
 
 /// The @-mention delegation route (`[delegation.assistants]`).
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
 pub struct DelegationAssistantsConfig {
     // Whether in-chat delegation to @-mentioned assistants is enabled.
     // Requires `assistants.enabled` to also be enabled.
@@ -4181,7 +4186,7 @@ impl Default for DelegationAssistantsConfig {
 }
 
 /// The model-planned task route (`[delegation.tasks]`).
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
 pub struct DelegationTasksConfig {
     // Whether the model may plan and dispatch its own delegated tasks with the
     // reserved `erato/delegate_task` tool. The tool is only offered when a
@@ -4308,7 +4313,7 @@ impl Default for DelegationTasksConfig {
 
 /// The approval-before-dispatch policy for model-planned tasks
 /// (`[delegation.tasks.approval]`).
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
 pub struct DelegationTasksApprovalConfig {
     // When the user is asked before the model's planned tasks are dispatched.
     // "never" dispatches without asking. "always" asks about every batch that
@@ -4358,7 +4363,7 @@ impl DelegationTasksApprovalConfig {
 /// `run_modes`: a deployment that later offers `async` gets the prompt it
 /// implies without having to remember to ask for it, and one that never offers
 /// it is never asked at all.
-#[derive(Debug, Deserialize, Serialize, PartialEq, Eq, Clone, Copy, Default, Facet)]
+#[derive(Debug, Deserialize, Serialize, PartialEq, Eq, Clone, Copy, Default, Facet, HeapSize)]
 #[facet(rename_all = "snake_case")]
 #[serde(rename_all = "snake_case")]
 #[repr(C)]
@@ -4414,7 +4419,7 @@ impl TaskApprovalMode {
 /// Only `reject` is implemented. The other two spellings are reserved so a
 /// deployment that writes one gets a named error instead of silently getting
 /// `reject` behaviour under a name that promises something else.
-#[derive(Debug, Deserialize, Serialize, PartialEq, Eq, Clone, Copy, Default, Facet)]
+#[derive(Debug, Deserialize, Serialize, PartialEq, Eq, Clone, Copy, Default, Facet, HeapSize)]
 #[facet(rename_all = "snake_case")]
 #[serde(rename_all = "snake_case")]
 #[repr(C)]
@@ -4430,7 +4435,7 @@ pub enum MultitaskStrategy {
 
 /// Per-facet overrides of the `[delegation.tasks]` runtime keys. Every field
 /// is optional; `None` inherits the global value.
-#[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone, Facet)]
+#[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
 pub struct FacetDelegationOverrides {
     #[serde(default)]
     pub max_tasks_per_turn: Option<u32>,
@@ -4462,7 +4467,7 @@ pub struct FacetDelegationOverrides {
 
 /// Per-facet overrides of the `[delegation.tasks.approval]` keys
 /// (`[facets.facets.<facet-id>.delegation.approval]`).
-#[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone, Facet)]
+#[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
 pub struct FacetDelegationApprovalOverrides {
     #[serde(default)]
     pub mode: Option<TaskApprovalMode>,
@@ -4473,7 +4478,7 @@ pub struct FacetDelegationApprovalOverrides {
 
 /// Whether a task child speaks as the origin chat's assistant or as the bare
 /// model.
-#[derive(Debug, Deserialize, Serialize, PartialEq, Eq, Clone, Copy, Default, Facet)]
+#[derive(Debug, Deserialize, Serialize, PartialEq, Eq, Clone, Copy, Default, Facet, HeapSize)]
 #[facet(rename_all = "snake_case")]
 #[serde(rename_all = "snake_case")]
 #[repr(C)]
@@ -4488,7 +4493,7 @@ pub enum TaskPersona {
 /// `wait` returns the child's answer as the call's result. `async` settles the
 /// call at launch and the answer is delivered into the conversation later, as
 /// a `task_result` row the model then reacts to.
-#[derive(Debug, Deserialize, Serialize, PartialEq, Eq, Clone, Copy, Default, Facet)]
+#[derive(Debug, Deserialize, Serialize, PartialEq, Eq, Clone, Copy, Default, Facet, HeapSize)]
 #[facet(rename_all = "snake_case")]
 #[serde(rename_all = "snake_case")]
 #[repr(C)]
@@ -4511,7 +4516,7 @@ impl TaskRunMode {
 /// How a completed async task result re-enters the origin chat. `interrupt` is
 /// a reserved spelling with no implementation; it is rejected at load rather
 /// than silently accepted.
-#[derive(Debug, Deserialize, Serialize, PartialEq, Eq, Clone, Copy, Default, Facet)]
+#[derive(Debug, Deserialize, Serialize, PartialEq, Eq, Clone, Copy, Default, Facet, HeapSize)]
 #[facet(rename_all = "snake_case")]
 #[serde(rename_all = "snake_case")]
 #[repr(C)]
@@ -4645,7 +4650,7 @@ impl AssistantsConfig {
     }
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
 pub struct AssistantHubConfig {
     // Whether the assistant hub feature is enabled.
     // Defaults to `false`.
@@ -4725,14 +4730,14 @@ mod assistant_hub_config_tests {
     }
 }
 
-#[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone, Facet)]
+#[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
 pub struct AssistantHubReviewerPermissionsConfig {
     // Map of rule name to reviewer rule configuration.
     #[serde(default)]
     pub rules: HashMap<String, AssistantHubReviewerRule>,
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
 #[facet(tag = "rule_type")]
 #[serde(tag = "rule_type")]
 #[repr(C)]
@@ -4745,7 +4750,7 @@ pub enum AssistantHubReviewerRule {
     },
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
 pub struct AssistantHubCategoryConfig {
     pub display_name: String,
     pub icon: String,
@@ -4840,7 +4845,7 @@ impl AssistantHubReviewerRule {
     }
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
 pub struct UserPreferencesConfig {
     // Whether the user preferences feature is enabled.
     // Defaults to `true`.
@@ -4870,7 +4875,7 @@ fn default_user_preferences_data_tab_enabled() -> bool {
     true
 }
 
-#[derive(Debug, Deserialize, PartialEq, Clone, Default, Facet)]
+#[derive(Debug, Deserialize, PartialEq, Clone, Default, Facet, HeapSize)]
 pub struct StarterPromptsConfig {
     // Whether the starter prompts feature is enabled.
     // Defaults to `false`.
@@ -4886,7 +4891,7 @@ pub struct StarterPromptsConfig {
     pub priority_order: Vec<String>,
 }
 
-#[derive(Debug, Deserialize, PartialEq, Clone, Facet)]
+#[derive(Debug, Deserialize, PartialEq, Clone, Facet, HeapSize)]
 pub struct StarterPromptConfig {
     // Human readable title for the starter prompt.
     pub title: String,
@@ -4914,7 +4919,7 @@ pub struct StarterPromptConfig {
     pub chat_provider: Option<String>,
 }
 
-#[derive(Debug, Deserialize, PartialEq, Clone, Default, Facet)]
+#[derive(Debug, Deserialize, PartialEq, Clone, Default, Facet, HeapSize)]
 pub struct FacetsConfig {
     // Map of facet id to facet configuration.
     #[serde(default)]
@@ -4947,7 +4952,7 @@ pub struct FacetsConfig {
     pub default_selected_facets: Vec<String>,
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Default, Facet)]
+#[derive(Debug, PartialEq, Eq, Clone, Default, Facet, HeapSize)]
 pub struct ActionFacetsConfig {
     // Map of action facet id to action facet configuration.
     pub facets: HashMap<String, ActionFacetConfig>,
@@ -5029,13 +5034,13 @@ impl ActionFacetsConfig {
     }
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default, Facet)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default, Facet, HeapSize)]
 pub struct ChatSharingConfig {
     #[serde(default)]
     pub enabled: bool,
 }
 
-#[derive(Debug, Deserialize, PartialEq, Clone, Default, Facet)]
+#[derive(Debug, Deserialize, PartialEq, Clone, Default, Facet, HeapSize)]
 pub struct FacetConfig {
     // Human readable name for the facet.
     pub display_name: String,
@@ -5080,7 +5085,7 @@ pub struct FacetConfig {
     pub delegation: Option<FacetDelegationOverrides>,
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default, Facet)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default, Facet, HeapSize)]
 pub struct ActionFacetConfig {
     // Human readable name for the action facet.
     pub display_name: String,
@@ -5139,7 +5144,7 @@ pub const ACTION_FACET_PRESENTATIONS: [&str; 2] = ["render_buttons", "auto_promp
 /// are overrideable / composable across multiple config files (like
 /// `chat_providers`). The intermediate `tools` level leaves room for future
 /// `[client_tools]` sibling keys that set global settings for all client tools.
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default, Facet)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default, Facet, HeapSize)]
 pub struct ClientToolsConfig {
     /// Enable durable escalation for compiled, registered operation kinds:
     /// native local evidence, and configured tools that opt in with a
@@ -5163,7 +5168,7 @@ pub struct ClientToolsConfig {
 /// Returning client tools MUST be read-only / idempotent: a backend restart
 /// drops the parked turn, so a client may re-execute on recovery. Mutations
 /// must use the terminal `client_actions` (`propose_client_action`) path.
-#[derive(Debug, Deserialize, Serialize, PartialEq, Eq, Clone, Default, Facet)]
+#[derive(Debug, Deserialize, Serialize, PartialEq, Eq, Clone, Default, Facet, HeapSize)]
 pub struct ClientToolConfig {
     /// Tool name exposed to the model (e.g. "fetch_availability", selected in
     /// allowlists as "outlook/fetch_availability" via its namespace). Must be
@@ -5227,7 +5232,7 @@ pub struct ClientToolConfig {
 
 /// `[client_tools.tools.<id>.durable]`. Selects a compiled host family, never
 /// an executor, realm or device.
-#[derive(Debug, Deserialize, Serialize, PartialEq, Eq, Clone, Facet)]
+#[derive(Debug, Deserialize, Serialize, PartialEq, Eq, Clone, Facet, HeapSize)]
 pub struct ClientToolDurableConfig {
     /// Host context an executor binding must carry for the call to park, e.g.
     /// `outlook_mailbox`. Calls without a matching binding keep the in-memory path.
@@ -5256,7 +5261,7 @@ fn default_durable_claim_lease_secs() -> u64 {
     120
 }
 
-#[derive(Debug, Deserialize, Serialize, PartialEq, Eq, Clone, Copy, Facet)]
+#[derive(Debug, Deserialize, Serialize, PartialEq, Eq, Clone, Copy, Facet, HeapSize)]
 #[facet(rename_all = "snake_case")]
 #[serde(rename_all = "snake_case")]
 #[repr(C)]
@@ -5280,7 +5285,7 @@ impl ClientToolHostContext {
 /// `[client_tools.tools.<id>.replay]`. Applies only to calls from earlier user
 /// turns: the turn in progress, including an approval continuation of a
 /// parked turn, always sees its own calls in full.
-#[derive(Debug, Deserialize, Serialize, PartialEq, Eq, Clone, Default, Facet)]
+#[derive(Debug, Deserialize, Serialize, PartialEq, Eq, Clone, Default, Facet, HeapSize)]
 pub struct ClientToolReplayConfig {
     /// `full` (default) replays arguments and result verbatim. `receipt`
     /// replaces both with a bounded receipt built from the fields listed below
@@ -5298,7 +5303,7 @@ pub struct ClientToolReplayConfig {
     pub keep_output_fields: Vec<String>,
 }
 
-#[derive(Debug, Deserialize, Serialize, PartialEq, Eq, Clone, Copy, Default, Facet)]
+#[derive(Debug, Deserialize, Serialize, PartialEq, Eq, Clone, Copy, Default, Facet, HeapSize)]
 #[facet(rename_all = "snake_case")]
 #[serde(rename_all = "snake_case")]
 #[repr(C)]
@@ -5334,7 +5339,7 @@ pub fn parse_receipt_field_path(path: &str) -> Result<Vec<String>, String> {
         .collect()
 }
 
-#[derive(Debug, Deserialize, Serialize, PartialEq, Eq, Clone, Facet)]
+#[derive(Debug, Deserialize, Serialize, PartialEq, Eq, Clone, Facet, HeapSize)]
 pub struct ClientToolSubmissionConfig {
     /// Maximum attempts per logical editing step, including the initial
     /// submission, schema/client failures and replies without progress.
@@ -5376,7 +5381,7 @@ impl Default for ClientToolSubmissionConfig {
     }
 }
 
-#[derive(Debug, Deserialize, Serialize, PartialEq, Eq, Clone, Copy, Default, Facet)]
+#[derive(Debug, Deserialize, Serialize, PartialEq, Eq, Clone, Copy, Default, Facet, HeapSize)]
 #[facet(rename_all = "snake_case")]
 #[serde(rename_all = "snake_case")]
 #[repr(C)]
@@ -5408,7 +5413,7 @@ impl ClientToolConfig {
     }
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
 pub struct CachesConfig {
     // Maximum size in MB for file bytes cache (raw file bytes for both text and images)
     // Defaults to 100MB
@@ -5459,7 +5464,7 @@ impl Default for CachesConfig {
     }
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
 pub struct GenerationStatusConfig {
     // Interval in seconds at which in-flight generations refresh their
     // heartbeat on the chats row.
@@ -5541,7 +5546,7 @@ impl Default for GenerationStatusConfig {
     }
 }
 
-#[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone, Copy, Facet)]
+#[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone, Copy, Facet, HeapSize)]
 #[serde(rename_all = "snake_case")]
 #[facet(rename_all = "snake_case")]
 #[repr(C)]
@@ -5553,7 +5558,7 @@ pub enum FileTypeDetectionMode {
     Magika,
 }
 
-#[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone, Facet)]
+#[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
 pub struct FileTypeDetectionConfig {
     /// File type detector to use.
     ///
@@ -5563,7 +5568,7 @@ pub struct FileTypeDetectionConfig {
     pub mode: FileTypeDetectionMode,
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
 pub struct FileUploadsConfig {
     /// File operations that permit an upload. Entries use OR semantics.
     ///
@@ -5574,7 +5579,7 @@ pub struct FileUploadsConfig {
     pub upload_allowed_if_supports: Vec<FileUploadOperationSelector>,
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
 #[serde(rename_all = "snake_case")]
 #[facet(rename_all = "snake_case")]
 #[repr(C)]
@@ -5598,7 +5603,7 @@ impl Default for FileUploadsConfig {
 }
 
 /// All numeric limits use zero to disable only that limit.
-#[derive(Debug, Deserialize, PartialEq, Clone, Facet)]
+#[derive(Debug, Deserialize, PartialEq, Clone, Facet, HeapSize)]
 #[serde(default)]
 pub struct FileContextConfig {
     /// Offer integrated, on-demand full text retrieval for approved file references.
@@ -5647,7 +5652,7 @@ impl FileContextConfig {
     }
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
 #[serde(default)]
 pub struct FilePreviewConfig {
     pub csv_max_sample_rows: usize,
@@ -5668,7 +5673,7 @@ impl Default for FilePreviewConfig {
     }
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
 #[serde(default)]
 pub struct FileExtractionLimits {
     pub max_input_bytes: usize,
@@ -5688,7 +5693,7 @@ impl Default for FileExtractionLimits {
     }
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
 pub struct FileProcessorConfig {
     /// File processor to use (currently only "kreuzberg" is supported)
     /// parser-core has been removed as it was unmaintained and yanked
@@ -5711,7 +5716,7 @@ impl Default for FileProcessorConfig {
     }
 }
 
-#[derive(Debug, Default, Deserialize, PartialEq, Clone, Facet)]
+#[derive(Debug, Default, Deserialize, PartialEq, Clone, Facet, HeapSize)]
 pub struct AudioTranscriptionConfig {
     // Whether to enable audio transcription workflow metadata for uploaded audio files.
     // Defaults to `false`.
@@ -5821,7 +5826,9 @@ fn default_audio_transcription_fixed_output_token_budget() -> u32 {
     500
 }
 
-#[derive(Debug, Deserialize, Serialize, PartialEq, Eq, Clone, Copy, Hash, ToSchema, Facet)]
+#[derive(
+    Debug, Deserialize, Serialize, PartialEq, Eq, Clone, Copy, Hash, ToSchema, Facet, HeapSize,
+)]
 #[serde(rename_all = "snake_case")]
 #[repr(C)]
 pub enum SharepointAllDrivesSource {
@@ -5848,7 +5855,7 @@ impl SharepointAllDrivesSource {
     ];
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default, Facet)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default, Facet, HeapSize)]
 pub struct SharepointConfig {
     // Whether the Sharepoint/OneDrive integration is enabled.
     // Defaults to `false`.
@@ -5917,7 +5924,7 @@ impl SharepointConfig {
     }
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
 pub struct EntraIdConfig {
     // Whether the Entra ID integration is enabled.
     // Defaults to `false`.
@@ -5936,7 +5943,7 @@ pub struct EntraIdConfig {
     pub group_overage: EntraIdGroupOverageConfig,
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
 pub struct EntraIdGroupOverageConfig {
     /// Resolve memberships through Microsoft Graph when an Entra token signals overage.
     #[serde(default = "default_true")]
@@ -5978,7 +5985,7 @@ impl EntraIdConfig {
     }
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default, Facet)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default, Facet, HeapSize)]
 pub struct IntegrationsConfig {
     #[serde(default)]
     pub langfuse: LangfuseConfig,
@@ -6000,7 +6007,7 @@ pub struct IntegrationsConfig {
     pub ms_office: MsOfficeConfig,
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default, Facet)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default, Facet, HeapSize)]
 pub struct MsOfficeConfig {
     // Exchange EWS API endpoint used by the backend EWS proxy.
     // Example: https://outlook.office365.com/EWS/Exchange.asmx
@@ -6099,7 +6106,7 @@ impl MsOfficeConfig {
 /// Independent Teams personal app distribution settings. The runtime shares
 /// the Office add-in frontend and Entra registration, but has its own app ID
 /// and customer-facing manifest branding.
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
 pub struct MsOfficeTeamsAppConfig {
     #[serde(default)]
     pub enabled: bool,
@@ -6164,7 +6171,7 @@ impl MsOfficeTeamsAppConfig {
     }
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
 pub struct TeamsBotConfig {
     // Whether the Teams bot endpoint `/api/integrations/ms_teams/messages` is enabled.
     // Defaults to `false`.
@@ -6413,7 +6420,7 @@ fn entra_authority_tenant(authority: &str) -> Option<String> {
     is_ms_office_guid(tenant).then(|| tenant.to_ascii_lowercase())
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
 pub struct MsOfficeTeamsManifestConfig {
     /// Installable package version. Keep the app ID stable and increase this
     /// when changing deployment-specific branding or bot capabilities.
@@ -6731,7 +6738,7 @@ mod teams_manifest_version_tests {
     }
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
 pub struct MsOfficeAddinConfig {
     #[serde(default)]
     pub enabled: bool,
@@ -6767,7 +6774,7 @@ pub struct MsOfficeAddinConfig {
     pub launch_events: Vec<MsOfficeAddinLaunchEventConfig>,
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
 pub struct MsOfficeAddinDefaultSettings {
     /// Default response when switching to another Outlook item.
     #[serde(default)]
@@ -6783,7 +6790,7 @@ pub struct MsOfficeAddinDefaultSettings {
     pub word_apply: MsOfficeAddinWordApplySettings,
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone, Copy, Default, Facet)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone, Copy, Default, Facet, HeapSize)]
 #[serde(rename_all = "snake_case")]
 #[facet(rename_all = "snake_case")]
 #[repr(C)]
@@ -6807,7 +6814,7 @@ impl Default for MsOfficeAddinDefaultSettings {
 
 /// Unset keys keep that host's own default; read them through [`Self::pc_policy`],
 /// [`Self::mac_policy`] and [`Self::web_policy`].
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default, Facet)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default, Facet, HeapSize)]
 pub struct MsOfficeAddinWordApplySettings {
     #[serde(default)]
     pub pc: MsOfficeAddinWordApplyHostSettings,
@@ -6817,7 +6824,7 @@ pub struct MsOfficeAddinWordApplySettings {
     pub web: MsOfficeAddinWordApplyHostSettings,
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default, Facet)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default, Facet, HeapSize)]
 pub struct MsOfficeAddinWordApplyHostSettings {
     /// Write plans through Word's object model where a probed mechanism applies.
     pub in_place: Option<bool>,
@@ -6827,7 +6834,7 @@ pub struct MsOfficeAddinWordApplyHostSettings {
     pub package_read: Option<bool>,
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone, Copy, Facet)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone, Copy, Facet, HeapSize)]
 #[serde(rename_all = "snake_case")]
 #[facet(rename_all = "snake_case")]
 #[repr(C)]
@@ -6968,7 +6975,7 @@ impl MsOfficeAddinConfig {
 }
 
 /// Document add-ins need a catalog identity distinct from mail. Other branding is inherited at render time.
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
 pub struct MsOfficeAddinDocumentConfig {
     #[serde(default = "default_ms_office_addin_document_id")]
     pub addin_id: String,
@@ -7005,7 +7012,7 @@ impl MsOfficeAddinDocumentConfig {
 }
 
 /// Document-specific overrides; other manifest fields inherit the mail configuration at render time.
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
 pub struct MsOfficeAddinDocumentManifestConfig {
     #[serde(default = "default_ms_office_addin_document_manifest_display_name")]
     pub display_name: String,
@@ -7040,7 +7047,7 @@ impl MsOfficeAddinDocumentManifestConfig {
     }
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
 pub struct MsOfficeAddinManifestConfig {
     // Provider name shown in the Office add-in manifest.
     #[serde(default = "default_ms_office_addin_manifest_provider_name")]
@@ -7293,7 +7300,7 @@ fn default_ms_office_addin_manifest_icon_80_path() -> String {
     "assets/ribbon-icon-80.png".to_string()
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
 pub struct MsOfficeAddinLaunchEventRuntimeConfig {
     // Path of the HTML runtime page that hosts the launch event handlers in
     // Outlook on the web, new Outlook, and Outlook on Mac. The path is relative
@@ -7306,7 +7313,7 @@ pub struct MsOfficeAddinLaunchEventRuntimeConfig {
     pub script_path: String,
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
 pub struct MsOfficeAddinLaunchEventConfig {
     // Outlook launch event that invokes the handler.
     pub event: MsOfficeAddinLaunchEventType,
@@ -7316,7 +7323,7 @@ pub struct MsOfficeAddinLaunchEventConfig {
 }
 
 /// Outlook launch events an Office add-in can subscribe to.
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Copy, Facet)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Copy, Facet, HeapSize)]
 #[repr(C)]
 pub enum MsOfficeAddinLaunchEventType {
     /// Raised when the user starts composing a new message.
@@ -7368,7 +7375,7 @@ fn is_ms_office_addin_launch_event_function_name(function_name: &str) -> bool {
         .all(|character| character.is_ascii_alphanumeric() || character == '_' || character == '$')
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
 pub struct OtelConfig {
     #[serde(default)]
     pub enabled: bool,
@@ -7403,7 +7410,7 @@ fn default_service_name() -> String {
     "erato-backend".to_string()
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
 pub struct PrometheusConfig {
     #[serde(default)]
     pub enabled: bool,
@@ -7457,7 +7464,7 @@ impl PrometheusConfig {
     }
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default, Facet)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default, Facet, HeapSize)]
 pub struct LangfuseConfig {
     // Whether Langfuse integration is enabled.
     // Defaults to `false`.
@@ -7496,13 +7503,13 @@ pub struct LangfuseConfig {
     pub use_otel: bool,
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
 pub struct LangfuseSystemPromptConfig {
     // The name of the prompt in Langfuse prompt management.
     pub prompt_name: String,
 }
 
-#[derive(Debug, Deserialize, PartialEq, Clone, Facet)]
+#[derive(Debug, Deserialize, PartialEq, Clone, Facet, HeapSize)]
 pub struct ModelCapabilities {
     // Maximum number of tokens that may be provided to the model
     #[serde(default = "default_context_size_tokens")]
@@ -7568,7 +7575,7 @@ impl Default for ModelCapabilities {
     }
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Copy, Facet)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Copy, Facet, HeapSize)]
 #[facet(rename_all = "lowercase")]
 #[serde(rename_all = "lowercase")]
 #[repr(C)]
@@ -7580,7 +7587,7 @@ pub enum ModelReasoningEffort {
     High,
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Copy, Facet)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Copy, Facet, HeapSize)]
 #[facet(rename_all = "lowercase")]
 #[serde(rename_all = "lowercase")]
 #[repr(C)]
@@ -7590,7 +7597,7 @@ pub enum ModelVerbosity {
     High,
 }
 
-#[derive(Debug, Deserialize, PartialEq, Clone, Default, Facet)]
+#[derive(Debug, Deserialize, PartialEq, Clone, Default, Facet, HeapSize)]
 pub struct ModelSettings {
     // Whether to omit tool `strict` in outgoing request payloads.
     // Defaults to `false`.
@@ -7610,14 +7617,14 @@ pub struct ModelSettings {
     pub verbosity: Option<ModelVerbosity>,
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default, Facet)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default, Facet, HeapSize)]
 pub struct SentryConfig {
     // If present, will enable Sentry for error reporting.
     #[facet(sensitive)]
     pub sentry_dsn: Option<SecretConfigString>,
 }
 
-#[derive(Debug, Deserialize, PartialEq, Clone, Default, Facet)]
+#[derive(Debug, Deserialize, PartialEq, Clone, Default, Facet, HeapSize)]
 pub struct BudgetConfig {
     // Whether budget tracking and display is enabled.
     // Defaults to `false`.
@@ -7647,7 +7654,9 @@ pub struct BudgetConfig {
     pub budget_period_days: u32,
 }
 
-#[derive(Debug, Deserialize, Serialize, PartialEq, Eq, Clone, ToSchema, Default, Facet)]
+#[derive(
+    Debug, Deserialize, Serialize, PartialEq, Eq, Clone, ToSchema, Default, Facet, HeapSize,
+)]
 #[facet(rename_all = "SCREAMING_SNAKE_CASE")]
 #[serde(rename_all = "UPPERCASE")]
 #[repr(C)]
@@ -7859,14 +7868,14 @@ mod model_permissions_tests {
     }
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default, Facet)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default, Facet, HeapSize)]
 pub struct ModelPermissionsConfig {
     // Map of rule name to rule configuration.
     #[serde(default)]
     pub rules: HashMap<String, ModelPermissionRule>,
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
 #[facet(tag = "rule_type")]
 #[serde(tag = "rule_type")]
 #[repr(C)]
@@ -7887,13 +7896,13 @@ pub enum ModelPermissionRule {
     },
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default, Facet)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default, Facet, HeapSize)]
 pub struct McpServerPermissionsConfig {
     #[serde(default)]
     pub rules: HashMap<String, McpServerPermissionRule>,
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
 #[facet(tag = "rule_type")]
 #[serde(tag = "rule_type")]
 #[repr(C)]
@@ -7909,13 +7918,13 @@ pub enum McpServerPermissionRule {
     },
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default, Facet)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default, Facet, HeapSize)]
 pub struct FacetPermissionsConfig {
     #[serde(default)]
     pub rules: HashMap<String, FacetPermissionRule>,
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
 #[facet(tag = "rule_type")]
 #[serde(tag = "rule_type")]
 #[repr(C)]

@@ -162,12 +162,28 @@ impl PolicyEngine {
         db: &DatabaseConnection,
         config: &AppConfig,
     ) -> Result<Self, Report> {
+        crate::metrics::components::scope(
+            crate::metrics::components::Component::Policy,
+            self.for_request_memory_inner(db, config),
+        )
+        .await
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    async fn for_request_memory_inner(
+        &self,
+        db: &DatabaseConnection,
+        config: &AppConfig,
+    ) -> Result<Self, Report> {
         let data = configuration_data(config).to_string();
         let engine = self
             .templates
             .try_get_with(data.clone(), async move {
                 tokio::task::spawn_blocking(move || {
-                    prepare_template(&data).map(|engine| Arc::new(RwLock::new(engine)))
+                    crate::metrics::components::sync(
+                        crate::metrics::components::Component::Policy,
+                        || prepare_template(&data).map(|engine| Arc::new(RwLock::new(engine))),
+                    )
                 })
                 .await
                 .map_err(|error| error.to_string())?
@@ -622,7 +638,9 @@ async fn evaluate_policy_snapshot<T: Send + 'static>(
         let engine = crate::latency::stage("policy.engine_read_wait", shared_engine.read()).await;
         let _read_hold_timer = crate::latency::StageTimer::new("policy.engine_read_hold");
         let _clone_timer = crate::latency::StageTimer::new("policy.engine_clone");
-        crate::latency::sync_span("policy.engine_clone").in_scope(|| engine.clone())
+        crate::metrics::components::sync(crate::metrics::components::Component::Policy, || {
+            crate::latency::sync_span("policy.engine_clone").in_scope(|| engine.clone())
+        })
     };
 
     let dispatch_wait = crate::latency::StageTimer::new("policy.blocking_dispatch_wait");
@@ -630,7 +648,9 @@ async fn evaluate_policy_snapshot<T: Send + 'static>(
     tokio::task::spawn_blocking(move || {
         let _permit = permit;
         drop(dispatch_wait);
-        parent_span.in_scope(|| evaluate(snapshot))
+        crate::metrics::components::sync(crate::metrics::components::Component::Policy, || {
+            parent_span.in_scope(|| evaluate(snapshot))
+        })
     })
     .await
     .wrap_err("Policy evaluation blocking task failed")?
@@ -720,6 +740,41 @@ pub const fn authorize_general(resource_kind: ResourceKind, action: Action) {
         is_valid_resource_action(resource_kind, action),
         "This resource kind can not be used with this action"
     )
+}
+
+impl PolicyEngine {
+    pub(crate) fn owned_memory(&self, c: &mut erato_memory::Context) {
+        fn engine(c: &mut erato_memory::Context, holder: &Arc<RwLock<Engine>>) {
+            if !c.shared(Arc::as_ptr(holder) as usize) {
+                return;
+            }
+            c.estimated(std::mem::size_of::<RwLock<Engine>>() + 2 * std::mem::size_of::<usize>());
+            if let Ok(value) = holder.try_read() {
+                crate::metrics::owned::RegorusValueView(&value.get_data()).heap_size(c);
+                if let Ok(sources) = value.get_policies() {
+                    for source in sources {
+                        for text in [source.get_path(), source.get_contents()] {
+                            if !text.is_empty() && c.shared(text.as_ptr() as usize) {
+                                c.estimated(text.len());
+                            }
+                        }
+                    }
+                }
+                c.unmeasured("regorus AST, evaluator and source container internals", 1);
+            } else {
+                c.locked("policy Engine lock");
+            }
+        }
+        use erato_memory::HeapSize;
+        engine(c, &self.engine);
+        for (key, value) in self.templates.iter() {
+            c.measure(&key);
+            engine(c, &value);
+        }
+        self.shared_facts.heap_size(c);
+        c.unmeasured("policy template Moka bookkeeping", 1);
+        c.opaque(&self.loader);
+    }
 }
 
 #[cfg(test)]

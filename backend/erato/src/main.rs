@@ -155,7 +155,11 @@ async fn async_main(worker_threads: usize) -> Result<(), Report> {
         &mut _sentry_guard,
     );
 
-    let state = AppState::new(config.clone()).await?;
+    let state = erato::metrics::components::scope(
+        erato::metrics::components::Component::Startup,
+        AppState::new(config.clone()),
+    )
+    .await?;
     erato::metrics::start_cache_size_metrics_reporter(state.clone());
 
     // Verify that the database has been migrated to the latest version
@@ -179,36 +183,58 @@ async fn async_main(worker_threads: usize) -> Result<(), Report> {
         )
     });
 
-    let (router, _api) = server::router::router(state.clone()).split_for_parts();
+    let (router, _api) = erato::metrics::components::sync(
+        erato::metrics::components::Component::HttpRouting,
+        || server::router::router(state.clone()).split_for_parts(),
+    );
 
     let listener =
         tokio::net::TcpListener::bind(format!("{}:{}", config.http_host, config.http_port)).await?;
     let local_addr = listener.local_addr()?;
 
     // Create OpenAPI spec with server information
-    let mut spec = ApiDoc::build_openapi_full();
+    let mut spec = erato::metrics::components::sync(
+        erato::metrics::components::Component::ApiSchema,
+        ApiDoc::build_openapi_full,
+    );
     spec.servers = Some(vec![utoipa::openapi::Server::new(format!(
         "http://{}",
         local_addr
     ))]);
 
-    let app = extend_with_sentry_layers(router)
-        .merge(Scalar::with_url("/scalar", spec.clone()))
-        .route(
-            "/openapi.json",
-            axum::routing::get(move || async move { axum::Json(spec.clone()) }),
-        )
-        .fallback_service(serve_files_with_script.into_service())
-        .layer(Extension(Arc::new(build_frontend_registry(
-            &config,
-            &state.distribution,
-        ))))
-        .layer(Extension(DeploymentVersion::from_env()))
-        .layer(CorsLayer::very_permissive())
-        .layer(SetResponseHeaderLayer::overriding(
-            axum::http::header::SERVER,
-            DeploymentIdentity::from_env().server_header(),
-        ));
+    let frontend_registry = Arc::new(erato::metrics::components::sync(
+        erato::metrics::components::Component::RuntimeDistribution,
+        || build_frontend_registry(&config, &state.distribution),
+    ));
+    erato::metrics::owned::start_reporter(state.clone(), frontend_registry.clone());
+
+    let app = erato::metrics::components::sync(
+        erato::metrics::components::Component::HttpRouting,
+        || {
+            extend_with_sentry_layers(router)
+                .merge(erato::metrics::components::sync(
+                    erato::metrics::components::Component::ApiSchema,
+                    || Scalar::with_url("/scalar", spec.clone()),
+                ))
+                .route(
+                    "/openapi.json",
+                    axum::routing::get(move || async move {
+                        axum::Json(erato::metrics::components::sync(
+                            erato::metrics::components::Component::ApiSchema,
+                            || spec.clone(),
+                        ))
+                    }),
+                )
+                .fallback_service(serve_files_with_script.into_service())
+                .layer(Extension(frontend_registry))
+                .layer(Extension(DeploymentVersion::from_env()))
+                .layer(CorsLayer::very_permissive())
+                .layer(SetResponseHeaderLayer::overriding(
+                    axum::http::header::SERVER,
+                    DeploymentIdentity::from_env().server_header(),
+                ))
+        },
+    );
 
     let background_tasks = state.background_tasks.clone();
 
@@ -221,7 +247,16 @@ async fn async_main(worker_threads: usize) -> Result<(), Report> {
     } else {
         app
     }
-    .with_state(state);
+    .with_state(state)
+    .layer(axum::middleware::from_fn(
+        |request: axum::extract::Request, next: axum::middleware::Next| async move {
+            erato::metrics::components::scope(
+                erato::metrics::components::Component::HttpRequest,
+                next.run(request),
+            )
+            .await
+        },
+    ));
 
     #[cfg(feature = "profiling-dial9")]
     let app = app.layer(

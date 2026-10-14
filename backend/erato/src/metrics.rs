@@ -2,7 +2,7 @@ use std::hash::Hash;
 use std::net::SocketAddr;
 use std::time::Duration;
 
-use eyre::{Result, WrapErr, eyre};
+use eyre::{Report, Result, WrapErr, eyre};
 use metrics::{
     Unit, counter, describe_counter, describe_gauge, describe_histogram, gauge, histogram,
 };
@@ -15,6 +15,17 @@ use crate::deployment_identity::DeploymentIdentity;
 use crate::models::message::GenerationErrorType;
 use crate::query_metrics::{POSTGRES_QUERY_DURATION_METRIC, init_known_postgres_query_metrics};
 use crate::state::AppState;
+
+#[doc(hidden)]
+pub mod components;
+#[cfg(any(test, all(feature = "profiling", target_os = "linux")))]
+mod exporter;
+pub(crate) mod memory;
+#[doc(hidden)]
+pub mod owned;
+mod process;
+
+const MEMORY_STATS_INTERVAL: Duration = Duration::from_secs(5);
 
 const MCP_ACTIVE_SESSIONS_METRIC: &str = "erato_mcp_active_sessions";
 const CHAT_PROVIDER_TIME_TO_FIRST_TOKEN_METRIC: &str =
@@ -45,15 +56,27 @@ pub fn init_prometheus_metrics(config: &AppConfig) -> Result<()> {
             )
         })?;
 
-    PrometheusBuilder::new()
-        .with_http_listener(listen_address)
-        .install()
-        .wrap_err_with(|| {
-            format!(
-                "Failed to install Prometheus metrics exporter on {}",
-                listen_address
-            )
-        })?;
+    let attribution_requested = std::env::var("ERATO_MEMORY_COMPONENTS").as_deref() == Ok("1");
+    let install_standard = || {
+        PrometheusBuilder::new()
+            .with_http_listener(listen_address)
+            .install()
+            .map_err(Report::from)
+    };
+    #[cfg(all(feature = "profiling", target_os = "linux"))]
+    let installation = if attribution_requested {
+        exporter::install(listen_address)
+    } else {
+        install_standard()
+    };
+    #[cfg(not(all(feature = "profiling", target_os = "linux")))]
+    let installation = install_standard();
+    installation.wrap_err_with(|| {
+        format!(
+            "Failed to install Prometheus metrics exporter on {}",
+            listen_address
+        )
+    })?;
 
     let deployment_version =
         std::env::var("ERATO_DEPLOYMENT_VERSION").unwrap_or_else(|_| "unknown".to_string());
@@ -72,10 +95,17 @@ pub fn init_prometheus_metrics(config: &AppConfig) -> Result<()> {
 
     report_chat_provider_info_metrics(config);
     report_mcp_active_session_metrics(config);
+    memory::describe();
+    owned::describe();
+    components::init(attribution_requested)?;
+    process::start_reporter();
     describe_application_metrics();
     init_known_postgres_query_metrics();
 
-    tokio::spawn(RuntimeMetricsReporterBuilder::default().describe_and_run());
+    tokio::spawn(components::scope(
+        components::Component::MetricsExporter,
+        RuntimeMetricsReporterBuilder::default().describe_and_run(),
+    ));
 
     tracing::info!(
         prometheus_metrics_url = %format!("http://{}/metrics", listen_address),
@@ -91,7 +121,8 @@ pub fn start_cache_size_metrics_reporter(app_state: AppState) {
     }
 
     tokio::spawn(async move {
-        let mut interval = tokio::time::interval(Duration::from_secs(30));
+        let mut interval = tokio::time::interval(MEMORY_STATS_INTERVAL);
+        interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
         loop {
             interval.tick().await;
@@ -101,6 +132,16 @@ pub fn start_cache_size_metrics_reporter(app_state: AppState) {
 }
 
 async fn report_cache_size_metrics_once(app_state: &AppState) {
+    let (sources, compiled) = app_state
+        .reloadable
+        .read()
+        .await
+        .distribution_bundle
+        .payload_bytes();
+    gauge!("erato_runtime_distribution_payload_bytes", "kind" => "source").set(sources as f64);
+    gauge!("erato_runtime_distribution_payload_bytes", "kind" => "compiled_translation")
+        .set(compiled as f64);
+
     let file_bytes_metrics = cache_metrics(&app_state.file_bytes_cache).await;
     report_cache_metrics("file_bytes_cache", file_bytes_metrics);
 

@@ -6,14 +6,23 @@ use serde::Serialize;
 use std::sync::LazyLock;
 use utoipa::ToSchema;
 
-static TOKENIZER: LazyLock<tiktoken_rs::CoreBPE> =
-    LazyLock::new(|| tiktoken_rs::o200k_base().expect("o200k tokenizer"));
+static TOKENIZER: LazyLock<crate::metrics::owned::Tokenizer> = LazyLock::new(|| {
+    crate::metrics::owned::Tokenizer::o200k_base(
+        "shared.attachment_tokenizer",
+        crate::metrics::components::sync(
+            crate::metrics::components::Component::TokenizerState,
+            || tiktoken_rs::o200k_base().expect("o200k tokenizer"),
+        ),
+    )
+});
 
 pub fn tokens(text: &str) -> usize {
-    TOKENIZER.encode_ordinary(text).len()
+    crate::metrics::components::sync(crate::metrics::components::Component::TokenizerWork, || {
+        TOKENIZER.encode_ordinary(text).len()
+    })
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, ToSchema)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, ToSchema, erato_memory::HeapSize)]
 #[serde(rename_all = "snake_case")]
 pub enum InclusionMode {
     Full,
@@ -21,7 +30,7 @@ pub enum InclusionMode {
     ReferenceOnly,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, ToSchema)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, ToSchema, erato_memory::HeapSize)]
 #[serde(rename_all = "snake_case")]
 pub enum Coverage {
     Complete,
@@ -29,7 +38,7 @@ pub enum Coverage {
     Unavailable,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, erato_memory::HeapSize)]
 pub struct Attachment {
     pub requested_in_full: bool,
     pub retrieval_indicator: String,
@@ -45,7 +54,7 @@ pub struct Attachment {
     pub reason: String,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, erato_memory::HeapSize)]
 pub struct PlannedAttachment {
     pub requested_in_full: bool,
     pub id: String,

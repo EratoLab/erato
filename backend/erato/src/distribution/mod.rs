@@ -24,12 +24,13 @@ use teams::TeamsAppDistribution;
 use translations::TranslationDistribution;
 
 /// The complete set of artifacts available to one Erato process.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, erato_memory::HeapSize)]
 pub struct Distribution {
     pub branding: branding::BrandingAssets,
     pub frontend_bundles: FrontendBundles,
     pub component_kits: ComponentKitDistribution,
     pub translations: TranslationDistribution,
+    #[heap_size(opaque)]
     pub desktop_sidecar: Option<Arc<DesktopSidecarDistribution>>,
     pub teams_app: Option<Arc<TeamsAppDistribution>>,
 }

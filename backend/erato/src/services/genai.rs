@@ -60,7 +60,15 @@ impl GenAIClient for genai::Client {
         chat_request: ChatRequest,
         options: Option<&ChatOptions>,
     ) -> genai::Result<ChatResponse> {
-        genai::Client::exec_chat(self, model, chat_request, options).await
+        let _memory = crate::metrics::owned::Reservation::measured(
+            "provider.request_copy",
+            &crate::metrics::owned::ProviderRequestView(&chat_request),
+        );
+        crate::metrics::components::scope(
+            crate::metrics::components::Component::ProviderRequest,
+            genai::Client::exec_chat(self, model, chat_request, options),
+        )
+        .await
     }
 
     async fn exec_chat_stream(
@@ -69,7 +77,15 @@ impl GenAIClient for genai::Client {
         chat_request: ChatRequest,
         options: Option<&ChatOptions>,
     ) -> genai::Result<GenAIChatStreamResponse> {
-        let response = genai::Client::exec_chat_stream(self, model, chat_request, options).await?;
+        let _memory = crate::metrics::owned::Reservation::measured(
+            "provider.request_copy",
+            &crate::metrics::owned::ProviderRequestView(&chat_request),
+        );
+        let response = crate::metrics::components::scope(
+            crate::metrics::components::Component::ProviderRequest,
+            genai::Client::exec_chat_stream(self, model, chat_request, options),
+        )
+        .await?;
         Ok(GenAIChatStreamResponse::new(response.stream))
     }
 }

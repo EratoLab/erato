@@ -18,7 +18,7 @@ const IMPORT_MAP_MANIFEST_FILE_NAME: &str = "import-map.manifest.json";
 const SERVER_CONFIG_FILE_NAME: &str = "serve.json";
 
 /// The browser application bundle and its stable public layout.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, erato_memory::HeapSize)]
 pub struct MainFrontendBundle {
     root: PathBuf,
     import_map_json: Option<String>,
@@ -26,7 +26,7 @@ pub struct MainFrontendBundle {
 }
 
 /// The Outlook/Office application bundle and its serving configuration.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, erato_memory::HeapSize)]
 pub struct OfficeAddinFrontendBundle {
     root: PathBuf,
     enabled: bool,
@@ -36,7 +36,7 @@ pub struct OfficeAddinFrontendBundle {
 }
 
 /// One SPA rewrite declared by a frontend bundle's `serve.json` file.
-#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq, erato_memory::HeapSize)]
 pub struct FrontendRewrite {
     source: String,
     destination: String,
@@ -48,7 +48,7 @@ struct FrontendServerConfig {
 }
 
 /// All frontend bundles available in the application distribution.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, erato_memory::HeapSize)]
 pub struct FrontendBundles {
     pub main: MainFrontendBundle,
     pub office_addin: OfficeAddinFrontendBundle,

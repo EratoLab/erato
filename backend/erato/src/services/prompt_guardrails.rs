@@ -30,7 +30,7 @@ impl From<PromptInjectionMatch> for PromptInjectionFilterDetails {
 }
 
 /// All configured patterns, prepared before the server starts accepting requests.
-#[derive(Debug)]
+#[derive(Debug, erato_memory::HeapSize)]
 pub struct CompiledPromptGuardrails {
     patterns: Vec<CompiledPromptPattern>,
 }
@@ -143,7 +143,7 @@ fn selected_patterns(
         .collect()
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, erato_memory::HeapSize)]
 struct CompiledPromptPattern {
     pattern_id: String,
     tags: Vec<String>,
@@ -208,6 +208,18 @@ fn find_fixed_case_insensitive(text: &str, pattern: &str) -> Option<String> {
     let start = text_lowercase.find(&pattern_lowercase)?;
     let end = start.checked_add(pattern.len())?;
     text.get(start..end).map(ToString::to_string)
+}
+
+impl erato_memory::HeapSize for PromptMatcher {
+    fn heap_size(&self, c: &mut erato_memory::Context) {
+        match self {
+            Self::Fixed(value) => c.measure(value),
+            Self::Regex(value) => {
+                c.estimated(value.as_str().len());
+                c.unmeasured("regex compiled state", 1);
+            }
+        }
+    }
 }
 
 #[cfg(test)]

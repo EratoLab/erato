@@ -19,25 +19,28 @@ async fn render_profile(flamegraph: bool) -> Result<Response, (StatusCode, Strin
             "a memory profile is already being rendered".to_string(),
         )
     })?;
-    let bytes = tokio::task::spawn_blocking(move || {
-        // Keep the permit until rendering actually ends, even if HTTP disconnects.
-        let _permit = permit;
-        let mut prof_ctl = jemalloc_pprof::PROF_CTL
-            .as_ref()
-            .ok_or_else(|| {
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "jemalloc profiling control is unavailable".to_string(),
-                )
-            })?
-            .blocking_lock();
-        require_profiling_activated(&prof_ctl)?;
-        if flamegraph {
-            prof_ctl.dump_flamegraph().map_err(internal_error_response)
-        } else {
-            prof_ctl.dump_pprof().map_err(internal_error_response)
-        }
-    })
+    let bytes = tokio::task::spawn_blocking(crate::metrics::components::blocking(
+        crate::metrics::components::Component::ProfileRender,
+        move || {
+            // Keep the permit until rendering actually ends, even if HTTP disconnects.
+            let _permit = permit;
+            let mut prof_ctl = jemalloc_pprof::PROF_CTL
+                .as_ref()
+                .ok_or_else(|| {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "jemalloc profiling control is unavailable".to_string(),
+                    )
+                })?
+                .blocking_lock();
+            require_profiling_activated(&prof_ctl)?;
+            if flamegraph {
+                prof_ctl.dump_flamegraph().map_err(internal_error_response)
+            } else {
+                prof_ctl.dump_pprof().map_err(internal_error_response)
+            }
+        },
+    ))
     .await
     .map_err(internal_error_response)??;
     let mut response = bytes.into_response();

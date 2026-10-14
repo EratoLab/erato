@@ -828,3 +828,71 @@ async fn stateless_application_handles_survive_between_tool_calls() {
         assert_eq!(manager.active_session_count("files").await, 0);
     }
 }
+
+#[tokio::test]
+async fn memory_inspection_deduplicates_cached_schemas_and_reports_locked_partitions() {
+    let server = Arc::new(HttpServer::new(config("http://unused.invalid/mcp")).unwrap());
+    let baseline = erato_memory::measure(&server).capacity;
+    let mut text = String::with_capacity(32 * 1024);
+    text.push_str("schema payload");
+    let mut schema = serde_json::Map::new();
+    schema.insert("description".into(), Value::String(text));
+    let schema = Arc::new(schema);
+    let mut tool: Tool = serde_json::from_value(json!({
+        "name": "memory_test", "inputSchema": {"type": "object"}
+    }))
+    .unwrap();
+    tool.input_schema = schema.clone();
+    let snapshot = Snapshot {
+        tools: vec![tool],
+        expires: Instant::now() + Duration::from_secs(60),
+    };
+    let partition = Arc::new(Mutex::new(Partition {
+        tools: Some(snapshot.clone()),
+        ..Default::default()
+    }));
+    server.partitions.lock().await.insert([0; 32], partition);
+    *server.public_tools.lock().await = Some(snapshot);
+
+    let mut context = erato_memory::Context::default();
+    context.measure(&server);
+    let with_caches = context.usage().capacity;
+    assert!(with_caches >= baseline + 32 * 1024);
+    context.measure(&schema);
+    assert_eq!(context.usage().capacity, with_caches);
+    let locked = server.partitions.lock().await;
+    assert!(erato_memory::measure(&server).locked);
+    drop(locked);
+    assert!(!erato_memory::measure(&server).locked);
+
+    server.partitions.lock().await.clear();
+    *server.public_tools.lock().await = None;
+    assert_eq!(erato_memory::measure(&server).capacity, baseline);
+}
+
+#[tokio::test]
+async fn memory_request_inspection_tracks_detached_servers_without_retaining_them() {
+    let secret = "header-secret-marker".repeat(1024);
+    let mut settings = config("http://unused.invalid/mcp");
+    settings.http_headers = Some(HashMap::from([("x-memory-token".into(), secret.clone())]));
+    let server = Arc::new(HttpServer::new(settings).unwrap());
+    let weak = Arc::downgrade(&server);
+    let request = server
+        .request_context("files", &Default::default())
+        .await
+        .unwrap();
+    // The same traversal backs the production request's lifetime reservation.
+    let usage = erato_memory::measure_owned(&request);
+    assert!(usage.estimated >= secret.len());
+    assert!(
+        !serde_json::to_string(&usage)
+            .unwrap()
+            .contains("header-secret-marker")
+    );
+    drop(server);
+    let roots = erato_memory::shared_roots(&mut erato_memory::Context::default());
+    assert!(roots[std::any::type_name::<HttpServer>()].capacity >= secret.len());
+    assert!(weak.upgrade().is_some());
+    drop(request);
+    assert!(weak.upgrade().is_none());
+}

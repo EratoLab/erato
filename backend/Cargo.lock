@@ -2805,6 +2805,7 @@ dependencies = [
  "dotenv-flow",
  "erato_config",
  "erato_mcp_oauth",
+ "erato_memory",
  "eyre",
  "futures",
  "genai",
@@ -2863,6 +2864,7 @@ dependencies = [
  "tempfile",
  "test-log",
  "tiktoken-rs",
+ "tikv-jemalloc-ctl",
  "tikv-jemallocator",
  "time",
  "tokio",
@@ -2890,6 +2892,7 @@ version = "0.6.2"
 dependencies = [
  "base64 0.22.1",
  "config",
+ "erato_memory",
  "eyre",
  "facet",
  "jsonschema",
@@ -2915,6 +2918,30 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "url",
+]
+
+[[package]]
+name = "erato_memory"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "erato_memory_derive",
+ "http 1.4.0",
+ "secrecy",
+ "serde",
+ "serde_json",
+ "tokio",
+ "url",
+ "uuid",
+]
+
+[[package]]
+name = "erato_memory_derive"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.114",
 ]
 
 [[package]]

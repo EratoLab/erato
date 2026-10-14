@@ -19,7 +19,7 @@ pub const ADMIN_PANEL_SOURCE_SERVICE: &str = "erato_admin_panel";
 const TRANSLATION_PO_SOURCE_TYPE: &str = "translation_po";
 
 /// A file that is made available by a runtime distribution producer.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, erato_memory::HeapSize)]
 pub struct DistributionFile {
     pub filename: String,
     pub contents: String,
@@ -33,13 +33,28 @@ pub struct DistributionBundle {
 }
 
 /// Evaluated MCP configuration and the session manager that serves it.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, erato_memory::HeapSize)]
 pub struct McpAppState {
     pub config: McpRuntimeConfig,
     pub servers: McpServers,
 }
 
 impl DistributionBundle {
+    /// Logical payloads in the published bundle, without cloning shared Bytes.
+    /// Excludes filenames, container overhead and responses retaining old bundles.
+    pub(crate) fn payload_bytes(&self) -> (usize, usize) {
+        (
+            self.files.iter().map(|file| file.contents.len()).sum(),
+            self.compiled_translations
+                .values()
+                .map(|value| match value {
+                    Ok(bytes) => bytes.len(),
+                    Err(error) => error.len(),
+                })
+                .sum(),
+        )
+    }
+
     // Compile once per replacement bundle, before publishing it. Cache failures
     // too, preserving per-catalog HTTP errors without retrying on every request.
     fn from_files(files: Vec<DistributionFile>) -> Self {
@@ -114,6 +129,15 @@ impl ReloadableAppState {
 
 impl ReloadableAppState {
     pub async fn load(app_state: &AppState) -> Result<Self, Report> {
+        crate::metrics::components::scope(
+            crate::metrics::components::Component::RuntimeDistribution,
+            Self::load_memory_inner(app_state),
+        )
+        .await
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    async fn load_memory_inner(app_state: &AppState) -> Result<Self, Report> {
         // Scoped so the read guard drops here: callers assign the result into
         // a `write()` on the same lock.
         let (previous_policy, previous_mcp) = {
@@ -287,6 +311,26 @@ pub fn translation_filename(locale: &str) -> Result<String, Report> {
     Ok(format!("overrides/{locale}.po"))
 }
 
+impl erato_memory::HeapSize for DistributionBundle {
+    fn heap_size(&self, c: &mut erato_memory::Context) {
+        c.measure(&self.files);
+        c.estimated(
+            self.compiled_translations.capacity()
+                * (std::mem::size_of::<(String, Result<Bytes, String>)>() + 1),
+        );
+        for (name, value) in &self.compiled_translations {
+            c.measure(name);
+            match value {
+                Ok(bytes) => {
+                    c.estimated(bytes.len());
+                    c.unmeasured("Bytes shared backing", 1);
+                }
+                Err(error) => c.measure(error),
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -307,6 +351,11 @@ mod tests {
             .compiled_translation("overrides/de.po")
             .unwrap()
             .unwrap();
+        assert_eq!(
+            old.payload_bytes(),
+            (old.files[0].contents.len(), first.len())
+        );
+        assert_eq!(DistributionBundle::default().payload_bytes(), (0, 0));
         let again = old
             .compiled_translation("overrides/de.po")
             .unwrap()

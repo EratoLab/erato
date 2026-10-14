@@ -11,7 +11,7 @@ use std::sync::Mutex;
 const EXPLICIT_ID_FLAG: &str = "js-lingui-explicit-id";
 const UNIT_SEPARATOR: char = '\u{1f}';
 
-#[derive(Debug)]
+#[derive(Debug, erato_memory::HeapSize)]
 pub struct TranslationPoCache {
     entries: Mutex<HashMap<PathBuf, Vec<u8>>>,
     fallback_locale: String,

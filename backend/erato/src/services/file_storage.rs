@@ -45,21 +45,22 @@ const AZBLOB_SERVICE_SAS_VERSION: &str = "2023-11-03";
 ///
 /// - `OpenDal`: Uses OpenDAL for S3/AzBlob storage (static credentials at construction time)
 /// - `Sharepoint`: Uses MS Graph API for Sharepoint/OneDrive (requires access token at request time)
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, erato_memory::HeapSize)]
 pub enum FileStorage {
     OpenDal(OpenDalStorage),
     Sharepoint(SharepointStorage),
 }
 
 /// OpenDAL-based file storage (S3, Azure Blob, etc.)
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, erato_memory::HeapSize)]
 pub struct OpenDalStorage {
+    #[heap_size(opaque)]
     opendal_operator: Operator,
     provider_kind: OpenDalProviderKind,
     azblob_config: Option<StorageProviderAzBlobConfig>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, erato_memory::HeapSize)]
 enum OpenDalProviderKind {
     S3,
     AzBlob,
@@ -75,7 +76,7 @@ pub(crate) enum ContentDispositionKind {
 ///
 /// This variant doesn't store credentials - it requires an access token
 /// to be passed at request time.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, erato_memory::HeapSize)]
 pub struct SharepointStorage {
     // No fields needed - the access token is passed at request time
 }
