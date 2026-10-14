@@ -8,6 +8,7 @@ import {
   readWordDocument,
   WORD_PACKAGE_CAPTURE_TIMEOUT_MS,
   WORD_PARAGRAPH_READ_TIMEOUT_MS,
+  WORD_PROOFING_DEADLINE_MS,
   WORD_PROOFING_SETTLE_MS,
   WORD_PROOFING_WINDOW_MS,
 } from "../readWordDocument";
@@ -636,6 +637,29 @@ describe("readWordDocument on Word for Mac while its proofing pass is pending", 
       }),
       proofingPending: true,
     });
+  });
+
+  it("does not wait past the read's deadline after a slow transfer, and marks the capture for the next send", async () => {
+    imported();
+    const texts = Array.from({ length: 40 }, (_, i) => `Paragraph ${i}.`);
+    const count = reads(
+      "https://contoso.example/slow.docx",
+      ...texts.map((_, i) =>
+        macPackage({ texts, tagged: Array.from({ length: i }, (_, j) => j) }),
+      ),
+    );
+    const slow = WORD_PROOFING_DEADLINE_MS - 16_000;
+    const reading = vi
+      .mocked(captureWordDocumentPackage)
+      .getMockImplementation()!;
+    vi.mocked(captureWordDocumentPackage).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => setTimeout(() => resolve(reading()), slow)),
+    );
+
+    const captured = await capture(WORD_PROOFING_DEADLINE_MS + 5_000);
+    expect(count()).toBe(1 + 16);
+    expect(captured).toMatchObject({ proofingPending: true });
   });
 
   it("fails the capture when another document becomes active while it waits", async () => {

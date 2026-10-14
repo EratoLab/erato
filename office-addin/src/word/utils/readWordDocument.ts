@@ -67,6 +67,8 @@ export const WORD_PROOFING_WINDOW_MS = 20_000;
 const WORD_PROOFING_QUIET_MS = 3_000;
 const WORD_PROOFING_POLL_MS = 1_000;
 export const WORD_PROOFING_SETTLE_MS = 30_000;
+/** From the start of the read, so waiting never takes a capture past the source's ceiling. */
+export const WORD_PROOFING_DEADLINE_MS = 60_000;
 
 const paneLoadedAt = Date.now();
 /** Documents whose proofing pass never reported done while a capture waited, e.g. with spell
@@ -82,6 +84,7 @@ const proofingQuiet = new Set<string>();
  */
 async function settleWordProofing(
   first: WordDocumentPackageSnapshot,
+  deadline: number,
 ): Promise<{ read: WordDocumentPackageSnapshot; pending?: boolean }> {
   if (
     wordHostPlatform() !== "Mac" ||
@@ -90,13 +93,14 @@ async function settleWordProofing(
   )
     return { read: first };
   const started = Date.now();
+  const stop = Math.min(started + WORD_PROOFING_SETTLE_MS, deadline);
   const windowEnd =
     Math.max(paneLoadedAt, wordDocumentImportedAt()) + WORD_PROOFING_WINDOW_MS;
   let current = first;
   let changedAt = started;
   for (;;) {
     const now = Date.now();
-    const remaining = started + WORD_PROOFING_SETTLE_MS - now;
+    const remaining = stop - now;
     if (
       remaining <= 0 ||
       (now >= windowEnd && now - changedAt >= WORD_PROOFING_QUIET_MS)
@@ -109,10 +113,7 @@ async function settleWordProofing(
     try {
       next = await withWordTimeout(
         captureWordDocumentPackage(),
-        Math.max(
-          started + WORD_PROOFING_SETTLE_MS - Date.now(),
-          WORD_PROOFING_POLL_MS,
-        ),
+        Math.max(stop - Date.now(), WORD_PROOFING_POLL_MS),
         () => new WordDocumentCaptureTimeoutError(),
       );
     } catch {
@@ -133,7 +134,8 @@ async function settleWordProofing(
     }
     if (wordProofingComplete(next.ooxml)) return { read: next };
   }
-  if (current !== first) return { read: current, pending: true };
+  if (current !== first || Date.now() < windowEnd)
+    return { read: current, pending: true };
   proofingQuiet.add(first.documentUrl);
   return { read: current };
 }
@@ -158,6 +160,7 @@ export async function readWordDocument(
 ): Promise<WordDocumentReadResult> {
   const word = wordGlobal();
   if (!word) return { ok: false };
+  const started = Date.now();
 
   // The full package supersedes the body OOXML, which is then not fetched.
   const packaged = includeAuthoring && supportsWordDocumentPackage();
@@ -218,6 +221,7 @@ export async function readWordDocument(
             WORD_PACKAGE_CAPTURE_TIMEOUT_MS,
             () => new WordDocumentCaptureTimeoutError(),
           ),
+          started + WORD_PROOFING_DEADLINE_MS,
         );
         return {
           ...result,
