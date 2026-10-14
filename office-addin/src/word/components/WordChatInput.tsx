@@ -140,6 +140,7 @@ export interface WordChatInputProps {
 }
 
 export const WORD_SEND_SKIP_OFFER_MS = 8_000;
+/** Word for Mac's proofing wait (WORD_PROOFING_DEADLINE_MS) ends before it. */
 export const WORD_SEND_CAPTURE_DEADLINE_MS = 30_000;
 
 type CaptureOutcome =

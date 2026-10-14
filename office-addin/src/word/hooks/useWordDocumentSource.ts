@@ -149,8 +149,12 @@ async function captureDocument(
     build.authoring.documentUrl = result.authoring.documentUrl;
     assignParagraphOrdinals(build.authoring, result.paragraphs);
     if (result.note) build.readNote = result.note;
-    // Word adds its tags without a change event, so only a send can pick them up.
-    if (result.authoring.proofingPending) return { build, retry: true };
+    if (result.authoring.proofingPending) {
+      if (result.authoring.proofingPending === "tagging")
+        build.authoring.proofingPending = true;
+      // Word adds its tags without a change event, so only a send can pick them up.
+      return { build, retry: true };
+    }
   } else if (result.authoringUnavailable) {
     build.authoring = {
       ...captureWordAuthoringSnapshot("", documentIdentity, ""),

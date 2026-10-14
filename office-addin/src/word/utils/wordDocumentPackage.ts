@@ -27,8 +27,6 @@ import type { WordInPlaceOp, WordInPlaceStoryTarget } from "./wordInPlacePlan";
 const PKG = "http://schemas.microsoft.com/office/2006/xmlPackage";
 const CT = "http://schemas.openxmlformats.org/package/2006/content-types";
 const BACKUP_PREFIX = "erato-word-document-backup-v1:";
-const SETTINGS_TYPE =
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml";
 
 let importedAt = 0;
 
@@ -318,11 +316,13 @@ export function wordWrittenPackageFingerprint(
 /** Word for Mac writes w:proofState spelling="clean" once its proofing pass, language detection
  * included, has been through the whole document; opening or importing a document clears it. */
 export function wordProofingComplete(ooxml: string): boolean {
-  // Parses only the settings part of wordDocumentFileToOoxml's serialization.
-  const type = ooxml.indexOf(`pkg:contentType="${SETTINGS_TYPE}"`);
-  const start = ooxml.lastIndexOf("<pkg:part ", type);
-  const end = ooxml.indexOf("</pkg:part>", type);
-  if (type < 0 || start < 0 || end < 0) return false;
+  // Parses only the main settings part of wordDocumentFileToOoxml's serialization. A glossary
+  // document (placeholder text of content controls) has a settings part of its own, and Word for
+  // Mac lists it first.
+  const name = ooxml.indexOf('pkg:name="/word/settings.xml"');
+  const start = ooxml.lastIndexOf("<pkg:part ", name);
+  const end = ooxml.indexOf("</pkg:part>", name);
+  if (name < 0 || start < 0 || end < 0) return false;
   const settings = parseWordXml(
     `<pkg:package xmlns:pkg="${PKG}">${ooxml.slice(start, end)}</pkg:part></pkg:package>`,
   );
@@ -330,22 +330,42 @@ export function wordProofingComplete(ooxml: string): boolean {
   return state?.getAttributeNS(WORD_XML_NS, "spelling") === "clean";
 }
 
-/** Whether two reads differ in nothing but w:lang in the form Word's language detection writes. */
+const detectedLanguageFree = new WeakMap<object, string>();
+
+/** Whether two reads differ in nothing but w:lang in the form Word's language detection writes.
+ * Each read is compared once, however many polls it takes part in. */
 export function wordPackagesDifferInDetectedLanguageOnly(
-  a: string,
-  b: string,
+  a: { ooxml: string },
+  b: { ooxml: string },
 ): boolean {
-  const without = (ooxml: string) => {
-    const doc = parseWordXml(ooxml);
-    removeWordDetectedLanguages(doc);
-    return createWordXmlComparison(doc).fingerprint();
+  const without = (read: { ooxml: string }) => {
+    let fingerprint = detectedLanguageFree.get(read);
+    if (fingerprint === undefined) {
+      const doc = parseWordXml(read.ooxml);
+      removeWordDetectedLanguages(doc);
+      fingerprint = createWordXmlComparison(doc).fingerprint();
+      detectedLanguageFree.set(read, fingerprint);
+    }
+    return fingerprint;
   };
   return without(a) === without(b);
 }
 
-/** When this pane last queued a whole-document import, or 0. */
+/** When the last whole-document import from this pane finished, or 0. */
 export function wordDocumentImportedAt(): number {
   return importedAt;
+}
+
+/** Runs the import insertWordDocumentFile queued. Word starts its proofing pass only once the import
+ * is done, so its window (wordDocumentImportedAt) starts after the sync, failed or not. */
+export async function syncWordDocumentImport(
+  context: Word.RequestContext,
+): Promise<void> {
+  try {
+    await context.sync();
+  } finally {
+    importedAt = Date.now();
+  }
 }
 
 export async function captureWordDocumentPackage(): Promise<WordDocumentPackageSnapshot> {
@@ -369,7 +389,8 @@ export async function captureWordDocumentPackage(): Promise<WordDocumentPackageS
   };
 }
 
-/** Queue once; callers own preflight, backup, sync, and semantic verification. */
+/** Queue once; callers own preflight, backup, sync (syncWordDocumentImport), and semantic
+ * verification. */
 export function insertWordDocumentFile(
   context: Word.RequestContext,
   bytes: Uint8Array,
@@ -380,7 +401,6 @@ export function insertWordDocumentFile(
     "Replace",
     WORD_DOCUMENT_IMPORT_OPTIONS,
   );
-  importedAt = Date.now();
 }
 
 /** One change of an in-place write, recorded in pane memory next to the exact original file so it

@@ -1,3 +1,4 @@
+import { removeWordDetectedLanguages } from "@erato/frontend/word-review";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -8,6 +9,7 @@ import {
   insertWordDocumentFile,
   isWordDocumentBackup,
   readWordDocumentFile,
+  syncWordDocumentImport,
   withWordInPlaceBackup,
   WORD_DOCUMENT_IMPORT_OPTIONS,
   WORD_FILE_OPEN_TIMEOUT_MS,
@@ -24,6 +26,16 @@ import {
   WordDocumentTooLargeError,
   wordXmlText,
 } from "../wordDocumentPackageCodec";
+
+import type * as wordReviewModule from "@erato/frontend/word-review";
+
+vi.mock("@erato/frontend/word-review", async (importOriginal) => {
+  const actual = await importOriginal<typeof wordReviewModule>();
+  return {
+    ...actual,
+    removeWordDetectedLanguages: vi.fn(actual.removeWordDetectedLanguages),
+  };
+});
 
 const W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
 const R = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
@@ -106,9 +118,7 @@ describe("complete Word document package transport", () => {
       document: { insertFileFromBase64: insert },
     } as unknown as Word.RequestContext;
     const bytes = wordDocumentOoxmlToFile(fixture());
-    const queued = Date.now();
     insertWordDocumentFile(context, bytes);
-    expect(wordDocumentImportedAt()).toBeGreaterThanOrEqual(queued);
     expect(insert).toHaveBeenCalledExactlyOnceWith(
       expect.any(String),
       "Replace",
@@ -118,6 +128,38 @@ describe("complete Word document package transport", () => {
       importCustomProperties: false,
       importCustomXmlParts: false,
     });
+  });
+
+  it("starts Word for Mac's proofing window once the import's sync has settled, failed or not", async () => {
+    vi.useFakeTimers();
+    try {
+      let sync = () =>
+        new Promise<void>((resolve) => setTimeout(resolve, 12_000));
+      const context = {
+        document: { insertFileFromBase64: vi.fn() },
+        sync: () => sync(),
+      } as unknown as Word.RequestContext;
+      const queued = Date.now();
+      insertWordDocumentFile(context, wordDocumentOoxmlToFile(fixture()));
+      const importing = syncWordDocumentImport(context);
+      await vi.advanceTimersByTimeAsync(12_000);
+      await importing;
+      expect(wordDocumentImportedAt()).toBe(queued + 12_000);
+
+      sync = () =>
+        new Promise<void>((_, reject) =>
+          setTimeout(() => reject(new Error("GeneralException")), 5_000),
+        );
+      insertWordDocumentFile(context, wordDocumentOoxmlToFile(fixture()));
+      const failing = expect(syncWordDocumentImport(context)).rejects.toThrow(
+        "GeneralException",
+      );
+      await vi.advanceTimersByTimeAsync(5_000);
+      await failing;
+      expect(wordDocumentImportedAt()).toBe(queued + 17_000);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("keeps the exact original DOCX bytes in the string recovery envelope", () => {
@@ -391,6 +433,13 @@ describe("Word for Mac's proofing pass", () => {
     read({
       paragraph: `<w:p w:rsidRPr="00DC4D6D"><w:pPr>${lang(extra)}</w:pPr><w:r w:rsidRPr="00DC4D6D">${lang(extra)}<w:t>Revenue grew.</w:t></w:r></w:p>`,
     });
+  /** As Word for Mac exports a document with a content control's placeholder text: the glossary
+   * document's own settings part comes before the main one. */
+  const withGlossary = (main: string, glossary = "") =>
+    read({ settings: main }).replace(
+      '<pkg:part pkg:name="/word/document.xml"',
+      `<pkg:part pkg:name="/word/glossary/settings.xml" pkg:contentType="${SETTINGS}"><pkg:xmlData><w:settings xmlns:w="${W}">${glossary}</w:settings></pkg:xmlData></pkg:part><pkg:part pkg:name="/word/document.xml"`,
+    );
 
   it("is done once Word marks spelling clean", () => {
     const clean = read({
@@ -412,22 +461,42 @@ describe("Word for Mac's proofing pass", () => {
     ).toBe(false);
   });
 
-  it("tells Word's language tags apart from other changes", () => {
-    expect(wordPackagesDifferInDetectedLanguageOnly(read(), tagged())).toBe(
-      true,
+  it("reads the done mark from the main document's settings, not the glossary's", () => {
+    const clean = `<w:proofState w:spelling="clean" w:grammar="clean"/>`;
+    const glossaryFirst = withGlossary(clean);
+    expect(glossaryFirst.indexOf("/word/glossary/settings.xml")).toBeLessThan(
+      glossaryFirst.indexOf('"/word/settings.xml"'),
     );
+    expect(wordProofingComplete(glossaryFirst)).toBe(true);
     expect(
-      wordPackagesDifferInDetectedLanguageOnly(
-        read(),
-        tagged(' w:eastAsia="ja-JP"'),
+      wordProofingComplete(
+        wordDocumentFileToOoxml(wordDocumentOoxmlToFile(glossaryFirst)),
       ),
-    ).toBe(false);
+    ).toBe(true);
+    expect(wordProofingComplete(withGlossary("", clean))).toBe(false);
+  });
+
+  it("tells Word's language tags apart from other changes", () => {
+    const differ = (a: string, b: string) =>
+      wordPackagesDifferInDetectedLanguageOnly({ ooxml: a }, { ooxml: b });
+    expect(differ(read(), tagged())).toBe(true);
+    expect(differ(read(), tagged(' w:eastAsia="ja-JP"'))).toBe(false);
     expect(
-      wordPackagesDifferInDetectedLanguageOnly(
+      differ(
         read(),
         read({ paragraph: `<w:p><w:r><w:t>Revenue fell.</w:t></w:r></w:p>` }),
       ),
     ).toBe(false);
+  });
+
+  it("compares each read once across the polls it takes part in", () => {
+    const [first, second, third] = [read(), tagged(), tagged()].map(
+      (ooxml) => ({ ooxml }),
+    );
+    vi.mocked(removeWordDetectedLanguages).mockClear();
+    expect(wordPackagesDifferInDetectedLanguageOnly(first, second)).toBe(true);
+    expect(wordPackagesDifferInDetectedLanguageOnly(second, third)).toBe(true);
+    expect(removeWordDetectedLanguages).toHaveBeenCalledTimes(3);
   });
 
   it("leaves the fingerprint Apply and Revert compare seeing a language added later", () => {

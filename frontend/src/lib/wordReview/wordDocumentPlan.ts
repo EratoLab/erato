@@ -148,6 +148,8 @@ export interface WordAuthoringSnapshot {
   /** What WORD_HOUSEKEEPING normalized in a body read, for content-free diagnostics. */
   housekeeping?: WordBodyReadHousekeeping;
   documentUrl?: string;
+  /** Word for Mac was still tagging languages when this was captured, so its own tags may follow. */
+  proofingPending?: boolean;
   stories?: WordStorySource[];
   sections?: WordSectionSource[];
   assets?: WordImageAsset[];
