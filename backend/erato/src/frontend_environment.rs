@@ -1586,8 +1586,8 @@ mod tests {
                 "compose_inherits_from_read": true,
                 "word_include_document": true,
                 "word_apply": {
-                    "pc": {"in_place": false, "whole_document_import": "allowed", "package_read": true},
-                    "mac": {"in_place": false, "whole_document_import": "allowed", "package_read": true},
+                    "pc": {"in_place": true, "whole_document_import": "allowed", "package_read": true},
+                    "mac": {"in_place": true, "whole_document_import": "allowed", "package_read": true},
                     "web": {"in_place": true, "whole_document_import": "off", "package_read": true},
                 },
             }))
@@ -1597,7 +1597,7 @@ mod tests {
         default_settings.mode = crate::config::MsOfficeAddinSessionMode::Ask;
         default_settings.compose_inherits_from_read = false;
         default_settings.word_include_document = false;
-        default_settings.word_apply.mac.in_place = Some(true);
+        default_settings.word_apply.mac.in_place = Some(false);
         default_settings.word_apply.web.whole_document_import =
             Some(crate::config::MsOfficeAddinWordWholeDocumentImport::Off);
         default_settings.word_apply.web.package_read = Some(false);
@@ -1610,8 +1610,8 @@ mod tests {
                 "compose_inherits_from_read": false,
                 "word_include_document": false,
                 "word_apply": {
-                    "pc": {"in_place": false, "whole_document_import": "allowed", "package_read": true},
-                    "mac": {"in_place": true, "whole_document_import": "allowed", "package_read": true},
+                    "pc": {"in_place": true, "whole_document_import": "allowed", "package_read": true},
+                    "mac": {"in_place": false, "whole_document_import": "allowed", "package_read": true},
                     "web": {"in_place": true, "whole_document_import": "off", "package_read": false},
                 },
             }))

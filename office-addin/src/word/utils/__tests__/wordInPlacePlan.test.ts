@@ -801,6 +801,62 @@ describe("in-place classification", () => {
     expect(restyled("ListBullet")).toBe("restyle");
   });
 
+  it("sets Word's built-in heading only for a style with its canonical name", () => {
+    const restyles = (id: string, name: string, custom = false) => {
+      const s = captureWordAuthoringSnapshot(
+        packageXml(
+          paragraph("Target") +
+            p(run("Region"), `<w:pStyle w:val="${id}"/>`) +
+            paragraph("Tail"),
+        ).replace(
+          "</w:styles>",
+          `<w:style w:type="paragraph"${custom ? ' w:customStyle="1"' : ""} w:styleId="${id}"><w:name w:val="${name}"/></w:style></w:styles>`,
+        ),
+        "doc",
+        "Off",
+        true,
+      );
+      s.readToken = "read-proof";
+      s.read = new Set(s.blocks.map((b) => b.ref));
+      const result = classifyWordInPlacePlan(
+        plan(s, {
+          b1: text("Target", { type: "heading", level: 2 }),
+          b2: text("Region"),
+        }),
+        s,
+        ALL,
+      );
+      if ("fallback" in result) return result.fallback;
+      return (result.ops as Extract<WordInPlaceOp, { kind: "text" }>[]).map(
+        (op) => [op.restyle?.from.style, op.restyle?.to.style],
+      );
+    };
+    // As in base-pc.docx.
+    expect(restyles("Heading2", "Heading2", true)).toEqual([
+      [{ builtIn: "Normal" }, { name: "Heading2" }],
+      [{ name: "Heading2" }, { builtIn: "Normal" }],
+    ]);
+    for (const id of ["Heading2", "berschrift2"])
+      expect(restyles(id, "heading 2")).toEqual([
+        [{ builtIn: "Normal" }, { builtIn: "Heading2" }],
+        [{ builtIn: "Heading2" }, { builtIn: "Normal" }],
+      ]);
+  });
+
+  it("sets Word's built-in heading when the document has no style for it yet", () => {
+    const s = readySnapshot(
+      packageXml(paragraph("Target") + paragraph("Tail")),
+    );
+    const result = classifyWordInPlacePlan(
+      plan(s, { b1: text("Target", { type: "heading", level: 2 }) }),
+      s,
+      ALL,
+    );
+    expect("ops" in result && result.ops[0]).toMatchObject({
+      restyle: { to: { styleRef: "Heading2", style: { builtIn: "Heading2" } } },
+    });
+  });
+
   it("routes a disabled mechanism to the import", () => {
     const s = snapshot();
     expect(

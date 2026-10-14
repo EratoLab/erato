@@ -49,14 +49,14 @@ const BUILT_IN_PARAGRAPH_STYLES: Record<string, WordBuiltInParagraphStyle> = {
   "endnote text": "EndnoteText",
 };
 
-/** The locale-independent Paragraph.styleBuiltIn name of a paragraph style, if Word has one. */
+/** The locale-independent Paragraph.styleBuiltIn name of a paragraph style, if Word has one. Word
+ * goes by the w:name alone: a custom style with ID "Heading2" is no built-in heading, and setting
+ * the built-in one makes Word add its own and rename the document's (ERMAIN-973). */
 export function wordBuiltInParagraphStyle(
-  styleId: string,
   name: string,
 ): WordBuiltInParagraphStyle | undefined {
-  for (let level = 1; level <= 9; level++)
-    if (isBuiltInHeadingStyle(styleId, name, level))
-      return `Heading${level}` as WordBuiltInParagraphStyle;
+  const heading = /^heading ([1-9])$/i.exec(name);
+  if (heading) return `Heading${heading[1]}` as WordBuiltInParagraphStyle;
   const toc = /^toc ([1-9])$/i.exec(name);
   if (toc) return `Toc${toc[1]}` as WordBuiltInParagraphStyle;
   return BUILT_IN_PARAGRAPH_STYLES[name.toLowerCase()];

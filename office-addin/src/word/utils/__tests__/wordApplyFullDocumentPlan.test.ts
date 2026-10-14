@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import nativeSource from "../../../test/fixtures/word-authoring-state/rewrite-source.xml?raw";
 import {
   allowWordWebImport,
+  setWordInPlace,
   setWordWebImport,
 } from "../../../test/mocks/word/applyPolicy";
 import { installWordOoxmlHost } from "../../../test/mocks/word/ooxmlHost";
@@ -1015,11 +1016,21 @@ describe(
       expect(sections.outcome?.route).toBe("import");
 
       const second = await realistic(profile);
-      const scoped = await applyWordDocumentPlan(
+      const inPlace = await applyWordDocumentPlan(
         await statusEdit(second.snapshot),
         second.snapshot,
         "message-A",
       );
+      expect(inPlace.status, report(inPlace)).toBe("applied");
+      expect(inPlace.outcome?.route).toBe("in-place");
+
+      const restore = setWordInPlace("pc", false);
+      const third = await realistic(profile);
+      const scoped = await applyWordDocumentPlan(
+        await statusEdit(third.snapshot),
+        third.snapshot,
+        "message-A",
+      ).finally(restore);
       expect(scoped.status, report(scoped)).toBe("applied");
       expect(scoped.outcome?.route).toBe("import");
       expect(imports).toHaveBeenCalledTimes(2);
@@ -1098,6 +1109,7 @@ describe(
 
     beforeEach(() => {
       delete window.WORD_IN_PLACE_APPLY;
+      return setWordInPlace("pc", false);
     });
     afterEach(() => {
       window.WORD_IN_PLACE_APPLY = true;

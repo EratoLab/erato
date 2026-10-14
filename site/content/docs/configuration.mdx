@@ -3187,7 +3187,10 @@ Each table takes:
 
 - `in_place`: write changes through Word's object model where the add-in
   supports that change on the host, leaving the rest of the document untouched.
-  When off, rewrites use the whole-document import.
+  On by default on every host; a change it can't write this way, such as a
+  section layout change or a moved passage, falls back to the whole-document
+  import as `whole_document_import` allows. Set it to `false` to send every
+  rewrite through the import.
 - `whole_document_import`: whether a change may replace the whole document by
   import. `allowed` imports without asking, `confirm` only after the user
   confirms that change, and `off` never imports.
@@ -3206,7 +3209,7 @@ explicit opt-in on the web; its result still can't be verified there. Unless
 the import is `allowed`, undoing an in-place change that did not verify never
 falls back to it.
 
-**Default value:** `{ pc = { in_place = false, whole_document_import = "allowed", package_read = true }, mac = { in_place = false, whole_document_import = "allowed", package_read = true }, web = { in_place = true, whole_document_import = "off", package_read = true } }`
+**Default value:** `{ pc = { in_place = true, whole_document_import = "allowed", package_read = true }, mac = { in_place = true, whole_document_import = "allowed", package_read = true }, web = { in_place = true, whole_document_import = "off", package_read = true } }`
 
 **Type:** `object`
 

@@ -53,6 +53,9 @@ export interface WordOoxmlHostOptions {
   attachToListNewNum?: boolean;
   /** Localized Word: the style ID it gives a built-in style it adds, e.g. { Heading2: "berschrift2" }. */
   builtInStyleIds?: Record<string, string>;
+  /** Word PC 16.0.20430 (ERMAIN-973): a built-in style it adds takes its ID from a custom style
+   * holding it, which Word renames (Heading2 → Heading20) along with every reference to it. */
+  builtInStyleTakesId?: boolean;
   /** Localized Word: Paragraph.style finds built-in styles only by their localized UI names, which
    * the package does not carry, so only custom style names resolve. */
   localizedStyleNames?: boolean;
@@ -1441,6 +1444,21 @@ export function installWordOoxmlHost(
     if (pc && numIdOf(paragraph) !== undefined)
       setParagraphProperty(paragraph, "numPr", null);
   };
+  const renameStyle = (styles: Element, id: string) => {
+    const ids = new Set(
+      elements(styles, W, "style").map((s) => s.getAttributeNS(W, "styleId")),
+    );
+    if (!ids.has(id)) return;
+    let renamed = `${id}0`;
+    for (let n = 1; ids.has(renamed); n++) renamed = `${id}${n}`;
+    elements(styles, W, "style")
+      .find((s) => s.getAttributeNS(W, "styleId") === id)!
+      .setAttributeNS(W, "w:styleId", renamed);
+    for (const name of ["pStyle", "rStyle", "basedOn", "next", "link"])
+      for (const ref of elements(live(), W, name))
+        if (ref.getAttributeNS(W, "val") === id)
+          ref.setAttributeNS(W, "w:val", renamed);
+  };
   /** Word adds a built-in style the first time it is applied. */
   const builtInStyle = (builtIn: string): Element => {
     const name = BUILT_IN_STYLE_NAMES[builtIn];
@@ -1451,9 +1469,11 @@ export function installWordOoxmlHost(
     if (existing) return existing;
     const root = partRoot(live(), "/word/styles.xml");
     if (!root) throw new Error("The document has no styles part.");
+    const id = settings.builtInStyleIds?.[builtIn] ?? builtIn;
+    if (settings.builtInStyleTakesId) renameStyle(root, id);
     const heading = /^Heading([1-9])$/.exec(builtIn);
     const style = parse(
-      `<w:style xmlns:w="${W}" w:type="paragraph" w:styleId="${settings.builtInStyleIds?.[builtIn] ?? builtIn}"><w:name w:val="${name}"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:uiPriority w:val="9"/><w:qFormat/>${
+      `<w:style xmlns:w="${W}" w:type="paragraph" w:styleId="${id}"><w:name w:val="${name}"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:uiPriority w:val="9"/><w:qFormat/>${
         heading
           ? `<w:pPr><w:keepNext/><w:keepLines/><w:spacing w:before="40" w:after="0"/><w:outlineLvl w:val="${Number(heading[1]) - 1}"/></w:pPr><w:rPr><w:sz w:val="26"/></w:rPr>`
           : ""
