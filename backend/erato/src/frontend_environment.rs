@@ -301,6 +301,28 @@ fn build_frontend_environment(
 ) -> FrontedEnvironment {
     let mut env = FrontedEnvironment::default();
 
+    // Public asset URLs only; never expose local branding source paths.
+    let office = &config.integrations.ms_office;
+    env.additional_environment.insert(
+        "BRANDING_OVERVIEW".to_string(),
+        serde_json::json!({
+            "officeEnabled": office.addin.enabled,
+            "teamsEnabled": office.teams.enabled,
+            "office": {
+                "icon": office.addin.manifest.icon_path,
+                "highResolutionIcon": office.addin.manifest.high_resolution_icon_path,
+                "icon16": office.addin.manifest.icon_16_path,
+                "icon32": office.addin.manifest.icon_32_path,
+                "icon80": office.addin.manifest.icon_80_path,
+            },
+            "teams": {
+                "color": office.teams.manifest.color_icon,
+                "outline": office.teams.manifest.outline_icon,
+                "color32x32": office.teams.manifest.small_color_icon,
+            },
+        }),
+    );
+
     let api_root_url = "/api/".to_string();
 
     env.additional_environment.insert(
@@ -1432,6 +1454,30 @@ mod tests {
                 assert!(output.contains(&format!("window.{key} = \"{expected}\";")));
                 assert!(!output.contains(&format!("window.{key} = \"/legacy.svg\";")));
             }
+        }
+    }
+
+    #[test]
+    fn branding_overview_exposes_manifest_urls_but_not_local_sources() {
+        let mut config = AppConfig::default();
+        config.integrations.ms_office.addin.enabled = true;
+        config.integrations.ms_office.addin.manifest.icon_path =
+            "https://example.com/icon.png".into();
+        config
+            .integrations
+            .ms_office
+            .addin
+            .manifest
+            .icon_source_path = Some("private-source.png".into());
+        config.integrations.ms_office.teams.manifest.outline_icon =
+            "assets/custom-outline.png".into();
+        for kind in [FrontendKind::Web, FrontendKind::OfficeAddin] {
+            let env = build_frontend_environment(&config, kind);
+            let overview = env.additional_environment.get("BRANDING_OVERVIEW").unwrap();
+            assert_eq!(overview["officeEnabled"], true);
+            assert_eq!(overview["office"]["icon"], "https://example.com/icon.png");
+            assert_eq!(overview["teams"]["outline"], "assets/custom-outline.png");
+            assert!(!overview.to_string().contains("private-source.png"));
         }
     }
 

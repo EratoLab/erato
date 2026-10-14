@@ -146,7 +146,7 @@ const getAssetEnvOverride = (
  * testing the value for truthiness: collapsing `null` into "undeclared" would
  * reintroduce the very request the declaration exists to prevent.
  */
-const resolveThemeAssetPath = async (
+export const resolveThemeAssetPath = async (
   key: ThemeAssetKey,
   options: {
     themeConfig: CustomThemeConfig | null;
@@ -192,7 +192,7 @@ const resolveThemeAssetPath = async (
   return null;
 };
 
-const resolveLogoPath = async (
+export const resolveLogoPath = async (
   themeConfig: CustomThemeConfig | null,
   resolvedThemeConfigPath: string | null,
   isDark: boolean,

@@ -6,7 +6,11 @@
 // cannot leave a copied string behind with nothing emitting its classes.
 import "@erato/frontend/library.css";
 import "./styles.css";
-import { applyComponentKitRegistrations } from "@erato/frontend/library";
+import {
+  BrandingOverviewPage,
+  I18nProvider,
+  applyComponentKitRegistrations,
+} from "@erato/frontend/library";
 import React, { Suspense, lazy } from "react";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
@@ -56,6 +60,14 @@ ReactDOM.createRoot(rootElement).render(
             <Suspense fallback={null}>
               <WordApp />
             </Suspense>
+          }
+        />
+        <Route
+          path="/branding-overview"
+          element={
+            <I18nProvider>
+              <BrandingOverviewPage />
+            </I18nProvider>
           }
         />
         <Route path="/setup" element={<AddinSetupRoute />} />

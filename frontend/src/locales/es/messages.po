@@ -1452,6 +1452,81 @@ msgid "branding.welcomeScreen.title"
 msgstr "Bienvenido al Asistente IA"
 
 #. js-lingui-explicit-id
+#: src/pages/BrandingOverviewPage.tsx
+msgid "brandingOverview.absent"
+msgstr "No hay ninguna imagen personalizada configurada"
+
+#. js-lingui-explicit-id
+#: src/pages/BrandingOverviewPage.tsx
+msgid "brandingOverview.avatar"
+msgstr "Avatar del asistente"
+
+#. js-lingui-explicit-id
+#: src/pages/BrandingOverviewPage.tsx
+msgid "brandingOverview.dark"
+msgstr "Oscuro"
+
+#. js-lingui-explicit-id
+#: src/pages/BrandingOverviewPage.tsx
+msgid "brandingOverview.failed"
+msgstr "No se pudo cargar la imagen"
+
+#. js-lingui-explicit-id
+#: src/pages/BrandingOverviewPage.tsx
+msgid "brandingOverview.light"
+msgstr "Claro"
+
+#. js-lingui-explicit-id
+#: src/pages/BrandingOverviewPage.tsx
+msgid "brandingOverview.loadFailed"
+msgstr "No se pudieron cargar las imágenes de marca"
+
+#. js-lingui-explicit-id
+#: src/pages/BrandingOverviewPage.tsx
+msgid "brandingOverview.loading"
+msgstr "Cargando imágenes de marca…"
+
+#. js-lingui-explicit-id
+#: src/pages/BrandingOverviewPage.tsx
+msgid "brandingOverview.logo"
+msgstr "Logotipo de la aplicación"
+
+#. js-lingui-explicit-id
+#: src/pages/BrandingOverviewPage.tsx
+msgid "brandingOverview.office"
+msgstr "Complemento de Office (Outlook, Word y Teams)"
+
+#. js-lingui-explicit-id
+#: src/pages/BrandingOverviewPage.tsx
+msgid "brandingOverview.officeDisabled"
+msgstr "El complemento de Office está desactivado"
+
+#. js-lingui-explicit-id
+#: src/pages/BrandingOverviewPage.tsx
+msgid "brandingOverview.officeManifest"
+msgstr "Manifiestos de Office (Outlook y Word)"
+
+#. js-lingui-explicit-id
+#: src/pages/BrandingOverviewPage.tsx
+msgid "brandingOverview.sidebar"
+msgstr "Logotipo de la barra lateral"
+
+#. js-lingui-explicit-id
+#: src/pages/BrandingOverviewPage.tsx
+msgid "brandingOverview.teamsManifest"
+msgstr "Iconos del paquete de Teams"
+
+#. js-lingui-explicit-id
+#: src/pages/BrandingOverviewPage.tsx
+msgid "brandingOverview.title"
+msgstr "Resumen de marca"
+
+#. js-lingui-explicit-id
+#: src/pages/BrandingOverviewPage.tsx
+msgid "brandingOverview.web"
+msgstr "Aplicación web"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatUsageAdvisory.tsx
 msgid "chat.ai_usage_advisory"
 msgstr "Está interactuando con un chatbot de IA. Las respuestas generadas pueden contener errores fácticos y deben verificarse antes de usarse."

@@ -9,6 +9,10 @@
       "destination": "index.html"
     },
     {
+      "source": "/branding-overview",
+      "destination": "index.html"
+    },
+    {
       "source": "/setup",
       "destination": "index.html"
     }
