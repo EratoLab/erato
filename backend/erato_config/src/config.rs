@@ -6858,9 +6858,10 @@ impl MsOfficeAddinWordApplyHostSettings {
 }
 
 impl MsOfficeAddinWordApplySettings {
-    // Word PC and Mac keep the import for every rewrite until their in-place probes are signed off.
+    // Word PC and Mac write in place where they can (ERMAIN-973) and import whatever in place can't
+    // write, such as sections, other stories or moves.
     const DESKTOP_DEFAULTS: MsOfficeAddinWordApplyPolicy = MsOfficeAddinWordApplyPolicy {
-        in_place: false,
+        in_place: true,
         whole_document_import: MsOfficeAddinWordWholeDocumentImport::Allowed,
         package_read: true,
     };

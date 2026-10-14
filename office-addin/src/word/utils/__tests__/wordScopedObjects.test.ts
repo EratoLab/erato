@@ -4,6 +4,7 @@ import {
 } from "@erato/frontend/word-review";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { setWordInPlace } from "../../../test/mocks/word/applyPolicy";
 import {
   packageXml,
   paragraph,
@@ -1249,11 +1250,24 @@ describe("scoped edits where the whole-document import needs confirmation", () =
     },
   );
 
-  it("accepts the same scoped edits on Word PC with default settings", async () => {
+  it.each([
+    ["with default settings", undefined],
+    ["where in-place writing is off", false],
+  ])("accepts the same scoped edits on Word PC %s", async (_case, inPlace) => {
     delete window.WORD_IN_PLACE_APPLY;
-    for (const reason of ["insert", "delete", "sections", "reword"] as const) {
-      const result = await (await realistic("word-pc-16.0.20326"))[reason]();
-      expect(result.ok, `${reason}: ${JSON.stringify(result)}`).toBe(true);
+    const restore = inPlace === false ? setWordInPlace("pc", false) : () => {};
+    try {
+      for (const reason of [
+        "insert",
+        "delete",
+        "sections",
+        "reword",
+      ] as const) {
+        const result = await (await realistic("word-pc-16.0.20326"))[reason]();
+        expect(result.ok, `${reason}: ${JSON.stringify(result)}`).toBe(true);
+      }
+    } finally {
+      restore();
     }
   });
 });

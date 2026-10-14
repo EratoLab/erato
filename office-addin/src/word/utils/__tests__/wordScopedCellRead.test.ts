@@ -12,7 +12,10 @@ import {
   vi,
 } from "vitest";
 
-import { setWordWebImport } from "../../../test/mocks/word/applyPolicy";
+import {
+  setWordInPlace,
+  setWordWebImport,
+} from "../../../test/mocks/word/applyPolicy";
 import {
   packageXml,
   paragraph,
@@ -590,9 +593,17 @@ describe("table-cell edits where the whole-document import needs confirmation", 
     });
   });
 
-  it("accepts it on Word PC with default settings, where it takes the import", async () => {
+  it.each([
+    ["with default settings", undefined],
+    ["where in-place writing is off, so it takes the import", false],
+  ])("accepts it on Word PC %s", async (_case, inPlace) => {
     delete window.WORD_IN_PLACE_APPLY;
-    const { submit } = await cellEdit("word-pc-16.0.20326");
-    expect((await submit()).ok).toBe(true);
+    const restore = inPlace === false ? setWordInPlace("pc", false) : () => {};
+    try {
+      const { submit } = await cellEdit("word-pc-16.0.20326");
+      expect((await submit()).ok).toBe(true);
+    } finally {
+      restore();
+    }
   });
 });

@@ -248,6 +248,9 @@ word_include_document = false
 
 [integrations.ms_office.addin.default_settings.word_apply.web]
 package_read = false
+
+[integrations.ms_office.addin.default_settings.word_apply.pc]
+in_place = false
 "#;
 
     temp_file
@@ -317,11 +320,17 @@ package_read = false
         }
     );
     let desktop = MsOfficeAddinWordApplyPolicy {
-        in_place: false,
+        in_place: true,
         whole_document_import: MsOfficeAddinWordWholeDocumentImport::Allowed,
         package_read: true,
     };
-    assert_eq!(word_apply.pc_policy(), desktop);
+    assert_eq!(
+        word_apply.pc_policy(),
+        MsOfficeAddinWordApplyPolicy {
+            in_place: false,
+            ..desktop
+        }
+    );
     assert_eq!(word_apply.mac_policy(), desktop);
 }
 

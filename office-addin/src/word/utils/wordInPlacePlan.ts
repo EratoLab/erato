@@ -1,8 +1,8 @@
 import {
   WORDPROCESSING_NS as W,
   readWordRunFormatting,
-  isBuiltInHeadingStyle,
   wordBuiltInParagraphStyle,
+  wordHeadingStyle,
   wordPlanOutput,
   createNativeContentSignature,
   wordTableCellTextEditIssue,
@@ -278,10 +278,9 @@ export function wordHeadingStyleId(
   level: number,
 ): string {
   return (
-    snapshot.styles.find(
-      (style) =>
-        style.type === "paragraph" &&
-        isBuiltInHeadingStyle(style.id, style.name, level),
+    wordHeadingStyle(
+      snapshot.styles.filter((style) => style.type === "paragraph"),
+      level,
     )?.id ?? `Heading${level}`
   );
 }
@@ -297,7 +296,7 @@ export const effectiveWordStyle = (
     (s) =>
       s.id === styleRef &&
       (!s.type || s.type === "paragraph") &&
-      wordBuiltInParagraphStyle(s.id, s.name) === "Normal",
+      wordBuiltInParagraphStyle(s.name) === "Normal",
   )
     ? "Normal"
     : styleRef;
@@ -485,13 +484,14 @@ function styleTarget(
     (s) => s.id === styleRef && (!s.type || s.type === "paragraph"),
   );
   if (!style) return styleRef === "Normal" ? { builtIn: "Normal" } : undefined;
-  const builtIn = wordBuiltInParagraphStyle(style.id, style.name);
+  const builtIn = wordBuiltInParagraphStyle(style.name);
   if (builtIn) return { builtIn };
   // Paragraph.style takes a custom style's name; a built-in one goes by its localized name there,
-  // which the package does not carry. A comma in the name reads as a list of aliases.
+  // which the package does not carry. A comma in the name reads as a list of aliases. A style with
+  // a heading's ID under another name is no built-in to Word either (ERMAIN-973).
   return style.name &&
     !style.name.includes(",") &&
-    customStyleIds(snapshot).has(style.id)
+    (customStyleIds(snapshot).has(style.id) || /^heading[1-9]$/i.test(style.id))
     ? { name: style.name }
     : undefined;
 }
@@ -533,6 +533,19 @@ function blockTyped(
   };
 }
 
+/** Whether Paragraph.styleBuiltIn sets this heading style. A style the document lacks is the
+ * compiler's fallback ID, which Word adds as its built-in heading. */
+function builtInHeading(
+  styleRef: string,
+  level: number,
+  styles: WordAuthoringSnapshot["styles"],
+): boolean {
+  const style = styles.find((s) => s.id === styleRef);
+  return style
+    ? wordBuiltInParagraphStyle(style.name) === `Heading${level}`
+    : styleRef.toLowerCase() === `heading${level}`;
+}
+
 function withStyle(
   typed: Typed,
   snapshot: WordAuthoringSnapshot,
@@ -541,11 +554,7 @@ function withStyle(
     typed.type === "heading" && typed.styleRef === undefined
       ? undefined
       : typed.type === "heading" &&
-          isBuiltInHeadingStyle(
-            typed.styleRef!,
-            snapshot.styles.find((s) => s.id === typed.styleRef)?.name ?? "",
-            typed.level ?? 1,
-          )
+          builtInHeading(typed.styleRef!, typed.level ?? 1, snapshot.styles)
         ? { builtIn: `Heading${typed.level ?? 1}` }
         : styleTarget(snapshot, typed.styleRef);
   // Attaching applies List Paragraph (probe P6), so only such list items can be re-created exactly.
@@ -621,17 +630,12 @@ function sameStyleRef(
     effectiveWordStyle(expected.styleRef, styles)
   )
     return true;
-  const builtInHeading = (styleRef: string | undefined) =>
-    !!styleRef &&
-    isBuiltInHeadingStyle(
-      styleRef,
-      styles.find((s) => s.id === styleRef)?.name ?? "",
-      expected.level ?? 1,
-    );
+  const builtIn = (styleRef: string | undefined) =>
+    !!styleRef && builtInHeading(styleRef, expected.level ?? 1, styles);
   return (
     expected.type === "heading" &&
-    builtInHeading(expected.styleRef) &&
-    builtInHeading(actual.styleRef)
+    builtIn(expected.styleRef) &&
+    builtIn(actual.styleRef)
   );
 }
 

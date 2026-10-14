@@ -53,9 +53,15 @@ export interface WordOoxmlHostOptions {
   attachToListNewNum?: boolean;
   /** Localized Word: the style ID it gives a built-in style it adds, e.g. { Heading2: "berschrift2" }. */
   builtInStyleIds?: Record<string, string>;
+  /** Word PC 16.0.20430 (ERMAIN-973): a built-in style it adds takes its ID from a custom style
+   * holding it, which Word renames (Heading2 → Heading20) along with every reference to it. */
+  builtInStyleTakesId?: boolean;
   /** Localized Word: Paragraph.style finds built-in styles only by their localized UI names, which
    * the package does not carry, so only custom style names resolve. */
   localizedStyleNames?: boolean;
+  /** Word PC and Mac (ERMAIN-973): Paragraph.getOoxml of a table-cell paragraph returns the cell's
+   * whole row, as a one-row table. On by default for the Word PC profile. */
+  cellParagraphOoxmlIsRow?: boolean;
   /** Word for the web (ERMAIN-967): Paragraph.getOoxml leaves out the paragraph's w:pPr, so a
    * style or list change does not show in it. */
   paragraphOoxmlOmitsProperties?: boolean;
@@ -89,7 +95,9 @@ export type WordReplaceFault =
   /** An extra empty paragraph appears after the written one. */
   | "adds-paragraph"
   /** The following paragraph turns bold as well. */
-  | "edits-next";
+  | "edits-next"
+  /** The next body paragraph turns bold as well, also in the next table cell or row. */
+  | "edits-following";
 
 type When =
   | "now"
@@ -1392,7 +1400,8 @@ export function installWordOoxmlHost(
       styles.find((s) => s.getAttributeNS(W, "default") === "1");
     const name = style ? styleName(style) : "Normal";
     const builtIn = Object.entries(BUILT_IN_STYLE_NAMES).find(
-      ([, builtInName]) => builtInName.toLowerCase() === name.toLowerCase(),
+      ([, builtInName]) =>
+        builtInName.toLowerCase() === ownName(name).toLowerCase(),
     )?.[0];
     return { style: name, styleBuiltIn: builtIn ?? "Other" };
   };
@@ -1406,6 +1415,8 @@ export function installWordOoxmlHost(
   };
   const styleName = (style: Element) =>
     child(style, "name")?.getAttributeNS(W, "val") ?? "";
+  /** Aliases follow a comma in w:name ("heading 2,h2"); Word identifies the style by the rest. */
+  const ownName = (name: string) => name.split(",", 1)[0];
   /** Word omits w:pStyle for the default paragraph style. */
   const applyStyle = (paragraph: Element, style: Element) => {
     recordParagraphChange(paragraph);
@@ -1441,19 +1452,36 @@ export function installWordOoxmlHost(
     if (pc && numIdOf(paragraph) !== undefined)
       setParagraphProperty(paragraph, "numPr", null);
   };
+  const renameStyle = (styles: Element, id: string) => {
+    const ids = new Set(
+      elements(styles, W, "style").map((s) => s.getAttributeNS(W, "styleId")),
+    );
+    if (!ids.has(id)) return;
+    let renamed = `${id}0`;
+    for (let n = 1; ids.has(renamed); n++) renamed = `${id}${n}`;
+    elements(styles, W, "style")
+      .find((s) => s.getAttributeNS(W, "styleId") === id)!
+      .setAttributeNS(W, "w:styleId", renamed);
+    for (const name of ["pStyle", "rStyle", "basedOn", "next", "link"])
+      for (const ref of elements(live(), W, name))
+        if (ref.getAttributeNS(W, "val") === id)
+          ref.setAttributeNS(W, "w:val", renamed);
+  };
   /** Word adds a built-in style the first time it is applied. */
   const builtInStyle = (builtIn: string): Element => {
     const name = BUILT_IN_STYLE_NAMES[builtIn];
     if (!name) throw new Error(`Unsupported built-in style ${builtIn}.`);
     const existing = paragraphStyles().find(
-      (style) => styleName(style).toLowerCase() === name.toLowerCase(),
+      (style) => ownName(styleName(style)).toLowerCase() === name.toLowerCase(),
     );
     if (existing) return existing;
     const root = partRoot(live(), "/word/styles.xml");
     if (!root) throw new Error("The document has no styles part.");
+    const id = settings.builtInStyleIds?.[builtIn] ?? builtIn;
+    if (settings.builtInStyleTakesId) renameStyle(root, id);
     const heading = /^Heading([1-9])$/.exec(builtIn);
     const style = parse(
-      `<w:style xmlns:w="${W}" w:type="paragraph" w:styleId="${settings.builtInStyleIds?.[builtIn] ?? builtIn}"><w:name w:val="${name}"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:uiPriority w:val="9"/><w:qFormat/>${
+      `<w:style xmlns:w="${W}" w:type="paragraph" w:styleId="${id}"><w:name w:val="${name}"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:uiPriority w:val="9"/><w:qFormat/>${
         heading
           ? `<w:pPr><w:keepNext/><w:keepLines/><w:spacing w:before="40" w:after="0"/><w:outlineLvl w:val="${Number(heading[1]) - 1}"/></w:pPr><w:rPr><w:sz w:val="26"/></w:rPr>`
           : ""
@@ -1575,9 +1603,22 @@ export function installWordOoxmlHost(
         : "";
     const wrapper = parse(`<w:document xmlns:w="${W}"><w:body/></w:document>`);
     const body = elements(wrapper, W, "body")[0];
-    const copy = wrapper.importNode(p, true);
-    if (settings.paragraphOoxmlOmitsProperties) child(copy, "pPr")?.remove();
-    body.append(copy);
+    let row = p.parentElement;
+    while (row && !(row.namespaceURI === W && row.localName === "tr"))
+      row = row.parentElement;
+    if ((settings.cellParagraphOoxmlIsRow ?? pc) && row) {
+      const table = wrapper.createElementNS(W, "w:tbl");
+      for (const name of ["tblPr", "tblGrid"]) {
+        const part = child(row.parentElement!, name);
+        if (part) table.append(wrapper.importNode(part, true));
+      }
+      table.append(wrapper.importNode(row, true));
+      body.append(table);
+    } else {
+      const copy = wrapper.importNode(p, true);
+      if (settings.paragraphOoxmlOmitsProperties) child(copy, "pPr")?.remove();
+      body.append(copy);
+    }
     body.append(wrapper.createElementNS(W, "w:sectPr"));
     return `<pkg:package xmlns:pkg="${PKG}">${packagePart(
       "/word/document.xml",
@@ -1950,6 +1991,14 @@ export function installWordOoxmlHost(
               next.localName === "p"
             )
               runsOf(next).forEach((r) => setRunMark(r, ["b", "bCs"], ""));
+            if (replaceFault === "edits-following") {
+              const all = bodyParagraphs(p.ownerDocument);
+              const following = all[all.indexOf(p) + 1];
+              if (following)
+                runsOf(following).forEach((r) =>
+                  setRunMark(r, ["b", "bCs"], ""),
+                );
+            }
           } else if (location === "End") {
             const run = newRun(p.ownerDocument, text, last);
             p.append(run);

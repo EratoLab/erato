@@ -17,8 +17,8 @@ export type WordApplyHost = "pc" | "mac" | "web";
 
 /** Mirrors the backend defaults, for a pane served without the backend's settings. */
 const DEFAULTS: Record<WordApplyHost, WordApplyPolicy> = {
-  pc: { inPlace: false, wholeDocumentImport: "allowed", packageRead: true },
-  mac: { inPlace: false, wholeDocumentImport: "allowed", packageRead: true },
+  pc: { inPlace: true, wholeDocumentImport: "allowed", packageRead: true },
+  mac: { inPlace: true, wholeDocumentImport: "allowed", packageRead: true },
   web: { inPlace: true, wholeDocumentImport: "off", packageRead: true },
 };
 

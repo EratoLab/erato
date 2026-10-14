@@ -6,7 +6,7 @@ import { supportsWordDocumentPackage } from "../wordDocumentPackage";
 import { wordInPlaceAvailability } from "../wordInPlaceSwitch";
 
 const DESKTOP = {
-  inPlace: false,
+  inPlace: true,
   wholeDocumentImport: "allowed",
   packageRead: true,
 } as const;
@@ -58,7 +58,7 @@ describe("wordApplyPolicy", () => {
       word_include_document: true,
       word_apply: {
         web: { package_read: false },
-        mac: { in_place: true },
+        mac: { in_place: false },
         pc: { whole_document_import: "bogus" as never },
       },
     };
@@ -66,14 +66,17 @@ describe("wordApplyPolicy", () => {
       ...WEB,
       packageRead: false,
     });
-    expect(wordApplyPolicy("Mac")).toEqual({ ...DESKTOP, inPlace: true });
+    expect(wordApplyPolicy("Mac")).toEqual({ ...DESKTOP, inPlace: false });
     expect(wordApplyPolicy("PC")).toEqual(DESKTOP);
     expect(wordApplyPolicy("unknown")).toEqual(DESKTOP);
   });
 
   it("lets the kill switch beat the in-place override, which beats the deployment", () => {
     window.MS_OFFICE_ADDIN_DEFAULT_SETTINGS = {
-      word_apply: { web: { in_place: false, whole_document_import: "off" } },
+      word_apply: {
+        pc: { in_place: false },
+        web: { in_place: false, whole_document_import: "off" },
+      },
     };
     window.WORD_IN_PLACE_APPLY = true;
     expect(wordApplyPolicy("PC").inPlace).toBe(true);
@@ -89,12 +92,19 @@ describe("wordApplyPolicy", () => {
   });
 
   it("turns in-place writing off where the deployment does", () => {
+    for (const platform of ["PC", "Mac", "OfficeOnline"]) {
+      word(platform);
+      expect(wordInPlaceAvailability()).toEqual({ enabled: true });
+    }
+    window.MS_OFFICE_ADDIN_DEFAULT_SETTINGS = {
+      word_apply: { pc: { in_place: false } },
+    };
     word("PC");
     expect(wordInPlaceAvailability()).toEqual({
       enabled: false,
       reason: "disabled",
     });
-    word("OfficeOnline");
+    word("Mac");
     expect(wordInPlaceAvailability()).toEqual({ enabled: true });
   });
 

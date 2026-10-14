@@ -1,7 +1,4 @@
-import {
-  isBuiltInHeadingStyle,
-  isDefaultTableStyle,
-} from "./wordBuiltInStyles";
+import { isDefaultTableStyle, wordHeadingStyle } from "./wordBuiltInStyles";
 import { wordPlanError } from "./wordPlanDiagnostics";
 import { wordPlanMatchesObjectScope } from "./wordReadScope";
 import { resolveWordSource, wordSourceDetails } from "./wordRichContent";
@@ -347,17 +344,16 @@ export function normalizeWordDocumentPlan(
   snapshot?: WordAuthoringSnapshot,
 ): WordDocumentPlan {
   if (!snapshot) return plan;
+  const paragraphStyles = snapshot.styles.filter(
+    (style) => style.type === "paragraph",
+  );
   const redundant = (block: WordPlanBlock): boolean => {
     const styleRef = block.styleRef;
     if (!styleRef) return false;
     if (block.type === "heading" && block.level !== undefined) {
       const level = block.level;
-      // Mirrors ensureHeading: the first matching paragraph style, or Heading{level} when none exists.
-      const builtIn = snapshot.styles.find(
-        (style) =>
-          style.type === "paragraph" &&
-          isBuiltInHeadingStyle(style.id, style.name, level),
-      );
+      // Mirrors ensureHeading: the heading style, or Heading{level} when none exists.
+      const builtIn = wordHeadingStyle(paragraphStyles, level);
       return builtIn
         ? builtIn.id === styleRef
         : styleRef.toLowerCase() === `heading${level}`;
@@ -397,10 +393,7 @@ export function normalizeWordDocumentPlan(
     if (block.type === "heading") {
       const level = block.level;
       if (block.styleRef || level === undefined) return undefined;
-      const style = snapshot.styles.find(
-        (s) =>
-          s.type === "paragraph" && isBuiltInHeadingStyle(s.id, s.name, level),
-      );
+      const style = wordHeadingStyle(paragraphStyles, level);
       return style && looks.get(style.id);
     }
     if (block.type === "paragraph") {
