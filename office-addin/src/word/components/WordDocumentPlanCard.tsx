@@ -620,6 +620,7 @@ export function WordDocumentPlanCard({
               review.documentPlanDiagnostic,
               review.status === "revert-failed" ||
                 review.documentPlanStatus === "revert-stale",
+              snapshot?.proofingPending,
             )
           : review.status === "write-failed" ||
               review.status === "revert-failed"

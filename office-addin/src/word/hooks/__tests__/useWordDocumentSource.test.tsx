@@ -13,6 +13,7 @@ import {
   WORD_CAPTURE_SLOW_MS,
 } from "../useWordDocumentSource";
 
+import type { WordDocumentBuild } from "../../utils/buildWordDocumentArgs";
 import type { WordDocumentReadResult } from "../../utils/readWordDocument";
 
 const changes = vi.hoisted(() => new Set<() => void>());
@@ -453,6 +454,40 @@ describe("useWordDocumentSource", () => {
     });
     expect(read).toHaveBeenCalledTimes(2);
   });
+
+  it.each(["tagging", "changed"] as const)(
+    "captures again at the next send, not on every focus, while Word for Mac's proofing pass was pending (%s)",
+    async (pending) => {
+      read.mockResolvedValue({
+        ok: true,
+        paragraphs: paragraphs(["Alpha"]),
+        authoring: {
+          ooxml: packageXml(paragraph("Alpha")),
+          tracking: "Off",
+          fullDocument: true,
+          proofingPending: pending,
+        },
+      });
+      const { result } = renderSource({ authoringEnabled: true });
+      await waitFor(() =>
+        expect(result.current.preview.status).toBe("included"),
+      );
+
+      focusPane();
+      focusPane();
+      expect(read).toHaveBeenCalledTimes(1);
+
+      let sent: WordDocumentBuild | null = null;
+      await act(async () => {
+        sent = await result.current.capture();
+      });
+      expect(read).toHaveBeenCalledTimes(2);
+      // Only Word's own tagging can explain a later refusal; another change ended the wait.
+      expect(sent!.authoring?.proofingPending).toBe(
+        pending === "tagging" ? true : undefined,
+      );
+    },
+  );
 
   it("does not let an older capture that settles late replace a newer one", async () => {
     const older = deferred<WordDocumentReadResult>();

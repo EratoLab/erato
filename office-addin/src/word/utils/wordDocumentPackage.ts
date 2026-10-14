@@ -1,11 +1,14 @@
 import {
   createWordXmlComparison,
+  removeWordDetectedLanguages,
   removeWordRedetectedLanguage,
+  wordXmlElements,
 } from "@erato/frontend/word-review";
 
 import { wordApplyPolicy } from "./wordApplyPolicy";
 import {
   MAX_WORD_DOCX_BYTES,
+  WORD_XML_NS,
   WordDocumentTooLargeError,
   encodeWordXml,
   isWordXmlPart,
@@ -24,6 +27,8 @@ import type { WordInPlaceOp, WordInPlaceStoryTarget } from "./wordInPlacePlan";
 const PKG = "http://schemas.microsoft.com/office/2006/xmlPackage";
 const CT = "http://schemas.openxmlformats.org/package/2006/content-types";
 const BACKUP_PREFIX = "erato-word-document-backup-v1:";
+
+let importedAt = 0;
 
 export interface WordDocumentPackageSnapshot {
   /** Host-only original file, retained independently of the native Undo stack. */
@@ -308,6 +313,61 @@ export function wordWrittenPackageFingerprint(
   };
 }
 
+/** Word for Mac writes w:proofState spelling="clean" once its proofing pass, language detection
+ * included, has been through the whole document; opening or importing a document clears it. */
+export function wordProofingComplete(ooxml: string): boolean {
+  // Parses only the main settings part of wordDocumentFileToOoxml's serialization. A glossary
+  // document (placeholder text of content controls) has a settings part of its own, and Word for
+  // Mac lists it first.
+  const name = ooxml.indexOf('pkg:name="/word/settings.xml"');
+  const start = ooxml.lastIndexOf("<pkg:part ", name);
+  const end = ooxml.indexOf("</pkg:part>", name);
+  if (name < 0 || start < 0 || end < 0) return false;
+  const settings = parseWordXml(
+    `<pkg:package xmlns:pkg="${PKG}">${ooxml.slice(start, end)}</pkg:part></pkg:package>`,
+  );
+  const state = wordXmlElements(settings, WORD_XML_NS, "proofState")[0];
+  return state?.getAttributeNS(WORD_XML_NS, "spelling") === "clean";
+}
+
+const detectedLanguageFree = new WeakMap<object, string>();
+
+/** Whether two reads differ in nothing but w:lang in the form Word's language detection writes.
+ * Each read is compared once, however many polls it takes part in. */
+export function wordPackagesDifferInDetectedLanguageOnly(
+  a: { ooxml: string },
+  b: { ooxml: string },
+): boolean {
+  const without = (read: { ooxml: string }) => {
+    let fingerprint = detectedLanguageFree.get(read);
+    if (fingerprint === undefined) {
+      const doc = parseWordXml(read.ooxml);
+      removeWordDetectedLanguages(doc);
+      fingerprint = createWordXmlComparison(doc).fingerprint();
+      detectedLanguageFree.set(read, fingerprint);
+    }
+    return fingerprint;
+  };
+  return without(a) === without(b);
+}
+
+/** When the last whole-document import from this pane finished, or 0. */
+export function wordDocumentImportedAt(): number {
+  return importedAt;
+}
+
+/** Runs the import insertWordDocumentFile queued. Word starts its proofing pass only once the import
+ * is done, so its window (wordDocumentImportedAt) starts after the sync, failed or not. */
+export async function syncWordDocumentImport(
+  context: Word.RequestContext,
+): Promise<void> {
+  try {
+    await context.sync();
+  } finally {
+    importedAt = Date.now();
+  }
+}
+
 export async function captureWordDocumentPackage(): Promise<WordDocumentPackageSnapshot> {
   const documentUrl = currentWordDocumentUrl();
   const bytes = await readWordDocumentFile();
@@ -329,7 +389,8 @@ export async function captureWordDocumentPackage(): Promise<WordDocumentPackageS
   };
 }
 
-/** Queue once; callers own preflight, backup, sync, and semantic verification. */
+/** Queue once; callers own preflight, backup, sync (syncWordDocumentImport), and semantic
+ * verification. */
 export function insertWordDocumentFile(
   context: Word.RequestContext,
   bytes: Uint8Array,

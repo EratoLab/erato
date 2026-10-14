@@ -36,4 +36,27 @@ describe("wordDocumentDiagnosticText", () => {
         "Word could not verify the restored document. Your saved original is still available for recovery.",
       );
   });
+
+  it("says Word was still checking the language when the plan's capture was taken mid-pass", () => {
+    const stale: WordDocumentDiagnostic = {
+      stage: "preflight",
+      reason: "source-changed",
+    };
+    const proofing =
+      "Word was still checking the document's language when Erato read it. Nothing was applied. Send your request again to use the checked document.";
+    expect(wordDocumentDiagnosticText(stale, false, true)).toBe(proofing);
+    expect(wordDocumentDiagnosticText(stale)).toBe(
+      "The document changed. Nothing was applied. Send a new request to refresh the plan.",
+    );
+    expect(
+      wordDocumentDiagnosticText(
+        { ...stale, details: { urlChanged: true } },
+        false,
+        true,
+      ),
+    ).not.toBe(proofing);
+    expect(wordDocumentDiagnosticText(stale, true, true)).toBe(
+      "The document changed after applying. Revert was not run because it could remove later edits.",
+    );
+  });
 });

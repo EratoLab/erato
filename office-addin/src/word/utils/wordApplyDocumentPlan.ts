@@ -28,6 +28,7 @@ import {
   insertWordDocumentFile,
   isWordDocumentBackup,
   supportsWordDocumentPackage,
+  syncWordDocumentImport,
   wordDocumentOoxmlToFile,
   wordWrittenPackageFingerprint,
 } from "./wordDocumentPackage";
@@ -897,7 +898,7 @@ async function applyFullDocument(
         throw new Error("The active document changed before import");
       writing = true;
       insertWordDocumentFile(context, bytes);
-      await context.sync();
+      await syncWordDocumentImport(context);
       imported = true;
       await finishWordEmptyDocumentImport(context, compiled);
       stage = "verify";
@@ -1054,7 +1055,7 @@ async function revertFullDocument(
         throw new Error("The active document changed before restore");
       writing = true;
       insertWordDocumentFile(context, original.bytes);
-      await context.sync();
+      await syncWordDocumentImport(context);
       imported = true;
       await finishWordEmptyDocumentImport(context, original.ooxml);
       stage = "verify";

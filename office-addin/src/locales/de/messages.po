@@ -2843,6 +2843,11 @@ msgstr "Das Dokument wurde verändert. Es wurde nichts angewendet. Sende eine ne
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.staleProofing"
+msgstr "Word hat die Sprache des Dokuments noch geprüft, als Erato es gelesen hat. Es wurde nichts angewendet. Sende deine Anfrage erneut, um das geprüfte Dokument zu verwenden."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
 msgid "officeAddin.word.authoring.tooLarge"
 msgstr "Dieses Dokument ist zu groß, um es als Ganzes zu überarbeiten. Erato kann es aber abschnittsweise lesen und bearbeiten."
 

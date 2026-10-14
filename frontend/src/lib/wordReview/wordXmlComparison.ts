@@ -656,6 +656,17 @@ function dropLanguage(lang: Element): void {
     properties.remove();
 }
 
+/** Drops every w:lang in the form Word's own language detection writes (isWordDetectedLanguage),
+ * wherever it sits, and returns how many. It tells Word's tagging apart from an edit; a comparison
+ * that must see a language the user sets uses removeWordRedetectedLanguage instead. */
+export function removeWordDetectedLanguages(doc: Document): number {
+  const languages = wordXmlElements(doc, W, "lang").filter(
+    isWordDetectedLanguage,
+  );
+  languages.forEach(dropLanguage);
+  return languages.length;
+}
+
 /**
  * proofing-language (wordHousekeeping): in the paragraphs `written` has and `original` lacks, drops
  * each w:lang that Word re-detects after a write, valued as one of the paragraphs the write

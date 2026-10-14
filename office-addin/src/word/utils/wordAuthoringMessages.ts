@@ -14,9 +14,12 @@ import type {
 } from "./wordInPlaceRoute";
 import type { WordPlanIssue } from "@erato/frontend/word-review";
 
+/** `proofingPending`: the plan's capture was taken while Word for Mac was still tagging languages
+ * (WordAuthoringSnapshot.proofingPending). */
 export function wordDocumentDiagnosticText(
   diagnostic: WordDocumentDiagnostic,
   restoring = false,
+  proofingPending = false,
 ): string {
   if (diagnostic.reason === "source-changed")
     return restoring
@@ -25,11 +28,17 @@ export function wordDocumentDiagnosticText(
           message:
             "The document changed after applying. Revert was not run because it could remove later edits.",
         })
-      : t({
-          id: "officeAddin.word.authoring.stale",
-          message:
-            "The document changed. Nothing was applied. Send a new request to refresh the plan.",
-        });
+      : proofingPending && !diagnostic.details?.urlChanged
+        ? t({
+            id: "officeAddin.word.authoring.staleProofing",
+            message:
+              "Word was still checking the document's language when Erato read it. Nothing was applied. Send your request again to use the checked document.",
+          })
+        : t({
+            id: "officeAddin.word.authoring.stale",
+            message:
+              "The document changed. Nothing was applied. Send a new request to refresh the plan.",
+          });
   if (
     diagnostic.reason === "output-mismatch" &&
     restoring &&

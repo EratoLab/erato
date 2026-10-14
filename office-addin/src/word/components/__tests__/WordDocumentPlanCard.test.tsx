@@ -1239,6 +1239,19 @@ describe("structural document review", () => {
     expect(screen.queryByRole("button", { name: "Apply changes" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Undo" })).toBeNull();
   });
+  it("says Word was still checking the language when the plan's capture was taken mid-pass", async () => {
+    const state = setup();
+    state.snapshot.proofingPending = true;
+    state.mount();
+    state.editSource();
+    fireEvent.click(screen.getByRole("button", { name: "Apply changes" }));
+    await waitFor(() =>
+      expect(screen.getByRole("alert")).toHaveTextContent(
+        "Word was still checking the document's language when Erato read it. Nothing was applied.",
+      ),
+    );
+    expect(state.insert).not.toHaveBeenCalled();
+  });
   it("shows the restore in progress, then a receipt naming what was undone", async () => {
     const state = setup();
     state.mount();

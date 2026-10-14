@@ -61,8 +61,8 @@ interface CachedCapture {
   generation: number;
   durationMs: number;
   startedAt: number;
-  /** A failed read or package transfer is retried at the next send; a file that can never be
-   * edited is not. */
+  /** A failed read or package transfer, or a capture Word for Mac was still tagging, is retried at
+   * the next send; a file that can never be edited is not. */
   retry: boolean;
 }
 
@@ -131,7 +131,11 @@ function assignParagraphOrdinals(
 async function captureDocument(
   documentIdentity: string,
   includeAuthoring: boolean,
-): Promise<{ build: WordDocumentBuild | null; error?: string }> {
+): Promise<{
+  build: WordDocumentBuild | null;
+  error?: string;
+  retry?: boolean;
+}> {
   const result = await readWordDocument(includeAuthoring);
   if (!result.ok) return { build: null, error: result.error };
   const build = buildWordDocumentArgs(result.paragraphs);
@@ -145,6 +149,12 @@ async function captureDocument(
     build.authoring.documentUrl = result.authoring.documentUrl;
     assignParagraphOrdinals(build.authoring, result.paragraphs);
     if (result.note) build.readNote = result.note;
+    if (result.authoring.proofingPending) {
+      if (result.authoring.proofingPending === "tagging")
+        build.authoring.proofingPending = true;
+      // Word adds its tags without a change event, so only a send can pick them up.
+      return { build, retry: true };
+    }
   } else if (result.authoringUnavailable) {
     build.authoring = {
       ...captureWordAuthoringSnapshot("", documentIdentity, ""),
@@ -209,8 +219,9 @@ export function useWordDocumentSource({
       .catch((error: unknown) => ({
         build: null,
         error: `capture: ${wordErrorText(error)}`,
+        retry: undefined,
       }))
-      .then(({ build, error }) => {
+      .then(({ build, error, retry }) => {
         clearTimeout(slowTimer);
         const entry: CachedCapture = {
           build,
@@ -220,6 +231,7 @@ export function useWordDocumentSource({
           startedAt,
           retry:
             !build ||
+            !!retry ||
             !!build.authoring?.issueDetails?.some((detail) =>
               RETRIED_AUTHORING_DETAILS.has(detail),
             ),
