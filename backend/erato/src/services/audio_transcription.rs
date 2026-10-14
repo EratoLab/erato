@@ -629,6 +629,7 @@ mod tests {
         config.additional_request_headers = Some(vec![
             "X-User={{erato_user.id}}".into(),
             "X-Tenant={{id_token.claims.tenant}}".into(),
+            "x-bf-session-id={{chat.id}}".into(),
         ]);
         let claims = serde_json::json!({ "tenant": "tenant-123" });
         let context = ChatProviderHeadersContext::new("user-123", &claims);
@@ -647,6 +648,7 @@ mod tests {
         assert_eq!(request.headers["authorization"], "Bearer test-key");
         assert_eq!(request.headers["x-user"], "user-123");
         assert_eq!(request.headers["x-tenant"], "tenant-123");
+        assert!(!request.headers.contains_key("x-bf-session-id"));
         assert!(
             request.headers["content-type"]
                 .to_str()

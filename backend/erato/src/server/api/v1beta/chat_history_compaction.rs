@@ -15,6 +15,7 @@ use crate::services::prompt_composition::{
     AppStateFileResolver, AppStatePromptProvider, DatabaseMessageRepository,
     PromptCompositionUserInput,
 };
+use crate::services::template_rendering::contexts::chat_provider_headers::ChatProviderHeadersContext;
 use crate::state::AppState;
 use axum::{
     Extension, Json,
@@ -444,8 +445,13 @@ async fn compact_under_lease(
         &provider.chat_provider_config.model_capabilities,
     )
     .with_max_tokens(headroom as u32);
+    let headers_context =
+        ChatProviderHeadersContext::new(&me.id, &me.id_token_claims).with_chat_id(chat.id);
     let client = app
-        .genai_for_chat_provider_id(Some(&provider.chat_provider_id))
+        .genai_for_chat_provider_id_with_headers_context(
+            Some(&provider.chat_provider_id),
+            Some(&headers_context),
+        )
         .map_err(internal)?;
     let start = std::time::SystemTime::now();
     let response = client
