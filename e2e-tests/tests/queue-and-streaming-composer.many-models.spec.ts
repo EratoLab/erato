@@ -458,7 +458,8 @@ test.describe("Streaming composer + message queue", () => {
       // Navigate away to a brand-new chat while the message is still queued.
       await page
         .getByRole("complementary")
-        .getByRole("button", { name: "New Chat", exact: true })
+        .getByRole("link", { name: "New Chat", exact: true })
+        .filter({ has: page.locator('[data-ui="sidebar-new-chat-item"]') })
         .click();
       await expect(page).toHaveURL(/\/chat\/new$/);
       // Neither the chip nor the payload leaks into the new chat's composer.

@@ -106,7 +106,8 @@ test(
     // Leave the chat; the backend turn keeps running without this tab's SSE.
     await page
       .getByRole("complementary")
-      .getByRole("button", { name: "New Chat", exact: true })
+      .getByRole("link", { name: "New Chat", exact: true })
+      .filter({ has: page.locator('[data-ui="sidebar-new-chat-item"]') })
       .click();
     await expect(page).toHaveURL(/\/chat\/new$/);
     await expect(indicator).toHaveAttribute("data-status", "running");
@@ -159,7 +160,8 @@ test(
     // Leave during the delay window; the failure happens unwatched.
     await page
       .getByRole("complementary")
-      .getByRole("button", { name: "New Chat", exact: true })
+      .getByRole("link", { name: "New Chat", exact: true })
+      .filter({ has: page.locator('[data-ui="sidebar-new-chat-item"]') })
       .click();
     await expect(page).toHaveURL(/\/chat\/new$/);
     await expect(indicator).toHaveAttribute("data-status", "running");

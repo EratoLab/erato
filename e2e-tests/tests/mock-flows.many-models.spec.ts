@@ -65,7 +65,8 @@ const navigateToNewChatViaSidebar = async (page: Page) => {
   await ensureOpenSidebar(page);
   await page
     .getByRole("complementary")
-    .getByRole("button", { name: "New Chat", exact: true })
+    .getByRole("link", { name: "New Chat", exact: true })
+    .filter({ has: page.locator('[data-ui="sidebar-new-chat-item"]') })
     .click();
   await expect(page).toHaveURL(/\/chat\/new$/);
 };

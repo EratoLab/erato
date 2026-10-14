@@ -163,10 +163,9 @@ export const measureExpanded = (page: Page): Promise<ExpandedMeasurement> =>
     const requireBoxes = (els: (Element | null)[]) =>
       els.filter((el): el is Element => el !== null).map((el) => toBox(el)!);
 
-    // The nav "New Chat" item is a div (InteractiveContainer); untitled chat
-    // rows can carry the same aria-label on their <a>, hence the tag prefix.
+    // Use the navigation row hook to distinguish it from untitled chats.
     const navRowEls = [
-      'div[aria-label="New Chat"]',
+      '[data-ui="sidebar-new-chat-item"]',
       '[data-ui="sidebar-search-item"]',
       '[data-ui="sidebar-assistants-item"]',
     ]
@@ -249,7 +248,7 @@ export const measureSlim = (page: Page): Promise<SlimMeasurement> =>
       });
     }
     for (const sel of [
-      'div[aria-label="New Chat"]',
+      '[data-ui="sidebar-new-chat-item"]',
       '[data-ui="sidebar-search-item"]',
       '[data-ui="sidebar-assistants-item"]',
     ]) {
@@ -416,7 +415,7 @@ export const recordToggleTrajectory = async (
       );
       trace.frames.push({
         toggle: pick('[data-ui="sidebar-header"] button'),
-        newChat: pick('div[aria-label="New Chat"] svg'),
+        newChat: pick('[data-ui="sidebar-new-chat-item"] svg'),
         search: pick('[data-ui="sidebar-search-item"] svg'),
         avatar: pick('[data-ui="sidebar-footer"] button[aria-haspopup="menu"]'),
       });

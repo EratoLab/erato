@@ -1,5 +1,6 @@
 import { test, expect, Page } from "@playwright/test";
 import { TAG_CI } from "./tags";
+import { forceSlimCollapsedMode } from "./sidebarGeometry";
 import {
   archiveChatFromRow,
   chatIsReadyToChat,
@@ -8,6 +9,59 @@ import {
   RECENT_CHATS_ROUTE,
   sendFirstMessage,
 } from "./shared";
+
+for (const collapsed of [false, true]) {
+  test(
+    `Ctrl/Cmd-click New Chat opens a new tab with sidebar ${collapsed ? "collapsed" : "expanded"}`,
+    { tag: TAG_CI },
+    async ({ page }) => {
+      // Collapsed navigation is clickable only in slim mode; hidden is the default.
+      await forceSlimCollapsedMode(page);
+      await page.goto("/");
+      await chatIsReadyToChat(page);
+      await sendFirstMessage(page, "Please write a short poem about the sun");
+      await chatIsReadyToChat(page, { expectAssistantResponse: true });
+      await ensureOpenSidebar(page);
+      if (collapsed) {
+        await page.getByLabel("collapse sidebar", { exact: true }).click();
+      }
+      await expect(page.locator('[data-ui="sidebar"]')).toHaveAttribute(
+        "data-sidebar-mode",
+        collapsed ? "slim" : "expanded",
+      );
+
+      const originalUrl = page.url();
+      const textbox = page.getByRole("textbox", { name: "Type a message..." });
+      const draft = "Keep this draft in the original tab";
+      await textbox.fill(draft);
+      const newChatLink = page
+        .getByRole("link", { name: "New Chat", exact: true })
+        .filter({ has: page.locator('[data-ui="sidebar-new-chat-item"]') });
+      await expect(newChatLink).toHaveAttribute("href", "/chat/new");
+
+      const newPagePromise = page.context().waitForEvent("page");
+      await newChatLink.click({ modifiers: ["ControlOrMeta"] });
+      const newPage = await newPagePromise;
+      try {
+        await chatIsReadyToChat(newPage);
+        await expect(newPage).toHaveURL(/\/chat\/new$/);
+        await expect(
+          newPage.getByRole("textbox", { name: "Type a message..." }),
+        ).toHaveValue("");
+        await expect(newPage.getByTestId("message-user")).toHaveCount(0);
+        await expect(page).toHaveURL(originalUrl);
+        await expect(textbox).toHaveValue(draft);
+      } finally {
+        await newPage.close();
+      }
+
+      // Plain clicks must still reset the composer in the current tab.
+      await newChatLink.click();
+      await expect(page).toHaveURL(/\/chat\/new$/);
+      await expect(textbox).toHaveValue("");
+    },
+  );
+}
 
 /**
  * Park every list request until released, so a row that shows up in that window
