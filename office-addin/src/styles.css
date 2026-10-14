@@ -519,3 +519,11 @@ body {
   );
   box-shadow: var(--theme-elevation-shell);
 }
+
+/* The diagnostic page scrolls as a document rather than an Office task pane. */
+html:has([data-branding-overview]),
+body:has([data-branding-overview]),
+#root:has([data-branding-overview]) {
+  height: auto;
+  overflow: auto;
+}

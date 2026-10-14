@@ -35,6 +35,7 @@ const AssistantsPage = lazy(() => import("./pages/AssistantsPage"));
 const DesktopSidecarSetupPage = lazy(
   () => import("./pages/DesktopSidecarSetupPage"),
 );
+const BrandingOverviewPage = lazy(() => import("./pages/BrandingOverviewPage"));
 const SearchPage = lazy(() => import("./pages/SearchPage"));
 const SharedChatPage = lazy(() => import("./pages/SharedChatPage"));
 
@@ -88,6 +89,7 @@ function AppRoutes() {
         {" "}
         {/* The App component provides the outermost layout context */}
         <Route index element={<HomePage />} />
+        <Route path="branding-overview" element={<BrandingOverviewPage />} />
         <Route path="about" element={<AboutPage />} />
         <Route
           path="desktop-sidecar/setup"

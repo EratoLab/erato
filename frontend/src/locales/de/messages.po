@@ -1452,6 +1452,81 @@ msgid "branding.welcomeScreen.title"
 msgstr "Willkommen beim KI-Assistenten"
 
 #. js-lingui-explicit-id
+#: src/pages/BrandingOverviewPage.tsx
+msgid "brandingOverview.absent"
+msgstr "Kein eigenes Bild konfiguriert"
+
+#. js-lingui-explicit-id
+#: src/pages/BrandingOverviewPage.tsx
+msgid "brandingOverview.avatar"
+msgstr "Assistenten-Avatar"
+
+#. js-lingui-explicit-id
+#: src/pages/BrandingOverviewPage.tsx
+msgid "brandingOverview.dark"
+msgstr "Dunkel"
+
+#. js-lingui-explicit-id
+#: src/pages/BrandingOverviewPage.tsx
+msgid "brandingOverview.failed"
+msgstr "Bild konnte nicht geladen werden"
+
+#. js-lingui-explicit-id
+#: src/pages/BrandingOverviewPage.tsx
+msgid "brandingOverview.light"
+msgstr "Hell"
+
+#. js-lingui-explicit-id
+#: src/pages/BrandingOverviewPage.tsx
+msgid "brandingOverview.loadFailed"
+msgstr "Branding-Bilder konnten nicht geladen werden"
+
+#. js-lingui-explicit-id
+#: src/pages/BrandingOverviewPage.tsx
+msgid "brandingOverview.loading"
+msgstr "Branding-Bilder werden geladen…"
+
+#. js-lingui-explicit-id
+#: src/pages/BrandingOverviewPage.tsx
+msgid "brandingOverview.logo"
+msgstr "Anwendungslogo"
+
+#. js-lingui-explicit-id
+#: src/pages/BrandingOverviewPage.tsx
+msgid "brandingOverview.office"
+msgstr "Office-Add-in (Outlook, Word und Teams)"
+
+#. js-lingui-explicit-id
+#: src/pages/BrandingOverviewPage.tsx
+msgid "brandingOverview.officeDisabled"
+msgstr "Office-Add-in ist deaktiviert"
+
+#. js-lingui-explicit-id
+#: src/pages/BrandingOverviewPage.tsx
+msgid "brandingOverview.officeManifest"
+msgstr "Office-Manifeste (Outlook und Word)"
+
+#. js-lingui-explicit-id
+#: src/pages/BrandingOverviewPage.tsx
+msgid "brandingOverview.sidebar"
+msgstr "Seitenleistenlogo"
+
+#. js-lingui-explicit-id
+#: src/pages/BrandingOverviewPage.tsx
+msgid "brandingOverview.teamsManifest"
+msgstr "Teams-Paketsymbole"
+
+#. js-lingui-explicit-id
+#: src/pages/BrandingOverviewPage.tsx
+msgid "brandingOverview.title"
+msgstr "Branding-Übersicht"
+
+#. js-lingui-explicit-id
+#: src/pages/BrandingOverviewPage.tsx
+msgid "brandingOverview.web"
+msgstr "Webanwendung"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatUsageAdvisory.tsx
 msgid "chat.ai_usage_advisory"
 msgstr "Sie interagieren mit einem KI-Chatbot. Generierte Antworten können sachliche Fehler enthalten und sollten vor der Verwendung überprüft werden."

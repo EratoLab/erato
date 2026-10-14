@@ -683,3 +683,5 @@ export {
   saveComposeReloadState,
   restoreComposeReloadState,
 } from "@/hooks/chat/composeReloadState";
+
+export { default as BrandingOverviewPage } from "@/pages/BrandingOverviewPage";

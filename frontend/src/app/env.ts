@@ -98,6 +98,12 @@ export type Env = {
 declare global {
   // These are injected from the backend (see frontend_environment.rs and related)
   interface Window {
+    BRANDING_OVERVIEW?: {
+      officeEnabled: boolean;
+      teamsEnabled: boolean;
+      office: Record<string, string>;
+      teams: Record<string, string>;
+    };
     API_ROOT_URL?: string;
     FRONTEND_PLATFORM?: string;
     FRONTEND_PUBLIC_BASE_PATH?: string;
