@@ -336,12 +336,145 @@ async fn modern_errors_and_rate_limits_never_select_legacy() {
         (403, 32600),
         (429, 32600),
         (500, 32600),
+        (401, 32601),
+        (403, 32601),
+        (429, 32601),
+        (500, 32601),
     ] {
         let (wire, _server, runtime) = fixture().await;
         wire.discovery_status.store(status, Ordering::SeqCst);
         wire.discovery_code.store(code, Ordering::SeqCst);
         assert!(context(&runtime, "").await.is_stateless().await.is_err());
     }
+}
+
+#[tokio::test]
+async fn discovery_accepts_legacy_http_validation_error_formats() {
+    for status in [400, 404, 405, 415, 422] {
+        for body in [
+            "Expected initialize request",
+            r#"{"detail":"Expected initialize request"}"#,
+            r#"{"jsonrpc":"2.0","id":null,"error":{"code":-32600,"message":"Invalid request"}}"#,
+        ] {
+            let server = serve(Router::new().route(
+                "/",
+                post(move || async move { (StatusCode::from_u16(status).unwrap(), body) }),
+            ))
+            .await;
+            let runtime = Arc::new(HttpServer::new(config(&server.url)).unwrap());
+            assert!(
+                !context(&runtime, "").await.is_stateless().await.unwrap(),
+                "{status}: {body}"
+            );
+        }
+    }
+}
+
+#[tokio::test]
+async fn discovery_negotiates_only_explicitly_supported_legacy_versions() {
+    for (status, supported, legacy) in [
+        (400, json!(["2024-11-05"]), true),
+        (200, json!(["2025-03-26", "2025-06-18"]), true),
+        (400, json!([VERSION, "2025-11-25"]), false),
+        (400, json!(["2099-01-01"]), false),
+        (400, Value::Null, false),
+        (401, json!(["2024-11-05"]), false),
+        (403, json!(["2024-11-05"]), false),
+        (429, json!(["2024-11-05"]), false),
+        (503, json!(["2024-11-05"]), false),
+    ] {
+        let server = serve(Router::new().route("/", post(move |Json(request): Json<Value>| {
+            let supported = supported.clone();
+            async move {
+                (StatusCode::from_u16(status).unwrap(), Json(json!({
+                    "jsonrpc":"2.0", "id":request["id"],
+                    "error":{"code":-32022, "message":"Unsupported protocol version", "data":{"supported":supported}}
+                })))
+            }
+        }))).await;
+        let runtime = Arc::new(HttpServer::new(config(&server.url)).unwrap());
+        let result = context(&runtime, "").await.is_stateless().await;
+        if legacy {
+            assert!(!result.unwrap());
+        } else {
+            let error = result.unwrap_err();
+            assert_eq!(
+                error.downcast_ref::<RequestError>().unwrap().status,
+                Some(status)
+            );
+        }
+    }
+}
+
+#[tokio::test]
+async fn discovery_sse_errors_do_not_time_out_into_legacy() {
+    for error in [false, true] {
+        let server = serve(Router::new().route("/", post(move |Json(request): Json<Value>| async move {
+            let message = if error {
+                json!({"jsonrpc":"2.0", "id":request["id"], "error":{"code":-32020,"message":"Header mismatch"}})
+            } else {
+                json!({"jsonrpc":"2.0", "id":request["id"], "result":{"supportedVersions":[VERSION]}})
+            };
+            // Leave the stream open: discovery must finish on the response,
+            // including errors, without waiting for the timeout and downgrading.
+            Sse::new(futures::stream::once(async move {
+                Ok::<_, std::convert::Infallible>(Event::default().data(message.to_string()))
+            }).chain(futures::stream::pending()))
+        }))).await;
+        let runtime = Arc::new(HttpServer::new(config(&server.url)).unwrap());
+        let result = tokio::time::timeout(Duration::from_secs(1), async {
+            context(&runtime, "").await.is_stateless().await
+        })
+        .await
+        .unwrap();
+        if error {
+            assert!(result.is_err());
+        } else {
+            assert!(result.unwrap());
+        }
+    }
+}
+
+#[tokio::test]
+async fn unrelated_discovery_responses_are_not_legacy_evidence() {
+    for status in [200, 400] {
+        for result in [
+            json!({"result":{"supportedVersions":[VERSION]}}),
+            json!({"error":{"code":-32020,"message":"Header mismatch"}}),
+        ] {
+            let server = serve(Router::new().route(
+                "/",
+                post(move || {
+                    let mut message = result.clone();
+                    async move {
+                        message["jsonrpc"] = json!("2.0");
+                        message["id"] = json!("unrelated");
+                        (StatusCode::from_u16(status).unwrap(), Json(message))
+                    }
+                }),
+            ))
+            .await;
+            let runtime = Arc::new(HttpServer::new(config(&server.url)).unwrap());
+            assert!(
+                context(&runtime, "")
+                    .await
+                    .is_stateless()
+                    .await
+                    .unwrap_err()
+                    .to_string()
+                    .contains("Uncorrelated MCP response")
+            );
+        }
+    }
+    assert!(
+        process_message(
+            json!({"jsonrpc":"2.0", "id":"unrelated",
+        "error":{"code":-32600,"message":"Invalid request"}}),
+            "expected",
+            None
+        )
+        .is_err()
+    );
 }
 
 #[tokio::test]
@@ -375,6 +508,83 @@ async fn broken_tool_stream_is_not_replayed_and_cancellation_closes_only_its_req
     })
     .await
     .unwrap();
+}
+
+#[tokio::test]
+async fn production_legacy_discovery_rejections_fall_back_to_working_sessions() {
+    let discoveries = Arc::new(AtomicUsize::new(0));
+    let versions = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let observed_discoveries = discoveries.clone();
+    let observed_versions = versions.clone();
+    let server = serve(mock_mcp_server::app().layer(axum::middleware::from_fn(
+        move |request: axum::extract::Request, next: axum::middleware::Next| {
+            let discoveries = observed_discoveries.clone();
+            let versions = observed_versions.clone();
+            async move {
+                if request
+                    .headers()
+                    .get("mcp-method")
+                    .is_some_and(|v| v == "server/discover")
+                {
+                    discoveries.fetch_add(1, Ordering::SeqCst);
+                }
+                if request.headers().contains_key("mcp-session-id") {
+                    versions
+                        .lock()
+                        .unwrap()
+                        .push(request.headers().get("mcp-protocol-version").cloned());
+                }
+                next.run(request).await
+            }
+        },
+    )))
+    .await;
+    let mut failures = Vec::new();
+    for rejection in ["415", "422", "version", "uncorrelated"] {
+        let manager = manager(config(&format!(
+            "{}/mcp/compat/{rejection}/file",
+            server.url
+        )));
+        let chat = Uuid::new_v4();
+        match manager.list_tools(chat, &Default::default()).await {
+            Ok(tools) => assert!(!tools.is_empty(), "{rejection}"),
+            Err(error) => {
+                failures.push(format!("{rejection}: {error}"));
+                continue;
+            }
+        }
+        let mut params = call_params("");
+        params.arguments = json!({"path":"docs/readme.txt"}).as_object().cloned();
+        let result = manager
+            .call_tool(chat, "files", params, &Default::default())
+            .await
+            .unwrap();
+        assert!(!result.is_error.unwrap_or(false), "{rejection}");
+        assert_eq!(
+            manager.active_session_count("files").await,
+            1,
+            "{rejection}"
+        );
+        assert_eq!(
+            manager.probe_connection("files", &Default::default()).await,
+            McpServerConnectionStatus::Success,
+            "{rejection}"
+        );
+    }
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+    assert_eq!(
+        discoveries.load(Ordering::SeqCst),
+        4,
+        "cache the legacy selection across listing, calling and probing"
+    );
+    let versions = versions.lock().unwrap();
+    assert!(!versions.is_empty());
+    assert!(
+        versions
+            .iter()
+            .all(|v| v.as_ref().is_some_and(|v| v == "2024-11-05")),
+        "{versions:?}"
+    );
 }
 
 #[tokio::test]

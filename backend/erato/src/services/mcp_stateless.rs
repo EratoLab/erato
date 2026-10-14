@@ -5,6 +5,7 @@ use super::mcp_transports::{apply_auth_headers, oauth_default_headers};
 use crate::config::{McpProtocolMode, McpServerConfig};
 use base64::{Engine, engine::general_purpose::STANDARD};
 use eyre::{Report, eyre};
+use futures::{StreamExt, TryStreamExt};
 use reqwest::header::{HeaderMap, HeaderValue};
 use rmcp::model::{
     CallToolRequestParams, CallToolResult, ListToolsResult, ProgressNotificationParam, Tool,
@@ -27,6 +28,7 @@ const MAX_PARTITIONS: usize = 512;
 pub(super) struct RequestError {
     pub status: Option<u16>,
     code: Option<i64>,
+    data: Option<Value>,
     message: String,
     transport_failure: bool,
 }
@@ -48,6 +50,7 @@ impl RequestError {
         Self {
             status: None,
             code: None,
+            data: None,
             message: message.into(),
             transport_failure: false,
         }
@@ -69,6 +72,7 @@ impl RequestError {
         Self {
             status,
             code: None,
+            data: None,
             message: error.to_string(),
             transport_failure,
         }
@@ -79,16 +83,42 @@ impl RequestError {
     }
 
     fn legacy(&self) -> bool {
-        // Modern errors identify the era even on HTTP 400/404.
+        // Authentication, throttling and server failures are never evidence of
+        // a legacy server, even if their bodies contain a JSON-RPC error.
+        if self
+            .status
+            .is_some_and(|s| !matches!(s, 200..=299 | 400 | 404 | 405 | 415 | 422))
+        {
+            return false;
+        }
+        if self.code == Some(-32022) {
+            // Version-aware servers can still support only legacy revisions.
+            // Negotiate from the advertised list; a bare version error is not
+            // sufficient reason to downgrade.
+            return self
+                .data
+                .as_ref()
+                .and_then(|data| data.get("supported"))
+                .and_then(Value::as_array)
+                .is_some_and(|versions| {
+                    !versions.iter().any(|v| v == VERSION) && versions.iter().any(is_legacy_version)
+                });
+        }
+        // Other modern errors identify the era even on HTTP 400/404.
         if self.code.is_some_and(|c| (-32099..=-32020).contains(&c)) {
             return false;
         }
-        // rmcp discards the HTTP status for JSON-RPC error bodies. Only
-        // method-not-found is an unambiguous legacy discovery response.
-        matches!(self.status, Some(400 | 404 | 405))
+        matches!(self.status, Some(400 | 404 | 405 | 415 | 422))
             || (self.status.is_none_or(|s| (200..300).contains(&s))
                 && matches!(self.code, Some(-32601)))
     }
+}
+
+fn is_legacy_version(version: &Value) -> bool {
+    matches!(
+        version.as_str(),
+        Some("2025-11-25" | "2025-06-18" | "2025-03-26" | "2024-11-05")
+    )
 }
 
 #[derive(Debug, Clone)]
@@ -194,12 +224,7 @@ impl HttpRequest {
                     .ok_or_else(|| eyre!("MCP discovery omitted supportedVersions"))?;
                 if versions.iter().any(|v| v == VERSION) {
                     true
-                } else if versions.iter().any(|v| {
-                    matches!(
-                        v.as_str(),
-                        Some("2025-11-25" | "2025-06-18" | "2025-03-26" | "2024-11-05")
-                    )
-                }) {
+                } else if versions.iter().any(is_legacy_version) {
                     false
                 } else {
                     return Err(eyre!("No compatible MCP protocol version"));
@@ -400,10 +425,14 @@ impl HttpRequest {
         if let Some(name) = params.get("name").and_then(Value::as_str) {
             headers.insert("mcp-name", encode_header(name)?);
         }
-        let message = serde_json::from_value(json!({
+        let message = json!({
             "jsonrpc": "2.0", "id": id, "method": method, "params": params
-        }))
-        .map_err(|error| RequestError::protocol(error.to_string()))?;
+        });
+        if method == "server/discover" {
+            return self.discover(message, headers, &id).await;
+        }
+        let message = serde_json::from_value(message)
+            .map_err(|error| RequestError::protocol(error.to_string()))?;
         // Use rmcp's HTTP/SSE implementation directly, without a retained worker
         // or session. Cancellation drops the POST/response future. The SDK's
         // response helper drains notifications preceding the first result.
@@ -430,6 +459,112 @@ impl HttpRequest {
             .map_err(|error| RequestError::protocol(error.to_string()))?;
         process_message(message, &id, progress.as_ref())?
             .ok_or_else(|| RequestError::protocol("Expected MCP result"))
+    }
+
+    /// rmcp's POST helper discards HTTP status for JSON-RPC errors. Discovery
+    /// needs both to distinguish legacy validation from auth/transient failures.
+    /// Keep this adapter limited to the harmless, bounded discovery probe.
+    async fn discover(
+        &self,
+        message: Value,
+        headers: HeaderMap,
+        id: &str,
+    ) -> Result<Value, RequestError> {
+        let response = self
+            .server
+            .client
+            .post(&self.server.config.url)
+            .headers(headers)
+            .header(
+                reqwest::header::ACCEPT,
+                "application/json, text/event-stream",
+            )
+            .json(&message)
+            .send()
+            .await
+            .map_err(|error| RequestError::from_transport(StreamableHttpError::Client(error)))?;
+        let status = response.status();
+        let sse = response
+            .headers()
+            .get(reqwest::header::CONTENT_TYPE)
+            .and_then(|v| v.to_str().ok())
+            .is_some_and(|v| v.starts_with("text/event-stream"));
+        // Bound the entire discovery body, including incomplete SSE events.
+        let mut bytes_read = 0usize;
+        let bytes = response
+            .bytes_stream()
+            .map_err(std::io::Error::other)
+            .and_then(move |chunk| {
+                bytes_read = bytes_read.saturating_add(chunk.len());
+                futures::future::ready(if bytes_read > 1024 * 1024 {
+                    Err(std::io::Error::other("MCP discovery response too large"))
+                } else {
+                    Ok(chunk)
+                })
+            });
+        let result = if status.is_success() && sse {
+            let mut events = sse_stream::SseStream::from_bytes_stream(bytes);
+            loop {
+                let event = events
+                    .next()
+                    .await
+                    .ok_or_else(|| RequestError::protocol("Empty MCP discovery stream"))?
+                    .map_err(|e| RequestError::protocol(e.to_string()))?;
+                let Some(data) = event.data.filter(|data| !data.trim().is_empty()) else {
+                    continue;
+                };
+                let message = serde_json::from_str(&data)
+                    .map_err(|e| RequestError::protocol(e.to_string()))?;
+                match process_message(message, id, None) {
+                    Ok(None) => continue,
+                    result => break result,
+                }
+            }
+        } else {
+            let mut body = Vec::new();
+            let mut bytes = std::pin::pin!(bytes);
+            while let Some(chunk) = bytes.next().await {
+                body.extend_from_slice(&chunk.map_err(|e| RequestError::protocol(e.to_string()))?);
+            }
+            match serde_json::from_slice::<Value>(&body) {
+                Ok(mut message) => {
+                    // Legacy request validators may not echo an ID for an
+                    // unknown method. Allow only Invalid Request on the failed
+                    // discovery POST; never relax success or tool correlation.
+                    if matches!(status.as_u16(), 400 | 415 | 422)
+                        && message["error"]["code"] == -32600
+                    {
+                        message["id"] = json!(id);
+                    }
+                    // A mismatched successful response or modern error must
+                    // remain a correlation failure, not become a downgrade
+                    // merely because it arrived with HTTP 400.
+                    if message["jsonrpc"] == "2.0"
+                        && (message.get("result").is_some() || message.get("error").is_some())
+                        && message["id"] != id
+                        && !(message["id"].is_null() && message.get("error").is_some())
+                    {
+                        return Err(RequestError::protocol("Uncorrelated MCP response"));
+                    }
+                    process_message(message, id, None)
+                }
+                Err(_) => Err(RequestError::protocol(format!(
+                    "server/discover rejected with HTTP {status}: {}",
+                    String::from_utf8_lossy(&body)
+                ))),
+            }
+        };
+        let result = result.map_err(|mut error| {
+            error.status = Some(status.as_u16());
+            error
+        })?;
+        if !status.is_success() {
+            return Err(RequestError {
+                status: Some(status.as_u16()),
+                ..RequestError::protocol("Unsuccessful MCP discovery HTTP response")
+            });
+        }
+        result.ok_or_else(|| RequestError::protocol("Expected MCP discovery result"))
     }
 }
 
@@ -462,13 +597,9 @@ fn process_message(
     }
     if let Some(error) = message.get("error") {
         return Err(RequestError {
-            // rmcp synthesizes this error for non-JSON legacy HTTP failures.
-            status: error["message"]
-                .as_str()
-                .and_then(|message| message.strip_prefix("server/discover rejected with HTTP "))
-                .and_then(|rest| rest.split_whitespace().next())
-                .and_then(|status| status.parse().ok()),
+            status: None,
             code: error["code"].as_i64(),
+            data: error.get("data").cloned(),
             message: error["message"]
                 .as_str()
                 .unwrap_or("JSON-RPC error")

@@ -1121,6 +1121,7 @@ impl ServerHandler for EmptyToolServer {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MockProtocolMode {
     Legacy,
+    Legacy2024,
     Stateless,
     Dual,
 }
@@ -1137,13 +1138,18 @@ impl<S: ServerHandler> ServerHandler for ProtocolServer<S> {
         use rmcp::model::ProtocolVersion as V;
         std::borrow::Cow::Owned(match self.mode {
             MockProtocolMode::Legacy => vec![V::V_2025_11_25],
+            MockProtocolMode::Legacy2024 => vec![V::V_2024_11_05],
             MockProtocolMode::Stateless => vec![V::V_2026_07_28],
             MockProtocolMode::Dual => vec![V::V_2026_07_28, V::V_2025_11_25],
         })
     }
 
     fn get_info(&self) -> ServerInfo {
-        self.inner.get_info()
+        let mut info = self.inner.get_info();
+        if self.mode == MockProtocolMode::Legacy2024 {
+            info.protocol_version = rmcp::model::ProtocolVersion::V_2024_11_05;
+        }
+        info
     }
 
     async fn call_tool(
@@ -1160,7 +1166,10 @@ impl<S: ServerHandler> ServerHandler for ProtocolServer<S> {
         context: RequestContext<RoleServer>,
     ) -> Result<ListToolsResult, McpError> {
         let mut result = self.inner.list_tools(request, context).await?;
-        if self.mode != MockProtocolMode::Legacy {
+        if matches!(
+            self.mode,
+            MockProtocolMode::Stateless | MockProtocolMode::Dual
+        ) {
             result.ttl_ms = Some(30_000);
             result.cache_scope = Some(rmcp::model::CacheScope::Private);
         }
@@ -1194,11 +1203,13 @@ where
         .fallback_service(service)
         .layer(axum::middleware::from_fn(
             move |request: Request<Body>, next: axum::middleware::Next| async move {
-                if mode == MockProtocolMode::Legacy
-                    && request
-                        .headers()
-                        .get("mcp-method")
-                        .is_some_and(|v| v == "server/discover")
+                if matches!(
+                    mode,
+                    MockProtocolMode::Legacy | MockProtocolMode::Legacy2024
+                ) && request
+                    .headers()
+                    .get("mcp-method")
+                    .is_some_and(|v| v == "server/discover")
                 {
                     return (StatusCode::BAD_REQUEST, "Legacy server requires initialize")
                         .into_response();
@@ -1594,6 +1605,50 @@ pub fn app_with_default_protocol(mode: MockProtocolMode) -> Router {
             app_with_protocol(MockProtocolMode::Stateless),
         )
         .nest("/mcp/dual", app_with_protocol(MockProtocolMode::Dual))
+        .nest("/mcp/compat", legacy_compatibility_app())
+}
+
+/// Discovery rejections observed in ERMAIN-801, followed by a real legacy
+/// initialize/list/call lifecycle. These fixtures intentionally emulate older
+/// SDKs instead of relying on the current SDK's discovery behavior.
+fn legacy_compatibility_app() -> Router {
+    let mut app = Router::new();
+    for rejection in ["415", "422", "version", "uncorrelated"] {
+        let fixture = app_with_protocol(MockProtocolMode::Legacy2024).layer(
+            axum::middleware::from_fn(
+                move |request: Request<Body>, next: axum::middleware::Next| async move {
+                    if request.headers().get("mcp-method")
+                        .is_none_or(|value| value != "server/discover")
+                    {
+                        return next.run(request).await;
+                    }
+                    match rejection {
+                        "415" => (StatusCode::UNSUPPORTED_MEDIA_TYPE,
+                            "fail to deserialize request body data did not match any variant of untagged enum JsonRpcMessage").into_response(),
+                        "422" => (StatusCode::UNPROCESSABLE_ENTITY,
+                            "Unexpected message, expect initialize request").into_response(),
+                        "version" => {
+                            let bytes = axum::body::to_bytes(request.into_body(), 64 * 1024).await.unwrap();
+                            let request: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+                            (StatusCode::BAD_REQUEST, Json(json!({
+                                "jsonrpc": "2.0", "id": request["id"],
+                                "error": {"code": -32022, "message": "Unsupported protocol version",
+                                    "data": {"supported": ["2024-11-05"], "requested": "2026-07-28"}}
+                            }))).into_response()
+                        }
+                        // Some legacy validators return a placeholder ID when
+                        // they cannot deserialize an unknown method.
+                        _ => (StatusCode::BAD_REQUEST, Json(json!({
+                            "jsonrpc": "2.0", "id": "validation-error",
+                            "error": {"code": -32600, "message": "Invalid request"}
+                        }))).into_response(),
+                    }
+                },
+            ),
+        );
+        app = app.nest(&format!("/{rejection}"), fixture);
+    }
+    app
 }
 
 /// Routes relative to the MCP endpoint prefix; also used by integration tests.

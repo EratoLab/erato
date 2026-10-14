@@ -20,6 +20,19 @@ initialization with the existing `2025-11-25` protocol; stateless fixtures requi
 `2026-07-28` request metadata. Dual fixtures accept both. The existing paths default
 to legacy, preserving old-version regression coverage.
 
+ERMAIN-801 compatibility fixtures expose file tools at
+`/mcp/compat/{rejection}/file`, where `rejection` is `415`, `422`, `version`, or
+`uncorrelated`. They reject modern discovery with the production error patterns
+(the last simulates a legacy validator returning a placeholder response ID),
+then require initialization and negotiate `2024-11-05`. Use Erato's default
+`protocol_mode = "auto"` to exercise discovery, fallback, tool listing, and calls.
+Run the regression with:
+
+```sh
+cd backend
+cargo test -p erato --lib production_legacy_discovery_rejections
+```
+
 Set `MCP_PROTOCOL_MODE=stateless` (or `dual`) to change the default paths, including
 `/mcp/oauth`, when exercising the whole integration/E2E suite against the modern
 protocol. Explicit variant paths retain their selected protocol. Library tests
