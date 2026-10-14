@@ -489,68 +489,65 @@ describe("WordHostCardRenderer", () => {
       expect(
         screen.getByText(/Edits are applied directly/),
       ).toBeInTheDocument();
-      expect(screen.queryByText(/Track Changes is already on/)).toBeNull();
+      expect(screen.queryByText(/Track Changes is on, so Erato/)).toBeNull();
       expect(screen.getByTestId("word-revert-button")).toBeInTheDocument();
     });
 
-    it("points to rejecting the revisions of a batch applied under Track Changes", async () => {
+    it("offers no Apply while Track Changes is on, and says why", async () => {
       word.word.setTrackingMode("TrackAll");
       renderCard({ artifact: makeArtifact() });
-
-      fireEvent.click(
-        screen.getByRole("button", {
-          name: /^Apply (edit|all \d+ edits)$/,
-        }),
-      );
-      await flush();
-      const writes = word.word.writes().length;
-
-      fireEvent.click(screen.getByTestId("word-revert-button"));
-      fireEvent.click(screen.getByRole("button", { name: "Restore body" }));
       await flush();
 
-      expect(word.word.writes()).toHaveLength(writes);
+      expect(screen.queryByRole("button", { name: /^Apply/ })).toBeNull();
       expect(
         screen.getByText(
-          "Revert was not run because Track Changes is on. Reject these changes in Word instead.",
+          "Track Changes is on, so Erato doesn't apply these edits. Make them in Word yourself.",
         ),
-      ).toBeInTheDocument();
-      expect(
-        screen.getByText(/Track Changes is already on/),
       ).toBeInTheDocument();
     });
 
-    it("keeps the Apply-time tracking note when a later edit stops Revert", async () => {
-      word.word.setTrackingMode("TrackAll");
-      renderCard({ artifact: makeArtifact() });
-
-      fireEvent.click(
-        screen.getByRole("button", {
-          name: /^Apply (edit|all \d+ edits)$/,
-        }),
-      );
+    it("never offers or prompts for a proposal read under Track Changes", async () => {
+      const artifact = makeArtifact({
+        clientActionPresentation: "auto_prompt",
+        proposedClientAction: APPLY,
+      });
+      renderCard({
+        artifact,
+        captures: new Map([
+          [artifact.messageId, capture({ trackChanges: true })],
+        ]),
+      });
       await flush();
-      word.word.setTrackingMode("Off");
+
+      expect(screen.queryByRole("button", { name: /^Apply/ })).toBeNull();
+      expect(screen.queryByTestId("confirmation-card")).toBeNull();
+      expect(
+        screen.getByText(/Track Changes is on, so Erato doesn't apply/),
+      ).toBeInTheDocument();
+      expect(word.word.writes()).toEqual([]);
+    });
+
+    it("names the authors of revisions that refused an edit, as plain text", async () => {
       word.word.setParagraphs([
         { text: "Alpha." },
-        { text: "Bravo, revised." },
-        { text: "Charlie, typed later." },
+        {
+          text: "Bravo.",
+          ooxml:
+            '<w:ins w:id="1" w:author="&lt;b&gt;Eve&lt;/b&gt;"><w:r><w:t>x</w:t></w:r></w:ins>',
+        },
+        { text: "Charlie." },
       ]);
+      renderCard({ artifact: makeArtifact() });
 
-      fireEvent.click(screen.getByTestId("word-revert-button"));
-      fireEvent.click(screen.getByRole("button", { name: "Restore body" }));
+      fireEvent.click(screen.getByRole("button", { name: "Apply edit" }));
       await flush();
 
       expect(word.word.writes()).toEqual([]);
       expect(
         screen.getByText(
-          "The document changed after applying. Revert was not run because it could remove later edits.",
+          "Skipped - the paragraph has tracked changes by <b>Eve</b>; accept or reject them in Word, then ask again",
         ),
       ).toBeInTheDocument();
-      expect(
-        screen.getByText(/Track Changes is already on/),
-      ).toBeInTheDocument();
-      expect(screen.queryByText(/Edits are applied directly/)).toBeNull();
     });
 
     it("offers Revert when Word rejected the write half-way", async () => {
@@ -1237,9 +1234,9 @@ describe("WordHostCardRenderer", () => {
       fireEvent.click(screen.getByRole("button", { name: "Apply edit" }));
       await flush();
       expect(
-        screen.getByText(/Word Track Changes is already on/),
+        screen.getByText(/Track Changes is on, so Erato doesn't apply/),
       ).toBeInTheDocument();
-      expect(word.word.writes()).toHaveLength(1);
+      expect(word.word.writes()).toEqual([]);
     });
 
     it("does not expose writes for a complete JSON fence while generation is active", () => {

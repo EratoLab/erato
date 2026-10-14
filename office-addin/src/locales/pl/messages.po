@@ -2752,6 +2752,11 @@ msgstr "Ten plik jest za duży, aby Erato mógł go otworzyć w całości. Erato
 
 #. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx
+msgid "officeAddin.word.authoring.readOnlyTracking"
+msgstr "Śledzenie zmian jest włączone, więc Erato odczytuje ten dokument tak, jakby wszystkie śledzone zmiany zostały zaakceptowane, nie widząc, kto co zmienił, i nie edytuje go."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordChatInput.tsx
 msgid "officeAddin.word.authoring.readOnlyUnavailable"
 msgstr "Word nie przekazał całego dokumentu, więc Erato może odczytać jego tekst, ale nie może go edytować. Wyślij ponownie, aby spróbować jeszcze raz."
 
@@ -4415,6 +4420,21 @@ msgstr "Pominięto — akapit wysłano tylko częściowo, więc nie można go za
 
 #. js-lingui-explicit-id
 #: src/word/components/WordEditReport.tsx
+msgid "officeAddin.word.report.status.revisions"
+msgstr "Pominięto — akapit zawiera śledzone zmiany; zaakceptuj je lub odrzuć w programie Word, a potem zapytaj ponownie"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordEditReport.tsx
+msgid "officeAddin.word.report.status.revisionsBy"
+msgstr "Pominięto — akapit zawiera śledzone zmiany autorstwa: {names}; zaakceptuj je lub odrzuć w programie Word, a potem zapytaj ponownie"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordEditReport.tsx
+msgid "officeAddin.word.report.status.tracking"
+msgstr "Pominięto — śledzenie zmian jest włączone, więc Erato nie wprowadza zmian w akapitach"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordEditReport.tsx
 msgid "officeAddin.word.report.status.unknownOrdinal"
 msgstr "Pominięto — akapit nie należał do wysłanej treści"
 
@@ -4755,8 +4775,13 @@ msgstr "Zmiany są stosowane bezpośrednio. Erato nie dodaje oznaczeń poprawek.
 
 #. js-lingui-explicit-id
 #: src/word/components/WordReviewPanel.tsx
-msgid "officeAddin.word.review.trackingOn"
-msgstr "Śledzenie zmian w Wordzie jest już włączone. Word może zapisać te edycje; Erato nie zmieni tego ustawienia."
+#~ msgid "officeAddin.word.review.trackingOn"
+#~ msgstr "Śledzenie zmian w Wordzie jest już włączone. Word może zapisać te edycje; Erato nie zmieni tego ustawienia."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordReviewPanel.tsx
+msgid "officeAddin.word.review.trackingOnWithheld"
+msgstr "Śledzenie zmian jest włączone, więc Erato nie wprowadza tych zmian. Wprowadź je samodzielnie w programie Word."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordReviewPanel.tsx

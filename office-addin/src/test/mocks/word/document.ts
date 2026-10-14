@@ -31,6 +31,9 @@ export interface MockWordParagraphSpec {
   uniqueLocalId?: string;
   styleBuiltIn?: string;
   outlineLevel?: number;
+  /** WordprocessingML appended inside the paragraph's w:p in Paragraph.getOoxml, e.g. a pending
+   * revision; a paragraph write drops it. */
+  ooxml?: string;
 }
 
 export interface MockWordWrite {
@@ -82,6 +85,14 @@ interface MockParagraphState {
   uniqueLocalId: string;
   styleBuiltIn: string;
   outlineLevel: number;
+  ooxml?: string;
+}
+
+const escapeXml = (text: string) =>
+  text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+function paragraphPackage(paragraph: MockParagraphState | undefined): string {
+  return `<pkg:package xmlns:pkg="http://schemas.microsoft.com/office/2006/xmlPackage"><pkg:part pkg:name="/word/document.xml"><pkg:xmlData><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:t xml:space="preserve">${escapeXml(paragraph?.text ?? "")}</w:t></w:r>${paragraph?.ooxml ?? ""}</w:p><w:sectPr/></w:body></w:document></pkg:xmlData></pkg:part></pkg:package>`;
 }
 
 let nextGeneratedId = 0;
@@ -95,6 +106,7 @@ function toState(
     uniqueLocalId: paragraph.uniqueLocalId ?? `id-${offset + index + 1}`,
     styleBuiltIn: paragraph.styleBuiltIn ?? "Normal",
     outlineLevel: paragraph.outlineLevel ?? 10,
+    ...(paragraph.ooxml === undefined ? {} : { ooxml: paragraph.ooxml }),
   }));
 }
 
@@ -228,6 +240,10 @@ export function installMockWordDocument(
             const captured = `${state()?.text ?? ""}${marksShown ? "\r" : ""}`;
             return deferred(() => captured);
           },
+          getOoxml: () => {
+            const captured = paragraphPackage(state());
+            return deferred(() => captured);
+          },
           insertText: (text: string, location: string) => {
             queue.push(() => {
               rejectIfUnwritable(uniqueLocalId);
@@ -253,7 +269,12 @@ export function installMockWordDocument(
                   outlineLevel: head.outlineLevel,
                 };
               });
-              body.splice(index, 1, { ...head, text: lines[0] }, ...created);
+              body.splice(
+                index,
+                1,
+                { ...head, text: lines[0], ooxml: undefined },
+                ...created,
+              );
             });
           },
           delete: () => {

@@ -188,9 +188,13 @@ function WordActionCard({
     }
     return content.trim().length > 0 ? { kind: "insert", text: content } : null;
   }, [entry.fenceLanguage, content]);
+  const trackingShown = capture?.trackChanges ? "on" : tracking;
+  // Under Track Changes a paragraph Replace would land as one whole-paragraph revision.
+  const editsWithheld =
+    entry.action === "word.apply_edits" && trackingShown === "on";
   const offeredActions = useMemo(
     () =>
-      payload
+      payload && !editsWithheld
         ? offerableWordClientActionsForFacet(
             facetId,
             artifact?.allowedClientActions,
@@ -205,7 +209,15 @@ function WordActionCard({
               }),
           )
         : [],
-    [payload, facetId, artifact, entry.action, decisions, enforcedAskActions],
+    [
+      payload,
+      editsWithheld,
+      facetId,
+      artifact,
+      entry.action,
+      decisions,
+      enforcedAskActions,
+    ],
   );
   const proposedAction =
     artifact?.proposedClientAction &&
@@ -698,7 +710,7 @@ function WordActionCard({
           edits={payload.edits}
           capture={capture}
           review={review}
-          tracking={review.tracking ?? tracking}
+          tracking={review.tracking ?? trackingShown}
           busy={operationInProgress}
           blockedReason={blockedReason}
           locationReason={locationReason}

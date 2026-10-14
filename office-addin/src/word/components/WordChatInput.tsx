@@ -886,6 +886,7 @@ export function WordChatInput({
             authoring: build?.authoring,
             availableFacetIds,
             availableFacetArgs,
+            trackChanges: capturedIssue === "tracking",
             ...(comments && build && decided.plan.carrier.kind === "map"
               ? {
                   commentMap: wordCommentMapArg(
@@ -912,6 +913,9 @@ export function WordChatInput({
                   partialOrdinal: build?.authoring
                     ? null
                     : (build?.partialOrdinal ?? null),
+                  ...(capturedIssue === "tracking"
+                    ? { trackChanges: true }
+                    : {}),
                 },
                 comments,
                 decided.plan.carrier,
@@ -1462,6 +1466,12 @@ function commentBlockText(block: WordCommentBlock): string {
 }
 
 function readOnlyText(issue: string, details: string[] = []): string {
+  if (issue === "tracking")
+    return t({
+      id: "officeAddin.word.authoring.readOnlyTracking",
+      message:
+        "Track Changes is on, so Erato reads this document as if every tracked change were accepted, without seeing who changed what, and doesn't edit it.",
+    });
   if (issue === "too-large")
     return t({
       id: "officeAddin.word.authoring.readOnlyTooLarge",

@@ -2752,6 +2752,11 @@ msgstr "Este archivo es demasiado grande para que Erato lo abra por completo. Er
 
 #. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx
+msgid "officeAddin.word.authoring.readOnlyTracking"
+msgstr "El control de cambios está activado, así que Erato lee este documento como si se hubieran aceptado todos los cambios controlados, sin ver quién cambió qué, y no lo edita."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordChatInput.tsx
 msgid "officeAddin.word.authoring.readOnlyUnavailable"
 msgstr "Word no entregó el documento completo, así que Erato puede leer su texto pero no editarlo. Vuelva a enviar para intentarlo de nuevo."
 
@@ -4415,6 +4420,21 @@ msgstr "Omitido: el párrafo solo se envió parcialmente y no se puede reemplaza
 
 #. js-lingui-explicit-id
 #: src/word/components/WordEditReport.tsx
+msgid "officeAddin.word.report.status.revisions"
+msgstr "Omitido: el párrafo tiene cambios controlados; acéptelos o rechácelos en Word y vuelva a preguntar"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordEditReport.tsx
+msgid "officeAddin.word.report.status.revisionsBy"
+msgstr "Omitido: el párrafo tiene cambios controlados de {names}; acéptelos o rechácelos en Word y vuelva a preguntar"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordEditReport.tsx
+msgid "officeAddin.word.report.status.tracking"
+msgstr "Omitido: el control de cambios está activado, así que Erato no aplica cambios de párrafo"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordEditReport.tsx
 msgid "officeAddin.word.report.status.unknownOrdinal"
 msgstr "Omitido: el párrafo no formaba parte del contenido enviado"
 
@@ -4755,8 +4775,13 @@ msgstr "Los cambios se aplican directamente. Erato no añade marcas de revisión
 
 #. js-lingui-explicit-id
 #: src/word/components/WordReviewPanel.tsx
-msgid "officeAddin.word.review.trackingOn"
-msgstr "El control de cambios de Word ya está activado. Word puede registrar estas modificaciones; Erato no cambiará esa configuración."
+#~ msgid "officeAddin.word.review.trackingOn"
+#~ msgstr "El control de cambios de Word ya está activado. Word puede registrar estas modificaciones; Erato no cambiará esa configuración."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordReviewPanel.tsx
+msgid "officeAddin.word.review.trackingOnWithheld"
+msgstr "El control de cambios está activado, así que Erato no aplica estos cambios. Hágalos usted mismo en Word."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordReviewPanel.tsx

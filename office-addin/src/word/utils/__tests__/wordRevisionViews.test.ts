@@ -7,6 +7,7 @@ import {
   acceptedWordView,
   rejectWordRevisions,
   rejectedWordView,
+  wordParagraphRevisionAuthors,
   wordRevisionsOutside,
 } from "../wordRevisionViews";
 
@@ -139,5 +140,110 @@ describe("Word revision views", () => {
       "TextNext.",
     ]);
     expect(serialize(accepted)).toContain("<w:i/>");
+  });
+});
+
+describe("wordParagraphRevisionAuthors", () => {
+  const by = (author: string, id: number) =>
+    `w:id="${id}" w:author="${author}" w:date="2026-10-12T09:30:00Z"`;
+
+  it("is null for a paragraph without revisions", () => {
+    expect(
+      wordParagraphRevisionAuthors(packageXml(p(run("Clean text.")))),
+    ).toBeNull();
+  });
+
+  it.each([
+    ["an insertion", `<w:ins ${by("Weber", 1)}>${run("60")}</w:ins>`, ""],
+    [
+      "a deletion",
+      `<w:del ${by("Weber", 1)}><w:r><w:delText>30</w:delText></w:r></w:del>`,
+      "",
+    ],
+    [
+      "a moved passage",
+      `<w:moveFrom ${by("Weber", 1)}>${run("Moved.")}</w:moveFrom>`,
+      "",
+    ],
+    [
+      "a move destination",
+      `<w:moveTo ${by("Weber", 1)}>${run("Moved.")}</w:moveTo>`,
+      "",
+    ],
+    [
+      "a run format change",
+      run(
+        "Bold",
+        `<w:b/><w:rPrChange ${by("Weber", 1)}><w:rPr/></w:rPrChange>`,
+      ),
+      "",
+    ],
+    [
+      "a paragraph format change",
+      "",
+      `<w:ind w:left="708"/><w:pPrChange ${by("Weber", 1)}><w:pPr/></w:pPrChange>`,
+    ],
+    [
+      "an inserted paragraph mark",
+      "",
+      `<w:rPr><w:ins ${by("Weber", 1)}/></w:rPr>`,
+    ],
+    [
+      "a deleted paragraph mark",
+      "",
+      `<w:rPr><w:del ${by("Weber", 1)}/></w:rPr>`,
+    ],
+  ])("finds %s", (_kind, content, pPr) => {
+    expect(
+      wordParagraphRevisionAuthors(packageXml(p(run("Text ") + content, pPr))),
+    ).toEqual(["Weber"]);
+  });
+
+  it("names each author once, in document order", () => {
+    expect(
+      wordParagraphRevisionAuthors(
+        packageXml(
+          p(
+            `<w:ins ${by("Weber", 1)}>${run("a")}</w:ins>` +
+              `<w:del ${by("Schmidt", 2)}><w:r><w:delText>b</w:delText></w:r></w:del>` +
+              `<w:ins ${by("Weber", 3)}>${run("c")}</w:ins>`,
+          ),
+        ),
+      ),
+    ).toEqual(["Weber", "Schmidt"]);
+  });
+
+  it("counts a revision without an author", () => {
+    expect(
+      wordParagraphRevisionAuthors(
+        packageXml(p(`<w:ins w:id="1">${run("a")}</w:ins>`)),
+      ),
+    ).toEqual([]);
+  });
+
+  it("ignores revisions in the package's styles", () => {
+    const styled = packageXml(p(run("Clean text."))).replace(
+      '<w:name w:val="Normal"/>',
+      `<w:name w:val="Normal"/><w:rPr><w:b/><w:rPrChange ${by("Weber", 1)}><w:rPr/></w:rPrChange></w:rPr>`,
+    );
+    expect(wordParagraphRevisionAuthors(styled)).toBeNull();
+  });
+
+  it("keeps author names to one capped line of text", () => {
+    const long = "A".repeat(200);
+    expect(
+      wordParagraphRevisionAuthors(
+        packageXml(
+          p(
+            `<w:ins ${by("RA Dr.&#10;Weber\u202e", 1)}>${run("a")}</w:ins>` +
+              `<w:ins ${by(long, 2)}>${run("b")}</w:ins>`,
+          ),
+        ),
+      ),
+    ).toEqual(["RA Dr. Weber", `${"A".repeat(63)}…`]);
+  });
+
+  it("refuses to guess from an unreadable package", () => {
+    expect(() => wordParagraphRevisionAuthors("<w:p")).toThrow();
   });
 });

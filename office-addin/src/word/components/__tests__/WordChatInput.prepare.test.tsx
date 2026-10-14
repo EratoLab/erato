@@ -285,7 +285,7 @@ describe("WordChatInput prepared send", () => {
   });
 
   it("keeps the capture's own authoring issue over a budget refusal", async () => {
-    host.capture.mockResolvedValue(authoringBuild({ issue: "tracking" }));
+    host.capture.mockResolvedValue(authoringBuild({ issue: "unsupported" }));
     host.budget.mockResolvedValue({ ok: false, issue: "model-budget" });
     renderInput();
     send();
@@ -294,7 +294,7 @@ describe("WordChatInput prepared send", () => {
 
     expect(prepared?.actionFacet).toMatchObject({
       id: "word_document_authoring",
-      args: { authoring_status: "tracking" },
+      args: { authoring_status: "unsupported" },
     });
   });
 
@@ -663,6 +663,11 @@ describe("WordChatInput prepared send", () => {
       "package-failed",
       "Word did not hand over the complete document, so Erato can read its text but not edit it. Send again to retry.",
     ],
+    [
+      "tracking",
+      "tracking",
+      "Track Changes is on, so Erato reads this document as if every tracked change were accepted, without seeing who changed what, and doesn't edit it.",
+    ],
   ])(
     "falls back to a read-only review when authoring is %s",
     async (issue, detail, warning) => {
@@ -689,6 +694,26 @@ describe("WordChatInput prepared send", () => {
       expect(screen.getByRole("alert")).toHaveTextContent(warning);
     },
   );
+
+  it("marks a capture read under Track Changes so its edits are not offered", async () => {
+    host.capture.mockResolvedValue(authoringBuild({ issue: "tracking" }));
+    renderInput();
+    send();
+    await settle(startPreparation());
+
+    expect(staged.at(-1)).toMatchObject({ trackChanges: true });
+
+    host.capture.mockResolvedValue(
+      authoringBuild({
+        issue: "unavailable",
+        issueDetails: ["package-failed"],
+      }),
+    );
+    send();
+    await settle(startPreparation());
+
+    expect(staged.at(-1)).not.toHaveProperty("trackChanges");
+  });
 
   it("keeps authoring with its issue when the review facet is not advertised", async () => {
     host.advertised = ["word_document_authoring"];
@@ -859,13 +884,31 @@ describe("WordChatInput document coverage", () => {
     renderWith(["word_document_review", "word_document_authoring"], {
       coverage: truncated,
       completeReadIssue: "too-large",
-      authoringIssue: "tracking",
+      authoringIssue: "unsupported",
     });
 
     expect(chip()).not.toHaveTextContent("read in parts");
     expect(hint()).toBeNull();
     expect(screen.getByRole("alert")).toHaveTextContent(
-      "Document restructuring is unavailable with the current Track Changes state.",
+      "Word did not supply a complete editable structure for this document.",
+    );
+  });
+
+  it("says a long document under Track Changes is cut, and that Erato reads the accepted text", () => {
+    renderWith(["word_document_review", "word_document_authoring"], {
+      coverage: truncated,
+      completeReadIssue: "too-large",
+      authoringIssue: "tracking",
+    });
+
+    expect(chip()).toHaveTextContent(
+      "Document included (first 453 of 1590 paragraphs)",
+    );
+    expect(hint()).toHaveTextContent(
+      "Only the beginning is sent. To work on a later part, select it in Word.",
+    );
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Track Changes is on, so Erato reads this document as if every tracked change were accepted",
     );
   });
 

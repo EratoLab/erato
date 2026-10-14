@@ -6,6 +6,7 @@ import {
 import { wordErrorText } from "./wordApplyDiagnostics";
 import { trackWordApply } from "./wordApplyProgress";
 import { wordBodyFingerprint } from "./wordDocumentXml";
+import { isWordTrackingMode } from "./wordInPlaceSwitch";
 import {
   resolveWordParagraphs,
   wordParagraphAnchor,
@@ -14,6 +15,7 @@ import {
   capturedWordAnchor,
   readWordParagraphEntries,
 } from "./wordReviewLocation";
+import { wordParagraphRevisionAuthors } from "./wordRevisionViews";
 import { wordWriteHost } from "./wordWriteHost";
 
 import type { WordApplyProgress, WordApplyStage } from "./wordApplyProgress";
@@ -104,6 +106,48 @@ function resolveWordEdits(
   return { applicable, skipped };
 }
 
+/** A Replace accepts or absorbs a paragraph's pending revisions, and Office.js cannot tell the user's
+ * own from others', so any revision refuses the edit; read from OOXML, as getTrackedChanges() misses
+ * some. Under Track Changes a Replace is a whole-paragraph revision Revert cannot undo. */
+async function withoutRevisedParagraphs(
+  context: Word.RequestContext,
+  items: readonly Word.Paragraph[],
+  verified: { applicable: PositionedWordEdit[]; skipped: WordEditOutcome[] },
+  tracking: boolean,
+): Promise<{ applicable: PositionedWordEdit[]; skipped: WordEditOutcome[] }> {
+  const positions = [
+    ...new Set(verified.applicable.flatMap((edit) => edit.positions)),
+  ];
+  if (positions.length === 0) return verified;
+  const packages = positions.map((position) => items[position].getOoxml());
+  await context.sync();
+  const authors = new Map(
+    positions.map((position, i) => [
+      position,
+      wordParagraphRevisionAuthors(packages[i].value),
+    ]),
+  );
+  const applicable: PositionedWordEdit[] = [];
+  const skipped = [...verified.skipped];
+  for (const edit of verified.applicable) {
+    const held = edit.positions.flatMap((p) => authors.get(p) ?? []);
+    const revised = edit.positions.some((p) => authors.get(p));
+    if (!revised && !tracking) {
+      applicable.push(edit);
+      continue;
+    }
+    skipped.push({
+      index: edit.index,
+      paragraph: edit.paragraph,
+      ...(edit.through === undefined ? {} : { through: edit.through }),
+      status: revised ? "revisions" : "tracking",
+      excerpt: edit.excerpt,
+      ...(revised ? { authors: [...new Set(held)] } : {}),
+    });
+  }
+  return { applicable, skipped };
+}
+
 /** The written paragraph after the batch: by its ID where Word has one, else by its new text alone.
  * Desktop getText keeps the paragraph or cell mark that the written text lacks. */
 function writtenPosition(
@@ -170,8 +214,15 @@ async function applyEdits(
 
   try {
     const result = await word.run(async (context) => {
+      context.document.load("changeTrackingMode");
       const { items, entries } = await readWordParagraphEntries(context);
-      const verified = resolveWordEdits(plan, capture, entries);
+      const verified = await withoutRevisedParagraphs(
+        context,
+        items,
+        resolveWordEdits(plan, capture, entries),
+        !!capture.trackChanges ||
+          isWordTrackingMode(context.document.changeTrackingMode),
+      );
       if (verified.applicable.length === 0) {
         return {
           outcomes: buildWordEditReport([

@@ -60,9 +60,9 @@ export function trackingDescription(mode: WordTrackingMode): string {
     });
   if (mode === "on")
     return t({
-      id: "officeAddin.word.review.trackingOn",
+      id: "officeAddin.word.review.trackingOnWithheld",
       message:
-        "Word Track Changes is already on. Word may record these edits; Erato will not change that setting.",
+        "Track Changes is on, so Erato doesn't apply these edits. Make them in Word yourself.",
     });
   return t({
     id: "officeAddin.word.review.trackingUnknown",
@@ -410,7 +410,7 @@ export function WordReviewPanel({
                         role="status"
                         className="[overflow-wrap:anywhere]"
                       >
-                        {statusLabel(status)}
+                        {statusLabel(status, outcome?.authors)}
                       </Alert>
                     )}
                   <Button

@@ -2752,6 +2752,11 @@ msgstr "This file is too large for Erato to open completely. Erato receives only
 
 #. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx
+msgid "officeAddin.word.authoring.readOnlyTracking"
+msgstr "Track Changes is on, so Erato reads this document as if every tracked change were accepted, without seeing who changed what, and doesn't edit it."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordChatInput.tsx
 msgid "officeAddin.word.authoring.readOnlyUnavailable"
 msgstr "Word did not hand over the complete document, so Erato can read its text but not edit it. Send again to retry."
 
@@ -4415,6 +4420,21 @@ msgstr "Skipped - that paragraph was only partly sent, so it cannot be replaced"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordEditReport.tsx
+msgid "officeAddin.word.report.status.revisions"
+msgstr "Skipped - the paragraph has tracked changes; accept or reject them in Word, then ask again"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordEditReport.tsx
+msgid "officeAddin.word.report.status.revisionsBy"
+msgstr "Skipped - the paragraph has tracked changes by {names}; accept or reject them in Word, then ask again"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordEditReport.tsx
+msgid "officeAddin.word.report.status.tracking"
+msgstr "Skipped - Track Changes is on, so Erato does not apply paragraph edits"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordEditReport.tsx
 msgid "officeAddin.word.report.status.unknownOrdinal"
 msgstr "Skipped - that paragraph was not part of what was sent"
 
@@ -4755,8 +4775,13 @@ msgstr "Edits are applied directly. Erato does not add revision marks."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordReviewPanel.tsx
-msgid "officeAddin.word.review.trackingOn"
-msgstr "Word Track Changes is already on. Word may record these edits; Erato will not change that setting."
+#~ msgid "officeAddin.word.review.trackingOn"
+#~ msgstr "Word Track Changes is already on. Word may record these edits; Erato will not change that setting."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordReviewPanel.tsx
+msgid "officeAddin.word.review.trackingOnWithheld"
+msgstr "Track Changes is on, so Erato doesn't apply these edits. Make them in Word yourself."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordReviewPanel.tsx

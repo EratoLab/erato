@@ -2752,6 +2752,11 @@ msgstr "Diese Datei ist zu groß, um sie in Erato vollständig zu öffnen. Erato
 
 #. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx
+msgid "officeAddin.word.authoring.readOnlyTracking"
+msgstr "Die Änderungsnachverfolgung ist aktiv. Erato liest dieses Dokument daher so, als wären alle nachverfolgten Änderungen angenommen, ohne zu sehen, wer was geändert hat, und bearbeitet es nicht."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordChatInput.tsx
 msgid "officeAddin.word.authoring.readOnlyUnavailable"
 msgstr "Word hat das vollständige Dokument nicht übergeben. Erato kann den Text lesen, aber nicht bearbeiten. Senden Sie erneut, um es noch einmal zu versuchen."
 
@@ -4415,6 +4420,21 @@ msgstr "Übersprungen – der Absatz wurde nur teilweise gesendet und kann nicht
 
 #. js-lingui-explicit-id
 #: src/word/components/WordEditReport.tsx
+msgid "officeAddin.word.report.status.revisions"
+msgstr "Übersprungen – der Absatz enthält nachverfolgte Änderungen; nehmen Sie sie in Word an oder lehnen Sie sie ab und fragen Sie dann erneut"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordEditReport.tsx
+msgid "officeAddin.word.report.status.revisionsBy"
+msgstr "Übersprungen – der Absatz enthält nachverfolgte Änderungen von {names}; nehmen Sie sie in Word an oder lehnen Sie sie ab und fragen Sie dann erneut"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordEditReport.tsx
+msgid "officeAddin.word.report.status.tracking"
+msgstr "Übersprungen – die Änderungsnachverfolgung ist aktiv, daher wendet Erato keine Absatzänderungen an"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordEditReport.tsx
 msgid "officeAddin.word.report.status.unknownOrdinal"
 msgstr "Übersprungen – der Absatz war nicht Teil des gesendeten Inhalts"
 
@@ -4755,8 +4775,13 @@ msgstr "Änderungen werden direkt angewendet. Erato fügt keine Überarbeitungsm
 
 #. js-lingui-explicit-id
 #: src/word/components/WordReviewPanel.tsx
-msgid "officeAddin.word.review.trackingOn"
-msgstr "Die Änderungsverfolgung in Word ist bereits aktiv. Word kann diese Änderungen aufzeichnen. Erato verändert diese Einstellung nicht."
+#~ msgid "officeAddin.word.review.trackingOn"
+#~ msgstr "Die Änderungsverfolgung in Word ist bereits aktiv. Word kann diese Änderungen aufzeichnen. Erato verändert diese Einstellung nicht."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordReviewPanel.tsx
+msgid "officeAddin.word.review.trackingOnWithheld"
+msgstr "Die Änderungsnachverfolgung ist aktiv, daher wendet Erato diese Änderungen nicht an. Nehmen Sie sie selbst in Word vor."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordReviewPanel.tsx

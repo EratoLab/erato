@@ -74,9 +74,14 @@ export function resolveWordSelectionFacet(input: {
   };
 }
 
-/** Only a failed package capture leaves authoring nothing to read. A capture that is merely too
- * large for a complete read sets completeReadIssue instead and keeps its scoped reads. */
-const REVIEW_FALLBACK_ISSUES = new Set(["too-large", "unavailable"]);
+/** Authoring has nothing to read after a failed package capture, nor under Track Changes, where
+ * review sends the accepted text instead. A capture merely too large for a complete read sets
+ * completeReadIssue and keeps its scoped reads. */
+const REVIEW_FALLBACK_ISSUES = new Set([
+  "too-large",
+  "unavailable",
+  "tracking",
+]);
 
 export function wordReviewFallbackApplies(
   issue: WordAuthoringSnapshot["issue"],
@@ -117,7 +122,11 @@ export interface WordActionFacetInput {
   availableFacetArgs?: ReadonlyMap<string, ReadonlySet<string>>;
   /** The whole document's comment map (wordCommentSend.ts); empty without one. */
   commentMap?: string;
+  /** Read with Track Changes on, so review offers no paragraph edits. */
+  trackChanges?: boolean;
 }
+
+const WORD_REVIEW_STATUS_ARG = "review_status";
 
 /** Supply every configured argument to avoid literal placeholders.
  * Repeat context on each turn because earlier facet instructions are removed from replay. */
@@ -162,6 +171,11 @@ export function resolveWordActionFacet(
         truncation_note: input.documentArgs.truncation_note,
         document_identity: input.documentIdentity,
         ...commentMap(WORD_DOCUMENT_REVIEW_FACET_ID),
+        ...(input.availableFacetArgs
+          ?.get(WORD_DOCUMENT_REVIEW_FACET_ID)
+          ?.has(WORD_REVIEW_STATUS_ARG)
+          ? { [WORD_REVIEW_STATUS_ARG]: wordReviewStatus(input.trackChanges) }
+          : {}),
       },
     };
   }
@@ -208,6 +222,12 @@ export function resolveWordCommentThreadFacet(input: {
       allowed,
     ),
   };
+}
+
+function wordReviewStatus(trackChanges: boolean | undefined): string {
+  return trackChanges
+    ? "read-only: Track Changes is on. The text is the document with every pending tracked change accepted; it does not show what was changed or by whom. Paragraph edits cannot be applied: give any new wording in plain prose, with no erato-word-edits block and no propose_client_action call."
+    : "available";
 }
 
 function wordAuthoringStatus(authoring: WordAuthoringSnapshot): string {

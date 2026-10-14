@@ -17,6 +17,8 @@ export interface WordDocumentCapture {
   renderedOrdinals: ReadonlySet<number>;
   /** A prefix is readable but not writable: replacing it would remove the unseen tail. */
   partialOrdinal: number | null;
+  /** Read with Track Changes on: the model saw the accepted text, and paragraph edits are not offered. */
+  trackChanges?: boolean;
 }
 
 /** Edited-message replay uses the original assistant capture, never the document currently open. */
