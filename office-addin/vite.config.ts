@@ -874,7 +874,7 @@ export default defineConfig(({ mode }) => {
         }
       : undefined,
     build: {
-      rollupOptions: {
+      rolldownOptions: {
         // Shared expose entries: chunks are shared with the app entry, so
         // the import map hands kits the add-in's own module instances.
         preserveEntrySignatures: "allow-extension" as const,

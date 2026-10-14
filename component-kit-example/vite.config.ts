@@ -43,8 +43,8 @@ const emitCompiledLocaleCatalogs = (): Plugin => {
 
 export default defineConfig({
   plugins: [emitCompiledLocaleCatalogs()],
-  esbuild: {
-    jsx: "automatic",
+  oxc: {
+    jsx: { runtime: "automatic" },
   },
   build: {
     outDir: "dist",
@@ -53,7 +53,7 @@ export default defineConfig({
       entry: path.resolve(__dirname, "src/index.tsx"),
       formats: ["es"],
     },
-    rollupOptions: {
+    rolldownOptions: {
       // The frontend package owns this list alongside its generated import
       // map, so kit externals cannot drift from the host contract.
       external: [...eratoComponentKitExternals],

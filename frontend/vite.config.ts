@@ -280,7 +280,7 @@ export default defineConfig(({ mode }) => {
       outDir: "out",
       assetsDir: "public/common/assets",
       reportCompressedSize: !silentLinkedBuildOutput,
-      rollupOptions: {
+      rolldownOptions: {
         // Expose entries must keep their re-export signatures so the import
         // map can hand kits the app-bundle module instances.
         preserveEntrySignatures: "allow-extension" as const,
@@ -299,19 +299,26 @@ export default defineConfig(({ mode }) => {
         },
         output: {
           // componentRegistry.ts is a tiny runtime store shared by the app and
-          // the component-kit entry. Without an explicit boundary Rollup can
+          // the component-kit entry. Without an explicit boundary the bundler can
           // coalesce it with the kit's generated component export graph, which
           // makes index.html preload several megabytes of components that the
           // current route has not requested.
-          onlyExplicitManualChunks: true,
-          manualChunks: (moduleId) => {
-            const iconCatalogChunk = iconCatalogManualChunk(moduleId);
-            if (iconCatalogChunk) {
-              return iconCatalogChunk;
-            }
-            return moduleId.endsWith("/src/config/componentRegistry.ts")
-              ? "component-registry-runtime"
-              : undefined;
+          codeSplitting: {
+            includeDependenciesRecursively: false,
+            groups: [
+              {
+                debugName: "runtime-and-icon-catalogs",
+                name: (moduleId) => {
+                  const iconCatalogChunk = iconCatalogManualChunk(moduleId);
+                  if (iconCatalogChunk) {
+                    return iconCatalogChunk;
+                  }
+                  return moduleId.endsWith("/src/config/componentRegistry.ts")
+                    ? "component-registry-runtime"
+                    : null;
+                },
+              },
+            ],
           },
           // The app imports generated exports from this runtime, so both files
           // must be cache-busted together to avoid cross-deployment mismatches.

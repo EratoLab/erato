@@ -1,4 +1,4 @@
-import { defineConfig } from "vite";
+import { defineConfig, esmExternalRequirePlugin } from "vite";
 import react from "@vitejs/plugin-react";
 import { lingui } from "@lingui/vite-plugin";
 import path from "node:path";
@@ -30,6 +30,8 @@ export default defineConfig(({ mode }) => {
         rootDir: __dirname,
         outputBasePath: "voice-runtime",
       }),
+      // CommonJS dependencies must import external peers in browser ESM.
+      esmExternalRequirePlugin(),
       browserOnlyBuildPlugin(),
       libraryBuildStatusPlugin({
         distLibraryDir: DIST_LIBRARY_DIR,
@@ -52,7 +54,7 @@ export default defineConfig(({ mode }) => {
       // (worker-import-meta-url) when the linked add-in dev server transforms
       // the bundle. External .map keeps identical debuggability.
       sourcemap: true,
-      minify: isLibraryDevBuild ? false : "esbuild",
+      minify: isLibraryDevBuild ? false : "oxc",
       lib: {
         // `shared` is the component-kit host surface (@erato/frontend/shared).
         // Building it as a sibling entry of the same compilation means both
@@ -80,7 +82,7 @@ export default defineConfig(({ mode }) => {
           entryName === "library" ? "library.mjs" : `${entryName}.mjs`,
         cssFileName: "style",
       },
-      rollupOptions: {
+      rolldownOptions: {
         external: [
           "react",
           "react-dom",
@@ -101,8 +103,15 @@ export default defineConfig(({ mode }) => {
         // module instances both entries reference.
         output: {
           chunkFileNames: "chunks/[name]-[hash].mjs",
-          onlyExplicitManualChunks: true,
-          manualChunks: iconCatalogManualChunk,
+          codeSplitting: {
+            includeDependenciesRecursively: false,
+            groups: [
+              {
+                debugName: "icon-catalogs",
+                name: (id) => iconCatalogManualChunk(id) ?? null,
+              },
+            ],
+          },
         },
         preserveEntrySignatures: "allow-extension" as const,
       },
