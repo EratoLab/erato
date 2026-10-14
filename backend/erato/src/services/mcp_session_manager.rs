@@ -1,4 +1,3 @@
-use super::mcp_stateless::{HttpRequest, HttpServer, RequestError};
 use crate::config::{
     AppConfig, McpRuntimeConfig, McpServerAuthenticationConfig, McpServerConfig,
     McpServerForwardedCredential, McpToolAnnotationsConfig,
@@ -31,33 +30,23 @@ pub enum McpServerConnectionStatus {
 #[derive(Debug)]
 struct McpSession {
     /// The rmcp running service (must be kept alive to maintain the connection)
-    _service: Arc<McpConnection>,
+    _service: RunningService<RoleClient, ProgressClientHandler>,
     /// The rmcp peer instance for making requests
     peer: Peer<RoleClient>,
     /// Server ID this session is for
     #[allow(dead_code)]
     server_id: String,
     /// Cached list of available tools
-    tools: Arc<tokio::sync::Mutex<LegacyTools>>,
+    tools: Vec<ResolvedMcpTool>,
     /// Timestamp of last activity (tool call or tool list request)
     last_activity: SystemTime,
     /// Maximum idle time before this session is evicted
     max_idle_duration: Duration,
 }
 
-#[derive(Debug)]
-struct McpConnection(RunningService<RoleClient, ProgressClientHandler>);
-
-impl std::ops::Deref for McpConnection {
-    type Target = RunningService<RoleClient, ProgressClientHandler>;
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl Drop for McpConnection {
+impl Drop for McpSession {
     fn drop(&mut self) {
-        self.0.service().clear();
+        self._service.service().clear();
     }
 }
 
@@ -86,16 +75,33 @@ impl McpSession {
         // Get a peer reference from the running service
         let peer = service.peer().clone();
 
-        // Erato owns freshness; disable the SDK's independent stale-on-error cache.
-        peer.set_response_cache_config(rmcp::service::ClientCacheConfig::disabled())
-            .await;
-        let tools = LegacyTools::fetch(&peer, config).await?;
+        // Fetch the initial tool list using Default::default() as shown in the example
+        let tools_result = peer
+            .list_tools(Default::default())
+            .await
+            .map_err(|e| eyre!("Failed to list tools during session initialization: {}", e))?;
+
+        debug!(
+            server_id = %server_id,
+            num_tools = tools_result.tools.len(),
+            "Successfully fetched tools from MCP server"
+        );
 
         Ok(Self {
-            _service: Arc::new(McpConnection(service)),
+            _service: service, // Keep the service alive!
             peer,
             server_id,
-            tools: Arc::new(tokio::sync::Mutex::new(tools)),
+            tools: filter_tools_by_server_config(tools_result.tools, &config.server)
+                .into_iter()
+                .map(|tool| {
+                    resolve_tool_annotations(
+                        tool,
+                        &config.server,
+                        &config.default_tool_annotations,
+                        &config.override_tool_annotations,
+                    )
+                })
+                .collect(),
             last_activity: SystemTime::now(),
             max_idle_duration: Duration::from_secs(config.max_idle_seconds),
         })
@@ -116,53 +122,6 @@ impl McpSession {
         } else {
             false
         }
-    }
-}
-
-#[derive(Debug)]
-struct LegacyTools {
-    tools: Vec<ResolvedMcpTool>,
-    // Older servers omit TTLs: preserve session-lifetime reuse in that case.
-    expires: Option<tokio::time::Instant>,
-}
-
-impl LegacyTools {
-    async fn fetch(peer: &Peer<RoleClient>, config: &McpSessionConfig) -> Result<Self, Report> {
-        let mut tools = Vec::new();
-        let mut cursor = None;
-        let mut seen = HashSet::new();
-        let mut expires = None;
-        for _ in 0..1000 {
-            let request = cursor.clone().map(|cursor| {
-                let mut request = rmcp::model::PaginatedRequestParams::default();
-                request.cursor = Some(cursor);
-                request
-            });
-            let page = peer.list_tools(request).await?;
-            if let Some(ttl) = page.ttl_ms {
-                let deadline = tokio::time::Instant::now()
-                    + Duration::from_millis(ttl).min(Duration::from_secs(86400));
-                expires = Some(expires.map_or(deadline, |previous: tokio::time::Instant| {
-                    previous.min(deadline)
-                }));
-            }
-            tools.extend(page.tools);
-            if tools.len() > 10_000 {
-                return Err(eyre!("MCP tool catalog too large"));
-            }
-            cursor = page.next_cursor;
-            if cursor.is_none() {
-                tools.sort_by(|a, b| a.name.cmp(&b.name));
-                return Ok(Self {
-                    tools: config.resolve_tools(tools),
-                    expires,
-                });
-            }
-            if !seen.insert(cursor.clone()) {
-                return Err(eyre!("Repeated MCP tool pagination cursor"));
-            }
-        }
-        Err(eyre!("MCP tool list exceeded pagination limit"))
     }
 }
 
@@ -253,11 +212,6 @@ pub struct McpSessionManager {
     sessions: Arc<RwLock<HashMap<SessionKey, McpSession>>>,
     /// Server configurations from the app config
     configuration: Arc<RwLock<McpSessionManagerConfig>>,
-    /// HTTP pools and metadata; never protocol sessions. Replaced on config/auth invalidation.
-    http_servers: tokio::sync::Mutex<HashMap<String, Arc<HttpServer>>>,
-    creation_gates:
-        tokio::sync::Mutex<HashMap<SessionKey, std::sync::Weak<tokio::sync::Mutex<()>>>>,
-    generation: std::sync::Mutex<HashMap<String, u64>>,
     /// Handle to the background cleanup task
     _cleanup_task: JoinHandle<()>,
 }
@@ -283,22 +237,6 @@ struct McpSessionConfig {
     max_idle_seconds: u64,
     default_tool_annotations: McpToolAnnotationsConfig,
     override_tool_annotations: McpToolAnnotationsConfig,
-}
-
-impl McpSessionConfig {
-    fn resolve_tools(&self, tools: Vec<Tool>) -> Vec<ResolvedMcpTool> {
-        filter_tools_by_server_config(tools, &self.server)
-            .into_iter()
-            .map(|tool| {
-                resolve_tool_annotations(
-                    tool,
-                    &self.server,
-                    &self.default_tool_annotations,
-                    &self.override_tool_annotations,
-                )
-            })
-            .collect()
-    }
 }
 
 impl McpSessionManagerConfig {
@@ -402,9 +340,6 @@ impl McpSessionManager {
             sessions,
             configuration,
             _cleanup_task: cleanup_task,
-            http_servers: Default::default(),
-            creation_gates: Default::default(),
-            generation: Default::default(),
         }
     }
 
@@ -441,22 +376,12 @@ impl McpSessionManager {
             .cloned()
             .collect();
 
-        if !changed_server_ids.is_empty() {
-            let mut generations = self.generation.lock().unwrap();
-            for id in &changed_server_ids {
-                *generations.entry(id.clone()).or_default() += 1;
-            }
-        }
         configuration.server_configs.clone_from(&config.mcp_servers);
         configuration.default_max_idle_seconds = next_default_max_idle_seconds;
         configuration.default_tool_annotations = config.mcp_servers_global.default_tool_annotations;
         configuration.override_tool_annotations =
             config.mcp_servers_global.override_tool_annotations;
 
-        self.http_servers
-            .lock()
-            .await
-            .retain(|id, _| !changed_server_ids.contains(id));
         let mut sessions = self.sessions.write().await;
         sessions.retain(|(_, server_id, _), _| !changed_server_ids.contains(server_id));
         Self::update_active_session_metrics(
@@ -549,33 +474,13 @@ impl McpSessionManager {
         loop {
             // Copy the snapshot before network awaits. Configuration guards must
             // never span authentication or connection setup.
-            let (config, generation) = {
-                let configuration = self.configuration.read().await;
-                (
-                    configuration.session_config(server_id)?,
-                    *self.generation.lock().unwrap().get(server_id).unwrap_or(&0),
-                )
-            };
+            let config = self.configuration.read().await.session_config(server_id)?;
             let key = (
                 chat_id,
                 server_id.to_string(),
                 Self::session_auth_key(server_id, &config.server, auth_context).await?,
             );
 
-            let gate = {
-                let mut gates = self.creation_gates.lock().await;
-                gates.retain(|_, value| value.strong_count() > 0);
-                let entry = gates.entry(key.clone()).or_default();
-                match entry.upgrade() {
-                    Some(gate) => gate,
-                    None => {
-                        let gate = Arc::new(tokio::sync::Mutex::new(()));
-                        *entry = Arc::downgrade(&gate);
-                        gate
-                    }
-                }
-            };
-            let _creation = gate.lock().await;
             {
                 let configuration = self.configuration.read().await;
                 if configuration.session_config(server_id)? != config {
@@ -598,9 +503,6 @@ impl McpSessionManager {
             }
             let session = session?;
             let mut sessions = self.sessions.write().await;
-            if *self.generation.lock().unwrap().get(server_id).unwrap_or(&0) != generation {
-                return Err(eyre!("MCP credentials changed during connection"));
-            }
             sessions.entry(key.clone()).or_insert(session);
             Self::update_active_session_metrics(
                 &sessions,
@@ -611,15 +513,21 @@ impl McpSessionManager {
         }
     }
 
+    /// Remove a session from the cache (used when a session becomes invalid)
+    async fn invalidate_session(&self, key: &SessionKey) {
+        let configured_server_ids = self.configured_server_ids().await;
+        let mut sessions_guard = self.sessions.write().await;
+        if sessions_guard.remove(key).is_some() {
+            Self::update_active_session_metrics(&sessions_guard, configured_server_ids.into_iter());
+            info!(
+                chat_id = %key.0,
+                server_id = %key.1,
+                "Invalidated MCP session (will be recreated on next request)"
+            );
+        }
+    }
+
     pub async fn invalidate_oauth_sessions_for_token(&self, server_id: &str, access_token: &str) {
-        *self
-            .generation
-            .lock()
-            .unwrap()
-            .entry(server_id.to_owned())
-            .or_default() += 1;
-        // Detached runtimes cannot republish into the replacement caches.
-        self.http_servers.lock().await.remove(server_id);
         let session_auth_key = format!("oauth2:{access_token}");
         let configured_server_ids = self.configured_server_ids().await;
         let mut sessions_guard = self.sessions.write().await;
@@ -637,72 +545,6 @@ impl McpSessionManager {
                 "Invalidated cached OAuth-backed MCP sessions for disconnected user"
             );
         }
-    }
-
-    async fn stateless_request(
-        &self,
-        server_id: &str,
-        auth_context: &McpRequestAuthContext<'_>,
-    ) -> Result<Option<HttpRequest>, Report> {
-        let runtime = {
-            // Coordinate publication with reconfigure, without holding either
-            // lock across authentication or network I/O.
-            let configuration = self.configuration.read().await;
-            let config = configuration
-                .server_configs
-                .get(server_id)
-                .ok_or_else(|| eyre!("MCP server '{}' not found in configuration", server_id))?;
-            if config.transport_type != "streamable_http"
-                || config.protocol_mode == crate::config::McpProtocolMode::Legacy
-            {
-                return Ok(None);
-            }
-            let mut servers = self.http_servers.lock().await;
-            if !servers.contains_key(server_id) {
-                servers.insert(
-                    server_id.to_owned(),
-                    Arc::new(HttpServer::new(config.clone())?),
-                );
-            }
-            servers[server_id].clone()
-        };
-        let request = runtime.request_context(server_id, auth_context).await?;
-        if request.is_stateless().await? {
-            Ok(Some(request))
-        } else {
-            Ok(None)
-        }
-    }
-
-    async fn tools_for_server(
-        &self,
-        chat_id: Uuid,
-        server_id: &str,
-        auth: &McpRequestAuthContext<'_>,
-    ) -> Result<Vec<ResolvedMcpTool>, Report> {
-        if let Some(request) = self.stateless_request(server_id, auth).await? {
-            let tools = request.list_tools(false).await?;
-            let config = self.configuration.read().await.session_config(server_id)?;
-            return Ok(config.resolve_tools(tools));
-        }
-        let key = self.get_or_create_session(chat_id, server_id, auth).await?;
-        let mut sessions = self.sessions.write().await;
-        let session = sessions
-            .get_mut(&key)
-            .ok_or_else(|| eyre!("MCP session invalidated during discovery"))?;
-        session.touch();
-        let connection = session._service.clone();
-        let catalog = session.tools.clone();
-        drop(sessions);
-        let mut catalog = catalog.lock().await;
-        if catalog
-            .expires
-            .is_some_and(|expires| expires <= tokio::time::Instant::now())
-        {
-            let config = self.configuration.read().await.session_config(server_id)?;
-            *catalog = LegacyTools::fetch(connection.peer(), &config).await?;
-        }
-        Ok(catalog.tools.clone())
     }
 
     /// List all available tools for a chat across all configured MCP servers
@@ -763,15 +605,16 @@ impl McpSessionManager {
         let creation_results = join_all(server_ids.iter().map(|server_id| async move {
             (
                 server_id.clone(),
-                self.tools_for_server(chat_id, server_id, auth_context)
+                self.get_or_create_session(chat_id, server_id, auth_context)
                     .await,
             )
         }))
         .await;
 
+        let sessions_guard = self.sessions.read().await;
         for (server_id, creation_result) in creation_results {
-            let tools = match creation_result {
-                Ok(tools) => tools,
+            let key = match creation_result {
+                Ok(key) => key,
                 Err(e) => {
                     if Self::is_missing_forwarded_credential_error(&e) {
                         debug!(
@@ -818,11 +661,13 @@ impl McpSessionManager {
                     continue;
                 }
             };
-            for tool in tools {
-                all_tools.push(ManagedTool {
-                    server_id: server_id.clone(),
-                    tool: tool.tool,
-                });
+            if let Some(session) = sessions_guard.get(&key) {
+                for tool in &session.tools {
+                    all_tools.push(ManagedTool {
+                        server_id: server_id.clone(),
+                        tool: tool.tool.clone(),
+                    });
+                }
             }
         }
 
@@ -851,12 +696,6 @@ impl McpSessionManager {
     }
 
     fn is_auth_denied_error(error: &Report) -> bool {
-        if error
-            .downcast_ref::<RequestError>()
-            .is_some_and(|e| matches!(e.status, Some(401 | 403)))
-        {
-            return true;
-        }
         let error_msg = error.to_string();
         error_msg.contains("401 Unauthorized") || error_msg.contains("403 Forbidden")
     }
@@ -902,14 +741,7 @@ impl McpSessionManager {
             tokio::sync::mpsc::UnboundedSender<rmcp::model::ProgressNotificationParam>,
         >,
     ) -> Result<CallToolResult, Report> {
-        if let Some(request) = self.stateless_request(server_id, auth_context).await? {
-            let config = self.server_config(server_id).await?;
-            if !is_tool_allowed_by_server_config(&params.name, &config) {
-                return Err(eyre!("MCP tool is excluded by server configuration"));
-            }
-            return request.call_tool(params, progress).await;
-        }
-        // Try calling the tool with the current legacy session
+        // Try calling the tool with the current session
         match self
             .call_tool_internal(
                 chat_id,
@@ -961,7 +793,6 @@ impl McpSessionManager {
             .ok_or_else(|| eyre!("Session not found after creation"))?;
 
         session.touch();
-        let connection = session._service.clone();
         let peer = session.peer.clone();
         let handler = session._service.service().clone();
         // The SDK allocates the token when sending. Gate notifications until
@@ -1005,7 +836,6 @@ impl McpSessionManager {
                 session.touch();
             }
         }
-        drop(connection);
         match result? {
             rmcp::model::ServerResult::CallToolResult(result) => Ok(result),
             other => Err(eyre!("Unexpected MCP tool response: {:?}", other)),
@@ -1046,14 +876,44 @@ impl McpSessionManager {
                 "Checking MCP server connectivity"
             );
 
-            let status = self
-                .probe_connection(server_id, &McpRequestAuthContext::default())
-                .await;
-            info!(
-                server_id,
-                ?status,
-                "MCP startup connectivity check complete"
-            );
+            // Use a dummy chat_id for the connectivity check
+            let test_chat_id = Uuid::nil();
+            let auth_context = McpRequestAuthContext::default();
+
+            match self
+                .get_or_create_session(test_chat_id, server_id, &auth_context)
+                .await
+            {
+                Ok(key) => {
+                    // Get the session to check how many tools are available
+                    let sessions_guard = self.sessions.read().await;
+
+                    if let Some(session) = sessions_guard.get(&key) {
+                        info!(
+                            server_id = %server_id,
+                            num_tools = session.tools.len(),
+                            "✓ MCP server connection successful"
+                        );
+                    }
+                }
+                Err(e) => {
+                    warn!(
+                        server_id = %server_id,
+                        transport_type = %config.transport_type,
+                        url = %config.url,
+                        error = %e,
+                        "✗ Failed to connect to MCP server (server may be unavailable). This is not fatal - the server will be retried when needed."
+                    );
+                }
+            }
+
+            // Drop the startup connectivity-check session immediately.
+            if let Ok(session_auth_key) =
+                Self::session_auth_key(server_id, config, &auth_context).await
+            {
+                let key = (test_chat_id, server_id.clone(), session_auth_key);
+                self.invalidate_session(&key).await;
+            }
         }
 
         info!("MCP server connectivity checks complete");
@@ -1065,9 +925,6 @@ impl McpSessionManager {
         auth_context: &McpRequestAuthContext<'_>,
     ) -> McpServerConnectionStatus {
         let probe = async {
-            if let Some(request) = self.stateless_request(server_id, auth_context).await? {
-                return request.list_tools(true).await.map(|_| ());
-            }
             let config = self.server_config(server_id).await?;
             // Own the connection instead of sharing a cached probe session. Auth
             // is resolved only by the transport, and dropping this future also
@@ -1100,9 +957,21 @@ impl McpSessionManager {
         auth_context: &McpRequestAuthContext<'_>,
     ) -> McpServerToolEnumeration {
         let result = self
-            .tools_for_server(ENUMERATION_CHAT_ID, server_id, auth_context)
+            .get_or_create_session(ENUMERATION_CHAT_ID, server_id, auth_context)
             .await;
-        let tools = result.as_ref().cloned().unwrap_or_default();
+        let tools = match &result {
+            Ok(key) => {
+                let mut sessions_guard = self.sessions.write().await;
+                match sessions_guard.get_mut(key) {
+                    Some(session) => {
+                        session.touch();
+                        session.tools.clone()
+                    }
+                    None => Vec::new(),
+                }
+            }
+            Err(_) => Vec::new(),
+        };
         McpServerToolEnumeration {
             status: Self::connection_status_from_session_result(result),
             tools,
@@ -1161,7 +1030,6 @@ mod tests {
         exclude_tools: Vec<&str>,
     ) -> McpServerConfig {
         McpServerConfig {
-            protocol_mode: Default::default(),
             transport_type: "streamable_http".to_string(),
             url: "http://localhost/mcp".to_string(),
             http_headers: None,

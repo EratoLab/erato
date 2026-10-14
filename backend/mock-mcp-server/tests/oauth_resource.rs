@@ -3,10 +3,13 @@ use std::collections::{BTreeMap, HashMap};
 
 use mock_mcp_server::oauth::{self, OAuthConfig, MCP_PATH, MISMATCH, RESOURCE, SCOPE};
 use reqwest::{Client, StatusCode, Url};
-use rmcp::transport::{
-    auth::{InMemoryCredentialStore, InMemoryStateStore, OAuthClientConfig},
-    streamable_http_client::StreamableHttpClientTransportConfig,
-    CredentialStore, StreamableHttpClientTransport,
+use rmcp::{
+    transport::{
+        auth::{InMemoryCredentialStore, InMemoryStateStore, OAuthClientConfig},
+        streamable_http_client::StreamableHttpClientTransportConfig,
+        CredentialStore, StreamableHttpClientTransport,
+    },
+    ServiceExt,
 };
 
 type Params = HashMap<String, String>;
@@ -18,7 +21,6 @@ struct Fixture {
     client: Client,
     task: tokio::task::JoinHandle<()>,
     authorization_params: BTreeMap<String, String>,
-    mode: mock_mcp_server::MockProtocolMode,
 }
 
 impl Drop for Fixture {
@@ -36,19 +38,11 @@ impl Fixture {
         configure: impl FnOnce(&mut OAuthConfig),
         modify: impl FnOnce(axum::Router) -> axum::Router,
     ) -> Self {
-        Self::with_protocol(configure, mock_mcp_server::MockProtocolMode::Legacy, modify).await
-    }
-
-    async fn with_protocol(
-        configure: impl FnOnce(&mut OAuthConfig),
-        mode: mock_mcp_server::MockProtocolMode,
-        modify: impl FnOnce(axum::Router) -> axum::Router,
-    ) -> Self {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let base_url = format!("http://{}", listener.local_addr().unwrap());
         let mut config = OAuthConfig::entra(base_url.clone());
         configure(&mut config);
-        let router = modify(oauth::router_with_protocol(config.clone(), mode));
+        let router = modify(oauth::router(config.clone()));
         let task = tokio::spawn(async move {
             axum::serve(listener, router).await.unwrap();
         });
@@ -57,7 +51,6 @@ impl Fixture {
             base_url,
             config,
             task,
-            mode,
             client: Client::builder()
                 .redirect(reqwest::redirect::Policy::none())
                 .build()
@@ -126,14 +119,7 @@ impl Fixture {
             StreamableHttpClientTransportConfig::with_uri(self.endpoint.clone())
                 .auth_header(access_token),
         );
-        use rmcp::service::{ClientLifecycleMode, ClientServiceExt};
-        let lifecycle = match self.mode {
-            mock_mcp_server::MockProtocolMode::Legacy => ClientLifecycleMode::Initialize,
-            _ => ClientLifecycleMode::Discover {
-                preferred_versions: vec![rmcp::model::ProtocolVersion::V_2026_07_28],
-            },
-        };
-        let service = ().serve_with_lifecycle(transport, lifecycle).await.unwrap();
+        let service = ().serve(transport).await.unwrap();
         let result = service
             .call_tool(rmcp::model::CallToolRequestParams::new("list_files"))
             .await
@@ -605,17 +591,4 @@ async fn dynamic_registration_retains_resource_compatibility() {
         .call_mcp(manager.get_access_token().await.unwrap())
         .await;
     manager.refresh_token().await.unwrap();
-}
-
-#[tokio::test]
-async fn modern_oauth_supports_exchange_authenticated_calls_and_refresh() {
-    for mode in [
-        mock_mcp_server::MockProtocolMode::Stateless,
-        mock_mcp_server::MockProtocolMode::Dual,
-    ] {
-        Fixture::with_protocol(|_| {}, mode, |router| router)
-            .await
-            .round_trip(None)
-            .await;
-    }
 }
