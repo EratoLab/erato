@@ -1,8 +1,8 @@
 import {
   WORDPROCESSING_NS as W,
   readWordRunFormatting,
-  isBuiltInHeadingStyle,
   wordBuiltInParagraphStyle,
+  wordHeadingStyle,
   wordPlanOutput,
   createNativeContentSignature,
   wordTableCellTextEditIssue,
@@ -278,10 +278,9 @@ export function wordHeadingStyleId(
   level: number,
 ): string {
   return (
-    snapshot.styles.find(
-      (style) =>
-        style.type === "paragraph" &&
-        isBuiltInHeadingStyle(style.id, style.name, level),
+    wordHeadingStyle(
+      snapshot.styles.filter((style) => style.type === "paragraph"),
+      level,
     )?.id ?? `Heading${level}`
   );
 }
@@ -488,10 +487,11 @@ function styleTarget(
   const builtIn = wordBuiltInParagraphStyle(style.name);
   if (builtIn) return { builtIn };
   // Paragraph.style takes a custom style's name; a built-in one goes by its localized name there,
-  // which the package does not carry. A comma in the name reads as a list of aliases.
+  // which the package does not carry. A comma in the name reads as a list of aliases. A style with
+  // a heading's ID under another name is no built-in to Word either (ERMAIN-973).
   return style.name &&
     !style.name.includes(",") &&
-    customStyleIds(snapshot).has(style.id)
+    (customStyleIds(snapshot).has(style.id) || /^heading[1-9]$/i.test(style.id))
     ? { name: style.name }
     : undefined;
 }

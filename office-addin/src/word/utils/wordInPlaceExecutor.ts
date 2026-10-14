@@ -31,6 +31,7 @@ import {
   verifyWordTrackedRevisions,
   wordFirstRunMarks,
   wordParagraphSignature,
+  wordRowCellCount,
 } from "./wordInPlaceState";
 import {
   isWordStoryOp,
@@ -111,6 +112,20 @@ const sameLive = (a: WordLiveParagraph[], b: WordLiveParagraph[]) =>
 
 const sameRuns = (a: readonly WordInPlaceRun[], b: readonly WordInPlaceRun[]) =>
   JSON.stringify(a) === JSON.stringify(b);
+
+/** A cell op's paragraph is signed by its own cell, so edits elsewhere in a row Word PC and Mac
+ * return for it leave its signature alone. */
+const opSignature = (ooxml: string, op: WordInPlaceOp | undefined) =>
+  wordParagraphSignature(
+    ooxml,
+    op?.kind === "cell" ? { cell: op.cellIndex } : undefined,
+  );
+const cellOpsById = (ops: readonly WordInPlaceBackupOp[]) =>
+  new Map(
+    ops.flatMap((op) =>
+      op.kind === "cell" && op.id ? [[op.id, op] as const] : [],
+    ),
+  );
 
 /** Each range inherits the marks of the run before it ("Replace" keeps the first run's), so a mark
  * is set only where the wanted value differs. */
@@ -858,7 +873,7 @@ export async function applyWordPlanInPlace(
           ...(read
             ? {
                 id: liveB[positions[i]].id,
-                originalSignature: wordParagraphSignature(read.value),
+                originalSignature: opSignature(read.value, op),
               }
             : {}),
           ...(anchor ? { listAnchor: liveB[listAt.get(anchor)!].id } : {}),
@@ -1125,9 +1140,13 @@ export async function applyWordPlanInPlace(
             trackedIssues.push(storyLocation(op, "revisions"));
         });
         const revisions: Record<string, [string, string][]> = {};
+        const cells = cellOpsById(recordOps);
         located.forEach((r, i) =>
           r.interior.forEach((id, k) => {
-            signatures.set(id, wordParagraphSignature(reads[i][k].ooxml.value));
+            signatures.set(
+              id,
+              opSignature(reads[i][k].ooxml.value, cells.get(id)),
+            );
             revisions[id] = reads[i][k].changes.items.map((change) => [
               String(change.type),
               change.text,
@@ -1183,7 +1202,7 @@ export async function applyWordPlanInPlace(
           const read = written.get(i);
           if (!read) return op;
           const id = op.kind === "insert" ? made.get(i)!.uniqueLocalId : op.id!;
-          const afterSignature = wordParagraphSignature(read.value);
+          const afterSignature = opSignature(read.value, op);
           signatures.set(id, afterSignature);
           return { ...op, id, afterSignature };
         });
@@ -1507,9 +1526,10 @@ async function observeWordInPlace(record: WordInPlaceBackup) {
       list.items.map(
         (change) => [String(change.type), change.text] as [string, string],
       );
+    const cells = cellOpsById(record.ops);
     located.forEach((r, i) =>
       r.interior.forEach((id, k) => {
-        signatures.set(id, wordParagraphSignature(reads[i][k].value));
+        signatures.set(id, opSignature(reads[i][k].value, cells.get(id)));
         if (changes) revisions[id] = revisionsOf(changes[i][k]);
       }),
     );
@@ -1772,8 +1792,8 @@ export async function revertWordPlanInPlace(
         );
         let changed = r.interior.length !== r.region.before.length;
         for (const [k, id] of r.interior.entries()) {
-          const live = wordParagraphSignature(reads[i][k].value);
           const op = opOf.get(id);
+          const live = opSignature(reads[i][k].value, op);
           const state = liveStates.get(id)?.();
           const holds = (...targets: (WordInPlaceState | undefined)[]) =>
             !state ||
@@ -1897,7 +1917,7 @@ export async function revertWordPlanInPlace(
             const state = liveStates.get(id)?.();
             const from = op && stateBefore(op);
             if (
-              original.get(id) !== wordParagraphSignature(reads[i][k].value) ||
+              original.get(id) !== opSignature(reads[i][k].value, op) ||
               (from && state && wordParagraphStateIssue(state, from))
             )
               changes[i][k].rejectAll();
@@ -1929,7 +1949,7 @@ export async function revertWordPlanInPlace(
           const at = r.interior.indexOf(op.id!);
           if (at < 0 || op.kind === "insert" || op.kind === "delete") continue;
           const textBack =
-            wordParagraphSignature(reads[i][at].value) === op.originalSignature;
+            opSignature(reads[i][at].value, op) === op.originalSignature;
           const state = liveStates.get(op.id!)?.();
           const from = stateBefore(op);
           const styleBack =
@@ -2057,15 +2077,35 @@ export async function revertWordPlanInPlace(
       const moved = recount.items.findIndex(
         (p, i) => p.uniqueLocalId !== expectedIds[i],
       );
-      // A cell's paragraph reads as its whole row on Word PC and Mac, so a neighbour in that row
-      // changes with it; it is fine once the row equals the restored cell's original.
-      const restoredRows = new Set(
-        pending.flatMap((r) =>
-          r.region.before
-            .filter((k) => ops[k].kind === "cell")
-            .map((k) => ops[k].originalSignature!),
-        ),
-      );
+      // Word PC and Mac read a boundary in a restored cell's row as that row, so there the restore
+      // may change that cell only. Same row by position: a region's cell holds one paragraph.
+      const withoutCell = new Map<number, number | undefined>();
+      const exclude = (at: number, cell: number) =>
+        withoutCell.set(
+          at,
+          withoutCell.has(at) && withoutCell.get(at) !== cell
+            ? undefined
+            : cell,
+        );
+      for (const [i, r] of located.entries()) {
+        const first = opOf.get(r.interior[0]);
+        if (first?.kind === "cell" && first.cellIndex > 0)
+          exclude(r.start, first.cellIndex);
+        const k = r.interior.length - 1;
+        const last = opOf.get(r.interior[k]);
+        if (
+          last?.kind === "cell" &&
+          last.cellIndex < (wordRowCellCount(reads[i][k].value) ?? 0) - 1
+        )
+          exclude(r.end, last.cellIndex);
+      }
+      const boundarySignature = (at: number, ooxml: string) => {
+        const cell = withoutCell.get(at);
+        return wordParagraphSignature(
+          ooxml,
+          cell === undefined ? undefined : { withoutCell: cell },
+        );
+      };
       const locations = [
         ...(recount.items.length !== expectedIds.length
           ? ["/word/document.xml body: count"]
@@ -2090,19 +2130,17 @@ export async function revertWordPlanInPlace(
           r.region.before
             .filter(
               (k, at) =>
-                wordParagraphSignature(restoredReads[i][at].value) !==
+                opSignature(restoredReads[i][at].value, ops[k]) !==
                 ops[k].originalSignature,
             )
             .map((k) => blockLocation(ops[k].ref, "signature")),
         ),
         ...boundaries
-          .filter((_, i) => {
-            const after = wordParagraphSignature(boundariesAfter[i].value);
-            return (
-              after !== wordParagraphSignature(boundaryReads[i].value) &&
-              !restoredRows.has(after)
-            );
-          })
+          .filter(
+            (at, i) =>
+              boundarySignature(at, boundariesAfter[i].value) !==
+              boundarySignature(at, boundaryReads[i].value),
+          )
           .map((at) => paragraphLocation(at, "signature")),
         ...storyPending
           .filter(

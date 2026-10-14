@@ -506,6 +506,41 @@ describe("in-place writes as tracked changes", { timeout: 60_000 }, () => {
     expect(reverted.status, report(reverted, "revert")).toBe("reverted");
   });
 
+  it("restores a table cell on Word PC, which reads a cell paragraph as its row, after the user edited the next cell", async () => {
+    const host = install();
+    const snapshot = await capture();
+    const applied = await apply(cellPlan(snapshot), snapshot);
+    expect(applied.status, report(applied)).toBe("applied");
+    expect(applied.outcome).toMatchObject({ route: "in-place", tracked: true });
+    const north = wordBodyParagraphElements(parse(host.ooxml())).findIndex(
+      (p) => p.textContent === "North",
+    );
+    const read = await Word.run(async (context) => {
+      const paragraphs = context.document.body.paragraphs;
+      paragraphs.load("items");
+      await context.sync();
+      const ooxml = paragraphs.items[north].getOoxml();
+      await context.sync();
+      return ooxml.value;
+    });
+    expect(read).toContain("<w:tr");
+    host.editParagraph(north, "South");
+    const reverted = await revertWordDocumentPlan(
+      applied.before!,
+      applied.afterFingerprint!,
+    );
+    expect(reverted.status, report(reverted, "revert")).toBe("reverted");
+    expect(revised(host.ooxml())).toEqual([]);
+    expect(
+      captureWordAuthoringSnapshot(host.ooxml(), "doc-A", "Off", true, "verify")
+        .blocks.find((b) => b.nativeKind === "table")!
+        .content!.rows.map((r) => r.cells.map((c) => c.text)),
+    ).toEqual([
+      ["Region", "Budget"],
+      ["South", "42"],
+    ]);
+  });
+
   it("refuses Restore once a reviewer accepted one of the changes", async () => {
     const host = install();
     const snapshot = await capture();

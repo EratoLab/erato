@@ -28,6 +28,7 @@ import {
   setWordInPlaceCapabilitiesForTests,
   wordInPlaceCapabilities,
 } from "../wordInPlaceCapabilities";
+import { wordParagraphSignature, wordRowCellCount } from "../wordInPlaceState";
 import {
   resetWordInPlaceLatchForTests,
   wordInPlaceAvailability,
@@ -349,6 +350,87 @@ describe("in-place apply", { timeout: 30_000 }, () => {
     expect(reverted.status, report(reverted)).toBe("reverted");
     expect(mutations(host.events)).toEqual(["mutation:insertText"]);
     expect(wordPackageFingerprint(host.ooxml())).toBe(original);
+  });
+
+  describe("Revert of a table cell whose paragraph reads as its row (Word PC)", () => {
+    const editCell = async () => {
+      const snapshot = await captureRealisticSnapshot();
+      const applied = await apply(
+        expandWordTableCellSubmission(
+          {
+            snapshot: snapshot.token,
+            readToken: "read-proof",
+            table_cell: {
+              sourceRef: snapshot.blocks.find((b) => b.nativeKind === "table")!
+                .ref,
+              rowIndex: 1,
+              cellIndex: 1,
+              expectedText: "42",
+              text: "43",
+            },
+          },
+          snapshot,
+        ),
+        snapshot,
+      );
+      expect(applied.status, report(applied)).toBe("applied");
+      expect(applied.outcome?.route).toBe("in-place");
+      return applied;
+    };
+    const revert = (applied: WordDocumentApplyResult) =>
+      revertWordDocumentPlan(applied.before!, applied.afterFingerprint!);
+    const table = (ooxml: string) =>
+      typed(ooxml)
+        .blocks.find((b) => b.nativeKind === "table")!
+        .content!.rows.map((r) => r.cells.map((c) => c.text));
+
+    it("reverts the cell after the user edited another cell of its row", async () => {
+      const host = install();
+      const applied = await editCell();
+      host.editParagraph(paragraphIndex(host.ooxml(), "North"), "South");
+      host.events.length = 0;
+      const reverted = await revert(applied);
+      expect(reverted.status, report(reverted, "revert")).toBe("reverted");
+      expect(mutations(host.events)).toEqual(["mutation:insertText"]);
+      expect(table(host.ooxml())).toEqual([
+        ["Region", "Budget"],
+        ["South", "42"],
+      ]);
+    });
+
+    it("reverts the cell after the user changed the table's width", async () => {
+      const host = install();
+      const applied = await editCell();
+      const width = '<w:tblW w:w="4000" w:type="pct"/>';
+      host.userEdit((ooxml) => ooxml.replace(/<w:tblW [^>]*\/>/, width));
+      const reverted = await revert(applied);
+      expect(reverted.status, report(reverted, "revert")).toBe("reverted");
+      expect(host.ooxml()).toContain(width);
+      expect(table(host.ooxml())[1]).toEqual(["North", "42"]);
+    });
+
+    it("reports a restore that also changed the next, identical row", async () => {
+      const host = install(
+        {},
+        inPlaceFixture((doc) => {
+          const row = doc.getElementsByTagNameNS(W, "tr")[1];
+          row.after(row.cloneNode(true));
+          const props = doc.createElementNS(W, "w:rPr");
+          props.append(
+            doc.createElementNS(W, "w:b"),
+            doc.createElementNS(W, "w:bCs"),
+          );
+          row.getElementsByTagNameNS(W, "r")[0].prepend(props);
+        }),
+      );
+      const applied = await editCell();
+      host.setReplaceFault("edits-following");
+      const reverted = await revert(applied);
+      expect(reverted.status, report(reverted, "revert")).toBe("interrupted");
+      expect(reverted.diagnostic?.details?.locations).toEqual([
+        `/word/document.xml paragraph ${paragraphIndex(host.ooxml(), "42") + 2}: signature`,
+      ]);
+    });
   });
 
   it("reverts an in-place write to the exact original package", async () => {
@@ -1198,5 +1280,50 @@ describe("in-place revert verification", { timeout: 30_000 }, () => {
     expect(locations).toEqual([
       `/word/document.xml paragraph ${status + 2}: signature`,
     ]);
+  });
+});
+
+describe("wordParagraphSignature of the row Word PC and Mac read for a cell paragraph", () => {
+  const cell = (text: string, props = "") =>
+    `<w:tc><w:tcPr>${props}</w:tcPr><w:p><w:r><w:t>${text}</w:t></w:r></w:p></w:tc>`;
+  const row = (...cells: string[]) =>
+    `<w:document xmlns:w="${W}"><w:body><w:tbl><w:tblPr><w:tblW w:w="0" w:type="auto"/></w:tblPr><w:tr>${cells.join("")}</w:tr></w:tbl><w:sectPr/></w:body></w:document>`;
+  const alone = (text: string) =>
+    `<w:document xmlns:w="${W}"><w:body><w:p><w:r><w:t>${text}</w:t></w:r></w:p></w:body></w:document>`;
+  const before = row(cell("West"), cell("18"));
+
+  it("signs the cell at its source index, merged cells counted as stored", () => {
+    const merged = row(
+      cell("Wide", '<w:gridSpan w:val="2"/>'),
+      cell("", "<w:vMerge/>"),
+      cell("Target"),
+    );
+    expect(wordParagraphSignature(merged, { cell: 2 })).toBe(
+      wordParagraphSignature(alone("Target")),
+    );
+    expect(wordRowCellCount(merged)).toBe(3);
+    expect(wordRowCellCount(alone("Target"))).toBeUndefined();
+  });
+
+  it("leaves a cell's signature to that cell and a row without it to the others", () => {
+    const sibling = row(cell("East"), cell("18"));
+    expect(wordParagraphSignature(sibling, { cell: 1 })).toBe(
+      wordParagraphSignature(before, { cell: 1 }),
+    );
+    expect(wordParagraphSignature(sibling, { withoutCell: 1 })).not.toBe(
+      wordParagraphSignature(before, { withoutCell: 1 }),
+    );
+    expect(
+      wordParagraphSignature(row(cell("West"), cell("21")), { withoutCell: 1 }),
+    ).toBe(wordParagraphSignature(before, { withoutCell: 1 }));
+  });
+
+  it("signs the whole row where the cell is not in the read", () => {
+    expect(wordParagraphSignature(before, { cell: 2 })).toBe(
+      wordParagraphSignature(before),
+    );
+    expect(wordParagraphSignature(before)).not.toBe(
+      wordParagraphSignature(before, { cell: 1 }),
+    );
   });
 });

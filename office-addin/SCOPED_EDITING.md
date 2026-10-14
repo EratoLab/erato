@@ -197,8 +197,9 @@ off:
 `list`, `span`, `tracked`, `trackedStructure`, `storyText` and `scriptText`
 stay off until their probe passes. Word for Mac writes only `text` and `cell`
 in place. Word for the web adds `restyle`: in its P-W-INPLACE run (ERMAIN-961,
-2026-10-12) only P7 passed, so on the web every other change takes the
-confirmed import or, for a scoped edit, is refused. `marks` also needs
+2026-10-12) only P7 passed, so on the web every other change is refused, since
+the import is off there by default (ERMAIN-970); a deployment that sets it to
+`confirm` or `allowed` imports those changes instead. `marks` also needs
 WordApiDesktop 1.3, which the web lacks. On the web, reloading
 `body.paragraphs` inside one `Word.run` returns the cached collection, so P1
 and P8 need a fresh count before `insert` or `delete` can be decided there.
@@ -278,9 +279,10 @@ changes in Word, and the read contract says so while tracking is on.
   one table per host (`pc`, `mac`, `web`), read through `wordApplyPolicy`.
   `in_place` turns the in-place writer on, `whole_document_import` is
   `allowed`, `confirm` or `off`, and `package_read` off reads only the body
-  (and so rules out in-place writing). Defaults: PC and Mac in-place off and
-  import allowed; the web in-place on and import only after confirmation. Users
-  cannot change these; a pane served without them uses the same defaults.
+  (and so rules out in-place writing). Defaults: in place on every host (PC
+  and Mac since ERMAIN-973), the import allowed on PC and Mac and off on the
+  web. Users cannot change these; a pane served without them uses the same
+  defaults.
   Apply enforces the import switch itself (`wordWholeDocumentWrite`): under
   `confirm` a whole-document write (the import, or the body route's whole-body
   Replace) runs only when the caller passes the user's confirmation, under `off`

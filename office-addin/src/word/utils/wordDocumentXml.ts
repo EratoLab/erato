@@ -3,7 +3,7 @@ import {
   applyWordRunFormatting,
   readWordParagraphFormatting,
   readWordRunFormatting,
-  isBuiltInHeadingStyle,
+  wordHeadingStyle,
   MAX_DOCUMENT_BLOCKS,
   MAX_SOURCE_BYTES,
   wordPlanOutput,
@@ -469,12 +469,13 @@ function ensurePart(doc: Document, name: "styles" | "numbering"): Element {
 function ensureHeading(doc: Document, level: number): string {
   const styles = ensurePart(doc, "styles");
   const styleDefinitions = all(styles, "style");
-  const existing = styleDefinitions.find(
-    (s) =>
-      attr(s, "type") === "paragraph" &&
-      isBuiltInHeadingStyle(attr(s, "styleId"), attr(child(s, "name")), level),
+  const existing = wordHeadingStyle(
+    styleDefinitions
+      .filter((s) => attr(s, "type") === "paragraph")
+      .map((s) => ({ id: attr(s, "styleId"), name: attr(child(s, "name")) })),
+    level,
   );
-  if (existing) return attr(existing, "styleId");
+  if (existing) return existing.id;
   const existingIds = new Set(
     styleDefinitions.map((style) => attr(style, "styleId").toLowerCase()),
   );

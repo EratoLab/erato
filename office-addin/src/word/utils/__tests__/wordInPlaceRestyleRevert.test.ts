@@ -458,14 +458,14 @@ describe("in-place heading restyle where the document's Heading2 is a custom sty
     builtInStyleTakesId: true,
   };
   /** As base-pc.docx: ID Heading2, name "Heading2", w:customStyle. */
-  const customHeading2 = () =>
+  const customHeading2 = (custom = true) =>
     editWordPackage(realisticWordPackageXml(), (doc) => {
       doc
         .getElementsByTagNameNS(W, "styles")[0]
         .append(
           doc.importNode(
             new DOMParser().parseFromString(
-              `<w:style xmlns:w="${W}" w:type="paragraph" w:customStyle="1" w:styleId="Heading2"><w:name w:val="Heading2"/><w:basedOn w:val="Normal"/><w:qFormat/><w:pPr><w:outlineLvl w:val="1"/></w:pPr><w:rPr><w:color w:val="1F4E79"/></w:rPr></w:style>`,
+              `<w:style xmlns:w="${W}" w:type="paragraph"${custom ? ' w:customStyle="1"' : ""} w:styleId="Heading2"><w:name w:val="Heading2"/><w:basedOn w:val="Normal"/><w:qFormat/><w:pPr><w:outlineLvl w:val="1"/></w:pPr><w:rPr><w:color w:val="1F4E79"/></w:rPr></w:style>`,
               "application/xml",
             ).documentElement,
             true,
@@ -499,29 +499,36 @@ describe("in-place heading restyle where the document's Heading2 is a custom sty
     expect(block(host, CLOSING).styleRef).toBe("Heading20");
   });
 
-  it("sets the style by name, leaves the other headings alone and reverts", async () => {
-    const host = install(PC, customHeading2());
-    const snapshot = await captureRealisticSnapshot();
-    host.events.length = 0;
-    const applied = await apply(
-      restyle(snapshot, QUESTIONS, { type: "heading", level: 2 }),
-      snapshot,
-    );
-    expect(applied.status, report(applied)).toBe("applied");
-    expect(applied.outcome?.route).toBe("in-place");
-    expect(mutations(host.events)).toEqual(["mutation:style"]);
-    expect(block(host, QUESTIONS)).toMatchObject({
-      type: "heading",
-      level: 2,
-      styleRef: "Heading2",
-    });
-    expect(block(host, CLOSING).styleRef).toBe("Heading2");
-    expect(host.ooxml()).not.toContain("Heading20");
-    const reverted = await revert(applied);
-    expect(reverted.status, report(reverted, "revert")).toBe("reverted");
-    expect(block(host, QUESTIONS)).toMatchObject({ type: "paragraph" });
-    expect(block(host, QUESTIONS).styleRef).toBeUndefined();
-  });
+  it.each([
+    ["on Word PC", PC, true],
+    ["on Word PC without w:customStyle", PC, false],
+    ["on Word for the web without w:customStyle", {}, false],
+  ])(
+    "sets the style by name %s, leaves the other headings alone and reverts",
+    async (_host, options, custom) => {
+      const host = install(options, customHeading2(custom));
+      const snapshot = await captureRealisticSnapshot();
+      host.events.length = 0;
+      const applied = await apply(
+        restyle(snapshot, QUESTIONS, { type: "heading", level: 2 }),
+        snapshot,
+      );
+      expect(applied.status, report(applied)).toBe("applied");
+      expect(applied.outcome?.route).toBe("in-place");
+      expect(mutations(host.events)).toEqual(["mutation:style"]);
+      expect(block(host, QUESTIONS)).toMatchObject({
+        type: "heading",
+        level: 2,
+        styleRef: "Heading2",
+      });
+      expect(block(host, CLOSING).styleRef).toBe("Heading2");
+      expect(host.ooxml()).not.toContain("Heading20");
+      const reverted = await revert(applied);
+      expect(reverted.status, report(reverted, "revert")).toBe("reverted");
+      expect(block(host, QUESTIONS)).toMatchObject({ type: "paragraph" });
+      expect(block(host, QUESTIONS).styleRef).toBeUndefined();
+    },
+  );
 });
 
 describe("wordParagraphStateIssue", () => {

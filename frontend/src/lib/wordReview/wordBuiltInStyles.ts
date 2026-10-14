@@ -1,13 +1,3 @@
-// Localized Word changes style IDs (e.g. "berschrift2") but keeps the canonical
-// English w:name of built-in styles, so both are checked.
-export const isBuiltInHeadingStyle = (
-  styleId: string,
-  name: string,
-  level: number,
-) =>
-  styleId.toLowerCase() === `heading${level}` ||
-  name.toLowerCase() === `heading ${level}`;
-
 export const isDefaultTableStyle = (styleId: string, name: string) =>
   styleId.toLowerCase() === "tablenormal" ||
   name.toLowerCase() === "normal table";
@@ -50,14 +40,33 @@ const BUILT_IN_PARAGRAPH_STYLES: Record<string, WordBuiltInParagraphStyle> = {
 };
 
 /** The locale-independent Paragraph.styleBuiltIn name of a paragraph style, if Word has one. Word
- * goes by the w:name alone: a custom style with ID "Heading2" is no built-in heading, and setting
- * the built-in one makes Word add its own and rename the document's (ERMAIN-973). */
+ * goes by the w:name alone, whose aliases follow a comma ("heading 2,h2"): a custom style with ID
+ * "Heading2" is no built-in heading, and setting the built-in one makes Word add its own and rename
+ * the document's (ERMAIN-973). */
 export function wordBuiltInParagraphStyle(
   name: string,
 ): WordBuiltInParagraphStyle | undefined {
-  const heading = /^heading ([1-9])$/i.exec(name);
+  const own = name.split(",", 1)[0];
+  const heading = /^heading ([1-9])$/i.exec(own);
   if (heading) return `Heading${heading[1]}` as WordBuiltInParagraphStyle;
-  const toc = /^toc ([1-9])$/i.exec(name);
+  const toc = /^toc ([1-9])$/i.exec(own);
   if (toc) return `Toc${toc[1]}` as WordBuiltInParagraphStyle;
-  return BUILT_IN_PARAGRAPH_STYLES[name.toLowerCase()];
+  return BUILT_IN_PARAGRAPH_STYLES[own.toLowerCase()];
+}
+
+/** The paragraph style a heading of `level` compiles to: Word's built-in heading by its canonical
+ * name, which localized Word keeps under another ID (e.g. "berschrift2"), else a style with the
+ * built-in heading's ID. */
+export function wordHeadingStyle<T extends { id: string; name: string }>(
+  paragraphStyles: readonly T[],
+  level: number,
+): T | undefined {
+  return (
+    paragraphStyles.find(
+      (style) => wordBuiltInParagraphStyle(style.name) === `Heading${level}`,
+    ) ??
+    paragraphStyles.find(
+      (style) => style.id.toLowerCase() === `heading${level}`,
+    )
+  );
 }

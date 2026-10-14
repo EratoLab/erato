@@ -183,6 +183,18 @@ describe("linked heading style compilation", () => {
     expect(result.outputStyles).toHaveLength(result.originalStyles.size);
   });
 
+  it("prefers the style Word names its built-in heading, aliases included, over one with the heading's ID", () => {
+    const named = (name: string) =>
+      compile(
+        standardDefaults +
+          '<w:style w:type="paragraph" w:styleId="heading2"><w:name w:val="Customer chapter"/></w:style>' +
+          `<w:style w:type="paragraph" w:styleId="CompanySection"><w:name w:val="${name}"/></w:style>`,
+      ).headingId;
+    expect(named("heading 2")).toBe("CompanySection");
+    expect(named("heading 2,Chapter")).toBe("CompanySection");
+    expect(named("Chapter,heading 2")).toBe("heading2");
+  });
+
   it("allocates a separate character ID without modifying an existing collision or its references", () => {
     const result = compile(
       standardDefaults +

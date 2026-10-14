@@ -841,6 +841,40 @@ describe("in-place classification", () => {
         [{ builtIn: "Normal" }, { builtIn: "Heading2" }],
         [{ builtIn: "Heading2" }, { builtIn: "Normal" }],
       ]);
+    // Word reads the name before the first comma; the rest are aliases.
+    for (const id of ["Heading2", "berschrift2"])
+      expect(restyles(id, "heading 2,h2")).toEqual([
+        [{ builtIn: "Normal" }, { builtIn: "Heading2" }],
+        [{ builtIn: "Heading2" }, { builtIn: "Normal" }],
+      ]);
+    // No built-in to Word under that name, w:customStyle or not.
+    expect(restyles("Heading2", "Heading2")).toEqual([
+      [{ builtIn: "Normal" }, { name: "Heading2" }],
+      [{ name: "Heading2" }, { builtIn: "Normal" }],
+    ]);
+    expect(restyles("Heading2", "Heading2,H2")).toBe("restyle");
+  });
+
+  it("takes the style Word names its built-in heading over one with the heading's ID", () => {
+    const s = captureWordAuthoringSnapshot(
+      packageXml(paragraph("Target") + paragraph("Tail")).replace(
+        "</w:styles>",
+        '<w:style w:type="paragraph" w:customStyle="1" w:styleId="Heading2"><w:name w:val="Heading2"/></w:style>' +
+          '<w:style w:type="paragraph" w:styleId="berschrift2"><w:name w:val="heading 2"/></w:style></w:styles>',
+      ),
+      "doc",
+      "Off",
+      true,
+    );
+    s.readToken = "read-proof";
+    s.read = new Set(s.blocks.map((b) => b.ref));
+    const p = plan(s, { b1: text("Target", { type: "heading", level: 2 }) });
+    const result = classifyWordInPlacePlan(p, s, ALL, compiledOf(s, p));
+    expect("ops" in result && result.ops[0]).toMatchObject({
+      restyle: {
+        to: { styleRef: "berschrift2", style: { builtIn: "Heading2" } },
+      },
+    });
   });
 
   it("sets Word's built-in heading when the document has no style for it yet", () => {

@@ -38,24 +38,67 @@ function firstParagraph(doc: Document): Element {
   return paragraph;
 }
 
-/** Canonical content of the paragraph Paragraph.getOoxml returns: revision-session IDs and run
- * splits are ignored, every property and text is compared. For a table-cell paragraph Word PC and
- * Mac return the cell's whole row, whose first paragraph may be another cell's, so the row stands
- * for it (ERMAIN-973). */
-export function wordParagraphSignature(paragraphOoxml: string): string {
+const childrenOf = (parent: Element | undefined, name: string) =>
+  Array.from(parent?.children ?? []).filter(
+    (e) => e.namespaceURI === W && e.localName === name,
+  );
+
+function parseParagraphRead(paragraphOoxml: string): Document {
   const doc = new DOMParser().parseFromString(
     paragraphOoxml,
     "application/xml",
   );
   if (doc.getElementsByTagName("parsererror").length)
     throw new Error("Word returned unreadable paragraph content.");
+  return doc;
+}
+
+/** For a table-cell paragraph Word PC and Mac return the cell's whole row as a one-row table
+ * (ERMAIN-973). */
+function rowTable(doc: Document): Element | undefined {
   const first = Array.from(wordMainBody(doc)?.children ?? []).find(
     (e) =>
       e.namespaceURI === W && (e.localName === "p" || e.localName === "tbl"),
   );
-  return createWordXmlComparison(doc).signature(
-    first?.localName === "tbl" ? first : firstParagraph(doc),
-  );
+  return first?.localName === "tbl" ? first : undefined;
+}
+
+const rowCells = (table: Element) => {
+  const rows = childrenOf(table, "tr");
+  return rows.length === 1 ? childrenOf(rows[0], "tc") : [];
+};
+
+/** In a row read, `cell` (the physical w:tc index, a table cell's source index) signs that cell's
+ * paragraph, `withoutCell` the row without that cell. */
+export type WordRowPart = { cell: number } | { withoutCell: number };
+
+/** Canonical content of the paragraph Paragraph.getOoxml returns: revision-session IDs and run
+ * splits are ignored, every property and text is compared. A row read is signed as the part
+ * `within` picks, or as the whole row where that cell can't be found in it. */
+export function wordParagraphSignature(
+  paragraphOoxml: string,
+  within?: WordRowPart,
+): string {
+  const doc = parseParagraphRead(paragraphOoxml);
+  const comparison = createWordXmlComparison(doc);
+  const table = rowTable(doc);
+  if (!table) return comparison.signature(firstParagraph(doc));
+  const cells = rowCells(table);
+  if (within && "cell" in within) {
+    const paragraphs = childrenOf(cells[within.cell], "p");
+    if (paragraphs.length === 1) return comparison.signature(paragraphs[0]);
+  } else if (within && cells[within.withoutCell]) {
+    const copy = table.cloneNode(true) as Element;
+    rowCells(copy)[within.withoutCell].remove();
+    return comparison.signature(copy);
+  }
+  return comparison.signature(table);
+}
+
+/** How many cells the row read holds, or undefined for a paragraph read. */
+export function wordRowCellCount(paragraphOoxml: string): number | undefined {
+  const table = rowTable(parseParagraphRead(paragraphOoxml));
+  return table && rowCells(table).length;
 }
 
 /** b/i/u of the paragraph's first run: what insertText "Replace" keeps for the new text. */

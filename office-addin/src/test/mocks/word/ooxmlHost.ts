@@ -60,7 +60,7 @@ export interface WordOoxmlHostOptions {
    * the package does not carry, so only custom style names resolve. */
   localizedStyleNames?: boolean;
   /** Word PC and Mac (ERMAIN-973): Paragraph.getOoxml of a table-cell paragraph returns the cell's
-   * whole row, as a one-row table. */
+   * whole row, as a one-row table. On by default for the Word PC profile. */
   cellParagraphOoxmlIsRow?: boolean;
   /** Word for the web (ERMAIN-967): Paragraph.getOoxml leaves out the paragraph's w:pPr, so a
    * style or list change does not show in it. */
@@ -95,7 +95,9 @@ export type WordReplaceFault =
   /** An extra empty paragraph appears after the written one. */
   | "adds-paragraph"
   /** The following paragraph turns bold as well. */
-  | "edits-next";
+  | "edits-next"
+  /** The next body paragraph turns bold as well, also in the next table cell or row. */
+  | "edits-following";
 
 type When =
   | "now"
@@ -1398,7 +1400,8 @@ export function installWordOoxmlHost(
       styles.find((s) => s.getAttributeNS(W, "default") === "1");
     const name = style ? styleName(style) : "Normal";
     const builtIn = Object.entries(BUILT_IN_STYLE_NAMES).find(
-      ([, builtInName]) => builtInName.toLowerCase() === name.toLowerCase(),
+      ([, builtInName]) =>
+        builtInName.toLowerCase() === ownName(name).toLowerCase(),
     )?.[0];
     return { style: name, styleBuiltIn: builtIn ?? "Other" };
   };
@@ -1412,6 +1415,8 @@ export function installWordOoxmlHost(
   };
   const styleName = (style: Element) =>
     child(style, "name")?.getAttributeNS(W, "val") ?? "";
+  /** Aliases follow a comma in w:name ("heading 2,h2"); Word identifies the style by the rest. */
+  const ownName = (name: string) => name.split(",", 1)[0];
   /** Word omits w:pStyle for the default paragraph style. */
   const applyStyle = (paragraph: Element, style: Element) => {
     recordParagraphChange(paragraph);
@@ -1467,7 +1472,7 @@ export function installWordOoxmlHost(
     const name = BUILT_IN_STYLE_NAMES[builtIn];
     if (!name) throw new Error(`Unsupported built-in style ${builtIn}.`);
     const existing = paragraphStyles().find(
-      (style) => styleName(style).toLowerCase() === name.toLowerCase(),
+      (style) => ownName(styleName(style)).toLowerCase() === name.toLowerCase(),
     );
     if (existing) return existing;
     const root = partRoot(live(), "/word/styles.xml");
@@ -1601,7 +1606,7 @@ export function installWordOoxmlHost(
     let row = p.parentElement;
     while (row && !(row.namespaceURI === W && row.localName === "tr"))
       row = row.parentElement;
-    if (settings.cellParagraphOoxmlIsRow && row) {
+    if ((settings.cellParagraphOoxmlIsRow ?? pc) && row) {
       const table = wrapper.createElementNS(W, "w:tbl");
       for (const name of ["tblPr", "tblGrid"]) {
         const part = child(row.parentElement!, name);
@@ -1986,6 +1991,14 @@ export function installWordOoxmlHost(
               next.localName === "p"
             )
               runsOf(next).forEach((r) => setRunMark(r, ["b", "bCs"], ""));
+            if (replaceFault === "edits-following") {
+              const all = bodyParagraphs(p.ownerDocument);
+              const following = all[all.indexOf(p) + 1];
+              if (following)
+                runsOf(following).forEach((r) =>
+                  setRunMark(r, ["b", "bCs"], ""),
+                );
+            }
           } else if (location === "End") {
             const run = newRun(p.ownerDocument, text, last);
             p.append(run);
