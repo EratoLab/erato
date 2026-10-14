@@ -2772,6 +2772,11 @@ msgstr "Word hat beim Wiederherstellen doppelte Dokumentdaten hinzugefügt. Das 
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.restoreStyleUnverified"
+msgstr "Word hat die ursprüngliche Absatzformatvorlage nicht wiederhergestellt, daher ist die Wiederherstellung unvollständig. Prüfen Sie die Formatvorlage dieses Absatzes in Word. Das gespeicherte Original steht weiterhin zur Wiederherstellung bereit."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
 msgid "officeAddin.word.authoring.restoreUnverified"
 msgstr "Word konnte das wiederhergestellte Dokument nicht überprüfen. Das gespeicherte Original steht weiterhin zur Wiederherstellung bereit."
 

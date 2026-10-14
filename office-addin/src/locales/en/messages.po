@@ -2772,6 +2772,11 @@ msgstr "Word added duplicate document data while restoring. Your saved original 
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.restoreStyleUnverified"
+msgstr "Word did not put the original paragraph style back, so Revert is incomplete. Check that paragraph's style in Word. Your saved original is still available for recovery."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
 msgid "officeAddin.word.authoring.restoreUnverified"
 msgstr "Word could not verify the restored document. Your saved original is still available for recovery."
 

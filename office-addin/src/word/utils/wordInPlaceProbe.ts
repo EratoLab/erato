@@ -13,6 +13,7 @@ import {
   queueRevisionPlacements,
   queueWordInPlaceTextWrite,
 } from "./wordInPlaceExecutor";
+import { effectiveWordStyle } from "./wordInPlacePlan";
 import {
   WORD_SPAN_ENDING_MARKS,
   planWordSpanEdits,
@@ -525,25 +526,45 @@ export async function runWordInPlaceProbe(
       const before = await captureWordDocumentPackage();
       target.styleBuiltIn = "Heading2";
       await context.sync();
+      const written = await signature(target);
       const after = await captureWordDocumentPackage();
-      const typed = captureWordAuthoringSnapshot(
-        after.ooxml,
-        "probe",
-        "Off",
-        true,
-        "verify",
-      ).blocks.find((b) => b.text === "Probe seven");
+      const typed = (ooxml: string) => {
+        const snapshot = captureWordAuthoringSnapshot(
+          ooxml,
+          "probe",
+          "Off",
+          true,
+          "verify",
+        );
+        const block = snapshot.blocks.find((b) => b.text === "Probe seven");
+        return (
+          block && {
+            ...block,
+            style: effectiveWordStyle(block.styleRef, snapshot.styles),
+          }
+        );
+      };
+      const heading = typed(after.ooxml);
       target.styleBuiltIn = "Normal";
       await context.sync();
       const restored = await signature(target);
+      // Word for the web leaves w:pPr out of Paragraph.getOoxml, so the inverse is also read back
+      // through the paragraph's properties and the exported package (ERMAIN-967).
+      target.load("styleBuiltIn,isListItem");
+      await context.sync();
+      const plain = typed((await captureWordDocumentPackage()).ooxml);
       const [a, b] = [before.ooxml, after.ooxml].map(wordPackageCounts);
       return {
         startsClean: true,
-        headingTyped: typed?.type === "heading" && typed.level === 2,
+        headingTyped: heading?.type === "heading" && heading.level === 2,
         numberingUnchanged:
           a.nums === b.nums && a.abstractNums === b.abstractNums,
         stylesAdded: styleCount(after.ooxml) - styleCount(before.ooxml),
+        paragraphOoxmlShowsStyle: written.signature !== original.signature,
         inverseExact: restored.signature === original.signature,
+        inverseStyle:
+          String(target.styleBuiltIn) === "Normal" && !target.isListItem,
+        inversePackage: plain?.type === "paragraph" && plain.style === "Normal",
       };
     });
 

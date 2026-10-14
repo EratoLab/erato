@@ -2772,6 +2772,11 @@ msgstr "Program Word dodał zduplikowane dane dokumentu podczas przywracania. Za
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.restoreStyleUnverified"
+msgstr "Program Word nie przywrócił pierwotnego stylu akapitu, więc cofnięcie jest niepełne. Sprawdź styl tego akapitu w programie Word. Zapisany oryginał nadal jest dostępny do odzyskania."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
 msgid "officeAddin.word.authoring.restoreUnverified"
 msgstr "Program Word nie mógł zweryfikować przywróconego dokumentu. Zapisany oryginał nadal jest dostępny do odzyskania."
 

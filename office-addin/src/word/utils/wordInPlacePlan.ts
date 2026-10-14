@@ -286,9 +286,21 @@ export function wordHeadingStyleId(
   );
 }
 
-/** The compiler writes "Normal" for an omitted paragraph style. */
-export const effectiveWordStyle = (styleRef: string | undefined) =>
-  styleRef ?? "Normal";
+/** The compiler writes "Normal" for an omitted paragraph style. Word for the web names Normal
+ * explicitly when it sets it, by the document's own ID for it, e.g. "Standard" (ERMAIN-967). */
+export const effectiveWordStyle = (
+  styleRef: string | undefined,
+  styles: Pick<WordAuthoringSnapshot, "styles">["styles"] = [],
+) =>
+  !styleRef ||
+  styles.some(
+    (s) =>
+      s.id === styleRef &&
+      (!s.type || s.type === "paragraph") &&
+      wordBuiltInParagraphStyle(s.id, s.name) === "Normal",
+  )
+    ? "Normal"
+    : styleRef;
 
 const on = (e: Element | undefined) =>
   !!e && !["0", "false", "off"].includes(e.getAttributeNS(W, "val") ?? "");
@@ -547,10 +559,15 @@ function withStyle(
     : undefined;
 }
 
-const styleChanged = (a: Typed, b: Typed) =>
+const styleChanged = (
+  a: Typed,
+  b: Typed,
+  styles: WordAuthoringSnapshot["styles"],
+) =>
   (a.type === "heading") !== (b.type === "heading") ||
   (a.type === "heading" && a.level !== b.level) ||
-  effectiveWordStyle(a.styleRef) !== effectiveWordStyle(b.styleRef);
+  effectiveWordStyle(a.styleRef, styles) !==
+    effectiveWordStyle(b.styleRef, styles);
 const listChanged = (a: Typed, b: Typed) =>
   (a.type === "list-item") !== (b.type === "list-item") ||
   (a.type === "list-item" && (a.list !== b.list || a.level !== b.level));
@@ -600,8 +617,8 @@ function sameStyleRef(
   styles: WordAuthoringSnapshot["styles"],
 ): boolean {
   if (
-    effectiveWordStyle(actual.styleRef) ===
-    effectiveWordStyle(expected.styleRef)
+    effectiveWordStyle(actual.styleRef, styles) ===
+    effectiveWordStyle(expected.styleRef, styles)
   )
     return true;
   const builtInHeading = (styleRef: string | undefined) =>
@@ -727,7 +744,7 @@ function textOp(
     )
       return "new-list";
   }
-  const restyled = styleChanged(from, to);
+  const restyled = styleChanged(from, to, snapshot.styles);
   const relisted = listChanged(from, to);
   if (restyled && !caps.restyle) return "restyle";
   // Word PC drops list membership when a list item's style is set (probe P6).
@@ -1355,14 +1372,19 @@ function blockExpected(
   };
 }
 
-const sameTyped = (a: WordInPlaceExpected, b: WordInPlaceExpected) =>
+const sameTyped = (
+  a: WordInPlaceExpected,
+  b: WordInPlaceExpected,
+  styles: WordAuthoringSnapshot["styles"],
+) =>
   a.text === b.text &&
   stableJson(a.runs) === stableJson(b.runs) &&
   a.type === b.type &&
   a.level === b.level &&
   a.list === b.list &&
   a.ordered === b.ordered &&
-  effectiveWordStyle(a.styleRef) === effectiveWordStyle(b.styleRef) &&
+  effectiveWordStyle(a.styleRef, styles) ===
+    effectiveWordStyle(b.styleRef, styles) &&
   sameFormat(a.format, b.format);
 
 /** The ops, applied to the captured blocks, must produce exactly the plan's output. */
@@ -1449,6 +1471,7 @@ export function sameWordInPlaceProgram(
     return sameTyped(
       blockExpected(block, snapshot),
       expectedOf(op, sources.get(op.ref)),
+      snapshot.styles,
     );
   });
 }
