@@ -442,10 +442,39 @@ describe("coarse anchors", () => {
     });
   });
 
-  it("keeps no anchor for a comment no paragraph lists on the web, and counts it", async () => {
+  it("places a comment no paragraph lists on the web from the package of the paragraph it ends in", async () => {
     const { threads, diagnostics } = await read({
       host: "web",
       unlistedByParagraphs: ["T8"],
+    });
+    const t8 = thread(threads, "T8");
+    expect(t8.anchor?.first.ordinal).toBe(host.ordinalOf("T8P"));
+    expect(t8.placement).toMatchObject({
+      status: "placed",
+      joinedBy: "durableId",
+      anchor: { quote: "sierra tango", occurrence: 2 },
+    });
+    expect(host.packagesRead()).toEqual(["T8P"]);
+    expect(diagnostics.counts.anchorsUnlisted).toBe(0);
+  });
+
+  it("places such a comment by content in a legacy file on the web", async () => {
+    const { threads } = await read({
+      host: "web",
+      legacy: true,
+      unlistedByParagraphs: ["T8"],
+    });
+    const placement = thread(threads, "T8").placement;
+    expect(placement?.status === "placed" && placement.joinedBy).toBe(
+      "content",
+    );
+  });
+
+  it("keeps no anchor for a comment neither a paragraph nor a package names on the web, and counts it", async () => {
+    const { threads, diagnostics } = await read({
+      host: "web",
+      unlistedByParagraphs: ["T8"],
+      bareParagraphPackages: ["T8P"],
     });
     expect(thread(threads, "T8").anchor).toBeNull();
     expect(thread(threads, "T9").anchor?.first.ordinal).toBe(
@@ -455,6 +484,13 @@ describe("coarse anchors", () => {
     expect(renderWordCommentReadReport(diagnostics)).toContain(
       "anchors no paragraph lists 1",
     );
+  });
+
+  it("makes no sync for anchors on the web once their budget is spent", async () => {
+    const result = await read({ host: "web" }, { budgetsMs: { anchors: 0 } });
+    expect(phase(result, "anchors")).toMatchObject({ syncs: 0, done: 0 });
+    expect(result.threads.every((t) => t.anchor === null)).toBe(true);
+    expect(result.diagnostics.counts.anchorsSkipped).toBe(ROOTS.length);
   });
 
   it("leaves a thread named once before a failed listing with its first paragraph only", async () => {

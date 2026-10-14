@@ -1181,8 +1181,9 @@ async function readRangeAnchors(
  * getComments(), which names a comment in the paragraph its anchor starts in and the one it ends
  * in, and in none between (probe ERMAIN-983, T3 and T14). The anchored text and offsets stay
  * unknown until a paragraph's package places a thread inside it (paragraphJob). A comment no
- * paragraph names, or one whose id Word lists twice, gets no anchor. Where the listing stops short
- * of the body's end, a thread named once keeps its first paragraph and an unknown end.
+ * paragraph names is looked for in packages (placeUnlisted); one whose id Word lists twice gets no
+ * anchor. Where the listing stops short of the body's end, a thread named once keeps its first
+ * paragraph and an unknown end.
  */
 async function readParagraphAnchors(
   context: Word.RequestContext,
@@ -1200,7 +1201,7 @@ async function readParagraphAnchors(
   const seen = new Map<Live, number[]>();
   let items: Word.Paragraph[] = [];
   let cut: "budget" | "error" | null = null;
-  try {
+  const list = async () => {
     const paragraphs = context.document.body.paragraphs;
     paragraphs.load(PARAGRAPH_FIELDS);
     await session.sync();
@@ -1211,7 +1212,7 @@ async function readParagraphAnchors(
     )) {
       if (session.spent()) {
         cut = "budget";
-        break;
+        return;
       }
       const lists = batch.map((paragraph) => {
         const comments = paragraph.getComments();
@@ -1227,10 +1228,26 @@ async function readParagraphAnchors(
       });
       session.advance(seen.size);
     }
-  } catch (error) {
-    session.note(error);
-    cut = "error";
-  }
+  };
+  if (session.spent()) cut = "budget";
+  else
+    try {
+      await list();
+    } catch (error) {
+      session.note(error);
+      cut = "error";
+    }
+  const unlisted = live.filter(
+    (thread) => thread.record.readOnly !== "id-repeated" && !seen.has(thread),
+  );
+  if (cut === null && unlisted.length > 0)
+    for (const [thread, at] of await placeUnlisted(
+      session,
+      items,
+      seen,
+      unlisted,
+    ))
+      seen.set(thread, [at]);
 
   const cells = new Map<number, Word.TableCell>();
   for (const at of seen.values())
@@ -1311,6 +1328,82 @@ async function readParagraphAnchors(
     if (group.length > 1)
       for (const { record } of group) record.orderUnsure = true;
   session.end(seen.size);
+}
+
+/**
+ * Word for the web names a comment in no paragraph's own getComments() where it misreads the
+ * comment parts (v3c-order.docx, whose comments.xml is out of w:id order; probe ERMAIN-983), though
+ * the paragraph's package still holds its marks. The packages of the paragraphs that show more
+ * references (U+0005) than the threads named as ending there place such threads, by durableId or,
+ * in a legacy file, by a unique content match; a thread no package places keeps no anchor.
+ */
+async function placeUnlisted(
+  session: Session,
+  items: readonly Word.Paragraph[],
+  seen: ReadonlyMap<Live, readonly number[]>,
+  unlisted: readonly Live[],
+): Promise<Map<Live, number>> {
+  const ending = new Map<number, number>();
+  for (const at of seen.values()) {
+    const last = at[at.length - 1];
+    ending.set(last, (ending.get(last) ?? 0) + 1);
+  }
+  const candidates = items.flatMap((paragraph, i) =>
+    (paragraph.text.match(/\u0005/g)?.length ?? 0) > (ending.get(i) ?? 0)
+      ? [i]
+      : [],
+  );
+  const ids = new Set(
+    [...seen.keys(), ...unlisted].map((thread) => thread.record.id),
+  );
+  const found = new Map<Live, number>();
+  for (const batch of chunks(candidates, WORD_COMMENT_EXACT_BATCH)) {
+    if (found.size === unlisted.length || session.spent()) break;
+    const reads = batch.map((index) => {
+      const paragraph = items[index];
+      const cell =
+        paragraph.tableNestingLevel > 0
+          ? paragraph.parentTableCellOrNullObject
+          : null;
+      cell?.load("cellIndex");
+      return {
+        index,
+        cell,
+        identity: paragraph.getText(WORD_SELECTION_TEXT_OPTIONS),
+        ooxml: paragraph.getOoxml(),
+      };
+    });
+    try {
+      await session.sync();
+    } catch (error) {
+      session.note(error);
+      break;
+    }
+    for (const { index, cell, identity, ooxml } of reads) {
+      const paragraph = items[index];
+      const read = readWordCommentParagraphPackage(ooxml.value, {
+        rangeText: paragraph.text,
+        identityText: identity.value,
+        inCell: paragraph.tableNestingLevel > 0,
+        ...(cell && !cell.isNullObject ? { cellIndex: cell.cellIndex } : {}),
+      });
+      if (!read) continue;
+      const known = withListedIds(read, ids);
+      const open = unlisted.filter((thread) => !found.has(thread));
+      const spans = unjoined(known)
+        ? joinWordCommentSpansByContent(known, listedFor(open, false), {
+            ordered: false,
+          })
+        : known.spans;
+      for (const thread of open) {
+        const placement = placeBySpan(known, spans, thread);
+        if (placement?.status !== "placed") continue;
+        found.set(thread, index);
+        thread.record.placement = placement;
+      }
+    }
+  }
+  return found;
 }
 
 /**
