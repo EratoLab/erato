@@ -885,6 +885,11 @@ impl AppState {
         let header_renderer = ChatProviderHeadersRenderer::new();
         let mut headers = HeaderMap::new();
         for (key, value) in config.additional_request_headers_map() {
+            if chat_provider_headers_context.is_none_or(|ctx| ctx.chat_id.is_none())
+                && ChatProviderHeadersRenderer::requires_chat(&value)
+            {
+                continue;
+            }
             let rendered_value = chat_provider_headers_context.map_or_else(
                 || value.to_string(),
                 |ctx| header_renderer.render(&value, ctx),
@@ -1204,5 +1209,87 @@ mod model_listing_tests {
             url.as_str(),
             "https://gateway.example/v1/models?tenant=acme"
         );
+    }
+}
+
+#[cfg(test)]
+mod request_header_tests {
+    use super::*;
+    use sea_orm::prelude::Uuid;
+    use serde_json::json;
+
+    #[tokio::test]
+    async fn conversation_request_headers_keep_identity_across_requests() {
+        let app = axum::Router::new().route(
+            "/v1/chat/completions",
+            axum::routing::post(|headers: HeaderMap| async move {
+                assert_eq!(headers["x-user"], "user-123");
+                assert_eq!(headers["x-tenant"], "a&b=c");
+                headers["x-bf-session-id"].to_str().unwrap().to_owned()
+            }),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!(
+            "http://{}/v1/chat/completions",
+            listener.local_addr().unwrap()
+        );
+        let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        let config = ChatProviderConfig {
+            additional_request_headers: Some(vec![
+                "x-bf-session-id={{chat.id}}".into(),
+                "x-user={{erato_user.id}}".into(),
+                "x-tenant={{id_token.claims.tenant}}".into(),
+            ]),
+            ..Default::default()
+        };
+        let claims = json!({"tenant": "a&b=c"});
+        let user_context = ChatProviderHeadersContext::new("user-123", &claims);
+        let first_chat = Uuid::new_v4();
+        let second_chat = Uuid::new_v4();
+        // Rebuilding the client for turns, retries and tool iterations must retain the ID.
+        for chat_id in [first_chat, first_chat, second_chat, first_chat] {
+            let context = user_context.with_chat_id(chat_id);
+            let headers = AppState::build_request_headers(&config, Some(&context)).unwrap();
+            let request = reqwest::Client::new()
+                .post(&url)
+                .headers(headers)
+                .build()
+                .unwrap();
+            assert_eq!(request.headers()["x-bf-session-id"], chat_id.to_string());
+            assert_eq!(request.headers()["x-user"], "user-123");
+            assert_eq!(request.headers()["x-tenant"], "a&b=c");
+            let response = reqwest::Client::new().execute(request).await.unwrap();
+            assert_eq!(response.text().await.unwrap(), chat_id.to_string());
+        }
+        server.abort();
+    }
+
+    #[test]
+    fn requests_without_chat_omit_chat_dependent_headers() {
+        let config = ChatProviderConfig {
+            additional_request_headers: Some(vec![
+                "x-bf-session-id={{chat.id}}".into(),
+                "x-composite=user-{{erato_user.id}}-chat-{{ chat.id }}".into(),
+                "x-static=fixed".into(),
+                "x-user={{erato_user.id}}".into(),
+            ]),
+            ..Default::default()
+        };
+        let claims = json!({});
+        let context = ChatProviderHeadersContext::new("user-123", &claims);
+        for context in [Some(&context), None] {
+            let headers = AppState::build_request_headers(&config, context).unwrap();
+            assert!(!headers.contains_key("x-bf-session-id"));
+            assert!(!headers.contains_key("x-composite"));
+            assert_eq!(headers["x-static"], "fixed");
+            assert_eq!(
+                headers["x-user"],
+                if context.is_some() {
+                    "user-123"
+                } else {
+                    "{{erato_user.id}}"
+                }
+            );
+        }
     }
 }

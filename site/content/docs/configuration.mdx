@@ -1157,6 +1157,28 @@ Each provider in `chat_providers.providers` supports the following fields:
 - **`model_capabilities`** - Optional configuration for model capabilities and limitations
 - **`model_settings`** - Optional configuration for model behavior and generation settings
 
+Provider `additional_request_headers` entries use `Header-Name=value` syntax. Values
+support Handlebars templates with these variables:
+
+- `{{erato_user.id}}`: the authenticated Erato user ID.
+- `{{id_token.claims.<claim>}}`: a claim from the user's ID token. Missing claims render as empty strings.
+- `{{chat.id}}`: the existing Erato conversation UUID. It stays the same across
+  turns, retries, tool-call iterations, and resumed generation. Summary and history
+  compaction requests use the conversation's ID; delegated runs use their own chat ID.
+
+When no conversation exists, such as during model availability checks or standalone
+transcription, headers referencing `chat` are omitted entirely. No session ID is
+invented, and no empty session header is sent. Other headers retain their existing behavior.
+
+For example, configure Bifrost's session header using the conversation UUID:
+
+```toml
+[chat_providers.providers.bifrost]
+additional_request_headers = ["x-bf-session-id={{chat.id}}"]
+```
+
+Session affinity also requires the appropriate configuration in Bifrost.
+
 ##### `chat_providers.providers.<provider-id>.provider_kind`
 
 {/* erato_toml_config_key: chat_providers.providers.<provider-id>.provider_kind */}

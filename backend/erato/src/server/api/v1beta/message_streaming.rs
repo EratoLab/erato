@@ -10307,7 +10307,8 @@ pub async fn generate_chat_summary(
 
     tracing::debug!("[SUMMARY] Calling genai API (chat_id={})", chat.id);
     let chat_provider_headers_context =
-        ChatProviderHeadersContext::new(&me_user.id, &me_user.id_token_claims);
+        ChatProviderHeadersContext::new(&me_user.id, &me_user.id_token_claims)
+            .with_chat_id(chat.id);
     let summary_completion = app_state
         .genai_for_chat_provider_config_with_headers_context(
             chat_provider_config,
@@ -14573,7 +14574,8 @@ pub(crate) async fn run_generation_after_user_message(
         })
         .unwrap_or_default();
     let chat_provider_headers_context =
-        ChatProviderHeadersContext::new(&me_user.id, &me_user.id_token_claims);
+        ChatProviderHeadersContext::new(&me_user.id, &me_user.id_token_claims)
+            .with_chat_id(chat.id);
 
     // Save initial empty assistant message
     let empty_assistant_message_json = json!({
@@ -15342,7 +15344,8 @@ pub(crate) async fn start_regeneration(
 
             let subject = me_user.to_subject();
             let chat_provider_headers_context =
-                ChatProviderHeadersContext::new(&me_user.id, &me_user.id_token_claims);
+                ChatProviderHeadersContext::new(&me_user.id, &me_user.id_token_claims)
+                    .with_chat_id(chat.id);
             let mcp_auth_context = McpRequestAuthContext {
                 app_state: Some(&app_state),
                 user_id: Uuid::parse_str(&me_user.id).ok(),
@@ -15944,7 +15947,8 @@ pub(crate) async fn start_edit(
 
             let subject = me_user.to_subject();
             let chat_provider_headers_context =
-                ChatProviderHeadersContext::new(&me_user.id, &me_user.id_token_claims);
+                ChatProviderHeadersContext::new(&me_user.id, &me_user.id_token_claims)
+                    .with_chat_id(chat.id);
             let mcp_auth_context = McpRequestAuthContext {
                 app_state: Some(&app_state),
                 user_id: Uuid::parse_str(&me_user.id).ok(),
@@ -19377,7 +19381,8 @@ async fn resume_parked_generation(
 
     let chat_options =
         build_chat_options_for_completion(&provider.model_settings, &provider.model_capabilities);
-    let headers_context = ChatProviderHeadersContext::new(&me_user.id, &me_user.id_token_claims);
+    let headers_context = ChatProviderHeadersContext::new(&me_user.id, &me_user.id_token_claims)
+        .with_chat_id(chat.id);
     let delegation = origin_user_message_id
         .filter(|_| task_offer_scope.is_some())
         .map(|origin_user_message_id| DelegationDispatchContext {
