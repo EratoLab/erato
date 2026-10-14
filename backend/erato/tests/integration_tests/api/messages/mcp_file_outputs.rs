@@ -22,6 +22,7 @@ const MARKER: &str = "MCP-FILE-RESULT";
 #[derive(Clone)]
 struct Fixture {
     output: Value,
+    protocol: erato::config::McpProtocolMode,
     structured: bool,
     is_error: bool,
     storage_failure: bool,
@@ -33,7 +34,12 @@ async fn mcp(State(fixture): State<Fixture>, Json(request): Json<Value>) -> Resp
     if request.get("id").is_none() {
         return http::StatusCode::ACCEPTED.into_response();
     }
-    let result = match request["method"].as_str().unwrap() {
+    let modern = fixture.protocol == erato::config::McpProtocolMode::Stateless;
+    let mut result = match request["method"].as_str().unwrap() {
+        "server/discover" if !modern => return http::StatusCode::BAD_REQUEST.into_response(),
+        "server/discover" => {
+            json!({"resultType":"complete", "supportedVersions":["2026-07-28"], "capabilities":{"tools":{}}, "ttlMs":30_000, "cacheScope":"private"})
+        }
         "initialize" => json!({
             "protocolVersion": request["params"]["protocolVersion"],
             "capabilities": {"tools": {}},
@@ -66,6 +72,13 @@ async fn mcp(State(fixture): State<Fixture>, Json(request): Json<Value>) -> Resp
         }
         other => panic!("Unexpected MCP method: {other}"),
     };
+    if modern {
+        result["resultType"] = json!("complete");
+        if request["method"] == "tools/list" {
+            result["ttlMs"] = json!(30_000);
+            result["cacheScope"] = json!("private");
+        }
+    }
     Json(json!({"jsonrpc": "2.0", "id": request["id"], "result": result})).into_response()
 }
 
@@ -127,8 +140,40 @@ async fn check_output(
     expected_status: &str,
     expected_files: usize,
 ) {
+    for protocol in [
+        erato::config::McpProtocolMode::Legacy,
+        erato::config::McpProtocolMode::Stateless,
+    ] {
+        check_output_for_protocol(
+            pool.clone(),
+            output.clone(),
+            approval,
+            structured,
+            is_error,
+            storage_failure,
+            expected_status,
+            expected_files,
+            protocol,
+        )
+        .await;
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn check_output_for_protocol(
+    pool: Pool<Postgres>,
+    output: Value,
+    approval: Option<&str>,
+    structured: bool,
+    is_error: bool,
+    storage_failure: bool,
+    expected_status: &str,
+    expected_files: usize,
+    protocol: erato::config::McpProtocolMode,
+) {
     let fixture = Fixture {
         output,
+        protocol,
         structured,
         is_error,
         storage_failure,
@@ -203,6 +248,13 @@ async fn check_output(
         .unwrap(),
     );
     let state = test_app_state(config, pool).await;
+    // Both protocol variants run against this test's database. Count only the
+    // rows added by this variant while still catching unexpected file writes.
+    let initial_file_count = file_uploads::Entity::find()
+        .all(&state.db)
+        .await
+        .unwrap()
+        .len();
     get_or_create_user(&state.db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
         .await
         .unwrap();
@@ -257,7 +309,7 @@ async fn check_output(
             .await
             .unwrap()
             .len(),
-        expected_files,
+        initial_file_count + expected_files,
         "failed validation or rejection must not create file rows"
     );
     assert_eq!(fixture.files.lock().unwrap().len(), expected_files);
@@ -509,6 +561,7 @@ async fn integrated_file_retrieval_full_text_and_replay(pool: Pool<Postgres>) {
     );
     let fixture = Fixture {
         output: json!({}),
+        protocol: erato::config::McpProtocolMode::Legacy,
         structured: false,
         is_error: false,
         storage_failure: false,

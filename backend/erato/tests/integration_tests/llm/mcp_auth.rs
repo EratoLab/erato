@@ -25,6 +25,7 @@ fn mcp_server_config(
     authentication: McpServerAuthenticationConfig,
 ) -> McpServerConfig {
     McpServerConfig {
+        protocol_mode: Default::default(),
         transport_type: "streamable_http".to_string(),
         url: format!("{base_url}{path}"),
         http_headers: None,

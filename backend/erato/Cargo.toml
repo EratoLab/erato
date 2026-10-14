@@ -84,6 +84,7 @@ tiktoken-rs = "0.12.0"
 # Dependencies: MCP
 rmcp = { version = "=3.2.0", features = ["auth", "client", "reqwest", "transport-streamable-http-client-reqwest"] }
 rmcp-sse = { path = "../rmcp-sse" }
+sse-stream = "0.2.6"
 erato_mcp_oauth = { path = "../erato_mcp_oauth" }
 
 # Dependencies: Observability

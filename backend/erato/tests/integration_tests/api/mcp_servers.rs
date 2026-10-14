@@ -36,6 +36,7 @@ fn mcp_server_config(
     authentication: McpServerAuthenticationConfig,
 ) -> McpServerConfig {
     McpServerConfig {
+        protocol_mode: Default::default(),
         transport_type: "streamable_http".to_string(),
         url: format!("{base_url}{path}"),
         http_headers: None,
@@ -221,6 +222,9 @@ async fn test_list_mcp_server_tools_projects_effective_values(pool: Pool<Postgre
 async fn test_tool_listing_resolves_operator_hints_and_per_hint_sources(pool: Pool<Postgres>) {
     let mock = Router::new().route("/mcp", post(|Json(request): Json<Value>| async move {
         let result = match request["method"].as_str() {
+            Some("server/discover") => {
+                return (http::StatusCode::BAD_REQUEST, Json(Value::Null));
+            }
             Some("initialize") => json!({
                 "protocolVersion": request["params"]["protocolVersion"], "capabilities": {"tools": {}},
                 "serverInfo": {"name": "annotations", "version": "1"}
@@ -273,6 +277,7 @@ async fn test_tool_listing_resolves_operator_hints_and_per_hint_sources(pool: Po
         .await;
     response.assert_status_ok();
     let body: Value = response.json();
+    assert_eq!(body["status"], "SUCCESS");
     let read = &body["tools"][0];
     assert_eq!(read["name"], "read_file");
     assert_eq!(read["title"], "Read file");
@@ -441,6 +446,9 @@ async fn test_list_mcp_servers_bounds_parallel_probes_and_preserves_order(pool: 
                     );
                     async move {
                         let result = match request["method"].as_str() {
+                            Some("server/discover") => {
+                                return (http::StatusCode::BAD_REQUEST, Json(Value::Null));
+                            }
                             Some("initialize") => json!({
                                 "protocolVersion": request["params"]["protocolVersion"],
                                 "capabilities": {"tools": {}},
@@ -1012,4 +1020,62 @@ async fn test_group_decisions_round_trip_through_the_roster(pool: Pool<Postgres>
         projection(&tools, "publish_approval_probe"),
         row("ask", "always_allow", "allow")
     );
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_both_protocols_preserve_effective_tool_settings(pool: Pool<Postgres>) {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    let mock =
+        tokio::spawn(async move { axum::serve(listener, mock_mcp_server::app()).await.unwrap() });
+    let (mut config, _llm) = setup_mock_llm_server(None).await;
+    for era in ["legacy", "stateless"] {
+        config.mcp_servers.insert(
+            era.into(),
+            mcp_server_config(
+                &base,
+                &format!("/mcp/{era}/file"),
+                McpServerAuthenticationConfig::None,
+            ),
+        );
+    }
+    let state = test_app_state(config, pool).await;
+    let user = get_or_create_user(&state.db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+        .await
+        .unwrap();
+    for era in ["legacy", "stateless"] {
+        upsert_active(
+            &state.db,
+            user.id,
+            era,
+            "read_file",
+            UserToolDecision::Denied,
+        )
+        .await
+        .unwrap();
+    }
+    let mcp = state.mcp_state().await;
+    let api = create_test_server(state);
+    for _ in 0..2 {
+        for era in ["legacy", "stateless"] {
+            let response = api
+                .get(&format!("/api/v1beta/me/mcp_servers/{era}/tools"))
+                .with_bearer_token(TEST_JWT_TOKEN)
+                .await;
+            response.assert_status_ok();
+            let body: Value = response.json();
+            assert_eq!(body["status"], "SUCCESS");
+            let tool = body["tools"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|t| t["name"] == "read_file")
+                .unwrap();
+            assert_eq!(tool["effective"], "denied");
+            assert_eq!(tool["annotations"]["read_only_hint"], true);
+        }
+    }
+    assert_eq!(mcp.servers.active_session_count("legacy").await, 1);
+    assert_eq!(mcp.servers.active_session_count("stateless").await, 0);
+    mock.abort();
 }
