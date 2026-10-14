@@ -454,6 +454,30 @@ describe("useWordDocumentSource", () => {
     expect(read).toHaveBeenCalledTimes(2);
   });
 
+  it("captures again at the next send, not on every focus, while Word for Mac was still tagging", async () => {
+    read.mockResolvedValue({
+      ok: true,
+      paragraphs: paragraphs(["Alpha"]),
+      authoring: {
+        ooxml: packageXml(paragraph("Alpha")),
+        tracking: "Off",
+        fullDocument: true,
+        proofingPending: true,
+      },
+    });
+    const { result } = renderSource({ authoringEnabled: true });
+    await waitFor(() => expect(result.current.preview.status).toBe("included"));
+
+    focusPane();
+    focusPane();
+    expect(read).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      await result.current.capture();
+    });
+    expect(read).toHaveBeenCalledTimes(2);
+  });
+
   it("does not let an older capture that settles late replace a newer one", async () => {
     const older = deferred<WordDocumentReadResult>();
     const newer = deferred<WordDocumentReadResult>();

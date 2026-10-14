@@ -25,6 +25,8 @@ export type WordDocumentReadResult =
         tracking: string;
         fullDocument?: boolean;
         documentUrl?: string;
+        /** Word for Mac was still tagging languages when the capture stopped waiting for it. */
+        proofingPending?: boolean;
       };
       /** The full package failed; the paragraphs still stand. */
       authoringUnavailable?: WordAuthoringUnavailable;
@@ -80,13 +82,13 @@ const proofingQuiet = new Set<string>();
  */
 async function settleWordProofing(
   first: WordDocumentPackageSnapshot,
-): Promise<WordDocumentPackageSnapshot> {
+): Promise<{ read: WordDocumentPackageSnapshot; pending?: boolean }> {
   if (
     wordHostPlatform() !== "Mac" ||
     proofingQuiet.has(first.documentUrl) ||
     wordProofingComplete(first.ooxml)
   )
-    return first;
+    return { read: first };
   const started = Date.now();
   const windowEnd =
     Math.max(paneLoadedAt, wordDocumentImportedAt()) + WORD_PROOFING_WINDOW_MS;
@@ -114,7 +116,7 @@ async function settleWordProofing(
         () => new WordDocumentCaptureTimeoutError(),
       );
     } catch {
-      return current;
+      return { read: current, pending: true };
     }
     if (next.documentUrl !== first.documentUrl)
       throw new WordDocumentTransferError(
@@ -125,14 +127,15 @@ async function settleWordProofing(
       next.fingerprint !== current.fingerprint
     ) {
       if (!wordPackagesDifferInDetectedLanguageOnly(current.ooxml, next.ooxml))
-        return current;
+        return { read: current, pending: true };
       current = next;
       changedAt = Date.now();
     }
-    if (wordProofingComplete(next.ooxml)) return next;
+    if (wordProofingComplete(next.ooxml)) return { read: next };
   }
-  if (current === first) proofingQuiet.add(first.documentUrl);
-  return current;
+  if (current !== first) return { read: current, pending: true };
+  proofingQuiet.add(first.documentUrl);
+  return { read: current };
 }
 
 interface WordGlobal {
@@ -209,7 +212,7 @@ export async function readWordDocument(
       // back to the body route, whose capture says it is not the whole document; any other failed
       // transfer, or a document that changes during capture, is retried at the next send.
       try {
-        const full = await settleWordProofing(
+        const { read: full, pending } = await settleWordProofing(
           await withWordTimeout(
             captureWordDocumentPackage(),
             WORD_PACKAGE_CAPTURE_TIMEOUT_MS,
@@ -223,6 +226,7 @@ export async function readWordDocument(
             ooxml: full.ooxml,
             fullDocument: true,
             documentUrl: full.documentUrl,
+            ...(pending ? { proofingPending: true } : {}),
           },
         };
       } catch (error) {

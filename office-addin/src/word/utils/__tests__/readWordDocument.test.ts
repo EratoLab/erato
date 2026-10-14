@@ -513,7 +513,7 @@ describe("readWordDocument on Word for Mac while its proofing pass is pending", 
     const read = readWordDocument(true);
     await vi.advanceTimersByTimeAsync(advanceMs);
     const result = await read;
-    return result.ok ? result.authoring?.ooxml : undefined;
+    return result.ok ? result.authoring : undefined;
   };
 
   beforeEach(() => {
@@ -543,7 +543,7 @@ describe("readWordDocument on Word for Mac while its proofing pass is pending", 
       done,
     );
 
-    expect(await capture(10_000)).toBe(done);
+    expect(await capture(10_000)).toMatchObject({ ooxml: done });
     expect(count()).toBe(5);
   });
 
@@ -565,7 +565,9 @@ describe("readWordDocument on Word for Mac while its proofing pass is pending", 
       macPackage({ tagged: [0, 2], clean: true }),
     );
 
-    expect(await capture(WORD_PROOFING_SETTLE_MS)).toBe(macPackage());
+    expect(await capture(WORD_PROOFING_SETTLE_MS)).toEqual(
+      expect.objectContaining({ ooxml: macPackage() }),
+    );
     expect(count()).toBe(1);
   });
 
@@ -579,7 +581,10 @@ describe("readWordDocument on Word for Mac while its proofing pass is pending", 
       macPackage({ tagged: [0, 2], clean: true }),
     );
 
-    expect(await capture(10_000)).toBe(first);
+    expect(await capture(10_000)).toMatchObject({
+      ooxml: first,
+      proofingPending: true,
+    });
     expect(count()).toBe(2);
   });
 
@@ -587,7 +592,9 @@ describe("readWordDocument on Word for Mac while its proofing pass is pending", 
     vi.setSystemTime(Date.now() + 10 * WORD_PROOFING_WINDOW_MS);
     const count = reads("https://contoso.example/quiet.docx", macPackage());
 
-    expect(await capture(WORD_PROOFING_SETTLE_MS)).toBe(macPackage());
+    const quiet = await capture(WORD_PROOFING_SETTLE_MS);
+    expect(quiet?.ooxml).toBe(macPackage());
+    expect(quiet?.proofingPending).toBeUndefined();
     expect(count()).toBe(4);
 
     await capture(WORD_PROOFING_SETTLE_MS);
@@ -604,7 +611,9 @@ describe("readWordDocument on Word for Mac while its proofing pass is pending", 
       done,
     );
 
-    expect(await capture(WORD_PROOFING_WINDOW_MS)).toBe(done);
+    expect(await capture(WORD_PROOFING_WINDOW_MS)).toMatchObject({
+      ooxml: done,
+    });
     expect(count()).toBe(10);
   });
 
@@ -620,12 +629,13 @@ describe("readWordDocument on Word for Mac while its proofing pass is pending", 
 
     const captured = await capture(2 * WORD_PROOFING_SETTLE_MS);
     expect(count()).toBe(1 + WORD_PROOFING_SETTLE_MS / 1_000);
-    expect(captured).toBe(
-      macPackage({
+    expect(captured).toMatchObject({
+      ooxml: macPackage({
         texts,
         tagged: Array.from({ length: count() - 1 }, (_, j) => j),
       }),
-    );
+      proofingPending: true,
+    });
   });
 
   it("fails the capture when another document becomes active while it waits", async () => {
