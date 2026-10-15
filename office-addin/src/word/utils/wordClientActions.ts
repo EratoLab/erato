@@ -14,6 +14,7 @@ import {
 } from "./wordActionFacet";
 import { applyWordDocumentPlan } from "./wordApplyDocumentPlan";
 import { applyWordEdits } from "./wordApplyEdits";
+import { reattributeWordComments } from "./wordCommentAuthor";
 import { wordCommentDraft } from "./wordCommentSubmission";
 import { executeWordCommentDraft } from "./wordCommentWrites";
 import { insertWordTextAtCursor } from "./wordInsertText";
@@ -273,7 +274,10 @@ export const WORD_CLIENT_ACTIONS: ReadonlyMap<
             !comments
           )
             return { ok: false, outcomes: [], snapshotOoxml: null };
-          const run = await executeWordCommentDraft(draft, comments);
+          const run = await executeWordCommentDraft(draft, {
+            ...comments,
+            reattribute: reattributeWordComments,
+          });
           return {
             ok: run.rows.some(
               (row) =>
