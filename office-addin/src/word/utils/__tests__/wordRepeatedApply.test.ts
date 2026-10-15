@@ -29,11 +29,22 @@ import {
 
 import type { WordOoxmlHostOptions } from "../../../test/mocks/word/ooxmlHost";
 import type { WordDocumentApplyResult } from "../wordApplyDocumentPlan";
+import type * as wordPlanCommentCheckModule from "../wordPlanCommentCheck";
 import type {
   WordAuthoringSnapshot,
   WordDocumentPlan,
   WordPlanEntry,
 } from "@erato/frontend/word-review";
+
+vi.mock("../wordPlanCommentCheck", async (importOriginal) => {
+  const { ooxmlHostCommentStates } = await import(
+    "../../../test/mocks/word/commentStates"
+  );
+  return {
+    ...(await importOriginal<typeof wordPlanCommentCheckModule>()),
+    readWordCommentStates: vi.fn(ooxmlHostCommentStates),
+  };
+});
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -110,6 +121,7 @@ describe("repeated full-document Apply", { timeout: 60_000 }, () => {
           "list-instance-renumbered",
           "first-paragraph-spacing",
         ],
+        comments: { removed: 0, kept: 0, unexpected: 0 },
       });
     }
     expect(results).toHaveLength(5);
@@ -225,6 +237,7 @@ describe("repeated full-document Apply", { timeout: 60_000 }, () => {
         route: "import",
         tier: "strict",
         adjustments: [],
+        comments: { removed: 0, kept: 0, unexpected: 0 },
       });
     expect(new Set(shapes.map((s) => JSON.stringify(s))).size).toBe(1);
   });
@@ -247,6 +260,7 @@ describe("repeated in-place Apply", { timeout: 60_000 }, () => {
         tier: "block",
         adjustments: [],
         ops: 1,
+        comments: { removed: 0, kept: 0, unexpected: 0 },
       });
     expect(host.insert).not.toHaveBeenCalled();
     expect(fullShape(host.ooxml())).toEqual(
@@ -363,6 +377,7 @@ describe("repeated structural in-place Apply", { timeout: 60_000 }, () => {
         tier: "block",
         adjustments: [],
         ops: 4,
+        comments: { removed: 0, kept: 0, unexpected: 0 },
       });
     expect(host.insert).not.toHaveBeenCalled();
     expect(host.ooxml()).toContain("Step 5.");

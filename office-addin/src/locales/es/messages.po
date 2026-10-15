@@ -3962,6 +3962,16 @@ msgstr "Este cambio requiere reescribir todo el documento, algo que Erato no pue
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordPlanCommentMessages.ts
+msgid "officeAddin.word.planComments.changed"
+msgstr "{count, plural, one {Aplicado — # hilo de comentarios cambió de forma inesperada. Deshacer en Word recupera un comentario eliminado.} other {Aplicado — # hilos de comentarios cambiaron de forma inesperada. Deshacer en Word recupera los comentarios eliminados.}}"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordPlanCommentMessages.ts
+msgid "officeAddin.word.planComments.changed.web"
+msgstr "{count, plural, one {Aplicado — # hilo de comentarios cambió de forma inesperada. Deshacer en Word para la Web no puede recuperarlo; restaure una versión anterior desde el historial de versiones.} other {Aplicado — # hilos de comentarios cambiaron de forma inesperada. Deshacer en Word para la Web no puede recuperarlos; restaure una versión anterior desde el historial de versiones.}}"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordPlanCommentMessages.ts
 msgid "officeAddin.word.planComments.copied"
 msgstr "Hilos de comentarios copiados."
 
@@ -3996,6 +4006,11 @@ msgstr "{0} ({1}):"
 #: src/word/utils/wordPlanCommentMessages.ts
 msgid "officeAddin.word.planComments.copyReply"
 msgstr "  Respuesta de {0}: {1}"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordPlanCommentMessages.ts
+msgid "officeAddin.word.planComments.deleted"
+msgstr "{count, plural, one {Se eliminó # hilo de comentarios, como confirmó.} other {Se eliminaron # hilos de comentarios, como confirmó.}}"
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordPlanCommentMessages.ts
@@ -4057,6 +4072,11 @@ msgstr "Resuelto"
 #: src/word/utils/wordPlanCommentMessages.ts
 msgid "officeAddin.word.planComments.tick"
 msgstr "{count, plural, one {Eliminar también # hilo de comentarios} other {Eliminar también # hilos de comentarios}}"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordPlanCommentMessages.ts
+msgid "officeAddin.word.planComments.unchecked"
+msgstr "Aplicado. Erato no pudo enumerar los comentarios del documento después; revíselos en Word."
 
 #. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts

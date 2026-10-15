@@ -137,3 +137,42 @@ export function wordCommentThreadsCopyFailedText(): string {
     message: "The comment threads could not be copied.",
   });
 }
+
+/** After Apply: Word's Undo restores removed comments on desktop with their ids, the web's does not (F-16). */
+export function wordCommentsChangedText(count: number, web: boolean): string {
+  return web
+    ? t({
+        id: "officeAddin.word.planComments.changed.web",
+        message: plural(count, {
+          one: "Applied — # comment thread changed unexpectedly. Word for the web's Undo can't bring it back; restore an earlier version from Version History.",
+          other:
+            "Applied — # comment threads changed unexpectedly. Word for the web's Undo can't bring them back; restore an earlier version from Version History.",
+        }),
+      })
+    : t({
+        id: "officeAddin.word.planComments.changed",
+        message: plural(count, {
+          one: "Applied — # comment thread changed unexpectedly. Word's Undo brings a removed comment back.",
+          other:
+            "Applied — # comment threads changed unexpectedly. Word's Undo brings removed comments back.",
+        }),
+      });
+}
+
+export function wordCommentsUncheckedText(): string {
+  return t({
+    id: "officeAddin.word.planComments.unchecked",
+    message:
+      "Applied. Erato couldn't list the document's comments afterwards, so check them in Word.",
+  });
+}
+
+export function wordCommentsDeletedText(count: number): string {
+  return t({
+    id: "officeAddin.word.planComments.deleted",
+    message: plural(count, {
+      one: "Deleted # comment thread, as you confirmed.",
+      other: "Deleted # comment threads, as you confirmed.",
+    }),
+  });
+}

@@ -87,6 +87,9 @@ import {
 } from "../utils/wordInPlaceRoute";
 import { wordInPlaceAvailability } from "../utils/wordInPlaceSwitch";
 import {
+  wordCommentsChangedText,
+  wordCommentsDeletedText,
+  wordCommentsUncheckedText,
   wordCommentThreadsCopiedText,
   wordCommentThreadsCopyFailedText,
   wordCommentThreadsCopyText,
@@ -698,12 +701,22 @@ export function WordDocumentPlanCard({
                     message: "Checking and restoring the document…",
                   })
                 : undefined;
+  const commentCheck =
+    review.status === "done" ? review.documentPlanOutcome?.comments : undefined;
+  const commentWarning = commentCheck?.unexpected
+    ? wordCommentsChangedText(commentCheck.unexpected, web)
+    : commentCheck?.unverified
+      ? wordCommentsUncheckedText()
+      : "";
   const adjustedOutcome =
     ["done", "reverted"].includes(review.status) &&
-    review.documentPlanOutcome?.tier === "content"
+    (review.documentPlanOutcome?.tier === "content" || commentWarning)
       ? review.documentPlanOutcome
       : undefined;
   const adjustmentNote = [
+    ...(commentCheck?.removed && !commentWarning
+      ? [wordCommentsDeletedText(commentCheck.removed)]
+      : []),
     ...(review.status === "done" && review.documentPlanOutcome?.tracked
       ? [wordTrackedApplyText()]
       : []),
@@ -1081,10 +1094,17 @@ export function WordDocumentPlanCard({
               title={planTitle}
               wholeDocument={planReview.scope.wholeFile}
               note={adjustmentNote}
+              warning={commentWarning}
             />
           ),
-          alert: status && (
+          alert: status ? (
             <WordStatusAlert status={review.status}>{status}</WordStatusAlert>
+          ) : (
+            commentWarning && (
+              <Alert type="warning" className="m-3 [overflow-wrap:anywhere]">
+                {commentWarning}
+              </Alert>
+            )
           ),
           trailing: (
             <>

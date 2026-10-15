@@ -26,6 +26,7 @@ import type {
   WordApplyAdjustment,
   WordVerifyTier,
 } from "./wordFullDocumentComparison";
+import type { WordPlanCommentCheck } from "./wordPlanCommentCheck";
 import type {
   WordHousekeepingCounts,
   WordReadScope,
@@ -87,6 +88,8 @@ export interface WordDiagnosticDetails {
   housekeeping?: WordHousekeepingCounts;
   /** Comment threads the plan deletes, which the user has not confirmed. */
   commentThreads?: number;
+  /** The comment threads after a write that stopped, against the plan. */
+  comments?: WordPlanCommentCheck;
   error?: string;
 }
 
@@ -276,6 +279,16 @@ function housekeepingLine(
     : [];
 }
 
+function commentLine(check: WordPlanCommentCheck | undefined): string[] {
+  if (!check) return [];
+  if (check.unverified) return ["Comment threads: not checked"];
+  return [check.removed, check.kept, check.unexpected].every(isCount)
+    ? [
+        `Comment threads: ${check.removed} deleted as planned, ${check.kept} kept, ${check.unexpected} changed unexpectedly`,
+      ]
+    : [];
+}
+
 export function renderWordDiagnosticReport(
   operation: string,
   status: string | undefined,
@@ -362,6 +375,7 @@ export function renderWordDiagnosticReport(
         ]
       : []),
     ...housekeepingLine(details?.housekeeping),
+    ...commentLine(details?.comments),
     ...(details?.parts?.length
       ? [
           `Differing parts: ${details.parts.join(", ")}${details.partsOmitted ? ` (+${details.partsOmitted} more)` : ""}`,
@@ -392,6 +406,7 @@ export function renderWordOutcomeReport(
       : []),
     `Adjustments: ${adjustments.length ? adjustments.join(", ") : "none"}`,
     ...housekeepingLine(outcome.housekeeping),
+    ...commentLine(outcome.comments),
     ...(isCount(outcome.ops) ? [`In-place changes: ${outcome.ops}`] : []),
     ...(isCount(outcome.outsideChanges)
       ? [

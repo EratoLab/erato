@@ -8,6 +8,7 @@ import {
   chapterCommentsBody,
   withComments,
 } from "../../../test/mocks/word/commentFixtures";
+import { ooxmlHostCommentStates } from "../../../test/mocks/word/commentStates";
 import { installWordOoxmlHost } from "../../../test/mocks/word/ooxmlHost";
 import { captureRealisticSnapshot } from "../../../test/mocks/word/realisticWordFixtures";
 import { applyWordDocumentPlan } from "../wordApplyDocumentPlan";
@@ -25,13 +26,25 @@ import {
 import { wordInPlaceCapabilities } from "../wordInPlaceCapabilities";
 import { routeWordDocumentPlan } from "../wordInPlaceRoute";
 import { wordInPlaceAvailability } from "../wordInPlaceSwitch";
+import { readWordCommentStates } from "../wordPlanCommentCheck";
 import { wordPlanCommentConsequences } from "../wordPlanComments";
 
 import type * as wordDocumentPackageModule from "../wordDocumentPackage";
+import type * as wordPlanCommentCheckModule from "../wordPlanCommentCheck";
 import type {
   WordAuthoringSnapshot,
   WordDocumentPlan,
 } from "@erato/frontend/word-review";
+
+vi.mock("../wordPlanCommentCheck", async (importOriginal) => {
+  const { ooxmlHostCommentStates } = await import(
+    "../../../test/mocks/word/commentStates"
+  );
+  return {
+    ...(await importOriginal<typeof wordPlanCommentCheckModule>()),
+    readWordCommentStates: vi.fn(ooxmlHostCommentStates),
+  };
+});
 
 vi.mock("../wordDocumentPackage", async (importOriginal) => {
   const actual = await importOriginal<typeof wordDocumentPackageModule>();
@@ -106,8 +119,10 @@ const liveThreads = async () =>
 
 afterEach(() => {
   vi.mocked(insertWordDocumentFile).mockClear();
+  vi.mocked(readWordCommentStates).mockClear();
   vi.unstubAllGlobals();
 });
+const UNCHANGED = { removed: 0, kept: 0, unexpected: 0 };
 
 describe("comment threads a plan removes, on every apply route", () => {
   it("in place: an edit beside the comments removes none and needs no tick", async () => {
@@ -123,9 +138,10 @@ describe("comment threads a plan removes, on every apply route", () => {
     );
     expect(result).toMatchObject({
       status: "applied",
-      outcome: { route: "in-place" },
+      outcome: { route: "in-place", comments: UNCHANGED },
     });
     expect((await liveThreads()).map((t) => t.wId)).toEqual(["0", "3", "5"]);
+    expect(readWordCommentStates).toHaveBeenCalledTimes(2);
   });
 
   it("import: shortening chapter 3 names its two threads and writes nothing until they are ticked", async () => {
@@ -176,7 +192,10 @@ describe("comment threads a plan removes, on every apply route", () => {
     );
     expect(result).toMatchObject({
       status: "applied",
-      outcome: { route: "import" },
+      outcome: {
+        route: "import",
+        comments: { removed: 2, kept: 0, unexpected: 0 },
+      },
     });
     const left = await liveThreads();
     expect(left.map((t) => [t.wId, t.replies.length])).toEqual([["0", 2]]);
@@ -237,7 +256,88 @@ describe("comment threads a plan removes, on every apply route", () => {
         undefined,
         { commentRemovalsConfirmed: found.fingerprint },
       ),
-    ).toMatchObject({ status: "applied" });
+    ).toMatchObject({
+      status: "applied",
+      outcome: { comments: { removed: 1, kept: 0, unexpected: 0 } },
+    });
     expect((await liveThreads()).map((t) => t.wId)).toEqual(["0", "3"]);
+  });
+});
+
+describe("the comment check after every written apply", () => {
+  const shorten = (snapshot: WordAuthoringSnapshot) =>
+    keepAllBut(snapshot, ["b6", "b7", "b8", "b9"], "Chapter three, in short.");
+  const confirmed = (snapshot: WordAuthoringSnapshot) => ({
+    commentRemovalsConfirmed: consequences(snapshot, shorten(snapshot))
+      .fingerprint,
+  });
+
+  it("reports a thread Word changed beyond the plan", async () => {
+    const { snapshot } = await open();
+    vi.mocked(readWordCommentStates)
+      .mockImplementationOnce(ooxmlHostCommentStates)
+      .mockImplementationOnce(async () =>
+        (await ooxmlHostCommentStates())!.filter(
+          (t) => t.id !== String(0x6d5c0001),
+        ),
+      );
+    expect(
+      await applyWordDocumentPlan(
+        JSON.stringify(shorten(snapshot)),
+        snapshot,
+        MESSAGE,
+        undefined,
+        undefined,
+        confirmed(snapshot),
+      ),
+    ).toMatchObject({
+      status: "applied",
+      outcome: { comments: { removed: 2, kept: 0, unexpected: 1 } },
+    });
+  });
+
+  it("says so when Word could not list the comments, and never reads for an unwritten apply", async () => {
+    const { snapshot } = await open();
+    vi.mocked(readWordCommentStates).mockResolvedValueOnce(null);
+    expect(
+      await applyWordDocumentPlan(
+        JSON.stringify(shorten(snapshot)),
+        snapshot,
+        MESSAGE,
+        undefined,
+        undefined,
+        confirmed(snapshot),
+      ),
+    ).toMatchObject({
+      status: "applied",
+      outcome: { comments: { unverified: true } },
+    });
+    vi.mocked(readWordCommentStates).mockClear();
+    const again = await open();
+    await applyWordDocumentPlan(
+      JSON.stringify(shorten(again.snapshot)),
+      again.snapshot,
+      MESSAGE,
+    );
+    expect(readWordCommentStates).not.toHaveBeenCalled();
+  });
+
+  it("checks a write that stopped partway too", async () => {
+    const { host, snapshot } = await open();
+    host.failAfterWrite();
+    const result = await applyWordDocumentPlan(
+      JSON.stringify(shorten(snapshot)),
+      snapshot,
+      MESSAGE,
+      undefined,
+      undefined,
+      confirmed(snapshot),
+    );
+    expect(result).toMatchObject({
+      status: "interrupted",
+      diagnostic: {
+        details: { comments: { removed: 2, kept: 0, unexpected: 0 } },
+      },
+    });
   });
 });

@@ -3962,6 +3962,16 @@ msgstr "Cette modification nécessite de réécrire tout le document, ce qu’Er
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordPlanCommentMessages.ts
+msgid "officeAddin.word.planComments.changed"
+msgstr "{count, plural, one {Appliqué — # fil de commentaires a changé de façon inattendue. L'annulation de Word rétablit un commentaire supprimé.} other {Appliqué — # fils de commentaires ont changé de façon inattendue. L'annulation de Word rétablit les commentaires supprimés.}}"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordPlanCommentMessages.ts
+msgid "officeAddin.word.planComments.changed.web"
+msgstr "{count, plural, one {Appliqué — # fil de commentaires a changé de façon inattendue. L'annulation de Word pour le web ne peut pas le rétablir ; restaurez une version antérieure depuis l'historique des versions.} other {Appliqué — # fils de commentaires ont changé de façon inattendue. L'annulation de Word pour le web ne peut pas les rétablir ; restaurez une version antérieure depuis l'historique des versions.}}"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordPlanCommentMessages.ts
 msgid "officeAddin.word.planComments.copied"
 msgstr "Fils de commentaires copiés."
 
@@ -3996,6 +4006,11 @@ msgstr "{0} ({1}) :"
 #: src/word/utils/wordPlanCommentMessages.ts
 msgid "officeAddin.word.planComments.copyReply"
 msgstr "  Réponse de {0} : {1}"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordPlanCommentMessages.ts
+msgid "officeAddin.word.planComments.deleted"
+msgstr "{count, plural, one {# fil de commentaires supprimé, comme vous l'avez confirmé.} other {# fils de commentaires supprimés, comme vous l'avez confirmé.}}"
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordPlanCommentMessages.ts
@@ -4057,6 +4072,11 @@ msgstr "Résolu"
 #: src/word/utils/wordPlanCommentMessages.ts
 msgid "officeAddin.word.planComments.tick"
 msgstr "{count, plural, one {Supprimer aussi # fil de commentaires} other {Supprimer aussi # fils de commentaires}}"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordPlanCommentMessages.ts
+msgid "officeAddin.word.planComments.unchecked"
+msgstr "Appliqué. Erato n'a pas pu lister ensuite les commentaires du document ; vérifiez-les dans Word."
 
 #. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts

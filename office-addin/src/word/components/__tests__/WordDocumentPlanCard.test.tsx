@@ -43,6 +43,7 @@ import {
   chapterCommentsBody,
   withComments,
 } from "../../../test/mocks/word/commentFixtures";
+import { ooxmlHostCommentStates } from "../../../test/mocks/word/commentStates";
 import { storedWordReads } from "../../../test/mocks/word/historyReads";
 import {
   editWordPackage,
@@ -80,10 +81,12 @@ import {
   latchWordInPlace,
   resetWordInPlaceLatchForTests,
 } from "../../utils/wordInPlaceSwitch";
+import { readWordCommentStates } from "../../utils/wordPlanCommentCheck";
 import { wordPlanCommentConsequences } from "../../utils/wordPlanComments";
 import { WordHostCardRenderer } from "../WordHostCardRenderer";
 
 import type { WordOoxmlHostOptions } from "../../../test/mocks/word/ooxmlHost";
+import type * as wordPlanCommentCheckModule from "../../utils/wordPlanCommentCheck";
 import type * as EratoLibrary from "@erato/frontend/library";
 import type {
   WordAuthoringSnapshot,
@@ -92,6 +95,16 @@ import type {
   WordPlanEntry,
 } from "@erato/frontend/word-review";
 import type { ReactNode } from "react";
+
+vi.mock("../../utils/wordPlanCommentCheck", async (importOriginal) => {
+  const { ooxmlHostCommentStates } = await import(
+    "../../../test/mocks/word/commentStates"
+  );
+  return {
+    ...(await importOriginal<typeof wordPlanCommentCheckModule>()),
+    readWordCommentStates: vi.fn(ooxmlHostCommentStates),
+  };
+});
 
 const mock = vi.hoisted(() => {
   const artifact: Record<string, unknown> = {};
@@ -2419,6 +2432,9 @@ describe("co-author warning on Word for Windows", () => {
 });
 
 describe("comment threads a plan deletes", () => {
+  afterEach(() => {
+    vi.mocked(readWordCommentStates).mockImplementation(ooxmlHostCommentStates);
+  });
   const CHAPTERS_WITH_COMMENTS = () =>
     withComments(packageXml(chapterCommentsBody()), CHAPTER_COMMENTS);
   /** Replaces chapter 3's four body paragraphs, two of which hold comment threads. */
@@ -2500,6 +2516,62 @@ describe("comment threads a plan deletes", () => {
     ]);
     expect(word.insert).toHaveBeenCalledOnce();
     expect(await liveComments()).toBe(3);
+    expect(screen.getByTestId("word-plan-adjustments")).toHaveTextContent(
+      "Deleted 2 comment threads, as you confirmed.",
+    );
+    expect(screen.queryByTestId("word-plan-comment-check")).toBeNull();
+  });
+
+  it("says when Word changed a thread beyond the plan, with Word's Undo, even folded", async () => {
+    const { snapshot } = await mountRealistic(shortenChapter3, {
+      xml: CHAPTERS_WITH_COMMENTS(),
+    });
+    vi.mocked(readWordCommentStates)
+      .mockImplementationOnce(ooxmlHostCommentStates)
+      .mockImplementationOnce(async () =>
+        (await ooxmlHostCommentStates())!.filter(
+          (t) => t.id !== String(0x6d5c0001),
+        ),
+      );
+    fireEvent.click(tickBox());
+    apply();
+    await screen.findByText(/^Applied: /);
+    expect(screen.getByTestId("word-plan-comment-check")).toHaveTextContent(
+      "Applied — 1 comment thread changed unexpectedly. Word's Undo brings a removed comment back.",
+    );
+    expect(snapshot.used).toBe(true);
+  });
+
+  it("points Word for the web to Version History, which its Undo cannot replace", async () => {
+    await mountRealistic(
+      (s) => {
+        const refs = s.blocks.map((b) => b.ref);
+        return {
+          ...shortenChapter3(s),
+          entries: [
+            { kind: "keep", source: refs.slice(0, 10) },
+            {
+              kind: "replace",
+              source: [refs[10]],
+              blocks: [{ id: "end", type: "paragraph", text: "Fin." }],
+            },
+          ],
+        };
+      },
+      { xml: CHAPTERS_WITH_COMMENTS(), profile: "word-web" },
+    );
+    vi.mocked(readWordCommentStates)
+      .mockImplementationOnce(ooxmlHostCommentStates)
+      .mockImplementation(async () =>
+        (await ooxmlHostCommentStates())!.map((t) =>
+          t.id === String(0x6d5c0004) ? { ...t, resolved: false } : t,
+        ),
+      );
+    apply();
+    await screen.findByText(/^Applied: /, undefined, { timeout: 5000 });
+    expect(screen.getByTestId("word-plan-comment-check")).toHaveTextContent(
+      "Applied — 1 comment thread changed unexpectedly. Word for the web's Undo can't bring it back; restore an earlier version from Version History.",
+    );
   });
 
   it("asks for the tick even under Always allow, and never runs on its own", async () => {

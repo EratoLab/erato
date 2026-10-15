@@ -3962,6 +3962,16 @@ msgstr "Ta zmiana wymaga przepisania całego dokumentu, czego Erato nie może zw
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordPlanCommentMessages.ts
+msgid "officeAddin.word.planComments.changed"
+msgstr "{count, plural, one {Zastosowano — # wątek komentarzy zmienił się nieoczekiwanie. Polecenie Cofnij w Wordzie przywraca usunięty komentarz.} few {Zastosowano — # wątki komentarzy zmieniły się nieoczekiwanie. Polecenie Cofnij w Wordzie przywraca usunięte komentarze.} many {Zastosowano — # wątków komentarzy zmieniło się nieoczekiwanie. Polecenie Cofnij w Wordzie przywraca usunięte komentarze.} other {Zastosowano — # wątku komentarzy zmieniło się nieoczekiwanie. Polecenie Cofnij w Wordzie przywraca usunięte komentarze.}}"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordPlanCommentMessages.ts
+msgid "officeAddin.word.planComments.changed.web"
+msgstr "{count, plural, one {Zastosowano — # wątek komentarzy zmienił się nieoczekiwanie. Polecenie Cofnij w Wordzie dla sieci Web go nie przywróci; przywróć wcześniejszą wersję z historii wersji.} few {Zastosowano — # wątki komentarzy zmieniły się nieoczekiwanie. Polecenie Cofnij w Wordzie dla sieci Web ich nie przywróci; przywróć wcześniejszą wersję z historii wersji.} many {Zastosowano — # wątków komentarzy zmieniło się nieoczekiwanie. Polecenie Cofnij w Wordzie dla sieci Web ich nie przywróci; przywróć wcześniejszą wersję z historii wersji.} other {Zastosowano — # wątku komentarzy zmieniło się nieoczekiwanie. Polecenie Cofnij w Wordzie dla sieci Web ich nie przywróci; przywróć wcześniejszą wersję z historii wersji.}}"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordPlanCommentMessages.ts
 msgid "officeAddin.word.planComments.copied"
 msgstr "Skopiowano wątki komentarzy."
 
@@ -3996,6 +4006,11 @@ msgstr "{0} ({1}):"
 #: src/word/utils/wordPlanCommentMessages.ts
 msgid "officeAddin.word.planComments.copyReply"
 msgstr "  Odpowiedź od {0}: {1}"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordPlanCommentMessages.ts
+msgid "officeAddin.word.planComments.deleted"
+msgstr "{count, plural, one {Usunięto # wątek komentarzy, zgodnie z Twoim potwierdzeniem.} few {Usunięto # wątki komentarzy, zgodnie z Twoim potwierdzeniem.} many {Usunięto # wątków komentarzy, zgodnie z Twoim potwierdzeniem.} other {Usunięto # wątku komentarzy, zgodnie z Twoim potwierdzeniem.}}"
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordPlanCommentMessages.ts
@@ -4057,6 +4072,11 @@ msgstr "Rozwiązany"
 #: src/word/utils/wordPlanCommentMessages.ts
 msgid "officeAddin.word.planComments.tick"
 msgstr "{count, plural, one {Usuń też # wątek komentarzy} few {Usuń też # wątki komentarzy} many {Usuń też # wątków komentarzy} other {Usuń też # wątku komentarzy}}"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordPlanCommentMessages.ts
+msgid "officeAddin.word.planComments.unchecked"
+msgstr "Zastosowano. Erato nie mógł potem wyświetlić listy komentarzy dokumentu, więc sprawdź je w Wordzie."
 
 #. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts
