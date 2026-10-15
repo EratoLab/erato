@@ -187,3 +187,31 @@ export function wordCommentAssistantAuthorName(
 export const wordCommentHostKey = (
   platform: WordHostPlatform = wordHostPlatform(),
 ) => (platform === "unknown" ? "unknown" : wordApplyHost(platform));
+
+// Device-local on purpose: Office.context.document.settings would persist into the .docx.
+export const WORD_PREFERENCES_KEY = "erato.addin.word.preferences.v1";
+
+const isCommentAuthor = (value: unknown): value is WordCommentAuthorMode =>
+  value === "user" || value === "assistant";
+
+/** The deployment's lock wins, then the user's stored choice, then the deployment's seed. */
+export function wordCommentAuthorOf(
+  stored: WordCommentAuthorMode | undefined,
+): WordCommentAuthorMode {
+  const { authorSeed, authorEnforced } = wordCommentDeploymentSettings();
+  return authorEnforced ? authorSeed : (stored ?? authorSeed);
+}
+
+/** The stored "Post new comments as" choice, read outside React for the comment submission. */
+export function wordCommentAuthorPreference(): WordCommentAuthorMode {
+  let stored: unknown;
+  try {
+    const raw = globalThis.localStorage?.getItem(WORD_PREFERENCES_KEY);
+    stored = raw
+      ? (JSON.parse(raw) as { commentAuthor?: unknown })?.commentAuthor
+      : undefined;
+  } catch {
+    stored = undefined;
+  }
+  return wordCommentAuthorOf(isCommentAuthor(stored) ? stored : undefined);
+}

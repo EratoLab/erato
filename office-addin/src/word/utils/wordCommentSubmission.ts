@@ -8,6 +8,7 @@ import {
   validateWordCommentChanges,
 } from "./wordCommentChanges";
 import {
+  wordCommentAuthorPreference,
   wordCommentDeploymentSettings,
   wordCommentRowCap,
 } from "./wordCommentPolicy";
@@ -16,7 +17,6 @@ import { wordHostPlatform } from "./wordHostPlatform";
 import { wordParagraphId } from "./wordParagraphIds";
 import { WORD_SELECTION_TEXT_OPTIONS } from "./wordReviewLocation";
 import { runWordGuarded } from "./wordRunGuard";
-import { wordCommentAuthorPreference } from "../wordPreferences";
 
 import type {
   WordCommentDraft,

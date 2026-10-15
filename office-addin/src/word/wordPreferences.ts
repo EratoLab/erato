@@ -4,14 +4,20 @@ import {
 } from "@erato/frontend/library";
 import { useCallback } from "react";
 
-import { wordCommentDeploymentSettings } from "./utils/wordCommentPolicy";
+import {
+  WORD_PREFERENCES_KEY,
+  wordCommentAuthorOf,
+  wordCommentDeploymentSettings,
+} from "./utils/wordCommentPolicy";
 import { WORD_COMMENT_PRECEDENCES } from "./utils/wordCommentSend";
 
 import type { WordCommentPrecedence } from "./utils/wordCommentSend";
 import type { WordCommentAuthorMode } from "@erato/frontend/word-review";
 
-// Device-local on purpose: Office.context.document.settings would persist into the .docx.
-export const WORD_PREFERENCES_KEY = "erato.addin.word.preferences.v1";
+export {
+  WORD_PREFERENCES_KEY,
+  wordCommentAuthorPreference,
+} from "./utils/wordCommentPolicy";
 
 export interface WordPreferences {
   includeDocumentByDefault?: boolean;
@@ -98,27 +104,6 @@ export function useWordCommentPrecedence(): [
   return [preferences.commentPrecedence ?? "selection", setCommentPrecedence];
 }
 
-function commentAuthorOf(preferences: WordPreferences): WordCommentAuthorMode {
-  const { authorSeed, authorEnforced } = wordCommentDeploymentSettings();
-  return authorEnforced
-    ? authorSeed
-    : (preferences.commentAuthor ?? authorSeed);
-}
-
-/** The stored preference outside React, for the comment submission and its card. */
-export function wordCommentAuthorPreference(): WordCommentAuthorMode {
-  let stored: WordPreferences | null = null;
-  try {
-    const raw = globalThis.localStorage?.getItem(WORD_PREFERENCES_KEY);
-    stored = raw
-      ? wordPreferencesPersistedOptions.parse(JSON.parse(raw) as unknown)
-      : null;
-  } catch {
-    stored = null;
-  }
-  return commentAuthorOf(stored ?? NO_WORD_PREFERENCES);
-}
-
 /** Per device, seeded by the deployment; a locked deployment value cannot be changed. */
 export function useWordCommentAuthor(): [
   WordCommentAuthorMode,
@@ -132,7 +117,7 @@ export function useWordCommentAuthor(): [
     [setPreferences],
   );
   return [
-    commentAuthorOf(preferences),
+    wordCommentAuthorOf(preferences.commentAuthor),
     setCommentAuthor,
     wordCommentDeploymentSettings().authorEnforced,
   ];
