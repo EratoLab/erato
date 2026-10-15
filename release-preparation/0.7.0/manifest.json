@@ -1,6 +1,6 @@
 {
   "base_sha": "3d40f674f1829f6cb8be535bdc10678602cfac43",
-  "head_sha": "6717e6c7cc6052f07be522f33109d148866f0b52",
+  "head_sha": "e8ea1ff372dd3e5ca20724548e7d16953f6379ec",
   "prs": {
     "780": {
       "subject": "Merge pull request #780 from EratoLab/feature/ermain-410-create-seperate-migrator-docker-image",
@@ -2821,6 +2821,420 @@
       "commits": [
         "6717e6c7cc6052f07be522f33109d148866f0b52"
       ]
+    },
+    "1317": {
+      "subject": "Merge pull request #1317 from EratoLab/increase-distribution-slot-size",
+      "commits": [
+        "d9c7cfe3986a44da98c7722a99d46098aa366a2d"
+      ]
+    },
+    "1303": {
+      "subject": "Guide first-time Teams bot setup and harden its public endpoint (#1303)",
+      "commits": [
+        "f3d5167491c188e050367e75ed5a66710b5b244c"
+      ]
+    },
+    "1318": {
+      "subject": "docs: document Teams setup PowerShell functions (#1318)",
+      "commits": [
+        "acbbf70f852141da55d181bdc83b70ac8a56250f"
+      ]
+    },
+    "1316": {
+      "subject": "Add indexed range and search coverage to the sidecar protocol (#1316)",
+      "commits": [
+        "2e9a9e5cf9e0076c999ca948252d0cfd09579981"
+      ]
+    },
+    "1319": {
+      "subject": "Locate Word paragraphs by exact text when Word gives no paragraph IDs (ERMAIN-927) (#1319)",
+      "commits": [
+        "94cb43da3977a18a9079016b615c2d08a3c7a852"
+      ]
+    },
+    "1321": {
+      "subject": "Match the composer's attachment chip in mock-flow e2e tests (#1321)",
+      "commits": [
+        "daa27c740b9e56ffdacf4c1697f8aafbd24287a5"
+      ]
+    },
+    "1320": {
+      "subject": "Show and keep the desktop sidecar's effective source priority (#1320)",
+      "commits": [
+        "5420574b594059fdba695e5c2c642c7caa81e3bb"
+      ]
+    },
+    "1323": {
+      "subject": "Add deployment controls for reduced customer chat interfaces (#1323)",
+      "commits": [
+        "b1a050bad0bc31a4a05c3f1f4be67b2dac693614"
+      ]
+    },
+    "1325": {
+      "subject": "Merge pull request #1325 from EratoLab/feature/ermain-930-implement-audio-transcription-on-basis-of-openai",
+      "commits": [
+        "7c4199dd34dc639f4fd6473ec0f8adb5b19e4df9"
+      ]
+    },
+    "1322": {
+      "subject": "Show the indexed time range instead of document counts in indexing settings (#1322)",
+      "commits": [
+        "f23c0fc080f9ed4b70cdf25568b003e8e718a706"
+      ]
+    },
+    "1324": {
+      "subject": "Report the searched period of local searches to the model and under replies (#1324)",
+      "commits": [
+        "fcb138846b91b31a198ba881e8ed456f247d164a"
+      ]
+    },
+    "1326": {
+      "subject": "Add the selection foundations for Word selection editing (ERMAIN-928, wave A) (#1326)",
+      "commits": [
+        "57d842357d898f60fc8d9ebafe037595fff02ad2"
+      ]
+    },
+    "1327": {
+      "subject": "Select only the first paragraph for Show in Word on Word for the web (ERMAIN-932) (#1327)",
+      "commits": [
+        "feb97ba1e94ad0e767a467429b6d6ce842b98c84"
+      ]
+    },
+    "1315": {
+      "subject": "Merge pull request #1315 from EratoLab/feature/ermain-924-delegated-run-page-doesnt-show-correct-page-title",
+      "commits": [
+        "6470b519c0ba365afdb20b2bb73d7f2b5763e220"
+      ]
+    },
+    "1330": {
+      "subject": "Send the Word selection to the model as context (ERMAIN-928, block 1) (#1330)",
+      "commits": [
+        "21ad4a2fd0f5e459e1582fb6b439e54b5fe6f4a3"
+      ]
+    },
+    "1329": {
+      "subject": "Merge pull request #1329 from EratoLab/feature/ermain-933-add-frontend-setting-for-setting-path-for-favicon",
+      "commits": [
+        "bcd041f0ebb8d857266ee042e032d4f5467dc930"
+      ]
+    },
+    "1331": {
+      "subject": "Merge pull request #1331 from EratoLab/feature/ermain-934-update-rust-genai-fork-to-v070-rc4",
+      "commits": [
+        "e1304e11eb10789fcfe31e82da381b6e19fc780a"
+      ]
+    },
+    "1328": {
+      "subject": "Merge pull request #1328 from EratoLab/feature/ermain-931-implement-chat-history-compaction",
+      "commits": [
+        "fc1861fdbecd94e0b44fae8b3cba6cd5b6162db4"
+      ]
+    },
+    "1332": {
+      "subject": "Merge pull request #1332 from EratoLab/feature/ermain-935-remove-upload-content-included-indicator",
+      "commits": [
+        "afadff028be3ea94963fd52fe39a8d03448c1558"
+      ]
+    },
+    "1334": {
+      "subject": "Replace a selected whole paragraph on its proven target (ERMAIN-928, block 2) (#1334)",
+      "commits": [
+        "c46b3a96271b72d503ce434d739007666de26fd7"
+      ]
+    },
+    "1333": {
+      "subject": "Report sidecar source capabilities and degrade honestly in chat (ERDSCAR-41) (#1333)",
+      "commits": [
+        "a6440581357c3865e13d148d3305fc865ea5ab2f"
+      ]
+    },
+    "1335": {
+      "subject": "Document preview-marked exports and pass export warnings to chat (ERDSCAR-42) (#1335)",
+      "commits": [
+        "89f84dc99aa3eb92cebdf79dfcd3e9a07f9fc84d"
+      ]
+    },
+    "1336": {
+      "subject": "Replace inline, multi-paragraph and table-cell selections (ERMAIN-928, block 3) (#1336)",
+      "commits": [
+        "61c6485189b38f2f3eec8ae0508b168c9d43579f"
+      ]
+    },
+    "1337": {
+      "subject": "Refuse a Word replace when a copy of the passage could take its place (ERMAIN-937) (#1337)",
+      "commits": [
+        "aa97aedec308826930fa3ac549e41563431b3efe"
+      ]
+    },
+    "1338": {
+      "subject": "Let the user pick among identical passages and point to Word's Undo on the web (ERMAIN-928) (#1338)",
+      "commits": [
+        "524681b0e53ab0bac614e6329c9db05df9581930"
+      ]
+    },
+    "1340": {
+      "subject": "Show a sent selection while the answer streams, and say what \"Ask again\" does (ERMAIN-928) (#1340)",
+      "commits": [
+        "21c51c4fa159ff953668c27048b52f3f0c237686"
+      ]
+    },
+    "1341": {
+      "subject": "Document partial Hx attachment exports in the sidecar protocol (ERDSCAR-43) (#1341)",
+      "commits": [
+        "44350c2e2fee5130b9d01127bcb1398b5f10d656"
+      ]
+    },
+    "1342": {
+      "subject": "Keep fields, links, notes, comments and pictures when Word Replace rewrites a selection (ERMAIN-938) (#1342)",
+      "commits": [
+        "8edb4e80e71316c43eff164a7680030c7d177ee2"
+      ]
+    },
+    "1343": {
+      "subject": "Offer Apple Silicon Macs the Apple Silicon sidecar build (ERDSCAR-44) (#1343)",
+      "commits": [
+        "4d134612afbcd666aafd74fcdc43ef4df99ca6d9"
+      ]
+    },
+    "1344": {
+      "subject": "Refuse Word selection rewrites that would flatten formatting, and explain bookmarks (ERMAIN-939) (#1344)",
+      "commits": [
+        "3c39a6fea3a97fc48528b51c01135c7acd4b49e5"
+      ]
+    },
+    "1345": {
+      "subject": "Let the user choose between several Word Replace versions (ERMAIN-940) (#1345)",
+      "commits": [
+        "2862d70ebac597cf0672f142c71c3fe7123ba0c8"
+      ]
+    },
+    "1346": {
+      "subject": "Keep bookmarks, such as table-of-contents targets, when Word Replace rewrites a selection (ERMAIN-941) (#1346)",
+      "commits": [
+        "1e8eaf04017becb61b18909b0385b5bed57f74b0"
+      ]
+    },
+    "1347": {
+      "subject": "Show Word selection replies in the Erato web app (ERMAIN-942) (#1347)",
+      "commits": [
+        "055012ddfc9ee35dad48ed96be0bc5b4b2a42eae"
+      ]
+    },
+    "1348": {
+      "subject": "Keep bold, italic, underline and strikethrough through a Word selection rewrite (ERMAIN-943) (#1348)",
+      "commits": [
+        "b665448c6be7c1df320ce1d27f53fd7cba365b74"
+      ]
+    },
+    "1350": {
+      "subject": "Tell users which Outlook setting limits how far back mail is indexed (ERDSCAR-51) (#1350)",
+      "commits": [
+        "396c20c223b217343ea23a35681207449d5a95a8"
+      ]
+    },
+    "1351": {
+      "subject": "Correct the add-in's EWS size-cap comments: a client cap of 1 or 5 MB (#1351)",
+      "commits": [
+        "7df1694191abe7aed839a670ca8887a76a9a1315"
+      ]
+    },
+    "1352": {
+      "subject": "Include the open Word document by default and keep one chat per document (ERMAIN-945) (#1352)",
+      "commits": [
+        "a70b5b1eb95677d0573edcda41ed36191b61b562"
+      ]
+    },
+    "1353": {
+      "subject": "Read and edit large Word documents section by section instead of refusing every read (ERMAIN-952) (#1353)",
+      "commits": [
+        "a59d83b9cc3974fe69bbd4de05679e8d26be58de"
+      ]
+    },
+    "1355": {
+      "subject": "Merge pull request #1355 from EratoLab/feature/erdscar-39-repeated-macos-permission-prompt-access-data-from-other-apps",
+      "commits": [
+        "69049007a9a023522119f70812efbda8c98d6440"
+      ]
+    },
+    "1354": {
+      "subject": "Let Word turns offer delegated tasks under their action facet's own limits (ERMAIN-954) (#1354)",
+      "commits": [
+        "8a5098cb3743ae39beb860cbcfa2c06501690bea"
+      ]
+    },
+    "1357": {
+      "subject": "Merge pull request #1357 from EratoLab/feature/ermain-959-keep-newlines-in-the-approval-card-and-tool-call-json-view",
+      "commits": [
+        "6102d0f2618fc51e02c76683e24e2a09ed4ea337"
+      ]
+    },
+    "1356": {
+      "subject": "Merge pull request #1356 from EratoLab/feature/ermain-956-authorization_params-for-mcp-authentication",
+      "commits": [
+        "d545fb7bff966fabddde34d3b50d2aa3ddfb125d"
+      ]
+    },
+    "1359": {
+      "subject": "Merge pull request #1359 from EratoLab/feature/ermain-957-resolve-entra-groups-claim-for-group-overage",
+      "commits": [
+        "5efc1008d24148e3a38014bf8a91474e673d73d6"
+      ]
+    },
+    "1358": {
+      "subject": "Let configured client tools survive a dropped stream through durable operations (ERMAIN-911) (#1358)",
+      "commits": [
+        "484769b3d3fe98be5a7c3e55190ec5195df45144"
+      ]
+    },
+    "1360": {
+      "subject": "Merge pull request #1360 from EratoLab/feature/ermain-958-per-server-default_tool_annotations",
+      "commits": [
+        "33b2cfcafc9b054fbf203503d6d386b19d8a79ee"
+      ]
+    },
+    "1361": {
+      "subject": "ERMAIN-854: Reserve validated submission attempts beyond tool budgets (#1361)",
+      "commits": [
+        "d73360f8fe79f397f9088ed9d70a9eda14de2be8"
+      ]
+    },
+    "1362": {
+      "subject": "Keep comments that span several paragraphs intact when Word Replace rewrites a selection (ERMAIN-955) (#1362)",
+      "commits": [
+        "9d8dc5e3e981104de89ecff66e3a087d95dbe2d5"
+      ]
+    },
+    "1363": {
+      "subject": "ERMAIN-912: Attach durable client-operation continuations (Part 1) (#1363)",
+      "commits": [
+        "aaa2130e9a5c5f072a848ad98091d3953810490b"
+      ]
+    },
+    "1364": {
+      "subject": "Ask before replacing the whole document in Word for the web, and edit in place there (ERMAIN-961) (#1364)",
+      "commits": [
+        "956a23f45a75f173b38470749fe02e2564bd16b3"
+      ]
+    },
+    "1367": {
+      "subject": "Merge pull request #1367 from EratoLab/feature/ermain-963-revert-outlook-microphone-capability-check",
+      "commits": [
+        "a02b1e7368bc9a4fd12b5c45e7e2fb4da6a915a3"
+      ]
+    },
+    "1366": {
+      "subject": "ERMAIN-912: Durable Word reads in the owning pane (Part 2) (#1366)",
+      "commits": [
+        "66100a683553ee10c3e3b9d7445cd011436a238f"
+      ]
+    },
+    "1368": {
+      "subject": "Merge pull request #1368 from EratoLab/feature/ermain-964-truncate-assistants-description-in-tools-dropdown",
+      "commits": [
+        "113deabb548c5888cffd0cf714f96c41be5bbceb"
+      ]
+    },
+    "1365": {
+      "subject": "Read Word comment threads as context, with a comment map, picker and precedence setting (ERMAIN-948) (#1365)",
+      "commits": [
+        "c90239cd8e72f51fb3cf738f6a3f7942d4fdc21b"
+      ]
+    },
+    "1369": {
+      "subject": "Merge pull request #1369 from EratoLab/feature/ermain-801-add-support-for-stateless-mcp-as-per-new-mcp-spec",
+      "commits": [
+        "f8354aa3738c5f78c72f7855b91782457b70f615"
+      ]
+    },
+    "1370": {
+      "subject": "Merge pull request #1370 from EratoLab/feature/ermain-965-make-branding-assets-configurable-across-web-office-and",
+      "commits": [
+        "7333fc948a222929ea8a6799a43424ae681fa179"
+      ]
+    },
+    "1372": {
+      "subject": "Merge pull request #1372 from EratoLab/blacksmith-migration-7333fc9",
+      "commits": [
+        "fab1ae66e5b8c7d5f48cad5907ee34d636fedb6b"
+      ]
+    },
+    "1373": {
+      "subject": "Merge pull request #1373 from EratoLab/revert-1369-feature/ermain-801-add-support-for-stateless-mcp-as-per-new-mcp-spec",
+      "commits": [
+        "745d966dd4bcb4281a3b6973ebc4afbde93fa2e1"
+      ]
+    },
+    "1371": {
+      "subject": "Word for the web: Revert of a restyle puts the paragraph style back and never claims it did when it didn't (ERMAIN-967) (#1371)",
+      "commits": [
+        "3daaa0f0fbfbf668edbb39e8da0aeb8b47b73eda"
+      ]
+    },
+    "1375": {
+      "subject": "Merge pull request #1375 from EratoLab/feature/ermain-968-add-branding-overview-page",
+      "commits": [
+        "8a992613ff4a29993a8c55955e63b002464efc3d"
+      ]
+    },
+    "1376": {
+      "subject": "Merge pull request #1376 from EratoLab/feature/ermain-971-update-vite-to-vite-8xx",
+      "commits": [
+        "daf0fcc95de832479631b09520b34091ddc9558b"
+      ]
+    },
+    "1374": {
+      "subject": "Merge pull request #1374 from EratoLab/feature/ermain-801-add-support-for-stateless-mcp-as-per-new-mcp-spec",
+      "commits": [
+        "37621a0f893b5d57c1f7be6c14d75f050ee29209"
+      ]
+    },
+    "1377": {
+      "subject": "Word: Revert and writes no longer refuse over Word's own housekeeping; whole-document import off on Word for the web (ERMAIN-970) (#1377)",
+      "commits": [
+        "eb4157b29f543436a4c0cee8d3592c124aec9175"
+      ]
+    },
+    "1378": {
+      "subject": "Merge pull request #1378 from EratoLab/feature/ermain-972-support-chatid-in-chat-provider-request-header-templates",
+      "commits": [
+        "aabb00b1e82d20ce5fe85a50152529f54eebd3fd"
+      ]
+    },
+    "1380": {
+      "subject": "Word for Windows and Mac write changes in place by default; heading restyles and table-cell Revert work there (ERMAIN-973) (#1380)",
+      "commits": [
+        "33b7a3c8f021ec14bf4b497a76edb059fc2a5888"
+      ]
+    },
+    "1381": {
+      "subject": "Word for Mac: Apply and Revert no longer refuse over Word's own language tagging after opening a document (ERMAIN-974) (#1381)",
+      "commits": [
+        "e806bcf0a034daf185456ed5b1c3de38e87901d8"
+      ]
+    },
+    "1383": {
+      "subject": "Word for the web: reading comments never changes the document, and legacy files keep their anchors (ERMAIN-983) (#1383)",
+      "commits": [
+        "9015845ffd345904feb9eb9e767fafa1147d7a5c"
+      ]
+    },
+    "1382": {
+      "subject": "Merge pull request #1382 from EratoLab/feature/ermain-975-ctrl-click-on-new-chat-should-open-new-tab",
+      "commits": [
+        "4394d4a06822defb92ba0d6fe751ad0934328d58"
+      ]
+    },
+    "1379": {
+      "subject": "Merge pull request #1379 from EratoLab/feature/ermain-808-share-frontendregistry-via-arc-and-cache-runtime-po-to-json",
+      "commits": [
+        "ba03ebd81b4401860a6859c36db0be4b9cc9747f"
+      ]
+    },
+    "1384": {
+      "subject": "Word: add, reply to, resolve and edit comments behind consent, as you or as Erato (ERMAIN-949) (#1384)",
+      "commits": [
+        "e8ea1ff372dd3e5ca20724548e7d16953f6379ec"
+      ]
     }
   },
   "unmatched_commits": [
@@ -2864,7 +3278,76 @@
     "1309": "Commit evidence changed; re-review the preserved summary",
     "1312": "Commit evidence changed; re-review the preserved summary",
     "1313": "Commit evidence changed; re-review the preserved summary",
-    "1314": "Commit evidence changed; re-review the preserved summary"
+    "1314": "Commit evidence changed; re-review the preserved summary",
+    "1317": "Missing cached response: repos/EratoLab/erato/pulls/1317",
+    "1303": "Missing cached response: repos/EratoLab/erato/pulls/1303",
+    "1318": "Missing cached response: repos/EratoLab/erato/pulls/1318",
+    "1316": "Missing cached response: repos/EratoLab/erato/pulls/1316",
+    "1319": "Missing cached response: repos/EratoLab/erato/pulls/1319",
+    "1321": "Missing cached response: repos/EratoLab/erato/pulls/1321",
+    "1320": "Missing cached response: repos/EratoLab/erato/pulls/1320",
+    "1323": "Missing cached response: repos/EratoLab/erato/pulls/1323",
+    "1325": "Missing cached response: repos/EratoLab/erato/pulls/1325",
+    "1322": "Missing cached response: repos/EratoLab/erato/pulls/1322",
+    "1324": "Missing cached response: repos/EratoLab/erato/pulls/1324",
+    "1326": "Missing cached response: repos/EratoLab/erato/pulls/1326",
+    "1327": "Missing cached response: repos/EratoLab/erato/pulls/1327",
+    "1315": "Missing cached response: repos/EratoLab/erato/pulls/1315",
+    "1330": "Missing cached response: repos/EratoLab/erato/pulls/1330",
+    "1329": "Missing cached response: repos/EratoLab/erato/pulls/1329",
+    "1331": "Missing cached response: repos/EratoLab/erato/pulls/1331",
+    "1328": "Missing cached response: repos/EratoLab/erato/pulls/1328",
+    "1332": "Missing cached response: repos/EratoLab/erato/pulls/1332",
+    "1334": "Missing cached response: repos/EratoLab/erato/pulls/1334",
+    "1333": "Missing cached response: repos/EratoLab/erato/pulls/1333",
+    "1335": "Missing cached response: repos/EratoLab/erato/pulls/1335",
+    "1336": "Missing cached response: repos/EratoLab/erato/pulls/1336",
+    "1337": "Missing cached response: repos/EratoLab/erato/pulls/1337",
+    "1338": "Missing cached response: repos/EratoLab/erato/pulls/1338",
+    "1340": "Missing cached response: repos/EratoLab/erato/pulls/1340",
+    "1341": "Missing cached response: repos/EratoLab/erato/pulls/1341",
+    "1342": "Missing cached response: repos/EratoLab/erato/pulls/1342",
+    "1343": "Missing cached response: repos/EratoLab/erato/pulls/1343",
+    "1344": "Missing cached response: repos/EratoLab/erato/pulls/1344",
+    "1345": "Missing cached response: repos/EratoLab/erato/pulls/1345",
+    "1346": "Missing cached response: repos/EratoLab/erato/pulls/1346",
+    "1347": "Missing cached response: repos/EratoLab/erato/pulls/1347",
+    "1348": "Missing cached response: repos/EratoLab/erato/pulls/1348",
+    "1350": "Missing cached response: repos/EratoLab/erato/pulls/1350",
+    "1351": "Missing cached response: repos/EratoLab/erato/pulls/1351",
+    "1352": "Missing cached response: repos/EratoLab/erato/pulls/1352",
+    "1353": "Missing cached response: repos/EratoLab/erato/pulls/1353",
+    "1355": "Missing cached response: repos/EratoLab/erato/pulls/1355",
+    "1354": "Missing cached response: repos/EratoLab/erato/pulls/1354",
+    "1357": "Missing cached response: repos/EratoLab/erato/pulls/1357",
+    "1356": "Missing cached response: repos/EratoLab/erato/pulls/1356",
+    "1359": "Missing cached response: repos/EratoLab/erato/pulls/1359",
+    "1358": "Missing cached response: repos/EratoLab/erato/pulls/1358",
+    "1360": "Missing cached response: repos/EratoLab/erato/pulls/1360",
+    "1361": "Missing cached response: repos/EratoLab/erato/pulls/1361",
+    "1362": "Missing cached response: repos/EratoLab/erato/pulls/1362",
+    "1363": "Missing cached response: repos/EratoLab/erato/pulls/1363",
+    "1364": "Missing cached response: repos/EratoLab/erato/pulls/1364",
+    "1367": "Missing cached response: repos/EratoLab/erato/pulls/1367",
+    "1366": "Missing cached response: repos/EratoLab/erato/pulls/1366",
+    "1368": "Missing cached response: repos/EratoLab/erato/pulls/1368",
+    "1365": "Missing cached response: repos/EratoLab/erato/pulls/1365",
+    "1369": "Missing cached response: repos/EratoLab/erato/pulls/1369",
+    "1370": "Missing cached response: repos/EratoLab/erato/pulls/1370",
+    "1372": "Missing cached response: repos/EratoLab/erato/pulls/1372",
+    "1373": "Missing cached response: repos/EratoLab/erato/pulls/1373",
+    "1371": "Missing cached response: repos/EratoLab/erato/pulls/1371",
+    "1375": "Missing cached response: repos/EratoLab/erato/pulls/1375",
+    "1376": "Missing cached response: repos/EratoLab/erato/pulls/1376",
+    "1374": "Missing cached response: repos/EratoLab/erato/pulls/1374",
+    "1377": "Missing cached response: repos/EratoLab/erato/pulls/1377",
+    "1378": "Missing cached response: repos/EratoLab/erato/pulls/1378",
+    "1380": "Missing cached response: repos/EratoLab/erato/pulls/1380",
+    "1381": "Missing cached response: repos/EratoLab/erato/pulls/1381",
+    "1383": "Missing cached response: repos/EratoLab/erato/pulls/1383",
+    "1382": "Missing cached response: repos/EratoLab/erato/pulls/1382",
+    "1379": "Missing cached response: repos/EratoLab/erato/pulls/1379",
+    "1384": "Missing cached response: repos/EratoLab/erato/pulls/1384"
   },
   "collected": {
     "780": [
