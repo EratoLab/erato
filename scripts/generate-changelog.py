@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Script to extract PR information from git log for changelog generation.
+Legacy full-list formatter. Use sync-release-notes.py for resumable preparation.
 """
 
 import subprocess
@@ -47,9 +47,10 @@ def extract_title_from_commit(commit_msg):
 def get_prs_for_range(tag_range):
     """Get all PRs with titles for a git tag range"""
     result = subprocess.run(
-        ['git', 'log', tag_range, '--pretty=format:%s'],
+        ['git', 'log', '--first-parent', tag_range, '--pretty=format:%s'],
         capture_output=True,
-        text=True
+        text=True,
+        check=True,
     )
     commits = result.stdout.strip().split('\n')
 
@@ -57,8 +58,8 @@ def get_prs_for_range(tag_range):
     seen_prs = set()
 
     for commit in commits:
-        matches = re.findall(r'#(\d+)', commit)
-        for pr in matches:
+        match = re.match(r'Merge pull request #(\d+)\b', commit) or re.search(r'\(#(\d+)\)$', commit)
+        for pr in [match.group(1)] if match else []:
             if pr not in seen_prs:
                 title = extract_title_from_commit(commit)
                 pr_data[pr] = title

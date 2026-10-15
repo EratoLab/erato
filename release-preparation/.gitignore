@@ -1,0 +1,5 @@
+# Generated local evidence; summaries are committed only as preparation scratch work.
+*/sources/
+
+# Release workflow instructions are shared, even if a local exclude hides AGENTS.md.
+!AGENTS.md
