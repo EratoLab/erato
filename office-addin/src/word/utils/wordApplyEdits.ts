@@ -5,6 +5,7 @@ import {
 
 import { wordErrorText } from "./wordApplyDiagnostics";
 import { trackWordApply } from "./wordApplyProgress";
+import { WORD_COMMENT_ORDER_PAIRS_PER_SYNC } from "./wordCommentReader";
 import { wordBodyFingerprint } from "./wordDocumentXml";
 import {
   wordHostPlatform,
@@ -122,30 +123,45 @@ const CLEAR_OF = new Set([
   "Unrelated",
 ]);
 
-/** Per paragraph, the authors of the changes Word lists in it, or null when it lists none. Word for
- * the web leaves w:pPr out of Paragraph.getOoxml, so a revised paragraph mark or paragraph format
- * shows only here. `type` stays unloaded: it throws on moves. */
+/** Per edit, the authors of the changes Word lists in its paragraphs, or null when it lists none.
+ * Word for the web leaves w:pPr out of Paragraph.getOoxml, so a revised paragraph mark or paragraph
+ * format shows only here. `type` stays unloaded: it throws on moves. */
 async function listedRevisionAuthors(
   context: Word.RequestContext,
-  paragraphs: readonly Word.Paragraph[],
+  items: readonly Word.Paragraph[],
+  edits: readonly PositionedWordEdit[],
 ): Promise<(string[] | null)[]> {
   const changes = context.document.body.getTrackedChanges();
   changes.load("items/author");
   await context.sync();
-  if (changes.items.length === 0) return paragraphs.map(() => null);
-  const relations = paragraphs.map((paragraph) => {
-    const whole = paragraph.getRange("Whole");
-    return changes.items.map((change) =>
-      change.getRange("Whole").compareLocationWith(whole),
-    );
+  const held: (string[] | null)[] = edits.map(() => null);
+  if (changes.items.length === 0) return held;
+  const changed = changes.items.map((change) => change.getRange("Whole"));
+  const spans = edits.map(({ positions }) => {
+    const first = items[positions[0]].getRange("Whole");
+    return positions.length === 1
+      ? first
+      : first.expandTo(
+          items[positions[positions.length - 1]].getRange("Whole"),
+        );
   });
-  await context.sync();
-  return relations.map((row) => {
-    const held = changes.items.filter((_, k) => !CLEAR_OF.has(row[k].value));
-    return held.length
-      ? held.map((change) => wordRevisionAuthor(change.author)).filter(Boolean)
-      : null;
-  });
+  const pairs = spans.flatMap((_, e) => changed.map((_, c) => [e, c] as const));
+  for (let at = 0; at < pairs.length; at += WORD_COMMENT_ORDER_PAIRS_PER_SYNC) {
+    const batch = pairs
+      .slice(at, at + WORD_COMMENT_ORDER_PAIRS_PER_SYNC)
+      .map(([e, c]) => ({
+        e,
+        c,
+        relation: changed[c].compareLocationWith(spans[e]),
+      }));
+    await context.sync();
+    for (const { e, c, relation } of batch) {
+      if (CLEAR_OF.has(relation.value)) continue;
+      const author = wordRevisionAuthor(changes.items[c].author);
+      held[e] = [...(held[e] ?? []), ...(author ? [author] : [])];
+    }
+  }
+  return held;
 }
 
 /** A Replace accepts or absorbs a paragraph's pending revisions, and Office.js cannot tell the user's
@@ -165,27 +181,22 @@ async function withoutRevisedParagraphs(
   await context.sync();
   const listed = wordParagraphOoxmlHasProperties(wordHostPlatform())
     ? []
-    : await listedRevisionAuthors(
-        context,
-        positions.map((position) => items[position]),
-      );
+    : await listedRevisionAuthors(context, items, verified.applicable);
   const authors = new Map(
-    positions.map((position, i) => {
-      const found = wordParagraphRevisionAuthors(packages[i].value);
-      const more = listed[i];
-      return [
-        position,
-        found || more
-          ? [...new Set([...(found ?? []), ...(more ?? [])])]
-          : null,
-      ];
-    }),
+    positions.map((position, i) => [
+      position,
+      wordParagraphRevisionAuthors(packages[i].value),
+    ]),
   );
   const applicable: PositionedWordEdit[] = [];
   const skipped = [...verified.skipped];
-  for (const edit of verified.applicable) {
-    const held = edit.positions.flatMap((p) => authors.get(p) ?? []);
-    const revised = edit.positions.some((p) => authors.get(p));
+  for (const [e, edit] of verified.applicable.entries()) {
+    const more = listed[e];
+    const held = [
+      ...edit.positions.flatMap((p) => authors.get(p) ?? []),
+      ...(more ?? []),
+    ];
+    const revised = !!more || edit.positions.some((p) => authors.get(p));
     if (!revised && !tracking) {
       applicable.push(edit);
       continue;

@@ -641,6 +641,96 @@ describe("applyWordEdits on a Word package with another author's revisions", () 
       expect(host.ooxml()).not.toContain("revised,");
     },
   );
+
+  it("places each edit once against every listed change, at most 1000 comparisons per sync", async () => {
+    const mark = (author: string) =>
+      `<w:pPr><w:rPr><w:ins w:id="9" w:author="${author}" w:date="2026-10-12T09:30:00Z"/></w:rPr></w:pPr>`;
+    const xml = packageXml(
+      [
+        ...Array.from(
+          { length: 20 },
+          (_, i) => `<w:p><w:r><w:t>Clean ${i + 1}.</w:t></w:r></w:p>`,
+        ),
+        `<w:p>${mark("RA Dr. Weber")}<w:r><w:t>Split clause,</w:t></w:r></w:p>`,
+        "<w:p><w:r><w:t>continued.</w:t></w:r></w:p>",
+        `<w:p><w:r><w:t>Head.</w:t></w:r></w:p>`,
+        `<w:p>${mark("Kanzlei Schmidt")}<w:r><w:t>Tail,</w:t></w:r></w:p>`,
+        ...Array.from(
+          { length: 58 },
+          (_, i) =>
+            `<w:p><w:r><w:t xml:space="preserve">Other ${i + 1} </w:t></w:r><w:ins w:id="${100 + i}" ${BY}><w:r><w:t>added</w:t></w:r></w:ins></w:p>`,
+        ),
+      ].join(""),
+    );
+    const edits = [
+      ...Array.from({ length: 20 }, (_, i) => ({
+        paragraph: i + 1,
+        text: `Clean ${i + 1}, revised.`,
+      })),
+      { paragraph: 21, text: "Split clause, revised," },
+      { paragraph: 23, through: 24, text: "Head and tail, revised." },
+    ];
+    const run = async (options: Parameters<typeof installWordOoxmlHost>[1]) => {
+      const host = installWordOoxmlHost(xml, options);
+      const read = await readWordDocument();
+      if (!read.ok) throw new Error("read failed");
+      const build = buildWordDocumentArgs(read.paragraphs);
+      const word = (globalThis as { Word: typeof Word }).Word;
+      let syncs = 0;
+      vi.stubGlobal("Word", {
+        run: (callback: (context: Word.RequestContext) => Promise<unknown>) =>
+          word.run((context) => {
+            const sync = context.sync.bind(context);
+            return callback(
+              Object.create(context, {
+                sync: {
+                  value: () => {
+                    syncs += 1;
+                    return sync();
+                  },
+                },
+              }) as Word.RequestContext,
+            );
+          }),
+      });
+      const result = await applyWordEdits({
+        edits,
+        capture: {
+          identity: IDENTITY,
+          ordinalMap: build.ordinalMap,
+          paragraphsSent: build.coverage.paragraphsSent,
+          renderedOrdinals: build.renderedOrdinals,
+          partialOrdinal: build.partialOrdinal,
+        },
+      });
+      return { host, result, syncs };
+    };
+
+    const pc = await run({ profile: "word-pc-16.0.20326" });
+    const web = await run({
+      profile: "word-web",
+      paragraphOoxmlOmitsProperties: true,
+    });
+
+    for (const { result } of [pc, web])
+      expect(
+        result.outcomes
+          .filter(({ status }) => status !== "applied")
+          .map(({ paragraph, status, authors }) => ({
+            paragraph,
+            status,
+            authors,
+          })),
+      ).toEqual([
+        { paragraph: 21, status: "revisions", authors: ["RA Dr. Weber"] },
+        { paragraph: 23, status: "revisions", authors: ["Kanzlei Schmidt"] },
+      ]);
+    expect(
+      web.result.outcomes.filter((o) => o.status === "applied"),
+    ).toHaveLength(20);
+    // 22 edits × 60 listed changes = 1320 comparisons: the listing, then two syncs of them.
+    expect(web.syncs - pc.syncs).toBe(1 + Math.ceil((22 * 60) / 1000));
+  });
 });
 
 describe("revertWordEdits", () => {

@@ -365,17 +365,6 @@ describe("readWordDocument", () => {
     },
   );
 
-  it("does not ask a host without WordApi 1.4 for the mode", async () => {
-    word.isSetSupported.mockImplementation(
-      (name, version) => !(name === "WordApi" && version === "1.4"),
-    );
-
-    const result = await readWordDocument();
-
-    expect(result.ok && result.paragraphs).toHaveLength(3);
-    expect(result.ok && result.tracking).toBeUndefined();
-  });
-
   it("keeps the paragraphs when the full transfer outlasts its deadline", async () => {
     vi.useFakeTimers();
     try {

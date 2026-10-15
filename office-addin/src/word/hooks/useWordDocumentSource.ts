@@ -141,6 +141,7 @@ async function captureDocument(
   const result = await readWordDocument(includeAuthoring);
   if (!result.ok) return { build: null, error: result.error };
   const build = buildWordDocumentArgs(result.paragraphs);
+  if (result.tracking !== undefined) build.trackingMode = result.tracking;
   if (isWordTrackingMode(result.tracking)) build.trackChanges = true;
   if (result.authoring) {
     build.authoring = captureWordAuthoringSnapshot(
@@ -331,7 +332,8 @@ export function useWordDocumentSource({
         refresh();
         return;
       }
-      const captured = cacheRef.current?.build?.authoring?.trackingMode;
+      const build = cacheRef.current?.build;
+      const captured = build?.authoring?.trackingMode ?? build?.trackingMode;
       if (captured === undefined) {
         refresh();
         return;

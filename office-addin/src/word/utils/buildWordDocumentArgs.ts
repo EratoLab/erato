@@ -36,7 +36,9 @@ export interface WordDocumentHeading {
 export interface WordDocumentBuild {
   authoring?: WordAuthoringSnapshot;
   readNote?: WordDocumentReadNote;
-  /** Track Changes was on at the read, even where the package then failed. */
+  /** Word's changeTrackingMode at the paragraph read, even where the package then failed. */
+  trackingMode?: string;
+  /** Track Changes was on at the read. */
   trackChanges?: boolean;
   args: WordDocumentArgs;
   coverage: WordDocumentCoverage;

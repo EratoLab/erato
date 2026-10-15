@@ -460,7 +460,12 @@ describe("WordHostCardRenderer", () => {
 
       expect(word.word.writes()).toEqual([]);
       expect(word.word.paragraphs()[2].text).toBe("Charlie, typed later.");
-      expect(screen.getByText(/Revert was not run/)).toBeInTheDocument();
+      expect(
+        screen.getByText(
+          "The document changed after applying. Revert was not run because it could remove later edits.",
+        ),
+      ).toBeInTheDocument();
+      expect(screen.queryByText(/Turn off Track Changes/)).toBeNull();
       expect(screen.getByTestId("word-revert-button")).toBeInTheDocument();
     });
 
@@ -525,6 +530,63 @@ describe("WordHostCardRenderer", () => {
         screen.getByText(/Track Changes is on, so Erato doesn't apply/),
       ).toBeInTheDocument();
       expect(word.word.writes()).toEqual([]);
+    });
+
+    const returnToPane = () =>
+      act(async () => {
+        window.dispatchEvent(new Event("blur"));
+        window.dispatchEvent(new Event("focus"));
+        await Promise.resolve();
+      });
+    const applyButton = () =>
+      screen.queryByRole("button", { name: /^Apply (edit|all \d+ edits)$/ });
+
+    it("offers Apply again once Track Changes is turned off in Word", async () => {
+      word.word.setTrackingMode("TrackAll");
+      renderCard({ artifact: makeArtifact() });
+      await flush();
+      expect(applyButton()).toBeNull();
+
+      word.word.setTrackingMode("Off");
+      await returnToPane();
+
+      expect(applyButton()).toBeInTheDocument();
+      expect(
+        screen.getByText(/Edits are applied directly/),
+      ).toBeInTheDocument();
+      expect(screen.queryByText(/Track Changes is on, so Erato/)).toBeNull();
+    });
+
+    it("withholds Apply once Track Changes is turned on in Word", async () => {
+      renderCard({ artifact: makeArtifact() });
+      await flush();
+      expect(applyButton()).toBeInTheDocument();
+
+      word.word.setTrackingMode("TrackAll");
+      await returnToPane();
+
+      expect(applyButton()).toBeNull();
+      expect(
+        screen.getByText(/Track Changes is on, so Erato doesn't apply/),
+      ).toBeInTheDocument();
+    });
+
+    it("keeps a capture read under Track Changes withheld after Track Changes is turned off", async () => {
+      const artifact = makeArtifact();
+      renderCard({
+        artifact,
+        captures: new Map([
+          [artifact.messageId, capture({ trackChanges: true })],
+        ]),
+      });
+      await flush();
+
+      await returnToPane();
+
+      expect(applyButton()).toBeNull();
+      expect(
+        screen.getByText(/Track Changes is on, so Erato doesn't apply/),
+      ).toBeInTheDocument();
     });
 
     it("names the authors of revisions that refused an edit, as plain text", async () => {
@@ -896,6 +958,83 @@ describe("WordHostCardRenderer", () => {
   });
 
   describe("auto_prompt consent", () => {
+    const holdWordRuns = () => {
+      const run = word.word.run.getMockImplementation()!;
+      let release!: () => void;
+      const held = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      word.word.run.mockImplementation(async (callback) => {
+        await held;
+        return run(callback);
+      });
+      return () =>
+        act(async () => {
+          release();
+          await held;
+          await Promise.resolve();
+        });
+    };
+
+    it.each([
+      ["Off", true],
+      ["TrackAll", false],
+    ] as const)(
+      "opens no prompt for edits before the live Track Changes mode (%s) is known",
+      async (mode, prompted) => {
+        word.word.setTrackingMode(mode);
+        const release = holdWordRuns();
+        renderCard({
+          artifact: makeArtifact({
+            clientActionPresentation: "auto_prompt",
+            proposedClientAction: APPLY,
+          }),
+        });
+        await flush();
+        expect(screen.queryByTestId("confirmation-card")).toBeNull();
+
+        await release();
+        await flush();
+
+        expect(!!screen.queryByTestId("confirmation-card")).toBe(prompted);
+        expect(word.word.writes()).toEqual([]);
+      },
+    );
+
+    it("explains instead of writing when Track Changes was turned on before Allow", async () => {
+      renderCard({
+        artifact: makeArtifact({
+          clientActionPresentation: "auto_prompt",
+          proposedClientAction: APPLY,
+        }),
+      });
+      await flush();
+      expect(screen.getByTestId("confirmation-card")).toBeInTheDocument();
+
+      word.word.setTrackingMode("TrackAll");
+      fireEvent.click(screen.getByRole("button", { name: "allow-once" }));
+      await flush();
+      await flush();
+
+      expect(word.word.writes()).toEqual([]);
+      expect(screen.queryByTestId("confirmation-card")).toBeNull();
+      expect(screen.queryByRole("button", { name: /^Apply/ })).toBeNull();
+      expect(
+        screen.getByText(/Track Changes is on, so Erato doesn't apply/),
+      ).toBeInTheDocument();
+
+      word.word.setTrackingMode("Off");
+      await act(async () => {
+        window.dispatchEvent(new Event("blur"));
+        window.dispatchEvent(new Event("focus"));
+        await Promise.resolve();
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Apply edit" }));
+      await flush();
+
+      expect(word.word.paragraphs()[1].text).toBe("Bravo, revised.");
+    });
+
     it("surfaces ONE card per turn covering the whole edit list", async () => {
       renderCard({
         artifact: makeArtifact({
