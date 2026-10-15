@@ -1,4 +1,5 @@
 const W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
+const W15 = "http://schemas.microsoft.com/office/word/2012/wordml";
 const CID = "http://schemas.microsoft.com/office/word/2016/wordml/cid";
 const XMLNS = "http://www.w3.org/2000/xmlns/";
 
@@ -6,7 +7,9 @@ export type WordHousekeepingId =
   | "list-instance-id"
   | "table-look"
   | "theme-font-language"
-  | "proofing-language";
+  | "proofing-language"
+  | "revision-id"
+  | "people-list";
 
 export interface WordHousekeepingEntry {
   id: WordHousekeepingId;
@@ -61,6 +64,26 @@ export const WORD_HOUSEKEEPING: readonly WordHousekeepingEntry[] = [
     hosts: ["Word PC", "Word for Mac"],
     probe:
       "ERMAIN-970 lang@main de-h2, de-reword-en, de-short (Word PC); de-h2-settled, de-short-settled (Word for Mac)",
+    scope: "written",
+  },
+  {
+    id: "revision-id",
+    element:
+      "w:id of revision marks (w:ins, w:del, moves, property changes), which share one sequence with comments",
+    part: "/word/document.xml",
+    hosts: ["Word PC"],
+    probe:
+      "ERMAIN-950 gate C3, C5 (Word PC, 2026-10-15): an import that drops comments renumbers a later w:del from 13 to 6",
+    scope: "written",
+  },
+  {
+    id: "people-list",
+    element:
+      "w15:person: one per author of a remaining comment, in the order of each author's first comment",
+    part: "/word/people.xml",
+    hosts: ["Word PC"],
+    probe:
+      "ERMAIN-950 gate C3 (the person whose last comment went is dropped), C5 (the others reordered); Word PC, 2026-10-15",
     scope: "written",
   },
 ];
@@ -261,4 +284,80 @@ export function wordHousekeepingDifferences(
   for (const [id, n] of Object.entries(extra) as [WordHousekeepingId, number][])
     if (n) counts[id] = (counts[id] ?? 0) + n;
   return counts;
+}
+
+const REVISION_MARKS = new Set([
+  "ins",
+  "del",
+  "moveFrom",
+  "moveTo",
+  "moveFromRangeStart",
+  "moveFromRangeEnd",
+  "moveToRangeStart",
+  "moveToRangeEnd",
+  "rPrChange",
+  "pPrChange",
+  "sectPrChange",
+  "tblPrChange",
+  "tblPrExChange",
+  "tblGridChange",
+  "trPrChange",
+  "tcPrChange",
+  "numberingChange",
+  "cellIns",
+  "cellDel",
+  "cellMerge",
+]);
+
+/**
+ * revision-id: renumbers revision marks by first appearance across `roots` (in the order given),
+ * keeping marks that shared an id together. Returns the ids as they were, in that order.
+ */
+export function normalizeWordRevisionIds(roots: readonly Element[]): string[] {
+  const ids = new Map<string, string>();
+  const seen: string[] = [];
+  for (const root of roots)
+    for (const mark of elements(root, "*")) {
+      if (!REVISION_MARKS.has(mark.localName) || !mark.hasAttributeNS(W, "id"))
+        continue;
+      const id = mark.getAttributeNS(W, "id") ?? "";
+      seen.push(id);
+      if (!ids.has(id)) ids.set(id, `revision-${ids.size}`);
+      mark.setAttributeNS(W, "w:id", ids.get(id)!);
+    }
+  return seen;
+}
+
+/**
+ * people-list: keeps the people entries of the authors who still have a comment, ordered by author,
+ * as an import leaves them whatever order or leftovers the written package had. Returns whether it
+ * changed the part.
+ */
+export function normalizeWordPeopleList(
+  people: Element | undefined,
+  comments: Element | undefined,
+): boolean {
+  if (!people) return false;
+  const authors = new Set(
+    Array.from(comments?.children ?? [])
+      .filter((c) => c.namespaceURI === W && c.localName === "comment")
+      .map((c) => c.getAttributeNS(W, "author") ?? ""),
+  );
+  const entries = Array.from(people.children);
+  const persons = entries.filter(
+    (e) => e.namespaceURI === W15 && e.localName === "person",
+  );
+  const author = (person: Element) =>
+    person.getAttributeNS(W15, "author") ?? "";
+  const kept = persons
+    .filter((person) => authors.has(author(person)))
+    .sort((a, b) =>
+      author(a) < author(b) ? -1 : author(a) > author(b) ? 1 : 0,
+    );
+  const others = entries.filter((e) => !persons.includes(e));
+  const next = [...others, ...kept];
+  if (next.length === entries.length && next.every((e, i) => e === entries[i]))
+    return false;
+  people.replaceChildren(...next);
+  return true;
 }

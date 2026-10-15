@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   WORD_HOUSEKEEPING,
+  normalizeWordPeopleList,
+  normalizeWordRevisionIds,
   wordHousekeepingDifferences,
   wordHousekeepingTokens,
 } from "../wordHousekeeping";
@@ -284,6 +286,17 @@ describe("proofing-language", () => {
     );
   });
 
+  it("counts a commented paragraph as kept though an import renumbered its comment", () => {
+    const commented = (id: string) =>
+      `<w:p><w:pPr>${tag("en-US")}</w:pPr><w:commentRangeStart w:id="${id}"/><w:r>${tag("en-US")}<w:t>Delta has a comment.</w:t></w:r><w:commentRangeEnd w:id="${id}"/><w:r>${tag("en-US")}<w:commentReference w:id="${id}"/></w:r></w:p>`;
+    expect(
+      removeWordRedetectedLanguage(
+        parse(pkg({ body: kept + commented("4") })),
+        parse(pkg({ body: kept + commented("6") })),
+      ),
+    ).toBe(0);
+  });
+
   it("still sees a language that sets more than w:val", () => {
     const withScripts = written(
       `<w:p><w:pPr><w:pStyle w:val="Heading2"/></w:pPr><w:r>${tag("en-US", ' w:eastAsia="ja-JP"')}<w:t>Bravo is restyled.</w:t></w:r></w:p>`,
@@ -291,5 +304,90 @@ describe("proofing-language", () => {
     expect(fingerprint(withScripts).fingerprint).not.toBe(
       fingerprint(compiled).fingerprint,
     );
+  });
+});
+
+describe("revision-id", () => {
+  const revisions = (ids: string[]) =>
+    parse(
+      pkg({
+        body: `<w:p><w:del w:id="${ids[0]}" w:author="A"><w:r><w:delText>gone</w:delText></w:r></w:del><w:ins w:id="${ids[1]}" w:author="A"><w:r><w:t>new</w:t></w:r></w:ins><w:moveFromRangeStart w:id="${ids[2]}" w:author="A" w:name="m"/><w:moveFromRangeEnd w:id="${ids[2]}"/></w:p>`,
+      }),
+    );
+  const normalized = (doc: Document) => {
+    normalizeWordRevisionIds([doc.documentElement]);
+    return createWordXmlComparison(doc).fingerprint();
+  };
+
+  it("numbers revision marks by order, keeping the marks of one move together", () => {
+    const doc = revisions(["13", "14", "20"]);
+    expect(normalizeWordRevisionIds([doc.documentElement])).toEqual([
+      "13",
+      "14",
+      "20",
+      "20",
+    ]);
+    expect(
+      Array.from(doc.getElementsByTagNameNS(W, "*"))
+        .filter((e) => e.hasAttributeNS(W, "id"))
+        .map((e) => e.getAttributeNS(W, "id")),
+    ).toEqual(["revision-0", "revision-1", "revision-2", "revision-2"]);
+    expect(normalized(revisions(["6", "7", "9"]))).toBe(
+      normalized(revisions(["13", "14", "20"])),
+    );
+  });
+
+  it("still sees a revision by someone else", () => {
+    const other = revisions(["6", "7", "9"]);
+    other
+      .getElementsByTagNameNS(W, "del")[0]
+      .setAttributeNS(W, "w:author", "B");
+    expect(normalized(other)).not.toBe(
+      normalized(revisions(["13", "14", "20"])),
+    );
+  });
+});
+
+describe("people-list", () => {
+  const W15 = "http://schemas.microsoft.com/office/word/2012/wordml";
+  const person = (author: string, provider = "None") =>
+    `<w15:person w15:author="${author}"><w15:presenceInfo w15:providerId="${provider}" w15:userId="${author}"/></w15:person>`;
+  const roots = (persons: string[], authors: string[]) => {
+    const doc = parse(
+      `<root xmlns:w="${W}" xmlns:w15="${W15}"><w15:people>${persons.join("")}</w15:people><w:comments>${authors
+        .map((a, i) => `<w:comment w:id="${i}" w:author="${a}"/>`)
+        .join("")}</w:comments></root>`,
+    );
+    return {
+      people: doc.getElementsByTagNameNS(W15, "people")[0],
+      comments: doc.getElementsByTagNameNS(W, "comments")[0],
+    };
+  };
+  const after = (persons: string[], authors: string[]) => {
+    const { people, comments } = roots(persons, authors);
+    normalizeWordPeopleList(people, comments);
+    return new XMLSerializer().serializeToString(people);
+  };
+
+  it("keeps one entry per author with a comment left, in any order Word writes them", () => {
+    const { people, comments } = roots(
+      [person("Maya"), person("Max", "AD"), person("Lena")],
+      ["Maya", "Lena", "Maya"],
+    );
+    expect(normalizeWordPeopleList(people, comments)).toBe(true);
+    expect(
+      Array.from(people.children).map((p) => p.getAttributeNS(W15, "author")),
+    ).toEqual(["Lena", "Maya"]);
+    expect(after([person("Lena"), person("Maya")], ["Maya", "Lena"])).toBe(
+      after([person("Maya"), person("Lena")], ["Lena", "Maya"]),
+    );
+  });
+
+  it("still sees another entry for an author with comments, or a missing one", () => {
+    const base = after([person("Maya"), person("Lena")], ["Maya", "Lena"]);
+    expect(
+      after([person("Maya", "AD"), person("Lena")], ["Maya", "Lena"]),
+    ).not.toBe(base);
+    expect(after([person("Maya")], ["Maya", "Lena"])).not.toBe(base);
   });
 });
