@@ -2412,6 +2412,11 @@ msgstr "Sprawdzanie kontekstu modelu nie powiodło się. Wyślij prośbę ponown
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.commentRemovalsNeedConfirmation"
+msgstr "Ta zmiana usuwa wątki komentarzy i najpierw wymaga Twojego potwierdzenia. Nic nie zostało zastosowane."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
 msgid "officeAddin.word.authoring.compileFailed"
 msgstr "Nie udało się przygotować proponowanej struktury dokumentu Word. Nie wprowadzono zmian. Poproś o nową wersję."
 
@@ -3966,6 +3971,130 @@ msgstr "Ta zmiana wymaga przepisania całego dokumentu, czego Erato nie może zw
 #~ msgstr "Zastąp dokument"
 
 #. js-lingui-explicit-id
+#: src/word/utils/wordPlanCommentMessages.ts
+msgid "officeAddin.word.planComments.changed"
+msgstr "{count, plural, one {Zastosowano — # wątek komentarzy zmienił się nieoczekiwanie. Polecenie Cofnij w Wordzie przywraca usunięty komentarz.} few {Zastosowano — # wątki komentarzy zmieniły się nieoczekiwanie. Polecenie Cofnij w Wordzie przywraca usunięte komentarze.} many {Zastosowano — # wątków komentarzy zmieniło się nieoczekiwanie. Polecenie Cofnij w Wordzie przywraca usunięte komentarze.} other {Zastosowano — # wątku komentarzy zmieniło się nieoczekiwanie. Polecenie Cofnij w Wordzie przywraca usunięte komentarze.}}"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordPlanCommentMessages.ts
+msgid "officeAddin.word.planComments.changed.web"
+msgstr "{count, plural, one {Zastosowano — # wątek komentarzy zmienił się nieoczekiwanie. Polecenie Cofnij w Wordzie dla sieci Web go nie przywróci; przywróć wcześniejszą wersję z historii wersji.} few {Zastosowano — # wątki komentarzy zmieniły się nieoczekiwanie. Polecenie Cofnij w Wordzie dla sieci Web ich nie przywróci; przywróć wcześniejszą wersję z historii wersji.} many {Zastosowano — # wątków komentarzy zmieniło się nieoczekiwanie. Polecenie Cofnij w Wordzie dla sieci Web ich nie przywróci; przywróć wcześniejszą wersję z historii wersji.} other {Zastosowano — # wątku komentarzy zmieniło się nieoczekiwanie. Polecenie Cofnij w Wordzie dla sieci Web ich nie przywróci; przywróć wcześniejszą wersję z historii wersji.}}"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordPlanCommentMessages.ts
+msgid "officeAddin.word.planComments.copied"
+msgstr "Skopiowano wątki komentarzy."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordImportConfirm.tsx
+#: src/word/components/WordPlanCommentRemovals.tsx
+msgid "officeAddin.word.planComments.copy"
+msgstr "Kopiuj te wątki"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordPlanCommentMessages.ts
+msgid "officeAddin.word.planComments.copyFailed"
+msgstr "Nie udało się skopiować wątków komentarzy."
+
+#. js-lingui-explicit-id
+#. placeholder {0}: thread.author
+#. placeholder {1}: wordCommentThreadStatusText(thread.resolved)
+#. placeholder {2}: thread.quote
+#: src/word/utils/wordPlanCommentMessages.ts
+msgid "officeAddin.word.planComments.copyHead"
+msgstr "{0} ({1}) do „{2}”:"
+
+#. js-lingui-explicit-id
+#. placeholder {0}: thread.author
+#. placeholder {1}: wordCommentThreadStatusText(thread.resolved)
+#: src/word/utils/wordPlanCommentMessages.ts
+msgid "officeAddin.word.planComments.copyHeadPoint"
+msgstr "{0} ({1}):"
+
+#. js-lingui-explicit-id
+#. placeholder {0}: reply.author
+#. placeholder {1}: reply.text
+#: src/word/utils/wordPlanCommentMessages.ts
+msgid "officeAddin.word.planComments.copyReply"
+msgstr "  Odpowiedź od {0}: {1}"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordPlanCommentMessages.ts
+msgid "officeAddin.word.planComments.deleted"
+msgstr "{count, plural, one {Usunięto # wątek komentarzy, zgodnie z Twoim potwierdzeniem.} few {Usunięto # wątki komentarzy, zgodnie z Twoim potwierdzeniem.} many {Usunięto # wątków komentarzy, zgodnie z Twoim potwierdzeniem.} other {Usunięto # wątku komentarzy, zgodnie z Twoim potwierdzeniem.}}"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordPlanCommentMessages.ts
+msgid "officeAddin.word.planComments.intro"
+msgstr "{count, plural, one {Usunięcie tego tekstu usuwa też # wątek komentarzy wraz z odpowiedziami:} few {Usunięcie tego tekstu usuwa też # wątki komentarzy wraz z odpowiedziami:} many {Usunięcie tego tekstu usuwa też # wątków komentarzy wraz z odpowiedziami:} other {Usunięcie tego tekstu usuwa też # wątku komentarzy wraz z odpowiedziami:}}"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordPlanCommentRemovals.tsx
+msgid "officeAddin.word.planComments.keep"
+msgstr "Zachowaj skomentowane fragmenty"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordPlanCommentMessages.ts
+msgid "officeAddin.word.planComments.keepNote"
+msgstr "Twoja prośba jest z powrotem w polu wiadomości, z dopiskiem, aby zachować skomentowane fragmenty. Sprawdź ją, a następnie wyślij."
+
+#. js-lingui-explicit-id
+#. placeholder {0}: thread.author
+#: src/word/utils/wordPlanCommentMessages.ts
+msgid "officeAddin.word.planComments.keepPoint"
+msgstr "miejsce skomentowane przez {0}"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordPlanCommentMessages.ts
+msgid "officeAddin.word.planComments.keepRequest"
+msgstr "Zachowaj fragmenty, do których przypięte są te komentarze, aby ich wątki pozostały: {passages}."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordPlanCommentMessages.ts
+msgid "officeAddin.word.planComments.kept"
+msgstr "{count, plural, one {Word zachował # wątek komentarzy, którego usunięcie potwierdzono.} few {Word zachował # wątki komentarzy, których usunięcie potwierdzono.} many {Word zachował # wątków komentarzy, których usunięcie potwierdzono.} other {Word zachował # wątku komentarzy, których usunięcie potwierdzono.}}"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordPlanCommentRemovals.tsx
+msgid "officeAddin.word.planComments.label"
+msgstr "Wątki komentarzy usuwane przez tę zmianę"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordPlanCommentMessages.ts
+msgid "officeAddin.word.planComments.open"
+msgstr "Otwarty"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordPlanCommentMessages.ts
+msgid "officeAddin.word.planComments.point"
+msgstr "Komentarz w jednym miejscu"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordPlanCommentMessages.ts
+msgid "officeAddin.word.planComments.rebuild"
+msgstr "{count, plural, one {Odtwarza # wątek komentarzy (daty i stan „rozwiązany” mogą się zmienić).} few {Odtwarza # wątki komentarzy (daty i stan „rozwiązany” mogą się zmienić).} many {Odtwarza # wątków komentarzy (daty i stan „rozwiązany” mogą się zmienić).} other {Odtwarza # wątku komentarzy (daty i stan „rozwiązany” mogą się zmienić).}}"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordPlanCommentMessages.ts
+msgid "officeAddin.word.planComments.replies"
+msgstr "{count, plural, =0 {Brak odpowiedzi} one {# odpowiedź} few {# odpowiedzi} many {# odpowiedzi} other {# odpowiedzi}}"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordPlanCommentMessages.ts
+msgid "officeAddin.word.planComments.resolved"
+msgstr "Rozwiązany"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordPlanCommentMessages.ts
+msgid "officeAddin.word.planComments.tick"
+msgstr "{count, plural, one {Usuń też # wątek komentarzy} few {Usuń też # wątki komentarzy} many {Usuń też # wątków komentarzy} other {Usuń też # wątku komentarzy}}"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordPlanCommentMessages.ts
+msgid "officeAddin.word.planComments.unchecked"
+msgstr "Zastosowano. Erato nie mógł potem wyświetlić listy komentarzy dokumentu, więc sprawdź je w Wordzie."
+
+#. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts
 #~ msgid "officeAddin.word.planGroup.removedCount"
 #~ msgstr "{0, plural, one {# usunięty} few {# usunięte} many {# usuniętych} other {# usuniętego}}"
@@ -4486,6 +4615,7 @@ msgstr "Stosowana jest każda proponowana zmiana, także w wierszach ukrytych pr
 #. js-lingui-explicit-id
 #: src/word/components/WordCommentChangesCard.tsx
 #: src/word/components/WordImportConfirm.tsx
+#: src/word/components/WordPlanCommentRemovals.tsx
 #: src/word/components/WordReviewCardParts.tsx
 msgid "officeAddin.word.review.cancel"
 msgstr "Anuluj"

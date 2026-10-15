@@ -10,6 +10,10 @@ import {
   paragraph,
 } from "../../../test/mocks/word/authoringFixtures";
 import {
+  commentedParagraph,
+  withComments,
+} from "../../../test/mocks/word/commentFixtures";
+import {
   wordDocumentFileToOoxml,
   wordDocumentOoxmlToFile,
 } from "../wordDocumentPackage";
@@ -44,7 +48,22 @@ function base(source: WordAuthoringSnapshot): WordDocumentPlan {
 }
 function richFixture(): string {
   const source = ready(
-    packageXml(paragraph("Original paragraph") + paragraph("Second paragraph")),
+    withComments(
+      packageXml(
+        paragraph("Original paragraph") +
+          commentedParagraph("", "Second paragraph", "", ["0"]),
+      ),
+      [
+        {
+          id: "0",
+          author: "Reviewer",
+          date: "2026-09-08T10:15:30Z",
+          text: "Original comment",
+          paraId: "1A2B3C4D",
+          durableId: "0BC0FFEE",
+        },
+      ],
+    ),
   );
   const plan = base(source);
   plan.stories = [
@@ -70,15 +89,6 @@ function richFixture(): string {
       id: "note",
       blocks: [{ id: "note-text", type: "paragraph", text: "Original note" }],
       anchor: { block: source.blocks[0].ref },
-    },
-    {
-      kind: "upsert",
-      type: "comment",
-      id: "comment",
-      blocks: [
-        { id: "comment-text", type: "paragraph", text: "Original comment" },
-      ],
-      anchor: { block: source.blocks[1].ref },
     },
   ];
   plan.sections = [
@@ -175,11 +185,11 @@ describe("production structured full-document authoring", () => {
         reason: "Clear the complete document as requested",
       },
     ];
-    plan.stories = source.stories!.map((story) => ({
-      kind: "delete",
-      type: story.type,
-      id: story.id,
-    }));
+    plan.stories = source.stories!.flatMap((story) =>
+      story.type === "comment"
+        ? []
+        : [{ kind: "delete" as const, type: story.type, id: story.id }],
+    );
     plan.sections = [{ id: "empty" }];
     const parsed = parseWordDocumentPlan(JSON.stringify(plan));
     expect(parsed).not.toBeNull();

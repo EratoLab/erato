@@ -356,16 +356,19 @@ async function prepareWordDocumentSubmission(
       "table-cell-text-mismatch":
         "textEdit.expectedText must match the original captured cell text exactly.",
     };
+    const attribution =
+      error instanceof Error && error.message === "comment-attribution-changed";
     return {
       ok: false,
       error: "Document plan preparation failed.",
       validationErrors: [
         {
           path: "",
-          code: "compile-plan",
-          message:
-            (error instanceof Error && hints[error.message]) ||
-            "The plan could not be compiled against its captured sources. Check native targets, retained table cells, bookmark names, stories and section layout.",
+          code: attribution ? "comment-attribution-changed" : "compile-plan",
+          message: attribution
+            ? "The compiled plan would change the author, initials or date of a comment it keeps, or the people part. Plans never change comments; keep the commented text or ask the user."
+            : (error instanceof Error && hints[error.message]) ||
+              "The plan could not be compiled against its captured sources. Check native targets, retained table cells, bookmark names, stories and section layout.",
         },
       ],
     };

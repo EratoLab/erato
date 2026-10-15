@@ -67,6 +67,11 @@ import {
   wordInPlaceCapabilitiesUnder,
   wordTrackedWritingAvailable,
 } from "./wordInPlaceSwitch";
+import {
+  checkWordPlanComments,
+  readWordCommentStates,
+} from "./wordPlanCommentCheck";
+import { wordPlanCommentConsequences } from "./wordPlanComments";
 import { wordWriteHost } from "./wordWriteHost";
 
 import type {
@@ -82,9 +87,14 @@ import type {
 } from "./wordFullDocumentComparison";
 import type { WordWholeDocumentRefusal } from "./wordInPlaceRoute";
 import type {
+  WordCommentThreadState,
+  WordPlanCommentCheck,
+} from "./wordPlanCommentCheck";
+import type {
   WordAuthoringSnapshot,
   WordDocumentPlan,
   WordHousekeepingCounts,
+  WordPlanCommentThread,
   WordPlanIssue,
 } from "@erato/frontend/word-review";
 
@@ -106,6 +116,8 @@ export interface WordDocumentDiagnostic {
     | "host-error"
     /** The host's policy asks before a whole-document write, and the user has not confirmed it. */
     | "import-needs-confirmation"
+    /** The plan deletes comment threads and the user has not ticked that for this compiled plan. */
+    | "comment-removals-need-confirmation"
     | WordWholeDocumentRefusal
     /** Word refused the write (NotAllowed) and the document is verifiably unchanged. */
     | "not-allowed";
@@ -128,6 +140,8 @@ export interface WordApplyOutcome {
   tracked?: boolean;
   /** Differences the checks left to WORD_HOUSEKEEPING, by rule. */
   housekeeping?: WordHousekeepingCounts;
+  /** The comment threads after the write, against the plan; absent in a document without any. */
+  comments?: WordPlanCommentCheck;
 }
 export interface WordDocumentApplyResult {
   status: WordDocumentApplyStatus;
@@ -232,6 +246,8 @@ async function observeAfterFailure(
 export interface WordDocumentApplyOptions {
   /** The user confirmed replacing the whole document, where the host's policy asks first. */
   importConfirmed?: boolean;
+  /** The compiled plan's fingerprint for which the user ticked "Also delete N comment threads". */
+  commentRemovalsConfirmed?: string;
 }
 
 export async function applyWordDocumentPlan(
@@ -244,6 +260,7 @@ export async function applyWordDocumentPlan(
 ): Promise<WordDocumentApplyResult> {
   const progress = trackWordApply("plan", onStage);
   const routing: { reason?: WordRouteReason } = {};
+  const watch: CommentWatch = {};
   let result: WordDocumentApplyResult | undefined;
   try {
     result = await applyPlan(
@@ -254,7 +271,9 @@ export async function applyWordDocumentPlan(
       progress,
       routing,
       options,
+      watch,
     );
+    result = await withCommentCheck(result, watch);
     return result;
   } finally {
     const details = result?.diagnostic?.details;
@@ -267,6 +286,39 @@ export async function applyWordDocumentPlan(
     if (result?.diagnostic)
       logWordDiagnostic("apply", result.status, result.diagnostic);
   }
+}
+
+/** The threads before the write and those the plan deletes, for documents that have comments. */
+interface CommentWatch {
+  before?: WordCommentThreadState[] | null;
+  planned?: readonly WordPlanCommentThread[];
+}
+
+/** Every written apply, on every route, is followed by a comment check; nothing else is. */
+async function withCommentCheck(
+  result: WordDocumentApplyResult,
+  watch: CommentWatch,
+): Promise<WordDocumentApplyResult> {
+  const written =
+    result.status === "interrupted" ||
+    (result.status === "applied" && result.outcome?.ops !== 0);
+  if (!written || watch.before === undefined) return result;
+  const comments = await checkWordPlanComments(
+    watch.before,
+    watch.planned ?? [],
+    readWordCommentStates,
+  );
+  if (result.outcome)
+    return { ...result, outcome: { ...result.outcome, comments } };
+  return result.diagnostic
+    ? {
+        ...result,
+        diagnostic: {
+          ...result.diagnostic,
+          details: { ...result.diagnostic.details, comments },
+        },
+      }
+    : result;
 }
 
 /** The route reason rides on the diagnostic so the copyable report says why the import ran. */
@@ -391,6 +443,7 @@ async function applyPlan(
   progress: WordApplyProgress,
   routing: { reason?: WordRouteReason },
   options: WordDocumentApplyOptions,
+  watch: CommentWatch,
 ): Promise<WordDocumentApplyResult> {
   progress.stage("checking");
   // Parsing, compiling and verifying below are synchronous; let the busy button paint first.
@@ -429,6 +482,27 @@ async function applyPlan(
         status: "blocked",
         diagnostic: diagnostic("compile", "compile-failed"),
       };
+    // Asked of every route and caller, Always and auto-prompt included: only the tick consents.
+    const comments = wordPlanCommentConsequences(snapshot, compiled, prepared);
+    if (
+      comments.removals.length &&
+      options.commentRemovalsConfirmed !== comments.fingerprint
+    )
+      return {
+        status: "blocked",
+        diagnostic: diagnostic(
+          "validate",
+          "comment-removals-need-confirmation",
+          undefined,
+          { commentThreads: comments.removals.length },
+        ),
+      };
+    watch.planned = comments.removals.map((removal) => removal.thread);
+    // Read once consent and the guards passed; a route's own stale check can still refuse after it.
+    const watchComments = async () => {
+      if (comments.threads.length && watch.before === undefined)
+        watch.before = await readWordCommentStates();
+    };
     if (snapshot.fullDocument) {
       // All or nothing per plan: in place only when every change has an exact object-model inverse.
       let routeReason: WordRouteReason | undefined;
@@ -454,6 +528,7 @@ async function applyPlan(
           },
         };
       } else if (route.route === "in-place") {
+        await watchComments();
         const result = await applyWordPlanInPlace({
           snapshot,
           compiled: prepared,
@@ -506,6 +581,7 @@ async function applyPlan(
         fallbackReasons,
       );
       if (guarded) return guarded;
+      await watchComments();
       return imported(
         await applyFullDocument(
           plan,
@@ -528,6 +604,7 @@ async function applyPlan(
       () => [],
     );
     if (guarded) return guarded;
+    await watchComments();
     stage = "preflight";
     progress.stage("backup");
     return await host.run(async (context) => {

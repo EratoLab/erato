@@ -367,6 +367,8 @@ export interface WordCommentReadOptions {
   selection?: boolean;
   /** "requested" reads replies only for the threads `exact` names (Word for Mac lists them slowly). */
   replies?: "all" | "requested";
+  /** Only the threads and all their replies, in Word's order: no inventory, anchor, order or legacy read. */
+  threadsOnly?: boolean;
   /**
    * False reads no package for exact anchors (about 0.4 s each on the web, probe ERMAIN-983):
    * `exact` then only names the threads whose replies to list. On desktop the packages that tell
@@ -638,6 +640,19 @@ async function readThreads(
       dateUtc: new PackageNotes().dateUtc(),
       selection: null,
     });
+  if (options.threadsOnly) {
+    await readReplies(session, live, budgets.replies);
+    return resultOf(
+      diagnostics,
+      live.map(({ record }) => record),
+      {
+        inventory: null,
+        legacy: options.legacy ?? null,
+        dateUtc: new PackageNotes().dateUtc(),
+        selection: null,
+      },
+    );
+  }
 
   const kept =
     anchors?.reuse && options.legacy != null && !options.inventory

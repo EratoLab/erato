@@ -3,6 +3,8 @@ import {
   isWordMediaElementActive,
 } from "./wordMediaComparison";
 import { nativeVisibleText } from "./wordNativeContent";
+import { placeWordNoteMarker } from "./wordNoteAnchors";
+import { wordCommentThreadRoots } from "./wordPlanComments";
 
 import type { WordPlanBlock } from "./wordDocumentPlan";
 
@@ -24,13 +26,13 @@ export interface WordStoryAnchor {
   start?: number;
   end?: number;
 }
+/** Comments are not plan stories: they are changed with the comment actions (O-1). */
+export type WordPlanStoryType = Exclude<WordStoryType, "comment">;
 export interface WordStoryChange {
   kind: "upsert" | "delete";
-  type: WordStoryType;
+  type: WordPlanStoryType;
   id: string;
   blocks?: WordPlanBlock[];
-  author?: string;
-  initials?: string;
   anchor?: WordStoryAnchor;
 }
 export interface WordPageLayout {
@@ -97,10 +99,6 @@ const id = (v: unknown): v is string =>
   typeof v === "string" && /^[A-Za-z0-9_-]{1,100}$/.test(v);
 const number = (v: unknown, min: number, max: number) =>
   typeof v === "number" && Number.isFinite(v) && v >= min && v <= max;
-const text = (v: unknown, max: number) =>
-  typeof v === "string" &&
-  v.length <= max &&
-  !/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/.test(v);
 const elements = (root: Document | Element, name: string) =>
   Array.from(root.getElementsByTagNameNS(W, name)).filter(
     isWordMediaElementActive,
@@ -129,19 +127,9 @@ export function parseWordStoryChanges(
   for (const v of value) {
     if (
       !record(v) ||
-      !keys(v, [
-        "kind",
-        "type",
-        "id",
-        "blocks",
-        "author",
-        "initials",
-        "anchor",
-      ]) ||
+      !keys(v, ["kind", "type", "id", "blocks", "anchor"]) ||
       !["upsert", "delete"].includes(String(v.kind)) ||
-      !["header", "footer", "footnote", "endnote", "comment"].includes(
-        String(v.type),
-      ) ||
+      !["header", "footer", "footnote", "endnote"].includes(String(v.type)) ||
       !id(v.id) ||
       seen.has(v.id)
     )
@@ -155,13 +143,6 @@ export function parseWordStoryChanges(
     if (!Array.isArray(v.blocks) || v.blocks.length > 2000) return null;
     const blocks = v.blocks.map((block) => parseBlock(block));
     if (blocks.some((b) => !b)) return null;
-    if (
-      (v.author !== undefined && !text(v.author, 255)) ||
-      (v.initials !== undefined && !text(v.initials, 32)) ||
-      ((v.author !== undefined || v.initials !== undefined) &&
-        v.type !== "comment")
-    )
-      return null;
     if (v.anchor !== undefined) {
       const a = v.anchor;
       if (
@@ -553,6 +534,7 @@ function stripReferences(
           parent.remove();
       }
 }
+/** Its replies go with it (pruneWordStoryReferences), so no entry keeps a parent it loses here. */
 function stripModernCommentMetadata(doc: Document, comment: Element): void {
   const ids = new Set(
     elements(comment, "p")
@@ -573,12 +555,6 @@ function stripModernCommentMetadata(doc: Document, comment: Element): void {
         for (const a of Array.from(e.attributes))
           if (a.localName === "durableId") durableIds.add(a.value);
         e.remove();
-      } else {
-        // A surviving reply must not retain a dangling reference to a removed
-        // parent paragraph. Its own body and metadata remain independently held.
-        for (const a of Array.from(e.attributes))
-          if (a.localName === "paraIdParent" && ids.has(a.value))
-            e.removeAttributeNode(a);
       }
   }
   for (const part of packageParts(doc)) {
@@ -593,11 +569,6 @@ function stripModernCommentMetadata(doc: Document, comment: Element): void {
       )
         e.remove();
   }
-}
-function storyParagraphs(root: Element): Element[] {
-  return root.namespaceURI === W && root.localName === "p"
-    ? [root]
-    : elements(root, "p");
 }
 function visibleText(root: Element): string {
   return Array.from(root.getElementsByTagNameNS(W, "*"))
@@ -614,152 +585,28 @@ function visibleText(root: Element): string {
     .join("");
 }
 
-function markerInParagraph(
-  paragraph: Element,
-  offset: number,
-  marker: Element,
-): void {
-  const length = visibleText(paragraph).length;
-  if (!Number.isInteger(offset) || offset < 0 || offset > length)
-    throw new Error("An annotation offset is outside its paragraph.");
-  if (offset === 0) {
-    const first = Array.from(paragraph.children).find(
-      (e) => !(e.namespaceURI === W && e.localName === "pPr"),
-    );
-    paragraph.insertBefore(marker, first ?? null);
-    return;
-  }
-  let position = 0;
-  for (const run of elements(paragraph, "r")) {
-    const runText = visibleText(run);
-    if (position + runText.length < offset) {
-      position += runText.length;
-      continue;
-    }
-    const cut = offset - position;
-    if (cut === 0) {
-      run.before(marker);
-      return;
-    }
-    if (cut === runText.length) {
-      run.after(marker);
-      return;
-    }
-    if (
-      Array.from(run.children).some(
-        (e) =>
-          e.namespaceURI !== W ||
-          !["rPr", "t", "tab", "br", "cr"].includes(e.localName),
-      )
-    )
-      throw new Error("This annotation splits a non-text Word run.");
-    const left = run.cloneNode(false) as Element,
-      right = run.cloneNode(false) as Element;
-    let cursor = 0;
-    for (const e of Array.from(run.children)) {
-      if (e.localName === "rPr") {
-        left.append(e.cloneNode(true));
-        right.append(e.cloneNode(true));
-        continue;
-      }
-      const content =
-        e.localName === "t"
-          ? (e.textContent ?? "")
-          : e.localName === "tab"
-            ? "\t"
-            : "\n";
-      const boundary = Math.max(0, Math.min(content.length, cut - cursor));
-      if (boundary > 0) {
-        const copy = e.cloneNode(true) as Element;
-        if (e.localName === "t") {
-          copy.textContent = content.slice(0, boundary);
-          copy.setAttributeNS(
-            "http://www.w3.org/XML/1998/namespace",
-            "xml:space",
-            "preserve",
-          );
-        }
-        left.append(copy);
-      }
-      if (boundary < content.length) {
-        const copy = e.cloneNode(true) as Element;
-        if (e.localName === "t") {
-          copy.textContent = content.slice(boundary);
-          copy.setAttributeNS(
-            "http://www.w3.org/XML/1998/namespace",
-            "xml:space",
-            "preserve",
-          );
-        }
-        right.append(copy);
-      }
-      cursor += content.length;
-    }
-    run.replaceWith(left, marker, right);
-    return;
-  }
-  if (offset === length) paragraph.append(marker);
-  else throw new Error("An annotation anchor could not be located.");
-}
-
 function addStoryAnchor(
   doc: Document,
   story: WordStoryChange,
   nativeId: string,
-  output: ReadonlyMap<string, Element>,
+  output: ReadonlyMap<string, readonly Element[]>,
 ): void {
   const anchor = story.anchor;
-  if (!anchor) throw new Error("A new note or comment needs an anchor.");
-  const block = output.get(anchor.block);
-  const paragraphs = block ? storyParagraphs(block) : [];
-  if (!paragraphs.length)
-    throw new Error("An annotation anchor does not refer to a text block.");
-  const total = paragraphs.reduce((sum, p) => sum + visibleText(p).length, 0);
-  const start = anchor.start ?? (story.type === "comment" ? 0 : total);
-  const end = anchor.end ?? (story.type === "comment" ? total : start);
-  if (start > end || end > total)
+  if (!anchor) throw new Error("A new note needs an anchor.");
+  const offset = anchor.start ?? anchor.end;
+  if (anchor.end !== undefined && anchor.end !== offset)
     throw new Error("An annotation anchor is outside its block.");
-  const locate = (offset: number) => {
-    let remaining = offset;
-    for (const p of paragraphs) {
-      const length = visibleText(p).length;
-      if (remaining <= length) return { p, offset: remaining };
-      remaining -= length;
-    }
-    throw new Error("An annotation anchor could not be located.");
-  };
-  if (story.type === "comment") {
-    const from = locate(start),
-      to = locate(end);
-    const endMarker = make(doc, "commentRangeEnd");
-    endMarker.setAttributeNS(W, "w:id", nativeId);
-    markerInParagraph(to.p, to.offset, endMarker);
-    const startMarker = make(doc, "commentRangeStart");
-    startMarker.setAttributeNS(W, "w:id", nativeId);
-    markerInParagraph(from.p, from.offset, startMarker);
-    const run = make(doc, "r"),
-      reference = make(doc, "commentReference");
-    reference.setAttributeNS(W, "w:id", nativeId);
-    const properties = storyMarkerProperties(doc, "CommentReference", true);
-    if (properties) run.append(properties);
-    run.append(reference);
-    endMarker.after(run);
-  } else {
-    const at = locate(start);
-    const run = make(doc, "r"),
-      reference = make(doc, `${story.type}Reference`);
-    reference.setAttributeNS(W, "w:id", nativeId);
-    run.append(reference);
-    markerInParagraph(at.p, at.offset, run);
-  }
+  const run = make(doc, "r"),
+    reference = make(doc, `${story.type}Reference`);
+  reference.setAttributeNS(W, "w:id", nativeId);
+  run.append(reference);
+  placeWordNoteMarker(output.get(anchor.block) ?? [], offset, run);
 }
 
-/** Word drops style references absent from the inventory.
- * Annotation markers use native styles; comment bodies retain the default size. */
+/** Word drops style references absent from the inventory, so markers use only native styles. */
 function storyMarkerProperties(
   doc: Document,
   styleId: string,
-  bodyComment = false,
 ): Element | undefined {
   const style = elements(doc, "style").find(
     (s) => attr(s, "type") === "character" && attr(s, "styleId") === styleId,
@@ -767,30 +614,26 @@ function storyMarkerProperties(
   if (!style) return undefined;
   const properties = make(doc, "rPr");
   properties.append(make(doc, "rStyle", styleId));
-  if (bodyComment) {
-    const defaults = child(elements(doc, "rPrDefault")[0], "rPr");
-    for (const name of ["sz", "szCs"]) {
-      const size = child(defaults, name);
-      if (size) properties.append(size.cloneNode(true));
-    }
-  }
   return properties;
 }
 
 /**
  * Compile typed stories into the retained package. The block callback must use
  * owner for image/hyperlink relationships instead of attaching them to the body.
+ * `output` holds every node of each output block, which a note anchor counts in.
  */
 export function compileWordStories(
   doc: Document,
   changes: readonly WordStoryChange[],
   compileBlocks: (blocks: WordPlanBlock[], owner: string) => Element[],
-  output: ReadonlyMap<string, Element>,
+  output: ReadonlyMap<string, readonly Element[]>,
   originalStories?: readonly WordStorySource[],
 ): void {
   const before = originalStories ?? extractWordStories(doc);
   const existing = new Map(extractWordStories(doc).map((s) => [s.id, s]));
   for (const change of changes) {
+    if ((change.type as WordStoryType) === "comment")
+      throw new Error("comment-story-route");
     const source = existing.get(change.id);
     if (source && source.type !== change.type)
       throw new Error("A story reference has the wrong type.");
@@ -798,7 +641,6 @@ export function compileWordStories(
       if (!source) throw new Error("The story to remove no longer exists.");
       const node = storyElement(doc, source)!;
       if (source.nativeId !== undefined) {
-        if (change.type === "comment") stripModernCommentMetadata(doc, node);
         node.remove();
         stripReferences(doc, change.type, source.nativeId);
       } else {
@@ -830,7 +672,7 @@ export function compileWordStories(
           `${change.type}s`,
           storyContentType(change.type),
         );
-        if (change.type !== "comment" && !root.children.length) {
+        if (!root.children.length) {
           for (const [specialId, specialType] of [
             ["-1", "separator"],
             ["0", "continuationSeparator"],
@@ -904,7 +746,7 @@ export function compileWordStories(
         const ids = new Set(
           Array.from(root.children).map((e) => attr(e, "id")),
         );
-        let index = change.type === "comment" ? 0 : 1;
+        let index = 1;
         while (ids.has(String(index))) index++;
         nativeId = String(index);
         node = make(doc, change.type);
@@ -919,8 +761,6 @@ export function compileWordStories(
         ? change.type
         : `${change.type}s`,
     );
-    const paragraphs = elements(node, "p");
-    const oldLastId = paragraphs.at(-1)?.getAttributeNS(W14, "paraId");
     const compiled = compileBlocks(change.blocks ?? [], path!);
     node.replaceChildren(...(compiled.length ? compiled : [make(doc, "p")]));
     // Every story ends with a paragraph mark; Word adds one after a final table on import.
@@ -939,28 +779,6 @@ export function compileWordStories(
         (e) => e.localName !== "pPr",
       );
       paragraph.insertBefore(run, first ?? null);
-    }
-    if (change.type === "comment") {
-      const paragraph = elements(node, "p")[0];
-      if (!paragraph) throw new Error("A comment must contain a paragraph.");
-      const marker = make(doc, "r");
-      const properties = storyMarkerProperties(doc, "CommentReference");
-      if (properties) marker.append(properties);
-      marker.append(make(doc, "annotationRef"));
-      paragraph.insertBefore(
-        marker,
-        Array.from(paragraph.children).find((e) => e.localName !== "pPr") ??
-          null,
-      );
-      if (change.author !== undefined || !source)
-        node.setAttributeNS(W, "w:author", change.author ?? "Erato");
-      if (change.initials !== undefined)
-        node.setAttributeNS(W, "w:initials", change.initials);
-      // Modern comment metadata names the last paragraph of the comment.
-      if (oldLastId)
-        elements(node, "p")
-          .at(-1)
-          ?.setAttributeNS(W14, "w14:paraId", oldLastId);
     }
     if (nativeId !== undefined) {
       if (change.anchor) {
@@ -993,6 +811,8 @@ export function pruneWordStoryReferences(
       .filter((s) => s.anchored)
       .map((s) => `${s.type}:${s.nativeId}`),
   );
+  // Read before anything is removed: removing a comment's metadata drops its replies' parent link.
+  const roots = wordCommentThreadRoots(doc);
   for (const type of ["footnote", "endnote", "comment"] as const) {
     const references = elements(doc, `${type}Reference`);
     const ids = new Set(references.map((r) => attr(r, "id")));
@@ -1000,16 +820,27 @@ export function pruneWordStoryReferences(
     const available = new Set(stories.map((s) => s.nativeId));
     if ([...ids].some((reference) => !available.has(reference)))
       throw new Error("An annotation reference has no content.");
-    for (const source of stories)
-      if (
+    const lost = stories.filter(
+      (source) =>
         !ids.has(source.nativeId!) &&
-        originallyAnchored.has(`${type}:${source.nativeId}`)
-      ) {
-        const node = storyElement(doc, source)!;
-        if (type === "comment") stripModernCommentMetadata(doc, node);
-        node.remove();
-        stripReferences(doc, type, source.nativeId!);
-      }
+        originallyAnchored.has(`${type}:${source.nativeId}`),
+    );
+    // A thread goes whole: a reply left behind would turn into a thread of its own.
+    const threads = new Set(
+      lost.map((source) => roots.get(source.nativeId!) ?? source.nativeId!),
+    );
+    const removed =
+      type === "comment"
+        ? stories.filter((source) =>
+            threads.has(roots.get(source.nativeId!) ?? source.nativeId!),
+          )
+        : lost;
+    for (const source of removed) {
+      const node = storyElement(doc, source)!;
+      if (type === "comment") stripModernCommentMetadata(doc, node);
+      node.remove();
+      stripReferences(doc, type, source.nativeId!);
+    }
   }
 }
 

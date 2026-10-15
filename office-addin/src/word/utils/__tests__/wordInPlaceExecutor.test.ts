@@ -41,12 +41,23 @@ import type {
   WordDocumentApplyResult,
   WordDocumentRevertResult,
 } from "../wordApplyDocumentPlan";
+import type * as wordPlanCommentCheckModule from "../wordPlanCommentCheck";
 import type {
   WordAuthoringSnapshot,
   WordDocumentPlan,
   WordPlanBlock,
   WordPlanEntry,
 } from "@erato/frontend/word-review";
+
+vi.mock("../wordPlanCommentCheck", async (importOriginal) => {
+  const { ooxmlHostCommentStates } = await import(
+    "../../../test/mocks/word/commentStates"
+  );
+  return {
+    ...(await importOriginal<typeof wordPlanCommentCheckModule>()),
+    readWordCommentStates: vi.fn(ooxmlHostCommentStates),
+  };
+});
 
 const W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
 const CLOSING = "Closing paragraph.";
@@ -208,6 +219,7 @@ describe("in-place apply", { timeout: 30_000 }, () => {
       tier: "block",
       adjustments: [],
       ops: 3,
+      comments: { removed: 0, kept: 0, unexpected: 0 },
     });
     expect(save).toHaveBeenCalledOnce();
     const capture = host.events.indexOf("capture-file");
@@ -299,6 +311,7 @@ describe("in-place apply", { timeout: 30_000 }, () => {
         tier: "block",
         adjustments: [],
         ops: 1,
+        comments: { removed: 0, kept: 0, unexpected: 0 },
       });
       expect(host.events.indexOf("backup-saved")).toBeGreaterThan(
         host.events.indexOf("capture-file"),

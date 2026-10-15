@@ -656,6 +656,12 @@ function dropLanguage(lang: Element): void {
     properties.remove();
 }
 
+const COMMENT_MARKS = new Set([
+  "commentRangeStart",
+  "commentRangeEnd",
+  "commentReference",
+]);
+
 /** Drops every w:lang in the form Word's own language detection writes (isWordDetectedLanguage),
  * wherever it sits, and returns how many. It tells Word's tagging apart from an edit; a comparison
  * that must see a language the user sets uses removeWordRedetectedLanguage instead. */
@@ -693,6 +699,14 @@ export function removeWordRedetectedLanguage(
       wordXmlElements(clone, W, "lang")
         .filter(isWordDetectedLanguage)
         .forEach(dropLanguage);
+      // An import renews comment ids and paraIds (ERMAIN-950 gate C5), which a kept paragraph's marks name.
+      for (const mark of wordXmlElements(clone, W, "*").filter((e) =>
+        COMMENT_MARKS.has(e.localName),
+      ))
+        (mark.localName === "commentReference"
+          ? mark.parentElement
+          : mark
+        )?.remove();
       return { paragraph, key: comparison.signature(clone) };
     });
   };

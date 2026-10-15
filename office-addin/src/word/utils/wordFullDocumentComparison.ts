@@ -5,6 +5,8 @@ import {
   isWordHostStateRelationship,
   normalizeWordInlineForComparison,
   normalizeWordMediaForComparison,
+  normalizeWordPeopleList,
+  normalizeWordRevisionIds,
   removeWordNumberingIdentity,
   removeWordRedetectedLanguage,
   wordXmlElements as all,
@@ -1580,8 +1582,33 @@ export function wordFullDocumentDifferences(
         removeWordRedetectedLanguage(expected.doc, parsed),
     );
   }
-  const housekeeping: { housekeeping?: WordHousekeepingCounts } = redetected
-    ? { housekeeping: { "proofing-language": redetected } }
+  const counts: WordHousekeepingCounts = redetected
+    ? { "proofing-language": redetected }
+    : {};
+  const [expectedIds, actualIds] = [expected, actual].map((v) =>
+    normalizeWordRevisionIds(
+      [...v.roots.keys()].sort().map((path) => v.roots.get(path)!),
+    ),
+  );
+  const renumbered = expectedIds.filter((id, i) => id !== actualIds[i]).length;
+  if (renumbered && expectedIds.length === actualIds.length)
+    counts["revision-id"] = renumbered;
+  const people = (v: PackageView) => {
+    const root = v.roots.get("/word/people.xml");
+    return root ? new XMLSerializer().serializeToString(root) : "";
+  };
+  const peopleDiffered = people(expected) !== people(actual);
+  for (const v of [expected, actual])
+    normalizeWordPeopleList(
+      v.roots.get("/word/people.xml"),
+      v.roots.get("/word/comments.xml"),
+    );
+  if (peopleDiffered && people(expected) === people(actual))
+    counts["people-list"] = 1;
+  const housekeeping: { housekeeping?: WordHousekeepingCounts } = Object.keys(
+    counts,
+  ).length
+    ? { housekeeping: counts }
     : {};
   for (const v of [expected, actual]) {
     normalizeWordMediaForComparison(v.doc);

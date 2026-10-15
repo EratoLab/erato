@@ -953,6 +953,11 @@ const decode = (base64: string) =>
   Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
 
 /** A complete-document Word host backed by a real DOCX: file capture, import, content-control locks. */
+let installed: WordOoxmlHost | undefined;
+
+/** The host the last installWordOoxmlHost() put in place. */
+export const currentWordOoxmlHost = () => installed;
+
 export function installWordOoxmlHost(
   source: Uint8Array | string,
   settings: WordOoxmlHostOptions = {},
@@ -2680,7 +2685,7 @@ export function installWordOoxmlHost(
       afterSyncs.push({ remaining: when.afterSync, apply });
     else (when === "after-capture" ? afterCapture : afterImport).push(apply);
   };
-  return {
+  const host = {
     insert,
     bodyInsert,
     close,
@@ -2815,6 +2820,8 @@ export function installWordOoxmlHost(
     },
     clearNativeUndo: () => events.push("native-undo-cleared"),
   };
+  installed = host;
+  return host;
 }
 
 export type WordOoxmlHost = ReturnType<typeof installWordOoxmlHost>;

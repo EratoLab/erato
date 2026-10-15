@@ -1,3 +1,4 @@
+import { Alert } from "@erato/frontend/library";
 import { wordEditCounts } from "@erato/frontend/word-review";
 import { t } from "@lingui/core/macro";
 
@@ -44,6 +45,7 @@ export function WordReviewReceipt({
   title = "",
   wholeDocument = false,
   note = "",
+  warning = "",
 }: {
   review: WordReviewState;
   kind: "edits" | "insert" | "plan" | "selection";
@@ -52,6 +54,8 @@ export function WordReviewReceipt({
   wholeDocument?: boolean;
   /** What Word did on its own while writing, which the folded card still says. */
   note?: string;
+  /** What changed that the user did not agree to, which the folded card must not hide. */
+  warning?: string;
 }) {
   const exceptions =
     kind === "edits" && review.status === "done"
@@ -104,6 +108,15 @@ export function WordReviewReceipt({
       )}
       {review.automatic && review.status === "done" && (
         <span className="word-review__hint">{wordAutomaticText()}</span>
+      )}
+      {warning && (
+        <Alert
+          type="warning"
+          className="mt-2 [overflow-wrap:anywhere]"
+          data-testid="word-plan-comment-check"
+        >
+          {warning}
+        </Alert>
       )}
     </div>
   );

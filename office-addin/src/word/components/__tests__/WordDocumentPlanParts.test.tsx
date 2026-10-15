@@ -162,16 +162,10 @@ describe("Word document parts and layout review", () => {
         kind: "upsert",
         blocks: [{ id: "en", type: "paragraph", text: "An endnote" }],
       },
-      {
-        id: "comment-new",
-        type: "comment",
-        kind: "upsert",
-        blocks: [{ id: "co", type: "paragraph", text: "Reviewer comment" }],
-      },
     ];
     const { container } = mount(plan, snapshot);
     const parts = partsSection();
-    for (const family of ["Header", "Footer", "Footnote", "Endnote", "Comment"])
+    for (const family of ["Header", "Footer", "Footnote", "Endnote"])
       expect(
         within(parts).getByRole("button", { name: new RegExp(`^${family}`) }),
       ).toBeInTheDocument();
