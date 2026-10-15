@@ -192,6 +192,33 @@ describe("resolveWordActionFacet", () => {
     ).not.toHaveProperty("comment_map");
   });
 
+  it("adds review_status only where advertised, read-only under Track Changes", () => {
+    const advertised = new Map([
+      [
+        WORD_DOCUMENT_REVIEW_FACET_ID,
+        new Set([
+          ...ALLOWED_ARGS[WORD_DOCUMENT_REVIEW_FACET_ID],
+          "review_status",
+        ]),
+      ],
+    ]);
+    expect(resolveWordActionFacet(input())?.args).not.toHaveProperty(
+      "review_status",
+    );
+    expect(
+      resolveWordActionFacet(input({ trackChanges: true }))?.args,
+    ).not.toHaveProperty("review_status");
+    expect(
+      resolveWordActionFacet(input({ availableFacetArgs: advertised }))?.args
+        ?.review_status,
+    ).toBe("available");
+    const tracked = resolveWordActionFacet(
+      input({ availableFacetArgs: advertised, trackChanges: true }),
+    )?.args?.review_status;
+    expect(tracked).toMatch(/^read-only: Track Changes is on\./);
+    expect(tracked).toContain("no erato-word-edits block");
+  });
+
   it("carries the document on every send, with no fingerprint de-dup", () => {
     const first = resolveWordActionFacet(input());
     const second = resolveWordActionFacet(input());
@@ -347,7 +374,7 @@ describe("withWordReviewFallback", () => {
     }) as unknown as WordDocumentBuild;
   const all = new Set([WORD_AUTHORING_FACET_ID, WORD_DOCUMENT_REVIEW_FACET_ID]);
 
-  it.each(["too-large", "unavailable"] as const)(
+  it.each(["too-large", "unavailable", "tracking"] as const)(
     "sends review text when authoring is %s",
     (issue) => {
       expect(withWordReviewFallback(build(issue), all).authoring).toBe(
@@ -356,7 +383,7 @@ describe("withWordReviewFallback", () => {
     },
   );
 
-  it.each([undefined, "tracking", "model-budget", "unsupported"] as const)(
+  it.each([undefined, "model-budget", "unsupported"] as const)(
     "keeps authoring when its issue is %s",
     (issue) => {
       const source = build(issue);

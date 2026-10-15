@@ -2752,6 +2752,16 @@ msgstr "Ce fichier est trop volumineux pour être ouvert entièrement par Erato.
 
 #. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx
+msgid "officeAddin.word.authoring.readOnlyTooLargeTracking"
+msgstr "De plus, le fichier est trop volumineux pour être ouvert entièrement par Erato : Erato ne reçoit donc que le texte inclus."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordChatInput.tsx
+msgid "officeAddin.word.authoring.readOnlyTracking"
+msgstr "Le suivi des modifications est activé : Erato lit donc ce document comme si toutes les modifications suivies étaient acceptées, sans voir qui a modifié quoi, et ne le modifie pas."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordChatInput.tsx
 msgid "officeAddin.word.authoring.readOnlyUnavailable"
 msgstr "Word n'a pas transmis le document complet : Erato peut en lire le texte mais pas le modifier. Renvoyez le message pour réessayer."
 
@@ -4415,6 +4425,21 @@ msgstr "Ignoré – le paragraphe n’a été envoyé qu’en partie et ne peut 
 
 #. js-lingui-explicit-id
 #: src/word/components/WordEditReport.tsx
+msgid "officeAddin.word.report.status.revisions"
+msgstr "Ignoré – le paragraphe contient des modifications suivies ; acceptez-les ou refusez-les dans Word, puis reposez la question"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordEditReport.tsx
+msgid "officeAddin.word.report.status.revisionsBy"
+msgstr "Ignoré – le paragraphe contient des modifications suivies de {names} ; acceptez-les ou refusez-les dans Word, puis reposez la question"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordEditReport.tsx
+msgid "officeAddin.word.report.status.tracking"
+msgstr "Ignoré – le suivi des modifications est activé, Erato n’applique donc pas de modifications de paragraphe"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordEditReport.tsx
 msgid "officeAddin.word.report.status.unknownOrdinal"
 msgstr "Ignoré – le paragraphe ne faisait pas partie du contenu envoyé"
 
@@ -4683,8 +4708,8 @@ msgstr "Restaurer le corps du document ?"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordHostCardRenderer.tsx
-msgid "officeAddin.word.review.revertTracking"
-msgstr "Le rétablissement n’a pas été effectué, car le suivi des modifications est activé. Refusez plutôt ces modifications dans Word."
+#~ msgid "officeAddin.word.review.revertTracking"
+#~ msgstr "Le rétablissement n’a pas été effectué, car le suivi des modifications est activé. Refusez plutôt ces modifications dans Word."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordHostCardRenderer.tsx
@@ -4755,8 +4780,13 @@ msgstr "Les modifications sont appliquées directement. Erato n’ajoute pas de 
 
 #. js-lingui-explicit-id
 #: src/word/components/WordReviewPanel.tsx
-msgid "officeAddin.word.review.trackingOn"
-msgstr "Le suivi des modifications de Word est déjà activé. Word peut enregistrer ces modifications ; Erato ne changera pas ce paramètre."
+#~ msgid "officeAddin.word.review.trackingOn"
+#~ msgstr "Le suivi des modifications de Word est déjà activé. Word peut enregistrer ces modifications ; Erato ne changera pas ce paramètre."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordReviewPanel.tsx
+msgid "officeAddin.word.review.trackingOnWithheld"
+msgstr "Le suivi des modifications est activé, Erato n’applique donc pas ces modifications. Apportez-les vous-même dans Word."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordReviewPanel.tsx

@@ -91,7 +91,11 @@ export type WordEditRejection =
   | "overlapping"
   | "changed"
   /** The paragraph's text recurs and nothing identifies which occurrence was sent. */
-  | "ambiguous";
+  | "ambiguous"
+  /** The paragraph holds pending tracked changes, which a replacement would accept or absorb. */
+  | "revisions"
+  /** Track Changes is on, so the replacement would land as a whole-paragraph revision. */
+  | "tracking";
 
 export type WordEditStatus = "applied" | "failed" | WordEditRejection;
 
@@ -102,6 +106,8 @@ export interface WordEditOutcome {
   through?: number;
   status: WordEditStatus;
   excerpt: string;
+  /** For "revisions": who made them, as the file names them (untrusted text). */
+  authors?: string[];
 }
 
 export function wordEditCounts(outcomes: readonly WordEditOutcome[]): {

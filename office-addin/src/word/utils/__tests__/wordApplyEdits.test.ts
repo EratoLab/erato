@@ -1,9 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { packageXml } from "../../../test/mocks/word/authoringFixtures";
 import {
   installMockWordDocument,
   uninstallMockWordDocument,
 } from "../../../test/mocks/word/document";
+import { installWordOoxmlHost } from "../../../test/mocks/word/ooxmlHost";
+import { buildWordDocumentArgs } from "../buildWordDocumentArgs";
+import { readWordDocument } from "../readWordDocument";
 import { applyWordEdits, revertWordEdits } from "../wordApplyEdits";
 
 import type { MockWordHost } from "../../../test/mocks/word/document";
@@ -415,6 +419,317 @@ describe("applyWordEdits with paragraph IDs", () => {
 
     expect(result.outcomes[0].status).toBe("changed");
     expect(word.word.writes()).toEqual([]);
+  });
+});
+
+describe("applyWordEdits on paragraphs with pending revisions", () => {
+  let word: MockWordHost;
+  const texts = ["Alpha.", "Bravo.", "Charlie.", "Delta."];
+  const revision = (author: string) =>
+    `<w:del w:id="1" w:author="${author}" w:date="2026-10-12T09:30:00Z"><w:r><w:delText>30</w:delText></w:r></w:del>`;
+
+  beforeEach(() => {
+    word = installMockWordDocument([
+      { text: "Alpha." },
+      { text: "Bravo.", ooxml: revision("RA Dr. Weber") },
+      { text: "Charlie." },
+      { text: "Delta.", ooxml: revision("Kanzlei Schmidt") },
+    ]);
+  });
+  afterEach(() => {
+    uninstallMockWordDocument();
+    vi.restoreAllMocks();
+  });
+
+  it("refuses a revised paragraph, names its author and still applies a clean one", async () => {
+    const result = await applyWordEdits({
+      edits: [
+        { paragraph: 1, text: "Alpha, revised." },
+        { paragraph: 2, text: "Bravo, revised." },
+      ],
+      capture: captureOf(texts),
+    });
+
+    expect(result.outcomes).toEqual([
+      {
+        index: 0,
+        paragraph: 1,
+        status: "applied",
+        excerpt: "Alpha, revised.",
+      },
+      {
+        index: 1,
+        paragraph: 2,
+        status: "revisions",
+        excerpt: "Bravo, revised.",
+        authors: ["RA Dr. Weber"],
+      },
+    ]);
+    expect(word.word.paragraphs().map((p) => p.text)).toEqual([
+      "Alpha, revised.",
+      "Bravo.",
+      "Charlie.",
+      "Delta.",
+    ]);
+  });
+
+  it("refuses a span when any paragraph in it holds a revision, before writing anything", async () => {
+    const result = await applyWordEdits({
+      edits: [{ paragraph: 1, through: 2, text: "Alpha and Bravo." }],
+      capture: captureOf(texts),
+    });
+
+    expect(result.outcomes[0]).toMatchObject({
+      status: "revisions",
+      authors: ["RA Dr. Weber"],
+    });
+    expect(word.word.writes()).toEqual([]);
+    expect(result.snapshotOoxml).toBeNull();
+  });
+
+  it("refuses every edit while Track Changes is on, naming authors where there are revisions", async () => {
+    word.word.setTrackingMode("TrackAll");
+    const result = await applyWordEdits({
+      edits: [
+        { paragraph: 3, text: "Charlie, revised." },
+        { paragraph: 4, text: "Delta, revised." },
+      ],
+      capture: captureOf(texts),
+    });
+
+    expect(
+      result.outcomes.map(({ status, authors }) => ({ status, authors })),
+    ).toEqual([
+      { status: "tracking", authors: undefined },
+      { status: "revisions", authors: ["Kanzlei Schmidt"] },
+    ]);
+    expect(word.word.writes()).toEqual([]);
+  });
+
+  it("refuses a capture read under Track Changes even once it is off", async () => {
+    const result = await applyWordEdits({
+      edits: [{ paragraph: 3, text: "Charlie, revised." }],
+      capture: { ...captureOf(texts), trackChanges: true },
+    });
+
+    expect(result.outcomes[0].status).toBe("tracking");
+    expect(word.word.writes()).toEqual([]);
+  });
+
+  it("writes nothing when a paragraph's revisions cannot be read", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    word.word.setParagraphs([
+      { text: "Alpha." },
+      { text: "Bravo.", ooxml: "<w:ins" },
+    ]);
+    const result = await applyWordEdits({
+      edits: [
+        { paragraph: 1, text: "Alpha, revised." },
+        { paragraph: 2, text: "Bravo, revised." },
+      ],
+      capture: captureOf(["Alpha.", "Bravo."]),
+    });
+
+    expect(result.outcomes.map((outcome) => outcome.status)).toEqual([
+      "failed",
+      "failed",
+    ]);
+    expect(word.word.writes()).toEqual([]);
+  });
+});
+
+describe("applyWordEdits on a Word package with another author's revisions", () => {
+  const BY = 'w:author="RA Dr. Weber" w:date="2026-10-12T09:30:00Z"';
+  const xml = packageXml(
+    [
+      "<w:p><w:r><w:t>Clean clause.</w:t></w:r></w:p>",
+      `<w:p><w:r><w:t xml:space="preserve">Payment within </w:t></w:r><w:del w:id="1" ${BY}><w:r><w:delText>30</w:delText></w:r></w:del><w:ins w:id="2" ${BY}><w:r><w:t>60</w:t></w:r></w:ins><w:r><w:t xml:space="preserve"> days.</w:t></w:r></w:p>`,
+      `<w:p><w:pPr><w:rPr><w:ins w:id="3" ${BY}/></w:rPr></w:pPr><w:ins w:id="4" ${BY}><w:r><w:t>Inserted clause.</w:t></w:r></w:ins></w:p>`,
+    ].join(""),
+  );
+  const revisions = (ooxml: string) =>
+    ooxml.match(/<w:(?:ins|del) [^>]*>|<w:delText>[^<]*/g);
+
+  it.each(["Off", "TrackAll"])(
+    "leaves them exactly as they were with Track Changes %s",
+    async (mode) => {
+      const host = installWordOoxmlHost(xml, {
+        profile: "word-pc-16.0.20326",
+        trackChanges: true,
+      });
+      host.setTrackingMode(mode);
+      const read = await readWordDocument();
+      if (!read.ok) throw new Error("read failed");
+      const build = buildWordDocumentArgs(read.paragraphs);
+      const before = revisions(host.ooxml());
+
+      const result = await applyWordEdits({
+        edits: [
+          { paragraph: 1, text: "Clean clause, revised." },
+          { paragraph: 2, text: "Payment within 45 days." },
+          { paragraph: 3, text: "Inserted clause, revised." },
+        ],
+        capture: {
+          identity: IDENTITY,
+          ordinalMap: build.ordinalMap,
+          paragraphsSent: build.coverage.paragraphsSent,
+          renderedOrdinals: build.renderedOrdinals,
+          partialOrdinal: build.partialOrdinal,
+        },
+      });
+
+      expect(result.outcomes.map(({ status }) => status)).toEqual([
+        mode === "Off" ? "applied" : "tracking",
+        "revisions",
+        "revisions",
+      ]);
+      expect(result.outcomes[1].authors).toEqual(["RA Dr. Weber"]);
+      expect(revisions(host.ooxml())).toEqual(before);
+      expect(host.ooxml().includes("Clean clause, revised.")).toBe(
+        mode === "Off",
+      );
+    },
+  );
+
+  it.each([
+    ["Word PC", { profile: "word-pc-16.0.20326" as const }],
+    [
+      "Word for the web, whose paragraph OOXML leaves them out",
+      { profile: "word-web" as const, paragraphOoxmlOmitsProperties: true },
+    ],
+  ])(
+    "refuses a revised paragraph mark or paragraph format on %s",
+    async (_host, options) => {
+      const host = installWordOoxmlHost(
+        packageXml(
+          [
+            "<w:p><w:r><w:t>Clean clause.</w:t></w:r></w:p>",
+            `<w:p><w:pPr><w:rPr><w:ins w:id="5" ${BY}/></w:rPr></w:pPr><w:r><w:t>Split clause,</w:t></w:r></w:p>`,
+            "<w:p><w:r><w:t>continued here.</w:t></w:r></w:p>",
+            `<w:p><w:pPr><w:jc w:val="center"/><w:pPrChange w:id="6" w:author="Kanzlei Schmidt" w:date="2026-10-13T08:15:00Z"><w:pPr/></w:pPrChange></w:pPr><w:r><w:t>Centred clause.</w:t></w:r></w:p>`,
+          ].join(""),
+        ),
+        options,
+      );
+      const read = await readWordDocument();
+      if (!read.ok) throw new Error("read failed");
+      const build = buildWordDocumentArgs(read.paragraphs);
+
+      const result = await applyWordEdits({
+        edits: [
+          { paragraph: 1, text: "Clean clause, revised." },
+          { paragraph: 2, text: "Split clause, revised," },
+          { paragraph: 4, text: "Centred clause, revised." },
+        ],
+        capture: {
+          identity: IDENTITY,
+          ordinalMap: build.ordinalMap,
+          paragraphsSent: build.coverage.paragraphsSent,
+          renderedOrdinals: build.renderedOrdinals,
+          partialOrdinal: build.partialOrdinal,
+        },
+      });
+
+      expect(
+        result.outcomes.map(({ status, authors }) => ({ status, authors })),
+      ).toEqual([
+        { status: "applied", authors: undefined },
+        { status: "revisions", authors: ["RA Dr. Weber"] },
+        { status: "revisions", authors: ["Kanzlei Schmidt"] },
+      ]);
+      expect(host.ooxml()).toContain("<w:pPrChange");
+      expect(host.ooxml()).not.toContain("revised,");
+    },
+  );
+
+  it("places each edit once against every listed change, at most 1000 comparisons per sync", async () => {
+    const mark = (author: string) =>
+      `<w:pPr><w:rPr><w:ins w:id="9" w:author="${author}" w:date="2026-10-12T09:30:00Z"/></w:rPr></w:pPr>`;
+    const xml = packageXml(
+      [
+        ...Array.from(
+          { length: 20 },
+          (_, i) => `<w:p><w:r><w:t>Clean ${i + 1}.</w:t></w:r></w:p>`,
+        ),
+        `<w:p>${mark("RA Dr. Weber")}<w:r><w:t>Split clause,</w:t></w:r></w:p>`,
+        "<w:p><w:r><w:t>continued.</w:t></w:r></w:p>",
+        `<w:p><w:r><w:t>Head.</w:t></w:r></w:p>`,
+        `<w:p>${mark("Kanzlei Schmidt")}<w:r><w:t>Tail,</w:t></w:r></w:p>`,
+        ...Array.from(
+          { length: 58 },
+          (_, i) =>
+            `<w:p><w:r><w:t xml:space="preserve">Other ${i + 1} </w:t></w:r><w:ins w:id="${100 + i}" ${BY}><w:r><w:t>added</w:t></w:r></w:ins></w:p>`,
+        ),
+      ].join(""),
+    );
+    const edits = [
+      ...Array.from({ length: 20 }, (_, i) => ({
+        paragraph: i + 1,
+        text: `Clean ${i + 1}, revised.`,
+      })),
+      { paragraph: 21, text: "Split clause, revised," },
+      { paragraph: 23, through: 24, text: "Head and tail, revised." },
+    ];
+    const run = async (options: Parameters<typeof installWordOoxmlHost>[1]) => {
+      const host = installWordOoxmlHost(xml, options);
+      const read = await readWordDocument();
+      if (!read.ok) throw new Error("read failed");
+      const build = buildWordDocumentArgs(read.paragraphs);
+      const word = (globalThis as { Word: typeof Word }).Word;
+      let syncs = 0;
+      vi.stubGlobal("Word", {
+        run: (callback: (context: Word.RequestContext) => Promise<unknown>) =>
+          word.run((context) => {
+            const sync = context.sync.bind(context);
+            return callback(
+              Object.create(context, {
+                sync: {
+                  value: () => {
+                    syncs += 1;
+                    return sync();
+                  },
+                },
+              }) as Word.RequestContext,
+            );
+          }),
+      });
+      const result = await applyWordEdits({
+        edits,
+        capture: {
+          identity: IDENTITY,
+          ordinalMap: build.ordinalMap,
+          paragraphsSent: build.coverage.paragraphsSent,
+          renderedOrdinals: build.renderedOrdinals,
+          partialOrdinal: build.partialOrdinal,
+        },
+      });
+      return { host, result, syncs };
+    };
+
+    const pc = await run({ profile: "word-pc-16.0.20326" });
+    const web = await run({
+      profile: "word-web",
+      paragraphOoxmlOmitsProperties: true,
+    });
+
+    for (const { result } of [pc, web])
+      expect(
+        result.outcomes
+          .filter(({ status }) => status !== "applied")
+          .map(({ paragraph, status, authors }) => ({
+            paragraph,
+            status,
+            authors,
+          })),
+      ).toEqual([
+        { paragraph: 21, status: "revisions", authors: ["RA Dr. Weber"] },
+        { paragraph: 23, status: "revisions", authors: ["Kanzlei Schmidt"] },
+      ]);
+    expect(
+      web.result.outcomes.filter((o) => o.status === "applied"),
+    ).toHaveLength(20);
+    // 22 edits × 60 listed changes = 1320 comparisons: the listing, then two syncs of them.
+    expect(web.syncs - pc.syncs).toBe(1 + Math.ceil((22 * 60) / 1000));
   });
 });
 

@@ -171,16 +171,35 @@ function WordActionCard({
   const [tracking, setTracking] = useState<WordTrackingMode>("unknown");
   const [revertConfirmation, setRevertConfirmation] = useState(false);
   const detailsId = useId();
+  const editsCard = entry.action === "word.apply_edits";
+  // A Track Changes toggle fires no event: read it again when the user comes back from Word.
   useEffect(() => {
+    if (!gate.allowed || isGenerating) return;
     let active = true;
-    if (gate.allowed && !isGenerating)
+    let left = false;
+    const read = () =>
       void readWordTrackingMode().then((mode) => {
         if (active) setTracking(mode);
       });
+    const leave = () => {
+      left = true;
+    };
+    const back = () => {
+      if (!left) return;
+      left = false;
+      read();
+    };
+    read();
+    if (editsCard) {
+      globalThis.addEventListener("blur", leave);
+      globalThis.addEventListener("focus", back);
+    }
     return () => {
       active = false;
+      globalThis.removeEventListener("blur", leave);
+      globalThis.removeEventListener("focus", back);
     };
-  }, [gate.allowed, documentIdentity, isGenerating]);
+  }, [gate.allowed, documentIdentity, isGenerating, editsCard]);
   const payload = useMemo<WordCardPayload | null>(() => {
     if (entry.fenceLanguage === WORD_EDITS_FENCE) {
       const edits = parseWordEdits(content);
@@ -188,9 +207,15 @@ function WordActionCard({
     }
     return content.trim().length > 0 ? { kind: "insert", text: content } : null;
   }, [entry.fenceLanguage, content]);
+  const trackingShown = capture?.trackChanges ? "on" : tracking;
+  // Under Track Changes a paragraph Replace would land as one whole-paragraph revision.
+  const editsWithheld = editsCard && trackingShown === "on";
+  // Edits are not proposed until the live mode is known, so an auto-prompt cannot open under
+  // Track Changes; the prompt's once-per-message slot is kept for then.
+  const promptReady = !editsCard || trackingShown !== "unknown";
   const offeredActions = useMemo(
     () =>
-      payload
+      payload && !editsWithheld
         ? offerableWordClientActionsForFacet(
             facetId,
             artifact?.allowedClientActions,
@@ -205,9 +230,18 @@ function WordActionCard({
               }),
           )
         : [],
-    [payload, facetId, artifact, entry.action, decisions, enforcedAskActions],
+    [
+      payload,
+      editsWithheld,
+      facetId,
+      artifact,
+      entry.action,
+      decisions,
+      enforcedAskActions,
+    ],
   );
   const proposedAction =
+    promptReady &&
     artifact?.proposedClientAction &&
     (offeredActions as string[]).includes(artifact.proposedClientAction)
       ? (artifact.proposedClientAction as WordClientAction)
@@ -243,6 +277,11 @@ function WordActionCard({
     try {
       const mode = await readWordTrackingMode();
       setTracking(mode);
+      // Turned on since the card last looked: withhold, and the panel says why.
+      if (editsCard && (capture?.trackChanges || mode === "on")) {
+        updateReview(batchKey, { status: "idle", applyStage: undefined });
+        return false;
+      }
       const run = await entry.execute({
         fenceContent: content,
         capture: live.capture,
@@ -307,6 +346,7 @@ function WordActionCard({
     isGenerating,
     offeredActions.length,
     idle,
+    editsCard,
     beginOperation,
     updateReview,
     batchKey,
@@ -335,7 +375,7 @@ function WordActionCard({
       itemIdentity: documentIdentity,
       presentation: artifact?.clientActionPresentation,
       messageId,
-      isFreshCompletion: !!artifact?.isFreshCompletion,
+      isFreshCompletion: !!artifact?.isFreshCompletion && promptReady,
       proposedAction,
       expectedItemIdentity: artifact?.itemIdentity,
       currentItemIdentity: documentIdentity,
@@ -461,17 +501,11 @@ function WordActionCard({
             message:
               "The document changed after applying. Revert was not run because it could remove later edits.",
           })
-        : review.tracking === "on"
-          ? t({
-              id: "officeAddin.word.review.revertTracking",
-              message:
-                "Revert was not run because Track Changes is on. Reject these changes in Word instead.",
-            })
-          : t({
-              id: "officeAddin.word.review.revertTrackingOff",
-              message:
-                "Revert was not run because Track Changes is on. Turn off Track Changes, then revert the batch again.",
-            })
+        : t({
+            id: "officeAddin.word.review.revertTrackingOff",
+            message:
+              "Revert was not run because Track Changes is on. Turn off Track Changes, then revert the batch again.",
+          })
       : review.status === "write-failed"
         ? t({
             id: "officeAddin.word.review.writeFailed",
@@ -698,7 +732,7 @@ function WordActionCard({
           edits={payload.edits}
           capture={capture}
           review={review}
-          tracking={review.tracking ?? tracking}
+          tracking={review.tracking ?? trackingShown}
           busy={operationInProgress}
           blockedReason={blockedReason}
           locationReason={locationReason}

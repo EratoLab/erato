@@ -1,4 +1,5 @@
 const W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
+const PKG = "http://schemas.microsoft.com/office/2006/xmlPackage";
 
 /** Run-level containers of tracked insertions and deletions. Inside w:rPr they mark a paragraph mark
  * instead, inside w:trPr a table row. */
@@ -254,4 +255,51 @@ export function wordRevisionsOutside(
     const paragraph = owningParagraph(e);
     return !paragraph || !scope.has(paragraph);
   }).length;
+}
+
+const REVISION_NAMES = new Set<string>(WORD_REVISION_ELEMENTS);
+const MAX_AUTHOR_LENGTH = 64;
+
+/** Anyone can write an author name into a file: one line of plain text, capped. */
+export function wordRevisionAuthor(raw: string): string {
+  const flat = raw
+    .replace(/[\p{Cc}\p{Cf}]+/gu, " ")
+    .replace(/\s+/gu, " ")
+    .trim();
+  const points = [...flat];
+  return points.length <= MAX_AUTHOR_LENGTH
+    ? flat
+    : `${points.slice(0, MAX_AUTHOR_LENGTH - 1).join("")}…`;
+}
+
+/** The authors of the pending revisions in a Paragraph.getOoxml package, in document order, or null
+ * when it holds none. Only the paragraph counts: the package also carries styles and the document's
+ * closing section, which can hold revisions of their own. */
+export function wordParagraphRevisionAuthors(ooxml: string): string[] | null {
+  const doc = new DOMParser().parseFromString(ooxml, "application/xml");
+  if (doc.getElementsByTagName("parsererror").length)
+    throw new Error("Unreadable paragraph package.");
+  const main =
+    Array.from(doc.getElementsByTagNameNS(PKG, "part")).find(
+      (part) =>
+        (part.getAttributeNS(PKG, "name") ?? part.getAttribute("pkg:name")) ===
+        "/word/document.xml",
+    ) ?? doc.documentElement;
+  const body = main.getElementsByTagNameNS(W, "body")[0];
+  if (!body) throw new Error("The paragraph package has no body.");
+  const revisions = Array.from(body.getElementsByTagNameNS(W, "*")).filter(
+    (e) => REVISION_NAMES.has(e.localName) && owningParagraph(e),
+  );
+  if (!revisions.length) return null;
+  return [
+    ...new Set(
+      revisions
+        .map((e) =>
+          wordRevisionAuthor(
+            e.getAttributeNS(W, "author") ?? e.getAttribute("w:author") ?? "",
+          ),
+        )
+        .filter(Boolean),
+    ),
+  ];
 }

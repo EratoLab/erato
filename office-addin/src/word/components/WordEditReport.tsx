@@ -8,7 +8,10 @@ import type {
   WordEditStatus,
 } from "@erato/frontend/word-review";
 
-export function statusLabel(status: WordEditStatus): string {
+export function statusLabel(
+  status: WordEditStatus,
+  authors: readonly string[] = [],
+): string {
   switch (status) {
     case "applied":
       return t({
@@ -41,6 +44,25 @@ export function statusLabel(status: WordEditStatus): string {
       return t({
         id: "officeAddin.word.report.status.overlapping",
         message: "Skipped - another change in this batch already covers it",
+      });
+    case "revisions": {
+      if (authors.length === 0)
+        return t({
+          id: "officeAddin.word.report.status.revisions",
+          message:
+            "Skipped - the paragraph has tracked changes; accept or reject them in Word, then ask again",
+        });
+      const names = `${authors.slice(0, 3).join(", ")}${authors.length > 3 ? ", …" : ""}`;
+      return t({
+        id: "officeAddin.word.report.status.revisionsBy",
+        message: `Skipped - the paragraph has tracked changes by ${names}; accept or reject them in Word, then ask again`,
+      });
+    }
+    case "tracking":
+      return t({
+        id: "officeAddin.word.report.status.tracking",
+        message:
+          "Skipped - Track Changes is on, so Erato does not apply paragraph edits",
       });
     case "failed":
       return t({
@@ -123,7 +145,7 @@ export function formatWordEditReport(
   return outcomes
     .map(
       (outcome) =>
-        `${wordEditTargetLabel(outcome)}: ${isRevertedOutcome(outcome.status, reverted) ? wordRevertedLabel() : statusLabel(outcome.status)}${
+        `${wordEditTargetLabel(outcome)}: ${isRevertedOutcome(outcome.status, reverted) ? wordRevertedLabel() : statusLabel(outcome.status, outcome.authors)}${
           outcome.excerpt ? ` — ${outcome.excerpt}` : ""
         }`,
     )
@@ -191,7 +213,7 @@ export function WordEditReport({
                 {wordEditTargetLabel(outcome)}
               </span>
               {": "}
-              {statusLabel(outcome.status)}
+              {statusLabel(outcome.status, outcome.authors)}
               {outcome.excerpt ? (
                 <span className="text-theme-fg-muted">
                   {" "}

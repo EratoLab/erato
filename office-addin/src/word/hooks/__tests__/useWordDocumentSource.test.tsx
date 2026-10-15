@@ -47,7 +47,11 @@ const paragraphs = (texts: string[]) =>
   }));
 
 const readsText = (texts: string[]) =>
-  read.mockResolvedValue({ ok: true, paragraphs: paragraphs(texts) });
+  read.mockResolvedValue({
+    ok: true,
+    tracking: "Off",
+    paragraphs: paragraphs(texts),
+  });
 
 const deferred = <T,>() => {
   let resolve!: (value: T) => void;
@@ -138,7 +142,11 @@ describe("useWordDocumentSource", () => {
 
     const send = result.current.capture();
     await act(async () => {
-      pending.resolve({ ok: true, paragraphs: paragraphs(["Alpha"]) });
+      pending.resolve({
+        ok: true,
+        tracking: "Off",
+        paragraphs: paragraphs(["Alpha"]),
+      });
       await send;
     });
 
@@ -174,7 +182,11 @@ describe("useWordDocumentSource", () => {
     expect(result.current.preview.reading).toBe(true);
     expect(result.current.captureExpectedSlow()).toBe(true);
     await act(async () => {
-      pending.resolve({ ok: true, paragraphs: paragraphs(["Alpha"]) });
+      pending.resolve({
+        ok: true,
+        tracking: "Off",
+        paragraphs: paragraphs(["Alpha"]),
+      });
       await pending.promise;
     });
     expect(result.current.preview.reading).toBe(false);
@@ -188,7 +200,11 @@ describe("useWordDocumentSource", () => {
     const { result } = renderSource();
     await act(async () => {
       vi.advanceTimersByTime(WORD_CAPTURE_SLOW_MS + 1);
-      pending.resolve({ ok: true, paragraphs: paragraphs(["Alpha"]) });
+      pending.resolve({
+        ok: true,
+        tracking: "Off",
+        paragraphs: paragraphs(["Alpha"]),
+      });
       await pending.promise;
     });
 
@@ -200,6 +216,7 @@ describe("useWordDocumentSource", () => {
   it("gives every send its own authoring token and per-send state", async () => {
     read.mockResolvedValue({
       ok: true,
+      tracking: "Off",
       paragraphs: paragraphs(["Alpha"]),
       authoring: { ooxml: mixedAuthoringXml(), tracking: "Off" },
     });
@@ -224,6 +241,7 @@ describe("useWordDocumentSource", () => {
   it("maps a block to a paragraph ordinal only when its text is unique on both sides", async () => {
     read.mockResolvedValue({
       ok: true,
+      tracking: "Off",
       paragraphs: paragraphs(["Alpha", "Twin", "Twin"]),
       authoring: {
         ooxml: packageXml(
@@ -247,6 +265,7 @@ describe("useWordDocumentSource", () => {
   it("keeps the text but no authoring when Word did not hand over the full document", async () => {
     read.mockResolvedValue({
       ok: true,
+      tracking: "Off",
       paragraphs: paragraphs(["Alpha"]),
       authoringUnavailable: {
         issue: "too-large",
@@ -269,6 +288,7 @@ describe("useWordDocumentSource", () => {
   it("keeps body authoring with its note when Word for the web withheld the file, without retrying", async () => {
     read.mockResolvedValue({
       ok: true,
+      tracking: "Off",
       paragraphs: paragraphs(["Alpha"]),
       authoring: {
         ooxml: packageXml(paragraph("Alpha")),
@@ -345,6 +365,7 @@ describe("useWordDocumentSource", () => {
     async (_, detail, issue, reads) => {
       read.mockResolvedValue({
         ok: true,
+        tracking: "Off",
         paragraphs: paragraphs(["Alpha"]),
         authoringUnavailable: { issue, detail, error: "capture failed" },
       });
@@ -386,6 +407,7 @@ describe("useWordDocumentSource", () => {
   const readsAuthoring = (tracking: string) =>
     read.mockResolvedValue({
       ok: true,
+      tracking,
       paragraphs: paragraphs(["Alpha"]),
       authoring: { ooxml: packageXml(paragraph("Alpha")), tracking },
     });
@@ -430,9 +452,63 @@ describe("useWordDocumentSource", () => {
     await waitFor(() => expect(read).toHaveBeenCalledTimes(2));
   });
 
+  const reads = {
+    "a review-only read": (tracking: string) =>
+      read.mockResolvedValue({
+        ok: true,
+        tracking,
+        paragraphs: paragraphs(["Alpha"]),
+      }),
+    "a read whose package is unsupported": (tracking: string) =>
+      read.mockResolvedValue({
+        ok: true,
+        tracking,
+        paragraphs: paragraphs(["Alpha"]),
+        authoringUnavailable: {
+          issue: "unavailable",
+          detail: "package-unsupported",
+          error: "Missing relationship target: NULL",
+        },
+      }),
+  };
+  describe.each(Object.entries(reads))("for %s", (_name, readsWith) => {
+    it.each([
+      ["Off", "TrackAll", true],
+      ["TrackAll", "Off", undefined],
+    ] as const)(
+      "reads again on a return after Track Changes went from %s to %s",
+      async (from, to, trackChanges) => {
+        signal.eventsActive = true;
+        readsWith(from);
+        const { result } = renderSource({
+          authoringEnabled: _name !== "a review-only read",
+        });
+        await waitFor(() =>
+          expect(result.current.preview.status).toBe("included"),
+        );
+        readsWith(to);
+        signal.trackingMode.mockResolvedValue(to);
+
+        leavePane();
+        focusPane();
+        await waitFor(() => expect(read).toHaveBeenCalledTimes(2));
+
+        let build: WordDocumentBuild | null = null;
+        await act(async () => {
+          build = await result.current.capture();
+        });
+        expect(read).toHaveBeenCalledTimes(2);
+        expect(build!.trackingMode).toBe(to);
+        expect(build!.trackChanges).toBe(trackChanges);
+        expect(result.current.preview.trackChanges).toBe(trackChanges);
+      },
+    );
+  });
+
   it("retries a failed full transfer at the next send, not on every focus", async () => {
     read.mockResolvedValue({
       ok: true,
+      tracking: "Off",
       paragraphs: paragraphs(["Alpha"]),
       authoringUnavailable: {
         issue: "unavailable",
@@ -460,6 +536,7 @@ describe("useWordDocumentSource", () => {
     async (pending) => {
       read.mockResolvedValue({
         ok: true,
+        tracking: "Off",
         paragraphs: paragraphs(["Alpha"]),
         authoring: {
           ooxml: packageXml(paragraph("Alpha")),
@@ -505,13 +582,18 @@ describe("useWordDocumentSource", () => {
     await act(async () => {
       newer.resolve({
         ok: true,
+        tracking: "Off",
         paragraphs: paragraphs(["Newer"]),
         authoring: { ooxml: packageXml(paragraph("Newer")), tracking: "Off" },
       });
       await send;
     });
     await act(async () => {
-      older.resolve({ ok: true, paragraphs: paragraphs(["Older"]) });
+      older.resolve({
+        ok: true,
+        tracking: "Off",
+        paragraphs: paragraphs(["Older"]),
+      });
       await older.promise;
     });
     readsText(["Third"]);

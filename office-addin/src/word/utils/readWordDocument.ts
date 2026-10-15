@@ -21,6 +21,8 @@ export type WordDocumentReadResult =
   | {
       ok: true;
       paragraphs: WordParagraphRead[];
+      /** Word's changeTrackingMode at the paragraph read, whatever becomes of the package. */
+      tracking: string;
       authoring?: {
         ooxml: string;
         tracking: string;
@@ -192,7 +194,7 @@ export async function readWordDocument(
           includeAuthoring && !packaged
             ? context.document.body.getOoxml()
             : null;
-        if (includeAuthoring) context.document.load("changeTrackingMode");
+        context.document.load("changeTrackingMode");
         await context.sync();
 
         const ids = paragraphs.items.map((paragraph) =>
@@ -201,6 +203,7 @@ export async function readWordDocument(
         noteWordParagraphIds(ids);
         return {
           ok: true as const,
+          tracking: String(context.document.changeTrackingMode),
           ...(includeAuthoring
             ? {
                 authoring: {
@@ -266,6 +269,7 @@ export async function readWordDocument(
         return {
           ok: true,
           paragraphs: result.paragraphs,
+          tracking: result.tracking,
           authoringUnavailable: authoringUnavailable(error, step),
         };
       }

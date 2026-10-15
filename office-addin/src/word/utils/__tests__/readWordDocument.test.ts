@@ -330,6 +330,41 @@ describe("readWordDocument", () => {
     },
   );
 
+  describe.each(["TrackAll", "Off"] as const)(
+    "with Track Changes %s",
+    (mode) => {
+      it.each([
+        [
+          new WordDocumentTooLargeError("The expanded document is too large."),
+          "package-too-large",
+        ],
+        [new WordDocumentCaptureTimeoutError(), "package-timeout"],
+        [new WordDocumentTransferError("Slice failed."), "package-failed"],
+        [new Error("Missing relationship target: NULL"), "package-unsupported"],
+      ] as const)(
+        "keeps the mode when the package fails: %s",
+        async (error, detail) => {
+          word.word.setTrackingMode(mode);
+          vi.mocked(supportsWordDocumentPackage).mockReturnValueOnce(true);
+          vi.mocked(captureWordDocumentPackage).mockRejectedValueOnce(error);
+
+          const result = await readWordDocument(true);
+
+          expect(result.ok && result.authoringUnavailable?.detail).toBe(detail);
+          expect(result.ok && result.tracking).toBe(mode);
+        },
+      );
+
+      it("reads the mode without authoring", async () => {
+        word.word.setTrackingMode(mode);
+
+        const result = await readWordDocument();
+
+        expect(result.ok && result.tracking).toBe(mode);
+      });
+    },
+  );
+
   it("keeps the paragraphs when the full transfer outlasts its deadline", async () => {
     vi.useFakeTimers();
     try {

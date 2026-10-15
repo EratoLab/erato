@@ -9,6 +9,7 @@ import {
   wordParagraphEventsActive,
 } from "../utils/wordDocumentChangeSignal";
 import { captureWordAuthoringSnapshot } from "../utils/wordDocumentXml";
+import { isWordTrackingMode } from "../utils/wordInPlaceSwitch";
 import { withWordTimeout } from "../utils/wordTimeout";
 
 import type {
@@ -28,6 +29,7 @@ export type WordDocumentStatus =
 export interface WordDocumentPreview {
   authoringIssue?: WordAuthoringSnapshot["issue"];
   authoringDetails?: string[];
+  trackChanges?: boolean;
   completeReadIssue?: WordAuthoringSnapshot["completeReadIssue"];
   authoringNote?: WordDocumentReadNote;
   status: WordDocumentStatus;
@@ -139,6 +141,8 @@ async function captureDocument(
   const result = await readWordDocument(includeAuthoring);
   if (!result.ok) return { build: null, error: result.error };
   const build = buildWordDocumentArgs(result.paragraphs);
+  if (result.tracking !== undefined) build.trackingMode = result.tracking;
+  if (isWordTrackingMode(result.tracking)) build.trackChanges = true;
   if (result.authoring) {
     build.authoring = captureWordAuthoringSnapshot(
       result.authoring.ooxml,
@@ -261,6 +265,7 @@ export function useWordDocumentSource({
         setPreview({
           authoringIssue: build.authoring?.issue,
           authoringDetails: build.authoring?.issueDetails,
+          trackChanges: build.trackChanges,
           completeReadIssue: build.authoring?.completeReadIssue,
           authoringNote: build.readNote,
           status: build.coverage.hasContent ? "included" : "empty",
@@ -327,7 +332,8 @@ export function useWordDocumentSource({
         refresh();
         return;
       }
-      const captured = cacheRef.current?.build?.authoring?.trackingMode;
+      const build = cacheRef.current?.build;
+      const captured = build?.authoring?.trackingMode ?? build?.trackingMode;
       if (captured === undefined) {
         refresh();
         return;
