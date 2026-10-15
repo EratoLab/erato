@@ -58,6 +58,7 @@ function thread(i: number, overrides: Partial<WordCommentListThread> = {}) {
     replies: i % 3,
     lastActivity: new Date(Date.UTC(2026, 8, 1 + ((i * 7) % 11))),
     pos: i + 1,
+    para: 2 * i + 3,
     inSelection: false,
     ...overrides,
   } satisfies WordCommentListThread;
@@ -253,7 +254,10 @@ describe("WordCommentPicker", () => {
       within(first).getByRole("button", { name: "Show in Word" }),
     );
     await waitFor(() =>
-      expect(picker.onShowInWord).toHaveBeenCalledWith(TWELVE[0].commentId),
+      expect(picker.onShowInWord).toHaveBeenCalledWith(
+        TWELVE[0].commentId,
+        TWELVE[0].para,
+      ),
     );
   });
 

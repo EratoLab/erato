@@ -46,6 +46,8 @@ export interface WordCommentListThread {
   lastActivity: Date | null;
   /** Dense and 1-based, in document order. */
   pos: number;
+  /** The review paragraph the anchor starts in, where Show in Word looks for it first. */
+  para: number;
   /** The anchor reaches the selected passage, or touches the caret. */
   inSelection: boolean;
 }
@@ -137,6 +139,7 @@ export function wordCommentListOf(
         ...(record.replies ?? []).map((reply) => reply.creationDate),
       ]),
       pos: position.pos,
+      para: where.para,
       inSelection:
         wordCommentVsInSelection(where.vs) || position.touches === true,
     });

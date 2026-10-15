@@ -187,6 +187,8 @@ export interface CommentHostOptions {
   unlistedByParagraphs?: readonly string[];
   /** These paragraphs' packages carry their text but none of their comments. */
   bareParagraphPackages?: readonly string[];
+  /** The selection's own getComments() throws. */
+  failSelectionComments?: boolean;
   /** The message of injected Office errors, which may quote the document as hosts sometimes do. */
   errorMessage?: string;
   /**
@@ -888,18 +890,27 @@ export function installWordCommentHost(
     getComments() {
       callLog.push("range.getComments");
       const span = this.span;
-      return new Collection<MockComment>("comments", () =>
-        listed
-          .filter((key) => {
-            const anchor = anchors.get(key)!;
-            const first = paragraphs[anchor.first];
-            return touchesSelection(
-              anchor,
-              span,
-              first.base + first.laid.rangeText.length,
-            );
-          })
-          .map((key) => new MockComment(key)),
+      return new Collection<MockComment>(
+        "comments",
+        () =>
+          listed
+            .filter((key) => {
+              const anchor = anchors.get(key)!;
+              const first = paragraphs[anchor.first];
+              return touchesSelection(
+                anchor,
+                span,
+                first.base + first.laid.rangeText.length,
+              );
+            })
+            .map((key) => new MockComment(key)),
+        {
+          cost: 0,
+          failure: () =>
+            options.failSelectionComments
+              ? officeError("GeneralException", message)
+              : null,
+        },
       );
     }
     select(_mode?: string) {

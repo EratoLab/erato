@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   V3C_COMMENT_DOCUMENT,
@@ -11,6 +11,7 @@ import {
   V3C_COMMENTS,
   V3C_PARAGRAPHS,
 } from "../../../test/mocks/word/commentPackages";
+import { joinWordCommentSpansByContent } from "../wordCommentPackage";
 import {
   WORD_COMMENT_SYNC_THREADS,
   readWordComments,
@@ -23,6 +24,7 @@ import type {
   CommentHostFlavour,
   CommentHostOptions,
 } from "../../../test/mocks/word/commentHost";
+import type * as wordCommentPackageModule from "../wordCommentPackage";
 import type {
   WordCommentAnchorCache,
   WordCommentReadOptions,
@@ -46,6 +48,14 @@ const ROOTS = [
   "PB1",
   "T14",
 ];
+
+vi.mock("../wordCommentPackage", async (importOriginal) => {
+  const actual = await importOriginal<typeof wordCommentPackageModule>();
+  return {
+    ...actual,
+    joinWordCommentSpansByContent: vi.fn(actual.joinWordCommentSpansByContent),
+  };
+});
 
 let host: CommentHost;
 
@@ -493,7 +503,7 @@ describe("coarse anchors", () => {
     expect(result.diagnostics.counts.anchorsSkipped).toBe(ROOTS.length);
   });
 
-  it("leaves a thread named once before a failed listing with its first paragraph only", async () => {
+  it("gives no anchor on the web to a thread whose end a failed listing may not have reached", async () => {
     const generated = generatedCommentDocument({ paragraphs: 600 });
     const body = [...generated.body];
     body.splice(1, 0, {
@@ -516,16 +526,12 @@ describe("coarse anchors", () => {
       document,
       failParagraphComments: ["G560"],
     });
-    const span = thread(threads, "S");
-    expect(span.anchor).toMatchObject({
-      first: { ordinal: 2 },
-      last: { ordinal: 2 },
-      single: false,
-    });
-    expect(thread(threads, "G1").anchor?.single).toBe(false);
+    // Its end may lie in the paragraphs the listing never reached, so no anchor is guessed.
+    expect(thread(threads, "S").anchor).toBeNull();
+    expect(thread(threads, "G1").anchor).toBeNull();
     expect(thread(threads, "G599").anchor).toBeNull();
     expect(diagnostics.errors[0]).toMatchObject({ phase: "anchors" });
-    expect(diagnostics.counts.anchorsSkipped).toBeGreaterThan(0);
+    expect(diagnostics.counts.anchorsSkipped).toBe(threads.length);
   });
 
   it("uses the Send capture's ordinals instead of reading the body", async () => {
@@ -946,6 +952,222 @@ describe("Word for the web reads no comment range (gates F1 and F2)", () => {
       expect(placement?.status === "placed" && placement.joinedBy, key).toBe(
         "content",
       );
+    }
+  });
+});
+
+describe("what the web pairs, orders and relates without ranges", () => {
+  const join = vi.mocked(joinWordCommentSpansByContent);
+  beforeEach(() => {
+    join.mockClear();
+  });
+  const base = {
+    initials: "AA",
+    date: "2026-09-01T10:00:00Z",
+    dateUtc: null,
+    done: false,
+  };
+  const quoteOf = (record: WordCommentThreadRecord) =>
+    record.placement?.status === "placed"
+      ? record.placement.anchor.quote
+      : null;
+
+  it.each(["pc", "mac"] as const)(
+    "runs no content join on %s, where every span keeps its id, replies' included",
+    async (h) => {
+      await read({ host: h }, { exact: () => ROOTS.map(host.commentId) });
+      expect(join).not.toHaveBeenCalled();
+    },
+  );
+
+  it("never gives a listed thread's span to another of the same author and content (legacy)", async () => {
+    const result = await read(
+      {
+        host: "web",
+        legacy: true,
+        unlistedByParagraphs: ["Z", "Y"],
+        document: {
+          v3c: true,
+          comments: {
+            X: {
+              ...base,
+              author: "Ann",
+              paraId: "10000001",
+              durableId: "01000001",
+              content: "Please check",
+            },
+            Z: {
+              ...base,
+              author: "Bob",
+              paraId: "10000002",
+              durableId: "01000002",
+              content: "Other note",
+            },
+            Y: {
+              ...base,
+              author: "Ann",
+              paraId: "10000003",
+              durableId: "01000003",
+              content: "Please check",
+            },
+          },
+          body: [
+            {
+              tag: "PX",
+              segments: [
+                "PX ",
+                { cs: "X" },
+                "alpha",
+                { ce: "X" },
+                " and ",
+                { cs: "Z" },
+                "beta",
+                { ce: "Z" },
+                ".",
+              ],
+            },
+            {
+              tag: "PY",
+              segments: ["PY ", { cs: "Y" }, "gamma", { ce: "Y" }, "."],
+            },
+          ],
+        },
+      },
+      { exact: () => ["X", "Y", "Z"].map(host.commentId) },
+    );
+    const at = (key: string) => {
+      const record = thread(result.threads, key);
+      return [record.anchor?.first.ordinal, quoteOf(record)];
+    };
+    expect(at("X")).toEqual([host.ordinalOf("PX"), "alpha"]);
+    expect(at("Z")).toEqual([host.ordinalOf("PX"), "beta"]);
+    expect(at("Y")).toEqual([host.ordinalOf("PY"), "gamma"]);
+  });
+
+  it("never gives a reply's span to a thread no paragraph lists", async () => {
+    const result = await read({
+      host: "web",
+      unlistedByParagraphs: ["X", "Y"],
+      document: {
+        v3c: true,
+        comments: {
+          X: {
+            ...base,
+            author: "Ann",
+            paraId: "10000001",
+            durableId: "01000001",
+            dateUtc: "2026-09-01T08:00:00Z",
+            content: "Please check",
+          },
+          XR: {
+            ...base,
+            author: "Ann",
+            paraId: "10000002",
+            durableId: "01000002",
+            dateUtc: "2026-09-01T08:05:00Z",
+            parent: "X",
+            content: "Done",
+          },
+          Y: {
+            ...base,
+            author: "Ann",
+            paraId: "10000003",
+            durableId: "01000003",
+            dateUtc: "2026-09-01T08:10:00Z",
+            content: "Done",
+          },
+        },
+        body: [
+          {
+            tag: "PX",
+            segments: ["PX ", { cs: "X" }, "alpha", { ce: "X" }, "."],
+          },
+          {
+            tag: "PY",
+            segments: ["PY ", { cs: "Y" }, "gamma", { ce: "Y" }, "."],
+          },
+        ],
+      },
+    });
+    const y = thread(result.threads, "Y");
+    expect([y.anchor?.first.ordinal, quoteOf(y)]).toEqual([
+      host.ordinalOf("PY"),
+      "gamma",
+    ]);
+  });
+
+  it("orders one paragraph's threads one way whatever order Word lists them in", async () => {
+    const orders = new Set<string>();
+    for (const shuffle of [undefined, 1, 2, 3, 5, 8, 13, 42]) {
+      const { threads } = await read(
+        { host: "web", shuffle },
+        { exact: askFor("T7b", "T6") },
+      );
+      orders.add(keysOf(threads).join(","));
+    }
+    expect(orders.size).toBe(1);
+    const keys = [...orders][0].split(",");
+    // Placed ones by their offsets, then the one no package placed.
+    expect(keys.indexOf("T6")).toBeLessThan(keys.indexOf("T7b"));
+    expect(keys.indexOf("T7b")).toBeLessThan(keys.indexOf("T7"));
+  });
+
+  it("reads no package on the web for a thread no paragraph lists when the read takes none", async () => {
+    const { threads, diagnostics } = await read(
+      { host: "web", unlistedByParagraphs: ["T8"] },
+      { packages: false, legacy: false },
+    );
+    expect(host.packagesRead()).toEqual([]);
+    expect(thread(threads, "T8").anchor).toBeNull();
+    expect(diagnostics.counts.anchorsUnlisted).toBe(1);
+  });
+
+  it("keeps the selection's paragraphs, and the anchors, when the selection's comments fail", async () => {
+    const cache: WordCommentAnchorCache = { generation: 0, snapshot: null };
+    const result = await read(
+      {
+        host: "web",
+        selection: { tag: "T6P", offset: 20 },
+        failSelectionComments: true,
+      },
+      {
+        selection: true,
+        packages: false,
+        legacy: false,
+        anchors: { cache, reuse: false },
+      },
+    );
+    const ordinal = host.ordinalOf("T6P");
+    expect(result.selection).toEqual({
+      collapsed: true,
+      first: ordinal,
+      last: ordinal,
+    });
+    expect(result.threads.some((t) => t.touchesSelection)).toBe(false);
+    expect(result.diagnostics.errors).toEqual([
+      expect.objectContaining({ phase: "selection" }),
+    ]);
+    expect(cache.snapshot).not.toBeNull();
+  });
+
+  it("makes legacy threads the web cannot tell apart in one paragraph read-only", async () => {
+    const same = { content: "Same root.", author: V3C_COMMENTS.T6.author };
+    const comments = {
+      ...V3C_COMMENTS,
+      T6: { ...V3C_COMMENTS.T6, ...same },
+      T7: { ...V3C_COMMENTS.T7, ...same },
+    };
+    for (const h of HOSTS) {
+      const { threads } = await read({
+        host: h,
+        legacy: true,
+        document: { ...V3C_COMMENT_DOCUMENT, comments },
+      });
+      const readOnly = (key: string) => thread(threads, key).readOnly;
+      // Desktop orders them by their ranges, so a write still finds the right one.
+      const expected = h === "web" ? "content-repeated" : null;
+      expect([readOnly("T6"), readOnly("T7")], h).toEqual([expected, expected]);
+      expect(readOnly("T7b"), h).toBeNull();
     }
   });
 });

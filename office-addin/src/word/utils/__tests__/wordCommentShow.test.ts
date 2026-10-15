@@ -82,6 +82,44 @@ describe("showWordComment", () => {
     expect(word.unhidden()).toEqual([]);
   });
 
+  it("looks first in the paragraph the read placed the comment in, scanning nothing", async () => {
+    const word = installWordCommentHost({ host: "web" });
+
+    expect(
+      await showWordComment(word.commentId("T8"), word.ordinalOf("T8P")),
+    ).toBe("selected");
+    expect(word.selected()).toEqual(paragraph("T8P"));
+    expect(
+      word.calls().filter((call) => call === "paragraph.getComments"),
+    ).toHaveLength(1);
+  });
+
+  it.each([false, true])(
+    "shows a comment the read placed from a package though no paragraph lists it (legacy %s)",
+    async (legacy) => {
+      const word = installWordCommentHost({
+        host: "web",
+        legacy,
+        unlistedByParagraphs: ["T8"],
+      });
+
+      expect(
+        await showWordComment(word.commentId("T8"), word.ordinalOf("T8P")),
+      ).toBe("selected");
+      expect(word.selected()).toEqual(paragraph("T8P"));
+      expect(word.rangesRead()).toEqual([]);
+    },
+  );
+
+  it("finds the comment again where the read's paragraph no longer holds it", async () => {
+    const word = installWordCommentHost({ host: "web" });
+
+    expect(
+      await showWordComment(word.commentId("T1"), word.ordinalOf("T2P")),
+    ).toBe("selected");
+    expect(word.selected()).toEqual(paragraph("T1P"));
+  });
+
   it("selects nothing on the web for a comment no paragraph lists", async () => {
     const word = installWordCommentHost({
       host: "web",

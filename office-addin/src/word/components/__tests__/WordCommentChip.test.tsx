@@ -46,6 +46,7 @@ const thread = (
   replies: 3,
   lastActivity: new Date("2026-09-04T07:00:00Z"),
   pos: 4,
+  para: 9,
   inSelection: true,
   ...overrides,
 });
@@ -363,7 +364,7 @@ describe("WordCommentChip", () => {
     expect(container.textContent).not.toMatch(/¶|\b12\b|para/i);
     fireEvent.click(screen.getByRole("button", { name: "Show in Word" }));
     await waitFor(() =>
-      expect(chip.onShowInWord).toHaveBeenCalledWith(MAYA.commentId),
+      expect(chip.onShowInWord).toHaveBeenCalledWith(MAYA.commentId, MAYA.para),
     );
   });
 

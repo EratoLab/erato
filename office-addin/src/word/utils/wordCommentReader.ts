@@ -196,7 +196,12 @@ export type WordCommentReadOnly =
   /** The web listed the root, or a reply twice, among the replies (F-1). */
   | "replies-repeated"
   /** Word listed the same id twice, so no write could tell the two apart (contract §4.6). */
-  | "id-repeated";
+  | "id-repeated"
+  /**
+   * Word for the web, a legacy file: another thread in the same paragraph has the same author and
+   * content, and nothing there tells their anchors apart, so a write could reach the other one.
+   */
+  | "content-repeated";
 
 export interface WordCommentThreadRecord extends WordCommentEntryRecord {
   resolved: boolean;
@@ -657,6 +662,7 @@ async function readThreads(
       live,
       inventory,
       budgets.anchors,
+      options.packages !== false,
     );
   const sorted = await orderThreads(session, live);
   if (selection) await relateSelection(session, sorted, selection);
@@ -682,6 +688,7 @@ async function readThreads(
       legacy = notes.legacy();
     }
   }
+  if (!desktop && legacy) markContentRepeated(records);
 
   const dateUtc = notes.dateUtc();
   if (
@@ -753,10 +760,12 @@ function resultOf(
   };
 }
 
-/** Every anchor was read and the order was decided, without an error. */
+/** Every anchor was read and the order was decided, without an error but in replies or the selection. */
 function placedWhole(diagnostics: WordCommentReadDiagnostics): boolean {
   return (
-    diagnostics.errors.every((e) => e.phase === "replies") &&
+    diagnostics.errors.every(
+      (e) => e.phase === "replies" || e.phase === "selection",
+    ) &&
     diagnostics.counts.anchorsSkipped === 0 &&
     diagnostics.phases.every(
       (p) => !p.exhausted && (p.phase !== "order" || p.done === p.total),
@@ -839,6 +848,8 @@ async function readFromKept(
     await relateSelection(session, sorted, selection);
   }
   const records = sorted.map((thread) => thread.record);
+  if (!wordReadsCommentRanges(diagnostics.host) && options.legacy)
+    markContentRepeated(records);
   await readAskedReplies(
     session,
     options,
@@ -910,8 +921,6 @@ async function readLiveSelection(
     const last = range.paragraphs.getLast();
     first.load("uniqueLocalId");
     last.load("uniqueLocalId");
-    const comments = touching ? range.getComments() : null;
-    comments?.load("items/id");
     await session.sync();
     const byId = idIndex(inventory);
     const ordinalOf = (paragraph: Word.Paragraph) => {
@@ -926,15 +935,29 @@ async function readLiveSelection(
         first: ordinalOf(first),
         last: ordinalOf(last),
       },
-      touching: comments
-        ? new Set(comments.items.map((comment) => String(comment.id)))
-        : null,
+      touching: touching ? await touchingIds(session, range) : null,
     };
   } catch (error) {
     session.note(error);
     session.end(0);
     return null;
   }
+}
+
+/** The ids the selection's own getComments() names, in a sync of their own; null when it fails. */
+async function touchingIds(
+  session: Session,
+  range: Word.Range,
+): Promise<ReadonlySet<string> | null> {
+  const comments = range.getComments();
+  comments.load("items/id");
+  try {
+    await session.sync();
+  } catch (error) {
+    session.note(error);
+    return null;
+  }
+  return new Set(comments.items.map((comment) => String(comment.id)));
 }
 
 /**
@@ -974,6 +997,20 @@ async function relateSelection(
     }
   }
   session.end(done);
+}
+
+/** Legacy threads on the web that share a paragraph, an author and a content: "content-repeated". */
+function markContentRepeated(records: readonly WordCommentThreadRecord[]) {
+  const groups = new Map<string, WordCommentThreadRecord[]>();
+  for (const record of records) {
+    const para = record.anchor?.first.ordinal;
+    if (para == null) continue;
+    const key = [para, record.authorName, record.content.trim()].join("\u001f");
+    groups.set(key, [...(groups.get(key) ?? []), record]);
+  }
+  for (const group of groups.values())
+    if (group.length > 1)
+      for (const record of group) record.readOnly ??= "content-repeated";
 }
 
 function markRepeatedIds(live: readonly Live[], session: Session) {
@@ -1181,9 +1218,9 @@ async function readRangeAnchors(
  * getComments(), which names a comment in the paragraph its anchor starts in and the one it ends
  * in, and in none between (probe ERMAIN-983, T3 and T14). The anchored text and offsets stay
  * unknown until a paragraph's package places a thread inside it (paragraphJob). A comment no
- * paragraph names is looked for in packages (placeUnlisted); one whose id Word lists twice gets no
- * anchor. Where the listing stops short of the body's end, a thread named once keeps its first
- * paragraph and an unknown end.
+ * paragraph names is looked for in packages (placeUnlisted) unless the read takes none; one whose
+ * id Word lists twice gets no anchor. Where the listing stops short of the body's end, a thread
+ * named once gets none either, as its end is unknown.
  */
 async function readParagraphAnchors(
   context: Word.RequestContext,
@@ -1191,6 +1228,7 @@ async function readParagraphAnchors(
   live: readonly Live[],
   inventory: WordCommentInventory,
   budgetMs: number,
+  packages: boolean,
 ) {
   const { counts } = session.diagnostics;
   session.begin("anchors", live.length, budgetMs);
@@ -1240,7 +1278,7 @@ async function readParagraphAnchors(
   const unlisted = live.filter(
     (thread) => thread.record.readOnly !== "id-repeated" && !seen.has(thread),
   );
-  if (cut === null && unlisted.length > 0)
+  if (cut === null && packages && unlisted.length > 0)
     for (const [thread, at] of await placeUnlisted(
       session,
       items,
@@ -1299,15 +1337,17 @@ async function readParagraphAnchors(
       counts.anchorsFailed += 1;
       continue;
     }
-    const ended = at.length > 1 || cut === null;
-    if (!ended) partial += 1;
+    if (at.length === 1 && cut !== null) {
+      partial += 1;
+      continue;
+    }
     thread.first = items[first];
     thread.last = items[last];
     raw.set(thread, {
       rangeText: null,
       first: edgeOf(first),
       last: edgeOf(last),
-      single: ended && first === last,
+      single: first === last,
     });
   }
   const missing = live.length - seen.size;
@@ -1390,10 +1430,16 @@ async function placeUnlisted(
       if (!read) continue;
       const known = withListedIds(read, ids);
       const open = unlisted.filter((thread) => !found.has(thread));
+      // The paragraph's own threads compete for its spans, so none of theirs goes to another.
+      const own = [...seen].flatMap(([thread, at]) =>
+        at.length === 1 && at[0] === index ? [thread] : [],
+      );
       const spans = unjoined(known)
-        ? joinWordCommentSpansByContent(known, listedFor(open, false), {
-            ordered: false,
-          })
+        ? joinWordCommentSpansByContent(
+            known,
+            listedFor([...own, ...open], false),
+            { ordered: false },
+          )
         : known.spans;
       for (const thread of open) {
         const placement = placeBySpan(known, spans, thread);
@@ -1471,18 +1517,25 @@ async function settleAnchors(
 }
 
 /**
- * Word for the web: the first body paragraph whose own getComments() names the comment, which Show
- * in Word selects there, as no comment range is read (wordReadsCommentRanges). Null when none does.
+ * Word for the web: the paragraph Show in Word selects for a comment, found without reading its
+ * range (wordReadsCommentRanges). The paragraph the read placed it in (`para`) stands when its own
+ * getComments() names the comment or, for one Word names in no paragraph, its package holds the
+ * comment's marks; otherwise the first body paragraph whose getComments() names it. Null when none.
  */
-export async function wordCommentFirstParagraph(
+export async function wordCommentShownParagraph(
   context: Word.RequestContext,
-  commentId: string,
+  comment: { id: string; content: string; authorName: string },
+  para: number | null,
 ): Promise<Word.Paragraph | null> {
   const paragraphs = context.document.body.paragraphs;
   paragraphs.load("items/uniqueLocalId");
   await context.sync();
+  const items = paragraphs.items;
+  const placed =
+    para !== null && para >= 1 && para <= items.length ? items[para - 1] : null;
+  if (placed && (await paragraphHolds(context, placed, comment))) return placed;
   for (const [, batch] of indexedChunks(
-    paragraphs.items,
+    items,
     WORD_COMMENT_LOCATE_PARAGRAPHS_PER_SYNC,
   )) {
     const lists = batch.map((paragraph) => {
@@ -1492,11 +1545,50 @@ export async function wordCommentFirstParagraph(
     });
     await context.sync();
     const found = lists.findIndex((list) =>
-      list.items.some((comment) => String(comment.id) === commentId),
+      list.items.some((each) => String(each.id) === comment.id),
     );
     if (found >= 0) return batch[found];
   }
   return null;
+}
+
+/** The paragraph's own getComments() names the comment, or its package holds its marks alone. */
+async function paragraphHolds(
+  context: Word.RequestContext,
+  paragraph: Word.Paragraph,
+  comment: { id: string; content: string; authorName: string },
+): Promise<boolean> {
+  const listed = paragraph.getComments();
+  listed.load("items/id");
+  paragraph.load("text,tableNestingLevel");
+  await context.sync();
+  if (listed.items.some((each) => String(each.id) === comment.id)) return true;
+  if (paragraph.tableNestingLevel > 0) return false;
+  const identity = paragraph.getText(WORD_SELECTION_TEXT_OPTIONS);
+  const ooxml = paragraph.getOoxml();
+  await context.sync();
+  const read = readWordCommentParagraphPackage(ooxml.value, {
+    rangeText: paragraph.text,
+    identityText: identity.value,
+  });
+  if (!read) return false;
+  const known = withListedIds(read, new Set([comment.id]));
+  const spans = unjoined(known)
+    ? joinWordCommentSpansByContent(
+        known,
+        [
+          {
+            id: comment.id,
+            content: comment.content,
+            author: comment.authorName,
+          },
+        ],
+        { ordered: false },
+      )
+    : known.spans;
+  return spans.some(
+    (span) => span.commentId === comment.id && !!span.start && !!span.end,
+  );
 }
 
 /**
@@ -1619,12 +1711,18 @@ function byId(a: WordCommentThreadRecord, b: WordCommentThreadRecord) {
     : a.id.localeCompare(b.id);
 }
 
-/** Two anchors placed from one paragraph's package, by their offsets in it. */
+/**
+ * Two anchors in one paragraph: placed ones first, by their offsets in its package. Unplaced ones
+ * after them keep the order a total key gives, so the sort never contradicts itself.
+ */
 function offsetOrder(a: Live, b: Live): number {
+  if (a.first !== b.first) return 0;
   const x = a.record.placement;
   const y = b.record.placement;
-  if (x?.status !== "placed" || y?.status !== "placed" || a.first !== b.first)
-    return 0;
+  const placed = (p: WordCommentPlacement | undefined) =>
+    p?.status === "placed";
+  if (placed(x) !== placed(y)) return placed(x) ? -1 : 1;
+  if (x?.status !== "placed" || y?.status !== "placed") return 0;
   return (
     x.offsets.start.range - y.offsets.start.range ||
     x.offsets.end.range - y.offsets.end.range
@@ -1907,17 +2005,23 @@ function listedFor(
 }
 
 /**
- * The package's spans with only the ids the read lists: Word for the web fills a legacy file's
- * commentsIds with ids that are not Comment.id (gate F2), which only a content join can pair.
+ * Word for the web: the package's spans with only the ids the read lists, as the web fills a
+ * legacy file's commentsIds with ids that are not Comment.id (gate F2), which only a content join
+ * can pair. A reply keeps its id: it is no thread, so no content join may give its span to one.
  */
 function withListedIds(
   read: WordCommentPackageRead,
   ids: ReadonlySet<string>,
 ): WordCommentPackageRead {
+  const replies = new Set(
+    read.comments.flatMap((comment) =>
+      comment.parentWId ? [comment.wId] : [],
+    ),
+  );
   return {
     ...read,
     spans: read.spans.map((span) =>
-      span.commentId && !ids.has(span.commentId)
+      span.commentId && !ids.has(span.commentId) && !replies.has(span.wId)
         ? { ...span, commentId: null, joinedBy: null }
         : span,
     ),
@@ -2012,20 +2116,21 @@ function paragraphJob(threads: Live[], ctx: ExactContext): Job {
       const texts = textsOf(paragraph, identity, anchor.first);
       const package_ = readWordCommentParagraphPackage(ooxml.value, texts);
       ctx.notePackage(package_);
-      const read = package_ && withListedIds(package_, ctx.ids);
+      const read =
+        package_ && !ctx.ordered ? withListedIds(package_, ctx.ids) : package_;
+      // Without a document order, a thread no paragraph placed may own a span here too.
+      const candidates = ctx.sorted.filter((t) =>
+        t.record.anchor
+          ? t.record.anchor.single &&
+            (t.first === paragraph ||
+              samePlace(t.record.anchor.first, anchor.first))
+          : !ctx.ordered && t.record.readOnly !== "id-repeated",
+      );
       const spans =
         read && unjoined(read)
           ? joinWordCommentSpansByContent(
               read,
-              listedFor(
-                ctx.sorted.filter(
-                  (t) =>
-                    t.record.anchor?.single &&
-                    (t.first === paragraph ||
-                      samePlace(t.record.anchor.first, anchor.first)),
-                ),
-                ctx.ordered,
-              ),
+              listedFor(candidates, ctx.ordered),
               { ordered: ctx.ordered },
             )
           : (read?.spans ?? []);
@@ -2123,9 +2228,8 @@ function rangeJob(thread: Live, ctx: ExactContext): Job {
           identityText: identities[i].value,
           inCell: p.tableNestingLevel > 0,
         }));
-        const package_ = readWordCommentRangePackage(ooxml.value, texts);
-        ctx.notePackage(package_);
-        const read = package_ && withListedIds(package_, ctx.ids);
+        const read = readWordCommentRangePackage(ooxml.value, texts);
+        ctx.notePackage(read);
         const spans =
           read && unjoined(read)
             ? joinWordCommentSpansByContent(
