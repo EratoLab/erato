@@ -12,6 +12,7 @@ import { captureWordAuthoringSnapshot } from "../wordDocumentXml";
 import type {
   WordDocumentPlan,
   WordPlanBlock,
+  WordStoryChange,
 } from "@erato/frontend/word-review";
 
 function setup(xml = nativeSource) {
@@ -61,7 +62,7 @@ describe("rich document plan reference validation", () => {
     expect(validateWordDocumentPlan(plan, source)).toBe("invalid");
   });
 
-  it("does not allow notes or comments anchored in earlier story blocks", () => {
+  it("does not allow notes anchored in earlier story blocks", () => {
     const { source, plan } = setup();
     plan.stories = [
       {
@@ -81,20 +82,21 @@ describe("rich document plan reference validation", () => {
     expect(validateWordDocumentPlan(plan, source)).toBe("invalid");
   });
 
-  it("requires new notes/comments to have a body anchor and checks its text offsets", () => {
+  it("requires new notes to have a body anchor and checks its text offsets", () => {
     const { source, plan } = setup();
-    plan.stories = [
-      {
-        kind: "upsert",
-        type: "comment",
-        id: "review",
-        blocks: [paragraph("comment-text")],
-      },
-    ];
+    const note: WordStoryChange = {
+      kind: "upsert",
+      type: "footnote",
+      id: "review",
+      blocks: [paragraph("note-text")],
+    };
+    plan.stories = [note];
     expect(validateWordDocumentPlan(plan, source)).toBe("invalid");
-    plan.stories[0].anchor = { block: source.blocks[0].ref, start: 100000 };
+    note.anchor = { block: source.blocks[0].ref, start: 100000 };
     expect(validateWordDocumentPlan(plan, source)).toBe("invalid");
-    plan.stories[0].anchor = { block: source.blocks[0].ref };
+    note.anchor = { block: source.blocks[0].ref, start: 0, end: 1 };
+    expect(validateWordDocumentPlan(plan, source)).toBe("invalid");
+    note.anchor = { block: source.blocks[0].ref };
     expect(validateWordDocumentPlan(plan, source)).toBeNull();
   });
 

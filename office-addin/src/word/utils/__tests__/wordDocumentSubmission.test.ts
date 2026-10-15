@@ -7,7 +7,13 @@ import { describe, expect, it, vi, afterEach } from "vitest";
 import {
   readySnapshot,
   examplePlan,
+  packageXml,
+  paragraph,
 } from "../../../test/mocks/word/authoringFixtures";
+import {
+  commentedParagraph,
+  withComments,
+} from "../../../test/mocks/word/commentFixtures";
 import { installWordOoxmlHost } from "../../../test/mocks/word/ooxmlHost";
 import {
   captureRealisticSnapshot,
@@ -20,11 +26,13 @@ import {
   createWordDocumentSubmissionExecutor,
   WORD_SUBMIT_PLAN_TOOL,
 } from "../wordDocumentSubmission";
+import { captureWordAuthoringSnapshot } from "../wordDocumentXml";
 
 import type {
   ClientToolCallContext,
   ContentPart,
 } from "@erato/frontend/library";
+import type { WordPlanDiagnostics } from "@erato/frontend/word-review";
 
 const context: ClientToolCallContext = {
   toolCallId: "submit-A",
@@ -648,5 +656,118 @@ describe("Word draft repairs", () => {
     expect(
       await submit(repair, { ...context, toolCallId: "still-current" }),
     ).toMatchObject({ ok: true });
+  });
+});
+
+describe("comment stories in plans", () => {
+  async function commentedSetup() {
+    const session = new WordDocumentReadSession();
+    const snapshot = captureWordAuthoringSnapshot(
+      withComments(
+        packageXml(
+          commentedParagraph("Keep ", "this", " text", ["0"]) +
+            paragraph("Other"),
+        ),
+        [
+          {
+            id: "0",
+            author: "Maya Krüger",
+            date: "2026-09-08T10:15:30Z",
+            text: "Why?",
+            paraId: "1A2B3C4D",
+            durableId: "0BC0FFEE",
+          },
+        ],
+      ),
+      "doc-A",
+      "Off",
+      true,
+    );
+    session.activate(snapshot, context);
+    await session.execute(
+      { snapshot: snapshot.token },
+      { ...context, toolCallId: "read-A" },
+    );
+    const comment = snapshot.stories!.find((s) => s.type === "comment")!;
+    const plan = {
+      version: 1,
+      snapshot: snapshot.token,
+      readToken: snapshot.readToken!,
+      scope: "document",
+      entries: [{ kind: "keep", source: snapshot.blocks.map((b) => b.ref) }],
+      deleted: [],
+      stories: [
+        {
+          kind: "upsert",
+          type: "comment",
+          id: comment.id,
+          author: "Erato",
+          blocks: [{ id: "c1", type: "paragraph", text: "Edited" }],
+        },
+      ],
+    };
+    return {
+      snapshot,
+      plan,
+      submit: createWordDocumentSubmissionExecutor(session),
+    };
+  }
+
+  it("names the comment route before any other story or scope problem", () => {
+    for (const scope of ["body", "document"]) {
+      const issues: WordPlanDiagnostics = [];
+      expect(
+        parseWordDocumentPlan(
+          JSON.stringify({
+            version: 1,
+            snapshot: "s",
+            readToken: "r",
+            scope,
+            entries: [{ kind: "keep", source: ["b1"] }],
+            stories: [
+              { kind: "upsert", type: "footnote", id: "n", blocks: [] },
+              { kind: "delete", type: "comment", id: "comment-4" },
+            ],
+          }),
+          issues,
+        ),
+      ).toBeNull();
+      expect(issues).toEqual([
+        {
+          path: "/stories/1/type",
+          code: "comment-story-route",
+          message: expect.stringContaining("comment actions"),
+        },
+      ]);
+    }
+  });
+
+  it("rejects a comment story as repairable, then accepts the repair that drops it", async () => {
+    const { plan, submit, snapshot } = await commentedSetup();
+    const failure = await submit(plan, context);
+    expect(failure).toMatchObject({
+      ok: false,
+      validationErrors: [
+        { path: "/stories/0/type", code: "comment-story-route" },
+      ],
+      submissionFeedback: { recovery: "repair_arguments", terminal: false },
+    });
+    if (failure.ok || !failure.submissionFeedback?.draft)
+      throw new Error("Expected repair handle");
+    const repaired = await submit(
+      {
+        snapshot: snapshot.token,
+        readToken: snapshot.readToken,
+        draft_id: failure.submissionFeedback.draft.id,
+        revision: failure.submissionFeedback.draft.revision,
+        patches: [{ op: "remove", path: "/stories" }],
+      },
+      { ...context, toolCallId: "repair" },
+    );
+    expect(repaired).toMatchObject({ ok: true });
+    const { stories: _, ...withoutStories } = plan;
+    expect(
+      (repaired as { result: { plan: unknown } }).result.plan,
+    ).toMatchObject(withoutStories);
   });
 });

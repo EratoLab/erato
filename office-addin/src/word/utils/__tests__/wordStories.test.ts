@@ -9,8 +9,17 @@ import {
 } from "@erato/frontend/word-review";
 import { describe, expect, it } from "vitest";
 
+import {
+  packageXml,
+  paragraph,
+} from "../../../test/mocks/word/authoringFixtures";
+import {
+  commentedParagraph,
+  withComments,
+} from "../../../test/mocks/word/commentFixtures";
 import { wordDocumentOoxmlToFile } from "../wordDocumentPackage";
 
+import type { FixtureComment } from "../../../test/mocks/word/commentFixtures";
 import type {
   WordPlanBlock,
   WordStoryChange,
@@ -34,31 +43,69 @@ function setup() {
     ["n1", first],
     ["n2", second],
   ]);
-  const compile = (blocks: WordPlanBlock[]) =>
-    blocks.map((block) => {
-      const paragraph = doc.createElementNS(W, "w:p"),
-        run = doc.createElementNS(W, "w:r"),
-        text = doc.createElementNS(W, "w:t");
-      text.setAttributeNS(
-        "http://www.w3.org/XML/1998/namespace",
-        "xml:space",
-        "preserve",
-      );
-      text.textContent = block.text ?? "";
-      run.append(text);
-      paragraph.append(run);
-      return paragraph;
-    });
-  return { doc, output, compile, first, second };
+  return { doc, output, compile: compileIn(doc), first, second };
 }
+const compileIn = (doc: Document) => (blocks: WordPlanBlock[]) =>
+  blocks.map((block) => {
+    const paragraph = doc.createElementNS(W, "w:p"),
+      run = doc.createElementNS(W, "w:r"),
+      text = doc.createElementNS(W, "w:t");
+    text.setAttributeNS(
+      "http://www.w3.org/XML/1998/namespace",
+      "xml:space",
+      "preserve",
+    );
+    text.textContent = block.text ?? "";
+    run.append(text);
+    paragraph.append(run);
+    return paragraph;
+  });
 const block = (text: string): WordPlanBlock => ({
   id: "s1",
   type: "paragraph",
   text,
 });
+const THREAD: FixtureComment[] = [
+  {
+    id: "0",
+    author: "Maya Krüger",
+    initials: "MK",
+    date: "2026-09-08T10:15:30Z",
+    text: "Clarify beta",
+    paraId: "12AB34CD",
+    durableId: "23456789",
+  },
+];
+/** A body whose first paragraph holds a comment on "beta". */
+function commentedSetup(comments: FixtureComment[] = THREAD) {
+  const doc = parse(
+    withComments(
+      packageXml(
+        commentedParagraph(
+          "Alpha ",
+          "beta",
+          " gamma",
+          comments.map((c) => c.id),
+        ) + paragraph("Second section"),
+      ),
+      comments,
+    ),
+  );
+  const [first, second] = paragraphs(doc);
+  return {
+    doc,
+    first,
+    second,
+    compile: compileIn(doc),
+    output: new Map([
+      ["n1", first],
+      ["n2", second],
+    ]),
+  };
+}
 
 describe("structured stories", () => {
-  it("creates all story families, exact comment anchors, and valid package relationships", () => {
+  it("creates every plan story family with valid package relationships", () => {
     const { doc, output, compile, first } = setup();
     const changes: WordStoryChange[] = [
       {
@@ -82,14 +129,6 @@ describe("structured stories", () => {
         blocks: [block("Endnote text")],
         anchor: { block: "n2" },
       },
-      {
-        kind: "upsert",
-        type: "comment",
-        id: "review",
-        author: "Reviewer",
-        blocks: [block("Clarify beta")],
-        anchor: { block: "n1", start: 6, end: 10 },
-      },
     ];
     compileWordStories(doc, changes, compile, output);
     compileWordSections(
@@ -106,27 +145,38 @@ describe("structured stories", () => {
     );
     const stories = extractWordStories(doc);
     expect(stories.map((s) => s.type).sort()).toEqual([
-      "comment",
       "endnote",
       "footer",
       "footnote",
       "header",
     ]);
-    expect(stories.find((s) => s.type === "comment")?.author).toBe("Reviewer");
-    const children = Array.from(first.children);
-    const start = children.findIndex(
-      (e) => e.localName === "commentRangeStart",
-    );
-    const end = children.findIndex((e) => e.localName === "commentRangeEnd");
-    expect(
-      children
-        .slice(start + 1, end)
-        .map((e) => e.textContent)
-        .join(""),
-    ).toBe("beta");
     expect(first.textContent).toBe("Alpha beta gamma");
-    expect(first.getElementsByTagNameNS(W, "b")).toHaveLength(3);
     expect(() => wordDocumentOoxmlToFile(xml(doc))).not.toThrow();
+  });
+
+  it("refuses to author, edit or delete comments", () => {
+    const { doc, output, compile } = commentedSetup();
+    const before = xml(doc);
+    for (const change of [
+      {
+        kind: "upsert",
+        type: "comment",
+        id: "review",
+        blocks: [block("Clarify")],
+        anchor: { block: "n1" },
+      },
+      { kind: "upsert", type: "comment", id: "comment-0", blocks: [] },
+      { kind: "delete", type: "comment", id: "comment-0" },
+    ])
+      expect(() =>
+        compileWordStories(
+          doc,
+          [change as unknown as WordStoryChange],
+          compile,
+          output,
+        ),
+      ).toThrow(/comment-story-route/);
+    expect(xml(doc)).toBe(before);
   });
 
   it("edits notes without duplicating anchors and deletes notes/comments with their anchors", () => {
@@ -217,17 +267,10 @@ describe("structured stories", () => {
   });
 
   it("prunes a comment when its source text is removed, preserving other stories", () => {
-    const { doc, output, compile, first } = setup();
+    const { doc, output, compile, first } = commentedSetup();
     compileWordStories(
       doc,
       [
-        {
-          kind: "upsert",
-          type: "comment",
-          id: "c",
-          blocks: [block("Review")],
-          anchor: { block: "n1" },
-        },
         {
           kind: "upsert",
           type: "header",
@@ -245,21 +288,7 @@ describe("structured stories", () => {
   });
 
   it("preserves existing unanchored story bodies on a keep-all compile", () => {
-    const { doc, output, compile } = setup();
-    compileWordStories(
-      doc,
-      [
-        {
-          kind: "upsert",
-          type: "comment",
-          id: "c",
-          blocks: [block("Unanchored legacy comment")],
-          anchor: { block: "n1" },
-        },
-      ],
-      compile,
-      output,
-    );
+    const { doc, output, compile } = commentedSetup();
     for (const reference of Array.from(
       doc.getElementsByTagNameNS(W, "commentReference"),
     ))
@@ -270,47 +299,10 @@ describe("structured stories", () => {
   });
 
   it("cleans modern comment identity metadata when the associated comment is removed", () => {
-    const { doc, output, compile } = setup();
-    compileWordStories(
-      doc,
-      [
-        {
-          kind: "upsert",
-          type: "comment",
-          id: "c",
-          blocks: [block("Modern comment")],
-          anchor: { block: "n1" },
-        },
-      ],
-      compile,
-      output,
-    );
-    const comment = doc.getElementsByTagNameNS(W, "comment")[0];
-    paragraphs(comment)[0].setAttributeNS(
-      "http://schemas.microsoft.com/office/word/2010/wordml",
-      "w14:paraId",
-      "12AB34CD",
-    );
-    const parts = [
-      '<pkg:part pkg:name="/word/commentsExtended.xml" pkg:contentType="application/vnd.ms-word.commentsExtended+xml"><pkg:xmlData><w15:commentsEx xmlns:w15="http://schemas.microsoft.com/office/word/2012/wordml"><w15:commentEx w15:paraId="12AB34CD" w15:done="0"/></w15:commentsEx></pkg:xmlData></pkg:part>',
-      '<pkg:part pkg:name="/word/commentsIds.xml" pkg:contentType="application/vnd.ms-word.commentsIds+xml"><pkg:xmlData><w16cid:commentsIds xmlns:w16cid="http://schemas.microsoft.com/office/word/2016/wordml/cid"><w16cid:commentId w16cid:paraId="12AB34CD" w16cid:durableId="23456789"/></w16cid:commentsIds></pkg:xmlData></pkg:part>',
-      '<pkg:part pkg:name="/word/commentsExtensible.xml" pkg:contentType="application/vnd.ms-word.commentsExtensible+xml"><pkg:xmlData><w16cex:commentsExtensible xmlns:w16cex="http://schemas.microsoft.com/office/word/2018/wordml/cex"><w16cex:commentExtensible w16cex:durableId="23456789"/></w16cex:commentsExtensible></pkg:xmlData></pkg:part>',
-    ];
-    for (const part of parts)
-      doc.documentElement.append(
-        doc.importNode(
-          parse(`<pkg:package xmlns:pkg="${PKG}">${part}</pkg:package>`)
-            .documentElement.firstElementChild!,
-          true,
-        ),
-      );
-    const source = extractWordStories(doc)[0];
-    compileWordStories(
-      doc,
-      [{ kind: "delete", type: "comment", id: source.id }],
-      compile,
-      output,
-    );
+    const { doc, first } = commentedSetup();
+    const originalStories = extractWordStories(doc);
+    first.remove();
+    pruneWordStoryReferences(doc, originalStories);
     expect(xml(doc)).not.toContain("12AB34CD");
     expect(xml(doc)).not.toContain("23456789");
     expect(doc.getElementsByTagNameNS(W, "commentReference")).toHaveLength(0);
@@ -324,9 +316,9 @@ describe("structured stories", () => {
         [
           {
             kind: "upsert",
-            type: "comment",
-            id: "c",
-            blocks: [block("Review")],
+            type: "footnote",
+            id: "n",
+            blocks: [block("Note")],
             anchor: { block: "n1", start: 100 },
           },
         ],
@@ -471,10 +463,10 @@ describe("strict typed story and section parsing", () => {
         [
           {
             kind: "upsert",
-            type: "comment",
+            type: "footnote",
             id: "c",
             blocks: [block("Text")],
-            anchor: { block: "n1", start: 0, end: 3 },
+            anchor: { block: "n1", start: 3, end: 3 },
           },
         ],
         parseBlock,
@@ -482,7 +474,29 @@ describe("strict typed story and section parsing", () => {
     ).not.toBeNull();
   });
   it.each([
-    [{ kind: "delete", type: "comment", id: "c", blocks: [] }],
+    [{ kind: "delete", type: "footnote", id: "c", blocks: [] }],
+    [{ kind: "delete", type: "comment", id: "c" }],
+    [{ kind: "upsert", type: "comment", id: "c", blocks: [] }],
+    [
+      {
+        kind: "upsert",
+        type: "footnote",
+        id: "n",
+        blocks: [],
+        author: "Erato",
+        anchor: { block: "n1" },
+      },
+    ],
+    [
+      {
+        kind: "upsert",
+        type: "footnote",
+        id: "n",
+        blocks: [],
+        initials: "AI",
+        anchor: { block: "n1" },
+      },
+    ],
     [
       {
         kind: "upsert",
@@ -495,7 +509,7 @@ describe("strict typed story and section parsing", () => {
     [
       {
         kind: "upsert",
-        type: "comment",
+        type: "footnote",
         id: "c",
         blocks: [],
         anchor: { block: "n1", start: 4, end: 3 },

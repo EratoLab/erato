@@ -217,6 +217,17 @@ export function parseWordDocumentPlan(
         "plan-envelope",
         "Expected version 1, snapshot, readToken, scope, entries and optional deleted/stories/sections. Unknown properties are not supported.",
       );
+    const comment = Array.isArray(v.stories)
+      ? v.stories.findIndex(
+          (story) => object(story) && story.type === "comment",
+        )
+      : -1;
+    if (comment >= 0)
+      return fail(
+        `/stories/${comment}/type`,
+        "comment-story-route",
+        "Comments are changed with the comment actions, not in document plans. Remove this story. Deleting all the text a comment is attached to deletes its thread, which the user must confirm; keep that text to keep the thread.",
+      );
     if (
       v.scope === "body" &&
       (v.stories !== undefined || v.sections !== undefined)
@@ -814,7 +825,7 @@ export function validateWordDocumentPlan(
         "invalid",
         `${path}/anchor`,
         "story-anchor",
-        "New notes and comments require an anchor in the output body.",
+        "New notes require an anchor in the output body.",
       );
     if (story.anchor) {
       const target = bodyAnchors.get(story.anchor.block);
@@ -825,25 +836,20 @@ export function validateWordDocumentPlan(
           "anchor-reference",
           "Anchor block must identify an output body block or kept body source.",
         );
-      const start =
-        story.anchor.start ??
-        (story.type === "comment" ? 0 : target.text.length);
-      const end =
-        story.anchor.end ??
-        (story.type === "comment" ? target.text.length : start);
+      const start = story.anchor.start ?? target.text.length;
+      const end = story.anchor.end ?? start;
       if (
         !Number.isInteger(start) ||
         !Number.isInteger(end) ||
         start < 0 ||
-        end < start ||
-        (target.type !== "native-edit" && end > target.text.length) ||
-        (story.type !== "comment" && end !== start)
+        end !== start ||
+        (target.type !== "native-edit" && end > target.text.length)
       )
         return fail(
           "invalid",
           `${path}/anchor`,
           "anchor-range",
-          "Anchor offsets must fit the target text in UTF-16 units; notes require a point, comments allow a range.",
+          "Anchor offsets must fit the target text in UTF-16 units, and a note is a point: start equals end.",
         );
     }
     if (!validBlocks(story.blocks ?? [], false, `${path}/blocks`))

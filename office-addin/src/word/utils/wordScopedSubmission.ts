@@ -285,6 +285,12 @@ export function expandWordScopedSubmission(
     } else {
       const story = snapshot.stories?.find((s) => s.id === group.storyId);
       if (!story) return fail("Story no longer exists.");
+      if (story.type === "comment")
+        throw new WordTableCellSubmissionError(
+          "/scoped_edit/objects",
+          "comment-story-route",
+          "Objects inside comments are changed with the comment actions, not in document plans.",
+        );
       stories.push({
         kind: "upsert",
         type: story.type,
@@ -298,7 +304,15 @@ export function expandWordScopedSubmission(
       return fail(
         "An insertion/destination anchor cannot also be replaced, deleted or moved in this submission.",
       );
-  for (const raw of (edit.stories as unknown[] | undefined) ?? []) {
+  for (const [index, raw] of (
+    (edit.stories as unknown[] | undefined) ?? []
+  ).entries()) {
+    if (object(raw) && raw.type === "comment")
+      throw new WordTableCellSubmissionError(
+        `/scoped_edit/stories/${index}/type`,
+        "comment-story-route",
+        "Comments are changed with the comment actions, not in document plans. Remove this story change.",
+      );
     if (
       !object(raw) ||
       typeof raw.id !== "string" ||

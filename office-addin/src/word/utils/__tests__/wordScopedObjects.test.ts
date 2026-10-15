@@ -10,6 +10,10 @@ import {
   paragraph,
   readySnapshot,
 } from "../../../test/mocks/word/authoringFixtures";
+import {
+  commentedParagraph,
+  withComments,
+} from "../../../test/mocks/word/commentFixtures";
 import { installWordOoxmlHost } from "../../../test/mocks/word/ooxmlHost";
 import {
   captureRealisticSnapshot,
@@ -99,8 +103,22 @@ function assertAccepted(
 }
 function richSnapshot() {
   const initial = captureWordAuthoringSnapshot(
-    packageXml(
-      paragraph("Before") + paragraph("Original") + paragraph("After"),
+    withComments(
+      packageXml(
+        commentedParagraph("", "Bef", "ore", ["0"]) +
+          paragraph("Original") +
+          paragraph("After"),
+      ),
+      [
+        {
+          id: "0",
+          author: "Reviewer",
+          date: "2026-09-08T10:15:30Z",
+          text: "comment text",
+          paraId: "1A2B3C4D",
+          durableId: "0BC0FFEE",
+        },
+      ],
     ),
     "doc-rich",
     "Off",
@@ -202,16 +220,12 @@ function richSnapshot() {
         id: type,
         blocks: [{ ...textBlock(`${type} text`), id: `${type}-p` }],
       })),
-      ...(["footnote", "endnote", "comment"] as const).map((type) => ({
+      ...(["footnote", "endnote"] as const).map((type) => ({
         kind: "upsert" as const,
         type,
         id: type,
         blocks: [{ ...textBlock(`${type} text`), id: `${type}-p` }],
-        anchor: {
-          block: "b1",
-          start: 0,
-          ...(type === "comment" ? { end: 3 } : {}),
-        },
+        anchor: { block: "b1", start: 0 },
       })),
     ],
     sections: [
@@ -790,7 +804,7 @@ describe("scoped object editing", () => {
       });
     },
   );
-  it.each(["header", "footer", "footnote", "endnote", "comment"])(
+  it.each(["header", "footer", "footnote", "endnote"])(
     "edits %s with bounded story context",
     async (kind) => {
       const s = setup(richSnapshot());
@@ -952,8 +966,50 @@ describe("scoped object editing", () => {
         .text,
     ).toBe("Cell");
   });
-  it("creates and deletes notes/comments with explicitly read anchors", async () => {
-    for (const type of ["footnote", "endnote", "comment"] as const) {
+  it("refuses comment story changes with a repairable error", async () => {
+    const s = setup(richSnapshot());
+    const target = wordTargetInventory(s.snapshot).find(
+      (t) => t.kind === "comment",
+    )!;
+    for (const change of [
+      {
+        kind: "upsert",
+        type: "comment",
+        id: target.storyId,
+        blocks: [textBlock("Revised story")],
+      },
+      { kind: "delete", type: "comment", id: target.storyId },
+    ]) {
+      const result = await s.edit({ ref: target.ref }, { stories: [change] });
+      expect(result).toMatchObject({
+        ok: false,
+        validationErrors: [
+          { path: "/scoped_edit/stories/0/type", code: "comment-story-route" },
+        ],
+        submissionFeedback: { recovery: "repair_arguments" },
+      });
+    }
+    const body = await s.edit(
+      { ref: "b1" },
+      {
+        stories: [
+          {
+            kind: "upsert",
+            type: "comment",
+            id: "new-comment",
+            blocks: [textBlock("New comment")],
+            anchor: { block: "b1", start: 0, end: 3 },
+          },
+        ],
+      },
+    );
+    expect(body).toMatchObject({
+      ok: false,
+      validationErrors: [{ code: "comment-story-route" }],
+    });
+  });
+  it("creates and deletes notes with explicitly read anchors", async () => {
+    for (const type of ["footnote", "endnote"] as const) {
       const s = setup(
         captureWordAuthoringSnapshot(
           packageXml(paragraph("Anchor") + paragraph("Untouched")),
@@ -972,11 +1028,7 @@ describe("scoped object editing", () => {
                 type,
                 id: "new-note",
                 blocks: [textBlock("New annotation")],
-                anchor: {
-                  block: "b1",
-                  start: 0,
-                  ...(type === "comment" ? { end: 3 } : {}),
-                },
+                anchor: { block: "b1", start: 0 },
               },
             ],
           },

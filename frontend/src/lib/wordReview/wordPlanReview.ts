@@ -693,11 +693,7 @@ function storyRows(
       story.kind === "delete"
         ? undefined
         : (story.blocks ?? []).map(blockText).join("\n");
-    const echoed =
-      !!existing &&
-      after === existing.text &&
-      !story.anchor &&
-      (story.author === undefined || story.author === existing.author);
+    const echoed = !!existing && after === existing.text && !story.anchor;
     if (echoed) return [];
     return {
       key: `story:${story.id}`,

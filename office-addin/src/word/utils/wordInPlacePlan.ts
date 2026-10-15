@@ -1139,9 +1139,7 @@ function storyOps(
     if (
       change.kind !== "upsert" ||
       (change.type !== "header" && change.type !== "footer") ||
-      change.anchor ||
-      change.author !== undefined ||
-      change.initials !== undefined
+      change.anchor
     )
       return "stories";
     const kind = change.type;
