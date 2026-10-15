@@ -540,7 +540,8 @@ export function validateWordDocumentPlan(
   );
   // Story content shares the ID namespace, but annotation targets must resolve to a body block.
   const outputIds = new Set(keptRefs);
-  const bodyAnchors = new Map<string, { text: string; type: string }>();
+  /** A note offset counts in this text; undefined where a new block's text is not what Word shows. */
+  const bodyAnchors = new Map<string, { view?: string }>();
   const bodyOrder = new Map<string, number>();
   const lists = new Map<string, boolean>();
   let outputCount = 0;
@@ -611,7 +612,12 @@ export function validateWordDocumentPlan(
           "Output IDs must be globally unique, including nested blocks, story blocks and kept source references.",
         );
       outputIds.add(block.id);
-      if (body) bodyAnchors.set(block.id, block);
+      if (body)
+        bodyAnchors.set(block.id, {
+          view: ["paragraph", "heading", "list-item"].includes(block.type)
+            ? block.text
+            : undefined,
+        });
       if (block.type === "heading" && block.styleRef)
         return reject(
           `${blockPath}/styleRef`,
@@ -782,7 +788,7 @@ export function validateWordDocumentPlan(
     if (entry.kind === "keep") {
       outputCount += entry.source.length;
       for (const ref of entry.source) {
-        bodyAnchors.set(ref, sources.get(ref)!);
+        bodyAnchors.set(ref, { view: sources.get(ref)!.text });
         bodyOrder.set(ref, bodyPosition++);
       }
     } else {
@@ -836,20 +842,23 @@ export function validateWordDocumentPlan(
           "anchor-reference",
           "Anchor block must identify an output body block or kept body source.",
         );
-      const start = story.anchor.start ?? target.text.length;
-      const end = story.anchor.end ?? start;
+      const { start, end } = story.anchor;
+      const offset = start ?? end;
       if (
-        !Number.isInteger(start) ||
-        !Number.isInteger(end) ||
-        start < 0 ||
-        end !== start ||
-        (target.type !== "native-edit" && end > target.text.length)
+        offset !== undefined &&
+        (target.view === undefined ||
+          !Number.isInteger(offset) ||
+          offset < 0 ||
+          offset > target.view.length ||
+          (start !== undefined && end !== undefined && end !== start))
       )
         return fail(
           "invalid",
           `${path}/anchor`,
           "anchor-range",
-          "Anchor offsets must fit the target text in UTF-16 units, and a note is a point: start equals end.",
+          target.view === undefined
+            ? "A note offset needs a paragraph, heading or list item, or a kept block; omit start to place the note at the end of this block."
+            : "start is a UTF-16 position in the anchor block's text as the read returned it: paragraphs joined by a newline, table cells by a tab, hidden text left out. A note is a point: end, if given, equals start.",
         );
     }
     if (!validBlocks(story.blocks ?? [], false, `${path}/blocks`))

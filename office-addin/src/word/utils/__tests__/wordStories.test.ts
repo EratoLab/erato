@@ -43,8 +43,17 @@ function setup() {
     ["n1", first],
     ["n2", second],
   ]);
-  return { doc, output, compile: compileIn(doc), first, second };
+  return {
+    doc,
+    output,
+    anchors: anchorsOf(output),
+    compile: compileIn(doc),
+    first,
+    second,
+  };
 }
+const anchorsOf = (output: Map<string, Element>) =>
+  new Map([...output].map(([id, node]) => [id, [node]]));
 const compileIn = (doc: Document) => (blocks: WordPlanBlock[]) =>
   blocks.map((block) => {
     const paragraph = doc.createElementNS(W, "w:p"),
@@ -97,16 +106,18 @@ function commentedSetup(comments: FixtureComment[] = THREAD) {
     first,
     second,
     compile: compileIn(doc),
-    output: new Map([
-      ["n1", first],
-      ["n2", second],
-    ]),
+    anchors: anchorsOf(
+      new Map([
+        ["n1", first],
+        ["n2", second],
+      ]),
+    ),
   };
 }
 
 describe("structured stories", () => {
   it("creates every plan story family with valid package relationships", () => {
-    const { doc, output, compile, first } = setup();
+    const { doc, anchors, output, compile, first } = setup();
     const changes: WordStoryChange[] = [
       {
         kind: "upsert",
@@ -130,7 +141,7 @@ describe("structured stories", () => {
         anchor: { block: "n2" },
       },
     ];
-    compileWordStories(doc, changes, compile, output);
+    compileWordStories(doc, changes, compile, anchors);
     compileWordSections(
       doc,
       [
@@ -155,7 +166,7 @@ describe("structured stories", () => {
   });
 
   it("refuses to author, edit or delete comments", () => {
-    const { doc, output, compile } = commentedSetup();
+    const { doc, anchors, compile } = commentedSetup();
     const before = xml(doc);
     for (const change of [
       {
@@ -173,14 +184,14 @@ describe("structured stories", () => {
           doc,
           [change as unknown as WordStoryChange],
           compile,
-          output,
+          anchors,
         ),
       ).toThrow(/comment-story-route/);
     expect(xml(doc)).toBe(before);
   });
 
   it("edits notes without duplicating anchors and deletes notes/comments with their anchors", () => {
-    const { doc, output, compile } = setup();
+    const { doc, anchors, compile } = setup();
     compileWordStories(
       doc,
       [
@@ -193,7 +204,7 @@ describe("structured stories", () => {
         },
       ],
       compile,
-      output,
+      anchors,
     );
     const source = extractWordStories(doc)[0];
     compileWordStories(
@@ -207,7 +218,7 @@ describe("structured stories", () => {
         },
       ],
       compile,
-      output,
+      anchors,
     );
     expect(doc.getElementsByTagNameNS(W, "footnoteReference")).toHaveLength(1);
     expect(extractWordStories(doc)[0].text).toBe("After");
@@ -215,14 +226,14 @@ describe("structured stories", () => {
       doc,
       [{ kind: "delete", type: "footnote", id: source.id }],
       compile,
-      output,
+      anchors,
     );
     expect(doc.getElementsByTagNameNS(W, "footnoteReference")).toHaveLength(0);
     expect(extractWordStories(doc)).toHaveLength(0);
   });
 
   it("initializes the first note parts with native separator geometry and settings", () => {
-    const { doc, output, compile } = setup();
+    const { doc, anchors, compile } = setup();
     compileWordStories(
       doc,
       [
@@ -242,7 +253,7 @@ describe("structured stories", () => {
         },
       ],
       compile,
-      output,
+      anchors,
     );
     for (const type of ["footnote", "endnote"]) {
       const part = doc.getElementsByTagNameNS(W, `${type}s`)[0];
@@ -267,7 +278,7 @@ describe("structured stories", () => {
   });
 
   it("prunes a comment when its source text is removed, preserving other stories", () => {
-    const { doc, output, compile, first } = commentedSetup();
+    const { doc, anchors, compile, first } = commentedSetup();
     compileWordStories(
       doc,
       [
@@ -279,7 +290,7 @@ describe("structured stories", () => {
         },
       ],
       compile,
-      output,
+      anchors,
     );
     const originalStories = extractWordStories(doc);
     first.remove();
@@ -288,13 +299,13 @@ describe("structured stories", () => {
   });
 
   it("preserves existing unanchored story bodies on a keep-all compile", () => {
-    const { doc, output, compile } = commentedSetup();
+    const { doc, anchors, compile } = commentedSetup();
     for (const reference of Array.from(
       doc.getElementsByTagNameNS(W, "commentReference"),
     ))
       reference.remove();
     const before = xml(doc);
-    compileWordStories(doc, [], compile, output, extractWordStories(doc));
+    compileWordStories(doc, [], compile, anchors, extractWordStories(doc));
     expect(xml(doc)).toBe(before);
   });
 
@@ -309,7 +320,7 @@ describe("structured stories", () => {
   });
 
   it("rejects dangling note references and invalid text offsets before import", () => {
-    const { doc, output, compile, first } = setup();
+    const { doc, anchors, compile, first } = setup();
     expect(() =>
       compileWordStories(
         doc,
@@ -323,7 +334,7 @@ describe("structured stories", () => {
           },
         ],
         compile,
-        output,
+        anchors,
       ),
     ).toThrow(/outside/);
     const bad = doc.createElementNS(W, "w:footnoteReference");
@@ -333,7 +344,7 @@ describe("structured stories", () => {
   });
 
   it("passes each story part as owner when compiling nested images or hyperlinks", () => {
-    const { doc, output, compile } = setup();
+    const { doc, anchors, compile } = setup();
     const owners: string[] = [];
     compileWordStories(
       doc,
@@ -342,7 +353,7 @@ describe("structured stories", () => {
         owners.push(owner);
         return compile(blocks);
       },
-      output,
+      anchors,
     );
     expect(owners).toEqual(["/word/footerErato1.xml"]);
   });
@@ -401,12 +412,12 @@ describe("structured sections and page layout", () => {
   });
 
   it("does not accidentally inherit the previous section's header after explicit removal", () => {
-    const { doc, output, compile } = setup();
+    const { doc, anchors, output, compile } = setup();
     compileWordStories(
       doc,
       [{ kind: "upsert", type: "header", id: "h", blocks: [block("Header")] }],
       compile,
-      output,
+      anchors,
     );
     compileWordSections(
       doc,

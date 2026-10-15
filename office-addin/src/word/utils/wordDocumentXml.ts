@@ -605,6 +605,7 @@ export function compileWordDocumentPlan(
       .map((b) => [b.list!, b.list!.slice("existing-".length)]),
   );
   const outputBlocks = new Map<string, Element>();
+  const anchorBlocks = new Map<string, Element[]>();
   const output = wordPlanOutput(plan, snapshot);
   const unwrap = (fragment: Element): Element[] =>
     fragment.namespaceURI === W &&
@@ -771,7 +772,10 @@ export function compileWordDocumentPlan(
       if (nodes.at(-1)?.localName === "tbl" && made[0]?.localName === "tbl")
         nodes.push(make(doc, "p"));
       nodes.push(...made);
-      if (made.length) outputBlocks.set(b.id, made.at(-1)!);
+      if (made.length) {
+        outputBlocks.set(b.id, made.at(-1)!);
+        anchorBlocks.set(b.id, made);
+      }
     }
     return nodes;
   };
@@ -786,7 +790,10 @@ export function compileWordDocumentPlan(
         "application/xml",
       ).documentElement;
       nodes = unwrap(fragment).map((n) => doc.importNode(n, true));
-      if (nodes.length) outputBlocks.set(source.ref, nodes.at(-1)!);
+      if (nodes.length) {
+        outputBlocks.set(source.ref, nodes.at(-1)!);
+        anchorBlocks.set(source.ref, nodes);
+      }
     } else nodes = compileBlocks([entry.block as WordPlanBlock]);
     if (
       body.lastElementChild?.localName === "tbl" &&
@@ -804,7 +811,7 @@ export function compileWordDocumentPlan(
     doc,
     plan.stories ?? [],
     compileBlocks,
-    outputBlocks,
+    anchorBlocks,
     snapshot.stories,
   );
   if (plan.sections)

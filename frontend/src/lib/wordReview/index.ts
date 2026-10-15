@@ -14,6 +14,7 @@ export * from "./wordInlineStructures";
 export * from "./wordMediaComparison";
 export * from "./wordMediaContent";
 export * from "./wordNativeContent";
+export * from "./wordNoteAnchors";
 export * from "./wordPlanDiagnostics";
 export * from "./wordPlanComments";
 export * from "./wordPlanReview";

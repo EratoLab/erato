@@ -3,6 +3,7 @@ import {
   isWordMediaElementActive,
 } from "./wordMediaComparison";
 import { nativeVisibleText } from "./wordNativeContent";
+import { placeWordNoteMarker } from "./wordNoteAnchors";
 import { wordCommentThreadRoots } from "./wordPlanComments";
 
 import type { WordPlanBlock } from "./wordDocumentPlan";
@@ -569,11 +570,6 @@ function stripModernCommentMetadata(doc: Document, comment: Element): void {
         e.remove();
   }
 }
-function storyParagraphs(root: Element): Element[] {
-  return root.namespaceURI === W && root.localName === "p"
-    ? [root]
-    : elements(root, "p");
-}
 function visibleText(root: Element): string {
   return Array.from(root.getElementsByTagNameNS(W, "*"))
     .filter(isWordMediaElementActive)
@@ -589,126 +585,22 @@ function visibleText(root: Element): string {
     .join("");
 }
 
-function markerInParagraph(
-  paragraph: Element,
-  offset: number,
-  marker: Element,
-): void {
-  const length = visibleText(paragraph).length;
-  if (!Number.isInteger(offset) || offset < 0 || offset > length)
-    throw new Error("An annotation offset is outside its paragraph.");
-  if (offset === 0) {
-    const first = Array.from(paragraph.children).find(
-      (e) => !(e.namespaceURI === W && e.localName === "pPr"),
-    );
-    paragraph.insertBefore(marker, first ?? null);
-    return;
-  }
-  let position = 0;
-  for (const run of elements(paragraph, "r")) {
-    const runText = visibleText(run);
-    if (position + runText.length < offset) {
-      position += runText.length;
-      continue;
-    }
-    const cut = offset - position;
-    if (cut === 0) {
-      run.before(marker);
-      return;
-    }
-    if (cut === runText.length) {
-      run.after(marker);
-      return;
-    }
-    if (
-      Array.from(run.children).some(
-        (e) =>
-          e.namespaceURI !== W ||
-          !["rPr", "t", "tab", "br", "cr"].includes(e.localName),
-      )
-    )
-      throw new Error("This annotation splits a non-text Word run.");
-    const left = run.cloneNode(false) as Element,
-      right = run.cloneNode(false) as Element;
-    let cursor = 0;
-    for (const e of Array.from(run.children)) {
-      if (e.localName === "rPr") {
-        left.append(e.cloneNode(true));
-        right.append(e.cloneNode(true));
-        continue;
-      }
-      const content =
-        e.localName === "t"
-          ? (e.textContent ?? "")
-          : e.localName === "tab"
-            ? "\t"
-            : "\n";
-      const boundary = Math.max(0, Math.min(content.length, cut - cursor));
-      if (boundary > 0) {
-        const copy = e.cloneNode(true) as Element;
-        if (e.localName === "t") {
-          copy.textContent = content.slice(0, boundary);
-          copy.setAttributeNS(
-            "http://www.w3.org/XML/1998/namespace",
-            "xml:space",
-            "preserve",
-          );
-        }
-        left.append(copy);
-      }
-      if (boundary < content.length) {
-        const copy = e.cloneNode(true) as Element;
-        if (e.localName === "t") {
-          copy.textContent = content.slice(boundary);
-          copy.setAttributeNS(
-            "http://www.w3.org/XML/1998/namespace",
-            "xml:space",
-            "preserve",
-          );
-        }
-        right.append(copy);
-      }
-      cursor += content.length;
-    }
-    run.replaceWith(left, marker, right);
-    return;
-  }
-  if (offset === length) paragraph.append(marker);
-  else throw new Error("An annotation anchor could not be located.");
-}
-
 function addStoryAnchor(
   doc: Document,
   story: WordStoryChange,
   nativeId: string,
-  output: ReadonlyMap<string, Element>,
+  output: ReadonlyMap<string, readonly Element[]>,
 ): void {
   const anchor = story.anchor;
   if (!anchor) throw new Error("A new note needs an anchor.");
-  const block = output.get(anchor.block);
-  const paragraphs = block ? storyParagraphs(block) : [];
-  if (!paragraphs.length)
-    throw new Error("An annotation anchor does not refer to a text block.");
-  const total = paragraphs.reduce((sum, p) => sum + visibleText(p).length, 0);
-  const start = anchor.start ?? total;
-  const end = anchor.end ?? start;
-  if (start > end || end > total)
+  const offset = anchor.start ?? anchor.end;
+  if (anchor.end !== undefined && anchor.end !== offset)
     throw new Error("An annotation anchor is outside its block.");
-  const locate = (offset: number) => {
-    let remaining = offset;
-    for (const p of paragraphs) {
-      const length = visibleText(p).length;
-      if (remaining <= length) return { p, offset: remaining };
-      remaining -= length;
-    }
-    throw new Error("An annotation anchor could not be located.");
-  };
-  const at = locate(start);
   const run = make(doc, "r"),
     reference = make(doc, `${story.type}Reference`);
   reference.setAttributeNS(W, "w:id", nativeId);
   run.append(reference);
-  markerInParagraph(at.p, at.offset, run);
+  placeWordNoteMarker(output.get(anchor.block) ?? [], offset, run);
 }
 
 /** Word drops style references absent from the inventory, so markers use only native styles. */
@@ -728,12 +620,13 @@ function storyMarkerProperties(
 /**
  * Compile typed stories into the retained package. The block callback must use
  * owner for image/hyperlink relationships instead of attaching them to the body.
+ * `output` holds every node of each output block, which a note anchor counts in.
  */
 export function compileWordStories(
   doc: Document,
   changes: readonly WordStoryChange[],
   compileBlocks: (blocks: WordPlanBlock[], owner: string) => Element[],
-  output: ReadonlyMap<string, Element>,
+  output: ReadonlyMap<string, readonly Element[]>,
   originalStories?: readonly WordStorySource[],
 ): void {
   const before = originalStories ?? extractWordStories(doc);
