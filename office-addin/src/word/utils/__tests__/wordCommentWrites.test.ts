@@ -635,6 +635,37 @@ describe.each(HOSTS)("hidden text beside a comment on %s", (which) => {
     stillHidden();
   });
 
+  it("does not read the paragraphs of a comment Erato added again before Revert or a later delete", async () => {
+    installHidden();
+    const first = await run(
+      await draftOf([
+        { op: "add", anchor: { para: 3, quote: "yankee" }, text: "Mine." },
+      ]),
+    );
+    expect(first.rows[0].status).toBe("applied");
+    let from = host.calls().length;
+    const reverted = await revertWordCommentRows(
+      [{ i: 0, step: first.rows[0].revert! }],
+      PLATFORM[which],
+      0,
+    );
+    expect(reverted.rows[0].status).toBe("reverted");
+    expect(host.calls().slice(from)).not.toContain("Paragraph.getOoxml");
+    const second = await run(
+      await draftOf(
+        [{ op: "add", anchor: { para: 1, quote: "probe" }, text: "Again." }],
+        "call-2",
+      ),
+    );
+    expect(second.rows[0].status).toBe("applied");
+    from = host.calls().length;
+    const removed = await run(
+      await draftOf([{ op: "delete", target: "ter" }], "call-3"),
+    );
+    expect(removed.rows[0].status).toBe("applied");
+    expect(host.calls().slice(from)).not.toContain("Paragraph.getOoxml");
+  });
+
   it("leaves a Revert on the thread alone once hidden text is beside it", async () => {
     installHidden();
     const { rows } = await run(

@@ -81,6 +81,11 @@ export interface WordCommentRefRegistry {
    * legacy file before one knows (O-17).
    */
   legacy: boolean | null;
+  /**
+   * String(Comment.id) of the comments Erato added in this pane session. Their paragraphs were
+   * checked for hidden text before the add, so Word for the web does not read them again.
+   */
+  readonly added: Set<string>;
 }
 
 export type WordCommentRefResolution =
@@ -101,6 +106,7 @@ export function createWordCommentRefRegistry(
     refs: new Map(),
     issued: new Map(),
     legacy: null,
+    added: new Set(),
   };
 }
 

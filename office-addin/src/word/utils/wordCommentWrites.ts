@@ -618,6 +618,7 @@ async function verifyAdds(
           code: "ANCHOR_UNPROVEN",
           commentId: id,
         };
+      registry.added.add(id);
       const newRef = draft.legacy
         ? null
         : wordCommentNewThreadRef(registry, id);
@@ -689,14 +690,18 @@ async function findThreads(
 }
 
 /**
- * Word for the web: the threads a write leaves alone because hidden text is beside them. Read in a
- * run of its own: deleting a comment in the run that listed its paragraphs' comments broke every
- * later comment read there (ERMAIN-949 gate A4). A read that fails leaves them all alone.
+ * Word for the web: the threads a write leaves alone because hidden text is beside them, read in a
+ * run of their own. Threads Erato added in this session were checked before the add and are not
+ * read again: deleting a multi-paragraph comment added in the session after reading its
+ * paragraphs' packages broke every later comment read there (ERMAIN-949 gate A4). A read that
+ * fails leaves them all alone.
  */
 async function threadsBesideHiddenText(
   host: WordHostPlatform,
-  ids: readonly string[],
+  candidates: readonly string[],
+  added: ReadonlySet<string> = new Set(),
 ): Promise<ReadonlySet<string>> {
+  const ids = candidates.filter((id) => !added.has(id));
   if (wordCommentWritesKeepHiddenText(host) || !ids.length) return new Set();
   const read = await runWordGuarded(
     (context) => wordThreadsBesideHiddenText(context, ids),
@@ -821,6 +826,7 @@ async function runResponds(
     rows
       .filter((row) => row.op !== "reply")
       .map((row) => row.thread!.commentId),
+    wordCommentRefRegistry(draft.identity).added,
   );
   const guarded = await runWordGuarded(
     async (context, guard) => {
@@ -1038,6 +1044,7 @@ async function runModifies(
     rows
       .filter((row) => row.entry!.n === 0)
       .map((row) => row.thread!.commentId),
+    wordCommentRefRegistry(draft.identity).added,
   );
   const guarded = await runWordGuarded(
     async (context, guard) => {
@@ -1222,9 +1229,10 @@ export async function revertWordCommentRows(
   const acted: { i: number; step: WordCommentRevertStep }[] = [];
   const threadOf = (step: WordCommentRevertStep) =>
     step.kind === "delete-comment" ? step.commentId : step.threadId;
+  // A delete-comment step undoes Erato's own add, whose paragraphs were checked before it.
   const onRoot = (step: WordCommentRevertStep) =>
-    step.kind !== "delete-reply" &&
-    (step.kind !== "restore-content" || step.replyId === null);
+    step.kind === "set-resolved" ||
+    (step.kind === "restore-content" && step.replyId === null);
   const besideHidden = await threadsBesideHiddenText(
     host,
     steps.filter(({ step }) => onRoot(step)).map(({ step }) => threadOf(step)),
