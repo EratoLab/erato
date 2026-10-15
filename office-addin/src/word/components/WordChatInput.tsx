@@ -401,6 +401,7 @@ export function WordChatInput({
       | "authoringDetails"
       | "completeReadIssue"
       | "authoringNote"
+      | "trackChanges"
     > & {
       readOnly?: boolean;
     }
@@ -847,6 +848,8 @@ export function WordChatInput({
           }
           const capturedIssue = build?.authoring?.issue;
           const capturedDetails = build?.authoring?.issueDetails;
+          const trackChanges =
+            !!build?.trackChanges || capturedIssue === "tracking";
           if (build) build = withWordReviewFallback(build, availableFacetIds);
           // Finalize paging limits before exposing whole-document availability.
           const authoringSnapshot = build?.authoring;
@@ -875,6 +878,7 @@ export function WordChatInput({
             authoringDetails: capturedDetails,
             completeReadIssue: authoringSnapshot?.completeReadIssue,
             authoringNote: build?.readNote,
+            trackChanges,
             readOnly: !!capturedIssue && !build?.authoring,
           });
           const actionFacet = resolveWordActionFacet({
@@ -886,7 +890,7 @@ export function WordChatInput({
             authoring: build?.authoring,
             availableFacetIds,
             availableFacetArgs,
-            trackChanges: capturedIssue === "tracking",
+            trackChanges,
             ...(comments && build && decided.plan.carrier.kind === "map"
               ? {
                   commentMap: wordCommentMapArg(
@@ -913,9 +917,7 @@ export function WordChatInput({
                   partialOrdinal: build?.authoring
                     ? null
                     : (build?.partialOrdinal ?? null),
-                  ...(capturedIssue === "tracking"
-                    ? { trackChanges: true }
-                    : {}),
+                  ...(trackChanges ? { trackChanges: true } : {}),
                 },
                 comments,
                 decided.plan.carrier,
@@ -1333,10 +1335,20 @@ export function WordChatInput({
             </Alert>
           )}
           {chipEnabled &&
+            (notice.trackChanges || notice.authoringIssue === "tracking") &&
+            !authoringRoute && (
+              <Alert type="warning">{trackingReadOnlyText()}</Alert>
+            )}
+          {chipEnabled &&
             notice.authoringIssue &&
+            !(readOnly && notice.authoringIssue === "tracking") &&
             (readOnly ? (
               <Alert type="warning">
-                {readOnlyText(notice.authoringIssue, notice.authoringDetails)}
+                {readOnlyText(
+                  notice.authoringIssue,
+                  notice.authoringDetails,
+                  notice.trackChanges,
+                )}
               </Alert>
             ) : (
               <Alert type="warning">
@@ -1465,12 +1477,25 @@ function commentBlockText(block: WordCommentBlock): string {
   });
 }
 
-function readOnlyText(issue: string, details: string[] = []): string {
-  if (issue === "tracking")
+function trackingReadOnlyText(): string {
+  return t({
+    id: "officeAddin.word.authoring.readOnlyTracking",
+    message:
+      "Track Changes is on, so Erato reads this document as if every tracked change were accepted, without seeing who changed what, and doesn't edit it.",
+  });
+}
+
+/** Why the complete file could not be read; with Track Changes on it shows below that notice. */
+function readOnlyText(
+  issue: string,
+  details: string[] = [],
+  trackChanges = false,
+): string {
+  if (issue === "too-large" && trackChanges)
     return t({
-      id: "officeAddin.word.authoring.readOnlyTracking",
+      id: "officeAddin.word.authoring.readOnlyTooLargeTracking",
       message:
-        "Track Changes is on, so Erato reads this document as if every tracked change were accepted, without seeing who changed what, and doesn't edit it.",
+        "The file is also too large for Erato to open completely, so Erato receives only the included text.",
     });
   if (issue === "too-large")
     return t({

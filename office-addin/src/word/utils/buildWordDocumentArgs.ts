@@ -36,6 +36,8 @@ export interface WordDocumentHeading {
 export interface WordDocumentBuild {
   authoring?: WordAuthoringSnapshot;
   readNote?: WordDocumentReadNote;
+  /** Track Changes was on at the read, even where the package then failed. */
+  trackChanges?: boolean;
   args: WordDocumentArgs;
   coverage: WordDocumentCoverage;
   ordinalMap: Map<number, { uniqueLocalId: string | null; text: string }>;

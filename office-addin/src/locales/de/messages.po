@@ -2752,6 +2752,11 @@ msgstr "Diese Datei ist zu groß, um sie in Erato vollständig zu öffnen. Erato
 
 #. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx
+msgid "officeAddin.word.authoring.readOnlyTooLargeTracking"
+msgstr "Die Datei ist außerdem zu groß, um sie in Erato vollständig zu öffnen. Erato erhält daher nur den eingeschlossenen Text."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordChatInput.tsx
 msgid "officeAddin.word.authoring.readOnlyTracking"
 msgstr "Die Änderungsnachverfolgung ist aktiv. Erato liest dieses Dokument daher so, als wären alle nachverfolgten Änderungen angenommen, ohne zu sehen, wer was geändert hat, und bearbeitet es nicht."
 

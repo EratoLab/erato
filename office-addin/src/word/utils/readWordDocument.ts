@@ -21,6 +21,9 @@ export type WordDocumentReadResult =
   | {
       ok: true;
       paragraphs: WordParagraphRead[];
+      /** Word's changeTrackingMode at the paragraph read, whatever becomes of the package; absent
+       * where the host cannot report it (before WordApi 1.4). */
+      tracking?: string;
       authoring?: {
         ooxml: string;
         tracking: string;
@@ -177,6 +180,7 @@ export async function readWordDocument(
 
   // The full package supersedes the body OOXML, which is then not fetched.
   const packaged = includeAuthoring && supportsWordDocumentPackage();
+  const tracked = includeAuthoring || trackingModeReadable();
   let step = "paragraph read";
   try {
     const result = await withWordTimeout(
@@ -192,7 +196,7 @@ export async function readWordDocument(
           includeAuthoring && !packaged
             ? context.document.body.getOoxml()
             : null;
-        if (includeAuthoring) context.document.load("changeTrackingMode");
+        if (tracked) context.document.load("changeTrackingMode");
         await context.sync();
 
         const ids = paragraphs.items.map((paragraph) =>
@@ -201,6 +205,9 @@ export async function readWordDocument(
         noteWordParagraphIds(ids);
         return {
           ok: true as const,
+          ...(tracked
+            ? { tracking: String(context.document.changeTrackingMode) }
+            : {}),
           ...(includeAuthoring
             ? {
                 authoring: {
@@ -266,6 +273,7 @@ export async function readWordDocument(
         return {
           ok: true,
           paragraphs: result.paragraphs,
+          tracking: result.tracking,
           authoringUnavailable: authoringUnavailable(error, step),
         };
       }
@@ -273,6 +281,19 @@ export async function readWordDocument(
     return result;
   } catch (error) {
     return { ok: false, error: `${step}: ${wordErrorText(error)}` };
+  }
+}
+
+function trackingModeReadable(): boolean {
+  try {
+    return (
+      globalThis.Office?.context?.requirements?.isSetSupported(
+        "WordApi",
+        "1.4",
+      ) === true
+    );
+  } catch {
+    return false;
   }
 }
 

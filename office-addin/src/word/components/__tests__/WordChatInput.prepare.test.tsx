@@ -30,6 +30,7 @@ const host = vi.hoisted(() => {
   };
   return {
     advertised: [] as string[],
+    facetInputs: [] as { trackChanges?: boolean }[],
     fileIds: undefined as string[] | undefined,
     readyPreview,
     preview: readyPreview,
@@ -114,15 +115,18 @@ vi.mock("../../utils/wordActionFacet", async (importOriginal) => ({
   resolveWordActionFacet: (input: {
     documentArgs: unknown;
     authoring?: { issue?: string };
-  }) =>
-    input.documentArgs === null
+    trackChanges?: boolean;
+  }) => {
+    host.facetInputs.push(input);
+    return input.documentArgs === null
       ? undefined
       : {
           id: input.authoring
             ? "word_document_authoring"
             : "word_document_review",
           args: { authoring_status: input.authoring?.issue ?? "available" },
-        },
+        };
+  },
 }));
 
 type SendCall = Parameters<AddinChatInputRenderProps["onSendMessage"]>;
@@ -212,6 +216,7 @@ describe("WordChatInput prepared send", () => {
   beforeEach(() => {
     i18n.activate("en");
     host.advertised = ["word_document_review", "word_document_authoring"];
+    host.facetInputs = [];
     host.fileIds = undefined;
     host.preview = { ...host.readyPreview };
     host.capture.mockReset();
@@ -713,6 +718,79 @@ describe("WordChatInput prepared send", () => {
     await settle(startPreparation());
 
     expect(staged.at(-1)).not.toHaveProperty("trackChanges");
+  });
+
+  const TRACKING_NOTICE =
+    "Track Changes is on, so Erato reads this document as if every tracked change were accepted, without seeing who changed what, and doesn't edit it.";
+  it.each([
+    [
+      "too-large",
+      "package-too-large",
+      "The file is also too large for Erato to open completely, so Erato receives only the included text.",
+      "This file is too large for Erato to open completely. Erato receives only the included text and can reword it, but not change its structure or formatting.",
+    ],
+    [
+      "unavailable",
+      "package-timeout",
+      "Word did not hand over the complete document, so Erato can read its text but not edit it. Send again to retry.",
+      "Word did not hand over the complete document, so Erato can read its text but not edit it. Send again to retry.",
+    ],
+    [
+      "unavailable",
+      "package-failed",
+      "Word did not hand over the complete document, so Erato can read its text but not edit it. Send again to retry.",
+      "Word did not hand over the complete document, so Erato can read its text but not edit it. Send again to retry.",
+    ],
+    [
+      "unavailable",
+      "package-unsupported",
+      "Erato cannot edit this document's file structure, so it can only read its text.",
+      "Erato cannot edit this document's file structure, so it can only read its text.",
+    ],
+  ])(
+    "keeps Track Changes when the package fails (%s, %s)",
+    async (issue, detail, trackedNotice, untrackedNotice) => {
+      const failed = authoringBuild({ issue, issueDetails: [detail] });
+      host.capture.mockResolvedValue({ ...failed, trackChanges: true });
+      renderInput();
+      send();
+      const tracked = await settle(startPreparation());
+
+      expect(tracked?.actionFacet?.id).toBe("word_document_review");
+      expect(host.facetInputs.at(-1)?.trackChanges).toBe(true);
+      expect(staged.at(-1)).toMatchObject({ trackChanges: true });
+      expect(
+        screen.getAllByRole("alert").map((alert) => alert.textContent),
+      ).toEqual([TRACKING_NOTICE, trackedNotice]);
+
+      host.capture.mockResolvedValue(failed);
+      send();
+      const untracked = await settle(startPreparation());
+
+      expect(untracked?.actionFacet?.id).toBe("word_document_review");
+      expect(host.facetInputs.at(-1)?.trackChanges).toBe(false);
+      expect(staged.at(-1)).not.toHaveProperty("trackChanges");
+      expect(
+        screen.getAllByRole("alert").map((alert) => alert.textContent),
+      ).toEqual([untrackedNotice]);
+    },
+  );
+
+  it("says Track Changes is on for a review read without authoring", async () => {
+    host.advertised = ["word_document_review"];
+    host.capture.mockResolvedValue({
+      ...authoringBuild(),
+      authoring: undefined,
+      trackChanges: true,
+    });
+    renderInput();
+    send();
+    const prepared = await settle(startPreparation());
+
+    expect(prepared?.actionFacet?.id).toBe("word_document_review");
+    expect(host.facetInputs.at(-1)?.trackChanges).toBe(true);
+    expect(staged.at(-1)).toMatchObject({ trackChanges: true });
+    expect(screen.getByRole("alert")).toHaveTextContent(TRACKING_NOTICE);
   });
 
   it("keeps authoring with its issue when the review facet is not advertised", async () => {

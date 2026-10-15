@@ -273,7 +273,8 @@ anchored-content: they stay as they are until the user accepts or rejects those
 changes in Word, and the read contract says so while tracking is on.
 Where authoring cannot read under Track Changes, review sends the accepted text
 instead (the same in every markup view, without change markers) and paragraph
-edits are not offered. `word.apply_edits` writes nothing while Track Changes is
+edits are not offered. Track Changes is read with the paragraphs, so this also
+holds when the package capture fails or authoring is not offered. `word.apply_edits` writes nothing while Track Changes is
 on, and refuses any paragraph whose OOXML holds a pending revision, naming its
 authors: a Replace would accept or absorb them, and Office.js cannot tell the
 user's own revisions from others'. Every target is checked before anything is

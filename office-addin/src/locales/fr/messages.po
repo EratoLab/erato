@@ -2752,6 +2752,11 @@ msgstr "Ce fichier est trop volumineux pour être ouvert entièrement par Erato.
 
 #. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx
+msgid "officeAddin.word.authoring.readOnlyTooLargeTracking"
+msgstr "De plus, le fichier est trop volumineux pour être ouvert entièrement par Erato : Erato ne reçoit donc que le texte inclus."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordChatInput.tsx
 msgid "officeAddin.word.authoring.readOnlyTracking"
 msgstr "Le suivi des modifications est activé : Erato lit donc ce document comme si toutes les modifications suivies étaient acceptées, sans voir qui a modifié quoi, et ne le modifie pas."
 
