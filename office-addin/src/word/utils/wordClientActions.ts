@@ -1,13 +1,21 @@
 import {
   parseWordEdits,
+  WORD_COMMENT_THREAD_FACET_ID,
   WORD_EDITS_FENCE,
   WORD_INSERT_FENCE,
   WORD_PLAN_FENCE,
 } from "@erato/frontend/word-review";
 import { t } from "@lingui/core/macro";
 
+import {
+  WORD_AUTHORING_FACET_ID,
+  WORD_DOCUMENT_REVIEW_FACET_ID,
+  WORD_SELECTION_FACET_ID,
+} from "./wordActionFacet";
 import { applyWordDocumentPlan } from "./wordApplyDocumentPlan";
 import { applyWordEdits } from "./wordApplyEdits";
+import { wordCommentDraft } from "./wordCommentSubmission";
+import { executeWordCommentDraft } from "./wordCommentWrites";
 import { insertWordTextAtCursor } from "./wordInsertText";
 import { replaceWordSelection } from "./wordReplaceSelection";
 import { WORD_REPLACE_FENCE } from "./wordSelectionEdit";
@@ -15,6 +23,10 @@ import { extractProposedClientAction as extractProposedClientActionFor } from ".
 
 import type { WordDocumentApplyResult } from "./wordApplyDocumentPlan";
 import type { WordApplyStage } from "./wordApplyProgress";
+import type {
+  WordCommentExecuteOptions,
+  WordCommentRun,
+} from "./wordCommentWrites";
 import type { WordReplaceSelectionResult } from "./wordReplaceSelection";
 import type { WordReviewAnchor } from "./wordReviewLocation";
 import type { ContentPart } from "@erato/frontend/library";
@@ -36,7 +48,17 @@ export type WordClientAction =
   | "word.apply_edits"
   | "word.insert_at_cursor"
   | "word.apply_document_plan"
-  | "word.replace_selection";
+  | "word.replace_selection"
+  | "word.add_comments"
+  | "word.respond_to_comments"
+  | "word.modify_comments";
+
+/** Card keys for accepted comment submissions; the model never writes these fences. */
+export const WORD_COMMENT_CARD_FENCES = {
+  "word.add_comments": "erato-word-comments-add",
+  "word.respond_to_comments": "erato-word-comments-respond",
+  "word.modify_comments": "erato-word-comments-modify",
+} as const;
 
 export interface WordClientActionContext {
   fenceContent: string;
@@ -47,6 +69,8 @@ export interface WordClientActionContext {
   onStage?: (stage: WordApplyStage) => void;
   /** Document plans: the user confirmed a whole-document write where the host's policy asks first. */
   importConfirmed?: boolean;
+  /** Comment changes: the rows the user kept and the author mode the card offered. */
+  comments?: Omit<WordCommentExecuteOptions, "host">;
 }
 
 export interface WordClientActionRun {
@@ -59,6 +83,7 @@ export interface WordClientActionRun {
   documentPlanResult?: WordDocumentApplyResult;
   resultAnchors?: ReadonlyMap<number, WordReviewAnchor>;
   selectionResult?: WordReplaceSelectionResult;
+  commentResult?: WordCommentRun;
 }
 
 export interface WordClientActionEntry {
@@ -191,6 +216,77 @@ export const WORD_CLIENT_ACTIONS: ReadonlyMap<
       },
     },
   ],
+  ...(
+    [
+      [
+        "word.add_comments",
+        "word-comments-add",
+        () =>
+          t({
+            id: "officeAddin.word.clientActions.addComments",
+            message: "Add comments",
+          }),
+      ],
+      [
+        "word.respond_to_comments",
+        "word-comments-respond",
+        () =>
+          t({
+            id: "officeAddin.word.clientActions.respondToComments",
+            message: "Reply to, resolve or reopen comments",
+          }),
+      ],
+      [
+        "word.modify_comments",
+        "word-comments-modify",
+        () =>
+          t({
+            id: "officeAddin.word.clientActions.modifyComments",
+            message: "Edit or delete comments",
+          }),
+      ],
+    ] as const
+  ).map(
+    ([action, promptScope, displayLabel]): [
+      WordClientAction,
+      WordClientActionEntry,
+    ] => [
+      action,
+      {
+        action,
+        facetIds: [
+          WORD_COMMENT_THREAD_FACET_ID,
+          WORD_SELECTION_FACET_ID,
+          WORD_DOCUMENT_REVIEW_FACET_ID,
+          WORD_AUTHORING_FACET_ID,
+        ],
+        fenceLanguage: WORD_COMMENT_CARD_FENCES[action],
+        promptScope,
+        displayLabel,
+        // The draft accepted for this card, by draft_id; the model's arguments never reach here.
+        execute: async ({ fenceContent, capture, comments }) => {
+          const draft = wordCommentDraft(fenceContent);
+          if (
+            !draft ||
+            draft.action !== action ||
+            draft.identity !== capture.identity ||
+            !comments
+          )
+            return { ok: false, outcomes: [], snapshotOoxml: null };
+          const run = await executeWordCommentDraft(draft, comments);
+          return {
+            ok: run.rows.some(
+              (row) =>
+                row.status === "applied" || row.status === "applied_as_user",
+            ),
+            outcomes: [],
+            snapshotOoxml: null,
+            commentResult: run,
+          };
+        },
+      },
+    ],
+  ),
 ]);
 
 const REGISTRY_ORDER = [...WORD_CLIENT_ACTIONS.keys()];

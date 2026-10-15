@@ -344,6 +344,24 @@ export function issueWordCommentRefs(
   };
 }
 
+/**
+ * The ref a thread Erato just added goes by, issued as the next read would issue it; null in a
+ * legacy file, whose refs come from the whole thread's content.
+ */
+export function wordCommentNewThreadRef(
+  registry: WordCommentRefRegistry,
+  commentId: string,
+): string | null {
+  if (registry.legacy !== false) return null;
+  const key = `${ID_KEY}${commentId}`;
+  const known = registry.refs.get(key);
+  if (known) return known;
+  const ref = issue(registry, commentId, key);
+  registry.issued.set(ref, key);
+  registry.refs.set(key, ref);
+  return ref;
+}
+
 /** "t7k" names the thread; "t7k.0" its comment, "t7k.2" its second reply. */
 export function resolveWordCommentRef(
   refs: WordCommentCaptureRefs,
