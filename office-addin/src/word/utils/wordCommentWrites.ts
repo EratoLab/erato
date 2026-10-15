@@ -688,6 +688,23 @@ async function findThreads(
   return found;
 }
 
+/**
+ * Word for the web: the threads a write leaves alone because hidden text is beside them. Read in a
+ * run of its own: deleting a comment in the run that listed its paragraphs' comments broke every
+ * later comment read there (ERMAIN-949 gate A4). A read that fails leaves them all alone.
+ */
+async function threadsBesideHiddenText(
+  host: WordHostPlatform,
+  ids: readonly string[],
+): Promise<ReadonlySet<string>> {
+  if (wordCommentWritesKeepHiddenText(host) || !ids.length) return new Set();
+  const read = await runWordGuarded(
+    (context) => wordThreadsBesideHiddenText(context, ids),
+    { timeoutMs: WORD_COMMENT_RUN_TIMEOUT_MS },
+  );
+  return read.outcome === "ok" && read.value ? read.value : new Set(ids);
+}
+
 const sameEntry = (
   live: { content: string; authorName: string },
   print: WordCommentEntryFingerprint,
@@ -799,16 +816,14 @@ async function runResponds(
 ): Promise<WordCommentRun> {
   const host = options.host ?? wordHostPlatform();
   const decisions = new Map<number, Decision>();
+  const besideHidden = await threadsBesideHiddenText(
+    host,
+    rows
+      .filter((row) => row.op !== "reply")
+      .map((row) => row.thread!.commentId),
+  );
   const guarded = await runWordGuarded(
     async (context, guard) => {
-      const besideHidden = wordCommentWritesKeepHiddenText(host)
-        ? new Set<string>()
-        : await wordThreadsBesideHiddenText(
-            context,
-            rows
-              .filter((row) => row.op !== "reply")
-              .map((row) => row.thread!.commentId),
-          );
       const found = await findThreads(
         context,
         rows.map((row) => row.thread!.commentId),
@@ -1018,16 +1033,14 @@ async function runModifies(
       commentId: row.entry!.fingerprint.id,
     });
   const writes: { row: WordCommentDraftRow; thrown?: boolean }[] = [];
+  const besideHidden = await threadsBesideHiddenText(
+    host,
+    rows
+      .filter((row) => row.entry!.n === 0)
+      .map((row) => row.thread!.commentId),
+  );
   const guarded = await runWordGuarded(
     async (context, guard) => {
-      const besideHidden = wordCommentWritesKeepHiddenText(host)
-        ? new Set<string>()
-        : await wordThreadsBesideHiddenText(
-            context,
-            rows
-              .filter((row) => row.entry!.n === 0)
-              .map((row) => row.thread!.commentId),
-          );
       const found = await findThreads(
         context,
         rows.map((row) => row.thread!.commentId),
@@ -1212,16 +1225,12 @@ export async function revertWordCommentRows(
   const onRoot = (step: WordCommentRevertStep) =>
     step.kind !== "delete-reply" &&
     (step.kind !== "restore-content" || step.replyId === null);
+  const besideHidden = await threadsBesideHiddenText(
+    host,
+    steps.filter(({ step }) => onRoot(step)).map(({ step }) => threadOf(step)),
+  );
   const guarded = await runWordGuarded(
     async (context, guard) => {
-      const besideHidden = wordCommentWritesKeepHiddenText(host)
-        ? new Set<string>()
-        : await wordThreadsBesideHiddenText(
-            context,
-            steps
-              .filter(({ step }) => onRoot(step))
-              .map(({ step }) => threadOf(step)),
-          );
       const found = await findThreads(
         context,
         steps.map(({ step }) => threadOf(step)),
