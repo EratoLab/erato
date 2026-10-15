@@ -231,7 +231,10 @@ test(
     // the return has to re-attach via resumestream and replay chat_created +
     // user_message_saved, which is what puts the user message back. Clicking a
     // different existing chat instead would preserve the socket and never resume.
-    await page.getByRole("button", { name: "New Chat" }).click();
+    await page
+      .getByRole("link", { name: "New Chat", exact: true })
+      .filter({ has: page.locator('[data-ui="sidebar-new-chat-item"]') })
+      .click();
     await expect(page).toHaveURL(/\/chat\/new$/);
 
     // Register before the row click triggers the resume.
@@ -389,7 +392,10 @@ test(
       // Starting a new chat abandons the finished-but-unlisted chat. Its
       // placeholder has to be cleared here or it lingers as a ghost row that
       // nothing else would ever remove.
-      await page.getByRole("button", { name: "New Chat" }).click();
+      await page
+        .getByRole("link", { name: "New Chat", exact: true })
+        .filter({ has: page.locator('[data-ui="sidebar-new-chat-item"]') })
+        .click();
 
       await expect(row).toHaveCount(0);
       // The exclusion is still in force, so a late list response cannot be what

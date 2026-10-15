@@ -275,6 +275,9 @@ export const NewChatItem = memo<{
   return (
     <SidebarNavigationItem
       label={t`New Chat`}
+      // eslint-disable-next-line lingui/no-unlocalized-strings -- Internal route path
+      href="/chat/new"
+      data-ui="sidebar-new-chat-item"
       icon={
         <ResolvedIcon
           iconId={newChatIconId}
