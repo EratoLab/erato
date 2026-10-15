@@ -307,10 +307,10 @@ describe("WordCommentChangesCard", () => {
     });
     const row = within(rows()[0]);
     expect(
-      row.getByText('Maya Krüger: "T1 root" · open · 1 replies'),
+      row.getByText('Maya Krüger: "T1 root" · open · 1 reply'),
     ).toBeInTheDocument();
     expect(
-      row.getByText("Also deletes 1 replies by Jonas Weber."),
+      row.getByText("Also deletes 1 reply by Jonas Weber."),
     ).toBeInTheDocument();
     expect(row.getByText("Erato cannot undo this.")).toBeInTheDocument();
     expect(row.getByText(/Resolving it keeps their words/)).toBeInTheDocument();

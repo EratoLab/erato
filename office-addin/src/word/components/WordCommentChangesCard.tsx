@@ -10,9 +10,10 @@ import {
   WordReviewCard,
   WordReviewGenerating,
   WordReviewHeader,
+  wordShowInWordLabel,
 } from "@erato/frontend/library";
 import { WORD_COMMENT_OP_META } from "@erato/frontend/word-review";
-import { t } from "@lingui/core/macro";
+import { plural, t } from "@lingui/core/macro";
 import { useCallback, useEffect, useId, useMemo, useState } from "react";
 
 import {
@@ -80,15 +81,10 @@ function titleOf(draft: WordCommentDraft): string {
   const n = draft.rows.length;
   switch (draft.action) {
     case "word.add_comments":
-      return n === 1
-        ? t({
-            id: "officeAddin.word.comments.title.addOne",
-            message: "Add a comment",
-          })
-        : t({
-            id: "officeAddin.word.comments.title.add",
-            message: `Add ${n} comments`,
-          });
+      return t({
+        id: "officeAddin.word.comments.title.add",
+        message: plural(n, { one: "Add a comment", other: "Add # comments" }),
+      });
     case "word.respond_to_comments":
       return t({
         id: "officeAddin.word.comments.title.respond",
@@ -356,7 +352,7 @@ function attributionOf(
         })
       : t({
           id: "officeAddin.word.comments.attribution.editOwn",
-          message: `Word keeps showing ${you} as the author.`,
+          message: "Word keeps showing you as the author.",
         });
   }
   return row.labelled
@@ -369,6 +365,9 @@ function attributionOf(
         message: `Word will show this as written by ${you}.`,
       });
 }
+
+const replyAuthors = (replies: readonly { author: string }[]) =>
+  [...new Set(replies.map((reply) => reply.author))].join(", ");
 
 const isOwn = (email: string | null, principal: string | null) =>
   !!email &&
@@ -748,24 +747,20 @@ export function WordCommentChangesCard({
     : wordBlockedReasonText(gate.reason);
   const applyLabel =
     draft.action === "word.add_comments"
-      ? count === 1
-        ? t({
-            id: "officeAddin.word.comments.apply.addOne",
-            message: "Add 1 comment",
-          })
-        : t({
-            id: "officeAddin.word.comments.apply.add",
-            message: `Add ${count} comments`,
-          })
-      : count === 1
-        ? t({
-            id: "officeAddin.word.comments.apply.one",
-            message: "Apply 1 change",
-          })
-        : t({
-            id: "officeAddin.word.comments.apply.many",
-            message: `Apply ${count} changes`,
-          });
+      ? t({
+          id: "officeAddin.word.comments.apply.add",
+          message: plural(count, {
+            one: "Add # comment",
+            other: "Add # comments",
+          }),
+        })
+      : t({
+          id: "officeAddin.word.comments.apply.change",
+          message: plural(count, {
+            one: "Apply # change",
+            other: "Apply # changes",
+          }),
+        });
   const failedRows = cardState.rows
     .filter((row) => row.status === "failed")
     .map((row) => row.i);
@@ -1036,6 +1031,7 @@ export function WordCommentChangesCard({
             const replies = thread?.replies ?? [];
             const others =
               row.op === "delete" && row.entry?.n === 0 ? replies : [];
+            const authors = replyAuthors(others);
             const notMine =
               !!row.thread &&
               !isOwn(row.thread.fingerprint.email, profile?.email ?? null);
@@ -1072,7 +1068,7 @@ export function WordCommentChangesCard({
                       message: `${target.author}: "${excerpt(target.content)}"`,
                     })}
                     {thread && row.op !== "edit"
-                      ? ` · ${thread.resolved ? t({ id: "officeAddin.word.comments.resolved", message: "resolved" }) : t({ id: "officeAddin.word.comments.open", message: "open" })} · ${t({ id: "officeAddin.word.comments.replyCount", message: `${replies.length} replies` })}`
+                      ? ` · ${thread.resolved ? t({ id: "officeAddin.word.comments.resolved", message: "resolved" }) : t({ id: "officeAddin.word.comments.open", message: "open" })} · ${t({ id: "officeAddin.word.comments.replyCount", message: plural(replies.length, { one: "# reply", other: "# replies" }) })}`
                       : ""}
                   </p>
                 )}
@@ -1080,7 +1076,10 @@ export function WordCommentChangesCard({
                   <p className="word-review__hint">
                     {t({
                       id: "officeAddin.word.comments.deleteReplies",
-                      message: `Also deletes ${others.length} replies by ${[...new Set(others.map((r) => r.author))].join(", ")}.`,
+                      message: plural(others.length, {
+                        one: `Also deletes # reply by ${authors}.`,
+                        other: `Also deletes # replies by ${authors}.`,
+                      }),
                     })}
                   </p>
                 )}
@@ -1164,10 +1163,7 @@ export function WordCommentChangesCard({
                           id: "officeAddin.word.comments.showPassage",
                           message: "Show passage",
                         })
-                      : t({
-                          id: "officeAddin.word.review.showInWord",
-                          message: "Show in Word",
-                        })}
+                      : wordShowInWordLabel()}
                   </Button>
                 </div>
               </li>
