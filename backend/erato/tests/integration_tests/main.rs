@@ -122,28 +122,34 @@ async fn test_app_state_internal(
 
     // Initialize file contents cache with MB-based weigher
     let file_contents_cache = moka::future::Cache::builder()
-        .weigher(|_key: &FileCacheKey, value: &String| -> u32 {
-            // Weight by string byte length
-            value.len().try_into().unwrap_or(u32::MAX)
-        })
+        .weigher(
+            |_key: &FileCacheKey, value: &erato::metrics::owned::Cached<String>| -> u32 {
+                // Weight by string byte length
+                value.len().try_into().unwrap_or(u32::MAX)
+            },
+        )
         .max_capacity(app_config.caches.file_contents_cache_mb * 1024 * 1024)
         .build();
 
     // Initialize file bytes cache with MB-based weigher
     let file_bytes_cache = moka::future::Cache::builder()
-        .weigher(|_key: &FileCacheKey, value: &Vec<u8>| -> u32 {
-            // Weight by byte vector length
-            value.len().try_into().unwrap_or(u32::MAX)
-        })
+        .weigher(
+            |_key: &FileCacheKey, value: &erato::metrics::owned::Cached<Vec<u8>>| -> u32 {
+                // Weight by byte vector length
+                value.len().try_into().unwrap_or(u32::MAX)
+            },
+        )
         .max_capacity(app_config.caches.file_bytes_cache_mb * 1024 * 1024)
         .build();
 
     // Initialize token count cache with MB-based weigher
     let token_count_cache = moka::future::Cache::builder()
-        .weigher(|key: &String, _value: &usize| -> u32 {
-            // Weight by key (content) size since that's the bulk of the data
-            key.len().try_into().unwrap_or(u32::MAX)
-        })
+        .weigher(
+            |key: &String, _value: &erato::metrics::owned::Cached<usize>| -> u32 {
+                // Weight by key (content) size since that's the bulk of the data
+                key.len().try_into().unwrap_or(u32::MAX)
+            },
+        )
         .max_capacity(app_config.caches.token_count_cache_mb * 1024 * 1024)
         .build();
 
@@ -195,6 +201,7 @@ async fn test_app_state_internal(
         .transpose()
         .unwrap();
     let app_state = AppState {
+        memory_reservation: None,
         client_operations: erato::services::client_operations::registry(
             &app_config,
             local_delegation_signer.as_ref(),

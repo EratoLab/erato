@@ -142,7 +142,7 @@ enum FrontendKind {
     OfficeAddin,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, erato_memory::HeapSize)]
 pub struct ServedFrontend {
     pub bundle_path: String,
     pub environment: FrontedEnvironment,
@@ -159,7 +159,7 @@ pub struct ServedFrontend {
     pub import_map_json: Option<String>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, erato_memory::HeapSize)]
 pub struct FrontendRegistry {
     frontends: Vec<ServedFrontend>,
     translations: TranslationDistribution,
@@ -1315,6 +1315,18 @@ pub mod axum {
             insert_content_security_policy(res.headers_mut(), content_security_policy.as_ref());
 
             Ok(res)
+        }
+    }
+}
+
+impl erato_memory::HeapSize for FrontedEnvironment {
+    fn heap_size(&self, c: &mut erato_memory::Context) {
+        c.estimated(
+            self.additional_environment.iter().count() * std::mem::size_of::<(String, Value)>(),
+        );
+        for (key, value) in self.additional_environment.iter() {
+            key.heap_size(c);
+            value.heap_size(c);
         }
     }
 }

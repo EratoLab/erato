@@ -1586,8 +1586,12 @@ impl FileProcessor for XbergProcessor {
         mime_type: Option<&str>,
     ) -> Result<String, Report> {
         let mime_type = mime_type.map(str::to_owned);
+        let input_payload =
+            crate::metrics::memory::parser_input_capacity(file_bytes.len(), file_bytes.capacity());
         Ok(
-            tokio::task::spawn_blocking(move || -> Result<String, Report> {
+            tokio::task::spawn_blocking(crate::metrics::components::blocking(crate::metrics::components::Component::FileParser, move || -> Result<String, Report> {
+                // Keep accounting with the buffer when the awaiting request is cancelled.
+                let _input_payload = input_payload;
                 let total_timer = StepTimer::start("file_processor.parse_file.total");
                 let input_len = file_bytes.len();
                 let provided_mime_type = mime_type.as_deref().map(str::to_string);
@@ -1914,7 +1918,7 @@ impl FileProcessor for XbergProcessor {
                     "file processing finished"
                 );
                 Ok(content)
-            })
+            }))
             .in_current_span()
             .await??,
         )

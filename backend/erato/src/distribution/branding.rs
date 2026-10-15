@@ -9,7 +9,7 @@ use super::frontend_bundles::{
 };
 use crate::config::AppConfig;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, erato_memory::HeapSize)]
 pub struct BrandingAssets {
     frontend: erato_config::config::FrontendConfig,
     addin: erato_config::config::MsOfficeAddinConfig,

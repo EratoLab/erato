@@ -105,6 +105,27 @@ pub(crate) async fn get_file_bytes_cached<'a>(
     file_storage_path: &str,
     sharepoint_ctx: Option<&SharepointContext<'a>>,
 ) -> Result<Vec<u8>, Report> {
+    crate::metrics::components::scope(
+        crate::metrics::components::Component::FileBytes,
+        get_file_bytes_cached_memory_inner(
+            app_state,
+            cache_key,
+            file_storage,
+            file_storage_path,
+            sharepoint_ctx,
+        ),
+    )
+    .await
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn get_file_bytes_cached_memory_inner<'a>(
+    app_state: &AppState,
+    cache_key: &FileCacheKey,
+    file_storage: &FileStorage,
+    file_storage_path: &str,
+    sharepoint_ctx: Option<&SharepointContext<'a>>,
+) -> Result<Vec<u8>, Report> {
     let span = tracing::Span::current();
 
     let result = app_state
@@ -137,13 +158,17 @@ pub(crate) async fn get_file_bytes_cached<'a>(
                 "File bytes read from storage and cached"
             );
 
-            Ok::<_, Report>(file_bytes)
+            Ok::<_, Report>(crate::metrics::owned::Cached::with_key(
+                "app_state.file_bytes_cache.values",
+                file_bytes,
+                cache_key,
+            ))
         })
         .await
         .map_err(|arc_err| Arc::try_unwrap(arc_err).unwrap_or_else(|arc| eyre::eyre!("{}", arc)))?;
 
     span.record("file_bytes_length", result.len());
-    Ok(result)
+    Ok((*result).clone())
 }
 
 /// Get parsed text file contents from cache or fetch/parse
@@ -182,6 +207,31 @@ pub async fn get_file_contents_cached<'a>(
 }
 
 async fn get_file_contents_cached_with_mime_type<'a>(
+    app_state: &AppState,
+    cache_key: &FileCacheKey,
+    file_storage: &FileStorage,
+    file_storage_path: &str,
+    filename: &str,
+    sharepoint_ctx: Option<&SharepointContext<'a>>,
+    detected_mime_type: Option<&str>,
+) -> Result<String, Report> {
+    crate::metrics::components::scope(
+        crate::metrics::components::Component::FileText,
+        get_file_contents_cached_with_mime_type_memory_inner(
+            app_state,
+            cache_key,
+            file_storage,
+            file_storage_path,
+            filename,
+            sharepoint_ctx,
+            detected_mime_type,
+        ),
+    )
+    .await
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn get_file_contents_cached_with_mime_type_memory_inner<'a>(
     app_state: &AppState,
     cache_key: &FileCacheKey,
     file_storage: &FileStorage,
@@ -245,13 +295,17 @@ async fn get_file_contents_cached_with_mime_type<'a>(
                 "File parsed and cached"
             );
 
-            Ok::<_, Report>(content)
+            Ok::<_, Report>(crate::metrics::owned::Cached::with_key(
+                "app_state.file_contents_cache.values",
+                content,
+                cache_key,
+            ))
         })
         .await
         .map_err(|arc_err| Arc::try_unwrap(arc_err).unwrap_or_else(|arc| eyre::eyre!("{}", arc)))?;
 
     span.record("content_length", result.len());
-    Ok(result)
+    Ok((*result).clone())
 }
 
 async fn get_file_cached_naive<'a>(
@@ -577,11 +631,24 @@ pub async fn get_token_count_cached(app_state: &AppState, content: &str) -> Resu
 
             // Calculate token count
             let content_owned = content.to_string();
-            let token_count = tokio::task::spawn_blocking(move || {
-                let bpe = o200k_base()
+            let input_payload = crate::metrics::memory::tokenizer_input_capacity(
+                content_owned.len(),
+                content_owned.capacity(),
+            );
+            let token_count = tokio::task::spawn_blocking(crate::metrics::components::blocking(
+                crate::metrics::components::Component::TokenizerWork,
+                move || {
+                    let _input_payload = input_payload;
+                    let bpe = crate::metrics::components::sync(
+                        crate::metrics::components::Component::TokenizerState,
+                        o200k_base,
+                    )
                     .map_err(|err| eyre::eyre!("Failed to initialize tokenizer: {}", err))?;
-                Ok::<_, Report>(bpe.encode_with_special_tokens(&content_owned).len())
-            })
+                    let bpe =
+                        crate::metrics::owned::Tokenizer::o200k_base("jobs.tokenizer.state", bpe);
+                    Ok::<_, Report>(bpe.encode_with_special_tokens(&content_owned).len())
+                },
+            ))
             .instrument(tracing::trace_span!("tokenize_content"))
             .await
             .wrap_err("Tokenization task panicked")??;
@@ -592,7 +659,11 @@ pub async fn get_token_count_cached(app_state: &AppState, content: &str) -> Resu
                 "Token count calculated and cached"
             );
 
-            Ok::<_, Report>(token_count)
+            Ok::<_, Report>(crate::metrics::owned::Cached::with_string_key(
+                "app_state.token_count_cache.values",
+                token_count,
+                content,
+            ))
         })
         .await
         .map_err(|arc_err| {
@@ -600,8 +671,8 @@ pub async fn get_token_count_cached(app_state: &AppState, content: &str) -> Resu
             Arc::try_unwrap(arc_err).unwrap_or_else(|arc| eyre::eyre!("{}", arc))
         })?;
 
-    span.record("token_count", token_count);
-    Ok(token_count)
+    span.record("token_count", *token_count);
+    Ok(*token_count)
 }
 
 /// Process a single file and return its contents (with caching).

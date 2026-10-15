@@ -24,7 +24,7 @@ const DEFAULT_TTL: Duration = Duration::from_secs(30);
 const MAX_TTL: Duration = Duration::from_secs(24 * 60 * 60);
 const MAX_PARTITIONS: usize = 512;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, erato_memory::HeapSize)]
 pub(super) struct RequestError {
     pub status: Option<u16>,
     code: Option<i64>,
@@ -127,7 +127,16 @@ struct Snapshot {
     expires: Instant,
 }
 
-#[derive(Debug, Default)]
+impl erato_memory::HeapSize for Snapshot {
+    fn heap_size(&self, c: &mut erato_memory::Context) {
+        c.capacity(self.tools.capacity() * std::mem::size_of::<Tool>());
+        for tool in &self.tools {
+            c.measure(&crate::metrics::owned::ToolView(tool));
+        }
+    }
+}
+
+#[derive(Debug, Default, erato_memory::HeapSize)]
 struct Partition {
     mode: Option<(bool, Instant)>,
     tools: Option<Snapshot>,
@@ -135,19 +144,23 @@ struct Partition {
     denied: bool,
 }
 
-#[derive(Debug)]
+#[derive(Debug, erato_memory::HeapSize)]
 pub(super) struct HttpServer {
     pub config: McpServerConfig,
+    #[heap_size(opaque)]
     client: reqwest::Client,
     partitions: Mutex<HashMap<[u8; 32], Arc<Mutex<Partition>>>>,
     public_tools: Mutex<Option<Snapshot>>,
 }
 
 // Headers never enter Debug output; the cache identity is an opaque digest.
+#[derive(erato_memory::HeapSize)]
 pub(super) struct HttpRequest {
     server: Arc<HttpServer>,
     headers: HeaderMap,
     partition: Arc<Mutex<Partition>>,
+    #[heap_size(skip)]
+    _memory: Option<crate::metrics::owned::Reservation>,
 }
 
 impl HttpServer {
@@ -190,11 +203,19 @@ impl HttpServer {
             }
         }
         let partition = partitions.entry(key).or_default().clone();
-        Ok(HttpRequest {
+        let mut request = HttpRequest {
             server: self.clone(),
             headers,
             partition,
-        })
+            _memory: None,
+        };
+        if crate::metrics::owned::enabled() {
+            request._memory = Some(crate::metrics::owned::Reservation::measured(
+                "requests.mcp.stateless",
+                &request,
+            ));
+        }
+        Ok(request)
     }
 }
 

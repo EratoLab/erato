@@ -41,7 +41,7 @@ enum Kind {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Deserialize)]
 struct Key(Kind, Uuid);
 
-#[derive(Debug, Clone, Serialize, FromQueryResult)]
+#[derive(Debug, Clone, Serialize, FromQueryResult, erato_memory::HeapSize)]
 struct ChatFacts {
     id: Uuid,
     #[serde(rename = "owner_id")]
@@ -57,24 +57,24 @@ impl From<&chats::Model> for ChatFacts {
         }
     }
 }
-#[derive(Debug, Clone, Serialize, FromQueryResult)]
+#[derive(Debug, Clone, Serialize, FromQueryResult, erato_memory::HeapSize)]
 struct AssistantFacts {
     id: Uuid,
     #[serde(rename = "owner_id")]
     owner_user_id: Uuid,
 }
-#[derive(Debug, Clone, Serialize, FromQueryResult)]
+#[derive(Debug, Clone, Serialize, FromQueryResult, erato_memory::HeapSize)]
 struct FileFacts {
     id: Uuid,
     #[serde(rename = "owner_id")]
     owner_user_id: String,
 }
-#[derive(Debug, Clone, Default, Serialize)]
+#[derive(Debug, Clone, Default, Serialize, erato_memory::HeapSize)]
 struct Associations {
     linked_chat_ids: Vec<Uuid>,
     linked_assistant_ids: Vec<Uuid>,
 }
-#[derive(Debug, Clone, Serialize, FromQueryResult)]
+#[derive(Debug, Clone, Serialize, FromQueryResult, erato_memory::HeapSize)]
 struct Grant {
     resource_type: String,
     resource_id: String,
@@ -83,20 +83,20 @@ struct Grant {
     subject_id: String,
     role: String,
 }
-#[derive(Debug, Clone, Serialize, FromQueryResult)]
+#[derive(Debug, Clone, Serialize, FromQueryResult, erato_memory::HeapSize)]
 struct HubState {
     assistant_id: Uuid,
     status: String,
     is_published: bool,
     is_current_published_version: bool,
 }
-#[derive(Debug, Clone, Serialize, FromQueryResult)]
+#[derive(Debug, Clone, Serialize, FromQueryResult, erato_memory::HeapSize)]
 struct ShareLink {
     resource_type: String,
     resource_id: String,
     enabled: bool,
 }
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, erato_memory::HeapSize)]
 enum Fact {
     Chat(Option<ChatFacts>),
     Assistant(Option<AssistantFacts>),
@@ -121,17 +121,17 @@ impl Fact {
 }
 
 // Generation counters and publication ordering exist only in this process.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, erato_memory::HeapSize)]
 struct Slot {
     state: std::sync::Mutex<SlotState>,
     loading: Arc<Mutex<()>>,
 }
-#[derive(Debug, Default)]
+#[derive(Debug, Default, erato_memory::HeapSize)]
 struct SlotState {
     generation: u64,
     record: Option<Arc<Record>>,
 }
-#[derive(Debug)]
+#[derive(Debug, erato_memory::HeapSize)]
 struct Record {
     generation: u64,
     sequence: u64,
@@ -829,6 +829,22 @@ fn context_json(facts: BTreeMap<Key, Arc<Fact>>) -> Result<Value, Report> {
         }
     }
     Ok(result)
+}
+
+impl erato_memory::HeapSize for SharedFacts {
+    fn heap_size(&self, c: &mut erato_memory::Context) {
+        if !c.shared(Arc::as_ptr(&self.0) as usize) {
+            return;
+        }
+        c.estimated(std::mem::size_of::<SharedInner>() + 2 * std::mem::size_of::<usize>());
+        // Cache values are Arc<Slot>; iteration only clones those handles.
+        for (key, slot) in self.0.slots.iter() {
+            c.estimated(std::mem::size_of_val(&*key) + 2 * std::mem::size_of::<usize>());
+            c.measure(&slot);
+        }
+        c.unmeasured("policy facts Moka bookkeeping", 1);
+        c.opaque(&self.0.listener);
+    }
 }
 
 #[cfg(test)]

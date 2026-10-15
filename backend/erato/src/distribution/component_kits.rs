@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 pub const COMPONENT_KITS_PUBLIC_MOUNT_BASE: &str = "/public/component-kits";
 
 /// One component-kit bundle and the assets that host frontends must load.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, erato_memory::HeapSize)]
 pub struct ComponentKit {
     pub name: String,
     pub root: PathBuf,
@@ -17,7 +17,7 @@ pub struct ComponentKit {
 }
 
 /// The component-kit part of an Erato distribution.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, erato_memory::HeapSize)]
 pub struct ComponentKitDistribution {
     root: PathBuf,
     kits: Vec<ComponentKit>,

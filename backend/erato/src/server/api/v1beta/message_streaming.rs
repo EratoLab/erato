@@ -2911,6 +2911,8 @@ fn file_retrieval_offer_allowed(
 }
 
 pub struct PreparedChatRequest {
+    // Move with the prepared payloads when the struct is destructured.
+    _payload_reservations: Vec<crate::metrics::memory::PayloadReservation>,
     pub(crate) retrieval_context: crate::services::file_retrieval::RetrievalContext,
     pub(crate) attachment_plans: Vec<crate::services::file_context::PlannedAttachment>,
     // Our internal abstract structure of the message chain
@@ -3909,6 +3911,39 @@ pub(crate) async fn prepare_chat_request_with_adapters(
     prompt_provider: &impl PromptProvider,
     virtual_files: &[crate::services::file_context::Attachment],
 ) -> Result<PreparedChatRequest, Report> {
+    crate::metrics::components::scope(
+        crate::metrics::components::Component::ChatPreparation,
+        prepare_chat_request_with_adapters_memory_inner(
+            app_state,
+            policy,
+            chat,
+            user_input,
+            generation_request_context,
+            me_profile_input,
+            assistant_config,
+            message_repo,
+            file_resolver,
+            prompt_provider,
+            virtual_files,
+        ),
+    )
+    .await
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn prepare_chat_request_with_adapters_memory_inner(
+    app_state: &AppState,
+    policy: &PolicyEngine,
+    chat: &chats::Model,
+    user_input: PromptCompositionUserInput,
+    generation_request_context: GenerationRequestContext,
+    me_profile_input: &MeProfileChatRequestInput<'_>,
+    assistant_config: Option<crate::models::assistant::AssistantWithFiles>,
+    message_repo: &impl MessageRepository,
+    file_resolver: &impl FileResolver,
+    prompt_provider: &impl PromptProvider,
+    virtual_files: &[crate::services::file_context::Attachment],
+) -> Result<PreparedChatRequest, Report> {
     let mcp = app_state.mcp_state().await;
     // A task child is scoped by the facets its brief asked for. They are read
     // from the durable chat row rather than carried on the request, for the
@@ -4469,7 +4504,24 @@ pub(crate) async fn prepare_chat_request_with_adapters(
 
     // Return the unresolved version for saving to DB (to avoid duplicating file contents)
     // The resolved version is already used in chat_request
+    let mut payload_reservations = vec![
+        crate::metrics::memory::chat_context("internal_messages", &generation_input_messages)
+            .with_owned(
+                "requests.prepared.internal_messages",
+                &generation_input_messages,
+            ),
+        crate::metrics::memory::chat_context("provider_request", &chat_request).with_owned(
+            "requests.prepared.provider_request",
+            &crate::metrics::owned::ProviderRequestView(&chat_request),
+        ),
+    ];
+    // Plan text is a distinct owned copy of the text in provider messages.
+    payload_reservations.extend(attachment_plans.iter().map(|plan| {
+        crate::metrics::memory::chat_context("attachment_plans", &plan.parts)
+            .with_owned("requests.prepared.attachment_plans", &plan.parts)
+    }));
     Ok(PreparedChatRequest {
+        _payload_reservations: payload_reservations,
         retrieval_context,
         attachment_plans,
         generation_input_messages,
@@ -5833,6 +5885,10 @@ async fn stream_generate_chat_completion<'a>(
         })
         .collect();
     let mut current_turn_chat_request = chat_request.clone();
+    let mut current_request_memory = crate::metrics::owned::Reservation::measured(
+        "requests.generation.current_request",
+        &crate::metrics::owned::ProviderRequestView(&current_turn_chat_request),
+    );
     let fallback_chat_provider_id = if chat_provider_id.is_none() {
         match app_state.config.determine_chat_provider(None, None) {
             Ok(provider_id) => Some(provider_id),
@@ -6034,6 +6090,9 @@ async fn stream_generate_chat_completion<'a>(
     }
 
     let completion = 'loop_call_turns: loop {
+        current_request_memory.refresh(&crate::metrics::owned::ProviderRequestView(
+            &current_turn_chat_request,
+        ));
         // A parked iteration was already counted before its checkpoint.
         if !std::mem::take(&mut resume_iteration) {
             current_turn += 1;
@@ -14440,6 +14499,39 @@ pub(crate) async fn run_generation_after_user_message(
     saved_user_message: &messages::Model,
     origin: GenerationOrigin,
 ) -> Result<(), Report> {
+    crate::metrics::components::scope(
+        crate::metrics::components::Component::ProviderRequest,
+        run_generation_after_user_message_memory_inner(
+            task,
+            app_state,
+            policy,
+            me_user,
+            request,
+            generation_request_context,
+            chat,
+            chat_was_created,
+            delegation_targets,
+            saved_user_message,
+            origin,
+        ),
+    )
+    .await
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn run_generation_after_user_message_memory_inner(
+    task: &Arc<StreamingTask>,
+    app_state: &AppState,
+    policy: &PolicyEngine,
+    me_user: &MeProfile,
+    request: &MessageSubmitRequest,
+    generation_request_context: GenerationRequestContext,
+    chat: &chats::Model,
+    chat_was_created: bool,
+    delegation_targets: Vec<crate::services::delegation::DelegationTarget>,
+    saved_user_message: &messages::Model,
+    origin: GenerationOrigin,
+) -> Result<(), Report> {
     // Prepare chat request
     let me_profile_input = MeProfileChatRequestInput::from_me_profile(me_user);
     // No persisted fallback: this request just persisted its own value, so
@@ -14469,6 +14561,7 @@ pub(crate) async fn run_generation_after_user_message(
         suppress_task_offer: origin == GenerationOrigin::TaskResultDelivery,
     };
     let PreparedChatRequest {
+        _payload_reservations,
         retrieval_context,
         attachment_plans,
         chat_request,
@@ -15231,6 +15324,7 @@ pub(crate) async fn start_regeneration(
                 suppress_task_offer: false,
             };
             let PreparedChatRequest {
+                _payload_reservations,
                 retrieval_context,
                 attachment_plans,
                 chat_request,
@@ -15834,6 +15928,7 @@ pub(crate) async fn start_edit(
                 suppress_task_offer: false,
             };
             let PreparedChatRequest {
+                _payload_reservations,
                 retrieval_context,
                 attachment_plans,
                 chat_request,

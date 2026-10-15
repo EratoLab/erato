@@ -207,8 +207,32 @@ pub(crate) async fn resolve_and_plan_attachments_with_retrieval(
     virtual_files: &[Attachment],
     retrieval: &mut crate::services::file_retrieval::RetrievalContext,
 ) -> Result<(GenerationInputMessages, Vec<PlannedAttachment>), Report> {
+    crate::metrics::components::scope(
+        crate::metrics::components::Component::AttachmentPlanning,
+        resolve_and_plan_attachments_with_retrieval_memory_inner(
+            app_state,
+            generation_input_messages,
+            access_token,
+            provider,
+            virtual_files,
+            retrieval,
+        ),
+    )
+    .await
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn resolve_and_plan_attachments_with_retrieval_memory_inner(
+    app_state: &AppState,
+    generation_input_messages: GenerationInputMessages,
+    access_token: Option<&str>,
+    provider: &crate::config::ChatProviderConfig,
+    virtual_files: &[Attachment],
+    retrieval: &mut crate::services::file_retrieval::RetrievalContext,
+) -> Result<(GenerationInputMessages, Vec<PlannedAttachment>), Report> {
     let sharepoint_ctx = access_token.map(|access_token| SharepointContext { access_token });
     let mut attachments = Vec::new();
+    let mut attachment_buffers = crate::metrics::memory::attachment_buffers();
     for message in &generation_input_messages.messages {
         let id = match &message.content {
             ContentPart::TextFilePointer(p) => p.file_upload_id,
@@ -232,11 +256,15 @@ pub(crate) async fn resolve_and_plan_attachments_with_retrieval(
         retrieval.observe(&file);
         file.retrieval_indicator = retrieval.indicator(&file);
         attachments.push(file);
+        attachment_buffers.resize(attachment_buffer_bytes(&attachments));
+        attachment_buffers.refresh_owned(&attachments);
     }
     for file in virtual_files {
         let mut file = file.clone();
         file.retrieval_indicator = retrieval.indicator(&file);
         attachments.push(file);
+        attachment_buffers.resize(attachment_buffer_bytes(&attachments));
+        attachment_buffers.refresh_owned(&attachments);
     }
     crate::services::file_context::estimate_native_images(&mut attachments, provider);
     let plans = plan_attachments(
@@ -395,6 +423,10 @@ async fn load_attachment_mode(
         .await;
         match raw {
             Ok(bytes) => {
+                let _input_payload = crate::metrics::memory::resolution_input_capacity(
+                    bytes.len(),
+                    bytes.capacity(),
+                );
                 if !crate::models::message::is_image_file(&file.filename)
                     && !infer::is_image(&bytes)
                     && crate::services::file_context::prepare_eager_attachment(
@@ -825,4 +857,17 @@ pub(crate) async fn replan_tool_attachments(
         });
     }
     Ok(())
+}
+
+/// Count owned backing storage, not lengths; image payloads are accounted for
+/// separately by component attribution rather than counted as text buffers.
+fn attachment_buffer_bytes(attachments: &Vec<Attachment>) -> usize {
+    attachments.capacity() * std::mem::size_of::<Attachment>()
+        + attachments
+            .iter()
+            .map(|file| {
+                file.text.as_ref().map_or(0, String::capacity)
+                    + file.csv_source.as_ref().map_or(0, String::capacity)
+            })
+            .sum::<usize>()
 }

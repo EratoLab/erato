@@ -13,7 +13,7 @@ use crate::translation_po::TranslationPoCache;
 
 /// Translation sources and runtime compilation state shared by all served
 /// bundles.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, erato_memory::HeapSize)]
 pub struct TranslationDistribution {
     sources: Vec<ConfigSourceFile>,
     compilation_mode: TranslationPoCompilationMode,

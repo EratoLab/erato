@@ -72,7 +72,18 @@ pub enum DelegationRunMode {
 /// regenerate body is a deserialization failure rather than a mode a client can
 /// ask for. `Wait` is never written - absence means it - so every envelope
 /// stored before this type existed deserializes unchanged.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, ToSchema)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Default,
+    Serialize,
+    Deserialize,
+    ToSchema,
+    erato_memory::HeapSize,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum ProvenanceRunMode {
     #[default]
@@ -332,7 +343,7 @@ pub struct GenerationMetadata {
 }
 
 /// Role of the message author (as defined by the LLM providers)
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, erato_memory::HeapSize)]
 #[serde(rename_all = "lowercase")]
 pub enum MessageRole {
     System,
@@ -352,7 +363,9 @@ impl fmt::Display for MessageRole {
     }
 }
 
-#[derive(Serialize, Deserialize, ToSchema, Clone, Debug, PartialEq, Default)]
+#[derive(
+    Serialize, Deserialize, ToSchema, Clone, Debug, PartialEq, Default, erato_memory::HeapSize,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum ToolCallStatus {
     /// The provider is still generating arguments; the tool has not run.
@@ -363,7 +376,9 @@ pub enum ToolCallStatus {
     Error,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema, Default)]
+#[derive(
+    Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema, Default, erato_memory::HeapSize,
+)]
 #[serde(default)]
 pub struct ToolUse {
     pub tool_call_id: String,
@@ -387,7 +402,7 @@ pub struct ToolUse {
 /// Snapshot of the MCP annotations used to decide whether a tool call needs
 /// user approval. The values are normalized to the MCP defaults so an absent
 /// annotation remains auditable as the pessimistic interpretation.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema, erato_memory::HeapSize)]
 #[serde(rename_all = "camelCase")]
 pub struct ToolApprovalAnnotations {
     pub read_only_hint: bool,
@@ -398,7 +413,7 @@ pub struct ToolApprovalAnnotations {
 
 /// Inert display text from the tool descriptor, captured when approval is
 /// requested. Never used to select a tool, evaluate policy or execute a call.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema, erato_memory::HeapSize)]
 pub struct ToolDisplayMetadata {
     pub title: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -408,7 +423,9 @@ pub struct ToolDisplayMetadata {
 
 /// Which surface a durable approval stop belongs to. `McpTool` is the
 /// default so rows written before the other kinds existed keep parsing.
-#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, ToSchema)]
+#[derive(
+    Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, ToSchema, erato_memory::HeapSize,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum ToolApprovalKind {
     #[default]
@@ -425,7 +442,7 @@ pub enum ToolApprovalKind {
 
 /// The gated call a delegated child parked on, copied onto the parent's
 /// approval item so the card renders without reading the child's chat.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema, erato_memory::HeapSize)]
 pub struct ChildApprovalRef {
     pub child_chat_id: Uuid,
     pub child_message_id: Uuid,
@@ -442,7 +459,7 @@ pub struct ChildApprovalRef {
 
 /// One decision the user owes on a parked turn. A stop carries several of
 /// these when a batch parked on more than one call.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema, erato_memory::HeapSize)]
 pub struct ApprovalItem {
     pub approval_id: String,
     pub tool_call_id: String,
@@ -456,7 +473,7 @@ pub struct ApprovalItem {
 
 /// A call of the parked batch that was never popped. The parked part is the
 /// only record of these, so the continuation has to replay them from here.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema, erato_memory::HeapSize)]
 pub struct PendingToolCall {
     pub call_id: String,
     pub fn_name: String,
@@ -464,7 +481,7 @@ pub struct PendingToolCall {
 }
 
 /// A durable request for user approval before an MCP tool call is executed.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema, erato_memory::HeapSize)]
 pub struct ContentPartToolApprovalRequest {
     pub tool_call_id: String,
     pub tool_name: String,
@@ -511,7 +528,7 @@ impl ContentPartToolApprovalRequest {
 }
 
 /// Records a user approval in the assistant message lifecycle.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema, erato_memory::HeapSize)]
 pub struct ContentPartToolApproval {
     pub tool_call_id: String,
     #[serde(default)]
@@ -526,7 +543,7 @@ pub struct ContentPartToolApproval {
 }
 
 /// Records a user rejection in the assistant message lifecycle.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema, erato_memory::HeapSize)]
 pub struct ContentPartToolRejection {
     pub tool_call_id: String,
     /// Both fields default, so rejections stored before standing denials
@@ -546,7 +563,7 @@ pub struct ContentPartToolRejection {
     pub reason: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema, erato_memory::HeapSize)]
 #[serde(rename_all = "snake_case")]
 #[serde(tag = "content_type")]
 pub enum ContentPart {
@@ -555,7 +572,7 @@ pub enum ContentPart {
     Reasoning(ContentPartReasoning),
     ToolUse(ToolUse),
     ToolApprovalRequest(ContentPartToolApprovalRequest),
-    ClientToolPending(crate::services::client_operations::ClientToolPending),
+    ClientToolPending(#[heap_size(opaque)] crate::services::client_operations::ClientToolPending),
     ToolApproval(ContentPartToolApproval),
     ToolRejection(ContentPartToolRejection),
     TextFilePointer(ContentPartTextFilePointer),
@@ -586,7 +603,7 @@ pub enum ContentPart {
 
 /// A durable context boundary. Its replacement snapshot is authoritative;
 /// this metadata is only for display and retry identification.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema, erato_memory::HeapSize)]
 pub struct ContentPartCompactionMarker {
     pub version: u8,
     pub mode: String,
@@ -643,7 +660,7 @@ pub fn is_durable_stop(content: &[ContentPart]) -> bool {
 /// rest is written by the server. It is stored RAW — the untrusted-data frame
 /// and the safety guidance are applied when the conversation is composed for
 /// the model, so the UI can render the answer plainly.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema, erato_memory::HeapSize)]
 pub struct ContentPartTaskResult {
     /// The child chat that produced this result; the link the UI offers.
     pub child_chat_id: Uuid,
@@ -671,12 +688,14 @@ pub struct ContentPartTaskResult {
     pub redeliveries: u32,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema, erato_memory::HeapSize)]
 pub struct ContentPartText {
     pub text: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema, Default)]
+#[derive(
+    Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema, Default, erato_memory::HeapSize,
+)]
 #[serde(default)]
 pub struct ContentPartReasoning {
     pub text: String,
@@ -698,12 +717,12 @@ impl From<String> for ContentPartText {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema, erato_memory::HeapSize)]
 pub struct ContentPartTextFilePointer {
     pub file_upload_id: Uuid,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema, erato_memory::HeapSize)]
 pub struct ContentPartImageFilePointer {
     pub file_upload_id: Uuid,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -712,13 +731,13 @@ pub struct ContentPartImageFilePointer {
     pub preview_url: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema, erato_memory::HeapSize)]
 pub struct ContentPartImage {
     pub content_type: String,
     pub base64_data: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema, erato_memory::HeapSize)]
 pub struct ContentPartActionFacetMarker {
     /// Identifier of the action facet whose template should be rendered.
     pub facet_id: String,
@@ -731,7 +750,7 @@ pub struct ContentPartActionFacetMarker {
 /// The structured-brief fields of a delegated run, copied from the chat's
 /// provenance envelope at composition time. The preamble template itself is
 /// not carried: it is read from the config in force when the marker resolves.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema, erato_memory::HeapSize)]
 pub struct ContentPartDelegationPreambleMarker {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub expected_output: Option<String>,
@@ -1728,7 +1747,7 @@ pub async fn update_message_generation_metadata(
 /// One input message for an LLM generation.
 /// In contrast to the `Message` model, which bundles multiple individual LLM messages, this is closer
 /// to the native format of the LLM.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, erato_memory::HeapSize)]
 pub struct InputMessage {
     pub role: MessageRole,
     pub content: ContentPart,
@@ -1759,7 +1778,7 @@ impl InputMessage {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, erato_memory::HeapSize)]
 pub struct GenerationInputMessages {
     pub(crate) messages: Vec<InputMessage>,
 }

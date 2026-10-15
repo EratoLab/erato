@@ -12,7 +12,7 @@ use erato_config::config::{MsOfficeAddinConfig, MsOfficeTeamsAppConfig};
 const MANIFEST_FILE_NAME: &str = "manifest-teams.json";
 const TEAMS_ROUTE: &str = "/office-addin/teams";
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, erato_memory::HeapSize)]
 pub struct TeamsAppDistribution {
     bundle_root: PathBuf,
     template: Value,

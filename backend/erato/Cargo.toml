@@ -19,6 +19,7 @@ path = "./src/record_chat_provider_reqwest.rs"
 
 [dependencies]
 erato_config = { path = "../erato_config" }
+erato_memory = { path = "../erato_memory" }
 
 # Dependencies: Server
 axum = { version = "0.8.4", features = ["macros", "ws"] }
@@ -79,7 +80,7 @@ cron = "0.16.0"
 # Dependencies: LLM / GenAI
 # Upstream v0.7.0-rc.4 + retained fork patches and Gemini streaming/replay ID fixes.
 genai = { version = "0.7.0-rc.4", git = "https://github.com/EratoLab/rust-genai.git", branch = "fork-2026-10-09" }
-tiktoken-rs = "0.12.0"
+tiktoken-rs = "=0.12.0"
 
 # Dependencies: MCP
 rmcp = { version = "=3.2.0", features = ["auth", "client", "reqwest", "transport-streamable-http-client-reqwest"] }
@@ -140,6 +141,7 @@ dial9-utils = { version = "0.5.0", optional = true, default-features = false, fe
 dial9 = { version = "0.5.0", optional = true, default-features = false, features = ["tokio", "cpu-profiling", "memory-profiling", "process-resource"] }
 jemalloc_pprof = { version = "0.8.2", optional = true, features = ["flamegraph", "symbolize"] }
 tikv-jemallocator = { version = "0.6.1", optional = true, features = ["profiling", "unprefixed_malloc_on_supported_platforms"] }
+tikv-jemalloc-ctl = { version = "0.6.1", optional = true, features = ["stats"] }
 
 [dependencies.sentry]
 version = "0.41.0"
@@ -164,5 +166,5 @@ mock-llm-server = { path = "../mock-llm-server" }
 default = ["sentry"]
 sentry = ["dep:sentry", "dep:sentry-tower"]
 tokio-console = ["dep:console-subscriber"]
-profiling = ["dep:jemalloc_pprof", "dep:tikv-jemallocator"]
+profiling = ["dep:jemalloc_pprof", "dep:tikv-jemallocator", "dep:tikv-jemalloc-ctl"]
 profiling-dial9 = ["dep:dial9", "dep:dial9-utils"]

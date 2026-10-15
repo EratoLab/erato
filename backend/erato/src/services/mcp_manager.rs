@@ -25,7 +25,7 @@ pub struct McpRequestAuthContext<'a> {
 }
 
 /// Wrapper struct that provides a high-level API for MCP operations
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, erato_memory::HeapSize)]
 pub struct McpServers {
     session_manager: Arc<McpSessionManager>,
 }

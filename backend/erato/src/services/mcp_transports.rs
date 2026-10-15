@@ -117,6 +117,15 @@ pub fn oauth_default_headers(config: &McpServerConfig) -> Result<HeaderMap, Repo
 pub fn build_oauth_supporting_reqwest_client(
     config: &McpServerConfig,
 ) -> Result<reqwest::Client, Report> {
+    crate::metrics::components::sync(crate::metrics::components::Component::McpClient, || {
+        build_oauth_supporting_reqwest_client_memory_inner(config)
+    })
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn build_oauth_supporting_reqwest_client_memory_inner(
+    config: &McpServerConfig,
+) -> Result<reqwest::Client, Report> {
     reqwest::Client::builder()
         .default_headers(oauth_default_headers(config)?)
         .build()
@@ -140,10 +149,12 @@ async fn build_reqwest_client(
         }
     }
     apply_auth_headers(&mut default_headers, server_id, config, auth_context).await?;
-    reqwest::Client::builder()
-        .default_headers(default_headers)
-        .build()
-        .map_err(|e| eyre!("Failed to build MCP reqwest client: {}", e))
+    crate::metrics::components::sync(crate::metrics::components::Component::McpClient, || {
+        reqwest::Client::builder()
+            .default_headers(default_headers)
+            .build()
+            .map_err(|e| eyre!("Failed to build MCP reqwest client: {}", e))
+    })
 }
 
 /// Create an MCP client service based on the transport type specified in the configuration
