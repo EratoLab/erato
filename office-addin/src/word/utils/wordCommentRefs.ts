@@ -7,6 +7,7 @@ import { wordCommentAnchorText } from "./wordCommentPackage";
 
 import type {
   WordCommentEntryRecord,
+  WordCommentReadOnly,
   WordCommentThreadRecord,
 } from "./wordCommentReader";
 
@@ -35,6 +36,8 @@ export interface WordCommentFingerprintAnchor {
 export interface WordCommentEntryFingerprint {
   id: string;
   author: string;
+  /** Pane only, to tell the user's own items apart; never compared, as AI authors have none. */
+  email: string | null;
   /** creationDate.toISOString(); null when Word gave none. */
   created: string | null;
   content: string;
@@ -56,6 +59,8 @@ export interface WordCommentRefEntry {
   /** "content": a legacy file, whose ref names the thread by its content (the card says so). */
   matchedBy: "id" | "content";
   fingerprint: WordCommentFingerprint;
+  /** A thread no write may touch (contract §6, F-1). */
+  readOnly: WordCommentReadOnly | null;
 }
 
 /** The refs frozen with the Send capture; actions resolve refs against these only. */
@@ -162,6 +167,7 @@ function entryPrint(
   return {
     id: entry.id,
     author: entry.authorName,
+    email: entry.authorEmail,
     created: entry.creationDate?.toISOString() ?? null,
     content: entry.content,
   };
@@ -329,6 +335,7 @@ export function issueWordCommentRefs(
       commentId: record.id,
       matchedBy: byContent ? "content" : "id",
       fingerprint: wordCommentFingerprint(record),
+      readOnly: record.readOnly,
     }),
   );
   return {

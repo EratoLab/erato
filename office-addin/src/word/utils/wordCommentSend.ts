@@ -469,13 +469,59 @@ export function wordCommentMapArg(
 /** The capture a Send stages, with the refs the turn's comment actions resolve against. */
 export type WordCommentsCapture = WordDocumentCapture & {
   commentRefs?: WordCommentCaptureRefs;
+  /** The Send carried comment text by someone other than the user (L2): no Always for add or Replace. */
+  commentTaint?: true;
 };
+
+/** Whether any of these threads, or all with null, carries an entry the principal did not write. */
+export function wordCommentOthersText(
+  model: WordCommentModel,
+  refs: readonly string[] | null,
+): boolean {
+  const wanted = refs && new Set(refs);
+  return model.threads.some(
+    ({ thread }) =>
+      (!wanted || wanted.has(thread.id)) &&
+      thread.entries.some((entry) => entry.me !== true),
+  );
+}
+
+/** The threads whose text a carrier sends; null for every thread the read listed. */
+export function wordCommentCarrierRefs(
+  read: WordCommentSendRead,
+  carrier: WordCommentSendCarrier,
+): readonly string[] | null {
+  switch (carrier.kind) {
+    case "selection":
+      return carrier.threads;
+    case "thread":
+      return [carrier.ref];
+    case "open-comments":
+      return read.model.threads
+        .filter(({ thread }) => thread.status === "open")
+        .map(({ thread }) => thread.id);
+    case "map":
+      return null;
+    case "none":
+      return [];
+  }
+}
 
 export function withWordCommentRefs<T extends WordDocumentCapture>(
   capture: T,
   read: WordCommentSendRead | null,
+  carrier: WordCommentSendCarrier = { kind: "none" },
 ): T & WordCommentsCapture {
-  return read ? { ...capture, commentRefs: read.refs } : capture;
+  if (!read) return capture;
+  const sent = wordCommentCarrierRefs(read, carrier);
+  return {
+    ...capture,
+    commentRefs: read.refs,
+    ...((sent === null || sent.length > 0) &&
+    wordCommentOthersText(read.model, sent)
+      ? { commentTaint: true as const }
+      : {}),
+  };
 }
 
 export const wordCommentRefsOf = (

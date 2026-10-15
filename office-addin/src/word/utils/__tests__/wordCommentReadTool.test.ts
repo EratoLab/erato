@@ -21,6 +21,8 @@ import {
   WORD_COMMENTS_ASK_AGAIN,
   WORD_READ_COMMENTS_PAGE_THREADS,
   WordCommentReadSession,
+  forgetWordCommentTaint,
+  wordCommentTaintedMessage,
 } from "../wordCommentReadTool";
 import { wordCommentInventoryFromCapture } from "../wordCommentReader";
 import {
@@ -856,5 +858,46 @@ describe("unavailable reads", () => {
     const refusal = await refused({ near: { selection: true } });
     expect(refusal.code).toBe("comment-read-failed");
     expect(refusal.error).not.toContain("Secret");
+  });
+});
+
+describe("the comment submission scope", () => {
+  beforeEach(() => forgetWordCommentTaint());
+
+  it("resolves the threads a read returned this turn, for this request only", async () => {
+    install();
+    activate({ selection: ON_T8 });
+    expect(session.submissionScope(REQUEST)?.threads.size).toBe(0);
+    const result = await read({ near: { selection: true } });
+    const scope = session.submissionScope(REQUEST);
+    expect([...scope!.threads.keys()].sort()).toEqual(
+      result.threads.map((t) => t.id).sort(),
+    );
+    const t8 = scope!.threads.get(refOf("T8"));
+    expect(t8?.commentId).toBe(host.commentId("T8"));
+    expect(t8?.fingerprint.replyIds).not.toBeNull();
+    expect(
+      session.submissionScope({ ...REQUEST, messageId: "message-B" }),
+    ).toBeNull();
+  });
+
+  it("keeps a fingerprint with replies over a later one without them", async () => {
+    install();
+    activate({ selection: ON_T8, gestures: { document: true } });
+    await read({ near: { selection: true } });
+    const before = session.submissionScope(REQUEST)!.threads.get(refOf("T8"));
+    await read({ cursor: "map:0" });
+    expect(
+      session.submissionScope(REQUEST)!.threads.get(refOf("T8"))?.fingerprint
+        .replyIds,
+    ).toEqual(before?.fingerprint.replyIds);
+  });
+
+  it("marks the request tainted once a read returns another author's text", async () => {
+    install();
+    activate({ selection: ON_T8, people: { principalEmail: MAYA } });
+    expect(wordCommentTaintedMessage(REQUEST.messageId)).toBe(false);
+    await read({ near: { selection: true } });
+    expect(wordCommentTaintedMessage(REQUEST.messageId)).toBe(true);
   });
 });

@@ -35,10 +35,14 @@ import {
   wordCommentIdKeysByRef,
   wordCommentRefRegistry,
 } from "./wordCommentRefs";
+import { wordCommentOthersText } from "./wordCommentSend";
 import { wordHostPlatform } from "./wordHostPlatform";
 import { utf8ByteLength } from "../../core/clientActions/actionFacetArgs";
 
-import type { WordCommentPeople } from "./wordCommentEnvelope";
+import type {
+  WordCommentModel,
+  WordCommentPeople,
+} from "./wordCommentEnvelope";
 import type { WordCommentHeading } from "./wordCommentMap";
 import type { WordCommentSelectionCoordinates } from "./wordCommentPositions";
 import type {
@@ -47,7 +51,13 @@ import type {
   WordCommentReadResult,
   WordCommentThreadRecord,
 } from "./wordCommentReader";
-import type { WordCommentRefRegistry } from "./wordCommentRefs";
+import type {
+  WordCommentCaptureRefs,
+  WordCommentRefEntry,
+  WordCommentRefRegistry,
+} from "./wordCommentRefs";
+import type { WordCommentsCapture } from "./wordCommentSend";
+import type { WordSelectionCapture } from "./wordSelectionAnchor";
 import type {
   ClientToolCallContext,
   ClientToolExecutionResult,
@@ -115,6 +125,22 @@ export interface WordCommentReadActivation {
   documentIncluded?: () => boolean;
   /** The user sent the request without comments, so no read answers for it. */
   withheld?: boolean;
+  /** The capture Send staged: the refs and the selection comment changes resolve against. */
+  capture?: WordCommentSendCapture | null;
+}
+
+export type WordCommentSendCapture = WordCommentsCapture &
+  Pick<WordSelectionCapture, "selection">;
+
+/** What a comment submission resolves against for its request (contract §4.2). */
+export interface WordCommentSubmissionScope {
+  /** The read session's token: a newer request replaces it. */
+  token: string;
+  identity: string;
+  capture: WordCommentSendCapture | null;
+  /** The Send capture's threads, then those reads returned this turn, which may carry replies. */
+  threads: ReadonlyMap<string, WordCommentRefEntry>;
+  people: WordCommentPeople;
 }
 
 export type WordCommentReadRequest = Pick<
@@ -190,6 +216,8 @@ interface Session {
   ownerMessageId: string | null;
   chatId: string | null;
   cursors: Map<string, Continuation>;
+  /** Threads this request's reads returned, by ref, with the fingerprints the reads gave them. */
+  seen: Map<string, WordCommentRefEntry>;
 }
 
 type Side = "in" | "above" | "below" | "unknown";
@@ -213,6 +241,28 @@ type Plan =
   | { ok: false; code: "unknown-ref" | "outside" };
 
 const jsonBytes = (value: unknown) => utf8ByteLength(JSON.stringify(value));
+
+/** Assistant messages whose turn carried comment text by someone other than the user (L2). */
+const taintedMessages = new Set<string>();
+
+export const wordCommentTaintedMessage = (messageId: string | undefined) =>
+  !!messageId && taintedMessages.has(messageId);
+
+export function forgetWordCommentTaint(): void {
+  taintedMessages.clear();
+}
+
+/** A later fingerprint wins unless it lost the replies an earlier one had. */
+function mergeSeen(
+  known: WordCommentRefEntry | undefined,
+  next: WordCommentRefEntry,
+): WordCommentRefEntry {
+  return known &&
+    known.fingerprint.replyIds !== null &&
+    next.fingerprint.replyIds === null
+    ? known
+    : next;
+}
 
 const MARKS = /[\u0002\u0005]/g;
 const LINES = /[\r\n\u0007\u000B]+/;
@@ -635,9 +685,56 @@ export class WordCommentReadSession {
       ownerMessageId: null,
       chatId: null,
       cursors: new Map(),
+      seen: new Map(),
     };
     if (request) this.bindRequest(token, request);
     return token;
+  }
+
+  /** The request's comment scope, for the submission bound to the same request only. */
+  submissionScope(
+    context: Pick<ClientToolCallContext, "chatId" | "messageId">,
+  ): WordCommentSubmissionScope | null {
+    const session = this.session;
+    if (
+      !session ||
+      session.ownerMessageId === null ||
+      session.ownerMessageId !== context.messageId ||
+      session.chatId !== context.chatId
+    )
+      return null;
+    const capture = session.activation.capture ?? null;
+    const threads = new Map<string, WordCommentRefEntry>(
+      capture?.commentRefs?.byRef ?? [],
+    );
+    for (const [ref, entry] of session.seen)
+      threads.set(ref, mergeSeen(threads.get(ref), entry));
+    return {
+      token: session.token,
+      identity: session.activation.identity,
+      capture,
+      threads,
+      people: session.activation.people ?? { principalEmail: null },
+    };
+  }
+
+  /** What a page sent: refs the submission may name, and the taint bit for other people's text. */
+  private remember(
+    session: Session,
+    refs: WordCommentCaptureRefs,
+    model: WordCommentModel,
+    sent: readonly string[],
+  ) {
+    for (const ref of sent) {
+      const entry = refs.byRef.get(ref);
+      if (entry) session.seen.set(ref, mergeSeen(session.seen.get(ref), entry));
+    }
+    if (
+      sent.length &&
+      session.ownerMessageId &&
+      wordCommentOthersText(model, sent)
+    )
+      taintedMessages.add(session.ownerMessageId);
   }
 
   /** The host binds ownership; model arguments cannot carry a session to another request. */
@@ -765,7 +862,7 @@ export class WordCommentReadSession {
   ) {
     const now = this.options.now?.() ?? new Date();
     const userTz = this.options.userTimeZone?.() ?? wordCommentUserTimeZone();
-    const { sources, model } = wordCommentModelOf(result, {
+    const { refs, sources, model } = wordCommentModelOf(result, {
       registry: session.registry,
       selection: session.activation.selection ?? null,
       people: session.activation.people ?? { principalEmail: null },
@@ -773,6 +870,7 @@ export class WordCommentReadSession {
       userTz,
     });
     return {
+      refs,
       model,
       now,
       userTz,
@@ -796,7 +894,7 @@ export class WordCommentReadSession {
       context,
     );
     if (!("threads" in read)) return read;
-    const { model, now, userTz } = this.modelOf(session, read);
+    const { refs, model, now, userTz } = this.modelOf(session, read);
     const headings =
       session.activation.headings ??
       wordCommentHeadingsFromInventory(read.inventory?.paragraphs ?? []);
@@ -815,6 +913,12 @@ export class WordCommentReadSession {
         "The comment map has no rows from this cursor on. Start again with cursor map:0.",
         "/cursor",
       );
+    this.remember(
+      session,
+      refs,
+      model,
+      page.index.map((row) => row.id),
+    );
     const { cursor, threads: _none, ...envelope } = page;
     const result: WordCommentReadResultJson = {
       ...envelope,
@@ -914,7 +1018,7 @@ export class WordCommentReadSession {
       context,
     );
     if (!("threads" in read)) return read;
-    const { model, now, userTz, records } = this.modelOf(session, read);
+    const { refs, model, now, userTz, records } = this.modelOf(session, read);
 
     const facts = model.threads.map(({ thread }, rank): Facts => {
       const record = records.get(thread.id)!;
@@ -1015,6 +1119,12 @@ export class WordCommentReadSession {
     const built = envelopeOf(page, cursor ?? undefined);
     const threads: WordCommentReadThread[] = built.envelope.threads.map(
       (thread) => ({ ...thread, ...extrasOf(thread.id) }),
+    );
+    this.remember(
+      session,
+      refs,
+      model,
+      threads.map((thread) => thread.id),
     );
 
     const line = this.coverageLine({

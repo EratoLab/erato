@@ -26,6 +26,16 @@ interface OfficeAddinWordApplyHostSettings {
   package_read?: boolean;
 }
 
+interface OfficeAddinCommentWriteSettings {
+  /** "copy" offers Copy comment and Show passage instead of writing. */
+  add?: "post" | "copy";
+  respond?: "post" | "copy";
+  modify?: "post" | "copy";
+  /** False posts every new comment under the user's name with the label. */
+  assistant_author?: boolean;
+  max_rows?: { add?: number; respond?: number; modify?: number };
+}
+
 interface OfficeAddinDefaultSettings {
   mode?: "resume" | "ask" | "new";
   compose_inherits_from_read?: boolean;
@@ -36,6 +46,12 @@ interface OfficeAddinDefaultSettings {
     mac?: OfficeAddinWordApplyHostSettings;
     web?: OfficeAddinWordApplyHostSettings;
   };
+  comment_label?: string;
+  comment_author?: "user" | "assistant";
+  comment_author_enforced?: boolean;
+  comment_assistant_author?: string;
+  /** Deployment switches for comment actions; see wordCommentPolicy. */
+  comment_writes?: OfficeAddinCommentWriteSettings;
 }
 
 interface Window {

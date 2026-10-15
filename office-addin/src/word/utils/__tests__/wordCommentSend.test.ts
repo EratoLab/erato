@@ -800,4 +800,47 @@ describe("the arguments a Send carries, from the ERMAIN-947 fixture", () => {
     expect(wordCommentRefsOf(withWordCommentRefs(capture, null))).toBeNull();
     expect(withWordCommentRefs(capture, null)).toBe(capture);
   });
+
+  it("taints the capture only when the sent threads carry someone else's text (L2)", async () => {
+    const read = await sendRead({ tag: "T1P", offset: 25 });
+    const capture = {
+      identity: "doc",
+      ordinalMap: new Map(),
+      paragraphsSent: 0,
+      renderedOrdinals: new Set<number>(),
+      partialOrdinal: null,
+    };
+    const t1 = refOf(read, "T1");
+    expect(withWordCommentRefs(capture, read).commentTaint).toBeUndefined();
+    expect(
+      withWordCommentRefs(capture, read, { kind: "selection", threads: [] })
+        .commentTaint,
+    ).toBeUndefined();
+    expect(
+      withWordCommentRefs(capture, read, { kind: "thread", ref: t1 })
+        .commentTaint,
+    ).toBe(true);
+    expect(
+      withWordCommentRefs(capture, read, { kind: "map" }).commentTaint,
+    ).toBe(true);
+    const mine = {
+      ...read,
+      model: {
+        ...read.model,
+        threads: read.model.threads.map((entry) => ({
+          ...entry,
+          thread: {
+            ...entry.thread,
+            entries: entry.thread.entries.map((e) => ({
+              ...e,
+              me: true as const,
+            })),
+          },
+        })),
+      },
+    };
+    expect(
+      withWordCommentRefs(capture, mine, { kind: "map" }).commentTaint,
+    ).toBeUndefined();
+  });
 });
