@@ -606,6 +606,15 @@ fn test_config_with_comment_author_template_without_user_is_invalid() {
 }
 
 #[test]
+#[should_panic(expected = "plain text of at most 60 characters")]
+fn test_config_with_comment_author_template_over_60_characters_is_invalid() {
+    ms_office_addin_config_from_toml(&format!(
+        "{MS_OFFICE_ADDIN_BASE}\n[integrations.ms_office.addin.default_settings]\ncomment_assistant_author = \"{}{{user}}\"\n",
+        "x".repeat(55)
+    ));
+}
+
+#[test]
 #[should_panic(expected = "`comment_writes.max_rows.respond` must be between 1 and 50")]
 fn test_config_with_comment_row_cap_out_of_range_is_invalid() {
     ms_office_addin_config_from_toml(&format!(

@@ -6889,8 +6889,9 @@ pub struct MsOfficeAddinCommentRowCaps {
 
 /// The longest label a comment starts with.
 const MS_OFFICE_ADDIN_COMMENT_LABEL_MAX: usize = 40;
-/// Word shows the expanded author on each comment card; 120 characters keep it readable.
-const MS_OFFICE_ADDIN_COMMENT_AUTHOR_MAX: usize = 120;
+/// The author template before `{user}` is filled in. The add-in shortens the user's name so the
+/// expanded author stays within 120 characters; 60 here leaves room for most names.
+const MS_OFFICE_ADDIN_COMMENT_AUTHOR_TEMPLATE_MAX: usize = 60;
 const MS_OFFICE_ADDIN_COMMENT_ROWS_MAX: u32 = 50;
 
 impl MsOfficeAddinDefaultSettings {
@@ -6905,11 +6906,11 @@ impl MsOfficeAddinDefaultSettings {
         }
         let template = &self.comment_assistant_author;
         if template.matches("{user}").count() != 1
-            || template.chars().count() > MS_OFFICE_ADDIN_COMMENT_AUTHOR_MAX
+            || template.chars().count() > MS_OFFICE_ADDIN_COMMENT_AUTHOR_TEMPLATE_MAX
             || template.chars().any(char::is_control)
         {
             return Err(eyre!(
-                "Microsoft Office add-in default setting `comment_assistant_author` must contain `{{user}}` exactly once and be plain text of at most {MS_OFFICE_ADDIN_COMMENT_AUTHOR_MAX} characters."
+                "Microsoft Office add-in default setting `comment_assistant_author` must contain `{{user}}` exactly once and be plain text of at most {MS_OFFICE_ADDIN_COMMENT_AUTHOR_TEMPLATE_MAX} characters."
             ));
         }
         let caps = &self.comment_writes.max_rows;

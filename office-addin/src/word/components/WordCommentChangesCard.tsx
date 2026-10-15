@@ -21,16 +21,10 @@ import {
   wordCommentTaintText,
 } from "./WordReviewCardParts";
 import { useClientActionConfirmFlow } from "../../core/clientActions/useClientActionConfirmFlow";
-import { useClientActionDecisions } from "../../core/clientActions/useClientActionDecisions";
+import { useWordClientActionDecisions } from "../hooks/useWordClientActionDecisions";
 import { useWordReviewFocus } from "../hooks/useWordReviewFocus";
 import { useWordWrite } from "../providers/WordWriteProvider";
-import {
-  decisionKey,
-  grantClientActionForSession,
-  isActionDenied,
-  scopedDecisions,
-  wordClientActionDecisionStore,
-} from "../utils/clientActionPolicy";
+import { isActionDenied } from "../utils/clientActionPolicy";
 import {
   recordWordCommentOutcome,
   wordCommentAlwaysBlock,
@@ -399,24 +393,14 @@ export function WordCommentChangesCard({
     holdOperationUntil,
     restoreRequest,
   } = useWordWrite();
-  const [storedDecisions, setDecisions] = useClientActionDecisions(
-    wordClientActionDecisionStore,
+  // O-25: a deployment may keep "Always" for adds to this pane session and document.
+  const { decisions, grantAlways, grantScope } = useWordClientActionDecisions(
+    entry.action,
   );
   const { profile } = useProfile();
   const { messages } = useChatContext();
   const facetId = artifact?.facetId ?? "";
   const messageId = artifact?.messageId;
-  // O-25: a deployment may keep "Always" for adds to this pane session and document.
-  const grantScope =
-    artifact?.clientActionGrantScopes?.[entry.action] === "session_document"
-      ? ("session_document" as const)
-      : ("device" as const);
-  const decisions = scopedDecisions(storedDecisions, {
-    facetId,
-    action: entry.action,
-    scope: grantScope,
-    identity: documentIdentity,
-  });
   const message = messageId ? messages[messageId] : undefined;
   const isGenerating = message?.status === "sending";
   const draft = wordCommentDraft(content);
@@ -527,17 +511,19 @@ export function WordCommentChangesCard({
         expectedIdentity: artifact?.itemIdentity,
         currentIdentity: documentIdentity,
       });
+      // A retry that cannot run leaves the approval it follows, and its receipt, as they were.
+      const lapse = () => {
+        const state: WordCommentCardState = cardState.consent
+          ? cardState
+          : { ...cardState, consent: "expired", consentKind };
+        if (!cardState.consent) recordOf(state);
+        return state;
+      };
       if (!draft || !live.allowed) {
-        const state = {
-          ...cardState,
-          consent: "expired" as const,
-          consentKind,
-        };
         updateReview(batchKey, {
           status: live.allowed ? "no-capture" : live.reason,
-          comments: state,
+          comments: lapse(),
         });
-        recordOf(state);
         return false;
       }
       if (isGenerating || !offered || !beginOperation()) return false;
@@ -560,13 +546,7 @@ export function WordCommentChangesCard({
           held = true;
         }
         if (!result) {
-          const state = {
-            ...cardState,
-            consent: "expired" as const,
-            consentKind,
-          };
-          updateReview(batchKey, { status: "no-capture", comments: state });
-          recordOf(state);
+          updateReview(batchKey, { status: "no-capture", comments: lapse() });
           return false;
         }
         const touched = new Map(
@@ -846,7 +826,7 @@ export function WordCommentChangesCard({
               })}
             </p>
           )}
-          {tainted && draft.action === "word.add_comments" && (
+          {tainted && (
             <p className="word-review__hint">
               {t({
                 id: "officeAddin.word.comments.tainted",
@@ -900,17 +880,7 @@ export function WordCommentChangesCard({
                   count === 0
                 )
                   return;
-                if (grantScope === "session_document" && documentIdentity)
-                  grantClientActionForSession(
-                    facetId,
-                    entry.action,
-                    documentIdentity,
-                  );
-                else
-                  setDecisions({
-                    ...storedDecisions,
-                    [decisionKey(facetId, entry.action)]: "always",
-                  });
+                grantAlways();
                 allowCard(confirmCard);
               }}
               alwaysAllowDisabledReason={
@@ -940,7 +910,7 @@ export function WordCommentChangesCard({
                 <Button
                   type="button"
                   variant="secondary"
-                  disabled={operationInProgress}
+                  disabled={operationInProgress || !gate.allowed}
                   onClick={() => void runRows(failedRows, "click")}
                 >
                   {t({
@@ -953,7 +923,7 @@ export function WordCommentChangesCard({
                 <Button
                   type="button"
                   variant="secondary"
-                  disabled={operationInProgress}
+                  disabled={operationInProgress || !gate.allowed}
                   onClick={() => void runRows(authorRows, "click", true)}
                 >
                   {t({

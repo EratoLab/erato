@@ -800,6 +800,11 @@ msgstr "Toujours autoriser"
 #~ msgstr "Verrouillé : votre organisation exige une confirmation pour cette action à chaque fois."
 
 #. js-lingui-explicit-id
+#: src/core/clientActions/ClientActionsSettings.tsx
+msgid "officeAddin.settings.addin.clientActions.always.session"
+msgstr "Accordé uniquement depuis la confirmation dans le chat, pour un document jusqu'à la fermeture du complément. Choisir une autre option le retire."
+
+#. js-lingui-explicit-id
 #: src/components/BehaviorTabContent.tsx
 #~ msgid "officeAddin.settings.addin.clientActions.ask.helper"
 #~ msgstr "Affiche une étape de confirmation dans la discussion avant d'ouvrir quoi que ce soit."

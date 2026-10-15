@@ -5,6 +5,7 @@ import {
 import { useCallback } from "react";
 
 import {
+  isWordCommentAuthorMode,
   WORD_PREFERENCES_KEY,
   wordCommentAuthorOf,
   wordCommentDeploymentSettings,
@@ -32,9 +33,6 @@ const NO_WORD_PREFERENCES: WordPreferences = {};
 const isCommentPrecedence = (value: unknown): value is WordCommentPrecedence =>
   WORD_COMMENT_PRECEDENCES.includes(value as WordCommentPrecedence);
 
-const isCommentAuthor = (value: unknown): value is WordCommentAuthorMode =>
-  value === "user" || value === "assistant";
-
 export const wordPreferencesPersistedOptions: PersistedStateOptions<WordPreferences> =
   {
     parse: (value) => {
@@ -50,7 +48,7 @@ export const wordPreferencesPersistedOptions: PersistedStateOptions<WordPreferen
         ...(isCommentPrecedence(commentPrecedence)
           ? { commentPrecedence }
           : {}),
-        ...(isCommentAuthor(commentAuthor) ? { commentAuthor } : {}),
+        ...(isWordCommentAuthorMode(commentAuthor) ? { commentAuthor } : {}),
       };
     },
   };

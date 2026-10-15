@@ -752,6 +752,7 @@ async function readOnce(ids: readonly string[]) {
   const read = await runWordGuarded(
     async (context) => {
       const found = await findThreads(context, ids);
+      // An id Word lists twice proves neither a write nor a delete.
       return new Map(
         [...found].map(([id, entry]) => [
           id,
@@ -764,7 +765,9 @@ async function readOnce(ids: readonly string[]) {
                   content: reply.content,
                 })),
               }
-            : null,
+            : entry.code === "THREAD_AMBIGUOUS"
+              ? ("ambiguous" as const)
+              : null,
         ]),
       );
     },
@@ -821,6 +824,8 @@ async function runResponds(
 ): Promise<WordCommentRun> {
   const host = options.host ?? wordHostPlatform();
   const decisions = new Map<number, Decision>();
+  // Rows whose phase was queued: after a timeout only these may have been written.
+  const queued = new Set<number>();
   const besideHidden = await threadsBesideHiddenText(
     host,
     rows
@@ -855,10 +860,12 @@ async function runResponds(
         (row) => decisions.get(row.i)!.kind === "write",
       );
       if (!writing.length) return;
-      guard.beforeWrite();
       for (const phase of RESPOND_PHASES) {
         const batch = writing.filter((row) => row.op === phase);
         if (!batch.length) continue;
+        // Each phase is its own write: none starts once the card has been told the run timed out.
+        guard.beforeWrite();
+        for (const row of batch) queued.add(row.i);
         const replies = batch.map((row) => {
           const decision = decisions.get(row.i) as Extract<
             Decision,
@@ -934,7 +941,7 @@ async function runResponds(
           );
         return result(
           row,
-          guarded.writeQueued && decision ? "unverified" : "failed",
+          queued.has(row.i) ? "unverified" : "failed",
           code ? { code } : {},
         );
       }),
@@ -956,6 +963,8 @@ async function runResponds(
         );
       if (!back) return result(row, "unverified", { code: "READ_FAILED" });
       const live = back.get(row.thread!.commentId);
+      if (live === "ambiguous")
+        return result(row, "unverified", { code: "THREAD_AMBIGUOUS" });
       if (!live)
         return result(row, decision.thrown ? "failed" : "unverified", {
           code: "THREAD_NOT_FOUND",
@@ -1148,6 +1157,8 @@ async function runModifies(
       writes.map(({ row, thrown }) => {
         if (!back) return outcome(row, "unverified", "READ_FAILED");
         const live = back.get(row.thread!.commentId);
+        if (live === "ambiguous")
+          return outcome(row, "unverified", "THREAD_AMBIGUOUS");
         const target = row.entry!;
         if (row.op === "delete") {
           const gone =
@@ -1321,6 +1332,7 @@ export async function revertWordCommentRows(
         acted.map(({ i, step }) => {
           if (!back) return { i, status: "unverified" };
           const live = back.get(threadOf(step));
+          if (live === "ambiguous") return { i, status: "unverified" };
           const done =
             step.kind === "delete-comment"
               ? !live

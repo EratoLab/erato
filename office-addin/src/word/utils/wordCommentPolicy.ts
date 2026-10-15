@@ -172,15 +172,32 @@ export function wordCommentDeploymentSettings(): WordCommentDeploymentSettings {
   };
 }
 
-/** The name Word shows for an AI-authored comment; null when the principal has no usable name. */
+/**
+ * The name Word shows for an AI-authored comment; null when the principal has no usable name. The
+ * name goes in as text, and a name too long for 120 characters is shortened with "…".
+ */
 export function wordCommentAssistantAuthorName(
   template: string,
   principalName: string | null | undefined,
 ): string | null {
   const name = principalName?.replace(/\s+/g, " ").trim();
-  if (!name) return null;
-  const expanded = template.replace("{user}", name);
-  return expanded.length <= WORD_COMMENT_ASSISTANT_AUTHOR_MAX ? expanded : null;
+  const parts = template.split("{user}");
+  if (!name || parts.length !== 2) return null;
+  const [before, after] = parts;
+  const room =
+    WORD_COMMENT_ASSISTANT_AUTHOR_MAX -
+    Array.from(before).length -
+    Array.from(after).length;
+  if (room < 2) return null;
+  const chars = Array.from(name);
+  const fitted =
+    chars.length <= room
+      ? name
+      : `${chars
+          .slice(0, room - 1)
+          .join("")
+          .trimEnd()}…`;
+  return `${before}${fitted}${after}`;
 }
 
 /** For the receipt: the host family, never a build or a document name. */
@@ -191,8 +208,9 @@ export const wordCommentHostKey = (
 // Device-local on purpose: Office.context.document.settings would persist into the .docx.
 export const WORD_PREFERENCES_KEY = "erato.addin.word.preferences.v1";
 
-const isCommentAuthor = (value: unknown): value is WordCommentAuthorMode =>
-  value === "user" || value === "assistant";
+export const isWordCommentAuthorMode = (
+  value: unknown,
+): value is WordCommentAuthorMode => value === "user" || value === "assistant";
 
 /** The deployment's lock wins, then the user's stored choice, then the deployment's seed. */
 export function wordCommentAuthorOf(
@@ -213,5 +231,7 @@ export function wordCommentAuthorPreference(): WordCommentAuthorMode {
   } catch {
     stored = undefined;
   }
-  return wordCommentAuthorOf(isCommentAuthor(stored) ? stored : undefined);
+  return wordCommentAuthorOf(
+    isWordCommentAuthorMode(stored) ? stored : undefined,
+  );
 }

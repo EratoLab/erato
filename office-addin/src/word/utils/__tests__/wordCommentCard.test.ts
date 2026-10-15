@@ -102,16 +102,28 @@ describe("wordCommentAuthorPlan (O-28)", () => {
 });
 
 describe("wordCommentAlwaysBlock", () => {
-  it("blocks Always for adds after other people's comments or without a label, and only for adds", () => {
+  it("blocks Always for adds after other people's comments or without a label", () => {
     const add = [{ op: "add", anchor: { para: 1 }, text: "a" }];
     expect(wordCommentAlwaysBlock(draftOf(add), true)).toBe("tainted");
     expect(wordCommentAlwaysBlock(draftOf(add, { label: "" }), false)).toBe(
       "empty-label",
     );
     expect(wordCommentAlwaysBlock(draftOf(add), false)).toBeNull();
-    expect(
-      wordCommentAlwaysBlock(draftOf([{ op: "resolve", thread: "t7k" }]), true),
-    ).toBeNull();
+  });
+
+  it("blocks Always for replies, resolves, edits and deletes after other people's comments", () => {
+    for (const change of [
+      { op: "reply", thread: "t7k", text: "a" },
+      { op: "resolve", thread: "t7k" },
+      { op: "edit", target: "t7k", text: "a" },
+      { op: "delete", target: "t7k" },
+    ]) {
+      expect(wordCommentAlwaysBlock(draftOf([change]), true)).toBe("tainted");
+      expect(wordCommentAlwaysBlock(draftOf([change]), false)).toBeNull();
+      expect(
+        wordCommentAlwaysBlock(draftOf([change], { label: "" }), false),
+      ).toBeNull();
+    }
   });
 });
 

@@ -800,6 +800,11 @@ msgstr "Zawsze zezwalaj"
 #~ msgstr "Zablokowane: Twoja organizacja wymaga potwierdzenia tej akcji za każdym razem."
 
 #. js-lingui-explicit-id
+#: src/core/clientActions/ClientActionsSettings.tsx
+msgid "officeAddin.settings.addin.clientActions.always.session"
+msgstr "Udzielane tylko w potwierdzeniu na czacie, dla jednego dokumentu do zamknięcia dodatku. Wybranie innej opcji je cofa."
+
+#. js-lingui-explicit-id
 #: src/components/BehaviorTabContent.tsx
 #~ msgid "officeAddin.settings.addin.clientActions.ask.helper"
 #~ msgstr "Wyświetla krok potwierdzenia na czacie przed otwarciem czegokolwiek."

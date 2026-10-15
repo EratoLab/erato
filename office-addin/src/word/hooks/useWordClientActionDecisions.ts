@@ -4,6 +4,7 @@ import { useCallback, useMemo, useState } from "react";
 import { useClientActionDecisions } from "../../core/clientActions/useClientActionDecisions";
 import { useWordWrite } from "../providers/WordWriteProvider";
 import {
+  clientActionSessionGrantVersion,
   decisionKey,
   grantClientActionForSession,
   scopedDecisions,
@@ -37,6 +38,7 @@ export function useWordClientActionDecisions(action: string): {
     artifact?.clientActionGrantScopes?.[action] === "session_document"
       ? "session_document"
       : "device";
+  const grantVersion = clientActionSessionGrantVersion();
   const decisions = useMemo(
     () =>
       scopedDecisions(stored, {
@@ -45,9 +47,18 @@ export function useWordClientActionDecisions(action: string): {
         scope: grantScope,
         identity: documentIdentity,
       }),
-    // `grants` re-reads the session store after this card granted.
+    // The session store is outside React: `grants` (this card granted) and `grantVersion`
+    // (granted or taken back anywhere, read at this render) make the memo read it again.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [stored, facetId, action, grantScope, documentIdentity, grants],
+    [
+      stored,
+      facetId,
+      action,
+      grantScope,
+      documentIdentity,
+      grants,
+      grantVersion,
+    ],
   );
   const grantAlways = useCallback(() => {
     if (grantScope === "session_document") {

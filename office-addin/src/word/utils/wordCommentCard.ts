@@ -81,7 +81,10 @@ export function wordCommentAuthorPlan(
 }
 
 export type WordCommentAlwaysBlock =
-  /** L2: the request carried comment text by someone other than the user. */
+  /**
+   * L2: the request carried comment text by someone other than the user. It suspends Always for
+   * every comment action, not only adds: a reply, resolve, edit or delete it prompted is no safer.
+   */
   | "tainted"
   /** O-8: without a label nothing in the comment says Erato wrote it. */
   | "empty-label";
@@ -91,8 +94,8 @@ export function wordCommentAlwaysBlock(
   draft: WordCommentDraft,
   tainted: boolean,
 ): WordCommentAlwaysBlock | null {
-  if (draft.action !== "word.add_comments") return null;
   if (tainted) return "tainted";
+  if (draft.action !== "word.add_comments") return null;
   return draft.label ? null : "empty-label";
 }
 

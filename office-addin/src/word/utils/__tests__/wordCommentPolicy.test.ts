@@ -83,6 +83,15 @@ describe("AI-author availability (O-28)", () => {
 
   it("names the author from the template and the principal, within 120 characters", () => {
     expect(
+      wordCommentAssistantAuthorName("Erato (AI) for {user}", "A$&B $' $$"),
+    ).toBe("Erato (AI) for A$&B $' $$");
+    const long = wordCommentAssistantAuthorName(
+      "Erato (AI) for {user}",
+      "x".repeat(110),
+    );
+    expect(long).toBe(`Erato (AI) for ${"x".repeat(104)}…`);
+    expect(Array.from(long!)).toHaveLength(120);
+    expect(
       wordCommentAssistantAuthorName(
         "Erato (AI) for {user}",
         " Daniel  Fiebig ",
@@ -94,9 +103,7 @@ describe("AI-author availability (O-28)", () => {
     expect(
       wordCommentAssistantAuthorName("Erato (AI) for {user}", null),
     ).toBeNull();
-    expect(
-      wordCommentAssistantAuthorName("Erato (AI) for {user}", "x".repeat(110)),
-    ).toBeNull();
+    expect(wordCommentAssistantAuthorName("{user}{user}", "Max")).toBeNull();
   });
 });
 

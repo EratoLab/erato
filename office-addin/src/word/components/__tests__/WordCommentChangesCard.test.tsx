@@ -222,17 +222,23 @@ function renderCard(options: {
     options.decisions ?? {},
     mockSetDecisions,
   ]);
-  return render(
+  const captures = new Map(
+    options.capture ? [[messageId, options.capture]] : [],
+  );
+  const tree = (identity: string) => (
     <WordWriteProvider
-      documentIdentity={IDENTITY}
-      capturesByAssistantMessageId={
-        new Map(options.capture ? [[messageId, options.capture]] : [])
-      }
+      documentIdentity={identity}
+      capturesByAssistantMessageId={captures}
     >
       <WordHostCardRenderer language={language} content={options.draftId} />
-    </WordWriteProvider>,
-    { wrapper: TestTheme },
+    </WordWriteProvider>
   );
+  const view = render(tree(IDENTITY), { wrapper: TestTheme });
+  return {
+    ...view,
+    /** The user switches Word to another document. */
+    openDocument: (identity: string) => view.rerender(tree(identity)),
+  };
 }
 
 const rows = () => screen.getAllByTestId("word-comments-row");
@@ -371,6 +377,28 @@ describe("WordCommentChangesCard", () => {
     expect(host.commentStates()).toHaveLength(1);
   });
 
+  it("does not honour Always for a delete when the request carried other people's comments", async () => {
+    const capture = await submit(
+      [{ op: "delete", target: "t7k" }],
+      "call-taint-del",
+    );
+    renderCard({
+      action: "word.modify_comments",
+      draftId: "call-taint-del",
+      capture: { ...capture, commentTaint: true },
+      presentation: "auto_prompt",
+      proposed: true,
+      decisions: { "word_selection/word.modify_comments": "always" },
+    });
+    expect(await screen.findByTestId("confirmation-card")).toHaveTextContent(
+      "This request included comments by other people, so Erato asks each time.",
+    );
+    expect(
+      screen.getByText("This request included comments by other people."),
+    ).toBeInTheDocument();
+    expect(host.commentStates().map((c) => c.content)).toEqual(["T1 root"]);
+  });
+
   it("posts an add under a standing grant and records it as such", async () => {
     const capture = await submit(
       [{ op: "add", anchor: { para: 3, quote: "alpha" }, text: "auto" }],
@@ -495,6 +523,37 @@ describe("WordCommentChangesCard", () => {
     });
     await waitFor(() => expect(host.commentStates()).toHaveLength(3));
     expect(screen.queryByTestId("confirmation-card")).toBeNull();
+  });
+
+  it("offers no retry for another open document and keeps the approval it follows", async () => {
+    uninstallWordSelectionHost();
+    host = installWordSelectionHost(DOC, {
+      host: "pc",
+      insertCommentError: () => "GeneralException",
+    });
+    const capture = await submit(
+      [{ op: "add", anchor: { para: 3, quote: "alpha" }, text: "x" }],
+      "call-retry",
+    );
+    const view = renderCard({
+      action: "word.add_comments",
+      draftId: "call-retry",
+      capture,
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Add/ }));
+    const retry = await screen.findByRole("button", {
+      name: "Try the rows Word did not take again",
+    });
+    expect(retry).toBeEnabled();
+    const approved = wordCommentReceipts().at(-1);
+    expect(approved).toMatchObject({ consent: "approved" });
+    view.openDocument("another-document");
+    expect(
+      screen.getByRole("button", {
+        name: "Try the rows Word did not take again",
+      }),
+    ).toBeDisabled();
+    expect(wordCommentReceipts().at(-1)).toEqual(approved);
   });
 
   it("ignores a fence naming a draft this message did not submit", async () => {

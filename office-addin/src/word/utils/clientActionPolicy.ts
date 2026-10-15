@@ -2,6 +2,7 @@ import { isImplementedClientAction } from "./wordClientActions";
 import { createClientActionDecisionStore } from "../../core/clientActions/clientActionPolicy";
 
 export {
+  clientActionSessionGrantVersion,
   decisionKey,
   effectiveDecision,
   grantClientActionForSession,

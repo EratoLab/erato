@@ -509,6 +509,31 @@ describe.each(HOSTS)("edits and deletes on %s", (which) => {
     expect(commentOn("T1 root")).toEqual([]);
   });
 
+  it("leaves a delete unverified when Word then lists its id twice", async () => {
+    install(which);
+    const target = commentOn("T1 root")[0].id;
+    const others = [
+      commentOn("T2 root")[0].id,
+      host.addComment({ p: "AP2", text: "delta" }, { content: "AP2 root" }),
+    ];
+    const draft = await draftOf([{ op: "delete", target: "tt1" }]);
+    const writes = host.writeSyncs().length;
+    let relisted = false;
+    const stop = host.afterSync(() => {
+      if (relisted || host.writeSyncs().length === writes) return;
+      relisted = true;
+      for (const id of others)
+        host.setCommentDurableId(id, Number(target).toString(16));
+    });
+    const { rows } = await run(draft);
+    stop();
+    expect(relisted).toBe(true);
+    expect(rows[0]).toMatchObject({
+      status: "unverified",
+      code: "THREAD_AMBIGUOUS",
+    });
+  });
+
   it("deletes one reply and refuses one that is gone", async () => {
     install(which);
     const draft = await draftOf([{ op: "delete", target: "tt1.1" }]);
@@ -698,5 +723,31 @@ describe("a run that times out", () => {
     expect(timedOut).toBe(true);
     expect(rows[0].status).toMatch(/failed|unverified/);
     hang.release();
+  });
+
+  it("writes no later phase once the card has been told the run timed out", async () => {
+    install("pc");
+    const draft = await draftOf([
+      { op: "reopen", thread: "tt2" },
+      { op: "reply", thread: "tt2", text: "Too late." },
+    ]);
+    vi.useFakeTimers();
+    // Sync indexes count from 1: the thread read, its replies, then the reopen.
+    const hang = host.hangSync({
+      at: host.syncCount() + 3,
+      execute: "immediately",
+    });
+    const result = run(draft);
+    await hang.reached;
+    await vi.advanceTimersByTimeAsync(WORD_COMMENT_RUN_TIMEOUT_MS + 3_000);
+    const { rows, timedOut } = await result;
+    expect(timedOut).toBe(true);
+    expect(rows.map((row) => row.status)).toEqual(["unverified", "failed"]);
+    hang.release();
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(commentOn("T2 root")[0]).toMatchObject({
+      resolved: false,
+      replies: [],
+    });
   });
 });

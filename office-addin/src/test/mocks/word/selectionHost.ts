@@ -295,6 +295,8 @@ export interface WordSelectionHost {
   addReply(id: string, meta?: { author?: string; content?: string }): string;
   /** A co-author deletes a comment and its replies. */
   deleteComment(id: string): void;
+  /** Gives a comment another durableId (hex), as Word for the web can list two comments under one id. */
+  setCommentDurableId(id: string, durableId: string): void;
   /**
    * The body's comments in reference order: Comment.id as a string, and its range's text as
    * Range.text gives it, without the web's U+0005.
@@ -4968,6 +4970,13 @@ export function installWordSelectionHost(
       )?.comment;
       if (!c) throw new Error(`mock: no comment ${id}`);
       removeComment(stories.body, c);
+    },
+    setCommentDurableId: (id, durableId) => {
+      const c = stories.body.tokens.find(
+        (t) => t.comment && commentId(t.comment) === id,
+      )?.comment;
+      if (!c) throw new Error(`mock: no comment ${id}`);
+      c.durableId = durableId.toUpperCase().padStart(8, "0");
     },
     addReply: (id, meta = {}) => {
       const c = stories.body.tokens.find(

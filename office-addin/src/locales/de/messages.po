@@ -800,6 +800,11 @@ msgstr "Immer erlauben"
 #~ msgstr "Gesperrt: Ihre Organisation verlangt für diese Aktion jedes Mal eine Bestätigung."
 
 #. js-lingui-explicit-id
+#: src/core/clientActions/ClientActionsSettings.tsx
+msgid "officeAddin.settings.addin.clientActions.always.session"
+msgstr "Wird nur in der Bestätigung im Chat erteilt, für ein Dokument, bis das Add-in geschlossen wird. Eine andere Auswahl nimmt die Erlaubnis zurück."
+
+#. js-lingui-explicit-id
 #: src/components/BehaviorTabContent.tsx
 #~ msgid "officeAddin.settings.addin.clientActions.ask.helper"
 #~ msgstr "Zeigt einen Bestätigungsschritt im Chat an, bevor etwas geöffnet wird."

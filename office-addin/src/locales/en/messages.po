@@ -800,6 +800,11 @@ msgstr "Always allow"
 #~ msgstr "Locked: your organization requires confirmation for this action every time."
 
 #. js-lingui-explicit-id
+#: src/core/clientActions/ClientActionsSettings.tsx
+msgid "officeAddin.settings.addin.clientActions.always.session"
+msgstr "Allowed from the confirmation only, for one document until this pane closes. Choose Ask or Never to take it back."
+
+#. js-lingui-explicit-id
 #: src/components/BehaviorTabContent.tsx
 #~ msgid "officeAddin.settings.addin.clientActions.ask.helper"
 #~ msgstr "Shows a confirmation step in the chat before opening anything."

@@ -800,6 +800,11 @@ msgstr "Permitir siempre"
 #~ msgstr "Bloqueado: tu organización requiere confirmación para esta acción cada vez."
 
 #. js-lingui-explicit-id
+#: src/core/clientActions/ClientActionsSettings.tsx
+msgid "officeAddin.settings.addin.clientActions.always.session"
+msgstr "Solo se concede desde la confirmación en el chat, para un documento hasta que se cierre el complemento. Elegir otra opción la retira."
+
+#. js-lingui-explicit-id
 #: src/components/BehaviorTabContent.tsx
 #~ msgid "officeAddin.settings.addin.clientActions.ask.helper"
 #~ msgstr "Muestra un paso de confirmación en el chat antes de abrir nada."
