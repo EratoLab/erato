@@ -6788,6 +6788,108 @@ pub struct MsOfficeAddinDefaultSettings {
     /// How Word document plans are applied on each host. Users cannot change these.
     #[serde(default)]
     pub word_apply: MsOfficeAddinWordApplySettings,
+    /// Put in front of every Word comment Erato writes under the user's name. May be empty, which
+    /// makes the user confirm every comment Erato adds.
+    #[serde(default = "default_ms_office_addin_comment_label")]
+    pub comment_label: String,
+    /// Who Word shows as the author of new comments until the user chooses: the user, with the
+    /// label, or Erato on the user's behalf.
+    #[serde(default)]
+    pub comment_author: MsOfficeAddinCommentAuthor,
+    /// Users cannot change `comment_author`.
+    #[serde(default)]
+    pub comment_author_enforced: bool,
+    /// The author of comments posted as Erato; `{user}` becomes the signed-in user's name.
+    #[serde(default = "default_ms_office_addin_comment_assistant_author")]
+    pub comment_assistant_author: String,
+    /// Which Word comment actions write, and how many changes a card holds. Users cannot change
+    /// these.
+    #[serde(default)]
+    pub comment_writes: MsOfficeAddinCommentWriteSettings,
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone, Copy, Default, Facet, HeapSize)]
+#[serde(rename_all = "snake_case")]
+#[facet(rename_all = "snake_case")]
+#[repr(C)]
+pub enum MsOfficeAddinCommentAuthor {
+    #[default]
+    User,
+    Assistant,
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone, Copy, Facet, HeapSize)]
+#[serde(rename_all = "snake_case")]
+#[facet(rename_all = "snake_case")]
+#[repr(C)]
+pub enum MsOfficeAddinCommentWriteMode {
+    Post,
+    /// The card offers "Copy comment" and "Show passage" instead of writing.
+    Copy,
+}
+
+/// Unset keys keep the add-in's defaults: every action posts, and cards hold up to 50 new
+/// comments and 20 other changes.
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default, Facet, HeapSize)]
+pub struct MsOfficeAddinCommentWriteSettings {
+    /// New comments.
+    pub add: Option<MsOfficeAddinCommentWriteMode>,
+    /// Replies, resolve and reopen.
+    pub respond: Option<MsOfficeAddinCommentWriteMode>,
+    /// Edits and deletes.
+    pub modify: Option<MsOfficeAddinCommentWriteMode>,
+    /// False posts every new comment under the user's name with the label.
+    pub assistant_author: Option<bool>,
+    #[serde(default)]
+    pub max_rows: MsOfficeAddinCommentRowCaps,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default, Facet, HeapSize)]
+pub struct MsOfficeAddinCommentRowCaps {
+    pub add: Option<u32>,
+    pub respond: Option<u32>,
+    pub modify: Option<u32>,
+}
+
+/// The longest label a comment starts with.
+const MS_OFFICE_ADDIN_COMMENT_LABEL_MAX: usize = 40;
+/// Word shows the expanded author on each comment card; 120 characters keep it readable.
+const MS_OFFICE_ADDIN_COMMENT_AUTHOR_MAX: usize = 120;
+const MS_OFFICE_ADDIN_COMMENT_ROWS_MAX: u32 = 50;
+
+impl MsOfficeAddinDefaultSettings {
+    pub fn validate(&self) -> Result<(), Report> {
+        let label = self.comment_label.trim();
+        if label.chars().count() > MS_OFFICE_ADDIN_COMMENT_LABEL_MAX
+            || label.chars().any(char::is_control)
+        {
+            return Err(eyre!(
+                "Microsoft Office add-in default setting `comment_label` must be plain text of at most {MS_OFFICE_ADDIN_COMMENT_LABEL_MAX} characters."
+            ));
+        }
+        let template = &self.comment_assistant_author;
+        if template.matches("{user}").count() != 1
+            || template.chars().count() > MS_OFFICE_ADDIN_COMMENT_AUTHOR_MAX
+            || template.chars().any(char::is_control)
+        {
+            return Err(eyre!(
+                "Microsoft Office add-in default setting `comment_assistant_author` must contain `{{user}}` exactly once and be plain text of at most {MS_OFFICE_ADDIN_COMMENT_AUTHOR_MAX} characters."
+            ));
+        }
+        let caps = &self.comment_writes.max_rows;
+        for (key, cap) in [
+            ("add", caps.add),
+            ("respond", caps.respond),
+            ("modify", caps.modify),
+        ] {
+            if cap.is_some_and(|cap| cap == 0 || cap > MS_OFFICE_ADDIN_COMMENT_ROWS_MAX) {
+                return Err(eyre!(
+                    "Microsoft Office add-in default setting `comment_writes.max_rows.{key}` must be between 1 and {MS_OFFICE_ADDIN_COMMENT_ROWS_MAX}."
+                ));
+            }
+        }
+        Ok(())
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone, Copy, Default, Facet, HeapSize)]
@@ -6808,6 +6910,11 @@ impl Default for MsOfficeAddinDefaultSettings {
             compose_inherits_from_read: default_ms_office_addin_compose_inherits_from_read(),
             word_include_document: default_ms_office_addin_word_include_document(),
             word_apply: MsOfficeAddinWordApplySettings::default(),
+            comment_label: default_ms_office_addin_comment_label(),
+            comment_author: MsOfficeAddinCommentAuthor::default(),
+            comment_author_enforced: false,
+            comment_assistant_author: default_ms_office_addin_comment_assistant_author(),
+            comment_writes: MsOfficeAddinCommentWriteSettings::default(),
         }
     }
 }
@@ -6924,6 +7031,7 @@ impl MsOfficeAddinConfig {
 
         self.manifest.validate()?;
         self.document.validate(&self.addin_id)?;
+        self.default_settings.validate()?;
         self.validate_launch_events()?;
 
         Ok(())
@@ -7251,6 +7359,14 @@ fn default_ms_office_addin_compose_inherits_from_read() -> bool {
 
 fn default_ms_office_addin_word_include_document() -> bool {
     true
+}
+
+fn default_ms_office_addin_comment_label() -> String {
+    "Erato AI:".to_string()
+}
+
+fn default_ms_office_addin_comment_assistant_author() -> String {
+    "Erato (AI) for {user}".to_string()
 }
 
 fn default_ms_office_addin_manifest_provider_name() -> String {

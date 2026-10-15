@@ -4,9 +4,10 @@ use crate::test_utils::hermetic_app_config;
 use crate::{MIGRATOR, test_app_state};
 use erato_config::config::{
     AppConfig, ConfigSourceFile, FileTypeDetectionMode, GenerationConfig, McpRuntimeConfig,
-    ModelReasoningEffort, ModelVerbosity, MsOfficeAddinLaunchEventType,
-    MsOfficeAddinWordApplyPolicy, MsOfficeAddinWordWholeDocumentImport, PromptSourceSpecification,
-    RuntimeConfigurationConfig, ServerConfig, SharepointAllDrivesSource,
+    ModelReasoningEffort, ModelVerbosity, MsOfficeAddinCommentAuthor,
+    MsOfficeAddinCommentWriteMode, MsOfficeAddinLaunchEventType, MsOfficeAddinWordApplyPolicy,
+    MsOfficeAddinWordWholeDocumentImport, PromptSourceSpecification, RuntimeConfigurationConfig,
+    ServerConfig, SharepointAllDrivesSource,
 };
 use sqlx::Pool;
 use sqlx::postgres::Postgres;
@@ -196,6 +197,12 @@ config = { endpoint = "https://xxx.blob.core.windows.net", container = "xxx", ac
             .default_settings
             .word_include_document
     );
+    let defaults = &config.integrations.ms_office.addin.default_settings;
+    assert_eq!(defaults.comment_label, "Erato AI:");
+    assert_eq!(defaults.comment_author, MsOfficeAddinCommentAuthor::User);
+    assert!(!defaults.comment_author_enforced);
+    assert_eq!(defaults.comment_assistant_author, "Erato (AI) for {user}");
+    assert_eq!(defaults.comment_writes.add, None);
     assert_eq!(config.integrations.ms_office.ews_api_endpoint, None);
     assert!(!config.integrations.ms_office.ews_skip_tls_validation);
     assert!(!config.cleanup_enabled);
@@ -245,6 +252,17 @@ icon_80_path = "https://cdn.example.com/contoso/icon-80.png"
 
 [integrations.ms_office.addin.default_settings]
 word_include_document = false
+comment_label = "KI:"
+comment_author = "assistant"
+comment_author_enforced = true
+comment_assistant_author = "Erato (KI) für {user}"
+
+[integrations.ms_office.addin.default_settings.comment_writes]
+modify = "copy"
+assistant_author = false
+
+[integrations.ms_office.addin.default_settings.comment_writes.max_rows]
+add = 10
 
 [integrations.ms_office.addin.default_settings.word_apply.web]
 package_read = false
@@ -332,6 +350,21 @@ in_place = false
         }
     );
     assert_eq!(word_apply.mac_policy(), desktop);
+    let defaults = &config.integrations.ms_office.addin.default_settings;
+    assert_eq!(defaults.comment_label, "KI:");
+    assert_eq!(
+        defaults.comment_author,
+        MsOfficeAddinCommentAuthor::Assistant
+    );
+    assert!(defaults.comment_author_enforced);
+    assert_eq!(defaults.comment_assistant_author, "Erato (KI) für {user}");
+    assert_eq!(
+        defaults.comment_writes.modify,
+        Some(MsOfficeAddinCommentWriteMode::Copy)
+    );
+    assert_eq!(defaults.comment_writes.add, None);
+    assert_eq!(defaults.comment_writes.assistant_author, Some(false));
+    assert_eq!(defaults.comment_writes.max_rows.add, Some(10));
 }
 
 #[test]
@@ -495,6 +528,36 @@ fn ms_office_addin_config_from_toml(config_content: &str) -> AppConfig {
         .try_deserialize::<AppConfig>()
         .expect("Failed to deserialize config")
         .migrate()
+}
+
+const MS_OFFICE_ADDIN_BASE: &str = r#"
+[chat_provider]
+provider_kind = "openai"
+model_name = "gpt-4o"
+
+[file_storage_providers.azblob_demo]
+provider_kind = "azblob"
+config = { endpoint = "https://xxx.blob.core.windows.net", container = "xxx", account_name = "xxx", account_key = "xxx" }
+
+[integrations.ms_office.addin]
+enabled = true
+msal_client_id = "00000000-0000-0000-0000-000000000000"
+"#;
+
+#[test]
+#[should_panic(expected = "`comment_assistant_author` must contain `{user}` exactly once")]
+fn test_config_with_comment_author_template_without_user_is_invalid() {
+    ms_office_addin_config_from_toml(&format!(
+        "{MS_OFFICE_ADDIN_BASE}\n[integrations.ms_office.addin.default_settings]\ncomment_assistant_author = \"Erato (AI)\"\n"
+    ));
+}
+
+#[test]
+#[should_panic(expected = "`comment_writes.max_rows.respond` must be between 1 and 50")]
+fn test_config_with_comment_row_cap_out_of_range_is_invalid() {
+    ms_office_addin_config_from_toml(&format!(
+        "{MS_OFFICE_ADDIN_BASE}\n[integrations.ms_office.addin.default_settings.comment_writes.max_rows]\nrespond = 51\n"
+    ));
 }
 
 #[test]

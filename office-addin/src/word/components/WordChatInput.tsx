@@ -56,6 +56,7 @@ import { checkWordAuthoringBudget } from "../utils/wordAuthoringBudget";
 import { wordAuthoringIssueText } from "../utils/wordAuthoringMessages";
 import { wordCommentUserTimeZone } from "../utils/wordCommentEnvelope";
 import { wordCommentHeadingsFromBuild } from "../utils/wordCommentMap";
+import { wordCommentDeploymentSettings } from "../utils/wordCommentPolicy";
 import { wordCommentSelectionCoordinates } from "../utils/wordCommentPositions";
 import {
   wordCommentReadSession,
@@ -410,6 +411,10 @@ export function WordChatInput({
   readEnabledRef.current = chipEnabled;
   const { profile } = useProfile();
   const principalEmail = profile?.email ?? null;
+  const commentPeople = useMemo(() => {
+    const { label, assistantAuthor } = wordCommentDeploymentSettings();
+    return { principalEmail, label, assistantAuthor };
+  }, [principalEmail]);
   const stopRequestBindingRef = useRef<(() => void) | undefined>(undefined);
   const clearReadSession = useCallback(() => {
     stopRequestBindingRef.current?.();
@@ -566,7 +571,7 @@ export function WordChatInput({
         const token = wordCommentReadSession.activate({
           ...activation,
           identity: documentIdentity,
-          people: { principalEmail },
+          people: commentPeople,
           documentIncluded: () => readEnabledRef.current,
         });
         stopCommentBindingRef.current = bindWordDocumentReadRequest(
@@ -609,7 +614,7 @@ export function WordChatInput({
               result,
               registry,
               passage,
-              people: { principalEmail },
+              people: commentPeople,
               now: new Date(),
               userTz: wordCommentUserTimeZone(),
             })
@@ -1070,7 +1075,7 @@ export function WordChatInput({
       includeOpenComments,
       markSent,
       previousCapture,
-      principalEmail,
+      commentPeople,
       waitForCommentDecision,
       withoutComments,
       selectionDue,

@@ -715,6 +715,7 @@ fn build_frontend_environment(
         );
         let default_settings = &config.integrations.ms_office.addin.default_settings;
         let word_apply = &default_settings.word_apply;
+        let comment_writes = &default_settings.comment_writes;
         let word_apply_host = |policy: MsOfficeAddinWordApplyPolicy| {
             serde_json::json!({
                 "in_place": policy.in_place,
@@ -732,6 +733,21 @@ fn build_frontend_environment(
                     "pc": word_apply_host(word_apply.pc_policy()),
                     "mac": word_apply_host(word_apply.mac_policy()),
                     "web": word_apply_host(word_apply.web_policy()),
+                },
+                "comment_label": default_settings.comment_label,
+                "comment_author": default_settings.comment_author,
+                "comment_author_enforced": default_settings.comment_author_enforced,
+                "comment_assistant_author": default_settings.comment_assistant_author,
+                "comment_writes": {
+                    "add": comment_writes.add,
+                    "respond": comment_writes.respond,
+                    "modify": comment_writes.modify,
+                    "assistant_author": comment_writes.assistant_author,
+                    "max_rows": {
+                        "add": comment_writes.max_rows.add,
+                        "respond": comment_writes.max_rows.respond,
+                        "modify": comment_writes.max_rows.modify,
+                    },
                 },
             }),
         );
@@ -1602,6 +1618,17 @@ mod tests {
                     "mac": {"in_place": true, "whole_document_import": "allowed", "package_read": true},
                     "web": {"in_place": true, "whole_document_import": "off", "package_read": true},
                 },
+                "comment_label": "Erato AI:",
+                "comment_author": "user",
+                "comment_author_enforced": false,
+                "comment_assistant_author": "Erato (AI) for {user}",
+                "comment_writes": {
+                    "add": null,
+                    "respond": null,
+                    "modify": null,
+                    "assistant_author": null,
+                    "max_rows": {"add": null, "respond": null, "modify": null},
+                },
             }))
         );
 
@@ -1613,6 +1640,14 @@ mod tests {
         default_settings.word_apply.web.whole_document_import =
             Some(crate::config::MsOfficeAddinWordWholeDocumentImport::Off);
         default_settings.word_apply.web.package_read = Some(false);
+        default_settings.comment_label = "KI:".to_string();
+        default_settings.comment_author = crate::config::MsOfficeAddinCommentAuthor::Assistant;
+        default_settings.comment_author_enforced = true;
+        default_settings.comment_assistant_author = "Erato (KI) für {user}".to_string();
+        default_settings.comment_writes.respond =
+            Some(crate::config::MsOfficeAddinCommentWriteMode::Copy);
+        default_settings.comment_writes.assistant_author = Some(false);
+        default_settings.comment_writes.max_rows.add = Some(10);
         assert_eq!(
             build_frontend_environment(&config, FrontendKind::OfficeAddin)
                 .additional_environment
@@ -1625,6 +1660,17 @@ mod tests {
                     "pc": {"in_place": true, "whole_document_import": "allowed", "package_read": true},
                     "mac": {"in_place": false, "whole_document_import": "allowed", "package_read": true},
                     "web": {"in_place": true, "whole_document_import": "off", "package_read": false},
+                },
+                "comment_label": "KI:",
+                "comment_author": "assistant",
+                "comment_author_enforced": true,
+                "comment_assistant_author": "Erato (KI) für {user}",
+                "comment_writes": {
+                    "add": null,
+                    "respond": "copy",
+                    "modify": null,
+                    "assistant_author": false,
+                    "max_rows": {"add": 10, "respond": null, "modify": null},
                 },
             }))
         );

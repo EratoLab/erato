@@ -8,6 +8,7 @@ import {
 } from "../../core/AddinSettingsDialogCore";
 import { ClientActionsSettings } from "../../core/clientActions/ClientActionsSettings";
 import {
+  useActionFacetClientActions,
   useAvailableActionFacetArgs,
   useAvailableActionFacetIds,
 } from "../../core/clientActions/useAvailableActionFacets";
@@ -23,11 +24,13 @@ import {
   writeWordCompatibilityMode,
 } from "../utils/wordInPlaceSwitch";
 import {
+  useWordCommentAuthor,
   useWordCommentPrecedence,
   useWordIncludeDocumentByDefault,
 } from "../wordPreferences";
 
 import type { WordCommentPrecedence } from "../utils/wordCommentSend";
+import type { WordCommentAuthorMode } from "@erato/frontend/word-review";
 
 export function WordSettingsDialog(props: AddinSettingsDialogCoreProps) {
   const { supportsAudioCapture } = useOffice();
@@ -52,6 +55,7 @@ export function WordSettingsDialog(props: AddinSettingsDialogCoreProps) {
           <div className="space-y-5">
             <WordIncludeDocumentSetting />
             <WordCommentPrecedenceSetting />
+            <WordCommentAuthorSetting />
           </div>
         ),
         systemDescription: t({
@@ -206,6 +210,77 @@ function WordCommentPrecedenceSetting() {
           helper={option.helper}
         />
       ))}
+    </fieldset>
+  );
+}
+
+/** Only where a facet offers new comments; a deployment may lock it (O-28). */
+function WordCommentAuthorSetting() {
+  const name = useId();
+  const facets = useActionFacetClientActions();
+  const [author, setAuthor, enforced] = useWordCommentAuthor();
+  const offered = [...facets.values()].some((facet) =>
+    facet.clientActions.includes("word.add_comments"),
+  );
+  if (!offered) return null;
+  const options: {
+    value: WordCommentAuthorMode;
+    label: string;
+    helper: string;
+  }[] = [
+    {
+      value: "user",
+      label: t({
+        id: "officeAddin.word.settings.commentAuthor.user",
+        message: "Me, with an AI label (default)",
+      }),
+      helper: t({
+        id: "officeAddin.word.settings.commentAuthor.user.helper",
+        message:
+          "Word shows you as the author; each comment starts with the AI label.",
+      }),
+    },
+    {
+      value: "assistant",
+      label: t({
+        id: "officeAddin.word.settings.commentAuthor.assistant",
+        message: "Erato, on my behalf",
+      }),
+      helper: t({
+        id: "officeAddin.word.settings.commentAuthor.assistant.helper",
+        message:
+          "Word shows Erato, on your behalf, as the author of new comments in Word for Windows and Mac. You can still edit or delete them in Word. Co-authors on Word for the web may briefly see your name until they reload. Replies, and comments in Word for the web, carry your name with the AI label.",
+      }),
+    },
+  ];
+  return (
+    <fieldset className="space-y-2" data-testid="word-comment-author">
+      <legend className="text-sm font-medium text-theme-fg-primary">
+        {t({
+          id: "officeAddin.word.settings.commentAuthor.legend",
+          message: "Post new comments as:",
+        })}
+      </legend>
+      {options.map((option) => (
+        <RadioCard
+          key={option.value}
+          name={name}
+          value={option.value}
+          checked={author === option.value}
+          disabled={enforced}
+          onChange={() => setAuthor(option.value)}
+          label={option.label}
+          helper={option.helper}
+        />
+      ))}
+      {enforced && (
+        <p className="text-xs text-theme-fg-muted">
+          {t({
+            id: "officeAddin.word.settings.commentAuthor.enforced",
+            message: "Your organization sets this.",
+          })}
+        </p>
+      )}
     </fieldset>
   );
 }

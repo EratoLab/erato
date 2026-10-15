@@ -3242,6 +3242,71 @@ falls back to it.
 package_read = false
 ```
 
+##### `integrations.ms_office.addin.default_settings` comment keys
+
+{/* erato_toml_config_key: integrations.ms_office.addin.default_settings.comment_label */}
+{/* erato_toml_config_key: integrations.ms_office.addin.default_settings.comment_author */}
+{/* erato_toml_config_key: integrations.ms_office.addin.default_settings.comment_author_enforced */}
+{/* erato_toml_config_key: integrations.ms_office.addin.default_settings.comment_assistant_author */}
+
+How Erato's Word comments are attributed.
+
+- `comment_label`: the text Erato puts in front of every comment Word shows as
+  written by the user: new comments in user mode and every reply. Plain text of
+  at most 40 characters. An empty label is allowed, but users are then asked to
+  confirm every comment Erato adds.
+- `comment_author`: who Word shows as the author of new comments until the user
+  chooses in the add-in's Word settings: `user` (the user's name, with the
+  label) or `assistant` (`comment_assistant_author`, on the user's behalf).
+  Replies, resolves, edits and deletes always show the user.
+- `comment_author_enforced`: when `true`, users cannot change `comment_author`.
+- `comment_assistant_author`: the author name for comments posted as Erato.
+  `{user}` must appear exactly once and becomes the signed-in Erato user's
+  display name; at most 120 characters. German deployments may use
+  `"Erato (KI) für {user}"`. Word for the web keeps user mode with the label for
+  now.
+
+**Default value:** `{ comment_label = "Erato AI:", comment_author = "user", comment_author_enforced = false, comment_assistant_author = "Erato (AI) for {user}" }`
+
+**Type:** `object`
+
+##### `integrations.ms_office.addin.default_settings.comment_writes`
+
+{/* erato_toml_config_key: integrations.ms_office.addin.default_settings.comment_writes.add */}
+{/* erato_toml_config_key: integrations.ms_office.addin.default_settings.comment_writes.respond */}
+{/* erato_toml_config_key: integrations.ms_office.addin.default_settings.comment_writes.modify */}
+{/* erato_toml_config_key: integrations.ms_office.addin.default_settings.comment_writes.assistant_author */}
+{/* erato_toml_config_key: integrations.ms_office.addin.default_settings.comment_writes.max_rows.add */}
+{/* erato_toml_config_key: integrations.ms_office.addin.default_settings.comment_writes.max_rows.respond */}
+{/* erato_toml_config_key: integrations.ms_office.addin.default_settings.comment_writes.max_rows.modify */}
+
+Deployment switches for Word comment actions, which users cannot change:
+
+- `add` (new comments), `respond` (replies, resolve and reopen) and `modify`
+  (edits and deletes): `post` writes after the user confirms; `copy` turns the
+  action off, and its card offers "Copy comment" and "Show passage" instead.
+  The add-in also switches an action to `copy` for the rest of a session when
+  Word refuses it on that host.
+- `assistant_author`: `false` posts every new comment under the user's name
+  with the label, whatever `comment_author` says.
+- `max_rows`: how many changes one card may hold per action, 1 to 50.
+
+A key left out keeps the add-in's default: every action posts, AI-author mode is
+available on Word for Windows and Mac, and cards hold up to 50 new comments and
+20 other changes.
+
+**Default value:** `{}`
+
+**Type:** `object`
+
+**Example:**
+
+```toml
+[integrations.ms_office.addin.default_settings.comment_writes]
+modify = "copy"
+assistant_author = false
+```
+
 ##### `integrations.ms_office.addin.favicon_path`
 
 {/* erato_toml_config_key: integrations.ms_office.addin.favicon_path */}

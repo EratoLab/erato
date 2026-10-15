@@ -40,7 +40,15 @@ vi.mock("../../wordPreferences", () => ({
     mockCommentPrecedence,
     mockSetCommentPrecedence,
   ],
+  useWordCommentAuthor: () => [
+    mockCommentAuthor.value,
+    mockSetCommentAuthor,
+    mockCommentAuthor.enforced,
+  ],
 }));
+
+const mockCommentAuthor = { value: "user", enforced: false };
+const mockSetCommentAuthor = vi.fn();
 
 const mockUseActionFacetClientActions = vi.fn();
 const mockFacets = {
@@ -75,6 +83,7 @@ vi.mock("@erato/frontend/library", () => ({
     value,
     checked,
     onChange,
+    disabled,
   }: {
     label: string;
     helper: string;
@@ -82,6 +91,7 @@ vi.mock("@erato/frontend/library", () => ({
     value: string;
     checked: boolean;
     onChange: () => void;
+    disabled?: boolean;
   }) => (
     <label>
       <input
@@ -89,6 +99,7 @@ vi.mock("@erato/frontend/library", () => ({
         name={name}
         value={value}
         checked={checked}
+        disabled={disabled}
         onChange={onChange}
       />
       <span>{label}</span>
@@ -351,6 +362,65 @@ describe("WordSettingsDialog", () => {
       fireEvent.click(toggle());
       expect(toggle()).not.toBeChecked();
       expect(wordInPlaceAvailability()).toEqual({ enabled: true });
+    });
+  });
+
+  describe("Post new comments as", () => {
+    const offerAdds = () =>
+      mockUseActionFacetClientActions.mockReturnValue(
+        new Map([
+          [
+            "word_selection",
+            {
+              displayName: "Selection",
+              clientActions: ["word.add_comments"],
+              presentation: "render_buttons",
+              alwaysAskActions: [],
+            },
+          ],
+        ]),
+      );
+
+    beforeEach(() => {
+      mockCommentAuthor.value = "user";
+      mockCommentAuthor.enforced = false;
+      mockSetCommentAuthor.mockReset();
+    });
+
+    it("is hidden until a facet offers new comments", () => {
+      render(<WordSettingsDialog isOpen onClose={() => {}} />);
+      expect(screen.queryByTestId("word-comment-author")).toBeNull();
+    });
+
+    it("offers me with the label or Erato, and stores the choice", () => {
+      offerAdds();
+      render(<WordSettingsDialog isOpen onClose={() => {}} />);
+      expect(screen.getByText("Post new comments as:")).toBeInTheDocument();
+      expect(
+        screen.getByRole("radio", { name: /Me, with an AI label \(default\)/ }),
+      ).toBeChecked();
+      expect(
+        screen.getByText(
+          /Co-authors on Word for the web may briefly see your name/,
+        ),
+      ).toBeInTheDocument();
+      fireEvent.click(
+        screen.getByRole("radio", { name: /Erato, on my behalf/ }),
+      );
+      expect(mockSetCommentAuthor).toHaveBeenCalledWith("assistant");
+    });
+
+    it("cannot be changed where the deployment locks it", () => {
+      offerAdds();
+      mockCommentAuthor.value = "assistant";
+      mockCommentAuthor.enforced = true;
+      render(<WordSettingsDialog isOpen onClose={() => {}} />);
+      expect(
+        screen.getByRole("radio", { name: /Erato, on my behalf/ }),
+      ).toBeDisabled();
+      expect(
+        screen.getByText("Your organization sets this."),
+      ).toBeInTheDocument();
     });
   });
 });
