@@ -44,6 +44,13 @@ export interface WordCommentPositionInput {
   order: number;
   /** The anchor's compareLocationWith the selection Word had at the read, for what offsets cannot decide. */
   selection?: string;
+  /**
+   * The selection's own getComments() named the thread at the read (Word for the web, which relates
+   * no anchor's range): it touches the selection, at a caret or inside a passage.
+   */
+  touches?: true;
+  /** Word did not order the anchor against the others in its first paragraph (orderUnsure). */
+  unsure?: true;
 }
 
 /** The selection captured at Send, in the same coordinates. */
@@ -60,6 +67,11 @@ export interface WordCommentPosition {
   /** Dense and 1-based; threads whose anchors start at the same place share it. */
   pos: number;
   vs?: WordCommentVs;
+  /**
+   * The anchor touches a passage, which neither its coordinates nor a relation could name as a vs;
+   * pane-only, so the thread still counts as in the selection.
+   */
+  touches?: true;
   away?: number;
   in: WordCommentContainer;
   overlaps?: string[];
@@ -117,6 +129,7 @@ export function wordCommentCoordinates(
     point: placed
       ? placed.anchor.point === true
       : !!anchor &&
+        anchor.rangeText !== null &&
         anchor.rangeText.replace(/[\u0002\u0005\r\n\u0007]/g, "") === "",
   };
 }
@@ -144,6 +157,8 @@ export function wordCommentPositionInput(
     in: wordCommentContainer(record.anchor?.first),
     order: record.order,
     ...(record.selection ? { selection: record.selection } : {}),
+    ...(record.touchesSelection ? { touches: true as const } : {}),
+    ...(record.orderUnsure ? { unsure: true as const } : {}),
   };
 }
 
@@ -257,7 +272,9 @@ function awayOf(anchor: Span, selection: WordCommentSelectionCoordinates) {
 
 /**
  * Document order of anchor starts: paragraph, then offset, then the shorter anchor first. Zero
- * means the same place. Only what none of these decide falls back to the read's order.
+ * means the same place, as far as anything tells: also two anchors in one paragraph that Word did
+ * not order, without offsets for both. Only what none of these decide falls back to the read's
+ * order.
  */
 function compareStarts(
   a: WordCommentPositionInput,
@@ -279,6 +296,7 @@ function compareStarts(
     if (shorter !== undefined && longer !== undefined)
       return shorter ? -1 : longer ? 1 : 0;
   }
+  if (!placed && (a.unsure || b.unsure)) return 0;
   return a.order - b.order;
 }
 
@@ -342,18 +360,24 @@ export function wordCommentPositions(
   const positions = new Map<string, WordCommentPosition>();
   for (const thread of threads) {
     const span = spanOf(thread.at);
+    const caret = !!selection && isCaret(selection);
     const vs =
       span && selection
         ? (vsOf(span, selection) ??
           (thread.selection
-            ? vsOfRelation(thread.selection, isCaret(selection))
-            : undefined))
+            ? vsOfRelation(thread.selection, caret)
+            : thread.touches && caret
+              ? "at_caret"
+              : undefined))
         : undefined;
     const away = span && selection ? awayOf(span, selection) : undefined;
     const others = overlaps.get(thread.ref);
     positions.set(thread.ref, {
       pos: ranks.get(thread.ref)!,
       ...(vs ? { vs } : {}),
+      ...(!vs && span && selection && thread.touches
+        ? { touches: true as const }
+        : {}),
       ...(away === undefined ? {} : { away }),
       in: thread.in,
       ...(others ? { overlaps: others } : {}),
@@ -383,6 +407,9 @@ export function wordCommentShortQuote(quote: string, edge: number): string {
 function anchorTextOf(record: WordCommentThreadRecord): WordCommentAnchorText {
   if (record.placement) return record.placement.anchor;
   const rangeText = record.anchor?.rangeText ?? "";
+  // Word for the web gives the paragraphs alone, not what is anchored in them.
+  if (record.anchor?.rangeText === null)
+    return { quote: "", position: "unknown" };
   const text = wordCommentAnchorText({ kind: "unplaced", rangeText });
   return text.quote === "" ? { quote: "", point: true } : text;
 }

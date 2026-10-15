@@ -83,7 +83,10 @@ export interface WordCommentPickerProps {
   /** Reads Word again; the hook coalesces a refresh asked for while one runs. */
   onRefresh: () => void;
   onPick: (ref: string) => void;
-  onShowInWord: (commentId: string) => Promise<WordSelectionShowResult>;
+  onShowInWord: (
+    commentId: string,
+    para: number,
+  ) => Promise<WordSelectionShowResult>;
   picked: string | null;
   /** Word for the web, where clicking a comment in the document fires no selection event (#4394). */
   web: boolean;
@@ -290,7 +293,7 @@ export function WordCommentPicker({
               thread={thread}
               picked={thread.ref === picked}
               onPick={() => onPick(thread.ref)}
-              onShowInWord={() => onShowInWord(thread.commentId)}
+              onShowInWord={() => onShowInWord(thread.commentId, thread.para)}
             />
           ))}
           {!reading && rows.length === 0 && (

@@ -354,12 +354,13 @@ export function wordCommentSendRead(input: {
   });
   const atSelection = selection
     ? model.threads
-        .filter(({ thread }) => {
+        .filter(({ thread, touchesSelection }) => {
           const { vs } = thread.where;
           // Positions treat a zero-width passage as a caret; a passage still takes no at_caret thread.
           return selection.caret
             ? vs === "at_caret"
-            : vs !== "at_caret" && wordCommentVsInSelection(vs);
+            : (vs !== "at_caret" && wordCommentVsInSelection(vs)) ||
+                (vs === undefined && touchesSelection === true);
         })
         .map(({ thread }) => thread.id)
     : [];

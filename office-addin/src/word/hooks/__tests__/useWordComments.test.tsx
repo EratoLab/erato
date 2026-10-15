@@ -325,7 +325,9 @@ describe("useWordComments", () => {
       const kept = hook.result.current.list;
 
       expect(bodyRead()).toBe(false);
-      expect(word.rangesRead().sort()).toEqual(["T6", "T7", "T7b"]);
+      // Word for the web reads no comment range: the selection's own comments relate the caret.
+      expect(word.rangesRead()).toEqual([]);
+      expect(word.calls()).toContain("range.getComments");
       expect(kept.selection).toEqual({
         kind: "caret",
         threads: [refOf(kept, "T6").ref, refOf(kept, "T7").ref],

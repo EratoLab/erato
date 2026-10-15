@@ -27,6 +27,7 @@ import {
 
 import type {
   CommentHost,
+  CommentHostFlavour,
   CommentHostSelection,
 } from "../../../test/mocks/word/commentHost";
 import type { WordCommentSelectionCoordinates } from "../wordCommentPositions";
@@ -519,8 +520,9 @@ describe("the arguments a Send carries, from the ERMAIN-947 fixture", () => {
     selection: CommentHostSelection,
     passage: (h: CommentHost) => WordCommentSelectionCoordinates | null = () =>
       null,
+    flavour: CommentHostFlavour = "pc",
   ): Promise<WordCommentSendRead> {
-    host = installWordCommentHost({ selection });
+    host = installWordCommentHost({ selection, host: flavour });
     const at = passage(host);
     const result = await readWordComments({
       selection: true,
@@ -621,6 +623,37 @@ describe("the arguments a Send carries, from the ERMAIN-947 fixture", () => {
       kind: "caret",
       threads: [],
     });
+  });
+
+  it("finds a caret's thread on the web by the selection's own comments", async () => {
+    const read = await sendRead({ tag: "T1P", offset: 25 }, undefined, "web");
+    const t1 = refOf(read, "T1");
+    expect(read.atSelection).toEqual([t1]);
+    const at = read.model.threads.find((t) => t.thread.id === t1);
+    expect(at?.thread.where.vs).toBe("at_caret");
+  });
+
+  it("keeps a passage's thread on the web that touches it where its position is unknown", async () => {
+    const overT3Start = (h: CommentHost) => ({
+      first: h.ordinalOf("T3A"),
+      last: h.ordinalOf("T3A"),
+      start: 20,
+      end: 30,
+    });
+    const read = await sendRead(
+      { tag: "T3A", offset: 20, to: { tag: "T3A", offset: 30 } },
+      overT3Start,
+      "web",
+    );
+    const t3 = refOf(read, "T3");
+    const thread = read.model.threads.find((t) => t.thread.id === t3)!;
+    expect(thread.thread.where).toMatchObject({
+      quote: "",
+      position: "unknown",
+    });
+    expect(thread.thread.where.vs).toBeUndefined();
+    expect(read.atSelection).toEqual([t3]);
+    expect(JSON.stringify(thread.thread)).not.toContain("touches");
   });
 
   it("sees no caret in a passage it does not send", async () => {

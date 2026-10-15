@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   V3C_COMMENT_DOCUMENT,
@@ -9,7 +9,9 @@ import {
 import {
   V3C_ANCHORS,
   V3C_COMMENTS,
+  V3C_PARAGRAPHS,
 } from "../../../test/mocks/word/commentPackages";
+import { joinWordCommentSpansByContent } from "../wordCommentPackage";
 import {
   WORD_COMMENT_SYNC_THREADS,
   readWordComments,
@@ -22,6 +24,7 @@ import type {
   CommentHostFlavour,
   CommentHostOptions,
 } from "../../../test/mocks/word/commentHost";
+import type * as wordCommentPackageModule from "../wordCommentPackage";
 import type {
   WordCommentAnchorCache,
   WordCommentReadOptions,
@@ -45,6 +48,14 @@ const ROOTS = [
   "PB1",
   "T14",
 ];
+
+vi.mock("../wordCommentPackage", async (importOriginal) => {
+  const actual = await importOriginal<typeof wordCommentPackageModule>();
+  return {
+    ...actual,
+    joinWordCommentSpansByContent: vi.fn(actual.joinWordCommentSpansByContent),
+  };
+});
 
 let host: CommentHost;
 
@@ -80,11 +91,43 @@ const keysOf = (threads: readonly WordCommentThreadRecord[]) =>
 const phase = (result: Awaited<ReturnType<typeof read>>, name: string) =>
   result.diagnostics.phases.find((p) => p.phase === name);
 
+/** T6, T7 and T7b start in T6P; on the web only offsets order them, and the id meanwhile. */
+const T6P_THREADS = ["T6", "T7", "T7b"];
+const byIdInT6P = () => {
+  const ids = T6P_THREADS.map(
+    (key) => [key, Number(host.commentId(key))] as const,
+  );
+  const shared = ids.sort((a, b) => a[1] - b[1]).map(([key]) => key);
+  return ROOTS.flatMap((key) =>
+    key === "T6" ? shared : T6P_THREADS.includes(key) ? [] : [key],
+  );
+};
+
 describe("readWordComments: the Office.js record", () => {
-  it.each(HOSTS)("lists every thread in document order on %s", async (h) => {
-    const { threads } = await read({ host: h });
+  it.each(["pc", "mac"] as const)(
+    "lists every thread in document order on %s",
+    async (h) => {
+      const { threads } = await read({ host: h });
+      expect(keysOf(threads)).toEqual(ROOTS);
+      expect(threads.map((t) => t.order)).toEqual(ROOTS.map((_, i) => i));
+      expect(threads.some((t) => t.orderUnsure)).toBe(false);
+    },
+  );
+
+  it("lists threads in document order on the web, where nothing orders those in one paragraph", async () => {
+    const { threads } = await read({ host: "web" });
+    expect(keysOf(threads)).toEqual(byIdInT6P());
+    expect(
+      ROOTS.filter((key) => thread(threads, key).orderUnsure === true),
+    ).toEqual(T6P_THREADS);
+  });
+
+  it("orders the threads of one paragraph by their offsets once packages placed them on the web", async () => {
+    const { threads } = await read(
+      { host: "web" },
+      { exact: () => ROOTS.map(host.commentId) },
+    );
     expect(keysOf(threads)).toEqual(ROOTS);
-    expect(threads.map((t) => t.order)).toEqual(ROOTS.map((_, i) => i));
   });
 
   it("returns the web's number ids as strings, replies included", async () => {
@@ -166,6 +209,16 @@ describe("readWordComments: the Office.js record", () => {
       expect(host.getFileAsync).not.toHaveBeenCalled();
       expect(host.calls()).not.toContain("document.getSelection");
       expect(host.calls()).not.toContain("range.getComments");
+    }
+  });
+
+  it("asks the selection for its comments only on the web, never on desktop (F-11)", async () => {
+    for (const h of HOSTS) {
+      await read(
+        { host: h, selection: { tag: "T1P", offset: 25 } },
+        { selection: true },
+      );
+      expect(host.calls().includes("range.getComments")).toBe(h === "web");
     }
   });
 
@@ -283,16 +336,17 @@ describe("replies", () => {
     expect(phase(result, "legacy")).toBeUndefined();
   });
 
-  it("reads only the packages of paragraphs with hidden text on the web without packages", async () => {
+  it("reads no package on the web without packages, hidden text or not", async () => {
     const result = await read(
       { host: "web" },
       { replies: "requested", exact: askFor("T1", "T3"), packages: false },
     );
     expect(thread(result.threads, "T1").placement).toBeUndefined();
-    expect(thread(result.threads, "T10").placement?.status).toBe("placed");
-    expect(
-      host.calls().filter((call) => call === "paragraph.getOoxml"),
-    ).toHaveLength(1);
+    expect(thread(result.threads, "T10").placement).toBeUndefined();
+    expect(thread(result.threads, "T10").anchor?.first.ordinal).toBe(
+      host.ordinalOf("T10P"),
+    );
+    expect(host.calls()).not.toContain("paragraph.getOoxml");
     expect(phase(result, "exact")).toBeUndefined();
   });
 
@@ -369,19 +423,115 @@ describe("coarse anchors", () => {
     ]);
   });
 
-  it("keeps the range's text as each host gives it", async () => {
+  it("keeps the range's text as desktop gives it", async () => {
     const pc = await read({ host: "pc" });
     expect(thread(pc.threads, "T14").anchor?.rangeText).toBe(
       "start sigma\tXC2 Cross cell end",
     );
     expect(thread(pc.threads, "T5").anchor?.rangeText).toBe("");
-    const web = await read({ host: "web" });
-    expect(thread(web.threads, "T6").anchor?.rangeText).toBe(
-      "lima mike november\u0005 oscar\u0005",
+  });
+
+  it("locates every thread on the web from its paragraphs' own comments, with no comment range", async () => {
+    const result = await read({ host: "web" });
+    expect(result.threads.every((t) => t.anchor?.rangeText === null)).toBe(
+      true,
     );
-    expect(thread(web.threads, "T3").anchor?.rangeText).toBe(
-      "foxtrot.\rT3B Middle span paragraph golf.\rT3C Last span\u0005",
+    expect(host.calls()).not.toContain("comment.getRange");
+    expect(
+      host.calls().filter((call) => call === "paragraph.getComments"),
+    ).toHaveLength(host.ordinalOf("END"));
+    expect(phase(result, "anchors")).toMatchObject({
+      total: ROOTS.length,
+      done: ROOTS.length,
+      syncs: 3,
+    });
+    expect(result.diagnostics.counts).toMatchObject({
+      anchorsUnlisted: 0,
+      anchorsSkipped: 0,
+      anchorsFailed: 0,
+    });
+  });
+
+  it("places a comment no paragraph lists on the web from the package of the paragraph it ends in", async () => {
+    const { threads, diagnostics } = await read({
+      host: "web",
+      unlistedByParagraphs: ["T8"],
+    });
+    const t8 = thread(threads, "T8");
+    expect(t8.anchor?.first.ordinal).toBe(host.ordinalOf("T8P"));
+    expect(t8.placement).toMatchObject({
+      status: "placed",
+      joinedBy: "durableId",
+      anchor: { quote: "sierra tango", occurrence: 2 },
+    });
+    expect(host.packagesRead()).toEqual(["T8P"]);
+    expect(diagnostics.counts.anchorsUnlisted).toBe(0);
+  });
+
+  it("places such a comment by content in a legacy file on the web", async () => {
+    const { threads } = await read({
+      host: "web",
+      legacy: true,
+      unlistedByParagraphs: ["T8"],
+    });
+    const placement = thread(threads, "T8").placement;
+    expect(placement?.status === "placed" && placement.joinedBy).toBe(
+      "content",
     );
+  });
+
+  it("keeps no anchor for a comment neither a paragraph nor a package names on the web, and counts it", async () => {
+    const { threads, diagnostics } = await read({
+      host: "web",
+      unlistedByParagraphs: ["T8"],
+      bareParagraphPackages: ["T8P"],
+    });
+    expect(thread(threads, "T8").anchor).toBeNull();
+    expect(thread(threads, "T9").anchor?.first.ordinal).toBe(
+      host.ordinalOf("T9P"),
+    );
+    expect(diagnostics.counts.anchorsUnlisted).toBe(1);
+    expect(renderWordCommentReadReport(diagnostics)).toContain(
+      "anchors no paragraph lists 1",
+    );
+  });
+
+  it("makes no sync for anchors on the web once their budget is spent", async () => {
+    const result = await read({ host: "web" }, { budgetsMs: { anchors: 0 } });
+    expect(phase(result, "anchors")).toMatchObject({ syncs: 0, done: 0 });
+    expect(result.threads.every((t) => t.anchor === null)).toBe(true);
+    expect(result.diagnostics.counts.anchorsSkipped).toBe(ROOTS.length);
+  });
+
+  it("gives no anchor on the web to a thread whose end a failed listing may not have reached", async () => {
+    const generated = generatedCommentDocument({ paragraphs: 600 });
+    const body = [...generated.body];
+    body.splice(1, 0, {
+      tag: "SPAN",
+      segments: ["Span ", { cs: "S" }, "starts"],
+    });
+    body.splice(550, 0, {
+      tag: "END",
+      segments: ["Span ends", { ce: "S" }, " here."],
+    });
+    const document = {
+      body,
+      comments: {
+        ...generated.comments,
+        S: { ...generated.comments.G1, durableId: "0ABCDEF1" },
+      },
+    };
+    const { threads, diagnostics } = await read({
+      host: "web",
+      document,
+      failParagraphComments: ["G560"],
+    });
+    // Its end may lie in the paragraphs the listing never reached, so no anchor is guessed.
+    expect(thread(threads, "S").anchor).toBeNull();
+    expect(thread(threads, "G1").anchor).toBeNull();
+    expect(thread(threads, "G599").anchor).toBeNull();
+    expect(diagnostics.errors[0]).toMatchObject({ phase: "anchors" });
+    expect(diagnostics.counts.anchorsSkipped).toBe(threads.length);
   });
 
   it("uses the Send capture's ordinals instead of reading the body", async () => {
@@ -465,12 +615,41 @@ describe("exact anchors", () => {
     T14: { quote: "start sigma…XC2 Cross cell end", multi_cell: true },
   };
 
-  it.each(HOSTS)("places every requested anchor on %s", async (h) => {
+  /** Across paragraphs only a range's text or package tells where, and the web reads neither. */
+  const ACROSS = ["T3", "T14"];
+
+  it.each(["pc", "mac"] as const)(
+    "places every requested anchor on %s",
+    async (h) => {
+      const { threads, diagnostics } = await read(
+        { host: h },
+        { exact: () => ROOTS.map(host.commentId) },
+      );
+      for (const key of ROOTS) {
+        const placement = thread(threads, key).placement;
+        expect(placement?.status, key).toBe("placed");
+        expect(placement?.anchor, key).toEqual(
+          expected[key as keyof typeof expected],
+        );
+        if (placement?.status !== "placed") continue;
+        const truth = V3C_ANCHORS[key];
+        expect(
+          [placement.offsets.start.visible, placement.offsets.end.visible],
+          key,
+        ).toEqual([truth.start, truth.end]);
+      }
+      expect(diagnostics.counts.placed).toBe(ROOTS.length);
+    },
+  );
+
+  it("places every requested anchor inside one paragraph on the web, and leaves the others' position unknown", async () => {
     const { threads, diagnostics } = await read(
-      { host: h },
+      { host: "web" },
       { exact: () => ROOTS.map(host.commentId) },
     );
-    for (const key of ROOTS) {
+    // The web's getText() keeps T10's hidden "SECRET ", so its visible offsets count it.
+    const shownBefore = (key: string) => (key === "T10" ? "SECRET ".length : 0);
+    for (const key of ROOTS.filter((k) => !ACROSS.includes(k))) {
       const placement = thread(threads, key).placement;
       expect(placement?.status, key).toBe("placed");
       expect(placement?.anchor, key).toEqual(
@@ -481,9 +660,23 @@ describe("exact anchors", () => {
       expect(
         [placement.offsets.start.visible, placement.offsets.end.visible],
         key,
-      ).toEqual([truth.start, truth.end]);
+      ).toEqual([truth.start + shownBefore(key), truth.end + shownBefore(key)]);
     }
-    expect(diagnostics.counts.placed).toBe(ROOTS.length);
+    for (const key of ACROSS)
+      expect(thread(threads, key).placement, key).toEqual({
+        status: "unplaced",
+        anchor: { quote: "", position: "unknown" },
+        source: { kind: "unplaced", rangeText: "" },
+      });
+    expect(thread(threads, "T3").anchor).toMatchObject({
+      first: { ordinal: host.ordinalOf("T3A") },
+      last: { ordinal: host.ordinalOf("T3C") },
+      single: false,
+    });
+    expect(diagnostics.counts).toMatchObject({
+      placed: ROOTS.length - ACROSS.length,
+      unplaced: ACROSS.length,
+    });
   });
 
   it("joins single-paragraph marks by durableId on every host, and multi-paragraph ones by range package on desktop only", async () => {
@@ -498,13 +691,13 @@ describe("exact anchors", () => {
       };
       expect(joined("T1")).toBe("durableId");
       expect(joined("T9")).toBe("durableId");
-      expect(joined("T3")).toBe(h === "web" ? "text" : "durableId");
-      expect(joined("T14")).toBe(h === "web" ? "text" : "durableId");
+      expect(joined("T3")).toBe(h === "web" ? "unplaced" : "durableId");
+      expect(joined("T14")).toBe(h === "web" ? "unplaced" : "durableId");
       expect(host.calls().includes("range.getOoxml")).toBe(h !== "web");
     }
   });
 
-  it("offsets web anchors in paragraph.text past U+0005 and hidden text", async () => {
+  it("offsets web anchors past U+0005, and in the text getText() shows, hidden text included", async () => {
     const { threads } = await read(
       { host: "web" },
       { exact: askFor("T7b", "T10") },
@@ -517,7 +710,7 @@ describe("exact anchors", () => {
       start: { range: 32, visible: 31 },
       end: { range: 50, visible: 48 },
     });
-    expect(offsets("T10")?.start).toEqual({ range: 19, visible: 12 });
+    expect(offsets("T10")?.start).toEqual({ range: 19, visible: 19 });
   });
 
   it("reads one package for threads that share a paragraph", async () => {
@@ -554,36 +747,39 @@ describe("exact anchors", () => {
       "placed",
       "budget",
       "budget",
-      "budget",
+      "unplaced",
     ]);
     expect(thread(threads, "T1").placement?.anchor).toEqual({
-      quote: "alpha bravo",
+      quote: "",
       position: "unknown",
     });
     expect(thread(threads, "T1").anchor?.first.ordinal).toBe(2);
     expect(thread(threads, "T5").placement).toBeUndefined();
     expect(phase({ threads, diagnostics } as never, "exact")).toMatchObject({
       total: 7,
-      done: 4,
+      done: 5,
       exhausted: true,
       budgetMs: 1500,
     });
-    expect(diagnostics.counts.budget).toBe(3);
-    expect(onProgress).toHaveBeenCalledWith(4, 7, "exact");
+    expect(diagnostics.counts.budget).toBe(2);
+    expect(onProgress).toHaveBeenCalledWith(5, 7, "exact");
     expect(renderWordCommentReadReport(diagnostics)).toContain(
-      "exact: 2810 ms, 1 sync, 4/7 (budget 1500 ms, used up)",
+      "exact: 2810 ms, 1 sync, 5/7 (budget 1500 ms, used up)",
     );
   });
 
-  it("gives the coarse threads to the exact request in document order", async () => {
-    const exact = vi.fn(() => []);
-    await read({ host: "web" }, { exact });
-    const [given] = exact.mock.calls[0] as unknown as [
-      WordCommentThreadRecord[],
-    ];
-    expect(keysOf(given)).toEqual(ROOTS);
-    expect(given.every((t) => t.anchor !== null)).toBe(true);
-  });
+  it.each(HOSTS)(
+    "gives the coarse threads to the exact request in document order on %s",
+    async (h) => {
+      const exact = vi.fn(() => []);
+      await read({ host: h }, { exact });
+      const [given] = exact.mock.calls[0] as unknown as [
+        WordCommentThreadRecord[],
+      ];
+      expect(keysOf(given)).toEqual(h === "web" ? byIdInT6P() : ROOTS);
+      expect(given.every((t) => t.anchor !== null)).toBe(true);
+    },
+  );
 });
 
 describe("legacy files (F-2a, O-17, gate F2)", () => {
@@ -642,77 +838,337 @@ describe("legacy files (F-2a, O-17, gate F2)", () => {
   });
 });
 
-describe("hidden text on the web (gate F1)", () => {
-  it("never reads the range of a comment whose paragraph has hidden text", async () => {
-    const result = await read(
-      { host: "web" },
-      { exact: () => ROOTS.map(host.commentId), selection: true },
-    );
+describe("Word for the web reads no comment range (gates F1 and F2)", () => {
+  const ALL = { exact: () => ROOTS.map(host.commentId), selection: true };
+
+  it("places T10 from its paragraph's package and leaves its hidden text hidden", async () => {
+    const result = await read({ host: "web" }, ALL);
+    expect(host.rangesRead()).toEqual([]);
     expect(host.unhidden()).toEqual([]);
-    expect(host.rangesRead()).not.toContain("T10");
-    expect(host.rangesRead()).toContain("T9");
     const t10 = thread(result.threads, "T10");
     expect(t10.anchor?.first.ordinal).toBe(host.ordinalOf("T10P"));
     expect(t10.placement).toMatchObject({
       status: "placed",
       joinedBy: "durableId",
       anchor: { quote: "whiskey xray" },
-      offsets: { start: { range: 19, visible: 12 } },
+      offsets: { start: { range: 19, visible: 19 } },
     });
-    expect(keysOf(result.threads)).toEqual(ROOTS);
-    expect(result.diagnostics.counts.hiddenParagraphs).toBe(1);
-    expect(phase(result, "hidden")).toMatchObject({ total: 1, done: 1 });
   });
 
   it("reads ranges as before on desktop", async () => {
-    const result = await read({ host: "pc" });
+    await read({ host: "pc" });
     expect(host.rangesRead()).toContain("T10");
-    expect(phase(result, "hidden")).toBeUndefined();
+    expect(host.calls()).not.toContain("paragraph.getComments");
   });
 
-  it("reads no package where no commented paragraph has hidden text", async () => {
-    const result = await read({
-      host: "web",
-      document: generatedCommentDocument({ paragraphs: 3 }),
-    });
-    expect(host.calls()).not.toContain("paragraph.getOoxml");
-    expect(result.diagnostics.counts.hiddenParagraphs).toBe(0);
-    expect(result.threads.every((t) => t.anchor !== null)).toBe(true);
-  });
-
-  it("reads no range at all when a package does not explain its paragraph", async () => {
-    const result = await read({
-      host: "web",
-      document: {
-        body: [
-          {
-            tag: "H1",
-            segments: [
-              "Lead ",
-              { hidden: "secret " },
-              { cs: "G1" },
-              "one",
-              { ce: "G1" },
-            ],
-          },
-          {
-            tag: "P2",
-            segments: ["Plain ", { cs: "G2" }, "two", { ce: "G2" }],
-          },
-        ],
-        comments: {
-          G1: { ...V3C_COMMENTS.T1, content: "First." },
-          G2: { ...V3C_COMMENTS.T2, content: "Second." },
-        },
+  it("places a thread past a page break, which only paragraph.text shows (U+000C)", async () => {
+    const { threads } = await read({ host: "web" }, { exact: askFor("PB1") });
+    const pb1 = thread(threads, "PB1");
+    expect(pb1.anchor?.first.rangeText).toContain("\u000C");
+    expect(pb1.placement).toMatchObject({
+      status: "placed",
+      joinedBy: "durableId",
+      anchor: { quote: "anchor pb" },
+      offsets: {
+        start: { visible: V3C_ANCHORS.PB1.start },
+        end: { visible: V3C_ANCHORS.PB1.end },
       },
     });
-    expect(host.rangesRead()).toEqual([]);
-    expect(host.unhidden()).toEqual([]);
-    expect(result.threads.every((t) => t.anchor === null)).toBe(true);
-    expect(result.diagnostics.counts.anchorsWithheld).toBe(2);
-    expect(renderWordCommentReadReport(result.diagnostics)).toContain(
-      "anchors withheld for hidden text 2",
+  });
+
+  it("leaves only the threads of a paragraph its package cannot explain unplaced", async () => {
+    const odd = {
+      ...V3C_COMMENTS.T1,
+      paraId: "0D000001",
+      durableId: "0E000001",
+      content: "Odd root.",
+    };
+    const { threads, diagnostics } = await read(
+      {
+        host: "web",
+        bareParagraphPackages: ["X1"],
+        document: {
+          v3c: true,
+          comments: { ...V3C_COMMENTS, ODD: odd },
+          body: [
+            { tag: "T1P", segments: V3C_PARAGRAPHS.T1P },
+            {
+              tag: "X1",
+              segments: ["Lead ", { cs: "ODD" }, "odd", { ce: "ODD" }, "."],
+            },
+            { tag: "T10P", segments: V3C_PARAGRAPHS.T10P },
+          ],
+        },
+      },
+      { exact: askFor("T1", "ODD", "T10") },
     );
+    expect(thread(threads, "ODD").placement).toMatchObject({
+      status: "unplaced",
+      anchor: { quote: "", position: "unknown" },
+    });
+    expect(thread(threads, "ODD").anchor?.first.ordinal).toBe(2);
+    for (const key of ["T1", "T10"])
+      expect(thread(threads, key).placement?.status, key).toBe("placed");
+    expect(diagnostics.counts).toMatchObject({ placed: 2, unplaced: 1 });
+  });
+
+  it("places a legacy file's threads by content, whose packages name other ids (gate F2)", async () => {
+    const result = await read({ host: "web", legacy: true }, ALL);
+    expect(result.legacy).toBe(true);
+    const single = ROOTS.filter((key) => !["T3", "T14"].includes(key));
+    for (const key of single) {
+      const placement = thread(result.threads, key).placement;
+      expect(placement?.status === "placed" && placement.joinedBy, key).toBe(
+        "content",
+      );
+    }
+    expect(result.diagnostics.counts.matchedByContent).toBe(single.length);
+    expect(thread(result.threads, "PB1").placement?.anchor).toEqual({
+      quote: "anchor pb",
+    });
+  });
+
+  it("pairs no legacy thread whose content and author another in its paragraph shares", async () => {
+    const same = { content: "Same root.", author: V3C_COMMENTS.T6.author };
+    const { threads } = await read(
+      {
+        host: "web",
+        legacy: true,
+        document: {
+          ...V3C_COMMENT_DOCUMENT,
+          comments: {
+            ...V3C_COMMENTS,
+            T6: { ...V3C_COMMENTS.T6, ...same },
+            T7: { ...V3C_COMMENTS.T7, ...same },
+          },
+        },
+      },
+      { exact: askFor("T6", "T7", "T7b", "T1") },
+    );
+    expect(thread(threads, "T6").placement?.status).toBe("unplaced");
+    expect(thread(threads, "T7").placement?.status).toBe("unplaced");
+    for (const key of ["T7b", "T1"]) {
+      const placement = thread(threads, key).placement;
+      expect(placement?.status === "placed" && placement.joinedBy, key).toBe(
+        "content",
+      );
+    }
+  });
+});
+
+describe("what the web pairs, orders and relates without ranges", () => {
+  const join = vi.mocked(joinWordCommentSpansByContent);
+  beforeEach(() => {
+    join.mockClear();
+  });
+  const base = {
+    initials: "AA",
+    date: "2026-09-01T10:00:00Z",
+    dateUtc: null,
+    done: false,
+  };
+  const quoteOf = (record: WordCommentThreadRecord) =>
+    record.placement?.status === "placed"
+      ? record.placement.anchor.quote
+      : null;
+
+  it.each(["pc", "mac"] as const)(
+    "runs no content join on %s, where every span keeps its id, replies' included",
+    async (h) => {
+      await read({ host: h }, { exact: () => ROOTS.map(host.commentId) });
+      expect(join).not.toHaveBeenCalled();
+    },
+  );
+
+  it("never gives a listed thread's span to another of the same author and content (legacy)", async () => {
+    const result = await read(
+      {
+        host: "web",
+        legacy: true,
+        unlistedByParagraphs: ["Z", "Y"],
+        document: {
+          v3c: true,
+          comments: {
+            X: {
+              ...base,
+              author: "Ann",
+              paraId: "10000001",
+              durableId: "01000001",
+              content: "Please check",
+            },
+            Z: {
+              ...base,
+              author: "Bob",
+              paraId: "10000002",
+              durableId: "01000002",
+              content: "Other note",
+            },
+            Y: {
+              ...base,
+              author: "Ann",
+              paraId: "10000003",
+              durableId: "01000003",
+              content: "Please check",
+            },
+          },
+          body: [
+            {
+              tag: "PX",
+              segments: [
+                "PX ",
+                { cs: "X" },
+                "alpha",
+                { ce: "X" },
+                " and ",
+                { cs: "Z" },
+                "beta",
+                { ce: "Z" },
+                ".",
+              ],
+            },
+            {
+              tag: "PY",
+              segments: ["PY ", { cs: "Y" }, "gamma", { ce: "Y" }, "."],
+            },
+          ],
+        },
+      },
+      { exact: () => ["X", "Y", "Z"].map(host.commentId) },
+    );
+    const at = (key: string) => {
+      const record = thread(result.threads, key);
+      return [record.anchor?.first.ordinal, quoteOf(record)];
+    };
+    expect(at("X")).toEqual([host.ordinalOf("PX"), "alpha"]);
+    expect(at("Z")).toEqual([host.ordinalOf("PX"), "beta"]);
+    expect(at("Y")).toEqual([host.ordinalOf("PY"), "gamma"]);
+  });
+
+  it("never gives a reply's span to a thread no paragraph lists", async () => {
+    const result = await read({
+      host: "web",
+      unlistedByParagraphs: ["X", "Y"],
+      document: {
+        v3c: true,
+        comments: {
+          X: {
+            ...base,
+            author: "Ann",
+            paraId: "10000001",
+            durableId: "01000001",
+            dateUtc: "2026-09-01T08:00:00Z",
+            content: "Please check",
+          },
+          XR: {
+            ...base,
+            author: "Ann",
+            paraId: "10000002",
+            durableId: "01000002",
+            dateUtc: "2026-09-01T08:05:00Z",
+            parent: "X",
+            content: "Done",
+          },
+          Y: {
+            ...base,
+            author: "Ann",
+            paraId: "10000003",
+            durableId: "01000003",
+            dateUtc: "2026-09-01T08:10:00Z",
+            content: "Done",
+          },
+        },
+        body: [
+          {
+            tag: "PX",
+            segments: ["PX ", { cs: "X" }, "alpha", { ce: "X" }, "."],
+          },
+          {
+            tag: "PY",
+            segments: ["PY ", { cs: "Y" }, "gamma", { ce: "Y" }, "."],
+          },
+        ],
+      },
+    });
+    const y = thread(result.threads, "Y");
+    expect([y.anchor?.first.ordinal, quoteOf(y)]).toEqual([
+      host.ordinalOf("PY"),
+      "gamma",
+    ]);
+  });
+
+  it("orders one paragraph's threads one way whatever order Word lists them in", async () => {
+    const orders = new Set<string>();
+    for (const shuffle of [undefined, 1, 2, 3, 5, 8, 13, 42]) {
+      const { threads } = await read(
+        { host: "web", shuffle },
+        { exact: askFor("T7b", "T6") },
+      );
+      orders.add(keysOf(threads).join(","));
+    }
+    expect(orders.size).toBe(1);
+    const keys = [...orders][0].split(",");
+    // Placed ones by their offsets, then the one no package placed.
+    expect(keys.indexOf("T6")).toBeLessThan(keys.indexOf("T7b"));
+    expect(keys.indexOf("T7b")).toBeLessThan(keys.indexOf("T7"));
+  });
+
+  it("reads no package on the web for a thread no paragraph lists when the read takes none", async () => {
+    const { threads, diagnostics } = await read(
+      { host: "web", unlistedByParagraphs: ["T8"] },
+      { packages: false, legacy: false },
+    );
+    expect(host.packagesRead()).toEqual([]);
+    expect(thread(threads, "T8").anchor).toBeNull();
+    expect(diagnostics.counts.anchorsUnlisted).toBe(1);
+  });
+
+  it("keeps the selection's paragraphs, and the anchors, when the selection's comments fail", async () => {
+    const cache: WordCommentAnchorCache = { generation: 0, snapshot: null };
+    const result = await read(
+      {
+        host: "web",
+        selection: { tag: "T6P", offset: 20 },
+        failSelectionComments: true,
+      },
+      {
+        selection: true,
+        packages: false,
+        legacy: false,
+        anchors: { cache, reuse: false },
+      },
+    );
+    const ordinal = host.ordinalOf("T6P");
+    expect(result.selection).toEqual({
+      collapsed: true,
+      first: ordinal,
+      last: ordinal,
+    });
+    expect(result.threads.some((t) => t.touchesSelection)).toBe(false);
+    expect(result.diagnostics.errors).toEqual([
+      expect.objectContaining({ phase: "selection" }),
+    ]);
+    expect(cache.snapshot).not.toBeNull();
+  });
+
+  it("makes legacy threads the web cannot tell apart in one paragraph read-only", async () => {
+    const same = { content: "Same root.", author: V3C_COMMENTS.T6.author };
+    const comments = {
+      ...V3C_COMMENTS,
+      T6: { ...V3C_COMMENTS.T6, ...same },
+      T7: { ...V3C_COMMENTS.T7, ...same },
+    };
+    for (const h of HOSTS) {
+      const { threads } = await read({
+        host: h,
+        legacy: true,
+        document: { ...V3C_COMMENT_DOCUMENT, comments },
+      });
+      const readOnly = (key: string) => thread(threads, key).readOnly;
+      // Desktop orders them by their ranges, so a write still finds the right one.
+      const expected = h === "web" ? "content-repeated" : null;
+      expect([readOnly("T6"), readOnly("T7")], h).toEqual([expected, expected]);
+      expect(readOnly("T7b"), h).toBeNull();
+    }
   });
 });
 
@@ -751,7 +1207,7 @@ describe("the user's selection", () => {
     key: string,
   ) => thread(threads, key).selection;
 
-  it.each(HOSTS)(
+  it.each(["pc", "mac"] as const)(
     "relates only the anchors around a caret to it on %s",
     async (h) => {
       let seen: unknown = "not called";
@@ -778,8 +1234,22 @@ describe("the user's selection", () => {
       expect(relationOf(result.threads, "T1")).toBeUndefined();
       expect(phase(result, "relations")).toMatchObject({ total: 3, done: 3 });
       expect(host.calls()).not.toContain("range.getComments");
+      expect(result.threads.some((t) => t.touchesSelection)).toBe(false);
     },
   );
+
+  it("takes the threads the selection names as touching it on the web, and relates no range", async () => {
+    const result = await read(
+      { host: "web", selection: { tag: "T6P", offset: 20 } },
+      { selection: true },
+    );
+    const touching = ROOTS.filter(
+      (key) => thread(result.threads, key).touchesSelection === true,
+    );
+    expect(touching).toEqual(["T6", "T7"]);
+    expect(result.threads.every((t) => t.selection === undefined)).toBe(true);
+    expect(phase(result, "relations")).toMatchObject({ total: 0, done: 0 });
+  });
 
   it("relates a selection across paragraphs to every anchor reaching them", async () => {
     const result = await read(
@@ -847,6 +1317,8 @@ describe("anchors kept between reads", () => {
       anchor: t.anchor,
       placement: t.placement,
       selection: t.selection,
+      touchesSelection: t.touchesSelection,
+      orderUnsure: t.orderUnsure,
       replies: t.replies?.length ?? null,
     })),
   });
@@ -868,7 +1340,9 @@ describe("anchors kept between reads", () => {
         { cache, reuse: true },
       );
       expect(host.calls()).not.toContain("paragraphs.load");
-      expect([...host.rangesRead()].sort()).toEqual(["T6", "T7", "T7b"]);
+      expect([...host.rangesRead()].sort()).toEqual(
+        h === "web" ? [] : ["T6", "T7", "T7b"],
+      );
       expect(host.unhidden()).toEqual([]);
 
       const full = await readWith(
@@ -909,21 +1383,22 @@ describe("anchors kept between reads", () => {
     expect(cache.snapshot).toBeNull();
   });
 
-  it("never read a range the kept read left alone for hidden text", async () => {
+  it("relate a caret on the web by the selection's own comments, reading no range", async () => {
     const cache = NO_ANCHORS();
     await readWith(
       { host: "web", selection: PASSAGE_T1 },
       { cache, reuse: false },
     );
     const kept = await readWith(
-      { host: "web", selection: { tag: "T10P", offset: 3 } },
+      { host: "web", selection: { tag: "T10P", offset: 22 } },
       { cache, reuse: true },
     );
-    expect(host.rangesRead()).not.toContain("T10");
+    expect(host.calls()).not.toContain("paragraphs.load");
     expect(host.unhidden()).toEqual([]);
-    expect(thread(kept.threads, "T10").anchor?.first.ordinal).toBe(
-      host.ordinalOf("T10P"),
-    );
+    const t10 = thread(kept.threads, "T10");
+    expect(t10.anchor?.first.ordinal).toBe(host.ordinalOf("T10P"));
+    expect(t10.touchesSelection).toBe(true);
+    expect(thread(kept.threads, "T1").touchesSelection).toBeUndefined();
   });
 });
 
@@ -938,5 +1413,20 @@ describe("renderWordCommentReadReport", () => {
     expect(report).toMatch(/^list: \d+ ms, 1 sync, 1\/1$/m);
     expect(report).toMatch(/^anchors: \d+ ms, 1 sync, 14\/14 \(budget/m);
     expect(report).toContain("Anchors: placed 1");
+  });
+});
+
+describe("the web host's guard", () => {
+  it("fails the test that reads a comment range on Word for the web", async () => {
+    host = installWordCommentHost({ host: "web" });
+    await Word.run(async (context) => {
+      const comments = context.document.body.getComments();
+      comments.load("items/id");
+      await context.sync();
+      expect(() => comments.items[0].getRange()).toThrow(/gate F1/);
+    });
+    expect(() => uninstallWordCommentHost()).toThrow(
+      /Comment\.getRange\(\) was called on Word for the web/,
+    );
   });
 });

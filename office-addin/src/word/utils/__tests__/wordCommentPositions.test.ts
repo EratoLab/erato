@@ -642,10 +642,13 @@ describe("the ERMAIN-947 fixture through the reader", () => {
       away: 0,
       in: "body",
     });
+    // Across paragraphs the web reads neither the range's text nor its package.
     expect(where("T3")).toMatchObject({
       para: host.ordinalOf("T3A"),
       through: host.ordinalOf("T3C"),
-      quote: "foxtrot.…T3C Last span",
+      ...(h === "web"
+        ? { quote: "", position: "unknown" }
+        : { quote: "foxtrot.…T3C Last span" }),
       vs: "before",
     });
     expect(where("T5")).toMatchObject({
@@ -653,7 +656,13 @@ describe("the ERMAIN-947 fixture through the reader", () => {
       point: true,
       after: "comment after kilo",
     });
-    expect(where("T14")).toMatchObject({ multi_cell: true });
+    if (h === "web")
+      expect(where("T14")).toMatchObject({
+        quote: "",
+        position: "unknown",
+        in: { table: 2, row: 1, cell: 1 },
+      });
+    else expect(where("T14")).toMatchObject({ multi_cell: true });
     expect(JSON.stringify(where("T1"))).not.toContain("\u0005");
   });
 
@@ -672,9 +681,82 @@ describe("the ERMAIN-947 fixture through the reader", () => {
         point: false,
       });
       const t5 = result.threads.find((t) => t.id === host.commentId("T5"))!;
-      expect(wordCommentCoordinates(t5).point).toBe(true);
       const t5Where = wordCommentWhere(t5, { pos: 5, in: "body" });
-      expect(t5Where).toMatchObject({ quote: "", point: true });
+      // Without a range's text the web cannot tell a point comment from any other.
+      if (h === "web") {
+        expect(wordCommentCoordinates(t5).point).toBe(false);
+        expect(t5Where).toMatchObject({ quote: "", position: "unknown" });
+        expect(t5Where).not.toHaveProperty("point");
+      } else {
+        expect(wordCommentCoordinates(t5).point).toBe(true);
+        expect(t5Where).toMatchObject({ quote: "", point: true });
+      }
     },
   );
+
+  it("takes a caret the web's selection names as at the thread, without offsets", async () => {
+    host = installWordCommentHost({
+      host: "web",
+      selection: { tag: "T1P", offset: 25 },
+    });
+    const result = await readWordComments({ now: host.now, selection: true });
+    if (!result.ok) throw new Error(result.error);
+    const keyOf = (record: WordCommentThreadRecord) =>
+      ROOTS.find((key) => host.commentId(key) === record.id)!;
+    const found = wordCommentPositions(
+      result.threads.map((t) => wordCommentPositionInput(t, keyOf(t))),
+      { selection: wordCommentCaretCoordinates(host.ordinalOf("T1P")) },
+    );
+    expect(found.get("T1")).toMatchObject({ vs: "at_caret", away: 0 });
+    expect(found.get("T2")).toMatchObject({ vs: "after", away: 1 });
+  });
+});
+
+describe("what Word for the web leaves undecided", () => {
+  const thread = (
+    ref: string,
+    at: Partial<WordCommentCoordinates>,
+    extra: Partial<WordCommentPositionInput> = {},
+  ): WordCommentPositionInput => ({
+    ref,
+    at: { first: 3, last: 3, start: null, end: null, point: false, ...at },
+    in: "body",
+    order: Number(ref.slice(1)),
+    ...extra,
+  });
+
+  it("gives threads Word did not order within their paragraph one pos until offsets tell", () => {
+    const found = wordCommentPositions([
+      thread("t1", { first: 2, last: 2 }),
+      thread("t2", {}, { unsure: true }),
+      thread("t3", {}, { unsure: true }),
+      thread("t4", { first: 4, last: 4 }),
+    ]);
+    expect(["t1", "t2", "t3", "t4"].map((ref) => found.get(ref)?.pos)).toEqual([
+      1, 2, 2, 3,
+    ]);
+    const placed = wordCommentPositions([
+      thread("t2", { start: 10, end: 12 }, { unsure: true }),
+      thread("t3", { start: 4, end: 6 }, { unsure: true }),
+    ]);
+    expect(placed.get("t3")?.pos).toBe(1);
+    expect(placed.get("t2")?.pos).toBe(2);
+  });
+
+  it("keeps a passage the selection names as touching, though no vs can be named", () => {
+    const passage = { first: 3, last: 3, start: null, end: null };
+    const found = wordCommentPositions(
+      [
+        thread("t1", {}, { touches: true }),
+        thread("t2", {}),
+        thread("t3", { first: 1, last: 1 }, { touches: true }),
+      ],
+      { selection: passage },
+    );
+    expect(found.get("t1")).toMatchObject({ touches: true, away: 0 });
+    expect(found.get("t1")).not.toHaveProperty("vs");
+    expect(found.get("t2")).not.toHaveProperty("touches");
+    expect(found.get("t3")).toMatchObject({ vs: "before" });
+    expect(found.get("t3")).not.toHaveProperty("touches");
+  });
 });

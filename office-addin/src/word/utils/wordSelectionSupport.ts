@@ -1,4 +1,4 @@
-import { wordHostPlatform } from "./wordHostPlatform";
+import { wordHostPlatform, wordReadsCommentRanges } from "./wordHostPlatform";
 
 import type { WordHostPlatform } from "./wordHostPlatform";
 
@@ -56,9 +56,8 @@ export interface WordSelectionSupport {
   listsBookmarks: boolean;
   /**
    * A comment a paragraph's OOXML leaves out may be found to lie around it by reading its anchor
-   * (queueWordCommentAnchors). On Word for the web Comment.getRange unhides hidden text in the
-   * anchored paragraph, and the change is saved (ERMAIN-948 F1), so there such a comment keeps
-   * its paragraph context only.
+   * (queueWordCommentAnchors). Only where comment ranges may be read (wordReadsCommentRanges);
+   * elsewhere such a comment keeps its paragraph context only.
    */
   comparesCommentAnchors: boolean;
   reason: "host_unsupported" | null;
@@ -127,7 +126,7 @@ export function wordSelectionSupport(
     keptItemParagraphs: desktop ? null : WORD_WEB_REVERT_MAX_PARAGRAPHS,
     listsBookmarks:
       platform === "Mac" && has(WORD_SELECTION_REQUIREMENTS.bookmarks),
-    comparesCommentAnchors: desktop,
+    comparesCommentAnchors: wordReadsCommentRanges(platform),
     reason: canRewrite ? null : "host_unsupported",
   };
 }

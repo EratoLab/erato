@@ -185,7 +185,10 @@ export interface WordCommentChipProps {
   onDismissPick: () => void;
   onChoose: () => void;
   onChangeDefault: () => void;
-  onShowInWord: (commentId: string) => Promise<WordSelectionShowResult>;
+  onShowInWord: (
+    commentId: string,
+    para: number,
+  ) => Promise<WordSelectionShowResult>;
 }
 
 const CHIP_CLASS =
@@ -457,7 +460,7 @@ export function WordCommentChip({
                 {wordCommentQuoteText(thread.quote)}
               </span>
               <WordShowInWordButton
-                onShow={() => onShowInWord(thread.commentId)}
+                onShow={() => onShowInWord(thread.commentId, thread.para)}
                 disabled={false}
               />
             </div>
