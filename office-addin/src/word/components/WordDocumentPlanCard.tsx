@@ -89,6 +89,7 @@ import { wordInPlaceAvailability } from "../utils/wordInPlaceSwitch";
 import {
   wordCommentsChangedText,
   wordCommentsDeletedText,
+  wordCommentsKeptText,
   wordCommentsUncheckedText,
   wordCommentThreadsCopiedText,
   wordCommentThreadsCopyFailedText,
@@ -724,6 +725,7 @@ export function WordDocumentPlanCard({
     ...(commentCheck?.removed && !commentWarning
       ? [wordCommentsDeletedText(commentCheck.removed)]
       : []),
+    ...(commentCheck?.kept ? [wordCommentsKeptText(commentCheck.kept)] : []),
     ...(review.status === "done" && review.documentPlanOutcome?.tracked
       ? [wordTrackedApplyText()]
       : []),
@@ -859,7 +861,7 @@ export function WordDocumentPlanCard({
             onApply={() =>
               void run(
                 true,
-                needsCommentTick ? commentPlan?.fingerprint : undefined,
+                needsCommentTick ? commentsTicked : undefined,
               ).then(() => {
                 // The tick is this plan's consent, so a pending consent card is settled with it.
                 if (confirmCard) denyCard(confirmCard);
@@ -882,7 +884,7 @@ export function WordDocumentPlanCard({
             applying={applying}
             applyStage={review.applyStage}
             onApply={() =>
-              void run(false, commentPlan?.fingerprint).then(() => {
+              void run(false, commentsTicked).then(() => {
                 if (confirmCard) denyCard(confirmCard);
               })
             }

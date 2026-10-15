@@ -498,7 +498,7 @@ async function applyPlan(
         ),
       };
     watch.planned = comments.removals.map((removal) => removal.thread);
-    // Read right before a write, so refused and stale applies read nothing.
+    // Read once consent and the guards passed; a route's own stale check can still refuse after it.
     const watchComments = async () => {
       if (comments.threads.length && watch.before === undefined)
         watch.before = await readWordCommentStates();

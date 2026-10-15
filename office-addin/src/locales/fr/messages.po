@@ -4040,6 +4040,11 @@ msgid "officeAddin.word.planComments.keepRequest"
 msgstr "Conserve les passages auxquels ces commentaires sont rattachés, pour que leurs fils de commentaires restent : {passages}."
 
 #. js-lingui-explicit-id
+#: src/word/utils/wordPlanCommentMessages.ts
+msgid "officeAddin.word.planComments.kept"
+msgstr "{count, plural, one {Word a conservé # fil de commentaires dont vous aviez confirmé la suppression.} other {Word a conservé # fils de commentaires dont vous aviez confirmé la suppression.}}"
+
+#. js-lingui-explicit-id
 #: src/word/components/WordPlanCommentRemovals.tsx
 msgid "officeAddin.word.planComments.label"
 msgstr "Fils de commentaires supprimés par cette modification"

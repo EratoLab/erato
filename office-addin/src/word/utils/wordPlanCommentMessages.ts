@@ -176,3 +176,14 @@ export function wordCommentsDeletedText(count: number): string {
     }),
   });
 }
+
+/** Ticked threads that Word did not delete, as inside a tracked deletion. */
+export function wordCommentsKeptText(count: number): string {
+  return t({
+    id: "officeAddin.word.planComments.kept",
+    message: plural(count, {
+      one: "Word kept # comment thread you agreed to delete.",
+      other: "Word kept # comment threads you agreed to delete.",
+    }),
+  });
+}

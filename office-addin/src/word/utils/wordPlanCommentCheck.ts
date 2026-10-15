@@ -5,9 +5,9 @@ import type { WordPlanCommentThread } from "@erato/frontend/word-review";
 
 /**
  * Whether a written plan left the document's comment threads as planned (contract §13.1.3). Both
- * sides are Office.js lists from the ERMAIN-948 reader, because a multi-paragraph anchor has no
- * marks in a single paragraph's package (F-13); without package reads it calls no
- * Comment.getRange() on Word for the web (ERMAIN-983).
+ * sides are Office.js lists of threads and replies from the ERMAIN-948 reader, because a
+ * multi-paragraph anchor has no marks in a single paragraph's package (F-13); they read no anchor,
+ * so no Comment.getRange() on any host (ERMAIN-983).
  */
 
 export interface WordCommentThreadState {
@@ -38,7 +38,7 @@ const WEB_SETTLE_MS = 1_000;
 export async function readWordCommentStates(): Promise<
   WordCommentThreadState[] | null
 > {
-  const read = await readWordComments({ replies: "all", packages: false });
+  const read = await readWordComments({ threadsOnly: true });
   if (!read.ok) return null;
   return read.threads.map((thread) => ({
     id: thread.id,
@@ -140,8 +140,8 @@ export function diffWordCommentStates(
   for (const [id, state] of was) {
     const current = now.get(id);
     if (planned.has(id)) {
-      if (current) kept += 1;
-      else if (!moved.has(id)) removed += 1;
+      if (current || moved.has(id)) kept += 1;
+      else removed += 1;
       continue;
     }
     if (!current) {
@@ -165,7 +165,8 @@ const pause = (ms: number) =>
 
 /**
  * Reads the threads after a write and compares them with `before`. Word for the web may list a
- * change a moment late, so there a difference from the plan is read again before it is reported.
+ * change a moment late, so there a difference from the plan is read again before it is reported;
+ * a re-read that fails keeps what the last read showed.
  */
 export async function checkWordPlanComments(
   before: readonly WordCommentThreadState[] | null,
@@ -185,7 +186,7 @@ export async function checkWordPlanComments(
   for (let attempt = 0; attempt < reads; attempt += 1) {
     if (attempt) await pause(WEB_SETTLE_MS);
     const after = await read();
-    check = after ? diffWordCommentStates(before, after, ids) : unverified;
+    if (after) check = diffWordCommentStates(before, after, ids);
     if (!check.unexpected && !check.kept && !check.unverified) break;
   }
   return check;

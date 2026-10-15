@@ -4040,6 +4040,11 @@ msgid "officeAddin.word.planComments.keepRequest"
 msgstr "Conserva los pasajes a los que están vinculados estos comentarios, para que sus hilos se mantengan: {passages}."
 
 #. js-lingui-explicit-id
+#: src/word/utils/wordPlanCommentMessages.ts
+msgid "officeAddin.word.planComments.kept"
+msgstr "{count, plural, one {Word mantuvo # hilo de comentarios cuya eliminación confirmó.} other {Word mantuvo # hilos de comentarios cuya eliminación confirmó.}}"
+
+#. js-lingui-explicit-id
 #: src/word/components/WordPlanCommentRemovals.tsx
 msgid "officeAddin.word.planComments.label"
 msgstr "Hilos de comentarios que elimina este cambio"

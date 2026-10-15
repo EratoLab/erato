@@ -4040,6 +4040,11 @@ msgid "officeAddin.word.planComments.keepRequest"
 msgstr "Zachowaj fragmenty, do których przypięte są te komentarze, aby ich wątki pozostały: {passages}."
 
 #. js-lingui-explicit-id
+#: src/word/utils/wordPlanCommentMessages.ts
+msgid "officeAddin.word.planComments.kept"
+msgstr "{count, plural, one {Word zachował # wątek komentarzy, którego usunięcie potwierdzono.} few {Word zachował # wątki komentarzy, których usunięcie potwierdzono.} many {Word zachował # wątków komentarzy, których usunięcie potwierdzono.} other {Word zachował # wątku komentarzy, których usunięcie potwierdzono.}}"
+
+#. js-lingui-explicit-id
 #: src/word/components/WordPlanCommentRemovals.tsx
 msgid "officeAddin.word.planComments.label"
 msgstr "Wątki komentarzy usuwane przez tę zmianę"

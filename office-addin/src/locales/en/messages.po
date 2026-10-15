@@ -4040,6 +4040,11 @@ msgid "officeAddin.word.planComments.keepRequest"
 msgstr "Keep the passages these comments are attached to, so their comment threads stay: {passages}."
 
 #. js-lingui-explicit-id
+#: src/word/utils/wordPlanCommentMessages.ts
+msgid "officeAddin.word.planComments.kept"
+msgstr "{count, plural, one {Word kept # comment thread you agreed to delete.} other {Word kept # comment threads you agreed to delete.}}"
+
+#. js-lingui-explicit-id
 #: src/word/components/WordPlanCommentRemovals.tsx
 msgid "officeAddin.word.planComments.label"
 msgstr "Comment threads this change deletes"

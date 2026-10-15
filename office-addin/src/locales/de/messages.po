@@ -4040,6 +4040,11 @@ msgid "officeAddin.word.planComments.keepRequest"
 msgstr "Behalte die Passagen, an denen diese Kommentare hängen, damit ihre Kommentar-Threads erhalten bleiben: {passages}."
 
 #. js-lingui-explicit-id
+#: src/word/utils/wordPlanCommentMessages.ts
+msgid "officeAddin.word.planComments.kept"
+msgstr "{count, plural, one {Word hat # Kommentar-Thread behalten, obwohl Sie das Löschen bestätigt hatten.} other {Word hat # Kommentar-Threads behalten, obwohl Sie das Löschen bestätigt hatten.}}"
+
+#. js-lingui-explicit-id
 #: src/word/components/WordPlanCommentRemovals.tsx
 msgid "officeAddin.word.planComments.label"
 msgstr "Kommentar-Threads, die diese Änderung löscht"

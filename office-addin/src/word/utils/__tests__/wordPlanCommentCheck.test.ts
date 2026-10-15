@@ -99,7 +99,7 @@ describe("comment threads after a write", () => {
     });
     expect(diffWordCommentStates(BEFORE, moved, new Set(["3"]))).toEqual({
       removed: 0,
-      kept: 0,
+      kept: 1,
       unexpected: 0,
     });
   });
@@ -208,12 +208,30 @@ describe("comment threads after a write", () => {
       unverified: true,
     });
   });
+
+  it("keeps a change it read on Word for the web when a later re-read fails", async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal("Office", {
+      context: { diagnostics: { platform: "OfficeOnline" } },
+    });
+    const read = vi
+      .fn<() => Promise<WordCommentThreadState[] | null>>()
+      .mockResolvedValueOnce(BEFORE.slice(0, 3))
+      .mockResolvedValue(null);
+    const check = checkWordPlanComments(BEFORE, [], read);
+    await vi.runAllTimersAsync();
+    expect(await check).toEqual({ removed: 0, kept: 0, unexpected: 1 });
+    expect(read).toHaveBeenCalledTimes(3);
+  });
 });
 
 describe("listing comment threads with the ERMAIN-948 reader", () => {
   it("lists ids, status and replies on Word PC", async () => {
     const host = installWordCommentHost({ host: "pc" });
     const states = await readWordCommentStates();
+    expect(new Set(host.calls())).toEqual(
+      new Set(["body.getComments", "comments.load", "replies.load"]),
+    );
     const t1 = states?.find((s) => s.id === host.commentId("T1"));
     expect(t1).toMatchObject({
       resolved: false,

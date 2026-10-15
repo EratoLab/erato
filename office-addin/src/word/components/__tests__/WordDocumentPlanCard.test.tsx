@@ -2525,6 +2525,20 @@ describe("comment threads a plan deletes", () => {
     expect(screen.queryByTestId("word-plan-comment-check")).toBeNull();
   });
 
+  it("says when Word kept threads the user agreed to delete", async () => {
+    await mountRealistic(shortenChapter3, { xml: CHAPTERS_WITH_COMMENTS() });
+    const before = ooxmlHostCommentStates();
+    vi.mocked(readWordCommentStates).mockImplementation(() => before);
+    fireEvent.click(tickBox());
+    apply();
+    await screen.findByText(/^Applied: /);
+    expect(screen.getByTestId("word-plan-adjustments")).toHaveTextContent(
+      "Word kept 2 comment threads you agreed to delete.",
+    );
+    expect(screen.queryByText(/as you confirmed/)).toBeNull();
+    expect(screen.queryByTestId("word-plan-comment-check")).toBeNull();
+  });
+
   it("says when Word changed a thread beyond the plan, with Word's Undo, even folded", async () => {
     const { snapshot } = await mountRealistic(shortenChapter3, {
       xml: CHAPTERS_WITH_COMMENTS(),

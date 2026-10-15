@@ -71,9 +71,9 @@ export const WORD_HOUSEKEEPING: readonly WordHousekeepingEntry[] = [
     element:
       "w:id of revision marks (w:ins, w:del, moves, property changes), which share one sequence with comments",
     part: "/word/document.xml",
-    hosts: ["Word PC"],
+    hosts: ["Word PC", "Word for Mac"],
     probe:
-      "ERMAIN-950 gate C3, C5 (Word PC, 2026-10-15): an import that drops comments renumbers a later w:del from 13 to 6",
+      "ERMAIN-950 gate C3, C5 (Word PC), C3 (Word for Mac), 2026-10-15: an import that drops comments renumbers a later w:del from 13 to 6",
     scope: "written",
   },
   {
@@ -81,9 +81,9 @@ export const WORD_HOUSEKEEPING: readonly WordHousekeepingEntry[] = [
     element:
       "w15:person: one per author of a remaining comment, in the order of each author's first comment",
     part: "/word/people.xml",
-    hosts: ["Word PC"],
+    hosts: ["Word PC", "Word for Mac"],
     probe:
-      "ERMAIN-950 gate C3 (the person whose last comment went is dropped), C5 (the others reordered); Word PC, 2026-10-15",
+      "ERMAIN-950 gate C3 (the person whose last comment went is dropped; Word PC and Word for Mac), C5 (the others reordered; Word PC), 2026-10-15",
     scope: "written",
   },
 ];
