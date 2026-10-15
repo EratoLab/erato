@@ -510,6 +510,7 @@ const sameAuthor = (a: Element | undefined, b: Element | undefined) =>
 
 interface MockTrackedChange {
   type: string;
+  author: string;
   text: string;
   /** The paragraphs the change covers; more than one only when Word coalesced revisions. */
   span: Element[];
@@ -535,11 +536,15 @@ function paragraphRevisions(
   const joinsPrevious =
     !!previous && sameAuthor(markInsertion(previous), opening);
   const span = [paragraph];
+  const author = (e: Element | undefined) =>
+    e?.getAttributeNS(W, "author") ?? "";
+  const pPrChange = child(child(paragraph, "pPr"), "pPrChange");
   return [
     ...(mark
       ? [
           {
             type: mark === "ins" ? "Added" : "Deleted",
+            author: author(child(child(child(paragraph, "pPr"), "rPr"), mark)),
             text: "",
             span:
               next &&
@@ -549,8 +554,8 @@ function paragraphRevisions(
           },
         ]
       : []),
-    ...(child(child(paragraph, "pPr"), "pPrChange")
-      ? [{ type: "Formatted", text: "", span }]
+    ...(pPrChange
+      ? [{ type: "Formatted", author: author(pPrChange), text: "", span }]
       : []),
     ...elements(paragraph, W, "*").flatMap((e) =>
       isWElement(e.parentElement, "rPr") &&
@@ -560,17 +565,26 @@ function paragraphRevisions(
           ? [
               {
                 type: "Added",
+                author: author(e),
                 text: text(e, "t"),
                 span:
                   e === opening && joinsPrevious ? [previous, paragraph] : span,
               },
             ]
           : e.localName === "del"
-            ? [{ type: "Deleted", text: text(e, "delText"), span }]
+            ? [
+                {
+                  type: "Deleted",
+                  author: author(e),
+                  text: text(e, "delText"),
+                  span,
+                },
+              ]
             : e.localName === "rPrChange"
               ? [
                   {
                     type: "Formatted",
+                    author: author(e),
                     text: text(e.parentElement!.parentElement!, "t"),
                     span,
                   },
@@ -2432,6 +2446,33 @@ export function installWordOoxmlHost(
       getOoxml: () => ({ value: wordDocumentFileToOoxml(current) }),
       get paragraphs() {
         return paragraphCollection();
+      },
+      /** Each change once, listed where it starts; a coalesced one spans several paragraphs. */
+      getTrackedChanges: () => {
+        let items:
+          | (MockTrackedChange & { getRange: () => unknown })[]
+          | undefined;
+        return {
+          load: () =>
+            enqueue(false, "load", () => {
+              items = bodyParagraphs(live()).flatMap((paragraph) =>
+                paragraphRevisions(paragraph, settings.coalesceInsertions)
+                  .filter((change) => change.span[0] === paragraph)
+                  .map((change) => ({
+                    ...change,
+                    getRange: () =>
+                      spanProxy(() => change.span, "tracked-change"),
+                  })),
+              );
+            }),
+          get items() {
+            if (!items)
+              throw Object.assign(new Error("The collection is not loaded."), {
+                code: "PropertyNotLoaded",
+              });
+            return items;
+          },
+        };
       },
       load: (properties: string) =>
         enqueue(false, "load", () => {

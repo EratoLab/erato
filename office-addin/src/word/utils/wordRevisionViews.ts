@@ -261,7 +261,7 @@ const REVISION_NAMES = new Set<string>(WORD_REVISION_ELEMENTS);
 const MAX_AUTHOR_LENGTH = 64;
 
 /** Anyone can write an author name into a file: one line of plain text, capped. */
-function revisionAuthor(raw: string): string {
+export function wordRevisionAuthor(raw: string): string {
   const flat = raw
     .replace(/[\p{Cc}\p{Cf}]+/gu, " ")
     .replace(/\s+/gu, " ")
@@ -295,7 +295,7 @@ export function wordParagraphRevisionAuthors(ooxml: string): string[] | null {
     ...new Set(
       revisions
         .map((e) =>
-          revisionAuthor(
+          wordRevisionAuthor(
             e.getAttributeNS(W, "author") ?? e.getAttribute("w:author") ?? "",
           ),
         )

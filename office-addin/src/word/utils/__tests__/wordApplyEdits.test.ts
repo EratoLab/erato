@@ -590,6 +590,57 @@ describe("applyWordEdits on a Word package with another author's revisions", () 
       );
     },
   );
+
+  it.each([
+    ["Word PC", { profile: "word-pc-16.0.20326" as const }],
+    [
+      "Word for the web, whose paragraph OOXML leaves them out",
+      { profile: "word-web" as const, paragraphOoxmlOmitsProperties: true },
+    ],
+  ])(
+    "refuses a revised paragraph mark or paragraph format on %s",
+    async (_host, options) => {
+      const host = installWordOoxmlHost(
+        packageXml(
+          [
+            "<w:p><w:r><w:t>Clean clause.</w:t></w:r></w:p>",
+            `<w:p><w:pPr><w:rPr><w:ins w:id="5" ${BY}/></w:rPr></w:pPr><w:r><w:t>Split clause,</w:t></w:r></w:p>`,
+            "<w:p><w:r><w:t>continued here.</w:t></w:r></w:p>",
+            `<w:p><w:pPr><w:jc w:val="center"/><w:pPrChange w:id="6" w:author="Kanzlei Schmidt" w:date="2026-10-13T08:15:00Z"><w:pPr/></w:pPrChange></w:pPr><w:r><w:t>Centred clause.</w:t></w:r></w:p>`,
+          ].join(""),
+        ),
+        options,
+      );
+      const read = await readWordDocument();
+      if (!read.ok) throw new Error("read failed");
+      const build = buildWordDocumentArgs(read.paragraphs);
+
+      const result = await applyWordEdits({
+        edits: [
+          { paragraph: 1, text: "Clean clause, revised." },
+          { paragraph: 2, text: "Split clause, revised," },
+          { paragraph: 4, text: "Centred clause, revised." },
+        ],
+        capture: {
+          identity: IDENTITY,
+          ordinalMap: build.ordinalMap,
+          paragraphsSent: build.coverage.paragraphsSent,
+          renderedOrdinals: build.renderedOrdinals,
+          partialOrdinal: build.partialOrdinal,
+        },
+      });
+
+      expect(
+        result.outcomes.map(({ status, authors }) => ({ status, authors })),
+      ).toEqual([
+        { status: "applied", authors: undefined },
+        { status: "revisions", authors: ["RA Dr. Weber"] },
+        { status: "revisions", authors: ["Kanzlei Schmidt"] },
+      ]);
+      expect(host.ooxml()).toContain("<w:pPrChange");
+      expect(host.ooxml()).not.toContain("revised,");
+    },
+  );
 });
 
 describe("revertWordEdits", () => {

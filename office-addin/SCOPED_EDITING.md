@@ -277,7 +277,9 @@ edits are not offered. `word.apply_edits` writes nothing while Track Changes is
 on, and refuses any paragraph whose OOXML holds a pending revision, naming its
 authors: a Replace would accept or absorb them, and Office.js cannot tell the
 user's own revisions from others'. Every target is checked before anything is
-written.
+written. Word for the web leaves paragraph properties out of a paragraph's OOXML,
+so there the body's tracked-change list, placed against each target paragraph,
+also counts: it holds paragraph-mark and paragraph-format revisions.
 
 ### Switches
 

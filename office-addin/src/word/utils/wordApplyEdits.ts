@@ -6,6 +6,10 @@ import {
 import { wordErrorText } from "./wordApplyDiagnostics";
 import { trackWordApply } from "./wordApplyProgress";
 import { wordBodyFingerprint } from "./wordDocumentXml";
+import {
+  wordHostPlatform,
+  wordParagraphOoxmlHasProperties,
+} from "./wordHostPlatform";
 import { isWordTrackingMode } from "./wordInPlaceSwitch";
 import {
   resolveWordParagraphs,
@@ -15,7 +19,10 @@ import {
   capturedWordAnchor,
   readWordParagraphEntries,
 } from "./wordReviewLocation";
-import { wordParagraphRevisionAuthors } from "./wordRevisionViews";
+import {
+  wordParagraphRevisionAuthors,
+  wordRevisionAuthor,
+} from "./wordRevisionViews";
 import { wordWriteHost } from "./wordWriteHost";
 
 import type { WordApplyProgress, WordApplyStage } from "./wordApplyProgress";
@@ -106,9 +113,44 @@ function resolveWordEdits(
   return { applicable, skipped };
 }
 
+/** Relations of a listed change that place it clear of a paragraph; any other counts as in it. */
+const CLEAR_OF = new Set([
+  "Before",
+  "AdjacentBefore",
+  "After",
+  "AdjacentAfter",
+  "Unrelated",
+]);
+
+/** Per paragraph, the authors of the changes Word lists in it, or null when it lists none. Word for
+ * the web leaves w:pPr out of Paragraph.getOoxml, so a revised paragraph mark or paragraph format
+ * shows only here. `type` stays unloaded: it throws on moves. */
+async function listedRevisionAuthors(
+  context: Word.RequestContext,
+  paragraphs: readonly Word.Paragraph[],
+): Promise<(string[] | null)[]> {
+  const changes = context.document.body.getTrackedChanges();
+  changes.load("items/author");
+  await context.sync();
+  if (changes.items.length === 0) return paragraphs.map(() => null);
+  const relations = paragraphs.map((paragraph) => {
+    const whole = paragraph.getRange("Whole");
+    return changes.items.map((change) =>
+      change.getRange("Whole").compareLocationWith(whole),
+    );
+  });
+  await context.sync();
+  return relations.map((row) => {
+    const held = changes.items.filter((_, k) => !CLEAR_OF.has(row[k].value));
+    return held.length
+      ? held.map((change) => wordRevisionAuthor(change.author)).filter(Boolean)
+      : null;
+  });
+}
+
 /** A Replace accepts or absorbs a paragraph's pending revisions, and Office.js cannot tell the user's
- * own from others', so any revision refuses the edit; read from OOXML, as getTrackedChanges() misses
- * some. Under Track Changes a Replace is a whole-paragraph revision Revert cannot undo. */
+ * own from others', so any revision refuses the edit; read from OOXML, as a paragraph's
+ * getTrackedChanges() misses some. Under Track Changes a Replace is a whole-paragraph revision Revert cannot undo. */
 async function withoutRevisedParagraphs(
   context: Word.RequestContext,
   items: readonly Word.Paragraph[],
@@ -121,11 +163,23 @@ async function withoutRevisedParagraphs(
   if (positions.length === 0) return verified;
   const packages = positions.map((position) => items[position].getOoxml());
   await context.sync();
+  const listed = wordParagraphOoxmlHasProperties(wordHostPlatform())
+    ? []
+    : await listedRevisionAuthors(
+        context,
+        positions.map((position) => items[position]),
+      );
   const authors = new Map(
-    positions.map((position, i) => [
-      position,
-      wordParagraphRevisionAuthors(packages[i].value),
-    ]),
+    positions.map((position, i) => {
+      const found = wordParagraphRevisionAuthors(packages[i].value);
+      const more = listed[i];
+      return [
+        position,
+        found || more
+          ? [...new Set([...(found ?? []), ...(more ?? [])])]
+          : null,
+      ];
+    }),
   );
   const applicable: PositionedWordEdit[] = [];
   const skipped = [...verified.skipped];

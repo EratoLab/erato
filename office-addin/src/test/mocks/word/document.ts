@@ -325,6 +325,8 @@ export function installMockWordDocument(
 
       const bodyProxy = {
         paragraphs: collection,
+        // Revisions show in Paragraph.getOoxml here; the list stays empty.
+        getTrackedChanges: () => ({ load: () => {}, items: [] }),
         // JSON stands in for opaque OOXML so tests can verify exact restoration.
         getOoxml: () => {
           const snapshot = JSON.stringify(body);

@@ -26,3 +26,8 @@ export const wordReadsCommentRanges = (platform: WordHostPlatform) =>
  */
 export const wordCommentWritesKeepHiddenText = (platform: WordHostPlatform) =>
   platform === "PC" || platform === "Mac";
+
+/** Paragraph.getOoxml carries the paragraph's own properties (w:pPr), and with them its paragraph-mark
+ * and paragraph-format revisions, only on PC and Mac; Word for the web leaves them out (ERMAIN-967). */
+export const wordParagraphOoxmlHasProperties = (platform: WordHostPlatform) =>
+  platform === "PC" || platform === "Mac";
