@@ -17,3 +17,12 @@ export function wordHostPlatform(): WordHostPlatform {
  */
 export const wordReadsCommentRanges = (platform: WordHostPlatform) =>
   platform === "PC" || platform === "Mac";
+
+/**
+ * Whether adding, editing, resolving, reopening or deleting a comment leaves hidden text hidden.
+ * On Word for the web each of them unhides the hidden text of the paragraphs the comment is
+ * anchored in, and the change is saved; replies, and their edits and deletes, do not (ERMAIN-949
+ * gate W1). There those writes first check their paragraphs.
+ */
+export const wordCommentWritesKeepHiddenText = (platform: WordHostPlatform) =>
+  platform === "PC" || platform === "Mac";

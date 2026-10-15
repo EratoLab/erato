@@ -20,6 +20,7 @@ import {
 import { t } from "@lingui/core/macro";
 import { useCallback, useEffect, useId, useMemo, useState } from "react";
 
+import { WordCommentChangesCard } from "./WordCommentChangesCard";
 import { WordDocumentPlanCard } from "./WordDocumentPlanCard";
 import { WordEditReport, wordEditsTitleText } from "./WordEditReport";
 import {
@@ -37,13 +38,10 @@ import {
 } from "./WordReviewReceipt";
 import { WordSelectionCard } from "./WordSelectionCard";
 import { useClientActionConfirmFlow } from "../../core/clientActions/useClientActionConfirmFlow";
-import { useClientActionDecisions } from "../../core/clientActions/useClientActionDecisions";
+import { useWordClientActionDecisions } from "../hooks/useWordClientActionDecisions";
 import { useWordReviewFocus } from "../hooks/useWordReviewFocus";
 import { useWordWrite } from "../providers/WordWriteProvider";
-import {
-  isActionDenied,
-  wordClientActionDecisionStore,
-} from "../utils/clientActionPolicy";
+import { isActionDenied } from "../utils/clientActionPolicy";
 import { revertWordEdits } from "../utils/wordApplyEdits";
 import {
   offerableWordClientActionsForFacet,
@@ -82,6 +80,18 @@ export function WordHostCardRenderer({
   if (entry.action === "word.apply_document_plan")
     return (
       <WordDocumentPlanCard
+        key={`${entry.action}:${content}`}
+        entry={entry}
+        content={content}
+      />
+    );
+  if (
+    entry.action === "word.add_comments" ||
+    entry.action === "word.respond_to_comments" ||
+    entry.action === "word.modify_comments"
+  )
+    return (
+      <WordCommentChangesCard
         key={`${entry.action}:${content}`}
         entry={entry}
         content={content}
@@ -134,8 +144,8 @@ function WordActionCard({
     locationGeneration,
     invalidateLocations,
   } = useWordWrite();
-  const [decisions, setDecisions] = useClientActionDecisions(
-    wordClientActionDecisionStore,
+  const { decisions, setDecisions, grantAlways } = useWordClientActionDecisions(
+    entry.action,
   );
   const facetId = artifact?.facetId ?? "";
   const messageId = artifact?.messageId;
@@ -566,6 +576,7 @@ function WordActionCard({
               enforcedAskActions={enforcedAskActions}
               decisions={decisions}
               setDecisions={setDecisions}
+              onGrantAlways={grantAlways}
               facetId={facetId}
               allowCard={allowCard}
               denyCard={denyCard}

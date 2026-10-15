@@ -38,13 +38,39 @@ beforeEach(() => {
 });
 
 describe("the Word client-action registry", () => {
-  it("holds the v1 actions and the selection Replace, each bound to its facet and fence", () => {
+  it("holds the v1 actions, the selection Replace and the comment actions, each bound to its facet and fence", () => {
     expect([...WORD_CLIENT_ACTIONS.keys()]).toEqual([
       "word.apply_document_plan",
       "word.apply_edits",
       "word.insert_at_cursor",
       "word.replace_selection",
+      "word.add_comments",
+      "word.respond_to_comments",
+      "word.modify_comments",
     ]);
+    for (const [action, fence, scope] of [
+      ["word.add_comments", "erato-word-comments-add", "word-comments-add"],
+      [
+        "word.respond_to_comments",
+        "erato-word-comments-respond",
+        "word-comments-respond",
+      ],
+      [
+        "word.modify_comments",
+        "erato-word-comments-modify",
+        "word-comments-modify",
+      ],
+    ] as const)
+      expect(WORD_CLIENT_ACTIONS.get(action)).toMatchObject({
+        facetIds: [
+          "word_comment_thread",
+          "word_selection",
+          "word_document_review",
+          "word_document_authoring",
+        ],
+        fenceLanguage: fence,
+        promptScope: scope,
+      });
     expect(WORD_CLIENT_ACTIONS.get("word.replace_selection")).toMatchObject({
       facetIds: ["word_selection"],
       fenceLanguage: "erato-word-replace",
@@ -60,6 +86,16 @@ describe("the Word client-action registry", () => {
       fenceLanguage: WORD_INSERT_FENCE,
       promptScope: "word-insert",
     });
+  });
+
+  it("runs only a comment draft accepted for this action and document", async () => {
+    const capture = { identity: "doc" } as unknown as WordDocumentCapture;
+    const run = await WORD_CLIENT_ACTIONS.get("word.add_comments")!.execute({
+      fenceContent: "no-such-draft",
+      capture,
+      comments: { selected: new Set([0]), assistantAuthor: null },
+    });
+    expect(run).toEqual({ ok: false, outcomes: [], snapshotOoxml: null });
   });
 
   it("passes the user's whole-document confirmation to the plan writer", async () => {

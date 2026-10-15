@@ -7,6 +7,7 @@ import { wordCommentAnchorText } from "./wordCommentPackage";
 
 import type {
   WordCommentEntryRecord,
+  WordCommentReadOnly,
   WordCommentThreadRecord,
 } from "./wordCommentReader";
 
@@ -35,6 +36,8 @@ export interface WordCommentFingerprintAnchor {
 export interface WordCommentEntryFingerprint {
   id: string;
   author: string;
+  /** Pane only, to tell the user's own items apart; never compared, as AI authors have none. */
+  email: string | null;
   /** creationDate.toISOString(); null when Word gave none. */
   created: string | null;
   content: string;
@@ -56,6 +59,8 @@ export interface WordCommentRefEntry {
   /** "content": a legacy file, whose ref names the thread by its content (the card says so). */
   matchedBy: "id" | "content";
   fingerprint: WordCommentFingerprint;
+  /** A thread no write may touch (contract §6, F-1). */
+  readOnly: WordCommentReadOnly | null;
 }
 
 /** The refs frozen with the Send capture; actions resolve refs against these only. */
@@ -76,6 +81,11 @@ export interface WordCommentRefRegistry {
    * legacy file before one knows (O-17).
    */
   legacy: boolean | null;
+  /**
+   * String(Comment.id) of the comments Erato added in this pane session. Their paragraphs were
+   * checked for hidden text before the add, so Word for the web does not read them again.
+   */
+  readonly added: Set<string>;
 }
 
 export type WordCommentRefResolution =
@@ -96,6 +106,7 @@ export function createWordCommentRefRegistry(
     refs: new Map(),
     issued: new Map(),
     legacy: null,
+    added: new Set(),
   };
 }
 
@@ -162,6 +173,7 @@ function entryPrint(
   return {
     id: entry.id,
     author: entry.authorName,
+    email: entry.authorEmail,
     created: entry.creationDate?.toISOString() ?? null,
     content: entry.content,
   };
@@ -329,12 +341,31 @@ export function issueWordCommentRefs(
       commentId: record.id,
       matchedBy: byContent ? "content" : "id",
       fingerprint: wordCommentFingerprint(record),
+      readOnly: record.readOnly,
     }),
   );
   return {
     threads: entries,
     byRef: new Map(entries.map((entry) => [entry.ref, entry])),
   };
+}
+
+/**
+ * The ref a thread Erato just added goes by, issued as the next read would issue it; null in a
+ * legacy file, whose refs come from the whole thread's content.
+ */
+export function wordCommentNewThreadRef(
+  registry: WordCommentRefRegistry,
+  commentId: string,
+): string | null {
+  if (registry.legacy !== false) return null;
+  const key = `${ID_KEY}${commentId}`;
+  const known = registry.refs.get(key);
+  if (known) return known;
+  const ref = issue(registry, commentId, key);
+  registry.issued.set(ref, key);
+  registry.refs.set(key, ref);
+  return ref;
 }
 
 /** "t7k" names the thread; "t7k.0" its comment, "t7k.2" its second reply. */

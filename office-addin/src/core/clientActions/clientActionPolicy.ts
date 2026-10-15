@@ -83,6 +83,79 @@ export function effectiveDecision(input: {
   return stored;
 }
 
+/** How far an "always allow" reaches: the device (default), or this session and document only. */
+export type ClientActionGrantScope = "device" | "session_document";
+
+/** Session grants live in pane memory: a reload or another document asks again. */
+const sessionGrants = new Set<string>();
+let sessionGrantVersion = 0;
+
+const sessionGrantKey = (facetId: string, action: string, identity: string) =>
+  `${decisionKey(facetId, action)}@${identity}`;
+
+export function grantClientActionForSession(
+  facetId: string,
+  action: string,
+  identity: string,
+): void {
+  sessionGrants.add(sessionGrantKey(facetId, action, identity));
+  sessionGrantVersion += 1;
+}
+
+const sessionGrantPrefix = (facetId: string, action: string) =>
+  `${decisionKey(facetId, action)}@`;
+
+/** Whether this pane session granted the action, for any document. */
+export function hasClientActionSessionGrant(
+  facetId: string,
+  action: string,
+): boolean {
+  const prefix = sessionGrantPrefix(facetId, action);
+  return [...sessionGrants].some((key) => key.startsWith(prefix));
+}
+
+/** Takes back this session's grants of one action, for every document; without one, all grants. */
+export function forgetClientActionSessionGrants(
+  facetId?: string,
+  action?: string,
+): void {
+  if (facetId === undefined || action === undefined) sessionGrants.clear();
+  else {
+    const prefix = sessionGrantPrefix(facetId, action);
+    for (const key of [...sessionGrants])
+      if (key.startsWith(prefix)) sessionGrants.delete(key);
+  }
+  sessionGrantVersion += 1;
+}
+
+/** Changes whenever a session grant is made or taken back, so memoized decisions read them again. */
+export const clientActionSessionGrantVersion = () => sessionGrantVersion;
+
+/**
+ * The decisions as one action under `scope` sees them: a session-scoped action ignores a stored
+ * device grant and is "always" only where this session granted it for this item. A stored
+ * `never` stands either way.
+ */
+export function scopedDecisions(
+  decisions: ClientActionDecisionMap,
+  input: {
+    facetId: string;
+    action: string;
+    scope: ClientActionGrantScope;
+    identity: string | null | undefined;
+  },
+): ClientActionDecisionMap {
+  if (input.scope !== "session_document") return decisions;
+  const key = decisionKey(input.facetId, input.action);
+  if (decisions[key] === "never") return decisions;
+  const granted =
+    !!input.identity &&
+    sessionGrants.has(
+      sessionGrantKey(input.facetId, input.action, input.identity),
+    );
+  return { ...decisions, [key]: granted ? "always" : "ask" };
+}
+
 export function isActionDenied(
   input: Parameters<typeof effectiveDecision>[0],
 ): boolean {

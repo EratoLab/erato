@@ -3,9 +3,11 @@ import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  useWordCommentAuthor,
   useWordCommentPrecedence,
   useWordIncludeDocumentByDefault,
   WORD_PREFERENCES_KEY,
+  wordCommentAuthorPreference,
 } from "../wordPreferences";
 
 import type { PersistedStateOptions } from "@erato/frontend/library";
@@ -158,5 +160,49 @@ describe("useWordCommentPrecedence", () => {
     localStorage.setItem(WORD_PREFERENCES_KEY, raw);
     expect(includeDocument()).toBe(include);
     expect(precedence()).toBe(chosen);
+  });
+});
+
+describe("useWordCommentAuthor (O-28)", () => {
+  afterEach(() => {
+    localStorage.removeItem(WORD_PREFERENCES_KEY);
+    delete window.MS_OFFICE_ADDIN_DEFAULT_SETTINGS;
+  });
+
+  it("posts as the user until the deployment seeds otherwise or the user chooses", () => {
+    expect(renderHook(() => useWordCommentAuthor()).result.current).toEqual([
+      "user",
+      expect.any(Function),
+      false,
+    ]);
+    window.MS_OFFICE_ADDIN_DEFAULT_SETTINGS = { comment_author: "assistant" };
+    const { result } = renderHook(() => useWordCommentAuthor());
+    expect(result.current[0]).toBe("assistant");
+    act(() => result.current[1]("user"));
+    expect(result.current[0]).toBe("user");
+    expect(wordCommentAuthorPreference()).toBe("user");
+  });
+
+  it("keeps the deployment's value where it is enforced", () => {
+    localStorage.setItem(
+      WORD_PREFERENCES_KEY,
+      JSON.stringify({ commentAuthor: "user" }),
+    );
+    window.MS_OFFICE_ADDIN_DEFAULT_SETTINGS = {
+      comment_author: "assistant",
+      comment_author_enforced: true,
+    };
+    expect(renderHook(() => useWordCommentAuthor()).result.current[0]).toBe(
+      "assistant",
+    );
+    expect(wordCommentAuthorPreference()).toBe("assistant");
+  });
+
+  it("ignores a stored value it does not know", () => {
+    localStorage.setItem(
+      WORD_PREFERENCES_KEY,
+      JSON.stringify({ commentAuthor: "robot" }),
+    );
+    expect(wordCommentAuthorPreference()).toBe("user");
   });
 });

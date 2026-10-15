@@ -162,6 +162,9 @@ describe("WordAddinChatHost", () => {
       "erato-word-insert",
       "erato-word-document-plan",
       "erato-word-replace",
+      "erato-word-comments-add",
+      "erato-word-comments-respond",
+      "erato-word-comments-modify",
     ]);
     expect(stamped.hostArtifact?.itemIdentity).toBeUndefined();
     expect(harness.stampedMessages.current.u1).not.toHaveProperty(

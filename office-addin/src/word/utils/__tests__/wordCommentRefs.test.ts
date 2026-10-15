@@ -356,6 +356,7 @@ describe("fingerprints and the capture's refs", () => {
     expect(wordCommentFingerprint(t7)).toEqual({
       id: "1332042173",
       author: "Maya Krüger",
+      email: "maya.kruger@contoso.test",
       created: "2026-09-03T08:15:00.000Z",
       content: "Comment 1332042173",
       resolved: true,
@@ -364,12 +365,14 @@ describe("fingerprints and the capture's refs", () => {
         {
           id: "123940964",
           author: "Jonas Weber",
+          email: "jonas.weber@contoso.test",
           created: "2026-09-03T09:20:00.000Z",
           content: "Reply 123940964",
         },
         {
           id: "1460246645",
           author: "Jonas Weber",
+          email: "jonas.weber@contoso.test",
           created: "2026-09-03T09:20:00.000Z",
           content: "Second",
         },

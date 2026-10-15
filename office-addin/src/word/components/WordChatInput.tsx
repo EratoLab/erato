@@ -56,6 +56,7 @@ import { checkWordAuthoringBudget } from "../utils/wordAuthoringBudget";
 import { wordAuthoringIssueText } from "../utils/wordAuthoringMessages";
 import { wordCommentUserTimeZone } from "../utils/wordCommentEnvelope";
 import { wordCommentHeadingsFromBuild } from "../utils/wordCommentMap";
+import { wordCommentDeploymentSettings } from "../utils/wordCommentPolicy";
 import { wordCommentSelectionCoordinates } from "../utils/wordCommentPositions";
 import {
   wordCommentReadSession,
@@ -84,6 +85,10 @@ import {
   wordCommentThreadArgs,
 } from "../utils/wordCommentSend";
 import { showWordComment } from "../utils/wordCommentShow";
+import {
+  createWordCommentSubmissionExecutor,
+  WORD_SUBMIT_COMMENT_CHANGES_TOOL,
+} from "../utils/wordCommentSubmission";
 import { resolveWordDocumentName } from "../utils/wordDocumentIdentity";
 import { bindWordDocumentReadRequest } from "../utils/wordDocumentReadRequest";
 import {
@@ -406,6 +411,10 @@ export function WordChatInput({
   readEnabledRef.current = chipEnabled;
   const { profile } = useProfile();
   const principalEmail = profile?.email ?? null;
+  const commentPeople = useMemo(() => {
+    const { label, assistantAuthor } = wordCommentDeploymentSettings();
+    return { principalEmail, label, assistantAuthor };
+  }, [principalEmail]);
   const stopRequestBindingRef = useRef<(() => void) | undefined>(undefined);
   const clearReadSession = useCallback(() => {
     stopRequestBindingRef.current?.();
@@ -449,6 +458,10 @@ export function WordChatInput({
       WORD_READ_COMMENTS_TOOL,
       wordCommentReadSession.execute,
     );
+    const unregisterCommentChanges = registerClientToolExecutor(
+      WORD_SUBMIT_COMMENT_CHANGES_TOOL,
+      createWordCommentSubmissionExecutor(),
+    );
     const submit = createWordDocumentSubmissionExecutor(
       wordDocumentReadSession,
     );
@@ -470,6 +483,7 @@ export function WordChatInput({
       unregister();
       unregisterSubmit();
       unregisterComments();
+      unregisterCommentChanges();
       clearReadSession();
       clearCommentSession();
     };
@@ -546,13 +560,18 @@ export function WordChatInput({
       const activateCommentReads = (
         activation: Pick<
           WordCommentReadActivation,
-          "gestures" | "selection" | "inventory" | "headings" | "withheld"
+          | "gestures"
+          | "selection"
+          | "inventory"
+          | "headings"
+          | "withheld"
+          | "capture"
         >,
       ) => {
         const token = wordCommentReadSession.activate({
           ...activation,
           identity: documentIdentity,
-          people: { principalEmail },
+          people: commentPeople,
           documentIncluded: () => readEnabledRef.current,
         });
         stopCommentBindingRef.current = bindWordDocumentReadRequest(
@@ -595,7 +614,7 @@ export function WordChatInput({
               result,
               registry,
               passage,
-              people: { principalEmail },
+              people: commentPeople,
               now: new Date(),
               userTz: wordCommentUserTimeZone(),
             })
@@ -671,19 +690,20 @@ export function WordChatInput({
           availableFacetArgs,
         });
         if (!actionFacet) return null;
-        stagePendingCapture(
-          withWordCommentRefs(
-            {
-              identity: documentIdentity,
-              ordinalMap: new Map(),
-              paragraphsSent: 0,
-              renderedOrdinals: new Set(),
-              partialOrdinal: null,
-            },
-            read,
-          ),
+        const staged = withWordCommentRefs(
+          {
+            identity: documentIdentity,
+            ordinalMap: new Map(),
+            paragraphsSent: 0,
+            renderedOrdinals: new Set(),
+            partialOrdinal: null,
+          },
+          read,
+          carrier,
         );
+        stagePendingCapture(staged);
         activateCommentReads({
+          capture: staged,
           gestures: gesturesFor(decided.pick, false),
           selection: read.selection,
           // Later reads number paragraphs as thread_json does.
@@ -877,27 +897,27 @@ export function WordChatInput({
           });
           if (actionFacet) markSent(build);
           else clearReadSession();
-          stagePendingCapture(
-            actionFacet
-              ? withWordCommentRefs(
-                  {
-                    identity: documentIdentity,
-                    authoring: build?.authoring,
-                    ordinalMap: build?.ordinalMap ?? new Map(),
-                    paragraphsSent: build?.authoring
-                      ? 0
-                      : (build?.coverage.paragraphsSent ?? 0),
-                    renderedOrdinals: build?.authoring
-                      ? new Set()
-                      : (build?.renderedOrdinals ?? new Set()),
-                    partialOrdinal: build?.authoring
-                      ? null
-                      : (build?.partialOrdinal ?? null),
-                  },
-                  comments,
-                )
-              : null,
-          );
+          const staged = actionFacet
+            ? withWordCommentRefs(
+                {
+                  identity: documentIdentity,
+                  authoring: build?.authoring,
+                  ordinalMap: build?.ordinalMap ?? new Map(),
+                  paragraphsSent: build?.authoring
+                    ? 0
+                    : (build?.coverage.paragraphsSent ?? 0),
+                  renderedOrdinals: build?.authoring
+                    ? new Set()
+                    : (build?.renderedOrdinals ?? new Set()),
+                  partialOrdinal: build?.authoring
+                    ? null
+                    : (build?.partialOrdinal ?? null),
+                },
+                comments,
+                decided.plan.carrier,
+              )
+            : null;
+          stagePendingCapture(staged);
           if (actionFacet && build?.authoring) {
             stopRequestBindingRef.current = bindWordDocumentReadRequest(
               wordDocumentReadSession,
@@ -907,6 +927,7 @@ export function WordChatInput({
           }
           if (actionFacet && build)
             activateCommentReads({
+              capture: staged,
               gestures: gesturesFor(decided.pick, true),
               selection: comments?.selection ?? null,
               inventory,
@@ -974,13 +995,14 @@ export function WordChatInput({
               ? wordAnchoredCommentsArg(comments, carrier.threads)
               : undefined,
           );
-          stagePendingCapture(
-            withWordCommentRefs(
-              emptySelectionCapture(documentIdentity, selection),
-              comments,
-            ),
+          const staged = withWordCommentRefs(
+            emptySelectionCapture(documentIdentity, selection),
+            comments,
+            carrier,
           );
+          stagePendingCapture(staged);
           activateCommentReads({
+            capture: staged,
             gestures: gesturesFor(decided.pick, false),
             selection: passage,
             withheld: decided.withheld,
@@ -1053,7 +1075,7 @@ export function WordChatInput({
       includeOpenComments,
       markSent,
       previousCapture,
-      principalEmail,
+      commentPeople,
       waitForCommentDecision,
       withoutComments,
       selectionDue,

@@ -4,7 +4,12 @@ import { useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ClientActionsSettings } from "../ClientActionsSettings";
-import { createClientActionDecisionStore } from "../clientActionPolicy";
+import {
+  createClientActionDecisionStore,
+  forgetClientActionSessionGrants,
+  grantClientActionForSession,
+  hasClientActionSessionGrant,
+} from "../clientActionPolicy";
 
 const facets = vi.hoisted(() => ({
   action_facets: [] as Array<{
@@ -13,6 +18,7 @@ const facets = vi.hoisted(() => ({
     client_actions?: string[];
     client_actions_always_ask?: string[];
     presentation?: string;
+    grant_scope?: Record<string, string>;
   }>,
 }));
 
@@ -84,6 +90,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   facets.action_facets = [];
+  forgetClientActionSessionGrants();
 });
 
 describe("ClientActionsSettings (host-neutral)", () => {
@@ -159,5 +166,54 @@ describe("ClientActionsSettings (host-neutral)", () => {
     expect(
       screen.getByText(/No assistant-suggested actions/),
     ).toBeInTheDocument();
+  });
+
+  describe("an action whose Always lasts one session and document", () => {
+    const sessionFacet = {
+      id: "word_comments",
+      display_name: "Comments",
+      client_actions: ["word.apply_edits"],
+      grant_scope: { "word.apply_edits": "session_document" },
+    };
+
+    it("shows this session's grant as Always and takes it back on Ask", () => {
+      facets.action_facets = [sessionFacet];
+      grantClientActionForSession("word_comments", "word.apply_edits", "doc-1");
+      renderSettings();
+      const [ask, always, never] = screen.getAllByRole("radio");
+      expect(always).toBeChecked();
+      expect(always).toBeDisabled();
+      fireEvent.click(ask);
+      expect(
+        hasClientActionSessionGrant("word_comments", "word.apply_edits"),
+      ).toBe(false);
+      expect(ask).toBeChecked();
+      expect(never).not.toBeChecked();
+    });
+
+    it("takes the grant back on Never, and Ask afterwards does not bring it back", () => {
+      facets.action_facets = [sessionFacet];
+      grantClientActionForSession("word_comments", "word.apply_edits", "doc-1");
+      renderSettings();
+      const [ask, , never] = screen.getAllByRole("radio");
+      fireEvent.click(never);
+      expect(never).toBeChecked();
+      fireEvent.click(ask);
+      expect(ask).toBeChecked();
+      expect(
+        hasClientActionSessionGrant("word_comments", "word.apply_edits"),
+      ).toBe(false);
+    });
+
+    it("offers no device-wide Always and says where it is granted", () => {
+      facets.action_facets = [sessionFacet];
+      renderSettings();
+      const [ask, always] = screen.getAllByRole("radio");
+      expect(ask).toBeChecked();
+      expect(always).toBeDisabled();
+      expect(
+        screen.getByText(/Granted from the in-chat confirmation only/),
+      ).toBeInTheDocument();
+    });
   });
 });

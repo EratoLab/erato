@@ -883,6 +883,19 @@ describe("WordSelectionCard", () => {
     expect(host.writeSyncs()).toHaveLength(1);
   });
 
+  it("asks instead of replacing under Always when the request carried other people's comments (L2)", async () => {
+    const capture = await captureOf(host, { p: "PL1" });
+    renderCard({
+      capture: { ...capture, commentTaint: true } as WordSelectionCapture,
+      presentation: "auto_prompt",
+      proposed: true,
+      decisions: { [`word_selection/${REPLACE}`]: "always" },
+    });
+    expect(await screen.findByTestId("confirmation-card")).toBeInTheDocument();
+    await act(() => Promise.resolve());
+    expect(host.writeSyncs()).toEqual([]);
+  });
+
   describe("several versions in one answer", () => {
     it("says another version is in the document, and Replace on it writes nothing and stays available", async () => {
       const capture = await captureOf(host, { p: "PL1" });

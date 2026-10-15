@@ -79,6 +79,20 @@ export async function wordSearchHitAt(
   target: WordSelectionRangeTarget,
   prefixRanges: boolean,
 ): Promise<Word.Range | null> {
+  const proof = queueWordSearchHitProof(hits, target, prefixRanges);
+  if (proof.pending) await context.sync();
+  return proof.settle();
+}
+
+/**
+ * wordSearchHitAt's checks for loaded hits, queued so that many targets share one sync; `settle`
+ * reads them after the caller's sync.
+ */
+export function queueWordSearchHitProof(
+  hits: Word.RangeCollection,
+  target: WordSelectionRangeTarget,
+  prefixRanges: boolean,
+): { pending: boolean; settle: () => Word.Range | null } {
   const { paragraph, rangeText, start, end } = target;
   const part = rangeText.slice(start, end);
   const starts = searchStartsOf(rangeText, part);
@@ -89,7 +103,7 @@ export async function wordSearchHitAt(
     items.length !== starts.length ||
     items.some((hit) => hit.text !== part)
   )
-    return null;
+    return { pending: false, settle: () => null };
   const order = items
     .slice(1)
     .map((hit, i) => items[i].compareLocationWith(hit));
@@ -102,15 +116,19 @@ export async function wordSearchHitAt(
         return prefix;
       })
     : [];
-  if (order.length || prefixes.length) await context.sync();
-  if (!order.every((relation) => FOLLOWS.has(relation.value))) return null;
-  if (
-    !prefixes.every(
-      (prefix, i) => prefix.text === rangeText.slice(0, starts[i]),
-    )
-  )
-    return null;
-  return items[index];
+  return {
+    pending: order.length > 0 || prefixes.length > 0,
+    settle: () => {
+      if (!order.every((relation) => FOLLOWS.has(relation.value))) return null;
+      if (
+        !prefixes.every(
+          (prefix, i) => prefix.text === rangeText.slice(0, starts[i]),
+        )
+      )
+        return null;
+      return items[index];
+    },
+  };
 }
 
 /**

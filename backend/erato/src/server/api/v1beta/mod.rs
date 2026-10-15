@@ -1089,6 +1089,11 @@ pub struct ActionFacetInfo {
     /// deny them entirely.
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     client_actions_always_ask: Vec<String>,
+    /// How far a persistent "always allow" reaches per action: `device`
+    /// (the default for actions not listed) or `session_document`, which the
+    /// client keeps only for its session and the document it was given on.
+    #[serde(skip_serializing_if = "HashMap::is_empty", default)]
+    grant_scope: HashMap<String, String>,
 }
 
 #[derive(Debug, Serialize, ToSchema)]
@@ -1207,6 +1212,7 @@ pub async fn facets(
                     .unwrap_or_else(|| "render_buttons".to_string())
             }),
             client_actions_always_ask: af.client_actions_always_ask.clone(),
+            grant_scope: af.grant_scope.clone(),
         })
         .collect();
     action_facets.sort_by(|a, b| a.id.cmp(&b.id));

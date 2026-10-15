@@ -123,6 +123,11 @@ export interface HostArtifact {
    * persistent "always allow" for these.
    */
   alwaysAskClientActions?: string[];
+  /**
+   * Per action, how far a persistent "always allow" reaches: `device` (the
+   * default) or `session_document`, kept only for this session and document.
+   */
+  clientActionGrantScopes?: Record<string, string>;
   /** Host-validated proposal; a rendering hint, never authorization to write. */
   proposedClientAction?: string;
   /**

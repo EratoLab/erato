@@ -34,13 +34,10 @@ import {
 } from "./WordReviewCardParts";
 import { WordReviewReceipt } from "./WordReviewReceipt";
 import { useClientActionConfirmFlow } from "../../core/clientActions/useClientActionConfirmFlow";
-import { useClientActionDecisions } from "../../core/clientActions/useClientActionDecisions";
+import { useWordClientActionDecisions } from "../hooks/useWordClientActionDecisions";
 import { useWordReviewFocus } from "../hooks/useWordReviewFocus";
 import { useWordWrite } from "../providers/WordWriteProvider";
-import {
-  isActionDenied,
-  wordClientActionDecisionStore,
-} from "../utils/clientActionPolicy";
+import { isActionDenied } from "../utils/clientActionPolicy";
 import {
   renderWordDiagnosticReport,
   renderWordOutcomeReport,
@@ -131,8 +128,8 @@ export function WordDocumentPlanCard({
   const artifact = useHostArtifact();
   const { messages, currentChatId } = useChatContext();
   const host = useWordWrite();
-  const [decisions, setDecisions] = useClientActionDecisions(
-    wordClientActionDecisionStore,
+  const { decisions, setDecisions, grantAlways } = useWordClientActionDecisions(
+    entry.action,
   );
   const [copyNote, setCopyNote] = useState("");
   const facetId = artifact?.facetId ?? "";
@@ -790,6 +787,7 @@ export function WordDocumentPlanCard({
                 enforcedAskActions={enforcedAskActions}
                 decisions={decisions}
                 setDecisions={setDecisions}
+                onGrantAlways={grantAlways}
                 facetId={facetId}
                 allowCard={allowCard}
                 denyCard={denyCard}

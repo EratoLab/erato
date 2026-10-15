@@ -106,6 +106,38 @@ export interface MockSelectionDocument {
   comments?: readonly MockSelectionParagraph[];
   /** durableIds (hex) of named comments; the others get one of the mock's. */
   commentIds?: Readonly<Record<string, string>>;
+  /** Author, text, status and replies of named comments. */
+  commentMeta?: Readonly<Record<string, MockCommentMeta>>;
+}
+
+export interface MockCommentMeta {
+  author?: string;
+  email?: string | null;
+  content?: string;
+  resolved?: boolean;
+  replies?: readonly {
+    author?: string;
+    email?: string | null;
+    content?: string;
+  }[];
+}
+
+/** A comment as the host holds it, for assertions. */
+export interface MockCommentState {
+  id: string;
+  author: string;
+  email: string | null;
+  initials: string;
+  content: string;
+  resolved: boolean;
+  replies: {
+    id: string;
+    author: string;
+    email: string | null;
+    content: string;
+  }[];
+  /** The anchored text, without the web's U+0005; null without a reference left. */
+  anchor: string | null;
 }
 
 export interface MockSelectionStyle {
@@ -160,6 +192,12 @@ export interface WordSelectionHostOptions {
   paragraphOoxml?: (ooxml: string, text: string) => string;
   /** OOXML packages carry no commentsIds part, as a legacy file's do (F-2a). */
   legacyComments?: boolean;
+  /** Who Office.js inserts comments and replies as (F-9). */
+  commentUser?: { name: string; email: string };
+  /** Comment.getRange() throws at once, as tests of Word for the web demand (ERMAIN-983). */
+  failCommentRanges?: boolean;
+  /** An Office error code the n-th insertComment (0-based) throws at its sync, if any. */
+  insertCommentError?: (index: number, text: string) => string | null;
 }
 
 /** Rewrites the hits a search returns; the hits are opaque, so it can only reorder, drop or repeat. */
@@ -246,7 +284,19 @@ export interface WordSelectionHost {
   /** Takes the target's text, at the edge of its bookmarks, out of them, as if they had moved. */
   clearBookmarks(target: MockSelectionTarget): void;
   /** Comments the target's text, its reference right after that text; returns Comment.id. */
-  addComment(target: MockSelectionTarget): string;
+  addComment(target: MockSelectionTarget, meta?: MockCommentMeta): string;
+  /** Every comment of the body in reference order, with what Word holds for it. */
+  commentStates(): MockCommentState[];
+  /** A co-author's change to a comment, as Word would sync it in. */
+  editComment(
+    id: string,
+    change: (comment: MockCommentMeta & { replies?: never }) => void,
+  ): void;
+  addReply(id: string, meta?: { author?: string; content?: string }): string;
+  /** A co-author deletes a comment and its replies. */
+  deleteComment(id: string): void;
+  /** Gives a comment another durableId (hex), as Word for the web can list two comments under one id. */
+  setCommentDurableId(id: string, durableId: string): void;
   /**
    * The body's comments in reference order: Comment.id as a string, and its range's text as
    * Range.text gives it, without the web's U+0005.
@@ -701,12 +751,24 @@ interface BookmarkState {
   name: string;
   id: number;
 }
+interface ReplyState {
+  durableId: string;
+  author: string;
+  email: string | null;
+  content: string;
+}
 interface CommentState {
   /** Hex, as commentsIds.xml writes it; Comment.id is its decimal value (F-2). */
   durableId: string;
   /** Its w:id and its comments.xml paragraph's w14:paraId in every package. */
   wid: number;
   paraId: string;
+  author: string;
+  email: string | null;
+  initials: string;
+  content: string;
+  resolved: boolean;
+  replies: ReplyState[];
 }
 interface RunState {
   font: MockSelectionFont;
@@ -987,6 +1049,12 @@ export function installWordSelectionHost(
         .padStart(8, "0"),
       wid,
       paraId: (0x1c000000 + wid).toString(16).toUpperCase(),
+      author: AUTHOR,
+      email: "mock.author@contoso.test",
+      initials: "MA",
+      content: "Mock comment.",
+      resolved: false,
+      replies: [],
     };
     commentsByDurableId.set(comment.durableId, comment);
     return comment;
@@ -996,12 +1064,42 @@ export function installWordSelectionHost(
     let comment = namedComments.get(name);
     if (!comment) {
       comment = commentState(documentSpec.commentIds?.[name]);
+      applyCommentMeta(comment, documentSpec.commentMeta?.[name]);
       namedComments.set(name, comment);
     }
     return comment;
   };
   const commentId = (comment: CommentState) =>
     String(parseInt(comment.durableId, 16));
+  const commentUser = options.commentUser ?? {
+    name: "Max Token",
+    email: "testuser@contoso.test",
+  };
+  let replySeed = 0;
+  const replyState = (meta: {
+    author?: string;
+    email?: string | null;
+    content?: string;
+  }): ReplyState => {
+    replySeed += 1;
+    return {
+      durableId: (0x5a000000 + replySeed).toString(16).toUpperCase(),
+      author: meta.author ?? commentUser.name,
+      email: meta.email === undefined ? commentUser.email : meta.email,
+      content: meta.content ?? "",
+    };
+  };
+  function applyCommentMeta(
+    comment: CommentState,
+    meta: MockCommentMeta | undefined,
+  ) {
+    if (!meta) return;
+    if (meta.author !== undefined) comment.author = meta.author;
+    if (meta.email !== undefined) comment.email = meta.email;
+    if (meta.content !== undefined) comment.content = meta.content;
+    if (meta.resolved !== undefined) comment.resolved = meta.resolved;
+    if (meta.replies) comment.replies = meta.replies.map(replyState);
+  }
 
   const styleTable = new Map<string, StyleDef>(
     BUILT_IN_STYLES.map((def) => [def.name, def]),
@@ -2066,7 +2164,7 @@ export function installWordSelectionHost(
         `<w:comments xmlns:w="${W}" xmlns:w14="${W14}">${held
           .map(
             (c) =>
-              `<w:comment w:id="${c.wid}" w:author="${AUTHOR}" w:date="${REVISION_DATE}" w:initials="MA"><w:p w14:paraId="${c.paraId}" w14:textId="77777777"><w:r><w:t>Mock comment.</w:t></w:r></w:p></w:comment>`,
+              `<w:comment w:id="${c.wid}" w:author="${escapeXml(c.author)}" w:date="${REVISION_DATE}" w:initials="${escapeXml(c.initials)}"><w:p w14:paraId="${c.paraId}" w14:textId="77777777"><w:r><w:t xml:space="preserve">${escapeXml(c.content)}</w:t></w:r></w:p></w:comment>`,
           )
           .join("")}</w:comments>`,
       ),
@@ -2074,7 +2172,10 @@ export function installWordSelectionHost(
         "/word/commentsExtended.xml",
         "application/vnd.openxmlformats-officedocument.wordprocessingml.commentsExtended+xml",
         `<w15:commentsEx xmlns:w15="${W15}">${held
-          .map((c) => `<w15:commentEx w15:paraId="${c.paraId}" w15:done="0"/>`)
+          .map(
+            (c) =>
+              `<w15:commentEx w15:paraId="${c.paraId}" w15:done="${c.resolved ? 1 : 0}"/>`,
+          )
           .join("")}</w15:commentsEx>`,
       ),
       options.legacyComments
@@ -2407,6 +2508,12 @@ export function installWordSelectionHost(
         entry.getAttributeNS(W16CID, "durableId") ?? "",
       );
     const parsedComments = new Map<string, CommentState>();
+    const commentElements = new Map(
+      Array.from(
+        partRoot("/word/comments.xml")?.getElementsByTagNameNS(W, "comment") ??
+          [],
+      ).map((comment) => [attrW(comment, "id") ?? "", comment]),
+    );
     const commentOf = (element: Element): CommentState => {
       const wid = attrW(element, "id") ?? "";
       let comment = parsedComments.get(wid);
@@ -2414,6 +2521,16 @@ export function installWordSelectionHost(
         comment = commentState(
           durableIds.get(commentParagraphs.get(wid) ?? "") || undefined,
         );
+        const source = commentElements.get(wid);
+        if (source) {
+          const author = attrW(source, "author") ?? comment.author;
+          if (author !== comment.author) comment.email = null;
+          comment.author = author;
+          comment.initials = attrW(source, "initials") ?? comment.initials;
+          comment.content = Array.from(source.getElementsByTagNameNS(W, "t"))
+            .map((t) => t.textContent ?? "")
+            .join("");
+        }
         parsedComments.set(wid, comment);
       }
       return comment;
@@ -3619,25 +3736,186 @@ export function installWordSelectionHost(
     return list;
   };
 
+  const idOf = (durableId: string) => {
+    const id = String(parseInt(durableId, 16));
+    return web ? Number(id) : id;
+  };
+  const commentAlive = (st: Story, state: CommentState) =>
+    st.tokens.some((t) => t.comment === state);
+  /**
+   * ERMAIN-949 gate W1: on Word for the web, adding, editing, resolving, reopening or deleting a
+   * comment unhides the hidden text of the paragraphs its anchor is in. Replies leave it hidden.
+   */
+  const revealOnWeb = (st: Story, state: CommentState) => {
+    if (!web) return;
+    const b = commentBounds(st, state);
+    if (!b) return;
+    const end = paragraphEnd(b.story, Math.max(b.s, b.e - 1));
+    const to = end < 0 ? b.e : end;
+    for (let i = paragraphStart(b.story, b.s); i <= to; i += 1) {
+      const t = b.story.tokens[i];
+      if (t.kind !== "char" || !t.run.font?.hidden) continue;
+      const font: MockSelectionFont = { ...t.run.font };
+      delete font.hidden;
+      t.run = { ...t.run, font };
+    }
+  };
+  /** Removes a comment's marks and its reference, as Comment.delete() does with its replies. */
+  const removeComment = (st: Story, state: CommentState) => {
+    for (const t of st.tokens)
+      if (t.run.comments?.includes(state))
+        t.run = {
+          ...t.run,
+          comments: t.run.comments.filter((c) => c !== state),
+        };
+    const at = st.tokens.findIndex((t) => t.comment === state);
+    if (at >= 0) st.tokens.splice(at, 1);
+  };
+  const makeReply = (
+    ctx: Ctx,
+    owner: () => { st: Story; state: CommentState },
+    reply: () => ReplyState,
+  ): Obj => {
+    const obj: Obj = {};
+    register(obj, ctx, "CommentReply");
+    defineProps(obj, ctx, "CommentReply", {
+      id: { get: () => idOf(reply().durableId) },
+      content: {
+        get: () => reply().content,
+        set: (value) => {
+          reply().content = String(value);
+        },
+      },
+      authorName: { get: () => reply().author },
+      authorEmail: { get: () => reply().email },
+      creationDate: { get: () => new Date(REVISION_DATE) },
+    });
+    obj.delete = () => {
+      calls.push("CommentReply.delete");
+      enqueue(ctx, obj, "CommentReply.delete", true, () => {
+        const { state } = owner();
+        const target = reply();
+        if (!state.replies.includes(target)) throw itemNotFound("CommentReply");
+        state.replies = state.replies.filter((r) => r !== target);
+      });
+    };
+    return obj;
+  };
   /** F-2: Comment.id is the decimal durableId, a number on the web. */
-  const makeComment = (ctx: Ctx, st: Story, state: CommentState): Obj => {
+  const makeComment = (
+    ctx: Ctx,
+    stOrResolve: Story | (() => Story),
+    stateOrResolve: CommentState | (() => CommentState),
+  ): Obj => {
+    const st = () =>
+      typeof stOrResolve === "function" ? stOrResolve() : stOrResolve;
+    const state = () =>
+      typeof stateOrResolve === "function" ? stateOrResolve() : stateOrResolve;
+    const live = () => {
+      if (!commentAlive(st(), state())) throw itemNotFound("Comment");
+      return state();
+    };
     const comment: Obj = {};
     register(comment, ctx, "Comment");
     defineProps(comment, ctx, "Comment", {
       id: {
-        get: () => (web ? Number(commentId(state)) : commentId(state)),
+        get: () => (web ? Number(commentId(state())) : commentId(state())),
+      },
+      content: {
+        get: () => state().content,
+        set: (value) => {
+          live().content = String(value);
+          revealOnWeb(st(), state());
+        },
+      },
+      authorName: { get: () => state().author },
+      authorEmail: { get: () => state().email },
+      creationDate: { get: () => new Date(REVISION_DATE) },
+      resolved: {
+        get: () => state().resolved,
+        set: (value) => {
+          live().resolved = value === true;
+          revealOnWeb(st(), state());
+        },
       },
     });
+    nav(comment, "replies", () => {
+      const { list } = collection(
+        ctx,
+        comment,
+        "CommentReplyCollection",
+        () => [...live().replies],
+        (reply) =>
+          makeReply(
+            ctx,
+            () => ({ st: st(), state: state() }),
+            () => reply,
+          ),
+      );
+      return list;
+    });
+    comment.reply = (text: string) => {
+      calls.push("Comment.reply");
+      let created: ReplyState | undefined;
+      enqueue(ctx, comment, "Comment.reply", true, () => {
+        const target = live();
+        // F-18: the web refuses a reply to a resolved thread; desktop keeps it resolved.
+        if (web && target.resolved)
+          throw officeError(
+            "NotAllowed",
+            "The action isn't supported by Word in a browser.",
+            "Comment.reply",
+          );
+        created = replyState({ content: String(text) });
+        target.replies = [...target.replies, created];
+      });
+      return makeReply(
+        ctx,
+        () => ({ st: st(), state: state() }),
+        () => {
+          if (!created) throw new Error("mock: reply used before its sync");
+          return created;
+        },
+      );
+    };
+    comment.delete = () => {
+      calls.push("Comment.delete");
+      enqueue(ctx, comment, "Comment.delete", true, () => {
+        revealOnWeb(st(), live());
+        removeComment(st(), live());
+      });
+    };
     comment.getRange = () => {
       calls.push("Comment.getRange");
+      if (web && options.failCommentRanges)
+        throw new Error(
+          "mock: Comment.getRange() was called on Word for the web (ERMAIN-983)",
+        );
       return makeRange(ctx, comment, "Comment.getRange", () => {
         gate("Comment.getRange");
-        const b = commentBounds(st, state);
+        const b = commentBounds(st(), state());
         if (!b) throw itemNotFound("Comment");
         return b;
       });
     };
     return comment;
+  };
+  let insertedComments = 0;
+  /** Marks the bounds' characters as the comment's range and puts its reference after them. */
+  const anchorComment = (b: Bounds, comment: CommentState) => {
+    let end = b.s;
+    for (let i = b.s; i < b.e; i += 1) {
+      const t = b.story.tokens[i];
+      if (t.kind !== "char") continue;
+      t.run = { ...t.run, comments: [...(t.run.comments ?? []), comment] };
+      end = i + 1;
+    }
+    b.story.tokens.splice(end, 0, {
+      kind: "comment",
+      ch: "",
+      run: { font: {} },
+      comment,
+    });
   };
 
   function decorate(obj: Obj, ctx: Ctx, target: Target): void {
@@ -3981,6 +4259,44 @@ export function installWordSelectionHost(
         }
         return [...names];
       });
+    };
+    obj.insertComment = (text: string) => {
+      method("insertComment");
+      let story: Story | undefined;
+      let state: CommentState | undefined;
+      const index = insertedComments;
+      insertedComments += 1;
+      enqueue(ctx, obj, `${type}.insertComment`, true, () => {
+        const b = target.whole();
+        // F-5: desktop refuses a comment outside the main story; the web takes it and loses it.
+        if (b.story.kind !== "body" && !web)
+          throw officeError("AccessDenied", "Access denied.", "insertComment");
+        const failure = options.insertCommentError?.(index, String(text));
+        if (failure) throw officeError(failure, failure, "insertComment");
+        state = commentState();
+        state.author = commentUser.name;
+        state.email = commentUser.email;
+        state.initials = commentUser.name
+          .split(/\s+/)
+          .map((part) => part[0] ?? "")
+          .join("")
+          .slice(0, 2);
+        state.content = String(text);
+        anchorComment(b, state);
+        revealOnWeb(b.story, state);
+        story = b.story;
+      });
+      return makeComment(
+        ctx,
+        () => {
+          if (!story) throw new Error("mock: comment used before its sync");
+          return story;
+        },
+        () => {
+          if (!state) throw new Error("mock: comment used before its sync");
+          return state;
+        },
+      );
     };
     obj.getComments = () => {
       method("getComments");
@@ -4609,23 +4925,71 @@ export function installWordSelectionHost(
         if (isInline(t)) t.run = { ...t.run, bookmarks: undefined };
       }
     },
-    addComment: (target) => {
+    addComment: (target, meta) => {
       const b = resolveTarget(target);
       const comment = commentState();
-      let end = b.s;
-      for (let i = b.s; i < b.e; i += 1) {
-        const t = b.story.tokens[i];
-        if (t.kind !== "char") continue;
-        t.run = { ...t.run, comments: [...(t.run.comments ?? []), comment] };
-        end = i + 1;
-      }
-      b.story.tokens.splice(end, 0, {
-        kind: "comment",
-        ch: "",
-        run: { font: {} },
-        comment,
-      });
+      applyCommentMeta(comment, meta);
+      anchorComment(b, comment);
       return commentId(comment);
+    },
+    commentStates: () =>
+      stories.body.tokens.flatMap((t) => {
+        if (!t.comment) return [];
+        const c = t.comment;
+        const range = commentBounds(stories.body, c);
+        return [
+          {
+            id: commentId(c),
+            author: c.author,
+            email: c.email,
+            initials: c.initials,
+            content: c.content,
+            resolved: c.resolved,
+            replies: c.replies.map((r) => ({
+              id: String(parseInt(r.durableId, 16)),
+              author: r.author,
+              email: r.email,
+              content: r.content,
+            })),
+            anchor: range ? renderRange(range).replace(/\u0005/g, "") : null,
+          },
+        ];
+      }),
+    editComment: (id, change) => {
+      const c = stories.body.tokens.find(
+        (t) => t.comment && commentId(t.comment) === id,
+      )?.comment;
+      if (!c) throw new Error(`mock: no comment ${id}`);
+      const meta: MockCommentMeta = {};
+      change(meta as never);
+      applyCommentMeta(c, meta);
+    },
+    deleteComment: (id) => {
+      const c = stories.body.tokens.find(
+        (t) => t.comment && commentId(t.comment) === id,
+      )?.comment;
+      if (!c) throw new Error(`mock: no comment ${id}`);
+      removeComment(stories.body, c);
+    },
+    setCommentDurableId: (id, durableId) => {
+      const c = stories.body.tokens.find(
+        (t) => t.comment && commentId(t.comment) === id,
+      )?.comment;
+      if (!c) throw new Error(`mock: no comment ${id}`);
+      c.durableId = durableId.toUpperCase().padStart(8, "0");
+    },
+    addReply: (id, meta = {}) => {
+      const c = stories.body.tokens.find(
+        (t) => t.comment && commentId(t.comment) === id,
+      )?.comment;
+      if (!c) throw new Error(`mock: no comment ${id}`);
+      const reply = replyState({
+        author: "Jonas Weber",
+        email: "jonas@contoso.test",
+        ...meta,
+      });
+      c.replies = [...c.replies, reply];
+      return String(parseInt(reply.durableId, 16));
     },
     comments: () =>
       stories.body.tokens.flatMap((t) => {

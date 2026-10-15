@@ -800,6 +800,11 @@ msgstr "Immer erlauben"
 #~ msgstr "Gesperrt: Ihre Organisation verlangt für diese Aktion jedes Mal eine Bestätigung."
 
 #. js-lingui-explicit-id
+#: src/core/clientActions/ClientActionsSettings.tsx
+msgid "officeAddin.settings.addin.clientActions.always.session"
+msgstr "Wird nur in der Bestätigung im Chat erteilt, für ein Dokument, bis das Add-in geschlossen wird. Eine andere Auswahl nimmt die Erlaubnis zurück."
+
+#. js-lingui-explicit-id
 #: src/components/BehaviorTabContent.tsx
 #~ msgid "officeAddin.settings.addin.clientActions.ask.helper"
 #~ msgstr "Zeigt einen Bestätigungsschritt im Chat an, bevor etwas geöffnet wird."
@@ -2902,6 +2907,7 @@ msgid "officeAddin.word.authoring.writeInterrupted"
 msgstr "Word konnte den Vorgang nicht abschließen. Das Dokument wurde möglicherweise teilweise geändert. Das Original ist zur Wiederherstellung gespeichert."
 
 #. js-lingui-explicit-id
+#: src/word/components/WordCommentChangesCard.tsx
 #: src/word/components/WordReviewCardParts.tsx
 msgid "officeAddin.word.card.alwaysAllowLocked"
 msgstr "Deine Organisation verlangt bei jeder automatischen Ausführung dieser Aktion eine Bestätigung."
@@ -3055,6 +3061,11 @@ msgstr "Nur der Anfang wird gesendet. Um an einem späteren Teil zu arbeiten, ma
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordClientActions.ts
+msgid "officeAddin.word.clientActions.addComments"
+msgstr "Kommentare hinzufügen"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordClientActions.ts
 msgid "officeAddin.word.clientActions.applyEdits"
 msgstr "Änderungen auf das Dokument anwenden"
 
@@ -3065,8 +3076,18 @@ msgstr "Text an der Cursorposition einfügen"
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordClientActions.ts
+msgid "officeAddin.word.clientActions.modifyComments"
+msgstr "Kommentare bearbeiten oder löschen"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordClientActions.ts
 msgid "officeAddin.word.clientActions.replaceSelection"
 msgstr "Ausgewählte Passage ersetzen"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordClientActions.ts
+msgid "officeAddin.word.clientActions.respondToComments"
+msgstr "Auf Kommentare antworten, sie auflösen oder erneut öffnen"
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordAuthoringMessages.ts
@@ -3099,9 +3120,92 @@ msgid "officeAddin.word.coauthors.pendingImport"
 msgstr "Word hält Änderungen von Mitautoren bereit, die noch nicht in Ihre Kopie übernommen wurden; das Ersetzen des gesamten Dokuments kann sie verwerfen."
 
 #. js-lingui-explicit-id
+#: src/word/components/WordCommentChangesCard.tsx
+msgid "officeAddin.word.comments.always.emptyLabel"
+msgstr "Kommentare tragen hier keine KI-Kennzeichnung, daher fragt Erato jedes Mal."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentChangesCard.tsx
+msgid "officeAddin.word.comments.always.session"
+msgstr "„Immer erlauben“ gilt für dieses Dokument, bis das Add-in geschlossen wird."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordReviewCardParts.tsx
+msgid "officeAddin.word.comments.always.tainted"
+msgstr "Diese Anfrage enthielt Kommentare anderer Personen, daher fragt Erato jedes Mal."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentChangesCard.tsx
+msgid "officeAddin.word.comments.apply.add"
+msgstr "{count, plural, one {# Kommentar hinzufügen} other {# Kommentare hinzufügen}}"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentChangesCard.tsx
+msgid "officeAddin.word.comments.apply.change"
+msgstr "{count, plural, one {# Änderung anwenden} other {# Änderungen anwenden}}"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentChangesCard.tsx
+msgid "officeAddin.word.comments.askAgain"
+msgstr "Mit den aktuellen Kommentaren erneut fragen"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentChangesCard.tsx
+msgid "officeAddin.word.comments.askAgainNote"
+msgstr "Ihre Anfrage steht wieder im Nachrichtenfeld: Senden Sie sie erneut, um mit den aktuellen Kommentaren zu arbeiten."
+
+#. js-lingui-explicit-id
 #: src/word/components/WordCommentChip.tsx
 msgid "officeAddin.word.comments.atCursorMany"
 msgstr "{count, plural, one {Ihr Cursor steht in # Kommentar} other {Ihr Cursor steht in # Kommentaren}}"
+
+#. js-lingui-explicit-id
+#. placeholder {0}: input.authorName
+#: src/word/components/WordCommentChangesCard.tsx
+msgid "officeAddin.word.comments.attribution.assistant"
+msgstr "Word zeigt dies als von {0} geschrieben an."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentChangesCard.tsx
+msgid "officeAddin.word.comments.attribution.delete"
+msgstr "Word hält nicht fest, wer gelöscht hat. Erato kann ein Löschen nicht rückgängig machen."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentChangesCard.tsx
+msgid "officeAddin.word.comments.attribution.editOther"
+msgstr "Ändert Text, den Word als von {author} geschrieben anzeigt."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentChangesCard.tsx
+msgid "officeAddin.word.comments.attribution.editOwn"
+msgstr "Word zeigt Sie weiterhin als Autor an."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentChangesCard.tsx
+msgid "officeAddin.word.comments.attribution.state"
+msgstr "Word zeigt dies als von {you} ausgeführt an; Mitautoren sehen nicht, dass Erato es getan hat."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentChangesCard.tsx
+msgid "officeAddin.word.comments.attribution.user"
+msgstr "Word zeigt dies als von {you} geschrieben an."
+
+#. js-lingui-explicit-id
+#. placeholder {0}: draft.label
+#: src/word/components/WordCommentChangesCard.tsx
+msgid "officeAddin.word.comments.attribution.userLabelled"
+msgstr "Word zeigt dies als von {you} geschrieben an. Es beginnt mit „{0}“."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentChangesCard.tsx
+msgid "officeAddin.word.comments.attribution.you"
+msgstr "Ihnen"
+
+#. js-lingui-explicit-id
+#. placeholder {0}: input.userName
+#: src/word/components/WordCommentChangesCard.tsx
+msgid "officeAddin.word.comments.attribution.youNamed"
+msgstr "Ihnen ({0})"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx
@@ -3129,6 +3233,91 @@ msgstr "Standard ändern"
 #: src/word/components/WordCommentChip.tsx
 msgid "officeAddin.word.comments.choose"
 msgstr "Kommentar wählen…"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentChangesCard.tsx
+msgid "officeAddin.word.comments.code.ambiguous"
+msgstr "Word listet ihn doppelt"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentChangesCard.tsx
+msgid "officeAddin.word.comments.code.authorMode"
+msgstr "Erato konnte nicht als Autor angezeigt werden"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentChangesCard.tsx
+msgid "officeAddin.word.comments.code.changed"
+msgstr "sein Text hat sich seit Ihrer Anfrage geändert"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentChangesCard.tsx
+msgid "officeAddin.word.comments.code.dependency"
+msgstr "der Schritt davor wurde nicht ausgeführt"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentChangesCard.tsx
+msgid "officeAddin.word.comments.code.deselected"
+msgstr "Sie haben ihn abgewählt"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentChangesCard.tsx
+msgid "officeAddin.word.comments.code.gone"
+msgstr "er ist nicht mehr im Dokument"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentChangesCard.tsx
+msgid "officeAddin.word.comments.code.hiddenText"
+msgstr "Word für das Web könnte ausgeblendeten Text in diesem Absatz sichtbar machen; verwenden Sie Word für Windows oder Mac"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentChangesCard.tsx
+msgid "officeAddin.word.comments.code.newActivity"
+msgstr "seit Ihrer Anfrage hat jemand geantwortet"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentChangesCard.tsx
+msgid "officeAddin.word.comments.code.notAllowed"
+msgstr "Word erlaubt es hier nicht"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentChangesCard.tsx
+msgid "officeAddin.word.comments.code.passageAmbiguous"
+msgstr "die Passage kommt jetzt mehr als einmal vor"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentChangesCard.tsx
+msgid "officeAddin.word.comments.code.passageChanged"
+msgstr "die Passage hat sich seit Ihrer Anfrage geändert"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentChangesCard.tsx
+msgid "officeAddin.word.comments.code.readOnly"
+msgstr "das Dokument ist geschützt"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentChangesCard.tsx
+msgid "officeAddin.word.comments.code.stateChanged"
+msgstr "seit Ihrer Anfrage hat ihn jemand aufgelöst oder erneut geöffnet"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentChangesCard.tsx
+msgid "officeAddin.word.comments.copied"
+msgstr "Kopiert. Fügen Sie es in Word in einen Kommentar ein."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentChangesCard.tsx
+msgid "officeAddin.word.comments.copy"
+msgstr "Kommentar kopieren"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentChangesCard.tsx
+msgid "officeAddin.word.comments.copyFailed"
+msgstr "Kopieren fehlgeschlagen. Markieren und kopieren Sie den Text stattdessen selbst."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentChangesCard.tsx
+msgid "officeAddin.word.comments.copyMode"
+msgstr "Erato kann Kommentare in dieser Word-Version gerade nicht ändern. Kopieren Sie jeden Kommentar und fügen Sie ihn selbst in Word ein."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordCommentCoverage.tsx
@@ -3186,9 +3375,30 @@ msgid "officeAddin.word.comments.coverage.trigger"
 msgstr "Was gesendet wird"
 
 #. js-lingui-explicit-id
+#: src/word/components/WordCommentChangesCard.tsx
+msgid "officeAddin.word.comments.declined"
+msgstr "Abgelehnt. Es wurde nichts geschrieben."
+
+#. js-lingui-explicit-id
+#. placeholder {0}: others.length
+#: src/word/components/WordCommentChangesCard.tsx
+msgid "officeAddin.word.comments.deleteReplies"
+msgstr "{0, plural, one {Löscht auch # Antwort von {authors}.} other {Löscht auch # Antworten von {authors}.}}"
+
+#. js-lingui-explicit-id
 #: src/word/components/WordCommentChip.tsx
 msgid "officeAddin.word.comments.dismissPick"
 msgstr "Gewählten Kommentar entfernen"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentChangesCard.tsx
+msgid "officeAddin.word.comments.editFormatting"
+msgstr "Word behält nur reinen Text: Fettdruck, Links und Erwähnungen in diesem Kommentar gehen verloren."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentChangesCard.tsx
+msgid "officeAddin.word.comments.expired"
+msgstr "Diese Kommentaränderungen gehören zu einer früheren Sitzung dieses Bereichs und können nicht mehr angewendet werden. Fragen Sie erneut, um einen neuen Vorschlag zu erhalten."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx
@@ -3201,9 +3411,29 @@ msgid "officeAddin.word.comments.inSelection"
 msgstr "{count, plural, one {# Kommentar in der Auswahl} other {# Kommentare in der Auswahl}}"
 
 #. js-lingui-explicit-id
+#: src/word/components/WordCommentChangesCard.tsx
+msgid "officeAddin.word.comments.irreversible"
+msgstr "Erato kann das nicht rückgängig machen."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentChangesCard.tsx
+msgid "officeAddin.word.comments.keep"
+msgstr "Behalten"
+
+#. js-lingui-explicit-id
 #: src/word/components/WordCommentChip.tsx
 msgid "officeAddin.word.comments.mapListed"
 msgstr "{threads, plural, one {# Kommentar wird mit dem Dokument aufgelistet} other {# Kommentare werden mit dem Dokument aufgelistet}}"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentChangesCard.tsx
+msgid "officeAddin.word.comments.matchedByContent"
+msgstr "Diese Datei benennt ihre Kommentare nur über den Inhalt, daher hat Erato sie über Autor, Zeit und Text zugeordnet."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentChangesCard.tsx
+msgid "officeAddin.word.comments.open"
+msgstr "offen"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordCommentPicker.tsx
@@ -3326,14 +3556,107 @@ msgid "officeAddin.word.comments.picker.webHint"
 msgstr "In Word für das Web wählt ein Klick auf einen Kommentar im Dokument ihn hier nicht aus. Wählen Sie ihn in dieser Liste."
 
 #. js-lingui-explicit-id
+#: src/word/components/WordCommentChangesCard.tsx
+msgid "officeAddin.word.comments.postAsMe"
+msgstr "Stattdessen unter meinem Namen posten"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentChangesCard.tsx
+msgid "officeAddin.word.comments.preparing"
+msgstr "Kommentaränderungen werden vorbereitet…"
+
+#. js-lingui-explicit-id
 #: src/word/components/WordCommentPicker.tsx
 msgid "officeAddin.word.comments.readingProgress"
 msgstr "Kommentare werden gelesen… {done} von {total}"
 
 #. js-lingui-explicit-id
+#. placeholder {0}: replies.length
+#: src/word/components/WordCommentChangesCard.tsx
+msgid "officeAddin.word.comments.replyCount"
+msgstr "{0, plural, one {# Antwort} other {# Antworten}}"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentChangesCard.tsx
+msgid "officeAddin.word.comments.resolved"
+msgstr "aufgelöst"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentChangesCard.tsx
+msgid "officeAddin.word.comments.resolveInstead"
+msgstr "Dieser Thread gehört jemand anderem. Durch Auflösen bleiben die Worte erhalten: Bitten Sie Erato stattdessen, ihn aufzulösen."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentChangesCard.tsx
+msgid "officeAddin.word.comments.retryFailed"
+msgstr "Zeilen, die Word nicht übernommen hat, erneut versuchen"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentChangesCard.tsx
+msgid "officeAddin.word.comments.revert"
+msgstr "Zurücksetzen"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentChangesCard.tsx
+msgid "officeAddin.word.comments.revertConfirm"
+msgstr "Zurücksetzen"
+
+#. js-lingui-explicit-id
+#. placeholder {0}: cardState.revert.filter((r) => r.status === "reverted").length
+#. placeholder {1}: cardState.revert.length
+#: src/word/components/WordCommentChangesCard.tsx
+msgid "officeAddin.word.comments.reverted"
+msgstr "{0} von {1} zurückgesetzt; Zurücksetzen ist aufgebraucht."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentChangesCard.tsx
+msgid "officeAddin.word.comments.revertWarning"
+msgstr "Zurücksetzen, was Erato hier getan hat? Kommentare oder Antworten, die seitdem jemand geändert hat, bleiben unberührt. Gelöschte Kommentare lassen sich nicht wiederherstellen."
+
+#. js-lingui-explicit-id
 #: src/word/components/WordCommentChip.tsx
 msgid "officeAddin.word.comments.sendWithout"
 msgstr "Ohne Kommentare senden"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentChangesCard.tsx
+msgid "officeAddin.word.comments.showFailed"
+msgstr "Word konnte diese Stelle nicht anzeigen: Sie hat sich seit Ihrer Anfrage geändert."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentChangesCard.tsx
+msgid "officeAddin.word.comments.showPassage"
+msgstr "Passage anzeigen"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentChangesCard.tsx
+msgid "officeAddin.word.comments.status.applied"
+msgstr "Erledigt"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentChangesCard.tsx
+msgid "officeAddin.word.comments.status.appliedAsUser"
+msgstr "Unter Ihrem Namen mit der Kennzeichnung gepostet"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentChangesCard.tsx
+msgid "officeAddin.word.comments.status.failed"
+msgstr "Nicht geschrieben: Word hat es nicht übernommen"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentChangesCard.tsx
+msgid "officeAddin.word.comments.status.refused"
+msgstr "Nicht geschrieben"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentChangesCard.tsx
+msgid "officeAddin.word.comments.status.unchanged"
+msgstr "Bereits so; nichts geändert"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentChangesCard.tsx
+msgid "officeAddin.word.comments.status.unverified"
+msgstr "Geschrieben, aber nicht bestätigt. Prüfen Sie das Dokument, bevor Sie es erneut versuchen."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordCommentChip.tsx
@@ -3344,6 +3667,18 @@ msgstr "Stattdessen mit dem Kommentar von {author} arbeiten"
 #: src/word/components/WordCommentChip.tsx
 msgid "officeAddin.word.comments.switchToPassage"
 msgstr "Stattdessen den ausgewählten Text verwenden"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentChangesCard.tsx
+msgid "officeAddin.word.comments.tainted"
+msgstr "Diese Anfrage enthielt Kommentare anderer Personen."
+
+#. js-lingui-explicit-id
+#. placeholder {0}: target.author
+#. placeholder {1}: excerpt(target.content)
+#: src/word/components/WordCommentChangesCard.tsx
+msgid "officeAddin.word.comments.target"
+msgstr "{0}: „{1}“"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordCommentChip.tsx
@@ -3369,6 +3704,96 @@ msgstr "{replies, plural, =0 {Kommentar von {author}} one {Kommentar von {author
 #: src/word/components/WordCommentChip.tsx
 msgid "officeAddin.word.comments.thread.unknown"
 msgstr "Gewählter Kommentar"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentChangesCard.tsx
+msgid "officeAddin.word.comments.title.add"
+msgstr "{n, plural, one {Einen Kommentar hinzufügen} other {# Kommentare hinzufügen}}"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentChangesCard.tsx
+msgid "officeAddin.word.comments.title.modify"
+msgstr "Kommentare bearbeiten oder löschen"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentChangesCard.tsx
+msgid "officeAddin.word.comments.title.respond"
+msgstr "Auf Kommentare antworten, sie auflösen oder erneut öffnen"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentChangesCard.tsx
+msgid "officeAddin.word.comments.userMode.anchor"
+msgstr "Unter Ihrem Namen mit der Kennzeichnung gepostet, weil der Kommentar mehrere Absätze umfasst."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentChangesCard.tsx
+msgid "officeAddin.word.comments.userMode.noName"
+msgstr "Unter Ihrem Namen mit der Kennzeichnung gepostet, weil Ihr Erato-Konto keinen Anzeigenamen hat."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentChangesCard.tsx
+msgid "officeAddin.word.comments.userMode.tracking"
+msgstr "Unter Ihrem Namen mit der Kennzeichnung gepostet, weil „Änderungen nachverfolgen“ aktiv ist."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentChangesCard.tsx
+msgid "officeAddin.word.comments.userMode.unavailable"
+msgstr "Unter Ihrem Namen mit der Kennzeichnung gepostet: Erato als Autor ist gerade nicht verfügbar."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentChangesCard.tsx
+msgid "officeAddin.word.comments.userMode.web"
+msgstr "Unter Ihrem Namen mit der Kennzeichnung gepostet: Erato als Autor ist in Word für das Web noch nicht verfügbar."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentChangesCard.tsx
+msgid "officeAddin.word.comments.verb.add"
+msgstr "Kommentieren:"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentChangesCard.tsx
+msgid "officeAddin.word.comments.verb.addSelection"
+msgstr "Ihre Auswahl kommentieren"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentChangesCard.tsx
+msgid "officeAddin.word.comments.verb.deleteReply"
+msgstr "Eine Antwort löschen"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentChangesCard.tsx
+msgid "officeAddin.word.comments.verb.deleteThread"
+msgstr "Den ganzen Thread löschen"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentChangesCard.tsx
+msgid "officeAddin.word.comments.verb.editComment"
+msgstr "Den Text eines Kommentars ändern"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentChangesCard.tsx
+msgid "officeAddin.word.comments.verb.editReply"
+msgstr "Den Text einer Antwort ändern"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentChangesCard.tsx
+msgid "officeAddin.word.comments.verb.reopen"
+msgstr "Den Thread erneut öffnen"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentChangesCard.tsx
+msgid "officeAddin.word.comments.verb.reply"
+msgstr "Am Ende des Threads antworten"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentChangesCard.tsx
+msgid "officeAddin.word.comments.verb.replyAfterReopen"
+msgstr "Den Thread erneut öffnen, dann antworten"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentChangesCard.tsx
+msgid "officeAddin.word.comments.verb.resolve"
+msgstr "Den Thread als aufgelöst markieren"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordCommentChip.tsx
@@ -4034,6 +4459,7 @@ msgid "officeAddin.word.review.batchScopeAll"
 msgstr "Jede vorgeschlagene Änderung wird angewendet, auch in durch Filter ausgeblendeten Zeilen. Seit der Anfrage veränderte Absätze werden übersprungen und aufgelistet."
 
 #. js-lingui-explicit-id
+#: src/word/components/WordCommentChangesCard.tsx
 #: src/word/components/WordImportConfirm.tsx
 #: src/word/components/WordReviewCardParts.tsx
 msgid "officeAddin.word.review.cancel"
@@ -5068,6 +5494,36 @@ msgstr "Wendet die vollständige Überarbeitung ohne Nachfrage an, sofern das Do
 #: src/word/components/WordSettingsDialog.tsx
 msgid "officeAddin.word.settings.alwaysReplaceSelection"
 msgstr "Ersetzt die ausgewählte Passage ohne Nachfrage, aber nur, wenn sie seit Ihrer Anfrage unverändert ist. Rückgängig ist verfügbar, solange die Änderungsnachverfolgung aus ist."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSettingsDialog.tsx
+msgid "officeAddin.word.settings.commentAuthor.assistant"
+msgstr "Erato, in meinem Auftrag"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSettingsDialog.tsx
+msgid "officeAddin.word.settings.commentAuthor.assistant.helper"
+msgstr "Word zeigt Erato in Ihrem Auftrag als Autor neuer Kommentare in Word für Windows und Mac. Sie können sie in Word weiterhin bearbeiten oder löschen. Mitautoren in Word für das Web sehen möglicherweise kurz Ihren Namen, bis sie neu laden. Antworten und Kommentare in Word für das Web tragen Ihren Namen mit der KI-Kennzeichnung."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSettingsDialog.tsx
+msgid "officeAddin.word.settings.commentAuthor.enforced"
+msgstr "Ihre Organisation legt dies fest."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSettingsDialog.tsx
+msgid "officeAddin.word.settings.commentAuthor.legend"
+msgstr "Neue Kommentare posten als:"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSettingsDialog.tsx
+msgid "officeAddin.word.settings.commentAuthor.user"
+msgstr "Ich, mit KI-Kennzeichnung (Standard)"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSettingsDialog.tsx
+msgid "officeAddin.word.settings.commentAuthor.user.helper"
+msgstr "Word zeigt Sie als Autor; jeder Kommentar beginnt mit der KI-Kennzeichnung."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSettingsDialog.tsx

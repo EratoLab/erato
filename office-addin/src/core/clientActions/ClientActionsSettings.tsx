@@ -1,11 +1,14 @@
 import { RadioCard } from "@erato/frontend/library";
 import { t } from "@lingui/core/macro";
-import { useId } from "react";
+import { useId, useReducer } from "react";
 
 import {
   decisionKey,
   effectiveDecision,
+  forgetClientActionSessionGrants,
+  hasClientActionSessionGrant,
   type ClientActionDecision,
+  type ClientActionDecisionMap,
   type ClientActionDecisionStore,
 } from "./clientActionPolicy";
 import { useActionFacetClientActions } from "./useAvailableActionFacets";
@@ -46,6 +49,8 @@ export function ClientActionsSettings<TAction extends string>({
 }: ClientActionsSettingsProps<TAction>) {
   const radioGroupName = useId();
   const [decisions, setDecisions] = useClientActionDecisions(store);
+  // Session grants live outside the store: taking one back must re-render the rows.
+  const [, grantsChanged] = useReducer((n: number) => n + 1, 0);
   // The rows mirror what the backend actually advertises: one group per
   // facet with client actions, one decision toggle per implemented action.
   const clientActionFacets = useActionFacetClientActions();
@@ -96,6 +101,11 @@ export function ClientActionsSettings<TAction extends string>({
     message:
       "Locked: your organization requires confirmation each time this action runs automatically.",
   });
+  const sessionAlwaysHelper = t({
+    id: "officeAddin.settings.addin.clientActions.always.session",
+    message:
+      "Granted from the in-chat confirmation only, for one document until the add-in closes. Choosing another option takes it back.",
+  });
   const decisionOrder: readonly ClientActionDecision[] = [
     "ask",
     "always",
@@ -138,10 +148,25 @@ export function ClientActionsSettings<TAction extends string>({
           </p>
           {group.actions.map((action) => {
             const enforced = group.info.alwaysAskActions.includes(action);
+            // O-25: a session-scoped action is "always" only through this session's grant.
+            const sessionScoped =
+              group.info.grantScope[action] === "session_document";
+            const key = decisionKey(group.facetId, action);
+            const shown: ClientActionDecisionMap = sessionScoped
+              ? {
+                  ...decisions,
+                  [key]:
+                    decisions[key] === "never"
+                      ? "never"
+                      : hasClientActionSessionGrant(group.facetId, action)
+                        ? "always"
+                        : "ask",
+                }
+              : decisions;
             const current = effectiveDecision({
               facetId: group.facetId,
               action,
-              decisions,
+              decisions: shown,
               enforcedAskActions: group.info.alwaysAskActions,
             });
             return (
@@ -155,7 +180,8 @@ export function ClientActionsSettings<TAction extends string>({
                   {displayLabel(action)}
                 </p>
                 {decisionOrder.map((decision) => {
-                  const lockedAlways = decision === "always" && enforced;
+                  const lockedAlways =
+                    decision === "always" && (enforced || sessionScoped);
                   return (
                     <RadioCard
                       key={decision}
@@ -168,15 +194,21 @@ export function ClientActionsSettings<TAction extends string>({
                         if (lockedAlways) {
                           return;
                         }
-                        setDecisions({
-                          ...decisions,
-                          [decisionKey(group.facetId, action)]: decision,
-                        });
+                        if (sessionScoped) {
+                          forgetClientActionSessionGrants(
+                            group.facetId,
+                            action,
+                          );
+                          grantsChanged();
+                        }
+                        setDecisions({ ...decisions, [key]: decision });
                       }}
                       label={decisionOptionLabels[decision].label}
                       helper={
                         lockedAlways
-                          ? alwaysLockedHelper
+                          ? enforced
+                            ? alwaysLockedHelper
+                            : sessionAlwaysHelper
                           : decision === "always" &&
                               typeof copy.alwaysAllowHelper === "function"
                             ? copy.alwaysAllowHelper(action)

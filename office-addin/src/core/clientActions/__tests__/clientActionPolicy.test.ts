@@ -6,6 +6,9 @@ import {
   effectiveDecision,
   mergeIntoStoredDecisions,
   resolveAutoPromptBehavior,
+  forgetClientActionSessionGrants,
+  grantClientActionForSession,
+  scopedDecisions,
 } from "../clientActionPolicy";
 
 // A synthetic non-Outlook host: proves the engine is bound to a registry
@@ -164,5 +167,45 @@ describe("decision functions accept any host action id", () => {
         enforcedAskActions: [],
       }),
     ).toBe("execute");
+  });
+});
+
+describe("scopedDecisions (grant_scope)", () => {
+  afterEach(() => forgetClientActionSessionGrants());
+  const input = (identity: string | null) => ({
+    facetId: "word_selection",
+    action: "word.add_comments",
+    scope: "session_document" as const,
+    identity,
+  });
+
+  it("leaves device-scoped decisions alone", () => {
+    const decisions = { "word_selection/word.add_comments": "always" as const };
+    expect(
+      scopedDecisions(decisions, { ...input("doc"), scope: "device" }),
+    ).toBe(decisions);
+  });
+
+  it("ignores a stored device grant and honours only this session's grant for this document", () => {
+    const stored = { "word_selection/word.add_comments": "always" as const };
+    expect(scopedDecisions(stored, input("doc"))).toEqual({
+      "word_selection/word.add_comments": "ask",
+    });
+    grantClientActionForSession("word_selection", "word.add_comments", "doc");
+    expect(scopedDecisions({}, input("doc"))).toEqual({
+      "word_selection/word.add_comments": "always",
+    });
+    expect(scopedDecisions({}, input("other-doc"))).toEqual({
+      "word_selection/word.add_comments": "ask",
+    });
+    expect(scopedDecisions({}, input(null))).toEqual({
+      "word_selection/word.add_comments": "ask",
+    });
+  });
+
+  it("keeps a stored never", () => {
+    grantClientActionForSession("word_selection", "word.add_comments", "doc");
+    const never = { "word_selection/word.add_comments": "never" as const };
+    expect(scopedDecisions(never, input("doc"))).toBe(never);
   });
 });

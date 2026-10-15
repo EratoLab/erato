@@ -32,6 +32,8 @@ export interface ActionFacetClientActionInfo {
    * allow" must be greyed out and stored grants ignored for these.
    */
   alwaysAskActions: string[];
+  /** Per action: `device` (default) or `session_document`; from `GET /me/facets`. */
+  grantScope: Record<string, string>;
 }
 
 /**
@@ -59,6 +61,7 @@ export function useActionFacetClientActions(): Map<
                     clientActions: facet.client_actions,
                     presentation: facet.presentation,
                     alwaysAskActions: facet.client_actions_always_ask ?? [],
+                    grantScope: facet.grant_scope ?? {},
                   },
                 ] as const,
               ]
