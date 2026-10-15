@@ -181,6 +181,8 @@ export const WORD_COMMENT_REFUSAL_CODES = [
   "DESELECTED",
   "AUTHOR_MODE_UNAVAILABLE",
   "COPY_ONLY",
+  /** Word for the web would unhide hidden text in the comment's paragraph (ERMAIN-949 gate W1). */
+  "HIDDEN_TEXT",
 ] as const;
 
 export type WordCommentRefusalCode =

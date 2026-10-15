@@ -3261,6 +3261,11 @@ msgstr "it is no longer in the document"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordCommentChangesCard.tsx
+msgid "officeAddin.word.comments.code.hiddenText"
+msgstr "Word for the web could reveal hidden text in its paragraph; use Word for Windows or Mac"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentChangesCard.tsx
 msgid "officeAddin.word.comments.code.newActivity"
 msgstr "someone replied since your request"
 

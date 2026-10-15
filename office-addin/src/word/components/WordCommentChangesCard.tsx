@@ -305,6 +305,12 @@ function codeText(code: string): string | null {
         id: "officeAddin.word.comments.code.authorMode",
         message: "Erato could not be shown as the author",
       });
+    case "HIDDEN_TEXT":
+      return t({
+        id: "officeAddin.word.comments.code.hiddenText",
+        message:
+          "Word for the web could reveal hidden text in its paragraph; use Word for Windows or Mac",
+      });
     default:
       return null;
   }

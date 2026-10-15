@@ -1,5 +1,9 @@
 import { wordCommentEdgePiece } from "./wordCommentChanges";
 import {
+  wordAnchorsBesideHiddenText,
+  wordThreadsBesideHiddenText,
+} from "./wordCommentHiddenText";
+import {
   noteWordCommentHostError,
   wordCommentErrorCode,
 } from "./wordCommentPolicy";
@@ -7,7 +11,10 @@ import {
   wordCommentNewThreadRef,
   wordCommentRefRegistry,
 } from "./wordCommentRefs";
-import { wordHostPlatform } from "./wordHostPlatform";
+import {
+  wordCommentWritesKeepHiddenText,
+  wordHostPlatform,
+} from "./wordHostPlatform";
 import { resolveWordParagraphs } from "./wordParagraphResolver";
 import { runWordGuarded } from "./wordRunGuard";
 import {
@@ -317,12 +324,24 @@ async function runAdds(
       const refuse = (row: WordCommentDraftRow, code: WordCommentRefusalCode) =>
         refused.push({ i: row.i, op: row.op, status: "refused", code });
       const story = await readWordStory(context);
-      const plans: AddPlan[] = [];
+      const planned: AddPlan[] = [];
       for (const row of rows) {
         const plan = planAdd(row, story, support);
         if (typeof plan === "string") refuse(row, plan);
-        else plans.push(plan);
+        else planned.push(plan);
       }
+      const besideHidden =
+        wordCommentWritesKeepHiddenText(host) || !planned.length
+          ? new Set<number>()
+          : await wordAnchorsBesideHiddenText(
+              context,
+              story.items,
+              new Map(planned.map((plan) => [plan.row.i, plan.positions])),
+            );
+      const plans: AddPlan[] = [];
+      for (const plan of planned)
+        if (besideHidden.has(plan.row.i)) refuse(plan.row, "HIDDEN_TEXT");
+        else plans.push(plan);
       const listed = context.document.body.getComments();
       listed.load("items/id");
       const document = context.document;
@@ -782,21 +801,35 @@ async function runResponds(
   const decisions = new Map<number, Decision>();
   const guarded = await runWordGuarded(
     async (context, guard) => {
+      const besideHidden = wordCommentWritesKeepHiddenText(host)
+        ? new Set<string>()
+        : await wordThreadsBesideHiddenText(
+            context,
+            rows
+              .filter((row) => row.op !== "reply")
+              .map((row) => row.thread!.commentId),
+          );
       const found = await findThreads(
         context,
         rows.map((row) => row.thread!.commentId),
       );
-      for (const row of rows)
+      for (const row of rows) {
+        const decision = respondDecision(
+          row,
+          found.get(row.thread!.commentId)!,
+          row.dependsOn === undefined
+            ? undefined
+            : decisions.get(row.dependsOn),
+        );
         decisions.set(
           row.i,
-          respondDecision(
-            row,
-            found.get(row.thread!.commentId)!,
-            row.dependsOn === undefined
-              ? undefined
-              : decisions.get(row.dependsOn),
-          ),
+          decision.kind === "write" &&
+            row.op !== "reply" &&
+            besideHidden.has(row.thread!.commentId)
+            ? { kind: "refused", code: "HIDDEN_TEXT" }
+            : decision,
         );
+      }
       const writing = rows.filter(
         (row) => decisions.get(row.i)!.kind === "write",
       );
@@ -987,6 +1020,14 @@ async function runModifies(
   const writes: { row: WordCommentDraftRow; thrown?: boolean }[] = [];
   const guarded = await runWordGuarded(
     async (context, guard) => {
+      const besideHidden = wordCommentWritesKeepHiddenText(host)
+        ? new Set<string>()
+        : await wordThreadsBesideHiddenText(
+            context,
+            rows
+              .filter((row) => row.entry!.n === 0)
+              .map((row) => row.thread!.commentId),
+          );
       const found = await findThreads(
         context,
         rows.map((row) => row.thread!.commentId),
@@ -1020,8 +1061,13 @@ async function runModifies(
               settle(row, "refused", "THREAD_CHANGED");
               continue;
             }
-            queued.push(() => live.comment.delete());
-          } else queued.push(() => (live.comment.content = row.finalText!));
+          }
+          if (besideHidden.has(row.thread!.commentId)) {
+            settle(row, "refused", "HIDDEN_TEXT");
+            continue;
+          }
+          if (row.op === "delete") queued.push(() => live.comment.delete());
+          else queued.push(() => (live.comment.content = row.finalText!));
         } else {
           const reply = live.replies.find(
             (r) => String(r.id) === target.fingerprint.id,
@@ -1163,8 +1209,19 @@ export async function revertWordCommentRows(
   const acted: { i: number; step: WordCommentRevertStep }[] = [];
   const threadOf = (step: WordCommentRevertStep) =>
     step.kind === "delete-comment" ? step.commentId : step.threadId;
+  const onRoot = (step: WordCommentRevertStep) =>
+    step.kind !== "delete-reply" &&
+    (step.kind !== "restore-content" || step.replyId === null);
   const guarded = await runWordGuarded(
     async (context, guard) => {
+      const besideHidden = wordCommentWritesKeepHiddenText(host)
+        ? new Set<string>()
+        : await wordThreadsBesideHiddenText(
+            context,
+            steps
+              .filter(({ step }) => onRoot(step))
+              .map(({ step }) => threadOf(step)),
+          );
       const found = await findThreads(
         context,
         steps.map(({ step }) => threadOf(step)),
@@ -1173,7 +1230,8 @@ export async function revertWordCommentRows(
       // Last first: a reply comes off its thread before the thread is resolved again (F-18).
       for (const { i, step } of [...steps].reverse()) {
         const entry = found.get(threadOf(step));
-        if (!entry?.ok) {
+        // Word for the web would unhide hidden text that is now beside it: left alone.
+        if (!entry?.ok || (onRoot(step) && besideHidden.has(threadOf(step)))) {
           outcome.set(i, "stale");
           continue;
         }

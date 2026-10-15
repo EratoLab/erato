@@ -3261,6 +3261,11 @@ msgstr "er ist nicht mehr im Dokument"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordCommentChangesCard.tsx
+msgid "officeAddin.word.comments.code.hiddenText"
+msgstr "Word für das Web könnte ausgeblendeten Text in diesem Absatz sichtbar machen; verwenden Sie Word für Windows oder Mac"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentChangesCard.tsx
 msgid "officeAddin.word.comments.code.newActivity"
 msgstr "seit Ihrer Anfrage hat jemand geantwortet"
 

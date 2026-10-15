@@ -3740,6 +3740,24 @@ export function installWordSelectionHost(
   };
   const commentAlive = (st: Story, state: CommentState) =>
     st.tokens.some((t) => t.comment === state);
+  /**
+   * ERMAIN-949 gate W1: on Word for the web, adding, editing, resolving, reopening or deleting a
+   * comment unhides the hidden text of the paragraphs its anchor is in. Replies leave it hidden.
+   */
+  const revealOnWeb = (st: Story, state: CommentState) => {
+    if (!web) return;
+    const b = commentBounds(st, state);
+    if (!b) return;
+    const end = paragraphEnd(b.story, Math.max(b.s, b.e - 1));
+    const to = end < 0 ? b.e : end;
+    for (let i = paragraphStart(b.story, b.s); i <= to; i += 1) {
+      const t = b.story.tokens[i];
+      if (t.kind !== "char" || !t.run.font?.hidden) continue;
+      const font: MockSelectionFont = { ...t.run.font };
+      delete font.hidden;
+      t.run = { ...t.run, font };
+    }
+  };
   /** Removes a comment's marks and its reference, as Comment.delete() does with its replies. */
   const removeComment = (st: Story, state: CommentState) => {
     for (const t of st.tokens)
@@ -3805,6 +3823,7 @@ export function installWordSelectionHost(
         get: () => state().content,
         set: (value) => {
           live().content = String(value);
+          revealOnWeb(st(), state());
         },
       },
       authorName: { get: () => state().author },
@@ -3814,6 +3833,7 @@ export function installWordSelectionHost(
         get: () => state().resolved,
         set: (value) => {
           live().resolved = value === true;
+          revealOnWeb(st(), state());
         },
       },
     });
@@ -3859,6 +3879,7 @@ export function installWordSelectionHost(
     comment.delete = () => {
       calls.push("Comment.delete");
       enqueue(ctx, comment, "Comment.delete", true, () => {
+        revealOnWeb(st(), live());
         removeComment(st(), live());
       });
     };
@@ -4260,6 +4281,7 @@ export function installWordSelectionHost(
           .slice(0, 2);
         state.content = String(text);
         anchorComment(b, state);
+        revealOnWeb(b.story, state);
         story = b.story;
       });
       return makeComment(

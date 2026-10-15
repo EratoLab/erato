@@ -3261,6 +3261,11 @@ msgstr "nie ma go już w dokumencie"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordCommentChangesCard.tsx
+msgid "officeAddin.word.comments.code.hiddenText"
+msgstr "program Word dla sieci Web mógłby odsłonić ukryty tekst w tym akapicie; użyj programu Word dla systemu Windows lub Mac"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentChangesCard.tsx
 msgid "officeAddin.word.comments.code.newActivity"
 msgstr "ktoś odpowiedział od czasu twojej prośby"
 

@@ -522,6 +522,136 @@ describe.each(HOSTS)("edits and deletes on %s", (which) => {
   });
 });
 
+const HIDDEN_DOC: MockSelectionDocument = {
+  body: [
+    "H1 Hidden text probe",
+    {
+      runs: [
+        "HT1 Before ",
+        { text: "SECRET ", hidden: true },
+        { text: "whiskey xray", commented: "TH" },
+        { comment: "TH" },
+        " end.",
+      ],
+    },
+    {
+      runs: [
+        "PL1 Plain ",
+        { text: "yankee zulu", commented: "TP" },
+        { comment: "TP" },
+        " end.",
+      ],
+    },
+  ],
+  commentMeta: {
+    TH: {
+      author: "Lena Fischer",
+      email: "lena@contoso.test",
+      content: "TH root",
+      replies: [{ author: "Jonas Weber", content: "TH reply" }],
+    },
+    TP: {
+      author: "Lena Fischer",
+      email: "lena@contoso.test",
+      content: "TP root",
+    },
+  },
+};
+
+describe.each(HOSTS)("hidden text beside a comment on %s", (which) => {
+  const web = which === "web";
+  const installHidden = () => {
+    flavour = which;
+    host = installWordSelectionHost(HIDDEN_DOC, {
+      host: which,
+      failCommentRanges: true,
+    });
+  };
+  const stillHidden = () =>
+    expect(host.ooxml({ p: "HT1" })).toMatch(/<w:vanish\/>/);
+
+  it("adds in that paragraph only where Word keeps it hidden", async () => {
+    installHidden();
+    const { rows } = await run(
+      await draftOf([
+        { op: "add", anchor: { para: 2 }, text: "Whole paragraph." },
+        { op: "add", anchor: { para: 3, quote: "yankee" }, text: "Plain." },
+      ]),
+    );
+    expect(rows.map((row) => [row.status, row.code])).toEqual([
+      web ? ["refused", "HIDDEN_TEXT"] : ["applied", undefined],
+      ["applied", undefined],
+    ]);
+    expect(commentOn("Erato AI: Whole paragraph.")).toHaveLength(web ? 0 : 1);
+    stillHidden();
+  });
+
+  it("resolves, edits and deletes its thread only where Word keeps it hidden; replies everywhere", async () => {
+    installHidden();
+    const resolve = await run(
+      await draftOf([
+        { op: "resolve", thread: "tth" },
+        { op: "resolve", thread: "ttp" },
+      ]),
+    );
+    expect(resolve.rows.map((row) => [row.status, row.code])).toEqual([
+      web ? ["refused", "HIDDEN_TEXT"] : ["applied", undefined],
+      ["applied", undefined],
+    ]);
+    stillHidden();
+    if (!web) {
+      await revertWordCommentRows(
+        [{ i: 0, step: resolve.rows[0].revert! }],
+        PLATFORM[which],
+        0,
+      );
+    }
+    const reply = await run(
+      await draftOf([{ op: "reply", thread: "tth", text: "Seen." }], "call-2"),
+    );
+    expect(reply.rows[0].status).toBe("applied");
+    const edit = await run(
+      await draftOf(
+        [
+          { op: "edit", target: "tth", text: "New root." },
+          { op: "edit", target: "tth.1", text: "New reply." },
+        ],
+        "call-3",
+      ),
+    );
+    expect(edit.rows.map((row) => [row.status, row.code])).toEqual([
+      web ? ["refused", "HIDDEN_TEXT"] : ["applied", undefined],
+      ["applied", undefined],
+    ]);
+    stillHidden();
+    // Refs here are named by the root's text, which the edit changed where it applied.
+    const root = web ? "tth" : "tne";
+    const remove = await run(
+      await draftOf([{ op: "delete", target: root }], "call-4"),
+    );
+    expect([remove.rows[0].status, remove.rows[0].code]).toEqual(
+      web ? ["refused", "HIDDEN_TEXT"] : ["applied", undefined],
+    );
+    stillHidden();
+  });
+
+  it("leaves a Revert on the thread alone once hidden text is beside it", async () => {
+    installHidden();
+    const { rows } = await run(
+      await draftOf([{ op: "resolve", thread: "ttp" }]),
+    );
+    expect(rows[0].status).toBe("applied");
+    host.format({ p: "PL1", text: "Plain" }, { text: "Plain", hidden: true });
+    const reverted = await revertWordCommentRows(
+      [{ i: 0, step: rows[0].revert! }],
+      PLATFORM[which],
+      0,
+    );
+    expect(reverted.rows[0].status).toBe(web ? "stale" : "reverted");
+    expect(host.ooxml({ p: "PL1" })).toMatch(/<w:vanish\/>/);
+  });
+});
+
 describe("a run that times out", () => {
   it("reports queued writes unverified and waits for Word to settle", async () => {
     install("pc");
