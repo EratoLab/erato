@@ -460,6 +460,13 @@ async function runAdds(
       }
     }
   }
+  // AI-author mode never falls back silently: a row it could not re-attribute says so.
+  if (options.assistantAuthor && !options.reattribute)
+    for (const result of results)
+      if (result.status === "applied" && assistantRows.has(result.i)) {
+        result.status = "applied_as_user";
+        result.code = "AUTHOR_MODE_UNAVAILABLE";
+      }
   for (const result of results)
     if (result.status === "applied_as_user") result.author = "user";
   return { rows: results, settled: SETTLED, timedOut: false };

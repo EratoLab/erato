@@ -45,6 +45,9 @@ describe("buildWordArtifact", () => {
       "erato-word-insert",
       "erato-word-document-plan",
       "erato-word-replace",
+      "erato-word-comments-add",
+      "erato-word-comments-respond",
+      "erato-word-comments-modify",
     ]);
     expect(artifact?.renderMode).toBe("suggestions");
   });
@@ -126,7 +129,7 @@ describe("buildWordArtifact", () => {
 
     expect(artifact?.itemIdentity).toBeUndefined();
     expect(artifact?.isFreshCompletion).toBeUndefined();
-    expect(artifact?.cardFenceLanguages).toHaveLength(4);
+    expect(artifact?.cardFenceLanguages).toHaveLength(7);
   });
 
   it("returns nothing when the facet advertises no action this build implements", () => {
@@ -175,5 +178,57 @@ describe("buildWordArtifact", () => {
         capture,
       }),
     ).toBeUndefined();
+  });
+
+  describe("comment changes", () => {
+    const accepted = (action: string, draftId = "call-7"): ContentPart[] =>
+      [
+        {
+          content_type: "tool_use",
+          tool_name: "word_submit_comment_changes",
+          tool_call_id: draftId,
+          status: "success",
+          input: { changes: [] },
+          output: {
+            status: "success",
+            result: { draft_id: draftId, action, rows: 1 },
+          },
+        },
+      ] as unknown as ContentPart[];
+    const selectionInfo = (actions: string[]) => ({
+      clientActions: actions,
+      alwaysAskActions: [],
+      presentation: "auto_prompt",
+    });
+
+    it("renders an accepted submission as its action's card, proposed for consent", () => {
+      const artifact = buildWordArtifact({
+        facetId: "word_selection",
+        clientActionInfo: selectionInfo(["word.add_comments"]),
+        content: accepted("word.add_comments"),
+        messageId: "m1",
+        capture,
+      });
+      expect(artifact).toMatchObject({
+        submittedCard: {
+          toolCallId: "call-7",
+          content: "call-7",
+          language: "erato-word-comments-add",
+        },
+        proposedClientAction: "word.add_comments",
+      });
+    });
+
+    it("ships dark: no card where the facet does not offer the action", () => {
+      const artifact = buildWordArtifact({
+        facetId: "word_selection",
+        clientActionInfo: selectionInfo(["word.replace_selection"]),
+        content: accepted("word.modify_comments"),
+        messageId: "m1",
+        capture,
+      });
+      expect(artifact?.submittedCard).toBeUndefined();
+      expect(artifact?.proposedClientAction).toBeUndefined();
+    });
   });
 });

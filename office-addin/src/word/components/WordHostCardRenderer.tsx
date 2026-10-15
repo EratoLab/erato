@@ -20,6 +20,7 @@ import {
 import { t } from "@lingui/core/macro";
 import { useCallback, useEffect, useId, useMemo, useState } from "react";
 
+import { WordCommentChangesCard } from "./WordCommentChangesCard";
 import { WordDocumentPlanCard } from "./WordDocumentPlanCard";
 import { WordEditReport, wordEditsTitleText } from "./WordEditReport";
 import {
@@ -82,6 +83,18 @@ export function WordHostCardRenderer({
   if (entry.action === "word.apply_document_plan")
     return (
       <WordDocumentPlanCard
+        key={`${entry.action}:${content}`}
+        entry={entry}
+        content={content}
+      />
+    );
+  if (
+    entry.action === "word.add_comments" ||
+    entry.action === "word.respond_to_comments" ||
+    entry.action === "word.modify_comments"
+  )
+    return (
+      <WordCommentChangesCard
         key={`${entry.action}:${content}`}
         entry={entry}
         content={content}

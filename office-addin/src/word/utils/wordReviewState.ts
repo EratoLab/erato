@@ -5,6 +5,10 @@ import type {
 } from "./wordApplyDocumentPlan";
 import type { WordApplyStage } from "./wordApplyProgress";
 import type {
+  WordCommentRevertResult,
+  WordCommentRowResult,
+} from "./wordCommentWrites";
+import type {
   WordPlanRoute,
   WordWholeDocumentRefusal,
   WordWholeDocumentWrite,
@@ -13,6 +17,8 @@ import type { WordReplaceSelectionResult } from "./wordReplaceSelection";
 import type { WordReviewAnchor, WordTrackingMode } from "./wordReviewLocation";
 import type { WordWriteBlockReason } from "./wordWriteGate";
 import type {
+  WordCommentConsentKind,
+  WordCommentConsentState,
   WordDocumentCapture,
   WordEditOutcome,
 } from "@erato/frontend/word-review";
@@ -56,6 +62,19 @@ export interface WordReviewState {
   /** A document plan's Apply that stopped before writing because the host's policy asks before, or
    * refuses, replacing the whole document. The card stays idle and offers that choice, not an error. */
   wholeDocumentBlock?: WordWholeDocumentBlock;
+  /** Comment changes: the rows the user ticked, each row's latest outcome, and Revert. */
+  comments?: WordCommentCardState;
+}
+
+export interface WordCommentCardState {
+  /** Row indexes ticked on the card; all of them until the user unticks one. */
+  selected: readonly number[];
+  /** The latest outcome per row, across Apply, Retry and "Post under my name instead". */
+  rows: readonly WordCommentRowResult[];
+  consent?: WordCommentConsentState;
+  consentKind?: WordCommentConsentKind | null;
+  /** Revert is single use. */
+  revert?: readonly WordCommentRevertResult[];
 }
 export const EMPTY_WORD_REVIEW: WordReviewState = {
   status: "idle",

@@ -1,8 +1,12 @@
-import { acceptedWordPlanFromHistory } from "@erato/frontend/word-review";
+import {
+  acceptedWordCommentSubmission,
+  acceptedWordPlanFromHistory,
+} from "@erato/frontend/word-review";
 
 import {
   extractProposedClientAction,
   offerableWordClientActionsForFacet,
+  WORD_COMMENT_CARD_FENCES,
   WORD_EDITS_FENCE,
   WORD_INSERT_FENCE,
   WORD_PLAN_FENCE,
@@ -18,6 +22,7 @@ export const WORD_CARD_FENCE_LANGUAGES: readonly string[] = [
   WORD_INSERT_FENCE,
   WORD_PLAN_FENCE,
   WORD_REPLACE_FENCE,
+  ...Object.values(WORD_COMMENT_CARD_FENCES),
 ];
 
 /** Historical cards can render without a capture, but only an owned live capture permits writing. */
@@ -35,24 +40,36 @@ export function buildWordArtifact(args: {
   capture: WordDocumentCapture | undefined;
 }): HostArtifact | undefined {
   const allowedClientActions = args.clientActionInfo?.clientActions;
-  if (
-    !args.facetId ||
-    offerableWordClientActionsForFacet(args.facetId, allowedClientActions)
-      .length === 0
-  ) {
-    return undefined;
-  }
-  const submitted = offerableWordClientActionsForFacet(
+  const offerable = offerableWordClientActionsForFacet(
     args.facetId,
     allowedClientActions,
-  ).includes(WORD_SUBMIT_PLAN_ACTION)
+  );
+  if (!args.facetId || offerable.length === 0) return undefined;
+  const plan = offerable.includes(WORD_SUBMIT_PLAN_ACTION)
     ? acceptedWordPlanFromHistory(args.content)
     : undefined;
-  const proposedClientAction = submitted
-    ? WORD_SUBMIT_PLAN_ACTION
-    : allowedClientActions
-      ? extractProposedClientAction(args.content, allowedClientActions)
+  // A comment card exists only for a submission the host accepted; its draft_id names the card.
+  const comments = plan
+    ? undefined
+    : acceptedWordCommentSubmission(args.content);
+  const commentCard =
+    comments && offerable.includes(comments.action) ? comments : undefined;
+  const submitted = plan
+    ? { ...plan, language: WORD_PLAN_FENCE }
+    : commentCard
+      ? {
+          toolCallId: commentCard.toolCallId,
+          content: commentCard.toolCallId,
+          language: WORD_COMMENT_CARD_FENCES[commentCard.action],
+        }
       : undefined;
+  const proposedClientAction = plan
+    ? WORD_SUBMIT_PLAN_ACTION
+    : commentCard
+      ? commentCard.action
+      : allowedClientActions
+        ? extractProposedClientAction(args.content, allowedClientActions)
+        : undefined;
   return {
     facetId: args.facetId,
     renderMode: "suggestions",
@@ -62,7 +79,7 @@ export function buildWordArtifact(args: {
           submittedCard: {
             toolCallId: submitted.toolCallId,
             content: submitted.content,
-            language: WORD_PLAN_FENCE,
+            language: submitted.language,
           },
         }
       : {}),
