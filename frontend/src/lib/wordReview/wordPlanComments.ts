@@ -262,3 +262,46 @@ export function wordPlanCommentRemovals(
       : [];
   });
 }
+
+/** What a plan must leave alone on every comment it keeps, and the people part, as written. */
+export interface WordCommentAttribution {
+  comments: ReadonlyMap<
+    string,
+    readonly [string | null, string | null, string | null]
+  >;
+  people: string | null;
+}
+
+export function wordCommentAttribution(doc: Document): WordCommentAttribution {
+  const people = partRoot(doc, "/word/people.xml");
+  return {
+    comments: new Map(
+      commentElements(doc).map((comment) => [
+        attr(comment, W, "id"),
+        [
+          comment.getAttributeNS(W, "author"),
+          comment.getAttributeNS(W, "initials"),
+          comment.getAttributeNS(W, "date"),
+        ] as const,
+      ]),
+    ),
+    people: people ? new XMLSerializer().serializeToString(people) : null,
+  };
+}
+
+/**
+ * Contract §13.1.4: every comment a compile keeps has the same w:author, w:initials and w:date, and
+ * people.xml is unchanged; none of them is Word housekeeping. A removed comment is not compared.
+ */
+export function wordCommentAttributionChanged(
+  before: WordCommentAttribution,
+  after: WordCommentAttribution,
+): boolean {
+  if (before.people !== after.people) return true;
+  for (const [id, fields] of after.comments) {
+    const original = before.comments.get(id);
+    if (!original || fields.some((value, i) => value !== original[i]))
+      return true;
+  }
+  return false;
+}

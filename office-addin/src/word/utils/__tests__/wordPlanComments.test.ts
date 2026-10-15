@@ -1,6 +1,8 @@
 import {
   extractWordStories,
   pruneWordStoryReferences,
+  wordCommentAttribution,
+  wordCommentAttributionChanged,
   wordPlanCommentRemovals,
   wordPlanCommentThreads,
   wordSourceReadRefs,
@@ -309,5 +311,56 @@ describe("threads a plan removes", () => {
     expect(
       wordPlanCommentConsequences(snapshot, b.xml, b.prepared).fingerprint,
     ).not.toBe(first.fingerprint);
+  });
+});
+
+describe("comment attribution a compile keeps", () => {
+  const before = () => parseWordXml(chapters().ooxml);
+  const changed = (edit: (doc: Document) => void) => {
+    const doc = before();
+    edit(doc);
+    return wordCommentAttributionChanged(
+      wordCommentAttribution(before()),
+      wordCommentAttribution(doc),
+    );
+  };
+  const comment = (doc: Document, id: string) =>
+    Array.from(doc.getElementsByTagNameNS(W, "comment")).find(
+      (c) => c.getAttributeNS(W, "id") === id,
+    )!;
+
+  it("holds for the comments a plan keeps, and ignores the ones it removes", () => {
+    const snapshot = chapters();
+    const { doc } = compiled(snapshot, shortenChapter3(snapshot));
+    expect(
+      wordCommentAttributionChanged(
+        wordCommentAttribution(parseWordXml(snapshot.ooxml)),
+        wordCommentAttribution(doc),
+      ),
+    ).toBe(false);
+    expect(changed(() => {})).toBe(false);
+    expect(changed((doc) => comment(doc, "4").remove())).toBe(false);
+  });
+
+  it.each([
+    ["author", (c: Element) => c.setAttributeNS(W, "w:author", "Erato")],
+    ["initials", (c: Element) => c.setAttributeNS(W, "w:initials", "AI")],
+    ["missing initials", (c: Element) => c.removeAttributeNS(W, "initials")],
+    [
+      "date seconds",
+      (c: Element) => c.setAttributeNS(W, "w:date", "2026-09-08T10:15:00Z"),
+    ],
+  ])("fails on a kept comment's changed %s", (_, edit) => {
+    expect(changed((doc) => edit(comment(doc, "0")))).toBe(true);
+  });
+
+  it("fails on a changed people part", () => {
+    expect(
+      changed((doc) =>
+        doc
+          .getElementsByTagNameNS(W15, "person")[0]
+          .setAttributeNS(W15, "w15:author", "Someone else"),
+      ),
+    ).toBe(true);
   });
 });

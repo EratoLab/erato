@@ -826,13 +826,25 @@ export function WordDocumentPlanCard({
                     )
                   }
                   onKeepPassages={keepCommentedPassages}
-                  onCopyThreads={() =>
-                    copyThreads(removals.map((r) => r.thread))
+                  onCopyThreads={
+                    web
+                      ? undefined
+                      : () => copyThreads(removals.map((r) => r.thread))
                   }
                 />
               )
             }
             commentsConfirmed={!needsCommentTick || commentsConfirmed}
+            rebuiltThreads={
+              web && commentPlan
+                ? commentPlan.threads.length - removals.length
+                : undefined
+            }
+            onCopyThreads={
+              web && commentPlan?.threads.length
+                ? () => copyThreads(commentPlan.threads)
+                : undefined
+            }
             applyLabel={applyLabel}
             canApply={ready && !host.operationInProgress}
             applying={applying}

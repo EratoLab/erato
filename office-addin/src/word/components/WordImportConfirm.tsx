@@ -4,6 +4,7 @@ import { useId, useState } from "react";
 
 import { WordApplyButton } from "./WordReviewCardParts";
 import { wordWholeDocumentRefusalText } from "../utils/wordAuthoringMessages";
+import { wordCommentRebuildText } from "../utils/wordPlanCommentMessages";
 
 import type { WordApplyStage } from "../utils/wordApplyProgress";
 import type { WordWholeDocumentRefusal } from "../utils/wordInPlaceRoute";
@@ -41,6 +42,8 @@ export function WordImportConfirm({
   notice,
   comments,
   commentsConfirmed = true,
+  rebuiltThreads,
+  onCopyThreads,
   applyLabel,
   canApply,
   applying,
@@ -59,6 +62,10 @@ export function WordImportConfirm({
   comments?: ReactNode;
   /** That tick, which Apply needs as well. */
   commentsConfirmed?: boolean;
+  /** Word for the web: comment threads the import rebuilds, changing their dates and flags (F-20). */
+  rebuiltThreads?: number;
+  /** Shown next to Apply: the web's Undo cannot bring those threads back (F-16). */
+  onCopyThreads?: () => void;
   applyLabel: string;
   canApply: boolean;
   applying: boolean;
@@ -86,10 +93,12 @@ export function WordImportConfirm({
     }),
     ...(web
       ? [
-          t({
-            id: "officeAddin.word.importConfirm.comments",
-            message: "Comment dates and resolved flags may change.",
-          }),
+          rebuiltThreads
+            ? wordCommentRebuildText(rebuiltThreads)
+            : t({
+                id: "officeAddin.word.importConfirm.comments",
+                message: "Comment dates and resolved flags may change.",
+              }),
         ]
       : []),
   ];
@@ -143,6 +152,19 @@ export function WordImportConfirm({
             if (confirmed && commentsConfirmed) onApply();
           }}
         />
+        {onCopyThreads && (
+          <Button
+            type="button"
+            variant="secondary"
+            disabled={applying}
+            onClick={onCopyThreads}
+          >
+            {t({
+              id: "officeAddin.word.planComments.copy",
+              message: "Copy these threads",
+            })}
+          </Button>
+        )}
         <AskAgainButton disabled={applying} onAskAgain={onAskAgain} />
         <Button
           type="button"

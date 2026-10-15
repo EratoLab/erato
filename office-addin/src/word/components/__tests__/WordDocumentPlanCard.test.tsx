@@ -1921,7 +1921,7 @@ const SECTIONS_ROUTE =
 const WEB_IMPORT_STATEMENTS = [
   "Word's Undo can't reverse this change. Erato can't verify the result on Word for the web, and its Restore may not bring back the exact original, which stays available to download.",
   "People editing at the same time may lose their latest changes.",
-  "Comment dates and resolved flags may change.",
+  "Rebuilds 1 comment thread (dates and resolved flags may change).",
 ];
 const confirmBox = () =>
   screen.getByRole("checkbox", {
@@ -2043,6 +2043,9 @@ describe("confirmed whole-document replacement on Word for the web", () => {
     expect(routeText()).toBe(SECTIONS_ROUTE);
     for (const statement of WEB_IMPORT_STATEMENTS)
       expect(screen.getByText(statement)).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Copy these threads" }),
+    ).toBeVisible();
     expect(confirmBox()).not.toBeChecked();
     expect(applyButton()).toBeDisabled();
     expect(screen.queryByRole("button", { name: "Always allow" })).toBeNull();
@@ -2655,5 +2658,160 @@ describe("comment threads a plan deletes", () => {
       "Lee Chen (Resolved) on “KPI”:\nSpell out the acronym.\n  Reply from Maya Krüger: Done.\n\nDaniel Person (Open) on “second pilot”:\nShorten this?",
     );
     expect(tickBox()).not.toBeChecked();
+  });
+});
+
+describe("whole-document imports of documents with comments", () => {
+  // Earlier suites restore their policy after afterEach, so the default is set here.
+  beforeEach(() => {
+    delete window.MS_OFFICE_ADDIN_DEFAULT_SETTINGS;
+  });
+  const CHAPTERS_WITH_COMMENTS = () =>
+    withComments(packageXml(chapterCommentsBody()), CHAPTER_COMMENTS);
+  const shortenChapter3 = (s: WordAuthoringSnapshot): WordDocumentPlan => {
+    const refs = s.blocks.map((b) => b.ref);
+    return {
+      version: 1,
+      snapshot: s.token,
+      readToken: "read-proof",
+      scope: "document",
+      entries: [
+        { kind: "keep", source: refs.slice(0, 5) },
+        {
+          kind: "replace",
+          source: refs.slice(5, 9),
+          blocks: [
+            {
+              id: "short",
+              type: "paragraph",
+              text: "Chapter three, in short.",
+            },
+          ],
+        },
+        { kind: "keep", source: refs.slice(9) },
+      ],
+      deleted: [],
+    };
+  };
+  const commentTick = () =>
+    screen.getByRole("checkbox", { name: "Also delete 2 comment threads" });
+
+  it("on Word for Windows: a plain verified route, with the co-author warning beside the threads", async () => {
+    const { word } = await mountRealistic(shortenChapter3, {
+      xml: CHAPTERS_WITH_COMMENTS(),
+      coauthors: 2,
+    });
+    expect(await screen.findByTestId("word-plan-coauthors")).toHaveTextContent(
+      "Someone else is editing this document.",
+    );
+    expect(
+      within(screen.getByTestId("word-plan-comment-removals")).getAllByTestId(
+        "word-plan-comment-thread",
+      ),
+    ).toHaveLength(2);
+    expect(screen.getAllByRole("checkbox")).toEqual([commentTick()]);
+    expect(
+      screen.queryByText(/Rebuilds \d+ comment thread/),
+    ).not.toBeInTheDocument();
+    fireEvent.click(commentTick());
+    apply();
+    await screen.findByText(/^Applied: /);
+    expect(word.insert).toHaveBeenCalledOnce();
+    expect(screen.getByTestId("word-plan-adjustments")).toHaveTextContent(
+      "Deleted 2 comment threads, as you confirmed.",
+    );
+  });
+
+  it("on Word for Windows: an import that deletes no thread needs no comment tick", async () => {
+    const { word } = await mountRealistic(
+      (s) => ({
+        ...shortenChapter3(s),
+        entries: [{ kind: "keep", source: s.blocks.map((b) => b.ref) }],
+        sections: [
+          {
+            id: "final",
+            source: "section-1",
+            layout: { orientation: "landscape" },
+          },
+        ],
+      }),
+      { xml: CHAPTERS_WITH_COMMENTS() },
+    );
+    expect(routeText()).toBe(SECTIONS_ROUTE);
+    expect(screen.queryByRole("checkbox")).toBeNull();
+    apply();
+    await screen.findByText(/^Applied: /);
+    expect(word.insert).toHaveBeenCalledOnce();
+    expect(screen.queryByTestId("word-plan-comment-check")).toBeNull();
+  });
+
+  it("on Word for the web: the import stays off by default, so no thread is offered for deletion", async () => {
+    const execute = spyOnApply();
+    const { word } = await mountRealistic(shortenChapter3, {
+      xml: CHAPTERS_WITH_COMMENTS(),
+      profile: "word-web",
+    });
+    expect(screen.getByText(WEB_IMPORT_REFUSAL)).toBeVisible();
+    expect(screen.queryByTestId("word-plan-comment-removals")).toBeNull();
+    expect(screen.queryByRole("button", { name: APPLY_LABEL })).toBeNull();
+    expect(execute).not.toHaveBeenCalled();
+    expect(word.insert).not.toHaveBeenCalled();
+  });
+
+  describe("with the admin's confirm on Word for the web", () => {
+    beforeEach(() => setWordWebImport("confirm"));
+    afterEach(() => {
+      delete window.MS_OFFICE_ADDIN_DEFAULT_SETTINGS;
+    });
+
+    it("names the threads it rebuilds and deletes, offers to copy them all, and needs both ticks", async () => {
+      autoPrompt("always");
+      const writeText = vi.fn(async (_text: string) => {});
+      vi.stubGlobal("navigator", { ...navigator, clipboard: { writeText } });
+      const execute = spyOnApply();
+      const { word } = await mountRealistic(shortenChapter3, {
+        xml: CHAPTERS_WITH_COMMENTS(),
+        profile: "word-web",
+      });
+      await act(async () => {});
+      expect(execute).not.toHaveBeenCalled();
+      expect(
+        screen.getByText(
+          "Rebuilds 1 comment thread (dates and resolved flags may change).",
+        ),
+      ).toBeVisible();
+      const removals = screen.getByTestId("word-plan-comment-removals");
+      expect(
+        within(removals).getAllByTestId("word-plan-comment-thread"),
+      ).toHaveLength(2);
+      expect(
+        within(removals).queryByRole("button", { name: "Copy these threads" }),
+      ).toBeNull();
+      fireEvent.click(
+        screen.getByRole("button", { name: "Copy these threads" }),
+      );
+      await screen.findByText("Comment threads copied.");
+      expect(writeText.mock.calls[0][0]).toContain(
+        "Maya Krüger (Open) on “twelve percent”:\nIs this figure current?\n  Reply from Daniel Person: Yes, from the September report.",
+      );
+      expect(writeText.mock.calls[0][0]).toContain("Lee Chen (Resolved)");
+
+      expect(applyButton()).toBeDisabled();
+      fireEvent.click(confirmBox());
+      expect(applyButton()).toBeDisabled();
+      fireEvent.click(commentTick());
+      expect(applyButton()).toBeEnabled();
+      apply();
+      await screen.findByText(/^Applied: /, undefined, { timeout: 5000 });
+      expect(execute.mock.calls).toEqual([
+        [
+          expect.objectContaining({
+            importConfirmed: true,
+            commentRemovalsConfirmed: expect.stringMatching(/^word-body-v2:/),
+          }),
+        ],
+      ]);
+      expect(word.insert).toHaveBeenCalledOnce();
+    });
   });
 });

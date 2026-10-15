@@ -37,6 +37,8 @@ import {
   wordHousekeepingDifferences,
   wordHousekeepingTokens,
   wordParagraphStyleLooks,
+  wordCommentAttribution,
+  wordCommentAttributionChanged,
 } from "@erato/frontend/word-review";
 
 import { wordReadableSourceBlock } from "./wordAuthoringReadData";
@@ -594,6 +596,7 @@ export function compileWordDocumentPlan(
   const body = wordMainBody(doc)!;
   const section = child(body, "sectPr")?.cloneNode(true);
   const originalSections = extractWordSections(doc);
+  const attribution = wordCommentAttribution(doc);
   // Captured list names refer to numbering instances, including their restart
   // overrides. Reusing the instance continues kept items in that same list.
   const lists = new Map(
@@ -806,6 +809,8 @@ export function compileWordDocumentPlan(
   );
   if (plan.sections)
     compileWordSections(doc, plan.sections, outputBlocks, originalSections);
+  if (wordCommentAttributionChanged(attribution, wordCommentAttribution(doc)))
+    throw new Error("comment-attribution-changed");
 
   return xml(doc);
 }

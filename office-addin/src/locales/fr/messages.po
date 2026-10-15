@@ -3976,6 +3976,7 @@ msgid "officeAddin.word.planComments.copied"
 msgstr "Fils de commentaires copiés."
 
 #. js-lingui-explicit-id
+#: src/word/components/WordImportConfirm.tsx
 #: src/word/components/WordPlanCommentRemovals.tsx
 msgid "officeAddin.word.planComments.copy"
 msgstr "Copier ces fils"
