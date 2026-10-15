@@ -320,6 +320,27 @@ describe("the comment check after every written apply", () => {
       MESSAGE,
     );
     expect(readWordCommentStates).not.toHaveBeenCalled();
+    window.MS_OFFICE_ADDIN_DEFAULT_SETTINGS = {
+      word_apply: { pc: { whole_document_import: "off" } },
+    };
+    try {
+      expect(
+        await applyWordDocumentPlan(
+          JSON.stringify(shorten(again.snapshot)),
+          again.snapshot,
+          MESSAGE,
+          undefined,
+          undefined,
+          confirmed(again.snapshot),
+        ),
+      ).toMatchObject({
+        status: "blocked",
+        diagnostic: { reason: "import-disabled" },
+      });
+    } finally {
+      delete window.MS_OFFICE_ADDIN_DEFAULT_SETTINGS;
+    }
+    expect(readWordCommentStates).not.toHaveBeenCalled();
   });
 
   it("checks a write that stopped partway too", async () => {

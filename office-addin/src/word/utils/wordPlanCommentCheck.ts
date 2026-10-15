@@ -108,9 +108,34 @@ export function diffWordCommentStates(
       continue;
     }
     matched.add(origin.id);
-    if (!now.has(origin.id)) moved.add(origin.id);
+    if (now.has(origin.id)) continue;
+    moved.add(origin.id);
+    // Under its new id the thread has new reply ids too, so its replies compare by author and text.
+    if (
+      !planned.has(origin.id) &&
+      (state.resolved !== origin.resolved ||
+        (state.replies &&
+          origin.replies &&
+          (state.replies.length !== origin.replies.length ||
+            state.replies.some((r, i) => !sameEntry(r, origin.replies![i])))))
+    )
+      changed.add(id);
   }
-  let removed = 0;
+  const missing = (id: string) => !now.has(id) && !moved.has(id);
+  // In a file without durableIds two threads can share author and text; Word may delete either.
+  const twins = new Set<string>();
+  for (const id of planned) {
+    if (!now.has(id)) continue;
+    const twin = before.find(
+      (state) =>
+        !planned.has(state.id) &&
+        !twins.has(state.id) &&
+        missing(state.id) &&
+        sameEntry(state, was.get(id)!),
+    );
+    if (twin) twins.add(twin.id);
+  }
+  let removed = twins.size;
   let kept = 0;
   for (const [id, state] of was) {
     const current = now.get(id);
@@ -120,7 +145,7 @@ export function diffWordCommentStates(
       continue;
     }
     if (!current) {
-      if (!moved.has(id)) changed.add(id);
+      if (missing(id) && !twins.has(id)) changed.add(id);
       continue;
     }
     if (
@@ -132,7 +157,7 @@ export function diffWordCommentStates(
     )
       changed.add(id);
   }
-  return { removed, kept, unexpected: changed.size };
+  return { removed, kept: kept - twins.size, unexpected: changed.size };
 }
 
 const pause = (ms: number) =>
@@ -140,7 +165,7 @@ const pause = (ms: number) =>
 
 /**
  * Reads the threads after a write and compares them with `before`. Word for the web may list a
- * change a moment late, so there an unexpected difference is read again before it is reported.
+ * change a moment late, so there a difference from the plan is read again before it is reported.
  */
 export async function checkWordPlanComments(
   before: readonly WordCommentThreadState[] | null,
@@ -161,7 +186,7 @@ export async function checkWordPlanComments(
     if (attempt) await pause(WEB_SETTLE_MS);
     const after = await read();
     check = after ? diffWordCommentStates(before, after, ids) : unverified;
-    if (!check.unexpected && !check.unverified) break;
+    if (!check.unexpected && !check.kept && !check.unverified) break;
   }
   return check;
 }

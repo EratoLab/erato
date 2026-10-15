@@ -33,6 +33,9 @@ const BLOCKS = {
   table: `<w:tbl><w:tblPr/><w:tblGrid><w:gridCol w:w="2000"/><w:gridCol w:w="2000"/></w:tblGrid><w:tr>${cell("Team")}${cell("Hours")}</w:tr><w:tr>${cell("East")}${cell("18")}</w:tr></w:tbl>`,
   hidden: `<w:p>${run("Visible ")}${run("SECRET ", "<w:vanish/>")}${run("tail")}</w:p>`,
   deleted: `<w:p>${run("Keep ")}<w:del w:id="5" w:author="A"><w:r><w:delText>gone </w:delText></w:r></w:del>${run("this")}</w:p>`,
+  /** A body-level bookmark around a paragraph: three nodes, two without text. */
+  bodyMarks: `<w:bookmarkStart w:id="2" w:name="Around"/>${paragraph("Hello there")}<w:bookmarkEnd w:id="2"/>`,
+  emoji: `<w:p>${run("Smile 😀 now")}<w:bookmarkStart w:id="3" w:name="E"/><w:bookmarkEnd w:id="3"/></w:p>`,
 };
 
 function snapshotOf(body: string): WordAuthoringSnapshot {
@@ -112,6 +115,8 @@ describe("note anchors count in the validator's text view (F7)", () => {
     ["table", "18", "Team\tHours\nEast\t§18"],
     ["hidden", "tail", "Visible §tail"],
     ["deleted", "this", "Keep §this"],
+    ["bodyMarks", "there", "\nHello §there\n"],
+    ["emoji", "now", "Smile 😀 §now"],
   ] as const)(
     "places a note in a %s block before the character its offset names",
     (kind, word, expected) => {

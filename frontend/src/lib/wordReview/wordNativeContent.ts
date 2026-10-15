@@ -122,31 +122,36 @@ export function nativeBodyGroups(body: Element): {
 }
 
 /** Expose visible source text only; hidden/deleted text, field code and binary data stay on the host. */
+const INVISIBLE = new Set([
+  "del",
+  "moveFrom",
+  "instrText",
+  "delInstrText",
+  "rPr",
+  "pPr",
+  "sdtPr",
+]);
+
+/** What nativeVisibleText leaves out with everything inside it: deletions, moved-away text, field
+ * codes, properties and hidden runs. */
+export function isWordTextHidden(e: Element): boolean {
+  if (e.namespaceURI !== W) return false;
+  if (INVISIBLE.has(e.localName)) return true;
+  return (
+    e.localName === "r" &&
+    ["vanish", "webHidden"].some((name) =>
+      descendants(e, name).some(
+        (n) =>
+          !["0", "false", "off"].includes(n.getAttributeNS(W, "val") ?? ""),
+      ),
+    )
+  );
+}
+
 export function nativeVisibleText(root: Element): string {
   const visit = (e: Element): string => {
     if (e.namespaceURI === W) {
-      if (
-        [
-          "del",
-          "moveFrom",
-          "instrText",
-          "delInstrText",
-          "rPr",
-          "pPr",
-          "sdtPr",
-        ].includes(e.localName)
-      )
-        return "";
-      if (
-        e.localName === "r" &&
-        ["vanish", "webHidden"].some((name) =>
-          descendants(e, name).some(
-            (n) =>
-              !["0", "false", "off"].includes(n.getAttributeNS(W, "val") ?? ""),
-          ),
-        )
-      )
-        return "";
+      if (isWordTextHidden(e)) return "";
       if (e.localName === "t") return e.textContent ?? "";
       if (e.localName === "tab") return "\t";
       if (["br", "cr"].includes(e.localName)) return "\n";

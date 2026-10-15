@@ -2,6 +2,7 @@ import {
   effectiveWordMediaChildren,
   isWordMediaElementActive,
 } from "./wordMediaComparison";
+import { isWordTextHidden } from "./wordNativeContent";
 
 /**
  * Where a note's reference goes, counted in the text view the plan validator checks offsets
@@ -17,25 +18,12 @@ type ViewChar =
   | { char: string; kind: "text"; t: Element; index: number }
   | { char: string; kind: "atom"; node: Element }
   /** A paragraph, cell, row or node boundary: it stands where `paragraph` ends. */
-  | { char: string; kind: "end"; paragraph: Element };
+  | { char: string; kind: "end"; paragraph: Element }
+  /** A boundary after nodes without a paragraph: it stands where `paragraph` starts. */
+  | { char: string; kind: "start"; paragraph: Element };
 
 const isW = (e: Element, local: string) =>
   e.namespaceURI === W && e.localName === local;
-const SKIPPED = new Set([
-  "del",
-  "moveFrom",
-  "instrText",
-  "delInstrText",
-  "rPr",
-  "pPr",
-  "sdtPr",
-]);
-const hiddenRun = (run: Element) =>
-  ["vanish", "webHidden"].some((name) =>
-    Array.from(run.getElementsByTagNameNS(W, name)).some(
-      (n) => !["0", "false", "off"].includes(n.getAttributeNS(W, "val") ?? ""),
-    ),
-  );
 const paragraphsOf = (node: Element) =>
   isW(node, "p")
     ? [node]
@@ -51,12 +39,12 @@ function view(nodes: readonly Element[]): ViewChar[] {
   };
   const visit = (e: Element) => {
     if (e.namespaceURI === W) {
-      if (SKIPPED.has(e.localName) || (e.localName === "r" && hiddenRun(e)))
-        return;
+      if (isWordTextHidden(e)) return;
       if (e.localName === "t") {
-        Array.from(e.textContent ?? "").forEach((char, index) =>
-          out.push({ char, kind: "text", t: e, index }),
-        );
+        // UTF-16 units, as the validator counts offsets.
+        const text = e.textContent ?? "";
+        for (let index = 0; index < text.length; index++)
+          out.push({ char: text[index], kind: "text", t: e, index });
         return;
       }
       if (e.localName === "tab") {
@@ -81,8 +69,12 @@ function view(nodes: readonly Element[]): ViewChar[] {
     } else if (isW(e, "p")) out.push({ char: "\n", kind: "end", paragraph: e });
   };
   nodes.forEach((node, i) => {
-    const previous = i ? paragraphsOf(nodes[i - 1]).at(-1) : undefined;
-    if (previous) out.push({ char: "\n", kind: "end", paragraph: previous });
+    if (i) {
+      const before = nodes.slice(0, i).flatMap(paragraphsOf).at(-1);
+      const after = nodes.slice(i).flatMap(paragraphsOf)[0];
+      if (before) out.push({ char: "\n", kind: "end", paragraph: before });
+      else if (after) out.push({ char: "\n", kind: "start", paragraph: after });
+    }
     const from = out.length;
     visit(node);
     dropTrailing(from, "\n");
@@ -174,6 +166,7 @@ export function placeWordNoteMarker(
     placeInRun(target.t, target.index + (after ? 1 : 0), marker);
   else if (target.kind === "atom")
     placeInRun(target.node, after ? 1 : 0, marker);
+  else if (target.kind === "start") startOf(target.paragraph, marker);
   else if (!after) target.paragraph.append(marker);
   else {
     const next = paragraphs[paragraphs.indexOf(target.paragraph) + 1];

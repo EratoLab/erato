@@ -497,10 +497,12 @@ async function applyPlan(
           { commentThreads: comments.removals.length },
         ),
       };
-    if (comments.threads.length) {
-      watch.before = await readWordCommentStates();
-      watch.planned = comments.removals.map((removal) => removal.thread);
-    }
+    watch.planned = comments.removals.map((removal) => removal.thread);
+    // Read right before a write, so refused and stale applies read nothing.
+    const watchComments = async () => {
+      if (comments.threads.length && watch.before === undefined)
+        watch.before = await readWordCommentStates();
+    };
     if (snapshot.fullDocument) {
       // All or nothing per plan: in place only when every change has an exact object-model inverse.
       let routeReason: WordRouteReason | undefined;
@@ -526,6 +528,7 @@ async function applyPlan(
           },
         };
       } else if (route.route === "in-place") {
+        await watchComments();
         const result = await applyWordPlanInPlace({
           snapshot,
           compiled: prepared,
@@ -578,6 +581,7 @@ async function applyPlan(
         fallbackReasons,
       );
       if (guarded) return guarded;
+      await watchComments();
       return imported(
         await applyFullDocument(
           plan,
@@ -600,6 +604,7 @@ async function applyPlan(
       () => [],
     );
     if (guarded) return guarded;
+    await watchComments();
     stage = "preflight";
     progress.stage("backup");
     return await host.run(async (context) => {

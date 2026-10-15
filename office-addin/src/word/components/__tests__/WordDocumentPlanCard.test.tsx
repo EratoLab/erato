@@ -2626,6 +2626,46 @@ describe("comment threads a plan deletes", () => {
     expect(await liveComments()).toBe(6);
   });
 
+  it("says why nothing ran when Apply asks for a tick the card could not show", async () => {
+    spyOnApply().mockResolvedValue({
+      ok: false,
+      outcomes: [],
+      snapshotOoxml: null,
+      documentPlanResult: {
+        status: "blocked",
+        diagnostic: {
+          stage: "validate",
+          reason: "comment-removals-need-confirmation",
+          details: { commentThreads: 1 },
+        },
+      },
+    });
+    await mountRealistic(
+      (s) => {
+        const refs = s.blocks.map((b) => b.ref);
+        return {
+          ...shortenChapter3(s),
+          entries: [
+            { kind: "keep", source: refs.slice(0, 10) },
+            {
+              kind: "replace",
+              source: [refs[10]],
+              blocks: [{ id: "end", type: "paragraph", text: "Fin." }],
+            },
+          ],
+        };
+      },
+      { xml: CHAPTERS_WITH_COMMENTS() },
+    );
+    apply();
+    expect(
+      await screen.findByText(
+        "This change deletes comment threads, which needs your confirmation first. Nothing was applied.",
+      ),
+    ).toBeVisible();
+    expect(applyButton()).toBeEnabled();
+  });
+
   it("puts the request back asking to keep the commented passages", async () => {
     autoPrompt();
     mock.request = "Shorten chapter 3.";

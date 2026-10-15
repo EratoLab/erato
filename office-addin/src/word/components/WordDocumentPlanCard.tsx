@@ -348,7 +348,14 @@ export function WordDocumentPlanCard({
           result.diagnostic?.reason === "comment-removals-need-confirmation"
         ) {
           setCommentsTicked(undefined);
-          host.updateReview(key, { applyStage: undefined, status: "idle" });
+          // Without the card's own rows, the diagnostic is what tells the user why nothing ran.
+          host.updateReview(key, {
+            applyStage: undefined,
+            status: "idle",
+            documentPlanDiagnostic: needsCommentTick
+              ? undefined
+              : result.diagnostic,
+          });
           return false;
         }
         if (

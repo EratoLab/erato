@@ -4067,7 +4067,7 @@ msgstr "{count, plural, =0 {Keine Antworten} one {# Antwort} other {# Antworten}
 #. js-lingui-explicit-id
 #: src/word/utils/wordPlanCommentMessages.ts
 msgid "officeAddin.word.planComments.resolved"
-msgstr "Gelöst"
+msgstr "Erledigt"
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordPlanCommentMessages.ts

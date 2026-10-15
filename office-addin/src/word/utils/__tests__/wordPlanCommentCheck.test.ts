@@ -37,7 +37,7 @@ const BEFORE: WordCommentThreadState[] = [
   thread("3"),
   thread("4"),
 ];
-const planned = (thread: string, commentId: string | null) =>
+const planned2 = (thread: string, commentId: string | null) =>
   ({
     wId: thread,
     commentId,
@@ -104,6 +104,52 @@ describe("comment threads after a write", () => {
     });
   });
 
+  it("compares a moved thread's status and replies by author and text", () => {
+    const copy = {
+      ...BEFORE[0],
+      id: "900",
+      replies: [
+        { ...BEFORE[0].replies![0], id: "901" },
+        { ...BEFORE[0].replies![1], id: "902" },
+      ],
+    };
+    const others = BEFORE.slice(1);
+    expect(
+      diffWordCommentStates(BEFORE, [copy, ...others], new Set()).unexpected,
+    ).toBe(0);
+    expect(
+      diffWordCommentStates(
+        BEFORE,
+        [{ ...copy, resolved: true }, ...others],
+        new Set(),
+      ).unexpected,
+    ).toBe(1);
+    expect(
+      diffWordCommentStates(
+        BEFORE,
+        [{ ...copy, replies: copy.replies.slice(0, 1) }, ...others],
+        new Set(),
+      ).unexpected,
+    ).toBe(1);
+  });
+
+  it("takes the removal of a thread's twin for the planned one in a file without durableIds", () => {
+    const twins = [
+      thread("1", { content: "OK?" }),
+      thread("2", { content: "OK?", author: "Author 1" }),
+    ];
+    const planned = plannedWordCommentIds(
+      [{ ...planned2("2", null), author: "Author 1", text: "OK?" }],
+      twins,
+    );
+    expect([...planned]).toEqual(["1"]);
+    expect(diffWordCommentStates(twins, [twins[0]], planned)).toEqual({
+      removed: 1,
+      kept: 0,
+      unexpected: 0,
+    });
+  });
+
   it("names planned threads Word kept, as inside a tracked deletion", () => {
     expect(diffWordCommentStates(BEFORE, BEFORE, new Set(["4"]))).toEqual({
       removed: 0,
@@ -124,9 +170,12 @@ describe("comment threads after a write", () => {
 
   it("names planned threads by durableId, and by author and text in a file without one", () => {
     expect([
-      ...plannedWordCommentIds([planned("3", "3"), planned("4", null)], BEFORE),
+      ...plannedWordCommentIds(
+        [planned2("3", "3"), planned2("4", null)],
+        BEFORE,
+      ),
     ]).toEqual(["3", "4"]);
-    expect([...plannedWordCommentIds([planned("2", "999")], BEFORE)]).toEqual([
+    expect([...plannedWordCommentIds([planned2("2", "999")], BEFORE)]).toEqual([
       "2",
     ]);
   });
@@ -142,12 +191,19 @@ describe("comment threads after a write", () => {
       .mockResolvedValueOnce(BEFORE.slice(0, 2));
     const check = checkWordPlanComments(
       BEFORE,
-      [planned("3", "3"), planned("4", "4")],
+      [planned2("3", "3"), planned2("4", "4")],
       read,
     );
     await vi.runAllTimersAsync();
     expect(await check).toEqual({ removed: 2, kept: 0, unexpected: 0 });
     expect(read).toHaveBeenCalledTimes(2);
+    const late = vi
+      .fn<() => Promise<WordCommentThreadState[] | null>>()
+      .mockResolvedValueOnce(BEFORE)
+      .mockResolvedValueOnce(BEFORE.slice(0, 3));
+    const settled = checkWordPlanComments(BEFORE, [planned2("4", "4")], late);
+    await vi.runAllTimersAsync();
+    expect(await settled).toEqual({ removed: 1, kept: 0, unexpected: 0 });
     expect(await checkWordPlanComments(null, [], read)).toMatchObject({
       unverified: true,
     });

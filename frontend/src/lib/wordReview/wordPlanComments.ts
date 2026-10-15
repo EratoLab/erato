@@ -1,5 +1,5 @@
 import { effectiveWordMediaChildren } from "./wordMediaComparison";
-import { nativeVisibleText } from "./wordNativeContent";
+import { isWordTextHidden, nativeVisibleText } from "./wordNativeContent";
 
 /**
  * Comment threads as a captured or compiled package holds them, for what a document plan does to
@@ -117,23 +117,6 @@ interface WordCommentAnchor {
   order: number;
 }
 
-const SKIPPED = new Set([
-  "del",
-  "moveFrom",
-  "instrText",
-  "delInstrText",
-  "rPr",
-  "pPr",
-  "sdtPr",
-]);
-
-const hiddenRun = (run: Element) =>
-  ["vanish", "webHidden"].some((name) =>
-    Array.from(run.getElementsByTagNameNS(W, name)).some(
-      (n) => !["0", "false", "off"].includes(attr(n, W, "val")),
-    ),
-  );
-
 /** The visible text inside each comment's range, as nativeVisibleText counts it, plus its marks. */
 function wordCommentAnchors(doc: Document): Map<string, WordCommentAnchor> {
   const anchors = new Map<string, WordCommentAnchor>();
@@ -171,8 +154,7 @@ function wordCommentAnchors(doc: Document): Map<string, WordCommentAnchor> {
         anchor(id).referenced = true;
         return;
       }
-      if (SKIPPED.has(e.localName) || (e.localName === "r" && hiddenRun(e)))
-        hidden = true;
+      if (isWordTextHidden(e)) hidden = true;
       if (!hidden && e.localName === "t") write(e.textContent ?? "");
       if (!hidden && e.localName === "tab") write("\t");
       if (!hidden && ["br", "cr"].includes(e.localName)) write("\n");
