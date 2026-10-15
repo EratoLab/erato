@@ -146,6 +146,7 @@ export function validationContext(
     label: "Erato AI:",
     authorMode: "user",
     rowCap: () => 50,
+    legacy: false,
     ...overrides,
   };
 }

@@ -25,14 +25,11 @@ import {
 import { wordDeniedText, WordReviewReceipt } from "./WordReviewReceipt";
 import { WordShowInWordButton } from "./WordShowInWordButton";
 import { useClientActionConfirmFlow } from "../../core/clientActions/useClientActionConfirmFlow";
-import { useClientActionDecisions } from "../../core/clientActions/useClientActionDecisions";
+import { useWordClientActionDecisions } from "../hooks/useWordClientActionDecisions";
 import { useWordReviewFocus } from "../hooks/useWordReviewFocus";
 import { wordSelectionStore } from "../hooks/wordSelectionStore";
 import { useWordWrite } from "../providers/WordWriteProvider";
-import {
-  isActionDenied,
-  wordClientActionDecisionStore,
-} from "../utils/clientActionPolicy";
+import { isActionDenied } from "../utils/clientActionPolicy";
 import { wordCommentTaintedMessage } from "../utils/wordCommentReadTool";
 import {
   isWordRevertOffered,
@@ -601,8 +598,8 @@ export function WordSelectionCard({
     heldOperationOwner,
     restoreRequest,
   } = useWordWrite();
-  const [decisions, setDecisions] = useClientActionDecisions(
-    wordClientActionDecisionStore,
+  const { decisions, setDecisions, grantAlways } = useWordClientActionDecisions(
+    entry.action,
   );
   const facetId = artifact?.facetId ?? "";
   const messageId = artifact?.messageId;
@@ -1247,6 +1244,7 @@ export function WordSelectionCard({
               }
               decisions={decisions}
               setDecisions={setDecisions}
+              onGrantAlways={grantAlways}
               facetId={facetId}
               allowCard={allowCard}
               denyCard={denyCard}

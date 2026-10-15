@@ -117,11 +117,48 @@ type Outcome = {
   code?: string;
 };
 
+interface ParagraphThread {
+  id: string;
+  author: string;
+  content: string;
+  resolved: boolean;
+  replies: { id: string; author: string; content: string }[];
+}
+
+/** The threads a paragraph lists with their replies and status: what the Replace must keep. */
+async function paragraphThreads(
+  context: Word.RequestContext,
+  paragraph: Word.Paragraph,
+): Promise<ParagraphThread[]> {
+  const comments = paragraph.getComments();
+  comments.load("items/id,items/authorName,items/content,items/resolved");
+  await context.sync();
+  const replies = comments.items.map((comment) => {
+    const list = comment.replies;
+    list.load("items/id,items/authorName,items/content");
+    return list;
+  });
+  if (replies.length) await context.sync();
+  return comments.items
+    .map((comment, k) => ({
+      id: String(comment.id),
+      author: comment.authorName,
+      content: comment.content,
+      resolved: comment.resolved,
+      replies: replies[k].items.map((reply) => ({
+        id: String(reply.id),
+        author: reply.authorName,
+        content: reply.content,
+      })),
+    }))
+    .sort((a, b) => (a.id < b.id ? -1 : 1));
+}
+
 async function reattributeParagraph(
   rows: readonly { row: WordCommentDraftRow; commentId: string }[],
   authorName: string,
   label: string,
-): Promise<Outcome> {
+): Promise<Outcome & { settled?: Promise<void>; timedOut?: boolean }> {
   const add = rows[0].row.add!;
   const support = currentWordSelectionSupport();
   const asUser = (code: string): Outcome => ({
@@ -174,6 +211,7 @@ async function reattributeParagraph(
           kind: "done" as const,
           outcome: asUser("AUTHOR_MODE_UNAVAILABLE"),
         };
+      const local = await paragraphThreads(context, paragraph);
       const rewritten = wordCommentPackageWithAuthor(
         read.ooxml,
         rows.map(({ commentId }) => ({ commentId, label })),
@@ -202,23 +240,29 @@ async function reattributeParagraph(
         return {
           kind: "written" as const,
           before,
+          local,
           paragraphs: story.items.length,
         };
       }
       return {
         kind: "written" as const,
         before,
+        local,
         paragraphs: story.items.length,
       };
     },
     { timeoutMs: WORD_COMMENT_RUN_TIMEOUT_MS },
   );
   if (write.outcome !== "ok" || !write.value)
-    return write.writeQueued
-      ? { status: "unverified", code: "AUTHOR_REWRITE_UNVERIFIED" }
-      : asUser("AUTHOR_MODE_UNAVAILABLE");
+    return {
+      ...(write.writeQueued
+        ? { status: "unverified" as const, code: "AUTHOR_REWRITE_UNVERIFIED" }
+        : asUser("AUTHOR_MODE_UNAVAILABLE")),
+      settled: write.settled,
+      timedOut: write.outcome === "timeout",
+    };
   if (write.value.kind === "done") return write.value.outcome;
-  const { before, paragraphs } = write.value;
+  const { before, local, paragraphs } = write.value;
 
   const check = await runWordGuarded(
     async (context) => {
@@ -227,13 +271,15 @@ async function reattributeParagraph(
       comments.load("items/id,items/authorName,items/content");
       await context.sync();
       const resolved = resolveWordParagraphs(add.anchor, story.entries);
+      const position = "positions" in resolved ? resolved.positions[0] : null;
       return {
-        text:
-          "positions" in resolved
-            ? story.rangeTexts[resolved.positions[0]]
-            : null,
+        text: position === null ? null : story.rangeTexts[position],
         paragraphs: story.items.length,
         after: listed(comments),
+        local:
+          position === null
+            ? null
+            : await paragraphThreads(context, story.items[position]),
       };
     },
     { timeoutMs: WORD_COMMENT_RUN_TIMEOUT_MS },
@@ -248,10 +294,13 @@ async function reattributeParagraph(
         .filter((c) => !targets.has(c.id))
         .sort((a, b) => (a.id < b.id ? -1 : 1)),
     );
+  const localOthers = (list: ParagraphThread[] | null) =>
+    JSON.stringify(list?.filter((c) => !targets.has(c.id)) ?? null);
   const intact =
     text === add.rangeTexts[0] &&
     check.value.paragraphs === paragraphs &&
-    others(before) === others(after);
+    others(before) === others(after) &&
+    localOthers(local) === localOthers(check.value.local);
   const states = rows.map(({ row, commentId }) => {
     const found = after.filter((c) => c.id === commentId);
     if (found.length !== 1) return "missing";
@@ -275,6 +324,8 @@ export const reattributeWordComments: WordCommentReattribute = async ({
   authorName,
 }) => {
   const outcomes = new Map<number, Outcome>();
+  let settled = Promise.resolve();
+  let timedOut = false;
   const groups = new Map<
     string,
     { row: WordCommentDraftRow; commentId: string }[]
@@ -284,10 +335,28 @@ export const reattributeWordComments: WordCommentReattribute = async ({
     groups.set(key, [...(groups.get(key) ?? []), entry]);
   }
   for (const group of groups.values()) {
-    const outcome = await reattributeParagraph(group, authorName, draft.label);
+    // After a rewrite Word did not confirm, nothing more is rewritten: the rest keep the label.
+    if (
+      timedOut ||
+      [...outcomes.values()].some((o) => o.status === "unverified")
+    ) {
+      for (const { row } of group)
+        outcomes.set(row.i, {
+          status: "applied_as_user",
+          code: "AUTHOR_MODE_UNAVAILABLE",
+        });
+      continue;
+    }
+    const {
+      settled: pending,
+      timedOut: late,
+      ...outcome
+    } = await reattributeParagraph(group, authorName, draft.label);
+    if (pending) settled = pending;
+    if (late) timedOut = true;
     // A rewrite Word did not confirm is not tried again this session; a paragraph's own hazard is.
     if (outcome.status === "unverified") noteWordCommentAssistantAuthorOff();
     for (const { row } of group) outcomes.set(row.i, outcome);
   }
-  return outcomes;
+  return { outcomes, settled, timedOut };
 };

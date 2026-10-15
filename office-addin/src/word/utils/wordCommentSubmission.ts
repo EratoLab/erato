@@ -13,6 +13,7 @@ import {
   wordCommentRowCap,
 } from "./wordCommentPolicy";
 import { wordCommentReadSession } from "./wordCommentReadTool";
+import { wordCommentRefRegistry } from "./wordCommentRefs";
 import { wordHostPlatform } from "./wordHostPlatform";
 import { wordParagraphId } from "./wordParagraphIds";
 import { WORD_SELECTION_TEXT_OPTIONS } from "./wordReviewLocation";
@@ -242,6 +243,7 @@ export function createWordCommentSubmissionExecutor(
       label: settings.label,
       authorMode: wordCommentAuthorPreference(),
       rowCap: (action) => wordCommentRowCap(actionClassOf(action)),
+      legacy: wordCommentRefRegistry(scope.identity).legacy,
     });
     if (!validated.ok) return remember(reject(current, validated.errors));
     drafts.set(validated.draft.draftId, validated.draft);

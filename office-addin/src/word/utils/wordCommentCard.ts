@@ -136,9 +136,7 @@ export function wordCommentOutcomeRecord(input: {
       ...(row.code ? { code: row.code } : {}),
       ...(row.newRef ? { newRef: row.newRef } : {}),
       // O-16: a legacy file's ids hold for one pane session only.
-      ...(row.commentId && !draft.matchedByContent
-        ? { commentId: row.commentId }
-        : {}),
+      ...(row.commentId && !draft.legacy ? { commentId: row.commentId } : {}),
     })),
   };
 }

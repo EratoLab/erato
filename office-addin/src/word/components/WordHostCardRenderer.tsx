@@ -38,13 +38,10 @@ import {
 } from "./WordReviewReceipt";
 import { WordSelectionCard } from "./WordSelectionCard";
 import { useClientActionConfirmFlow } from "../../core/clientActions/useClientActionConfirmFlow";
-import { useClientActionDecisions } from "../../core/clientActions/useClientActionDecisions";
+import { useWordClientActionDecisions } from "../hooks/useWordClientActionDecisions";
 import { useWordReviewFocus } from "../hooks/useWordReviewFocus";
 import { useWordWrite } from "../providers/WordWriteProvider";
-import {
-  isActionDenied,
-  wordClientActionDecisionStore,
-} from "../utils/clientActionPolicy";
+import { isActionDenied } from "../utils/clientActionPolicy";
 import { revertWordEdits } from "../utils/wordApplyEdits";
 import {
   offerableWordClientActionsForFacet,
@@ -147,8 +144,8 @@ function WordActionCard({
     locationGeneration,
     invalidateLocations,
   } = useWordWrite();
-  const [decisions, setDecisions] = useClientActionDecisions(
-    wordClientActionDecisionStore,
+  const { decisions, setDecisions, grantAlways } = useWordClientActionDecisions(
+    entry.action,
   );
   const facetId = artifact?.facetId ?? "";
   const messageId = artifact?.messageId;
@@ -579,6 +576,7 @@ function WordActionCard({
               enforcedAskActions={enforcedAskActions}
               decisions={decisions}
               setDecisions={setDecisions}
+              onGrantAlways={grantAlways}
               facetId={facetId}
               allowCard={allowCard}
               denyCard={denyCard}

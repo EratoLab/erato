@@ -580,6 +580,14 @@ fn test_action_facet_grant_scope_value_is_validated() {
 }
 
 #[test]
+#[should_panic(expected = "grant_scope applies to Word add-in actions (word.*) only")]
+fn test_action_facet_grant_scope_is_word_only() {
+    ms_office_addin_config_from_toml(&format!(
+        "{GRANT_SCOPE_FACET}grant_scope = {{ \"outlook.reply\" = \"device\" }}\n"
+    ));
+}
+
+#[test]
 #[should_panic(
     expected = "sets grant_scope for 'word.modify_comments', which is not in client_actions"
 )]

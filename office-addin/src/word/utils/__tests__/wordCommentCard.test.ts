@@ -29,6 +29,12 @@ function draftOf(
 ) {
   const ctx = validationContext({
     story: STORY,
+    captured: new Map(
+      STORY.entries.map((e, i) => [
+        i + 1,
+        { uniqueLocalId: e.id, text: e.text },
+      ]),
+    ),
     threads: threadMap({ ref: "t7k", id: "1", replies: [] }),
     authorMode: "assistant",
     ...overrides,
@@ -151,7 +157,7 @@ describe("wordCommentOutcomeRecord (D-42)", () => {
     });
     expect(JSON.stringify(record)).not.toContain("secret");
     const legacy = wordCommentOutcomeRecord({
-      draft: { ...draft, matchedByContent: true },
+      draft: { ...draft, legacy: true },
       consent: "approved",
       consentKind: "click",
       authorModeRequested: null,

@@ -109,8 +109,10 @@ export interface WordCommentDraft {
   label: string;
   /** What the user's setting asked for; per-row availability is decided on the card (O-28). */
   authorMode: WordCommentAuthorMode;
-  /** Every thread was named by content, as in a legacy file (O-17). */
+  /** A thread was named by content, as in a legacy file (O-17). */
   matchedByContent: boolean;
+  /** The file has no stable comment ids (F-2a): no Comment.id is kept beyond this session (O-16). */
+  legacy: boolean;
 }
 
 /** A body read at validation, for adds that name paragraphs. */
@@ -134,6 +136,8 @@ export interface WordCommentValidationContext {
   label: string;
   authorMode: WordCommentAuthorMode;
   rowCap: (action: WordCommentAction) => number;
+  /** What the request's comment reads found; unknown counts as legacy. */
+  legacy: boolean | null;
 }
 
 type Change = Record<string, unknown> & { op: WordCommentOp };
@@ -589,6 +593,17 @@ function addTarget(
     );
   const story = ctx.story;
   if (!story) return positionUnknown(path, para);
+  // Without a quote only a paragraph the document read captured can be checked to be the one meant.
+  if (
+    quote === null &&
+    (!ctx.captured.has(para) ||
+      (through !== null && !ctx.captured.has(through)))
+  )
+    return error(
+      path,
+      "position-unknown",
+      `Paragraph ${para} was not read with this request, so a comment on the whole paragraph cannot be checked. Quote the passage the comment is about.`,
+    );
   const first = positionOf(ctx, story, para, `${path}/para`);
   if (typeof first !== "number") return first;
   let last = first;
@@ -1005,6 +1020,7 @@ export function validateWordCommentChanges(
       label: ctx.label.trim(),
       authorMode: ctx.authorMode,
       matchedByContent: rows.some((row) => row.thread?.matchedBy === "content"),
+      legacy: ctx.legacy !== false,
     },
   };
 }

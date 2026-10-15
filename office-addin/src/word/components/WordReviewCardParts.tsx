@@ -79,6 +79,7 @@ export function WordReviewConfirm<TSummary, TAction extends string>({
   operationInProgress,
   enforcedAskActions,
   alwaysBlockedReason,
+  onGrantAlways,
   decisions,
   setDecisions,
   facetId,
@@ -97,6 +98,8 @@ export function WordReviewConfirm<TSummary, TAction extends string>({
   enforcedAskActions: readonly string[];
   /** Why Always is off when it is not the organization's always-ask list. */
   alwaysBlockedReason?: string;
+  /** Where "Always allow" is kept when not on the device (grant_scope). */
+  onGrantAlways?: () => void;
   decisions: ClientActionDecisionMap;
   setDecisions: (value: ClientActionDecisionMap | null) => void;
   facetId: string;
@@ -118,10 +121,12 @@ export function WordReviewConfirm<TSummary, TAction extends string>({
       }}
       onAlwaysAllow={() => {
         if (!canApply || operationInProgress || locked) return;
-        setDecisions({
-          ...decisions,
-          [decisionKey(facetId, card.action)]: "always",
-        });
+        if (onGrantAlways) onGrantAlways();
+        else
+          setDecisions({
+            ...decisions,
+            [decisionKey(facetId, card.action)]: "always",
+          });
         allowCard(card);
       }}
       alwaysAllowDisabledReason={

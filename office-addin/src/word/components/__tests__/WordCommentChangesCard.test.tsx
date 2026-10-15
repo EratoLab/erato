@@ -174,6 +174,8 @@ function renderCard(options: {
   alwaysAsk?: string[];
   proposed?: boolean;
   grantScopes?: Record<string, string>;
+  /** The accepted submission of this message, when it is not the draft the fence names. */
+  submitted?: string;
 }) {
   nextMessage += 1;
   const messageId = `assistant-${nextMessage}`;
@@ -193,6 +195,11 @@ function renderCard(options: {
     itemIdentity: IDENTITY,
     proposedClientAction: options.proposed ? options.action : undefined,
     clientActionGrantScopes: options.grantScopes,
+    submittedCard: {
+      toolCallId: options.submitted ?? options.draftId,
+      content: options.submitted ?? options.draftId,
+      language,
+    },
   });
   mockUseChatContext.mockReturnValue({
     messages: {
@@ -488,5 +495,20 @@ describe("WordCommentChangesCard", () => {
     });
     await waitFor(() => expect(host.commentStates()).toHaveLength(3));
     expect(screen.queryByTestId("confirmation-card")).toBeNull();
+  });
+
+  it("ignores a fence naming a draft this message did not submit", async () => {
+    const capture = await submit(
+      [{ op: "add", anchor: { para: 3, quote: "alpha" }, text: "old" }],
+      "call-old",
+    );
+    renderCard({
+      action: "word.add_comments",
+      draftId: "call-old",
+      submitted: "call-new",
+      capture,
+    });
+    expect(screen.queryByTestId("word-comments-card")).toBeNull();
+    expect(screen.queryByRole("button", { name: /Add/ })).toBeNull();
   });
 });

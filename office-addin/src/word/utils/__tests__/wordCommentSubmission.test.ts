@@ -6,6 +6,10 @@ import {
   threadMap,
 } from "../../../test/mocks/word/commentDrafts";
 import {
+  forgetWordCommentRefs,
+  wordCommentRefRegistry,
+} from "../wordCommentRefs";
+import {
   createWordCommentSubmissionExecutor,
   forgetWordCommentDrafts,
   WORD_COMMENT_NOTHING_WRITTEN,
@@ -40,6 +44,7 @@ const context = (toolCallId: string): ClientToolCallContext => ({
 
 beforeEach(() => {
   forgetWordCommentDrafts();
+  forgetWordCommentRefs();
   readStory.mockClear();
   scope = {
     token: "session-1",
@@ -114,6 +119,22 @@ describe("word_submit_comment_changes", () => {
     );
     expect(result.ok).toBe(true);
     expect(readStory).not.toHaveBeenCalled();
+  });
+
+  it("marks a draft legacy unless the request's reads found stable ids", async () => {
+    const run = executor();
+    await run(
+      { changes: [{ op: "resolve", thread: "t7k" }] },
+      context("call-1"),
+    );
+    expect(wordCommentDraft("call-1")?.legacy).toBe(true);
+    wordCommentRefRegistry("doc-1").legacy = false;
+    scope = { ...scope!, token: "session-2" };
+    await run(
+      { changes: [{ op: "resolve", thread: "t7k" }] },
+      context("call-2"),
+    );
+    expect(wordCommentDraft("call-2")?.legacy).toBe(false);
   });
 
   it("uses the deployment's label", async () => {

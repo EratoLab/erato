@@ -113,12 +113,15 @@ export type WordCommentReattribute = (input: {
   draft: WordCommentDraft;
   rows: readonly { row: WordCommentDraftRow; commentId: string }[];
   authorName: string;
-}) => Promise<
-  Map<
+}) => Promise<{
+  outcomes: Map<
     number,
     { status: "applied" | "applied_as_user" | "unverified"; code?: string }
-  >
->;
+  >;
+  /** A rewrite that timed out may still land: the card holds every write until this resolves. */
+  settled: Promise<void>;
+  timedOut: boolean;
+}>;
 
 const SETTLED = Promise.resolve();
 
@@ -437,12 +440,16 @@ async function runAdds(
       commentId: result.commentId!,
     }))
     .filter(({ row }) => row.add!.rangeTexts.length === 1);
+  let settled = SETTLED;
+  let timedOut = false;
   if (toReattribute.length && options.reattribute && options.assistantAuthor) {
-    const outcomes = await options.reattribute({
+    const rewrite = await options.reattribute({
       draft,
       rows: toReattribute,
       authorName: options.assistantAuthor,
     });
+    ({ settled, timedOut } = rewrite);
+    const { outcomes } = rewrite;
     for (const result of results) {
       const outcome = outcomes.get(result.i);
       if (!outcome) continue;
@@ -469,7 +476,7 @@ async function runAdds(
       }
   for (const result of results)
     if (result.status === "applied_as_user") result.author = "user";
-  return { rows: results, settled: SETTLED, timedOut: false };
+  return { rows: results, settled, timedOut };
 }
 
 async function verifyAdds(
@@ -549,8 +556,11 @@ async function verifyAdds(
             !claimed.has(String(comment.id)) &&
             sameCommentText(comment.content, add.row.finalText!),
         );
+        // Absent after a throw is proof on desktop (F-17); the web may still show it later.
         if (!match)
-          return { ...base, status: "failed", code: refusalOf(write.thrown) };
+          return host === "OfficeOnline"
+            ? { ...base, status: "unverified", code: "NOT_LISTED" }
+            : { ...base, status: "failed", code: refusalOf(write.thrown) };
         id = String(match.id);
         claimed.add(id);
       }
@@ -589,7 +599,7 @@ async function verifyAdds(
           code: "ANCHOR_UNPROVEN",
           commentId: id,
         };
-      const newRef = draft.matchedByContent
+      const newRef = draft.legacy
         ? null
         : wordCommentNewThreadRef(registry, id);
       return {
@@ -674,19 +684,27 @@ const sameIds = (
   live.length === captured.length &&
   live.every((item, k) => String(item.id) === captured[k]);
 
-async function readBack(
+type ReadBack = Awaited<ReturnType<typeof readOnce>>;
+
+/**
+ * Judges rows on fresh reads. Word for the web may show a write a moment later, so there the rows
+ * are read again until none is still failed or unverified, or the polls run out.
+ */
+async function judgeFresh<R extends { status: string }>(
   host: WordHostPlatform,
   ids: readonly string[],
   pollMs: number,
-) {
+  judge: (back: ReadBack) => R[],
+): Promise<R[]> {
   const polls = host === "OfficeOnline" ? WORD_COMMENT_WEB_POLLS : 1;
-  let result: Awaited<ReturnType<typeof readOnce>> = null;
+  let judged: R[] = [];
   for (let attempt = 0; attempt < polls; attempt += 1) {
     if (attempt > 0) await sleep(pollMs);
-    result = await readOnce(ids);
-    if (result) break;
+    judged = judge(await readOnce(ids));
+    if (!judged.some((r) => r.status === "failed" || r.status === "unverified"))
+      break;
   }
-  return result;
+  return judged;
 }
 
 async function readOnce(ids: readonly string[]) {
@@ -871,15 +889,9 @@ async function runResponds(
     };
   }
   const written = rows.filter((row) => decisions.get(row.i)?.kind === "write");
-  const back = written.length
-    ? await readBack(
-        host,
-        written.map((row) => row.thread!.commentId),
-        options.pollMs ?? WORD_COMMENT_WEB_POLL_MS,
-      )
-    : null;
-  return {
-    rows: rows.map((row) => {
+  const web = host === "OfficeOnline";
+  const judge = (back: ReadBack): WordCommentRowResult[] =>
+    rows.map((row) => {
       const decision = decisions.get(row.i)!;
       if (decision.kind === "unchanged") return result(row, "unchanged");
       if (decision.kind !== "write")
@@ -904,8 +916,9 @@ async function runResponds(
                 sameCommentText(reply.content, row.finalText!),
             );
         const reply = live.replies[index];
+        // A reply the web has not shown after a throw may still land: it is never retried.
         if (!reply)
-          return decision.thrown
+          return decision.thrown && !web
             ? result(row, "failed", { code: "WRITE_FAILED" })
             : result(row, "unverified", { code: "NOT_LISTED" });
         if (!sameCommentText(reply.content, row.finalText!))
@@ -936,7 +949,16 @@ async function runResponds(
             "failed",
             decision.thrown ? { code: "WRITE_FAILED" } : {},
           );
-    }),
+    });
+  return {
+    rows: written.length
+      ? await judgeFresh(
+          host,
+          written.map((row) => row.thread!.commentId),
+          options.pollMs ?? WORD_COMMENT_WEB_POLL_MS,
+          judge,
+        )
+      : judge(null),
     settled: SETTLED,
     timedOut: false,
   };
@@ -1044,59 +1066,67 @@ async function runModifies(
     };
   }
   if (writes.length) {
-    const back = await readBack(
-      host,
-      writes.map((write) => write.row.thread!.commentId),
-      options.pollMs ?? WORD_COMMENT_WEB_POLL_MS,
-    );
-    for (const { row, thrown } of writes) {
-      if (!back) {
-        settle(row, "unverified", "READ_FAILED");
-        continue;
-      }
-      const live = back.get(row.thread!.commentId);
-      const target = row.entry!;
-      if (row.op === "delete") {
-        const gone =
+    const outcome = (
+      row: WordCommentDraftRow,
+      status: WordCommentRowStatus,
+      code?: string,
+    ): WordCommentRowResult => ({
+      i: row.i,
+      op: row.op,
+      ref: row.ref,
+      status,
+      ...(code ? { code } : {}),
+      commentId: row.entry!.fingerprint.id,
+    });
+    const judge = (back: ReadBack): WordCommentRowResult[] =>
+      writes.map(({ row, thrown }) => {
+        if (!back) return outcome(row, "unverified", "READ_FAILED");
+        const live = back.get(row.thread!.commentId);
+        const target = row.entry!;
+        if (row.op === "delete") {
+          const gone =
+            target.n === 0
+              ? !live
+              : !!live &&
+                !live.replies.some(
+                  (reply) => reply.id === target.fingerprint.id,
+                );
+          return outcome(row, gone ? "applied" : "failed");
+        }
+        const content =
           target.n === 0
-            ? !live
-            : !!live &&
-              !live.replies.some((reply) => reply.id === target.fingerprint.id);
-        settle(row, gone ? "applied" : "failed");
-        continue;
-      }
-      const content =
-        target.n === 0
-          ? live?.content
-          : live?.replies.find((reply) => reply.id === target.fingerprint.id)
-              ?.content;
-      if (content !== undefined && sameCommentText(content, row.finalText!))
-        results.set(row.i, {
-          i: row.i,
-          op: row.op,
-          ref: row.ref,
-          status: "applied",
-          commentId: target.fingerprint.id,
-          revert: {
-            kind: "restore-content",
-            threadId: row.thread!.commentId,
-            replyId: target.n === 0 ? null : target.fingerprint.id,
-            previous: target.fingerprint.content,
-            written: row.finalText!,
-          },
-        });
-      else if (
-        content !== undefined &&
-        sameCommentText(content, target.fingerprint.content)
-      )
-        settle(row, "failed", thrown ? "WRITE_FAILED" : undefined);
-      else
-        settle(
+            ? live?.content
+            : live?.replies.find((reply) => reply.id === target.fingerprint.id)
+                ?.content;
+        if (content !== undefined && sameCommentText(content, row.finalText!))
+          return {
+            ...outcome(row, "applied"),
+            revert: {
+              kind: "restore-content",
+              threadId: row.thread!.commentId,
+              replyId: target.n === 0 ? null : target.fingerprint.id,
+              previous: target.fingerprint.content,
+              written: row.finalText!,
+            },
+          };
+        if (
+          content !== undefined &&
+          sameCommentText(content, target.fingerprint.content)
+        )
+          return outcome(row, "failed", thrown ? "WRITE_FAILED" : undefined);
+        return outcome(
           row,
           "unverified",
           content === undefined ? "NOT_LISTED" : "CONTENT_MISMATCH",
         );
-    }
+      });
+    const judged = await judgeFresh(
+      host,
+      writes.map((write) => write.row.thread!.commentId),
+      options.pollMs ?? WORD_COMMENT_WEB_POLL_MS,
+      judge,
+    );
+    for (const row of judged) results.set(row.i, row);
   }
   return {
     rows: rows.map((row) => results.get(row.i)!),
@@ -1124,7 +1154,11 @@ export async function revertWordCommentRows(
   steps: readonly { i: number; step: WordCommentRevertStep }[],
   host: WordHostPlatform = wordHostPlatform(),
   pollMs = WORD_COMMENT_WEB_POLL_MS,
-): Promise<{ rows: WordCommentRevertResult[]; settled: Promise<void> }> {
+): Promise<{
+  rows: WordCommentRevertResult[];
+  settled: Promise<void>;
+  timedOut: boolean;
+}> {
   const outcome = new Map<number, WordCommentRevertStatus>();
   const acted: { i: number; step: WordCommentRevertStep }[] = [];
   const threadOf = (step: WordCommentRevertStep) =>
@@ -1136,7 +1170,8 @@ export async function revertWordCommentRows(
         steps.map(({ step }) => threadOf(step)),
       );
       const queued: (() => void)[] = [];
-      for (const { i, step } of steps) {
+      // Last first: a reply comes off its thread before the thread is resolved again (F-18).
+      for (const { i, step } of [...steps].reverse()) {
         const entry = found.get(threadOf(step));
         if (!entry?.ok) {
           outcome.set(i, "stale");
@@ -1199,40 +1234,43 @@ export async function revertWordCommentRows(
     return {
       rows: steps.map(({ i }) => ({ i, status: outcome.get(i)! })),
       settled: guarded.settled,
+      timedOut: guarded.outcome === "timeout",
     };
   }
   if (acted.length) {
-    const back = await readBack(
+    const judged = await judgeFresh(
       host,
       acted.map(({ step }) => threadOf(step)),
       pollMs,
+      (back): WordCommentRevertResult[] =>
+        acted.map(({ i, step }) => {
+          if (!back) return { i, status: "unverified" };
+          const live = back.get(threadOf(step));
+          const done =
+            step.kind === "delete-comment"
+              ? !live
+              : step.kind === "delete-reply"
+                ? !!live &&
+                  !live.replies.some((reply) => reply.id === step.replyId)
+                : step.kind === "set-resolved"
+                  ? live?.resolved === step.to
+                  : !!live &&
+                    sameCommentText(
+                      step.replyId
+                        ? (live.replies.find(
+                            (reply) => reply.id === step.replyId,
+                          )?.content ?? "")
+                        : live.content,
+                      step.previous,
+                    );
+          return { i, status: done ? "reverted" : "failed" };
+        }),
     );
-    for (const { i, step } of acted) {
-      const live = back?.get(threadOf(step));
-      if (!back) {
-        outcome.set(i, "unverified");
-        continue;
-      }
-      const done =
-        step.kind === "delete-comment"
-          ? !live
-          : step.kind === "delete-reply"
-            ? !!live && !live.replies.some((reply) => reply.id === step.replyId)
-            : step.kind === "set-resolved"
-              ? live?.resolved === step.to
-              : !!live &&
-                sameCommentText(
-                  step.replyId
-                    ? (live.replies.find((reply) => reply.id === step.replyId)
-                        ?.content ?? "")
-                    : live.content,
-                  step.previous,
-                );
-      outcome.set(i, done ? "reverted" : "failed");
-    }
+    for (const row of judged) outcome.set(row.i, row.status);
   }
   return {
     rows: steps.map(({ i }) => ({ i, status: outcome.get(i)! })),
     settled: SETTLED,
+    timedOut: false,
   };
 }

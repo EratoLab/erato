@@ -140,11 +140,17 @@ async function draftOf(changes: unknown[], draftId = "call-1") {
     host: PLATFORM[flavour],
     threads: threads(),
     selection: null,
-    captured: new Map(),
+    captured: new Map(
+      story!.entries.map((e, i) => [
+        i + 1,
+        { uniqueLocalId: e.id, text: e.text },
+      ]),
+    ),
     story,
     label: "Erato AI:",
     authorMode: "user",
     rowCap: () => 50,
+    legacy: false,
   });
   if (!validated.ok) throw new Error(JSON.stringify(validated.errors));
   return validated.draft;
@@ -260,7 +266,12 @@ describe.each(HOSTS)("adds on %s", (which) => {
       { op: "add", anchor: { para: 6, quote: "zeta" }, text: "lands first" },
     ]);
     const { rows } = await run(draft);
-    expect(rows.map((r) => r.status)).toEqual(["failed", "failed", "applied"]);
+    // Desktop proves the later rows absent (F-17); the web may still show them, so they stay open.
+    expect(rows.map((r) => r.status)).toEqual(
+      which === "web"
+        ? ["unverified", "unverified", "applied"]
+        : ["failed", "failed", "applied"],
+    );
     expect(commentOn("Erato AI: lands first")).toHaveLength(1);
     expect(
       host.calls().filter((c) => c.endsWith("insertComment")),

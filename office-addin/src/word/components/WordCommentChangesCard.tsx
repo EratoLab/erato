@@ -534,7 +534,8 @@ export function WordCommentChangesCard({
         recordOf(state);
         return false;
       }
-      if (isGenerating || !beginOperation()) return false;
+      if (isGenerating || !offered || !beginOperation()) return false;
+      let held = false;
       updateReview(batchKey, { status: "applying", capture: live.capture });
       try {
         const run = await entry.execute({
@@ -547,9 +548,23 @@ export function WordCommentChangesCard({
           },
         });
         const result = run.commentResult;
-        if (result?.timedOut) holdOperationUntil(result.settled, batchKey);
+        if (result?.timedOut) {
+          // Word may still be writing: every card waits until the run has really ended.
+          holdOperationUntil(result.settled, batchKey);
+          held = true;
+        }
+        if (!result) {
+          const state = {
+            ...cardState,
+            consent: "expired" as const,
+            consentKind,
+          };
+          updateReview(batchKey, { status: "no-capture", comments: state });
+          recordOf(state);
+          return false;
+        }
         const touched = new Map(
-          (result?.rows ?? [])
+          result.rows
             .filter((row) => rows.includes(row.i))
             .map((row) => [row.i, row]),
         );
@@ -571,7 +586,7 @@ export function WordCommentChangesCard({
           consentKind: cardState.consentKind ?? consentKind,
         };
         updateReview(batchKey, {
-          status: result ? "done" : "error",
+          status: "done",
           comments: state,
           automatic: consentKind === "standing_grant",
         });
@@ -581,7 +596,7 @@ export function WordCommentChangesCard({
         updateReview(batchKey, { status: "write-failed" });
         return false;
       } finally {
-        endOperation();
+        if (!held) endOperation();
       }
     },
     [
@@ -594,6 +609,7 @@ export function WordCommentChangesCard({
       batchKey,
       recordOf,
       isGenerating,
+      offered,
       beginOperation,
       entry,
       content,
@@ -702,12 +718,17 @@ export function WordCommentChangesCard({
   );
   const handleRevert = async () => {
     if (!revertable.length || cardState.revert || !beginOperation()) return;
+    let held = false;
     setRevertConfirmation(false);
     updateReview(batchKey, { status: "reverting" });
     try {
       const result = await revertWordCommentRows(
         revertable.map((row) => ({ i: row.i, step: row.revert! })),
       );
+      if (result.timedOut) {
+        holdOperationUntil(result.settled, batchKey);
+        held = true;
+      }
       updateReview(batchKey, {
         status: result.rows.some((row) => row.status === "reverted")
           ? "reverted"
@@ -715,7 +736,7 @@ export function WordCommentChangesCard({
         comments: { ...cardState, revert: result.rows },
       });
     } finally {
-      endOperation();
+      if (!held) endOperation();
     }
   };
 
@@ -728,6 +749,8 @@ export function WordCommentChangesCard({
         })}
       />
     );
+  // Only this message's accepted submission is its card; a fence naming another draft is not.
+  if (artifact?.submittedCard?.toolCallId !== content) return null;
   if (!draft)
     return (
       <Alert type="info" role="status">
@@ -761,10 +784,17 @@ export function WordCommentChangesCard({
             other: "Apply # changes",
           }),
         });
-  const failedRows = cardState.rows
-    .filter((row) => row.status === "failed")
-    .map((row) => row.i);
-  const authorRows = cardState.rows
+  // A row whose pair ran earlier cannot be tried alone: its pair's state has changed.
+  const failedRows = offered
+    ? cardState.rows
+        .filter(
+          (row) =>
+            row.status === "failed" &&
+            draft.rows.find((r) => r.i === row.i)?.dependsOn === undefined,
+        )
+        .map((row) => row.i)
+    : [];
+  const authorRows = (offered ? cardState.rows : [])
     .filter(
       (row) =>
         row.code === "AUTHOR_MODE_UNAVAILABLE" && row.status === "refused",

@@ -383,16 +383,37 @@ describe("add anchors", () => {
     expect(!result.ok && result.errors[0].message).toContain('{"para": 1}');
   });
 
+  const capturedAll = (story: typeof STORY) =>
+    new Map(
+      story.entries.map((entry, i) => [
+        i + 1,
+        { uniqueLocalId: entry.id, text: entry.text },
+      ]),
+    );
+
+  it("takes a whole paragraph only where the document read captured it", () => {
+    expect(codes(add({ para: 4 }))).toEqual(["position-unknown"]);
+    expect(codes(add({ para: 2, through: 4 }))).toEqual(["position-unknown"]);
+  });
+
   it("takes a whole paragraph, and refuses an empty one", () => {
-    const result = add({ para: 4 });
+    const result = add({ para: 4 }, { captured: capturedAll(STORY) });
     expect(result.ok && result.draft.rows[0].add).toMatchObject({
       kind: "paragraph",
       start: 0,
       end: 21,
     });
-    expect(codes(add({ para: 1 }, { story: storyFacts(["", "x"]) }))).toEqual([
-      "unsupported-anchor",
-    ]);
+    expect(
+      codes(
+        add(
+          { para: 1 },
+          {
+            story: storyFacts(["", "x"]),
+            captured: capturedAll(storyFacts(["", "x"])),
+          },
+        ),
+      ),
+    ).toEqual(["unsupported-anchor"]);
   });
 
   it("spans paragraphs from the start of the quote to its end", () => {
@@ -416,9 +437,11 @@ describe("add anchors", () => {
       { text: "Cell one.", nesting: 1 },
       { text: "Cell two.", nesting: 1 },
     ]);
-    expect(codes(add({ para: 1, through: 2 }, { story }))).toEqual([
-      "unsupported-anchor",
-    ]);
+    expect(
+      codes(
+        add({ para: 1, through: 2 }, { story, captured: capturedAll(story) }),
+      ),
+    ).toEqual(["unsupported-anchor"]);
     const one = add({ para: 1, quote: "one" }, { story });
     expect(one.ok && one.draft.rows[0].add?.inTable).toBe(true);
   });

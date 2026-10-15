@@ -1557,6 +1557,13 @@ impl AppConfig {
                 }
             }
             for (action, scope) in &action_facet.grant_scope {
+                // Only the Word add-in's cards honour a scope; elsewhere a stored grant would still apply.
+                if !action.starts_with("word.") {
+                    panic!(
+                        "Action facet '{}' sets grant_scope for '{}'; grant_scope applies to Word add-in actions (word.*) only.",
+                        id, action
+                    );
+                }
                 if !action_facet.client_actions.contains(action) {
                     panic!(
                         "Action facet '{}' sets grant_scope for '{}', which is not in client_actions.",

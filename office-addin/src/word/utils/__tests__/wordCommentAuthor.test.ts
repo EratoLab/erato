@@ -106,6 +106,8 @@ const DOC: MockSelectionDocument = {
       author: "Maya Krüger",
       email: "maya@contoso.test",
       content: "Theirs.",
+      resolved: true,
+      replies: [{ author: "Jonas Weber", content: "Their reply." }],
     },
   },
 };
@@ -127,6 +129,7 @@ async function addDraft(changes: unknown[]) {
     label: "Erato AI:",
     authorMode: "assistant",
     rowCap: () => 50,
+    legacy: false,
   });
   if (!validated.ok) throw new Error(JSON.stringify(validated.errors));
   return validated.draft;
@@ -232,14 +235,14 @@ describe.each(["pc", "mac"] as const)("AI-author mode on %s", (which) => {
       pollMs: 0,
     });
     const start = host.syncCount();
-    // story (2 syncs), checks (1), then the insertOoxml sync.
+    // story (2 syncs), checks (1), the paragraph's threads and replies (2), then the insertOoxml sync.
     const stop = host.beforeSync((index) => {
-      if (index === start + 4)
+      if (index === start + 6)
         throw Object.assign(new Error("protected"), {
           code: "GeneralException",
         });
     });
-    const outcomes = await reattributeWordComments({
+    const { outcomes } = await reattributeWordComments({
       draft,
       rows: [{ row: draft.rows[0], commentId: user.rows[0].commentId! }],
       authorName: AUTHOR,
