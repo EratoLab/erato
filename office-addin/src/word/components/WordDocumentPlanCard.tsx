@@ -25,6 +25,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { WordImportConfirm, WordImportRefusal } from "./WordImportConfirm";
 import {
+  WordPlanCommentConfirm,
+  WordPlanCommentRemovals,
+} from "./WordPlanCommentRemovals";
+import {
   isAutomaticWordRun,
   WordApplyButton,
   wordBlockedReasonText,
@@ -83,6 +87,14 @@ import {
 } from "../utils/wordInPlaceRoute";
 import { wordInPlaceAvailability } from "../utils/wordInPlaceSwitch";
 import {
+  wordCommentThreadsCopiedText,
+  wordCommentThreadsCopyFailedText,
+  wordCommentThreadsCopyText,
+  wordKeepCommentedPassagesNote,
+  wordKeepCommentedPassagesText,
+} from "../utils/wordPlanCommentMessages";
+import { wordPlanCommentConsequences } from "../utils/wordPlanComments";
+import {
   capturedWordAnchor,
   showWordParagraphs,
   showWordReviewLocation,
@@ -106,7 +118,10 @@ import type {
 } from "../utils/wordClientActions";
 import type { WordCoauthoringState } from "../utils/wordCoauthoring";
 import type { WordInPlaceBackup } from "../utils/wordDocumentPackage";
-import type { WordDocumentPlan } from "@erato/frontend/word-review";
+import type {
+  WordDocumentPlan,
+  WordPlanCommentThread,
+} from "@erato/frontend/word-review";
 
 function coauthorNotice(
   state: WordCoauthoringState | undefined,
@@ -176,7 +191,7 @@ export function WordDocumentPlanCard({
   const idle = review.status === "idle";
   const applying = review.status === "applying";
   const issue = plan ? validateWordDocumentPlan(plan, snapshot) : "invalid";
-  const enforcedAskActions = useMemo(
+  const configuredAskActions = useMemo(
     () => artifact?.alwaysAskClientActions ?? [],
     [artifact],
   );
@@ -189,7 +204,7 @@ export function WordDocumentPlanCard({
       facetId,
       action: entry.action,
       decisions,
-      enforcedAskActions,
+      enforcedAskActions: configuredAskActions,
     });
   const ready =
     idle &&
@@ -206,8 +221,9 @@ export function WordDocumentPlanCard({
   const routing = useMemo(() => {
     if (!routable || !plan || !snapshot) return undefined;
     try {
+      const xml = compileWordDocumentPlan(plan, snapshot);
       const compiled = captureWordAuthoringSnapshot(
-        compileWordDocumentPlan(plan, snapshot),
+        xml,
         snapshot.identity,
         "Off",
         snapshot.fullDocument,
@@ -227,12 +243,27 @@ export function WordDocumentPlanCard({
         route: route.route,
         text: wordRoutePreviewText(route, wordPlanPassages(plan)),
         write: wordWholeDocumentWrite(route, plan, snapshot, wordApplyPolicy()),
+        comments: wordPlanCommentConsequences(snapshot, xml, compiled),
       };
     } catch {
       return undefined;
     }
   }, [routable, plan, snapshot, unavailable]);
   const routePreview = routing?.text;
+  const commentPlan = routing?.comments;
+  const removals = commentPlan?.removals ?? [];
+  const needsCommentTick = offered && removals.length > 0;
+  // The tick holds for the compiled plan it was given for, so a changed plan asks again.
+  const [commentsTicked, setCommentsTicked] = useState<string>();
+  const commentsConfirmed =
+    !!commentPlan && commentsTicked === commentPlan.fingerprint;
+  const enforcedAskActions = useMemo(
+    () =>
+      needsCommentTick
+        ? [...configuredAskActions, entry.action]
+        : configuredAskActions,
+    [needsCommentTick, configuredAskActions, entry.action],
+  );
   const block = review.wholeDocumentBlock;
   const wholeDocument = block
     ? wordWholeDocumentBlockWrite(block)
@@ -263,9 +294,16 @@ export function WordDocumentPlanCard({
     );
   }, [checkCoauthors]);
   const run = useCallback(
-    async (importConfirmed: boolean) => {
-      // Always allow and auto-prompt reach this too; only the card's own tick confirms.
-      if (!ready || !capture || refusal || (confirmImport && !importConfirmed))
+    async (importConfirmed: boolean, commentRemovalsConfirmed?: string) => {
+      // Always allow and auto-prompt reach this too; only the card's own ticks confirm.
+      if (
+        !ready ||
+        !capture ||
+        refusal ||
+        (confirmImport && !importConfirmed) ||
+        (needsCommentTick &&
+          commentRemovalsConfirmed !== commentPlan?.fingerprint)
+      )
         return false;
       if (checkCoauthors) {
         // Someone who joined since the card was read is shown before anything is replaced.
@@ -299,8 +337,17 @@ export function WordDocumentPlanCard({
               });
           },
           importConfirmed,
+          commentRemovalsConfirmed,
         });
         const result = outcome.documentPlanResult;
+        if (
+          result?.status === "blocked" &&
+          result.diagnostic?.reason === "comment-removals-need-confirmation"
+        ) {
+          setCommentsTicked(undefined);
+          host.updateReview(key, { applyStage: undefined, status: "idle" });
+          return false;
+        }
         if (
           result?.status === "blocked" &&
           isWordWholeDocumentBlock(result.diagnostic)
@@ -367,6 +414,8 @@ export function WordDocumentPlanCard({
       capture,
       refusal,
       confirmImport,
+      needsCommentTick,
+      commentPlan,
       checkCoauthors,
       coauthors,
       host,
@@ -562,15 +611,26 @@ export function WordDocumentPlanCard({
       failed();
     }
   };
-  const askAgainInPlace = () => {
+  const askAgainWith = (instruction: string) => {
     if (confirmCard) denyCard(confirmCard);
     const message = messageId ? messages[messageId] : undefined;
     const request = message?.previous_message_id
       ? extractTextFromContent(messages[message.previous_message_id]?.content)
       : "";
-    host.restoreRequest(
-      [request, wordInPlaceRequestText()].filter(Boolean).join("\n\n"),
+    host.restoreRequest([request, instruction].filter(Boolean).join("\n\n"));
+  };
+  const keepCommentedPassages = () => {
+    askAgainWith(wordKeepCommentedPassagesText(removals));
+    setCopyNote(wordKeepCommentedPassagesNote());
+  };
+  const copyThreads = (threads: readonly WordPlanCommentThread[]) =>
+    copyText(
+      wordCommentThreadsCopyText(threads),
+      wordCommentThreadsCopiedText(),
+      wordCommentThreadsCopyFailedText(),
     );
+  const askAgainInPlace = () => {
+    askAgainWith(wordInPlaceRequestText());
     setCopyNote(
       t({
         id: "officeAddin.word.importConfirm.askAgainNote",
@@ -741,17 +801,61 @@ export function WordDocumentPlanCard({
             }
             web={web}
             notice={coauthorsNotice}
+            comments={
+              needsCommentTick && (
+                <WordPlanCommentRemovals
+                  removals={removals}
+                  confirmed={commentsConfirmed}
+                  disabled={applying}
+                  onConfirmedChange={(checked) =>
+                    setCommentsTicked(
+                      checked ? commentPlan?.fingerprint : undefined,
+                    )
+                  }
+                  onKeepPassages={keepCommentedPassages}
+                  onCopyThreads={() =>
+                    copyThreads(removals.map((r) => r.thread))
+                  }
+                />
+              )
+            }
+            commentsConfirmed={!needsCommentTick || commentsConfirmed}
             applyLabel={applyLabel}
             canApply={ready && !host.operationInProgress}
             applying={applying}
             applyStage={review.applyStage}
             onApply={() =>
-              void run(true).then(() => {
+              void run(
+                true,
+                needsCommentTick ? commentPlan?.fingerprint : undefined,
+              ).then(() => {
                 // The tick is this plan's consent, so a pending consent card is settled with it.
                 if (confirmCard) denyCard(confirmCard);
               })
             }
             onAskAgain={askAgainInPlace}
+            onCancel={deny}
+          />
+        ) : needsCommentTick && (idle || applying) ? (
+          <WordPlanCommentConfirm
+            removals={removals}
+            confirmed={commentsConfirmed}
+            onConfirmedChange={(checked) =>
+              setCommentsTicked(checked ? commentPlan?.fingerprint : undefined)
+            }
+            routeText={routePreview}
+            notice={coauthorsNotice}
+            applyLabel={applyLabel}
+            canApply={ready && !host.operationInProgress}
+            applying={applying}
+            applyStage={review.applyStage}
+            onApply={() =>
+              void run(false, commentPlan?.fingerprint).then(() => {
+                if (confirmCard) denyCard(confirmCard);
+              })
+            }
+            onKeepPassages={keepCommentedPassages}
+            onCopyThreads={() => copyThreads(removals.map((r) => r.thread))}
             onCancel={deny}
           />
         ) : (

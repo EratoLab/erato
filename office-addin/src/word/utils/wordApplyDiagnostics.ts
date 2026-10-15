@@ -85,6 +85,8 @@ export interface WordDiagnosticDetails {
   readScope?: WordReadScope["kind"];
   /** Differences the checks left to WORD_HOUSEKEEPING, by rule; counts only. */
   housekeeping?: WordHousekeepingCounts;
+  /** Comment threads the plan deletes, which the user has not confirmed. */
+  commentThreads?: number;
   error?: string;
 }
 
@@ -323,6 +325,9 @@ export function renderWordDiagnosticReport(
       : []),
     ...(isCount(details?.inPlaceOps)
       ? [`In-place changes: ${details.inPlaceOps}`]
+      : []),
+    ...(isCount(details?.commentThreads)
+      ? [`Comment threads to delete: ${details.commentThreads}`]
       : []),
     ...(details?.paragraphs &&
     isCount(details.paragraphs.predicted) &&

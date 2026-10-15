@@ -70,6 +70,8 @@ export interface WordClientActionContext {
   onStage?: (stage: WordApplyStage) => void;
   /** Document plans: the user confirmed a whole-document write where the host's policy asks first. */
   importConfirmed?: boolean;
+  /** Document plans: the compiled plan's fingerprint for which the user ticked its comment removals. */
+  commentRemovalsConfirmed?: string;
   /** Comment changes: the rows the user kept and the author mode the card offered. */
   comments?: Omit<WordCommentExecuteOptions, "host">;
 }
@@ -121,6 +123,7 @@ export const WORD_CLIENT_ACTIONS: ReadonlyMap<
         onBeforeDocumentWrite,
         onStage,
         importConfirmed,
+        commentRemovalsConfirmed,
       }) => {
         const result = await applyWordDocumentPlan(
           fenceContent,
@@ -128,7 +131,7 @@ export const WORD_CLIENT_ACTIONS: ReadonlyMap<
           messageId,
           onBeforeDocumentWrite,
           onStage,
-          { importConfirmed },
+          { importConfirmed, commentRemovalsConfirmed },
         );
         return {
           ok: result.status === "applied",

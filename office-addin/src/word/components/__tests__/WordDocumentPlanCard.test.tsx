@@ -38,6 +38,11 @@ import {
   readySnapshot,
   wordSerializationNoise,
 } from "../../../test/mocks/word/authoringFixtures";
+import {
+  CHAPTER_COMMENTS,
+  chapterCommentsBody,
+  withComments,
+} from "../../../test/mocks/word/commentFixtures";
 import { storedWordReads } from "../../../test/mocks/word/historyReads";
 import {
   editWordPackage,
@@ -52,12 +57,19 @@ import {
 import { WordWriteProvider } from "../../providers/WordWriteProvider";
 import { buildWordArtifact } from "../../utils/buildWordArtifact";
 import { WORD_CLIENT_ACTIONS } from "../../utils/wordClientActions";
-import { wordPackageFingerprint } from "../../utils/wordDocumentPackage";
+import {
+  captureWordDocumentPackage,
+  wordPackageFingerprint,
+} from "../../utils/wordDocumentPackage";
 import { WordDocumentReadSession } from "../../utils/wordDocumentReadTool";
 import {
   createWordDocumentSubmissionExecutor,
   WORD_SUBMIT_PLAN_TOOL,
 } from "../../utils/wordDocumentSubmission";
+import {
+  captureWordAuthoringSnapshot,
+  compileWordDocumentPlan,
+} from "../../utils/wordDocumentXml";
 import {
   ALL_WORD_IN_PLACE_CAPABILITIES,
   setWordInPlaceCapabilitiesForTests,
@@ -68,6 +80,7 @@ import {
   latchWordInPlace,
   resetWordInPlaceLatchForTests,
 } from "../../utils/wordInPlaceSwitch";
+import { wordPlanCommentConsequences } from "../../utils/wordPlanComments";
 import { WordHostCardRenderer } from "../WordHostCardRenderer";
 
 import type { WordOoxmlHostOptions } from "../../../test/mocks/word/ooxmlHost";
@@ -2402,5 +2415,173 @@ describe("co-author warning on Word for Windows", () => {
     expect(coauthoringRead).not.toHaveBeenCalled();
     expect(screen.queryByTestId("word-plan-coauthors")).toBeNull();
     expect(confirmBox()).not.toBeChecked();
+  });
+});
+
+describe("comment threads a plan deletes", () => {
+  const CHAPTERS_WITH_COMMENTS = () =>
+    withComments(packageXml(chapterCommentsBody()), CHAPTER_COMMENTS);
+  /** Replaces chapter 3's four body paragraphs, two of which hold comment threads. */
+  const shortenChapter3 = (s: WordAuthoringSnapshot): WordDocumentPlan => {
+    const refs = s.blocks.map((b) => b.ref);
+    return {
+      version: 1,
+      snapshot: s.token,
+      readToken: "read-proof",
+      scope: "document",
+      entries: [
+        { kind: "keep", source: refs.slice(0, 5) },
+        {
+          kind: "replace",
+          source: refs.slice(5, 9),
+          blocks: [
+            {
+              id: "short",
+              type: "paragraph",
+              text: "Chapter three, in short.",
+            },
+          ],
+        },
+        { kind: "keep", source: refs.slice(9) },
+      ],
+      deleted: [],
+    };
+  };
+  const tickBox = () =>
+    screen.getByRole("checkbox", { name: "Also delete 2 comment threads" });
+  const threadRows = () =>
+    screen
+      .getAllByTestId("word-plan-comment-thread")
+      .map((row) => row.textContent);
+  const fingerprintOf = (s: WordAuthoringSnapshot) => {
+    const xml = compileWordDocumentPlan(
+      normalizeWordDocumentPlan(shortenChapter3(s), s),
+      s,
+    );
+    return wordPlanCommentConsequences(
+      s,
+      xml,
+      captureWordAuthoringSnapshot(xml, s.identity, "Off", true, "verify"),
+    ).fingerprint;
+  };
+  const liveComments = async () =>
+    ((await captureWordDocumentPackage()).ooxml.match(/<w:comment /g) ?? [])
+      .length;
+
+  it("lists each thread once and applies only with the unticked box ticked", async () => {
+    const execute = spyOnApply();
+    const { word, snapshot } = await mountRealistic(shortenChapter3, {
+      xml: CHAPTERS_WITH_COMMENTS(),
+    });
+    expect(
+      screen.getByText(
+        "Removing this text also deletes 2 comment threads, with their replies:",
+      ),
+    ).toBeVisible();
+    expect(threadRows()).toEqual([
+      "Lee Chen · Resolved · 1 reply“KPI”",
+      "Daniel Person · Open · No replies“second pilot”",
+    ]);
+    expect(tickBox()).not.toBeChecked();
+    expect(applyButton()).toBeDisabled();
+    fireEvent.click(applyButton());
+    expect(execute).not.toHaveBeenCalled();
+
+    fireEvent.click(tickBox());
+    expect(applyButton()).toBeEnabled();
+    apply();
+    await screen.findByText(/^Applied: /);
+    expect(execute.mock.calls).toEqual([
+      [
+        expect.objectContaining({
+          commentRemovalsConfirmed: fingerprintOf(snapshot),
+        }),
+      ],
+    ]);
+    expect(word.insert).toHaveBeenCalledOnce();
+    expect(await liveComments()).toBe(3);
+  });
+
+  it("asks for the tick even under Always allow, and never runs on its own", async () => {
+    autoPrompt("always");
+    const execute = spyOnApply();
+    const { word } = await mountRealistic(shortenChapter3, {
+      xml: CHAPTERS_WITH_COMMENTS(),
+    });
+    await act(async () => {});
+    expect(execute).not.toHaveBeenCalled();
+    expect(word.insert).not.toHaveBeenCalled();
+    expect(tickBox()).not.toBeChecked();
+    expect(screen.queryByRole("button", { name: "Always allow" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Allow once" })).toBeNull();
+    expect(mock.pendingConfirmations.size).toBe(1);
+
+    fireEvent.click(tickBox());
+    apply();
+    await screen.findByText(/^Applied: /);
+    expect(execute).toHaveBeenCalledOnce();
+    expect(
+      screen.queryByText("Automatic action under your Always allow setting."),
+    ).toBeNull();
+    expect(mock.pendingConfirmations.size).toBe(0);
+    expect(await liveComments()).toBe(3);
+  });
+
+  it("still runs a plan that deletes no comment thread under Always allow", async () => {
+    autoPrompt("always");
+    const { word } = await mountRealistic(
+      (s) => {
+        const plan = shortenChapter3(s);
+        const refs = s.blocks.map((b) => b.ref);
+        plan.entries = [
+          { kind: "keep", source: refs.slice(0, 10) },
+          {
+            kind: "replace",
+            source: [refs[10]],
+            blocks: [{ id: "end", type: "paragraph", text: "Fin." }],
+          },
+        ];
+        return plan;
+      },
+      { xml: CHAPTERS_WITH_COMMENTS() },
+    );
+    await screen.findByText(/^Applied: /);
+    expect(screen.queryByTestId("word-plan-comment-removals")).toBeNull();
+    expect(word.insert).not.toHaveBeenCalled();
+    expect(await liveComments()).toBe(6);
+  });
+
+  it("puts the request back asking to keep the commented passages", async () => {
+    autoPrompt();
+    mock.request = "Shorten chapter 3.";
+    const { word } = await mountRealistic(shortenChapter3, {
+      xml: CHAPTERS_WITH_COMMENTS(),
+    });
+    expect(mock.pendingConfirmations.size).toBe(1);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Keep commented passages" }),
+    );
+    expect(mock.restoreRequest).toHaveBeenCalledWith(
+      "Shorten chapter 3.\n\nKeep the passages these comments are attached to, so their comment threads stay: “KPI”, “second pilot”.",
+    );
+    expect(
+      screen.getByText(
+        "Your request is back in the message box, asking to keep the commented passages. Review it, then send.",
+      ),
+    ).toBeVisible();
+    expect(mock.pendingConfirmations.size).toBe(0);
+    expect(word.insert).not.toHaveBeenCalled();
+  });
+
+  it("copies the threads, replies included, before anything is deleted", async () => {
+    const writeText = vi.fn(async (_text: string) => {});
+    vi.stubGlobal("navigator", { ...navigator, clipboard: { writeText } });
+    await mountRealistic(shortenChapter3, { xml: CHAPTERS_WITH_COMMENTS() });
+    fireEvent.click(screen.getByRole("button", { name: "Copy these threads" }));
+    await screen.findByText("Comment threads copied.");
+    expect(writeText.mock.calls[0][0]).toBe(
+      "Lee Chen (Resolved) on “KPI”:\nSpell out the acronym.\n  Reply from Maya Krüger: Done.\n\nDaniel Person (Open) on “second pilot”:\nShorten this?",
+    );
+    expect(tickBox()).not.toBeChecked();
   });
 });

@@ -110,6 +110,12 @@ export function wordDocumentDiagnosticText(
       diagnostic.reason === "import-disabled")
   )
     return wordRevertNeedsImportText();
+  if (diagnostic.reason === "comment-removals-need-confirmation")
+    return t({
+      id: "officeAddin.word.authoring.commentRemovalsNeedConfirmation",
+      message:
+        "This change deletes comment threads, which needs your confirmation first. Nothing was applied.",
+    });
   if (diagnostic.reason === "import-needs-confirmation")
     return t({
       id: "officeAddin.word.authoring.importNeedsConfirmation",

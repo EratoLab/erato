@@ -2412,6 +2412,11 @@ msgstr "La comprobación del contexto del modelo falló. Vuelve a enviar tu soli
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.commentRemovalsNeedConfirmation"
+msgstr "Este cambio elimina hilos de comentarios y primero necesita su confirmación. No se aplicó nada."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
 msgid "officeAddin.word.authoring.compileFailed"
 msgstr "No se pudo preparar la estructura de Word propuesta. No se realizó ningún cambio. Solicita una nueva reescritura."
 
@@ -3956,6 +3961,104 @@ msgstr "Este cambio requiere reescribir todo el documento, algo que Erato no pue
 #~ msgstr "Reemplazar documento"
 
 #. js-lingui-explicit-id
+#: src/word/utils/wordPlanCommentMessages.ts
+msgid "officeAddin.word.planComments.copied"
+msgstr "Hilos de comentarios copiados."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordPlanCommentRemovals.tsx
+msgid "officeAddin.word.planComments.copy"
+msgstr "Copiar estos hilos"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordPlanCommentMessages.ts
+msgid "officeAddin.word.planComments.copyFailed"
+msgstr "No se pudieron copiar los hilos de comentarios."
+
+#. js-lingui-explicit-id
+#. placeholder {0}: thread.author
+#. placeholder {1}: wordCommentThreadStatusText(thread.resolved)
+#. placeholder {2}: thread.quote
+#: src/word/utils/wordPlanCommentMessages.ts
+msgid "officeAddin.word.planComments.copyHead"
+msgstr "{0} ({1}) sobre «{2}»:"
+
+#. js-lingui-explicit-id
+#. placeholder {0}: thread.author
+#. placeholder {1}: wordCommentThreadStatusText(thread.resolved)
+#: src/word/utils/wordPlanCommentMessages.ts
+msgid "officeAddin.word.planComments.copyHeadPoint"
+msgstr "{0} ({1}):"
+
+#. js-lingui-explicit-id
+#. placeholder {0}: reply.author
+#. placeholder {1}: reply.text
+#: src/word/utils/wordPlanCommentMessages.ts
+msgid "officeAddin.word.planComments.copyReply"
+msgstr "  Respuesta de {0}: {1}"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordPlanCommentMessages.ts
+msgid "officeAddin.word.planComments.intro"
+msgstr "{count, plural, one {Al quitar este texto también se elimina # hilo de comentarios, con sus respuestas:} other {Al quitar este texto también se eliminan # hilos de comentarios, con sus respuestas:}}"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordPlanCommentRemovals.tsx
+msgid "officeAddin.word.planComments.keep"
+msgstr "Conservar los pasajes comentados"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordPlanCommentMessages.ts
+msgid "officeAddin.word.planComments.keepNote"
+msgstr "Tu solicitud vuelve a estar en el cuadro de mensaje, pidiendo conservar los pasajes comentados. Revísala y envíala."
+
+#. js-lingui-explicit-id
+#. placeholder {0}: thread.author
+#: src/word/utils/wordPlanCommentMessages.ts
+msgid "officeAddin.word.planComments.keepPoint"
+msgstr "el punto comentado por {0}"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordPlanCommentMessages.ts
+msgid "officeAddin.word.planComments.keepRequest"
+msgstr "Conserva los pasajes a los que están vinculados estos comentarios, para que sus hilos se mantengan: {passages}."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordPlanCommentRemovals.tsx
+msgid "officeAddin.word.planComments.label"
+msgstr "Hilos de comentarios que elimina este cambio"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordPlanCommentMessages.ts
+msgid "officeAddin.word.planComments.open"
+msgstr "Abierto"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordPlanCommentMessages.ts
+msgid "officeAddin.word.planComments.point"
+msgstr "Comentario en un único punto"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordPlanCommentMessages.ts
+msgid "officeAddin.word.planComments.rebuild"
+msgstr "{count, plural, one {Reconstruye # hilo de comentarios (las fechas y el estado «resuelto» pueden cambiar).} other {Reconstruye # hilos de comentarios (las fechas y el estado «resuelto» pueden cambiar).}}"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordPlanCommentMessages.ts
+msgid "officeAddin.word.planComments.replies"
+msgstr "{count, plural, =0 {Sin respuestas} one {# respuesta} other {# respuestas}}"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordPlanCommentMessages.ts
+msgid "officeAddin.word.planComments.resolved"
+msgstr "Resuelto"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordPlanCommentMessages.ts
+msgid "officeAddin.word.planComments.tick"
+msgstr "{count, plural, one {Eliminar también # hilo de comentarios} other {Eliminar también # hilos de comentarios}}"
+
+#. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts
 #~ msgid "officeAddin.word.planGroup.removedCount"
 #~ msgstr "{0, plural, one {# eliminado} other {# eliminados}}"
@@ -4461,6 +4564,7 @@ msgstr "Se aplica cada cambio propuesto, incluidas las filas ocultas por filtros
 #. js-lingui-explicit-id
 #: src/word/components/WordCommentChangesCard.tsx
 #: src/word/components/WordImportConfirm.tsx
+#: src/word/components/WordPlanCommentRemovals.tsx
 #: src/word/components/WordReviewCardParts.tsx
 msgid "officeAddin.word.review.cancel"
 msgstr "Cancelar"

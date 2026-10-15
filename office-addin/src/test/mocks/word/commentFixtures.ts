@@ -179,3 +179,103 @@ export function withComments(
     `${parts.join("")}</pkg:package>`,
   );
 }
+
+const heading = (text: string) =>
+  `<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr>${run(text)}</w:p>`;
+const plain = (text: string) => `<w:p>${run(text)}</w:p>`;
+
+/** The signed-in user in these fixtures. */
+export const FIXTURE_ME = "Daniel Person";
+
+/**
+ * Four chapters. Chapter 2 holds an open thread with two replies by two authors; chapter 3 holds a
+ * resolved thread with a reply and an open thread by the user, which "shorten chapter 3" removes.
+ */
+export const CHAPTER_COMMENTS: readonly FixtureComment[] = [
+  {
+    id: "0",
+    author: "Maya Krüger",
+    initials: "MK",
+    date: "2026-09-08T10:15:30Z",
+    dateUtc: "2026-09-08T08:15:30Z",
+    text: "Is this figure current?",
+    paraId: "1A000001",
+    durableId: "6D5C0001",
+  },
+  {
+    id: "1",
+    author: FIXTURE_ME,
+    initials: "DP",
+    date: "2026-09-08T11:00:05Z",
+    dateUtc: "2026-09-08T09:00:05Z",
+    text: "Yes, from the September report.",
+    paraId: "1A000002",
+    durableId: "6D5C0002",
+    parent: "0",
+  },
+  {
+    id: "2",
+    author: "Lee Chen",
+    initials: "LC",
+    date: "2026-09-09T07:30:45Z",
+    dateUtc: "2026-09-09T05:30:45Z",
+    text: "Then cite it.",
+    paraId: "1A000003",
+    durableId: "6D5C0003",
+    parent: "0",
+  },
+  {
+    id: "3",
+    author: "Lee Chen",
+    initials: "LC",
+    date: "2026-09-10T09:12:00Z",
+    dateUtc: "2026-09-10T07:12:00Z",
+    text: "Spell out the acronym.",
+    paraId: "1A000004",
+    durableId: "6D5C0004",
+    done: true,
+  },
+  {
+    id: "4",
+    author: "Maya Krüger",
+    initials: "MK",
+    date: "2026-09-10T10:00:00Z",
+    dateUtc: "2026-09-10T08:00:00Z",
+    text: "Done.",
+    paraId: "1A000005",
+    durableId: "6D5C0005",
+    parent: "3",
+    done: true,
+  },
+  {
+    id: "5",
+    author: FIXTURE_ME,
+    initials: "DP",
+    date: "2026-09-11T14:20:10Z",
+    dateUtc: "2026-09-11T12:20:10Z",
+    text: "Shorten this?",
+    paraId: "1A000006",
+    durableId: "6D5C0006",
+  },
+];
+
+/** Chapter 3's body paragraphs are the 6th to 9th body blocks (b6–b9). */
+export function chapterCommentsBody(): string {
+  return [
+    heading("Chapter 1"),
+    plain("Chapter one text."),
+    heading("Chapter 2"),
+    commentedParagraph("Revenue grew by ", "twelve percent", ".", [
+      "0",
+      "1",
+      "2",
+    ]),
+    heading("Chapter 3"),
+    plain("Chapter three opens."),
+    commentedParagraph("The ", "KPI", " moved up.", ["3", "4"]),
+    commentedParagraph("We plan a ", "second pilot", " next year.", ["5"]),
+    plain("Chapter three closes."),
+    heading("Chapter 4"),
+    plain("The end."),
+  ].join("");
+}

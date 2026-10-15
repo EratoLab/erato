@@ -39,6 +39,8 @@ export function WordImportConfirm({
   routeText,
   web,
   notice,
+  comments,
+  commentsConfirmed = true,
   applyLabel,
   canApply,
   applying,
@@ -53,6 +55,10 @@ export function WordImportConfirm({
   web: boolean;
   /** Shown after the route, such as Word reporting others in the document. */
   notice?: ReactNode;
+  /** The comment threads the plan deletes, with their own tick. */
+  comments?: ReactNode;
+  /** That tick, which Apply needs as well. */
+  commentsConfirmed?: boolean;
   applyLabel: string;
   canApply: boolean;
   applying: boolean;
@@ -126,14 +132,15 @@ export function WordImportConfirm({
           })}
         </span>
       </label>
+      {comments}
       <div className="word-review__actions">
         <WordApplyButton
           applying={applying}
           applyStage={applyStage}
-          disabled={!confirmed || !canApply}
+          disabled={!confirmed || !commentsConfirmed || !canApply}
           label={applyLabel}
           onApply={() => {
-            if (confirmed) onApply();
+            if (confirmed && commentsConfirmed) onApply();
           }}
         />
         <AskAgainButton disabled={applying} onAskAgain={onAskAgain} />

@@ -3,6 +3,7 @@ import {
   isWordMediaElementActive,
 } from "./wordMediaComparison";
 import { nativeVisibleText } from "./wordNativeContent";
+import { wordCommentThreadRoots } from "./wordPlanComments";
 
 import type { WordPlanBlock } from "./wordDocumentPlan";
 
@@ -532,6 +533,7 @@ function stripReferences(
           parent.remove();
       }
 }
+/** Its replies go with it (pruneWordStoryReferences), so no entry keeps a parent it loses here. */
 function stripModernCommentMetadata(doc: Document, comment: Element): void {
   const ids = new Set(
     elements(comment, "p")
@@ -552,12 +554,6 @@ function stripModernCommentMetadata(doc: Document, comment: Element): void {
         for (const a of Array.from(e.attributes))
           if (a.localName === "durableId") durableIds.add(a.value);
         e.remove();
-      } else {
-        // A surviving reply must not retain a dangling reference to a removed
-        // parent paragraph. Its own body and metadata remain independently held.
-        for (const a of Array.from(e.attributes))
-          if (a.localName === "paraIdParent" && ids.has(a.value))
-            e.removeAttributeNode(a);
       }
   }
   for (const part of packageParts(doc)) {
@@ -922,6 +918,8 @@ export function pruneWordStoryReferences(
       .filter((s) => s.anchored)
       .map((s) => `${s.type}:${s.nativeId}`),
   );
+  // Read before anything is removed: removing a comment's metadata drops its replies' parent link.
+  const roots = wordCommentThreadRoots(doc);
   for (const type of ["footnote", "endnote", "comment"] as const) {
     const references = elements(doc, `${type}Reference`);
     const ids = new Set(references.map((r) => attr(r, "id")));
@@ -929,16 +927,27 @@ export function pruneWordStoryReferences(
     const available = new Set(stories.map((s) => s.nativeId));
     if ([...ids].some((reference) => !available.has(reference)))
       throw new Error("An annotation reference has no content.");
-    for (const source of stories)
-      if (
+    const lost = stories.filter(
+      (source) =>
         !ids.has(source.nativeId!) &&
-        originallyAnchored.has(`${type}:${source.nativeId}`)
-      ) {
-        const node = storyElement(doc, source)!;
-        if (type === "comment") stripModernCommentMetadata(doc, node);
-        node.remove();
-        stripReferences(doc, type, source.nativeId!);
-      }
+        originallyAnchored.has(`${type}:${source.nativeId}`),
+    );
+    // A thread goes whole: a reply left behind would turn into a thread of its own.
+    const threads = new Set(
+      lost.map((source) => roots.get(source.nativeId!) ?? source.nativeId!),
+    );
+    const removed =
+      type === "comment"
+        ? stories.filter((source) =>
+            threads.has(roots.get(source.nativeId!) ?? source.nativeId!),
+          )
+        : lost;
+    for (const source of removed) {
+      const node = storyElement(doc, source)!;
+      if (type === "comment") stripModernCommentMetadata(doc, node);
+      node.remove();
+      stripReferences(doc, type, source.nativeId!);
+    }
   }
 }
 

@@ -67,6 +67,7 @@ import {
   wordInPlaceCapabilitiesUnder,
   wordTrackedWritingAvailable,
 } from "./wordInPlaceSwitch";
+import { wordPlanCommentConsequences } from "./wordPlanComments";
 import { wordWriteHost } from "./wordWriteHost";
 
 import type {
@@ -106,6 +107,8 @@ export interface WordDocumentDiagnostic {
     | "host-error"
     /** The host's policy asks before a whole-document write, and the user has not confirmed it. */
     | "import-needs-confirmation"
+    /** The plan deletes comment threads and the user has not ticked that for this compiled plan. */
+    | "comment-removals-need-confirmation"
     | WordWholeDocumentRefusal
     /** Word refused the write (NotAllowed) and the document is verifiably unchanged. */
     | "not-allowed";
@@ -232,6 +235,8 @@ async function observeAfterFailure(
 export interface WordDocumentApplyOptions {
   /** The user confirmed replacing the whole document, where the host's policy asks first. */
   importConfirmed?: boolean;
+  /** The compiled plan's fingerprint for which the user ticked "Also delete N comment threads". */
+  commentRemovalsConfirmed?: string;
 }
 
 export async function applyWordDocumentPlan(
@@ -428,6 +433,21 @@ async function applyPlan(
       return {
         status: "blocked",
         diagnostic: diagnostic("compile", "compile-failed"),
+      };
+    // Asked of every route and caller, Always and auto-prompt included: only the tick consents.
+    const comments = wordPlanCommentConsequences(snapshot, compiled, prepared);
+    if (
+      comments.removals.length &&
+      options.commentRemovalsConfirmed !== comments.fingerprint
+    )
+      return {
+        status: "blocked",
+        diagnostic: diagnostic(
+          "validate",
+          "comment-removals-need-confirmation",
+          undefined,
+          { commentThreads: comments.removals.length },
+        ),
       };
     if (snapshot.fullDocument) {
       // All or nothing per plan: in place only when every change has an exact object-model inverse.

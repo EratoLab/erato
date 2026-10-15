@@ -15,6 +15,7 @@ export * from "./wordMediaComparison";
 export * from "./wordMediaContent";
 export * from "./wordNativeContent";
 export * from "./wordPlanDiagnostics";
+export * from "./wordPlanComments";
 export * from "./wordPlanReview";
 export * from "./wordReadScope";
 export * from "./wordRichContent";
