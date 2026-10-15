@@ -3278,76 +3278,7 @@
     "1309": "Commit evidence changed; re-review the preserved summary",
     "1312": "Commit evidence changed; re-review the preserved summary",
     "1313": "Commit evidence changed; re-review the preserved summary",
-    "1314": "Commit evidence changed; re-review the preserved summary",
-    "1317": "Missing cached response: repos/EratoLab/erato/pulls/1317",
-    "1303": "Missing cached response: repos/EratoLab/erato/pulls/1303",
-    "1318": "Missing cached response: repos/EratoLab/erato/pulls/1318",
-    "1316": "Missing cached response: repos/EratoLab/erato/pulls/1316",
-    "1319": "Missing cached response: repos/EratoLab/erato/pulls/1319",
-    "1321": "Missing cached response: repos/EratoLab/erato/pulls/1321",
-    "1320": "Missing cached response: repos/EratoLab/erato/pulls/1320",
-    "1323": "Missing cached response: repos/EratoLab/erato/pulls/1323",
-    "1325": "Missing cached response: repos/EratoLab/erato/pulls/1325",
-    "1322": "Missing cached response: repos/EratoLab/erato/pulls/1322",
-    "1324": "Missing cached response: repos/EratoLab/erato/pulls/1324",
-    "1326": "Missing cached response: repos/EratoLab/erato/pulls/1326",
-    "1327": "Missing cached response: repos/EratoLab/erato/pulls/1327",
-    "1315": "Missing cached response: repos/EratoLab/erato/pulls/1315",
-    "1330": "Missing cached response: repos/EratoLab/erato/pulls/1330",
-    "1329": "Missing cached response: repos/EratoLab/erato/pulls/1329",
-    "1331": "Missing cached response: repos/EratoLab/erato/pulls/1331",
-    "1328": "Missing cached response: repos/EratoLab/erato/pulls/1328",
-    "1332": "Missing cached response: repos/EratoLab/erato/pulls/1332",
-    "1334": "Missing cached response: repos/EratoLab/erato/pulls/1334",
-    "1333": "Missing cached response: repos/EratoLab/erato/pulls/1333",
-    "1335": "Missing cached response: repos/EratoLab/erato/pulls/1335",
-    "1336": "Missing cached response: repos/EratoLab/erato/pulls/1336",
-    "1337": "Missing cached response: repos/EratoLab/erato/pulls/1337",
-    "1338": "Missing cached response: repos/EratoLab/erato/pulls/1338",
-    "1340": "Missing cached response: repos/EratoLab/erato/pulls/1340",
-    "1341": "Missing cached response: repos/EratoLab/erato/pulls/1341",
-    "1342": "Missing cached response: repos/EratoLab/erato/pulls/1342",
-    "1343": "Missing cached response: repos/EratoLab/erato/pulls/1343",
-    "1344": "Missing cached response: repos/EratoLab/erato/pulls/1344",
-    "1345": "Missing cached response: repos/EratoLab/erato/pulls/1345",
-    "1346": "Missing cached response: repos/EratoLab/erato/pulls/1346",
-    "1347": "Missing cached response: repos/EratoLab/erato/pulls/1347",
-    "1348": "Missing cached response: repos/EratoLab/erato/pulls/1348",
-    "1350": "Missing cached response: repos/EratoLab/erato/pulls/1350",
-    "1351": "Missing cached response: repos/EratoLab/erato/pulls/1351",
-    "1352": "Missing cached response: repos/EratoLab/erato/pulls/1352",
-    "1353": "Missing cached response: repos/EratoLab/erato/pulls/1353",
-    "1355": "Missing cached response: repos/EratoLab/erato/pulls/1355",
-    "1354": "Missing cached response: repos/EratoLab/erato/pulls/1354",
-    "1357": "Missing cached response: repos/EratoLab/erato/pulls/1357",
-    "1356": "Missing cached response: repos/EratoLab/erato/pulls/1356",
-    "1359": "Missing cached response: repos/EratoLab/erato/pulls/1359",
-    "1358": "Missing cached response: repos/EratoLab/erato/pulls/1358",
-    "1360": "Missing cached response: repos/EratoLab/erato/pulls/1360",
-    "1361": "Missing cached response: repos/EratoLab/erato/pulls/1361",
-    "1362": "Missing cached response: repos/EratoLab/erato/pulls/1362",
-    "1363": "Missing cached response: repos/EratoLab/erato/pulls/1363",
-    "1364": "Missing cached response: repos/EratoLab/erato/pulls/1364",
-    "1367": "Missing cached response: repos/EratoLab/erato/pulls/1367",
-    "1366": "Missing cached response: repos/EratoLab/erato/pulls/1366",
-    "1368": "Missing cached response: repos/EratoLab/erato/pulls/1368",
-    "1365": "Missing cached response: repos/EratoLab/erato/pulls/1365",
-    "1369": "Missing cached response: repos/EratoLab/erato/pulls/1369",
-    "1370": "Missing cached response: repos/EratoLab/erato/pulls/1370",
-    "1372": "Missing cached response: repos/EratoLab/erato/pulls/1372",
-    "1373": "Missing cached response: repos/EratoLab/erato/pulls/1373",
-    "1371": "Missing cached response: repos/EratoLab/erato/pulls/1371",
-    "1375": "Missing cached response: repos/EratoLab/erato/pulls/1375",
-    "1376": "Missing cached response: repos/EratoLab/erato/pulls/1376",
-    "1374": "Missing cached response: repos/EratoLab/erato/pulls/1374",
-    "1377": "Missing cached response: repos/EratoLab/erato/pulls/1377",
-    "1378": "Missing cached response: repos/EratoLab/erato/pulls/1378",
-    "1380": "Missing cached response: repos/EratoLab/erato/pulls/1380",
-    "1381": "Missing cached response: repos/EratoLab/erato/pulls/1381",
-    "1383": "Missing cached response: repos/EratoLab/erato/pulls/1383",
-    "1382": "Missing cached response: repos/EratoLab/erato/pulls/1382",
-    "1379": "Missing cached response: repos/EratoLab/erato/pulls/1379",
-    "1384": "Missing cached response: repos/EratoLab/erato/pulls/1384"
+    "1314": "Commit evidence changed; re-review the preserved summary"
   },
   "collected": {
     "780": [
@@ -4759,6 +4690,213 @@
     ],
     "1314": [
       "6717e6c7cc6052f07be522f33109d148866f0b52"
+    ],
+    "1317": [
+      "d9c7cfe3986a44da98c7722a99d46098aa366a2d"
+    ],
+    "1303": [
+      "f3d5167491c188e050367e75ed5a66710b5b244c"
+    ],
+    "1318": [
+      "acbbf70f852141da55d181bdc83b70ac8a56250f"
+    ],
+    "1316": [
+      "2e9a9e5cf9e0076c999ca948252d0cfd09579981"
+    ],
+    "1319": [
+      "94cb43da3977a18a9079016b615c2d08a3c7a852"
+    ],
+    "1321": [
+      "daa27c740b9e56ffdacf4c1697f8aafbd24287a5"
+    ],
+    "1320": [
+      "5420574b594059fdba695e5c2c642c7caa81e3bb"
+    ],
+    "1323": [
+      "b1a050bad0bc31a4a05c3f1f4be67b2dac693614"
+    ],
+    "1325": [
+      "7c4199dd34dc639f4fd6473ec0f8adb5b19e4df9"
+    ],
+    "1322": [
+      "f23c0fc080f9ed4b70cdf25568b003e8e718a706"
+    ],
+    "1324": [
+      "fcb138846b91b31a198ba881e8ed456f247d164a"
+    ],
+    "1326": [
+      "57d842357d898f60fc8d9ebafe037595fff02ad2"
+    ],
+    "1327": [
+      "feb97ba1e94ad0e767a467429b6d6ce842b98c84"
+    ],
+    "1315": [
+      "6470b519c0ba365afdb20b2bb73d7f2b5763e220"
+    ],
+    "1330": [
+      "21ad4a2fd0f5e459e1582fb6b439e54b5fe6f4a3"
+    ],
+    "1329": [
+      "bcd041f0ebb8d857266ee042e032d4f5467dc930"
+    ],
+    "1331": [
+      "e1304e11eb10789fcfe31e82da381b6e19fc780a"
+    ],
+    "1328": [
+      "fc1861fdbecd94e0b44fae8b3cba6cd5b6162db4"
+    ],
+    "1332": [
+      "afadff028be3ea94963fd52fe39a8d03448c1558"
+    ],
+    "1334": [
+      "c46b3a96271b72d503ce434d739007666de26fd7"
+    ],
+    "1333": [
+      "a6440581357c3865e13d148d3305fc865ea5ab2f"
+    ],
+    "1335": [
+      "89f84dc99aa3eb92cebdf79dfcd3e9a07f9fc84d"
+    ],
+    "1336": [
+      "61c6485189b38f2f3eec8ae0508b168c9d43579f"
+    ],
+    "1337": [
+      "aa97aedec308826930fa3ac549e41563431b3efe"
+    ],
+    "1338": [
+      "524681b0e53ab0bac614e6329c9db05df9581930"
+    ],
+    "1340": [
+      "21c51c4fa159ff953668c27048b52f3f0c237686"
+    ],
+    "1341": [
+      "44350c2e2fee5130b9d01127bcb1398b5f10d656"
+    ],
+    "1342": [
+      "8edb4e80e71316c43eff164a7680030c7d177ee2"
+    ],
+    "1343": [
+      "4d134612afbcd666aafd74fcdc43ef4df99ca6d9"
+    ],
+    "1344": [
+      "3c39a6fea3a97fc48528b51c01135c7acd4b49e5"
+    ],
+    "1345": [
+      "2862d70ebac597cf0672f142c71c3fe7123ba0c8"
+    ],
+    "1346": [
+      "1e8eaf04017becb61b18909b0385b5bed57f74b0"
+    ],
+    "1347": [
+      "055012ddfc9ee35dad48ed96be0bc5b4b2a42eae"
+    ],
+    "1348": [
+      "b665448c6be7c1df320ce1d27f53fd7cba365b74"
+    ],
+    "1350": [
+      "396c20c223b217343ea23a35681207449d5a95a8"
+    ],
+    "1351": [
+      "7df1694191abe7aed839a670ca8887a76a9a1315"
+    ],
+    "1352": [
+      "a70b5b1eb95677d0573edcda41ed36191b61b562"
+    ],
+    "1353": [
+      "a59d83b9cc3974fe69bbd4de05679e8d26be58de"
+    ],
+    "1355": [
+      "69049007a9a023522119f70812efbda8c98d6440"
+    ],
+    "1354": [
+      "8a5098cb3743ae39beb860cbcfa2c06501690bea"
+    ],
+    "1357": [
+      "6102d0f2618fc51e02c76683e24e2a09ed4ea337"
+    ],
+    "1356": [
+      "d545fb7bff966fabddde34d3b50d2aa3ddfb125d"
+    ],
+    "1359": [
+      "5efc1008d24148e3a38014bf8a91474e673d73d6"
+    ],
+    "1358": [
+      "484769b3d3fe98be5a7c3e55190ec5195df45144"
+    ],
+    "1360": [
+      "33b2cfcafc9b054fbf203503d6d386b19d8a79ee"
+    ],
+    "1361": [
+      "d73360f8fe79f397f9088ed9d70a9eda14de2be8"
+    ],
+    "1362": [
+      "9d8dc5e3e981104de89ecff66e3a087d95dbe2d5"
+    ],
+    "1363": [
+      "aaa2130e9a5c5f072a848ad98091d3953810490b"
+    ],
+    "1364": [
+      "956a23f45a75f173b38470749fe02e2564bd16b3"
+    ],
+    "1367": [
+      "a02b1e7368bc9a4fd12b5c45e7e2fb4da6a915a3"
+    ],
+    "1366": [
+      "66100a683553ee10c3e3b9d7445cd011436a238f"
+    ],
+    "1368": [
+      "113deabb548c5888cffd0cf714f96c41be5bbceb"
+    ],
+    "1365": [
+      "c90239cd8e72f51fb3cf738f6a3f7942d4fdc21b"
+    ],
+    "1369": [
+      "f8354aa3738c5f78c72f7855b91782457b70f615"
+    ],
+    "1370": [
+      "7333fc948a222929ea8a6799a43424ae681fa179"
+    ],
+    "1372": [
+      "fab1ae66e5b8c7d5f48cad5907ee34d636fedb6b"
+    ],
+    "1373": [
+      "745d966dd4bcb4281a3b6973ebc4afbde93fa2e1"
+    ],
+    "1371": [
+      "3daaa0f0fbfbf668edbb39e8da0aeb8b47b73eda"
+    ],
+    "1375": [
+      "8a992613ff4a29993a8c55955e63b002464efc3d"
+    ],
+    "1376": [
+      "daf0fcc95de832479631b09520b34091ddc9558b"
+    ],
+    "1374": [
+      "37621a0f893b5d57c1f7be6c14d75f050ee29209"
+    ],
+    "1377": [
+      "eb4157b29f543436a4c0cee8d3592c124aec9175"
+    ],
+    "1378": [
+      "aabb00b1e82d20ce5fe85a50152529f54eebd3fd"
+    ],
+    "1380": [
+      "33b7a3c8f021ec14bf4b497a76edb059fc2a5888"
+    ],
+    "1381": [
+      "e806bcf0a034daf185456ed5b1c3de38e87901d8"
+    ],
+    "1383": [
+      "9015845ffd345904feb9eb9e767fafa1147d7a5c"
+    ],
+    "1382": [
+      "4394d4a06822defb92ba0d6fe751ad0934328d58"
+    ],
+    "1379": [
+      "ba03ebd81b4401860a6859c36db0be4b9cc9747f"
+    ],
+    "1384": [
+      "e8ea1ff372dd3e5ca20724548e7d16953f6379ec"
     ]
   },
   "titles": {
@@ -5231,6 +5369,75 @@
     "1309": "Implement per-file token budgets",
     "1312": "Keep Outlook selection rewrites on the rewritten passage and out of the body",
     "1313": "Fix teams chat upload blocking if unrestricted upload is configured",
-    "1314": "Add read-file-contents tool for preview-truncated files"
+    "1314": "Add read-file-contents tool for preview-truncated files",
+    "1317": "Align with increased sidecar bootstrap slot size of 512KB",
+    "1303": "Guide first-time Teams bot setup and harden its public endpoint",
+    "1318": "docs: document Teams setup PowerShell functions",
+    "1316": "Add indexed range and search coverage to the sidecar protocol",
+    "1319": "Locate Word paragraphs by exact text when Word gives no paragraph IDs (ERMAIN-927)",
+    "1321": "Match the composer's attachment chip in mock-flow e2e tests",
+    "1320": "Show and keep the desktop sidecar's effective source priority",
+    "1323": "Add deployment controls for reduced customer chat interfaces",
+    "1325": "Implement audio transcription via OpenAI interface",
+    "1322": "Show the indexed time range instead of document counts in indexing settings",
+    "1324": "Report the searched period of local searches to the model and under replies",
+    "1326": "Add the selection foundations for Word selection editing (ERMAIN-928, wave A)",
+    "1327": "Select only the first paragraph for Show in Word on Word for the web (ERMAIN-932)",
+    "1315": "Fix missing page title on delegated run pages",
+    "1330": "Send the Word selection to the model as context (ERMAIN-928, block 1)",
+    "1329": "Make favicon path configurable",
+    "1331": "Update rust-genai fork to fork-2026-10-09",
+    "1328": "Implement chat history compaction",
+    "1332": "Don't display marker for file reference expansion level",
+    "1334": "Replace a selected whole paragraph on its proven target (ERMAIN-928, block 2)",
+    "1333": "Report sidecar source capabilities and degrade honestly in chat (ERDSCAR-41)",
+    "1335": "Document preview-marked exports and pass export warnings to chat (ERDSCAR-42)",
+    "1336": "Replace inline, multi-paragraph and table-cell selections (ERMAIN-928, block 3)",
+    "1337": "Refuse a Word replace when a copy of the passage could take its place (ERMAIN-937)",
+    "1338": "Let the user pick among identical passages and point to Word's Undo on the web (ERMAIN-928)",
+    "1340": "Show a sent selection while the answer streams, and say what \"Ask again\" does (ERMAIN-928)",
+    "1341": "Document partial Hx attachment exports in the sidecar protocol (ERDSCAR-43)",
+    "1342": "Keep fields, links, notes, comments and pictures when Word Replace rewrites a selection (ERMAIN-938)",
+    "1343": "Offer Apple Silicon Macs the Apple Silicon sidecar build (ERDSCAR-44)",
+    "1344": "Refuse Word selection rewrites that would flatten formatting, and explain bookmarks (ERMAIN-939)",
+    "1345": "Let the user choose between several Word Replace versions (ERMAIN-940)",
+    "1346": "Keep bookmarks, such as table-of-contents targets, when Word Replace rewrites a selection (ERMAIN-941)",
+    "1347": "Show Word selection replies in the Erato web app (ERMAIN-942)",
+    "1348": "Keep bold, italic, underline and strikethrough through a Word selection rewrite (ERMAIN-943)",
+    "1350": "Tell users which Outlook setting limits how far back mail is indexed (ERDSCAR-51)",
+    "1351": "Correct the add-in's EWS size-cap comments: a client cap of 1 or 5 MB",
+    "1352": "Include the open Word document by default and keep one chat per document (ERMAIN-945)",
+    "1353": "Read and edit large Word documents section by section instead of refusing every read (ERMAIN-952)",
+    "1355": "Extend sidecar protocol for permission request flows",
+    "1354": "Let Word turns offer delegated tasks under their action facet's own limits (ERMAIN-954)",
+    "1357": "Preserve newline in JSON preview of e.g. tool calls",
+    "1356": "Add support for `authorization_params` for MCP server Oauth2 flow",
+    "1359": "Resolve EntraID groups on overages",
+    "1358": "Let configured client tools survive a dropped stream through durable operations (ERMAIN-911)",
+    "1360": "Add configurable MCP tool_annotations defaults/overrides",
+    "1361": "ERMAIN-854: Reserve validated submission attempts beyond tool budgets",
+    "1362": "Keep comments that span several paragraphs intact when Word Replace rewrites a selection (ERMAIN-955)",
+    "1363": "ERMAIN-912: Attach durable client-operation continuations (Part 1)",
+    "1364": "Ask before replacing the whole document in Word for the web, and edit in place there (ERMAIN-961)",
+    "1367": "Deactivate Outlook microphone gate permission check",
+    "1366": "ERMAIN-912: Durable Word reads in the owning pane (Part 2)",
+    "1368": "Add config to truncate assistant description in Tools menu",
+    "1365": "Read Word comment threads as context, with a comment map, picker and precedence setting (ERMAIN-948)",
+    "1369": "Add support for stateless MCP",
+    "1370": "Make all branding paths configurable",
+    "1372": ".github/workflows: Migrate workflows to Blacksmith runners",
+    "1373": "Revert \"Add support for stateless MCP\"",
+    "1371": "Word for the web: Revert of a restyle puts the paragraph style back and never claims it did when it didn't (ERMAIN-967)",
+    "1375": "Add branding overview page",
+    "1376": "Update vite to 8.3.4",
+    "1374": "Fix compatibility issues with older MCP protocol specs",
+    "1377": "Word: Revert and writes no longer refuse over Word's own housekeeping; whole-document import off on Word for the web (ERMAIN-970)",
+    "1378": "Add support for request template variable `{{chat.id}}`",
+    "1380": "Word for Windows and Mac write changes in place by default; heading restyles and table-cell Revert work there (ERMAIN-973)",
+    "1381": "Word for Mac: Apply and Revert no longer refuse over Word's own language tagging after opening a document (ERMAIN-974)",
+    "1383": "Word for the web: reading comments never changes the document, and legacy files keep their anchors (ERMAIN-983)",
+    "1382": "Support CTRL-click on \"New Chat\"",
+    "1379": "Add more extensive memory usage metrics",
+    "1384": "Word: add, reply to, resolve and edit comments behind consent, as you or as Erato (ERMAIN-949)"
   }
 }
