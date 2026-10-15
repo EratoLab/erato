@@ -1556,6 +1556,23 @@ impl AppConfig {
                     );
                 }
             }
+            for (action, scope) in &action_facet.grant_scope {
+                if !action_facet.client_actions.contains(action) {
+                    panic!(
+                        "Action facet '{}' sets grant_scope for '{}', which is not in client_actions.",
+                        id, action
+                    );
+                }
+                if !ACTION_FACET_GRANT_SCOPES.contains(&scope.as_str()) {
+                    panic!(
+                        "Action facet '{}' has an invalid grant_scope '{}' for '{}'. Must be one of: {}",
+                        id,
+                        scope,
+                        action,
+                        ACTION_FACET_GRANT_SCOPES.join(", ")
+                    );
+                }
+            }
         }
 
         // Validate top-level `client_tools` (client-executed returning tools).
@@ -5010,6 +5027,7 @@ impl ActionFacetsConfig {
                 client_actions: vec![],
                 presentation: None,
                 client_actions_always_ask: vec![],
+                grant_scope: HashMap::new(),
                 tool_call_allowlist: vec![],
                 delegation: None,
             });
@@ -5028,6 +5046,7 @@ impl ActionFacetsConfig {
                 client_actions: vec![],
                 presentation: None,
                 client_actions_always_ask: vec![],
+                grant_scope: HashMap::new(),
                 tool_call_allowlist: vec![],
                 delegation: None,
             });
@@ -5122,6 +5141,13 @@ pub struct ActionFacetConfig {
     #[serde(default)]
     pub client_actions_always_ask: Vec<String>,
 
+    // How far a user's persistent "always allow" reaches, per action in
+    // `client_actions`: "device" (default) keeps it on the device until the
+    // user changes it; "session_document" keeps it only for the open add-in
+    // session and the document it was given on.
+    #[serde(default)]
+    pub grant_scope: HashMap<String, String>,
+
     // Allowlist of tools the model may call when this action facet is active,
     // using the same `namespace/*` / `server/tool` pattern syntax as regular
     // facets' `tool_call_allowlist`. Selects both top-level `client_tools` (by
@@ -5138,6 +5164,9 @@ pub struct ActionFacetConfig {
 
 /// Valid values for `ActionFacetConfig::presentation`.
 pub const ACTION_FACET_PRESENTATIONS: [&str; 2] = ["render_buttons", "auto_prompt"];
+
+/// Valid values in `ActionFacetConfig::grant_scope`.
+pub const ACTION_FACET_GRANT_SCOPES: [&str; 2] = ["device", "session_document"];
 
 /// Top-level `[client_tools]` configuration. Tools live in a map keyed by a
 /// config tool id (`[client_tools.tools.<id>]`) rather than an array, so they

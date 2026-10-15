@@ -83,6 +83,52 @@ export function effectiveDecision(input: {
   return stored;
 }
 
+/** How far an "always allow" reaches: the device (default), or this session and document only. */
+export type ClientActionGrantScope = "device" | "session_document";
+
+/** Session grants live in pane memory: a reload or another document asks again. */
+const sessionGrants = new Set<string>();
+
+const sessionGrantKey = (facetId: string, action: string, identity: string) =>
+  `${decisionKey(facetId, action)}@${identity}`;
+
+export function grantClientActionForSession(
+  facetId: string,
+  action: string,
+  identity: string,
+): void {
+  sessionGrants.add(sessionGrantKey(facetId, action, identity));
+}
+
+export function forgetClientActionSessionGrants(): void {
+  sessionGrants.clear();
+}
+
+/**
+ * The decisions as one action under `scope` sees them: a session-scoped action ignores a stored
+ * device grant and is "always" only where this session granted it for this item. A stored
+ * `never` stands either way.
+ */
+export function scopedDecisions(
+  decisions: ClientActionDecisionMap,
+  input: {
+    facetId: string;
+    action: string;
+    scope: ClientActionGrantScope;
+    identity: string | null | undefined;
+  },
+): ClientActionDecisionMap {
+  if (input.scope !== "session_document") return decisions;
+  const key = decisionKey(input.facetId, input.action);
+  if (decisions[key] === "never") return decisions;
+  const granted =
+    !!input.identity &&
+    sessionGrants.has(
+      sessionGrantKey(input.facetId, input.action, input.identity),
+    );
+  return { ...decisions, [key]: granted ? "always" : "ask" };
+}
+
 export function isActionDenied(
   input: Parameters<typeof effectiveDecision>[0],
 ): boolean {

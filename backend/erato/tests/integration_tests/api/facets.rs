@@ -137,6 +137,7 @@ async fn test_facets_endpoint_exposes_action_facet_client_actions(pool: Pool<Pos
             client_actions: vec!["outlook.reply".to_string(), "outlook.reply_all".to_string()],
             presentation: None,
             client_actions_always_ask: vec![],
+            grant_scope: Default::default(),
             tool_call_allowlist: vec![],
             delegation: None,
         },
@@ -151,6 +152,7 @@ async fn test_facets_endpoint_exposes_action_facet_client_actions(pool: Pool<Pos
             client_actions: vec![],
             presentation: None,
             client_actions_always_ask: vec![],
+            grant_scope: Default::default(),
             tool_call_allowlist: vec![],
             delegation: None,
         },
@@ -226,6 +228,10 @@ async fn test_facets_endpoint_exposes_auto_prompt_presentation(pool: Pool<Postgr
             client_actions: vec!["outlook.reply".to_string(), "outlook.reply_all".to_string()],
             presentation: Some("auto_prompt".to_string()),
             client_actions_always_ask: vec!["outlook.reply_all".to_string()],
+            grant_scope: HashMap::from([(
+                "outlook.reply".to_string(),
+                "session_document".to_string(),
+            )]),
             tool_call_allowlist: vec![],
             delegation: None,
         },
@@ -262,6 +268,11 @@ async fn test_facets_endpoint_exposes_auto_prompt_presentation(pool: Pool<Postgr
     assert_eq!(
         action_facets[0]["client_actions_always_ask"],
         serde_json::json!(["outlook.reply_all"])
+    );
+    // So is how far an "always allow" reaches.
+    assert_eq!(
+        action_facets[0]["grant_scope"],
+        serde_json::json!({"outlook.reply": "session_document"})
     );
 }
 

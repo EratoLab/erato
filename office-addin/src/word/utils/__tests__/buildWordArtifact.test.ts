@@ -219,6 +219,22 @@ describe("buildWordArtifact", () => {
       });
     });
 
+    it("passes how far Always reaches per action", () => {
+      const artifact = buildWordArtifact({
+        facetId: "word_selection",
+        clientActionInfo: {
+          ...selectionInfo(["word.add_comments"]),
+          grantScope: { "word.add_comments": "session_document" },
+        },
+        content: accepted("word.add_comments"),
+        messageId: "m1",
+        capture,
+      });
+      expect(artifact?.clientActionGrantScopes).toEqual({
+        "word.add_comments": "session_document",
+      });
+    });
+
     it("ships dark: no card where the facet does not offer the action", () => {
       const artifact = buildWordArtifact({
         facetId: "word_selection",

@@ -20,6 +20,7 @@ import {
   WordApplyButton,
   WordReviewConfirm,
   WordStatusAlert,
+  wordCommentTaintText,
 } from "./WordReviewCardParts";
 import { wordDeniedText, WordReviewReceipt } from "./WordReviewReceipt";
 import { WordShowInWordButton } from "./WordShowInWordButton";
@@ -32,6 +33,7 @@ import {
   isActionDenied,
   wordClientActionDecisionStore,
 } from "../utils/clientActionPolicy";
+import { wordCommentTaintedMessage } from "../utils/wordCommentReadTool";
 import {
   isWordRevertOffered,
   revertWordSelection,
@@ -64,6 +66,7 @@ import type {
   WordClientAction,
   WordClientActionEntry,
 } from "../utils/wordClientActions";
+import type { WordCommentsCapture } from "../utils/wordCommentSend";
 import type { WordReplaceSelectionResult } from "../utils/wordReplaceSelection";
 import type { WordReviewState } from "../utils/wordReviewState";
 import type {
@@ -645,9 +648,16 @@ export function WordSelectionCard({
   const capture = messageCapture ?? review.capture;
   const selection = wordSelectionOf(capture);
   const rewritable = rewritableWordSelection(capture);
+  // L2: a turn that carried other people's comment text never replaces under a standing grant.
+  const commentCapture: WordCommentsCapture | undefined = capture;
+  const tainted =
+    !!commentCapture?.commentTaint || wordCommentTaintedMessage(messageId);
   const enforcedAskActions = useMemo(
-    () => artifact?.alwaysAskClientActions ?? [],
-    [artifact],
+    () =>
+      tainted
+        ? [...(artifact?.alwaysAskClientActions ?? []), entry.action]
+        : (artifact?.alwaysAskClientActions ?? []),
+    [artifact, tainted, entry.action],
   );
   const gate = resolveWordWriteGate({
     capture,
@@ -1229,6 +1239,12 @@ export function WordSelectionCard({
               canApply={canReplace}
               operationInProgress={operationInProgress}
               enforcedAskActions={enforcedAskActions}
+              alwaysBlockedReason={
+                tainted &&
+                !(artifact?.alwaysAskClientActions ?? []).includes(entry.action)
+                  ? wordCommentTaintText()
+                  : undefined
+              }
               decisions={decisions}
               setDecisions={setDecisions}
               facetId={facetId}

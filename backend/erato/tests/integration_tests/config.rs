@@ -544,6 +544,51 @@ enabled = true
 msal_client_id = "00000000-0000-0000-0000-000000000000"
 "#;
 
+const GRANT_SCOPE_FACET: &str = r#"
+[chat_provider]
+provider_kind = "openai"
+model_name = "gpt-4o"
+
+[file_storage_providers.azblob_demo]
+provider_kind = "azblob"
+config = { endpoint = "https://xxx.blob.core.windows.net", container = "xxx", account_name = "xxx", account_key = "xxx" }
+
+[action_facets.facets.word_selection]
+display_name = "Selection"
+template = "Work on {{selected_text}}"
+allowed_args = ["selected_text"]
+client_actions = ["word.add_comments"]
+"#;
+
+#[test]
+fn test_action_facet_grant_scope_is_parsed() {
+    let config = ms_office_addin_config_from_toml(&format!(
+        "{GRANT_SCOPE_FACET}grant_scope = {{ \"word.add_comments\" = \"session_document\" }}\n"
+    ));
+    assert_eq!(
+        config.action_facets.facets["word_selection"].grant_scope["word.add_comments"],
+        "session_document"
+    );
+}
+
+#[test]
+#[should_panic(expected = "invalid grant_scope 'forever' for 'word.add_comments'")]
+fn test_action_facet_grant_scope_value_is_validated() {
+    ms_office_addin_config_from_toml(&format!(
+        "{GRANT_SCOPE_FACET}grant_scope = {{ \"word.add_comments\" = \"forever\" }}\n"
+    ));
+}
+
+#[test]
+#[should_panic(
+    expected = "sets grant_scope for 'word.modify_comments', which is not in client_actions"
+)]
+fn test_action_facet_grant_scope_needs_a_client_action() {
+    ms_office_addin_config_from_toml(&format!(
+        "{GRANT_SCOPE_FACET}grant_scope = {{ \"word.modify_comments\" = \"device\" }}\n"
+    ));
+}
+
 #[test]
 #[should_panic(expected = "`comment_assistant_author` must contain `{user}` exactly once")]
 fn test_config_with_comment_author_template_without_user_is_invalid() {

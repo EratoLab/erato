@@ -4,10 +4,13 @@ import { createClientActionDecisionStore } from "../../core/clientActions/client
 export {
   decisionKey,
   effectiveDecision,
+  grantClientActionForSession,
   isActionDenied,
   resolveAutoPromptBehavior,
+  scopedDecisions,
   type ClientActionDecision,
   type ClientActionDecisionMap,
+  type ClientActionGrantScope,
 } from "../../core/clientActions/clientActionPolicy";
 
 /** Keep decisions per host: each registry discards unknown actions when reading its store. */

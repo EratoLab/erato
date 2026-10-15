@@ -5942,6 +5942,21 @@ Each action facet supports these fields:
 - `template` - Prompt template with `{{variable}}` placeholders
 - `allowed_args` - List of allowed argument names for the template
 
+#### Action facet grant scope
+
+{/* erato_toml_config_key: action_facets.facets.<facet-id>.grant_scope.<key> */}
+
+`grant_scope` sets, per client action the facet offers, how far a user's "Always allow" reaches:
+`device` (the default) keeps it on the device until the user changes it in settings;
+`session_document` keeps it only while the add-in stays open on the document it was given for,
+and ignores an "Always allow" stored on the device. Keys must be listed in the facet's
+`client_actions`.
+
+```toml
+[action_facets.facets.word_selection]
+grant_scope = { "word.add_comments" = "session_document" }
+```
+
 #### Action facet delegation
 
 {/* erato_toml_config_key: action_facets.facets.<facet-id>.delegation.max_tasks_per_turn */}

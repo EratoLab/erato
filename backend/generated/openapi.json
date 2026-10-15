@@ -4668,6 +4668,16 @@
             "type": "string",
             "description": "Human readable name for the facet, e.g. for client settings UIs."
           },
+          "grant_scope": {
+            "type": "object",
+            "description": "How far a persistent \"always allow\" reaches per action: `device`\n(the default for actions not listed) or `session_document`, which the\nclient keeps only for its session and the document it was given on.",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "propertyNames": {
+              "type": "string"
+            }
+          },
           "id": {
             "type": "string"
           },

@@ -39,6 +39,14 @@ export type ActionFacetInfo = {
    * Human readable name for the facet, e.g. for client settings UIs.
    */
   display_name: string;
+  /**
+   * How far a persistent "always allow" reaches per action: `device`
+   * (the default for actions not listed) or `session_document`, which the
+   * client keeps only for its session and the document it was given on.
+   */
+  grant_scope?: {
+    [key: string]: string;
+  };
   id: string;
   platform?: string;
   /**

@@ -15,14 +15,19 @@ import { WORD_COMMENT_OP_META } from "@erato/frontend/word-review";
 import { t } from "@lingui/core/macro";
 import { useCallback, useEffect, useId, useMemo, useState } from "react";
 
-import { wordBlockedReasonText } from "./WordReviewCardParts";
+import {
+  wordBlockedReasonText,
+  wordCommentTaintText,
+} from "./WordReviewCardParts";
 import { useClientActionConfirmFlow } from "../../core/clientActions/useClientActionConfirmFlow";
 import { useClientActionDecisions } from "../../core/clientActions/useClientActionDecisions";
 import { useWordReviewFocus } from "../hooks/useWordReviewFocus";
 import { useWordWrite } from "../providers/WordWriteProvider";
 import {
   decisionKey,
+  grantClientActionForSession,
   isActionDenied,
+  scopedDecisions,
   wordClientActionDecisionStore,
 } from "../utils/clientActionPolicy";
 import {
@@ -192,11 +197,7 @@ function alwaysBlockText(
 ): string {
   switch (block) {
     case "tainted":
-      return t({
-        id: "officeAddin.word.comments.always.tainted",
-        message:
-          "This request included comments by other people, so Erato asks each time.",
-      });
+      return wordCommentTaintText();
     case "empty-label":
       return t({
         id: "officeAddin.word.comments.always.emptyLabel",
@@ -393,13 +394,24 @@ export function WordCommentChangesCard({
     holdOperationUntil,
     restoreRequest,
   } = useWordWrite();
-  const [decisions, setDecisions] = useClientActionDecisions(
+  const [storedDecisions, setDecisions] = useClientActionDecisions(
     wordClientActionDecisionStore,
   );
   const { profile } = useProfile();
   const { messages } = useChatContext();
   const facetId = artifact?.facetId ?? "";
   const messageId = artifact?.messageId;
+  // O-25: a deployment may keep "Always" for adds to this pane session and document.
+  const grantScope =
+    artifact?.clientActionGrantScopes?.[entry.action] === "session_document"
+      ? ("session_document" as const)
+      : ("device" as const);
+  const decisions = scopedDecisions(storedDecisions, {
+    facetId,
+    action: entry.action,
+    scope: grantScope,
+    identity: documentIdentity,
+  });
   const message = messageId ? messages[messageId] : undefined;
   const isGenerating = message?.status === "sending";
   const draft = wordCommentDraft(content);
@@ -474,7 +486,7 @@ export function WordCommentChangesCard({
     });
   const proposedAction =
     offered && artifact?.proposedClientAction === entry.action
-      ? (entry.action)
+      ? entry.action
       : undefined;
   const idle =
     review.status === "idle" ||
@@ -832,6 +844,15 @@ export function WordCommentChangesCard({
               key={confirmCard.requestId}
               title={titleOf(draft)}
               allowOnceLabel={applyLabel}
+              description={
+                grantScope === "session_document" && !locked
+                  ? t({
+                      id: "officeAddin.word.comments.always.session",
+                      message:
+                        "Always allow lasts for this document until the add-in closes.",
+                    })
+                  : undefined
+              }
               denyLabel={t({
                 id: "officeAddin.word.review.cancel",
                 message: "Cancel",
@@ -848,10 +869,17 @@ export function WordCommentChangesCard({
                   count === 0
                 )
                   return;
-                setDecisions({
-                  ...decisions,
-                  [decisionKey(facetId, entry.action)]: "always",
-                });
+                if (grantScope === "session_document" && documentIdentity)
+                  grantClientActionForSession(
+                    facetId,
+                    entry.action,
+                    documentIdentity,
+                  );
+                else
+                  setDecisions({
+                    ...storedDecisions,
+                    [decisionKey(facetId, entry.action)]: "always",
+                  });
                 allowCard(confirmCard);
               }}
               alwaysAllowDisabledReason={

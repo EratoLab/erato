@@ -10,6 +10,7 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { messages as frontendMessages } from "../../../../../frontend/src/locales/en/messages.po";
+import { forgetClientActionSessionGrants } from "../../../core/clientActions/clientActionPolicy";
 import { TestTheme } from "../../../test/helpers/TestTheme";
 import {
   installWordSelectionHost,
@@ -38,6 +39,7 @@ const mockUseHostArtifact = vi.fn();
 const mockUseChatContext = vi.fn();
 const mockUsePersistedState = vi.fn();
 const mockProfile = vi.fn();
+const mockSetDecisions = vi.fn();
 
 vi.mock("@erato/frontend/library", async (importOriginal) => ({
   ...(await importOriginal<typeof EratoLibrary>()),
@@ -46,6 +48,7 @@ vi.mock("@erato/frontend/library", async (importOriginal) => ({
     onAlwaysAllow: () => void;
     onDeny: () => void;
     alwaysAllowDisabledReason?: string;
+    description?: string;
   }) => (
     <div data-testid="confirmation-card">
       <button type="button" onClick={props.onAllowOnce}>
@@ -58,6 +61,7 @@ vi.mock("@erato/frontend/library", async (importOriginal) => ({
         deny
       </button>
       <span>{props.alwaysAllowDisabledReason}</span>
+      <span>{props.description}</span>
     </div>
   ),
   useChatContext: () => mockUseChatContext(),
@@ -169,6 +173,7 @@ function renderCard(options: {
   decisions?: Record<string, string>;
   alwaysAsk?: string[];
   proposed?: boolean;
+  grantScopes?: Record<string, string>;
 }) {
   nextMessage += 1;
   const messageId = `assistant-${nextMessage}`;
@@ -187,6 +192,7 @@ function renderCard(options: {
     isFreshCompletion: true,
     itemIdentity: IDENTITY,
     proposedClientAction: options.proposed ? options.action : undefined,
+    clientActionGrantScopes: options.grantScopes,
   });
   mockUseChatContext.mockReturnValue({
     messages: {
@@ -205,7 +211,10 @@ function renderCard(options: {
     messageOrder: ["user", messageId],
     currentChatId: "chat-1",
   });
-  mockUsePersistedState.mockReturnValue([options.decisions ?? {}, vi.fn()]);
+  mockUsePersistedState.mockReturnValue([
+    options.decisions ?? {},
+    mockSetDecisions,
+  ]);
   return render(
     <WordWriteProvider
       documentIdentity={IDENTITY}
@@ -239,6 +248,8 @@ describe("WordCommentChangesCard", () => {
     resetWordCommentSession();
     delete window.MS_OFFICE_ADDIN_DEFAULT_SETTINGS;
     localStorage.clear();
+    forgetClientActionSessionGrants();
+    mockSetDecisions.mockReset();
   });
 
   it("shows each new comment's exact text and author, counts the ticked rows and posts only those", async () => {
@@ -437,5 +448,45 @@ describe("WordCommentChangesCard", () => {
     expect(
       screen.getByText(/belong to an earlier session of this pane/),
     ).toBeInTheDocument();
+  });
+
+  it("keeps Always for adds to this session and document where the facet scopes it so", async () => {
+    const scoped = { "word.add_comments": "session_document" };
+    const first = await submit(
+      [{ op: "add", anchor: { para: 3, quote: "alpha" }, text: "one" }],
+      "call-s1",
+    );
+    renderCard({
+      action: "word.add_comments",
+      draftId: "call-s1",
+      capture: first,
+      presentation: "auto_prompt",
+      proposed: true,
+      grantScopes: scoped,
+      decisions: { "word_selection/word.add_comments": "always" },
+    });
+    // A device grant does not reach a session-scoped action.
+    expect(await screen.findByTestId("confirmation-card")).toHaveTextContent(
+      "Always allow lasts for this document until the add-in closes.",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "always-allow" }));
+    await waitFor(() => expect(host.commentStates()).toHaveLength(2));
+    expect(mockSetDecisions).not.toHaveBeenCalled();
+    cleanup();
+
+    const second = await submit(
+      [{ op: "add", anchor: { para: 3, quote: "gamma" }, text: "two" }],
+      "call-s2",
+    );
+    renderCard({
+      action: "word.add_comments",
+      draftId: "call-s2",
+      capture: second,
+      presentation: "auto_prompt",
+      proposed: true,
+      grantScopes: scoped,
+    });
+    await waitFor(() => expect(host.commentStates()).toHaveLength(3));
+    expect(screen.queryByTestId("confirmation-card")).toBeNull();
   });
 });

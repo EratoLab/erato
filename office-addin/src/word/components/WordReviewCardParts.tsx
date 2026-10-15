@@ -78,6 +78,7 @@ export function WordReviewConfirm<TSummary, TAction extends string>({
   canApply,
   operationInProgress,
   enforcedAskActions,
+  alwaysBlockedReason,
   decisions,
   setDecisions,
   facetId,
@@ -94,6 +95,8 @@ export function WordReviewConfirm<TSummary, TAction extends string>({
   canApply: boolean;
   operationInProgress: boolean;
   enforcedAskActions: readonly string[];
+  /** Why Always is off when it is not the organization's always-ask list. */
+  alwaysBlockedReason?: string;
   decisions: ClientActionDecisionMap;
   setDecisions: (value: ClientActionDecisionMap | null) => void;
   facetId: string;
@@ -123,11 +126,12 @@ export function WordReviewConfirm<TSummary, TAction extends string>({
       }}
       alwaysAllowDisabledReason={
         locked
-          ? t({
+          ? (alwaysBlockedReason ??
+            t({
               id: "officeAddin.word.card.alwaysAllowLocked",
               message:
                 "Your organization requires confirmation each time this action runs automatically.",
-            })
+            }))
           : undefined
       }
       onDeny={() => {
@@ -216,4 +220,13 @@ export function WordStatusAlert({
       {children}
     </Alert>
   );
+}
+
+/** L2: shown where a request carried comments by other people, which suspends Always. */
+export function wordCommentTaintText(): string {
+  return t({
+    id: "officeAddin.word.comments.always.tainted",
+    message:
+      "This request included comments by other people, so Erato asks each time.",
+  });
 }

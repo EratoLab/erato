@@ -33,6 +33,7 @@ export function buildWordArtifact(args: {
         clientActions: string[];
         alwaysAskActions: string[];
         presentation?: string;
+        grantScope?: Record<string, string>;
       }
     | undefined;
   content: ContentPart[] | undefined;
@@ -90,6 +91,10 @@ export function buildWordArtifact(args: {
       ? { alwaysAskClientActions: args.clientActionInfo.alwaysAskActions }
       : {}),
     ...(proposedClientAction ? { proposedClientAction } : {}),
+    ...(args.clientActionInfo?.grantScope &&
+    Object.keys(args.clientActionInfo.grantScope).length > 0
+      ? { clientActionGrantScopes: args.clientActionInfo.grantScope }
+      : {}),
     ...(args.clientActionInfo?.presentation
       ? { clientActionPresentation: args.clientActionInfo.presentation }
       : {}),

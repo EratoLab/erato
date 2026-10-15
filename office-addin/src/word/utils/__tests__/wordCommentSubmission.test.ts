@@ -106,7 +106,7 @@ describe("word_submit_comment_changes", () => {
       capture: {
         ...scope!.capture!,
         selection: selectionSnapshot(STORY, 1, 1, 10, 16),
-      } as WordCommentSubmissionScope["capture"],
+      },
     };
     const result = await executor()(
       { changes: [{ op: "add", anchor: "selection", text: "x" }] },
