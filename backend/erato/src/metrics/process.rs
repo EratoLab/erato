@@ -14,7 +14,11 @@ pub(super) fn start_reporter() {
         "erato_memory_stats_collection_errors_total",
         "Failed process or allocator memory samples."
     );
-    #[cfg(feature = "profiling")]
+    #[cfg(all(
+        target_os = "linux",
+        not(target_env = "musl"),
+        not(feature = "profiling-dial9")
+    ))]
     describe_gauge!(
         "erato_allocator_memory_bytes",
         Unit::Bytes,
@@ -58,7 +62,11 @@ fn report_once() {
         }
     }
 
-    #[cfg(feature = "profiling")]
+    #[cfg(all(
+        target_os = "linux",
+        not(target_env = "musl"),
+        not(feature = "profiling-dial9")
+    ))]
     if let Err(error) = report_allocator() {
         counter!("erato_memory_stats_collection_errors_total", "source" => "jemalloc").increment(1);
         tracing::warn!(%error, "Unable to collect allocator memory statistics");
@@ -98,7 +106,11 @@ fn parse_process_memory(status: &str) -> std::io::Result<Vec<(&'static str, u64)
     Ok(samples)
 }
 
-#[cfg(all(target_os = "linux", feature = "profiling"))]
+#[cfg(all(
+    target_os = "linux",
+    not(target_env = "musl"),
+    not(feature = "profiling-dial9")
+))]
 fn report_allocator() -> Result<(), tikv_jemalloc_ctl::Error> {
     use metrics::gauge;
     use tikv_jemalloc_ctl::{epoch, stats};

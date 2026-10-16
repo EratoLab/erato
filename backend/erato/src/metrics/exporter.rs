@@ -31,7 +31,11 @@ fn router(handle: PrometheusHandle) -> Router {
         }))
 }
 
-#[cfg(all(feature = "profiling", target_os = "linux"))]
+#[cfg(all(
+    target_os = "linux",
+    not(target_env = "musl"),
+    not(feature = "profiling-dial9")
+))]
 pub(super) fn install(address: std::net::SocketAddr) -> eyre::Result<()> {
     use metrics_exporter_prometheus::PrometheusBuilder;
 

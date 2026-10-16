@@ -21,17 +21,7 @@ use std::time::Duration;
 use tower_http::cors::CorsLayer;
 use tower_http::set_header::SetResponseHeaderLayer;
 
-#[cfg(all(feature = "profiling", target_os = "linux"))]
-#[global_allocator]
-static GLOBAL: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
-
-#[cfg(all(feature = "profiling", target_os = "linux"))]
-#[unsafe(export_name = "malloc_conf")]
-pub static MALLOC_CONF: &[u8] = b"prof:true,prof_active:true,lg_prof_sample:19\0";
-
-#[cfg(all(feature = "profiling-dial9", not(feature = "profiling")))]
-#[global_allocator]
-static GLOBAL: dial9::memory::Dial9Allocator = dial9::memory::Dial9Allocator::system();
+mod allocator;
 
 const ENV_WORKER_THREADS: &str = "TOKIO_WORKER_THREADS";
 const MIN_TOKIO_WORKER_THREADS: usize = 4;
@@ -95,6 +85,7 @@ async fn shutdown_signal() {
 }
 
 fn main() -> Result<(), Report> {
+    allocator::init()?;
     let worker_threads = configured_tokio_worker_threads();
 
     #[cfg(feature = "profiling-dial9")]

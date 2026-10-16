@@ -18,7 +18,14 @@ use crate::state::AppState;
 
 #[doc(hidden)]
 pub mod components;
-#[cfg(any(test, all(feature = "profiling", target_os = "linux")))]
+#[cfg(any(
+    test,
+    all(
+        target_os = "linux",
+        not(target_env = "musl"),
+        not(feature = "profiling-dial9")
+    )
+))]
 mod exporter;
 pub(crate) mod memory;
 #[doc(hidden)]
@@ -63,13 +70,21 @@ pub fn init_prometheus_metrics(config: &AppConfig) -> Result<()> {
             .install()
             .map_err(Report::from)
     };
-    #[cfg(all(feature = "profiling", target_os = "linux"))]
+    #[cfg(all(
+        target_os = "linux",
+        not(target_env = "musl"),
+        not(feature = "profiling-dial9")
+    ))]
     let installation = if attribution_requested {
         exporter::install(listen_address)
     } else {
         install_standard()
     };
-    #[cfg(not(all(feature = "profiling", target_os = "linux")))]
+    #[cfg(not(all(
+        target_os = "linux",
+        not(target_env = "musl"),
+        not(feature = "profiling-dial9")
+    )))]
     let installation = install_standard();
     installation.wrap_err_with(|| {
         format!(

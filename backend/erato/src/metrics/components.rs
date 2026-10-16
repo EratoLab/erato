@@ -1,6 +1,6 @@
 //! Optional allocation-origin attribution for opaque library objects. Dedicated
 //! jemalloc arenas remember allocations after scopes return and across threads.
-//! Ordinary builds use only the owner-based payload metrics in `memory`.
+//! Available in Linux jemalloc builds, enabled only with ERATO_MEMORY_COMPONENTS=1.
 
 use std::future::Future;
 
@@ -77,9 +77,17 @@ impl Component {
 }
 
 pub fn sync<T>(component: Component, operation: impl FnOnce() -> T) -> T {
-    #[cfg(all(feature = "profiling", target_os = "linux"))]
+    #[cfg(all(
+        target_os = "linux",
+        not(target_env = "musl"),
+        not(feature = "profiling-dial9")
+    ))]
     let _guard = implementation::Scope::enter(component);
-    #[cfg(not(all(feature = "profiling", target_os = "linux")))]
+    #[cfg(not(all(
+        target_os = "linux",
+        not(target_env = "musl"),
+        not(feature = "profiling-dial9")
+    )))]
     let _ = component;
     operation()
 }
@@ -96,31 +104,59 @@ pub fn scope<F: Future>(component: Component, future: F) -> impl Future<Output =
     // futures inline here multiplies their stack footprint at nested scopes.
     let mut future = Box::pin(future);
     std::future::poll_fn(move |context| {
-        #[cfg(all(feature = "profiling", target_os = "linux"))]
+        #[cfg(all(
+            target_os = "linux",
+            not(target_env = "musl"),
+            not(feature = "profiling-dial9")
+        ))]
         let _guard = implementation::Scope::enter(component);
-        #[cfg(not(all(feature = "profiling", target_os = "linux")))]
+        #[cfg(not(all(
+            target_os = "linux",
+            not(target_env = "musl"),
+            not(feature = "profiling-dial9")
+        )))]
         let _ = component;
         future.as_mut().poll(context)
     })
 }
 
 pub fn init(enabled: bool) -> eyre::Result<()> {
-    #[cfg(all(feature = "profiling", target_os = "linux"))]
+    #[cfg(all(
+        target_os = "linux",
+        not(target_env = "musl"),
+        not(feature = "profiling-dial9")
+    ))]
     implementation::init(enabled)?;
-    #[cfg(not(all(feature = "profiling", target_os = "linux")))]
+    #[cfg(not(all(
+        target_os = "linux",
+        not(target_env = "musl"),
+        not(feature = "profiling-dial9")
+    )))]
     let _ = enabled;
     Ok(())
 }
 
-#[cfg(all(feature = "profiling", target_os = "linux"))]
+#[cfg(all(
+    target_os = "linux",
+    not(target_env = "musl"),
+    not(feature = "profiling-dial9")
+))]
 pub use implementation::{Sample, snapshot};
 
-#[cfg(all(feature = "profiling", target_os = "linux"))]
+#[cfg(all(
+    target_os = "linux",
+    not(target_env = "musl"),
+    not(feature = "profiling-dial9")
+))]
 pub(super) fn report(allocated: usize) -> Result<(), tikv_jemalloc_ctl::Error> {
     implementation::report(allocated)
 }
 
-#[cfg(all(feature = "profiling", target_os = "linux"))]
+#[cfg(all(
+    target_os = "linux",
+    not(target_env = "musl"),
+    not(feature = "profiling-dial9")
+))]
 mod implementation {
     use super::Component;
     use metrics::{Unit, counter, describe_counter, describe_gauge, gauge};
