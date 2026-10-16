@@ -6,8 +6,14 @@ import { useModelHistory } from "../useModelHistory";
 import type { RecentChat } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
 vi.mock("@/lib/generated/v1betaApi/v1betaApiComponents", () => ({
+  useChatDetail: () => ({ data: { last_chat_provider_id: "available-model" } }),
   useAvailableModels: () => ({
-    data: [{ chat_provider_id: "available-model" }],
+    data: [
+      {
+        chat_provider_id: "available-model",
+        model_display_name: "Available model",
+      },
+    ],
   }),
 }));
 
@@ -39,5 +45,17 @@ describe("useModelHistory", () => {
     );
 
     expect(result.current.currentChatLastModel).toEqual(chat.last_model);
+  });
+  it("restores settings when the active chat is outside the sidebar page", () => {
+    const { result } = renderHook(() =>
+      useModelHistory({
+        currentChatId: "old-chat",
+        chats: [],
+        pinnedChats: [],
+      }),
+    );
+    expect(result.current.currentChatLastModel?.chat_provider_id).toBe(
+      "available-model",
+    );
   });
 });

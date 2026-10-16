@@ -29,6 +29,7 @@ import {
 import { getIdToken } from "@/auth/tokenStore";
 import { useChatHistory } from "@/hooks";
 import { BUDGET_QUERY_KEY } from "@/hooks/budget/useBudgetStatus";
+import { refreshChatQueries } from "@/hooks/chat/refreshChatQueries";
 import { useFileUploadStore } from "@/hooks/files/useFileUploadStore";
 import { requestClientOperationSweep } from "@/lib/clientOperations/handlers";
 import {
@@ -37,7 +38,6 @@ import {
   listMcpServerToolsQuery,
   listUserToolApprovalSettingsQuery,
   profileQuery,
-  recentChatsQuery,
   useChatMessages,
   useUpdateChat,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
@@ -598,9 +598,9 @@ export function useChatMessaging(
       // waiting for staleness — sits under this key prefix, and active
       // observers refetch before the await resolves. A separate sidebar
       // refetch on top would fetch the same list a second time per turn.
-      await queryClient.invalidateQueries({
-        queryKey: recentChatsQuery({}).queryKey,
-      });
+      // Refresh active-chat metadata alongside these lists so model/facet
+      // settings cannot lag behind the completed turn.
+      await refreshChatQueries(queryClient);
 
       if (effectiveChatId) {
         if (process.env.NODE_ENV === "development") {

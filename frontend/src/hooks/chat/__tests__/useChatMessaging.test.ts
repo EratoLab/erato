@@ -1566,6 +1566,10 @@ describe("useChatMessaging", () => {
     expect(mockInvalidateQueries).toHaveBeenCalledWith({
       queryKey: ["recentChats"],
     });
+    expect(mockInvalidateQueries).toHaveBeenCalledWith({
+      queryKey: ["chatDetail"],
+      predicate: expect.any(Function),
+    });
   });
 
   it("should prefer streaming content over api snapshot when ids collide during streaming", async () => {

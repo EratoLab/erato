@@ -1,5 +1,5 @@
 import { t } from "@lingui/core/macro";
-import { useQueryClient } from "@tanstack/react-query";
+import { skipToken, useQueryClient } from "@tanstack/react-query";
 import clsx from "clsx";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -22,7 +22,10 @@ import { useFileUploadWithTokenCheck } from "@/hooks/files/useFileUploadWithToke
 import { useSidebar, useFilePreviewModal } from "@/hooks/ui";
 import { useChatShareLink } from "@/hooks/useChatShareLink";
 import { useProfile } from "@/hooks/useProfile";
-import { chatMessagesQuery } from "@/lib/generated/v1betaApi/v1betaApiComponents";
+import {
+  chatMessagesQuery,
+  useChatDetail,
+} from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import { useChatContext } from "@/providers/ChatProvider";
 import {
   useChatInputFeature,
@@ -308,14 +311,8 @@ export const Chat = ({
     [pinnedChatHistory],
   );
 
-  // Pinned chats are excluded from the regular history listing.
-  const currentChat = useMemo(
-    () =>
-      pinnedChatHistory.find((chat) => chat.id === currentChatId) ??
-      (Array.isArray(chatHistory)
-        ? chatHistory.find((chat) => chat.id === currentChatId)
-        : undefined),
-    [chatHistory, pinnedChatHistory, currentChatId],
+  const { data: currentChat } = useChatDetail(
+    currentChatId ? { pathParams: { chatId: currentChatId } } : skipToken,
   );
   // Edit, regenerate and Share are writes, so they follow the composer's lock:
   // a run its delegate is still writing refuses them exactly as it refuses a send.

@@ -1,6 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef } from "react";
 
+import { refreshChatQueries } from "@/hooks/chat/refreshChatQueries";
 import {
   selectPollDriverCount,
   useGenerationStatusStore,
@@ -213,9 +214,7 @@ export function GenerationStatusPoller({
         DELIVERY_LISTING_REFRESH_MS;
       if (aRunEnded || backstopDue) {
         lastListingRefreshRef.current = Date.now();
-        void queryClient.invalidateQueries({
-          queryKey: recentChatsQuery({}).queryKey,
-        });
+        void refreshChatQueries(queryClient);
         // 779-B: the same edge is when a delivered `task_result` row may have
         // appeared in the OPEN chat. `deliver_task_result` holds the origin's
         // own lease for the whole delivery, so the origin is what leaves the

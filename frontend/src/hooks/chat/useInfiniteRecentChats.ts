@@ -10,6 +10,7 @@
 import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo } from "react";
 
+import { refreshChatQueries } from "@/hooks/chat/refreshChatQueries";
 import {
   chatDetailQuery,
   fetchRecentChats,
@@ -337,8 +338,6 @@ export function useUpdateChatTitle() {
 
   return useCallback(
     async (chatId: string, titleByUserProvided?: string) => {
-      const queryKey = recentChatsQuery({}).queryKey;
-
       try {
         const trimmedTitle = titleByUserProvided?.trim();
         await updateChatMutation({
@@ -348,7 +347,7 @@ export function useUpdateChatTitle() {
             : // Empty value removes custom title on backend.
               {},
         });
-        await queryClient.invalidateQueries({ queryKey });
+        await refreshChatQueries(queryClient);
       } catch (error) {
         logger.log(`Failed to update chat title for ${chatId}:`, error);
         throw error;
