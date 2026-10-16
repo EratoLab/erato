@@ -148,6 +148,7 @@ function isUnauthorizedRedeemError(error: unknown): boolean {
 export function SessionAuthProvider({
   authSource,
   onReinitialize,
+  onSignInFailure,
   children,
 }: {
   authSource: AuthSource;
@@ -159,6 +160,12 @@ export function SessionAuthProvider({
    * `initNonce`.
    */
   onReinitialize?: () => void;
+  /**
+   * Optional: told when the user's explicit sign-in (the AuthGate button)
+   * fails, with the source or redeem error. Background refreshes don't report
+   * here.
+   */
+  onSignInFailure?: (error: unknown) => void;
   children: React.ReactNode;
 }) {
   const [error, setError] = useState<string | null>(null);
@@ -594,10 +601,11 @@ export function SessionAuthProvider({
       await refreshSession(true, true);
     } catch (authenticationError) {
       setError(formatAuthenticationError(authenticationError));
+      onSignInFailure?.(authenticationError);
     } finally {
       setIsInitialized(true);
     }
-  }, [isSourceInitialized, onReinitialize, refreshSession]);
+  }, [isSourceInitialized, onReinitialize, onSignInFailure, refreshSession]);
 
   const isOauth2ProxySessionReady =
     oauth2ProxySession.lastRedeemedAt !== null &&

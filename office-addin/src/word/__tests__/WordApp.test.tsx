@@ -1,10 +1,11 @@
 import { componentRegistry } from "@erato/frontend/library";
 import { i18n } from "@lingui/core";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { NEUTRAL_CURRENT_CHAT_KEY } from "../../core/AddinChatProviderCore";
+import { NestedAppAuthUnavailableError } from "../../core/auth/AuthSource";
 import {
   installMockWordDocument,
   uninstallMockWordDocument,
@@ -21,7 +22,9 @@ const spies = vi.hoisted(() => ({
   callLog: [] as string[],
   setSystemThemeOverride: vi.fn(),
   createEntraNaaAuthSource: vi.fn(),
+  naaInitialize: vi.fn(async (): Promise<void> => undefined),
   sessionAuthSource: vi.fn(),
+  proxyLogin: vi.fn(),
   usePersistedState: vi.fn(),
   unarchiveChat: vi.fn(async () => undefined),
   updateChatTitle: vi.fn(async () => undefined),
@@ -52,19 +55,28 @@ const spies = vi.hoisted(() => ({
 vi.mock("../../auth/EntraNaaAuthSource", () => ({
   createEntraNaaAuthSource: (options: {
     resolveLoginHint: LoginHintResolver;
+    requireBridge?: boolean;
   }) => {
     spies.callLog.push("createEntraNaaAuthSource");
     spies.createEntraNaaAuthSource(options);
     return {
       mode: "entra-msal",
-      initialize: vi.fn(async () => undefined),
+      initialize: spies.naaInitialize,
       acquireBootstrapToken: vi.fn(async () => ({ idToken: "id-token" })),
       acquireGraphToken: vi.fn(),
     };
   },
 }));
 
-vi.mock("../../core/SessionAuthProvider", () => ({
+vi.mock("../../core/Oauth2ProxyLoginProvider", () => ({
+  Oauth2ProxyLoginProvider: ({ children }: { children?: ReactNode }) => {
+    spies.proxyLogin();
+    return children;
+  },
+}));
+
+vi.mock("../../core/SessionAuthProvider", async () => ({
+  SessionAuthContext: (await import("react")).createContext(null),
   SessionAuthProvider: ({
     authSource,
     children,
@@ -230,9 +242,15 @@ describe("Word task pane composition", () => {
     renderPane();
     await screen.findByTestId("word-message-list");
 
-    expect(spies.sessionAuthSource).toHaveBeenCalledWith(
-      expect.objectContaining({ mode: "entra-msal" }),
+    await waitFor(() =>
+      expect(spies.sessionAuthSource).toHaveBeenCalledWith(
+        expect.objectContaining({ mode: "entra-msal" }),
+      ),
     );
+    expect(spies.createEntraNaaAuthSource).toHaveBeenCalledWith(
+      expect.objectContaining({ requireBridge: true }),
+    );
+    expect(spies.proxyLogin).not.toHaveBeenCalled();
     expect(spies.callLog.indexOf("createEntraNaaAuthSource")).toBeGreaterThan(
       spies.callLog.indexOf("Office.onReady"),
     );
@@ -267,7 +285,7 @@ describe("Word task pane composition", () => {
     await expect(options?.resolveLoginHint()).resolves.toBeUndefined();
   });
 
-  it("falls back to the unsupported source when the host reports no NAA", async () => {
+  it("signs in through the proxy login when the host reports no NAA", async () => {
     word.isSetSupported.mockImplementation(
       (name: string) => name !== "NestedAppAuth",
     );
@@ -275,9 +293,20 @@ describe("Word task pane composition", () => {
     renderPane();
     await screen.findByTestId("word-message-list");
 
+    await waitFor(() => expect(spies.proxyLogin).toHaveBeenCalled());
     expect(spies.createEntraNaaAuthSource).not.toHaveBeenCalled();
-    expect(spies.sessionAuthSource).toHaveBeenCalledWith(
-      expect.objectContaining({ mode: "unsupported" }),
+    expect(spies.sessionAuthSource).not.toHaveBeenCalled();
+  });
+
+  it("signs in through the proxy login when Office provides no NAA bridge, as on the web", async () => {
+    spies.naaInitialize.mockRejectedValueOnce(
+      new NestedAppAuthUnavailableError(),
     );
+
+    renderPane();
+    await screen.findByTestId("word-message-list");
+
+    await waitFor(() => expect(spies.proxyLogin).toHaveBeenCalled());
+    expect(spies.sessionAuthSource).not.toHaveBeenCalled();
   });
 });

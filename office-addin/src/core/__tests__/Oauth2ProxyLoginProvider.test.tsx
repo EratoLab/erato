@@ -3,8 +3,8 @@ import { i18n } from "@lingui/core";
 import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { useSessionAuth } from "../../../core/SessionAuthProvider";
 import { Oauth2ProxyLoginProvider } from "../Oauth2ProxyLoginProvider";
+import { useSessionAuth } from "../SessionAuthProvider";
 
 vi.mock("@erato/frontend/library", () => ({
   setAuthRecoveryHandler: vi.fn(),
@@ -461,7 +461,7 @@ describe("Oauth2ProxyLoginProvider", () => {
     expect(screen.getByTestId("authenticated")).toHaveTextContent("false");
     expect(screen.getByTestId("status")).toHaveTextContent("idle");
     expect(screen.getByTestId("error")).toHaveTextContent(
-      "Could not reach the sign-in service",
+      `Sign-in finished, but the add-in can't see the session. Your browser is probably blocking third-party cookies here. Allow cookies for ${window.location.host} and try again.`,
     );
     // Mount probe + message verification probe + 8 grace probes + final probe.
     expect(fetcher).toHaveBeenCalledTimes(11);
@@ -472,6 +472,59 @@ describe("Oauth2ProxyLoginProvider", () => {
       await flushSessionProbes();
     });
     expect(fetcher).toHaveBeenCalledTimes(11);
+  });
+
+  it("reports an unreachable sign-in service when the last probe after a completed popup fails", async () => {
+    let calls = 0;
+    const fetcher = vi.fn(async () => {
+      calls += 1;
+      // Mount probe, message verification probe and 8 grace probes stay 401.
+      if (calls <= 10) {
+        return new Response("Unauthorized", { status: 401 });
+      }
+      throw new TypeError("Failed to fetch");
+    });
+    Object.defineProperty(window, "fetch", {
+      configurable: true,
+      value: fetcher,
+    });
+    vi.stubGlobal("fetch", fetcher);
+    const popup = fakePopup();
+    stubWindowOpen(popup);
+
+    render(
+      <Oauth2ProxyLoginProvider>
+        <AuthProbe />
+      </Oauth2ProxyLoginProvider>,
+    );
+
+    await waitFor(() =>
+      expect(screen.getByTestId("initialized")).toHaveTextContent("true"),
+    );
+    vi.useFakeTimers();
+    act(() => {
+      screen.getByTestId("retry").click();
+    });
+    await act(async () => {
+      window.dispatchEvent(
+        new MessageEvent("message", {
+          data: "erato-oauth2-login-complete",
+          origin: window.location.origin,
+        }),
+      );
+      await flushSessionProbes();
+    });
+    popup.closed = true;
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(13_500);
+      await flushSessionProbes();
+    });
+
+    expect(fetcher).toHaveBeenCalledTimes(11);
+    expect(screen.getByTestId("error")).toHaveTextContent(
+      "Could not reach the sign-in service",
+    );
   });
 
   it("authenticates via the polling fallback when the postMessage is missed", async () => {

@@ -10,6 +10,11 @@
  * host-specific decision lives in OutlookAuthProvider, which is allowed to read
  * Outlook surfaces. Here we return only the host-agnostic "is NAA available"
  * verdict.
+ *
+ * The requirement set is necessary but not sufficient: Word, Excel and
+ * PowerPoint on the web report it without providing the NAA bridge. Word
+ * therefore also requires the bridge (`createEntraNaaAuthSource`'s
+ * `requireBridge`).
  */
 export function isNestedAppAuthSupported(): boolean {
   try {
