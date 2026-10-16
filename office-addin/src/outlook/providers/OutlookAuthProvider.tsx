@@ -1,10 +1,10 @@
 import { useCallback, useMemo, useState } from "react";
 
 import { EntraGraphTokenProvider } from "./EntraGraphTokenProvider";
-import { Oauth2ProxyLoginProvider } from "./Oauth2ProxyLoginProvider";
 import { createEntraNaaAuthSource } from "../../auth/EntraNaaAuthSource";
 import { UnsupportedAuthSource } from "../../auth/UnsupportedAuthSource";
 import { isNestedAppAuthSupported } from "../../auth/isNestedAppAuthSupported";
+import { Oauth2ProxyLoginProvider } from "../../core/Oauth2ProxyLoginProvider";
 import { SessionAuthProvider } from "../../core/SessionAuthProvider";
 import { useOffice } from "../../providers/OfficeProvider";
 import { detectExchangeOnPrem } from "../../utils/detectExchangeOnPrem";

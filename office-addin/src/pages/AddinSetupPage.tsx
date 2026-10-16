@@ -496,14 +496,26 @@ function SetupSelectors({
 }
 
 function WordInstructions({ spaRedirectUri }: { spaRedirectUri: string }) {
+  const proxyCallbackUri = `${window.location.origin}/oauth2/callback`;
   return (
     <ol className="office-setup-steps">
       <li>
-        <Trans id="officeAddin.word.setup.redirectUriInstruction">
+        <Trans id="officeAddin.word.setup.desktopRedirectUriInstruction">
           In the Entra ID app registration, add the SPA redirect URI. Word on
-          the web will not sign in without it:
+          Windows and Mac sign in through it:
         </Trans>
         <CopyableCodeField content={spaRedirectUri} />
+      </li>
+      <li>
+        <Trans id="officeAddin.word.setup.webSignInInstruction">
+          Word on the web has no Office sign-in for add-ins, so users sign in
+          through this deployment&apos;s oauth2-proxy login in a popup. That
+          login uses the proxy&apos;s web redirect URI, which every deployment
+          already registers for the Erato web app. The proxy must set{" "}
+          <code>cookie_samesite = &quot;none&quot;</code> so the session cookie
+          reaches the add-in inside Word:
+        </Trans>
+        <CopyableCodeField content={proxyCallbackUri} />
       </li>
       <li>
         <Trans id="officeAddin.word.setup.reviewManifest">

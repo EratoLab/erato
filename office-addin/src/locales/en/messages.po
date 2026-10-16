@@ -153,12 +153,17 @@ msgstr "MSAL not initialized"
 #~ msgstr "Nested App Authentication is not supported in this environment"
 
 #. js-lingui-explicit-id
-#: src/outlook/providers/Oauth2ProxyLoginProvider.tsx
+#: src/core/Oauth2ProxyLoginProvider.tsx
+msgid "officeAddin.auth.oauth2ProxyCookieBlocked"
+msgstr "Sign-in finished, but the add-in can't see the session. Your browser is probably blocking third-party cookies here. Allow cookies for {host} and try again."
+
+#. js-lingui-explicit-id
+#: src/core/Oauth2ProxyLoginProvider.tsx
 msgid "officeAddin.auth.oauth2ProxyPopupBlocked"
 msgstr "Sign-in popup was blocked. Allow popups for this site and try again."
 
 #. js-lingui-explicit-id
-#: src/outlook/providers/Oauth2ProxyLoginProvider.tsx
+#: src/core/Oauth2ProxyLoginProvider.tsx
 msgid "officeAddin.auth.oauth2ProxyProbeFailed"
 msgstr "Could not reach the sign-in service. Try again."
 
@@ -168,7 +173,7 @@ msgid "officeAddin.auth.oauth2ProxySessionFailed"
 msgstr "Could not establish a secure Erato session. Try signing in again."
 
 #. js-lingui-explicit-id
-#: src/outlook/providers/Oauth2ProxyLoginProvider.tsx
+#: src/core/Oauth2ProxyLoginProvider.tsx
 msgid "officeAddin.auth.oauth2ProxySignInTimedOut"
 msgstr "Sign-in timed out. Try again."
 
@@ -5757,6 +5762,11 @@ msgstr "Download the XML below as <0>manifest-document.xml</0>, then deploy it t
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.word.setup.desktopRedirectUriInstruction"
+msgstr "In the Entra ID app registration, add the SPA redirect URI. Word on Windows and Mac sign in through it:"
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
 msgid "officeAddin.word.setup.downloadButton"
 msgstr "Download manifest-document.xml"
 
@@ -5782,13 +5792,18 @@ msgstr "Open app catalog docs"
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
-msgid "officeAddin.word.setup.redirectUriInstruction"
-msgstr "In the Entra ID app registration, add the SPA redirect URI. Word on the web will not sign in without it:"
+#~ msgid "officeAddin.word.setup.redirectUriInstruction"
+#~ msgstr "In the Entra ID app registration, add the SPA redirect URI. Word on the web will not sign in without it:"
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
 msgid "officeAddin.word.setup.reviewManifest"
 msgstr "Review the generated document manifest XML below. It is a separate add-in from the Outlook one and carries its own id."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.word.setup.webSignInInstruction"
+msgstr "Word on the web has no Office sign-in for add-ins, so users sign in through this deployment's oauth2-proxy login in a popup. That login uses the proxy's web redirect URI, which every deployment already registers for the Erato web app. The proxy must set <0>cookie_samesite = \"none\"</0> so the session cookie reaches the add-in inside Word:"
 
 # ==============================
 # Unstable IDs

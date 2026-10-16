@@ -153,12 +153,17 @@ msgstr "MSAL nie został zainicjowany"
 #~ msgstr "Uwierzytelnianie zagnieżdżonej aplikacji nie jest obsługiwane w tym środowisku"
 
 #. js-lingui-explicit-id
-#: src/outlook/providers/Oauth2ProxyLoginProvider.tsx
+#: src/core/Oauth2ProxyLoginProvider.tsx
+msgid "officeAddin.auth.oauth2ProxyCookieBlocked"
+msgstr "Logowanie zostało zakończone, ale dodatek nie widzi sesji. Twoja przeglądarka prawdopodobnie blokuje tutaj pliki cookie innych firm. Zezwól na pliki cookie dla {host} i spróbuj ponownie."
+
+#. js-lingui-explicit-id
+#: src/core/Oauth2ProxyLoginProvider.tsx
 msgid "officeAddin.auth.oauth2ProxyPopupBlocked"
 msgstr "Wyskakujące okno logowania zostało zablokowane. Zezwól na wyskakujące okna dla tej witryny i spróbuj ponownie."
 
 #. js-lingui-explicit-id
-#: src/outlook/providers/Oauth2ProxyLoginProvider.tsx
+#: src/core/Oauth2ProxyLoginProvider.tsx
 msgid "officeAddin.auth.oauth2ProxyProbeFailed"
 msgstr "Nie udało się połączyć z usługą logowania. Spróbuj ponownie."
 
@@ -168,7 +173,7 @@ msgid "officeAddin.auth.oauth2ProxySessionFailed"
 msgstr "Nie udało się ustanowić bezpiecznej sesji Erato. Zaloguj się ponownie."
 
 #. js-lingui-explicit-id
-#: src/outlook/providers/Oauth2ProxyLoginProvider.tsx
+#: src/core/Oauth2ProxyLoginProvider.tsx
 msgid "officeAddin.auth.oauth2ProxySignInTimedOut"
 msgstr "Upłynął limit czasu logowania. Spróbuj ponownie."
 
@@ -5757,6 +5762,11 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.word.setup.desktopRedirectUriInstruction"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
 msgid "officeAddin.word.setup.downloadButton"
 msgstr ""
 
@@ -5782,12 +5792,17 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
-msgid "officeAddin.word.setup.redirectUriInstruction"
-msgstr ""
+#~ msgid "officeAddin.word.setup.redirectUriInstruction"
+#~ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
 msgid "officeAddin.word.setup.reviewManifest"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.word.setup.webSignInInstruction"
 msgstr ""
 
 # ==============================

@@ -2,11 +2,11 @@ import { setAuthRecoveryHandler } from "@erato/frontend/library";
 import { t } from "@lingui/core/macro";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { SessionAuthContext } from "../../core/SessionAuthProvider";
+import { SessionAuthContext } from "./SessionAuthProvider";
 import {
   OAUTH2_PROXY_SIGN_IN_PATH,
   checkOauth2ProxySession,
-} from "../../core/auth/oauth2ProxySession";
+} from "./auth/oauth2ProxySession";
 
 /** How often we re-probe the proxy session while the popup is open. */
 const SESSION_POLL_INTERVAL_MS = 1_500;
@@ -30,6 +30,21 @@ const LOGIN_COMPLETE_MESSAGE = "erato-oauth2-login-complete";
  */
 const COMPLETION_GRACE_MS = 12_000;
 
+function probeFailedMessage(): string {
+  return t({
+    id: "officeAddin.auth.oauth2ProxyProbeFailed",
+    message: "Could not reach the sign-in service. Try again.",
+  });
+}
+
+function cookieBlockedMessage(): string {
+  const host = window.location.host;
+  return t({
+    id: "officeAddin.auth.oauth2ProxyCookieBlocked",
+    message: `Sign-in finished, but the add-in can't see the session. Your browser is probably blocking third-party cookies here. Allow cookies for ${host} and try again.`,
+  });
+}
+
 type LoginPhase =
   | "checking"
   | "needs-signin"
@@ -38,18 +53,19 @@ type LoginPhase =
   | "error";
 
 /**
- * The oauth2-proxy redirect-login {@link SessionAuthContext} provider for the
- * NAA-less hybrid mailbox (Exchange SE). Unlike the EXO path there is no
+ * The oauth2-proxy redirect-login {@link SessionAuthContext} provider for hosts
+ * without usable Office NAA: the Exchange SE mailbox in Outlook, and Word on the
+ * web (see {@link "./NaaOrProxyLoginProvider"}). Unlike the NAA path there is no
  * client-side Entra token to redeem: the add-in is served through oauth2-proxy
- * on the funnel domain, so the proxy performs the full Entra OIDC login itself
+ * on the deployment domain, so the proxy performs the full Entra OIDC login itself
  * (with ITS OWN app registration) and sets the session cookie. This provider
  * therefore only orchestrates that login — probe the cookie, open the proxy's
  * `/oauth2/start` login in a popup, detect completion — and supplies the SAME
  * {@link SessionAuthContext} value so AuthGate, {@link useSessionAuth}, and the
  * mail-fetch hook all work unchanged.
  *
- * No {@link "./EntraGraphTokenProvider"} is mounted here: there is no
- * client-side Graph token on this path, which is correct because the SE on-prem
+ * No {@link "../outlook/providers/EntraGraphTokenProvider"} is mounted here:
+ * there is no client-side Graph token on this path, which is correct because the SE on-prem
  * mailbox reads mail via EWS SOAP through the Erato backend proxy (host-issued
  * Exchange callback token in `X-EWS-Authentication`), not Graph.
  */
@@ -83,12 +99,7 @@ export function Oauth2ProxyLoginProvider({
           return;
         }
         console.warn("OAuth2 proxy session probe failed", probeError);
-        setError(
-          t({
-            id: "officeAddin.auth.oauth2ProxyProbeFailed",
-            message: "Could not reach the sign-in service. Try again.",
-          }),
-        );
+        setError(probeFailedMessage());
         setPhase("error");
       });
 
@@ -282,21 +293,20 @@ export function Oauth2ProxyLoginProvider({
             window.clearInterval(pollId);
             pollId = undefined;
           }
-          const failureMessage = completionSignaled
-            ? t({
-                id: "officeAddin.auth.oauth2ProxyProbeFailed",
-                message: "Could not reach the sign-in service. Try again.",
-              })
-            : null;
           void checkOauth2ProxySession()
             .then((authenticated) => {
               if (authenticated) {
                 succeed();
               } else {
-                giveUp(failureMessage);
+                // The popup only reaches auth-complete once the proxy has set
+                // its cookie, so a pane that still can't see it is being
+                // refused third-party cookies.
+                giveUp(completionSignaled ? cookieBlockedMessage() : null);
               }
             })
-            .catch(() => giveUp(failureMessage));
+            .catch(() =>
+              giveUp(completionSignaled ? probeFailedMessage() : null),
+            );
           return;
         }
         void checkOauth2ProxySession()
