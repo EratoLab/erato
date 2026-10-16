@@ -67,7 +67,7 @@ pub(super) fn describe() {
     describe_gauge!(
         "erato_tokenizer_jobs",
         Unit::Count,
-        "Queued or running token-count cache-miss jobs, each constructing its own tokenizer."
+        "Queued or running token-count cache-miss jobs using the shared tokenizer."
     );
     gauge!("erato_tokenizer_input_bytes").set(0.0);
     gauge!("erato_tokenizer_jobs").set(0.0);

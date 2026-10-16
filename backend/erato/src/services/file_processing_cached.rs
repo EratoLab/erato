@@ -10,9 +10,25 @@ use crate::state::{AppState, FileCacheKey};
 use eyre::{ContextCompat, OptionExt, Report, WrapErr};
 use sea_orm::EntityTrait;
 use sea_orm::prelude::Uuid;
-use std::sync::Arc;
-use tiktoken_rs::o200k_base;
+use std::sync::{Arc, LazyLock};
 use tracing::{Instrument, instrument};
+
+/// Application access and lifetime accounting for the library-owned singleton.
+/// Initialization is lazy and may block the first caller. The library panics on
+/// invalid embedded vocabulary/regex data; cache-miss workers surface that as a
+/// join error. No caller clones the tokenizer or reserves its memory again.
+pub(crate) fn shared_tokenizer() -> &'static tiktoken_rs::CoreBPE {
+    static TOKENIZER: LazyLock<crate::metrics::owned::Tokenizer> = LazyLock::new(|| {
+        crate::metrics::owned::Tokenizer::o200k_base(
+            "shared.tokenizer",
+            crate::metrics::components::sync(
+                crate::metrics::components::Component::TokenizerState,
+                tiktoken_rs::o200k_base_singleton,
+            ),
+        )
+    });
+    &TOKENIZER
+}
 
 /// Helper function to determine if a file is an image based on extension
 fn is_image_file(filename: &str) -> bool {
@@ -639,19 +655,14 @@ pub async fn get_token_count_cached(app_state: &AppState, content: &str) -> Resu
                 crate::metrics::components::Component::TokenizerWork,
                 move || {
                     let _input_payload = input_payload;
-                    let bpe = crate::metrics::components::sync(
-                        crate::metrics::components::Component::TokenizerState,
-                        o200k_base,
-                    )
-                    .map_err(|err| eyre::eyre!("Failed to initialize tokenizer: {}", err))?;
-                    let bpe =
-                        crate::metrics::owned::Tokenizer::o200k_base("jobs.tokenizer.state", bpe);
-                    Ok::<_, Report>(bpe.encode_with_special_tokens(&content_owned).len())
+                    shared_tokenizer()
+                        .encode_with_special_tokens(&content_owned)
+                        .len()
                 },
             ))
             .instrument(tracing::trace_span!("tokenize_content"))
             .await
-            .wrap_err("Tokenization task panicked")??;
+            .wrap_err("Tokenization task panicked")?;
 
             tracing::debug!(
                 content_len = content_len,
@@ -871,6 +882,49 @@ pub fn process_files_parallel_cached<'a>(
 mod tests {
     use super::{effective_detected_mime_type, effective_text_mime_type, parse_text_file_bytes};
     use crate::services::file_processor::XbergProcessor;
+
+    #[test]
+    fn shared_tokenizer_preserves_both_encoding_modes_across_threads() {
+        // A fresh instance is an independent baseline, not another production owner.
+        let baseline = tiktoken_rs::o200k_base().unwrap();
+        let inputs = [
+            "",
+            "Hello, world!",
+            "<|endoftext|> and <|fim_suffix|>",
+            "Grüße aus Berlin. 東京 العربية 🦀",
+            r#"{"name":"lookup","parameters":{"type":"object","properties":{"q":{"type":"string"}}}}"#,
+            r#"{"results":[{"title":"Synthetic response","content":"Repeated tool output"}]}"#,
+        ];
+        let expected: Vec<_> = inputs
+            .iter()
+            .map(|text| {
+                (
+                    baseline.encode_ordinary(text),
+                    baseline.encode_with_special_tokens(text),
+                )
+            })
+            .collect();
+        assert_ne!(expected[2].0.len(), expected[2].1.len());
+        std::thread::scope(|scope| {
+            for worker in 0..16 {
+                let expected = &expected;
+                scope.spawn(move || {
+                    let shared = super::shared_tokenizer();
+                    assert!(std::ptr::eq(shared, tiktoken_rs::o200k_base_singleton()));
+                    for (text, (ordinary, special)) in inputs.iter().zip(expected) {
+                        assert_eq!(shared.encode_ordinary(text), *ordinary);
+                        assert_eq!(shared.encode_with_special_tokens(text), *special);
+                        assert_eq!(crate::services::file_context::tokens(text), ordinary.len());
+                        let distinct = format!("{worker}: {text}");
+                        assert_eq!(
+                            crate::services::file_context::tokens(&distinct),
+                            shared.encode_ordinary(&distinct).len()
+                        );
+                    }
+                });
+            }
+        });
+    }
 
     #[test]
     fn effective_text_mime_type_forces_eml_to_message_rfc822() {

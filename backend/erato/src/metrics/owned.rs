@@ -181,18 +181,18 @@ impl<T: HeapSize> Cached<T> {
     }
 }
 
-/// The o200k estimate is computed once through public APIs and reused for each
-/// independently owned instance. No private fields or allocator APIs are read.
+/// Accounts for a borrowed process-global tokenizer without cloning its state.
+/// The application keeps exactly one wrapper alive for the process lifetime.
 pub(crate) struct Tokenizer {
-    inner: tiktoken_rs::CoreBPE,
+    inner: &'static tiktoken_rs::CoreBPE,
     _memory: Reservation,
 }
 impl Tokenizer {
-    pub fn o200k_base(owner: &'static str, inner: tiktoken_rs::CoreBPE) -> Self {
+    pub fn o200k_base(owner: &'static str, inner: &'static tiktoken_rs::CoreBPE) -> Self {
         static ESTIMATE: std::sync::OnceLock<Usage> = std::sync::OnceLock::new();
         let usage = if enabled() {
             ESTIMATE
-                .get_or_init(|| estimate_o200k_tokenizer(&inner))
+                .get_or_init(|| estimate_o200k_tokenizer(inner))
                 .clone()
         } else {
             Usage::default()
@@ -262,7 +262,7 @@ fn estimate_o200k_tokenizer(inner: &tiktoken_rs::CoreBPE) -> Usage {
 impl Deref for Tokenizer {
     type Target = tiktoken_rs::CoreBPE;
     fn deref(&self) -> &Self::Target {
-        &self.inner
+        self.inner
     }
 }
 impl<T: HeapSize> Cached<T> {
@@ -561,10 +561,10 @@ mod tests {
 
     #[test]
     fn external_tokenizer_estimate_preserves_encoding_and_releases_with_owner() {
-        let inner = tiktoken_rs::o200k_base().unwrap();
+        let inner = tiktoken_rs::o200k_base_singleton();
         let text = "Hello, world! Grüße aus Berlin. 東京";
         let tokens = inner.encode_ordinary(text);
-        let usage = estimate_o200k_tokenizer(&inner);
+        let usage = estimate_o200k_tokenizer(inner);
         assert_eq!(usage.capacity, 0);
         assert!(usage.estimated > 24 * 1024 * 1024);
         assert!(usage.estimated < 26 * 1024 * 1024);

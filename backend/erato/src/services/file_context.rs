@@ -1,24 +1,15 @@
 //! Request-scoped attachment planning. Extraction artifacts and original bytes are immutable.
 use crate::models::message::{ContentPart, ContentPartText};
+use crate::services::file_processing_cached::shared_tokenizer;
 use erato_config::config::FileContextConfig;
 use eyre::{Report, bail};
 use serde::Serialize;
 use std::sync::LazyLock;
 use utoipa::ToSchema;
 
-static TOKENIZER: LazyLock<crate::metrics::owned::Tokenizer> = LazyLock::new(|| {
-    crate::metrics::owned::Tokenizer::o200k_base(
-        "shared.attachment_tokenizer",
-        crate::metrics::components::sync(
-            crate::metrics::components::Component::TokenizerState,
-            || tiktoken_rs::o200k_base().expect("o200k tokenizer"),
-        ),
-    )
-});
-
 pub fn tokens(text: &str) -> usize {
     crate::metrics::components::sync(crate::metrics::components::Component::TokenizerWork, || {
-        TOKENIZER.encode_ordinary(text).len()
+        shared_tokenizer().encode_ordinary(text).len()
     })
 }
 
@@ -476,8 +467,9 @@ pub(crate) fn prepare_eager_attachment(
         && !raw_text.contains("erato:teams-transcript")
     {
         static MAX_TOKEN_BYTES: LazyLock<usize> = LazyLock::new(|| {
+            let tokenizer = shared_tokenizer();
             (0..)
-                .map_while(|rank| TOKENIZER.decode_bytes(&[rank]).ok())
+                .map_while(|rank| tokenizer.decode_bytes(&[rank]).ok())
                 .map(|bytes| bytes.len())
                 .max()
                 .unwrap_or(1)
