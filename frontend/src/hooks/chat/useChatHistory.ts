@@ -10,6 +10,7 @@ import { useNavigate, useLocation, useParams } from "react-router-dom"; // Added
 import { create } from "zustand";
 import { devtools } from "zustand/middleware";
 
+import { refreshChatQueries } from "@/hooks/chat/refreshChatQueries";
 import {
   fetchRecentChats,
   useArchiveChatEndpoint,
@@ -261,7 +262,6 @@ export function useChatHistory({
     chats: listedChats,
     isLoading,
     error,
-    refetch,
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
@@ -503,12 +503,7 @@ export function useChatHistory({
         }
         // Not awaited: navigation away from the archived chat must not wait
         // for every list variant to refetch page by page.
-        void queryClient.invalidateQueries({
-          queryKey: recentChatsQuery({}).queryKey,
-        });
-        void queryClient.invalidateQueries({
-          queryKey: chatDetailQuery({ pathParams: { chatId } }).queryKey,
-        });
+        void refreshChatQueries(queryClient);
         return;
       }
 
@@ -569,9 +564,7 @@ export function useChatHistory({
           pathParams: { chatId },
           body: { is_pinned: isPinned },
         });
-        await queryClient.invalidateQueries({
-          queryKey: recentChatsQuery({}).queryKey,
-        });
+        await refreshChatQueries(queryClient);
       } catch (error) {
         logger.log(
           `Failed to ${isPinned ? "pin" : "unpin"} chat ${chatId}:`,
@@ -581,6 +574,11 @@ export function useChatHistory({
       }
     },
     [queryClient, updateChatMutation],
+  );
+
+  const refetch = useCallback(
+    () => refreshChatQueries(queryClient),
+    [queryClient],
   );
 
   return {

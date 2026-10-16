@@ -847,6 +847,14 @@ export type ChatDetail = {
    */
   is_pinned: boolean;
   /**
+   * Provider used by the latest active-thread generation.
+   */
+  last_chat_provider_id?: string;
+  /**
+   * Enabled facets of the latest active-thread generation.
+   */
+  last_selected_facets?: string[];
+  /**
    * Whether the model may be offered MCP write tools and client actions
    * in this chat. Off, only tools the server marks read-only are offered.
    */

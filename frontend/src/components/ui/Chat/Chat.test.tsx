@@ -452,16 +452,29 @@ describe("Chat surface composition", () => {
     },
   );
 
+  it("restores facets for a chat outside the sidebar page", () => {
+    testState.chatDetail = chatDetail({
+      last_selected_facets: ["active-facet"],
+    });
+    renderChat({ messageOrder: ["user-1"] });
+    expect(screen.getByTestId("chat-input-stub")).toHaveAttribute(
+      "data-facets",
+      JSON.stringify(["active-facet"]),
+    );
+  });
+
   it.each([false, true])(
     "shows edit, regenerate and share for an editable chat (pinned: %s)",
     (isPinned) => {
       const chat = {
         ...backgroundRun("origin-1"),
         is_pinned: isPinned,
-        last_selected_facets: ["selected-facet"],
+        last_selected_facets: ["stale-sidebar-facet"],
       };
       chatLists[isPinned ? "pinnedChats" : "chats"] = [chat];
-      testState.chatDetail = chatDetail();
+      testState.chatDetail = chatDetail({
+        last_selected_facets: ["selected-facet"],
+      });
 
       renderChat({ messageOrder: ["user-1"] });
 

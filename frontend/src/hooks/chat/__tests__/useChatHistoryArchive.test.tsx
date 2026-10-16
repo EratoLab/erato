@@ -174,7 +174,8 @@ describe("useChatHistory archiveChat optimistic removal", () => {
     expect(result.current.chats.map((c) => c.id)).toContain("chat5");
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["recentChats"] });
     expect(invalidateSpy).toHaveBeenCalledWith({
-      queryKey: ["chatDetail", { chatId: "chat5" }],
+      queryKey: ["chatDetail"],
+      predicate: expect.any(Function),
     });
   });
 

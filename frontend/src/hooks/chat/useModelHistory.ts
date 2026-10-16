@@ -4,63 +4,42 @@
  * Provides historical model information for displaying what models were used in past chats.
  * This is a read-only hook focused on historical context, not interactive selection.
  */
+import { skipToken } from "@tanstack/react-query";
 import { useMemo } from "react";
 
-import { useAvailableModels } from "@/lib/generated/v1betaApi/v1betaApiComponents";
-import { createLogger } from "@/utils/debugLogger";
+import {
+  useAvailableModels,
+  useChatDetail,
+} from "@/lib/generated/v1betaApi/v1betaApiComponents";
 
 import type { RecentChat } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
-const logger = createLogger("HOOK", "useModelHistory");
-
 interface UseModelHistoryParams {
   currentChatId: string | null;
-  chats: RecentChat[];
+  /** @deprecated Active-chat settings are loaded independently of sidebar pages. */
+  chats?: RecentChat[];
+  /** @deprecated Active-chat settings are loaded independently of sidebar pages. */
   pinnedChats?: RecentChat[];
 }
 
-export function useModelHistory({
-  currentChatId,
-  chats,
-  pinnedChats,
-}: UseModelHistoryParams) {
+export function useModelHistory({ currentChatId }: UseModelHistoryParams) {
   // Fetch available models to validate historical models still exist
   const { data: availableModels = [] } = useAvailableModels({});
 
-  // Resolve current chat's last used model (historical context)
-  const currentChatLastModel = useMemo(() => {
-    if (!currentChatId) {
-      return null;
-    }
+  const { data: currentChat } = useChatDetail(
+    currentChatId ? { pathParams: { chatId: currentChatId } } : skipToken,
+  );
 
-    const currentChat =
-      pinnedChats?.find((chat) => chat.id === currentChatId) ??
-      chats.find((chat) => chat.id === currentChatId);
-    const lastModel = currentChat?.last_model;
-
-    // Validate the historical model still exists in available models
-    if (lastModel && availableModels.length > 0) {
-      const modelExists = availableModels.find(
-        (model) => model.chat_provider_id === lastModel.chat_provider_id,
-      );
-      if (modelExists) {
-        logger.log("Found last used model for current chat:", {
-          chatId: currentChatId,
-          modelId: lastModel.chat_provider_id,
-          modelName: lastModel.model_display_name,
-        });
-        return lastModel;
-      } else {
-        logger.log("Last used model no longer available:", {
-          chatId: currentChatId,
-          unavailableModelId: lastModel.chat_provider_id,
-          availableModels: availableModels.map((m) => m.chat_provider_id),
-        });
-      }
-    }
-
-    return null;
-  }, [currentChatId, chats, pinnedChats, availableModels]);
+  const currentChatLastModel = useMemo(
+    () =>
+      currentChatId
+        ? (availableModels.find(
+            (model) =>
+              model.chat_provider_id === currentChat?.last_chat_provider_id,
+          ) ?? null)
+        : null,
+    [currentChatId, currentChat, availableModels],
+  );
 
   return {
     // Historical model information

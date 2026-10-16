@@ -1031,6 +1031,41 @@ fn latest_message_lateral() -> &'static str {
         ) latest_msg ON true"#
 }
 
+/// At most one metadata-only row per requested chat crosses the DB boundary.
+#[derive(Debug, FromQueryResult)]
+struct LatestGenerationParameters {
+    chat_id: Uuid,
+    generation_parameters: Option<serde_json::Value>,
+}
+
+async fn latest_generation_parameters(
+    conn: &DatabaseConnection,
+    chat_ids: &[Uuid],
+) -> Result<Vec<LatestGenerationParameters>, Report> {
+    if chat_ids.is_empty() {
+        return Ok(Vec::new());
+    }
+    Ok(
+        LatestGenerationParameters::find_by_statement(sea_orm::Statement::from_sql_and_values(
+            sea_orm::DatabaseBackend::Postgres,
+            r#"SELECT requested.chat_id, latest.generation_parameters
+               FROM unnest($1::uuid[]) AS requested(chat_id)
+               CROSS JOIN LATERAL (
+                   SELECT m.generation_parameters
+                   FROM messages m
+                   WHERE m.chat_id = requested.chat_id
+                     AND m.is_message_in_active_thread = TRUE
+                     AND m.generation_parameters IS NOT NULL
+                   ORDER BY m.created_at DESC
+                   LIMIT 1
+               ) latest"#,
+            [chat_ids.to_vec().into()],
+        ))
+        .all(conn)
+        .await?,
+    )
+}
+
 /// Get the most recent chats for a user.
 ///
 /// Returns a tuple of (chats, stats) where:
@@ -1389,49 +1424,31 @@ pub async fn get_recent_chats(
         selected_facets: Option<Vec<String>>,
     }
 
-    // Batch query: Get the most recent message with generation_parameters for each chat
-    // We query all messages that could be the "last" one, then pick the latest per chat in memory
-    let last_generation_info_map: HashMap<Uuid, LastGenerationInfo> = if !authorized_chat_ids
-        .is_empty()
-    {
-        let messages_with_params: Vec<messages::Model> = Messages::find()
-            .filter(messages::Column::ChatId.is_in(authorized_chat_ids.clone()))
-            .filter(messages::Column::IsMessageInActiveThread.eq(true))
-            .filter(messages::Column::GenerationParameters.is_not_null())
-            .order_by_desc(messages::Column::CreatedAt)
-            .all(conn)
-            .await?;
-
-        // Group by chat_id and take the first (most recent) for each
-        let mut map: HashMap<Uuid, LastGenerationInfo> = HashMap::new();
-        for msg in messages_with_params {
-            // Only insert if we haven't seen this chat_id yet (first = most recent due to ORDER BY)
-            if let std::collections::hash_map::Entry::Vacant(e) = map.entry(msg.chat_id) {
-                let generation_info = msg
+    // PostgreSQL returns at most one metadata-only row per authorized chat.
+    let last_generation_info_map: HashMap<Uuid, LastGenerationInfo> =
+        latest_generation_parameters(conn, &authorized_chat_ids)
+            .await?
+            .into_iter()
+            .map(|row| {
+                let info = row
                     .generation_parameters
                     .and_then(|params| serde_json::from_value::<GenerationParameters>(params).ok())
-                    .map(|gp| {
-                        let selected_facets: Vec<String> = gp
-                            .selected_facets
-                            .into_iter()
-                            .filter_map(|(id, enabled)| enabled.then_some(id))
-                            .collect();
-                        LastGenerationInfo {
-                            provider_id: gp.generation_chat_provider_id,
-                            selected_facets: Some(selected_facets),
-                        }
+                    .map(|gp| LastGenerationInfo {
+                        provider_id: gp.generation_chat_provider_id,
+                        selected_facets: Some(
+                            gp.selected_facets
+                                .into_iter()
+                                .filter_map(|(id, enabled)| enabled.then_some(id))
+                                .collect(),
+                        ),
                     })
                     .unwrap_or(LastGenerationInfo {
                         provider_id: None,
                         selected_facets: None,
                     });
-                e.insert(generation_info);
-            }
-        }
-        map
-    } else {
-        HashMap::new()
-    };
+                (row.chat_id, info)
+            })
+            .collect();
 
     // Assemble the final results using the pre-fetched data
     let recent_chats: Vec<RecentChat> = authorized_chats
@@ -1499,6 +1516,8 @@ pub async fn get_recent_chats(
 /// hide it by default, so opening one by link has no row to read from.
 #[derive(Debug, Clone)]
 pub struct ChatDetail {
+    pub last_chat_provider_id: Option<String>,
+    pub last_selected_facets: Option<Vec<String>>,
     pub id: Uuid,
     pub title_by_summary: Option<String>,
     pub title_by_user_provided: Option<String>,
@@ -1582,7 +1601,25 @@ pub async fn get_chat_detail(
         None => None,
     };
 
+    let latest = latest_generation_parameters(conn, &[*chat_id])
+        .await?
+        .into_iter()
+        .next()
+        .and_then(|row| row.generation_parameters)
+        .and_then(|params| serde_json::from_value::<GenerationParameters>(params).ok());
+    let last_chat_provider_id = latest
+        .as_ref()
+        .and_then(|gp| gp.generation_chat_provider_id.clone());
+    let last_selected_facets = latest.map(|gp| {
+        gp.selected_facets
+            .into_iter()
+            .filter_map(|(id, enabled)| enabled.then_some(id))
+            .collect()
+    });
+
     Ok(ChatDetail {
+        last_chat_provider_id,
+        last_selected_facets,
         id: chat.id,
         created_via: ChatCreatedVia::parse(&chat.created_via).unwrap_or(ChatCreatedVia::Legacy),
         title_resolved: resolve_chat_display_name(

@@ -2852,3 +2852,180 @@ async fn test_frequent_assistants_endpoint(pool: Pool<Postgres>) {
         "First should still be the most frequent"
     );
 }
+
+/// A real PostgreSQL boundary that measures materialized results, not query count.
+#[derive(Debug)]
+struct MeasuredChatDb {
+    db: DatabaseConnection,
+    measurements: std::sync::Arc<std::sync::Mutex<Vec<(usize, usize)>>>,
+}
+
+#[async_trait::async_trait]
+impl sea_orm::ProxyDatabaseTrait for MeasuredChatDb {
+    async fn query(
+        &self,
+        statement: sea_orm::Statement,
+    ) -> Result<Vec<sea_orm::ProxyRow>, sea_orm::DbErr> {
+        use sea_orm::ConnectionTrait;
+        let rows = self.db.query_all_raw(statement).await?;
+        let mut rows: Vec<_> = rows
+            .iter()
+            .map(sea_orm::from_query_result_to_proxy_row)
+            .collect();
+        // SeaORM's PostgreSQL proxy adapter represents timestamptz as UTC,
+        // while these entities decode FixedOffset. Preserve the instant in
+        // the representation expected by the entity decoder.
+        for row in &mut rows {
+            for value in row.values.values_mut() {
+                if let sea_orm::Value::ChronoDateTimeUtc(timestamp) = value {
+                    *value = sea_orm::Value::ChronoDateTimeWithTimeZone(
+                        timestamp.take().map(|time| time.fixed_offset()),
+                    );
+                }
+            }
+        }
+        let mut bytes = 0;
+        for row in &rows {
+            // Fail even for tiny fixtures if either historical payload is projected.
+            assert!(!row.values.contains_key("raw_message"));
+            assert!(!row.values.contains_key("generation_input_messages"));
+            let json: Value = row.clone().into();
+            bytes += serde_json::to_vec(&json).unwrap().len();
+        }
+        self.measurements.lock().unwrap().push((rows.len(), bytes));
+        Ok(rows)
+    }
+
+    async fn execute(
+        &self,
+        statement: sea_orm::Statement,
+    ) -> Result<sea_orm::ProxyExecResult, sea_orm::DbErr> {
+        use sea_orm::ConnectionTrait;
+        Ok(self.db.execute_raw(statement).await?.into())
+    }
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn recent_chats_bounds_materialized_history(pool: Pool<Postgres>) {
+    use erato::models::chat::{RecentChatsFilter, get_recent_chats};
+    use erato::policy::types::Subject;
+    use std::sync::{Arc, Mutex};
+
+    let (config, _mock) = setup_mock_llm_server(None).await;
+    let state = test_app_state(config, pool.clone()).await;
+    let user = erato::models::user::get_or_create_user(
+        &state.db,
+        TEST_USER_ISSUER,
+        "bounded-history",
+        None,
+    )
+    .await
+    .unwrap();
+    let mut ids = Vec::new();
+    for title in ["old", "active", "empty"] {
+        let id: Uuid = sqlx::query_scalar(
+            "INSERT INTO chats (owner_user_id, title_by_user_provided) VALUES ($1, $2) RETURNING id",
+        ).bind(user.id.to_string()).bind(title).fetch_one(&pool).await.unwrap();
+        ids.push(id);
+    }
+    // A short active chat, and a newer inactive branch that must not supply settings.
+    for (active, provider, age) in [(true, "active-provider", 1), (false, "wrong-branch", 0)] {
+        sqlx::query("INSERT INTO messages (chat_id, raw_message, generation_parameters, is_message_in_active_thread, created_at) VALUES ($1, '{}', $2, $3, now() - make_interval(secs => $4))")
+            .bind(ids[1]).bind(json!({"generation_chat_provider_id": provider, "selected_facets": {"active-facet": true, "off": false}}))
+            .bind(active).bind(f64::from(age)).execute(&pool).await.unwrap();
+    }
+    let policy = state
+        .global_policy_engine
+        .get_engine_with_rebuild_check(&state.db, &state.config, std::time::Duration::ZERO)
+        .await
+        .unwrap();
+    let measurements = Arc::new(Mutex::new(Vec::new()));
+    let db = sea_orm::Database::connect_proxy(
+        sea_orm::DbBackend::Postgres,
+        Arc::new(Box::new(MeasuredChatDb {
+            db: state.db.clone(),
+            measurements: measurements.clone(),
+        })),
+    )
+    .await
+    .unwrap();
+    let filter = RecentChatsFilter {
+        limit: 2,
+        offset: 0,
+        include_archived: false,
+        pinned: None,
+        chat_type: None,
+        search_query: None,
+        include_delegated: false,
+        origin_chat_id: None,
+        created_via: &[],
+        exclude_created_via: &[],
+    };
+    let mut baseline = None;
+    for (count, payload_size) in [(200, 4096), (800, 65536)] {
+        sqlx::query("DELETE FROM messages WHERE chat_id = $1")
+            .bind(ids[0])
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query(r#"INSERT INTO messages (chat_id, raw_message, generation_input_messages, generation_parameters, is_message_in_active_thread, created_at)
+            SELECT $1, jsonb_build_object('content', repeat('x', $3)),
+                jsonb_build_array(jsonb_build_object('content', repeat('y', $3))),
+                jsonb_build_object('generation_chat_provider_id', CASE WHEN n = $2 THEN 'latest-old' ELSE 'historical' END,
+                    'selected_facets', jsonb_build_object('old-facet', n = $2)),
+                TRUE, now() - interval '1 day' + n * interval '1 second'
+            FROM generate_series(1, $2) n"#)
+            .bind(ids[0]).bind(count).bind(payload_size).execute(&pool).await.unwrap();
+        // Repeated refreshes must have the same live result volume after history grows.
+        for _ in 0..10 {
+            measurements.lock().unwrap().clear();
+            let (chats, stats) = get_recent_chats(
+                &db,
+                &policy,
+                &Subject::User(user.id.to_string()),
+                &user.id.to_string(),
+                filter,
+                60,
+            )
+            .await
+            .unwrap();
+            assert_eq!(chats.len(), 2);
+            assert_eq!(stats.total_count, 2);
+            assert_eq!(chats[0].id, ids[1].to_string());
+            assert_eq!(
+                chats[0].last_chat_provider_id.as_deref(),
+                Some("active-provider")
+            );
+            assert_eq!(
+                chats[0].last_selected_facets,
+                Some(vec!["active-facet".into()])
+            );
+            assert_eq!(
+                chats[1].last_chat_provider_id.as_deref(),
+                Some("latest-old")
+            );
+            assert_eq!(
+                chats[1].last_selected_facets,
+                Some(vec!["old-facet".into()])
+            );
+            let measured = measurements.lock().unwrap();
+            let rows: usize = measured.iter().map(|m| m.0).sum();
+            let bytes: usize = measured.iter().map(|m| m.1).sum();
+            assert!(rows <= 5, "materialized {rows} rows");
+            assert!(bytes < 8192, "materialized {bytes} bytes");
+            let first = *baseline.get_or_insert((rows, bytes));
+            assert_eq!(rows, first.0);
+            assert!(bytes <= first.1 + 64);
+        }
+    }
+    let detail = erato::models::chat::get_chat_detail(
+        &db,
+        &policy,
+        &Subject::User(user.id.to_string()),
+        &ids[2],
+    )
+    .await
+    .unwrap();
+    assert_eq!(detail.last_selected_facets, None);
+    assert_eq!(detail.last_chat_provider_id, None);
+}

@@ -6076,6 +6076,17 @@
             "type": "boolean",
             "description": "Whether this chat is pinned by its owner."
           },
+          "last_chat_provider_id": {
+            "type": "string",
+            "description": "Provider used by the latest active-thread generation."
+          },
+          "last_selected_facets": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Enabled facets of the latest active-thread generation."
+          },
           "mcp_write_tools_enabled": {
             "type": "boolean",
             "description": "Whether the model may be offered MCP write tools and client actions\nin this chat. Off, only tools the server marks read-only are offered."

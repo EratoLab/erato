@@ -24,6 +24,11 @@ vi.mock("@/utils/sse/sseClient", () => ({
 
 // Mock TanStack Query dependencies
 vi.mock("@/lib/generated/v1betaApi/v1betaApiComponents", () => ({
+  chatDetailQuery: vi.fn(
+    ({ pathParams }: { pathParams: { chatId: string } }) => ({
+      queryKey: ["chatDetail", pathParams.chatId],
+    }),
+  ),
   fetchRecentChats: vi.fn(),
   recentChatsQuery: vi.fn(() => ({
     queryKey: ["recentChats"],

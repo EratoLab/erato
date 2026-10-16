@@ -202,11 +202,7 @@ export function ChatProvider({
   }, [currentChatId]);
 
   // Use model history hook for historical model information
-  const { currentChatLastModel } = useModelHistory({
-    currentChatId,
-    chats,
-    pinnedChats,
-  });
+  const { currentChatLastModel } = useModelHistory({ currentChatId });
 
   // Custom createNewChat that also increments the counter
   const createNewChat = useMemo(() => {
