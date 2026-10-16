@@ -12,16 +12,25 @@ metadata:
     {{- range $key, $value := .Values.ingress.annotations }}
     {{ $key }}: {{ $value | squote }}
     {{- end }}
+    {{- if eq (.Values.deployment.ingressClassName | default .Values.ingress.className) "tailscale" }}
+    tailscale.com/tags: {{ .Values.deployment.tailscaleTags | default "tag:k8s-observability" | quote }}
+    {{- end }}
 spec:
-  ingressClassName: {{ .Values.ingress.className }}
+  ingressClassName: {{ .Values.deployment.ingressClassName | default .Values.ingress.className }}
   tls:
-    {{- if .Values.ingress.tls.enabled }}
+    {{- if or .Values.ingress.tls.enabled .Values.deployment.tlsSecretName (and (eq (.Values.deployment.ingressClassName | default .Values.ingress.className) "tailscale") .Values.deployment.ingressTlsHost) }}
     - hosts:
-        - {{ .Values.ingress.host | quote }}
-      secretName: {{ .Values.ingress.tls.secretName }}
+        - {{ .Values.deployment.ingressTlsHost | default .Values.deployment.appHost | default .Values.ingress.host | quote }}
+      {{- if or .Values.deployment.tlsSecretName (ne (.Values.deployment.ingressClassName | default .Values.ingress.className) "tailscale") }}
+      secretName: {{ .Values.deployment.tlsSecretName | default .Values.ingress.tls.secretName }}
+      {{- end }}
     {{- end }}
   rules:
-    - host: {{ .Values.ingress.host | quote }}
+    {{- if ne (.Values.deployment.ingressClassName | default .Values.ingress.className) "tailscale" }}
+    - host: {{ .Values.deployment.appHost | default .Values.ingress.host | quote }}
+    {{- else }}
+    -
+    {{- end }}
       http:
         paths:
           {{- with .Values.ingress.extraPaths }}

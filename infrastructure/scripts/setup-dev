@@ -8,12 +8,17 @@
 # ///
 
 import argparse
+import atexit
+import json
+import os
 import subprocess
 import sys
 import time
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
+import re
+import tempfile
 from pydantic import BaseModel, Field
 
 # Import shared k3d utilities
@@ -33,6 +38,7 @@ class ScriptConfig(BaseModel):
     with_telepresence: bool = False
     file_storage_config_source: Optional[str] = None
     test_scenario: str = "basic"
+    deployment_kubeconfig: Optional[Path] = None
 
 
 class ClusterConfig(BaseModel):
@@ -667,8 +673,10 @@ def install_erato_chart(config: ScriptConfig, cluster_config: ClusterConfig, hel
     cmd = [
         "helm", "upgrade", "--install", "erato-local",
         str(cluster_config.chart_path),
-        "--namespace", "erato-local-ns", "--create-namespace"
+        "--namespace", "erato-local-ns"
     ]
+    if config.deployment_kubeconfig:
+        cmd.extend(["--kubeconfig", str(config.deployment_kubeconfig)])
     
     if config.wait_flag:
         cmd.append(config.wait_flag)
@@ -737,6 +745,273 @@ def print_completion_message(cluster_config: ClusterConfig, config: ScriptConfig
         print("  (This URL is only available in the nginx-auth scenario)")
 
 
+def deploy_existing_environment(args: argparse.Namespace, config: ScriptConfig) -> None:
+    """Deploy into a pre-provisioned namespace using its limited kubeconfig."""
+    import yaml
+
+    if not args.kubeconfig or not args.kubeconfig.is_file():
+        raise SystemExit("--target existing requires --kubeconfig from setup-dev-service-account")
+    if not args.environment:
+        raise SystemExit("--target existing requires a unique --environment identity")
+    # The local chart pins the source checkout's image SHA, which may not have
+    # been published (for example when deploying this branch). Remote targets
+    # default to the registry's CI-published multi-architecture image instead.
+    if not config.erato_image_tag:
+        config.erato_image_tag = "latest"
+    tailscale_ingress = args.ingress_class == "tailscale"
+    if not tailscale_ingress and not args.tls_secret_name:
+        raise SystemExit("Private nginx deployments require --tls-secret-name")
+
+    environment = args.environment.lower()
+    if not re.fullmatch(r"[a-z0-9]([-a-z0-9]*[a-z0-9])?", environment) or len(environment) > 29:
+        raise SystemExit("--environment must be a DNS label of at most 29 characters")
+    namespace = args.namespace or f"erato-{environment}"
+    release = args.release_name or f"erato-{environment}"
+    domain = args.domain_suffix.lstrip(".")
+    domain_labels = domain.split(".")
+    valid_domain_suffix = domain.endswith("ts.net") if tailscale_ingress else domain.endswith("erato.internal")
+    if (
+        not valid_domain_suffix
+        or any(not re.fullmatch(r"[a-z0-9]([-a-z0-9]*[a-z0-9])?", label) or len(label) > 63 for label in domain_labels)
+    ):
+        expected_domain = "a Tailscale MagicDNS suffix ending in ts.net" if tailscale_ingress else "a private domain ending in erato.internal"
+        raise SystemExit(f"--domain-suffix must be {expected_domain} and contain only lowercase DNS characters")
+
+    app_host = f"app-{environment}.{domain}"
+    dex_host = f"dex-{environment}.{domain}"
+    embedded_host = f"embedded-host-{environment}.{domain}"
+    app_url = f"https://{app_host}"
+    dex_url = f"https://{dex_host}"
+    if not re.fullmatch(r"[a-z0-9]([-a-z0-9]*[a-z0-9])?", namespace) or len(namespace) > 63:
+        raise SystemExit("--namespace must be a Kubernetes DNS label of at most 63 characters")
+    if not re.fullmatch(r"[a-z0-9]([-a-z0-9]*[a-z0-9])?", release) or len(release) > 63:
+        raise SystemExit("--release-name must be a Kubernetes DNS label of at most 63 characters")
+    if len(f"{release}-erato-backend-load-balancer") > 63:
+        raise SystemExit("--release-name is too long for the chart's backend load-balancer service account")
+    release_fullname = release if "erato-local" in release else f"{release}-erato-local"
+    internal_dex_url = f"http://{release}-dex.{namespace}.svc.cluster.local:5556"
+    chart_path = Path(__file__).resolve().parent.parent / "k3d" / "erato-local"
+    verify_deployer_kubeconfig(args.kubeconfig, namespace, args.deployer_service_account)
+
+    scenario_secret_path = args.scenario_secrets_file
+    if scenario_secret_path and not scenario_secret_path.is_file():
+        raise SystemExit(f"Scenario secrets file not found: {scenario_secret_path}")
+    if scenario_secret_path:
+        marker = re.search(r'(?m)^K3D_TEST_SCENARIO\s*=\s*"([^"]+)"', scenario_secret_path.read_text(encoding="utf-8"))
+        if marker and marker.group(1) != config.test_scenario:
+            raise SystemExit(f"Scenario secrets are for '{marker.group(1)}', but --scenario selects '{config.test_scenario}'")
+    if config.chart_dep_update:
+        run_command(["helm", "dependency", "update", str(chart_path)])
+    if config.test_scenario == "entra_id" and not args.e2e_secrets_file:
+        raise SystemExit("--scenario entra_id requires --e2e-secrets-file with the Entra tenant/client credentials")
+
+    helm_args = configure_helm_args(config)
+    helm_args.extend(handle_file_storage_config(config))
+    helm_args.extend(configure_mock_llm_server_helm_args(config))
+    helm_args.extend(configure_mock_mcp_server_helm_args(config))
+    helm_args.extend(get_helm_scenario_args(config.test_scenario))
+    app_tls_host = f"app-{environment}" if tailscale_ingress else app_host
+    dex_tls_host = f"dex-{environment}" if tailscale_ingress else dex_host
+    embedded_tls_host = f"embedded-host-{environment}" if tailscale_ingress else embedded_host
+    helm_args.extend([
+        "--set", "scenarioSecretsConfig.includeLocalFiles=false",
+        "--set", "scenarioSecretsConfig.enabled=false",
+        "--set", f"scenarioSecretsConfig.scenario={config.test_scenario}",
+        "--set", f"erato.deployment.appHost={app_host}",
+        "--set", f"erato.deployment.dexHost={dex_host}",
+        "--set", f"erato.deployment.embeddedHost={embedded_host}",
+        "--set", f"erato.deployment.appUrl={app_url}",
+        "--set", f"erato.deployment.dexUrl={dex_url}",
+        "--set", f"erato.deployment.internalDexUrl={internal_dex_url}",
+        "--set", f"erato.deployment.ingressClassName={args.ingress_class}",
+        "--set", f"erato.deployment.tlsSecretName={args.tls_secret_name or ''}",
+        "--set", f"erato.deployment.appTlsHost={app_tls_host}",
+        "--set", f"erato.deployment.dexTlsHost={dex_tls_host}",
+        "--set", f"erato.deployment.embeddedTlsHost={embedded_tls_host}",
+        "--set", f"erato.deployment.tailscaleTags={args.tailscale_tags}",
+        "--set", f"erato.deployment.ingressTlsHost={app_tls_host}",
+        "--set", f"erato.ingress.host={app_host}",
+        "--set", f"erato.ingress.className={args.ingress_class}",
+        "--set", f"erato.ingress.tls.enabled=true",
+        "--set", f"erato.ingress.tls.secretName={args.tls_secret_name or ''}",
+        "--set", f"dex.ingress.host={dex_host}",
+        "--set", f"dex.ingress.className={args.ingress_class}",
+        "--set", f"nginxAuth.ingress.host={app_host}",
+        "--set", f"nginxAuth.ingress.className={args.ingress_class}",
+        "--set", f"nginxAuth.ingress.tls.enabled=true",
+        "--set", f"nginxAuth.ingress.tls.secretName={args.tls_secret_name or ''}",
+        "--set", f"nginxAuth.embeddedHost.ingress.host={embedded_host}",
+        "--set", f"nginxAuth.embeddedHost.ingress.className={args.ingress_class}",
+        "--set", f"nginxAuth.embeddedHost.ingress.tls.enabled=true",
+        "--set", f"nginxAuth.embeddedHost.ingress.tls.secretName={args.tls_secret_name or ''}",
+        "--set", f"seaweedMini.serviceName={release_fullname}-seaweed-mini",
+        "--set", f"erato.backend.configFile.secretName={release}-erato-toml-secret",
+        "--set", f"erato.postgresql.external.connectionString.valueFrom.secretKeyRef.name={release_fullname}-postgres-app",
+        "--set", "erato.backend.loadBalancer.serviceAccount.create=false",
+        "--set", f"erato.backend.loadBalancer.serviceAccount.name={release}-erato-backend-load-balancer",
+    ])
+
+    extra_config_files = [
+        {"name": "file-storage", "configMapName": f"{release}-erato-file-storage-config", "configMapKey": "erato.file-storage.toml"},
+        {"name": "test-scenario", "configMapName": f"{release}-erato-test-scenario-config", "configMapKey": "erato.scenario.toml"},
+        {"name": "frontend-env", "inlineContent": '[frontend.additional_environment]\nFOO_BAR = "true"'},
+    ]
+    secret_temp_paths: list[Path] = []
+    if scenario_secret_path:
+        scenario_contents = scenario_secret_path.read_text(encoding="utf-8")
+        scenario_data_match = re.search(r"(?m)^SCENARIO_DATA\s*=.*(?:\n|$)", scenario_contents)
+        private_contents = scenario_contents.replace(scenario_data_match.group(0), "") if scenario_data_match else scenario_contents
+        private_contents = (
+            private_contents
+            .replace('{{ include "erato-local.fullname" . }}', release_fullname)
+            .replace("{{ .Release.Namespace }}", namespace)
+        )
+        public_contents = "[frontend.additional_environment]\n"
+        marker_match = re.search(r'(?m)^K3D_TEST_SCENARIO\s*=.*(?:\n|$)', scenario_contents)
+        if marker_match:
+            public_contents += marker_match.group(0)
+        if scenario_data_match:
+            public_contents += scenario_data_match.group(0)
+        secret_temp_paths = []
+        for suffix, contents in (("-private.toml", private_contents), ("-public.toml", public_contents)):
+            fd, temporary_name = tempfile.mkstemp(suffix=suffix, prefix=f"{environment}-")
+            os.fchmod(fd, 0o600)
+            with os.fdopen(fd, "w", encoding="utf-8") as stream:
+                stream.write(contents)
+            secret_temp_paths.append(Path(temporary_name))
+            atexit.register(lambda path=temporary_name: Path(path).unlink(missing_ok=True))
+
+        scenario_config_files = extra_config_files + [
+            {
+                "name": "scenario-secrets",
+                "secretName": f"{release}-erato-scenario-{config.test_scenario.replace('_', '-')}-secrets",
+                "secretKey": "erato.scenario.auto.toml",
+            }
+        ]
+        helm_args.extend([
+            "--set", "scenarioSecretsConfig.enabled=true",
+            "--set-file", f"scenarioSecretsConfig.remoteData={secret_temp_paths[0]}",
+            "--set-file", f"scenarioSecretsConfig.remotePublicData={secret_temp_paths[1]}",
+            "--set-json", f"erato.backend.extraConfigFiles={json.dumps(scenario_config_files)}",
+            "--set-json", f"erato.ingress.extraPaths={json.dumps([{'path': '/e2e-scenario-data', 'pathType': 'Prefix', 'backend': {'service': {'name': f'{release}-e2e-scenario-data-server', 'port': {'name': 'http'}}}}])}",
+        ])
+    else:
+        helm_args.extend(["--set-json", f"erato.backend.extraConfigFiles={json.dumps(extra_config_files)}"])
+
+    if config.test_scenario == "multi-replica":
+        helm_args.extend([
+            "--set", "erato.backend.replicaCount=2",
+            "--set", "erato.backend.loadBalancer.enabled=true",
+            "--set", "erato.backend.loadBalancer.provider=kubernetesingress",
+            "--set", "erato.backend.resources.requests.cpu=100m",
+            "--set", "erato.backend.resources.requests.memory=250Mi",
+            "--set", "erato.backend.resources.limits.cpu=100m",
+            "--set", "erato.backend.resources.limits.memory=250Mi",
+            "--set", "mockLlmServer.enabled=true",
+        ])
+    elif config.test_scenario == "nginx-auth":
+        helm_args.extend([
+            "--set", "erato.oauth2Proxy.enabled=false",
+            "--set", "dex.enabled=false",
+            "--set", "nginxAuth.enabled=true",
+            "--set", "erato.ingress.enabled=false",
+        ])
+    if args.storage_class:
+        helm_args.extend(["--set", f"postgresql.storage.storageClass={args.storage_class}"])
+
+    values = {
+        "erato": {
+            "ingress": {"annotations": {"nginx.ingress.kubernetes.io/proxy-buffer-size": "8k", "nginx.ingress.kubernetes.io/proxy-buffers-number": "4", "nginx.ingress.kubernetes.io/proxy-body-size": "0"}},
+        }
+    }
+    if config.test_scenario == "entra_id":
+        import tomllib
+
+        try:
+            with args.e2e_secrets_file.open("rb") as stream:
+                entra_secrets = tomllib.load(stream)
+            base_values = yaml.safe_load((chart_path / "values.yaml").read_text(encoding="utf-8"))
+            base_config = base_values.get("erato", {}).get("oauth2Proxy", {}).get("config", "")
+            config_dict = {}
+            for line in base_config.splitlines():
+                line = line.strip()
+                if "=" in line and not line.startswith("#"):
+                    key, value = line.split("=", 1)
+                    config_dict[key.strip()] = value.strip()
+            tenant = entra_secrets["entra_id_tenant_id"]
+            client_id = entra_secrets["entra_id_client_id"]
+            client_secret = entra_secrets["entra_id_client_secret"]
+        except (OSError, KeyError, ValueError) as error:
+            raise SystemExit(f"Could not load Entra credentials from {args.e2e_secrets_file}: {error}") from error
+        config_dict.update({
+            "provider": '"entra-id"',
+            "oidc_issuer_url": f'"https://login.microsoftonline.com/{tenant}/v2.0"',
+            "client_id": f'"{client_id}"',
+            "client_secret": f'"{client_secret}"',
+            "skip_oidc_discovery": "false",
+            "scope": '"openid profile email offline_access"',
+        })
+        for key in ("login_url", "redeem_url", "oidc_jwks_url", "insecure_oidc_skip_issuer_verification"):
+            config_dict.pop(key, None)
+        values["erato"]["oauth2Proxy"] = {"config": "\n".join(f"{key} = {value}" for key, value in config_dict.items())}
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", prefix=f"{environment}-", delete=False) as stream:
+        yaml.safe_dump(values, stream)
+        values_path = Path(stream.name)
+    atexit.register(lambda path=values_path: path.unlink(missing_ok=True))
+
+    command = [
+        "helm", "upgrade", "--install", release, str(chart_path),
+        "--kubeconfig", str(args.kubeconfig),
+        "--namespace", namespace,
+        "--values", str(values_path),
+        *[item for values_file in (args.values_file or []) for item in ["--values", str(values_file.resolve())]],
+        *helm_args,
+    ]
+    if config.wait_flag:
+        command.append(config.wait_flag)
+    print(f"Deploying environment '{environment}' into namespace '{namespace}' using the supplied namespace-scoped kubeconfig")
+    try:
+        run_command(command)
+    finally:
+        values_path.unlink(missing_ok=True)
+        for secret_temp_path in secret_temp_paths:
+            secret_temp_path.unlink(missing_ok=True)
+    print(f"Environment ready: {app_url}")
+    print(f"Dex: {dex_url}")
+
+
+def verify_deployer_kubeconfig(kubeconfig: Path, namespace: str, service_account: str) -> None:
+    """Require an actual service-account token and deny cluster/cross-namespace access."""
+    import base64
+    import yaml
+
+    try:
+        config = yaml.safe_load(kubeconfig.read_text(encoding="utf-8"))
+        token = config["users"][0]["user"]["token"]
+        payload = token.split(".")[1]
+        claims = json.loads(base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4)))
+    except (OSError, KeyError, IndexError, TypeError, ValueError) as error:
+        raise SystemExit("--kubeconfig must contain a service-account bearer token") from error
+    expected_subject = f"system:serviceaccount:{namespace}:{service_account}"
+    if claims.get("sub") != expected_subject:
+        raise SystemExit(f"--kubeconfig identity must be {expected_subject}; got {claims.get('sub', 'unknown')}")
+
+    kubectl = ["kubectl", "--kubeconfig", str(kubeconfig)]
+    checks = [
+        ("get", "deployments", "--namespace", namespace, "yes"),
+        ("list", "namespaces", "no"),
+        ("create", "namespaces", "no"),
+        ("list", "pods", "--all-namespaces", "no"),
+        ("get", "deployments", "--namespace", "kube-system", "no"),
+    ]
+    for check in checks:
+        *permission, expected = check
+        result = run_command([*kubectl, "auth", "can-i", *permission], capture_output=True, check=False)
+        accepted_exit_code = result.returncode == 0 or (expected == "no" and result.returncode == 1)
+        if not accepted_exit_code or result.stdout.strip().lower() != expected:
+            raise SystemExit(f"Service account scope check failed: expected '{expected}' for kubectl auth can-i {' '.join(permission)}")
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Setup local k3d development environment for Erato",
@@ -748,6 +1023,21 @@ def main():
         action="store_true",
         help="Wait for resources to be ready during Helm install"
     )
+    parser.add_argument("--target", choices=["k3d", "existing"], default="k3d", help="Deploy to local k3d or an existing Kubernetes cluster")
+    parser.add_argument("--environment", help="Unique DNS-safe identity for an isolated existing-cluster deployment")
+    parser.add_argument("--namespace", help="Target namespace; defaults to erato-<environment> for existing-cluster deployments")
+    parser.add_argument("--release-name", help="Helm release; defaults to erato-<environment> for existing-cluster deployments")
+    parser.add_argument("--kubeconfig", type=Path, help="Namespace-scoped deployer kubeconfig from setup-dev-service-account")
+    parser.add_argument("--deployer-service-account", default="erato-deployer", help="Service account expected in the supplied kubeconfig")
+    parser.add_argument("--domain-suffix", default="tail1f0fbd.ts.net", help="Private DNS suffix (default: Tailscale tail1f0fbd.ts.net)")
+    parser.add_argument("--ingress-class", default="tailscale", help="Existing ingress class (default: tailscale)")
+    parser.add_argument("--tailscale-tags", default="tag:k8s-observability", help="Tailscale device tag for private ingress (default: tag:k8s-observability)")
+    parser.add_argument("--tls-secret-name", help="Pre-provisioned namespace TLS Secret name (required for nginx ingress)")
+    parser.add_argument("--storage-class", help="Storage class for the CNPG cluster")
+    parser.add_argument("--scenario-secrets-file", type=Path, help="Per-environment generated scenario TOML to mount as a Secret")
+    parser.add_argument("--e2e-secrets-file", type=Path, help="Private E2E source TOML (required for Entra ID OAuth configuration)")
+    parser.add_argument("--values-file", type=Path, action="append", help="Additional per-environment Helm values file (repeatable)")
+    parser.add_argument("--image-pull-secret", action="append", help="Namespace imagePullSecret name (repeatable)")
     parser.add_argument(
         "--build-local",
         action="store_true",
@@ -822,14 +1112,35 @@ def main():
         file_storage_config_source=args.file_storage_config_source,
         test_scenario=args.scenario
     )
+    if args.image_pull_secret:
+        pull_secrets = [{"name": name} for name in args.image_pull_secret]
+        config.helm_set_args.extend([
+            "--set-json", f"global.imagePullSecrets={json.dumps(pull_secrets)}",
+            "--set-json", f"erato.global.imagePullSecrets={json.dumps(pull_secrets)}",
+        ])
 
-    # Handle magic string "fetch-latest-main" for image tag
+    # Resolve the image selector before either deployment target consumes it.
     if config.erato_image_tag == "fetch-latest-main":
         config.erato_image_tag = fetch_latest_main_commit()
     if config.mock_llm_server_image_tag == "fetch-latest-main":
         config.mock_llm_server_image_tag = fetch_latest_main_commit()
     if config.mock_mcp_server_image_tag == "fetch-latest-main":
         config.mock_mcp_server_image_tag = fetch_latest_main_commit()
+
+    if args.target == "existing":
+        if config.build_local:
+            raise SystemExit("--build-local is only supported by the local k3d target")
+        if config.with_telepresence:
+            raise SystemExit("--with-telepresence is only supported by the local k3d target")
+        if args.kubeconfig is None:
+            raise SystemExit("--target existing requires --kubeconfig")
+        if args.e2e_secrets_file and not args.e2e_secrets_file.is_file():
+            raise SystemExit(f"E2E secrets file not found: {args.e2e_secrets_file}")
+        for values_file in args.values_file or []:
+            if not values_file.is_file():
+                raise SystemExit(f"Helm values file not found: {values_file}")
+        deploy_existing_environment(args, config)
+        return
 
     cluster_config = ClusterConfig()
 
@@ -867,12 +1178,20 @@ def main():
     
     # Configure Helm arguments
     helm_args = configure_helm_args(config)
+    helm_args.extend([
+        "--set", "erato.backend.loadBalancer.serviceAccount.create=false",
+        "--set", "erato.backend.loadBalancer.serviceAccount.name=erato-local-erato-backend-load-balancer",
+    ])
     
     # Handle local build if requested
     if config.build_local:
         print("Performing local build...")
         build_helm_args = perform_local_build(config)
         helm_args = build_helm_args  # Override with build-specific args
+        helm_args.extend([
+            "--set", "erato.backend.loadBalancer.serviceAccount.create=false",
+            "--set", "erato.backend.loadBalancer.serviceAccount.name=erato-local-erato-backend-load-balancer",
+        ])
 
     # Handle E2E scenario secrets
     # Check if any scenario secret files exist
@@ -989,6 +1308,7 @@ def main():
                 fd, oauth2_values_file = tempfile.mkstemp(suffix='.yaml', text=True)
                 with os.fdopen(fd, 'w') as f:
                     yaml.dump(oauth2_values, f)
+                atexit.register(lambda path=oauth2_values_file: Path(path).unlink(missing_ok=True))
 
                 helm_args.extend(["-f", oauth2_values_file])
 
@@ -1028,9 +1348,34 @@ def main():
     # Wait for webhooks
     wait_for_webhook("ingress-nginx", "ingress-nginx-controller-admission", "NGINX admission webhook")
     wait_for_webhook("cnpg-system", "cnpg-webhook-service", "CNPG webhook")
-    
-    # Install Erato chart
-    install_erato_chart(config, cluster_config, helm_args)
+
+    # Cluster-level setup above uses the developer's context. Install and
+    # upgrade the application itself only with the namespace-scoped account.
+    import json as json_module
+    import os as os_module
+    import tempfile as tempfile_module
+
+    issuer_config = run_command([
+        "kubectl", "config", "view", "--raw", "--flatten", "--minify", "-o", "json",
+    ], capture_output=True).stdout
+    issuer_fd, issuer_name = tempfile_module.mkstemp(prefix="erato-admin-kubeconfig-")
+    try:
+        os_module.fchmod(issuer_fd, 0o600)
+        with os_module.fdopen(issuer_fd, "w", encoding="utf-8") as issuer_stream:
+            json_module.dump(json_module.loads(issuer_config), issuer_stream)
+        deployment_kubeconfig = Path.home() / ".kube" / "erato-dev-deployer.yaml"
+        run_command([
+            str(script_dir / "setup-dev-service-account"), "provision",
+            "--issuer-kubeconfig", issuer_name,
+            "--namespace", "erato-local-ns",
+            "--service-account", "erato-deployer",
+            "--release-name", "erato-local",
+            "--output-kubeconfig", str(deployment_kubeconfig),
+        ])
+        config.deployment_kubeconfig = deployment_kubeconfig
+        install_erato_chart(config, cluster_config, helm_args)
+    finally:
+        Path(issuer_name).unlink(missing_ok=True)
 
     # Clean up temporary values file if it was created
     if oauth2_values_file and os.path.exists(oauth2_values_file):

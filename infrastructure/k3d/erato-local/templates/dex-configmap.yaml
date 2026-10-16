@@ -8,5 +8,5 @@ metadata:
     app.kubernetes.io/instance: {{ .Release.Name }}
 data:
   config.yaml: |-
-{{ .Values.dex.config | indent 4 }}
-{{- end }} 
+{{ tpl .Values.dex.config . | indent 4 }}
+{{- end }}
