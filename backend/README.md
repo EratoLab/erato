@@ -158,6 +158,74 @@ cargo auditable rustc --locked --release -p erato --bin erato --timings -- \
   -C link-arg=-Wl,--compress-debug-sections=zlib
 ```
 
+## Linux allocator
+
+Normal Linux builds (including `--no-default-features` and production images)
+use tikv-jemallocator 0.6.1 with statistics, independently of heap profiling.
+Non-Linux and musl targets use the system allocator; this jemalloc version does
+not support background threads on musl. `profiling-dial9` deliberately overrides
+jemalloc with Dial9's system allocator wrapper, and does not expose jemalloc
+metrics. `profiling` remains Linux/non-musl only and mutually exclusive with
+`profiling-dial9`.
+
+The binary exports unprefixed `malloc_conf`, matching the allocator's
+`unprefixed_malloc_on_supported_platforms` feature. Embedded defaults are
+`dirty_decay_ms:10000,muzzy_decay_ms:0,background_thread:false`. At the beginning
+of `main`, before starting Tokio, Erato enables background purging with the
+runtime control API. Initialization/control failures stop startup with an error.
+This avoids the startup thread-creation concerns in the
+[jemalloc documentation](https://jemalloc.net/jemalloc.3.html#opt.background_thread).
+Startup logs report effective background-thread status, arena decay defaults and
+heap-profiling status. Ordinary builds do not compile heap sampling support or
+expose profiling endpoints. `--features profiling` adds sampling with the existing
+`prof:true,prof_active:true,lg_prof_sample:19` defaults.
+
+To override decay, set e.g. `MALLOC_CONF=dirty_decay_ms:5000,muzzy_decay_ms:0` in
+the process environment **before launch**, not in an Erato dotenv file. To disable
+runtime background purging, set `ERATO_JEMALLOC_BACKGROUND_THREAD=false` (only
+`true`/`false` are accepted). That switch takes precedence over jemalloc's
+background-thread option; do not use `MALLOC_CONF=background_thread:true`, which
+would start threads during allocator initialization. Restart to apply changes.
+For a complete allocator rollback, deploy the previous system-allocator image;
+disabling purging does not switch allocators. `--no-default-features` does not
+switch allocators either.
+
+Prometheus exposes allocated, active, resident, mapped, retained and metadata
+bytes in ordinary builds. `ERATO_MEMORY_COMPONENTS=1` enables diagnostic arena
+attribution without heap sampling; it remains opt-in because it disables thread
+caches within scopes and changes performance. See the
+[metric reference](../site/content/docs/integrations/prometheus.mdx).
+
+Dirty decay is approximate, not a 10-second deadline. Background purging can
+reclaim completely unused pages even while requests are idle. Live allocations,
+partially occupied pages, thread caches and metadata can keep RSS above baseline.
+Retained/mapped virtual address space is not physical RSS. This change is not a
+proven leak fix.
+
+On Linux/non-musl, validate the embedded settings and live statistics with
+`cargo test -p erato --bin erato allocator_settings_and_live_statistics`, then
+repeat with `--features profiling`. Run with `MALLOC_CONF` and
+`ERATO_JEMALLOC_BACKGROUND_THREAD` unset to check defaults. For an isolated
+256 MiB temporary-allocation probe (prints allocator totals and RSS at
+10/30/60 seconds, does not explicitly flush or purge), run:
+
+```sh
+cargo test --release -p erato --bin erato background_reclamation_after_temporary_allocations -- --ignored --nocapture --test-threads=1
+```
+
+This probe is not a substitute for workload comparisons or a normal release
+container check. Native macOS checks do not validate Linux allocator behavior.
+
+Before production rollout, compare equivalent unsampled release builds with and
+without this change using repeated chat-list/history, token-estimation and
+file/image workloads followed by idle periods. Keep inputs, concurrency, cache
+warmup and resource limits fixed; leave component attribution off. Record p50,
+p95/p99 latency, CPU, peak RSS/container working set, allocated bytes and RSS at
+10/30/60 seconds after each cycle. Repeat cycles to distinguish stable retention
+from continuing growth. A heap-sampled profiling build is not an allocator-only
+baseline. Verify startup settings and allocator metrics in the release container
+and measure latency/CPU regression before deployment.
+
 ## Dial9 profiling
 
 Run `just run_dial9` from this directory to build and run the backend in release

@@ -38,8 +38,11 @@ pub mod state;
 pub mod telemetry;
 pub mod translation_po;
 
-#[cfg(all(feature = "profiling", not(target_os = "linux")))]
-compile_error!("The `profiling` feature is only supported on Linux.");
+#[cfg(all(
+    feature = "profiling",
+    any(not(target_os = "linux"), target_env = "musl")
+))]
+compile_error!("The `profiling` feature requires Linux with a non-musl libc.");
 
 #[cfg(all(feature = "profiling", feature = "profiling-dial9"))]
 compile_error!("The `profiling` and `profiling-dial9` features are mutually exclusive.");

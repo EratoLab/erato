@@ -139,7 +139,7 @@ named-owned bytes divided by RSS are not exact heap coverage.
 
 ### Named component memory metrics
 
-For deeper attribution, run a Linux `profiling` build with
+For deeper attribution, run a Linux jemalloc build (normal or `profiling`) with
 `ERATO_MEMORY_COMPONENTS=1` and enable the Prometheus integration. Dedicated
 jemalloc arenas attribute allocations to the component that created them,
 including private library allocations. Accounting continues after a scope
@@ -183,9 +183,8 @@ This diagnostic mode disables the thread cache inside each component scope to
 prevent reuse of another arena's allocations. It changes allocator behavior and
 adds arena, polling and synchronization overhead; use it for investigation and
 compare runs with the mode disabled before drawing performance conclusions.
-Ordinary builds expose the owner-based payload gauges below without this mode.
-They do not expose a total live-heap gauge, so exact named live-heap coverage
-cannot be calculated in an ordinary build. A sum of named payload/capacity bytes
+Ordinary Linux jemalloc builds expose total live-heap bytes and the owner-based
+payload gauges below without enabling component attribution. A sum of named payload/capacity bytes
 divided by independently observed RSS is only a visibility indicator: capacities
 may include untouched pages, serialized sizes are not heap sizes, and RSS also
 includes allocator-retained pages and non-heap memory. Exclude configured cache
@@ -195,13 +194,15 @@ sum individual gauge maxima taken at different times.
 ### Process and allocator memory metrics
 
 On Linux, memory totals are sampled every five seconds on a blocking worker.
-These metrics require the Prometheus integration to be enabled.
+These metrics require the Prometheus integration to be enabled. Allocator and
+component metrics are unavailable on musl, non-Linux targets and `profiling-dial9`
+builds, which use the system allocator.
 
 - `erato_process_memory_bytes` (gauge)
   - Bytes read from `/proc/self/status`, available in ordinary Linux builds
   - Labels: `kind`, with values `resident`, `resident_anonymous`, `resident_file`, `resident_shared`, `peak_resident`, `virtual`
   - `resident` is process RSS; `peak_resident` is the process lifetime high-water mark. The three resident components split anonymous, file-backed and shared pages. `virtual` includes reserved address space, including untouched thread stacks; it is not RAM usage.
-- `erato_allocator_memory_bytes` (gauge, Linux `profiling` builds only)
+- `erato_allocator_memory_bytes` (gauge, normal and `profiling` Linux jemalloc builds)
   - Jemalloc statistics, refreshed by advancing its epoch before each sample
   - Labels: `kind`, with values `allocated`, `active`, `resident`, `mapped`, `retained`, `metadata`
   - `allocated` measures live application allocations; `active` measures pages backing allocations; `resident` estimates allocator resident memory, including metadata and unused dirty pages, and can exceed actual RSS for untouched pages. `mapped` and `retained` describe address space and are not additional resident memory.
