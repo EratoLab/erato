@@ -63,7 +63,7 @@ They report where data is held rather than where an allocation was triggered.
     `app_state.token_count_cache.values`, `shared.distribution`,
     `shared.frontend_registry`, `shared.reloadable.distribution`,
     `shared.reloadable.mcp`, `shared.policy`, `shared.prompt_guardrails`,
-    `shared.attachment_tokenizer`, `jobs.tokenizer.state`,
+    `shared.tokenizer`,
     `jobs.tokenizer.input`, `jobs.parser.input`, `requests.attachments`,
     `requests.file_resolution.input`, `requests.prepared.internal_messages`,
     `requests.prepared.provider_request`, `requests.prepared.attachment_plans`,
@@ -117,8 +117,9 @@ Tokenizer construction is measured after the completed tokenizer exists, so
 temporary construction buffers are outside its state gauge.
 
 The unmodified, pinned tokenizer is estimated externally through its public
-decoding and special-token APIs. One vocabulary scan is reused for each o200k
-instance, estimating three copies of token bytes, the sorted-token Vec and map
+decoding and special-token APIs. One process-global o200k instance is shared by
+attachment planning and token-count cache misses, with one lifetime reservation
+under `shared.tokenizer`, estimating three copies of token bytes, the sorted-token Vec and map
 tables. All tokenizer storage is classified as `estimated`: private capacities
 and compiled regex state remain explicitly unmeasured. Updating the dependency
 requires reviewing these layout assumptions. Other opaque state includes HTTP/TLS/MCP
@@ -293,10 +294,10 @@ other payload gauges, do not add it to component arena statistics.
   - Text bytes held by queued or running token-count cache-miss jobs
   - No labels
 - `erato_tokenizer_jobs` (gauge)
-  - Number of those jobs, each of which currently constructs its own tokenizer
+  - Number of those jobs, all using the process-global tokenizer
   - No labels
 
-These gauges follow the blocking jobs through request cancellation. Input bytes exclude tokenizer vocabulary, regex tables, encoded token vectors and allocator overhead. Job count exposes concurrent tokenizer construction; `caches.file_processing_parallelism` controls the shared parsing/tokenization semaphore. Short jobs may fall between scrapes. The token-count cache gauge measures retained cache keys separately.
+These gauges follow the blocking jobs through request cancellation. Input bytes exclude tokenizer vocabulary, regex tables, encoded token vectors and allocator overhead. Job count exposes concurrent token-count work, not tokenizer instances; `caches.file_processing_parallelism` controls the shared parsing/tokenization semaphore. Short jobs may fall between scrapes. The token-count cache gauge measures retained cache keys separately.
 
 ### Runtime distribution memory metrics
 
