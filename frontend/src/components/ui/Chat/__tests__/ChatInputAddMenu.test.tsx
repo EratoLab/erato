@@ -1,4 +1,5 @@
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { act } from "react";
 import { describe, expect, it, vi } from "vitest";
 
 import { Row } from "../../Controls/Row";
@@ -63,6 +64,44 @@ describe("ChatInputAddMenu", () => {
     expect(
       screen.queryByTestId("chat-input-add-menu-badge"),
     ).not.toBeInTheDocument();
+  });
+
+  // A mention row puts focus in the composer; closing after the select delay
+  // must leave it there instead of returning it to the "+" trigger.
+  it("leaves focus where a selected row moved it", async () => {
+    render(
+      <>
+        <textarea aria-label="Composer" />
+        <ChatInputAddMenu
+          extraSections={[
+            {
+              id: "assistants",
+              items: [
+                {
+                  id: "researcher",
+                  label: "Researcher",
+                  onSelect: () =>
+                    screen.getByRole("textbox", { name: "Composer" }).focus(),
+                },
+              ],
+            },
+          ]}
+        />
+      </>,
+    );
+
+    fireEvent.click(screen.getByTestId("chat-input-add-menu-trigger"));
+    // The panel takes focus one frame after opening.
+    await act(async () => {
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+    });
+    fireEvent.click(screen.getByRole("menuitem", { name: "Researcher" }));
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 150));
+    });
+
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Composer" })).toHaveFocus();
   });
 
   it("disables the trigger when disabled", () => {

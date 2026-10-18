@@ -50,9 +50,8 @@ export interface AddMenuActionItem extends AddMenuItemBase {
   /** Optional secondary line (e.g. file size, provider hint). */
   description?: React.ReactNode;
   /**
-   * Skip the close delay. Required of any row that opens a dialog: the delayed
-   * close returns focus to the trigger *after* the dialog has focused itself,
-   * pulling focus out from under the overlay.
+   * Skip the close delay. Required of any row that opens a dialog, so the menu
+   * is gone before the dialog takes focus instead of lingering over it.
    */
   closesImmediately?: boolean;
   onSelect: () => void;
@@ -189,9 +188,8 @@ export function ChatInputAddMenu({
   }, []);
 
   // Host content closes immediately: hosts open dialogs (or finish an async
-  // upload) on selection, and AnchoredPopover focus-returns to the trigger on
-  // close — delaying past the dialog's own focus grab would steal focus from
-  // an open aria-modal. Same convention as DropdownMenu's confirm dialogs.
+  // upload) on selection, and the menu must be gone before an aria-modal takes
+  // focus. Same convention as DropdownMenu's confirm dialogs.
   const closeNow = useCallback(() => {
     cancelPendingClose();
     setIsOpen(false);
