@@ -104,6 +104,27 @@ secret_key = "sk-lf-..."
 
 For detailed information about the `system_prompt` configuration option, see the [Chat Provider Configuration](../configuration#chat_providersystem_prompt) documentation.
 
+## Prompt lookup failures and fallback
+
+The configured `fallback` is used only when Langfuse returns **404 (not found)**.
+With an explicit `label`, Erato first requests that label; on 404 it requests
+`production`, then uses the fallback if that lookup also returns 404. Without
+an explicit label, Erato uses Langfuse's default lookup and falls back on 404.
+If no fallback is configured, missing prompts fail preparation.
+
+Network/transport errors, authentication failures (401/403), other unsuccessful
+HTTP responses (including 500), malformed JSON, and invalid prompt content
+remain errors even when a fallback is configured. A failed lookup in these
+categories does not trigger another label lookup. This policy prevents an
+outage or configuration error from silently changing the prompt used.
+
+When submit, edit, or regenerate fails during preparation, Erato saves a failed
+assistant message before closing the stream. Its error remains available after
+reload and identifies the preparation phase, prompt name, requested label, and
+failure category. Raw upstream response bodies and invalid prompt content are
+not included in these message diagnostics. Administrators should check the
+configured prompt/label, Langfuse credentials, and provider availability.
+
 ## Prompt Format Support
 
 Erato supports two types of prompts from Langfuse:

@@ -5,6 +5,7 @@ mod client_submissions;
 mod client_tool_decisions;
 mod client_tool_operations;
 mod mcp_file_outputs;
+mod preparation_failures;
 mod token_usage_tool_parts;
 mod tool_arguments;
 mod tool_call_budget;

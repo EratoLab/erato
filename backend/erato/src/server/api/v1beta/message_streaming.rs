@@ -1140,6 +1140,24 @@ async fn send_generation_event(
 }
 
 async fn forward_error_report(tx: &Sender<Result<Event, Report>>, error: &Report) {
+    if let Some(failure) = error.downcast_ref::<PreparationFailure>() {
+        let payload =
+            MessageSubmitStreamingResponseMessage::Error(MessageSubmitStreamingResponseError {
+                message_id: Some(failure.message_id),
+                error: GenerationErrorType::InternalError {
+                    error_description: failure.description.clone(),
+                },
+            });
+        if let Ok(event) = Event::default().event("error").json_data(payload) {
+            let _ = tx.send(Ok(event)).await;
+        }
+        let _ = tx
+            .send(Ok(Event::default()
+                .event("stream_end")
+                .data(r#"{"message_type":"stream_end"}"#)))
+            .await;
+        return;
+    }
     // `Report` is not cloneable. Recreate the channel error from its debug
     // representation so the returned report retains its original cause chain
     // and backtrace while legacy SSE consumers still receive the diagnostics.
@@ -3278,14 +3296,21 @@ where
         Err(error) => {
             tracing::error!(%chat_id, error = ?error, "Generation task failed");
             capture_report(error);
-            send_background_event(
-                task,
-                StreamingEvent::Error {
-                    error: generation_failure_error_value(),
-                },
-                "broadcast generation failure",
-            )
-            .await;
+            if !task
+                .get_event_history()
+                .await
+                .iter()
+                .any(|event| matches!(event, StreamingEvent::Error { .. }))
+            {
+                send_background_event(
+                    task,
+                    StreamingEvent::Error {
+                        error: generation_failure_error_value(),
+                    },
+                    "broadcast generation failure",
+                )
+                .await;
+            }
         }
     }
 
@@ -3336,6 +3361,49 @@ mod generation_task_lifecycle_tests {
             "The message could not be generated."
         );
         assert!(background_tasks.get_task(&chat_id).await.is_none());
+    }
+
+    #[tokio::test]
+    async fn preparation_failure_keeps_diagnostics_and_releases_task() {
+        let manager = BackgroundTaskManager::new(None, GenerationStatusConfig::default(), None);
+        let chat_id = Uuid::new_v4();
+        let message_id = Uuid::new_v4();
+        let (_receiver, task) = manager.start_task(chat_id, message_id).await;
+        let error = json!({
+            "message_type": "error", "message_id": message_id,
+            "error_type": "internal_error", "error_description": "Prompt resolution failed"
+        });
+        task.send_event(StreamingEvent::Error {
+            error: Some(error.clone()),
+        })
+        .await
+        .unwrap();
+        let _ = with_generation_task_lifecycle(&manager, &task, chat_id, async {
+            Err(eyre!("preparation failed"))
+        })
+        .await;
+        let events = task.get_event_history().await;
+        assert!(matches!(
+            events.as_slice(),
+            [StreamingEvent::Error { .. }, StreamingEvent::StreamEnd]
+        ));
+        if let StreamingEvent::Error { error: actual } = &events[0] {
+            assert_eq!(actual.as_ref(), Some(&error));
+        }
+        assert!(manager.get_task(&chat_id).await.is_none());
+    }
+
+    #[test]
+    fn preparation_diagnostics_only_include_safe_prompt_context() {
+        let report = Report::new(crate::state::PromptResolutionError(
+            "Langfuse prompt 'test' (label: staging): HTTP 401".to_string(),
+        ))
+        .wrap_err("composition failed");
+        let description = preparation_error_description(&report);
+        assert!(description.contains("preparation"));
+        assert!(description.contains("Langfuse"));
+        assert!(description.contains("401"));
+        assert!(!preparation_error_description(&eyre!("PRIVATE_BODY")).contains("PRIVATE_BODY"));
     }
 
     #[tokio::test]
@@ -3823,6 +3891,114 @@ pub(crate) fn resolve_effective_selected_facet_ids(
     };
 
     sanitize_selected_facet_ids(config, selected_facet_ids)
+}
+
+#[derive(Debug)]
+struct PreparationFailure {
+    message_id: Uuid,
+    description: String,
+}
+impl std::fmt::Display for PreparationFailure {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.description)
+    }
+}
+impl std::error::Error for PreparationFailure {}
+
+fn preparation_error_description(report: &Report) -> String {
+    match report.downcast_ref::<crate::state::PromptResolutionError>() {
+        Some(error) => format!("Failed during chat preparation. {error}"),
+        None => "Failed during chat preparation, before generation started. Please retry or contact your administrator.".to_string(),
+    }
+}
+
+/// Persist preparation failures before publishing them, even when generation never began.
+#[allow(clippy::too_many_arguments)]
+async fn prepare_chat_request_or_persist_failure(
+    task: &Arc<StreamingTask>,
+    app_state: &AppState,
+    policy: &PolicyEngine,
+    me_user: &MeProfile,
+    chat: &chats::Model,
+    sibling_message_id: Option<&Uuid>,
+    user_input: PromptCompositionUserInput,
+    generation_request_context: GenerationRequestContext,
+    me_profile_input: &MeProfileChatRequestInput<'_>,
+) -> Result<PreparedChatRequest, Report> {
+    let previous_message_id = user_input.just_submitted_user_message_id;
+    match prepare_chat_request(
+        app_state,
+        policy,
+        chat,
+        user_input,
+        generation_request_context,
+        me_profile_input,
+    )
+    .await
+    {
+        Ok(prepared) => Ok(prepared),
+        Err(report) => {
+            log_and_capture_error("prepare chat request", &report);
+            let description = preparation_error_description(&report);
+            let error = GenerationErrorType::InternalError {
+                error_description: description.clone(),
+            };
+            let message = submit_message(
+                &app_state.db,
+                policy,
+                &me_user.to_subject(),
+                &chat.id,
+                json!({"role": "assistant", "content": []}),
+                Some(&previous_message_id),
+                sibling_message_id,
+                None,
+                &[],
+                None,
+                Some(generation_metadata_for_error(error.clone())),
+                None,
+            )
+            .await
+            .wrap_err("Failed to persist chat preparation failure")?;
+            if app_state.config.delegation.tasks.enabled
+                && let Err(error) = crate::models::chat::requeue_or_supersede_branched_deliveries(
+                    &app_state.db,
+                    &chat.id,
+                )
+                .await
+            {
+                warn_and_capture_error("reconcile deliveries after preparation failure", &error);
+            }
+            task.set_message_id(message.id);
+            send_background_event(
+                task,
+                StreamingEvent::AssistantMessageStarted {
+                    message_id: message.id,
+                },
+                "broadcast preparation failure message",
+            )
+            .await;
+            send_background_event(
+                task,
+                StreamingEvent::Error {
+                    error: serialize_json_value(
+                        MessageSubmitStreamingResponseMessage::Error(
+                            MessageSubmitStreamingResponseError {
+                                message_id: Some(message.id),
+                                error,
+                            },
+                        ),
+                        "serialize preparation failure",
+                    ),
+                },
+                "broadcast preparation failure",
+            )
+            .await;
+            Err(Report::new(PreparationFailure {
+                message_id: message.id,
+                description,
+            }))
+        }
+    }
 }
 
 /// Prepares a chat request for LLM generation.
@@ -14587,10 +14763,13 @@ async fn run_generation_after_user_message_memory_inner(
         delegation_targets,
         delegation_offered_file_ids,
         task_offer_scope,
-    } = prepare_chat_request(
+    } = prepare_chat_request_or_persist_failure(
+        task,
         app_state,
         policy,
+        me_user,
         chat,
+        None,
         user_input,
         generation_request_context,
         &me_profile_input,
@@ -15350,10 +15529,13 @@ pub(crate) async fn start_regeneration(
                 delegation_targets,
                 delegation_offered_file_ids,
                 task_offer_scope,
-            } = prepare_chat_request(
+            } = prepare_chat_request_or_persist_failure(
+                &task_for_stream,
                 &app_state,
                 &policy,
+                &me_user,
                 &chat,
+                Some(&request.current_message_id),
                 user_input,
                 generation_request_context.clone(),
                 &me_profile_input,
@@ -15954,10 +16136,13 @@ pub(crate) async fn start_edit(
                 delegation_targets,
                 delegation_offered_file_ids,
                 task_offer_scope,
-            } = prepare_chat_request(
+            } = prepare_chat_request_or_persist_failure(
+                &task_for_stream,
                 &app_state,
                 &policy,
+                &me_user,
                 &chat,
+                None,
                 user_input,
                 generation_request_context.clone(),
                 &me_profile_input,

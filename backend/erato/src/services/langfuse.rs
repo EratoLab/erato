@@ -701,7 +701,7 @@ impl LangfuseClient {
                     prompt_name = %prompt_name,
                     "Failed to send HTTP request to Langfuse prompts endpoint"
                 );
-                eyre!("Failed to retrieve prompt from Langfuse: {}", e)
+                eyre!("Could not connect to Langfuse or receive a response")
             })?;
 
         let status = response.status();
@@ -736,10 +736,9 @@ impl LangfuseClient {
             );
 
             return Err(eyre!(
-                "Failed to retrieve prompt '{}' from Langfuse with status {}: {}",
+                "Failed to retrieve prompt '{}' from Langfuse with HTTP status {}",
                 prompt_name,
-                status,
-                body
+                status
             ));
         }
 
@@ -749,7 +748,7 @@ impl LangfuseClient {
                 prompt_name = %prompt_name,
                 "Failed to parse Langfuse prompt response as JSON"
             );
-            eyre!("Failed to parse prompt response from Langfuse: {}", e)
+            eyre!("Langfuse returned malformed prompt JSON")
         })?;
 
         tracing::debug!(
@@ -1882,6 +1881,220 @@ mod tests {
             axum::serve(listener, app).await.unwrap();
         });
         (format!("http://{addr}"), receiver)
+    }
+
+    // Uses the real HTTP client and the exact resolver called by AppState.
+    async fn prompt_scenario_server(
+        responses: Vec<(u16, String)>,
+    ) -> (
+        String,
+        std::sync::Arc<std::sync::Mutex<Vec<Option<String>>>>,
+        tokio::task::JoinHandle<()>,
+    ) {
+        let requests = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let responses = std::sync::Arc::new(std::sync::Mutex::new(
+            std::collections::VecDeque::from(responses),
+        ));
+        let recorded = requests.clone();
+        let app = Router::new().route(
+            "/api/public/v2/prompts/{*prompt_name}",
+            get(move |uri: Uri| {
+                let recorded = recorded.clone();
+                let responses = responses.clone();
+                async move {
+                    recorded
+                        .lock()
+                        .unwrap()
+                        .push(uri.query().map(str::to_owned));
+                    let (status, body) = responses
+                        .lock()
+                        .unwrap()
+                        .pop_front()
+                        .expect("unexpected extra prompt lookup");
+                    (axum::http::StatusCode::from_u16(status).unwrap(), body)
+                }
+            }),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}", listener.local_addr().unwrap());
+        let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        (url, requests, server)
+    }
+
+    fn scenario_prompt(content: serde_json::Value) -> String {
+        json!({
+            "id": "prompt-1", "name": "test-prompt", "version": 1,
+            "prompt": content, "type": "text", "labels": ["production"], "tags": [],
+            "createdAt": "2026-06-19T00:00:00.000Z", "updatedAt": "2026-06-19T00:00:00.000Z"
+        })
+        .to_string()
+    }
+
+    #[tokio::test]
+    async fn prompt_resolution_failure_policy() {
+        use crate::config::PromptSourceSpecification;
+        for fallback in [None, Some("configured fallback".to_string())] {
+            for label in [None, Some("staging".to_string())] {
+                for (status, body, expected) in [
+                    (401, "PRIVATE_UPSTREAM_BODY".to_string(), "401"),
+                    (500, "PRIVATE_UPSTREAM_BODY".to_string(), "500"),
+                    (200, "PRIVATE_UPSTREAM_BODY".to_string(), "malformed"),
+                    (
+                        200,
+                        scenario_prompt(json!({"secret": "PRIVATE_UPSTREAM_BODY"})),
+                        "Expected string",
+                    ),
+                ] {
+                    let (url, requests, server) =
+                        prompt_scenario_server(vec![(status, body)]).await;
+                    let client =
+                        LangfuseClient::from_config(&enabled_config(url, false), None).unwrap();
+                    let error = crate::state::resolve_prompt_source(
+                        &client,
+                        &PromptSourceSpecification::Langfuse {
+                            prompt_name: "test-prompt".to_string(),
+                            label: label.clone(),
+                            fallback: fallback.clone(),
+                        },
+                    )
+                    .await
+                    .unwrap_err();
+                    let description = error.to_string();
+                    assert!(description.contains(expected), "{description}");
+                    assert!(description.contains("test-prompt"));
+                    assert!(!description.contains("PRIVATE_UPSTREAM_BODY"));
+                    assert_eq!(
+                        *requests.lock().unwrap(),
+                        vec![label.as_ref().map(|label| format!("label={label}"))]
+                    );
+                    server.abort();
+                }
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn prompt_resolution_missing_and_explicit_label_policy() {
+        use crate::config::PromptSourceSpecification;
+        for fallback in [None, Some("configured fallback".to_string())] {
+            for label in [None, Some("staging".to_string())] {
+                for production_found in [false, true] {
+                    let mut responses = vec![(404, String::new())];
+                    if label.is_some() {
+                        responses.push(if production_found {
+                            (200, scenario_prompt(json!("production content")))
+                        } else {
+                            (404, String::new())
+                        });
+                    }
+                    let (url, requests, server) = prompt_scenario_server(responses).await;
+                    let client =
+                        LangfuseClient::from_config(&enabled_config(url, false), None).unwrap();
+                    let result = crate::state::resolve_prompt_source(
+                        &client,
+                        &PromptSourceSpecification::Langfuse {
+                            prompt_name: "test-prompt".to_string(),
+                            label: label.clone(),
+                            fallback: fallback.clone(),
+                        },
+                    )
+                    .await;
+                    if label.is_some() && production_found {
+                        assert_eq!(result.unwrap(), "production content");
+                    } else if let Some(fallback) = &fallback {
+                        assert_eq!(result.unwrap(), *fallback);
+                    } else {
+                        assert!(result.unwrap_err().to_string().contains("no fallback"));
+                    }
+                    let expected = if label.is_some() {
+                        vec![
+                            Some("label=staging".to_string()),
+                            Some("label=production".to_string()),
+                        ]
+                    } else {
+                        vec![None]
+                    };
+                    assert_eq!(*requests.lock().unwrap(), expected);
+                    server.abort();
+                }
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn prompt_resolution_success_and_production_failure() {
+        use crate::config::PromptSourceSpecification;
+        for fallback in [None, Some("fallback".to_string())] {
+            for (responses, succeeds, lookups) in [
+                (
+                    vec![(200, scenario_prompt(json!("selected content")))],
+                    true,
+                    1,
+                ),
+                (
+                    vec![(404, String::new()), (500, "PRIVATE_BODY".to_string())],
+                    false,
+                    2,
+                ),
+            ] {
+                let (url, requests, server) = prompt_scenario_server(responses).await;
+                let client =
+                    LangfuseClient::from_config(&enabled_config(url, false), None).unwrap();
+                let result = crate::state::resolve_prompt_source(
+                    &client,
+                    &PromptSourceSpecification::Langfuse {
+                        prompt_name: "test-prompt".to_string(),
+                        label: Some("staging".to_string()),
+                        fallback: fallback.clone(),
+                    },
+                )
+                .await;
+                if succeeds {
+                    assert_eq!(result.unwrap(), "selected content");
+                } else {
+                    let description = result.unwrap_err().to_string();
+                    assert!(description.contains("500"));
+                    assert!(!description.contains("PRIVATE_BODY"));
+                }
+                assert_eq!(requests.lock().unwrap().len(), lookups);
+                server.abort();
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn prompt_resolution_transport_failure_never_uses_fallback() {
+        use crate::config::PromptSourceSpecification;
+        // Keep the port reserved but drop each accepted connection without an HTTP response.
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}", listener.local_addr().unwrap());
+        let server = tokio::spawn(async move {
+            loop {
+                let (socket, _) = listener.accept().await.unwrap();
+                drop(socket);
+            }
+        });
+        let client = LangfuseClient::from_config(&enabled_config(url, false), None).unwrap();
+        for fallback in [None, Some("fallback".to_string())] {
+            for label in [None, Some("staging".to_string())] {
+                let error = tokio::time::timeout(
+                    std::time::Duration::from_secs(5),
+                    crate::state::resolve_prompt_source(
+                        &client,
+                        &PromptSourceSpecification::Langfuse {
+                            prompt_name: "test-prompt".to_string(),
+                            label,
+                            fallback: fallback.clone(),
+                        },
+                    ),
+                )
+                .await
+                .unwrap()
+                .unwrap_err();
+                assert!(error.to_string().contains("Could not connect"));
+            }
+        }
+        server.abort();
     }
 
     fn enabled_config(base_url: String, use_otel: bool) -> LangfuseConfig {
