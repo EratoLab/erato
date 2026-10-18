@@ -283,7 +283,7 @@ describe("resolveWordParagraphs", () => {
   });
 
   const na = "Not applicable.";
-  it.each([
+  for (const { enter, captured, target, live } of [
     {
       enter:
         "at the start of the 3rd of three identical lines followed by a blank line",
@@ -305,15 +305,28 @@ describe("resolveWordParagraphs", () => {
       target: 2,
       live: ["Intro", "", "TBD", "", "TBD", "TBD", "Outro"],
     },
-  ])(
-    "refuses the twin its context moved to after Enter $enter, without IDs",
-    ({ captured, target, live }) => {
+  ]) {
+    it(`refuses the twin its context moved to after Enter ${enter}, without IDs`, () => {
       const anchor = wordParagraphAnchor(body(captured, false), target, target);
       expect(resolveWordParagraphs(anchor, body(live, false))).toEqual({
         refused: "ambiguous",
       });
-    },
-  );
+    });
+  }
+
+  it("still resolves the target after a twin above it is deleted, without IDs", () => {
+    const anchor = wordParagraphAnchor(
+      body(["Intro", "TBD", "TBD", "TBD", "", "Outro"], false),
+      3,
+      3,
+    );
+    expect(
+      resolveWordParagraphs(
+        anchor,
+        body(["Intro", "TBD", "TBD", "", "Outro"], false),
+      ),
+    ).toEqual({ positions: [2] });
+  });
 
   it("tells repeated text apart by its neighbours when there are no IDs", () => {
     const doc = body(["P", "Same", "N", "Q", "Same", "R"], false);
