@@ -202,18 +202,17 @@ pub async fn sweep_interrupted_tool_parts(
             SELECT "messages"."id" AS "id", "messages"."raw_message" AS "raw_message"
             FROM "messages"
             JOIN "chats" ON "chats"."id" = "messages"."chat_id"
-            WHERE "messages"."raw_message" -> 'content' @> $1::jsonb
+            -- Keep this fixed predicate literal: generic prepared plans must be
+            -- able to prove the predicate of idx_messages_interrupted_parts.
+            WHERE "messages"."raw_message" -> 'content'
+                @> '[{{"content_type":"tool_use","status":"in_progress"}}]'::jsonb
               AND NOT {unfinished}
             ORDER BY "messages"."updated_at" ASC
-            LIMIT $3
+            LIMIT $2
             "#,
-            unfinished = generation_unfinished_condition("\"chats\"", 2),
+            unfinished = generation_unfinished_condition("\"chats\"", 1),
         ),
-        [
-            probe.clone().into(),
-            (stale_after_secs as f64).into(),
-            SWEEP_BATCH_LIMIT.into(),
-        ],
+        [(stale_after_secs as f64).into(), SWEEP_BATCH_LIMIT.into()],
     );
 
     let rows = match db.query_all_raw(statement).await {

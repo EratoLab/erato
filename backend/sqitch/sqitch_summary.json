@@ -57,7 +57,8 @@
     "deploy/0055_add_client_tool_decisions.sql",
     "deploy/0056_add_ms_teams_pending_sign_ins.sql",
     "deploy/0057_add_ms_teams_requests.sql",
-    "deploy/0058_add_client_operation_transports.sql"
+    "deploy/0058_add_client_operation_transports.sql",
+    "deploy/0059_add_interrupted_parts_index.sql"
   ],
-  "latest_change": "cd25ac114b14641e3cbc154d96ab82647bea976b"
+  "latest_change": "bf2984fbb6473bcd633547c939fa747b6ab54491"
 }
