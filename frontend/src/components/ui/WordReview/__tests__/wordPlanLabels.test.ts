@@ -51,11 +51,9 @@ describe("whole-file plans", () => {
       partsRows: [],
     }) as unknown as WordPlanReview;
 
-  it("says the file is reloaded whatever scope the plan names", () => {
+  it("leaves how Word writes the plan to the route line", () => {
     const body = { entries: [{}], scope: "body" } as WordDocumentPlan;
-    expect(wordPlanScopeText(wholeFile("small"), body)).toBe(
-      "Word reloads the whole document file to apply this.",
-    );
+    expect(wordPlanScopeText(wholeFile("small"), body)).toBe("");
   });
 
   it("names the change on the button and keeps Replace document for large rewrites", () => {

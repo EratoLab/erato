@@ -4402,8 +4402,8 @@ msgstr "{count, plural, one {{list} se mantiene sin cambios.} other {{list} se m
 
 #. js-lingui-explicit-id
 #: src/components/ui/WordReview/wordPlanLabels.ts
-msgid "officeAddin.word.planScope.wholeFile"
-msgstr "Word vuelve a cargar todo el archivo del documento para aplicarlo."
+#~ msgid "officeAddin.word.planScope.wholeFile"
+#~ msgstr "Word vuelve a cargar todo el archivo del documento para aplicarlo."
 
 #. js-lingui-explicit-id
 #: src/components/ui/WordReview/wordPlanLabels.ts

@@ -536,13 +536,6 @@ export function wordPlanScopeText(
       sentence.charAt(0).toLocaleUpperCase(locale()) + sentence.slice(1),
     );
   }
-  if (review.scope.wholeFile)
-    sentences.push(
-      t({
-        id: "officeAddin.word.planScope.wholeFile",
-        message: "Word reloads the whole document file to apply this.",
-      }),
-    );
   return sentences.join(" ");
 }
 

@@ -4402,8 +4402,8 @@ msgstr "{count, plural, one {{list} bleibt unverändert.} other {{list} bleiben 
 
 #. js-lingui-explicit-id
 #: src/components/ui/WordReview/wordPlanLabels.ts
-msgid "officeAddin.word.planScope.wholeFile"
-msgstr "Word lädt dafür die gesamte Dokumentdatei neu."
+#~ msgid "officeAddin.word.planScope.wholeFile"
+#~ msgstr "Word lädt dafür die gesamte Dokumentdatei neu."
 
 #. js-lingui-explicit-id
 #: src/components/ui/WordReview/wordPlanLabels.ts
