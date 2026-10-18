@@ -1037,6 +1037,27 @@ impl AppState {
         &self,
         spec: &PromptSourceSpecification,
     ) -> Result<String, Report> {
+        resolve_prompt_source(&self.langfuse_client, spec).await
+    }
+}
+
+/// Safe diagnostic from prompt resolution, suitable for persisting on a message.
+#[derive(Debug)]
+pub(crate) struct PromptResolutionError(pub String);
+
+impl std::fmt::Display for PromptResolutionError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl std::error::Error for PromptResolutionError {}
+
+pub(crate) async fn resolve_prompt_source(
+    client: &LangfuseClient,
+    spec: &PromptSourceSpecification,
+) -> Result<String, Report> {
+    let result: Result<String, Report> = async {
         match spec {
             PromptSourceSpecification::Static { content } => Ok(content.clone()),
             PromptSourceSpecification::Langfuse {
@@ -1045,21 +1066,18 @@ impl AppState {
                 fallback,
             } => {
                 let resolved_prompt = if let Some(label) = label {
-                    if let Some(prompt) = self
-                        .langfuse_client
+                    if let Some(prompt) = client
                         .get_prompt_with_label(prompt_name, Some(label))
                         .await?
                     {
                         Some(prompt)
                     } else {
-                        self.langfuse_client
+                        client
                             .get_prompt_with_label(prompt_name, Some("production"))
                             .await?
                     }
                 } else {
-                    self.langfuse_client
-                        .get_prompt_with_label(prompt_name, None)
-                        .await?
+                    client.get_prompt_with_label(prompt_name, None).await?
                 };
 
                 if let Some(prompt) = resolved_prompt {
@@ -1077,6 +1095,17 @@ impl AppState {
             }
         }
     }
+    .await;
+    result.map_err(|error| {
+        let context = match spec {
+            PromptSourceSpecification::Langfuse { prompt_name, label, .. } =>
+                format!("Langfuse prompt '{prompt_name}' (label: {})", label.as_deref().unwrap_or("default")),
+            PromptSourceSpecification::Static { .. } => "static prompt".to_string(),
+        };
+        Report::new(PromptResolutionError(format!(
+            "Prompt resolution failed for {context}: {error}. Check the prompt configuration and provider availability."
+        )))
+    })
 }
 
 /// Extract the system prompt content from a Langfuse prompt response.
@@ -1094,9 +1123,8 @@ fn extract_system_prompt_from_langfuse_prompt(prompt: &LangfusePrompt) -> Result
                 Ok(content.to_string())
             } else {
                 Err(eyre::eyre!(
-                    "Expected string content for text prompt '{}', but got: {:?}",
-                    prompt.name,
-                    prompt.prompt
+                    "Expected string content for text prompt '{}'",
+                    prompt.name
                 ))
             }
         }
@@ -1113,15 +1141,13 @@ fn extract_system_prompt_from_langfuse_prompt(prompt: &LangfusePrompt) -> Result
                     }
                 }
                 Err(eyre::eyre!(
-                    "No system message found in chat prompt '{}'. Available messages: {:?}",
-                    prompt.name,
-                    messages
+                    "No system message found in chat prompt '{}'",
+                    prompt.name
                 ))
             } else {
                 Err(eyre::eyre!(
-                    "Expected array of messages for chat prompt '{}', but got: {:?}",
-                    prompt.name,
-                    prompt.prompt
+                    "Expected array of messages for chat prompt '{}'",
+                    prompt.name
                 ))
             }
         }
