@@ -19,6 +19,8 @@ export interface WordParagraphAnchor {
   counts: readonly { needle: readonly (string | null)[]; count: number }[];
   /** The ID of the paragraph right above the span; null at the body's start or without IDs. */
   aboveId: string | null;
+  /** How many paragraphs above the span had its first paragraph's text at capture. */
+  twinsAbove: number;
 }
 
 export type WordParagraphRefusal = "changed" | "ambiguous";
@@ -91,6 +93,8 @@ export function wordParagraphAnchor(
     window: null,
     counts: [],
     aboveId: body[first - 1]?.id ?? null,
+    twinsAbove: texts.slice(0, first).filter((text) => text === texts[first])
+      .length,
   };
   const counted = (needles: (string | null)[][]) =>
     needles.map((needle) => ({ needle, count: countOf(texts, needle) }));
@@ -165,8 +169,9 @@ function commoner(
  * A surviving ID is decisive: if its paragraph changed, a copy of the old text elsewhere must not
  * take its place, nor where it may have moved onto a copy of its text: with that text above it, the
  * captured neighbour above must still be there. Without one, the span with its capture-time context
- * must occur exactly once now, and the texts it is built from no more often than at capture. A
- * second occurrence refuses rather than widening the context, because a copied block and the
+ * must occur exactly once now, the texts it is built from no more often than at capture, and,
+ * unless a deletion made the span's texts rarer, with its first paragraph's text as often above it.
+ * A second occurrence refuses rather than widening the context, because a copied block and the
  * original are indistinguishable by text.
  */
 export function resolveWordParagraphs(
@@ -184,6 +189,16 @@ export function resolveWordParagraphs(
     return { refused: "ambiguous" };
   if (found.length === 1) {
     const head = found[0] - 1 + Math.min(anchor.window, anchor.before.length);
+    // A copy of a context neighbour can rebuild the context around a twin that was already there;
+    // only the number of same-text paragraphs above it tells them apart.
+    const asCommon = anchor.counts.every(
+      ({ needle, count }) =>
+        needle.length > 1 || countOf(texts, needle) === count,
+    );
+    const text = anchor.paragraphs[0].text;
+    const twinsAbove = texts.slice(0, head).filter((t) => t === text).length;
+    if (asCommon && twinsAbove !== anchor.twinsAbove)
+      return { refused: "ambiguous" };
     return { positions: anchor.paragraphs.map((_, i) => head + i) };
   }
   if (found.length > 1) return { refused: "ambiguous" };

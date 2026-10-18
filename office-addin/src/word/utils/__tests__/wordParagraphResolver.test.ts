@@ -282,6 +282,39 @@ describe("resolveWordParagraphs", () => {
     ).toEqual({ refused: "ambiguous" });
   });
 
+  const na = "Not applicable.";
+  it.each([
+    {
+      enter:
+        "at the start of the 3rd of three identical lines followed by a blank line",
+      captured: ["Intro", "TBD", "TBD", "TBD", "", "Outro"],
+      target: 3,
+      live: ["Intro", "TBD", "TBD", "", "TBD", "", "Outro"],
+    },
+    {
+      enter:
+        "in the blank line above the 3rd of three blank-separated clauses followed by two blank lines",
+      captured: ["Schedule 4", "", na, "", na, "", na, "", "", "Schedule 5"],
+      target: 6,
+      live: ["Schedule 4", "", na, "", na, "", "", na, "", "", "Schedule 5"],
+    },
+    {
+      enter:
+        "at the end of the 1st of three identical lines after a blank line",
+      captured: ["Intro", "", "TBD", "TBD", "TBD", "Outro"],
+      target: 2,
+      live: ["Intro", "", "TBD", "", "TBD", "TBD", "Outro"],
+    },
+  ])(
+    "refuses the twin its context moved to after Enter $enter, without IDs",
+    ({ captured, target, live }) => {
+      const anchor = wordParagraphAnchor(body(captured, false), target, target);
+      expect(resolveWordParagraphs(anchor, body(live, false))).toEqual({
+        refused: "ambiguous",
+      });
+    },
+  );
+
   it("tells repeated text apart by its neighbours when there are no IDs", () => {
     const doc = body(["P", "Same", "N", "Q", "Same", "R"], false);
     const anchor = wordParagraphAnchor(doc, 4, 4);
@@ -390,6 +423,7 @@ function referenceResolve(
   anchor: WordParagraphAnchor,
   live: readonly WordParagraphEntry[],
   captured: readonly string[],
+  capturedFirst: number,
 ): WordParagraphResolution {
   const texts = live.map((p) => p.text);
   const count = (body: readonly string[], test: (start: number) => boolean) =>
@@ -407,6 +441,12 @@ function referenceResolve(
     test: (body: readonly string[]) => (start: number) => boolean,
   ) => count(texts, test(texts)) > count(captured, test(captured));
   const grew = [...own, ...windows].some(grows);
+  const asCommon = own.every(
+    (test) => count(texts, test(texts)) === count(captured, test(captured)),
+  );
+  const twinsAbove = (body: readonly string[], end: number) =>
+    body.slice(0, end).filter((text) => text === anchor.paragraphs[0].text)
+      .length;
   if (anchor.paragraphs.every((p) => p.id)) {
     const positions = anchor.paragraphs.map((p) =>
       live.findIndex((l) => l.id === p.id),
@@ -438,6 +478,12 @@ function referenceResolve(
     .map((_, start) => start)
     .filter((start) => contextMatches(texts, start, anchor, anchor.window!));
   if (starts.length === 1 && grew) return { refused: "ambiguous" };
+  if (
+    starts.length === 1 &&
+    asCommon &&
+    twinsAbove(texts, starts[0]) !== twinsAbove(captured, capturedFirst)
+  )
+    return { refused: "ambiguous" };
   if (starts.length === 1)
     return { positions: anchor.paragraphs.map((_, i) => starts[0] + i) };
   if (starts.length > 1) return { refused: "ambiguous" };
@@ -572,6 +618,7 @@ describe("resolveWordParagraphs properties", () => {
             anchor,
             after,
             doc.map((p) => p.text),
+            first,
           ),
         );
       }),
@@ -619,6 +666,7 @@ describe("resolveWordParagraphs properties", () => {
     type CopyOp =
       | { kind: "fresh"; at: number }
       | { kind: "copy"; which: number; to: number }
+      | { kind: "copyAny"; which: number; to: number }
       | { kind: "copyBlock"; to: number }
       | { kind: "split"; at: number; same: boolean };
     const copyOp: fc.Arbitrary<CopyOp> = fc.oneof(
@@ -628,6 +676,15 @@ describe("resolveWordParagraphs properties", () => {
         which: fc.nat(),
         to: fc.nat(),
       }),
+      // A copy that rebuilds the span's context around a twin needs one exact text and place.
+      {
+        arbitrary: fc.record({
+          kind: fc.constant("copyAny" as const),
+          which: fc.nat(),
+          to: fc.nat(),
+        }),
+        weight: 4,
+      },
       fc.record({ kind: fc.constant("copyBlock" as const), to: fc.nat() }),
       fc.record({
         kind: fc.constant("split" as const),
@@ -656,6 +713,8 @@ describe("resolveWordParagraphs properties", () => {
             if (o.kind === "fresh") add(o.at, fresh());
             else if (o.kind === "copy")
               add(o.to, span[o.which % span.length].text);
+            else if (o.kind === "copyAny")
+              add(o.to, next[o.which % next.length].text);
             else if (o.kind === "copyBlock") {
               const at = o.to % (next.length + 1);
               span.forEach((p, i) => add(at + i, p.text));
@@ -678,7 +737,7 @@ describe("resolveWordParagraphs properties", () => {
           );
         },
       ),
-      { numRuns: 5000 },
+      { numRuns: 20000 },
     );
   });
 
