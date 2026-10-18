@@ -5,6 +5,7 @@ import { Trans } from "@lingui/react/macro";
 import { useState, useCallback, useEffect } from "react";
 
 import { getOptionalTranslation } from "@/hooks/i18n";
+import { isImeComposing } from "@/utils/isImeComposing";
 
 import { Button } from "../Controls/Button";
 import { Textarea } from "../Input/Textarea";
@@ -63,6 +64,9 @@ export const FeedbackCommentDialog: React.FC<FeedbackCommentDialogProps> = ({
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+      if (isImeComposing(e)) {
+        return;
+      }
       // Submit on Ctrl/Cmd + Enter
       if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
         e.preventDefault();

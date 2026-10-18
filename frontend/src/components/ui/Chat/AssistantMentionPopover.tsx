@@ -29,7 +29,8 @@ export interface AssistantMentionPopoverProps {
   onBrowse: () => void;
   /**
    * Called when the panel closes while it holds focus, which only happens after
-   * the user arrowed into it. Focus belongs back in the composer.
+   * the user arrowed into it, and focus went down with it. Focus belongs back
+   * in the composer; a dialog opened from the panel keeps it.
    */
   onRestoreFocus: () => void;
   ref?: Ref<AssistantMentionPopoverHandle>;
@@ -68,7 +69,12 @@ export function AssistantMentionPopover({
     }
     if (!isOpen && wasOpenRef.current && panelHasFocusRef.current) {
       panelHasFocusRef.current = false;
-      onRestoreFocus();
+      if (
+        document.activeElement === null ||
+        document.activeElement === document.body
+      ) {
+        onRestoreFocus();
+      }
     }
     wasOpenRef.current = isOpen;
   }, [isOpen, onRestoreFocus]);

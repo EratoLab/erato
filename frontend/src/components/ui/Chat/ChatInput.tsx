@@ -77,6 +77,7 @@ import { createLogger } from "@/utils/debugLogger";
 import { disambiguatePastedImageFileNames } from "@/utils/file/disambiguatePastedImageFileNames";
 import { mergeUniqueFilesById } from "@/utils/file/mergeUniqueFilesById";
 import { DEFAULT_MAX_FILES_PER_MESSAGE } from "@/utils/fileUploadLimits";
+import { isImeComposing } from "@/utils/isImeComposing";
 
 import {
   ArrowUpIcon,
@@ -1640,8 +1641,18 @@ export const ChatInput = ({
       if (getQueuedBySessionId(composeSessionId)) {
         setIsDrainArmed(true);
       }
+      // Refocus only when focus is nowhere or already in the composer. The
+      // textarea stays live during a turn, so a dialog or menu opened
+      // meanwhile keeps focus.
       requestAnimationFrame(() => {
-        textareaRef.current?.focus();
+        const active = document.activeElement;
+        if (
+          active === null ||
+          active === document.body ||
+          formRef.current?.contains(active)
+        ) {
+          textareaRef.current?.focus();
+        }
       });
     }
   }, [isPendingResponse, getQueuedBySessionId, composeSessionId]);
@@ -2967,6 +2978,9 @@ export const ChatInput = ({
                 onKeyUp={(e) => syncMentionTrigger(e.currentTarget)}
                 onPaste={handleTextareaPaste}
                 onKeyDown={(e) => {
+                  if (isImeComposing(e)) {
+                    return;
+                  }
                   // The open picker owns Enter, Tab and the arrows — it has to
                   // run before Enter reaches send/queue.
                   if (mentionPopoverRef.current?.handleComposerKeyDown(e)) {

@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { AnchoredPopover } from "./AnchoredPopover";
@@ -21,6 +21,30 @@ describe("AnchoredPopover", () => {
     // rule on the panel's data-ui hook can override it.
     expect(panel).toHaveClass("anchored-popover-skin");
     expect(panel?.getAttribute("style") ?? "").not.toContain("border-color");
+  });
+
+  it("does not close on the Escape that dismisses an IME candidate", () => {
+    const onOpenChange = vi.fn();
+    render(
+      <AnchoredPopover
+        isOpen={true}
+        onOpenChange={onOpenChange}
+        trigger={(props) => <button {...props}>Open</button>}
+      >
+        <input aria-label="Filter" />
+      </AnchoredPopover>,
+    );
+    const field = screen.getByRole("textbox", { name: "Filter" });
+
+    fireEvent.keyDown(field, {
+      key: "Escape",
+      keyCode: 229,
+      isComposing: true,
+    });
+    expect(onOpenChange).not.toHaveBeenCalled();
+
+    fireEvent.keyDown(field, { key: "Escape" });
+    expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 
   // Closing hands focus back to the trigger only when it would otherwise be

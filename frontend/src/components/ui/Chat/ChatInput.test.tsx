@@ -534,9 +534,6 @@ describe("ChatInput", () => {
     );
 
     const textarea = screen.getByPlaceholderText("Type a message...");
-    const otherButton = document.createElement("button");
-    otherButton.type = "button";
-    document.body.appendChild(otherButton);
 
     mockUseChatContext.mockReturnValue({
       isPendingResponse: true,
@@ -552,10 +549,12 @@ describe("ChatInput", () => {
       </QueryClientProvider>,
     );
 
+    // Whatever held focus during the turn went away, leaving it on the body.
     await act(async () => {
-      otherButton.focus();
+      textarea.focus();
+      textarea.blur();
     });
-    expect(otherButton).toHaveFocus();
+    expect(document.activeElement).toBe(document.body);
 
     mockUseChatContext.mockReturnValue({
       isPendingResponse: false,
@@ -578,7 +577,6 @@ describe("ChatInput", () => {
     });
 
     expect(textarea).toHaveFocus();
-    otherButton.remove();
   });
 
   it("keeps the composer interactive while a response is generating (only send is blocked)", async () => {
@@ -5160,6 +5158,266 @@ describe("ChatInput", () => {
       const props = mockFacetSelector.mock.calls.at(-1)?.[0];
       expect(props.disabled).toBe(false);
       expect(props.toolsDisabled).toBe(true);
+    });
+  });
+
+  describe("IME keys and focus (ERMAIN-997)", () => {
+    const RESEARCHER = {
+      id: "assistant-research",
+      name: "Researcher",
+      description: "Finds and cites sources",
+    };
+
+    const submitHandlerThatSends =
+      (
+        message: string,
+        _attachedFiles: FileUploadItem[],
+        innerOnSendMessage: (message: string) => void,
+        isLoading: boolean,
+        disabled: boolean,
+        resetMessage: () => void,
+      ) =>
+      (event: FormEvent) => {
+        event.preventDefault();
+        if (isLoading || disabled) return;
+        const trimmed = message.trim();
+        if (trimmed) {
+          innerOnSendMessage(trimmed);
+          resetMessage();
+        }
+      };
+
+    const enableDelegation = () => {
+      mockUseAssistantsFeature.mockReturnValue({
+        enabled: true,
+        delegationEnabled: true,
+      });
+      mockUseListAssistants.mockReturnValue({ data: [RESEARCHER] });
+      mockUseFrequentAssistants.mockReturnValue({
+        data: { assistants: [RESEARCHER] },
+      });
+    };
+
+    const chatContext = (isPendingResponse: boolean) => ({
+      isPendingResponse,
+      isMessagingLoading: false,
+      isUploading: false,
+      cancelMessage: vi.fn(),
+      messagingError: null,
+    });
+
+    const renderComposer = async ({ pending = false } = {}) => {
+      const onSendMessage = vi.fn();
+      const queryClient = new QueryClient({
+        defaultOptions: {
+          queries: { retry: false },
+          mutations: { retry: false },
+        },
+      });
+      const { i18n } = await import("@lingui/core");
+      const ui = () => (
+        <QueryClientProvider client={queryClient}>
+          <I18nProvider i18n={i18n}>
+            <ChatInput onSendMessage={onSendMessage} chatId="chat-1" />
+          </I18nProvider>
+        </QueryClientProvider>
+      );
+      mockUseChatContext.mockReturnValue(chatContext(pending));
+      const { rerender } = render(ui());
+      const textarea =
+        screen.getByPlaceholderText<HTMLTextAreaElement>("Type a message...");
+      textarea.focus();
+      return {
+        textarea,
+        onSendMessage,
+        // A streamed chunk re-renders the composer with the same props.
+        rerender: () => rerender(ui()),
+        endTurn: () => {
+          mockUseChatContext.mockReturnValue(chatContext(false));
+          rerender(ui());
+        },
+      };
+    };
+
+    const flushFrame = async () => {
+      await act(async () => {
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+      });
+    };
+
+    const typeWithCaretAtEnd = (
+      textarea: HTMLTextAreaElement,
+      value: string,
+    ) => {
+      fireEvent.change(textarea, { target: { value } });
+      textarea.setSelectionRange(value.length, value.length);
+      fireEvent.select(textarea);
+    };
+
+    const composeInto = (textarea: HTMLTextAreaElement, value: string) => {
+      fireEvent.compositionStart(textarea);
+      typeWithCaretAtEnd(textarea, value);
+    };
+
+    // Chromium and Firefox deliver the key that confirms a candidate while the
+    // composition is open; WebKit ends the composition first and marks the key
+    // with keyCode 229 only.
+    const imeKey: Record<string, (target: HTMLElement, key: string) => void> = {
+      chromium: (target, key) => {
+        fireEvent.keyDown(target, { key, keyCode: 229, isComposing: true });
+        fireEvent.compositionEnd(target);
+      },
+      webkit: (target, key) => {
+        fireEvent.compositionEnd(target);
+        fireEvent.keyDown(target, { key, keyCode: 229 });
+      },
+    };
+
+    beforeEach(() => {
+      useMessageQueueStore.setState({ queuedBySessionId: {} });
+      mockUseChatInputHandlers.mockReturnValue({
+        attachedFiles: [],
+        fileError: null,
+        setFileError: vi.fn(),
+        handleFilesUploaded: vi.fn(),
+        handleRemoveFile: vi.fn(),
+        handleRemoveAllFiles: vi.fn(),
+        setAttachedFiles: vi.fn(),
+        createSubmitHandler: submitHandlerThatSends,
+      });
+    });
+
+    it.each(Object.keys(imeKey))(
+      "does not send on the Enter that confirms an IME candidate (%s order)",
+      async (order) => {
+        const { textarea, onSendMessage } = await renderComposer();
+
+        composeInto(textarea, "こんにちは");
+        imeKey[order](textarea, "Enter");
+
+        expect(onSendMessage).not.toHaveBeenCalled();
+        expect(textarea).toHaveValue("こんにちは");
+      },
+    );
+
+    it.each(Object.keys(imeKey))(
+      "does not queue on the Enter that confirms an IME candidate while generating (%s order)",
+      async (order) => {
+        const { textarea } = await renderComposer({ pending: true });
+
+        composeInto(textarea, "次の質問");
+        imeKey[order](textarea, "Enter");
+
+        expect(
+          screen.queryByText("Queued — sends when response finishes"),
+        ).not.toBeInTheDocument();
+        expect(textarea).toHaveValue("次の質問");
+      },
+    );
+
+    it("sends on an Enter pressed after the composition ended", async () => {
+      const { textarea, onSendMessage } = await renderComposer();
+
+      composeInto(textarea, "こんにちは");
+      fireEvent.compositionEnd(textarea);
+      fireEvent.keyDown(textarea, { key: "Enter", keyCode: 13 });
+
+      expect(onSendMessage).toHaveBeenCalledTimes(1);
+      expect(onSendMessage.mock.calls[0][0]).toBe("こんにちは");
+    });
+
+    it.each(["Enter", "Tab"])(
+      "does not pick an assistant on a %s that drives an IME candidate",
+      async (key) => {
+        enableDelegation();
+        const { textarea } = await renderComposer();
+
+        composeInto(textarea, "@Res");
+        expect(
+          screen.getByTestId("chat-input-mention-option-assistant-research"),
+        ).toBeInTheDocument();
+        imeKey.chromium(textarea, key);
+
+        expect(textarea).toHaveValue("@Res");
+      },
+    );
+
+    it("keeps focus in the composer on an arrow key that browses IME candidates", async () => {
+      enableDelegation();
+      const { textarea } = await renderComposer();
+
+      composeInto(textarea, "@Res");
+      fireEvent.keyDown(textarea, {
+        key: "ArrowDown",
+        keyCode: 229,
+        isComposing: true,
+      });
+
+      expect(textarea).toHaveFocus();
+    });
+
+    it("does not pull focus out of an open dialog when the turn ends", async () => {
+      enableDelegation();
+      const { textarea, endTurn } = await renderComposer({ pending: true });
+
+      typeWithCaretAtEnd(textarea, "@");
+      fireEvent.click(screen.getByTestId("chat-input-mention-browse"));
+      await flushFrame();
+      const search = screen.getByTestId("chat-input-mention-browse-search");
+      expect(search).toHaveFocus();
+
+      endTurn();
+      await flushFrame();
+
+      expect(search).toHaveFocus();
+    });
+
+    it("does not pull focus out of an open menu when the turn ends", async () => {
+      enableDelegation();
+      const { textarea, endTurn } = await renderComposer({ pending: true });
+
+      typeWithCaretAtEnd(textarea, "@Res");
+      fireEvent.keyDown(textarea, { key: "ArrowDown" });
+      const row = screen.getByTestId(
+        "chat-input-mention-option-assistant-research",
+      );
+      expect(row).toHaveFocus();
+
+      endTurn();
+      await flushFrame();
+
+      expect(row).toHaveFocus();
+    });
+
+    it("focuses the browse search before the next frame", async () => {
+      enableDelegation();
+      const { textarea } = await renderComposer();
+
+      typeWithCaretAtEnd(textarea, "@");
+      fireEvent.keyDown(textarea, { key: "ArrowUp" });
+      const browse = screen.getByTestId("chat-input-mention-browse");
+      expect(browse).toHaveFocus();
+      // Enter activates the focused row with a click.
+      fireEvent.click(browse);
+
+      expect(
+        screen.getByTestId("chat-input-mention-browse-search"),
+      ).toHaveFocus();
+    });
+
+    it("keeps the browse search focused across a composer re-render", async () => {
+      enableDelegation();
+      const { textarea, rerender } = await renderComposer({ pending: true });
+
+      typeWithCaretAtEnd(textarea, "@");
+      fireEvent.click(screen.getByTestId("chat-input-mention-browse"));
+      await flushFrame();
+      const search = screen.getByTestId("chat-input-mention-browse-search");
+      expect(search).toHaveFocus();
+
+      rerender();
+
+      expect(search).toHaveFocus();
     });
   });
 

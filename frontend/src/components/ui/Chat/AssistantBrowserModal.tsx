@@ -1,5 +1,5 @@
 import { t } from "@lingui/core/macro";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useState } from "react";
 
 import { Input } from "@/components/ui/Input/Input";
 import { useFuzzySearch } from "@/hooks/search/useFuzzySearch";
@@ -40,7 +40,6 @@ export function AssistantBrowserModal({
   onSelect,
 }: AssistantBrowserModalProps) {
   const [searchQuery, setSearchQuery] = useState("");
-  const searchRef = useRef<HTMLInputElement>(null);
   const matches = useFuzzySearch({
     items: assistants,
     keys: SEARCH_KEYS,
@@ -49,18 +48,6 @@ export function AssistantBrowserModal({
     // user is narrowing it, not searching prose.
     minMatchCharLength: 1,
   });
-
-  // The surface that opened this dialog is a popover closing in the same
-  // interaction, and its focus-return to its own trigger lands after the
-  // dialog's. Claiming focus a frame later puts the caret in the search box
-  // rather than behind the overlay.
-  useEffect(() => {
-    if (!isOpen) {
-      return;
-    }
-    const frame = requestAnimationFrame(() => searchRef.current?.focus());
-    return () => window.cancelAnimationFrame(frame);
-  }, [isOpen]);
 
   const closeAndReset = useCallback(() => {
     setSearchQuery("");
@@ -86,8 +73,10 @@ export function AssistantBrowserModal({
           typing never loses focus. */}
       <div className="mb-3">
         <Input
-          ref={searchRef}
           type="search"
+          // Focused in the opening commit, so a key typed right after opening
+          // cannot reach the composer behind the overlay.
+          autoFocus // eslint-disable-line jsx-a11y/no-autofocus -- the dialog exists to search
           value={searchQuery}
           onChange={(event) => setSearchQuery(event.target.value)}
           placeholder={t({

@@ -90,6 +90,26 @@ describe("MessageEditor", () => {
     expect(onCancel).toHaveBeenCalledTimes(1);
   });
 
+  it("does not submit on the Enter that confirms an IME candidate", () => {
+    const { onSubmit, input } = renderEditor();
+
+    fireEvent.keyDown(input, { key: "Enter", keyCode: 229, isComposing: true });
+
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it("does not cancel on the Escape that dismisses an IME candidate", () => {
+    const { onCancel, input } = renderEditor();
+
+    fireEvent.keyDown(input, {
+      key: "Escape",
+      keyCode: 229,
+      isComposing: true,
+    });
+
+    expect(onCancel).not.toHaveBeenCalled();
+  });
+
   it("blocks submit while a token limit is exceeded", () => {
     const { onSubmit, input } = renderEditor({ isSubmitBlocked: true });
 
