@@ -122,7 +122,7 @@ describe("Oauth2ProxyLoginProvider", () => {
     vi.useRealTimers();
     vi.unstubAllGlobals();
     vi.clearAllMocks();
-    document.cookie = "erato_oauth2_login_marker=; Max-Age=0; Path=/";
+    vi.restoreAllMocks();
   });
 
   it("authenticates when the mount probe finds a valid session", async () => {
@@ -429,7 +429,11 @@ describe("Oauth2ProxyLoginProvider", () => {
     "surfaces an error when the cookie never lands after a completed popup closed because $cause",
     async ({ markerVisible, message }) => {
       if (markerVisible) {
-        document.cookie = "erato_oauth2_login_marker=1; Path=/";
+        // Stubbed rather than written: jsdom serves http, so it would drop
+        // the Secure marker that auth-complete.html sets.
+        vi.spyOn(document, "cookie", "get").mockReturnValue(
+          "erato_oauth2_login_marker=1",
+        );
       }
       // Mount probe 401, then every probe stays 401: the popup signaled
       // completion but the session never becomes visible to the taskpane.
