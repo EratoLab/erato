@@ -35,6 +35,21 @@ const sharedModuleInputId = (entry: SharedModuleEntry): string =>
     ? entry.specifier
     : `@erato/frontend/shared-runtime/${entry.file.replace(/\.ts$/, "")}`;
 
+// Packages that hold React context or module state the add-in shares with the
+// frontend library. Linked mode imports that library from ../frontend, whose
+// node_modules has its own copies; vite 8 pre-bundled those as a second React,
+// and every hook call in the router failed.
+const REACT_CONTEXT_PACKAGES = [
+  "react",
+  "react-dom",
+  "react-router",
+  "react-router-dom",
+  "@lingui/core",
+  "@lingui/react",
+  "@tanstack/react-query",
+  "@tanstack/react-query-devtools",
+];
+
 const loadOfficeAddinEnv = (mode: string) => {
   const developmentEnv =
     mode === "development" ? {} : loadEnv("development", __dirname, "");
@@ -835,9 +850,10 @@ export default defineConfig(({ mode }) => {
         : []),
       copy404Plugin(),
     ],
-    resolve: linkedFrontend
-      ? {
-          alias: {
+    resolve: {
+      dedupe: REACT_CONTEXT_PACKAGES,
+      alias: linkedFrontend
+        ? {
             "@erato/frontend/library": path.resolve(
               __dirname,
               "../frontend/dist-library/library.mjs",
@@ -870,9 +886,9 @@ export default defineConfig(({ mode }) => {
                 ),
               ]),
             ),
-          },
-        }
-      : undefined,
+          }
+        : undefined,
+    },
     build: {
       rolldownOptions: {
         // Shared expose entries: chunks are shared with the app entry, so
