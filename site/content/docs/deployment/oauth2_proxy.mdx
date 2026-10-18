@@ -72,6 +72,10 @@ redirect_url = "https://erato.example.com/oauth2/callback"
 # python -c 'import os,base64; print(base64.urlsafe_b64encode(os.urandom(32)).decode())'
 cookie_secret = "your-cookie-secret"
 cookie_secure = true
+# Required for the Office add-in in Outlook and Word on the web, which load Erato
+# in a cross-site frame. Needs cookie_secure = true. Has no effect where the
+# browser blocks third-party cookies (Safari, Firefox's default protection).
+cookie_samesite = "none"
 cookie_expire = "168h" # 7 days
 cookie_refresh = "30m" # Refresh the cookie every 30 minutes (recommended)
 

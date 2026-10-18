@@ -55,6 +55,17 @@ describe("shouldSwitchToProxyLogin", () => {
     ).toBe(false);
   });
 
+  it.each([403, 500, 502, 503])(
+    "stays on NAA when the proxy answers the redeem with %i",
+    (status) => {
+      expect(
+        shouldSwitchToProxyLogin(
+          new Oauth2ProxySessionRedeemError("redeem failed", { status }),
+        ),
+      ).toBe(false);
+    },
+  );
+
   it.each([
     ["a missing bridge", new NestedAppAuthUnavailableError()],
     ["a disabled bridge", msalError("nested_app_auth_bridge_disabled")],
@@ -70,7 +81,11 @@ describe("shouldSwitchToProxyLogin", () => {
     ["a host without an Entra account", msalError("no_account_found")],
     [
       "a token the proxy refused",
-      new Oauth2ProxySessionRedeemError("rejected", { status: 403 }),
+      new Oauth2ProxySessionRedeemError("rejected", { status: 401 }),
+    ],
+    [
+      "a proxy that can't redeem external tokens",
+      new Oauth2ProxySessionRedeemError("not implemented", { status: 501 }),
     ],
     ["an unknown error", new Error("boom")],
   ])("switches to the proxy login on %s", (_, error) => {

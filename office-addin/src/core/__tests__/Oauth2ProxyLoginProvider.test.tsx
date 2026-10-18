@@ -122,6 +122,7 @@ describe("Oauth2ProxyLoginProvider", () => {
     vi.useRealTimers();
     vi.unstubAllGlobals();
     vi.clearAllMocks();
+    document.cookie = "erato_oauth2_login_marker=; Max-Age=0; Path=/";
   });
 
   it("authenticates when the mount probe finds a valid session", async () => {
@@ -411,68 +412,85 @@ describe("Oauth2ProxyLoginProvider", () => {
     expect(screen.getByTestId("error")).toHaveTextContent("");
   });
 
-  it("surfaces an error when the cookie never lands after a completed popup closed", async () => {
-    // Mount probe 401, then every probe stays 401: the popup signaled
-    // completion but the session never becomes visible to the taskpane.
-    const fetcher = stubFetch(new Response("Unauthorized", { status: 401 }));
-    const popup = fakePopup();
-    stubWindowOpen(popup);
+  it.each([
+    {
+      cause: "the browser blocks the frame's cookies",
+      markerVisible: false,
+      message: () =>
+        `Sign-in finished, but your browser blocks cookies from ${window.location.host} inside this page. Allow cookies for ${window.location.host} in your browser settings and try again. If you can't, ask your Erato administrator.`,
+    },
+    {
+      cause: "only the proxy cookie can't reach the frame",
+      markerVisible: true,
+      message: () =>
+        "Sign-in finished, but this Erato deployment isn't set up for sign-in inside Office on the web. Ask your Erato administrator.",
+    },
+  ])(
+    "surfaces an error when the cookie never lands after a completed popup closed because $cause",
+    async ({ markerVisible, message }) => {
+      if (markerVisible) {
+        document.cookie = "erato_oauth2_login_marker=1; Path=/";
+      }
+      // Mount probe 401, then every probe stays 401: the popup signaled
+      // completion but the session never becomes visible to the taskpane.
+      const fetcher = stubFetch(new Response("Unauthorized", { status: 401 }));
+      const popup = fakePopup();
+      stubWindowOpen(popup);
 
-    render(
-      <Oauth2ProxyLoginProvider>
-        <AuthProbe />
-      </Oauth2ProxyLoginProvider>,
-    );
-
-    await waitFor(() =>
-      expect(screen.getByTestId("initialized")).toHaveTextContent("true"),
-    );
-    vi.useFakeTimers();
-    act(() => {
-      screen.getByTestId("retry").click();
-    });
-
-    await act(async () => {
-      window.dispatchEvent(
-        new MessageEvent("message", {
-          data: "erato-oauth2-login-complete",
-          origin: window.location.origin,
-        }),
+      render(
+        <Oauth2ProxyLoginProvider>
+          <AuthProbe />
+        </Oauth2ProxyLoginProvider>,
       );
-      await flushSessionProbes();
-    });
-    popup.closed = true;
 
-    // Mid-grace (4 of the 8 grace ticks): still signing in, no bounce.
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(6_000);
-      await flushSessionProbes();
-    });
-    expect(screen.getByTestId("status")).toHaveTextContent("establishing");
-    expect(screen.getByTestId("error")).toHaveTextContent("");
+      await waitFor(() =>
+        expect(screen.getByTestId("initialized")).toHaveTextContent("true"),
+      );
+      vi.useFakeTimers();
+      act(() => {
+        screen.getByTestId("retry").click();
+      });
 
-    // Remaining grace ticks plus the final probe tick (9 ticks total after
-    // close): the grace window is exhausted and the failure is surfaced —
-    // unlike a user-cancelled popup this is NOT silent.
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(7_500);
-      await flushSessionProbes();
-    });
-    expect(screen.getByTestId("authenticated")).toHaveTextContent("false");
-    expect(screen.getByTestId("status")).toHaveTextContent("idle");
-    expect(screen.getByTestId("error")).toHaveTextContent(
-      `Sign-in finished, but the add-in can't see the session. Your browser is probably blocking third-party cookies here. Allow cookies for ${window.location.host} and try again.`,
-    );
-    // Mount probe + message verification probe + 8 grace probes + final probe.
-    expect(fetcher).toHaveBeenCalledTimes(11);
+      await act(async () => {
+        window.dispatchEvent(
+          new MessageEvent("message", {
+            data: "erato-oauth2-login-complete",
+            origin: window.location.origin,
+          }),
+        );
+        await flushSessionProbes();
+      });
+      popup.closed = true;
 
-    // The flow is settled: no further polling.
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(4_500);
-      await flushSessionProbes();
-    });
-    expect(fetcher).toHaveBeenCalledTimes(11);
-  });
+      // Mid-grace (4 of the 8 grace ticks): still signing in, no bounce.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(6_000);
+        await flushSessionProbes();
+      });
+      expect(screen.getByTestId("status")).toHaveTextContent("establishing");
+      expect(screen.getByTestId("error")).toHaveTextContent("");
+
+      // Remaining grace ticks plus the final probe tick (9 ticks total after
+      // close): the grace window is exhausted and the failure is surfaced —
+      // unlike a user-cancelled popup this is NOT silent.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(7_500);
+        await flushSessionProbes();
+      });
+      expect(screen.getByTestId("authenticated")).toHaveTextContent("false");
+      expect(screen.getByTestId("status")).toHaveTextContent("idle");
+      expect(screen.getByTestId("error")).toHaveTextContent(message());
+      // Mount probe + message verification probe + 8 grace probes + final probe.
+      expect(fetcher).toHaveBeenCalledTimes(11);
+
+      // The flow is settled: no further polling.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(4_500);
+        await flushSessionProbes();
+      });
+      expect(fetcher).toHaveBeenCalledTimes(11);
+    },
+  );
 
   it("reports an unreachable sign-in service when the last probe after a completed popup fails", async () => {
     let calls = 0;

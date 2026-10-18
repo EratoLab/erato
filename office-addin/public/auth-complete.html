@@ -11,6 +11,13 @@
       // The oauth2-proxy login popup lands here after the cookie is set. Notify
       // the opener so it can stop polling, then close ourselves.
       try {
+        // Lets the pane tell blocked cookies from a proxy cookie it can't get.
+        document.cookie =
+          "erato_oauth2_login_marker=1; Path=/; Max-Age=120; SameSite=None; Secure";
+      } catch (error) {
+        // Without the marker the pane reports blocked cookies.
+      }
+      try {
         if (window.opener) {
           window.opener.postMessage(
             "erato-oauth2-login-complete",

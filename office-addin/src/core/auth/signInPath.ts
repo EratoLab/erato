@@ -4,12 +4,6 @@ import {
 } from "./AuthSource";
 import { Oauth2ProxySessionRedeemError } from "./oauth2ProxySession";
 
-/**
- * How the pane signs in: Office's nested app authentication (NAA), or the
- * oauth2-proxy's own Entra login in a popup.
- */
-export type SignInPath = "naa" | "oauth2-proxy";
-
 const PROXY_LOGIN_SWITCH_STORAGE_KEY = "erato.officeAddin.useOauth2ProxyLogin";
 
 // MSAL spells the cancel code differently in the browser and NAA bridge paths.
@@ -19,6 +13,11 @@ const STAY_ON_NAA_ERROR_CODES = new Set([
   "no_network_connectivity",
   "interaction_in_progress",
 ]);
+
+// The proxy answers 401 for a token it refuses and 501 when its provider can't
+// redeem external tokens; the popup login fixes both. A 403 (user not allowed)
+// or a 5xx would fail the popup login too.
+const SWITCH_ON_REDEEM_STATUSES = new Set([401, 501]);
 
 function errorCodeOf(error: unknown): string | null {
   if (
@@ -78,7 +77,7 @@ export function shouldSwitchToProxyLogin(error: unknown): boolean {
     return false;
   }
   if (error instanceof Oauth2ProxySessionRedeemError) {
-    return error.status !== null;
+    return error.status !== null && SWITCH_ON_REDEEM_STATUSES.has(error.status);
   }
   const code = errorCodeOf(error);
   return code === null || !STAY_ON_NAA_ERROR_CODES.has(code);

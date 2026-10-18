@@ -28,8 +28,9 @@ function createWordNaaSource(): AuthSource | null {
 
 /**
  * Word signs in through NAA where Office provides its bridge (Word on Windows
- * and Mac), and through the oauth2-proxy popup login where it doesn't (Word on
- * the web, which still reports the NestedAppAuth requirement set).
+ * and Mac), and otherwise through the oauth2-proxy popup login: Word on the
+ * web, which reports the NestedAppAuth requirement set without the bridge, and
+ * desktop builds that don't report NestedAppAuth at all.
  */
 export function WordAuthProvider({ children }: { children: React.ReactNode }) {
   return (

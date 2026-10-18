@@ -155,7 +155,12 @@ msgstr "MSAL not initialized"
 #. js-lingui-explicit-id
 #: src/core/Oauth2ProxyLoginProvider.tsx
 msgid "officeAddin.auth.oauth2ProxyCookieBlocked"
-msgstr "Sign-in finished, but the add-in can't see the session. Your browser is probably blocking third-party cookies here. Allow cookies for {host} and try again."
+msgstr "Sign-in finished, but your browser blocks cookies from {host} inside this page. Allow cookies for {host} in your browser settings and try again. If you can't, ask your Erato administrator."
+
+#. js-lingui-explicit-id
+#: src/core/Oauth2ProxyLoginProvider.tsx
+msgid "officeAddin.auth.oauth2ProxyCookieMisconfigured"
+msgstr "Sign-in finished, but this Erato deployment isn't set up for sign-in inside Office on the web. Ask your Erato administrator."
 
 #. js-lingui-explicit-id
 #: src/core/Oauth2ProxyLoginProvider.tsx

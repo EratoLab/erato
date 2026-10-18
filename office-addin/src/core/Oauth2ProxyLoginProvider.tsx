@@ -29,6 +29,8 @@ const LOGIN_COMPLETE_MESSAGE = "erato-oauth2-login-complete";
  * the sign-in CTA is worse than a few extra seconds of "signing in".
  */
 const COMPLETION_GRACE_MS = 12_000;
+/** Set by auth-complete.html with `SameSite=None`, next to the proxy cookie. */
+const LOGIN_MARKER_COOKIE = "erato_oauth2_login_marker=1";
 
 function probeFailedMessage(): string {
   return t({
@@ -41,8 +43,28 @@ function cookieBlockedMessage(): string {
   const host = window.location.host;
   return t({
     id: "officeAddin.auth.oauth2ProxyCookieBlocked",
-    message: `Sign-in finished, but the add-in can't see the session. Your browser is probably blocking third-party cookies here. Allow cookies for ${host} and try again.`,
+    message: `Sign-in finished, but your browser blocks cookies from ${host} inside this page. Allow cookies for ${host} in your browser settings and try again. If you can't, ask your Erato administrator.`,
   });
+}
+
+function cookieMisconfiguredMessage(): string {
+  return t({
+    id: "officeAddin.auth.oauth2ProxyCookieMisconfigured",
+    message:
+      "Sign-in finished, but this Erato deployment isn't set up for sign-in inside Office on the web. Ask your Erato administrator.",
+  });
+}
+
+// A visible marker means the browser lets this frame use cookies, so the proxy
+// cookie itself can't reach the frame (its SameSite setting).
+function sessionNotVisibleMessage(): string {
+  let markerVisible = false;
+  try {
+    markerVisible = document.cookie.split("; ").includes(LOGIN_MARKER_COOKIE);
+  } catch {
+    // Treat an unreadable cookie jar as blocked.
+  }
+  return markerVisible ? cookieMisconfiguredMessage() : cookieBlockedMessage();
 }
 
 type LoginPhase =
@@ -299,9 +321,9 @@ export function Oauth2ProxyLoginProvider({
                 succeed();
               } else {
                 // The popup only reaches auth-complete once the proxy has set
-                // its cookie, so a pane that still can't see it is being
-                // refused third-party cookies.
-                giveUp(completionSignaled ? cookieBlockedMessage() : null);
+                // its cookie, so a pane that still can't see it is refused
+                // that cookie, by the browser or by its SameSite setting.
+                giveUp(completionSignaled ? sessionNotVisibleMessage() : null);
               }
             })
             .catch(() =>

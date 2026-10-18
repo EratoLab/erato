@@ -277,7 +277,7 @@ describe("NaaOrProxyLoginProvider", () => {
     });
 
     it("switches when the proxy refuses the NAA token", async () => {
-      const fetcher = stubProxy({ sessionStatus: 401, redeemStatus: 403 });
+      const fetcher = stubProxy({ sessionStatus: 401, redeemStatus: 401 });
       const source = naaSource({
         acquireBootstrapToken: vi.fn(async (options) => {
           if (options?.forceInteraction) {
@@ -295,7 +295,7 @@ describe("NaaOrProxyLoginProvider", () => {
         expect(fetchedPaths(fetcher)).toContain(OAUTH2_PROXY_AUTH_PATH),
       );
       expect(console.warn).toHaveBeenCalledWith(
-        "NAA sign-in failed (redeem_403); switching to the oauth2-proxy login",
+        "NAA sign-in failed (redeem_401); switching to the oauth2-proxy login",
       );
     });
 
