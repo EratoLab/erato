@@ -1,5 +1,6 @@
 //! Database-related integration tests.
 
+pub mod interrupted_parts;
 pub mod migrations;
 pub mod runtime_configuration;
 pub mod runtime_distribution;
