@@ -62,6 +62,9 @@ export interface WordReviewState {
   /** A document plan's Apply that stopped before writing because the host's policy asks before, or
    * refuses, replacing the whole document. The card stays idle and offers that choice, not an error. */
   wholeDocumentBlock?: WordWholeDocumentBlock;
+  /** A document plan's refusal shown before Apply. Routing ends once the snapshot expires, so the
+   * card keeps refusing instead of falling back to a disabled Apply. */
+  wholeDocumentRefusal?: WordWholeDocumentRefusal;
   /** Comment changes: the rows the user ticked, each row's latest outcome, and Revert. */
   comments?: WordCommentCardState;
 }

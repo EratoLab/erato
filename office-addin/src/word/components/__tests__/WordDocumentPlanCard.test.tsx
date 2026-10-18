@@ -1415,6 +1415,7 @@ describe("route preview", () => {
   it("says an eligible rewrite edits its passages in place", async () => {
     await mountRealistic((s) => statusRewritePlan(s, "Status: revised."));
     expect(routeText()).toBe("Edits 1 passage in place.");
+    expect(screen.queryByText(/reloads the whole document/)).toBeNull();
   });
 
   it("says the passages go in as tracked changes under the user's name", async () => {
@@ -2006,6 +2007,38 @@ describe("whole-document plans on Word for the web by default", () => {
     ).toBeVisible();
     expect(execute).not.toHaveBeenCalled();
     expect(word.insert).not.toHaveBeenCalled();
+  });
+
+  it("stay refused after a later turn revokes their snapshot", async () => {
+    const { snapshot, refresh } = await mountRealistic(sectionsPlan, {
+      profile: "word-web",
+    });
+    await act(async () => {});
+    snapshot.revoked = true;
+    refresh();
+    expect(screen.getByText(WEB_IMPORT_REFUSAL)).toBeVisible();
+    expect(screen.getByRole("button", { name: "Copy draft" })).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Ask again for in-place edits" }),
+    ).toBeVisible();
+    expect(screen.queryByRole("button", { name: APPLY_LABEL })).toBeNull();
+    expect(screen.queryByText(/no longer active/)).toBeNull();
+  });
+
+  it("leave an in-place plan a later turn revoked with a disabled Apply and the expired notice", async () => {
+    const { snapshot, refresh } = await mountRealistic(
+      (s) => statusRewritePlan(s, "Status: revised."),
+      { profile: "word-web" },
+    );
+    await act(async () => {});
+    snapshot.revoked = true;
+    refresh();
+    expect(applyButton()).toBeDisabled();
+    expect(
+      screen.getByText(
+        "This document snapshot is no longer active. Include the document in a new request.",
+      ),
+    ).toBeVisible();
   });
 
   it("keeps the organization wording where a desktop deployment turns the import off", async () => {

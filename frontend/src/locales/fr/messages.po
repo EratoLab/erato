@@ -4402,8 +4402,8 @@ msgstr "{count, plural, one {{list} reste inchangée.} other {{list} restent inc
 
 #. js-lingui-explicit-id
 #: src/components/ui/WordReview/wordPlanLabels.ts
-msgid "officeAddin.word.planScope.wholeFile"
-msgstr "Word recharge pour cela l’intégralité du fichier du document."
+#~ msgid "officeAddin.word.planScope.wholeFile"
+#~ msgstr "Word recharge pour cela l’intégralité du fichier du document."
 
 #. js-lingui-explicit-id
 #: src/components/ui/WordReview/wordPlanLabels.ts

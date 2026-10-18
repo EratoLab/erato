@@ -122,6 +122,7 @@ import type {
 } from "../utils/wordClientActions";
 import type { WordCoauthoringState } from "../utils/wordCoauthoring";
 import type { WordInPlaceBackup } from "../utils/wordDocumentPackage";
+import type { WordWholeDocumentWrite } from "../utils/wordInPlaceRoute";
 import type {
   WordDocumentPlan,
   WordPlanCommentThread,
@@ -269,9 +270,17 @@ export function WordDocumentPlanCard({
     [needsCommentTick, configuredAskActions, entry.action],
   );
   const block = review.wholeDocumentBlock;
-  const wholeDocument = block
+  const liveRefusal =
+    routing?.write.write === "refuse" ? routing.write.reason : undefined;
+  const storedRefusal = review.wholeDocumentRefusal;
+  useEffect(() => {
+    if (routing && liveRefusal !== storedRefusal)
+      host.updateReview(key, { wholeDocumentRefusal: liveRefusal });
+  }, [routing, liveRefusal, storedRefusal, host, key]);
+  const wholeDocument: WordWholeDocumentWrite | undefined = block
     ? wordWholeDocumentBlockWrite(block)
-    : routing?.write;
+    : (routing?.write ??
+      (storedRefusal && { write: "refuse", reason: storedRefusal }));
   const confirmImport = offered && wholeDocument?.write === "confirm";
   const refusal =
     offered && wholeDocument?.write === "refuse"
@@ -1161,7 +1170,7 @@ export function WordDocumentPlanCard({
               )}
             </>
           ),
-          notice: idle && blockedText && (
+          notice: idle && blockedText && !refusal && (
             <Alert
               type="info"
               role="status"
