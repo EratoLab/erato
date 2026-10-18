@@ -3,8 +3,8 @@ import { i18n } from "@lingui/core";
 import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { useSessionAuth } from "../../../core/SessionAuthProvider";
 import { Oauth2ProxyLoginProvider } from "../Oauth2ProxyLoginProvider";
+import { useSessionAuth } from "../SessionAuthProvider";
 
 vi.mock("@erato/frontend/library", () => ({
   setAuthRecoveryHandler: vi.fn(),
@@ -122,6 +122,7 @@ describe("Oauth2ProxyLoginProvider", () => {
     vi.useRealTimers();
     vi.unstubAllGlobals();
     vi.clearAllMocks();
+    vi.restoreAllMocks();
   });
 
   it("authenticates when the mount probe finds a valid session", async () => {
@@ -411,10 +412,105 @@ describe("Oauth2ProxyLoginProvider", () => {
     expect(screen.getByTestId("error")).toHaveTextContent("");
   });
 
-  it("surfaces an error when the cookie never lands after a completed popup closed", async () => {
-    // Mount probe 401, then every probe stays 401: the popup signaled
-    // completion but the session never becomes visible to the taskpane.
-    const fetcher = stubFetch(new Response("Unauthorized", { status: 401 }));
+  it.each([
+    {
+      cause: "the browser blocks the frame's cookies",
+      markerVisible: false,
+      message: () =>
+        `Sign-in finished, but your browser blocks cookies from ${window.location.host} inside this page. Allow cookies for ${window.location.host} in your browser settings and try again. If you can't, ask your Erato administrator.`,
+    },
+    {
+      cause: "only the proxy cookie can't reach the frame",
+      markerVisible: true,
+      message: () =>
+        "Sign-in finished, but this Erato deployment isn't set up for sign-in inside Office on the web. Ask your Erato administrator.",
+    },
+  ])(
+    "surfaces an error when the cookie never lands after a completed popup closed because $cause",
+    async ({ markerVisible, message }) => {
+      if (markerVisible) {
+        // Stubbed rather than written: jsdom serves http, so it would drop
+        // the Secure marker that auth-complete.html sets.
+        vi.spyOn(document, "cookie", "get").mockReturnValue(
+          "erato_oauth2_login_marker=1",
+        );
+      }
+      // Mount probe 401, then every probe stays 401: the popup signaled
+      // completion but the session never becomes visible to the taskpane.
+      const fetcher = stubFetch(new Response("Unauthorized", { status: 401 }));
+      const popup = fakePopup();
+      stubWindowOpen(popup);
+
+      render(
+        <Oauth2ProxyLoginProvider>
+          <AuthProbe />
+        </Oauth2ProxyLoginProvider>,
+      );
+
+      await waitFor(() =>
+        expect(screen.getByTestId("initialized")).toHaveTextContent("true"),
+      );
+      vi.useFakeTimers();
+      act(() => {
+        screen.getByTestId("retry").click();
+      });
+
+      await act(async () => {
+        window.dispatchEvent(
+          new MessageEvent("message", {
+            data: "erato-oauth2-login-complete",
+            origin: window.location.origin,
+          }),
+        );
+        await flushSessionProbes();
+      });
+      popup.closed = true;
+
+      // Mid-grace (4 of the 8 grace ticks): still signing in, no bounce.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(6_000);
+        await flushSessionProbes();
+      });
+      expect(screen.getByTestId("status")).toHaveTextContent("establishing");
+      expect(screen.getByTestId("error")).toHaveTextContent("");
+
+      // Remaining grace ticks plus the final probe tick (9 ticks total after
+      // close): the grace window is exhausted and the failure is surfaced —
+      // unlike a user-cancelled popup this is NOT silent.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(7_500);
+        await flushSessionProbes();
+      });
+      expect(screen.getByTestId("authenticated")).toHaveTextContent("false");
+      expect(screen.getByTestId("status")).toHaveTextContent("idle");
+      expect(screen.getByTestId("error")).toHaveTextContent(message());
+      // Mount probe + message verification probe + 8 grace probes + final probe.
+      expect(fetcher).toHaveBeenCalledTimes(11);
+
+      // The flow is settled: no further polling.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(4_500);
+        await flushSessionProbes();
+      });
+      expect(fetcher).toHaveBeenCalledTimes(11);
+    },
+  );
+
+  it("reports an unreachable sign-in service when the last probe after a completed popup fails", async () => {
+    let calls = 0;
+    const fetcher = vi.fn(async () => {
+      calls += 1;
+      // Mount probe, message verification probe and 8 grace probes stay 401.
+      if (calls <= 10) {
+        return new Response("Unauthorized", { status: 401 });
+      }
+      throw new TypeError("Failed to fetch");
+    });
+    Object.defineProperty(window, "fetch", {
+      configurable: true,
+      value: fetcher,
+    });
+    vi.stubGlobal("fetch", fetcher);
     const popup = fakePopup();
     stubWindowOpen(popup);
 
@@ -431,7 +527,6 @@ describe("Oauth2ProxyLoginProvider", () => {
     act(() => {
       screen.getByTestId("retry").click();
     });
-
     await act(async () => {
       window.dispatchEvent(
         new MessageEvent("message", {
@@ -443,35 +538,15 @@ describe("Oauth2ProxyLoginProvider", () => {
     });
     popup.closed = true;
 
-    // Mid-grace (4 of the 8 grace ticks): still signing in, no bounce.
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(6_000);
+      await vi.advanceTimersByTimeAsync(13_500);
       await flushSessionProbes();
     });
-    expect(screen.getByTestId("status")).toHaveTextContent("establishing");
-    expect(screen.getByTestId("error")).toHaveTextContent("");
 
-    // Remaining grace ticks plus the final probe tick (9 ticks total after
-    // close): the grace window is exhausted and the failure is surfaced —
-    // unlike a user-cancelled popup this is NOT silent.
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(7_500);
-      await flushSessionProbes();
-    });
-    expect(screen.getByTestId("authenticated")).toHaveTextContent("false");
-    expect(screen.getByTestId("status")).toHaveTextContent("idle");
+    expect(fetcher).toHaveBeenCalledTimes(11);
     expect(screen.getByTestId("error")).toHaveTextContent(
       "Could not reach the sign-in service",
     );
-    // Mount probe + message verification probe + 8 grace probes + final probe.
-    expect(fetcher).toHaveBeenCalledTimes(11);
-
-    // The flow is settled: no further polling.
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(4_500);
-      await flushSessionProbes();
-    });
-    expect(fetcher).toHaveBeenCalledTimes(11);
   });
 
   it("authenticates via the polling fallback when the postMessage is missed", async () => {

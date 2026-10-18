@@ -4,7 +4,7 @@
  * which redeems an Entra id_token + Graph token for the proxy session. The
  * NAA-less hybrid mailbox (Exchange SE) ALSO reports `entra-msal` — but via the
  * oauth2-proxy redirect login (see
- * {@link "../../providers/Oauth2ProxyLoginProvider"}), which has no client-side
+ * {@link "../Oauth2ProxyLoginProvider"}), which has no client-side
  * `AuthSource`: the user is still an Entra identity, so the mail-fetch hook
  * treats it as authenticated and routes SE mail to the EWS SOAP backend
  * (Erato backend proxy + host-brokered `makeEwsRequestAsync`).
@@ -124,5 +124,19 @@ export class InteractionRequiredError extends Error {
     );
     this.name = "InteractionRequiredError";
     this.reason = options?.reason ?? "sign-in";
+  }
+}
+
+/**
+ * The host offers no nested app authentication (NAA) bridge, although it may
+ * still report the NestedAppAuth requirement set (Word, Excel and PowerPoint
+ * on the web). MSAL would then fall back to a standard client whose popup
+ * can't complete from a cross-origin task pane, so the host must sign in
+ * through the oauth2-proxy login instead.
+ */
+export class NestedAppAuthUnavailableError extends Error {
+  constructor(message = "Nested app authentication is unavailable") {
+    super(message);
+    this.name = "NestedAppAuthUnavailableError";
   }
 }

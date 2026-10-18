@@ -2,11 +2,11 @@ import { setAuthRecoveryHandler } from "@erato/frontend/library";
 import { t } from "@lingui/core/macro";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { SessionAuthContext } from "../../core/SessionAuthProvider";
+import { SessionAuthContext } from "./SessionAuthProvider";
 import {
   OAUTH2_PROXY_SIGN_IN_PATH,
   checkOauth2ProxySession,
-} from "../../core/auth/oauth2ProxySession";
+} from "./auth/oauth2ProxySession";
 
 /** How often we re-probe the proxy session while the popup is open. */
 const SESSION_POLL_INTERVAL_MS = 1_500;
@@ -29,6 +29,43 @@ const LOGIN_COMPLETE_MESSAGE = "erato-oauth2-login-complete";
  * the sign-in CTA is worse than a few extra seconds of "signing in".
  */
 const COMPLETION_GRACE_MS = 12_000;
+/** Set by auth-complete.html with `SameSite=None`, next to the proxy cookie. */
+const LOGIN_MARKER_COOKIE = "erato_oauth2_login_marker=1";
+
+function probeFailedMessage(): string {
+  return t({
+    id: "officeAddin.auth.oauth2ProxyProbeFailed",
+    message: "Could not reach the sign-in service. Try again.",
+  });
+}
+
+function cookieBlockedMessage(): string {
+  const host = window.location.host;
+  return t({
+    id: "officeAddin.auth.oauth2ProxyCookieBlocked",
+    message: `Sign-in finished, but your browser blocks cookies from ${host} inside this page. Allow cookies for ${host} in your browser settings and try again. If you can't, ask your Erato administrator.`,
+  });
+}
+
+function cookieMisconfiguredMessage(): string {
+  return t({
+    id: "officeAddin.auth.oauth2ProxyCookieMisconfigured",
+    message:
+      "Sign-in finished, but this Erato deployment isn't set up for sign-in inside Office on the web. Ask your Erato administrator.",
+  });
+}
+
+// A visible marker means the browser lets this frame use cookies, so the proxy
+// cookie itself can't reach the frame (its SameSite setting).
+function sessionNotVisibleMessage(): string {
+  let markerVisible = false;
+  try {
+    markerVisible = document.cookie.split("; ").includes(LOGIN_MARKER_COOKIE);
+  } catch {
+    // Treat an unreadable cookie jar as blocked.
+  }
+  return markerVisible ? cookieMisconfiguredMessage() : cookieBlockedMessage();
+}
 
 type LoginPhase =
   | "checking"
@@ -38,18 +75,19 @@ type LoginPhase =
   | "error";
 
 /**
- * The oauth2-proxy redirect-login {@link SessionAuthContext} provider for the
- * NAA-less hybrid mailbox (Exchange SE). Unlike the EXO path there is no
+ * The oauth2-proxy redirect-login {@link SessionAuthContext} provider for hosts
+ * without usable Office NAA: the Exchange SE mailbox in Outlook, and Word on the
+ * web (see {@link "./NaaOrProxyLoginProvider"}). Unlike the NAA path there is no
  * client-side Entra token to redeem: the add-in is served through oauth2-proxy
- * on the funnel domain, so the proxy performs the full Entra OIDC login itself
+ * on the deployment domain, so the proxy performs the full Entra OIDC login itself
  * (with ITS OWN app registration) and sets the session cookie. This provider
  * therefore only orchestrates that login — probe the cookie, open the proxy's
  * `/oauth2/start` login in a popup, detect completion — and supplies the SAME
  * {@link SessionAuthContext} value so AuthGate, {@link useSessionAuth}, and the
  * mail-fetch hook all work unchanged.
  *
- * No {@link "./EntraGraphTokenProvider"} is mounted here: there is no
- * client-side Graph token on this path, which is correct because the SE on-prem
+ * No {@link "../outlook/providers/EntraGraphTokenProvider"} is mounted here:
+ * there is no client-side Graph token on this path, which is correct because the SE on-prem
  * mailbox reads mail via EWS SOAP through the Erato backend proxy (host-issued
  * Exchange callback token in `X-EWS-Authentication`), not Graph.
  */
@@ -83,12 +121,7 @@ export function Oauth2ProxyLoginProvider({
           return;
         }
         console.warn("OAuth2 proxy session probe failed", probeError);
-        setError(
-          t({
-            id: "officeAddin.auth.oauth2ProxyProbeFailed",
-            message: "Could not reach the sign-in service. Try again.",
-          }),
-        );
+        setError(probeFailedMessage());
         setPhase("error");
       });
 
@@ -282,21 +315,20 @@ export function Oauth2ProxyLoginProvider({
             window.clearInterval(pollId);
             pollId = undefined;
           }
-          const failureMessage = completionSignaled
-            ? t({
-                id: "officeAddin.auth.oauth2ProxyProbeFailed",
-                message: "Could not reach the sign-in service. Try again.",
-              })
-            : null;
           void checkOauth2ProxySession()
             .then((authenticated) => {
               if (authenticated) {
                 succeed();
               } else {
-                giveUp(failureMessage);
+                // The popup only reaches auth-complete once the proxy has set
+                // its cookie, so a pane that still can't see it is refused
+                // that cookie, by the browser or by its SameSite setting.
+                giveUp(completionSignaled ? sessionNotVisibleMessage() : null);
               }
             })
-            .catch(() => giveUp(failureMessage));
+            .catch(() =>
+              giveUp(completionSignaled ? probeFailedMessage() : null),
+            );
           return;
         }
         void checkOauth2ProxySession()

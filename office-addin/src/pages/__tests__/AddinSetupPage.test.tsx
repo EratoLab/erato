@@ -156,7 +156,7 @@ describe("AddinSetupRoute Word branch", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("names both delivery routes, the Mac gap, and the SPA redirect URI", async () => {
+  it("names both delivery routes, the Mac gap, and both sign-in redirect URIs", async () => {
     await selectWord();
 
     expect(screen.getByRole("link", { name: "Integrated Apps" })).toBeVisible();
@@ -171,6 +171,10 @@ describe("AddinSetupRoute Word branch", () => {
     expect(
       screen.getByText(`brk-multihub://${window.location.host}`),
     ).toBeVisible();
+    expect(
+      screen.getByText(`${window.location.origin}/oauth2/callback`),
+    ).toBeVisible();
+    expect(screen.getByText('cookie_samesite = "none"')).toBeVisible();
   });
 });
 

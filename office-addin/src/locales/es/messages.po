@@ -153,12 +153,22 @@ msgstr "MSAL no está inicializado"
 #~ msgstr "La autenticación de aplicación anidada no es compatible con este entorno"
 
 #. js-lingui-explicit-id
-#: src/outlook/providers/Oauth2ProxyLoginProvider.tsx
+#: src/core/Oauth2ProxyLoginProvider.tsx
+msgid "officeAddin.auth.oauth2ProxyCookieBlocked"
+msgstr "El inicio de sesión ha terminado, pero tu navegador bloquea las cookies de {host} en esta página. Permite las cookies para {host} en la configuración del navegador e inténtalo de nuevo. Si no puedes, ponte en contacto con el administrador de Erato."
+
+#. js-lingui-explicit-id
+#: src/core/Oauth2ProxyLoginProvider.tsx
+msgid "officeAddin.auth.oauth2ProxyCookieMisconfigured"
+msgstr "El inicio de sesión ha terminado, pero esta implementación de Erato no está configurada para iniciar sesión en Office en la Web. Ponte en contacto con el administrador de Erato."
+
+#. js-lingui-explicit-id
+#: src/core/Oauth2ProxyLoginProvider.tsx
 msgid "officeAddin.auth.oauth2ProxyPopupBlocked"
 msgstr "Se bloqueó la ventana emergente de inicio de sesión. Permite las ventanas emergentes para este sitio e inténtalo de nuevo."
 
 #. js-lingui-explicit-id
-#: src/outlook/providers/Oauth2ProxyLoginProvider.tsx
+#: src/core/Oauth2ProxyLoginProvider.tsx
 msgid "officeAddin.auth.oauth2ProxyProbeFailed"
 msgstr "No se pudo conectar con el servicio de inicio de sesión. Inténtalo de nuevo."
 
@@ -168,7 +178,7 @@ msgid "officeAddin.auth.oauth2ProxySessionFailed"
 msgstr "No se pudo establecer una sesión segura de Erato. Inicia sesión de nuevo."
 
 #. js-lingui-explicit-id
-#: src/outlook/providers/Oauth2ProxyLoginProvider.tsx
+#: src/core/Oauth2ProxyLoginProvider.tsx
 msgid "officeAddin.auth.oauth2ProxySignInTimedOut"
 msgstr "Se agotó el tiempo de espera del inicio de sesión. Inténtalo de nuevo."
 
@@ -5757,6 +5767,11 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.word.setup.desktopRedirectUriInstruction"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
 msgid "officeAddin.word.setup.downloadButton"
 msgstr ""
 
@@ -5782,12 +5797,17 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
-msgid "officeAddin.word.setup.redirectUriInstruction"
-msgstr ""
+#~ msgid "officeAddin.word.setup.redirectUriInstruction"
+#~ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
 msgid "officeAddin.word.setup.reviewManifest"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.word.setup.webSignInInstruction"
 msgstr ""
 
 # ==============================

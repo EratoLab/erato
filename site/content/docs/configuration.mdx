@@ -601,7 +601,11 @@ window.FOO = "bar";
 
 Additional `Content-Security-Policy` `frame-ancestors` sources that may embed the frontend.
 
-Erato always includes `'self'`. When the Microsoft Office add-in is enabled, Erato also includes `https://outlook.office.com` and `https://outlook.cloud.microsoft`.
+Erato always includes `'self'`. When the Microsoft Office add-in is enabled, Erato also includes the hosts that embed it:
+
+- Outlook: `https://outlook.office.com` and `https://outlook.cloud.microsoft`.
+- Word on the web: `https://*.officeapps.live.com` and `https://*.sharepoint.com`.
+- The Teams personal tab: `https://teams.microsoft.com`, `https://*.teams.microsoft.com`, `https://*.microsoft365.com`, `https://*.office.com`, `https://*.cloud.microsoft`, `https://outlook.office365.com` and `https://outlook-sdf.office365.com`.
 
 **Default value:** `[]`
 
@@ -2978,6 +2982,8 @@ This is unsafe and should only be enabled for development or controlled internal
 Whether the Office add-in frontend and manifest endpoint are enabled.
 
 When enabled, Erato serves the add-in frontend bundle and exposes `GET /office-addin/manifest.xml`.
+
+The add-in in Outlook and Word on the web runs in a cross-site frame, so the oauth2-proxy must set `cookie_samesite = "none"` (see [OAuth2 Proxy](./deployment/oauth2_proxy)).
 
 **Default value:** `false`
 
