@@ -5,6 +5,7 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
+import { act } from "react";
 import { describe, expect, it, vi } from "vitest";
 
 import { DropdownMenu } from "../DropdownMenu";
@@ -301,9 +302,42 @@ describe("DropdownMenu", () => {
     );
 
     expect(onClick).toHaveBeenCalledTimes(1);
-    // A dialog opened by the row focuses itself immediately; a delayed close
-    // would take that focus back to the trigger.
+    // A dialog opened by the row focuses itself immediately; the menu must not
+    // still be open over it.
     expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+  });
+
+  // Picking an assistant moves focus into the composer. The delayed close must
+  // not take it back to the trigger and swallow what the user types next.
+  it("leaves focus where the selected action moved it", async () => {
+    render(
+      <>
+        <textarea aria-label="Composer" />
+        <DropdownMenu
+          items={[
+            {
+              label: "Mention",
+              onClick: () =>
+                screen.getByRole("textbox", { name: "Composer" }).focus(),
+            },
+          ]}
+        />
+      </>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Open menu" }));
+    const row = await screen.findByRole("menuitem", { name: "Mention" });
+    // The panel takes focus one frame after opening.
+    await act(async () => {
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+    });
+    fireEvent.click(row);
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 150));
+    });
+
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Composer" })).toHaveFocus();
   });
 
   it("takes its geometry from the shared control token, not a caller override", () => {

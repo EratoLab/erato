@@ -47,9 +47,8 @@ export interface DropdownMenuItem {
   /** Limit the description to two lines with an ellipsis. */
   truncateDescription?: boolean;
   /**
-   * Skip the close delay. Required of any row that opens a dialog: the delayed
-   * close returns focus to the trigger *after* the dialog has focused itself,
-   * pulling focus out from under the overlay.
+   * Skip the close delay. Required of any row that opens a dialog, so the menu
+   * is gone before the dialog takes focus instead of lingering over it.
    */
   closesImmediately?: boolean;
   /** Group label rendered above this row, opening a new section. */

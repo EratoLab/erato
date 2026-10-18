@@ -291,8 +291,17 @@ export function AnchoredPopover({
     });
   }, [getPanelElement, initialFocusSelector, isOpen, manageFocus]);
 
+  // Return focus only when it went down with the panel (it is on the body
+  // then). A selection that moved it on purpose, into the composer or a dialog,
+  // keeps it, even when the menu closes after its select delay.
   useEffect(() => {
-    if (manageFocus && wasOpenRef.current && !isOpen) {
+    if (
+      manageFocus &&
+      wasOpenRef.current &&
+      !isOpen &&
+      (document.activeElement === null ||
+        document.activeElement === document.body)
+    ) {
       triggerRef.current?.focus();
     }
 

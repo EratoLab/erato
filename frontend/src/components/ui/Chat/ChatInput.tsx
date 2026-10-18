@@ -49,6 +49,7 @@ import { useFileUploadStore } from "@/hooks/files/useFileUploadStore";
 import { useOptionalTranslation } from "@/hooks/i18n";
 import { useChatInputHandlers } from "@/hooks/ui";
 import { useOpenMcpServersSettings } from "@/hooks/ui/useOpenMcpServersSettings";
+import { usePendingCaret } from "@/hooks/ui/usePendingCaret";
 import { useIsMobile } from "@/hooks/useResponsive";
 import {
   fetchGetFile,
@@ -1614,14 +1615,17 @@ export const ChatInput = ({
     () => setMessage(""),
   );
 
-  // Auto-resize textarea
-  useEffect(() => {
+  // Auto-resize textarea. A layout effect, and ahead of the pending caret, so
+  // the caret is placed in a box that already has its final height.
+  useLayoutEffect(() => {
     const textarea = textareaRef.current;
     if (textarea) {
       textarea.style.height = "auto";
       textarea.style.height = `${Math.min(textarea.scrollHeight, 200)}px`;
     }
   }, [message]);
+
+  const placeCaret = usePendingCaret(textareaRef);
 
   useEffect(() => {
     const wasPendingResponse = wasPendingResponseRef.current;
@@ -1881,16 +1885,9 @@ export const ChatInput = ({
           : [...tracked, { id: assistant.id, name: assistant.name }],
       );
       setMentionTrigger(null);
-      requestAnimationFrame(() => {
-        const textarea = textareaRef.current;
-        if (!textarea) {
-          return;
-        }
-        textarea.focus();
-        textarea.setSelectionRange(next.caret, next.caret);
-      });
+      placeCaret(next.text, next.caret);
     },
-    [message, mentionTrigger],
+    [message, mentionTrigger, placeCaret],
   );
 
   // A typed query searches everything accessible; an empty one shows the

@@ -25,7 +25,7 @@ import { messages as enMessages } from "@/locales/en/messages.json";
 import { ChatInput, type ComposerSizeLimit } from "./ChatInput";
 import { useToastStore } from "../Toast/toastStore";
 
-import type { AddMenuSection } from "./ChatInputAddMenu";
+import type { AddMenuActionItem, AddMenuSection } from "./ChatInputAddMenu";
 import type { FileUploadItem } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { ChatContextValue } from "@/providers/ChatProvider";
 import type { I18n, Messages } from "@lingui/core";
@@ -4867,6 +4867,157 @@ describe("ChatInput", () => {
       expect(
         screen.queryByTestId("chat-input-mention-browse-search"),
       ).not.toBeInTheDocument();
+    });
+
+    // A pick has to place the caret before the browser can deliver the next
+    // key. Keys that arrive in between must land after the token, in order.
+    describe("caret after a pick", () => {
+      const nativeValueSetter = Object.getOwnPropertyDescriptor(
+        HTMLTextAreaElement.prototype,
+        "value",
+      )?.set;
+
+      // Inserts each character at the live selection, the way a keystroke does,
+      // so a caret moved out from under the typist shows as reordered text.
+      const typeAtCaret = (textarea: HTMLTextAreaElement, text: string) => {
+        for (const char of text) {
+          const { selectionStart, selectionEnd, value } = textarea;
+          nativeValueSetter?.call(
+            textarea,
+            value.slice(0, selectionStart) + char + value.slice(selectionEnd),
+          );
+          textarea.setSelectionRange(selectionStart + 1, selectionStart + 1);
+          fireEvent.input(textarea);
+        }
+      };
+
+      const selectionOf = (textarea: HTMLTextAreaElement) => [
+        textarea.selectionStart,
+        textarea.selectionEnd,
+      ];
+
+      const renderFocusedComposer = async () => {
+        enableDelegation();
+        const textarea = (await renderComposer(vi.fn())) as HTMLTextAreaElement;
+        textarea.focus();
+        return textarea;
+      };
+
+      const picks: Record<string, (textarea: HTMLTextAreaElement) => void> = {
+        click: () =>
+          fireEvent.click(
+            screen.getByTestId("chat-input-mention-option-assistant-research"),
+          ),
+        Enter: (textarea) => fireEvent.keyDown(textarea, { key: "Enter" }),
+        Tab: (textarea) => fireEvent.keyDown(textarea, { key: "Tab" }),
+        "focused row": (textarea) => {
+          fireEvent.keyDown(textarea, { key: "ArrowDown" });
+          const row = screen.getByTestId(
+            "chat-input-mention-option-assistant-research",
+          );
+          expect(row).toHaveFocus();
+          fireEvent.click(row);
+        },
+      };
+
+      it.each(Object.keys(picks))(
+        "keeps keys typed right after a %s pick in order",
+        async (pick) => {
+          const textarea = await renderFocusedComposer();
+
+          typeWithCaretAtEnd(textarea, "@Res");
+          picks[pick](textarea);
+
+          expect(textarea).toHaveValue("@Researcher ");
+          expect(textarea).toHaveFocus();
+          expect(selectionOf(textarea)).toEqual([12, 12]);
+
+          typeAtCaret(textarea, "dele");
+          await flushFrame();
+          typeAtCaret(textarea, "gate");
+
+          expect(textarea).toHaveValue("@Researcher delegate");
+        },
+      );
+
+      it("puts the caret right after a token picked mid-draft", async () => {
+        const textarea = await renderFocusedComposer();
+
+        fireEvent.change(textarea, { target: { value: "ping @Res world" } });
+        textarea.setSelectionRange(9, 9);
+        fireEvent.select(textarea);
+        fireEvent.keyDown(textarea, { key: "Enter" });
+
+        expect(textarea).toHaveValue("ping @Researcher world");
+        expect(textarea).toHaveFocus();
+        expect(selectionOf(textarea)).toEqual([17, 17]);
+
+        typeAtCaret(textarea, "please ");
+        await flushFrame();
+
+        expect(textarea).toHaveValue("ping @Researcher please world");
+        expect(selectionOf(textarea)).toEqual([24, 24]);
+      });
+
+      it("steps past the space when the pick leaves the text unchanged", async () => {
+        const textarea = await renderFocusedComposer();
+
+        fireEvent.change(textarea, { target: { value: "@Researcher world" } });
+        textarea.setSelectionRange(11, 11);
+        fireEvent.select(textarea);
+        fireEvent.keyDown(textarea, { key: "Enter" });
+
+        expect(textarea).toHaveValue("@Researcher world");
+        expect(selectionOf(textarea)).toEqual([12, 12]);
+      });
+
+      it("lands a menu pick at the end of the draft with focus and caret after it", async () => {
+        const textarea = await renderFocusedComposer();
+
+        fireEvent.change(textarea, { target: { value: "please review" } });
+        textarea.setSelectionRange(3, 3);
+        fireEvent.select(textarea);
+        textarea.blur();
+
+        const section = mockFacetSelector.mock.calls.at(-1)?.[0]
+          .assistantSection as AddMenuSection;
+        const researcher = section.items.find(
+          (item) => item.label === "Researcher",
+        ) as AddMenuActionItem;
+        act(() => researcher.onSelect());
+
+        expect(textarea).toHaveValue("please review @Researcher ");
+        expect(textarea).toHaveFocus();
+        expect(selectionOf(textarea)).toEqual([26, 26]);
+
+        typeAtCaret(textarea, "dele");
+        await flushFrame();
+        typeAtCaret(textarea, "gate");
+
+        expect(textarea).toHaveValue("please review @Researcher delegate");
+      });
+
+      it("keeps keys typed right after a browse-dialog pick in order", async () => {
+        const textarea = await renderFocusedComposer();
+
+        typeWithCaretAtEnd(textarea, "@");
+        fireEvent.click(screen.getByTestId("chat-input-mention-browse"));
+        fireEvent.click(
+          screen.getByTestId(
+            "chat-input-mention-browse-option-assistant-editor",
+          ),
+        );
+
+        expect(textarea).toHaveValue("@Editor ");
+        expect(textarea).toHaveFocus();
+        expect(selectionOf(textarea)).toEqual([8, 8]);
+
+        typeAtCaret(textarea, "dele");
+        await flushFrame();
+        typeAtCaret(textarea, "gate");
+
+        expect(textarea).toHaveValue("@Editor delegate");
+      });
     });
 
     it("browses the whole accessible list and filters on one character", async () => {
