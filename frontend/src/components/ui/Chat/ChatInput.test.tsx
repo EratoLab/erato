@@ -5389,6 +5389,27 @@ describe("ChatInput", () => {
       expect(row).toHaveFocus();
     });
 
+    it("moves focus from a composer control back to the textarea when the turn ends", async () => {
+      mockUseChatCompaction.mockReturnValue({
+        available: true,
+        isPending: false,
+        compact: vi.fn(),
+        error: null,
+      });
+      const { textarea, endTurn } = await renderComposer({ pending: true });
+
+      const compact = screen.getByRole("button", {
+        name: "Compact chat history",
+      });
+      compact.focus();
+      expect(compact).toHaveFocus();
+
+      endTurn();
+      await flushFrame();
+
+      expect(textarea).toHaveFocus();
+    });
+
     it("focuses the browse search before the next frame", async () => {
       enableDelegation();
       const { textarea } = await renderComposer();

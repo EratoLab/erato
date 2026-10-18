@@ -40,19 +40,24 @@ describe("ModalBase", () => {
   });
 
   it("does not refocus the shell when onClose changes", () => {
+    // Focus sits outside the shell, as in a portaled menu opened from the
+    // dialog, so only the effect's keying keeps it there.
     const ui = (onClose: () => void) => (
-      <ModalBase isOpen={true} onClose={onClose} title="Search">
-        <input data-testid="field" />
-      </ModalBase>
+      <>
+        <button data-testid="outside" />
+        <ModalBase isOpen={true} onClose={onClose} title="Search">
+          <input data-testid="field" />
+        </ModalBase>
+      </>
     );
     const { rerender } = render(ui(vi.fn()));
     expect(screen.getByRole("dialog")).toHaveFocus();
 
-    const field = screen.getByTestId("field");
-    field.focus();
+    const outside = screen.getByTestId("outside");
+    outside.focus();
     rerender(ui(vi.fn()));
 
-    expect(field).toHaveFocus();
+    expect(outside).toHaveFocus();
   });
 
   it("keeps an autoFocus child focused", () => {
