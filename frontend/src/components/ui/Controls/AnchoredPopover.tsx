@@ -15,6 +15,8 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 
+import { isImeComposing } from "@/utils/isImeComposing";
+
 import { PopoverPanel, resolvePopoverViewportPadding } from "./PopoverPanel";
 
 import type { PopoverWidth } from "./PopoverPanel";
@@ -247,7 +249,7 @@ export function AnchoredPopover({
     };
 
     const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
+      if (event.key === "Escape" && !isImeComposing(event)) {
         event.preventDefault();
         onOpenChange(false);
       }

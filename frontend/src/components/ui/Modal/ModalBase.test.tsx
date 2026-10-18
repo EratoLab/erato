@@ -38,4 +38,60 @@ describe("ModalBase", () => {
     fireEvent.keyDown(document, { key: "Escape" });
     expect(onClose).toHaveBeenCalledTimes(2);
   });
+
+  it("does not refocus the shell when onClose changes", () => {
+    // Focus sits outside the shell, as in a portaled menu opened from the
+    // dialog, so only the effect's keying keeps it there.
+    const ui = (onClose: () => void) => (
+      <>
+        <button data-testid="outside" />
+        <ModalBase isOpen={true} onClose={onClose} title="Search">
+          <input data-testid="field" />
+        </ModalBase>
+      </>
+    );
+    const { rerender } = render(ui(vi.fn()));
+    expect(screen.getByRole("dialog")).toHaveFocus();
+
+    const outside = screen.getByTestId("outside");
+    outside.focus();
+    rerender(ui(vi.fn()));
+
+    expect(outside).toHaveFocus();
+  });
+
+  it("keeps an autoFocus child focused", () => {
+    render(
+      <ModalBase isOpen={true} onClose={vi.fn()} title="Search">
+        <input
+          // eslint-disable-next-line jsx-a11y/no-autofocus -- the case under test
+          autoFocus
+          data-testid="field"
+        />
+      </ModalBase>,
+    );
+
+    expect(screen.getByTestId("field")).toHaveFocus();
+  });
+
+  it("does not close on the Escape that dismisses an IME candidate", () => {
+    const onClose = vi.fn();
+    render(
+      <ModalBase isOpen={true} onClose={onClose} title="Add a comment">
+        <textarea data-testid="field" />
+      </ModalBase>,
+    );
+    const field = screen.getByTestId("field");
+    field.focus();
+
+    fireEvent.keyDown(field, {
+      key: "Escape",
+      keyCode: 229,
+      isComposing: true,
+    });
+    expect(onClose).not.toHaveBeenCalled();
+
+    fireEvent.keyDown(field, { key: "Escape" });
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
 });

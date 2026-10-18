@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { FileAttachmentsPreview } from "@/components/ui/FileUpload";
 import { extractTextFromContent } from "@/utils/adapters/contentPartAdapter";
+import { isImeComposing } from "@/utils/isImeComposing";
 
 import { Button } from "../Controls";
 
@@ -72,6 +73,9 @@ export const MessageEditor = ({
 
   const handleKeyDown = useCallback(
     (event: KeyboardEvent<HTMLTextAreaElement>) => {
+      if (isImeComposing(event)) {
+        return;
+      }
       if (event.key === "Escape") {
         event.preventDefault();
         onCancel();

@@ -3,6 +3,8 @@ import clsx from "clsx";
 import { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 
+import { isImeComposing } from "@/utils/isImeComposing";
+
 import { CloseIcon } from "../icons";
 
 import type React from "react";
@@ -33,15 +35,13 @@ export const ModalBase: React.FC<ModalBaseProps> = ({
   // Close modal on Escape key press
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
+      if (event.key === "Escape" && !isImeComposing(event)) {
         onClose();
       }
     };
 
     if (isOpen) {
       document.addEventListener("keydown", handleKeyDown);
-      // Basic focus trap: focus the modal content when opened
-      modalRef.current?.focus();
     } else {
       document.removeEventListener("keydown", handleKeyDown);
     }
@@ -50,6 +50,15 @@ export const ModalBase: React.FC<ModalBaseProps> = ({
       document.removeEventListener("keydown", handleKeyDown);
     };
   }, [isOpen, onClose]);
+
+  // Keyed on opening alone: callers pass inline onClose closures, and
+  // refocusing on each new one pulled focus out of the dialog's fields on
+  // every parent render.
+  useEffect(() => {
+    if (isOpen && !modalRef.current?.contains(document.activeElement)) {
+      modalRef.current?.focus();
+    }
+  }, [isOpen]);
 
   const handleOverlayMouseDown = (event: React.MouseEvent<HTMLDivElement>) => {
     mouseDownTargetRef.current = event.target;
