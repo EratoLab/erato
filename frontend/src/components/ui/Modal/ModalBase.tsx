@@ -1,6 +1,6 @@
 import { t } from "@lingui/core/macro";
 import clsx from "clsx";
-import { useEffect, useRef } from "react";
+import { useEffect, useId, useRef } from "react";
 import { createPortal } from "react-dom";
 
 import { isImeComposing } from "@/utils/isImeComposing";
@@ -30,6 +30,8 @@ export const ModalBase: React.FC<ModalBaseProps> = ({
   contentClassName,
 }) => {
   const modalRef = useRef<HTMLDivElement>(null);
+  // Dialogs stack (a file preview over a conversation), so each names itself.
+  const titleId = useId();
   const mouseDownTargetRef = useRef<EventTarget | null>(null);
 
   // Close modal on Escape key press
@@ -100,14 +102,14 @@ export const ModalBase: React.FC<ModalBaseProps> = ({
         // Make the content div focusable
         tabIndex={-1}
         role="dialog"
-        aria-labelledby={title ? "modal-title" : undefined}
+        aria-labelledby={title ? titleId : undefined}
         data-ui="modal-shell"
       >
         {/* Optional Header */}
         {title && (
           <div className="modal-section-geometry flex shrink-0 items-start gap-3 border-b border-theme-border">
             <h2
-              id="modal-title"
+              id={titleId}
               className="min-w-0 flex-1 break-words font-heading text-lg font-semibold text-theme-fg-primary"
             >
               {title}

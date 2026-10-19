@@ -94,4 +94,50 @@ describe("ModalBase", () => {
     fireEvent.keyDown(field, { key: "Escape" });
     expect(onClose).toHaveBeenCalledTimes(1);
   });
+
+  it("names each stacked dialog by its own title", () => {
+    render(
+      <>
+        <ModalBase isOpen={true} onClose={vi.fn()} title="Teams conversation">
+          <p>Messages</p>
+        </ModalBase>
+        <ModalBase
+          isOpen={true}
+          onClose={vi.fn()}
+          title="Preview: dashboard.png"
+        >
+          <p>Image</p>
+        </ModalBase>
+      </>,
+    );
+
+    const dialogs = screen.getAllByRole("dialog");
+    expect(dialogs).toHaveLength(2);
+    const titleIds = dialogs.map((dialog) =>
+      dialog.getAttribute("aria-labelledby"),
+    );
+    expect(titleIds[0]).toBeTruthy();
+    expect(new Set(titleIds).size).toBe(2);
+    for (const [index, dialog] of dialogs.entries()) {
+      const heading = document.getElementById(titleIds[index] ?? "");
+      expect(heading?.tagName).toBe("H2");
+      expect(dialog).toContainElement(heading);
+    }
+    expect(
+      screen.getAllByRole("dialog", { name: "Teams conversation" }),
+    ).toHaveLength(1);
+    expect(
+      screen.getAllByRole("dialog", { name: "Preview: dashboard.png" }),
+    ).toHaveLength(1);
+  });
+
+  it("leaves an untitled dialog unlabelled", () => {
+    render(
+      <ModalBase isOpen={true} onClose={vi.fn()}>
+        <p>Body</p>
+      </ModalBase>,
+    );
+
+    expect(screen.getByRole("dialog")).not.toHaveAttribute("aria-labelledby");
+  });
 });
