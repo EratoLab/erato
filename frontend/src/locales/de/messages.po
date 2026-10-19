@@ -7530,6 +7530,16 @@ msgstr "An einen Assistenten delegiert"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Trace/steps/DelegationStep.tsx
+msgid "trace.delegation.model"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/DelegationStep.tsx
+msgid "trace.delegation.model.unavailable"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/DelegationStep.tsx
 msgid "trace.delegation.openRun"
 msgstr "Delegierten Lauf öffnen"
 
