@@ -357,6 +357,11 @@ interface DictationTarget {
   sessionId: string;
   nextChunkIndex: number;
   chunkTranscripts: Map<number, string>;
+  hasAppendedVisibleText: boolean;
+}
+
+function isScrolledToEnd(element: HTMLElement): boolean {
+  return element.scrollHeight - element.scrollTop - element.clientHeight <= 4;
 }
 
 function appendDictationText(current: string, transcript: string): string {
@@ -489,6 +494,7 @@ export const ChatInput = ({
   const shouldRestartAudioModeAfterResponseRef = useRef(false);
   const audioModeRestartSawPendingResponseRef = useRef(false);
   const dictationTargetRef = useRef<DictationTarget | null>(null);
+  const scrollTextareaToEndRef = useRef(false);
   // Add state for file button processing
   const [isFileButtonProcessing, setIsFileButtonProcessing] = useState(false);
   const pendingSelectedFacetIdsRef = useRef<string[] | null>(null);
@@ -668,6 +674,18 @@ export const ChatInput = ({
         target.nextChunkIndex += 1;
 
         if (target.sessionId === getActiveSessionId()) {
+          if (nextTranscript.trim()) {
+            // The first chunk always reveals where dictated text lands; later
+            // ones follow only if the user has not scrolled up to reread.
+            const textarea = textareaRef.current;
+            if (
+              !target.hasAppendedVisibleText ||
+              (textarea && isScrolledToEnd(textarea))
+            ) {
+              scrollTextareaToEndRef.current = true;
+            }
+            target.hasAppendedVisibleText = true;
+          }
           setMessage((current) => appendDictationText(current, nextTranscript));
           continue;
         }
@@ -712,6 +730,7 @@ export const ChatInput = ({
         sessionId: getActiveSessionId(),
         nextChunkIndex: 0,
         chunkTranscripts: new Map(),
+        hasAppendedVisibleText: false,
       };
     }
 
@@ -1623,22 +1642,12 @@ export const ChatInput = ({
     if (textarea) {
       textarea.style.height = "auto";
       textarea.style.height = `${Math.min(textarea.scrollHeight, 200)}px`;
+      if (scrollTextareaToEndRef.current) {
+        textarea.scrollTop = textarea.scrollHeight;
+      }
     }
+    scrollTextareaToEndRef.current = false;
   }, [message]);
-
-  // Scroll the textarea to the bottom while dictation is streaming so newly
-  // appended transcript chunks remain visible. Runs as a layout effect so it
-  // fires after the resize effect above has set the final height (layout
-  // effects execute in source order), giving scrollHeight its correct value.
-  useLayoutEffect(() => {
-    if (!isDictating && !isDictationCompleting) {
-      return;
-    }
-    const textarea = textareaRef.current;
-    if (textarea) {
-      textarea.scrollTop = textarea.scrollHeight;
-    }
-  }, [isDictating, isDictationCompleting, message]);
 
   const placeCaret = usePendingCaret(textareaRef);
 
