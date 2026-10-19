@@ -359,8 +359,10 @@ test.describe("detail", () => {
         AREA,
       ),
     ).toBe(false);
+    // The footer says what the action does; the (x)'s own name stays on
+    // the (x).
     await expect(
-      dialog.getByRole("button", { name: "Don't include this document" }),
+      dialog.getByRole("button", { name: "Leave out" }),
     ).toBeVisible();
     // Focus moved in, and Tab stays in.
     expect(
@@ -379,6 +381,36 @@ test.describe("detail", () => {
     await page.keyboard.press("Escape");
     await expect(page.getByRole("dialog")).toHaveCount(0);
     await expect(open).toBeFocused();
+  });
+
+  test("keeps a long detail's actions in view while its body scrolls", async ({
+    page,
+  }) => {
+    await openStory(page, `${STORY}--detail-sheet-long`, LANE);
+    await page.setViewportSize({ width: 340, height: 520 });
+    await openButton(page, "Email thread").click();
+    const dialog = page.getByRole("dialog", { name: "Re: Offsite agenda" });
+    await expect(dialog).toBeVisible();
+    const body = dialog.locator(
+      'xpath=.//*[@data-ui="composer-context-detail"]/..',
+    );
+    expect(
+      await body.evaluate(
+        (element) => element.scrollHeight > element.clientHeight + 1,
+      ),
+    ).toBe(true);
+    const inView = async () => {
+      for (const name of ["Include every message", "Leave out"]) {
+        const box = await boxOf(dialog.getByRole("button", { name }));
+        expect(box.y, name).toBeGreaterThanOrEqual(0);
+        expect(box.y + box.height, name).toBeLessThanOrEqual(520);
+      }
+    };
+    await inView();
+    await body.evaluate((element) => element.scrollTo(0, 0));
+    await inView();
+    await body.evaluate((element) => element.scrollTo(0, element.scrollHeight));
+    await inView();
   });
 
   test("anchors a popover to its chip on the wide app", async ({ page }) => {
@@ -471,6 +503,15 @@ test.describe("overflow", () => {
     expect(pinnedTop - firstTile.y).toBeGreaterThanOrEqual(
       firstTile.height / 2 - 1,
     );
+    // While files continue below, the cut tile fades into the pinned row.
+    const fade = () =>
+      area
+        .locator('[data-ui="attachment-bulk-controls"]')
+        .evaluate(
+          (element) => getComputedStyle(element, "::before").backgroundImage,
+        );
+    await expect(area).toHaveAttribute("data-overflow-below", "true");
+    expect(await fade()).toContain("linear-gradient");
 
     await more.click();
     await expect(page.locator(CHIP)).toHaveCount(8);
@@ -489,6 +530,8 @@ test.describe("overflow", () => {
     // With every chip shown the files sit further down the same area, and
     // Remove all comes with them.
     await area.evaluate((element) => element.scrollTo(0, element.scrollHeight));
+    await expect(area).not.toHaveAttribute("data-overflow-below");
+    expect(await fade()).toBe("none");
     const pinned = await boxOf(removeAll);
     const box = await boxOf(area);
     expect(pinned.y).toBeGreaterThanOrEqual(box.y - 1);
@@ -600,10 +643,20 @@ test.describe("notices", () => {
     await openStory(page, `${STORY}--notices`, '[data-ui="composer-notice"]');
     const notices = page.locator('[data-ui="composer-notice"]');
     await expect(notices).toHaveCount(3);
-    await expect(notices.nth(0)).toHaveAttribute("role", "status");
-    await expect(notices.nth(1)).toHaveAttribute("role", "status");
-    await expect(notices.nth(2)).toHaveAttribute("role", "alert");
+    const regionOf = (notice: Locator) =>
+      notice
+        .locator('[data-ui="alert"]')
+        .evaluate((alert) => alert.parentElement!.getAttribute("role"));
+    expect(await regionOf(notices.nth(0))).toBe("status");
+    expect(await regionOf(notices.nth(1))).toBe("status");
+    expect(await regionOf(notices.nth(2))).toBe("alert");
     for (const notice of await notices.all()) {
+      await expect(
+        notice.locator('[data-ui="composer-notice-polite"]'),
+      ).toHaveAttribute("role", "status");
+      await expect(
+        notice.locator('[data-ui="composer-notice-assertive"]'),
+      ).toHaveAttribute("role", "alert");
       const order = await notice.evaluate((element) => {
         const shell = element.parentElement!;
         const children = [...shell.children];

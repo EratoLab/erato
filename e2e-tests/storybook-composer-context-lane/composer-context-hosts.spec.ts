@@ -153,20 +153,22 @@ const SCENARIOS: Scenario[] = [
     ],
     notice: "status",
   },
-  {
-    story: "word-error",
-    chips: [
-      {
-        kind: "word.document",
-        state: "error",
-        tone: "error",
-        origin: "ambient",
-        name: `${docName} Couldn't read the document Error.`,
-        control: "Dismiss",
-        detail: true,
-      },
-    ],
-  },
+  ...["word-error", "word-error-again"].map(
+    (story): Scenario => ({
+      story,
+      chips: [
+        {
+          kind: "word.document",
+          state: "error",
+          tone: "error",
+          origin: "ambient",
+          name: `${docName} Couldn't read the document Error.`,
+          control: "Dismiss",
+          detail: true,
+        },
+      ],
+    }),
+  ),
   {
     story: "word-cursor-in-comments",
     chips: [
@@ -234,20 +236,22 @@ const SCENARIOS: Scenario[] = [
       },
     ],
   },
-  {
-    story: "outlook-read-error",
-    chips: [
-      {
-        kind: "outlook.thread",
-        state: "error",
-        tone: "error",
-        origin: "ambient",
-        name: `${subject} Couldn't load the email thread Error.`,
-        control: "Dismiss",
-        detail: true,
-      },
-    ],
-  },
+  ...["outlook-read-error", "outlook-read-error-again"].map(
+    (story): Scenario => ({
+      story,
+      chips: [
+        {
+          kind: "outlook.thread",
+          state: "error",
+          tone: "error",
+          origin: "ambient",
+          name: `${subject} Couldn't load the email thread Error.`,
+          control: "Dismiss",
+          detail: true,
+        },
+      ],
+    }),
+  ),
   {
     story: "outlook-read-sign-in",
     chips: [
@@ -544,14 +548,22 @@ test.describe("host scenarios match the prototype", () => {
         expect((await boxOf(tile)).height).toBeCloseTo(54, 0);
       }
 
-      // Hosts opt in, so the notice region is mounted even when empty.
+      // Hosts opt in, so both notice regions are mounted even when empty,
+      // and keep their roles whatever the tone.
       const notice = page.locator('[data-ui="composer-notice"]');
       await expect(notice).toHaveCount(1);
+      await expect(
+        notice.locator('[data-ui="composer-notice-polite"]'),
+      ).toHaveAttribute("role", "status");
+      await expect(
+        notice.locator('[data-ui="composer-notice-assertive"]'),
+      ).toHaveAttribute("role", "alert");
       if (scenario.notice) {
-        await expect(notice).toHaveAttribute("role", scenario.notice);
-        await expect(notice.locator('[data-ui="alert"]')).toBeVisible();
+        await expect(
+          notice.locator(`[role="${scenario.notice}"] [data-ui="alert"]`),
+        ).toBeVisible();
       } else {
-        await expect(notice).toBeEmpty();
+        await expect(notice.locator('[data-ui="alert"]')).toHaveCount(0);
       }
 
       for (const { text, ratio } of await ratiosOf(page)) {
@@ -593,7 +605,7 @@ test.describe("host flows", () => {
       doc.locator('[data-ui="composer-context-restore"]'),
     ).toHaveAccessibleName("Include this document");
     await expect(live(page)).toHaveText(
-      `${docName} removed. Include again with +`,
+      "Document removed. Include again with +",
     );
     await expect(openButton(page, docName)).toBeFocused();
 
@@ -603,8 +615,47 @@ test.describe("host flows", () => {
     await expect(openButton(page, docName)).toHaveAccessibleName(
       `${docName} 86 ¶ · 12 comments Included.`,
     );
-    await expect(live(page)).toHaveText(`${docName} included.`);
+    await expect(live(page)).toHaveText("Document included.");
     await expect(openButton(page, docName)).toBeFocused();
+  });
+
+  test("Word: a + that fails again says so", async ({ page }) => {
+    await openHost(page, "word-error-again");
+    const doc = chip(page, docName);
+    await openButton(page, docName).focus();
+    await page.keyboard.press("Delete");
+    await expect(doc).toHaveAttribute("data-state", "suggested");
+    await page.keyboard.press("+");
+    await expect(doc).toHaveAttribute("data-state", "loading");
+    await expect(doc).toHaveAttribute("data-state", "error");
+    await expect(live(page)).toHaveText("Document: Couldn't read the document");
+    await expect(openButton(page, docName)).toBeFocused();
+    await expect(
+      doc.locator('[data-ui="composer-context-remove"]'),
+    ).toHaveAccessibleName("Dismiss");
+  });
+
+  test("Word: dismissing the selection gives the document back", async ({
+    page,
+  }) => {
+    await openHost(page, "word-selection");
+    const doc = chip(page, docName);
+    await expect(doc).toHaveAttribute("data-state", "superseded");
+    await openButton(page, quote).focus();
+    await page.keyboard.press("Delete");
+    await expect(chip(page, quote)).toHaveAttribute("data-state", "suggested");
+    await expect(doc).toHaveAttribute("data-state", "included");
+    await expect(openButton(page, docName)).toHaveAccessibleName(
+      `${docName} 86 ¶ · 12 comments Included.`,
+    );
+    await expect(live(page)).toHaveText(
+      "Selection removed. Include again with +",
+    );
+
+    await page.keyboard.press("+");
+    await expect(chip(page, quote)).toHaveAttribute("data-state", "included");
+    await expect(doc).toHaveAttribute("data-state", "superseded");
+    await expect(live(page)).toHaveText("Selection included.");
   });
 
   test("Outlook: (x) on an error offers + to load the email again", async ({
@@ -624,7 +675,21 @@ test.describe("host flows", () => {
     await retry.click();
     await expect(thread).toHaveAttribute("data-state", "loading");
     await expect(thread).toHaveAttribute("data-state", "included");
-    await expect(live(page)).toHaveText(`${subject} included.`);
+    await expect(live(page)).toHaveText("Email thread included.");
+  });
+
+  test("Outlook: a retry that fails again says so", async ({ page }) => {
+    await openHost(page, "outlook-read-error-again");
+    const thread = chip(page, subject);
+    await openButton(page, subject).focus();
+    await page.keyboard.press("Delete");
+    await expect(thread).toHaveAttribute("data-state", "suggested");
+    await thread.locator('[data-ui="composer-context-restore"]').click();
+    await expect(thread).toHaveAttribute("data-state", "loading");
+    await expect(thread).toHaveAttribute("data-state", "error");
+    await expect(live(page)).toHaveText(
+      "Email thread: Couldn't load the email thread",
+    );
   });
 
   test("hosts word their own removals; the lane states the lifetime", async ({
@@ -668,12 +733,12 @@ test.describe("host flows", () => {
     await openButton(page, subject).focus();
     await page.keyboard.press("Delete");
     await expect(live(page)).toHaveText(
-      `${subject} is not included. Press + to include it.`,
+      "Email thread is not included. Press + to include it.",
     );
     await expect(thread).toHaveAttribute("data-state", "suggested");
     await page.keyboard.press("+");
     await expect(thread).toHaveAttribute("data-state", "included");
-    await expect(live(page)).toHaveText(`${subject} included.`);
+    await expect(live(page)).toHaveText("Email thread included.");
   });
 
   test("locked chips say why, with or without a control", async ({ page }) => {
