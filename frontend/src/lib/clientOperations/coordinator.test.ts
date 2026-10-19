@@ -1,11 +1,15 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { resetClientToolRegistryForTests } from "@/hooks/chat/clientToolExecutors";
+import {
+  registerClientToolExecutor,
+  resetClientToolRegistryForTests,
+} from "@/hooks/chat/clientToolExecutors";
 import { fakeWebLocks } from "@/test/webLocks";
 
 import { ClientToolOperationHandler } from "./clientToolHandler";
 import { ClientOperationCoordinator, clientOperationApi } from "./coordinator";
 import { createClientOperationHandlerRegistry } from "./handlers";
+import { registerOperationExecutor } from "./registration";
 
 import type { ClientOperationApi, ClientOperationHandler } from "./coordinator";
 import type { ClientToolExecutor } from "@/hooks/chat/clientToolExecutors";
@@ -47,6 +51,7 @@ function fakeApi(request: OperationRequest = operation()) {
   const api = {
     list: vi.fn<ClientOperationApi["list"]>(async () => ({
       enabled: true,
+      executor_stream_enabled: false,
       account_id: ACCOUNT,
       operations:
         state === "completed"
@@ -130,6 +135,7 @@ describe("ClientOperationCoordinator handler registry", () => {
         const { api } = fakeApi(request);
         api.list.mockResolvedValue({
           enabled: true,
+          executor_stream_enabled: false,
           account_id: ACCOUNT,
           operations: [{ request, state }],
         });
@@ -164,6 +170,7 @@ describe("ClientOperationCoordinator handler registry", () => {
       const { api } = fakeApi(request);
       api.list.mockResolvedValue({
         enabled: true,
+        executor_stream_enabled: false,
         account_id: ACCOUNT,
         operations: [{ request, state }],
       });
@@ -208,6 +215,7 @@ describe("ClientOperationCoordinator handler registry", () => {
     const { api } = fakeApi(request);
     api.list.mockResolvedValue({
       enabled: true,
+      executor_stream_enabled: false,
       account_id: ACCOUNT,
       operations: [{ request, state: "ready" }],
     });
@@ -236,6 +244,7 @@ describe("ClientOperationCoordinator handler registry", () => {
     const { api } = fakeApi(first);
     api.list.mockImplementation(async () => ({
       enabled: true,
+      executor_stream_enabled: false,
       account_id: ACCOUNT,
       operations: [first, second].map((request) => ({
         request,
@@ -389,6 +398,7 @@ describe("ClientOperationCoordinator handler registry", () => {
       if (url === "/api/v1beta/me/client-operations")
         body = {
           enabled: true,
+          executor_stream_enabled: false,
           account_id: ACCOUNT,
           operations: state === "completed" ? [] : [{ request, state }],
         };
@@ -449,6 +459,127 @@ describe("ClientOperationCoordinator handler registry", () => {
     } finally {
       coordinator.dispose();
       vi.unstubAllGlobals();
+    }
+  });
+});
+
+describe("ClientOperationCoordinator executor stream", () => {
+  function streamApi() {
+    const { api } = fakeApi();
+    const page = { durable: false, stream: true };
+    api.list.mockImplementation(async () => ({
+      enabled: page.durable,
+      executor_stream_enabled: page.stream,
+      account_id: ACCOUNT,
+      operations: [],
+    }));
+    const signals: AbortSignal[] = [];
+    const nudges: (() => void)[] = [];
+    const stream = vi.fn<NonNullable<ClientOperationApi["stream"]>>(
+      (_headers, onNudge, signal) => {
+        signals.push(signal);
+        nudges.push(onNudge);
+        return new Promise<void>((resolve) => {
+          signal.addEventListener("abort", () => resolve(), { once: true });
+        });
+      },
+    );
+    return { api: { ...api, stream }, page, stream, signals, nudges };
+  }
+
+  it("holds one stream for the binding while only executor streams are enabled", async () => {
+    const unregister = registerOperationExecutor(
+      "fetch_availability",
+      () => binding,
+    );
+    const { api, stream, signals } = streamApi();
+    const { coordinator } = coordinatorWith(api);
+    try {
+      await coordinator.reconcile();
+      await coordinator.reconcile();
+      expect(coordinator.enabled).toBe(true);
+      expect(stream).toHaveBeenCalledOnce();
+      expect(stream.mock.calls[0]?.[0]).toEqual({
+        "X-Erato-Executor": JSON.stringify(binding),
+        "X-Erato-Client-Tools": "fetch_availability",
+      });
+      expect(api.claim).not.toHaveBeenCalled();
+      coordinator.dispose();
+      expect(signals[0]?.aborted).toBe(true);
+    } finally {
+      unregister();
+    }
+  });
+
+  it("reopens the stream when the tools change and closes it without a binding", async () => {
+    let current: ExecutorBinding | undefined = binding;
+    const unregister = registerOperationExecutor(
+      "fetch_availability",
+      () => current,
+    );
+    const { api, stream, signals } = streamApi();
+    const { coordinator } = coordinatorWith(api);
+    try {
+      await coordinator.reconcile();
+      registerClientToolExecutor(
+        "read_document_blocks",
+        vi.fn<ClientToolExecutor>(),
+        () => true,
+        { acceptsGrantCalls: true },
+      );
+      await coordinator.reconcile();
+      expect(signals[0]?.aborted).toBe(true);
+      expect(stream.mock.calls[1]?.[0]).toMatchObject({
+        "X-Erato-Client-Tools": "fetch_availability,read_document_blocks",
+        "X-Erato-Child-Client-Tools": "read_document_blocks",
+      });
+      current = undefined;
+      await coordinator.reconcile();
+      expect(signals[1]?.aborted).toBe(true);
+      expect(stream).toHaveBeenCalledTimes(2);
+    } finally {
+      coordinator.dispose();
+      unregister();
+    }
+  });
+
+  it("closes the stream when the server turns it off", async () => {
+    const unregister = registerOperationExecutor(
+      "fetch_availability",
+      () => binding,
+    );
+    const { api, page, signals } = streamApi();
+    const { coordinator } = coordinatorWith(api);
+    try {
+      await coordinator.reconcile();
+      page.stream = false;
+      await coordinator.reconcile();
+      expect(signals[0]?.aborted).toBe(true);
+      expect(coordinator.enabled).toBe(false);
+    } finally {
+      coordinator.dispose();
+      unregister();
+    }
+  });
+
+  it("sweeps the inbox when the stream announces an operation", async () => {
+    const unregister = registerOperationExecutor(
+      "fetch_availability",
+      () => binding,
+    );
+    const { api, page, nudges } = streamApi();
+    page.durable = true;
+    const { coordinator } = coordinatorWith(api);
+    try {
+      await coordinator.reconcile();
+      const sweeps = api.list.mock.calls.length;
+      nudges[0]?.();
+      await vi.waitFor(() =>
+        expect(api.list).toHaveBeenCalledTimes(sweeps + 1),
+      );
+    } finally {
+      coordinator.dispose();
+      unregister();
     }
   });
 });

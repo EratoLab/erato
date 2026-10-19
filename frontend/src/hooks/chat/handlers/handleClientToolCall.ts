@@ -13,8 +13,10 @@ import {
 } from "../clientToolExecutors";
 
 import type {
+  CallLineage,
   ClientToolResultRequest,
   ClientToolResultResponse,
+  ExecutorBinding,
   MessageSubmitStreamingResponseClientToolCall,
   Value,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
@@ -23,7 +25,16 @@ interface HandleClientToolCallDeps {
   chatId: string | null;
   getAuthHeaders: () => Record<string, string>;
   extraHeaders?: Record<string, string>;
+  /** The executor stream's binding; its result must carry it. */
+  executor?: ExecutorBinding;
+  lineage?: CallLineage;
 }
+
+/** A chat stream's event, or a call pushed over the executor stream. */
+export type ClientToolCallEvent = Pick<
+  MessageSubmitStreamingResponseClientToolCall,
+  "message_id" | "tool_call_id" | "tool_name"
+> & { input?: unknown; message_type: "client_tool_call" };
 
 /**
  * Runs the registered executor for a `client_tool_call` and POSTs the outcome to
@@ -34,9 +45,7 @@ interface HandleClientToolCallDeps {
  * expires on the backend rather than uploading private native information.
  */
 export async function handleClientToolCall(
-  responseData: MessageSubmitStreamingResponseClientToolCall & {
-    message_type: "client_tool_call";
-  },
+  responseData: ClientToolCallEvent,
   deps: HandleClientToolCallDeps,
 ): Promise<void> {
   const { message_id, tool_call_id, tool_name, input } = responseData;
@@ -82,6 +91,7 @@ export async function handleClientToolCall(
           messageId: message_id,
           chatId,
           signal,
+          ...(deps.lineage ? { lineage: deps.lineage } : {}),
         });
         if (outcome.disposition === "local_only") return;
         body = outcome.ok
@@ -122,8 +132,9 @@ async function postClientToolResult(
   deps: HandleClientToolCallDeps,
 ): Promise<void> {
   if (isClientToolResultLocalOnly(toolName)) return;
-  // A call with a durable operation identity only accepts its submit binding.
-  const binding = operationExecutorBinding(toolName);
+  // A call with a durable operation identity only accepts its submit binding;
+  // a call from the executor stream only accepts the stream's binding.
+  const binding = deps.executor ?? operationExecutorBinding(toolName);
   try {
     const response = await fetch("/api/v1beta/me/messages/clienttoolresult", {
       method: "POST",
