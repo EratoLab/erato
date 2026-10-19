@@ -386,12 +386,23 @@ export const NoItemsYet: Story = {
   render: () => <ComposerWith seed={[]} notice={null} />,
 };
 
-const ThreadChecklist = () => {
-  const [included, setIncluded] = useState<Record<string, boolean>>({
-    m1: true,
-    m2: true,
-    m3: false,
-  });
+const THREAD_MESSAGES = [
+  ["m1", "Maya Krüger", "Mon 09:12 · Agenda draft"],
+  ["m2", "Jonas Weber", "Mon 11:40 · Re: Agenda draft"],
+  ["m3", "Maya Krüger", "Tue 08:05 · Re: Re: Agenda draft"],
+  ["m4", "Lena Hoffmann", "Tue 10:31 · Re: Re: Agenda draft"],
+  ["m5", "Jonas Weber", "Tue 14:02 · Room booking"],
+  ["m6", "Maya Krüger", "Wed 08:45 · Catering"],
+  ["m7", "Lena Hoffmann", "Wed 16:20 · Travel"],
+  ["m8", "Jonas Weber", "Thu 09:05 · Final agenda"],
+] as const;
+
+const ThreadChecklist = ({ count = 3 }: { count?: number }) => {
+  const [included, setIncluded] = useState<Record<string, boolean>>(() =>
+    Object.fromEntries(
+      THREAD_MESSAGES.slice(0, count).map(([id], index) => [id, index !== 2]),
+    ),
+  );
   const toggle = (id: string) =>
     setIncluded((current) => ({ ...current, [id]: !current[id] }));
   const message = (id: string, label: string, sublabel: string) => ({
@@ -410,12 +421,10 @@ const ThreadChecklist = () => {
         {
           id: "thread",
           label: "Re: Offsite agenda",
-          metaLabel: "3 messages",
-          items: [
-            message("m1", "Maya Krüger", "Mon 09:12 · Agenda draft"),
-            message("m2", "Jonas Weber", "Mon 11:40 · Re: Agenda draft"),
-            message("m3", "Maya Krüger", "Tue 08:05 · Re: Re: Agenda draft"),
-          ],
+          metaLabel: `${count} messages`,
+          items: THREAD_MESSAGES.slice(0, count).map(([id, label, sublabel]) =>
+            message(id, label, sublabel),
+          ),
         },
       ]}
     />
@@ -449,6 +458,25 @@ const detailSeed: ComposerContextItem[] = [
 export const DetailSheet: Story = {
   decorators: [pane(340)],
   render: () => <ComposerWith seed={detailSeed} files={twoFiles} />,
+};
+
+const longDetailSeed: ComposerContextItem[] = [
+  {
+    ...detailSeed[2],
+    meta: "7 of 8 messages",
+    detail: {
+      title: "Re: Offsite agenda",
+      render: () => <ThreadChecklist count={8} />,
+      actions: [{ id: "all", label: "Include every message", onSelect: noop }],
+    },
+  },
+];
+
+// A detail taller than the sheet: its actions stay pinned while the body
+// scrolls.
+export const DetailSheetLong: Story = {
+  decorators: [pane(340)],
+  render: () => <ComposerWith seed={longDetailSeed} />,
 };
 
 export const DetailPopover: Story = {

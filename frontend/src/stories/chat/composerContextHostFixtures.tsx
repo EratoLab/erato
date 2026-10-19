@@ -5,8 +5,11 @@
  */
 import { noop, stagedFile } from "./composerContextStoryKit";
 
-import type { StoryContextItem } from "./composerContextStoryKit";
-import type { ComposerNotice } from "@/components/ui/Chat/ComposerContext/types";
+import type { HostOutcome, StoryContextItem } from "./composerContextStoryKit";
+import type {
+  ComposerContextDetail,
+  ComposerNotice,
+} from "@/components/ui/Chat/ComposerContext/types";
 import type { FileUploadItem } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
 export interface HostScenario {
@@ -22,6 +25,38 @@ const text = (body: string) =>
 
 /* ---------- Word ---------- */
 
+const documentDetail: ComposerContextDetail = {
+  title: "Supply agreement.docx",
+  render: text(
+    "The whole document is sent with your message: 86 paragraphs and a list of its 12 comments.",
+  ),
+};
+
+const replacedDetail: ComposerContextDetail = {
+  title: "Supply agreement.docx",
+  render: text("Your selection is sent instead of the document."),
+  actions: [
+    {
+      id: "instead",
+      label: "Send this instead",
+      onSelect: noop,
+      variant: "primary",
+    },
+  ],
+};
+
+const documentIncluded: HostOutcome = {
+  state: "included",
+  meta: "86 ¶ · 12 comments",
+  detail: documentDetail,
+};
+
+const documentReplaced: HostOutcome = {
+  state: "superseded",
+  meta: "Replaced by selection",
+  detail: replacedDetail,
+};
+
 const wordDocument = (over: Partial<StoryContextItem> = {}): StoryContextItem =>
   ({
     id: "w-doc",
@@ -30,37 +65,18 @@ const wordDocument = (over: Partial<StoryContextItem> = {}): StoryContextItem =>
     dismissScope: "chat",
     state: "included",
     label: "Supply agreement.docx",
+    spokenLabel: "Document",
     meta: "86 ¶ · 12 comments",
     icon: "document",
     onRemove: noop,
     onRestore: noop,
     removeLabel: "Don't include this document",
     restoreLabel: "Include this document",
-    detail: {
-      title: "Supply agreement.docx",
-      render: text(
-        "The whole document is sent with your message: 86 paragraphs and a list of its 12 comments.",
-      ),
-    },
+    detail: documentDetail,
     ...over,
   }) as StoryContextItem;
 
-const replacedBySelection = wordDocument({
-  state: "superseded",
-  meta: "Replaced by selection",
-  detail: {
-    title: "Supply agreement.docx",
-    render: text("Your selection is sent instead of the document."),
-    actions: [
-      {
-        id: "instead",
-        label: "Send this instead",
-        onSelect: noop,
-        variant: "primary",
-      },
-    ],
-  },
-});
+const replacedBySelection = wordDocument(documentReplaced);
 
 const selection = (over: Partial<StoryContextItem> = {}): StoryContextItem =>
   ({
@@ -70,12 +86,16 @@ const selection = (over: Partial<StoryContextItem> = {}): StoryContextItem =>
     dismissScope: "selection",
     state: "included",
     label: "“The Supplier shall deliver the Goods no later than the deliv…”",
+    spokenLabel: "Selection",
     meta: "Selected passage · 2 ¶",
     icon: "selection",
     onRemove: noop,
     onRestore: noop,
     removeLabel: "Dismiss selection",
     restoreLabel: "Include selection",
+    // One resolver: the selection replaces the document while it is sent.
+    siblingsWhenRemoved: { "w-doc": documentIncluded },
+    siblingsWhenRestored: { "w-doc": documentReplaced },
     detail: {
       title: "Selected passage",
       render: text(
@@ -92,11 +112,13 @@ const cursorComment: StoryContextItem = {
   dismissScope: "message",
   state: "included",
   label: "Comment by Maya Krüger",
+  spokenLabel: "Comments",
   meta: "At your cursor",
   icon: "comment",
   onRemove: noop,
   onRestore: noop,
   removeLabel: "Send without comments",
+  removeActionLabel: "Send without comments",
   restoreLabel: "Include comments",
   announcements: {
     removed: "Comments removed for this message. Include again with +",
@@ -117,13 +139,13 @@ const thread = (over: Partial<StoryContextItem> = {}): StoryContextItem =>
     dismissScope: "item",
     state: "included",
     label: "RE: Q4 vendor contract renewal",
+    spokenLabel: "Email thread",
     meta: "5 messages · 1.5 MB of 25 MB",
     icon: "mail",
     onRemove: noop,
     onRestore: noop,
     removeLabel: "Leave out the email",
     restoreLabel: "Include the email",
-    whenRemoved: { meta: "Off until you switch mail items" },
     detail: {
       title: "RE: Q4 vendor contract renewal",
       render: text("Choose which messages and attachments are sent."),
@@ -155,6 +177,7 @@ const draft = (over: Partial<StoryContextItem> = {}): StoryContextItem =>
     dismissScope: "item",
     state: "included",
     label: "Your draft",
+    spokenLabel: "Draft",
     meta: "Reply to Anna Weber",
     icon: "draft",
     onRemove: noop,
@@ -162,7 +185,6 @@ const draft = (over: Partial<StoryContextItem> = {}): StoryContextItem =>
     removeLabel: "Don't include draft",
     restoreLabel: "Include draft",
     announcements: { removed: "Draft removed. Include again with +" },
-    whenRemoved: { meta: "Off until you switch mail items" },
     detail: { title: "Your draft", render: text("Your reply draft is sent.") },
     ...over,
   }) as StoryContextItem;
@@ -188,7 +210,6 @@ const draftAttachment = (
     onRestore: noop,
     removeLabel: `Don't include ${label}`,
     restoreLabel: `Include ${label}`,
-    whenRemoved: { meta: "Off until you switch mail items" },
     detail: { title: label, render: text("An attachment of your draft.") },
     ...over,
   }) as StoryContextItem;
@@ -207,10 +228,12 @@ const transcript = (over: Partial<StoryContextItem> = {}): StoryContextItem =>
     origin: "user",
     state: "included",
     label: "Product sync +1",
+    spokenLabel: "Teams transcript",
     meta: "2 conversations · 124 messages",
     icon: "chats",
     onRemove: noop,
     removeLabel: "Remove Teams transcript",
+    removeActionLabel: "Remove transcript",
     announcements: { removed: "Teams transcript removed." },
     detail: {
       title: "Teams transcript",
@@ -218,6 +241,50 @@ const transcript = (over: Partial<StoryContextItem> = {}): StoryContextItem =>
     },
     ...over,
   }) as StoryContextItem;
+
+const documentError: HostOutcome = {
+  state: "error",
+  meta: "Couldn't read the document",
+  removeLabel: "Dismiss",
+};
+
+const unreadableDocument = (settles: HostOutcome) =>
+  wordDocument({
+    ...documentError,
+    detail: {
+      title: "Supply agreement.docx",
+      render: text(
+        "Word did not hand over this document, so it is not sent. Try again, or leave it out.",
+      ),
+      actions: [
+        {
+          id: "retry",
+          label: "Try again",
+          onSelect: noop,
+          variant: "primary",
+        },
+      ],
+    },
+    whenRestored: { state: "loading", meta: "Reading document…" },
+    thenSettles: {
+      removeLabel: "Don't include this document",
+      ...settles,
+    },
+  });
+
+const unloadableThread = (settles: HostOutcome) =>
+  thread({
+    state: "error",
+    meta: "Couldn't load the email thread",
+    removeLabel: "Dismiss",
+    whenRemoved: { restoreLabel: "Try loading the email again" },
+    whenRestored: {
+      state: "loading",
+      meta: "Loading email thread…",
+      removeLabel: "Leave out the email",
+    },
+    thenSettles: settles,
+  });
 
 export const hostScenarios = {
   wordDocument: { items: [wordDocument()] },
@@ -271,35 +338,9 @@ export const hostScenarios = {
       actions: [{ id: "skip", label: "Send without it", onSelect: noop }],
     },
   },
-  wordError: {
-    items: [
-      wordDocument({
-        state: "error",
-        meta: "Couldn't read the document",
-        removeLabel: "Dismiss",
-        detail: {
-          title: "Supply agreement.docx",
-          render: text(
-            "Word did not hand over this document, so it is not sent. Try again, or leave it out.",
-          ),
-          actions: [
-            {
-              id: "retry",
-              label: "Try again",
-              onSelect: noop,
-              variant: "primary",
-            },
-          ],
-        },
-        whenRestored: { state: "loading", meta: "Reading document…" },
-        thenSettles: {
-          state: "included",
-          meta: "86 ¶ · 12 comments",
-          removeLabel: "Don't include this document",
-        },
-      }),
-    ],
-  },
+  wordError: { items: [unreadableDocument(documentIncluded)] },
+  // + reads the document again, and Word fails again.
+  wordErrorAgain: { items: [unreadableDocument(documentError)] },
   wordCursorInComments: {
     items: [
       wordDocument({ meta: "86 ¶" }),
@@ -354,24 +395,21 @@ export const hostScenarios = {
   },
   outlookReadError: {
     items: [
-      thread({
+      unloadableThread({
+        state: "included",
+        meta: "5 messages · 1.5 MB of 25 MB",
+        removeLabel: "Leave out the email",
+        restoreLabel: "Include the email",
+      }),
+    ],
+  },
+  // + retries, and the thread fails to load again.
+  outlookReadErrorAgain: {
+    items: [
+      unloadableThread({
         state: "error",
         meta: "Couldn't load the email thread",
         removeLabel: "Dismiss",
-        whenRemoved: {
-          meta: "Off until you switch mail items",
-          restoreLabel: "Try loading the email again",
-        },
-        whenRestored: {
-          state: "loading",
-          meta: "Loading email thread…",
-          removeLabel: "Leave out the email",
-        },
-        thenSettles: {
-          state: "included",
-          meta: "5 messages · 1.5 MB of 25 MB",
-          restoreLabel: "Include the email",
-        },
       }),
     ],
   },
@@ -411,6 +449,7 @@ export const hostScenarios = {
         origin: "user",
         state: "loading",
         label: "Reading email 1 of 2…",
+        spokenLabel: "Dropped emails",
         icon: "mail",
         locked: true,
         lockReason: "Wait until the emails are added",
@@ -453,13 +492,13 @@ export const hostScenarios = {
         dismissScope: "item",
         state: "included",
         label: "Draft attachments (3)",
+        spokenLabel: "Draft attachments",
         meta: "3 of 3 · 738 KB",
         icon: "attachment",
         onRemove: noop,
         onRestore: noop,
         removeLabel: "Don't include draft attachments",
         restoreLabel: "Include draft attachments",
-        whenRemoved: { meta: "Off until you switch mail items" },
         detail: {
           title: "Draft attachments (3)",
           render: text("Choose which attachments of your draft are sent."),
@@ -476,12 +515,19 @@ export const hostScenarios = {
         dismissScope: "selection",
         state: "included",
         label: "“Could you confirm the delivery date by Friday?”",
+        spokenLabel: "Selection",
         meta: "Replaces draft",
         icon: "selection",
         onRemove: noop,
         onRestore: noop,
         removeLabel: "Dismiss selection",
         restoreLabel: "Include selection",
+        siblingsWhenRemoved: {
+          "o-draft": { state: "included", meta: "Reply to Anna Weber" },
+        },
+        siblingsWhenRestored: {
+          "o-draft": { state: "superseded", meta: "Replaced by selection" },
+        },
         detail: {
           title: "Selected text",
           render: text("Erato rewrites the text you selected in your draft."),

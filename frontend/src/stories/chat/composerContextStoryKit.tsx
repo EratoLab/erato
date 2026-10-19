@@ -32,7 +32,13 @@ export const pane = (width?: number) =>
 export type HostOutcome = Partial<
   Pick<
     ComposerContextItem,
-    "state" | "meta" | "tone" | "removeLabel" | "restoreLabel" | "announcements"
+    | "state"
+    | "meta"
+    | "tone"
+    | "removeLabel"
+    | "restoreLabel"
+    | "announcements"
+    | "detail"
   >
 >;
 
@@ -47,9 +53,28 @@ export type StoryContextItem = ComposerContextItem & {
   whenRestored?: HostOutcome;
   /** Where a `whenRestored` that is still loading lands. */
   thenSettles?: HostOutcome;
+  /** What the same answer does to other items, by id (a dismissed selection gives the document back). */
+  siblingsWhenRemoved?: Record<string, HostOutcome>;
+  siblingsWhenRestored?: Record<string, HostOutcome>;
 };
 
-const HOST_ONLY = new Set(["whenRemoved", "whenRestored", "thenSettles"]);
+const HOST_ONLY = new Set([
+  "whenRemoved",
+  "whenRestored",
+  "thenSettles",
+  "siblingsWhenRemoved",
+  "siblingsWhenRestored",
+]);
+
+const patchSiblings = (
+  items: StoryContextItem[],
+  patches: Record<string, HostOutcome> | undefined,
+) =>
+  patches
+    ? items.map((entry) =>
+        entry.id in patches ? { ...entry, ...patches[entry.id] } : entry,
+      )
+    : items;
 const SETTLE_MS = 600;
 
 const laneItem = (item: StoryContextItem) =>
@@ -73,34 +98,49 @@ export const useResolved = (
   return useMemo(
     () =>
       items.map((item) => {
-        const update = (next: (entry: StoryContextItem) => StoryContextItem) =>
+        const update = (
+          next: (entry: StoryContextItem) => StoryContextItem,
+          siblings?: Record<string, HostOutcome>,
+        ) =>
           setItems((current) =>
-            current.map((entry) =>
-              entry.id === item.id ? next(entry) : entry,
+            patchSiblings(
+              current.map((entry) =>
+                entry.id === item.id ? next(entry) : entry,
+              ),
+              siblings,
             ),
           );
         const remove = () =>
           item.origin === "ambient"
-            ? update((entry) => ({
-                ...entry,
-                state: "suggested",
-                meta: undefined,
-                tone: undefined,
-                onRestore: noop,
-                ...entry.whenRemoved,
-              }))
+            ? update(
+                (entry) => ({
+                  ...entry,
+                  state: "suggested",
+                  meta: undefined,
+                  tone: undefined,
+                  onRestore: noop,
+                  ...entry.whenRemoved,
+                }),
+                item.siblingsWhenRemoved,
+              )
             : setItems((current) =>
-                current.filter((entry) => entry.id !== item.id),
+                patchSiblings(
+                  current.filter((entry) => entry.id !== item.id),
+                  item.siblingsWhenRemoved,
+                ),
               );
         const restore = () => {
           const seeded = original.get(item.id) ?? item;
-          update(() => ({
-            ...seeded,
-            state: "included",
-            tone: undefined,
-            onRemove: noop,
-            ...seeded.whenRestored,
-          }));
+          update(
+            () => ({
+              ...seeded,
+              state: "included",
+              tone: undefined,
+              onRemove: noop,
+              ...seeded.whenRestored,
+            }),
+            seeded.siblingsWhenRestored,
+          );
           if (seeded.thenSettles) {
             const settled = seeded.thenSettles;
             window.setTimeout(
