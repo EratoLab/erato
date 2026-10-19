@@ -1,6 +1,6 @@
 //! Executor streams (ERMAIN-1000): a pane's stream for its binding receives
 //! live calls from any of the account's chats that no chat stream can take.
-use super::attached::serve;
+use super::attached::{serve, wait_park};
 use super::*;
 use crate::test_utils::build_openai_narrated_tool_calls_streaming_response;
 use erato::services::client_operations::executor_stream::{self, LiveCallRoute};
@@ -464,7 +464,10 @@ async fn parked_operation_nudges_the_binding_stream(pool: Pool<Postgres>) {
         .with_bearer_token(TEST_JWT_TOKEN)
         .await;
     assert_eq!(inbox.json::<Value>()["executor_stream_enabled"], true);
-    let request = park(&setup).await;
+    submit(&setup.state, setup.chat_id, Some(&mailbox()))
+        .await
+        .assert_status_ok();
+    let request = wait_park(&setup, 1).await;
     let nudge = pane
         .next(Duration::from_secs(2))
         .await
