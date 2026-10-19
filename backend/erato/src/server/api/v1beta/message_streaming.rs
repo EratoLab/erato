@@ -4130,11 +4130,13 @@ async fn prepare_chat_request_with_adapters_memory_inner(
     // same reason the client-tool collector reads the row: what a delegated
     // run may reach for is a property of the run, not of whoever submitted
     // the turn, and it must survive every later turn of that child.
-    let task_facet_ids: Vec<String> = crate::models::chat::parse_chat_configuration(chat)
+    let task_spec = crate::models::chat::parse_chat_configuration(chat)
         .ok()
         .flatten()
-        .and_then(|configuration| configuration.task)
-        .map(|task| task.facet_ids)
+        .and_then(|configuration| configuration.task);
+    let task_facet_ids: Vec<String> = task_spec
+        .as_ref()
+        .map(|task| task.facet_ids.clone())
         .unwrap_or_default();
     let requested_facet_ids: &[String] = if user_input.selected_facet_ids.is_empty() {
         &task_facet_ids
@@ -4186,14 +4188,12 @@ async fn prepare_chat_request_with_adapters_memory_inner(
     // at launch and wins over its assistant's default: an inherited assistant
     // is the origin chat's, and its default is not what the run was given.
     let requested_chat_provider_id = user_input.requested_chat_provider_id.as_deref();
-    let task_chat_provider_id = crate::models::chat::parse_chat_configuration(chat)
-        .ok()
-        .flatten()
-        .and_then(|configuration| configuration.task)
-        .and_then(|task| task.model)
-        .map(|model| model.chat_provider_id);
+    let task_chat_provider_id = task_spec
+        .as_ref()
+        .and_then(|task| task.model.as_ref())
+        .map(|model| model.chat_provider_id.as_str());
     let effective_chat_provider_id = requested_chat_provider_id
-        .or(task_chat_provider_id.as_deref())
+        .or(task_chat_provider_id)
         .or_else(|| {
             assistant_config
                 .as_ref()

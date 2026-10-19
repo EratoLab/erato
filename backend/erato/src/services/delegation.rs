@@ -253,10 +253,20 @@ pub fn render_task_result(
         .map(|reason| format!(", reason: {}", bounded_untrusted(reason, 64, "-")))
         .unwrap_or_default();
 
+    // A fact like the status, so the template cannot drop it either: the
+    // result is the only place a detached run tells the model it fell back.
+    let model_note = part
+        .model
+        .as_ref()
+        .and_then(|model| model.note.as_deref())
+        .map(|note| format!("\n{note}"))
+        .unwrap_or_default();
+
     format!(
-        "Delegated task result — status: {}{}.\n{}\n\n{}",
+        "Delegated task result — status: {}{}.{}\n{}\n\n{}",
         bounded_untrusted(&part.status, 32, "-"),
         reason,
+        model_note,
         RESULT_UNTRUSTED_GUIDANCE,
         body
     )
@@ -1130,18 +1140,30 @@ impl DelegationRunReason {
 }
 
 /// The model a delegated run runs on, as its result reports it.
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    serde::Serialize,
+    serde::Deserialize,
+    utoipa::ToSchema,
+    erato_memory::HeapSize,
+)]
 pub struct TaskModelReport {
     pub chat_provider_id: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
     pub display_name: Option<String>,
-    /// The configured model the run could not use; see
-    /// [`crate::models::chat::TaskModel`].
-    #[serde(skip_serializing_if = "Option::is_none")]
+    /// The configured model the user may not use, so the run fell back to
+    /// the parent turn's model.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
     pub unavailable_chat_provider_id: Option<String>,
     /// Tells the origin model about a fallback, so its answer can say the
     /// task did not run on the model it was configured for.
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
     pub note: Option<String>,
 }
 
@@ -4296,6 +4318,7 @@ mod tests {
             truncated,
             sequence: 0,
             redeliveries: 0,
+            model: None,
         }
     }
 
@@ -4419,6 +4442,39 @@ mod tests {
     }
 
     #[test]
+    fn a_model_fallback_reaches_the_model_outside_the_frame() {
+        let mut part = task_result_part("CHILD-ANSWER", false);
+        part.model = Some(TaskModelReport {
+            chat_provider_id: "parent".to_string(),
+            display_name: None,
+            unavailable_chat_provider_id: Some("local".to_string()),
+            note: Some("FALLBACK-NOTE".to_string()),
+        });
+
+        let rendered = render_task_result("{{result}}", &part);
+
+        let open = rendered
+            .find(&format!("<{UNTRUSTED_TAG}"))
+            .expect("frame opens");
+        let note = rendered
+            .find("FALLBACK-NOTE")
+            .expect("the note is rendered");
+        assert!(
+            note < open,
+            "the note is the server's, not the child's: {rendered}"
+        );
+
+        let without = render_task_result("{{result}}", &task_result_part("CHILD-ANSWER", false));
+        assert!(
+            without.starts_with(&format!(
+                "Delegated task result — status: completed, reason: cap_exceeded.\n\
+                 {RESULT_UNTRUSTED_GUIDANCE}"
+            )),
+            "no model note, no extra line: {without}"
+        );
+    }
+
+    #[test]
     fn the_truncation_note_appears_only_when_the_answer_was_shortened() {
         let shortened = render_task_result(
             "body{{truncated_note}} {{result}}",
@@ -4438,14 +4494,15 @@ mod tests {
     }
 
     /// Every brief-bearing argument of a recorded `delegate_task` call survives
-    /// the round trip, and the three run-parameter arguments are ignored.
+    /// the round trip, and the run-parameter arguments are ignored.
     ///
-    /// The ignored three are the point. A retry inherits what the OLD CHILD was
+    /// The ignored ones are the point. A retry inherits what the OLD CHILD was
     /// launched with - its persisted `TaskSpec`, already authorization-filtered
     /// and already clamped by that turn's offer - not what the model once
     /// asked for. Reading `facet_ids` back would un-clamp a capability the
     /// offer narrowed; reading `scheduling` back would restore a value the
-    /// launch had overridden; `run_mode` is chosen by the retry itself.
+    /// launch had overridden; `run_mode` is chosen by the retry itself; the
+    /// run's `model` was resolved at launch and is stored with it.
     ///
     /// Compared field by field rather than against `validate_task_tool_call`'s
     /// output directly: that function needs an `AppState` and a live dispatch
@@ -4464,6 +4521,7 @@ mod tests {
             "run_mode": "wait",
             "scheduling": "silent",
             "facet_ids": ["a-facet-the-offer-narrowed-away"],
+            "model": "a-model-the-launch-did-not-settle-on",
         });
 
         let brief = brief_from_persisted_task_args(&recorded).expect("a recorded call parses");
@@ -4480,10 +4538,10 @@ mod tests {
         assert!(brief.include_conversation_context);
 
         // The five fields above are the whole of `DelegateBrief`, which is why
-        // `run_mode`, `scheduling` and `facet_ids` cannot travel with it: there
-        // is nowhere to put them. That exhaustiveness is enforced by the
-        // compiler, at the struct literal in `brief_from_persisted_task_args` —
-        // add a field there and omit it and the build fails.
+        // `run_mode`, `scheduling`, `facet_ids` and `model` cannot travel with
+        // it: there is nowhere to put them. That exhaustiveness is enforced by
+        // the compiler, at the struct literal in `brief_from_persisted_task_args`
+        // — add a field there and omit it and the build fails.
         //
         // An assertion here cannot add to that. The obvious one (serialise the
         // brief and grep for "silent") would have to hand-build the JSON from

@@ -3816,6 +3816,16 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/TaskResultCard.tsx
+msgid "message.taskResult.model"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/TaskResultCard.tsx
+msgid "message.taskResult.model.unavailable"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/TaskResultCard.tsx
 msgid "message.taskResult.openRun"
 msgstr ""
 

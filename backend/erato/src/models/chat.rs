@@ -305,6 +305,10 @@ pub struct ResultDelivery {
     /// Matches `ContentPartTaskResult::sequence`.
     #[serde(default)]
     pub sequence: u32,
+    /// The run's model, settled when the delivery is recorded like the
+    /// status: the sweep that may append it has no config to name it with.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model: Option<crate::services::delegation::TaskModelReport>,
     pub at: DateTimeWithTimeZone,
 }
 

@@ -180,6 +180,46 @@ describe("TaskResultCard", () => {
     );
   });
 
+  it("names the model the task ran on, and a fallback", () => {
+    const { rerender } = render(
+      <TaskResultCard
+        part={part({
+          model: { chat_provider_id: "model-b", display_name: "Model B" },
+        })}
+      />,
+    );
+    expect(screen.getByTestId("task-result-model")).toHaveTextContent(
+      "Model: Model B",
+    );
+    expect(screen.queryByTestId("task-result-model-unavailable")).toBeNull();
+
+    rerender(
+      <TaskResultCard
+        part={part({
+          model: {
+            chat_provider_id: "mock-llm",
+            unavailable_chat_provider_id: "model-x",
+            note: "for the origin model only",
+          },
+        })}
+      />,
+    );
+    expect(screen.getByTestId("task-result-model")).toHaveTextContent(
+      "Model: mock-llm",
+    );
+    expect(
+      screen.getByTestId("task-result-model-unavailable"),
+    ).toHaveTextContent("not available to you");
+    expect(screen.getByTestId("task-result-card")).not.toHaveTextContent(
+      "for the origin model only",
+    );
+  });
+
+  it("shows no model on a result delivered before the model was recorded", () => {
+    render(<TaskResultCard part={part()} />);
+    expect(screen.queryByTestId("task-result-model")).toBeNull();
+  });
+
   it("notes a shortened answer only when it was shortened", () => {
     const { rerender } = render(
       <TaskResultCard part={part({ truncated: false })} />,

@@ -5083,7 +5083,7 @@ max_client_tool_calls_per_task = 30
 
 {/* erato_toml_config_key: delegation.tasks.persona */}
 
-Whether a task child runs with the origin chat's assistant persona (`"inherit"`) or on the bare model (`"bare"`). With `"inherit"`, a child spawned from a chat bound to an assistant uses that assistant's system prompt and model settings; a chat with no assistant bound runs bare either way.
+Whether a task child runs with the origin chat's assistant persona (`"inherit"`) or on the bare model (`"bare"`). With `"inherit"`, a child spawned from a chat bound to an assistant uses that assistant's system prompt and facets, but not its default model (see [which model a task runs on](#which-model-a-task-runs-on)); a chat with no assistant bound runs bare either way.
 
 **Default value:** `"inherit"`
 
@@ -6018,7 +6018,7 @@ A delegated task runs on, in this order:
 
 A run delegated to an @-mentioned assistant uses that assistant's default model in place of step 2. A task never runs on the default model of the assistant it inherits from the conversation.
 
-A task always runs on a model the user may use. When a configured model is not available to the user, the task runs on the parent turn's model instead, and its result says so, both to the parent model and on the task card. The model is stored with the task when it starts: later turns of the task and a retry keep it, and a retry falls back to the parent turn's model in the same way when the user may no longer use it.
+A task always runs on a model the user may use. When a configured model is not available to the user, the task runs on the parent turn's model instead, and its result says so, both to the parent model and on the task card. The model is stored with the task when it starts: later turns of the task and a retry keep it, and a retry falls back to the parent turn's model in the same way when the user may no longer use it, or to the user's default model when they have lost that one too.
 
 ```toml
 [facets.facets.mail_search]

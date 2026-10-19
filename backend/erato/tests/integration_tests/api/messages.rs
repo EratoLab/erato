@@ -10828,6 +10828,7 @@ async fn seed_delivered_child(
                 redeliveries,
                 redelivery_of: None,
                 sequence: redeliveries,
+                model: None,
                 at: Utc::now().into(),
             }),
             retry_of: None,
