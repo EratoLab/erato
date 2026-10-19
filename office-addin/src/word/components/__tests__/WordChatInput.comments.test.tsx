@@ -985,6 +985,10 @@ describe("WordChatInput comment context", () => {
           screen.getByTestId("word-include-document-chip"),
         ).toHaveTextContent("A comment is sent instead of the document"),
       );
+      // Wrapped, not cut: the long locales end on the word that matters.
+      expect(
+        screen.getByText("A comment is sent instead of the document"),
+      ).not.toHaveClass("truncate");
       expect(screen.queryByTestId("word-document-coverage-hint")).toBeNull();
 
       send();

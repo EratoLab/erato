@@ -152,6 +152,11 @@ describe("WordChatInput", () => {
     await waitFor(() =>
       expect(chip()).toHaveTextContent("report.docx is included"),
     );
+    // A long name is cut, so the whole label stays on hover.
+    expect(screen.getByText("report.docx is included")).toHaveAttribute(
+      "title",
+      "report.docx is included",
+    );
   });
 
   it("starts without the document when the preference is off, and includes it with one click", async () => {

@@ -115,8 +115,24 @@ test("an unticked thread message reads its attachments unticked", async ({
   await expect(boxes).toHaveCount(2);
   for (const box of await boxes.all()) {
     await expect(box).not.toBeChecked();
+    // Faded once by the row, never again by the card around it.
+    expect(
+      await box.evaluate((el) => {
+        let opacity = 1;
+        for (let node: Element | null = el; node; node = node.parentElement) {
+          opacity *= Number(getComputedStyle(node).opacity);
+        }
+        return Math.round(opacity * 100) / 100;
+      }),
+    ).toBe(0.5);
   }
-  expect(await card.evaluate((el) => getComputedStyle(el).opacity)).toBe("0.6");
+  expect(await card.evaluate((el) => getComputedStyle(el).opacity)).toBe("1");
+  expect(
+    await card
+      .locator('[data-ui="card-header"] > div')
+      .first()
+      .evaluate((el) => getComputedStyle(el).opacity),
+  ).toBe("0.6");
 });
 
 test("a display-named image upload draws as a thumbnail and an image row", async ({

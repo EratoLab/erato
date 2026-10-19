@@ -1138,6 +1138,12 @@ export function WordChatInput({
   const composerLocked = !!chatInputProps.disabled;
   const readInParts =
     authoringRoute && !!notice.completeReadIssue && !notice.authoringIssue;
+  const documentRowLabel = chipLabel(
+    preview,
+    resolveWordDocumentName(),
+    authoringRoute,
+    readInParts,
+  );
   const coverageHint = readInParts
     ? wordAuthoringIssueText("too-large")
     : !authoringRoute &&
@@ -1261,24 +1267,25 @@ export function WordChatInput({
               ) : (
                 <DocumentIcon className="size-4 shrink-0" />
               )}
-              <span className="min-w-0 truncate">
-                {selectionReplacesDocument
-                  ? t({
-                      id: "officeAddin.word.chip.selectionInstead",
-                      message: "Your selection is sent instead of the document",
-                    })
-                  : commentReplacesDocument
+              {selectionReplacesDocument || commentReplacesDocument ? (
+                // A sentence, not a name: cut short it can lose "instead".
+                <span className="min-w-0 break-words">
+                  {selectionReplacesDocument
                     ? t({
+                        id: "officeAddin.word.chip.selectionInstead",
+                        message:
+                          "Your selection is sent instead of the document",
+                      })
+                    : t({
                         id: "officeAddin.word.chip.commentInstead",
                         message: "A comment is sent instead of the document",
-                      })
-                    : chipLabel(
-                        preview,
-                        resolveWordDocumentName(),
-                        authoringRoute,
-                        readInParts,
-                      )}
-              </span>
+                      })}
+                </span>
+              ) : (
+                <span className="min-w-0 truncate" title={documentRowLabel}>
+                  {documentRowLabel}
+                </span>
+              )}
               <button
                 type="button"
                 onClick={() => {

@@ -1354,19 +1354,24 @@ export const AddinChatInput = forwardRef<
       {draftRowState && (
         <div className="mx-auto w-full max-w-[var(--theme-layout-chat-input-max-width)] px-2 pb-1 sm:px-4">
           <div
-            className={`flex items-center gap-2 rounded-[var(--theme-radius-message)] border border-theme-border bg-theme-bg-secondary px-3 py-1.5 text-xs ${
+            // Muted text on the secondary fill misses 4.5:1, so a superseded
+            // row sits on the primary fill instead.
+            className={`flex items-center gap-2 rounded-[var(--theme-radius-message)] border border-theme-border px-3 py-1.5 text-xs ${
               draftRowState === "sent"
-                ? "text-theme-fg-secondary"
-                : "text-theme-fg-muted"
+                ? "bg-theme-bg-secondary text-theme-fg-secondary"
+                : "bg-theme-bg-primary text-theme-fg-muted"
             }`}
             data-testid="outlook-draft-chip"
             data-state={draftRowState === "sent" ? "included" : "superseded"}
-            title={draftRowText(draftRowState, isAppointmentCompose)}
           >
-            <span className="shrink-0" aria-hidden="true">
+            <span
+              className={`shrink-0 ${draftRowState === "sent" ? "" : "opacity-60"}`}
+              aria-hidden="true"
+            >
               &#x1F4DD;
             </span>
-            <span className="min-w-0 truncate">
+            {/* Wraps rather than truncates: several locales put "not sent" last. */}
+            <span className="min-w-0 break-words">
               {draftRowText(draftRowState, isAppointmentCompose)}
             </span>
             <button

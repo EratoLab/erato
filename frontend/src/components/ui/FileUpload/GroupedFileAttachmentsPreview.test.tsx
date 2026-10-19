@@ -676,8 +676,15 @@ describe("GroupedFileAttachmentsPreview", () => {
     // inside derive from the card in turn.
     expect(card).toHaveClass("card-nested", "thread-message-card-geometry");
     // A message left out of the upload is dimmed rather than deselected: the
-    // card's own selected fill would read as the opposite.
-    expect(card).toHaveClass("opacity-60");
+    // card's own selected fill would read as the opposite. Only its header
+    // dims, so a row inside is not faded twice.
+    expect(card).not.toHaveClass("opacity-60");
+    expect(card.querySelector('[data-ui="card-header"] > div')).toHaveClass(
+      "opacity-60",
+    );
+    expect(
+      card.querySelector('[data-ui="attachment-tile"]')?.closest(".opacity-60"),
+    ).toBeNull();
     expect(card).not.toHaveAttribute("data-selected");
   });
 

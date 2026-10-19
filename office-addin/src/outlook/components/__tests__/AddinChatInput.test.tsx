@@ -708,7 +708,11 @@ describe("AddinChatInput", () => {
       expect(draftRow()).toHaveTextContent(
         "Your draft is unchanged, not re-sent",
       );
-      expect(draftRow()).toHaveClass("text-theme-fg-muted");
+      // Muted text needs the primary fill to keep 4.5:1.
+      expect(draftRow()).toHaveClass(
+        "text-theme-fg-muted",
+        "bg-theme-bg-primary",
+      );
 
       send();
       await waitFor(() => expect(onSendMessage).toHaveBeenCalledTimes(2));
