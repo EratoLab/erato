@@ -7451,6 +7451,10 @@
             "format": "uuid",
             "description": "The child chat that produced this result; the link the UI offers."
           },
+          "model": {
+            "$ref": "#/components/schemas/TaskModelReport",
+            "description": "The model the run ran on. Absent on results of runs launched before\nthe model was recorded."
+          },
           "parent_tool_call_id": {
             "type": "string",
             "description": "The `delegate_task` call in the origin turn that started it."
@@ -11847,6 +11851,29 @@
           "accepted",
           "unresolved"
         ]
+      },
+      "TaskModelReport": {
+        "type": "object",
+        "description": "The model a delegated run runs on, as its result reports it.",
+        "required": [
+          "chat_provider_id"
+        ],
+        "properties": {
+          "chat_provider_id": {
+            "type": "string"
+          },
+          "display_name": {
+            "type": "string"
+          },
+          "note": {
+            "type": "string",
+            "description": "Tells the origin model about a fallback, so its answer can say the\ntask did not run on the model it was configured for."
+          },
+          "unavailable_chat_provider_id": {
+            "type": "string",
+            "description": "The configured model the user may not use, so the run fell back to\nthe parent turn's model."
+          }
+        }
       },
       "TaskResultInput": {
         "type": "object",

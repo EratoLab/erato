@@ -687,6 +687,11 @@ pub struct ContentPartTaskResult {
     /// delivery, including a parked run's follow-up answer.
     #[serde(default)]
     pub redeliveries: u32,
+    /// The model the run ran on. Absent on results of runs launched before
+    /// the model was recorded.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub model: Option<crate::services::delegation::TaskModelReport>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema, erato_memory::HeapSize)]
