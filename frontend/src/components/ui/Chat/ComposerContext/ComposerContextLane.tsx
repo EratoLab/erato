@@ -38,6 +38,7 @@ import { useLiveAnnouncement } from "./useLiveAnnouncement";
 
 import type {
   ComposerContextChipFaceProps,
+  ComposerContextDetailAction,
   ComposerContextItem,
   ComposerContextState,
 } from "./types";
@@ -55,10 +56,12 @@ const LESS_KEY = "__less";
 const PENDING_TIMEOUT_MS = 3000;
 
 interface PendingAction {
-  action: "remove" | "restore";
+  action: "remove" | "restore" | "detail";
   state: ComposerContextState;
   label: string;
   removedText?: string;
+  /** A detail action's own words for a state it asked for. */
+  detailText?: string;
   /** A user item's claimed files, unstaged once the host drops the item. */
   claimsFileIds?: string[];
   at: number;
@@ -332,7 +335,13 @@ export const ComposerContextLane = memo(function ComposerContextLane({
       pendingRef.current.delete(id);
       handled.add(id);
       const spoken = composerContextSpokenLabel(item);
-      if (pending.action === "remove" && item.state === "suggested") {
+      if (pending.action === "detail" && pending.detailText) {
+        say(
+          needsTheUser(item)
+            ? announceOutcome(spoken, item.meta ?? statePill(item.state))
+            : pending.detailText,
+        );
+      } else if (pending.action === "remove" && item.state === "suggested") {
         say(item.announcements?.removed ?? announceRemovedAmbient(spoken));
       } else if (pending.action === "restore" && item.state === "included") {
         say(item.announcements?.restored ?? announceRestored(spoken));
@@ -523,6 +532,25 @@ export const ComposerContextLane = memo(function ComposerContextLane({
       item.onRestore();
     },
     [say],
+  );
+
+  // Recorded before the host's action runs, so a host that commits its new
+  // state synchronously still finds the action waiting for it.
+  const recordDetailAction = useCallback(
+    (item: ComposerContextItem, action: ComposerContextDetailAction) => {
+      if (!action.announcement) {
+        return;
+      }
+      pendingRef.current.set(item.id, {
+        action: "detail",
+        state: item.state,
+        label: composerContextSpokenLabel(item),
+        detailText: action.announcement,
+        at: Date.now(),
+        order: prevOrderRef.current,
+      });
+    },
+    [],
   );
 
   const closeDetail = useCallback(
@@ -749,6 +777,7 @@ export const ComposerContextLane = memo(function ComposerContextLane({
             closeDetail({ restoreFocus: true });
             runRestore(item);
           }}
+          onAction={recordDetailAction}
         />
       ) : null}
       {liveRegion}
