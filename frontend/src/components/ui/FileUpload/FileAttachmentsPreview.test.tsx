@@ -192,10 +192,11 @@ describe("FileAttachmentsPreview", () => {
       />,
     );
 
-    expect(screen.getByText("5/5")).toBeInTheDocument();
+    expect(screen.getByText("3 files · 5/5")).toBeInTheDocument();
+    // "Remove all" takes only the files shown here and says so.
     expect(
-      screen.getByRole("button", { name: "Remove all attachments" }),
-    ).toBeVisible();
+      screen.getByRole("button", { name: "Remove all: 3 files" }),
+    ).toHaveTextContent("Remove all");
   });
 
   it("renders nothing when there is nothing attached", async () => {

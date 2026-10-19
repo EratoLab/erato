@@ -10,6 +10,7 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { messages as frontendMessages } from "../../../../../frontend/src/locales/en/messages.po";
 import { buildTeamsTranscriptFile } from "../../utils/buildTeamsTranscriptFile";
 import { TeamsAttachmentsPreview } from "../TeamsAttachmentsPreview";
 
@@ -130,7 +131,8 @@ const sharedFileMessage = message({
 
 describe("TeamsAttachmentsPreview", () => {
   beforeEach(() => {
-    i18n.load("en", {});
+    // The library's own strings, such as the count and "Remove all".
+    i18n.load("en", frontendMessages);
     i18n.activate("en");
     state.attachedTranscript = null;
   });
@@ -274,7 +276,11 @@ describe("TeamsAttachmentsPreview", () => {
       });
 
       await screen.findByText("Product sync");
-      fireEvent.click(removeAll("5/5"));
+      // The transcript stays, so the button is named by what it removes.
+      const button = removeAll("3 files · 5/5");
+      expect(button).toHaveAccessibleName("Remove all: 3 files");
+      expect(button).toHaveTextContent("Remove all");
+      fireEvent.click(button);
 
       expect(onRemoveAllFiles).not.toHaveBeenCalled();
       expect(onRemoveFile.mock.calls).toEqual(own.map((file) => [file.id]));
@@ -284,7 +290,9 @@ describe("TeamsAttachmentsPreview", () => {
       const onRemoveAllFiles = vi.fn();
       renderPreview(own, { maxFiles: 5, onRemoveAllFiles });
 
-      fireEvent.click(removeAll("3/5"));
+      const button = removeAll("3/5");
+      expect(button).toHaveAccessibleName("Remove all attachments");
+      fireEvent.click(button);
       expect(onRemoveAllFiles).toHaveBeenCalledTimes(1);
     });
   });

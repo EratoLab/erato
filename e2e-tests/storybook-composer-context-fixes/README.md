@@ -10,8 +10,10 @@ pieces the add-in's composer context fixes rely on:
 - attachment boxes under an unticked thread message reading unticked, and a
   re-ticked attachment bringing back only itself;
 - an image upload shown under a display name ("Image") still drawn as a
-  thumbnail, and as an image row in a picked message;
-- the staged count reading files shown elsewhere against the limit;
+  thumbnail, and as an image row in a picked message whose type label does
+  not repeat that name;
+- the staged count reading files shown elsewhere against the limit, beside
+  the files shown here, which are all that "Remove all" removes and names;
 - stacked dialogs each named by their own title, including the web app's
   Archive all chats confirmation over Preferences.
 

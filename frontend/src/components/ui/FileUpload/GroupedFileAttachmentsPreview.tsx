@@ -675,6 +675,14 @@ export const DefaultGroupedFileAttachmentsPreview: React.FC<
               ) : (
                 <div className={clsx(headerClassName, "justify-between")}>
                   {headerInner}
+                  {actionsPinned && actions != null && (
+                    <div
+                      className="flex shrink-0 items-center self-center"
+                      data-ui="attachment-group-header-actions"
+                    >
+                      {actions}
+                    </div>
+                  )}
                   {shouldCollapse && isExpanded && (
                     <Button
                       type="button"

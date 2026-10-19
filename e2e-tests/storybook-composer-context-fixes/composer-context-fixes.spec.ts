@@ -303,6 +303,9 @@ test("a display-named image upload draws as a thumbnail and an image row", async
   const row = page.locator(`${CARD} [data-filetype="image"]`).first();
   await expect(row).toBeVisible();
   await expect(row.locator("img")).toHaveCount(0);
+  // The name already says "Image"; the family label does not repeat it.
+  await expect(row).toContainText("Image");
+  await expect(row).not.toContainText("IMAGE");
 });
 
 test("the staged count reads files shown elsewhere", async ({ page }) => {
@@ -312,11 +315,11 @@ test("the staged count reads files shown elsewhere", async ({ page }) => {
     '[data-ui="attachment-tile"]',
   );
 
-  await expect(page.getByText("5/5", { exact: true })).toBeVisible();
-  const removeAll = page.getByRole("button", {
-    name: "Remove all attachments",
-  });
+  await expect(page.getByText("3 files · 5/5", { exact: true })).toBeVisible();
+  // It removes the three files shown here, not the ones staged elsewhere.
+  const removeAll = page.getByRole("button", { name: "Remove all: 3 files" });
   await expect(removeAll).toBeVisible();
+  await expect(removeAll).toHaveText("Remove all");
   const box = await removeAll.boundingBox();
   if (!box) throw new Error("Remove all has no box");
   expect(box.height).toBeGreaterThanOrEqual(24);

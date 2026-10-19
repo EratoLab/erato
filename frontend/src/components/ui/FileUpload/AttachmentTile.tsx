@@ -190,11 +190,15 @@ export const AttachmentTile: React.FC<AttachmentTileProps> = ({
       return labelOverride;
     }
     const familyName = FILE_TYPES[fileType].displayName || t`File`;
-    if (showType === "family") {
-      return familyName.toUpperCase();
-    }
     const { extension } = splitFilenameForDisplay(filename);
-    return extension ? extension.slice(1).toUpperCase() : familyName;
+    const label =
+      showType === "family"
+        ? familyName.toUpperCase()
+        : extension
+          ? extension.slice(1).toUpperCase()
+          : familyName;
+    // A display name such as "Image" already says it.
+    return label.toLowerCase() === filename.trim().toLowerCase() ? null : label;
   }, [showType, labelOverride, filename, fileType]);
   // The API type carries no size, so the separator has to survive its absence.
   const meta = useMemo(() => {

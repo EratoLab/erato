@@ -824,6 +824,23 @@ describe("GroupedFileAttachmentsPreview", () => {
     },
   );
 
+  it("draws a pinned action once in the header of a group that cannot collapse", async () => {
+    await renderWithI18n(
+      <GroupedFileAttachmentsPreview
+        groups={[{ ...pinnedDropGroup, collapsible: false }]}
+        groupActions={{ drop: <button>Remove Re: Offsite agenda</button> }}
+      />,
+    );
+
+    const actions = screen.getAllByRole("button", {
+      name: "Remove Re: Offsite agenda",
+    });
+    expect(actions).toHaveLength(1);
+    expect(
+      actions[0].closest('[data-ui="attachment-group-header-actions"]'),
+    ).not.toBeNull();
+  });
+
   it("reports pinned actions from the hook while the group is collapsed", async () => {
     const { i18n } = await import("@lingui/core");
     i18n.load("en", enMessages as unknown as Messages);
@@ -902,7 +919,7 @@ describe("GroupedFileAttachmentsPreview", () => {
                     file: {
                       id: "image-1",
                       filename: "teams-img-abc.png",
-                      displayName: "Image",
+                      displayName: "Whiteboard",
                       preview_url: "/files/image-1/preview",
                     },
                     selected: true,

@@ -51,7 +51,8 @@ export interface FileAttachmentsPreviewProps
   surfaceVariant?: "default" | "message";
   /**
    * Files staged in all, when some of them are shown elsewhere (a Teams
-   * transcript's files); the count reads it against `maxFiles`.
+   * transcript's files). The count reads it against `maxFiles`, and "Remove
+   * all" is named by the files shown here.
    */
   stagedCount?: number;
 }
