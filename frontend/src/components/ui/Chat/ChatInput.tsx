@@ -1626,6 +1626,20 @@ export const ChatInput = ({
     }
   }, [message]);
 
+  // Scroll the textarea to the bottom while dictation is streaming so newly
+  // appended transcript chunks remain visible. Runs as a layout effect so it
+  // fires after the resize effect above has set the final height (layout
+  // effects execute in source order), giving scrollHeight its correct value.
+  useLayoutEffect(() => {
+    if (!isDictating && !isDictationCompleting) {
+      return;
+    }
+    const textarea = textareaRef.current;
+    if (textarea) {
+      textarea.scrollTop = textarea.scrollHeight;
+    }
+  }, [isDictating, isDictationCompleting, message]);
+
   const placeCaret = usePendingCaret(textareaRef);
 
   useEffect(() => {
