@@ -1,14 +1,40 @@
 import { i18n } from "@lingui/core";
 import { I18nProvider } from "@lingui/react";
-import { render, screen } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import {
+  render as testingRender,
+  screen,
+  fireEvent,
+  waitFor,
+} from "@testing-library/react";
+import { http, HttpResponse } from "msw";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 
+import { ThemeProvider } from "@/components/providers/ThemeProvider";
+import { MessageContent } from "@/components/ui/Message/MessageContent";
+import { server } from "@/lib/mocks/server";
 import { messages as enMessages } from "@/locales/en/messages.json";
+import { StaticFeatureConfigProvider } from "@/providers/FeatureConfigProvider";
 
 import { MessageList } from "./MessageList";
 import { useConversationMessage } from "../Message/ConversationMessages";
 
+import type { ChatMessageProps } from "../Chat/ChatMessage";
 import type { Messages } from "@lingui/core";
+import type { ReactElement } from "react";
+
+const render = (ui: ReactElement) =>
+  testingRender(
+    <QueryClientProvider
+      client={
+        new QueryClient({ defaultOptions: { queries: { retry: false } } })
+      }
+    >
+      <StaticFeatureConfigProvider>
+        <ThemeProvider enableCustomTheme={false}>{ui}</ThemeProvider>
+      </StaticFeatureConfigProvider>
+    </QueryClientProvider>,
+  );
 
 beforeAll(() => {
   i18n.load("en", enMessages as unknown as Messages);
@@ -16,6 +42,86 @@ beforeAll(() => {
 });
 
 describe("MessageList", () => {
+  it.each([false, true])(
+    "resolves generated documents for this and later messages (metadata loaded: %s)",
+    async (metadataLoaded) => {
+      const file = {
+        id: "generated-file",
+        filename: "values.xlsx",
+        preview_url: "https://files.example/preview",
+        download_url: "https://files.example/download",
+        file_contents_unavailable_missing_permissions: false,
+        is_sharepoint_file: false,
+      };
+      const fetchFile = vi.fn(() => HttpResponse.json(file));
+      server.use(http.get("*/api/v1beta/files/generated-file", fetchFile));
+      const preview = vi.fn();
+      function Renderer({ message, allFilesById }: ChatMessageProps) {
+        return (
+          <MessageContent
+            content={message.content}
+            filesById={allFilesById}
+            onFileLinkPreview={preview}
+          />
+        );
+      }
+      const generated = {
+        id: "generated",
+        role: "assistant" as const,
+        sender: "assistant",
+        authorId: "assistant",
+        createdAt: "2026-01-01T00:00:00Z",
+        files: metadataLoaded ? [file] : [],
+        content: [
+          {
+            content_type: "text_file_pointer" as const,
+            file_upload_id: file.id,
+          },
+          {
+            content_type: "text" as const,
+            text: "[Download values](erato-file://generated-file)",
+          },
+        ],
+      };
+      const later = {
+        ...generated,
+        id: "later",
+        content: [
+          {
+            content_type: "text" as const,
+            text: "[Earlier file](erato-file://generated-file)",
+          },
+        ],
+      };
+      render(
+        <I18nProvider i18n={i18n}>
+          <MessageList
+            messages={{ generated, later }}
+            messageOrder={["generated", "later"]}
+            loadOlderMessages={vi.fn()}
+            hasOlderMessages={false}
+            isPending={false}
+            currentSessionId="chat"
+            controlsContext={{}}
+            onMessageAction={vi.fn(async () => true)}
+            messageRenderer={Renderer}
+          />
+        </I18nProvider>,
+      );
+      await waitFor(() =>
+        expect(
+          screen.getByRole("link", { name: "Download values" }),
+        ).toHaveAttribute("href", file.preview_url),
+      );
+      expect(
+        screen.getByRole("link", { name: "Earlier file" }),
+      ).toHaveAttribute("href", file.preview_url);
+      fireEvent.click(screen.getByRole("link", { name: "Download values" }));
+      expect(preview).toHaveBeenCalledWith(file);
+      expect(fetchFile).toHaveBeenCalledTimes(metadataLoaded ? 0 : 1);
+    },
+  );
+
   it("centers empty state components independently from message width", () => {
     render(
       <MessageList

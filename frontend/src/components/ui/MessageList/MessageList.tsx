@@ -2,7 +2,9 @@ import clsx from "clsx";
 import { debounce } from "lodash";
 import { memo, useCallback, useMemo, useEffect, useRef, useState } from "react";
 
+import { messageAttachmentFileIds } from "@/components/ui/Chat/messageAttachmentFileIds";
 import { useFileUploadStore } from "@/hooks/files/useFileUploadStore";
+import { useResolvedFiles } from "@/hooks/files/useResolvedFiles";
 import { useMessageListVirtualization, useScrollEvents } from "@/hooks/ui";
 import { usePaginatedData } from "@/hooks/ui/usePaginatedData";
 import { useScrollToBottom } from "@/hooks/useScrollToBottom";
@@ -735,7 +737,7 @@ export const MessageList = memo<MessageListProps>(
 
     // Collect all known file records for attachment previews and
     // erato-file:// link resolution.
-    const allFilesById = useMemo(() => {
+    const knownFilesById = useMemo(() => {
       const fileMap: Record<string, FileUploadItem> = {};
 
       // Assistant files are available even before they appear in message payloads.
@@ -758,13 +760,22 @@ export const MessageList = memo<MessageListProps>(
 
         message.content.forEach((part) => {
           const pointerFile = toMockImagePointerFile(part);
-          if (pointerFile) {
+          if (pointerFile && !(pointerFile.id in fileMap)) {
             fileMap[pointerFile.id] = pointerFile;
           }
         });
       });
       return fileMap;
     }, [assistantFiles, messageOrder, messages, uploadedFiles]);
+
+    const attachmentIds = useMemo(
+      () =>
+        messageOrder.flatMap((id) =>
+          messageAttachmentFileIds(messages[id] as UiChatMessage),
+        ),
+      [messageOrder, messages],
+    );
+    const allFilesById = useResolvedFiles(attachmentIds, knownFilesById);
 
     // Check if there are no messages to display
     const showEmptyState = messageOrder.length === 0 && !isPending;

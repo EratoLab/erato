@@ -3086,16 +3086,29 @@ async fn assemble_chat_messages_response(
         std::collections::HashMap::new()
     };
 
-    // Collect all unique file IDs from all messages
-    let all_file_ids: std::collections::HashSet<Uuid> = messages
+    // Include generated attachments as well as input uploads. Use the same IDs
+    // for fetching authorized metadata and populating each message's files.
+    let file_ids_by_message: std::collections::HashMap<Uuid, Vec<Uuid>> = messages
         .iter()
-        .flat_map(|msg| {
-            msg.input_file_uploads
-                .as_ref()
-                .map(|uploads| uploads.to_vec())
-                .unwrap_or_default()
+        .map(|msg| {
+            let parsed = MessageSchema::validate(&msg.raw_message)?;
+            let mut ids = msg.input_file_uploads.clone().unwrap_or_default();
+            for part in parsed.content {
+                let id = match part {
+                    ContentPart::TextFilePointer(pointer) => pointer.file_upload_id,
+                    ContentPart::ImageFilePointer(pointer) => pointer.file_upload_id,
+                    _ => continue,
+                };
+                if !ids.contains(&id) {
+                    ids.push(id);
+                }
+            }
+            Ok((msg.id, ids))
         })
-        .collect();
+        .collect::<Result<_, Report>>()
+        .map_err(log_internal_server_error)?;
+    let all_file_ids: std::collections::HashSet<Uuid> =
+        file_ids_by_message.values().flatten().copied().collect();
 
     // Determine if any available model supports image understanding
     let available_models = app_state
@@ -3180,9 +3193,7 @@ async fn assemble_chat_messages_response(
                 .unwrap_or_default();
 
             // Populate files for this message
-            chat_message.files = msg
-                .input_file_uploads
-                .unwrap_or_default()
+            chat_message.files = file_ids_by_message[&msg.id]
                 .iter()
                 .filter_map(|file_id| file_uploads_map.get(file_id).cloned())
                 .collect();
