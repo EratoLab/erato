@@ -192,7 +192,7 @@ For local frontend development, set `VITE_FAVICON_PATH` to override this value.
 
 {/* erato_toml_config_key: frontend.translation_po_compilation_mode */}
 
-Controls how frontend Lingui translation catalogs are served. `precompiled` serves existing `messages.json` files. `just_in_time` compiles sibling `messages.po` files when `messages.json` is requested and caches each compiled result for the server lifetime.
+Controls how frontend Lingui translation catalogs are served. `precompiled` serves existing `messages.json` files. `just_in_time` compiles sibling `messages.po` files when `messages.json` is requested and caches each compiled result until the modification time or size of a `messages.po` it was built from (including the default-language catalog used for missing translations) changes.
 
 **Default value:** `precompiled`
 

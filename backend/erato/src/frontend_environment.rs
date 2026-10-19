@@ -14,6 +14,7 @@ use lol_html::html_content::ContentType;
 use lol_html::{HtmlRewriter, Settings, element};
 use ordered_multimap::ListOrderedMultimap;
 use serde_json::Value;
+use sha2::{Digest, Sha256};
 use std::fmt::Write;
 use std::io;
 
@@ -807,6 +808,18 @@ impl DeploymentVersion {
             format!("\"{etag_seed}\"")
         })
     }
+
+    /// Just-in-time catalogs are recompiled when their PO sources change, so
+    /// their ETag follows the compiled body rather than the process.
+    fn etag_value_for_compiled_messages_json(&self, body: &[u8]) -> Option<String> {
+        self.0.as_ref().map(|version| {
+            let content_hash: String = Sha256::digest(body)[..16]
+                .iter()
+                .map(|byte| format!("{byte:02x}"))
+                .collect();
+            format!("\"{version}-{content_hash}\"")
+        })
+    }
 }
 
 fn random_hex_string() -> String {
@@ -1191,10 +1204,8 @@ pub mod axum {
             match compilation {
                 Ok(body) => {
                     let cache_control = cache_control_for_path(&request_path);
-                    let etag_value = deployment_version.etag_value_for_path(
-                        &request_path,
-                        frontend_registry.translations.compilation_mode(),
-                    );
+                    let etag_value =
+                        deployment_version.etag_value_for_compiled_messages_json(&body);
                     if let Some(etag_value) = &etag_value
                         && client_etag_matches(client_etag.as_ref(), etag_value)
                     {
@@ -2315,6 +2326,68 @@ mod tests {
                 )
                 .as_deref(),
             Some("\"deployment-123\"")
+        );
+    }
+
+    #[tokio::test]
+    async fn jit_messages_json_revalidation_returns_recompiled_catalog_after_po_change() {
+        use ::axum::http::{Request, header};
+        use ::axum::{Extension, body::Body};
+        use http_body_util::BodyExt;
+        let dir = tempfile::tempdir().unwrap();
+        let web = dir.path().join("web");
+        let locale = web.join("public/common/locales/de");
+        std::fs::create_dir_all(&locale).unwrap();
+        std::fs::write(web.join("404.html"), "Not Found").unwrap();
+        let po_path = locale.join("messages.po");
+        std::fs::write(
+            &po_path,
+            "#. js-lingui-explicit-id\nmsgid \"common.cancel\"\nmsgstr \"Abbrechen\"\n",
+        )
+        .unwrap();
+        let mut config = AppConfig::default();
+        config.frontend.web_frontend_bundle_path = web.display().to_string();
+        config.frontend.translation_po_compilation_mode = TranslationPoCompilationMode::JustInTime;
+        let distribution = Distribution::load(&config);
+        let registry = std::sync::Arc::new(build_frontend_registry(&config, &distribution));
+        let request = |if_none_match: Option<&str>| {
+            let mut request = Request::builder().uri("/public/common/locales/de/messages.json");
+            if let Some(etag) = if_none_match {
+                request = request.header(header::IF_NONE_MATCH, etag);
+            }
+            serve_files_with_script(
+                Extension(registry.clone()),
+                Extension(DeploymentVersion(
+                    Some("deployment-123".to_string()),
+                    "abcdef".to_string(),
+                )),
+                request.body(Body::empty()).unwrap(),
+            )
+        };
+
+        let response = request(None).await.unwrap();
+        assert_eq!(response.status(), 200);
+        let etag = response.headers()[header::ETAG]
+            .to_str()
+            .unwrap()
+            .to_string();
+        assert_eq!(request(Some(&etag)).await.unwrap().status(), 304);
+
+        std::fs::write(
+            &po_path,
+            "#. js-lingui-explicit-id\nmsgid \"common.cancel\"\nmsgstr \"Abbrechen\"\n\n\
+             #. js-lingui-explicit-id\nmsgid \"common.close\"\nmsgstr \"Schließen\"\n",
+        )
+        .unwrap();
+        let response = request(Some(&etag)).await.unwrap();
+        assert_eq!(response.status(), 200);
+        assert_ne!(response.headers()[header::ETAG], etag.as_str());
+        let body: Value =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .unwrap();
+        assert_eq!(
+            body["messages"]["common.close"],
+            serde_json::json!(["Schließen"])
         );
     }
 }
