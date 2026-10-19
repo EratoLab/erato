@@ -2130,16 +2130,56 @@ export const ChatInput = ({
   ]);
 
   // Files a context chip stands for are drawn by that chip, not the file row,
-  // but stay staged: they still count against `maxFiles` and still send.
+  // but stay staged: they still count against `maxFiles` and still send. So
+  // only a chip that says it sends them (included, or loading) may hide them;
+  // under any other state they show in the row, which is what goes out.
   const claimedFileIds = useMemo(() => {
     const ids = new Set<string>();
     for (const item of contextItems ?? []) {
+      if (item.state !== "included" && item.state !== "loading") {
+        continue;
+      }
       for (const fileId of item.claimsFileIds ?? []) {
         ids.add(fileId);
       }
     }
     return ids;
   }, [contextItems]);
+
+  const warnedClaimsRef = useRef(new Set<string>());
+  useEffect(() => {
+    if (!import.meta.env.DEV || !contextItems) {
+      return;
+    }
+    const staged = new Set(attachedFiles.map((file) => file.id));
+    for (const item of contextItems) {
+      if (
+        item.state !== "included" &&
+        item.state !== "loading" &&
+        item.claimsFileIds?.some((fileId) => staged.has(fileId)) &&
+        !warnedClaimsRef.current.has(item.id)
+      ) {
+        warnedClaimsRef.current.add(item.id);
+        console.warn(
+          `[ChatInput] "${item.id}" is ${item.state} but its claimed files are still staged, so they send and show in the file row. Unstage them when the item stops being sent.`,
+        );
+      }
+    }
+  }, [contextItems, attachedFiles]);
+
+  // While the composer is locked (an upload, a compaction, a recording) the
+  // file row cannot change, so neither can a chip standing for some of it.
+  const laneItems = useMemo(
+    () =>
+      contextItems === undefined || !composeLocked
+        ? contextItems
+        : contextItems.map((item) =>
+            item.claimsFileIds?.length && !item.locked
+              ? { ...item, locked: true }
+              : item,
+          ),
+    [contextItems, composeLocked],
+  );
   const slotFiles = useMemo(
     () =>
       claimedFileIds.size === 0
@@ -2152,6 +2192,9 @@ export const ChatInput = ({
   // on every call and ask the audio confirmation once per file.
   const handleRemoveFilesByIds = useCallback(
     (fileIds: string[]) => {
+      if (composeLocked) {
+        return;
+      }
       const ids = new Set(fileIds);
       const removing = attachedFiles.filter((file) => ids.has(file.id));
       if (removing.length === 0) {
@@ -2168,11 +2211,23 @@ export const ChatInput = ({
     },
     [
       attachedFiles,
+      composeLocked,
       handleRemoveFile,
       message,
       removeRecordedAudioFile,
       resetTokenLimitsOnFileRemoval,
     ],
+  );
+
+  // The lane is memoized; a handler that changed with every keystroke would
+  // re-render every chip on every keystroke.
+  const removeClaimedFilesRef = useRef(handleRemoveFilesByIds);
+  useLayoutEffect(() => {
+    removeClaimedFilesRef.current = handleRemoveFilesByIds;
+  }, [handleRemoveFilesByIds]);
+  const removeClaimedFiles = useCallback(
+    (fileIds: string[]) => removeClaimedFilesRef.current(fileIds),
+    [],
   );
 
   // "Remove all" only touches the files the row shows.
@@ -3117,10 +3172,10 @@ export const ChatInput = ({
             };
             return (
               <ComposerContextArea
-                items={contextItems}
+                items={laneItems ?? contextItems}
                 hasFiles={slotFiles.length > 0}
                 onFocusComposer={focusInput}
-                onRemoveClaimedFiles={handleRemoveFilesByIds}
+                onRemoveClaimedFiles={removeClaimedFiles}
                 files={
                   ChatInputAttachmentPreview ? (
                     <ChatInputAttachmentPreview {...slotProps} />

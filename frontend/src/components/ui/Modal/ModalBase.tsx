@@ -21,6 +21,8 @@ interface ModalBaseProps {
    * viewport, for narrow panes.
    */
   placement?: "center" | "bottom";
+  /** Actions pinned below the scrolling content, so they stay in view. */
+  footer?: React.ReactNode;
 }
 
 /**
@@ -34,6 +36,7 @@ export const ModalBase: React.FC<ModalBaseProps> = ({
   className,
   contentClassName,
   placement = "center",
+  footer,
 }) => {
   const modalRef = useRef<HTMLDivElement>(null);
   // Dialogs stack (a file preview over a conversation), so each names itself.
@@ -145,6 +148,14 @@ export const ModalBase: React.FC<ModalBaseProps> = ({
         <div className="modal-section-geometry flex-1 overflow-y-auto">
           {children}
         </div>
+        {footer ? (
+          <div
+            data-ui="modal-footer"
+            className="modal-section-geometry shrink-0 border-t border-theme-border"
+          >
+            {footer}
+          </div>
+        ) : null}
       </div>
     </div>
   );

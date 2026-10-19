@@ -26,7 +26,10 @@ import { ChatInput, type ComposerSizeLimit } from "./ChatInput";
 import { useToastStore } from "../Toast/toastStore";
 
 import type { AddMenuActionItem, AddMenuSection } from "./ChatInputAddMenu";
-import type { ComposerContextItem } from "./ComposerContext/types";
+import type {
+  ComposerContextChipFaceProps,
+  ComposerContextItem,
+} from "./ComposerContext/types";
 import type { ChatInputAttachmentPreviewProps } from "@/components/ui/FileUpload/FileAttachmentsPreview";
 import type { FileUploadItem } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { ChatContextValue } from "@/providers/ChatProvider";
@@ -6853,7 +6856,21 @@ describe("ChatInput", () => {
       expect(lastTokenUsageFiles()).toBe(hostFiles);
     });
 
-    it("hides claimed files from the row, still counts them, and removes them with their chip", async () => {
+    const transcript = (
+      over: Partial<Extract<ComposerContextItem, { origin: "user" }>> = {},
+    ): ComposerContextItem => ({
+      id: "transcript",
+      kind: "teams.transcript",
+      origin: "user",
+      state: "included",
+      label: "Weekly sync",
+      icon: "chats",
+      claimsFileIds: ["f2", "f3"],
+      onRemove: vi.fn(),
+      ...over,
+    });
+
+    it("hides claimed files from the row, still counts them, and unstages them once the host drops their chip", async () => {
       const handleRemoveFile = vi.fn();
       const handleRemoveAllFiles = vi.fn();
       const onRemove = vi.fn();
@@ -6862,21 +6879,10 @@ describe("ChatInput", () => {
         handleRemoveFile,
         handleRemoveAllFiles,
       });
-      await renderComposer({
+      const { rerenderWith } = await renderComposer({
         maxFiles: 3,
         handleFileAttachments: vi.fn(),
-        contextItems: [
-          {
-            id: "transcript",
-            kind: "teams.transcript",
-            origin: "user",
-            state: "included",
-            label: "Weekly sync",
-            icon: "chats",
-            claimsFileIds: ["f2", "f3"],
-            onRemove,
-          },
-        ],
+        contextItems: [transcript({ onRemove })],
       });
 
       expect(screen.getByTestId("attachments-preview")).toHaveTextContent("1");
@@ -6893,28 +6899,114 @@ describe("ChatInput", () => {
       fireEvent.click(
         screen.getByRole("button", { name: "Remove Weekly sync" }),
       );
-      expect(handleRemoveFile.mock.calls).toEqual([["f2"], ["f3"]]);
       expect(onRemove).toHaveBeenCalledTimes(1);
+      // A host that keeps the chip keeps its files staged.
+      expect(handleRemoveFile).not.toHaveBeenCalled();
+
+      rerenderWith({
+        maxFiles: 3,
+        handleFileAttachments: vi.fn(),
+        contextItems: [],
+      });
+      expect(handleRemoveFile.mock.calls).toEqual([["f2"], ["f3"]]);
     });
 
-    it("never removes an ambient item's claimed files", async () => {
+    it("shows a claimed file in the row while its chip says it is not sent", async () => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
       const handleRemoveFile = vi.fn();
       const onRemove = vi.fn();
       stageFiles([fileItem("f1")], { handleRemoveFile });
-      await renderComposer({
-        contextItems: [
-          documentChip({
-            claimsFileIds: ["f1"],
-            onRemove,
-            label: "Draft attachments",
-          }),
-        ],
+      const draftAttachments = (
+        over: Partial<Extract<ComposerContextItem, { origin: "ambient" }>>,
+      ) =>
+        documentChip({
+          id: "atts",
+          claimsFileIds: ["f1"],
+          label: "Draft attachments",
+          ...over,
+        });
+      try {
+        const { rerenderWith } = await renderComposer({
+          contextItems: [draftAttachments({ onRemove })],
+        });
+        expect(screen.queryByTestId("attachments-preview")).toHaveTextContent(
+          "0",
+        );
+        fireEvent.click(
+          screen.getByRole("button", { name: "Remove Draft attachments" }),
+        );
+        expect(onRemove).toHaveBeenCalledTimes(1);
+
+        for (const state of ["suggested", "superseded", "error"] as const) {
+          rerenderWith({
+            contextItems: [
+              draftAttachments({ state, onRestore: vi.fn(), onRemove }),
+            ],
+          });
+          // Still staged, so still sent: the row says so, not the chip.
+          expect(screen.getByTestId("attachments-preview")).toHaveTextContent(
+            "1",
+          );
+        }
+        expect(handleRemoveFile).not.toHaveBeenCalled();
+        expect(warn).toHaveBeenCalledTimes(1);
+        expect(warn.mock.calls[0][0]).toContain('"atts" is suggested');
+      } finally {
+        warn.mockRestore();
+      }
+    });
+
+    it("locks a chip standing for staged files while the composer is locked", async () => {
+      const handleRemoveFile = vi.fn();
+      const onRemove = vi.fn();
+      stageFiles([fileItem("f1"), fileItem("f2"), fileItem("f3")], {
+        handleRemoveFile,
       });
-      fireEvent.click(
-        screen.getByRole("button", { name: "Remove Draft attachments" }),
-      );
-      expect(onRemove).toHaveBeenCalledTimes(1);
+      mockUseChatContext.mockReturnValue({
+        isPendingResponse: false,
+        isMessagingLoading: false,
+        isUploading: true,
+        cancelMessage: vi.fn(),
+      });
+      await renderComposer({
+        contextItems: [transcript({ onRemove }), documentChip()],
+      });
+      const remove = screen.getByRole("button", {
+        name: "Remove Weekly sync",
+      });
+      expect(remove).toBeDisabled();
+      fireEvent.click(remove);
+      fireEvent.keyDown(screen.getByRole("button", { name: /^Weekly sync/ }), {
+        key: "Delete",
+      });
+      expect(onRemove).not.toHaveBeenCalled();
       expect(handleRemoveFile).not.toHaveBeenCalled();
+      // A chip without files keeps its own lock.
+      expect(
+        screen.getByRole("button", { name: "Remove Supply agreement" }),
+      ).toBeEnabled();
+    });
+
+    it("does not re-render the chips on a keystroke", async () => {
+      let faceRenders = 0;
+      componentRegistry.ComposerContextChipFace = function CountingFace({
+        item,
+      }: ComposerContextChipFaceProps) {
+        faceRenders += 1;
+        return <span>{item.label}</span>;
+      };
+      try {
+        const contextItems = [transcript()];
+        stageFiles([fileItem("f1"), fileItem("f2"), fileItem("f3")]);
+        await renderComposer({ contextItems });
+        const before = faceRenders;
+        const textarea = screen.getByPlaceholderText("Type a message...");
+        fireEvent.change(textarea, { target: { value: "a" } });
+        fireEvent.change(textarea, { target: { value: "ab" } });
+        expect(faceRenders).toBe(before);
+      } finally {
+        componentRegistry.ComposerContextChipFace = null;
+      }
     });
 
     it("leaves a keyboard user on their chip when the turn ends", async () => {

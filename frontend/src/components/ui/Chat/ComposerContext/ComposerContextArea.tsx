@@ -1,5 +1,5 @@
 import clsx from "clsx";
-import { useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useLayoutEffect, useRef, useState } from "react";
 
 import { ComposerContextLane } from "./ComposerContextLane";
 import { chipBudgetInStagedArea } from "./composerContextLayout";
@@ -46,7 +46,21 @@ export const ComposerContextArea = ({
   const areaRef = useRef<HTMLDivElement>(null);
   const filesRef = useRef<HTMLDivElement>(null);
   const [budget, setBudget] = useState<number | undefined>(undefined);
+  const [overflowBelow, setOverflowBelow] = useState(false);
   const empty = items.length === 0 && !hasFiles;
+
+  // Marks content past the fold, so the tile the cap cuts fades into the
+  // pinned "Remove all" row instead of reading as a rendering glitch.
+  const readOverflow = useCallback(() => {
+    const area = areaRef.current;
+    if (!area) {
+      return;
+    }
+    const next = area.scrollTop + area.clientHeight < area.scrollHeight - 1;
+    setOverflowBelow((current) => (current === next ? current : next));
+  }, []);
+
+  useLayoutEffect(readOverflow);
 
   useLayoutEffect(() => {
     const area = areaRef.current;
@@ -78,19 +92,22 @@ export const ComposerContextArea = ({
         pinnedHeight: bulk ? bulk.getBoundingClientRect().height : 0,
       });
       setBudget((current) => (current === next ? current : next));
+      readOverflow();
     };
     read();
     const observer = new ResizeObserver(read);
     observer.observe(area);
     observer.observe(filesNode);
     return () => observer.disconnect();
-  }, []);
+  }, [readOverflow]);
 
   return (
     <>
       <div
         ref={areaRef}
         data-ui="composer-staged-area"
+        data-overflow-below={overflowBelow ? "true" : undefined}
+        onScroll={readOverflow}
         // The overhang pays for focus rings and corner controls in padding and
         // takes it back in margin; overflow-y-auto would clip them otherwise.
         className={clsx(

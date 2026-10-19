@@ -1152,12 +1152,26 @@ body {
   outline-offset: -2px;
 }
 
-/* Its own rule: a selector list fails whole where :has() is unsupported. */
-.composer-context-chip-skin:has(
-    > [data-ui="composer-context-chip-open"]:focus-visible
-  ) {
+/* Without :has() the open button rings itself; with it, the whole chip
+   does, so the ring also frames the (x)/(+). */
+.composer-context-chip-skin
+  > [data-ui="composer-context-chip-open"]:focus-visible {
   outline: 2px solid var(--theme-focus-ring);
   outline-offset: -2px;
+}
+
+@supports selector(:has(*)) {
+  .composer-context-chip-skin
+    > [data-ui="composer-context-chip-open"]:focus-visible {
+    outline: none;
+  }
+
+  .composer-context-chip-skin:has(
+      > [data-ui="composer-context-chip-open"]:focus-visible
+    ) {
+    outline: 2px solid var(--theme-focus-ring);
+    outline-offset: -2px;
+  }
 }
 
 .composer-context-chip-skin[data-state="suggested"] {
@@ -1197,8 +1211,50 @@ body {
   --composer-context-chip-bg: transparent;
 }
 
+/* The shared staged area cuts a file tile at its cap; while more follows
+   below, that tile fades into the pinned "Remove all" row. */
+[data-ui="composer-staged-area"][data-overflow-below]
+  [data-ui="attachment-bulk-controls"]::before {
+  content: "";
+  position: absolute;
+  inset-inline: 0;
+  bottom: 100%;
+  height: 1.5rem;
+  pointer-events: none;
+  background: linear-gradient(
+    to top,
+    var(--theme-shell-chat-input),
+    transparent
+  );
+}
+
+/* A dark shell is lighter than an included chip's fill, so a transparent
+   superseded chip would read as raised: its frame and glyph step back
+   instead, since its text cannot. */
+:root[data-theme="dark"] .composer-context-chip-skin[data-state="superseded"] {
+  --composer-context-chip-border: color-mix(
+    in srgb,
+    var(--theme-border-attachment) 55%,
+    transparent
+  );
+  --composer-context-chip-icon-opacity: 0.6;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"])
+    .composer-context-chip-skin[data-state="superseded"] {
+    --composer-context-chip-border: color-mix(
+      in srgb,
+      var(--theme-border-attachment) 55%,
+      transparent
+    );
+    --composer-context-chip-icon-opacity: 0.6;
+  }
+}
+
 .composer-context-chip-skin [data-ui="composer-context-chip-icon"] {
   color: var(--composer-context-chip-icon, var(--theme-fg-secondary));
+  opacity: var(--composer-context-chip-icon-opacity, 1);
 }
 
 .composer-context-chip-skin [data-ui="composer-context-chip-label"] {

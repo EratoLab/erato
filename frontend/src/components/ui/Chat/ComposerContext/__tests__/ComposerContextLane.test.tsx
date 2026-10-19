@@ -437,6 +437,26 @@ describe("ComposerContextLane", () => {
       }
     });
 
+    it("keeps the item's icon for a tone alone, and marks an error or a choice", () => {
+      const glyph = (label: string) =>
+        chip(label).querySelector('[data-ui="composer-context-chip-icon"]')!
+          .innerHTML;
+      render(
+        <ComposerContextLane
+          items={[
+            ambient({ id: "a", label: "Plain" }),
+            ambient({ id: "b", label: "Tracked", tone: "warning" }),
+            ambient({ id: "c", label: "Choose", state: "attention" }),
+            ambient({ id: "d", label: "Broken", state: "error" }),
+          ]}
+        />,
+      );
+      expect(glyph("Tracked")).toBe(glyph("Plain"));
+      expect(glyph("Choose")).not.toBe(glyph("Plain"));
+      expect(glyph("Broken")).not.toBe(glyph("Plain"));
+      expect(glyph("Broken")).not.toBe(glyph("Choose"));
+    });
+
     it("prefers the chipFace prop over the registry", () => {
       const previous = componentRegistry.ComposerContextChipFace;
       componentRegistry.ComposerContextChipFace = function RegistryFace() {
@@ -778,6 +798,179 @@ describe("ComposerContextLane", () => {
       expect(live()).not.toBe(first);
       expect(live().trim()).toContain("is not included");
     });
+
+    it("speaks an item by its spoken name", () => {
+      const quote = "“The Supplier shall deliver…”";
+      render(
+        <Resolver
+          initial={[
+            ambient({
+              id: "sel",
+              kind: "word.selection",
+              label: quote,
+              spokenLabel: "Selection",
+              meta: "Selected passage",
+            }),
+          ]}
+        />,
+      );
+      expect(
+        within(chip(quote)).getByRole("button", { name: "Remove Selection" }),
+      ).toBeInTheDocument();
+      fireEvent.keyDown(openButton(quote), { key: "Delete" });
+      expect(live()).toBe("Selection removed. Include again with +");
+      fireEvent.keyDown(openButton(quote), { key: "Backspace" });
+      expect(live()).toBe("Selection is not included. Press + to include it.");
+      expect(
+        within(chip(quote)).getByRole("button", { name: "Include Selection" }),
+      ).toBeInTheDocument();
+      fireEvent.keyDown(openButton(quote), { key: "+" });
+      expect(live()).toBe("Selection included.");
+    });
+
+    it.each([
+      ["an error", "error", "Couldn't read", true],
+      ["an error, without loading first", "error", "Couldn't read", false],
+      ["a choice", "attention", "Choose one", true],
+      ["a selection winning", "superseded", "Replaced by selection", false],
+    ] as const)(
+      "announces a + that ends in %s",
+      (_, state, meta, viaLoading) => {
+        const onRestore = vi.fn();
+        const seed = ambient({
+          state: "suggested",
+          spokenLabel: "Document",
+          meta: undefined,
+          onRestore,
+        });
+        const { rerender } = render(<ComposerContextLane items={[seed]} />);
+        fireEvent.keyDown(openButton("Supply agreement"), { key: "+" });
+        expect(onRestore).toHaveBeenCalledTimes(1);
+        if (viaLoading) {
+          rerender(
+            <ComposerContextLane
+              items={[{ ...seed, state: "loading", meta: "Reading…" }]}
+            />,
+          );
+          expect(live()).toBe("");
+        }
+        rerender(
+          <ComposerContextLane
+            items={[{ ...seed, state, meta, onRemove: vi.fn() }]}
+          />,
+        );
+        expect(live()).toBe(`Document: ${meta}`);
+      },
+    );
+
+    it("does not take a late change for the answer to a click", () => {
+      const now = vi.spyOn(Date, "now").mockReturnValue(1_000);
+      try {
+        const onRemove = vi.fn();
+        const { rerender } = render(
+          <ComposerContextLane items={[ambient({ onRemove })]} />,
+        );
+        fireEvent.keyDown(openButton("Supply agreement"), { key: "Delete" });
+        expect(onRemove).toHaveBeenCalledTimes(1);
+        (document.activeElement as HTMLElement).blur();
+
+        now.mockReturnValue(61_000);
+        rerender(
+          <ComposerContextLane
+            items={[
+              ambient({
+                state: "suggested",
+                meta: undefined,
+                onRestore: vi.fn(),
+              }),
+            ]}
+          />,
+        );
+        expect(live()).toBe("");
+        expect(document.activeElement).toBe(document.body);
+      } finally {
+        now.mockRestore();
+      }
+    });
+
+    it("waits for a + that keeps loading past the timeout", () => {
+      const now = vi.spyOn(Date, "now").mockReturnValue(1_000);
+      try {
+        const seed = ambient({
+          state: "suggested",
+          meta: undefined,
+          onRestore: vi.fn(),
+        });
+        const other = ambient({
+          id: "sel",
+          kind: "word.selection",
+          label: "Passage",
+        });
+        const { rerender } = render(
+          <ComposerContextLane items={[other, seed]} />,
+        );
+        fireEvent.keyDown(openButton("Supply agreement"), { key: "+" });
+        now.mockReturnValue(1_500);
+        rerender(
+          <ComposerContextLane
+            items={[other, { ...seed, state: "loading" }]}
+          />,
+        );
+        now.mockReturnValue(9_000);
+        rerender(
+          <ComposerContextLane
+            items={[
+              { ...other, label: "Passage 2" },
+              { ...seed, state: "loading" },
+            ]}
+          />,
+        );
+        now.mockReturnValue(12_000);
+        rerender(
+          <ComposerContextLane
+            items={[
+              { ...other, label: "Passage 2" },
+              { ...seed, state: "included", onRemove: vi.fn() },
+            ]}
+          />,
+        );
+        expect(live()).toBe("Supply agreement included.");
+      } finally {
+        now.mockRestore();
+      }
+    });
+
+    it("unstages a user item's claimed files only once the host drops it", () => {
+      const onRemoveClaimedFiles = vi.fn();
+      const transcript = user({
+        claimsFileIds: ["f1", "f2"],
+        onRemove: vi.fn(),
+      });
+      const attachments = ambient({
+        id: "atts",
+        label: "Draft attachments",
+        claimsFileIds: ["f3"],
+        onRemove: vi.fn(),
+      });
+      const lane = (items: ComposerContextItem[]) => (
+        <ComposerContextLane
+          items={items}
+          onRemoveClaimedFiles={onRemoveClaimedFiles}
+        />
+      );
+      const { rerender } = render(lane([attachments, transcript]));
+      fireEvent.click(
+        screen.getByRole("button", { name: "Remove Re: Offsite agenda" }),
+      );
+      fireEvent.click(
+        screen.getByRole("button", { name: "Remove Draft attachments" }),
+      );
+      rerender(lane([{ ...attachments }, { ...transcript }]));
+      expect(onRemoveClaimedFiles).not.toHaveBeenCalled();
+
+      rerender(lane([]));
+      expect(onRemoveClaimedFiles.mock.calls).toEqual([[["f1", "f2"]]]);
+    });
   });
 
   describe("detail", () => {
@@ -898,6 +1091,42 @@ describe("ComposerContextLane", () => {
       expect(openButton("Supply agreement")).toHaveFocus();
     });
 
+    it("names the footer's remove action apart from the (x)", () => {
+      render(
+        <ComposerContextLane
+          items={[
+            withDetail({
+              removeLabel: "Don't include this document",
+              onRemove: vi.fn(),
+            }),
+            user({
+              detail: { title: "Teams transcript", render: () => null },
+              removeLabel: "Remove Teams transcript",
+              removeActionLabel: "Remove transcript",
+              onRemove: vi.fn(),
+            }),
+          ]}
+        />,
+      );
+      fireEvent.click(openButton("Supply agreement"));
+      let dialog = screen.getByRole("dialog");
+      expect(
+        within(dialog).getByRole("button", { name: "Leave out" }),
+      ).toBeInTheDocument();
+      expect(
+        within(dialog).queryByRole("button", {
+          name: "Don't include this document",
+        }),
+      ).toBeNull();
+      fireEvent.click(openButton("Supply agreement"));
+
+      fireEvent.click(openButton("Re: Offsite agenda"));
+      dialog = screen.getByRole("dialog");
+      expect(
+        within(dialog).getByRole("button", { name: "Remove transcript" }),
+      ).toBeInTheDocument();
+    });
+
     it("runs a host action and disables the default while locked", () => {
       const onSelect = vi.fn();
       render(
@@ -973,6 +1202,24 @@ describe("ComposerContextLane", () => {
         fireEvent.keyDown(document, { key: "Escape" });
         expect(screen.queryByRole("dialog")).toBeNull();
         expect(open).toHaveFocus();
+      });
+
+      it("pins the actions below the scrolling body", () => {
+        render(<Resolver initial={[withDetail()]} />);
+        fireEvent.click(openButton("Supply agreement"));
+        const dialog = screen.getByRole("dialog", { name: "Document details" });
+        const footer = dialog.querySelector<HTMLElement>(
+          '[data-ui="modal-footer"]',
+        )!;
+        expect(
+          within(footer).getByRole("button", { name: "Leave out" }),
+        ).toBeInTheDocument();
+        expect(
+          within(footer).getByRole("button", { name: "Send this instead" }),
+        ).toBeInTheDocument();
+        expect(
+          dialog.querySelector('[data-ui="composer-context-detail"]'),
+        ).not.toContainElement(footer);
       });
     });
   });
@@ -1057,6 +1304,114 @@ describe("ComposerContextLane", () => {
       expect(
         screen.getByRole("button", { name: "Show 2 more items" }),
       ).toHaveTextContent("+2 more");
+    });
+
+    const byChips = (lane: HTMLElement) =>
+      geometry(
+        lane.querySelectorAll(':scope > [data-ui="composer-context-chip"]')
+          .length,
+      );
+
+    it("focuses the chip that takes a removed chip's place, folded or not", () => {
+      vi.mocked(readLaneGeometry).mockImplementation(byChips);
+      render(<Resolver initial={five} budget={108} />);
+      expect(
+        screen.getByRole("button", { name: "Show 3 more items" }),
+      ).toBeInTheDocument();
+      openButton("File 1").focus();
+      fireEvent.keyDown(openButton("File 1"), { key: "Delete" });
+      expect(screen.queryByText("File 1")).toBeNull();
+      expect(openButton("File 2")).toHaveFocus();
+    });
+
+    it("folds again once every chip fits, or the lane empties", () => {
+      vi.mocked(readLaneGeometry).mockImplementation(byChips);
+      const { rerender } = render(
+        <ComposerContextLane items={five} budget={108} />,
+      );
+      const expand = () =>
+        act(() => {
+          fireEvent.click(
+            screen.getByRole("button", { name: "Show 3 more items" }),
+          );
+        });
+      expand();
+      expect(
+        screen.getByRole("button", { name: "Show less" }),
+      ).toBeInTheDocument();
+      rerender(<ComposerContextLane items={five.slice(0, 1)} budget={108} />);
+      expect(screen.queryByRole("button", { name: "Show less" })).toBeNull();
+
+      rerender(<ComposerContextLane items={five} budget={108} />);
+      expand();
+      rerender(<ComposerContextLane items={[]} budget={108} />);
+      rerender(<ComposerContextLane items={five} budget={108} />);
+      expect(screen.queryByRole("button", { name: "Show less" })).toBeNull();
+      expect(
+        screen.getByRole("button", { name: "Show 3 more items" }),
+      ).toBeInTheDocument();
+    });
+
+    it("folds again when every item is new", () => {
+      vi.mocked(readLaneGeometry).mockImplementation(byChips);
+      const { rerender } = render(
+        <ComposerContextLane items={five} budget={108} />,
+      );
+      act(() => {
+        fireEvent.click(
+          screen.getByRole("button", { name: "Show 3 more items" }),
+        );
+      });
+      const nextMail = five.map((item, index) =>
+        user({ id: `v${index}`, label: `Mail ${index}`, kind: item.kind }),
+      );
+      rerender(<ComposerContextLane items={nextMail} budget={108} />);
+      expect(screen.queryByRole("button", { name: "Show less" })).toBeNull();
+      expect(
+        screen.getByRole("button", { name: "Show 3 more items" }),
+      ).toBeInTheDocument();
+    });
+
+    it("never folds away a chip that needs the user", () => {
+      vi.mocked(readLaneGeometry).mockImplementation(byChips);
+      const items = five.map((item, index) =>
+        index === 3
+          ? { ...item, state: "error" as const, meta: "Couldn't add" }
+          : item,
+      );
+      render(<ComposerContextLane items={items} budget={108} />);
+      const shown = [
+        ...screen
+          .getByRole("list")
+          .querySelectorAll('[data-ui="composer-context-chip-label"]'),
+      ].map((label) => label.textContent);
+      expect(shown).toEqual(["File 0", "File 1", "File 2", "File 3"]);
+      expect(
+        screen.getByRole("button", { name: "Show 1 more item" }),
+      ).toBeInTheDocument();
+    });
+
+    it("keeps the tab stop on +N more through a re-measure, and hands it on when nothing folds", () => {
+      vi.mocked(readLaneGeometry).mockImplementation(byChips);
+      const { rerender } = render(
+        <ComposerContextLane items={five} budget={108} />,
+      );
+      screen.getByRole("button", { name: "Show 3 more items" }).focus();
+      rerender(
+        <ComposerContextLane
+          items={five.map((item, index) =>
+            index === 0 ? { ...item, meta: "changed" } : item,
+          )}
+          budget={108}
+        />,
+      );
+      const more = screen.getByRole("button", { name: "Show 3 more items" });
+      expect(more).toHaveFocus();
+      expect(more).toHaveAttribute("tabindex", "0");
+
+      rerender(<ComposerContextLane items={five.slice(0, 2)} budget={108} />);
+      expect(screen.queryByRole("button", { name: /more item/ })).toBeNull();
+      expect(openButton("File 1")).toHaveFocus();
     });
   });
 });

@@ -155,7 +155,7 @@ export const dismissScopeMeta = (
     case "item":
       return t({
         id: "composer.context.scope.item",
-        message: "Off until you switch items",
+        message: "Off until you switch mail items",
       });
     default:
       return t({

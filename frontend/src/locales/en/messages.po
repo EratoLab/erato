@@ -3461,7 +3461,7 @@ msgstr "Off in this chat"
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ComposerContext/composerContextStrings.ts
 msgid "composer.context.scope.item"
-msgstr "Off until you switch items"
+msgstr "Off until you switch mail items"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ComposerContext/composerContextStrings.ts

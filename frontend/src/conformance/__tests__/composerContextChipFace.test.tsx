@@ -41,14 +41,32 @@ describe("composerContextChipFaceConformanceFailures", () => {
       Nested,
       harness,
     );
-    expect(failures).toHaveLength(18);
-    expect(failures[0]).toMatch(/focusable or clickable/);
+    expect(
+      failures.filter((failure) => /focusable or clickable/.test(failure)),
+    ).toHaveLength(18);
   });
 
   it("reports a face that drops the label", () => {
-    const Blank = () => <span>chip</span>;
+    const Blank = ({ meta }: ComposerContextChipFaceProps) => (
+      <span>{meta}</span>
+    );
     const failures = composerContextChipFaceConformanceFailures(Blank, harness);
     expect(failures).toHaveLength(18);
     expect(failures.every((failure) => failure.includes("label"))).toBe(true);
+  });
+
+  it("reports a face that drops the meta, the scope default included", () => {
+    const LabelOnly = ({ item }: ComposerContextChipFaceProps) => (
+      <span>{item.label}</span>
+    );
+    const failures = composerContextChipFaceConformanceFailures(
+      LabelOnly,
+      harness,
+    );
+    expect(failures).toHaveLength(18);
+    expect(failures.every((failure) => failure.includes("meta"))).toBe(true);
+    expect(failures.some((failure) => failure.includes("suggested"))).toBe(
+      true,
+    );
   });
 });

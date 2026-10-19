@@ -49,13 +49,17 @@ export const composerContextMeta = (
     ? dismissScopeMeta(item.dismissScope)
     : undefined);
 
+/** What announcements and default control names call the item. */
+export const composerContextSpokenLabel = (item: ComposerContextItem) =>
+  item.spokenLabel ?? item.label;
+
 export const composerContextControlLabel = (
   item: ComposerContextItem,
   control: Exclude<ComposerContextControl, null>,
 ) =>
   control === "remove"
-    ? (item.removeLabel ?? removeLabelFor(item.label))
-    : (item.restoreLabel ?? restoreLabelFor(item.label));
+    ? (item.removeLabel ?? removeLabelFor(composerContextSpokenLabel(item)))
+    : (item.restoreLabel ?? restoreLabelFor(composerContextSpokenLabel(item)));
 
 /** The host's own face: glyph, label, meta and a lock mark. Kits may wrap it. */
 export const DefaultComposerContextChipFace = ({

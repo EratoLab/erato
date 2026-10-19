@@ -151,7 +151,7 @@ const DetailFooter = ({
           title={item.locked ? item.lockReason : undefined}
           onClick={() => onRemove(item)}
         >
-          {item.removeLabel ??
+          {item.removeActionLabel ??
             (item.origin === "user" ? removeButtonLabel() : leaveOutLabel())}
         </Button>
       ) : null}
@@ -318,6 +318,8 @@ export const ComposerContextDetail = ({
     return null;
   }
 
+  const hasFooter =
+    composerContextControl(item) !== null || (detail.actions?.length ?? 0) > 0;
   const footer = (
     <DetailFooter
       item={item}
@@ -334,6 +336,7 @@ export const ComposerContextDetail = ({
         onClose={closeAndRefocus}
         title={detail.title}
         placement="bottom"
+        footer={hasFooter ? footer : undefined}
       >
         <div
           ref={bodyRef}
@@ -343,7 +346,6 @@ export const ComposerContextDetail = ({
         >
           <DetailHeaderMeta item={item} />
           <div className="text-sm text-theme-fg-primary">{detail.render()}</div>
-          {footer}
         </div>
       </ModalBase>
     );
@@ -383,8 +385,7 @@ export const ComposerContextDetail = ({
       <div className="min-h-0 flex-1 overflow-y-auto px-3.5 py-3 text-sm text-theme-fg-primary">
         {detail.render()}
       </div>
-      {composerContextControl(item) !== null ||
-      (detail.actions?.length ?? 0) > 0 ? (
+      {hasFooter ? (
         <div className="shrink-0 border-t border-theme-border px-3.5 py-2.5">
           {footer}
         </div>

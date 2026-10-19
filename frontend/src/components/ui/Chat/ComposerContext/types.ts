@@ -55,6 +55,11 @@ interface ComposerContextItemBase {
   kind: string;
   state: ComposerContextState;
   label: string;
+  /**
+   * What announcements and default control names call the item when the
+   * label is a quote or a long subject, e.g. "Selection" or "Email thread".
+   */
+  spokenLabel?: string;
   /** State and scope, e.g. "3 of 5 messages" or "Off for this message". */
   meta?: string;
   icon: ComposerContextIconName | (string & {});
@@ -70,8 +75,10 @@ interface ComposerContextItemBase {
   detail?: ComposerContextDetail;
   /** Why the item is locked: the disabled control's title, and what Delete announces. */
   lockReason?: string;
-  /** Names the (x) and the detail's leave-out button, e.g. "Don't include this document". */
+  /** Names the (x), e.g. "Don't include this document". */
   removeLabel?: string;
+  /** The detail's remove button; defaults to "Leave out" (ambient) or "Remove" (user). */
+  removeActionLabel?: string;
   /** Names the (+) and the detail's include button, e.g. "Use this selection". */
   restoreLabel?: string;
   /** Replace the default outcome announcements. */
@@ -82,13 +89,21 @@ export type ComposerContextItem =
   | (ComposerContextItemBase & {
       origin: "ambient";
       dismissScope: ComposerContextDismissScope;
-      /** Hidden from the file row; an ambient (x) never removes them. */
+      /**
+       * Hidden from the file row while the item is included or loading, and
+       * shown there again in any other state, because staged files still
+       * send. An ambient (x) never removes them: the host unstages them in
+       * `onRemove` and stages them again in `onRestore`.
+       */
       claimsFileIds?: string[];
     })
   | (ComposerContextItemBase & {
       origin: "user";
       dismissScope?: never;
-      /** Hidden from the file row and removed with the item. */
+      /**
+       * Hidden from the file row while the item is included or loading, and
+       * unstaged once the host drops the item after its (x).
+       */
       claimsFileIds?: string[];
     });
 
