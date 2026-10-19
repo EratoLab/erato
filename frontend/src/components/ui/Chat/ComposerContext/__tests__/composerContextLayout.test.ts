@@ -1,8 +1,15 @@
 import { describe, expect, it } from "vitest";
 
-import { fitChipsInBudget } from "../composerContextLayout";
+import {
+  chipBudgetInStagedArea,
+  fitChipsInBudget,
+} from "../composerContextLayout";
 
-import type { LaneBox, LaneGeometry } from "../composerContextLayout";
+import type {
+  LaneBox,
+  LaneGeometry,
+  StagedAreaGeometry,
+} from "../composerContextLayout";
 
 const ROW = 32;
 const GAP = 6;
@@ -69,5 +76,45 @@ describe("fitChipsInBudget", () => {
     expect(fitChipsInBudget(geometry(stacked(5), { laneWidth: 0 }), 10)).toBe(
       5,
     );
+  });
+});
+
+/** The 340px task pane as measured: a 192px cap less 4px padding, 54px tiles, a 36px pinned row. */
+const pane = (over: Partial<StagedAreaGeometry> = {}): StagedAreaGeometry => ({
+  inner: 188,
+  gap: 8,
+  filesHeight: 346,
+  firstTileHeight: 54,
+  pinnedHeight: 36,
+  ...over,
+});
+
+describe("chipBudgetInStagedArea", () => {
+  it("gives the chips the whole cap without files", () => {
+    expect(chipBudgetInStagedArea(pane({ filesHeight: 0 }))).toBe(188);
+  });
+
+  it("keeps Word's three ambient chips in view beside five files", () => {
+    // The prototype keeps all three here too, folding the files instead.
+    const budget = chipBudgetInStagedArea(pane());
+    expect(budget).toBe(109);
+    expect(fitChipsInBudget(geometry(stacked(3)), budget)).toBe(3);
+    expect(fitChipsInBudget(geometry(stacked(8)), budget)).toBe(2);
+  });
+
+  it("reserves only the files there are", () => {
+    expect(
+      chipBudgetInStagedArea(
+        pane({ filesHeight: 20, firstTileHeight: 54, pinnedHeight: 0 }),
+      ),
+    ).toBe(160);
+  });
+
+  it("counts a kit's tile-less slot whole", () => {
+    expect(
+      chipBudgetInStagedArea(
+        pane({ filesHeight: 60, firstTileHeight: null, pinnedHeight: 0 }),
+      ),
+    ).toBe(120);
   });
 });

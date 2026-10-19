@@ -9,6 +9,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { ThemeProvider } from "@/components/providers/ThemeProvider";
 
 import { ComposerNoticeView } from "../ComposerNoticeView";
+import { ComposerContextGlyph } from "../composerContextIcons";
 
 import type { ReactElement, ReactNode } from "react";
 
@@ -28,6 +29,11 @@ const render = (ui: ReactElement) => renderBare(ui, { wrapper: Themed });
 
 const notice = () =>
   document.querySelector<HTMLElement>('[data-ui="composer-notice"]')!;
+
+const pathsOf = (root: Element | null) =>
+  [...(root?.querySelectorAll("path") ?? [])]
+    .map((path) => path.getAttribute("d"))
+    .join("|");
 
 describe("ComposerNoticeView", () => {
   it("speaks politely for info and warnings, assertively for errors", () => {
@@ -92,7 +98,9 @@ describe("ComposerNoticeView", () => {
         }}
       />,
     );
-    const spinner = notice().querySelector('[data-ui="spinner"]');
+    const spinner = notice().querySelector(
+      '[data-ui="composer-notice-icon"] [data-ui="spinner"]',
+    );
     expect(spinner).not.toBeNull();
     expect(spinner).not.toHaveAttribute("role");
     fireEvent.click(screen.getByRole("button", { name: "Send without it" }));
@@ -100,4 +108,31 @@ describe("ComposerNoticeView", () => {
     fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
     expect(onDismiss).toHaveBeenCalledTimes(1);
   });
+
+  it.each([
+    ["error", "error"],
+    ["warning", "attention"],
+  ] as const)(
+    "marks a %s notice as a chip in that tone, never with the dismiss (x)",
+    (tone, state) => {
+      render(
+        <>
+          <ComposerNoticeView
+            notice={{ id: "n", tone, text: "Something", onDismiss: vi.fn() }}
+          />
+          <span data-testid="chip-glyph">
+            <ComposerContextGlyph icon="document" state={state} tone={tone} />
+          </span>
+        </>,
+      );
+      const mark = pathsOf(
+        notice().querySelector('[data-ui="composer-notice-icon"]'),
+      );
+      expect(mark).not.toBe("");
+      expect(mark).toBe(pathsOf(screen.getByTestId("chip-glyph")));
+      expect(mark).not.toBe(
+        pathsOf(screen.getByRole("button", { name: "Dismiss" })),
+      );
+    },
+  );
 });

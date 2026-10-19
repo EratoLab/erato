@@ -2,6 +2,7 @@ import clsx from "clsx";
 import { useLayoutEffect, useRef, useState } from "react";
 
 import { ComposerContextLane } from "./ComposerContextLane";
+import { chipBudgetInStagedArea } from "./composerContextLayout";
 import { useLiveAnnouncement } from "./useLiveAnnouncement";
 
 import type {
@@ -60,27 +61,22 @@ export const ComposerContextArea = ({
         setBudget(undefined);
         return;
       }
-      const inner =
-        cap - (px(style.paddingTop) ?? 0) - (px(style.paddingBottom) ?? 0);
-      const filesHeight = filesNode.getBoundingClientRect().height;
-      let reserve = 0;
-      if (filesHeight > 0) {
-        // Chips fold before the first file row leaves the view. The pinned
-        // "Remove all" would otherwise sit over that row, so it is reserved
-        // too; a kit's files slot has no tile to measure and counts whole.
-        const firstTile = filesNode.querySelector<HTMLElement>(
-          '[data-ui="attachment-tile"]',
-        );
-        const bulk = filesNode.querySelector<HTMLElement>(
-          '[data-ui="attachment-bulk-controls"]',
-        );
-        const row = firstTile?.getBoundingClientRect().height ?? filesHeight;
-        const pinned = bulk ? bulk.getBoundingClientRect().height : 0;
-        const gap = px(style.rowGap) ?? 0;
-        reserve =
-          Math.min(filesHeight, row + (pinned > 0 ? pinned + gap : 0)) + gap;
-      }
-      const next = Math.max(0, Math.round(inner - reserve));
+      const firstTile = filesNode.querySelector<HTMLElement>(
+        '[data-ui="attachment-tile"]',
+      );
+      const bulk = filesNode.querySelector<HTMLElement>(
+        '[data-ui="attachment-bulk-controls"]',
+      );
+      const next = chipBudgetInStagedArea({
+        inner:
+          cap - (px(style.paddingTop) ?? 0) - (px(style.paddingBottom) ?? 0),
+        gap: px(style.rowGap) ?? 0,
+        filesHeight: filesNode.getBoundingClientRect().height,
+        firstTileHeight: firstTile
+          ? firstTile.getBoundingClientRect().height
+          : null,
+        pinnedHeight: bulk ? bulk.getBoundingClientRect().height : 0,
+      });
       setBudget((current) => (current === next ? current : next));
     };
     read();
