@@ -94,6 +94,9 @@ import { ChatInputAudioModeButton } from "./ChatInputAudioModeButton";
 import { ChatInputTokenUsage } from "./ChatInputTokenUsage";
 import { ChatTaskPlanAdvisory } from "./ChatTaskPlanAdvisory";
 import { ChatUsageAdvisory } from "./ChatUsageAdvisory";
+import { ComposerContextArea } from "./ComposerContext/ComposerContextArea";
+import { ComposerNoticeView } from "./ComposerContext/ComposerNoticeView";
+import { useStableFileList } from "./ComposerContext/useStableFileList";
 import { DelegationRunModePopover } from "./DelegationRunModePopover";
 import { FacetSelector } from "./FacetSelector";
 import { McpToolsBrowserModal } from "./McpToolsBrowserModal";
@@ -109,6 +112,10 @@ import { toast } from "../Toast/toast";
 
 import type { AssistantMentionPopoverHandle } from "./AssistantMentionPopover";
 import type { ChatInputControlsHandle } from "./ChatInputControlsContext";
+import type {
+  ComposerContextItem,
+  ComposerNotice,
+} from "./ComposerContext/types";
 import type { ToastAction } from "../Toast/types";
 import type { AudioDictationTranscriptChunk } from "@/hooks/audio/useAudioDictationRecorder";
 import type { MentionableAssistant } from "@/hooks/chat/useMentionableAssistants";
@@ -300,6 +307,21 @@ interface ChatInputProps {
    * reference will thrash the cache.
    */
   virtualFiles?: File[];
+  /**
+   * Host context shown as chips inside the composer, before staged files.
+   * Rendered as given: hosts derive each state from the resolver that builds
+   * the send. Ambient items come in the design's fixed order (selection,
+   * draft, document or thread, comment, open comments), user items in the
+   * order added. Pass a memoized array. Omitted, the composer renders exactly
+   * as before.
+   */
+  contextItems?: ComposerContextItem[];
+  /**
+   * A one-off send prompt above the chips. Pass `null` while there is none,
+   * so its live region is already in place when one arrives; omitted, nothing
+   * renders.
+   */
+  composerNotice?: ComposerNotice | null;
   /** Show file type in previews */
   showFileTypes?: boolean;
   // Add prop for preview callback
@@ -429,6 +451,8 @@ export const ChatInput = ({
   acceptedFileTypes = [],
   initialFiles = [],
   virtualFiles,
+  contextItems,
+  composerNotice,
   showFileTypes = false,
   // Destructure the new props
   onFilePreview,
@@ -1669,6 +1693,10 @@ export const ChatInput = ({
       // meanwhile keeps focus.
       requestAnimationFrame(() => {
         const active = document.activeElement;
+        // A keyboard user walking the context chips keeps their place.
+        if (active?.closest('[data-ui="composer-context-lane"]')) {
+          return;
+        }
         if (
           active === null ||
           active === document.body ||
@@ -2080,6 +2108,75 @@ export const ChatInput = ({
     resetTokenLimits,
     message,
   ]);
+
+  // Files a context chip stands for are drawn by that chip, not the file row,
+  // but stay staged: they still count against `maxFiles` and still send.
+  const claimedFileIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const item of contextItems ?? []) {
+      for (const fileId of item.claimsFileIds ?? []) {
+        ids.add(fileId);
+      }
+    }
+    return ids;
+  }, [contextItems]);
+  const slotFiles = useMemo(
+    () =>
+      claimedFileIds.size === 0
+        ? attachedFiles
+        : attachedFiles.filter((file) => !claimedFileIds.has(file.id)),
+    [attachedFiles, claimedFileIds],
+  );
+
+  // One token reset for the batch: per-file removal would read a stale count
+  // on every call and ask the audio confirmation once per file.
+  const handleRemoveFilesByIds = useCallback(
+    (fileIds: string[]) => {
+      const ids = new Set(fileIds);
+      const removing = attachedFiles.filter((file) => ids.has(file.id));
+      if (removing.length === 0) {
+        return;
+      }
+      for (const file of removing) {
+        removeRecordedAudioFile(file.id);
+        handleRemoveFile(file.id);
+      }
+      resetTokenLimitsOnFileRemoval(
+        attachedFiles.length - removing.length,
+        message.trim().length,
+      );
+    },
+    [
+      attachedFiles,
+      handleRemoveFile,
+      message,
+      removeRecordedAudioFile,
+      resetTokenLimitsOnFileRemoval,
+    ],
+  );
+
+  // "Remove all" only touches the files the row shows.
+  const handleRemoveUnclaimedFiles = useCallback(
+    () => handleRemoveFilesByIds(slotFiles.map((file) => file.id)),
+    [handleRemoveFilesByIds, slotFiles],
+  );
+
+  const includedEstimates = useStableFileList(
+    useMemo(
+      () =>
+        (contextItems ?? []).flatMap((item) =>
+          item.state === "included" && item.estimate ? [item.estimate] : [],
+        ),
+      [contextItems],
+    ),
+  );
+  const effectiveVirtualFiles = useMemo(
+    () =>
+      includedEstimates.length === 0
+        ? virtualFiles
+        : [...(virtualFiles ?? []), ...includedEstimates],
+    [virtualFiles, includedEstimates],
+  );
 
   // Callback for file button processing state change
   const handleFileButtonProcessingChange = useCallback(
@@ -2661,7 +2758,7 @@ export const ChatInput = ({
         <ChatInputTokenUsage
           message={message}
           attachedFiles={attachedFiles}
-          virtualFiles={virtualFiles}
+          virtualFiles={effectiveVirtualFiles}
           chatId={chatId}
           assistantId={assistantId}
           previousMessageId={previousMessageId}
@@ -2954,21 +3051,62 @@ export const ChatInput = ({
             </div>
           )}
 
+          {composerNotice !== undefined && (
+            <ComposerNoticeView notice={composerNotice} />
+          )}
+
           {/* Staged attachments belong inside the shell, above the textarea:
               they are part of what is about to be sent, not a separate card
-              floating over the composer. The shell's own gap spaces them. */}
+              floating over the composer. The shell's own gap spaces them.
+              Context chips are drawn here rather than through the slot, so a
+              kit replacing the slot cannot hide what is being sent. */}
           {(() => {
             const StagedAttachments =
               ChatInputAttachmentPreview ?? FileAttachmentsPreview;
+            if (contextItems === undefined) {
+              return (
+                <StagedAttachments
+                  attachedFiles={attachedFiles}
+                  maxFiles={maxFiles}
+                  onRemoveFile={handleRemoveFileById}
+                  onRemoveAllFiles={handleRemoveAllFilesWithTokenReset}
+                  onFilePreview={onFilePreview}
+                  disabled={composeLocked}
+                  showFileTypes={showFileTypes}
+                />
+              );
+            }
+            const someClaimed = claimedFileIds.size > 0;
+            const slotProps = {
+              attachedFiles: slotFiles,
+              maxFiles,
+              onRemoveFile: handleRemoveFileById,
+              onRemoveAllFiles: someClaimed
+                ? handleRemoveUnclaimedFiles
+                : handleRemoveAllFilesWithTokenReset,
+              onFilePreview,
+              disabled: composeLocked,
+              showFileTypes,
+              sharedHeightCap: true,
+            };
             return (
-              <StagedAttachments
-                attachedFiles={attachedFiles}
-                maxFiles={maxFiles}
-                onRemoveFile={handleRemoveFileById}
-                onRemoveAllFiles={handleRemoveAllFilesWithTokenReset}
-                onFilePreview={onFilePreview}
-                disabled={composeLocked}
-                showFileTypes={showFileTypes}
+              <ComposerContextArea
+                items={contextItems}
+                hasFiles={slotFiles.length > 0}
+                onFocusComposer={focusInput}
+                onRemoveClaimedFiles={handleRemoveFilesByIds}
+                files={
+                  ChatInputAttachmentPreview ? (
+                    <ChatInputAttachmentPreview {...slotProps} />
+                  ) : (
+                    <FileAttachmentsPreview
+                      {...slotProps}
+                      stagedCount={
+                        someClaimed ? attachedFiles.length : undefined
+                      }
+                    />
+                  )
+                }
               />
             );
           })()}
