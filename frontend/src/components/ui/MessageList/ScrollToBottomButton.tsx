@@ -1,7 +1,6 @@
 import { plural, t } from "@lingui/core/macro";
-import { memo, useEffect, useState } from "react";
-
 import { NavArrowDown } from "iconoir-react";
+import { memo, useEffect, useState } from "react";
 
 interface ScrollToBottomButtonProps {
   onClick: () => void;
@@ -15,11 +14,11 @@ interface ScrollToBottomButtonProps {
  */
 export const ScrollToBottomButton = memo(
   ({ onClick, newMessageCount }: ScrollToBottomButtonProps) => {
-    // Defer setting visible so the CSS transition runs on mount
+    // Defer setting visible by one tick so the CSS transition fires on mount
     const [visible, setVisible] = useState(false);
     useEffect(() => {
-      const raf = requestAnimationFrame(() => setVisible(true));
-      return () => cancelAnimationFrame(raf);
+      const timer = setTimeout(() => setVisible(true), 0);
+      return () => clearTimeout(timer);
     }, []);
 
     const count = newMessageCount ?? 0;
