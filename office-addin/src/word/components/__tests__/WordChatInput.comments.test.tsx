@@ -937,9 +937,15 @@ describe("WordChatInput comment context", () => {
     it("reach only the passage's nearest threads when the passage replaces the document", async () => {
       selectT1();
       renderInput();
-      expect(
-        screen.getByTestId("word-include-document-chip"),
-      ).toHaveTextContent("Your selection is sent instead of the document");
+      const documentRow = screen.getByTestId("word-include-document-chip");
+      expect(documentRow).toHaveTextContent(
+        "Your selection is sent instead of the document",
+      );
+      expect(documentRow).toHaveAttribute("data-state", "superseded");
+      expect(documentRow).toHaveClass(
+        "bg-theme-bg-primary",
+        "text-theme-fg-muted",
+      );
       send();
       expect((await prepared())?.actionFacet?.id).toBe("word_selection");
       expect(host.capture).not.toHaveBeenCalled();
@@ -989,6 +995,12 @@ describe("WordChatInput comment context", () => {
       expect(
         screen.getByText("A comment is sent instead of the document"),
       ).not.toHaveClass("truncate");
+      const documentRow = screen.getByTestId("word-include-document-chip");
+      expect(documentRow).toHaveAttribute("data-state", "superseded");
+      expect(documentRow).toHaveClass(
+        "bg-theme-bg-primary",
+        "text-theme-fg-muted",
+      );
       expect(screen.queryByTestId("word-document-coverage-hint")).toBeNull();
 
       send();

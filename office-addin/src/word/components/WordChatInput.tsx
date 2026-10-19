@@ -1133,27 +1133,39 @@ export function WordChatInput({
     sendPreview.document === "replaced-by-selection";
   const commentReplacesDocument =
     sendPreview.document === "replaced-by-comment";
+  const documentSuperseded =
+    selectionReplacesDocument || commentReplacesDocument;
+  // Before the first read nothing is known yet, and the Send reads it first.
+  const documentNotSent =
+    sendPreview.document === "not-sent" && preview.status !== "unknown";
   // An archived chat or a delegated run that is writing locks the composer,
   // and the document's inclusion with it.
   const composerLocked = !!chatInputProps.disabled;
   const readInParts =
     authoringRoute && !!notice.completeReadIssue && !notice.authoringIssue;
-  const documentRowLabel = chipLabel(
-    preview,
-    resolveWordDocumentName(),
-    authoringRoute,
-    readInParts,
-  );
-  const coverageHint = readInParts
-    ? wordAuthoringIssueText("too-large")
-    : !authoringRoute &&
-        (preview.coverage?.truncated || preview.coverage?.partialParagraph)
-      ? t({
-          id: "officeAddin.word.chip.selectLaterPart",
-          message:
-            "Only the beginning is sent. To work on a later part, select it in Word.",
-        })
-      : undefined;
+  const documentRowLabel = documentNotSent
+    ? t({
+        id: "officeAddin.word.chip.notIncluded",
+        message: "Document not included",
+      })
+    : chipLabel(
+        preview,
+        resolveWordDocumentName(),
+        authoringRoute,
+        readInParts,
+      );
+  const coverageHint = documentNotSent
+    ? undefined
+    : readInParts
+      ? wordAuthoringIssueText("too-large")
+      : !authoringRoute &&
+          (preview.coverage?.truncated || preview.coverage?.partialParagraph)
+        ? t({
+            id: "officeAddin.word.chip.selectLaterPart",
+            message:
+              "Only the beginning is sent. To work on a later part, select it in Word.",
+          })
+        : undefined;
 
   return (
     <>
@@ -1253,8 +1265,21 @@ export function WordChatInput({
         <div className="mx-auto w-full max-w-[var(--theme-layout-chat-input-max-width)] px-2 pb-1 sm:px-4">
           {chipEnabled ? (
             <div
-              className="flex items-center gap-2 rounded-[var(--theme-radius-message)] border border-theme-border bg-theme-bg-secondary px-3 py-1.5 text-xs text-theme-fg-secondary"
+              // Muted text on the secondary fill misses 4.5:1, so a superseded
+              // row sits on the primary fill, as Outlook's draft row does.
+              className={`flex items-center gap-2 rounded-[var(--theme-radius-message)] border border-theme-border px-3 py-1.5 text-xs ${
+                documentSuperseded
+                  ? "bg-theme-bg-primary text-theme-fg-muted"
+                  : "bg-theme-bg-secondary text-theme-fg-secondary"
+              }`}
               data-testid="word-include-document-chip"
+              data-state={
+                documentSuperseded
+                  ? "superseded"
+                  : documentNotSent
+                    ? "error"
+                    : "included"
+              }
             >
               {preview.reading ? (
                 <SpinnerIcon
@@ -1265,9 +1290,11 @@ export function WordChatInput({
                   })}
                 />
               ) : (
-                <DocumentIcon className="size-4 shrink-0" />
+                <DocumentIcon
+                  className={`size-4 shrink-0 ${documentSuperseded ? "opacity-60" : ""}`}
+                />
               )}
-              {selectionReplacesDocument || commentReplacesDocument ? (
+              {documentSuperseded ? (
                 // A sentence, not a name: cut short it can lose "instead".
                 <span className="min-w-0 break-words">
                   {selectionReplacesDocument
@@ -1322,17 +1349,14 @@ export function WordChatInput({
               </span>
             </Button>
           )}
-          {chipEnabled &&
-            !selectionReplacesDocument &&
-            !commentReplacesDocument &&
-            coverageHint && (
-              <p
-                className="mt-1 text-xs text-theme-fg-secondary"
-                data-testid="word-document-coverage-hint"
-              >
-                {coverageHint}
-              </p>
-            )}
+          {chipEnabled && !documentSuperseded && coverageHint && (
+            <p
+              className="mt-1 text-xs text-theme-fg-secondary"
+              data-testid="word-document-coverage-hint"
+            >
+              {coverageHint}
+            </p>
+          )}
           {chipEnabled && readReport && (
             <CopyErrorButton
               error={readReport}

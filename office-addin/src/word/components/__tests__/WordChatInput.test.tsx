@@ -152,6 +152,7 @@ describe("WordChatInput", () => {
     await waitFor(() =>
       expect(chip()).toHaveTextContent("report.docx is included"),
     );
+    expect(chip()).toHaveAttribute("data-state", "included");
     // A long name is cut, so the whole label stays on hover.
     expect(screen.getByText("report.docx is included")).toHaveAttribute(
       "title",
@@ -278,6 +279,23 @@ describe("WordChatInput", () => {
       document_name: "report.docx",
       document_identity: IDENTITY,
     });
+  });
+
+  it("says a document with content is not included when only compose is advertised", async () => {
+    advertised.ids = ["word_compose"];
+    renderInput();
+
+    await waitFor(() =>
+      expect(chip()).toHaveTextContent("Document not included"),
+    );
+    expect(chip()).toHaveAttribute("data-state", "error");
+    expect(
+      screen.queryByTestId("word-document-coverage-hint"),
+    ).not.toBeInTheDocument();
+
+    send();
+    await waitFor(() => expect(sends).toHaveLength(1));
+    expect(lastFacet()).toBeUndefined();
   });
 
   it("hands the message over, unlabelled, before a quick capture finishes", async () => {
