@@ -181,6 +181,39 @@ describe("WordChatInput", () => {
     expect(lastIdentity()).toBeNull();
   });
 
+  it("holds the document's inclusion while the composer is locked", async () => {
+    const locked = (disabled: boolean) => (
+      <WordChatInput
+        chatInputProps={{ ...chatInputProps("chat-1"), disabled }}
+        documentIdentity={IDENTITY}
+        stagePendingCapture={(capture) => staged.push(capture)}
+      />
+    );
+    const { rerender } = render(locked(true));
+
+    expect(excludeButton()).toBeDisabled();
+    exclude();
+    expect(isIncluded()).toBe(true);
+    send();
+    await waitFor(() => expect(sends).toHaveLength(1));
+    expect(lastFacet()?.id).toBe("word_document_review");
+
+    rerender(locked(false));
+    expect(excludeButton()).toBeEnabled();
+    exclude();
+    expect(chip()).toHaveTextContent("Include this document");
+
+    rerender(locked(true));
+    expect(chip()).toBeDisabled();
+    include();
+    expect(isIncluded()).toBe(false);
+
+    rerender(locked(false));
+    expect(chip()).toBeEnabled();
+    include();
+    expect(isIncluded()).toBe(true);
+  });
+
   it("is not rendered at all when neither facet is advertised", () => {
     advertised.ids = [];
     renderInput();

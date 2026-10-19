@@ -976,6 +976,38 @@ describe("WordChatInput comment context", () => {
       );
     });
 
+    it("says a comment goes instead of the document when the caret's thread does", async () => {
+      install({ selection: { tag: "T1P", offset: 25 } });
+      host.capture.mockResolvedValue(documentBuild());
+      renderInput();
+      await waitFor(() =>
+        expect(
+          screen.getByTestId("word-include-document-chip"),
+        ).toHaveTextContent("A comment is sent instead of the document"),
+      );
+      expect(screen.queryByTestId("word-document-coverage-hint")).toBeNull();
+
+      send();
+      expect((await prepared())?.actionFacet?.id).toBe("word_comment_thread");
+    });
+
+    it("says a comment goes instead of the document and the passage when the setting picks it", async () => {
+      host.precedence = "comment";
+      selectT1();
+      renderInput();
+      await waitFor(() =>
+        expect(
+          screen.getByTestId("word-include-document-chip"),
+        ).toHaveTextContent("A comment is sent instead of the document"),
+      );
+      expect(
+        screen.getByText("The comment below is sent instead of this passage."),
+      ).toBeVisible();
+
+      send();
+      expect((await prepared())?.actionFacet?.id).toBe("word_comment_thread");
+    });
+
     it("reach the whole document when the document goes with its map", async () => {
       install({ selection: { tag: "END", offset: 0 } });
       host.capture.mockResolvedValue(documentBuild());

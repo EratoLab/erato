@@ -128,6 +128,23 @@ export interface WordActionFacetInput {
 
 const WORD_REVIEW_STATUS_ARG = "review_status";
 
+/** Which document facet goes, before any of its arguments are built. */
+export function wordDocumentFacetChoice(input: {
+  authoring: boolean;
+  hasContent: boolean;
+  availableFacetIds: ReadonlySet<string>;
+}): string | null {
+  if (input.authoring && input.availableFacetIds.has(WORD_AUTHORING_FACET_ID))
+    return WORD_AUTHORING_FACET_ID;
+  if (input.hasContent)
+    return input.availableFacetIds.has(WORD_DOCUMENT_REVIEW_FACET_ID)
+      ? WORD_DOCUMENT_REVIEW_FACET_ID
+      : null;
+  return input.availableFacetIds.has(WORD_COMPOSE_FACET_ID)
+    ? WORD_COMPOSE_FACET_ID
+    : null;
+}
+
 /** Supply every configured argument to avoid literal placeholders.
  * Repeat context on each turn because earlier facet instructions are removed from replay. */
 export function resolveWordActionFacet(
@@ -140,7 +157,13 @@ export function resolveWordActionFacet(
       ? { [WORD_COMMENT_MAP_ARG]: input.commentMap ?? "" }
       : {};
 
-  if (input.authoring && input.availableFacetIds.has(WORD_AUTHORING_FACET_ID)) {
+  const choice = wordDocumentFacetChoice({
+    authoring: !!input.authoring,
+    hasContent: input.hasContent,
+    availableFacetIds: input.availableFacetIds,
+  });
+  if (choice === null) return undefined;
+  if (input.authoring && choice === WORD_AUTHORING_FACET_ID) {
     return {
       id: WORD_AUTHORING_FACET_ID,
       args: {
@@ -156,10 +179,7 @@ export function resolveWordActionFacet(
       },
     };
   }
-  if (input.hasContent) {
-    if (!input.availableFacetIds.has(WORD_DOCUMENT_REVIEW_FACET_ID)) {
-      return undefined;
-    }
+  if (choice === WORD_DOCUMENT_REVIEW_FACET_ID) {
     return {
       id: WORD_DOCUMENT_REVIEW_FACET_ID,
       args: {
@@ -180,7 +200,6 @@ export function resolveWordActionFacet(
     };
   }
 
-  if (!input.availableFacetIds.has(WORD_COMPOSE_FACET_ID)) return undefined;
   return {
     id: WORD_COMPOSE_FACET_ID,
     args: {
