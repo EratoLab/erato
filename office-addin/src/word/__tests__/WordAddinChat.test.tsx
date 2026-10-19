@@ -1,5 +1,5 @@
 import { i18n } from "@lingui/core";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -7,12 +7,14 @@ import {
   uninstallMockWordDocument,
 } from "../../test/mocks/word/document";
 import { WordAddinChat } from "../WordAddinChat";
+import { wordContextStore } from "../hooks/wordContextStore";
 
 import type {
   AddinChatController,
   AddinChatHostProps,
   AddinChatInputRenderProps,
 } from "../../core/AddinChatCore";
+import type { ComposerContextItem } from "@erato/frontend/library";
 import type { ReactNode } from "react";
 
 const harness = vi.hoisted(() => {
@@ -44,9 +46,22 @@ vi.mock("@erato/frontend/library", async () => {
   });
 });
 
-vi.mock("../../core/AddinChatInputCore", () => ({
-  AddinChatInputCore: () => <div data-testid="word-composer" />,
-}));
+vi.mock("../../core/AddinChatInputCore", async () => {
+  const { ContextLaneDouble } = await import(
+    "../../test/helpers/contextLaneDouble"
+  );
+  return {
+    AddinChatInputCore: ({
+      contextItems,
+    }: {
+      contextItems?: ComposerContextItem[];
+    }) => (
+      <div data-testid="word-composer">
+        <ContextLaneDouble items={contextItems} />
+      </div>
+    ),
+  };
+});
 vi.mock("../../core/AddinSettingsDialogCore", () => ({
   AddinSettingsDialogCore: () => <div data-testid="word-settings" />,
 }));
@@ -115,6 +130,7 @@ describe("WordAddinChatHost", () => {
   afterEach(() => {
     cleanup();
     uninstallMockWordDocument();
+    wordContextStore.resetForTests();
     vi.clearAllMocks();
   });
 
@@ -132,9 +148,10 @@ describe("WordAddinChatHost", () => {
     render(<WordAddinChat />);
 
     expect(
-      screen.getByTestId("word-include-document-chip"),
+      within(screen.getByTestId("word-composer")).getByTestId(
+        "context-chip-word.document",
+      ),
     ).toBeInTheDocument();
-    expect(screen.getByTestId("word-composer")).toBeInTheDocument();
     expect(screen.getByTestId("word-settings")).toBeInTheDocument();
   });
 
@@ -192,8 +209,10 @@ describe("WordAddinChatHost", () => {
   it("passes the pane's document identity down to the composer", () => {
     render(<WordAddinChat />);
 
-    expect(screen.getByTestId("word-include-document-chip")).toHaveTextContent(
-      "report.docx is included",
-    );
+    const document = screen.getByTestId("context-chip-word.document");
+    expect(document).toHaveAttribute("data-state", "included");
+    expect(
+      within(document).getByTestId("context-chip-label"),
+    ).toHaveTextContent("report.docx");
   });
 });
