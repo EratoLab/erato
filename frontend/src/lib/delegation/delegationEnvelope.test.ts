@@ -212,6 +212,49 @@ describe("parseDelegationEnvelope", () => {
       result: "done",
     });
   });
+
+  it("reads the model the run runs on", () => {
+    expect(
+      parseDelegationEnvelope({
+        ...RUNNING,
+        status: "completed",
+        model: {
+          chat_provider_id: "mock-llm",
+          display_name: "Mock model",
+          unavailable_chat_provider_id: "local-llm",
+          note: "for the origin model only",
+        },
+      })?.model,
+    ).toEqual({
+      chatProviderId: "mock-llm",
+      displayName: "Mock model",
+      unavailableChatProviderId: "local-llm",
+    });
+  });
+
+  it("drops a model it cannot name", () => {
+    for (const model of [
+      "mock-llm",
+      null,
+      [{ chat_provider_id: "mock-llm" }],
+      { display_name: "Mock model" },
+      { chat_provider_id: "  " },
+    ]) {
+      expect(
+        parseDelegationEnvelope({ ...RUNNING, model })?.model,
+      ).toBeUndefined();
+    }
+    expect(
+      parseDelegationEnvelope({
+        ...RUNNING,
+        model: { chat_provider_id: "mock-llm", display_name: 7 },
+      })?.model,
+    ).toEqual({
+      chatProviderId: "mock-llm",
+      displayName: undefined,
+      unavailableChatProviderId: undefined,
+    });
+  });
 });
 
 describe("isDelegationToolName", () => {
