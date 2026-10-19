@@ -246,6 +246,11 @@ msgstr "Appointment details are included as context"
 
 #. js-lingui-explicit-id
 #: src/outlook/components/AddinChatInput.tsx
+msgid "officeAddin.chatInput.appointmentContextUnchanged"
+msgstr "Appointment details unchanged, not re-sent"
+
+#. js-lingui-explicit-id
+#: src/outlook/components/AddinChatInput.tsx
 msgid "officeAddin.chatInput.dismissAppointmentContext"
 msgstr "Don't include appointment details"
 
@@ -256,7 +261,6 @@ msgstr "Don't include draft"
 
 #. js-lingui-explicit-id
 #: src/core/selection/AddinSelectionChip.tsx
-#: src/outlook/components/AddinChatInput.tsx
 msgid "officeAddin.chatInput.dismissSelection"
 msgstr "Dismiss selection"
 
@@ -264,6 +268,16 @@ msgstr "Dismiss selection"
 #: src/outlook/components/AddinChatInput.tsx
 msgid "officeAddin.chatInput.draftContext"
 msgstr "Your draft is included as context"
+
+#. js-lingui-explicit-id
+#: src/outlook/components/AddinChatInput.tsx
+msgid "officeAddin.chatInput.draftContextScheduling"
+msgstr "Your draft is not sent while scheduling"
+
+#. js-lingui-explicit-id
+#: src/outlook/components/AddinChatInput.tsx
+msgid "officeAddin.chatInput.draftContextUnchanged"
+msgstr "Your draft is unchanged, not re-sent"
 
 #. js-lingui-explicit-id
 #: src/outlook/components/AddinChatInput.tsx
@@ -301,13 +315,13 @@ msgid "officeAddin.chatInput.emailBody"
 msgstr "Email body"
 
 #. js-lingui-explicit-id
+#: src/outlook/components/AddinChatAddMenuExtraContent.tsx
 #: src/outlook/components/AddinChatInput.tsx
 #: src/outlook/utils/buildDropEmailGroup.ts
 msgid "officeAddin.chatInput.emailFallback"
 msgstr "Email"
 
 #. js-lingui-explicit-id
-#: src/outlook/components/AddinChatInput.tsx
 #: src/outlook/utils/buildDropEmailGroup.ts
 msgid "officeAddin.chatInput.emailLabel"
 msgstr "Email"
@@ -355,6 +369,11 @@ msgstr "Remove"
 
 #. js-lingui-explicit-id
 #: src/outlook/components/AddinChatInput.tsx
+msgid "officeAddin.chatInput.removeDroppedEmailNamed"
+msgstr "Remove {subject}"
+
+#. js-lingui-explicit-id
+#: src/outlook/components/AddinChatInput.tsx
 msgid "officeAddin.chatInput.replyContext.groupLabel"
 msgstr "Reply context"
 
@@ -372,6 +391,11 @@ msgstr "(no subject)"
 #: src/outlook/components/AddinChatInput.tsx
 msgid "officeAddin.chatInput.stagedSize"
 msgstr "{used} of {limit}"
+
+#. js-lingui-explicit-id
+#: src/outlook/components/AddinChatInput.tsx
+msgid "officeAddin.chatInput.threadMessageCount"
+msgstr "{count, plural, one {# message} other {# messages}}"
 
 #. js-lingui-explicit-id
 #: src/outlook/components/AddinChatInput.tsx
@@ -3021,6 +3045,11 @@ msgstr "Inserted into the document."
 #: src/word/components/WordChatInput.tsx
 msgid "officeAddin.word.chip.changed"
 msgstr "Document included - changed since last send"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordChatInput.tsx
+msgid "officeAddin.word.chip.commentInstead"
+msgstr "A comment is sent instead of the document"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx
@@ -5814,9 +5843,9 @@ msgstr "Word on the web has no Office sign-in for add-ins, so users sign in thro
 # Unstable IDs
 # ==============================
 #: src/outlook/components/AddinChatInput.tsx
-msgid "{messageCount} messages"
-msgstr "{messageCount} messages"
+#~ msgid "{messageCount} messages"
+#~ msgstr "{messageCount} messages"
 
 #: src/outlook/components/AddinChatInput.tsx
-msgid "1 message"
-msgstr "1 message"
+#~ msgid "1 message"
+#~ msgstr "1 message"
