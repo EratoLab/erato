@@ -50,6 +50,12 @@ export interface WordDocumentSource {
   previousCapture: () => WordDocumentBuild | null;
   /** Records what a send carried, for the "changed since last send" label. */
   markSent: (build: WordDocumentBuild | null) => void;
+  /**
+   * Reads the document again now, though a failed read otherwise waits for
+   * the next send. `reading` turns true at once, so an unreadable document
+   * shows loading, not a last flash of its error.
+   */
+  retry: () => void;
 }
 
 export const WORD_CAPTURE_SLOW_MS = 300;
@@ -397,5 +403,19 @@ export function useWordDocumentSource({
     [],
   );
 
-  return { preview, capture, captureExpectedSlow, previousCapture, markSent };
+  const retry = useCallback(() => {
+    setPreview((previous) =>
+      previous.reading ? previous : { ...previous, reading: true },
+    );
+    void startCapture();
+  }, [startCapture]);
+
+  return {
+    preview,
+    capture,
+    captureExpectedSlow,
+    previousCapture,
+    markSent,
+    retry,
+  };
 }

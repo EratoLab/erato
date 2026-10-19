@@ -495,6 +495,26 @@ describe("describeWordSelection", () => {
     });
   });
 
+  it("shows the whole text Send carries, cut only where Send cuts it", async () => {
+    const long = `LONG ${"word ".repeat(200)}end`;
+    const host = installWordSelectionHost({
+      body: [long, `BIG ${"lorem ipsum ".repeat(6_000)}`],
+    });
+    host.select({ p: "LONG" });
+    const whole = await describeWordSelection();
+    expect(whole).toMatchObject({
+      status: "ok",
+      value: { text: long, truncated: false },
+    });
+
+    host.select({ p: "BIG" });
+    const cut = await describeWordSelection();
+    const text = cut.status === "ok" ? (cut.value?.text ?? "") : "";
+    expect(cut).toMatchObject({ status: "ok", value: { truncated: true } });
+    expect(text.length).toBeGreaterThan(400);
+    expect(text.length).toBeLessThan(72_004);
+  });
+
   it("offers nothing for a collapsed cursor", async () => {
     const host = installWordSelectionHost(SV2_MAIN_DOCUMENT);
     host.select({ p: "PL1", collapse: "End" });

@@ -564,3 +564,43 @@ export function wordApplyStageLabel(stage: WordApplyStage | undefined): string {
       });
   }
 }
+
+/** Track Changes on the review route: Erato reads the document as accepted and does not edit it. */
+export function trackingReadOnlyText(): string {
+  return t({
+    id: "officeAddin.word.authoring.readOnlyTracking",
+    message:
+      "Track Changes is on, so Erato reads this document as if every tracked change were accepted, without seeing who changed what, and doesn't edit it.",
+  });
+}
+
+/** Why the complete file could not be read; with Track Changes on it shows below that notice. */
+export function readOnlyText(
+  issue: string,
+  details: string[] = [],
+  trackChanges = false,
+): string {
+  if (issue === "too-large" && trackChanges)
+    return t({
+      id: "officeAddin.word.authoring.readOnlyTooLargeTracking",
+      message:
+        "The file is also too large for Erato to open completely, so Erato receives only the included text.",
+    });
+  if (issue === "too-large")
+    return t({
+      id: "officeAddin.word.authoring.readOnlyTooLarge",
+      message:
+        "This file is too large for Erato to open completely. Erato receives only the included text and can reword it, but not change its structure or formatting.",
+    });
+  if (details.includes("package-unsupported"))
+    return t({
+      id: "officeAddin.word.authoring.readOnlyUnsupported",
+      message:
+        "Erato cannot edit this document's file structure, so it can only read its text.",
+    });
+  return t({
+    id: "officeAddin.word.authoring.readOnlyUnavailable",
+    message:
+      "Word did not hand over the complete document, so Erato can read its text but not edit it. Send again to retry.",
+  });
+}

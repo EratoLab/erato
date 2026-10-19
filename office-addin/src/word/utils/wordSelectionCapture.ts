@@ -55,9 +55,6 @@ export const WORD_SELECTION_CAPTURE_TIMEOUT_MS = 15_000;
  */
 export const WORD_SELECTION_SPAN_CHECK_MS_PER_PARAGRAPH = 500;
 
-/** Kept for the chip, which shows less. */
-const PREVIEW_MAX_CHARACTERS = 400;
-
 /** What the composer chip shows of the live selection. */
 export interface WordSelectionPreview {
   /**
@@ -65,7 +62,7 @@ export interface WordSelectionPreview {
    * paragraph share a key, because the light read does not tell them apart.
    */
   key: string;
-  /** What would be sent, one line per paragraph, cut for display. */
+  /** What Send carries, one line per paragraph. */
   text: string;
   paragraphCount: number;
   shape: WordSelectionShape;
@@ -322,9 +319,7 @@ function previewOf(
       facts.endOffset,
       facts.selectionText,
     ]),
-    text: Array.from(snapshot.selectedText)
-      .slice(0, PREVIEW_MAX_CHARACTERS)
-      .join(""),
+    text: snapshot.selectedText,
     paragraphCount: snapshot.paragraphCount,
     shape: snapshot.shape,
     story: snapshot.story,
