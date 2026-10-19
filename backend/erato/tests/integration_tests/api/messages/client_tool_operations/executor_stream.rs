@@ -1,16 +1,26 @@
 //! Executor streams (ERMAIN-1000): a pane's stream for its binding receives
 //! live calls from any of the account's chats that no chat stream can take.
-use super::attached::{serve, wait_park};
+use super::attached::{next_call, serve, wait_park};
 use super::*;
-use crate::test_utils::build_openai_narrated_tool_calls_streaming_response;
-use erato::services::client_operations::executor_stream::{self, LiveCallRoute};
+use crate::test_utils::{
+    build_openai_delayed_text_streaming_response, build_openai_paused_tool_calls_streaming_response,
+};
+use erato::services::client_operations::executor_stream::{
+    self, LiveCallRoute, PRESENCE_LOSS_GRACE,
+};
 use futures::StreamExt;
 use sea_orm::ConnectionTrait;
 use std::pin::Pin;
 
 const TIMEOUT_MS: u64 = 60_000;
+/// Between the model's narration and its tool call; well above the time a
+/// dropped chat stream takes to detach.
+const PAUSE: Duration = Duration::from_secs(5);
+/// A user message whose turn only narrates, for [`BUSY_FOR`].
+const BUSY: &str = "Keep this chat busy";
+const BUSY_FOR: Duration = Duration::from_secs(12);
 
-/// The model narrates first and calls the tool two seconds later, so a test
+/// The model narrates first and calls the tool [`PAUSE`] later, so a test
 /// can drop the chat's own stream before the call is dispatched.
 async fn setup_stream(
     pool: Pool<Postgres>,
@@ -24,14 +34,25 @@ async fn setup_stream(
     mocks.mock(move |when, then| {
         when.post()
             .path("/v1/chat/completions")
-            .matcher(BodyContainsMatcher::new(&[], &[CALL]))
+            .matcher(BodyContainsMatcher::new(&[], &[CALL, BUSY]))
             .matcher(capture);
-        let mut actions = build_openai_narrated_tool_calls_streaming_response(
-            "Checking your calendar.",
-            &[(CALL, TOOL, json!({"lookahead_days":7}))],
+        mock_llm_sse_response(
+            then,
+            build_openai_paused_tool_calls_streaming_response(
+                "Checking your calendar.",
+                PAUSE,
+                &[(CALL, TOOL, json!({"lookahead_days":7}))],
+            ),
         );
-        actions.insert(2, BodyAction::Delay(Duration::from_secs(2)));
-        mock_llm_sse_response(then, actions);
+    });
+    mocks.mock(move |when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(&[BUSY], &[]));
+        mock_llm_sse_response(
+            then,
+            build_openai_delayed_text_streaming_response(&["Still working."], BUSY_FOR),
+        );
     });
     let capture = recorder.clone();
     mocks.mock(move |when, then| {
@@ -140,20 +161,20 @@ fn call_of(event: &Value) -> (Uuid, String) {
     )
 }
 
-/// Submits over a real connection and drops it once the model has started
-/// narrating, before it calls the tool.
-async fn submit_detached(
-    state: &erato::state::AppState,
+/// Submits over a real connection and returns its body once the model has
+/// started narrating.
+async fn submit_narrated(
     base: &str,
     chat_id: Uuid,
     binding: &ExecutorBinding,
-) {
+    user_message: &str,
+) -> impl futures::Stream<Item = Result<axum::body::Bytes, reqwest::Error>> + Unpin + use<> {
     let response = reqwest::Client::new()
         .post(format!("{base}/me/messages/submitstream"))
         .bearer_auth(TEST_JWT_TOKEN)
         .header("X-Erato-Client-Tools", TOOL)
         .header("X-Erato-Executor", serde_json::to_string(binding).unwrap())
-        .json(&json!({"existing_chat_id":chat_id,"user_message":"When am I free this week?"}))
+        .json(&json!({"existing_chat_id":chat_id,"user_message":user_message}))
         .send()
         .await
         .unwrap();
@@ -171,19 +192,40 @@ async fn submit_detached(
     })
     .await
     .unwrap();
-    drop(body);
-    tokio::time::timeout(Duration::from_millis(1500), async {
+    body
+}
+
+/// Submits over a real connection and drops it once the model has started
+/// narrating, before it calls the tool.
+async fn submit_detached(
+    state: &erato::state::AppState,
+    base: &str,
+    chat_id: Uuid,
+    binding: &ExecutorBinding,
+) {
+    drop(submit_narrated(base, chat_id, binding, "When am I free this week?").await);
+    let task = tokio::time::timeout(Duration::from_millis(1500), async {
         loop {
             if let Some(task) = state.background_tasks.get_task(&chat_id).await
                 && !task.client_stream_attached().await
             {
-                return;
+                return task;
             }
             tokio::time::sleep(Duration::from_millis(10)).await;
         }
     })
     .await
     .expect("the dropped chat stream must detach before the call");
+    assert!(
+        !task.get_event_history().await.iter().any(|event| matches!(
+            event,
+            StreamingEvent::ToolCallProposed { .. }
+                | StreamingEvent::ToolCallUpdate { .. }
+                | StreamingEvent::ClientToolCall { .. }
+        )),
+        "the model called the tool before the chat stream detached"
+    );
+    assert_eq!(rows(state, "client_executor_calls").await, 0);
 }
 
 async fn wait_idle(state: &erato::state::AppState, chat_id: Uuid, within: Duration) -> bool {
@@ -258,11 +300,50 @@ async fn presence(state: &erato::state::AppState, binding: &ExecutorBinding) -> 
         .map(|presence| presence.stream_id)
 }
 
+async fn wait_released(state: &erato::state::AppState, binding: &ExecutorBinding) {
+    tokio::time::timeout(Duration::from_secs(5), async {
+        while presence(state, binding).await.is_some() {
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .expect("a dropped stream releases its binding");
+}
+
+fn handed_call(
+    account_id: Uuid,
+    chat_id: Uuid,
+    generation_id: Uuid,
+) -> executor_stream::ExecutorCall {
+    executor_stream::ExecutorCall {
+        account_id,
+        binding: mailbox(),
+        chat_id,
+        generation_id,
+        message_id: Uuid::new_v4(),
+        tool_call_id: CALL.into(),
+        tool_name: TOOL.into(),
+        input: json!({}),
+        lineage: None,
+    }
+}
+
+async fn set_running(db: &sea_orm::DatabaseConnection, chat_id: Uuid, generation_id: Uuid) {
+    db.execute_unprepared(&format!(
+        "UPDATE chats SET generation_state = 'running', active_generation_id = '{generation_id}', \
+         generation_heartbeat_at = now() WHERE id = '{chat_id}'"
+    ))
+    .await
+    .unwrap();
+}
+
 #[sqlx::test(migrator = "crate::MIGRATOR")]
 async fn executor_stream_answers_a_call_from_another_chat(pool: Pool<Postgres>) {
     let setup = setup_stream(pool, TIMEOUT_MS, true, false).await;
     let (base, server) = serve(&setup.state).await;
     let mut pane = Pane::open(&base, &mailbox()).await;
+    let streamed_chat = seed_origin_chat(&setup.state.db).await;
+    let mut streamed = submit_narrated(&base, streamed_chat, &mailbox(), BUSY).await;
     submit_detached(&setup.state, &base, setup.chat_id, &mailbox()).await;
     let event = pane.call().await;
     assert_eq!(event["chat_id"], setup.chat_id.to_string());
@@ -288,6 +369,28 @@ async fn executor_stream_answers_a_call_from_another_chat(pool: Pool<Postgres>) 
     assert_eq!(accepted.json::<Value>()["delivered"], true);
     assert_answered(&setup.state, setup.chat_id).await;
     assert_eq!(rows(&setup.state, "client_executor_calls").await, 0);
+    assert!(
+        setup
+            .state
+            .background_tasks
+            .get_task(&streamed_chat)
+            .await
+            .expect("the other chat still runs")
+            .client_stream_attached()
+            .await,
+        "the other chat's stream must stay attached while the call runs"
+    );
+    let rest = tokio::time::timeout(BUSY_FOR + Duration::from_secs(5), async {
+        let mut rest = String::new();
+        while let Some(bytes) = streamed.next().await {
+            rest.push_str(&String::from_utf8_lossy(&bytes.unwrap()));
+        }
+        rest
+    })
+    .await
+    .unwrap();
+    assert!(rest.contains("assistant_message_completed"));
+    assert!(!rest.contains("client_tool_call") && !rest.contains(&call.1));
     server.abort();
 }
 
@@ -390,7 +493,7 @@ async fn attached_chat_stream_keeps_its_call(pool: Pool<Postgres>) {
             Some(&binding),
         ),
         async {
-            let silent = pane.next(Duration::from_secs(4)).await.is_none();
+            let silent = pane.next(PAUSE + Duration::from_secs(2)).await.is_none();
             assert_eq!(rows(&setup.state, "client_executor_calls").await, 0);
             silent
         }
@@ -414,13 +517,7 @@ async fn lost_presence_settles_as_context_unavailable_after_grace(pool: Pool<Pos
     submit_detached(&setup.state, &base, setup.chat_id, &mailbox()).await;
     pane.call().await;
     drop(pane);
-    tokio::time::timeout(Duration::from_secs(5), async {
-        while presence(&setup.state, &mailbox()).await.is_some() {
-            tokio::time::sleep(Duration::from_millis(20)).await;
-        }
-    })
-    .await
-    .expect("a dropped stream releases its binding");
+    wait_released(&setup.state, &mailbox()).await;
     assert!(!wait_idle(&setup.state, setup.chat_id, Duration::from_secs(2)).await);
     assert!(wait_idle(&setup.state, setup.chat_id, Duration::from_secs(20)).await);
     assert_eq!(
@@ -428,6 +525,168 @@ async fn lost_presence_settles_as_context_unavailable_after_grace(pool: Pool<Pos
         json!({"status":"cancelled","reason":"context_unavailable"})
     );
     assert_eq!(rows(&setup.state, "client_executor_calls").await, 0);
+    server.abort();
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn call_without_any_stream_is_unavailable_at_once(pool: Pool<Postgres>) {
+    let setup = setup_stream(pool, TIMEOUT_MS, true, false).await;
+    let (base, server) = serve(&setup.state).await;
+    submit_detached(&setup.state, &base, setup.chat_id, &mailbox()).await;
+    assert!(wait_idle(&setup.state, setup.chat_id, PAUSE + Duration::from_secs(5)).await);
+    assert_eq!(
+        call_output(&answer(&setup.state, setup.chat_id).await),
+        json!({"status":"cancelled","reason":"context_unavailable"})
+    );
+    assert_eq!(rows(&setup.state, "client_executor_calls").await, 0);
+    server.abort();
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn resumed_chat_stream_keeps_its_call(pool: Pool<Postgres>) {
+    let setup = setup_stream(pool, TIMEOUT_MS, true, false).await;
+    let (base, server) = serve(&setup.state).await;
+    let mut pane = Pane::open(&base, &mailbox()).await;
+    submit_detached(&setup.state, &base, setup.chat_id, &mailbox()).await;
+    let response = reqwest::Client::new()
+        .post(format!("{base}/me/messages/resumestream"))
+        .bearer_auth(TEST_JWT_TOKEN)
+        .json(&json!({"chat_id":setup.chat_id}))
+        .send()
+        .await
+        .unwrap();
+    assert!(response.status().is_success());
+    let mut resumed = response.bytes_stream();
+    let call = next_call(&mut resumed).await;
+    assert_eq!(pane.next(Duration::from_secs(1)).await, None);
+    assert_eq!(rows(&setup.state, "client_executor_calls").await, 0);
+    post_live(
+        &setup.state,
+        setup.chat_id,
+        &call,
+        json!({"result":availability()}),
+        Some(&mailbox()),
+    )
+    .await
+    .assert_status_ok();
+    assert_answered(&setup.state, setup.chat_id).await;
+    server.abort();
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn reconnected_pane_gets_the_call_again_and_keeps_it_past_the_grace(pool: Pool<Postgres>) {
+    let setup = setup_stream(pool, TIMEOUT_MS, true, false).await;
+    let (base, server) = serve(&setup.state).await;
+    let mut pane = Pane::open(&base, &mailbox()).await;
+    submit_detached(&setup.state, &base, setup.chat_id, &mailbox()).await;
+    let first = call_of(&pane.call().await);
+    drop(pane);
+    let dropped = tokio::time::Instant::now();
+    wait_released(&setup.state, &mailbox()).await;
+    tokio::time::sleep(Duration::from_secs(1)).await;
+    let mut pane = Pane::open(&base, &mailbox()).await;
+    assert_eq!(call_of(&pane.call().await), first);
+    let past_grace = (dropped + PRESENCE_LOSS_GRACE + Duration::from_secs(2))
+        .saturating_duration_since(tokio::time::Instant::now());
+    assert!(!wait_idle(&setup.state, setup.chat_id, past_grace).await);
+    post_live(
+        &setup.state,
+        setup.chat_id,
+        &first,
+        json!({"result":availability()}),
+        Some(&mailbox()),
+    )
+    .await
+    .assert_status_ok();
+    assert_answered(&setup.state, setup.chat_id).await;
+    server.abort();
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn expired_presence_settles_as_context_unavailable_after_grace(pool: Pool<Postgres>) {
+    let setup = setup_stream(pool, TIMEOUT_MS, true, false).await;
+    let (base, server) = serve(&setup.state).await;
+    // Held by a replica that died: nothing renews or releases it.
+    assert!(
+        executor_stream::acquire(
+            &setup.state.db,
+            account(&setup.state).await,
+            &mailbox(),
+            Uuid::new_v4(),
+            &[TOOL.to_string()],
+            &[],
+        )
+        .await
+        .unwrap()
+    );
+    submit_detached(&setup.state, &base, setup.chat_id, &mailbox()).await;
+    tokio::time::timeout(PAUSE + Duration::from_secs(5), async {
+        while rows(&setup.state, "client_executor_calls").await == 0 {
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .expect("the call is handed to the dead replica's stream");
+    setup
+        .state
+        .db
+        .execute_unprepared(
+            "UPDATE client_executor_presence SET expires_at = now() - interval '1 second'",
+        )
+        .await
+        .unwrap();
+    assert!(!wait_idle(&setup.state, setup.chat_id, Duration::from_secs(2)).await);
+    assert!(wait_idle(&setup.state, setup.chat_id, Duration::from_secs(20)).await);
+    assert_eq!(
+        call_output(&answer(&setup.state, setup.chat_id).await),
+        json!({"status":"cancelled","reason":"context_unavailable"})
+    );
+    assert_eq!(rows(&setup.state, "client_executor_calls").await, 0);
+    server.abort();
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn submissions_keep_the_chat_path(pool: Pool<Postgres>) {
+    let mut setup = setup_stream(pool, 1_000, true, false).await;
+    setup
+        .state
+        .config
+        .client_tools
+        .tools
+        .get_mut("outlook_fetch_availability")
+        .unwrap()
+        .submission = Some(erato::config::ClientToolSubmissionConfig::default());
+    let (base, server) = serve(&setup.state).await;
+    let mut pane = Pane::open(&base, &mailbox()).await;
+    submit_detached(&setup.state, &base, setup.chat_id, &mailbox()).await;
+    assert_eq!(pane.next(PAUSE + Duration::from_secs(3)).await, None);
+    assert!(wait_idle(&setup.state, setup.chat_id, Duration::from_secs(10)).await);
+    let output = call_output(&answer(&setup.state, setup.chat_id).await);
+    assert_eq!(output["status"], "cancelled");
+    assert_eq!(output["reason"], "timeout");
+    assert_eq!(rows(&setup.state, "client_executor_calls").await, 0);
+    server.abort();
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn only_the_running_generation_delivers_its_calls(pool: Pool<Postgres>) {
+    let setup = setup_stream(pool, TIMEOUT_MS, true, false).await;
+    let (base, server) = serve(&setup.state).await;
+    let mut pane = Pane::open(&base, &mailbox()).await;
+    let db = &setup.state.db;
+    let account = account(&setup.state).await;
+    let generation = Uuid::new_v4();
+    set_running(db, setup.chat_id, generation).await;
+    executor_stream::hand_over(db, &handed_call(account, setup.chat_id, Uuid::new_v4()))
+        .await
+        .unwrap();
+    assert_eq!(pane.next(Duration::from_secs(1)).await, None);
+    let current = handed_call(account, setup.chat_id, generation);
+    executor_stream::hand_over(db, &current).await.unwrap();
+    assert_eq!(
+        pane.call().await["message_id"],
+        current.message_id.to_string()
+    );
     server.abort();
 }
 
@@ -444,7 +703,7 @@ async fn disabled_flag_changes_nothing(pool: Pool<Postgres>) {
     inbox.assert_status_ok();
     assert_eq!(inbox.json::<Value>()["executor_stream_enabled"], false);
     submit_detached(&setup.state, &base, setup.chat_id, &mailbox()).await;
-    assert!(wait_idle(&setup.state, setup.chat_id, Duration::from_secs(10)).await);
+    assert!(wait_idle(&setup.state, setup.chat_id, PAUSE + Duration::from_secs(5)).await);
     assert_eq!(
         call_output(&answer(&setup.state, setup.chat_id).await),
         json!({"status":"cancelled","reason":"timeout"})
@@ -537,8 +796,9 @@ async fn grant_call_without_presence_is_unavailable(pool: Pool<Postgres>) {
     assert_eq!(route(true, true).await.unwrap(), LiveCallRoute::Unavailable);
     assert_eq!(
         route(false, false).await.unwrap(),
-        LiveCallRoute::ChatStream
+        LiveCallRoute::Unavailable
     );
+    assert_eq!(route(true, false).await.unwrap(), LiveCallRoute::ChatStream);
 
     let (first, second) = (Uuid::new_v4(), Uuid::new_v4());
     let tools = vec![TOOL.to_string()];
@@ -576,7 +836,7 @@ async fn grant_call_without_presence_is_unavailable(pool: Pool<Postgres>) {
 }
 
 #[sqlx::test(migrator = "crate::MIGRATOR")]
-async fn cleanup_removes_rows_that_no_run_or_stream_can_use(pool: Pool<Postgres>) {
+async fn cleanup_removes_only_rows_that_no_run_or_stream_can_use(pool: Pool<Postgres>) {
     let state = test_app_state(hermetic_app_config(None, None), pool).await;
     let db = &state.db;
     let account = account(&state).await;
@@ -601,44 +861,71 @@ async fn cleanup_removes_rows_that_no_run_or_stream_can_use(pool: Pool<Postgres>
     ))
     .await
     .unwrap();
-    executor_stream::hand_over(
-        db,
-        &executor_stream::ExecutorCall {
-            account_id: account,
-            binding: binding.clone(),
-            chat_id,
-            message_id: Uuid::new_v4(),
-            tool_call_id: CALL.into(),
-            tool_name: TOOL.into(),
-            input: json!({}),
-            lineage: None,
-        },
-    )
+    let running_chat = seed_origin_chat(db).await;
+    let generation = Uuid::new_v4();
+    set_running(db, running_chat, generation).await;
+    let running_call = handed_call(account, running_chat, generation);
+    for call in [
+        handed_call(account, chat_id, Uuid::new_v4()),
+        handed_call(account, running_chat, Uuid::new_v4()),
+        running_call.clone(),
+    ] {
+        executor_stream::hand_over(db, &call).await.unwrap();
+    }
+    let request = |attempt_id, message_id| OperationRequest {
+        attempt_id,
+        operation_id: QUALIFIED.into(),
+        kind: client_tool::CLIENT_TOOL_KIND.into(),
+        realm: ExecutionRealm::OfficeAddin,
+        chat_id,
+        message_id,
+        tool_call_id: CALL.into(),
+        account_id: account,
+        binding: binding.clone(),
+        base_revision: None,
+        consent: ConsentPolicy::None,
+        expires_at: chrono::Utc::now() + chrono::Duration::hours(1),
+        input: json!({}),
+    };
+    let pending = request(
+        Uuid::new_v4(),
+        seed_row(db, chat_id, None, "assistant", None, None).await,
+    );
+    db.execute_raw(sea_orm::Statement::from_sql_and_values(
+        sea_orm::DatabaseBackend::Postgres,
+        r#"INSERT INTO client_operation_attempts
+             (attempt_id, account_id, chat_id, message_id, tool_call_id, generation_id,
+              request, state, expires_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending', $8)"#,
+        [
+            pending.attempt_id.into(),
+            account.into(),
+            chat_id.into(),
+            pending.message_id.into(),
+            CALL.into(),
+            Uuid::new_v4().into(),
+            serde_json::to_value(&pending).unwrap().into(),
+            pending.expires_at.into(),
+        ],
+    ))
     .await
     .unwrap();
-    executor_stream::nudge(
-        db,
-        &OperationRequest {
-            attempt_id: Uuid::new_v4(),
-            operation_id: QUALIFIED.into(),
-            kind: client_tool::CLIENT_TOOL_KIND.into(),
-            realm: ExecutionRealm::OfficeAddin,
-            chat_id,
-            message_id: Uuid::new_v4(),
-            tool_call_id: CALL.into(),
-            account_id: account,
-            binding: binding.clone(),
-            base_revision: None,
-            consent: ConsentPolicy::None,
-            expires_at: chrono::Utc::now() + chrono::Duration::hours(1),
-            input: json!({}),
-        },
-    )
-    .await
-    .unwrap();
-    assert_eq!(rows(&state, "client_executor_calls").await, 2);
+    for nudge in [request(Uuid::new_v4(), Uuid::new_v4()), pending.clone()] {
+        executor_stream::nudge(db, &nudge).await.unwrap();
+    }
+    assert_eq!(rows(&state, "client_executor_calls").await, 5);
     executor_stream::cleanup(db).await.unwrap();
-    assert_eq!(rows(&state, "client_executor_calls").await, 0);
+    let kept = db
+        .query_all_raw(sea_orm::Statement::from_string(
+            sea_orm::DatabaseBackend::Postgres,
+            "SELECT message_id FROM client_executor_calls ORDER BY call_id",
+        ))
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|row| row.try_get::<Uuid>("", "message_id").unwrap())
+        .collect::<Vec<_>>();
+    assert_eq!(kept, [running_call.message_id, pending.message_id]);
     assert_eq!(rows(&state, "client_executor_presence").await, 1);
     assert_eq!(presence(&state, &binding).await, Some(held));
 }

@@ -7834,8 +7834,6 @@ async fn stream_generate_chat_completion<'a>(
                         reason: "context_unavailable".into(),
                     });
                 }
-                // A live-only call that no stream of this chat can take goes to
-                // the stream serving its binding, from whichever chat it comes.
                 let mut executor_target = None;
                 if let Some(binding) = tool_policy
                     .filter(|policy| {
@@ -7889,6 +7887,7 @@ async fn stream_generate_chat_completion<'a>(
                             account_id,
                             binding,
                             chat_id,
+                            generation_id: task.generation_id,
                             message_id: assistant_message_id,
                             tool_call_id: call_id.clone(),
                             tool_name: tool_name.clone(),
@@ -7980,9 +7979,6 @@ async fn stream_generate_chat_completion<'a>(
                             )) => Park::TimedOut,
                         }
                     };
-                    if let Some(call) = &handed_over {
-                        settle_executor_call(&app_state.db, task, call).await;
-                    }
 
                     // The gate read the decision before dispatch. A Never saved while
                     // the call waited settles it as withdrawn: no park, no raced-in result.
@@ -8013,6 +8009,11 @@ async fn stream_generate_chat_completion<'a>(
                         task.remove_pending_client_tool(&call_id).await;
                     }
                     let raced_in = result_rx.try_recv().ok();
+                    // Only after the waiter is gone: a result that finds no
+                    // binding to check must find nothing to deliver to either.
+                    if let Some(call) = &handed_over {
+                        settle_executor_call(&app_state.db, task, call).await;
+                    }
 
                     match park {
                         Park::Delivered(outcome) => outcome,

@@ -73,6 +73,8 @@ pub struct ExecutorCall {
     pub account_id: Uuid,
     pub binding: ExecutorBinding,
     pub chat_id: Uuid,
+    /// The run that made the call; the call is delivered only while it runs.
+    pub generation_id: Uuid,
     pub message_id: Uuid,
     pub tool_call_id: String,
     pub tool_name: String,
@@ -137,7 +139,7 @@ pub enum LiveCallRoute {
     /// The calling chat's own stream takes the call, as without executor streams.
     ChatStream,
     Executor(ExecutorPresence),
-    /// The call must use an executor stream and none serves it.
+    /// No stream can take the call.
     Unavailable,
 }
 
@@ -221,8 +223,7 @@ pub async fn present(
 
 /// Precedence: a grant call always needs a stream that accepts grant calls for
 /// the tool. Any other call stays on the calling chat's attached stream, else
-/// goes to the binding's stream when it serves the tool, else keeps the chat
-/// path (broadcast plus the tool's timeout, so a resumed stream can take it).
+/// goes to the binding's stream when it serves the tool.
 pub async fn route_live_call(
     db: &DatabaseConnection,
     account_id: Uuid,
@@ -244,7 +245,7 @@ pub async fn route_live_call(
     }
     Ok(match present(db, account_id, binding).await? {
         Some(presence) if presence.serves(tool_name) => LiveCallRoute::Executor(presence),
-        _ => LiveCallRoute::ChatStream,
+        _ => LiveCallRoute::Unavailable,
     })
 }
 
@@ -252,18 +253,19 @@ pub async fn route_live_call(
 pub async fn hand_over(db: &DatabaseConnection, call: &ExecutorCall) -> Result<(), Report> {
     db.execute_raw(statement(
         r#"INSERT INTO client_executor_calls
-             (account_id, binding, chat_id, message_id, tool_call_id, event)
-           VALUES ($1, $2, $3, $4, $5, $6)
+             (account_id, binding, chat_id, message_id, tool_call_id, generation_id, event)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)
            ON CONFLICT (message_id, tool_call_id) WHERE attempt_id IS NULL
            DO UPDATE SET account_id = EXCLUDED.account_id, binding = EXCLUDED.binding,
-             chat_id = EXCLUDED.chat_id, event = EXCLUDED.event, created_at = now(),
-             delivered_at = NULL, delivered_to = NULL"#,
+             chat_id = EXCLUDED.chat_id, generation_id = EXCLUDED.generation_id,
+             event = EXCLUDED.event, created_at = now(), delivered_at = NULL, delivered_to = NULL"#,
         vec![
             call.account_id.into(),
             serde_json::to_value(&call.binding)?.into(),
             call.chat_id.into(),
             call.message_id.into(),
             call.tool_call_id.clone().into(),
+            call.generation_id.into(),
             serde_json::to_value(ExecutorStreamEvent::from(call))?.into(),
         ],
     ))
@@ -347,7 +349,8 @@ pub async fn cleanup(db: &DatabaseConnection) -> Result<(), Report> {
         r#"DELETE FROM client_executor_calls q
            WHERE q.created_at < now() - interval '1 day'
               OR (q.attempt_id IS NULL AND NOT EXISTS (
-                    SELECT 1 FROM chats c WHERE c.id = q.chat_id AND c.generation_state = 'running'))
+                    SELECT 1 FROM chats c WHERE c.id = q.chat_id
+                    AND c.active_generation_id = q.generation_id AND c.generation_state = 'running'))
               OR (q.attempt_id IS NOT NULL AND (q.delivered_at IS NOT NULL OR NOT EXISTS (
                     SELECT 1 FROM client_operation_attempts a
                     WHERE a.attempt_id = q.attempt_id AND a.state = 'pending')))"#,
@@ -473,7 +476,10 @@ async fn poll(db: DatabaseConnection, hub: Weak<HubInner>) {
 }
 
 /// Marks every due row for a presence held here as delivered to that stream.
-/// A nudge is due once its attempt is claimable: pending, its chat not running.
+/// A live call is due while its run is running, until the stream that now
+/// holds its binding has had it: a pane that reloads or reconnects gets it
+/// again, since the event may have died with the old stream. A nudge is due
+/// once, when its attempt is claimable: pending, its chat not running.
 async fn claim(
     db: &DatabaseConnection,
     streams: &[Uuid],
@@ -484,11 +490,12 @@ async fn claim(
              JOIN client_executor_presence p
                ON p.account_id = q.account_id AND p.binding = q.binding
              WHERE p.stream_id = ANY($1::uuid[]) AND p.expires_at > now()
-               AND q.delivered_at IS NULL
-               AND CASE WHEN q.attempt_id IS NULL THEN EXISTS (
-                     SELECT 1 FROM chats c
-                     WHERE c.id = q.chat_id AND c.generation_state = 'running')
-                   ELSE EXISTS (
+               AND CASE WHEN q.attempt_id IS NULL THEN q.delivered_to IS DISTINCT FROM p.stream_id
+                     AND EXISTS (
+                       SELECT 1 FROM chats c
+                       WHERE c.id = q.chat_id AND c.active_generation_id = q.generation_id
+                         AND c.generation_state = 'running')
+                   ELSE q.delivered_at IS NULL AND EXISTS (
                      SELECT 1 FROM client_operation_attempts a JOIN chats c ON c.id = a.chat_id
                      WHERE a.attempt_id = q.attempt_id AND a.state = 'pending'
                        AND a.expires_at > now() AND c.archived_at IS NULL
@@ -653,6 +660,7 @@ mod tests {
                 host_context: None,
             },
             chat_id: Uuid::nil(),
+            generation_id: Uuid::nil(),
             message_id: Uuid::nil(),
             tool_call_id: "call".into(),
             tool_name: "read".into(),

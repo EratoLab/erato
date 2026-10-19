@@ -22,17 +22,18 @@ CREATE UNLOGGED TABLE public.client_executor_calls (
     chat_id uuid NOT NULL REFERENCES public.chats(id) ON DELETE CASCADE,
     message_id uuid NOT NULL,
     tool_call_id text NOT NULL,
-    -- Set only for durable-operation nudges.
+    -- A live call belongs to the run that handed it over; a nudge to its attempt.
+    generation_id uuid DEFAULT NULL,
     attempt_id uuid DEFAULT NULL,
     event jsonb NOT NULL,
     created_at timestamptz NOT NULL DEFAULT now(),
     delivered_at timestamptz DEFAULT NULL,
-    delivered_to uuid DEFAULT NULL
+    delivered_to uuid DEFAULT NULL,
+    CHECK ((generation_id IS NULL) <> (attempt_id IS NULL))
 );
 
-CREATE INDEX client_executor_calls_pending_idx
-    ON public.client_executor_calls (account_id, binding)
-    WHERE delivered_at IS NULL;
+CREATE INDEX client_executor_calls_binding_idx
+    ON public.client_executor_calls (account_id, binding);
 
 CREATE UNIQUE INDEX client_executor_calls_call_key
     ON public.client_executor_calls (message_id, tool_call_id)
