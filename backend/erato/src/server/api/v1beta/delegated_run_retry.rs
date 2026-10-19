@@ -578,6 +578,7 @@ pub async fn retry_delegated_run(
     let task_scope = TaskOfferScope {
         facet_enum: facet_ids.clone(),
         mcp_allowlist: spec.parent_mcp_allowlist.clone(),
+        mcp_server_ids: spec.parent_mcp_server_ids.clone(),
         effective: EffectiveTasksConfig {
             max_tasks_per_turn: 1,
             max_parallel: 1,
