@@ -6089,6 +6089,21 @@ additional_system_prompt = "You are assisting inside the Outlook add-in. Keep re
 - `hidden` - When `true`, the facet is a hidden baseline: never shown in the pool, not user-selectable, and injected as an always-on system prompt. Defaults to `false`.
 - `hidden_always_active_for_platform` - Optional platform identifier (e.g. `"outlook"`) restricting where a hidden facet auto-activates. Omit to apply on all platforms. Only meaningful together with `hidden = true`.
 
+##### Child facet model
+
+{/* erato_toml_config_key: facets.facets.<facet-id>.child_chat_provider */}
+
+`child_chat_provider` names the chat provider a [delegated task](#delegationtasks) runs on when the task names this facet in its `facet_ids`, for example a cheaper model for simple lookups or a model your organisation runs itself for mail search. It applies only to delegated runs; selecting the facet in a normal conversation does not change the model. The id must be a configured chat provider.
+
+```toml
+[facets.facets.mail_search]
+display_name = "Mail search"
+tool_call_allowlist = ["mail-mcp/*"]
+child_chat_provider = "in-house-model"
+```
+
+When a task names several facets that set one, the first in the task's `facet_ids` wins. A model the parent picks for the task comes first; see [which model a task runs on](#which-model-a-task-runs-on).
+
 ##### Per-facet delegation overrides
 
 {/* erato_toml_config_key: facets.facets.<facet-id>.delegation.max_tasks_per_turn */}
@@ -6097,6 +6112,7 @@ additional_system_prompt = "You are assisting inside the Outlook add-in. Keep re
 {/* erato_toml_config_key: facets.facets.<facet-id>.delegation.max_parallel */}
 {/* erato_toml_config_key: facets.facets.<facet-id>.delegation.persona */}
 {/* erato_toml_config_key: facets.facets.<facet-id>.delegation.child_facet_ids.[] */}
+{/* erato_toml_config_key: facets.facets.<facet-id>.delegation.child_chat_providers.[] */}
 {/* erato_toml_config_key: facets.facets.<facet-id>.delegation.run_modes.[] */}
 {/* erato_toml_config_key: facets.facets.<facet-id>.delegation.scheduling */}
 {/* erato_toml_config_key: facets.facets.<facet-id>.delegation.approval.mode */}
@@ -6129,6 +6145,7 @@ plan_min_tasks = 3
 - `max_client_tool_calls_per_task` - Overrides `delegation.tasks.max_client_tool_calls_per_task`. Raising this while leaving the server budget alone is the usual shape for a planning facet.
 - `persona` - Overrides `delegation.tasks.persona`.
 - `child_facet_ids` - Added to `delegation.tasks.child_facet_ids` (union). Like the global list, it only widens what a task may name, and a child never gets an MCP tool outside the planning turn's allowlist. Once you write into a task's chat yourself, that chat is yours and this cap no longer applies. Each entry must name a configured facet.
+- `child_chat_providers` - The chat providers the parent may pick for each task, offered as an optional `model` argument of `delegate_task` and described by their display names. Facet-only: there is no `delegation.tasks` value, and without a list the argument is not offered. Unioned across the selected planning facets. Entries the user may not use are not offered, and a pick outside the offered list is refused. Each entry must be a configured chat provider.
 - `run_modes` - Overrides `delegation.tasks.run_modes`. Unioned with the global list rather than replacing it, because a run mode is a capability the facet's author meant to grant; `wait` is always kept available.
 - `scheduling` - Overrides `delegation.tasks.scheduling`. The first selected facet that states one wins.
 - `approval.mode` and `approval.plan_min_tasks` - Override `delegation.tasks.approval.mode` and `delegation.tasks.approval.plan_min_tasks`. Merged like a cap rather than replacing: the strictest `mode` (`always` beats `plan` beats `async_only` beats `never`) and the lowest `plan_min_tasks` win, so selecting a second planning facet can only ever make a turn ask more.
@@ -6330,12 +6347,13 @@ grant_scope = { "word.add_comments" = "session_document" }
 {/* erato_toml_config_key: action_facets.facets.<facet-id>.delegation.max_parallel */}
 {/* erato_toml_config_key: action_facets.facets.<facet-id>.delegation.persona */}
 {/* erato_toml_config_key: action_facets.facets.<facet-id>.delegation.child_facet_ids.[] */}
+{/* erato_toml_config_key: action_facets.facets.<facet-id>.delegation.child_chat_providers.[] */}
 {/* erato_toml_config_key: action_facets.facets.<facet-id>.delegation.run_modes.[] */}
 {/* erato_toml_config_key: action_facets.facets.<facet-id>.delegation.scheduling */}
 {/* erato_toml_config_key: action_facets.facets.<facet-id>.delegation.approval.mode */}
 {/* erato_toml_config_key: action_facets.facets.<facet-id>.delegation.approval.plan_min_tasks */}
 
-Add `erato/delegate_task` to an action facet's `tool_call_allowlist` to offer [delegated tasks](#delegationtasks) on its turns, for example a Word document turn that no selected facet plans for. The facet then counts as a planning facet: its optional `delegation` table takes the same keys as [per-facet delegation overrides](#per-facet-delegation-overrides) and merges with any selected planning facet by the same rules (caps take the minimum, `child_facet_ids` and `run_modes` the union, the strictest approval wins). Single-valued keys such as `persona` and `scheduling` come from a selected facet first.
+Add `erato/delegate_task` to an action facet's `tool_call_allowlist` to offer [delegated tasks](#delegationtasks) on its turns, for example a Word document turn that no selected facet plans for. The facet then counts as a planning facet: its optional `delegation` table takes the same keys as [per-facet delegation overrides](#per-facet-delegation-overrides) and merges with any selected planning facet by the same rules (caps take the minimum, `child_facet_ids`, `child_chat_providers` and `run_modes` the union, the strictest approval wins). Single-valued keys such as `persona` and `scheduling` come from a selected facet first.
 
 ```toml
 [action_facets.facets.word_document_review]
@@ -6347,6 +6365,28 @@ child_facet_ids = ["web_search"]
 ```
 
 Delegated tasks never receive client tools, so a task started on a Word turn cannot read or edit the open document. Pass what it needs in the brief or as attached files. An action facet's `erato/*` patterns do not change its MCP tool set.
+
+##### Which model a task runs on
+
+A delegated task runs on, in this order:
+
+1. the model the parent picked for the task from `child_chat_providers`;
+2. else the `child_chat_provider` of the first facet in the task's `facet_ids` that sets one;
+3. else the model of the parent turn that started it.
+
+A run delegated to an @-mentioned assistant uses that assistant's default model in place of step 2. A task never runs on the default model of the assistant it inherits from the conversation.
+
+A task always runs on a model the user may use. When a configured model is not available to the user, the task runs on the parent turn's model instead, and its result says so, both to the parent model and on the task card. The model is stored with the task when it starts: later turns of the task and a retry keep it, and a retry falls back to the parent turn's model in the same way when the user may no longer use it.
+
+```toml
+[facets.facets.mail_search]
+display_name = "Mail search"
+child_chat_provider = "in-house-model"
+
+[action_facets.facets.word_document_review.delegation]
+child_facet_ids = ["mail_search"]
+child_chat_providers = ["fast-model", "in-house-model"]
+```
 
 #### Template Rendering
 
