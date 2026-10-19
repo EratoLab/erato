@@ -3870,6 +3870,21 @@ msgid "message.taskResult.truncated"
 msgstr "This answer was shortened to fit."
 
 #. js-lingui-explicit-id
+#: src/components/ui/MessageList/ScrollToBottomButton.tsx
+msgid "messageList.scrollToBottom.ariaLabel"
+msgstr "Scroll to new messages"
+
+#. js-lingui-explicit-id
+#: src/components/ui/MessageList/ScrollToBottomButton.tsx
+msgid "messageList.scrollToBottom.label"
+msgstr "New messages"
+
+#. js-lingui-explicit-id
+#: src/components/ui/MessageList/ScrollToBottomButton.tsx
+#~ msgid "messageList.scrollToBottom.newMessages"
+#~ msgstr "{newMessageCount} new {0}"
+
+#. js-lingui-explicit-id
 #: src/App.tsx
 msgid "navigation.goHome"
 msgstr "Go Home"
@@ -7256,6 +7271,10 @@ msgstr "{0, plural, one {Cannot send: {names} exceeds the {limit} limit. Remove 
 #: src/components/ui/FileUpload/ThreadMessageCard.tsx
 msgid "{attachmentCount} files"
 msgstr "{attachmentCount} files"
+
+#: src/components/ui/MessageList/ScrollToBottomButton.tsx
+msgid "{count, plural, one {# new message} other {# new messages}}"
+msgstr "{count, plural, one {# new message} other {# new messages}}"
 
 #: src/components/ui/FilePreview/EmlPreview.tsx
 #: src/components/ui/FileUpload/AttachmentTileList.tsx

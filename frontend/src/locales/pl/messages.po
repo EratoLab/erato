@@ -3870,6 +3870,21 @@ msgid "message.taskResult.truncated"
 msgstr ""
 
 #. js-lingui-explicit-id
+#: src/components/ui/MessageList/ScrollToBottomButton.tsx
+msgid "messageList.scrollToBottom.ariaLabel"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/MessageList/ScrollToBottomButton.tsx
+msgid "messageList.scrollToBottom.label"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/MessageList/ScrollToBottomButton.tsx
+#~ msgid "messageList.scrollToBottom.newMessages"
+#~ msgstr ""
+
+#. js-lingui-explicit-id
 #: src/App.tsx
 msgid "navigation.goHome"
 msgstr "Idź do strony głównej"
@@ -7255,6 +7270,10 @@ msgstr "{0, plural, one {Nie można wysłać: {names} przekracza limit {limit}. 
 
 #: src/components/ui/FileUpload/ThreadMessageCard.tsx
 msgid "{attachmentCount} files"
+msgstr ""
+
+#: src/components/ui/MessageList/ScrollToBottomButton.tsx
+msgid "{count, plural, one {# new message} other {# new messages}}"
 msgstr ""
 
 #: src/components/ui/FilePreview/EmlPreview.tsx

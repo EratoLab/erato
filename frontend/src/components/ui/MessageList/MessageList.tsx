@@ -13,6 +13,7 @@ import {
   useMessageClassNameHelper,
   useMessageAnimations,
 } from "./MessageListUtils";
+import { ScrollToBottomButton } from "./ScrollToBottomButton";
 import { StandardMessageList } from "./StandardMessageList";
 import { VirtualizedMessageList } from "./VirtualizedMessageList";
 import { ConversationMessagesProvider } from "../Message/ConversationMessages";
@@ -651,16 +652,19 @@ export const MessageList = memo<MessageListProps>(
       direction: "backward", // Use backward pagination for chat (older messages first)
     });
 
-    // Add a message when user scrolls back down to new messages
+    // Track message count when the user was last at the bottom so we can
+    // detect new messages that arrived while they were scrolled away.
+    const lastSeenMessageCount = useRef(messageOrder.length);
     useEffect(() => {
-      // Don't show any notification while loading or if no messages
-      if (isPending || messageOrder.length === 0) return;
-
-      // User was scrolled up but now scrolled back down, check if there are new messages
-      if (isScrolledUp === false && visibleData.length < messageOrder.length) {
-        // This is where you'd show a "new messages" indicator if desired
+      if (!isScrolledUp) {
+        lastSeenMessageCount.current = messageOrder.length;
       }
-    }, [isScrolledUp, isPending, messageOrder.length, visibleData.length]);
+    }, [isScrolledUp, messageOrder.length]);
+
+    const newMessageCount = isScrolledUp
+      ? Math.max(0, messageOrder.length - lastSeenMessageCount.current)
+      : 0;
+    const showNewMessagesIndicator = newMessageCount > 0;
 
     // Create debounced function with useMemo
     const debouncedLoadMore = useMemo(
@@ -879,65 +883,73 @@ export const MessageList = memo<MessageListProps>(
     );
 
     return (
-      <div
-        ref={containerRef}
-        className={containerClass}
-        data-testid="message-list"
-        data-ui="chat-body"
-        onCopy={handleCopyPlainText}
-      >
-        {renderMessageListHeader}
-        {showEmptyState && emptyStateComponent ? (
-          <div className="flex min-h-[300px] w-full items-center justify-center pb-6 pt-16 sm:pb-10 sm:pt-24">
-            {emptyStateComponent}
-          </div>
-        ) : (
-          <div className="mx-auto w-full" style={contentWidthStyle}>
-            <ConversationMessagesProvider messages={messages}>
-              {shouldUseVirtualization ? (
-                <VirtualizedMessageList
-                  messages={messages}
-                  visibleData={visibleData}
-                  containerSize={containerSize}
-                  isNewlyLoaded={isNewlyLoaded}
-                  getMessageClassName={getMessageClassName}
-                  maxWidth={maxWidth}
-                  showTimestamps={showTimestamps}
-                  showAvatars={showAvatars}
-                  userProfile={userProfile}
-                  userDisplayNameOverride={userDisplayNameOverride}
-                  controls={controls}
-                  messageRenderer={messageRenderer}
-                  controlsContext={controlsContext}
-                  onMessageAction={onMessageAction}
-                  onFilePreview={onFilePreview}
-                  onViewFeedback={onViewFeedback}
-                  allFilesById={allFilesById}
-                  modelSwitches={modelSwitches}
-                />
-              ) : (
-                <StandardMessageList
-                  messages={messages}
-                  visibleData={visibleData}
-                  isNewlyLoaded={isNewlyLoaded}
-                  getMessageClassName={getMessageClassName}
-                  maxWidth={maxWidth}
-                  showTimestamps={showTimestamps}
-                  showAvatars={showAvatars}
-                  userProfile={userProfile}
-                  userDisplayNameOverride={userDisplayNameOverride}
-                  controls={controls}
-                  messageRenderer={messageRenderer}
-                  controlsContext={controlsContext}
-                  onMessageAction={onMessageAction}
-                  onFilePreview={onFilePreview}
-                  onViewFeedback={onViewFeedback}
-                  allFilesById={allFilesById}
-                  modelSwitches={modelSwitches}
-                />
-              )}
-            </ConversationMessagesProvider>
-          </div>
+      <div className="relative flex min-h-0 flex-1 flex-col">
+        <div
+          ref={containerRef}
+          className={containerClass}
+          data-testid="message-list"
+          data-ui="chat-body"
+          onCopy={handleCopyPlainText}
+        >
+          {renderMessageListHeader}
+          {showEmptyState && emptyStateComponent ? (
+            <div className="flex min-h-[300px] w-full items-center justify-center pb-6 pt-16 sm:pb-10 sm:pt-24">
+              {emptyStateComponent}
+            </div>
+          ) : (
+            <div className="mx-auto w-full" style={contentWidthStyle}>
+              <ConversationMessagesProvider messages={messages}>
+                {shouldUseVirtualization ? (
+                  <VirtualizedMessageList
+                    messages={messages}
+                    visibleData={visibleData}
+                    containerSize={containerSize}
+                    isNewlyLoaded={isNewlyLoaded}
+                    getMessageClassName={getMessageClassName}
+                    maxWidth={maxWidth}
+                    showTimestamps={showTimestamps}
+                    showAvatars={showAvatars}
+                    userProfile={userProfile}
+                    userDisplayNameOverride={userDisplayNameOverride}
+                    controls={controls}
+                    messageRenderer={messageRenderer}
+                    controlsContext={controlsContext}
+                    onMessageAction={onMessageAction}
+                    onFilePreview={onFilePreview}
+                    onViewFeedback={onViewFeedback}
+                    allFilesById={allFilesById}
+                    modelSwitches={modelSwitches}
+                  />
+                ) : (
+                  <StandardMessageList
+                    messages={messages}
+                    visibleData={visibleData}
+                    isNewlyLoaded={isNewlyLoaded}
+                    getMessageClassName={getMessageClassName}
+                    maxWidth={maxWidth}
+                    showTimestamps={showTimestamps}
+                    showAvatars={showAvatars}
+                    userProfile={userProfile}
+                    userDisplayNameOverride={userDisplayNameOverride}
+                    controls={controls}
+                    messageRenderer={messageRenderer}
+                    controlsContext={controlsContext}
+                    onMessageAction={onMessageAction}
+                    onFilePreview={onFilePreview}
+                    onViewFeedback={onViewFeedback}
+                    allFilesById={allFilesById}
+                    modelSwitches={modelSwitches}
+                  />
+                )}
+              </ConversationMessagesProvider>
+            </div>
+          )}
+        </div>
+        {showNewMessagesIndicator && (
+          <ScrollToBottomButton
+            onClick={scrollToBottom}
+            newMessageCount={newMessageCount}
+          />
         )}
       </div>
     );
