@@ -1,10 +1,11 @@
 import { plural, t } from "@lingui/core/macro";
-import { NavArrowDown } from "iconoir-react";
 import { memo, useEffect, useState } from "react";
+
+import { ChevronDownIcon } from "../icons";
 
 interface ScrollToBottomButtonProps {
   onClick: () => void;
-  newMessageCount?: number;
+  newMessageCount: number;
 }
 
 /**
@@ -21,27 +22,21 @@ export const ScrollToBottomButton = memo(
       return () => clearTimeout(timer);
     }, []);
 
-    const count = newMessageCount ?? 0;
-    const label =
-      count > 0
-        ? plural(count, {
-            one: "# new message",
-            other: "# new messages",
-          })
-        : t({
-            id: "messageList.scrollToBottom.label",
-            message: "New messages",
-          });
+    // The visible count is the button's accessible name, so voice control
+    // users can say what they see.
+    const label = t({
+      id: "messageList.scrollToBottom.newMessageCount",
+      message: plural(newMessageCount, {
+        one: "# new message",
+        other: "# new messages",
+      }),
+    });
 
     return (
       <div className="pointer-events-none absolute inset-x-0 bottom-4 z-10 flex justify-center">
         <button
           type="button"
           onClick={onClick}
-          aria-label={t({
-            id: "messageList.scrollToBottom.ariaLabel",
-            message: "Scroll to new messages",
-          })}
           className={[
             "pointer-events-auto",
             "flex items-center gap-1.5",
@@ -57,7 +52,11 @@ export const ScrollToBottomButton = memo(
           ].join(" ")}
         >
           <span>{label}</span>
-          <NavArrowDown className="size-3.5" strokeWidth={2} />
+          <ChevronDownIcon
+            aria-hidden="true"
+            className="size-3.5"
+            strokeWidth={2}
+          />
         </button>
       </div>
     );

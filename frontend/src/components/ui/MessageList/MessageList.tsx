@@ -435,6 +435,107 @@ function useLoadMoreOnScroll({
   }, [isNearTop, hasOlderMessages, isPending, handleLoadMore]);
 }
 
+interface LastSeenSnapshot {
+  sessionId: string | null;
+  messageId: string;
+  createdAt: number;
+  contentSize: number;
+}
+
+const getContentSize = (message: ChatMessage) =>
+  message.content.reduce(
+    (size, part) =>
+      size +
+      1 +
+      ("text" in part && typeof part.text === "string" ? part.text.length : 0),
+    0,
+  );
+
+const takeLastSeenSnapshot = (
+  messageOrder: string[],
+  messages: Record<string, ChatMessage>,
+  sessionId: string | null,
+): LastSeenSnapshot | null => {
+  const messageId = messageOrder.at(-1);
+  if (messageId === undefined) return null;
+
+  const message = messages[messageId];
+  return {
+    sessionId,
+    messageId,
+    createdAt: Date.parse(message.createdAt),
+    contentSize: getContentSize(message),
+  };
+};
+
+// Counts assistant output that arrived below the viewport since the user left
+// the bottom: messages after the last one they saw, plus that message itself
+// if it kept streaming. The user's own sends are not counted.
+function useUnseenMessageCount({
+  messageOrder,
+  messages,
+  currentSessionId,
+  isAwayFromBottom,
+}: {
+  messageOrder: string[];
+  messages: Record<string, ChatMessage>;
+  currentSessionId: string | null;
+  isAwayFromBottom: boolean;
+}) {
+  const [lastSeen, setLastSeen] = useState<LastSeenSnapshot | null>(null);
+
+  useEffect(() => {
+    if (!isAwayFromBottom) {
+      setLastSeen(null);
+      return;
+    }
+
+    // Switching chats keeps this list mounted with a stale scroll position,
+    // so the new chat's existing messages become the baseline.
+    setLastSeen((current) =>
+      current?.sessionId === currentSessionId
+        ? current
+        : takeLastSeenSnapshot(messageOrder, messages, currentSessionId),
+    );
+  }, [isAwayFromBottom, currentSessionId, messageOrder, messages]);
+
+  return useMemo(() => {
+    if (!isAwayFromBottom || lastSeen?.sessionId !== currentSessionId) {
+      return 0;
+    }
+
+    // The last seen message disappears when its optimistic id is replaced
+    // (createdAt is preserved) or an edit/regenerate drops it, so fall back
+    // to timestamps; history loaded above is never newer.
+    const lastSeenIndex = messageOrder.indexOf(lastSeen.messageId);
+    let count = 0;
+
+    messageOrder.forEach((messageId, index) => {
+      const message = messages[messageId];
+      if (message.role === "user") return;
+
+      const isUnseen =
+        lastSeenIndex >= 0
+          ? index > lastSeenIndex
+          : Date.parse(message.createdAt) >= lastSeen.createdAt;
+      if (isUnseen) count += 1;
+    });
+
+    if (lastSeenIndex >= 0) {
+      const lastSeenMessage = messages[lastSeen.messageId];
+      // Growth only: the post-stream refetch may normalize persisted content.
+      if (
+        lastSeenMessage.role !== "user" &&
+        getContentSize(lastSeenMessage) > lastSeen.contentSize
+      ) {
+        count += 1;
+      }
+    }
+
+    return count;
+  }, [isAwayFromBottom, lastSeen, currentSessionId, messageOrder, messages]);
+}
+
 /**
  * MessageList component for rendering chat messages with scroll behavior
  */
@@ -652,19 +753,19 @@ export const MessageList = memo<MessageListProps>(
       direction: "backward", // Use backward pagination for chat (older messages first)
     });
 
-    // Track message count when the user was last at the bottom so we can
-    // detect new messages that arrived while they were scrolled away.
-    const lastSeenMessageCount = useRef(messageOrder.length);
-    useEffect(() => {
-      if (!isScrolledUp) {
-        lastSeenMessageCount.current = messageOrder.length;
-      }
-    }, [isScrolledUp, messageOrder.length]);
+    // A paused completion streams below the viewport even while the user is
+    // still within the scrolled-up threshold.
+    const newMessageCount = useUnseenMessageCount({
+      messageOrder,
+      messages,
+      currentSessionId,
+      isAwayFromBottom: isScrolledUp || isAutoScrollPaused,
+    });
 
-    const newMessageCount = isScrolledUp
-      ? Math.max(0, messageOrder.length - lastSeenMessageCount.current)
-      : 0;
-    const showNewMessagesIndicator = newMessageCount > 0;
+    const handleNewMessagesClick = useCallback(() => {
+      resumeAutoScrollForActiveCompletion();
+      scrollToBottom();
+    }, [resumeAutoScrollForActiveCompletion, scrollToBottom]);
 
     // Create debounced function with useMemo
     const debouncedLoadMore = useMemo(
@@ -945,9 +1046,9 @@ export const MessageList = memo<MessageListProps>(
             </div>
           )}
         </div>
-        {showNewMessagesIndicator && (
+        {newMessageCount > 0 && (
           <ScrollToBottomButton
-            onClick={scrollToBottom}
+            onClick={handleNewMessagesClick}
             newMessageCount={newMessageCount}
           />
         )}
