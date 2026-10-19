@@ -18,5 +18,15 @@ msgstr ""
 # ==============================
 #. js-lingui-explicit-id
 #: src/i18n/messages.ts
+msgid "componentKit.example.attachment.remove"
+msgstr "Usuń {filename}"
+
+#. js-lingui-explicit-id
+#: src/i18n/messages.ts
+msgid "componentKit.example.attachment.removeAll"
+msgstr "Usuń wszystko"
+
+#. js-lingui-explicit-id
+#: src/i18n/messages.ts
 msgid "componentKit.example.welcome"
 msgstr "Przykładowy zestaw komponentów"

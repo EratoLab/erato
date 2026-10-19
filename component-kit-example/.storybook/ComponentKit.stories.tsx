@@ -1,3 +1,4 @@
+import { ComposerContextLane } from "@erato/frontend/shared";
 import React, { createElement as h } from "react";
 
 import {
@@ -11,6 +12,7 @@ import type {
   MessageAction,
   UiChatMessage,
 } from "@erato/frontend/library";
+import type { ComposerContextItem } from "@erato/frontend/shared";
 import type { Meta, StoryObj } from "@storybook/react";
 
 type PropsOf<TKey extends keyof ComponentRegistry> = React.ComponentProps<
@@ -108,6 +110,7 @@ const attachmentPreviewProps = {
   maxFiles: 4,
   onRemoveFile: (fileId: string) => logAction("remove file", fileId),
   onRemoveAllFiles: () => logAction("remove all files"),
+  onFilePreview: (file: { id: string }) => logAction("preview file", file.id),
   disabled: false,
 } as unknown as PropsOf<"ChatInputAttachmentPreview">;
 
@@ -192,6 +195,84 @@ const emailCodeBlockProps = {
   content: "Subject: Follow-up\n\nThanks for the discussion today.",
   isHtml: false,
 } as unknown as PropsOf<"EratoEmailCodeBlock">;
+
+// One chip per state, so the face shows against every frame the host draws.
+const composerContextItems: ComposerContextItem[] = [
+  {
+    id: "selection",
+    kind: "word.selection",
+    origin: "ambient",
+    dismissScope: "selection",
+    state: "included",
+    label: "\u201cThe Supplier shall deliver\u2026\u201d",
+    meta: "Selected passage",
+    icon: "selection",
+    onRemove: () => logAction("remove selection"),
+  },
+  {
+    id: "document",
+    kind: "word.document",
+    origin: "ambient",
+    dismissScope: "chat",
+    state: "superseded",
+    label: "Supply agreement",
+    meta: "Replaced by selection",
+    icon: "document",
+    onRemove: () => logAction("remove document"),
+    detail: {
+      title: "Supply agreement",
+      render: () => "The selection is sent instead of the document.",
+      actions: [
+        {
+          id: "instead",
+          label: "Send this instead",
+          onSelect: () => logAction("send document instead"),
+        },
+      ],
+    },
+  },
+  {
+    id: "draft",
+    kind: "outlook.draft",
+    origin: "ambient",
+    dismissScope: "item",
+    state: "suggested",
+    label: "Your draft",
+    icon: "draft",
+    onRestore: () => logAction("include draft"),
+  },
+  {
+    id: "thread",
+    kind: "outlook.thread",
+    origin: "ambient",
+    dismissScope: "item",
+    state: "loading",
+    label: "Email thread",
+    meta: "Reading\u2026",
+    icon: "mail",
+  },
+  {
+    id: "comments",
+    kind: "word.comments",
+    origin: "ambient",
+    dismissScope: "message",
+    state: "attention",
+    label: "Comments",
+    meta: "Cursor is in 3 comments",
+    icon: "comments",
+    onRemove: () => logAction("remove comments"),
+  },
+  {
+    id: "drop",
+    kind: "outlook.drop",
+    origin: "user",
+    state: "error",
+    label: "Re: Offsite agenda",
+    meta: "Couldn't load the email",
+    icon: "mail",
+    onRemove: () => logAction("remove drop"),
+  },
+];
 
 const Panel = ({
   title,
@@ -279,6 +360,10 @@ const ComponentKitShowcase = () => {
     "ChatTopLeftAccessory",
   );
   const EratoEmailCodeBlock = getComponent(componentKit, "EratoEmailCodeBlock");
+  const ComposerContextChipFace = getComponent(
+    componentKit,
+    "ComposerContextChipFace",
+  );
 
   return (
     <main className="storybook-shell">
@@ -303,6 +388,12 @@ const ComponentKitShowcase = () => {
         </Panel>
         <Panel title="Chat Input Attachments">
           <ChatInputAttachmentPreview {...attachmentPreviewProps} />
+        </Panel>
+        <Panel title="Composer Context Chips">
+          <ComposerContextLane
+            items={composerContextItems}
+            chipFace={ComposerContextChipFace}
+          />
         </Panel>
         <Panel title="Grouped Attachments">
           <ChatGroupedAttachmentsPreview {...groupedAttachmentsProps} />
