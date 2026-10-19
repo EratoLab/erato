@@ -60,7 +60,8 @@
     "deploy/0058_add_client_operation_transports.sql",
     "deploy/0059_add_interrupted_parts_index.sql",
     "deploy/0060_add_audio_synthesis.sql",
-    "deploy/0061_add_assistant_welcome.sql"
+    "deploy/0061_add_assistant_welcome.sql",
+    "deploy/0062_add_client_executor_streams.sql"
   ],
-  "latest_change": "8a65407577fbb0ef2d4dd0997371dda993fa02fc"
+  "latest_change": "8dc51e4469b74e78f0aa01f91d2703f0aa48260a"
 }

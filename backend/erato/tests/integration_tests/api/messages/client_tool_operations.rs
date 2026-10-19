@@ -1209,3 +1209,5 @@ async fn opted_in_tool_without_a_binding_keeps_the_legacy_path(pool: Pool<Postgr
 mod attached;
 
 mod word;
+
+mod executor_stream;
