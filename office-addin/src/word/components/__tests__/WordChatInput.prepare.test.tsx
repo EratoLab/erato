@@ -5,9 +5,12 @@ import {
   fireEvent,
   render,
   screen,
+  within,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { ContextLaneDouble } from "../../../test/helpers/contextLaneDouble";
+import { wordContextStore } from "../../hooks/wordContextStore";
 import {
   WORD_SEND_CAPTURE_DEADLINE_MS,
   WORD_SEND_SKIP_OFFER_MS,
@@ -18,13 +21,19 @@ import type { AddinChatInputRenderProps } from "../../../core/AddinChatCore";
 import type { WordDocumentPreview } from "../../hooks/useWordDocumentSource";
 import type { WordDocumentBuild } from "../../utils/buildWordDocumentArgs";
 import type * as wordActionFacetModule from "../../utils/wordActionFacet";
+import type { ComposerContextItem } from "@erato/frontend/library";
 import type { WordDocumentCapture } from "@erato/frontend/word-review";
-import type { ReactNode } from "react";
 
 const host = vi.hoisted(() => {
   const readyPreview: WordDocumentPreview = {
     status: "included",
-    coverage: null,
+    coverage: {
+      hasContent: true,
+      truncated: false,
+      partialParagraph: false,
+      paragraphsSent: 1,
+      paragraphsTotal: 1,
+    },
     changedSinceLastSend: false,
     reading: false,
   };
@@ -38,6 +47,7 @@ const host = vi.hoisted(() => {
     captureExpectedSlow: vi.fn(),
     previousCapture: vi.fn(),
     markSent: vi.fn(),
+    retry: vi.fn(),
     budget: vi.fn(),
     images: vi.fn(),
     session: { activate: vi.fn(), clear: vi.fn(), execute: vi.fn() },
@@ -46,16 +56,12 @@ const host = vi.hoisted(() => {
 
 vi.mock("@erato/frontend/library", async () => {
   const mock = await import("../../../test/helpers/eratoLibraryMock");
+  const { AlertMock } = await import("../../../test/helpers/contextLaneDouble");
   return mock.createEratoLibraryMock({
     useFacets: () => ({
       data: { action_facets: host.advertised.map((id) => ({ id })) },
     }),
-    Alert: ({ children }: { children: ReactNode }) => (
-      <div role="alert">{children}</div>
-    ),
-    SpinnerIcon: ({ srText }: { srText?: string }) => (
-      <span role="status">{srText}</span>
-    ),
+    Alert: AlertMock,
   });
 });
 
@@ -63,18 +69,23 @@ vi.mock("../../../core/AddinChatInputCore", () => ({
   AddinChatInputCore: ({
     onSendMessage,
     disabled,
+    contextItems,
   }: {
     onSendMessage: (message: string, inputFileIds?: string[]) => void;
     disabled?: boolean;
+    contextItems?: ComposerContextItem[];
   }) => (
-    <button
-      type="button"
-      data-testid="send"
-      data-composer-disabled={String(disabled === true)}
-      onClick={() => onSendMessage("hi", host.fileIds)}
-    >
-      send
-    </button>
+    <>
+      <ContextLaneDouble items={contextItems} />
+      <button
+        type="button"
+        data-testid="send"
+        data-composer-disabled={String(disabled === true)}
+        onClick={() => onSendMessage("hi", host.fileIds)}
+      >
+        send
+      </button>
+    </>
   ),
 }));
 
@@ -85,6 +96,7 @@ vi.mock("../../hooks/useWordDocumentSource", () => ({
     captureExpectedSlow: host.captureExpectedSlow,
     previousCapture: host.previousCapture,
     markSent: host.markSent,
+    retry: host.retry,
   }),
 }));
 
@@ -134,6 +146,25 @@ type Prepared = Awaited<ReturnType<NonNullable<SendCall[11]>["run"]>>;
 
 const IDENTITY = "https://contoso.sharepoint.com/Shared%20Documents/a.docx";
 const WITHOUT_DOCUMENT = { actionFacet: undefined, hostContextIdentity: null };
+
+const chip = () => screen.getByTestId("context-chip-word.document");
+const meta = () =>
+  within(chip()).queryByTestId("context-chip-meta")?.textContent;
+const detail = () => screen.getByTestId("context-detail-word.document");
+/** The document's lasting facts, as its detail lists them. */
+const notes = () =>
+  [...detail().querySelectorAll('[data-ui="word-context-detail-note"]')].map(
+    (note) => note.textContent,
+  );
+/** The one-off send prompts above the composer. */
+const oneOffAlerts = () => {
+  const rows = screen.queryByTestId("word-one-off-rows");
+  return rows
+    ? within(rows)
+        .queryAllByRole("alert")
+        .map((alert) => alert.textContent)
+    : [];
+};
 
 const deferred = <T,>() => {
   let resolve!: (value: T) => void;
@@ -187,7 +218,6 @@ describe("WordChatInput prepared send", () => {
   const send = () => fireEvent.click(screen.getByTestId("send"));
   const composerDisabled = () =>
     screen.getByTestId("send").getAttribute("data-composer-disabled");
-  const chip = () => screen.getByTestId("word-include-document-chip");
   const preparation = () => {
     const prepare = handedOver.at(-1)?.[11];
     if (!prepare) throw new Error("the send was not prepared");
@@ -231,6 +261,7 @@ describe("WordChatInput prepared send", () => {
   afterEach(() => {
     cleanup();
     vi.useRealTimers();
+    wordContextStore.resetForTests();
     vi.clearAllMocks();
   });
 
@@ -287,6 +318,12 @@ describe("WordChatInput prepared send", () => {
     const prepared = await settle(startPreparation());
 
     expect(prepared?.actionFacet?.args?.authoring_status).toBe("model-budget");
+    // The Send's own check says to send again: a one-off row, not a fact on the chip.
+    expect(oneOffAlerts()).toEqual([
+      "The complete rewrite cannot fit the selected model’s available context. Start a shorter chat or choose a model with more context.",
+    ]);
+    expect(chip()).not.toHaveAttribute("data-tone");
+    expect(notes()).toEqual([]);
   });
 
   it("keeps the capture's own authoring issue over a budget refusal", async () => {
@@ -319,6 +356,7 @@ describe("WordChatInput prepared send", () => {
       args: { authoring_status: "available" },
     });
     expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.queryByTestId("word-one-off-rows")).toBeNull();
   });
 
   it("clears a prepared capture when the document identity changes", async () => {
@@ -467,25 +505,70 @@ describe("WordChatInput prepared send", () => {
     },
   );
 
-  it("shows a spinner in the chip while Word is handing over the document", () => {
+  it("shows the document loading while Word is handing it over, still removable", () => {
     host.preview = { ...host.readyPreview, reading: true };
     renderInput();
 
-    expect(screen.getByRole("status")).toHaveTextContent("Reading document…");
+    expect(chip()).toHaveAttribute("data-state", "loading");
+    expect(meta()).toBe("Reading document…");
+    expect(
+      within(chip()).getByRole("button", {
+        name: "Don't include this document",
+      }),
+    ).toBeEnabled();
   });
 
-  it("shows no spinner once the document is read", () => {
+  it("shows the document included once it is read", () => {
     renderInput();
 
-    expect(screen.queryByRole("status")).toBeNull();
+    expect(chip()).toHaveAttribute("data-state", "included");
   });
 
   it("says the document changed since the last send", () => {
     host.preview = { ...host.readyPreview, changedSinceLastSend: true };
     renderInput();
 
-    expect(chip()).toHaveTextContent(
-      "Document included - changed since last send",
+    expect(meta()).toBe("Changed since last send");
+    expect(detail()).toHaveTextContent(
+      "Changed since last send: Erato reads it again with this message.",
+    );
+  });
+
+  it("redraws an open detail when the document's facts change", () => {
+    host.advertised = ["word_document_review"];
+    host.preview = {
+      ...host.readyPreview,
+      coverage: {
+        hasContent: true,
+        truncated: false,
+        partialParagraph: false,
+        paragraphsSent: 3,
+        paragraphsTotal: 3,
+      },
+    };
+    const view = renderInput();
+    expect(detail()).toHaveTextContent(
+      "Erato receives the whole document, 3 paragraphs.",
+    );
+
+    host.preview = {
+      ...host.preview,
+      coverage: {
+        ...host.preview.coverage!,
+        paragraphsSent: 4,
+        paragraphsTotal: 4,
+      },
+    };
+    view.rerender(
+      <WordChatInput
+        chatInputProps={props("chat-1")}
+        documentIdentity={IDENTITY}
+        stagePendingCapture={(capture) => staged.push(capture)}
+      />,
+    );
+
+    expect(detail()).toHaveTextContent(
+      "Erato receives the whole document, 4 paragraphs.",
     );
   });
 
@@ -530,13 +613,17 @@ describe("WordChatInput prepared send", () => {
     expect(screen.queryByTestId("word-slow-capture")).toBeNull();
   });
 
-  it("stops waiting for Word as soon as the document is removed with ✕", async () => {
+  it("stops waiting for Word as soon as the document is removed with its (x)", async () => {
     host.capture.mockReturnValue(neverSettles());
     renderInput();
     send();
     const result = startPreparation();
 
-    fireEvent.click(screen.getByTestId("word-exclude-document"));
+    fireEvent.click(
+      within(chip()).getByRole("button", {
+        name: "Don't include this document",
+      }),
+    );
 
     expect(await settle(result)).toEqual(WITHOUT_DOCUMENT);
     expect(host.markSent).not.toHaveBeenCalled();
@@ -696,7 +783,9 @@ describe("WordChatInput prepared send", () => {
         authoring: undefined,
         paragraphsSent: 1,
       });
-      expect(screen.getByRole("alert")).toHaveTextContent(warning);
+      expect(notes()).toContain(warning);
+      expect(chip()).toHaveAttribute("data-tone", "warning");
+      expect(oneOffAlerts()).toEqual([]);
     },
   );
 
@@ -759,9 +848,8 @@ describe("WordChatInput prepared send", () => {
       expect(tracked?.actionFacet?.id).toBe("word_document_review");
       expect(host.facetInputs.at(-1)?.trackChanges).toBe(true);
       expect(staged.at(-1)).toMatchObject({ trackChanges: true });
-      expect(
-        screen.getAllByRole("alert").map((alert) => alert.textContent),
-      ).toEqual([TRACKING_NOTICE, trackedNotice]);
+      expect(notes()).toEqual([TRACKING_NOTICE, trackedNotice]);
+      expect(meta()).toMatch(/^Track Changes on/);
 
       host.capture.mockResolvedValue(failed);
       send();
@@ -770,9 +858,8 @@ describe("WordChatInput prepared send", () => {
       expect(untracked?.actionFacet?.id).toBe("word_document_review");
       expect(host.facetInputs.at(-1)?.trackChanges).toBe(false);
       expect(staged.at(-1)).not.toHaveProperty("trackChanges");
-      expect(
-        screen.getAllByRole("alert").map((alert) => alert.textContent),
-      ).toEqual([untrackedNotice]);
+      expect(notes()).toEqual([untrackedNotice]);
+      expect(meta()).toMatch(/^Read only/);
     },
   );
 
@@ -790,7 +877,9 @@ describe("WordChatInput prepared send", () => {
     expect(prepared?.actionFacet?.id).toBe("word_document_review");
     expect(host.facetInputs.at(-1)?.trackChanges).toBe(true);
     expect(staged.at(-1)).toMatchObject({ trackChanges: true });
-    expect(screen.getByRole("alert")).toHaveTextContent(TRACKING_NOTICE);
+    expect(notes()).toEqual([TRACKING_NOTICE]);
+    expect(meta()).toBe("Track Changes on · 1 ¶");
+    expect(chip()).toHaveAttribute("data-tone", "warning");
   });
 
   it("keeps authoring with its issue when the review facet is not advertised", async () => {
@@ -810,9 +899,10 @@ describe("WordChatInput prepared send", () => {
       id: "word_document_authoring",
       args: { authoring_status: "too-large" },
     });
-    expect(screen.getByRole("alert")).toHaveTextContent(
+    expect(notes()).toEqual([
       "This file is too large for Erato to open, so Erato cannot read or edit it.",
-    );
+    ]);
+    expect(meta()).toBe("Can't edit · 1 ¶");
   });
 
   const PACKAGE_BLOCKED =
@@ -824,6 +914,10 @@ describe("WordChatInput prepared send", () => {
     renderInput();
 
     expect(readNote()).toHaveTextContent(PACKAGE_BLOCKED);
+    expect(within(detail()).getByTestId("word-document-read-note")).toBe(
+      readNote(),
+    );
+    expect(meta()).toBe("Body only · 1 ¶");
     expect(screen.queryByRole("alert")).toBeNull();
   });
 
@@ -873,7 +967,7 @@ describe("WordChatInput prepared send", () => {
     expect(build.authoring?.assets).toEqual([{ id: "asset-1" }]);
     expect(staged.at(-1)?.authoring).toBe(build.authoring);
     expect(screen.queryByRole("alert")).toBeNull();
-    expect(chip()).toHaveTextContent("Document included · read in parts");
+    expect(meta()).toBe("Read in parts · 1 ¶");
     expect(screen.getByTestId("word-document-coverage-hint")).toHaveTextContent(
       "This document is too large to rewrite as a whole. Erato can still read and edit it section by section.",
     );
@@ -920,17 +1014,20 @@ describe("WordChatInput document coverage", () => {
       />,
     );
   };
-  const chip = () => screen.getByTestId("word-include-document-chip");
   const hint = () => screen.queryByTestId("word-document-coverage-hint");
 
   beforeEach(() => i18n.activate("en"));
-  afterEach(cleanup);
+  afterEach(() => {
+    cleanup();
+    wordContextStore.resetForTests();
+  });
 
   it("keeps the paragraph count and points to a selection when only the review excerpt is sent", () => {
     renderWith(["word_document_review"], { coverage: truncated });
 
-    expect(chip()).toHaveTextContent(
-      "Document included (first 453 of 1590 paragraphs)",
+    expect(meta()).toBe("First 453 of 1,590 ¶");
+    expect(detail()).toHaveTextContent(
+      "Erato receives the first 453 of 1,590 paragraphs.",
     );
     expect(hint()).toHaveTextContent(
       "Only the beginning is sent. To work on a later part, select it in Word.",
@@ -942,7 +1039,11 @@ describe("WordChatInput document coverage", () => {
       coverage: truncated,
     });
 
-    expect(chip()).not.toHaveTextContent("first 453");
+    expect(meta()).toBe("1,590 ¶");
+    expect(detail()).not.toHaveTextContent("453");
+    expect(detail()).toHaveTextContent(
+      "Erato reads the parts of the document your request needs.",
+    );
     expect(hint()).toBeNull();
   });
 
@@ -952,7 +1053,8 @@ describe("WordChatInput document coverage", () => {
       completeReadIssue: "too-large",
     });
 
-    expect(chip()).toHaveTextContent("Document included · read in parts");
+    expect(meta()).toBe("Read in parts · 1,590 ¶");
+    expect(chip()).not.toHaveAttribute("data-tone");
     expect(hint()).toHaveTextContent(
       "This document is too large to rewrite as a whole. Erato can still read and edit it section by section.",
     );
@@ -965,9 +1067,10 @@ describe("WordChatInput document coverage", () => {
       authoringIssue: "unsupported",
     });
 
-    expect(chip()).not.toHaveTextContent("read in parts");
+    expect(meta()).toBe("Can't edit · 1,590 ¶");
+    expect(chip()).toHaveAttribute("data-tone", "warning");
     expect(hint()).toBeNull();
-    expect(screen.getByRole("alert")).toHaveTextContent(
+    expect(notes().join(" ")).toContain(
       "Word did not supply a complete editable structure for this document.",
     );
   });
@@ -979,15 +1082,16 @@ describe("WordChatInput document coverage", () => {
       authoringIssue: "tracking",
     });
 
-    expect(chip()).toHaveTextContent(
-      "Document included (first 453 of 1590 paragraphs)",
-    );
+    expect(meta()).toBe("Track Changes on · First 453 of 1,590 ¶");
+    expect(chip()).toHaveAttribute("data-tone", "warning");
     expect(hint()).toHaveTextContent(
       "Only the beginning is sent. To work on a later part, select it in Word.",
     );
-    expect(screen.getByRole("alert")).toHaveTextContent(
-      "Track Changes is on, so Erato reads this document as if every tracked change were accepted",
-    );
+    expect(notes()).toEqual([
+      expect.stringContaining(
+        "Track Changes is on, so Erato reads this document as if every tracked change were accepted",
+      ),
+    ]);
   });
 
   it("keeps the count when a file too large to open falls back to the review excerpt", () => {
@@ -997,11 +1101,12 @@ describe("WordChatInput document coverage", () => {
       authoringDetails: ["package-too-large"],
     });
 
-    expect(chip()).toHaveTextContent(
-      "Document included (first 453 of 1590 paragraphs)",
-    );
-    expect(screen.getByRole("alert")).toHaveTextContent(
-      "This file is too large for Erato to open completely.",
-    );
+    expect(meta()).toBe("Read only · First 453 of 1,590 ¶");
+    expect(chip()).toHaveAttribute("data-tone", "warning");
+    expect(notes()).toEqual([
+      expect.stringContaining(
+        "This file is too large for Erato to open completely.",
+      ),
+    ]);
   });
 });

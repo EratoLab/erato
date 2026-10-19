@@ -11,6 +11,7 @@ import {
   uninstallMockWordDocument,
 } from "../../test/mocks/word/document";
 import WordApp from "../WordApp";
+import { wordContextStore } from "../hooks/wordContextStore";
 import { LEGACY_WORD_CURRENT_CHAT_KEY } from "../wordSession";
 
 import type { LoginHintResolver } from "../../core/auth/AuthSource";
@@ -170,6 +171,7 @@ describe("Word task pane composition", () => {
   afterEach(() => {
     cleanup();
     uninstallMockWordDocument();
+    wordContextStore.resetForTests();
     vi.clearAllMocks();
   });
 
