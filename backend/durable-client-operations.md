@@ -406,9 +406,12 @@ calls. With it off, the stream endpoint answers 404 and no row is written.
 - **Queue.** UNLOGGED `client_executor_calls`, addressed to the account and
   binding, not to a stream. Each replica runs one poll loop (200 ms) for the
   streams it holds presence for; it marks a due row delivered to that stream in
-  the same statement, so exactly one stream gets it. An undelivered row goes to
-  whichever stream holds the binding next; a delivered, unanswered call is never
-  redelivered.
+  the same statement, so exactly one stream gets it. A live call row belongs to
+  the generation that handed it over and is due only while that generation is
+  the chat's running one. It is due again once a stream other than the one it
+  went to holds the binding, because a reloaded or reconnected pane may have
+  lost it; the frontend runs a `tool_call_id` once per page. A nudge is
+  delivered once.
 - **Hand-over.** Where the run emits `ClientToolCall`, a live-only call (no
   durable operation, not a submission, not inbox-only) with a binding is routed
   once, at dispatch:
@@ -416,7 +419,10 @@ calls. With it off, the stream endpoint answers 404 and no row is written.
      stream on the same replica, or the shared transport owner): the chat
      stream, unchanged;
   2. else the binding's present stream lists the tool: the executor stream;
-  3. else the chat path as before (broadcast and the tool's own timeout).
+  3. else no stream can take it: it settles as `context_unavailable` at once,
+     without waiting for the tool's timeout. A chat resumed on another replica
+     without a shared transport row is not seen in step 1, so its call takes
+     this path or the executor stream.
 
   A handed-over call is neither broadcast nor written to the shared event log, so
   no chat stream runs it twice; proposal and status updates still are. The event

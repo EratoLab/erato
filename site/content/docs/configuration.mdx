@@ -5559,7 +5559,8 @@ binding waits until the first one closes.
 A live client tool call normally runs over the calling chat's own stream, and
 it still does while that stream is connected. When the calling chat has no
 connected stream, the call goes to the stream that serves the call's binding and
-advertises the tool, whichever chat of the account made it. If that stream goes
+advertises the tool, whichever chat of the account made it. Without such a
+stream, the call ends as `context_unavailable` at once. If that stream goes
 away while the call runs, the call ends as `context_unavailable` after 15
 seconds without a stream for the binding. The tool's own `timeout_ms` still
 applies. Calls with a durable operation and submission tools keep their usual
