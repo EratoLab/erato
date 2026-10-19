@@ -1706,6 +1706,73 @@ describe("ChatInput", () => {
     expect(textarea).toHaveValue("Existing dictated text");
   });
 
+  describe("textarea scroll during dictation", () => {
+    const renderDictatingTextarea = async () => {
+      mockUseAudioDictationFeature.mockReturnValue({ enabled: true });
+      const { i18n } = await import("@lingui/core");
+      render(
+        <QueryClientProvider client={new QueryClient()}>
+          <I18nProvider i18n={i18n}>
+            <ChatInput onSendMessage={vi.fn()} />
+          </I18nProvider>
+        </QueryClientProvider>,
+      );
+
+      const textarea =
+        screen.getByPlaceholderText<HTMLTextAreaElement>("Type a message...");
+      // jsdom has no layout, so derive scrollHeight from the content.
+      Object.defineProperty(textarea, "scrollHeight", {
+        configurable: true,
+        get: () => textarea.value.length * 20,
+      });
+      fireEvent.change(textarea, { target: { value: "Existing" } });
+      fireEvent.click(screen.getByTestId("chat-input-record-audio"));
+      mockUseAudioDictationRecorder.mockReturnValue({
+        ...mockUseAudioDictationRecorder.mock.results.at(-1)?.value,
+        isDictating: true,
+      });
+
+      const sendChunk = (chunkIndex: number, transcript: string) =>
+        act(async () => {
+          mockUseAudioDictationRecorder.mock.calls
+            .at(-1)?.[0]
+            .onTranscriptChunk({ chunkIndex, transcript });
+        });
+
+      return { textarea, sendChunk };
+    };
+
+    it("follows dictated text to the end of the textarea", async () => {
+      const { textarea, sendChunk } = await renderDictatingTextarea();
+      expect(textarea.scrollTop).toBe(0);
+
+      await sendChunk(0, "first");
+      expect(textarea).toHaveValue("Existing first");
+      expect(textarea.scrollTop).toBe(textarea.scrollHeight);
+
+      await sendChunk(1, "second");
+      expect(textarea).toHaveValue("Existing first second");
+      expect(textarea.scrollTop).toBe(textarea.scrollHeight);
+    });
+
+    it("leaves the scroll position alone for typing, empty chunks, and after the user scrolls up", async () => {
+      const { textarea, sendChunk } = await renderDictatingTextarea();
+      await sendChunk(0, "first");
+      textarea.scrollTop = 100;
+
+      fireEvent.change(textarea, { target: { value: "Edited first" } });
+      expect(textarea.scrollTop).toBe(100);
+
+      await sendChunk(1, "");
+      fireEvent.change(textarea, { target: { value: "Edited first!" } });
+      expect(textarea.scrollTop).toBe(100);
+
+      await sendChunk(2, "second");
+      expect(textarea).toHaveValue("Edited first! second");
+      expect(textarea.scrollTop).toBe(100);
+    });
+  });
+
   it("warns before removing an audio attachment", async () => {
     const queryClient = new QueryClient({
       defaultOptions: {
