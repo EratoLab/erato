@@ -1,0 +1,571 @@
+import { useCallback, useMemo, useRef, useState } from "react";
+
+import { Alert } from "@/components/ui/Feedback/Alert";
+
+import type {
+  ComposerContextDetailAction,
+  ComposerContextItem,
+  ComposerContextTone,
+} from "@/components/ui/Chat/ComposerContext/types";
+import type { ReactNode } from "react";
+
+/*
+ * Word's selection and document chips as the Office add-in builds them, played
+ * from data. The rules are those of office-addin/src/word/utils/wordContextChips.ts
+ * and the copy is the add-in's English catalog; the add-in's tests pin the real
+ * output, so these stories show the lane, not the add-in's strings.
+ */
+
+export const WORD_DOCUMENT_NAME = "Supply agreement.docx";
+export const WORD_SELECTION_TEXT =
+  "The Supplier shall deliver the Goods no later than the delivery date stated in the Order.\nAny delay must be notified to the Buyer in writing without undue delay.";
+export const WORD_ERATO_TEXT =
+  "The Buyer may audit the Supplier's records once per contract year, with 30 days' notice.";
+export const WORD_LONG_TEXT = Array.from(
+  { length: 14 },
+  (_, index) =>
+    `Clause ${index + 1}. The Supplier warrants that the Goods conform to the specification, are free from defects in design, material and workmanship, and remain fit for the purpose made known to it.`,
+).join("\n");
+
+type DocumentStatus =
+  | "ready"
+  | "reading"
+  | "error"
+  | "empty"
+  | "noFacet"
+  | "noFacetEmpty";
+
+export interface WordStorySeed {
+  selection?: "user" | "erato" | null;
+  selectionOff?: boolean;
+  selectionFailed?: boolean;
+  /** Too long to send whole: only the beginning goes. */
+  long?: boolean;
+  documentOff?: boolean;
+  status?: DocumentStatus;
+  /** Where a read started by + or "Try again" lands. */
+  retryLandsOn?: "ready" | "error";
+  track?: boolean;
+  changed?: boolean;
+  readInParts?: boolean;
+  bodyOnly?: boolean;
+  readOnly?: boolean;
+  cannotEdit?: boolean;
+  coverage?: { sent: number; total: number };
+  /** A comment thread goes in place of the passage and the document. */
+  commentReplaces?: boolean;
+  commentLines?: string[];
+  locked?: boolean;
+}
+
+type WordStoryState = Required<Omit<WordStorySeed, "selection">> & {
+  selection: "user" | "erato" | null;
+};
+
+const DEFAULTS: WordStoryState = {
+  selection: null,
+  selectionOff: false,
+  selectionFailed: false,
+  long: false,
+  documentOff: false,
+  status: "ready",
+  retryLandsOn: "ready",
+  track: false,
+  changed: false,
+  readInParts: false,
+  bodyOnly: false,
+  readOnly: false,
+  cannotEdit: false,
+  coverage: { sent: 86, total: 86 },
+  commentReplaces: false,
+  commentLines: [
+    "A list of the 12 comments in the document: each one's author, place, status and how it starts.",
+    "If your question needs them, Erato may read the other comments in the document.",
+  ],
+  locked: false,
+};
+
+const READ_MS = 600;
+const count = (value: number) => value.toLocaleString("en");
+
+const excerpt = (text: string) => {
+  const characters = Array.from(text.replace(/\s+/g, " ").trim());
+  return characters.length > 60
+    ? `${characters.slice(0, 60).join("").trimEnd()}…`
+    : characters.join("");
+};
+
+interface Note {
+  tone: "info" | "warning" | "error";
+  text: string;
+}
+
+const DetailNote = ({ note }: { note: Note }) => (
+  <div data-ui="word-context-detail-note" data-tone={note.tone}>
+    <Alert role="none" type={note.tone}>
+      {note.text}
+    </Alert>
+  </div>
+);
+
+const Section = ({
+  title,
+  dataUi,
+  children,
+}: {
+  title: string;
+  dataUi: string;
+  children: ReactNode;
+}) => (
+  <section className="flex flex-col gap-1" data-ui={dataUi}>
+    <h3 className="text-xs font-semibold text-theme-fg-secondary">{title}</h3>
+    {children}
+  </section>
+);
+
+const Lifetime = ({ text }: { text: string }) => (
+  <p className="text-xs text-theme-fg-secondary">{text}</p>
+);
+
+const SelectionDetail = ({
+  text,
+  paragraphs,
+  notes,
+}: {
+  text: string;
+  paragraphs: number;
+  notes: Note[];
+}) => (
+  <div className="flex flex-col gap-3">
+    <blockquote
+      // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- a scroll region must take focus to scroll by keyboard
+      tabIndex={0}
+      aria-label="Selected text"
+      data-ui="word-context-detail-quote"
+      className="max-h-48 overflow-y-auto whitespace-pre-wrap break-words border-l-2 border-theme-border pl-3 text-sm text-theme-fg-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-theme-focus"
+    >
+      {text}
+    </blockquote>
+    <p className="text-xs text-theme-fg-secondary">
+      {paragraphs === 1 ? "1 paragraph" : `${paragraphs} paragraphs`}
+    </p>
+    {notes.map((note) => (
+      <DetailNote key={note.text} note={note} />
+    ))}
+    <Lifetime text="Leaving it out lasts until the selection changes." />
+  </div>
+);
+
+const DocumentDetail = ({
+  notes,
+  coverage,
+  hint,
+  comments,
+}: {
+  notes: Note[];
+  coverage: string[] | null;
+  hint?: string;
+  comments: string[];
+}) => (
+  <div className="flex flex-col gap-3">
+    {notes.map((note) => (
+      <DetailNote key={note.text} note={note} />
+    ))}
+    {coverage && (
+      <Section title="Coverage" dataUi="word-context-detail-coverage">
+        {coverage.map((line) => (
+          <p key={line}>{line}</p>
+        ))}
+        {hint && <p className="text-xs text-theme-fg-secondary">{hint}</p>}
+      </Section>
+    )}
+    {comments.length > 0 && (
+      <Section title="Comments" dataUi="word-context-detail-comments">
+        {comments.map((line) => (
+          <p key={line}>{line}</p>
+        ))}
+      </Section>
+    )}
+    <Lifetime text="Leaving it out lasts for this chat. New chats follow your setting “Include the open document in new chats”." />
+  </div>
+);
+
+const TRACKING_NOTE =
+  "Track Changes is on, so Erato reads this document as if every tracked change were accepted, without seeing who changed what, and doesn't edit it.";
+const READ_ONLY_NOTE =
+  "This file is too large for Erato to open completely. Erato receives only the included text and can reword it, but not change its structure or formatting.";
+const CANNOT_EDIT_NOTE =
+  "Word did not supply a complete editable structure for this document. No rewrite was applied.";
+const BODY_ONLY_NOTE =
+  "Word for the web didn't hand over the complete file, for example because the document has a sensitivity label. Erato read the body only, so it can't change headers, footers or page layout, and any change replaces the whole body instead of editing passages in place.";
+const SELECT_LATER_PART =
+  "Only the beginning is sent. To work on a later part, select it in Word.";
+
+export interface WordStorySimulations {
+  selectPassage: () => void;
+  eratoShowsPassage: () => void;
+  clearSelection: () => void;
+  editDocument: () => void;
+  toggleTrackChanges: () => void;
+  failNextRead: () => void;
+}
+
+/**
+ * Plays the add-in's resolver: (x) and (+) change the story's state and both
+ * chips are derived from it again, as `previewWordSend()` does in the add-in.
+ */
+export const useWordStoryResolver = (
+  seed: WordStorySeed,
+): { items: ComposerContextItem[]; simulate: WordStorySimulations } => {
+  const [state, setState] = useState<WordStoryState>(() => ({
+    ...DEFAULTS,
+    ...seed,
+  }));
+  const timer = useRef<number | null>(null);
+
+  const read = useCallback(() => {
+    setState((current) => ({ ...current, status: "reading" }));
+    if (timer.current !== null) window.clearTimeout(timer.current);
+    timer.current = window.setTimeout(() => {
+      setState((current) => ({ ...current, status: current.retryLandsOn }));
+    }, READ_MS);
+  }, []);
+
+  const simulate = useMemo<WordStorySimulations>(
+    () => ({
+      selectPassage: () =>
+        setState((current) => ({
+          ...current,
+          selection: "user",
+          selectionOff: false,
+          selectionFailed: false,
+          long: false,
+        })),
+      eratoShowsPassage: () =>
+        setState((current) => ({
+          ...current,
+          selection: "erato",
+          selectionOff: false,
+          selectionFailed: false,
+          long: false,
+        })),
+      clearSelection: () =>
+        setState((current) => ({ ...current, selection: null })),
+      editDocument: () =>
+        setState((current) => ({ ...current, changed: true })),
+      toggleTrackChanges: () =>
+        setState((current) => ({ ...current, track: !current.track })),
+      failNextRead: () =>
+        setState((current) => ({ ...current, retryLandsOn: "error" })),
+    }),
+    [],
+  );
+
+  const items = useMemo(() => {
+    const result: ComposerContextItem[] = [];
+    const passageGoes = state.selection === "user" && !state.selectionOff;
+    const documentGoes =
+      !state.documentOff &&
+      !passageGoes &&
+      !state.commentReplaces &&
+      (state.status === "ready" || state.status === "empty");
+
+    if (state.selection) {
+      const text =
+        state.selection === "erato"
+          ? WORD_ERATO_TEXT
+          : state.long
+            ? WORD_LONG_TEXT
+            : WORD_SELECTION_TEXT;
+      const paragraphs = text.split("\n").length;
+      const erato = state.selection === "erato";
+      const notes: Note[] = [];
+      let item: Partial<ComposerContextItem> & {
+        state: ComposerContextItem["state"];
+      };
+      if (state.selectionOff || erato) {
+        if (erato)
+          notes.push({
+            tone: "info",
+            text: "Erato selected this passage. It is shown, but not sent until you use it.",
+          });
+        item = {
+          state: "suggested",
+          ...(erato && !state.selectionOff
+            ? { meta: `Shown by Erato · ${count(paragraphs)} ¶` }
+            : {}),
+          restoreLabel: erato ? "Use this selection" : "Include selection",
+          onRestore: () =>
+            setState((current) => ({
+              ...current,
+              selection: "user",
+              selectionOff: false,
+            })),
+        };
+      } else if (state.selectionFailed) {
+        notes.push({
+          tone: "error",
+          text: "Erato could not read your selection in Word, so your message was not sent. Send it again, or dismiss the selection to send without it.",
+        });
+        item = {
+          state: "error",
+          tone: "error",
+          meta: "Couldn't read · send again",
+        };
+      } else if (state.commentReplaces) {
+        notes.push({
+          tone: "info",
+          text: "A comment is sent instead of this passage.",
+        });
+        item = { state: "superseded", meta: "Replaced by comment" };
+      } else {
+        if (state.long)
+          notes.push({
+            tone: "warning",
+            text: "Too long to send in full. Only the beginning is sent.",
+          });
+        if (!state.documentOff)
+          notes.push({ tone: "info", text: "Sent instead of the document." });
+        item = {
+          state: "included",
+          ...(state.long
+            ? {
+                tone: "warning" as ComposerContextTone,
+                meta: "Too long · beginning only",
+              }
+            : { meta: `Selected passage · ${count(paragraphs)} ¶` }),
+          ...(!state.documentOff
+            ? {
+                announcements: {
+                  restored:
+                    "Selection included. It is sent instead of the document.",
+                },
+              }
+            : {}),
+        };
+      }
+      result.push({
+        id: "word-selection",
+        kind: "word.selection",
+        origin: "ambient",
+        dismissScope: "selection",
+        icon: "selection",
+        label: `“${excerpt(text)}”`,
+        spokenLabel: "Selection",
+        ...(item.state === "suggested"
+          ? {}
+          : {
+              removeLabel: "Dismiss selection",
+              onRemove: () =>
+                setState((current) => ({
+                  ...current,
+                  selectionOff: true,
+                  selectionFailed: false,
+                })),
+            }),
+        detail: {
+          title: erato ? "Passage Erato selected" : "Selected passage",
+          render: () => (
+            <SelectionDetail
+              text={text}
+              paragraphs={paragraphs}
+              notes={notes}
+            />
+          ),
+        },
+        ...item,
+      } as ComposerContextItem);
+    }
+
+    const { sent, total } = state.coverage;
+    const truncated = sent < total;
+    const lasting: Note[] = [
+      ...(state.track
+        ? [{ tone: "warning" as const, text: TRACKING_NOTE }]
+        : []),
+      ...(state.readOnly
+        ? [{ tone: "warning" as const, text: READ_ONLY_NOTE }]
+        : []),
+      ...(state.cannotEdit
+        ? [{ tone: "warning" as const, text: CANNOT_EDIT_NOTE }]
+        : []),
+      ...(state.bodyOnly
+        ? [{ tone: "info" as const, text: BODY_ONLY_NOTE }]
+        : []),
+    ];
+    const authoring = state.readInParts || state.bodyOnly || state.cannotEdit;
+    const empty = state.status === "empty";
+    const coverage = empty
+      ? ["The document is empty, so only its name is sent."]
+      : authoring
+        ? ["Erato reads the parts of the document your request needs."]
+        : truncated
+          ? [
+              `Erato receives the first ${count(sent)} of ${count(total)} paragraphs.`,
+            ]
+          : [`Erato receives the whole document, ${count(total)} paragraphs.`];
+    if (state.changed)
+      coverage.push(
+        "Changed since last send: Erato reads it again with this message.",
+      );
+    const hint = state.readInParts
+      ? "This document is too large to rewrite as a whole. Erato can still read and edit it section by section."
+      : !authoring && truncated
+        ? SELECT_LATER_PART
+        : undefined;
+
+    let document: Partial<ComposerContextItem> & {
+      state: ComposerContextItem["state"];
+    };
+    let notes: Note[] = lasting;
+    let actions: ComposerContextDetailAction[] = [];
+    let shownCoverage: string[] | null = coverage;
+    if (state.documentOff) {
+      document = {
+        state: "suggested",
+        restoreLabel: "Include this document",
+        onRestore: () => {
+          if (state.status === "error") read();
+          setState((current) => ({ ...current, documentOff: false }));
+        },
+      };
+      notes = [];
+    } else if (passageGoes && !state.commentReplaces) {
+      document = { state: "superseded", meta: "Replaced by selection" };
+      notes = [
+        {
+          tone: "info",
+          text: "Your selection is sent instead of the document",
+        },
+        ...lasting,
+      ];
+      actions = [
+        {
+          id: "send-instead",
+          label: "Send this instead",
+          variant: "primary",
+          announcement:
+            "Document included. Your selection is off until it changes.",
+          onSelect: () =>
+            setState((current) => ({ ...current, selectionOff: true })),
+        },
+      ];
+    } else if (state.commentReplaces) {
+      document = { state: "superseded", meta: "Replaced by comment" };
+      notes = [
+        { tone: "info", text: "A comment is sent instead of the document" },
+        ...lasting,
+      ];
+    } else if (state.status === "reading") {
+      document = { state: "loading", meta: "Reading document…" };
+      notes = [];
+      shownCoverage = null;
+    } else if (state.status === "error") {
+      document = {
+        state: "error",
+        tone: "error",
+        meta: "Couldn't read the document",
+        removeLabel: "Dismiss",
+      };
+      notes = [
+        {
+          tone: "error",
+          text: "Word did not hand over this document, so it is not sent. Try again, or leave it out.",
+        },
+      ];
+      shownCoverage = null;
+      actions = [
+        {
+          id: "retry",
+          label: "Try again",
+          variant: "primary",
+          announcement: "Document read.",
+          onSelect: read,
+        },
+      ];
+    } else if (state.status === "noFacet" || state.status === "noFacetEmpty") {
+      document = {
+        state: "error",
+        tone: "error",
+        meta: "Can't be sent in this chat",
+        removeLabel: "Dismiss",
+      };
+      notes = [
+        {
+          tone: "warning",
+          text:
+            state.status === "noFacetEmpty"
+              ? "This chat can only work with documents that have text, so an empty document is not sent."
+              : "This chat can only start new documents, so a document with text is not sent.",
+        },
+      ];
+      shownCoverage = null;
+    } else {
+      const lead = state.track
+        ? "Track Changes on"
+        : state.readOnly
+          ? "Read only"
+          : state.cannotEdit
+            ? "Can't edit"
+            : state.readInParts
+              ? "Read in parts"
+              : state.bodyOnly
+                ? "Body only"
+                : undefined;
+      const tail = state.changed
+        ? "Changed since last send"
+        : empty
+          ? "New document"
+          : !authoring && truncated
+            ? `First ${count(sent)} of ${count(total)} ¶`
+            : `${count(total)} ¶`;
+      document = {
+        state: "included",
+        meta: [lead, tail].filter(Boolean).join(" · "),
+        ...(state.track || state.readOnly || state.cannotEdit
+          ? { tone: "warning" as ComposerContextTone }
+          : {}),
+      };
+    }
+
+    result.push({
+      id: "word-document",
+      kind: "word.document",
+      origin: "ambient",
+      dismissScope: "chat",
+      icon: "document",
+      label: WORD_DOCUMENT_NAME,
+      spokenLabel: "Document",
+      removeLabel: "Don't include this document",
+      ...(state.locked
+        ? {
+            locked: true,
+            lockReason:
+              "Can't change this while the chat is archived or a task is running",
+          }
+        : {}),
+      ...(document.state === "suggested"
+        ? {}
+        : {
+            onRemove: () =>
+              setState((current) => ({ ...current, documentOff: true })),
+          }),
+      detail: {
+        title: WORD_DOCUMENT_NAME,
+        render: () => (
+          <DocumentDetail
+            notes={notes}
+            coverage={shownCoverage}
+            hint={documentGoes ? hint : undefined}
+            comments={documentGoes ? state.commentLines : []}
+          />
+        ),
+        ...(actions.length > 0 ? { actions } : {}),
+      },
+      ...document,
+    } as ComposerContextItem);
+    return result;
+  }, [state, read]);
+
+  return { items, simulate };
+};
