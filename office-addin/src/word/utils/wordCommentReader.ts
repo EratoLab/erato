@@ -581,7 +581,7 @@ export async function readWordComments(
 
 /**
  * Word PC dates a reply without dateUtc 1899-11-30, its empty date; this also stops the other
- * epochs (1899-12-30, 1904, 1970) from passing as times.
+ * epochs (1899-12-30, 1904, 1970) from passing as times, and an invalid date fails it too.
  */
 const EARLIEST_COMMENT_DATE_MS = Date.UTC(1980, 0, 1);
 
@@ -592,9 +592,7 @@ function dateOf(value: unknown): Date | null {
       : typeof value === "string" || typeof value === "number"
         ? new Date(value)
         : null;
-  return date && value !== "" && date.getTime() >= EARLIEST_COMMENT_DATE_MS
-    ? date
-    : null;
+  return date && date.getTime() >= EARLIEST_COMMENT_DATE_MS ? date : null;
 }
 
 const textOf = (value: unknown) => (typeof value === "string" ? value : "");

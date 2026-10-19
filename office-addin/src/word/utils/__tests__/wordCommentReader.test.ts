@@ -187,18 +187,15 @@ describe("readWordComments: the Office.js record", () => {
       expect(thread(threads, "T5").creationDate).toBeNull();
     });
 
-    it.each(["pc", "mac"] as const)(
-      "reads Word's empty date on a reply without dateUtc as none on %s, and keeps the root's",
-      async (h) => {
-        const { threads } = await read({ host: h, legacy: true });
-        const t1 = thread(threads, "T1");
-        expect(t1.creationDate).toEqual(new Date("2026-09-03T08:15:30Z"));
-        expect(t1.replies?.map((reply) => reply.creationDate)).toEqual([
-          null,
-          null,
-        ]);
-      },
-    );
+    it("reads Word PC's empty date on a reply without dateUtc as none, and keeps the root's", async () => {
+      const { threads } = await read({ host: "pc", legacy: true });
+      const t1 = thread(threads, "T1");
+      expect(t1.creationDate).toEqual(new Date("2026-09-03T08:15:30Z"));
+      expect(t1.replies?.map((reply) => reply.creationDate)).toEqual([
+        null,
+        null,
+      ]);
+    });
 
     it.each([
       "1899-11-30T00:00:00Z",

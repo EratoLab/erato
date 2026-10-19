@@ -38,7 +38,7 @@ export interface WordCommentListThread {
   status: WordCommentStatus;
   /**
    * The visible anchored text, both ends kept when long; "" for a point comment; null when the read
-   * gave no anchored text, as Word for the web's never does.
+   * gave no anchored text, as on Word for the web.
    */
   quote: string | null;
   /** The thread's comment, on one line. */
@@ -134,11 +134,7 @@ export function wordCommentListOf(
       commentId: record.id,
       author: record.authorName,
       status: record.resolved ? "resolved" : "open",
-      quote: where.point
-        ? ""
-        : where.position === "unknown" && !where.quote
-          ? null
-          : oneLine(where.quote),
+      quote: where.point ? "" : where.quote ? oneLine(where.quote) : null,
       text: oneLine(record.content),
       replies: record.replies?.length ?? null,
       lastActivity: latest([
