@@ -580,6 +580,8 @@ pub async fn retry_delegated_run(
         facet_enum: facet_ids.clone(),
         mcp_allowlist: spec.parent_mcp_allowlist.clone(),
         mcp_server_ids: spec.parent_mcp_server_ids.clone(),
+        // The recorded model rides the target below, not a pick from an offer.
+        model_enum: Vec::new(),
         effective: EffectiveTasksConfig {
             max_tasks_per_turn: 1,
             max_parallel: 1,
@@ -595,12 +597,52 @@ pub async fn retry_delegated_run(
             scheduling: spec.scheduling,
             run_modes: vec![erato_config::config::TaskRunMode::Async],
             child_facet_ids: facet_ids.clone(),
+            child_chat_providers: Vec::new(),
             // The user clicking "retry" IS the approval, so this path never
             // asks again. The batch pre-pass is not on it either; the mode is
             // written as the one that matches what already happened.
             approval_mode: erato_config::config::TaskApprovalMode::Never,
             approval_plan_min_tasks: tasks.approval.plan_min_tasks,
         },
+    };
+
+    // 16. The model a fallback lands on: the one the turn that made the call
+    //     ran on, as it was for the run being retried. A turn that recorded
+    //     none falls back to the owner's default model.
+    let origin_turn_chat_provider_id = crate::models::message::get_message_by_id(
+        &app_state.db,
+        &policy,
+        &me_user.to_subject(),
+        &recovered.message_id,
+    )
+    .await
+    .ok()
+    .and_then(|message| {
+        crate::models::message::get_generation_chat_provider_id_from_message(&message)
+            .ok()
+            .flatten()
+    });
+    let parent_chat_provider_id = match origin_turn_chat_provider_id {
+        Some(chat_provider_id) => chat_provider_id,
+        None => {
+            app_state
+                .chat_provider_for_chatcompletion(
+                    &policy,
+                    &me_user.to_subject(),
+                    &me_user.groups,
+                    None,
+                )
+                .await
+                .map_err(|error| {
+                    tracing::warn!(%error, %child_chat_id, "No model for a retried run");
+                    not_retryable_with_message(
+                        child_chat_id,
+                        NotRetryableState::LaunchRefused,
+                        "No model this task may run on is available to you.".to_string(),
+                    )
+                })?
+                .chat_provider_id
+        }
     };
 
     let context = crate::server::api::v1beta::message_streaming::DelegationDispatchContext {
@@ -622,6 +664,7 @@ pub async fn retry_delegated_run(
         origin_user_message_id: recovered
             .previous_message_id
             .unwrap_or(recovered.message_id),
+        parent_chat_provider_id: &parent_chat_provider_id,
         // Unread on the task route: `DelegationRunMode` has no `Async` variant
         // and this field is consumed only by the mention route, which a retry
         // never reaches. The run's async-ness lives on `LaunchRunSpec` below.
@@ -637,6 +680,12 @@ pub async fn retry_delegated_run(
         &context,
         DelegationTargetSpec::Task {
             facet_ids: facet_ids.clone(),
+            // Re-checked at launch like a pick: a model the owner has lost
+            // since falls back to the origin turn's model, and says so.
+            model: spec
+                .model
+                .as_ref()
+                .map(|model| model.chat_provider_id.clone()),
         },
         LaunchRunSpec {
             run_mode: ProvenanceRunMode::Async,

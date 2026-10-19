@@ -1035,6 +1035,7 @@ mod tests {
             reason: None,
             assistant_id: Some(Uuid::from_u128(1)),
             assistant_name: Some("Research".to_string()),
+            model: None,
             delegate_chat_id: child,
             child_run_id: child,
             parent_tool_call_id: "call-1".to_string(),
