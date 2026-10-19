@@ -9,7 +9,7 @@ use std::sync::Arc;
 use crate::config::{AppConfig, ConfigSourceFile, TranslationPoCompilationMode};
 use crate::distribution::component_kits::ComponentKitDistribution;
 use crate::distribution::frontend_bundles::FrontendBundles;
-use crate::translation_po::TranslationPoCache;
+use crate::translation_po::{CompiledMessagesJson, TranslationPoCache};
 
 /// Translation sources and runtime compilation state shared by all served
 /// bundles.
@@ -98,18 +98,13 @@ impl TranslationDistribution {
         &self.sources
     }
 
-    #[must_use]
-    pub fn compilation_mode(&self) -> TranslationPoCompilationMode {
-        self.compilation_mode
-    }
-
     /// Compiles the PO source corresponding to a served `messages.json`
     /// request. `None` means the request is not a JIT translation artifact.
     pub fn compile_messages_json_for_request(
         &self,
         bundle_root: &Path,
         request_path: &str,
-    ) -> Option<(PathBuf, io::Result<Vec<u8>>)> {
+    ) -> Option<(PathBuf, io::Result<CompiledMessagesJson>)> {
         if self.compilation_mode != TranslationPoCompilationMode::JustInTime {
             return None;
         }
@@ -120,7 +115,10 @@ impl TranslationDistribution {
 
     /// Compile an already resolved local source, including a runtime theme
     /// mounted outside Vite's packaged public layout.
-    pub fn compile_messages_json_source(&self, po_path: &Path) -> Option<io::Result<Vec<u8>>> {
+    pub fn compile_messages_json_source(
+        &self,
+        po_path: &Path,
+    ) -> Option<io::Result<CompiledMessagesJson>> {
         if self.compilation_mode != TranslationPoCompilationMode::JustInTime {
             return None;
         }

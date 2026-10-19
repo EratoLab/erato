@@ -1,6 +1,6 @@
 //! Inlined version of the frontend-environment crate (to simplify dependency version alignment)
 pub use self::axum::serve_files_with_script;
-use crate::config::{AppConfig, MsOfficeAddinWordApplyPolicy, TranslationPoCompilationMode};
+use crate::config::{AppConfig, MsOfficeAddinWordApplyPolicy};
 use crate::distribution::Distribution;
 use crate::distribution::component_kits::ComponentKit;
 use crate::distribution::frontend_bundles::{
@@ -14,7 +14,6 @@ use lol_html::html_content::ContentType;
 use lol_html::{HtmlRewriter, Settings, element};
 use ordered_multimap::ListOrderedMultimap;
 use serde_json::Value;
-use sha2::{Digest, Sha256};
 use std::fmt::Write;
 use std::io;
 
@@ -781,54 +780,18 @@ fn chat_created_via_sources(config: &AppConfig) -> Vec<ChatCreatedVia> {
 }
 
 #[derive(Debug, Clone)]
-pub struct DeploymentVersion(pub Option<String>, pub String);
+pub struct DeploymentVersion(pub Option<String>);
 
 impl DeploymentVersion {
     /// Read the deployment version from the ERATO_DEPLOYMENT_VERSION environment variable.
     /// This bypasses the config.rs mechanism and reads directly from the environment.
     pub fn from_env() -> Self {
-        let version = std::env::var("ERATO_DEPLOYMENT_VERSION").ok();
-        Self(version, random_hex_string())
+        Self(std::env::var("ERATO_DEPLOYMENT_VERSION").ok())
     }
 
-    fn etag_value_for_path(
-        &self,
-        request_path: &str,
-        translation_po_compilation_mode: TranslationPoCompilationMode,
-    ) -> Option<String> {
-        self.0.as_ref().map(|version| {
-            let etag_seed = if translation_po_compilation_mode
-                == TranslationPoCompilationMode::JustInTime
-                && TranslationDistribution::is_messages_json_path(request_path)
-            {
-                format!("{version}-{}", self.1)
-            } else {
-                version.clone()
-            };
-            format!("\"{etag_seed}\"")
-        })
+    fn etag_value(&self) -> Option<String> {
+        self.0.as_ref().map(|version| format!("\"{version}\""))
     }
-
-    /// Just-in-time catalogs are recompiled when their PO sources change, so
-    /// their ETag follows the compiled body rather than the process.
-    fn etag_value_for_compiled_messages_json(&self, body: &[u8]) -> Option<String> {
-        self.0.as_ref().map(|version| {
-            let content_hash: String = Sha256::digest(body)[..16]
-                .iter()
-                .map(|byte| format!("{byte:02x}"))
-                .collect();
-            format!("\"{version}-{content_hash}\"")
-        })
-    }
-}
-
-fn random_hex_string() -> String {
-    let bytes: [u8; 16] = rand::random();
-    let mut hex = String::with_capacity(bytes.len() * 2);
-    for byte in bytes {
-        write!(hex, "{byte:02x}").unwrap();
-    }
-    hex
 }
 
 fn matches_mount_path(request_path: &str, mount_path: &str) -> bool {
@@ -1140,13 +1103,13 @@ pub mod axum {
                 .translations
                 .compile_messages_json_source(&source)
         {
-            let Ok(body) = compiled else {
+            let Ok(compiled) = compiled else {
                 return Ok(internal_server_error_response());
             };
             return Ok(Response::builder()
                 .header(http::header::CONTENT_TYPE, "application/json")
                 .header(http::header::CACHE_CONTROL, "no-cache")
-                .body(full_body(Bytes::from(body)))
+                .body(full_body(Bytes::from(compiled.body)))
                 .unwrap());
         }
 
@@ -1202,15 +1165,11 @@ pub mod axum {
             .compile_messages_json_for_request(&bundle_dir_path, &rewritten_request_path)
         {
             match compilation {
-                Ok(body) => {
+                Ok(compiled) => {
                     let cache_control = cache_control_for_path(&request_path);
-                    let etag_value =
-                        deployment_version.etag_value_for_compiled_messages_json(&body);
-                    if let Some(etag_value) = &etag_value
-                        && client_etag_matches(client_etag.as_ref(), etag_value)
-                    {
+                    if client_etag_matches(client_etag.as_ref(), &compiled.etag) {
                         return Ok(not_modified_response(
-                            etag_value.clone(),
+                            compiled.etag,
                             cache_control,
                             content_security_policy.as_ref(),
                         ));
@@ -1219,9 +1178,9 @@ pub mod axum {
                     let mut res = Response::builder()
                         .status(StatusCode::OK)
                         .header(http::header::CONTENT_TYPE, "application/json")
-                        .body(full_body(Bytes::from(body)))
+                        .body(full_body(Bytes::from(compiled.body)))
                         .unwrap();
-                    apply_non_html_cache_headers(&mut res, etag_value.as_deref(), cache_control);
+                    apply_non_html_cache_headers(&mut res, Some(&compiled.etag), cache_control);
                     insert_content_security_policy(
                         res.headers_mut(),
                         content_security_policy.as_ref(),
@@ -1322,10 +1281,7 @@ pub mod axum {
             // Non-HTML files (theme files, locales, etc.): add cache headers based on deployment version
             let mut res = res.map(|body| body.map_err(Into::into).boxed_unsync());
             let cache_control = cache_control_for_path(&request_path);
-            let etag_value = deployment_version.etag_value_for_path(
-                &request_path,
-                frontend_registry.translations.compilation_mode(),
-            );
+            let etag_value = deployment_version.etag_value();
 
             if let Some(etag_value) = &etag_value {
                 // Check if the client's ETag matches our current version
@@ -1398,7 +1354,7 @@ mod tests {
         ] {
             let response = serve_files_with_script(
                 Extension(registry.clone()),
-                Extension(DeploymentVersion(None, "test".into())),
+                Extension(DeploymentVersion(None)),
                 Request::builder()
                     .uri(format!("/public/common/custom-theme/acme/{asset}"))
                     .body(Body::empty())
@@ -1430,7 +1386,7 @@ mod tests {
             ] {
                 let response = serve_files_with_script(
                     Extension(registry.clone()),
-                    Extension(DeploymentVersion(None, "test".into())),
+                    Extension(DeploymentVersion(None)),
                     Request::builder()
                         .uri(format!("{mount}/{asset}"))
                         .body(Body::empty())
@@ -2295,39 +2251,6 @@ mod tests {
         assert!(runtime_script_index < kit_script_index);
         assert!(kit_script_index < main_script_index);
     }
-    #[test]
-    fn deployment_version_etag_for_jit_i18n_messages_json_uses_runtime_cache_buster() {
-        let deployment_version =
-            DeploymentVersion(Some("deployment-123".to_string()), "abcdef".to_string());
-
-        assert_eq!(
-            deployment_version
-                .etag_value_for_path(
-                    "/public/common/locales/de/messages.json",
-                    TranslationPoCompilationMode::JustInTime
-                )
-                .as_deref(),
-            Some("\"deployment-123-abcdef\"")
-        );
-        assert_eq!(
-            deployment_version
-                .etag_value_for_path(
-                    "/public/common/locales/de/messages.json",
-                    TranslationPoCompilationMode::Precompiled
-                )
-                .as_deref(),
-            Some("\"deployment-123\"")
-        );
-        assert_eq!(
-            deployment_version
-                .etag_value_for_path(
-                    "/public/common/assets/index.js",
-                    TranslationPoCompilationMode::JustInTime
-                )
-                .as_deref(),
-            Some("\"deployment-123\"")
-        );
-    }
 
     #[tokio::test]
     async fn jit_messages_json_revalidation_returns_recompiled_catalog_after_po_change() {
@@ -2347,7 +2270,8 @@ mod tests {
         .unwrap();
         let mut config = AppConfig::default();
         config.frontend.web_frontend_bundle_path = web.display().to_string();
-        config.frontend.translation_po_compilation_mode = TranslationPoCompilationMode::JustInTime;
+        config.frontend.translation_po_compilation_mode =
+            crate::config::TranslationPoCompilationMode::JustInTime;
         let distribution = Distribution::load(&config);
         let registry = std::sync::Arc::new(build_frontend_registry(&config, &distribution));
         let request = |if_none_match: Option<&str>| {
@@ -2357,10 +2281,7 @@ mod tests {
             }
             serve_files_with_script(
                 Extension(registry.clone()),
-                Extension(DeploymentVersion(
-                    Some("deployment-123".to_string()),
-                    "abcdef".to_string(),
-                )),
+                Extension(DeploymentVersion(None)),
                 request.body(Body::empty()).unwrap(),
             )
         };

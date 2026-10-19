@@ -21,7 +21,27 @@ pub struct TranslationPoCache {
 #[derive(Debug, erato_memory::HeapSize)]
 struct CachedCatalog {
     sources: CatalogSources,
-    compiled: Vec<u8>,
+    compiled: CompiledMessagesJson,
+}
+
+/// A compiled `messages.json` body with an ETag derived from its content.
+#[derive(Clone, Debug, erato_memory::HeapSize)]
+pub struct CompiledMessagesJson {
+    pub body: Vec<u8>,
+    pub etag: String,
+}
+
+impl CompiledMessagesJson {
+    fn new(body: Vec<u8>) -> Self {
+        let content_hash: String = Sha256::digest(&body)[..16]
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect();
+        Self {
+            body,
+            etag: format!("\"{content_hash}\""),
+        }
+    }
 }
 
 /// A cached catalog is reused only while its PO files still match these.
@@ -55,7 +75,7 @@ impl TranslationPoCache {
         }
     }
 
-    pub fn compile_messages_json(&self, po_path: &Path) -> io::Result<Vec<u8>> {
+    pub fn compile_messages_json(&self, po_path: &Path) -> io::Result<CompiledMessagesJson> {
         let po_path = po_path.canonicalize()?;
         let fallback_path = fallback_po_path(&po_path, &self.fallback_locale)
             .filter(|fallback_path| fallback_path != &po_path);
@@ -100,8 +120,10 @@ impl TranslationPoCache {
                 format!("failed to compile {}: {err}", po_path.display()),
             )
         })?);
-        let compiled = serde_json::to_vec(&json!({ "messages": messages }))
-            .map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))?;
+        let compiled = CompiledMessagesJson::new(
+            serde_json::to_vec(&json!({ "messages": messages }))
+                .map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))?,
+        );
 
         self.entries
             .lock()
@@ -658,7 +680,7 @@ msgstr "Abbrechen"
         let compiled = TranslationPoCache::new("en")
             .compile_messages_json(&de_path)
             .unwrap();
-        let value: Value = serde_json::from_slice(&compiled).unwrap();
+        let value: Value = serde_json::from_slice(&compiled.body).unwrap();
 
         assert_eq!(
             value["messages"]["navigation.page.new_chat"],
@@ -708,7 +730,7 @@ msgstr "Abbrechen"
 
         let cache = TranslationPoCache::new("en");
         let compile = |path: &Path| -> Value {
-            serde_json::from_slice(&cache.compile_messages_json(path).unwrap()).unwrap()
+            serde_json::from_slice(&cache.compile_messages_json(path).unwrap().body).unwrap()
         };
         let value = compile(&de_path);
         assert_eq!(value["messages"]["common.cancel"], json!(["Abbrechen"]));
