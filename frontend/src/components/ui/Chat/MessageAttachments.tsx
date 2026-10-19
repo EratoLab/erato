@@ -1,4 +1,3 @@
-import { useQueries } from "@tanstack/react-query";
 import { useMemo } from "react";
 
 import { AttachmentTileList } from "@/components/ui/FileUpload/AttachmentTileList";
@@ -8,8 +7,7 @@ import {
   getFilePreviewUrl,
 } from "@/components/ui/FileUpload/FilePreviewBase";
 import { GroupedFileAttachmentsPreview } from "@/components/ui/FileUpload/GroupedFileAttachmentsPreview";
-import { getFileQuery } from "@/lib/generated/v1betaApi/v1betaApiComponents";
-import { useV1betaApiContext } from "@/lib/generated/v1betaApi/v1betaApiContext";
+import { useResolvedFiles } from "@/hooks/files/useResolvedFiles";
 import { groupTeamsSentAttachments } from "@/utils/teams/teamsSentAttachmentGroups";
 import { teamsUploadDisplayName } from "@/utils/teams/teamsUploadName";
 
@@ -75,34 +73,8 @@ const useAttachmentTiles = (
   fileIds: readonly string[],
   filesById: Record<string, FileUploadItem>,
 ): Omit<MessageAttachmentFiles, "relatedFiles"> => {
-  const { queryOptions, fetcherOptions } = useV1betaApiContext({});
-
-  const missingIds = useMemo(
-    () => fileIds.filter((fileId) => !(fileId in filesById)),
-    [fileIds, filesById],
-  );
-
-  const fetched = useQueries({
-    queries: missingIds.map((fileId) => ({
-      ...getFileQuery({ ...fetcherOptions, pathParams: { fileId } }),
-      ...queryOptions,
-      staleTime: Infinity,
-    })),
-  });
-
-  // `Partial` because a lookup can genuinely miss — a file still in flight —
-  // while a plain index signature would claim every key resolves.
-  const resolvedById = useMemo<Partial<Record<string, FileUploadItem>>>(() => {
-    const map: Partial<Record<string, FileUploadItem>> = {};
-    missingIds.forEach((fileId, index) => {
-      const file = fetched[index]?.data;
-      if (file) {
-        map[fileId] = file;
-      }
-    });
-    // The conversation's own records are the freshest, so they win.
-    return { ...map, ...filesById };
-  }, [missingIds, fetched, filesById]);
+  const resolvedById: Partial<Record<string, FileUploadItem>> =
+    useResolvedFiles(fileIds, filesById);
 
   const items = useMemo<AttachmentTileItem[]>(
     () =>

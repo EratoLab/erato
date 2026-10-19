@@ -303,6 +303,42 @@ async fn check_output_for_protocol(
         })
         .collect();
     assert_eq!(pointers.len(), expected_files, "{parts:?}");
+    let history = server
+        .get(&format!("/api/v1beta/chats/{chat_id}/messages"))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await;
+    history.assert_status_ok();
+    let history: Value = history.json();
+    let assistant = history["messages"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|message| message["id"] == message_id.to_string())
+        .unwrap();
+    let files = assistant["files"].as_array().unwrap();
+    assert_eq!(files.len(), expected_files);
+    for pointer in &pointers {
+        let file = files
+            .iter()
+            .find(|file| file["id"] == pointer["file_upload_id"])
+            .expect("generated pointer must have metadata in message.files");
+        assert!(
+            file["filename"]
+                .as_str()
+                .is_some_and(|name| !name.is_empty())
+        );
+        assert!(
+            file["preview_url"]
+                .as_str()
+                .is_some_and(|url| !url.is_empty())
+        );
+        assert!(
+            file["download_url"]
+                .as_str()
+                .is_some_and(|url| !url.is_empty())
+        );
+    }
+
     assert_eq!(
         file_uploads::Entity::find()
             .all(&state.db)
