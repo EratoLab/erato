@@ -85,7 +85,12 @@ describe("v1betaApiFetch optional query parameters", () => {
 
   it("starts every coordinator sweep without a cursor and follows server pagination", async () => {
     const cursor = "550e8400-e29b-41d4-a716-446655440000";
-    const page = { account_id: "account", enabled: true, operations: [] };
+    const page = {
+      account_id: "account",
+      enabled: true,
+      executor_stream_enabled: false,
+      operations: [],
+    };
     const fetchMock = mockFetch();
     fetchMock.mockImplementation(async (url: string) => ({
       ok: true,
@@ -116,6 +121,7 @@ describe("v1betaApiFetch optional query parameters", () => {
     const fetchMock = mockFetch({
       account_id: "account",
       enabled: false,
+      executor_stream_enabled: false,
       operations: [],
     });
     const coordinator = new ClientOperationCoordinator(
