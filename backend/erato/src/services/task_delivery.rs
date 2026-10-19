@@ -138,6 +138,7 @@ pub async fn record_pending_delivery(
             spawned_at,
             chat.assistant_id,
             None,
+            None,
             parent_tool_call_id.clone(),
             if run_failed {
                 DelegationRunStatus::Failed
@@ -351,6 +352,7 @@ pub async fn rearm_delivery_after_child_decision(
                 child_assistant_message_id,
                 spawned_at,
                 chat.assistant_id,
+                None,
                 None,
                 parent_tool_call_id,
                 if outcome == TaskOutcome::Errored {
@@ -1226,6 +1228,7 @@ async fn child_answer_for_delivery<C: ConnectionTrait>(
         result_message_id,
         spawned_at,
         child.assistant_id,
+        None,
         None,
         parent_tool_call_id,
         // The status was settled when the delivery was recorded; asking for it
