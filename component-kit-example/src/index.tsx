@@ -8,6 +8,7 @@ import { ExampleChatInputAttachmentPreview } from "./components/ExampleChatInput
 import { ExampleChatMessageRenderer } from "./components/ExampleChatMessageRenderer";
 import { ExampleChatTopLeftAccessory } from "./components/ExampleChatTopLeftAccessory";
 import { ExampleChatWelcomeScreen } from "./components/ExampleChatWelcomeScreen";
+import { ExampleComposerContextChipFace } from "./components/ExampleComposerContextChipFace";
 import { ExampleEratoEmailCodeBlock } from "./components/ExampleEratoEmailCodeBlock";
 import { ExampleFileSourceSelector } from "./components/ExampleFileSourceSelector";
 import { ExampleGroupedAttachmentsPreview } from "./components/ExampleGroupedAttachmentsPreview";
@@ -51,6 +52,12 @@ const componentKit: ComponentKitRegistration = {
       extensionPoint: "ChatInputAttachmentPreview",
       component: ExampleChatInputAttachmentPreview,
       priority: 50,
+    },
+    {
+      extensionPoint: "ComposerContextChipFace",
+      component: ExampleComposerContextChipFace,
+      priority: 50,
+      builtAgainstSharedSurfaceMinor: 19,
     },
     {
       extensionPoint: "ChatGroupedAttachmentsPreview",
