@@ -2,10 +2,12 @@
 //! executor content telemetry, or stored authentication credentials.
 use super::me_profile_middleware::MeProfile;
 use crate::services::background_tasks::Takeover;
+use crate::services::client_operations::executor_stream::{ExecutorStreamEvent, PresenceGuard};
 use crate::services::client_operations::{
     ExecutorBinding, OperationRequest, OperationResult, store,
 };
 use crate::{policy::engine::PolicyEngine, state::AppState};
+use axum::response::sse::{Event, KeepAlive};
 use axum::response::{IntoResponse, Response, Sse};
 use axum::{
     Extension, Json,
@@ -178,6 +180,8 @@ pub struct ListClientOperationsQuery {
 pub struct ListClientOperationsResponse {
     pub account_id: String,
     pub enabled: bool,
+    /// Whether `GET /me/client-operations/stream` serves executor streams.
+    pub executor_stream_enabled: bool,
     pub operations: Vec<ClientOperationView>,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false)]
@@ -217,6 +221,7 @@ pub async fn list_client_operations(
         return Ok(Json(ListClientOperationsResponse {
             account_id: me.id.clone(),
             enabled: false,
+            executor_stream_enabled: state.config.client_tools.executor_stream_enabled,
             operations: Vec::new(),
             after: None,
         }));
@@ -238,6 +243,7 @@ pub async fn list_client_operations(
     Ok(Json(ListClientOperationsResponse {
         account_id: me.id.clone(),
         enabled: true,
+        executor_stream_enabled: state.config.client_tools.executor_stream_enabled,
         operations,
         after,
     }))
@@ -459,4 +465,59 @@ pub async fn continue_client_operation(
         })
         .into_response())
     }
+}
+
+/// One stream per executor binding. It receives live client tool calls from any
+/// of the account's chats that no stream of the calling chat can take, and
+/// announces new durable operations for the binding. The first stream of a
+/// binding serves it; a later one waits until the first closes.
+#[utoipa::path(get, path = "/me/client-operations/stream", operation_id = "clientOperationStream",
+    responses((status = OK, content_type = "text/event-stream", body = ExecutorStreamEvent),
+        (status = BAD_REQUEST, description = "No valid X-Erato-Executor binding or no X-Erato-Client-Tools"),
+        (status = NOT_FOUND, description = "Executor streams are disabled")),
+    security(("bearer_auth" = [])))]
+pub async fn executor_stream(
+    State(state): State<AppState>,
+    Extension(me): Extension<MeProfile>,
+    headers: HeaderMap,
+) -> Result<Response, ApiError> {
+    if !state.config.client_tools.executor_stream_enabled {
+        return Err((StatusCode::NOT_FOUND, "Not found".into()));
+    }
+    let account_id = Uuid::parse_str(&me.id)
+        .map_err(|_| (StatusCode::UNAUTHORIZED, "Invalid account".into()))?;
+    let binding = ExecutorBinding::from_headers(&headers).ok_or_else(|| {
+        (
+            StatusCode::BAD_REQUEST,
+            "A valid X-Erato-Executor binding is required".into(),
+        )
+    })?;
+    let client_tools = crate::services::client_tools::registered_client_tools(&headers);
+    if client_tools.is_empty() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "X-Erato-Client-Tools must name at least one tool".into(),
+        ));
+    }
+    let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
+    let guard = PresenceGuard::start(
+        state.db.clone(),
+        state.executor_streams.clone(),
+        account_id,
+        binding,
+        client_tools,
+        crate::services::client_tools::child_client_tools(&headers),
+        sender,
+    )
+    .await;
+    let events = futures::stream::unfold((receiver, guard), |(mut receiver, guard)| async move {
+        let event = receiver.recv().await?;
+        let sse = Event::default()
+            .event(event.message_type())
+            .json_data(&event);
+        Some((sse, (receiver, guard)))
+    });
+    Ok(Sse::new(events)
+        .keep_alive(KeepAlive::new().interval(std::time::Duration::from_secs(1)))
+        .into_response())
 }

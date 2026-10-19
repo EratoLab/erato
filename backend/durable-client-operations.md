@@ -68,7 +68,8 @@ The selected qualified client tools and submission policies, together with consu
 budgets/counters, are retained for the logical turn. Current allowlists, registration
 requirements and delegated-child restrictions still apply on continuation. A kind
 must explicitly authorize a bound child operation; no parent-to-child SSE relay is
-introduced.
+introduced. The executor stream below is no relay either: delegated children get
+no configured client tools until ERMAIN-1001 grants them.
 
 ## Rollout prerequisites and current limits
 
@@ -386,13 +387,66 @@ and `durable_operations_enabled = true` into an uncommitted
 `backend/zz-ermain-911-durable.auto.erato.toml`. Check that the durable table
 merges onto the overlay's tool. That file is not gitignored; never commit it.
 
+## Executor streams (ERMAIN-1000)
+
+`client_tools.executor_stream_enabled` (default off) adds a second channel for live
+calls. With it off, the stream endpoint answers 404 and no row is written.
+
+- **Stream.** `GET /me/client-operations/stream` (SSE, 1 s keep-alive), one per
+  pane. It needs a valid `X-Erato-Executor` and a non-empty `X-Erato-Client-Tools`
+  (else 400). `X-Erato-Child-Client-Tools` names the tools whose handlers accept
+  grant calls; it is intersected with `X-Erato-Client-Tools` and never part of the
+  binding, so older backends that refuse unknown binding fields are unaffected.
+- **Presence.** UNLOGGED `client_executor_presence`, one row per account and
+  binding: the stream id, the advertised and child-capable tool names, and a
+  20 s lease renewed every 5 s, as for chat transports. Acquisition is
+  compare-and-set, so the first stream wins; a later stream for the binding
+  retries every second and takes over once the holder's row is gone. Dropping the
+  response body deletes the row.
+- **Queue.** UNLOGGED `client_executor_calls`, addressed to the account and
+  binding, not to a stream. Each replica runs one poll loop (200 ms) for the
+  streams it holds presence for; it marks a due row delivered to that stream in
+  the same statement, so exactly one stream gets it. An undelivered row goes to
+  whichever stream holds the binding next; a delivered, unanswered call is never
+  redelivered.
+- **Hand-over.** Where the run emits `ClientToolCall`, a live-only call (no
+  durable operation, not a submission, not inbox-only) with a binding is routed
+  once, at dispatch:
+  1. a stream of the calling chat can take it (the original stream, a resumed
+     stream on the same replica, or the shared transport owner): the chat
+     stream, unchanged;
+  2. else the binding's present stream lists the tool: the executor stream;
+  3. else the chat path as before (broadcast and the tool's own timeout).
+
+  A handed-over call is neither broadcast nor written to the shared event log, so
+  no chat stream runs it twice; proposal and status updates still are. The event
+  is `client_tool_call {chat_id, message_id, tool_call_id, tool_name, input,
+  lineage?}`. `lineage` is set only for grant calls (ERMAIN-1001), which always use
+  the executor stream and settle as `context_unavailable` at once without a
+  stream that accepts them.
+- **Results** use `clienttoolresult` with the calling chat and message ids. A
+  handed-over call accepts only the binding it was sent to (409 otherwise), on the
+  run's replica from memory and on another replica from the queue row.
+- **Outcomes.** If the binding has no stream for 15 s while the call runs, it
+  settles as `context_unavailable`; a reconnect within that grace resets it. The
+  tool's own timeout still applies. Every exit deletes the queue row.
+- **Nudge.** After a durable park commits, a `client_operation_available
+  {attempt_id}` row for the binding is released once the attempt is claimable
+  (pending, its chat no longer running). The frontend coordinator then sweeps the
+  inbox at once; the 10 s poll stays the fallback.
+- **Frontend.** `ClientOperationCoordinator` opens the stream when
+  `ListClientOperationsResponse.executor_stream_enabled` is set and the pane has a
+  binding, reopens it when the binding or tools change, and dispatches calls
+  through the client tool executor registry with the stream's binding.
+
 ## Local evidence integration
 
 The completed [rebase delta](local-evidence-operations.md) records the removed
 private checkpoint, job lifecycle and continuation paths. The native kind uses the
 shared attempts table, with a narrow export/binding extension. Its offer policy
 retains the single-replica, async-leaf, exclusive-scope and depth-one restrictions.
-Ordinary configured client tools remain suppressed in delegated children.
+Ordinary configured client tools remain suppressed in delegated children until
+ERMAIN-1001 grants them over the executor stream.
 
 Protocol 0.1.28 keeps its existing signed fields: native `jobId` is the generic
 attempt UUID; native `attemptId` retains the original generation UUID. No native

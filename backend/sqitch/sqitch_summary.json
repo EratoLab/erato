@@ -58,7 +58,8 @@
     "deploy/0056_add_ms_teams_pending_sign_ins.sql",
     "deploy/0057_add_ms_teams_requests.sql",
     "deploy/0058_add_client_operation_transports.sql",
-    "deploy/0059_add_interrupted_parts_index.sql"
+    "deploy/0059_add_interrupted_parts_index.sql",
+    "deploy/0060_add_client_executor_streams.sql"
   ],
-  "latest_change": "bf2984fbb6473bcd633547c939fa747b6ab54491"
+  "latest_change": "d135af9009faa0fb19a27db96d2df5444409cfcb"
 }

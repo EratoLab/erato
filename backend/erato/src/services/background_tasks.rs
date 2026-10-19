@@ -23,7 +23,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::types::Uuid;
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::time::Duration;
 use tokio::sync::{Notify, RwLock, broadcast, oneshot};
 use tokio::task::JoinHandle;
@@ -121,6 +121,8 @@ pub struct BackgroundTaskManager {
     /// Shared with the already-spawned maintenance loop, which reads it each
     /// tick, so it can be set after construction.
     lease_identity_guard: Arc<AtomicBool>,
+    /// Whether the maintenance loop removes stale executor stream rows.
+    executor_stream_cleanup: Arc<AtomicBool>,
 }
 
 impl BackgroundTaskManager {
@@ -137,10 +139,12 @@ impl BackgroundTaskManager {
         let tasks: Arc<RwLock<HashMap<Uuid, Arc<StreamingTask>>>> =
             Arc::new(RwLock::new(HashMap::new()));
         let lease_identity_guard = Arc::new(AtomicBool::new(false));
+        let executor_stream_cleanup = Arc::new(AtomicBool::new(false));
 
         let maintenance_task = db.clone().map(|db| {
             let tasks = Arc::clone(&tasks);
             let lease_identity_guard = Arc::clone(&lease_identity_guard);
+            let executor_stream_cleanup = Arc::clone(&executor_stream_cleanup);
             Arc::new(tokio::spawn(async move {
                 Self::run_maintenance_task(
                     db,
@@ -148,6 +152,7 @@ impl BackgroundTaskManager {
                     config,
                     delegation_run_timeout_secs,
                     lease_identity_guard,
+                    executor_stream_cleanup,
                 )
                 .await;
             }))
@@ -158,6 +163,7 @@ impl BackgroundTaskManager {
             db,
             _maintenance_task: maintenance_task,
             lease_identity_guard,
+            executor_stream_cleanup,
         }
     }
 
@@ -168,6 +174,13 @@ impl BackgroundTaskManager {
     /// control. With it off, nothing about the historical behaviour changes.
     pub fn with_lease_identity_guard(self, enabled: bool) -> Self {
         self.lease_identity_guard.store(enabled, Ordering::Relaxed);
+        self
+    }
+
+    /// Remove stale executor stream presence and queue rows on each tick.
+    pub fn with_executor_stream_cleanup(self, enabled: bool) -> Self {
+        self.executor_stream_cleanup
+            .store(enabled, Ordering::Relaxed);
         self
     }
 
@@ -678,17 +691,25 @@ impl BackgroundTaskManager {
                                 .ok()
                                 .flatten()
                                 .unwrap_or(JsonValue::Null);
+                            let executor = serde_json::from_value::<
+                                crate::services::client_operations::ExecutorBinding,
+                            >(
+                                payload["operation_executor"].clone()
+                            );
                             let bound = match task.client_operation(&tool_call_id).await {
-                                Some(operation) => serde_json::from_value::<
-                                    crate::services::client_operations::ExecutorBinding,
-                                >(
-                                    payload["operation_executor"].clone()
-                                )
-                                .is_ok_and(|binding| binding == operation.binding)
+                                Some(operation) => executor
+                                    .as_ref()
+                                    .is_ok_and(|binding| *binding == operation.binding)
                                     && operation.consent
                                         == crate::services::client_operations::ConsentPolicy::None,
                                 None => true,
-                            };
+                            } && task.executor_call(&tool_call_id).await.is_none_or(
+                                |handed_over| {
+                                    executor
+                                        .as_ref()
+                                        .is_ok_and(|binding| *binding == handed_over)
+                                },
+                            );
                             if bound {
                                 let outcome = ClientToolOutcome::from_payload(&payload);
                                 let _ = task
@@ -941,6 +962,7 @@ impl BackgroundTaskManager {
         config: GenerationStatusConfig,
         delegation_run_timeout_secs: Option<u64>,
         lease_identity_guard: Arc<AtomicBool>,
+        executor_stream_cleanup: Arc<AtomicBool>,
     ) {
         let mut interval =
             tokio::time::interval(Duration::from_secs(config.heartbeat_interval_secs.max(1)));
@@ -1097,6 +1119,13 @@ impl BackgroundTaskManager {
             );
             if let Err(err) = db.execute_raw(shared_cleanup_statement).await {
                 tracing::warn!(error = %err, "Failed to clean up shared generation rows");
+            }
+
+            if executor_stream_cleanup.load(Ordering::Relaxed)
+                && let Err(error) =
+                    crate::services::client_operations::executor_stream::cleanup(&db).await
+            {
+                tracing::warn!(%error, "Failed to clean up executor stream rows");
             }
 
             if let Some(run_timeout_secs) = delegation_run_timeout_secs {
@@ -1281,6 +1310,10 @@ pub struct StreamingTask {
     original_transport_connected: AtomicBool,
     shared_transport: AtomicBool,
     shared_transport_ready: Arc<Notify>,
+    /// Calls handed to an executor stream, with the binding they were sent to.
+    executor_calls: RwLock<HashMap<String, crate::services::client_operations::ExecutorBinding>>,
+    /// Resumed streams of this chat on this replica.
+    local_streams: Arc<AtomicUsize>,
 }
 
 impl std::fmt::Debug for StreamingTask {
@@ -1322,6 +1355,8 @@ impl StreamingTask {
             original_transport_connected: AtomicBool::new(false),
             shared_transport: AtomicBool::new(false),
             shared_transport_ready: Arc::new(Notify::new()),
+            executor_calls: RwLock::new(HashMap::new()),
+            local_streams: Arc::new(AtomicUsize::new(0)),
         }
     }
 
@@ -1666,6 +1701,37 @@ impl StreamingTask {
         self.client_operations.read().await.get(call_id).cloned()
     }
 
+    pub async fn register_executor_call(
+        &self,
+        call_id: String,
+        binding: crate::services::client_operations::ExecutorBinding,
+    ) {
+        self.executor_calls.write().await.insert(call_id, binding);
+    }
+
+    pub async fn executor_call(
+        &self,
+        call_id: &str,
+    ) -> Option<crate::services::client_operations::ExecutorBinding> {
+        self.executor_calls.read().await.get(call_id).cloned()
+    }
+
+    pub async fn remove_executor_call(&self, call_id: &str) {
+        self.executor_calls.write().await.remove(call_id);
+    }
+
+    /// Counts a resumed stream of this chat on this replica while held.
+    pub fn local_stream_guard(&self) -> LocalStreamGuard {
+        self.local_streams.fetch_add(1, Ordering::AcqRel);
+        LocalStreamGuard(Arc::clone(&self.local_streams))
+    }
+
+    /// Whether a stream of this chat can take a live call. A resumed stream on
+    /// another replica is visible only through a shared transport row.
+    pub async fn client_stream_attached(&self) -> bool {
+        self.local_streams.load(Ordering::Acquire) > 0 || self.client_transport_connected().await
+    }
+
     /// Get the number of active subscribers
     pub fn subscriber_count(&self) -> usize {
         self.event_tx.receiver_count()
@@ -1780,6 +1846,14 @@ pub enum ToolCallStatus {
     Error,
 }
 
+pub struct LocalStreamGuard(Arc<AtomicUsize>);
+
+impl Drop for LocalStreamGuard {
+    fn drop(&mut self) {
+        self.0.fetch_sub(1, Ordering::AcqRel);
+    }
+}
+
 /// The lease belongs to a response body, never to the worker or its event log.
 pub struct ClientStreamGuard {
     db: Option<DatabaseConnection>,
@@ -1788,6 +1862,7 @@ pub struct ClientStreamGuard {
     original: Option<std::sync::Weak<StreamingTask>>,
     owned: Arc<AtomicBool>,
     heartbeat: Option<JoinHandle<()>>,
+    local_stream: Option<LocalStreamGuard>,
 }
 
 struct ClientTransportClaim {
@@ -1810,9 +1885,15 @@ impl ClientStreamGuard {
             original,
             owned: Arc::new(AtomicBool::new(false)),
             heartbeat: None,
+            local_stream: None,
         };
         guard.start_heartbeat(None);
         guard
+    }
+
+    pub fn with_local_stream(mut self, task: &StreamingTask) -> Self {
+        self.local_stream = Some(task.local_stream_guard());
+        self
     }
 
     pub async fn resume(

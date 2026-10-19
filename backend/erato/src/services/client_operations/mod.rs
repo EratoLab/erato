@@ -1,6 +1,7 @@
 //! Logged, account-scoped attempts for explicitly registered client operations.
 //! Model history remains on the message row; no composed request is stored here.
 pub mod client_tool;
+pub mod executor_stream;
 pub mod store;
 pub mod transport;
 
