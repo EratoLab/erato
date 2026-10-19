@@ -1,14 +1,17 @@
 import { UploadTooLargeError } from "@erato/frontend/library";
 import { i18n } from "@lingui/core";
 import {
+  act,
   cleanup,
   fireEvent,
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { SCHEDULING_THREAD_MAX_AGE_MS } from "../../utils/outlookScheduleTool";
 import { EmailTrimError } from "../../utils/trimRawEmlBytes";
 import { AddinChatInput } from "../AddinChatInput";
 
@@ -18,6 +21,7 @@ import type {
   StagedEmail,
 } from "../../providers/OutlookEmailSourceProvider";
 import type { ParsedEmail } from "../../utils/parsedEmail";
+import type { FileAttachmentGroup } from "@erato/frontend/library";
 import type { ComponentProps, ReactNode } from "react";
 
 // The composer and the preview are stubbed to what this suite reads: the
@@ -31,6 +35,12 @@ const h = vi.hoisted(() => {
   return {
     uploadedFile,
     mailItem: null as Record<string, unknown> | null,
+    itemIdentity: "item-1",
+    composeSelection: { data: "", sourceProperty: "body" },
+    calendarFetcher: null as object | null,
+    readAppointmentComposeSnapshot: vi.fn(),
+    groups: [] as FileAttachmentGroup[],
+    capabilities: [] as unknown[],
     availableFacetArgs: new Map<string, Set<string>>(),
     controls: {
       setDraftMessage: vi.fn(),
@@ -99,17 +109,24 @@ vi.mock("@erato/frontend/library", () => {
       groups,
       groupActions,
     }: {
-      groups: { id: string }[];
+      groups: FileAttachmentGroup[];
       groupActions?: Partial<Record<string, ReactNode>>;
-    }) => (
-      <div>
-        {groups.map((group) => (
-          <div key={group.id} data-testid={`group-${group.id}`}>
-            {groupActions?.[group.id]}
-          </div>
-        ))}
-      </div>
-    ),
+    }) => {
+      h.groups = groups;
+      return (
+        <div>
+          {groups.map((group) => (
+            <div
+              key={group.id}
+              data-testid={`group-${group.id}`}
+              data-pin-actions={group.pinActions ? "true" : undefined}
+            >
+              {groupActions?.[group.id]}
+            </div>
+          ))}
+        </div>
+      );
+    },
     SpinnerIcon: () => null,
     UploadTooLargeError,
     UploadUnknownError,
@@ -122,7 +139,10 @@ vi.mock("@erato/frontend/library", () => {
       (error as { status?: unknown }).status === 413,
     useChatInputControls: () => h.controls,
     useChatInputFeature: () => ({ maxFiles: 10 }),
-    useFileCapabilitiesContext: () => ({ capabilities: [], isLoading: false }),
+    useFileCapabilitiesContext: () => ({
+      capabilities: h.capabilities,
+      isLoading: false,
+    }),
     useFileUploadStore: Object.assign(
       (selector?: (state: typeof h.fileUploadState) => unknown) =>
         selector ? selector(h.fileUploadState) : h.fileUploadState,
@@ -153,17 +173,20 @@ vi.mock("../../../core/clientActions/useAvailableActionFacets", () => ({
 }));
 vi.mock("../../hooks/useOutlookCalendarFetcher", () => ({
   useOutlookCalendarFetcher: () => ({
-    fetcher: null,
+    fetcher: h.calendarFetcher,
     unavailableReason: null,
   }),
 }));
 vi.mock("../../hooks/useOutlookComposeSelection", () => ({
-  useOutlookComposeSelection: () => ({ data: "", sourceProperty: "body" }),
+  useOutlookComposeSelection: () => h.composeSelection,
 }));
 vi.mock("../../providers/OutlookMailItemProvider", () => ({
   NO_ITEM_SEND_IDENTITY: "no-item",
-  readAppointmentComposeSnapshot: vi.fn(),
-  useOutlookMailItem: () => ({ mailItem: h.mailItem, itemIdentity: "item-1" }),
+  readAppointmentComposeSnapshot: h.readAppointmentComposeSnapshot,
+  useOutlookMailItem: () => ({
+    mailItem: h.mailItem,
+    itemIdentity: h.itemIdentity,
+  }),
 }));
 vi.mock("../../providers/OutlookEmailSourceProvider", () => ({
   useOutlookEmailSource: () => h.emailSource,
@@ -231,7 +254,9 @@ function unstageDrops() {
   });
 }
 
-function renderInput() {
+function renderInput(
+  initial: Partial<ComponentProps<typeof AddinChatInput>> = {},
+) {
   const onSendMessage = vi.fn();
   const onEmailSourceDropsSent = vi.fn();
   // A fresh element per render, or React bails out on the unchanged props.
@@ -239,6 +264,7 @@ function renderInput() {
     <AddinChatInput
       onSendMessage={onSendMessage}
       onEmailSourceDropsSent={onEmailSourceDropsSent}
+      {...initial}
       {...props}
     />
   );
@@ -266,6 +292,11 @@ async function expectDeclinedSend(onSendMessage: ReturnType<typeof vi.fn>) {
 describe("AddinChatInput", () => {
   beforeEach(() => {
     h.mailItem = null;
+    h.itemIdentity = "item-1";
+    h.composeSelection = { data: "", sourceProperty: "body" };
+    h.calendarFetcher = null;
+    h.groups = [];
+    h.capabilities = [];
     h.availableFacetArgs = new Map();
     i18n.activate("en");
     vi.spyOn(console, "warn").mockImplementation(() => {});
@@ -290,7 +321,6 @@ describe("AddinChatInput", () => {
       removeDroppedEmail: vi.fn(),
       selectedAttachmentItems: [],
       isLoadingAttachments: false,
-      removeEmailBody: vi.fn(),
       removeAttachment: vi.fn(),
       restoreEmailBody: vi.fn(),
       restoreAttachment: vi.fn(),
@@ -615,5 +645,419 @@ describe("AddinChatInput", () => {
     await waitFor(() => expect(onSendMessage).toHaveBeenCalledTimes(1));
     expect(onSendMessage.mock.calls[0]?.[10]).toEqual(["linear/create_issue"]);
     expect(onSendMessage.mock.calls[0]?.[9]).toBeUndefined();
+  });
+
+  describe("draft row", () => {
+    const succeeded = (value: unknown) => ({
+      status: Office.AsyncResultStatus.Succeeded,
+      value,
+    });
+    const composeItem = (extra: Record<string, unknown> = {}) => {
+      (Office.context.mailbox as unknown as { item: unknown }).item = {
+        subject: {},
+        body: {
+          getTypeAsync: (callback: (result: unknown) => void) =>
+            callback(succeeded(Office.CoercionType.Text)),
+        },
+        ...extra,
+      };
+    };
+    const composeMessage = (bodyText: string) => {
+      h.mailItem = {
+        itemKind: "message",
+        isComposeMode: true,
+        bodyText,
+        bodyHtml: null,
+        subject: "",
+      };
+      composeItem();
+    };
+    const draftRow = () => screen.getByTestId("outlook-draft-chip");
+    const facetOf = (
+      onSendMessage: ReturnType<typeof vi.fn>,
+      call: number,
+    ): { id: string; args?: Record<string, unknown> } | undefined =>
+      onSendMessage.mock.calls[call]?.[4] as
+        | { id: string; args?: Record<string, unknown> }
+        | undefined;
+
+    beforeEach(() => {
+      unstageDrops();
+      h.availableFacetArgs = new Map([
+        ["outlook_review_draft", new Set<string>()],
+      ]);
+    });
+
+    it("reads unchanged after the send carried the draft, as the next send does", async () => {
+      composeMessage("Dear Bob");
+      const { onSendMessage, rerender, ui } = renderInput({
+        chatId: "chat-1",
+      });
+      expect(draftRow()).toHaveAttribute("data-state", "included");
+      expect(draftRow()).toHaveTextContent("Your draft is included as context");
+      expect(
+        within(draftRow()).getByText("📝", { exact: false }),
+      ).toHaveAttribute("aria-hidden", "true");
+
+      send();
+      await waitFor(() => expect(onSendMessage).toHaveBeenCalledTimes(1));
+      expect(facetOf(onSendMessage, 0)?.id).toBe("outlook_review_draft");
+      await waitFor(() =>
+        expect(draftRow()).toHaveAttribute("data-state", "superseded"),
+      );
+      expect(draftRow()).toHaveTextContent(
+        "Your draft is unchanged, not re-sent",
+      );
+      expect(draftRow()).toHaveClass("text-theme-fg-muted");
+
+      send();
+      await waitFor(() => expect(onSendMessage).toHaveBeenCalledTimes(2));
+      expect(facetOf(onSendMessage, 1)).toBeUndefined();
+
+      composeMessage("Dear Bob, v2");
+      rerender(ui());
+      expect(draftRow()).toHaveAttribute("data-state", "included");
+      send();
+      await waitFor(() => expect(onSendMessage).toHaveBeenCalledTimes(3));
+      expect(facetOf(onSendMessage, 2)?.args?.full_body).toBe("Dear Bob, v2");
+      await waitFor(() =>
+        expect(draftRow()).toHaveAttribute("data-state", "superseded"),
+      );
+
+      rerender(ui({ chatId: "chat-2" }));
+      expect(draftRow()).toHaveAttribute("data-state", "included");
+    });
+
+    it("rolls the row back to included when the send is declined", async () => {
+      stageDrop();
+      composeMessage("Dear Bob");
+      h.fetchUploadFile.mockRejectedValueOnce(new Error("network down"));
+      const { onSendMessage } = renderInput({ chatId: "chat-1" });
+
+      send();
+
+      await expectDeclinedSend(onSendMessage);
+      expect(draftRow()).toHaveAttribute("data-state", "included");
+    });
+
+    it("says the draft is not sent while scheduling, as the send does", async () => {
+      composeMessage("Dear Bob");
+      h.calendarFetcher = {};
+      h.availableFacetArgs = new Map([
+        ["outlook_review_draft", new Set<string>()],
+        ["outlook_schedule", new Set<string>()],
+      ]);
+      const { onSendMessage } = renderInput({
+        lastSchedulingSignalAt: new Date(Date.now() - 60_000).toISOString(),
+      });
+
+      expect(draftRow()).toHaveAttribute("data-state", "superseded");
+      expect(draftRow()).toHaveTextContent(
+        "Your draft is not sent while scheduling",
+      );
+
+      send();
+      await waitFor(() => expect(onSendMessage).toHaveBeenCalledTimes(1));
+      expect(facetOf(onSendMessage, 0)?.id).toBe("outlook_schedule");
+    });
+
+    it("returns to included when the scheduling window closes", () => {
+      vi.useFakeTimers();
+      try {
+        composeMessage("Dear Bob");
+        h.calendarFetcher = {};
+        h.availableFacetArgs = new Map([
+          ["outlook_review_draft", new Set<string>()],
+          ["outlook_schedule", new Set<string>()],
+        ]);
+        renderInput({
+          lastSchedulingSignalAt: new Date(
+            Date.now() - SCHEDULING_THREAD_MAX_AGE_MS + 1_000,
+          ).toISOString(),
+        });
+        expect(draftRow()).toHaveAttribute("data-state", "superseded");
+
+        act(() => {
+          vi.advanceTimersByTime(1_001);
+        });
+
+        expect(draftRow()).toHaveAttribute("data-state", "included");
+        expect(draftRow()).toHaveTextContent(
+          "Your draft is included as context",
+        );
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("reads appointment details unchanged although the live form differs from the bound item", async () => {
+      const bindTime = {
+        subject: "Planning",
+        organizer: null,
+        requiredAttendees: [
+          { displayName: "Bob", emailAddress: "bob@example.com" },
+        ],
+        optionalAttendees: [],
+        location: "",
+        start: new Date("2026-08-10T08:00:00.000Z"),
+        end: new Date("2026-08-10T09:00:00.000Z"),
+        bodyText: "Agenda",
+        bodyHtml: null,
+      };
+      h.mailItem = {
+        ...bindTime,
+        itemKind: "appointment",
+        isComposeMode: true,
+      };
+      composeItem({ itemType: "appointment" });
+      h.availableFacetArgs = new Map([
+        ["outlook_review_appointment", new Set<string>()],
+      ]);
+      h.readAppointmentComposeSnapshot.mockResolvedValue({
+        ...bindTime,
+        location: "Room 3",
+      });
+      const { onSendMessage } = renderInput({ chatId: "chat-1" });
+      expect(draftRow()).toHaveTextContent(
+        "Appointment details are included as context",
+      );
+
+      send();
+      await waitFor(() => expect(onSendMessage).toHaveBeenCalledTimes(1));
+      expect(facetOf(onSendMessage, 0)?.id).toBe("outlook_review_appointment");
+      expect(facetOf(onSendMessage, 0)?.args?.location).toBe("Room 3");
+      await waitFor(() =>
+        expect(draftRow()).toHaveTextContent(
+          "Appointment details unchanged, not re-sent",
+        ),
+      );
+      expect(draftRow()).toHaveAttribute("data-state", "superseded");
+
+      send();
+      await waitFor(() => expect(onSendMessage).toHaveBeenCalledTimes(2));
+      expect(facetOf(onSendMessage, 1)).toBeUndefined();
+    });
+  });
+
+  describe("selection chip", () => {
+    const longSelection = `${"a".repeat(79)}😀 and the rest of it`;
+
+    beforeEach(() => {
+      unstageDrops();
+      h.mailItem = {
+        itemKind: "message",
+        isComposeMode: true,
+        bodyText: "Dear Bob",
+        bodyHtml: null,
+        subject: "",
+      };
+      h.availableFacetArgs = new Map([
+        ["outlook_review_draft", new Set<string>()],
+      ]);
+      h.composeSelection = { data: longSelection, sourceProperty: "body" };
+    });
+
+    it("uses the shared chip and cuts at a code point", () => {
+      renderInput();
+
+      const chip = screen.getByTestId("outlook-selection-chip");
+      expect(chip.querySelector('[aria-hidden="true"]')).toHaveTextContent(
+        "✂",
+      );
+      expect(chip).toHaveTextContent(`${"a".repeat(79)}😀...`);
+      // A selection replaces the draft, so the draft row stays away.
+      expect(screen.queryByTestId("outlook-draft-chip")).toBeNull();
+    });
+
+    it("stays dismissed until the selection or the item changes", () => {
+      const { rerender, ui } = renderInput();
+
+      fireEvent.click(
+        screen.getByRole("button", { name: "Dismiss selection" }),
+      );
+      expect(screen.queryByTestId("outlook-selection-chip")).toBeNull();
+      expect(screen.getByTestId("outlook-draft-chip")).toBeVisible();
+
+      h.composeSelection = { data: "", sourceProperty: "body" };
+      rerender(ui());
+      h.composeSelection = { data: longSelection, sourceProperty: "body" };
+      rerender(ui());
+      expect(screen.getByTestId("outlook-selection-chip")).toBeVisible();
+
+      fireEvent.click(
+        screen.getByRole("button", { name: "Dismiss selection" }),
+      );
+      h.itemIdentity = "item-2";
+      rerender(ui());
+      expect(screen.getByTestId("outlook-selection-chip")).toBeVisible();
+    });
+  });
+
+  describe("email cards", () => {
+    it("no longer renders an email-body item in the compose fallback", () => {
+      unstageDrops();
+      Object.assign(h.emailSource, {
+        emailBodyFile: emlFile,
+        isEmailBodyIncluded: true,
+        selectedAttachmentItems: [{ id: "att-1", filename: "plan.pdf" }],
+      });
+
+      renderInput({ showSuggestedEmailSource: true });
+
+      const fallback = h.groups.find(
+        (group) => group.id === "current-email-fallback",
+      );
+      expect(fallback?.items.map((item) => item.id)).toEqual(["att-1"]);
+    });
+
+    it("pins a dropped email's Remove to its header and names the email", () => {
+      const { onEmailSourceDropsSent } = renderInput();
+
+      expect(
+        screen.getByTestId(`group-staged-email:${DROP_KEY}`),
+      ).toHaveAttribute("data-pin-actions", "true");
+      fireEvent.click(screen.getByRole("button", { name: "Remove Quarterly" }));
+      expect(onEmailSourceDropsSent).toHaveBeenCalledWith([
+        { key: DROP_KEY, messageId: "<quarterly@x>" },
+      ]);
+    });
+
+    describe("thread under an unticked message", () => {
+      const attachment = (
+        id: string,
+        filename: string,
+        extra: Record<string, unknown> = {},
+      ) => ({
+        id,
+        filename,
+        mimeType: "application/octet-stream",
+        size: 10,
+        contentBytes: null,
+        isInline: false,
+        contentId: null,
+        unavailableReason: null,
+        ...extra,
+      });
+      const message = (id: string, attachments: unknown[]) => ({
+        id,
+        internetMessageId: id,
+        subject: "Kickoff",
+        from: { name: "Anna", address: "anna@example.com" },
+        to: [],
+        cc: [],
+        date: null,
+        bodyText: "hi",
+        bodyHtml: null,
+        attachments,
+      });
+      const threadKey = "current-thread:conv-1";
+      const stageThread = () => {
+        unstageDrops();
+        h.capabilities = [
+          {
+            id: "pdf",
+            extensions: ["pdf"],
+            mime_types: ["application/pdf"],
+            operations: ["extract_text"],
+          },
+          { id: "exe", extensions: ["exe"], mime_types: [], operations: [] },
+        ];
+        h.emailSource.stagedEmails = [
+          {
+            key: threadKey,
+            source: "current-thread",
+            thread: {
+              conversationId: "conv-1",
+              subject: "Kickoff",
+              incomplete: false,
+              messages: [
+                message("m1", [
+                  attachment("a1", "plan.pdf"),
+                  attachment("a2", "notes.pdf"),
+                  attachment("a3", "setup.exe"),
+                  attachment("a4", "logo.png", { isInline: true }),
+                  attachment("a5", "budget.pdf"),
+                ]),
+                message("m2", []),
+              ],
+            },
+            dismissedMessageIds: new Set(["m1"]),
+            dismissedAttachmentIds: new Set(["a2"]),
+          },
+        ];
+      };
+      const threadAttachments = () => {
+        const group = h.groups.find(
+          (candidate) => candidate.id === `staged-email:${threadKey}`,
+        );
+        const first = group?.items[0];
+        if (first?.kind !== "threadMessageGroup") {
+          throw new Error("expected a thread message");
+        }
+        return { group, message: first, attachments: first.attachments };
+      };
+
+      it("reads every attachment unticked and counts the messages", () => {
+        stageThread();
+        renderInput({ showSuggestedEmailSource: true });
+
+        const { group, message: card, attachments } = threadAttachments();
+        expect(group?.metaLabel).toMatch(/^2 messages · /);
+        expect(card.selected).toBe(false);
+        expect(attachments.map((entry) => entry.id)).toEqual([
+          "a1",
+          "a2",
+          "a3",
+          "a5",
+        ]);
+        expect(attachments.every((entry) => entry.selected === false)).toBe(
+          true,
+        );
+        // Policy-excluded parts stay read-only.
+        expect(attachments[2]?.onToggle).toBeUndefined();
+      });
+
+      it("brings the message back with only the ticked attachment", () => {
+        stageThread();
+        renderInput({ showSuggestedEmailSource: true });
+
+        act(() => threadAttachments().attachments[0]?.onToggle?.());
+
+        expect(h.emailSource.restoreStagedEmailBody).toHaveBeenCalledWith("m1");
+        expect(
+          h.emailSource.restoreStagedEmailAttachment,
+        ).not.toHaveBeenCalled();
+        expect(
+          (
+            h.emailSource.dismissStagedEmailAttachment as ReturnType<
+              typeof vi.fn
+            >
+          ).mock.calls,
+        ).toEqual([["m1", "a5"]]);
+      });
+
+      it("restores a dismissed attachment it ticks and holds back the rest", () => {
+        stageThread();
+        renderInput({ showSuggestedEmailSource: true });
+
+        act(() => threadAttachments().attachments[1]?.onToggle?.());
+
+        expect(h.emailSource.restoreStagedEmailBody).toHaveBeenCalledWith("m1");
+        expect(h.emailSource.restoreStagedEmailAttachment).toHaveBeenCalledWith(
+          "m1",
+          "a2",
+        );
+        expect(
+          (
+            h.emailSource.dismissStagedEmailAttachment as ReturnType<
+              typeof vi.fn
+            >
+          ).mock.calls,
+        ).toEqual([
+          ["m1", "a1"],
+          ["m1", "a5"],
+        ]);
+      });
+    });
   });
 });

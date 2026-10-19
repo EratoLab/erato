@@ -1,14 +1,26 @@
 import { i18n } from "@lingui/core";
-import { cleanup, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AddinChatAddMenuExtraContent } from "../AddinChatAddMenuExtraContent";
 
+import type { StagedEmail } from "../../providers/OutlookEmailSourceProvider";
 import type { OutlookAttachmentData } from "../../providers/OutlookMailItemProvider";
+import type {
+  ParsedThread,
+  ThreadAttachment,
+  ThreadMessage,
+} from "../../utils/parsedThread";
 
 const state = vi.hoisted(() => ({
   host: "Outlook",
-  currentChatId: "chat-1",
+  currentChatId: null as string | null,
   messageOrder: [] as string[],
   attachments: [] as OutlookAttachmentData[],
   isLoadingAttachments: false,
@@ -22,6 +34,13 @@ const state = vi.hoisted(() => ({
   getAttachmentFile: vi.fn(),
   restoreEmailBody: vi.fn(),
   restoreAttachment: vi.fn(),
+  internetMessageId: null as string | null,
+  currentThread: null as ParsedThread | null,
+  stagedEmails: [] as StagedEmail[],
+  threadTrimError: null as Error | null,
+  restoreStagedEmailBody: vi.fn(),
+  restoreStagedEmailAttachment: vi.fn(),
+  dismissStagedEmailAttachment: vi.fn(),
 }));
 
 // The library is mocked at one seam only: the chat snapshot decides whether a
@@ -40,6 +59,7 @@ vi.mock("../../../providers/OfficeProvider", () => ({
 }));
 vi.mock("../../providers/OutlookMailItemProvider", () => ({
   useOutlookMailItem: () => ({
+    mailItem: { internetMessageId: state.internetMessageId },
     attachments: state.attachments,
     isLoadingAttachments: state.isLoadingAttachments,
     getAttachmentFile: state.getAttachmentFile,
@@ -56,6 +76,12 @@ vi.mock("../../providers/OutlookEmailSourceProvider", () => ({
     dismissedAttachmentIds: state.dismissedAttachmentIds,
     restoreEmailBody: state.restoreEmailBody,
     restoreAttachment: state.restoreAttachment,
+    threadTrimError: state.threadTrimError,
+    currentThread: state.currentThread,
+    stagedEmails: state.stagedEmails,
+    restoreStagedEmailBody: state.restoreStagedEmailBody,
+    restoreStagedEmailAttachment: state.restoreStagedEmailAttachment,
+    dismissStagedEmailAttachment: state.dismissStagedEmailAttachment,
   }),
 }));
 
@@ -84,8 +110,15 @@ describe("AddinChatAddMenuExtraContent", () => {
     state.isThreadEmlStale = false;
     state.isEmailBodyDismissed = false;
     state.dismissedAttachmentIds = [];
+    state.internetMessageId = null;
+    state.currentThread = null;
+    state.stagedEmails = [];
+    state.threadTrimError = null;
   });
-  afterEach(cleanup);
+  afterEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+  });
 
   it("offers the thread and each attachment as a menu row", () => {
     render(
@@ -199,5 +232,255 @@ describe("AddinChatAddMenuExtraContent", () => {
     );
 
     expect(container).toBeEmptyDOMElement();
+  });
+
+  describe("with the open conversation staged", () => {
+    const threadAttachment = (
+      id: string,
+      filename: string,
+      size: number,
+    ): ThreadAttachment => ({
+      id,
+      filename,
+      mimeType: "application/pdf",
+      size,
+      contentBytes: null,
+      isInline: false,
+      contentId: null,
+      unavailableReason: null,
+    });
+    const message = (
+      id: string,
+      attachments: ThreadAttachment[] = [],
+    ): ThreadMessage => ({
+      id,
+      internetMessageId: id,
+      subject: "Kickoff",
+      from: null,
+      to: [],
+      cc: [],
+      date: null,
+      bodyText: "hi",
+      bodyHtml: null,
+      attachments,
+    });
+    const thread: ParsedThread = {
+      conversationId: "conv-1",
+      subject: "Re: Kickoff",
+      incomplete: false,
+      messages: [
+        message("<earlier@x>"),
+        message("<open@x>", [
+          threadAttachment("<open@x>:a1", "quarterly-report.pdf", 2048),
+          threadAttachment("<open@x>:a2", "appendix.pdf", 512),
+        ]),
+      ],
+    };
+    const stageThread = (
+      dismissedMessageIds: string[],
+      dismissedAttachmentIds: string[] = [],
+    ) => {
+      state.currentThread = thread;
+      state.internetMessageId = "<open@x>";
+      state.stagedEmails = [
+        {
+          key: "current-thread:conv-1",
+          source: "current-thread",
+          thread,
+          dismissedMessageIds: new Set(dismissedMessageIds),
+          dismissedAttachmentIds: new Set(dismissedAttachmentIds),
+        },
+      ];
+      state.isEmailBodyDismissed =
+        dismissedMessageIds.length === thread.messages.length;
+      if (state.isEmailBodyDismissed) state.emailBodyFile = null;
+    };
+    const allMessages = ["<earlier@x>", "<open@x>"];
+    const freshChat = () => {
+      state.currentChatId = null;
+    };
+    const threadRow = () => screen.getByTestId("addin-add-menu-email-thread");
+    const attachmentRow = () =>
+      screen.getByTestId("addin-add-menu-attachment-att-1");
+
+    it("restores a fully unticked thread on a fresh chat", () => {
+      freshChat();
+      stageThread(allMessages);
+      const onClose = vi.fn();
+      render(
+        <AddinChatAddMenuExtraContent
+          onSelectFiles={onSelectFiles}
+          onClose={onClose}
+        />,
+      );
+
+      expect(threadRow()).toBeEnabled();
+      expect(threadRow()).toHaveTextContent("Re: Kickoff");
+      fireEvent.click(threadRow());
+      expect(state.restoreEmailBody).toHaveBeenCalledTimes(1);
+      expect(onClose).toHaveBeenCalledTimes(1);
+    });
+
+    it("reads a partly ticked thread as already added", () => {
+      freshChat();
+      stageThread(["<earlier@x>"]);
+      render(
+        <AddinChatAddMenuExtraContent
+          onSelectFiles={onSelectFiles}
+          onClose={() => {}}
+        />,
+      );
+
+      expect(threadRow()).toBeDisabled();
+      expect(threadRow()).toHaveTextContent("Already added");
+    });
+
+    it("reads an attachment from the thread's own ticks and restores it", () => {
+      freshChat();
+      stageThread([], ["<open@x>:a1"]);
+      // The Office.js list says nothing about the thread card's ticks.
+      state.dismissedAttachmentIds = [];
+      const onClose = vi.fn();
+      render(
+        <AddinChatAddMenuExtraContent
+          onSelectFiles={onSelectFiles}
+          onClose={onClose}
+        />,
+      );
+
+      expect(attachmentRow()).toBeEnabled();
+      fireEvent.click(attachmentRow());
+      expect(state.restoreStagedEmailAttachment).toHaveBeenCalledWith(
+        "<open@x>",
+        "<open@x>:a1",
+      );
+      expect(state.restoreStagedEmailBody).not.toHaveBeenCalled();
+      expect(state.restoreAttachment).not.toHaveBeenCalled();
+      expect(onClose).toHaveBeenCalledTimes(1);
+    });
+
+    it("brings back an unticked message with only the chosen attachment", () => {
+      freshChat();
+      stageThread(["<open@x>"]);
+      render(
+        <AddinChatAddMenuExtraContent
+          onSelectFiles={onSelectFiles}
+          onClose={() => {}}
+        />,
+      );
+
+      expect(attachmentRow()).toBeEnabled();
+      fireEvent.click(attachmentRow());
+      expect(state.restoreStagedEmailBody).toHaveBeenCalledWith("<open@x>");
+      expect(state.dismissStagedEmailAttachment.mock.calls).toEqual([
+        ["<open@x>", "<open@x>:a2"],
+      ]);
+      expect(state.restoreStagedEmailAttachment).not.toHaveBeenCalled();
+    });
+
+    it("keeps the Office.js list for an attachment the thread does not have", () => {
+      freshChat();
+      stageThread([]);
+      state.attachments = [
+        { ...attachment, id: "att-2", name: "unrelated.docx", size: 9 },
+      ];
+      state.dismissedAttachmentIds = ["att-2"];
+      render(
+        <AddinChatAddMenuExtraContent
+          onSelectFiles={onSelectFiles}
+          onClose={() => {}}
+        />,
+      );
+
+      fireEvent.click(screen.getByTestId("addin-add-menu-attachment-att-2"));
+      expect(state.restoreAttachment).toHaveBeenCalledWith("att-2");
+      expect(state.restoreStagedEmailAttachment).not.toHaveBeenCalled();
+    });
+
+    it("uploads a restored thread on a follow-up chat once its file is rebuilt", async () => {
+      stageThread(allMessages);
+      const onClose = vi.fn();
+      const upload = vi.fn(() => Promise.resolve());
+      const ui = () => (
+        <AddinChatAddMenuExtraContent
+          onSelectFiles={upload}
+          onClose={onClose}
+        />
+      );
+      const { rerender } = render(ui());
+
+      fireEvent.click(threadRow());
+      expect(state.restoreEmailBody).toHaveBeenCalledTimes(1);
+      expect(threadRow()).toHaveTextContent("Updating…");
+      expect(upload).not.toHaveBeenCalled();
+
+      // The restore lands; the deferred rebuild has not caught up yet.
+      stageThread([]);
+      state.emailBodyFile = null;
+      state.isThreadEmlStale = true;
+      rerender(ui());
+      expect(upload).not.toHaveBeenCalled();
+
+      const rebuilt = new File(["thread"], "conversation.eml");
+      state.isThreadEmlStale = false;
+      state.emailBodyFile = rebuilt;
+      rerender(ui());
+      await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+      expect(upload).toHaveBeenCalledTimes(1);
+      expect(upload).toHaveBeenCalledWith([rebuilt]);
+    });
+
+    it.each([
+      ["a trim error", { threadTrimError: new Error("trim") }],
+      ["a settled pass without a file", {}],
+    ])("stops waiting on %s without uploading", (_label, settled) => {
+      stageThread(allMessages);
+      const upload = vi.fn(() => Promise.resolve());
+      const ui = () => (
+        <AddinChatAddMenuExtraContent
+          onSelectFiles={upload}
+          onClose={() => {}}
+        />
+      );
+      const { rerender } = render(ui());
+
+      fireEvent.click(threadRow());
+      expect(threadRow()).toHaveTextContent("Updating…");
+
+      stageThread([]);
+      state.emailBodyFile = null;
+      Object.assign(state, settled);
+      rerender(ui());
+
+      expect(threadRow()).not.toHaveTextContent("Updating…");
+      expect(upload).not.toHaveBeenCalled();
+    });
+
+    it("only restores on a follow-up chat while a drop is staged", () => {
+      stageThread(allMessages);
+      state.stagedEmails = [
+        ...state.stagedEmails,
+        {
+          key: "drop-1",
+          source: "drop",
+          parsed: {} as never,
+          bodyDismissed: false,
+          dismissedAttachmentIds: new Set(),
+        },
+      ];
+      const onClose = vi.fn();
+      const upload = vi.fn(() => Promise.resolve());
+      render(
+        <AddinChatAddMenuExtraContent
+          onSelectFiles={upload}
+          onClose={onClose}
+        />,
+      );
+
+      fireEvent.click(threadRow());
+      expect(state.restoreEmailBody).toHaveBeenCalledTimes(1);
+      expect(onClose).toHaveBeenCalledTimes(1);
+      expect(upload).not.toHaveBeenCalled();
+    });
   });
 });

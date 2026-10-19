@@ -1,8 +1,12 @@
 import { describe, it, expect } from "vitest";
 
 import {
+  outlookAppointmentFingerprint,
+  outlookDraftFingerprint,
+  previewOutlookSend,
   resolveOutlookActionFacet,
   type OutlookActionFacetInput,
+  type OutlookSendPreviewInput,
 } from "../outlookActionFacet";
 
 const base: OutlookActionFacetInput = {
@@ -40,6 +44,7 @@ describe("resolveOutlookActionFacet", () => {
   it("returns no facet with nothing selected and no draft included", () => {
     expect(resolveOutlookActionFacet(base)).toEqual({
       facet: undefined,
+      draft: "none",
       sentDraftFingerprint: null,
     });
   });
@@ -64,6 +69,7 @@ describe("resolveOutlookActionFacet", () => {
         body_format: "html",
       },
     });
+    expect(result.draft).toBe("selection");
     // Selection sends never touch the draft dedup marker.
     expect(result.sentDraftFingerprint).toBeNull();
   });
@@ -80,6 +86,7 @@ describe("resolveOutlookActionFacet", () => {
       selected_text: "x",
       source_property: "subject",
     });
+    expect(result.draft).toBe("none");
   });
 
   it("uses the appointment-specific rewrite facet for organizer selections", () => {
@@ -102,6 +109,7 @@ describe("resolveOutlookActionFacet", () => {
         body_format: "html",
       },
     });
+    expect(result.draft).toBe("none");
   });
 
   it("does not send an appointment selection to the email rewrite facet", () => {
@@ -114,7 +122,11 @@ describe("resolveOutlookActionFacet", () => {
       selectionData: "Old agenda",
     });
 
-    expect(result).toEqual({ facet: undefined, sentDraftFingerprint: null });
+    expect(result).toEqual({
+      facet: undefined,
+      draft: "none",
+      sentDraftFingerprint: null,
+    });
   });
 
   it("sends review_draft for an included, non-empty, changed draft", () => {
@@ -129,6 +141,7 @@ describe("resolveOutlookActionFacet", () => {
       id: "outlook_review_draft",
       args: { full_body: "Dear Bob, ...", body_format: "text" },
     });
+    expect(result.draft).toBe("sent");
     expect(result.sentDraftFingerprint).toBe("Dear Bob, ...");
   });
 
@@ -139,7 +152,11 @@ describe("resolveOutlookActionFacet", () => {
       draftBody: "Dear Bob, ...",
     });
 
-    expect(result).toEqual({ facet: undefined, sentDraftFingerprint: null });
+    expect(result).toEqual({
+      facet: undefined,
+      draft: "none",
+      sentDraftFingerprint: null,
+    });
   });
 
   it("de-dupes: skips review_draft when the body is unchanged since the last send (#4)", () => {
@@ -150,7 +167,11 @@ describe("resolveOutlookActionFacet", () => {
       lastSentDraftFingerprint: "same body",
     });
 
-    expect(result).toEqual({ facet: undefined, sentDraftFingerprint: null });
+    expect(result).toEqual({
+      facet: undefined,
+      draft: "unchanged",
+      sentDraftFingerprint: null,
+    });
   });
 
   it("re-sends review_draft after the draft body changes", () => {
@@ -162,6 +183,7 @@ describe("resolveOutlookActionFacet", () => {
     });
 
     expect(result.facet?.id).toBe("outlook_review_draft");
+    expect(result.draft).toBe("sent");
     expect(result.sentDraftFingerprint).toBe("edited body");
   });
 
@@ -172,7 +194,11 @@ describe("resolveOutlookActionFacet", () => {
       draftBody: "",
     });
 
-    expect(result).toEqual({ facet: undefined, sentDraftFingerprint: null });
+    expect(result).toEqual({
+      facet: undefined,
+      draft: "none",
+      sentDraftFingerprint: null,
+    });
   });
 
   it("sends explicit appointment context, including an empty description", () => {
@@ -206,6 +232,7 @@ describe("resolveOutlookActionFacet", () => {
         timezone: "Europe/Berlin",
       },
     });
+    expect(result.draft).toBe("sent");
     expect(result.sentDraftFingerprint).toBe("appointment-v1");
   });
 
@@ -240,6 +267,7 @@ describe("resolveOutlookActionFacet", () => {
 
     expect(result.facet?.id).toBe("compose_email");
     expect(result.facet?.args).toEqual({ body_format: "html" });
+    expect(result.draft).toBe("none");
     expect(result.sentDraftFingerprint).toBeNull();
   });
 
@@ -252,6 +280,7 @@ describe("resolveOutlookActionFacet", () => {
     });
 
     expect(result.facet?.args).toEqual({ body_format: "text" });
+    expect(result.draft).toBe("none");
   });
 
   it("does NOT send compose_email when the facet is unavailable (avoids a 400)", () => {
@@ -261,7 +290,11 @@ describe("resolveOutlookActionFacet", () => {
       composeEmailAvailable: false,
     });
 
-    expect(result).toEqual({ facet: undefined, sentDraftFingerprint: null });
+    expect(result).toEqual({
+      facet: undefined,
+      draft: "none",
+      sentDraftFingerprint: null,
+    });
   });
 
   it("prefers review_draft over compose_email once the draft has content", () => {
@@ -274,6 +307,7 @@ describe("resolveOutlookActionFacet", () => {
     });
 
     expect(result.facet?.id).toBe("outlook_review_draft");
+    expect(result.draft).toBe("sent");
   });
 
   it("prefers a selection over compose_email", () => {
@@ -286,6 +320,7 @@ describe("resolveOutlookActionFacet", () => {
     });
 
     expect(result.facet?.id).toBe("outlook_rewrite_selection");
+    expect(result.draft).toBe("none");
   });
 
   it("sends outlook_reply_from_read in read mode when the facet is available", () => {
@@ -300,6 +335,7 @@ describe("resolveOutlookActionFacet", () => {
       id: "outlook_reply_from_read",
       args: { body_format: "html" },
     });
+    expect(result.draft).toBe("none");
     expect(result.sentDraftFingerprint).toBeNull();
   });
 
@@ -310,7 +346,11 @@ describe("resolveOutlookActionFacet", () => {
       replyFromReadAvailable: false,
     });
 
-    expect(result).toEqual({ facet: undefined, sentDraftFingerprint: null });
+    expect(result).toEqual({
+      facet: undefined,
+      draft: "none",
+      sentDraftFingerprint: null,
+    });
   });
 
   it("does NOT send outlook_reply_from_read outside read mode", () => {
@@ -320,7 +360,11 @@ describe("resolveOutlookActionFacet", () => {
       replyFromReadAvailable: true,
     });
 
-    expect(result).toEqual({ facet: undefined, sentDraftFingerprint: null });
+    expect(result).toEqual({
+      facet: undefined,
+      draft: "none",
+      sentDraftFingerprint: null,
+    });
   });
 
   it("attaches outlook_schedule ambiently in a NEUTRAL context (no item)", () => {
@@ -330,6 +374,7 @@ describe("resolveOutlookActionFacet", () => {
       id: "outlook_schedule",
       args: scheduleArgs,
     });
+    expect(result.draft).toBe("none");
     expect(result.sentDraftFingerprint).toBeNull();
   });
 
@@ -340,16 +385,16 @@ describe("resolveOutlookActionFacet", () => {
         .facet,
     ).toBeUndefined();
     // … and compose (here: unchanged deduped draft) keeps its email facets.
-    expect(
-      resolveOutlookActionFacet({
-        ...base,
-        ...scheduleReady,
-        isComposeMode: true,
-        draftContextIncluded: true,
-        draftBody: "same body",
-        lastSentDraftFingerprint: "same body",
-      }).facet,
-    ).toBeUndefined();
+    const unchanged = resolveOutlookActionFacet({
+      ...base,
+      ...scheduleReady,
+      isComposeMode: true,
+      draftContextIncluded: true,
+      draftBody: "same body",
+      lastSentDraftFingerprint: "same body",
+    });
+    expect(unchanged.facet).toBeUndefined();
+    expect(unchanged.draft).toBe("unchanged");
   });
 
   it("gates outlook_schedule on facet availability AND a calendar backend", () => {
@@ -375,6 +420,7 @@ describe("resolveOutlookActionFacet", () => {
       id: "outlook_schedule",
       args: scheduleArgs,
     });
+    expect(result.draft).toBe("none");
   });
 
   it("sticky: outranks review_draft and compose_email but never a selection", () => {
@@ -385,33 +431,33 @@ describe("resolveOutlookActionFacet", () => {
     };
 
     // Beats review_draft (changed non-empty draft would otherwise win).
-    expect(
-      resolveOutlookActionFacet({
-        ...sticky,
-        isComposeMode: true,
-        composeEmailAvailable: true,
-        draftContextIncluded: true,
-        draftBody: "a changed draft",
-      }).facet?.id,
-    ).toBe("outlook_schedule");
+    const overDraft = resolveOutlookActionFacet({
+      ...sticky,
+      isComposeMode: true,
+      composeEmailAvailable: true,
+      draftContextIncluded: true,
+      draftBody: "a changed draft",
+    });
+    expect(overDraft.facet?.id).toBe("outlook_schedule");
+    expect(overDraft.draft).toBe("scheduling");
 
     // Beats compose_email (empty compose would otherwise win).
-    expect(
-      resolveOutlookActionFacet({
-        ...sticky,
-        isComposeMode: true,
-        composeEmailAvailable: true,
-        draftBody: "",
-      }).facet?.id,
-    ).toBe("outlook_schedule");
+    const overCompose = resolveOutlookActionFacet({
+      ...sticky,
+      isComposeMode: true,
+      composeEmailAvailable: true,
+      draftBody: "",
+    });
+    expect(overCompose.facet?.id).toBe("outlook_schedule");
+    expect(overCompose.draft).toBe("none");
 
-    expect(
-      resolveOutlookActionFacet({
-        ...sticky,
-        hasActiveSelection: true,
-        selectionData: "picked text",
-      }).facet?.id,
-    ).toBe("outlook_rewrite_selection");
+    const selection = resolveOutlookActionFacet({
+      ...sticky,
+      hasActiveSelection: true,
+      selectionData: "picked text",
+    });
+    expect(selection.facet?.id).toBe("outlook_rewrite_selection");
+    expect(selection.draft).toBe("none");
   });
 
   it("sticky never claims an appointment compose — the review facet owns it", () => {
@@ -427,6 +473,7 @@ describe("resolveOutlookActionFacet", () => {
     });
 
     expect(result.facet?.id).toBe("outlook_review_appointment");
+    expect(result.draft).toBe("sent");
   });
 
   it("sticky does not fire without an available facet or calendar backend", () => {
@@ -442,6 +489,7 @@ describe("resolveOutlookActionFacet", () => {
 
     // Falls through to the normal read-mode rung.
     expect(result.facet?.id).toBe("outlook_reply_from_read");
+    expect(result.draft).toBe("none");
   });
 });
 
@@ -527,5 +575,177 @@ describe("optional compose recipient context", () => {
         replyFromReadAvailable: true,
       }).facet?.args?.recipients,
     ).toBeUndefined();
+  });
+});
+
+describe("previewOutlookSend", () => {
+  const {
+    lastSentDraftFingerprint: _ignored,
+    nowIso,
+    timezone,
+    ...rest
+  } = base;
+  const preview: OutlookSendPreviewInput = {
+    ...rest,
+    itemKind: "message",
+    isComposeMode: true,
+    lastSentDraft: null,
+  };
+  const draft = { ...preview, draftContextIncluded: true, draftBody: "Hello" };
+
+  // The chip and the send have to agree, so each row also runs the resolver
+  // the send uses and checks the facet it would carry.
+  it.each([
+    ["sent", draft, "outlook_review_draft"],
+    [
+      "unchanged",
+      { ...draft, lastSentDraft: { sent: "Hello", seen: "Hello" } },
+      null,
+    ],
+    [
+      "scheduling",
+      { ...draft, ...scheduleReady, schedulingThreadActive: true },
+      "outlook_schedule",
+    ],
+    [
+      "selection",
+      { ...draft, hasActiveSelection: true, selectionData: "Hel" },
+      "outlook_rewrite_selection",
+    ],
+    ["none", { ...draft, draftContextIncluded: false }, null],
+  ] as const)("reports %s together with the facet", (state, input, facetId) => {
+    const result = previewOutlookSend(input);
+    expect(result.draft).toBe(state);
+    expect(result.facetId).toBe(facetId);
+
+    const send = resolveOutlookActionFacet({
+      ...input,
+      lastSentDraftFingerprint: input.lastSentDraft?.sent ?? null,
+      nowIso,
+      timezone,
+    });
+    expect(send.facet?.id ?? null).toBe(facetId);
+    expect(send.draft).toBe(state);
+  });
+
+  it("re-includes a draft whose body changed since the send", () => {
+    expect(
+      previewOutlookSend({
+        ...draft,
+        draftBody: "Hello again",
+        lastSentDraft: { sent: "Hello", seen: "Hello" },
+      }).draft,
+    ).toBe("sent");
+  });
+
+  it("carries the last send's recipients into the fingerprint", () => {
+    const recipients = '{"to":["mark@example.com"]}';
+    const withRecipients = {
+      ...draft,
+      availableFacetArgs: new Map([
+        ["outlook_review_draft", new Set(["recipients"])],
+      ]),
+    };
+    const sent = outlookDraftFingerprint({ ...withRecipients, recipients });
+
+    const result = previewOutlookSend({
+      ...withRecipients,
+      lastSentDraft: { sent, seen: sent, recipients },
+    });
+
+    expect(result.fingerprint).toBe(sent);
+    expect(result.draft).toBe("unchanged");
+  });
+
+  describe("appointments", () => {
+    const bindTime = {
+      subject: "Planning",
+      requiredAttendees: [
+        { displayName: "Bob", emailAddress: "bob@example.com" },
+      ],
+      optionalAttendees: [],
+      location: "",
+      start: new Date("2026-08-10T08:00:00.000Z"),
+      end: new Date("2026-08-10T09:00:00.000Z"),
+      bodyText: "Agenda",
+      bodyHtml: "<p>Agenda</p>",
+    };
+    const live = { ...bindTime, location: "Room 3" };
+    const appointment = (fields: typeof bindTime) => ({
+      ...preview,
+      itemKind: "appointment" as const,
+      appointmentContextAvailable: true,
+      draftContextIncluded: true,
+      draftBody: fields.bodyText,
+      draftContextFingerprint: outlookAppointmentFingerprint(fields),
+    });
+    const lastSentDraft = {
+      sent: outlookAppointmentFingerprint(live),
+      seen: outlookAppointmentFingerprint(bindTime),
+    };
+
+    it("reads unchanged against the bind-time fields seen at the send", () => {
+      expect(
+        previewOutlookSend({ ...appointment(bindTime), lastSentDraft }).draft,
+      ).toBe("unchanged");
+    });
+
+    it("reads unchanged once the item rebinds to what was sent", () => {
+      expect(
+        previewOutlookSend({ ...appointment(live), lastSentDraft }).draft,
+      ).toBe("unchanged");
+    });
+
+    it("re-includes details that match neither", () => {
+      const result = previewOutlookSend({
+        ...appointment({ ...live, subject: "Planning v2" }),
+        lastSentDraft,
+      });
+      expect(result.draft).toBe("sent");
+      expect(result.facetId).toBe("outlook_review_appointment");
+    });
+
+    it("is stable and keyed on every field", () => {
+      expect(outlookAppointmentFingerprint(bindTime)).toBe(
+        outlookAppointmentFingerprint({ ...bindTime }),
+      );
+      expect(outlookAppointmentFingerprint(bindTime)).not.toBe(
+        outlookAppointmentFingerprint(live),
+      );
+    });
+
+    it("gives the provider's item and a live snapshot one key for equal values", () => {
+      // The bind-time item carries every mail field; the snapshot only its own.
+      const providerItem = {
+        ...bindTime,
+        itemKind: "appointment" as const,
+        from: null,
+        to: [],
+        cc: [],
+        organizer: null,
+        dateTimeCreated: null,
+        conversationId: null,
+        internetMessageId: null,
+        itemId: null,
+        isLoadingBody: false,
+        isComposeMode: true,
+      };
+      const snapshot = {
+        subject: "Planning",
+        organizer: { displayName: "Ana", emailAddress: "ana@example.com" },
+        requiredAttendees: [
+          { displayName: "Bob", emailAddress: "bob@example.com" },
+        ],
+        optionalAttendees: [],
+        location: "",
+        start: new Date("2026-08-10T08:00:00.000Z"),
+        end: new Date("2026-08-10T09:00:00.000Z"),
+        bodyText: "Agenda",
+        bodyHtml: "<p>Agenda</p>",
+      };
+      expect(outlookAppointmentFingerprint(providerItem)).toBe(
+        outlookAppointmentFingerprint(snapshot),
+      );
+    });
   });
 });

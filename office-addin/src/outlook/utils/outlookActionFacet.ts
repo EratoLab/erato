@@ -97,9 +97,23 @@ export interface OutlookActionFacetInput {
   timezone: string;
 }
 
+/**
+ * What became of the user's draft (or appointment details) on this send:
+ * attached for review (`sent`), replaced by a selection rewrite, held back by
+ * sticky scheduling, skipped as identical to the last send (`unchanged`), or
+ * not in play at all (`none`).
+ */
+export type OutlookDraftDisposition =
+  | "none"
+  | "sent"
+  | "selection"
+  | "scheduling"
+  | "unchanged";
+
 export interface OutlookActionFacetResult {
   /** The facet to attach, or `undefined` when none applies. */
   facet: ActionFacetRequest | undefined;
+  draft: OutlookDraftDisposition;
   /**
    * When a review facet was produced, the fingerprint to remember so the next
    * unchanged send de-dupes (body and recipients for message drafts, metadata fingerprint
@@ -107,6 +121,70 @@ export interface OutlookActionFacetResult {
    * selection sends and skipped/unchanged drafts.
    */
   sentDraftFingerprint: string | null;
+}
+
+type OutlookDraftFingerprintInput = Pick<
+  OutlookActionFacetInput,
+  | "itemKind"
+  | "isComposeMode"
+  | "recipients"
+  | "availableFacetArgs"
+  | "draftBody"
+  | "draftContextFingerprint"
+>;
+
+function reviewDraftRecipients(
+  input: OutlookDraftFingerprintInput,
+): string | undefined {
+  return input.itemKind === "message" &&
+    input.isComposeMode &&
+    input.recipients !== undefined &&
+    input.availableFacetArgs?.get("outlook_review_draft")?.has("recipients")
+    ? input.recipients
+    : undefined;
+}
+
+/** The de-dup key of the draft context a review send would carry. */
+export function outlookDraftFingerprint(
+  input: OutlookDraftFingerprintInput,
+): string {
+  if (input.draftContextFingerprint !== undefined) {
+    return input.draftContextFingerprint;
+  }
+  const recipients = reviewDraftRecipients(input);
+  return recipients !== undefined
+    ? JSON.stringify({ body: input.draftBody, recipients })
+    : input.draftBody;
+}
+
+export interface OutlookAppointmentFingerprintFields {
+  subject: string;
+  requiredAttendees: readonly { displayName: string; emailAddress: string }[];
+  optionalAttendees: readonly { displayName: string; emailAddress: string }[];
+  location: string;
+  start: Date | null;
+  end: Date | null;
+  bodyText: string | null;
+  bodyHtml: string | null;
+}
+
+/**
+ * The de-dup key for appointment metadata and description. The provider's
+ * bind-time item and the send's live snapshot come from the same reader, so
+ * equal values give one key whichever side computed it.
+ */
+export function outlookAppointmentFingerprint(
+  fields: OutlookAppointmentFingerprintFields,
+): string {
+  return JSON.stringify({
+    subject: fields.subject,
+    body: fields.bodyText ?? fields.bodyHtml ?? "",
+    requiredAttendees: fields.requiredAttendees,
+    optionalAttendees: fields.optionalAttendees,
+    location: fields.location,
+    start: fields.start?.toISOString() ?? "",
+    end: fields.end?.toISOString() ?? "",
+  });
 }
 
 /**
@@ -131,24 +209,33 @@ export function resolveOutlookActionFacet(
       ? { recipients: input.recipients }
       : {};
   const reviewRecipientArgs = recipientArgs("outlook_review_draft");
-  const draftFingerprint =
-    input.draftContextFingerprint ??
-    (reviewRecipientArgs.recipients !== undefined
-      ? JSON.stringify({ body: input.draftBody, recipients: input.recipients })
-      : input.draftBody);
+  const draftFingerprint = outlookDraftFingerprint(input);
+  const draftEligible =
+    input.draftContextIncluded &&
+    (itemKind === "appointment" || input.draftBody.length > 0);
+  const draftUnchanged =
+    draftEligible && draftFingerprint === input.lastSentDraftFingerprint;
+  // Every branch past the review one leaves the draft out: either it was
+  // already sent unchanged, or it was never in play.
+  const passedOver: OutlookDraftDisposition = draftUnchanged
+    ? "unchanged"
+    : "none";
   const scheduleReady = input.scheduleFacetAvailable && input.calendarAvailable;
-  const scheduleFacet = (): OutlookActionFacetResult => ({
+  const scheduleFacet = (
+    draft: OutlookDraftDisposition,
+  ): OutlookActionFacetResult => ({
     facet: {
       id: OUTLOOK_SCHEDULE_FACET_ID,
       args: { now_iso: input.nowIso, timezone: input.timezone },
     },
+    draft,
     // A scheduling send never touches the draft dedup marker.
     sentDraftFingerprint: null,
   });
 
   if (input.hasActiveSelection) {
     if (itemKind === "appointment" && !input.appointmentRewriteAvailable) {
-      return { facet: undefined, sentDraftFingerprint: null };
+      return { facet: undefined, draft: "none", sentDraftFingerprint: null };
     }
     return {
       facet: {
@@ -163,6 +250,7 @@ export function resolveOutlookActionFacet(
           ...(input.bodyFormat ? { body_format: input.bodyFormat } : {}),
         },
       },
+      draft: draftEligible ? "selection" : "none",
       // A selection send never touches the draft dedup marker.
       sentDraftFingerprint: null,
     };
@@ -192,17 +280,13 @@ export function resolveOutlookActionFacet(
     input.schedulingThreadActive &&
     itemKind !== "appointment"
   ) {
-    return scheduleFacet();
+    return scheduleFacet(draftEligible ? "scheduling" : "none");
   }
 
-  if (
-    input.draftContextIncluded &&
-    (itemKind === "appointment" || input.draftBody.length > 0) &&
-    draftFingerprint !== input.lastSentDraftFingerprint
-  ) {
+  if (draftEligible && !draftUnchanged) {
     if (itemKind === "appointment") {
       if (!input.appointmentContextAvailable) {
-        return { facet: undefined, sentDraftFingerprint: null };
+        return { facet: undefined, draft: "none", sentDraftFingerprint: null };
       }
       return {
         facet: {
@@ -219,6 +303,7 @@ export function resolveOutlookActionFacet(
             timezone: input.timezone,
           },
         },
+        draft: "sent",
         sentDraftFingerprint: draftFingerprint,
       };
     }
@@ -231,6 +316,7 @@ export function resolveOutlookActionFacet(
           body_format: "text",
         },
       },
+      draft: "sent",
       sentDraftFingerprint: draftFingerprint,
     };
   }
@@ -254,6 +340,7 @@ export function resolveOutlookActionFacet(
           body_format: input.bodyFormat ?? "text",
         },
       },
+      draft: passedOver,
       sentDraftFingerprint: null,
     };
   }
@@ -273,6 +360,7 @@ export function resolveOutlookActionFacet(
         id: OUTLOOK_REPLY_FROM_READ_FACET_ID,
         args: { body_format: "html" },
       },
+      draft: passedOver,
       sentDraftFingerprint: null,
     };
   }
@@ -286,8 +374,63 @@ export function resolveOutlookActionFacet(
   // (draft review). Not covered: a selection-rewrite turn, and an
   // unchanged-deduped-draft compose turn, which attaches no facet at all.
   if (scheduleReady && !input.isComposeMode && !input.isReadMode) {
-    return scheduleFacet();
+    return scheduleFacet(passedOver);
   }
 
-  return { facet: undefined, sentDraftFingerprint: null };
+  return { facet: undefined, draft: passedOver, sentDraftFingerprint: null };
+}
+
+/**
+ * What the last send of a draft left behind for the chip to compare against.
+ * `sent` is the fingerprint the send attached. `seen` is the same draft as
+ * render time sees it: for an appointment the provider's bind-time fields,
+ * which lag the live form the send read; for a message, `sent` again.
+ * `recipients` are the live recipients that send read, since render time
+ * cannot read them.
+ */
+export interface OutlookSentDraft {
+  sent: string;
+  seen: string;
+  recipients?: string;
+}
+
+export type OutlookSendPreviewInput = Omit<
+  OutlookActionFacetInput,
+  "lastSentDraftFingerprint" | "recipients" | "nowIso" | "timezone"
+> & { lastSentDraft: OutlookSentDraft | null };
+
+export interface OutlookSendPreview {
+  facetId: string | null;
+  draft: OutlookDraftDisposition;
+  fingerprint: string;
+}
+
+/**
+ * The send resolver run on what render time knows, so the draft chip states
+ * what a send would do instead of re-deriving the rules. Recipient and form
+ * edits fire no event, so this can under-claim a change, never invent one.
+ */
+export function previewOutlookSend(
+  input: OutlookSendPreviewInput,
+): OutlookSendPreview {
+  const { lastSentDraft, ...rest } = input;
+  const recipients = lastSentDraft?.recipients;
+  const fingerprint = outlookDraftFingerprint({ ...rest, recipients });
+  const lastSentDraftFingerprint = lastSentDraft
+    ? fingerprint === lastSentDraft.seen
+      ? fingerprint
+      : lastSentDraft.sent
+    : null;
+  const result = resolveOutlookActionFacet({
+    ...rest,
+    recipients,
+    lastSentDraftFingerprint,
+    nowIso: "",
+    timezone: "",
+  });
+  return {
+    facetId: result.facet?.id ?? null,
+    draft: result.draft,
+    fingerprint,
+  };
 }

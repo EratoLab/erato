@@ -42,9 +42,12 @@ import {
   useAvailableActionFacetArgs,
   useAvailableActionFacetIds,
 } from "../../core/clientActions/useAvailableActionFacets";
+import { AddinSelectionChip } from "../../core/selection/AddinSelectionChip";
+import { useSelectionDismissal } from "../../core/selection/useSelectionDismissal";
 import { useOffice } from "../../providers/OfficeProvider";
 import { useOutlookCalendarFetcher } from "../hooks/useOutlookCalendarFetcher";
 import { useOutlookComposeSelection } from "../hooks/useOutlookComposeSelection";
+import { useSchedulingThreadActive } from "../hooks/useSchedulingThreadActive";
 import { useOutlookEmailSource } from "../providers/OutlookEmailSourceProvider";
 import {
   NO_ITEM_SEND_IDENTITY,
@@ -60,7 +63,12 @@ import {
   buildDropEmailGroup,
   judgeDropEmailParts,
 } from "../utils/buildDropEmailGroup";
-import { resolveOutlookActionFacet } from "../utils/outlookActionFacet";
+import {
+  outlookAppointmentFingerprint,
+  previewOutlookSend,
+  resolveOutlookActionFacet,
+  type OutlookSentDraft,
+} from "../utils/outlookActionFacet";
 import { OUTLOOK_REPLY_FROM_READ_FACET_ID } from "../utils/outlookClientActions";
 import {
   readComposeRecipients,
@@ -212,6 +220,54 @@ function dropPipelineLabel(pipeline: DropPipelineState | undefined): string {
   }
 }
 
+function formatAttendees(
+  attendees: { displayName: string; emailAddress: string }[] | undefined,
+): string | undefined {
+  return attendees
+    ?.map((attendee) => attendee.emailAddress || attendee.displayName)
+    .join(", ");
+}
+
+// The placeholder stays `count` so the catalog entry reads {count, plural, …}.
+function threadMessageCountLabel(count: number): string {
+  return t({
+    id: "officeAddin.chatInput.threadMessageCount",
+    message: plural(count, { one: "# message", other: "# messages" }),
+  });
+}
+
+function draftRowText(
+  state: "sent" | "unchanged" | "scheduling",
+  isAppointment: boolean,
+): string {
+  if (state === "scheduling") {
+    return t({
+      id: "officeAddin.chatInput.draftContextScheduling",
+      message: "Your draft is not sent while scheduling",
+    });
+  }
+  if (state === "unchanged") {
+    return isAppointment
+      ? t({
+          id: "officeAddin.chatInput.appointmentContextUnchanged",
+          message: "Appointment details unchanged, not re-sent",
+        })
+      : t({
+          id: "officeAddin.chatInput.draftContextUnchanged",
+          message: "Your draft is unchanged, not re-sent",
+        });
+  }
+  return isAppointment
+    ? t({
+        id: "officeAddin.chatInput.appointmentContext",
+        message: "Appointment details are included as context",
+      })
+    : t({
+        id: "officeAddin.chatInput.draftContext",
+        message: "Your draft is included as context",
+      });
+}
+
 export const AddinChatInput = forwardRef<
   ChatInputControlsHandle,
   AddinChatInputProps
@@ -252,14 +308,21 @@ export const AddinChatInput = forwardRef<
   const composeSelection = useOutlookComposeSelection();
   const { mailItem, itemIdentity } = useOutlookMailItem();
   const isAppointmentCompose = mailItem?.itemKind === "appointment";
-  const [isSelectionDismissed, setIsSelectionDismissed] = useState(false);
+  // A dismissal lasts until the selection changes or another item opens
+  // (ERMAIN-431).
+  const selectionDismissal = useSelectionDismissal(
+    composeSelection.data
+      ? `${composeSelection.sourceProperty}:${composeSelection.data}`
+      : "",
+    itemIdentity ?? "",
+  );
   // Appointment facets are config-defined (subscription content, not
   // builtins): when the backend doesn't advertise them, the resolver would
   // drop the facet — so the selection/draft context must not count as
   // included, or the chips would promise context the send doesn't carry.
   const hasActiveSelection =
     composeSelection.data.length > 0 &&
-    !isSelectionDismissed &&
+    !selectionDismissal.dismissed &&
     (!isAppointmentCompose || appointmentRewriteAvailable);
 
   // Draft-as-context (#1): a non-empty compose body is eligible to ride along
@@ -271,25 +334,26 @@ export const AddinChatInput = forwardRef<
   if (itemIdentity !== lastDraftItemIdentityRef.current) {
     lastDraftItemIdentityRef.current = itemIdentity;
     setIsDraftDismissed(false);
-    // A dismissal must not outlive the item it suppressed (ERMAIN-431).
-    setIsSelectionDismissed(false);
   }
   const isDraftContextIncluded =
     !!mailItem?.isComposeMode &&
     (draftBodyText.length > 0 || isAppointmentCompose) &&
     !isDraftDismissed &&
     (!isAppointmentCompose || appointmentContextAvailable);
-  // Show the draft chip only when it's actually what we'd send: a live
-  // selection takes priority (rewrite wins over review), so hide it then.
-  const hasDraftContextChip =
-    host === "Outlook" && isDraftContextIncluded && !hasActiveSelection;
 
-  // Draft de-dup marker (#4): the fingerprint of the draft context we last
-  // sent in this chat (raw body for message drafts, metadata fingerprint for
-  // appointments). Client-side by design — the backend is action-facet
-  // toggle-stateless. Reset when the chat changes so a fresh chat re-sends
-  // the draft.
-  const lastSentDraftFingerprintRef = useRef<string | null>(null);
+  // Draft de-dup marker (#4): what the last send of the draft context left in
+  // this chat (see `OutlookSentDraft`). Client-side by design — the backend is
+  // action-facet toggle-stateless. Reset when the chat changes so a fresh
+  // chat re-sends the draft. The send reads the ref; the draft row reads the
+  // state, so it re-renders when the marker moves.
+  const lastSentDraftRef = useRef<OutlookSentDraft | null>(null);
+  const [lastSentDraft, setLastSentDraft] = useState<OutlookSentDraft | null>(
+    null,
+  );
+  const rememberSentDraft = useCallback((next: OutlookSentDraft | null) => {
+    lastSentDraftRef.current = next;
+    setLastSentDraft(next);
+  }, []);
   const lastDraftChatIdRef = useRef(chatId);
   if (chatId !== lastDraftChatIdRef.current) {
     // Reset the dedup marker when the chat genuinely changes — but NOT when a
@@ -300,35 +364,55 @@ export const AddinChatInput = forwardRef<
       lastDraftChatIdRef.current == null && chatId != null;
     lastDraftChatIdRef.current = chatId;
     if (!isNewChatGettingItsId) {
-      lastSentDraftFingerprintRef.current = null;
+      lastSentDraftRef.current = null;
+      if (lastSentDraft !== null) setLastSentDraft(null);
     }
   }
 
-  // Reset dismiss when the selection changes (user selects new text). The ref
-  // tracks the previous render's value UNCONDITIONALLY: updating it only
-  // inside the reset branch made a dismiss permanent for a same-text
-  // re-selection (dismiss → deselect → select the same passage again read as
-  // "unchanged" because the ref still held that passage; ERMAIN-431). A
-  // deselect-then-reselect gesture now always passes through "" and re-arms.
-  const lastSelectionDataRef = useRef(composeSelection.data);
-  const previousSelectionData = lastSelectionDataRef.current;
-  lastSelectionDataRef.current = composeSelection.data;
-  if (
-    composeSelection.data !== previousSelectionData &&
-    composeSelection.data.length > 0
-  ) {
-    setIsSelectionDismissed(false);
-  }
+  const schedulingThreadActive = useSchedulingThreadActive(
+    lastSchedulingSignalAt,
+  );
+  // The draft row says what the send would do with the draft, from the same
+  // resolver, so it never claims context the send leaves out.
+  const draftPreview = previewOutlookSend({
+    itemKind: mailItem?.itemKind ?? null,
+    hasActiveSelection,
+    selectionData: composeSelection.data,
+    selectionSource: composeSelection.sourceProperty,
+    draftContextIncluded: isDraftContextIncluded,
+    draftBody: draftBodyText,
+    draftContextFingerprint:
+      isAppointmentCompose && mailItem
+        ? outlookAppointmentFingerprint(mailItem)
+        : undefined,
+    availableFacetArgs,
+    isComposeMode: !!mailItem?.isComposeMode,
+    composeEmailAvailable,
+    appointmentRewriteAvailable,
+    appointmentContextAvailable,
+    isReadMode:
+      !!mailItem && mailItem.itemKind === "message" && !mailItem.isComposeMode,
+    replyFromReadAvailable,
+    scheduleFacetAvailable,
+    calendarAvailable: calendarFetcher !== null,
+    schedulingThreadActive,
+    lastSentDraft,
+  });
+  // A live selection replaces the draft; that row stays hidden as before.
+  const draftRowState =
+    host === "Outlook" &&
+    (draftPreview.draft === "sent" ||
+      draftPreview.draft === "unchanged" ||
+      draftPreview.draft === "scheduling")
+      ? draftPreview.draft
+      : null;
   const {
     hasSelectedEmailSource,
-    isEmailBodyIncluded,
-    emailBodyFile,
     emailSubject,
     isLoadingEmailBody,
     emailThreadLoadError,
     selectedAttachmentItems,
     isLoadingAttachments,
-    removeEmailBody,
     removeAttachment,
     resolveSelectedFilesForSend,
     getFileProvenance,
@@ -636,15 +720,20 @@ export const AddinChatInput = forwardRef<
               .filter((part) => part.trim().length > 0)
               .join(" · ");
 
+            const messageDismissed = staged.dismissedMessageIds.has(message.id);
+            const messageVerdicts = stagedPartVerdicts.get(message.id);
+            const sendable = message.attachments.filter((attachment) => {
+              if (attachment.isInline) return false;
+              const verdict = messageVerdicts?.get(attachment.id);
+              return !verdict || !isPolicyExcluded(verdict);
+            });
             const attachmentItems = message.attachments
               .filter((attachment) => !attachment.isInline)
               .map((attachment) => {
                 const dismissed = staged.dismissedAttachmentIds.has(
                   attachment.id,
                 );
-                const validation = stagedPartVerdicts
-                  .get(message.id)
-                  ?.get(attachment.id);
+                const validation = messageVerdicts?.get(attachment.id);
                 const excluded = !!validation && isPolicyExcluded(validation);
                 return {
                   id: attachment.id,
@@ -653,11 +742,33 @@ export const AddinChatInput = forwardRef<
                     filename: attachment.filename,
                     size: attachment.size,
                   },
-                  selected: !dismissed,
+                  // Nothing of an unticked message is sent.
+                  selected: !messageDismissed && !dismissed,
                   onToggle: excluded
                     ? undefined
                     : () => {
-                        if (dismissed) {
+                        if (messageDismissed) {
+                          // Bringing the message back would bring every
+                          // sibling with it; only the ticked one should come.
+                          for (const sibling of sendable) {
+                            if (
+                              sibling.id !== attachment.id &&
+                              !staged.dismissedAttachmentIds.has(sibling.id)
+                            ) {
+                              dismissStagedEmailAttachment(
+                                message.id,
+                                sibling.id,
+                              );
+                            }
+                          }
+                          restoreStagedEmailBody(message.id);
+                          if (dismissed) {
+                            restoreStagedEmailAttachment(
+                              message.id,
+                              attachment.id,
+                            );
+                          }
+                        } else if (dismissed) {
                           restoreStagedEmailAttachment(
                             message.id,
                             attachment.id,
@@ -673,7 +784,6 @@ export const AddinChatInput = forwardRef<
                 };
               });
 
-            const messageDismissed = staged.dismissedMessageIds.has(message.id);
             return {
               kind: "threadMessageGroup" as const,
               id: message.id,
@@ -702,9 +812,7 @@ export const AddinChatInput = forwardRef<
               id: "officeAddin.chatInput.emailFallback",
               message: "Email",
             }),
-          metaLabel: `${
-            messageCount === 1 ? t`1 message` : t`${messageCount} messages`
-          } · ${usedOfLimitLabel}`,
+          metaLabel: `${threadMessageCountLabel(messageCount)} · ${usedOfLimitLabel}`,
           items,
           collapsible: true,
           defaultCollapsed: true,
@@ -718,8 +826,8 @@ export const AddinChatInput = forwardRef<
       const resolvedDrop = resolvedDrops.find(
         (drop) => drop.key === staged.key,
       );
-      groups.push(
-        buildDropEmailGroup(staged, {
+      groups.push({
+        ...buildDropEmailGroup(staged, {
           resolvedSize: resolvedDrop?.file?.size,
           bodyMetaLabel: isDropResolutionStale ? updatingLabel : undefined,
           verdicts: stagedPartVerdicts.get(staged.key),
@@ -731,7 +839,9 @@ export const AddinChatInput = forwardRef<
           restoreAttachment: (attachmentId) =>
             restoreStagedEmailAttachment(staged.key, attachmentId),
         }),
-      );
+        // Removing a drop must not need the card opened first.
+        pinActions: true,
+      });
     }
 
     // Office.js compose-mode attachments fallback. These are only relevant
@@ -739,23 +849,6 @@ export const AddinChatInput = forwardRef<
     // redundant copies of the in-eml attachments shown in the staged group.
     if (stagedEmails.length === 0) {
       const items: FileAttachmentGroupItem[] = [];
-
-      if (isEmailBodyIncluded && emailBodyFile) {
-        items.push({
-          kind: "attachment",
-          id: "email-body",
-          file: {
-            id: "email-body",
-            filename: emailBodyFile.name,
-            displayName: "Email thread",
-            size: emailBodyFile.size,
-          },
-          labelOverride: t({
-            id: "officeAddin.chatInput.emailLabel",
-            message: "Email",
-          }),
-        });
-      }
 
       for (const attachmentItem of selectedAttachmentItems) {
         items.push({
@@ -788,12 +881,10 @@ export const AddinChatInput = forwardRef<
   }, [
     dismissStagedEmailAttachment,
     dismissStagedEmailBody,
-    emailBodyFile,
     emailThreadLoadError,
     emailSubject,
     hasDroppedStagedEmails,
     isDropResolutionStale,
-    isEmailBodyIncluded,
     isLoadingAttachments,
     isLoadingEmailBody,
     isLoadingParentReplyContext,
@@ -811,7 +902,7 @@ export const AddinChatInput = forwardRef<
   ]);
 
   // A dropped email leaves through the same door a sent one does, so the
-  // owner releases its dedup claim too. The card shows it only when expanded.
+  // owner releases its dedup claim too. The card pins it to its header.
   const emailSourceGroupActions = useMemo(() => {
     const actions: Partial<Record<string, ReactNode>> = {};
     for (const staged of stagedEmails) {
@@ -820,7 +911,10 @@ export const AddinChatInput = forwardRef<
         key: staged.key,
         messageId: staged.parsed.messageId ?? null,
       };
-      actions[`staged-email:${staged.key}`] = (
+      const groupId = `staged-email:${staged.key}`;
+      const subject =
+        emailSourceGroups.find((group) => group.id === groupId)?.label ?? "";
+      actions[groupId] = (
         <Button
           type="button"
           variant="ghost"
@@ -829,6 +923,10 @@ export const AddinChatInput = forwardRef<
           disabled={isUploadingEmail}
           onClick={() => onEmailSourceDropsSent?.([drop])}
           data-testid={`addin-staged-email-remove-${staged.key}`}
+          aria-label={t({
+            id: "officeAddin.chatInput.removeDroppedEmailNamed",
+            message: `Remove ${subject}`,
+          })}
         >
           {t({
             id: "officeAddin.chatInput.removeDroppedEmail",
@@ -838,19 +936,12 @@ export const AddinChatInput = forwardRef<
       );
     }
     return actions;
-  }, [isUploadingEmail, onEmailSourceDropsSent, stagedEmails]);
-
-  const handleRemoveEmailSourceFile = useCallback(
-    (fileId: string) => {
-      if (fileId === "email-body") {
-        removeEmailBody();
-        return;
-      }
-
-      removeAttachment(fileId);
-    },
-    [removeAttachment, removeEmailBody],
-  );
+  }, [
+    emailSourceGroups,
+    isUploadingEmail,
+    onEmailSourceDropsSent,
+    stagedEmails,
+  ]);
 
   const wrappedOnSendMessage = useCallback(
     async (
@@ -937,22 +1028,8 @@ export const AddinChatInput = forwardRef<
         ? (appointmentSnapshot.bodyText ?? appointmentSnapshot.bodyHtml ?? "")
         : draftBodyText;
       const draftContextFingerprint = appointmentSnapshot
-        ? JSON.stringify({
-            subject: appointmentSnapshot.subject,
-            body: draftBody,
-            requiredAttendees: appointmentSnapshot.requiredAttendees,
-            optionalAttendees: appointmentSnapshot.optionalAttendees,
-            location: appointmentSnapshot.location,
-            start: appointmentSnapshot.start?.toISOString() ?? "",
-            end: appointmentSnapshot.end?.toISOString() ?? "",
-          })
+        ? outlookAppointmentFingerprint(appointmentSnapshot)
         : undefined;
-      const formatAttendees = (
-        attendees: { displayName: string; emailAddress: string }[] | undefined,
-      ) =>
-        attendees
-          ?.map((attendee) => attendee.emailAddress || attendee.displayName)
-          .join(", ");
       const { facet: actionFacet, sentDraftFingerprint } =
         resolveOutlookActionFacet({
           itemKind: mailItem?.itemKind ?? null,
@@ -961,7 +1038,7 @@ export const AddinChatInput = forwardRef<
           selectionSource: composeSelection.sourceProperty,
           draftContextIncluded: isDraftContextIncluded,
           draftBody,
-          lastSentDraftFingerprint: lastSentDraftFingerprintRef.current,
+          lastSentDraftFingerprint: lastSentDraftRef.current?.sent ?? null,
           draftContextFingerprint,
           bodyFormat,
           recipients,
@@ -994,6 +1071,8 @@ export const AddinChatInput = forwardRef<
           replyFromReadAvailable,
           scheduleFacetAvailable,
           calendarAvailable: calendarFetcher !== null,
+          // Judged again here rather than read from render: the send can
+          // come after the window closed and before the re-render.
           schedulingThreadActive: isSchedulingThreadFresh(
             lastSchedulingSignalAt,
             Date.now(),
@@ -1002,10 +1081,19 @@ export const AddinChatInput = forwardRef<
           timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         });
       // Rolled back on a declined send: the marker means "already sent".
-      const previousDraftFingerprint = lastSentDraftFingerprintRef.current;
+      const previousSentDraft = lastSentDraftRef.current;
       if (sentDraftFingerprint !== null) {
-        // Remember what we sent so an unchanged follow-up de-dupes (#4).
-        lastSentDraftFingerprintRef.current = sentDraftFingerprint;
+        // Remember what we sent so an unchanged follow-up de-dupes (#4). The
+        // draft row only sees the bind-time appointment, so it compares
+        // against that as well.
+        rememberSentDraft({
+          sent: sentDraftFingerprint,
+          seen:
+            appointmentSnapshot && mailItem
+              ? outlookAppointmentFingerprint(mailItem)
+              : sentDraftFingerprint,
+          recipients,
+        });
       }
 
       // Snapshot the dropped emails staged for this send. They are cleared only
@@ -1046,7 +1134,7 @@ export const AddinChatInput = forwardRef<
       // draft comes back, and the dedup marker forgets the draft it never sent.
       const declineSend = (error: Error) => {
         setSendFailure({ error, dropKeys: sentDrops.map((drop) => drop.key) });
-        lastSentDraftFingerprintRef.current = previousDraftFingerprint;
+        rememberSentDraft(previousSentDraft);
         restoreDraft(message, inputFileIds);
       };
       let resolvedFileIds: string[] = [];
@@ -1190,6 +1278,7 @@ export const AddinChatInput = forwardRef<
       mailItem,
       maxSizeFormatted,
       onEmailSourceDropsSent,
+      rememberSentDraft,
       replyFromReadAvailable,
       resolvedParts,
       resolveSelectedFilesForSend,
@@ -1226,7 +1315,7 @@ export const AddinChatInput = forwardRef<
             <GroupedFileAttachmentsPreview
               groups={emailSourceGroups}
               groupActions={emailSourceGroupActions}
-              onRemoveFile={handleRemoveEmailSourceFile}
+              onRemoveFile={removeAttachment}
               disabled={isUploadingEmail}
               showFileTypes={true}
               showFileSizes={true}
@@ -1254,42 +1343,31 @@ export const AddinChatInput = forwardRef<
       )}
 
       {host === "Outlook" && hasActiveSelection && (
-        <div className="mx-auto w-full max-w-[var(--theme-layout-chat-input-max-width)] px-2 pb-1 sm:px-4">
-          <div className="flex items-center gap-2 rounded-[var(--theme-radius-message)] border border-theme-border bg-theme-bg-secondary px-3 py-1.5 text-xs text-theme-fg-secondary">
-            <span className="shrink-0">&#x2702;</span>
-            <span className="min-w-0 truncate">
-              &ldquo;{composeSelection.data.slice(0, 80)}
-              {composeSelection.data.length > 80 ? "..." : ""}&rdquo;
-            </span>
-            <button
-              type="button"
-              onClick={() => setIsSelectionDismissed(true)}
-              className="ml-auto shrink-0 rounded-[var(--theme-radius-control)] p-0.5 hover:bg-theme-bg-tertiary"
-              aria-label={t({
-                id: "officeAddin.chatInput.dismissSelection",
-                message: "Dismiss selection",
-              })}
-            >
-              &#x2715;
-            </button>
-          </div>
-        </div>
+        <AddinSelectionChip
+          preview={composeSelection.data}
+          armed
+          onDismiss={selectionDismissal.dismiss}
+          testId="outlook-selection-chip"
+        />
       )}
 
-      {hasDraftContextChip && (
+      {draftRowState && (
         <div className="mx-auto w-full max-w-[var(--theme-layout-chat-input-max-width)] px-2 pb-1 sm:px-4">
-          <div className="flex items-center gap-2 rounded-[var(--theme-radius-message)] border border-theme-border bg-theme-bg-secondary px-3 py-1.5 text-xs text-theme-fg-secondary">
-            <span className="shrink-0">&#x1F4DD;</span>
+          <div
+            className={`flex items-center gap-2 rounded-[var(--theme-radius-message)] border border-theme-border bg-theme-bg-secondary px-3 py-1.5 text-xs ${
+              draftRowState === "sent"
+                ? "text-theme-fg-secondary"
+                : "text-theme-fg-muted"
+            }`}
+            data-testid="outlook-draft-chip"
+            data-state={draftRowState === "sent" ? "included" : "superseded"}
+            title={draftRowText(draftRowState, isAppointmentCompose)}
+          >
+            <span className="shrink-0" aria-hidden="true">
+              &#x1F4DD;
+            </span>
             <span className="min-w-0 truncate">
-              {isAppointmentCompose
-                ? t({
-                    id: "officeAddin.chatInput.appointmentContext",
-                    message: "Appointment details are included as context",
-                  })
-                : t({
-                    id: "officeAddin.chatInput.draftContext",
-                    message: "Your draft is included as context",
-                  })}
+              {draftRowText(draftRowState, isAppointmentCompose)}
             </span>
             <button
               type="button"

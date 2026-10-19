@@ -352,6 +352,36 @@ describe("OutlookEmailSourceProvider — current-thread emailBodyFile", () => {
     });
     expect(sent).toHaveLength(0);
   });
+
+  it("restores every message of a fully unticked thread and keeps the attachment choices", async () => {
+    primeReadModeThread();
+    renderProvider();
+    expect(captured).not.toHaveProperty("removeEmailBody");
+
+    const messageIds = captured!.currentThread!.messages.map(
+      (message) => message.id,
+    );
+    act(() => {
+      captured!.dismissStagedEmailAttachment("<m2@x>", "<m2@x>:a1");
+      messageIds.forEach((id) => captured!.dismissStagedEmailBody(id));
+    });
+    expect(captured!.emailBodyFile).toBeNull();
+    expect(captured!.isEmailBodyDismissed).toBe(true);
+
+    act(() => {
+      captured!.restoreEmailBody();
+    });
+
+    const staged = captured!.stagedEmails[0];
+    if (staged?.source !== "current-thread") {
+      throw new Error("expected the thread to be staged");
+    }
+    expect(staged.dismissedMessageIds.size).toBe(0);
+    expect([...staged.dismissedAttachmentIds]).toEqual(["<m2@x>:a1"]);
+    expect(captured!.isEmailBodyDismissed).toBe(false);
+    expect(captured!.emailBodyFile).not.toBeNull();
+    expect(await captured!.emailBodyFile!.text()).not.toContain("Deck.pdf");
+  });
 });
 
 describe("OutlookEmailSourceProvider — compose reply-context via the dispatched fetcher", () => {
@@ -941,6 +971,15 @@ describe("OutlookEmailSourceProvider — dropped email resolution", () => {
     // The "+" menu keeps its restore row on the original file.
     expect(captured!.emailBodyFile).toBe(parsed.rawEmlFile);
     expect(captured!.isEmailBodyDismissed).toBe(true);
+
+    act(() => {
+      captured!.restoreEmailBody();
+    });
+    expect(captured!.isEmailBodyDismissed).toBe(false);
+    expect(captured!.resolvedFiles).toEqual([parsed.rawEmlFile]);
+    act(() => {
+      captured!.dismissStagedEmailBody("<drop-1@x>");
+    });
 
     let sent: File[] = [];
     await act(async () => {
