@@ -3158,6 +3158,7 @@ async fn reconcile_orphaned_parent_slot(
         spawned_at,
         child_chat.assistant_id,
         None,
+        crate::services::delegation::task_model_report_for_chat(&app_state.config, &child_chat),
         parent_tool_call_id.clone(),
         if outcome == TaskOutcome::Errored {
             crate::services::delegation::DelegationRunStatus::Failed
@@ -3556,6 +3557,9 @@ pub(crate) struct DelegationDispatchContext<'a> {
     pub origin_chat: &'a chats::Model,
     /// The turn's user message; seeding source and provenance anchor.
     pub origin_user_message_id: Uuid,
+    /// The model this turn runs on: what a child runs on when nothing names
+    /// another model for it.
+    pub parent_chat_provider_id: &'a str,
     /// Effective run mode for this turn's delegated runs — resolved and
     /// gate-downgraded at request time, so dispatch executes it as-is.
     pub run_mode: crate::models::message::DelegationRunMode,
@@ -4248,14 +4252,24 @@ async fn prepare_chat_request_with_adapters_memory_inner(
         }
     }
 
-    // Determine the chat provider to use
+    // Determine the chat provider to use. A delegated run's model was settled
+    // at launch and wins over its assistant's default: an inherited assistant
+    // is the origin chat's, and its default is not what the run was given.
     let requested_chat_provider_id = user_input.requested_chat_provider_id.as_deref();
-    let effective_chat_provider_id = requested_chat_provider_id.or_else(|| {
-        assistant_config
-            .as_ref()
-            .and_then(|a| a.default_chat_provider.as_deref())
-            .filter(|id| app_state.config.resolve_chat_provider_id(id).is_ok())
-    });
+    let task_chat_provider_id = crate::models::chat::parse_chat_configuration(chat)
+        .ok()
+        .flatten()
+        .and_then(|configuration| configuration.task)
+        .and_then(|task| task.model)
+        .map(|model| model.chat_provider_id);
+    let effective_chat_provider_id = requested_chat_provider_id
+        .or(task_chat_provider_id.as_deref())
+        .or_else(|| {
+            assistant_config
+                .as_ref()
+                .and_then(|a| a.default_chat_provider.as_deref())
+                .filter(|id| app_state.config.resolve_chat_provider_id(id).is_ok())
+        });
 
     // Resolve chat provider configuration
     let chosen_provider = app_state
@@ -5132,6 +5146,7 @@ async fn settle_delegation_slot<
             assistant_name,
             delegate_chat_id,
             run_mode,
+            model,
         }) => {
             // A bare task child has no assistant to name. The
             // keys are omitted rather than sent null, so a reader
@@ -5144,15 +5159,17 @@ async fn settle_delegation_slot<
                     if let Some(assistant_name) = assistant_name.as_ref() {
                         object.insert("assistant_name".to_string(), json!(assistant_name));
                     }
+                    object.insert("model".to_string(), json!(model));
                 }
             };
-            // The background shape is left byte-identical - every shipped
-            // part has it, and the frontend's dispatch pill keys on
-            // `background`, which is true of both detached modes. `async`
-            // adds exactly one key, because a reader has to be able to tell
-            // a run whose answer is coming back from one whose never will.
-            // It is inert on replay: `frame_delegation_result` returns
-            // before touching an object with no string `result`.
+            // The background shape is otherwise left as every shipped part
+            // has it: beyond the identity keys and `model` it adds nothing,
+            // and the frontend's dispatch pill keys on `background`, which is
+            // true of both detached modes. `async` adds exactly one key,
+            // because a reader has to be able to tell a run whose answer is
+            // coming back from one whose never will. It is inert on replay:
+            // `frame_delegation_result` returns before touching an object
+            // with no string `result`.
             let is_async = run_mode == crate::models::message::ProvenanceRunMode::Async;
             let mut ui_output = json!({
                 "delegate_chat_id": delegate_chat_id,
@@ -5197,6 +5214,7 @@ async fn settle_delegation_slot<
             child_chat_id,
             assistant_id: child_assistant_id,
             assistant_name,
+            model,
             trace,
             ..
         }) => {
@@ -5204,6 +5222,7 @@ async fn settle_delegation_slot<
                 child_chat_id,
                 child_assistant_id,
                 assistant_name,
+                Some(model),
                 tool_call.call_id.clone(),
             );
             (
@@ -5490,6 +5509,7 @@ async fn settle_or_park_delegation_slot<
             child_message_id,
             assistant_id: child_assistant_id,
             assistant_name,
+            model,
             request,
             trace,
         }) => {
@@ -5497,6 +5517,7 @@ async fn settle_or_park_delegation_slot<
                 child_chat_id,
                 child_assistant_id,
                 assistant_name,
+                Some(model),
                 meta.tool_call.call_id.clone(),
             )
             .output_value(&trace);
@@ -5798,6 +5819,7 @@ async fn launch_prepared_task<'a>(
             assistant_name,
             delegate_chat_id,
             run_mode,
+            model,
         }) => (
             None,
             Box::pin(std::future::ready(SettledTask {
@@ -5808,6 +5830,7 @@ async fn launch_prepared_task<'a>(
                         assistant_name,
                         delegate_chat_id,
                         run_mode,
+                        model,
                     },
                 ),
             })),
@@ -11637,6 +11660,35 @@ pub(crate) async fn resolve_task_offer_scope(
         .filter_authorized_facet_ids(subject, user_groups, &candidate_facet_ids)
         .await?;
 
+    // Filtered like the facets: a model the owner may not use is not offered,
+    // so naming it is refused as outside the list rather than falling back.
+    let model_enum = if effective.child_chat_providers.is_empty() {
+        Vec::new()
+    } else {
+        let permissions = crate::services::delegation::TaskModelPermissions::for_user(
+            app_state,
+            policy,
+            subject,
+            user_groups,
+        )
+        .await?;
+        effective
+            .child_chat_providers
+            .iter()
+            .filter(|chat_provider_id| permissions.may_use(chat_provider_id))
+            .map(
+                |chat_provider_id| crate::services::delegation::TaskModelOption {
+                    chat_provider_id: chat_provider_id.clone(),
+                    display_name: crate::services::delegation::chat_provider_display_name(
+                        &app_state.config,
+                        chat_provider_id,
+                    )
+                    .unwrap_or_else(|| chat_provider_id.clone()),
+                },
+            )
+            .collect()
+    };
+
     Ok(crate::services::delegation::TaskOfferScope {
         facet_enum,
         mcp_allowlist: effective_mcp_allowlist(
@@ -11645,6 +11697,7 @@ pub(crate) async fn resolve_task_offer_scope(
             action_facet_id,
         ),
         mcp_server_ids: assistant_mcp_server_ids.map(<[String]>::to_vec),
+        model_enum,
         effective,
     })
 }
@@ -15137,6 +15190,7 @@ async fn run_generation_after_user_message_memory_inner(
             offered_file_ids: &delegation_offered_file_ids,
             origin_chat: chat,
             origin_user_message_id: saved_user_message.id,
+            parent_chat_provider_id: &chat_provider_id,
             run_mode: effective_delegation_run_mode,
             background_dispatches: std::sync::atomic::AtomicUsize::new(0),
             task_scope: task_offer_scope.clone(),
@@ -15880,6 +15934,7 @@ pub(crate) async fn start_regeneration(
                     offered_file_ids: &delegation_offered_file_ids,
                     origin_chat: &chat,
                     origin_user_message_id: previous_message.id,
+                    parent_chat_provider_id: &chat_provider_id,
                     run_mode: effective_delegation_run_mode,
                     background_dispatches: std::sync::atomic::AtomicUsize::new(0),
                     task_scope: task_offer_scope.clone(),
@@ -16501,6 +16556,7 @@ pub(crate) async fn start_edit(
                     offered_file_ids: &delegation_offered_file_ids,
                     origin_chat: &chat,
                     origin_user_message_id: saved_user_message.id,
+                    parent_chat_provider_id: &chat_provider_id,
                     run_mode: effective_delegation_run_mode,
                     background_dispatches: std::sync::atomic::AtomicUsize::new(0),
                     task_scope: task_offer_scope.clone(),
@@ -18190,6 +18246,7 @@ async fn resume_parked_child(
         // model; neither is a delegate the origin model named, so there is no
         // name to report.
         None,
+        crate::services::delegation::task_model_report_for_chat(&app_state.config, &child_chat),
         parent_tool_call_id,
         status,
         None,
@@ -19926,6 +19983,7 @@ async fn resume_parked_generation(
             offered_file_ids: &delegation_offered_file_ids,
             origin_chat: &chat,
             origin_user_message_id,
+            parent_chat_provider_id: &chat_provider_id,
             // Neither a request value nor the user row's: this field only
             // reaches `delegate_to_assistant` dispatch, which `targets: &[]`
             // above refuses before it is read. The task route takes its mode

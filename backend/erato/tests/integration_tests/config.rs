@@ -5312,6 +5312,108 @@ model_name = "gpt-4o"
 }
 
 #[test]
+fn test_task_model_keys_accept_configured_chat_providers() {
+    let config = build_and_migrate_delegation_config(
+        r#"
+[facets.facets.mail]
+display_name = "Mail"
+child_chat_provider = "default"
+
+[facets.facets.plan]
+display_name = "Plan"
+
+[facets.facets.plan.delegation]
+child_chat_providers = ["default"]
+
+[chat_provider]
+provider_kind = "openai"
+model_name = "gpt-4o"
+
+[file_storage_providers]
+"#,
+    );
+
+    assert_eq!(
+        config.facets.facets["mail"].child_chat_provider.as_deref(),
+        Some("default")
+    );
+    assert_eq!(
+        config.facets.facets["plan"]
+            .delegation
+            .as_ref()
+            .and_then(|delegation| delegation.child_chat_providers.clone()),
+        Some(vec!["default".to_string()])
+    );
+}
+
+#[test]
+#[should_panic(
+    expected = "facets.facets.mail.child_chat_provider references unknown or non-chat provider 'nope'"
+)]
+fn test_child_chat_provider_unknown_provider_panics() {
+    build_and_migrate_delegation_config(
+        r#"
+[facets.facets.mail]
+display_name = "Mail"
+child_chat_provider = "nope"
+
+[chat_provider]
+provider_kind = "openai"
+model_name = "gpt-4o"
+
+[file_storage_providers]
+"#,
+    );
+}
+
+#[test]
+#[should_panic(
+    expected = "facets.facets.plan.delegation.child_chat_providers references unknown or non-chat provider 'nope'"
+)]
+fn test_per_facet_child_chat_providers_unknown_provider_panics() {
+    build_and_migrate_delegation_config(
+        r#"
+[facets.facets.plan]
+display_name = "Plan"
+
+[facets.facets.plan.delegation]
+child_chat_providers = ["default", "nope"]
+
+[chat_provider]
+provider_kind = "openai"
+model_name = "gpt-4o"
+
+[file_storage_providers]
+"#,
+    );
+}
+
+#[test]
+#[should_panic(
+    expected = "action_facets.facets.word.delegation.child_chat_providers references unknown or non-chat provider 'nope'"
+)]
+fn test_action_facet_child_chat_providers_unknown_provider_panics() {
+    build_and_migrate_delegation_config(
+        r#"
+[action_facets.facets.word]
+display_name = "Word"
+template = "Work on {{document_name}}."
+allowed_args = ["document_name"]
+tool_call_allowlist = ["erato/delegate_task"]
+
+[action_facets.facets.word.delegation]
+child_chat_providers = ["nope"]
+
+[chat_provider]
+provider_kind = "openai"
+model_name = "gpt-4o"
+
+[file_storage_providers]
+"#,
+    );
+}
+
+#[test]
 fn test_action_facet_delegation_override_parses() {
     let config = build_and_migrate_delegation_config(
         r#"

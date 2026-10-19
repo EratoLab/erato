@@ -461,6 +461,9 @@ pub(crate) struct EffectiveTasksConfig {
     pub max_parallel: u32,
     pub persona: erato_config::config::TaskPersona,
     pub child_facet_ids: Vec<String>,
+    /// The models a parent may pick for a task. Facet-only: there is no
+    /// global value, so it is empty unless a planning facet names some.
+    pub child_chat_providers: Vec<String>,
     pub run_modes: Vec<erato_config::config::TaskRunMode>,
     pub scheduling: erato_config::config::TaskScheduling,
     pub approval_mode: erato_config::config::TaskApprovalMode,
@@ -474,7 +477,8 @@ pub(crate) struct EffectiveTasksConfig {
 /// narrow what a turn can spend, so a facet cannot be used to buy its way past
 /// another facet's limit. Child facet ids take the UNION, because they say
 /// what a task run is allowed to reach for and each facet's list is a
-/// capability its author meant to grant. Persona takes the FIRST selected
+/// capability its author meant to grant; `child_chat_providers` unions the
+/// same way, starting from nothing. Persona takes the FIRST selected
 /// facet that states one — it is a single-valued choice with no meaningful
 /// "combination", and selection order is the user's own. `run_modes` unions
 /// for the same reason as child facet ids, with `wait` floored back in;
@@ -498,6 +502,7 @@ pub(crate) fn effective_tasks_config(
         max_parallel: global.max_parallel,
         persona: global.persona,
         child_facet_ids: global.child_facet_ids.clone(),
+        child_chat_providers: Vec::new(),
         run_modes: global.run_modes.clone(),
         scheduling: global.scheduling,
         approval_mode: global.approval.mode,
@@ -536,6 +541,13 @@ pub(crate) fn effective_tasks_config(
             for id in ids {
                 if !effective.child_facet_ids.contains(id) {
                     effective.child_facet_ids.push(id.clone());
+                }
+            }
+        }
+        if let Some(ids) = overrides.child_chat_providers.as_ref() {
+            for id in ids {
+                if !effective.child_chat_providers.contains(id) {
+                    effective.child_chat_providers.push(id.clone());
                 }
             }
         }
@@ -659,9 +671,19 @@ pub(crate) struct TaskOfferScope {
     /// The MCP servers this turn's assistant is restricted to, `None` meaning
     /// unrestricted. Part of the same ceiling.
     pub mcp_server_ids: Option<Vec<String>>,
+    /// Models the model may name in `model`. Already filtered to the models
+    /// the chat owner may use; empty means `model` is not offered.
+    pub model_enum: Vec<TaskModelOption>,
     /// The `[delegation.tasks]` keys after the selected planning facets have
     /// had their say.
     pub effective: EffectiveTasksConfig,
+}
+
+/// A model `delegate_task` offers in its `model` enum.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct TaskModelOption {
+    pub chat_provider_id: String,
+    pub display_name: String,
 }
 
 /// Build the `delegate_task` tool for this turn.
@@ -748,6 +770,30 @@ pub(crate) fn build_delegate_task_tool(
                     "type": "array",
                     "items": { "type": "string", "enum": scope.facet_enum },
                     "description": "Capabilities to give the sub-task. Ask only for what the task needs.",
+                }),
+            );
+        }
+        if !scope.model_enum.is_empty() {
+            let model_ids: Vec<&str> = scope
+                .model_enum
+                .iter()
+                .map(|option| option.chat_provider_id.as_str())
+                .collect();
+            let listed = scope
+                .model_enum
+                .iter()
+                .map(|option| format!("{} ({})", option.chat_provider_id, option.display_name))
+                .collect::<Vec<_>>()
+                .join(", ");
+            object.insert(
+                "model".to_string(),
+                json!({
+                    "type": "string",
+                    "enum": model_ids,
+                    "description": format!(
+                        "The model to run the sub-task on: {listed}. Omit it to use the model \
+                         the sub-task's capabilities name, or else this conversation's model."
+                    ),
                 }),
             );
         }
@@ -1089,6 +1135,163 @@ impl DelegationRunReason {
     }
 }
 
+/// The model a delegated run runs on, as its result reports it.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct TaskModelReport {
+    pub chat_provider_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub display_name: Option<String>,
+    /// The configured model the run could not use; see
+    /// [`crate::models::chat::TaskModel`].
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub unavailable_chat_provider_id: Option<String>,
+    /// Tells the origin model about a fallback, so its answer can say the
+    /// task did not run on the model it was configured for.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
+}
+
+impl TaskModelReport {
+    pub(crate) fn new(
+        config: &crate::config::AppConfig,
+        model: &crate::models::chat::TaskModel,
+    ) -> Self {
+        let note = model
+            .unavailable_chat_provider_id
+            .as_ref()
+            .map(|unavailable| {
+                let unavailable = chat_provider_display_name(config, unavailable)
+                    .unwrap_or_else(|| unavailable.clone());
+                format!(
+                    "The model configured for this task ({unavailable}) is not available to \
+                     the user, so the task ran on this conversation's model instead."
+                )
+            });
+        Self {
+            chat_provider_id: model.chat_provider_id.clone(),
+            display_name: chat_provider_display_name(config, &model.chat_provider_id),
+            unavailable_chat_provider_id: model.unavailable_chat_provider_id.clone(),
+            note,
+        }
+    }
+}
+
+/// The display name of a configured model. Unlike `get_chat_provider` it
+/// tolerates an id the config no longer has, which a stored run can name.
+pub(crate) fn chat_provider_display_name(
+    config: &crate::config::AppConfig,
+    chat_provider_id: &str,
+) -> Option<String> {
+    match (&config.chat_providers, &config.chat_provider) {
+        (Some(providers), _) => providers
+            .providers
+            .get(chat_provider_id)
+            .map(|provider| provider.model_display_name().to_string()),
+        (None, Some(provider)) if chat_provider_id == "default" => {
+            Some(provider.model_display_name().to_string())
+        }
+        (None, _) => None,
+    }
+}
+
+/// The model report of a delegated run, read off its stored `TaskSpec`.
+pub(crate) fn task_model_report_for_chat(
+    config: &crate::config::AppConfig,
+    chat: &crate::db::entity::chats::Model,
+) -> Option<TaskModelReport> {
+    let model = crate::models::chat::parse_chat_configuration(chat)
+        .ok()
+        .flatten()?
+        .task?
+        .model?;
+    Some(TaskModelReport::new(config, &model))
+}
+
+/// Which models the chat owner may run a task on. Asked the way the child's
+/// own request asks, so a model accepted here is one the child's turn accepts.
+pub(crate) struct TaskModelPermissions<'a> {
+    config: &'a crate::config::AppConfig,
+    allowlist: Option<Vec<String>>,
+}
+
+impl<'a> TaskModelPermissions<'a> {
+    pub(crate) async fn for_user(
+        app_state: &'a AppState,
+        policy: &PolicyEngine,
+        subject: &Subject,
+        user_groups: &[String],
+    ) -> Result<Self, eyre::Report> {
+        let allowlist = app_state
+            .determine_chat_provider_allowlist_for_user(policy, subject, user_groups)
+            .await?;
+        Ok(Self {
+            config: &app_state.config,
+            allowlist,
+        })
+    }
+
+    pub(crate) fn may_use(&self, chat_provider_id: &str) -> bool {
+        let allowlist: Option<Vec<&str>> = self
+            .allowlist
+            .as_ref()
+            .map(|allowlist| allowlist.iter().map(String::as_str).collect());
+        self.config
+            .determine_chat_provider(allowlist.as_deref(), Some(chat_provider_id))
+            .is_ok()
+    }
+}
+
+/// The model a delegation is configured to run on, before the user's model
+/// permissions have their say: the parent's pick, else the first of the
+/// task's facets that names one, else the mentioned assistant's default.
+pub(crate) fn configured_task_model(
+    facets: &crate::config::FacetsConfig,
+    target: &DelegationTargetSpec,
+    assistant_default: Option<&str>,
+) -> Option<String> {
+    match target {
+        DelegationTargetSpec::Task { facet_ids, model } => model.clone().or_else(|| {
+            facet_ids.iter().find_map(|facet_id| {
+                facets
+                    .facets
+                    .get(facet_id)
+                    .and_then(|facet| facet.child_chat_provider.clone())
+            })
+        }),
+        DelegationTargetSpec::Assistant(_) => assistant_default.map(str::to_string),
+    }
+}
+
+/// Settle the model a delegation runs on.
+///
+/// A configured model the user may not use falls back to the parent turn's
+/// model rather than refusing the task, and is remembered so the result can
+/// say so. `Err` only when the parent's model is not usable either, which a
+/// live turn cannot reach: it is already running on that model.
+pub(crate) fn choose_task_model(
+    candidate: Option<String>,
+    parent_chat_provider_id: &str,
+    may_use: impl Fn(&str) -> bool,
+) -> Result<crate::models::chat::TaskModel, String> {
+    if let Some(candidate) = candidate.as_deref()
+        && may_use(candidate)
+    {
+        return Ok(crate::models::chat::TaskModel {
+            chat_provider_id: candidate.to_string(),
+            unavailable_chat_provider_id: None,
+        });
+    }
+    if !may_use(parent_chat_provider_id) {
+        return Err(
+            "No model this task may run on is available to you; it was not started.".to_string(),
+        );
+    }
+    Ok(crate::models::chat::TaskModel {
+        chat_provider_id: parent_chat_provider_id.to_string(),
+        unavailable_chat_provider_id: candidate,
+    })
+}
+
 /// Key under which the child run's trace rides on the tool output. UI-only:
 /// `prompt_composition` strips it before a stored tool output is replayed to
 /// a provider.
@@ -1109,6 +1312,10 @@ pub struct DelegationResultEnvelope {
     pub assistant_id: Option<Uuid>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub assistant_name: Option<String>,
+    /// The model the child ran on. Absent for runs launched before the model
+    /// was recorded, and where only the status is read.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub model: Option<TaskModelReport>,
     /// The child chat. Kept under its original name for parts and readers
     /// that predate `child_run_id`.
     pub delegate_chat_id: Uuid,
@@ -1179,6 +1386,7 @@ pub(crate) enum DelegationDispatchOutcome {
         /// Which detached mode this was. `Background` never comes back;
         /// `Async` is delivered into the origin chat later.
         run_mode: ProvenanceRunMode,
+        model: TaskModelReport,
     },
     /// A task that was cancelled while it was still waiting for a free slot.
     ///
@@ -1200,6 +1408,7 @@ pub(crate) enum DelegationDispatchOutcome {
         /// Absent for a task child dispatched on the bare model.
         assistant_id: Option<Uuid>,
         assistant_name: Option<String>,
+        model: TaskModelReport,
         request: Box<crate::models::message::ContentPartToolApprovalRequest>,
         trace: DelegationTrace,
     },
@@ -1263,6 +1472,7 @@ struct DelegationProgressEmitter<'a> {
     /// real assistant that happens to be all zeroes.
     assistant_id: Option<Uuid>,
     assistant_name: Option<String>,
+    model: TaskModelReport,
     delegate_chat_id: Uuid,
     parent_tool_call_id: String,
     sent_version: u64,
@@ -1278,6 +1488,7 @@ impl DelegationProgressEmitter<'_> {
             "delegate_chat_id": self.delegate_chat_id,
             "child_run_id": self.delegate_chat_id,
             "parent_tool_call_id": self.parent_tool_call_id,
+            "model": self.model,
             DELEGATION_LOCAL_TRACE_KEY: trace.snapshot(),
         });
         if let Some(object) = output.as_object_mut() {
@@ -1588,6 +1799,7 @@ pub(crate) async fn build_result_envelope<C: sea_orm::ConnectionTrait>(
     spawned_at: sea_orm::prelude::DateTimeWithTimeZone,
     assistant_id: Option<Uuid>,
     assistant_name: Option<String>,
+    model: Option<TaskModelReport>,
     parent_tool_call_id: String,
     requested_status: DelegationRunStatus,
     requested_reason: Option<DelegationRunReason>,
@@ -1702,6 +1914,7 @@ pub(crate) async fn build_result_envelope<C: sea_orm::ConnectionTrait>(
         reason,
         assistant_id,
         assistant_name,
+        model,
         delegate_chat_id: child_chat_id,
         child_run_id: child_chat_id,
         parent_tool_call_id,
@@ -1816,7 +2029,12 @@ pub(crate) enum DelegationTargetSpec {
     /// The task route: the model planned the sub-task itself, and the child is
     /// scoped by facets rather than bound to an assistant.
     #[allow(dead_code)]
-    Task { facet_ids: Vec<String> },
+    Task {
+        facet_ids: Vec<String>,
+        /// The model the parent picked for this task, checked against the
+        /// offer; on a retry, the model the failed run was recorded with.
+        model: Option<String>,
+    },
 }
 
 /// The parsed `delegate_*` arguments a launch works from, independent of which
@@ -1840,6 +2058,7 @@ pub(crate) struct LaunchedDelegation {
     pub assistant_id: Option<Uuid>,
     /// The name to show for the target; `None` for a bare task child.
     pub target_name: Option<String>,
+    pub model: TaskModelReport,
     pub route: crate::models::chat::DelegateRoute,
     handle: tokio::task::JoinHandle<Result<(), eyre::Report>>,
     child_rx: tokio::sync::broadcast::Receiver<crate::services::background_tasks::StreamingEvent>,
@@ -1870,6 +2089,7 @@ pub(crate) enum LaunchOutcome {
         /// Which detached mode this was. `Background` never comes back;
         /// `Async` is delivered into the origin chat later.
         run_mode: ProvenanceRunMode,
+        model: TaskModelReport,
     },
 }
 
@@ -1915,7 +2135,7 @@ pub(crate) async fn launch_delegation(
     // facets and may have no assistant at all.
     let (mention_assistant_id, task_facet_ids) = match &target {
         DelegationTargetSpec::Assistant(assistant_id) => (Some(*assistant_id), Vec::new()),
-        DelegationTargetSpec::Task { facet_ids } => (None, facet_ids.clone()),
+        DelegationTargetSpec::Task { facet_ids, .. } => (None, facet_ids.clone()),
     };
 
     let mut file_ids: Vec<Uuid> = Vec::new();
@@ -1960,7 +2180,8 @@ pub(crate) async fn launch_delegation(
     let persona = task_scope
         .map(|scope| scope.effective.persona)
         .unwrap_or_default();
-    let (assistant_id, assistant_name) = match mention_assistant_id {
+    let (assistant_id, assistant_name, assistant_default_chat_provider) = match mention_assistant_id
+    {
         Some(assistant_id) => {
             let assistant = crate::models::assistant::get_assistant_by_id(
                 &app_state.db,
@@ -1973,13 +2194,39 @@ pub(crate) async fn launch_delegation(
                 tracing::debug!(%assistant_id, %error, "Delegation target no longer resolvable");
                 "The mentioned assistant is no longer available.".to_string()
             })?;
-            (Some(assistant_id), Some(assistant.name))
+            (
+                Some(assistant_id),
+                Some(assistant.name),
+                assistant.default_chat_provider,
+            )
         }
+        // The inherited assistant's default is not consulted: a task runs on
+        // the parent turn's model unless something names one for it.
         None => match persona {
-            erato_config::config::TaskPersona::Inherit => (context.origin_chat.assistant_id, None),
-            erato_config::config::TaskPersona::Bare => (None, None),
+            erato_config::config::TaskPersona::Inherit => {
+                (context.origin_chat.assistant_id, None, None)
+            }
+            erato_config::config::TaskPersona::Bare => (None, None, None),
         },
     };
+
+    let permissions =
+        TaskModelPermissions::for_user(app_state, policy, &owner_subject, &context.me_user.groups)
+            .await
+            .map_err(|error| {
+                tracing::warn!(%error, "Failed to read the model permissions for a delegated run");
+                "Failed to check which models the task may run on.".to_string()
+            })?;
+    let model = choose_task_model(
+        configured_task_model(
+            &app_state.config.facets,
+            &target,
+            assistant_default_chat_provider.as_deref(),
+        ),
+        context.parent_chat_provider_id,
+        |chat_provider_id| permissions.may_use(chat_provider_id),
+    )?;
+    let model_report = TaskModelReport::new(&app_state.config, &model);
 
     // A background run consumes a concurrency slot the moment it launches and
     // frees it only when its own generation ends, so the cap is checked before
@@ -2055,6 +2302,7 @@ pub(crate) async fn launch_delegation(
         max_client_tool_calls_per_task: task_scope
             .map(|scope| scope.effective.max_client_tool_calls_per_task),
         persona,
+        model: Some(model),
         scheduling: run.scheduling,
         parent_tool_call_id: run.parent_tool_call_id.clone(),
         route: match target {
@@ -2161,6 +2409,7 @@ pub(crate) async fn launch_delegation(
             assistant_name,
             delegate_chat_id: child_chat.id,
             run_mode: run.run_mode,
+            model: model_report,
         });
     }
 
@@ -2169,6 +2418,7 @@ pub(crate) async fn launch_delegation(
         child_task,
         assistant_id,
         target_name: assistant_name,
+        model: model_report,
         route: crate::models::chat::DelegateRoute::Assistant,
         handle,
         child_rx,
@@ -2194,6 +2444,7 @@ pub(crate) async fn await_delegation(
         child_task,
         assistant_id,
         target_name,
+        model,
         route: _route,
         mut handle,
         mut child_rx,
@@ -2213,6 +2464,7 @@ pub(crate) async fn await_delegation(
         input: tool_call.fn_arguments.clone(),
         assistant_id,
         assistant_name: target_name.clone(),
+        model: model.clone(),
         delegate_chat_id: child_chat_id,
         parent_tool_call_id: tool_call.call_id.clone(),
         sent_version: 0,
@@ -2316,6 +2568,7 @@ pub(crate) async fn await_delegation(
             child_message_id: child_task.message_id(),
             assistant_id,
             assistant_name: target_name,
+            model,
             request: Box::new(request),
             trace: trace.snapshot(),
         };
@@ -2329,6 +2582,7 @@ pub(crate) async fn await_delegation(
             spawned_at,
             assistant_id,
             target_name,
+            Some(model),
             tool_call.call_id.clone(),
             status,
             reason,
@@ -2407,11 +2661,13 @@ pub(crate) async fn dispatch_delegate_tool_call(
             assistant_name,
             delegate_chat_id,
             run_mode,
+            model,
         } => Ok(DelegationDispatchOutcome::Dispatched {
             assistant_id,
             assistant_name,
             delegate_chat_id,
             run_mode,
+            model,
         }),
         LaunchOutcome::Launched(launched) => {
             Ok(await_delegation(app_state, launched, parent, tool_call).await)
@@ -2434,6 +2690,8 @@ struct DelegateTaskArgs {
     #[serde(default)]
     scheduling: Option<String>,
     #[serde(default)]
+    model: Option<String>,
+    #[serde(default)]
     file_ids: Option<Vec<String>>,
     #[serde(default)]
     include_conversation_context: bool,
@@ -2441,9 +2699,9 @@ struct DelegateTaskArgs {
 
 /// Rebuild a task brief from the origin model's persisted tool-call input.
 ///
-/// `run_mode`, `facet_ids` and `scheduling` in the recorded arguments are
-/// deliberately ignored: a retry inherits the run parameters the OLD CHILD was
-/// actually launched with - its persisted `TaskSpec`, already
+/// `run_mode`, `facet_ids`, `scheduling` and `model` in the recorded arguments
+/// are deliberately ignored: a retry inherits the run parameters the OLD CHILD
+/// was actually launched with - its persisted `TaskSpec`, already
 /// authorization-filtered and already clamped by the offer that turn - not
 /// whatever the model once asked for. Re-reading the model's request would
 /// silently un-clamp a facet the offer narrowed, and would restore a
@@ -2477,6 +2735,7 @@ pub(crate) fn task_placeholder_output(launched: &LaunchedDelegation) -> serde_js
         "status": "working",
         "child_run_id": launched.child_chat_id,
         "delegate_chat_id": launched.child_chat_id,
+        "model": launched.model,
     });
     if let Some(object) = output.as_object_mut() {
         if let Some(assistant_id) = launched.assistant_id {
@@ -2511,6 +2770,7 @@ pub(crate) fn suspended_envelope(
     child_chat_id: Uuid,
     assistant_id: Option<Uuid>,
     assistant_name: Option<String>,
+    model: Option<TaskModelReport>,
     parent_tool_call_id: String,
 ) -> DelegationResultEnvelope {
     DelegationResultEnvelope {
@@ -2518,6 +2778,7 @@ pub(crate) fn suspended_envelope(
         reason: Some(DelegationRunReason::ApprovalPending),
         assistant_id,
         assistant_name,
+        model,
         delegate_chat_id: child_chat_id,
         child_run_id: child_chat_id,
         parent_tool_call_id,
@@ -2663,6 +2924,36 @@ pub(crate) fn validate_task_tool_call(
         }
     }
 
+    // Same reasoning as the facets: the enum is advisory, and the list it was
+    // built from already holds only models the owner may use.
+    let model = match args.model {
+        None => None,
+        Some(model)
+            if scope
+                .model_enum
+                .iter()
+                .any(|option| option.chat_provider_id == model) =>
+        {
+            Some(model)
+        }
+        Some(model) if scope.model_enum.is_empty() => {
+            return Err(format!(
+                "Model '{model}' is not available for tasks on this turn; omit 'model'."
+            ));
+        }
+        Some(model) => {
+            return Err(format!(
+                "Model '{model}' was not offered for tasks on this turn; available: {}.",
+                scope
+                    .model_enum
+                    .iter()
+                    .map(|option| option.chat_provider_id.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ));
+        }
+    };
+
     let brief = DelegateBrief {
         task: args.task,
         expected_output: args.expected_output,
@@ -2672,7 +2963,7 @@ pub(crate) fn validate_task_tool_call(
     };
 
     Ok(PreparedTask {
-        target: DelegationTargetSpec::Task { facet_ids },
+        target: DelegationTargetSpec::Task { facet_ids, model },
         brief,
         run_mode,
         scheduling,
@@ -2997,6 +3288,7 @@ mod tests {
             reason: None,
             assistant_id: Some(Uuid::from_u128(1)),
             assistant_name: Some("Research".to_string()),
+            model: None,
             delegate_chat_id: child,
             child_run_id: child,
             parent_tool_call_id: "call-1".to_string(),
@@ -3141,6 +3433,7 @@ mod tests {
             hidden: false,
             hidden_always_active_for_platform: None,
             delegation: overrides,
+            child_chat_provider: None,
         }
     }
 
@@ -3176,6 +3469,7 @@ mod tests {
                     max_parallel: None,
                     persona: Some(erato_config::config::TaskPersona::Bare),
                     child_facet_ids: Some(vec!["files".to_string()]),
+                    child_chat_providers: None,
                     run_modes: None,
                     scheduling: None,
                     approval: None,
@@ -3195,6 +3489,7 @@ mod tests {
                     max_parallel: None,
                     persona: Some(erato_config::config::TaskPersona::Inherit),
                     child_facet_ids: Some(vec!["web_search".to_string(), "mail".to_string()]),
+                    child_chat_providers: None,
                     run_modes: None,
                     scheduling: None,
                     approval: None,
@@ -3242,6 +3537,7 @@ mod tests {
             max_parallel: None,
             persona: None,
             child_facet_ids: None,
+            child_chat_providers: None,
             run_modes: None,
             scheduling: None,
             approval: Some(erato_config::config::FacetDelegationApprovalOverrides {
@@ -3321,6 +3617,7 @@ mod tests {
                     max_tasks_per_turn: Some(3),
                     persona: Some(TaskPersona::Bare),
                     child_facet_ids: Some(vec!["mail".to_string()]),
+                    child_chat_providers: None,
                     approval: Some(FacetDelegationApprovalOverrides {
                         mode: Some(TaskApprovalMode::Plan),
                         plan_min_tasks: None,
@@ -3333,6 +3630,7 @@ mod tests {
             max_tasks_per_turn: Some(1),
             persona: Some(TaskPersona::Inherit),
             child_facet_ids: Some(vec!["files".to_string(), "mail".to_string()]),
+            child_chat_providers: None,
             run_modes: Some(vec![TaskRunMode::Async]),
             scheduling: Some(TaskScheduling::Silent),
             approval: Some(FacetDelegationApprovalOverrides {
@@ -3596,6 +3894,7 @@ mod tests {
                     max_parallel: None,
                     persona: None,
                     child_facet_ids: None,
+                    child_chat_providers: None,
                     run_modes: Some(vec![erato_config::config::TaskRunMode::Async]),
                     scheduling: Some(erato_config::config::TaskScheduling::Silent),
                     approval: None,
@@ -3613,6 +3912,7 @@ mod tests {
                     max_parallel: None,
                     persona: None,
                     child_facet_ids: None,
+                    child_chat_providers: None,
                     run_modes: Some(vec![erato_config::config::TaskRunMode::Wait]),
                     scheduling: Some(erato_config::config::TaskScheduling::WhenIdle),
                     approval: None,
@@ -3659,6 +3959,7 @@ mod tests {
             facet_enum: facet_enum.iter().map(|s| s.to_string()).collect(),
             mcp_allowlist: None,
             mcp_server_ids: None,
+            model_enum: Vec::new(),
             effective: EffectiveTasksConfig {
                 max_tasks_per_turn: 5,
                 max_server_tool_calls_per_task: 5,
@@ -3666,6 +3967,7 @@ mod tests {
                 max_parallel: 3,
                 persona: erato_config::config::TaskPersona::Inherit,
                 child_facet_ids: Vec::new(),
+                child_chat_providers: Vec::new(),
                 run_modes: run_modes.to_vec(),
                 scheduling: erato_config::config::TaskScheduling::default(),
                 approval_mode: erato_config::config::TaskApprovalMode::Never,
@@ -3769,6 +4071,7 @@ mod tests {
                     max_parallel: None,
                     persona: None,
                     child_facet_ids: None,
+                    child_chat_providers: None,
                     run_modes: None,
                     scheduling: None,
                     approval: None,
@@ -4207,5 +4510,147 @@ mod tests {
     fn brief_from_persisted_task_args_refuses_an_empty_task() {
         assert!(brief_from_persisted_task_args(&serde_json::json!({ "task": "   " })).is_err());
         assert!(brief_from_persisted_task_args(&serde_json::json!({ "not_a_call": 1 })).is_err());
+    }
+
+    fn model_overrides(ids: &[&str]) -> Option<erato_config::config::FacetDelegationOverrides> {
+        Some(erato_config::config::FacetDelegationOverrides {
+            child_chat_providers: Some(ids.iter().map(|id| id.to_string()).collect()),
+            ..Default::default()
+        })
+    }
+
+    /// The models a parent may pick are a capability each planning facet
+    /// grants, so they union like child facets, and nothing is offered unless
+    /// a facet names a model: there is no global list to fall back to.
+    #[test]
+    fn child_chat_providers_union_across_planning_facets() {
+        let mut facets = crate::config::FacetsConfig::default();
+        facets.facets.insert(
+            "cheap".to_string(),
+            planning_facet(&["erato/delegate_task"], model_overrides(&["b", "c"])),
+        );
+        facets.facets.insert(
+            "local".to_string(),
+            planning_facet(&["erato/delegate_task"], model_overrides(&["c", "d"])),
+        );
+
+        let effective = effective_tasks_config(
+            &tasks_config(),
+            &facets,
+            &["cheap".to_string(), "local".to_string()],
+            model_overrides(&["d", "e"]).as_ref(),
+        );
+        assert_eq!(effective.child_chat_providers, vec!["b", "c", "d", "e"]);
+
+        let unconfigured = effective_tasks_config(&tasks_config(), &facets, &[], None);
+        assert!(unconfigured.child_chat_providers.is_empty());
+    }
+
+    #[test]
+    fn the_task_tool_offers_a_model_only_when_there_is_a_list() {
+        let without = build_delegate_task_tool(&scope(&[]), &[], false)
+            .schema
+            .expect("tool schema");
+        assert!(
+            without["properties"]["model"].is_null(),
+            "no list, no knob: {without}"
+        );
+
+        let mut with_models = scope(&[]);
+        with_models.model_enum = vec![
+            TaskModelOption {
+                chat_provider_id: "sonnet".to_string(),
+                display_name: "Claude Sonnet".to_string(),
+            },
+            TaskModelOption {
+                chat_provider_id: "local".to_string(),
+                display_name: "In-house model".to_string(),
+            },
+        ];
+        let schema = build_delegate_task_tool(&with_models, &[], false)
+            .schema
+            .expect("tool schema");
+        let model = &schema["properties"]["model"];
+        assert_eq!(model["enum"], json!(["sonnet", "local"]));
+        let description = model["description"].as_str().expect("description");
+        assert!(
+            description.contains("sonnet (Claude Sonnet)"),
+            "{description}"
+        );
+        assert!(
+            description.contains("local (In-house model)"),
+            "{description}"
+        );
+        assert_eq!(
+            schema["required"],
+            json!(["task"]),
+            "the model stays optional"
+        );
+    }
+
+    #[test]
+    fn a_task_runs_on_the_first_usable_model_in_order() {
+        let may_use = |id: &str| id != "denied";
+
+        assert_eq!(
+            choose_task_model(Some("picked".to_string()), "parent", may_use),
+            Ok(crate::models::chat::TaskModel {
+                chat_provider_id: "picked".to_string(),
+                unavailable_chat_provider_id: None,
+            })
+        );
+        assert_eq!(
+            choose_task_model(None, "parent", may_use),
+            Ok(crate::models::chat::TaskModel {
+                chat_provider_id: "parent".to_string(),
+                unavailable_chat_provider_id: None,
+            })
+        );
+        assert_eq!(
+            choose_task_model(Some("denied".to_string()), "parent", may_use),
+            Ok(crate::models::chat::TaskModel {
+                chat_provider_id: "parent".to_string(),
+                unavailable_chat_provider_id: Some("denied".to_string()),
+            }),
+            "a model the user may not use falls back and is remembered"
+        );
+        assert!(choose_task_model(Some("denied".to_string()), "denied", may_use).is_err());
+        assert!(choose_task_model(None, "denied", may_use).is_err());
+    }
+
+    #[test]
+    fn a_pick_beats_the_facets_and_the_first_facet_naming_a_model_wins() {
+        let mut facets = crate::config::FacetsConfig::default();
+        for (facet_id, model) in [("plain", None), ("mail", Some("b")), ("files", Some("c"))] {
+            let mut facet = planning_facet(&[], None);
+            facet.child_chat_provider = model.map(str::to_string);
+            facets.facets.insert(facet_id.to_string(), facet);
+        }
+        let task = |facet_ids: &[&str], model: Option<&str>| DelegationTargetSpec::Task {
+            facet_ids: facet_ids.iter().map(|id| id.to_string()).collect(),
+            model: model.map(str::to_string),
+        };
+
+        assert_eq!(
+            configured_task_model(&facets, &task(&["plain", "files", "mail"], None), None),
+            Some("c".to_string())
+        );
+        assert_eq!(
+            configured_task_model(&facets, &task(&["mail", "files"], Some("d")), None),
+            Some("d".to_string())
+        );
+        assert_eq!(
+            configured_task_model(&facets, &task(&["plain"], None), Some("assistant")),
+            None,
+            "a task does not run on an assistant's default"
+        );
+        assert_eq!(
+            configured_task_model(
+                &facets,
+                &DelegationTargetSpec::Assistant(Uuid::nil()),
+                Some("assistant")
+            ),
+            Some("assistant".to_string())
+        );
     }
 }
