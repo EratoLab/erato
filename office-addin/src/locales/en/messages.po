@@ -2250,28 +2250,28 @@ msgstr "Whole chats add the last {messageLimit} messages."
 
 #. js-lingui-explicit-id
 #: src/teams/utils/teamsAttachmentGroups.ts
-msgid "officeAddin.teams.preview.allMessages"
-msgstr "All messages"
+#~ msgid "officeAddin.teams.preview.allMessages"
+#~ msgstr "All messages"
 
 #. js-lingui-explicit-id
 #: src/teams/utils/teamsAttachmentGroups.ts
-msgid "officeAddin.teams.preview.attachment"
-msgstr "Attachment"
+#~ msgid "officeAddin.teams.preview.attachment"
+#~ msgstr "Attachment"
 
 #. js-lingui-explicit-id
 #: src/teams/components/TeamsAttachmentsPreview.tsx
-msgid "officeAddin.teams.preview.conversationRegion"
-msgstr "Teams conversation preview"
+#~ msgid "officeAddin.teams.preview.conversationRegion"
+#~ msgstr "Teams conversation preview"
 
 #. js-lingui-explicit-id
 #: src/teams/components/TeamsAttachmentsPreview.tsx
-msgid "officeAddin.teams.preview.conversationTitle"
-msgstr "Teams conversation"
+#~ msgid "officeAddin.teams.preview.conversationTitle"
+#~ msgstr "Teams conversation"
 
 #. js-lingui-explicit-id
 #: src/teams/utils/teamsAttachmentGroups.ts
-msgid "officeAddin.teams.preview.image"
-msgstr "Image"
+#~ msgid "officeAddin.teams.preview.image"
+#~ msgstr "Image"
 
 #. js-lingui-explicit-id
 #: src/teams/utils/teamsAttachmentGroups.ts
@@ -2280,29 +2280,28 @@ msgstr "Image"
 
 #. js-lingui-explicit-id
 #: src/teams/utils/teamsAttachmentGroups.ts
-msgid "officeAddin.teams.preview.messageCount"
-msgstr "{count, plural, one {# message} other {# messages}}"
+#~ msgid "officeAddin.teams.preview.messageCount"
+#~ msgstr "{count, plural, one {# message} other {# messages}}"
 
 #. js-lingui-explicit-id
 #: src/teams/utils/teamsAttachmentGroups.ts
-msgid "officeAddin.teams.preview.recentMessages"
-msgstr "Recent messages — older ones not included"
+#~ msgid "officeAddin.teams.preview.recentMessages"
+#~ msgstr "Recent messages — older ones not included"
 
 #. js-lingui-explicit-id
 #: src/teams/utils/teamsAttachmentGroups.ts
-msgid "officeAddin.teams.preview.selectedMessages"
-msgstr "Selected messages"
-
-#. js-lingui-explicit-id
-#. placeholder {0}: section.skippedCount
-#: src/teams/utils/teamsAttachmentGroups.ts
-msgid "officeAddin.teams.preview.skipped"
-msgstr "{skipped, plural, one {# could not be loaded} other {# could not be loaded}}"
+#~ msgid "officeAddin.teams.preview.selectedMessages"
+#~ msgstr "Selected messages"
 
 #. js-lingui-explicit-id
 #: src/teams/utils/teamsAttachmentGroups.ts
-msgid "officeAddin.teams.preview.transcriptLabel"
-msgstr "Teams conversation"
+#~ msgid "officeAddin.teams.preview.skipped"
+#~ msgstr "{skipped, plural, one {# could not be loaded} other {# could not be loaded}}"
+
+#. js-lingui-explicit-id
+#: src/teams/utils/teamsAttachmentGroups.ts
+#~ msgid "officeAddin.teams.preview.transcriptLabel"
+#~ msgstr "Teams conversation"
 
 #. js-lingui-explicit-id
 #. placeholder {0}: window.location.host

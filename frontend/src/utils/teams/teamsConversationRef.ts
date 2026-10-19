@@ -1,10 +1,9 @@
 /**
  * What a Teams selection points at, as the transcript index records it.
  *
- * Types only, and deliberately so: the constructors live beside the Teams
- * picker that mints them, and nothing that merely reads a transcript needs to
- * build one. Keeping this module free of runtime code also keeps the identity
- * shape importable from anywhere without dragging a bundle along.
+ * The constructors live beside the Teams picker that mints them: nothing that
+ * merely reads a transcript needs to build one. `conversationKey` is here
+ * because every reader and the picker have to derive the same identity.
  *
  * Chats and channels are both conversations to the picker, but Graph addresses
  * them differently — a chat by id, a channel by the team that owns it — so the
@@ -42,4 +41,11 @@ export interface TeamsMessageRef {
   messageId: string;
   /** Root of a channel reply; null for roots and for chat messages. */
   parentMessageId: string | null;
+}
+
+/** Stable identity for grouping, dedupe keys and the per-conversation gate. */
+export function conversationKey(ref: TeamsConversationRef): string {
+  return ref.kind === "chat"
+    ? `chat:${ref.chatId}`
+    : `channel:${ref.teamId}/${ref.channelId}`;
 }

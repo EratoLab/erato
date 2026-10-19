@@ -23,11 +23,12 @@ export {
   type TeamsTranscriptIndexWindow,
 } from "./teamsTranscriptIndex";
 
-export type {
-  TeamsChannelConversationRef,
-  TeamsChatConversationRef,
-  TeamsConversationRef,
-  TeamsMessageRef,
+export {
+  conversationKey,
+  type TeamsChannelConversationRef,
+  type TeamsChatConversationRef,
+  type TeamsConversationRef,
+  type TeamsMessageRef,
 } from "./teamsConversationRef";
 
 export { teamsUploadDisplayName } from "./teamsUploadName";

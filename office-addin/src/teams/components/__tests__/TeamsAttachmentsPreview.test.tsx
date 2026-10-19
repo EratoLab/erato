@@ -1,13 +1,7 @@
 import { ThemeProvider } from "@erato/frontend/library";
 import { i18n } from "@lingui/core";
 import { I18nProvider } from "@lingui/react";
-import {
-  cleanup,
-  fireEvent,
-  render,
-  screen,
-  within,
-} from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { messages as frontendMessages } from "../../../../../frontend/src/locales/en/messages.po";
@@ -35,7 +29,6 @@ function upload(filename: string, id = filename): FileUploadItem {
 
 const transcript = upload("teams-Product_sync.md", "upload-transcript");
 const image = upload("teams-img-abc.png", "upload-image");
-const report = upload("teams-file-abc12345-Q3_report.pdf", "upload-report");
 const unrelated = upload("holiday.pdf", "upload-holiday");
 
 function message(
@@ -116,55 +109,28 @@ function renderPreview(
 
 const groupHeader = () => screen.getByRole("button", { name: /product sync/i });
 
-/** Carries a shared file, so its chip has a real name rather than a macro. */
-const sharedFileMessage = message({
-  text: "Numbers attached",
-  markers: ["[attachment: teams-file-abc12345-Q3_report.pdf]"],
-  sharedFiles: [
-    {
-      attachmentId: "a1",
-      name: "Q3 report.pdf",
-      contentUrl: "https://contoso.sharepoint.com/Q3.pdf",
-    },
-  ],
-});
-
 describe("TeamsAttachmentsPreview", () => {
   beforeEach(() => {
-    // The library's own strings, such as the count and "Remove all".
     i18n.load("en", frontendMessages);
     i18n.activate("en");
     state.attachedTranscript = null;
   });
   afterEach(cleanup);
 
-  it("renders the composer's flat chips when no transcript is attached", () => {
+  it("renders the composer's flat chips when the picker holds no transcript", () => {
     renderPreview([unrelated]);
 
     expect(screen.queryByRole("button", { name: /product sync/i })).toBeNull();
     expect(screen.getByText("holiday.pdf")).toBeVisible();
   });
 
-  it("renders the conversation out of the transcript's own index block", async () => {
+  it("renders the picker's transcript as its conversation", async () => {
     state.attachedTranscript = transcriptFile();
-    // Nothing is mounted until the block parses: showing the flat chips first
-    // and pulling them back out a frame later is worse than a blank region.
-    expect(screen.queryByText("holiday.pdf")).toBeNull();
     renderPreview([transcript, image, unrelated]);
 
     expect(await screen.findByText("Product sync")).toBeVisible();
-    // The upload the transcript names is claimed by the conversation card; only
-    // the unrelated file is left to the flat chips.
     expect(screen.getByText("holiday.pdf")).toBeVisible();
     expect(screen.queryByText("teams-img-abc")).toBeNull();
-  });
-
-  it("keeps a whole conversation collapsed so the composer stays reachable", async () => {
-    state.attachedTranscript = transcriptFile("whole-chat");
-    renderPreview([transcript, image]);
-
-    await screen.findByText("Product sync");
-    expect(groupHeader()).toHaveAttribute("aria-expanded", "false");
   });
 
   it("opens the conversation from the summary row", async () => {
@@ -173,127 +139,12 @@ describe("TeamsAttachmentsPreview", () => {
 
     await screen.findByText("Product sync");
     fireEvent.click(groupHeader());
-    // Matched on the row's own name, not the translated verb: this suite runs
-    // without a message catalogue. The trailing comma picks the activate
-    // button over the remove button, which carries the same filename.
+    // The trailing comma picks the activate button over the remove button,
+    // which carries the same name.
     fireEvent.click(screen.getByRole("button", { name: /all messages,/i }));
 
     const dialog = await screen.findByRole("dialog");
     expect(dialog).toHaveTextContent("Ada Lovelace");
     expect(dialog).toHaveTextContent("Screenshot");
-    // The marker the model reads is stripped, and the modal names the
-    // conversation once — the view inside it does not repeat the heading.
-    expect(dialog).not.toHaveTextContent("teams-img-abc");
-    expect(dialog.querySelectorAll("h2")).toHaveLength(1);
-  });
-
-  it("previews an attachment from inside the conversation", async () => {
-    const onFilePreview = vi.fn();
-    state.attachedTranscript = transcriptFile("whole-chat", [
-      sharedFileMessage,
-    ]);
-    renderPreview([transcript, report], { onFilePreview });
-
-    await screen.findByText("Product sync");
-    fireEvent.click(groupHeader());
-    fireEvent.click(screen.getByRole("button", { name: /all messages,/i }));
-
-    // Matched on the file's own name: the surrounding "Preview attachment" is a
-    // library string, and this suite runs without a catalogue.
-    const dialog = await screen.findByRole("dialog");
-    fireEvent.click(within(dialog).getByRole("button", { name: /Q3 report/ }));
-    expect(onFilePreview).toHaveBeenCalledWith(report);
-  });
-
-  it("names a shared file as Teams named it, never by its upload name", async () => {
-    state.attachedTranscript = transcriptFile("whole-chat", [
-      message({
-        text: "Numbers attached",
-        markers: ["[attachment: teams-file-abc12345-Q3_report.pdf]"],
-        sharedFiles: [
-          {
-            attachmentId: "a1",
-            name: "Q3 report.pdf",
-            contentUrl: "https://contoso.sharepoint.com/Q3.pdf",
-          },
-        ],
-      }),
-    ]);
-    renderPreview([transcript, report]);
-
-    await screen.findByText("Product sync");
-    fireEvent.click(groupHeader());
-
-    expect(screen.getByText(/Q3 report/)).toBeVisible();
-    expect(screen.queryByText(/teams-file-abc12345/)).toBeNull();
-  });
-
-  it("falls back to flat chips for a transcript with no index block", async () => {
-    state.attachedTranscript = new File(
-      ["# Teams chat: Product sync\n\nHello.\n"],
-      transcript.filename,
-      { type: "text/plain" },
-    );
-    renderPreview([transcript, image, unrelated]);
-
-    expect(await screen.findByText("holiday.pdf")).toBeVisible();
-    expect(screen.getByText("teams-Product_sync.md")).toBeVisible();
-    expect(screen.queryByRole("button", { name: /product sync/i })).toBeNull();
-  });
-
-  it("falls back to flat chips when the index block is unreadable", async () => {
-    state.attachedTranscript = new File(
-      ['# Teams chat\n\n<!-- erato:teams-transcript v1 {"sections": -->\n'],
-      transcript.filename,
-      { type: "text/plain" },
-    );
-    renderPreview([transcript, image, unrelated]);
-
-    expect(await screen.findByText("holiday.pdf")).toBeVisible();
-    expect(screen.getByText("teams-Product_sync.md")).toBeVisible();
-    expect(screen.queryByRole("button", { name: /product sync/i })).toBeNull();
-  });
-
-  describe("the files beside a transcript", () => {
-    // The bulk control sits beside the count; its name is a library string,
-    // and this suite runs without a catalogue.
-    const removeAll = (count: string) =>
-      within(screen.getByText(count).parentElement!).getByRole("button");
-    const own = [
-      upload("notes.pdf", "upload-notes"),
-      upload("budget.xlsx", "upload-budget"),
-      upload("plan.docx", "upload-plan"),
-    ];
-
-    it("counts every staged file and removes only its own with Remove all", async () => {
-      const onRemoveFile = vi.fn();
-      const onRemoveAllFiles = vi.fn();
-      state.attachedTranscript = transcriptFile();
-      renderPreview([transcript, image, ...own], {
-        maxFiles: 5,
-        onRemoveFile,
-        onRemoveAllFiles,
-      });
-
-      await screen.findByText("Product sync");
-      // The transcript stays, so the button is named by what it removes.
-      const button = removeAll("3 files · 5/5");
-      expect(button).toHaveAccessibleName("Remove all: 3 files");
-      expect(button).toHaveTextContent("Remove all");
-      fireEvent.click(button);
-
-      expect(onRemoveAllFiles).not.toHaveBeenCalled();
-      expect(onRemoveFile.mock.calls).toEqual(own.map((file) => [file.id]));
-    });
-
-    it("hands Remove all through untouched without a transcript", () => {
-      const onRemoveAllFiles = vi.fn();
-      renderPreview(own, { maxFiles: 5, onRemoveAllFiles });
-
-      const button = removeAll("3/5");
-      expect(button).toHaveAccessibleName("Remove all attachments");
-      fireEvent.click(button);
-      expect(onRemoveAllFiles).toHaveBeenCalledTimes(1);
-    });
   });
 });

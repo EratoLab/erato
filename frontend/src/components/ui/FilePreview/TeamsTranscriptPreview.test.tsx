@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ThemeProvider } from "@/components/providers/ThemeProvider";
 import { messages as enMessages } from "@/locales/en/messages.json";
+import { forgetStoredTeamsTranscripts } from "@/utils/teams/storedTeamsTranscript";
 import {
   TEAMS_TRANSCRIPT_INDEX_MARKER,
   TEAMS_TRANSCRIPT_INDEX_VERSION,
@@ -109,6 +110,7 @@ vi.mock("./PdfPreview", () => ({
 
 describe("TeamsTranscriptPreview", () => {
   afterEach(() => {
+    forgetStoredTeamsTranscripts();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });

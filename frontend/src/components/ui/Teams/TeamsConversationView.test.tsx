@@ -262,7 +262,7 @@ describe("TeamsConversationView", () => {
     expect(header).not.toBeNull();
     expect(
       within(header as HTMLElement).getByText(
-        /older messages are not included/i,
+        /only part of this conversation is included/i,
       ),
     ).toBeVisible();
     expect(
