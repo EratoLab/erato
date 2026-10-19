@@ -24,8 +24,8 @@ import { conversationKey } from "./teamsConversationRef";
 import type {
   FileAttachmentGroup,
   FileAttachmentGroupItem,
+  FileResource,
   FileUploadItem,
-  LocalFilePreviewItem,
   TeamsTranscriptIndex,
   TeamsTranscriptIndexAsset,
   TeamsTranscriptIndexMessage,
@@ -270,11 +270,12 @@ function claimAssets(
  * The upload's own name is a content hash minted to join file to message; it
  * is not something to put in front of a user. The index carries the name Teams
  * gave the file, and a pasted image — which never had one — is simply an image.
+ * The upload itself is kept underneath, so its preview URL and its stored,
+ * extensioned filename still draw an image as a thumbnail.
  */
-function assetResource({ asset, file }: ClaimedAsset): LocalFilePreviewItem {
+function assetResource({ asset, file }: ClaimedAsset): FileResource {
   return {
-    id: file.id,
-    filename: file.filename,
+    ...file,
     // Never `file.filename`: that is the minted name, and falling back to it
     // shows the content hash this whole indirection exists to hide.
     displayName:

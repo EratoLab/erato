@@ -419,6 +419,42 @@ describe("buildTeamsAttachmentGroups", () => {
     });
   });
 
+  it("keeps an image upload's preview URL and stored name under its display name", () => {
+    const image = {
+      ...upload("teams-img-abc.png", "upload-image"),
+      download_url: "/files/upload-image",
+      preview_url: "/files/upload-image/preview",
+    } as FileUploadItem;
+    const shared = upload("teams-file-abc-roadmap.png", "upload-shared");
+    const preview = buildTeamsAttachmentGroups(
+      attach([
+        chatSection({
+          messages: [
+            message({
+              text: "Screenshot [image: teams-img-abc.png]",
+              markers: ["[attachment: teams-file-abc-roadmap.png]"],
+            }),
+          ],
+        }),
+      ]),
+      [TRANSCRIPT, image, shared],
+    );
+
+    const [, imageRow, sharedRow] = preview!.groups[0].items;
+    expect(imageRow).toMatchObject({
+      kind: "attachment",
+      file: {
+        id: image.id,
+        filename: "teams-img-abc.png",
+        displayName: "Image",
+        preview_url: "/files/upload-image/preview",
+      },
+    });
+    expect(sharedRow).toMatchObject({
+      file: { filename: shared.filename, displayName: "Attachment" },
+    });
+  });
+
   it("reports how many messages could not be loaded", () => {
     const preview = buildTeamsAttachmentGroups(
       attach([chatSection({ selection: "messages", skippedCount: 2 })]),

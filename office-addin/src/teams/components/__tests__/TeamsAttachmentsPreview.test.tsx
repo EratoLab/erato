@@ -251,4 +251,41 @@ describe("TeamsAttachmentsPreview", () => {
     expect(screen.getByText("teams-Product_sync.md")).toBeVisible();
     expect(screen.queryByRole("button", { name: /product sync/i })).toBeNull();
   });
+
+  describe("the files beside a transcript", () => {
+    // The bulk control sits beside the count; its name is a library string,
+    // and this suite runs without a catalogue.
+    const removeAll = (count: string) =>
+      within(screen.getByText(count).parentElement!).getByRole("button");
+    const own = [
+      upload("notes.pdf", "upload-notes"),
+      upload("budget.xlsx", "upload-budget"),
+      upload("plan.docx", "upload-plan"),
+    ];
+
+    it("counts every staged file and removes only its own with Remove all", async () => {
+      const onRemoveFile = vi.fn();
+      const onRemoveAllFiles = vi.fn();
+      state.attachedTranscript = transcriptFile();
+      renderPreview([transcript, image, ...own], {
+        maxFiles: 5,
+        onRemoveFile,
+        onRemoveAllFiles,
+      });
+
+      await screen.findByText("Product sync");
+      fireEvent.click(removeAll("5/5"));
+
+      expect(onRemoveAllFiles).not.toHaveBeenCalled();
+      expect(onRemoveFile.mock.calls).toEqual(own.map((file) => [file.id]));
+    });
+
+    it("hands Remove all through untouched without a transcript", () => {
+      const onRemoveAllFiles = vi.fn();
+      renderPreview(own, { maxFiles: 5, onRemoveAllFiles });
+
+      fireEvent.click(removeAll("3/5"));
+      expect(onRemoveAllFiles).toHaveBeenCalledTimes(1);
+    });
+  });
 });
