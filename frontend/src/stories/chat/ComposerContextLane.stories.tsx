@@ -1,42 +1,27 @@
 import { action } from "@storybook/addon-actions";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { ChatInput } from "@/components/ui/Chat/ChatInput";
 import { ComposerContextLane } from "@/components/ui/Chat/ComposerContext/ComposerContextLane";
 import { GroupedFileAttachmentsPreview } from "@/components/ui/FileUpload/GroupedFileAttachmentsPreview";
 import { componentRegistry } from "@/config/componentRegistry";
 
+import {
+  AnnouncementLog,
+  noop,
+  pane,
+  stagedFile,
+  useResolved,
+} from "./composerContextStoryKit";
+
 import type {
   ComposerContextChipFaceProps,
   ComposerContextItem,
   ComposerNotice,
 } from "@/components/ui/Chat/ComposerContext/types";
-import type {
-  FileCapability,
-  FileUploadItem,
-} from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type { FileUploadItem } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { Meta, StoryObj } from "@storybook/react";
 import type { ReactNode } from "react";
-
-const noop = () => {};
-
-/** The Office task pane, or the wide web app. */
-const pane = (width: number) =>
-  function Pane(Story: () => ReactNode) {
-    return (
-      <div
-        className="bg-theme-bg-primary"
-        style={{
-          width,
-          minHeight: "100vh",
-          padding: 16,
-          boxSizing: "border-box",
-        }}
-      >
-        <Story />
-      </div>
-    );
-  };
 
 /** A stand-in for the composer shell, for stories that show the lane alone. */
 const Shell = ({ children }: { children: ReactNode }) => (
@@ -44,110 +29,6 @@ const Shell = ({ children }: { children: ReactNode }) => (
     {children}
   </div>
 );
-
-/**
- * Plays the host resolver: an ambient (x) turns the item suggested, a user
- * (x) drops it, + includes it again with the meta it had. Seeds mark which
- * handlers a chip has by carrying `noop`.
- */
-const useResolved = (seed: ComposerContextItem[]) => {
-  const [items, setItems] = useState(seed);
-  const original = useMemo(
-    () => new Map(seed.map((item) => [item.id, item])),
-    [seed],
-  );
-  return useMemo(
-    () =>
-      items.map((item): ComposerContextItem => {
-        const remove = () =>
-          setItems((current) =>
-            item.origin === "ambient"
-              ? current.map((entry) =>
-                  entry.id === item.id
-                    ? {
-                        ...entry,
-                        state: "suggested",
-                        meta: undefined,
-                        tone: undefined,
-                        onRestore: noop,
-                      }
-                    : entry,
-                )
-              : current.filter((entry) => entry.id !== item.id),
-          );
-        const restore = () =>
-          setItems((current) =>
-            current.map((entry) =>
-              entry.id === item.id
-                ? {
-                    ...(original.get(item.id) ?? entry),
-                    state: "included",
-                    tone: undefined,
-                    onRemove: noop,
-                  }
-                : entry,
-            ),
-          );
-        return {
-          ...item,
-          onRemove: item.onRemove ? remove : undefined,
-          onRestore: item.onRestore ? restore : undefined,
-        };
-      }),
-    [items, original],
-  );
-};
-
-/** Mirrors the polite live region into the page, for screenshots and review. */
-const AnnouncementLog = () => {
-  const [entries, setEntries] = useState<string[]>([]);
-  const lastRef = useRef("");
-  useEffect(() => {
-    const observer = new MutationObserver(() => {
-      const region = document.querySelector(
-        '[data-ui="composer-context-live"]',
-      );
-      const text = region?.textContent?.replace(/\u200b/g, "").trim() ?? "";
-      if (text && text !== lastRef.current) {
-        setEntries((current) => [text, ...current].slice(0, 5));
-      }
-      lastRef.current = text;
-    });
-    observer.observe(document.body, {
-      subtree: true,
-      childList: true,
-      characterData: true,
-    });
-    return () => observer.disconnect();
-  }, []);
-  return (
-    <ol
-      data-testid="announcement-log"
-      aria-hidden="true"
-      className="mt-3 list-none space-y-1 p-0 text-xs text-theme-fg-secondary"
-    >
-      {entries.map((entry, index) => (
-        <li key={`${entry}-${index}`}>{`Announced: ${entry}`}</li>
-      ))}
-    </ol>
-  );
-};
-
-const documentCapability: FileCapability = {
-  id: "pdf",
-  extensions: ["pdf"],
-  mime_types: ["application/pdf"],
-  operations: ["extract_text"],
-};
-
-const stagedFile = (id: string, filename: string): FileUploadItem => ({
-  id,
-  filename,
-  download_url: `https://example.com/${id}`,
-  file_contents_unavailable_missing_permissions: false,
-  is_sharepoint_file: false,
-  file_capability: documentCapability,
-});
 
 const fiveFiles = [
   stagedFile("f1", "supply-plan-q3.pdf"),
