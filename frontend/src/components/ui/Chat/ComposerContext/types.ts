@@ -40,6 +40,12 @@ export interface ComposerContextDetailAction {
   label: string;
   onSelect: () => void;
   variant?: "primary" | "secondary";
+  /**
+   * Spoken once the item's state changes after the action, e.g. "Document
+   * included. Your selection is off until it changes." An item that lands in
+   * an error or a choice says where it landed instead.
+   */
+  announcement?: string;
 }
 
 export interface ComposerContextDetail {
