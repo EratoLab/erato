@@ -245,6 +245,20 @@ export type {
   AssistantWelcomeUpperProps,
 } from "@/components/ui/Assistant/AssistantWelcomeScreen";
 export { StarterPromptsSection } from "@/components/ui/Chat/StarterPromptsSection";
+
+// A context chip's face is the kit's; the lane, its controls and the detail
+// stay the host's. The default face is pinned so a kit can wrap it, and the
+// lane so a kit's own Storybook and tests can show a face where the host
+// draws it (`chipFace`); a kit never renders the lane in place of the host's.
+export { DefaultComposerContextChipFace } from "@/components/ui/Chat/ComposerContext/ComposerContextChip";
+export { ComposerContextLane } from "@/components/ui/Chat/ComposerContext/ComposerContextLane";
+export type { ComposerContextLaneProps } from "@/components/ui/Chat/ComposerContext/ComposerContextLane";
+export type {
+  ComposerContextChipFaceProps,
+  ComposerContextItem,
+  ComposerContextState,
+  ComposerContextTone,
+} from "@/components/ui/Chat/ComposerContext/types";
 export { ModelSelector } from "@/components/ui/Chat/ModelSelector";
 export { getChatUrl } from "@/utils/chat/urlUtils";
 export { useThemedIcon } from "@/hooks/ui/useThemedIcon";
@@ -282,10 +296,17 @@ export const ERATO_KIT_SURFACE_EXPORTS = [
   "ChevronDownIcon",
   "ChevronRightIcon",
   "CloseIcon",
+  "ComposerContextChipFaceProps",
+  "ComposerContextItem",
+  "ComposerContextLane",
+  "ComposerContextLaneProps",
+  "ComposerContextState",
+  "ComposerContextTone",
   "CopyErrorButton",
   "CountBadge",
   "CountBadgeProps",
   "CountBadgeVariant",
+  "DefaultComposerContextChipFace",
   "DefaultMessageControls",
   "DisclosureChevron",
   "DisclosureChevronProps",

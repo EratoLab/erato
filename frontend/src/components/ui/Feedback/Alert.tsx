@@ -28,8 +28,11 @@ interface AlertProps {
   icon?: ReactNode;
   /** Optional geometry variant for chat message surfaces */
   geometryVariant?: "default" | "message";
-  /** Use a polite live region for progress and non-urgent confirmations. */
-  role?: "alert" | "status";
+  /**
+   * Use a polite live region for progress and non-urgent confirmations, or
+   * `none` inside a live region the caller keeps mounted.
+   */
+  role?: "alert" | "status" | "none";
   /** Test ID for e2e testing */
   "data-testid"?: string;
 }

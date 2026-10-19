@@ -7,3 +7,7 @@ export {
   type ChatHistoryConformanceHarness,
   type ChatHistoryConformanceOptions,
 } from "./chatHistoryList";
+export {
+  composerContextChipFaceConformanceFailures,
+  type ComposerContextChipFaceConformanceHarness,
+} from "./composerContextChipFace";

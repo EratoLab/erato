@@ -30,6 +30,11 @@ export interface ChatInputAttachmentPreviewProps {
   disabled?: boolean;
   /** Whether to show file type info */
   showFileTypes?: boolean;
+  /**
+   * The composer caps the staged area as a whole (context chips and files
+   * together); do not add a scroll area of your own.
+   */
+  sharedHeightCap?: boolean;
 }
 
 /**
@@ -76,6 +81,7 @@ export const FileAttachmentsPreview: React.FC<FileAttachmentsPreviewProps> = ({
   renderAttachment,
   renderItems,
   stagedCount,
+  sharedHeightCap = false,
 }) => {
   const items = useMemo<AttachmentTileItem[]>(
     () =>
@@ -105,7 +111,8 @@ export const FileAttachmentsPreview: React.FC<FileAttachmentsPreviewProps> = ({
           : undefined
       }
       disabled={disabled}
-      capHeight
+      capHeight={!sharedHeightCap}
+      stickyBulkControls={sharedHeightCap}
       maxFiles={maxFiles}
       stagedCount={stagedCount}
       className={className}

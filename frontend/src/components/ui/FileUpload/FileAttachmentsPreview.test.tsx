@@ -259,3 +259,46 @@ it("wires custom tiles in attachment order and retains the bulk controls", async
   );
   expect(onRemoveAllFiles).toHaveBeenCalledOnce();
 });
+
+describe("inside the composer's shared staged area", () => {
+  const three = [
+    file("1", "spec.pdf"),
+    file("2", "notes.txt"),
+    file("3", "plan.docx"),
+  ];
+  const capped = (container: HTMLElement) =>
+    container.querySelector('[style*="attachment-tile-staged-max-height"]');
+  const bulkRow = () =>
+    screen.getByRole("button", { name: "Remove all attachments" })
+      .parentElement!;
+
+  it("caps itself and keeps a static bulk row by default", async () => {
+    const { container } = await renderWithProviders(
+      <FileAttachmentsPreview
+        attachedFiles={three}
+        maxFiles={5}
+        onRemoveFile={vi.fn()}
+        onRemoveAllFiles={vi.fn()}
+      />,
+    );
+    expect(capped(container)).not.toBeNull();
+    expect(bulkRow()).not.toHaveClass("sticky");
+    expect(bulkRow()).not.toHaveAttribute("data-ui");
+  });
+
+  it("leaves the cap to the composer and pins the bulk row", async () => {
+    const { container } = await renderWithProviders(
+      <FileAttachmentsPreview
+        attachedFiles={three}
+        maxFiles={5}
+        onRemoveFile={vi.fn()}
+        onRemoveAllFiles={vi.fn()}
+        sharedHeightCap
+      />,
+    );
+    expect(capped(container)).toBeNull();
+    expect(container.querySelector(".overflow-y-auto")).toBeNull();
+    expect(bulkRow()).toHaveClass("sticky", "bottom-0");
+    expect(bulkRow()).toHaveAttribute("data-ui", "attachment-bulk-controls");
+  });
+});
