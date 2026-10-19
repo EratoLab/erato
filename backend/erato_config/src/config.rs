@@ -6934,8 +6934,8 @@ impl MsOfficeAddinDefaultSettings {
 #[facet(rename_all = "snake_case")]
 #[repr(C)]
 pub enum MsOfficeAddinSessionMode {
-    #[default]
     Resume,
+    #[default]
     Ask,
     New,
 }
