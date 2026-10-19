@@ -45,6 +45,7 @@ import {
 import { AddinSelectionChip } from "../../core/selection/AddinSelectionChip";
 import { useSelectionDismissal } from "../../core/selection/useSelectionDismissal";
 import { useOffice } from "../../providers/OfficeProvider";
+import { useLiveComposeFields } from "../hooks/useLiveComposeFields";
 import { useOutlookCalendarFetcher } from "../hooks/useOutlookCalendarFetcher";
 import { useOutlookComposeSelection } from "../hooks/useOutlookComposeSelection";
 import { useSchedulingThreadActive } from "../hooks/useSchedulingThreadActive";
@@ -53,6 +54,7 @@ import {
   NO_ITEM_SEND_IDENTITY,
   readAppointmentComposeSnapshot,
   useOutlookMailItem,
+  type AppointmentComposeSnapshot,
 } from "../providers/OutlookMailItemProvider";
 import {
   isAppointmentCompose as isAppointmentComposeItem,
@@ -372,6 +374,39 @@ export const AddinChatInput = forwardRef<
   const schedulingThreadActive = useSchedulingThreadActive(
     lastSchedulingSignalAt,
   );
+  // What the send falls back to per field when a live appointment read fails.
+  const appointmentFallback = useMemo<AppointmentComposeSnapshot>(
+    () => ({
+      subject: mailItem?.subject ?? "",
+      organizer: mailItem?.organizer ?? null,
+      requiredAttendees: mailItem?.requiredAttendees ?? [],
+      optionalAttendees: mailItem?.optionalAttendees ?? [],
+      location: mailItem?.location ?? "",
+      start: mailItem?.start ?? null,
+      end: mailItem?.end ?? null,
+      bodyText: mailItem?.bodyText ?? null,
+      bodyHtml: mailItem?.bodyHtml ?? null,
+    }),
+    [mailItem],
+  );
+  const liveComposeFields = useLiveComposeFields({
+    watch:
+      host !== "Outlook" || !mailItem?.isComposeMode
+        ? null
+        : isAppointmentCompose
+          ? "appointment"
+          : availableFacetArgs.get("outlook_review_draft")?.has("recipients")
+            ? "recipients"
+            : null,
+    itemIdentity,
+    appointmentFallback,
+  });
+  // The appointment as render time last saw it; the send compares against it.
+  const seenAppointmentFingerprint =
+    isAppointmentCompose && mailItem
+      ? (liveComposeFields.appointmentFingerprint ??
+        outlookAppointmentFingerprint(mailItem))
+      : undefined;
   // The draft row says what the send would do with the draft, from the same
   // resolver, so it never claims context the send leaves out.
   const draftPreview = previewOutlookSend({
@@ -381,10 +416,7 @@ export const AddinChatInput = forwardRef<
     selectionSource: composeSelection.sourceProperty,
     draftContextIncluded: isDraftContextIncluded,
     draftBody: draftBodyText,
-    draftContextFingerprint:
-      isAppointmentCompose && mailItem
-        ? outlookAppointmentFingerprint(mailItem)
-        : undefined,
+    draftContextFingerprint: seenAppointmentFingerprint,
     availableFacetArgs,
     isComposeMode: !!mailItem?.isComposeMode,
     composeEmailAvailable,
@@ -397,6 +429,7 @@ export const AddinChatInput = forwardRef<
     calendarAvailable: calendarFetcher !== null,
     schedulingThreadActive,
     lastSentDraft,
+    liveRecipients: liveComposeFields.recipients,
   });
   // A live selection replaces the draft; that row stays hidden as before.
   const draftRowState =
@@ -921,7 +954,12 @@ export const AddinChatInput = forwardRef<
           size="sm"
           className="self-start px-0 text-xs"
           disabled={isUploadingEmail}
-          onClick={() => onEmailSourceDropsSent?.([drop])}
+          onClick={() => {
+            onEmailSourceDropsSent?.([drop]);
+            // The card goes with the button, which would drop focus to the
+            // page outside the task pane's composer.
+            chatInputControls.focusInput();
+          }}
           data-testid={`addin-staged-email-remove-${staged.key}`}
           aria-label={t({
             id: "officeAddin.chatInput.removeDroppedEmailNamed",
@@ -937,6 +975,7 @@ export const AddinChatInput = forwardRef<
     }
     return actions;
   }, [
+    chatInputControls,
     emailSourceGroups,
     isUploadingEmail,
     onEmailSourceDropsSent,
@@ -990,17 +1029,7 @@ export const AddinChatInput = forwardRef<
       // wedged host degrades to the old behavior instead of losing the send.
       const appointmentSnapshot =
         isAppointmentCompose && liveItem && isAppointmentComposeItem(liveItem)
-          ? await readAppointmentComposeSnapshot(liveItem, {
-              subject: mailItem?.subject ?? "",
-              organizer: mailItem?.organizer ?? null,
-              requiredAttendees: mailItem?.requiredAttendees ?? [],
-              optionalAttendees: mailItem?.optionalAttendees ?? [],
-              location: mailItem?.location ?? "",
-              start: mailItem?.start ?? null,
-              end: mailItem?.end ?? null,
-              bodyText: mailItem?.bodyText ?? null,
-              bodyHtml: mailItem?.bodyHtml ?? null,
-            })
+          ? await readAppointmentComposeSnapshot(liveItem, appointmentFallback)
           : null;
 
       // Build the action facet (selection rewrite vs. draft review) via a pure
@@ -1084,13 +1113,13 @@ export const AddinChatInput = forwardRef<
       const previousSentDraft = lastSentDraftRef.current;
       if (sentDraftFingerprint !== null) {
         // Remember what we sent so an unchanged follow-up de-dupes (#4). The
-        // draft row only sees the bind-time appointment, so it compares
-        // against that as well.
+        // draft row sees the appointment as last read at render time, which
+        // can lag the live form, so it compares against that as well.
         rememberSentDraft({
           sent: sentDraftFingerprint,
           seen:
-            appointmentSnapshot && mailItem
-              ? outlookAppointmentFingerprint(mailItem)
+            appointmentSnapshot && seenAppointmentFingerprint !== undefined
+              ? seenAppointmentFingerprint
               : sentDraftFingerprint,
           recipients,
         });
@@ -1265,6 +1294,7 @@ export const AddinChatInput = forwardRef<
       chatInputProps,
       composeEmailAvailable,
       appointmentContextAvailable,
+      appointmentFallback,
       appointmentRewriteAvailable,
       composeSelection.data,
       composeSelection.sourceProperty,
@@ -1285,6 +1315,7 @@ export const AddinChatInput = forwardRef<
       getFileProvenance,
       restoreDraft,
       scheduleFacetAvailable,
+      seenAppointmentFingerprint,
       shouldUseSuggestedEmailSource,
       stagedEmails,
     ],

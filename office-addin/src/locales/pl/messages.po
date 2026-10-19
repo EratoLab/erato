@@ -413,6 +413,7 @@ msgid "officeAddin.chatInput.validation.tooLarge"
 msgstr "Plik przekracza limit serwera wynoszący {globalMaxFormatted}"
 
 #. js-lingui-explicit-id
+#: src/outlook/components/AddinChatAddMenuExtraContent.tsx
 #: src/outlook/utils/validateStagedPart.ts
 msgid "officeAddin.chatInput.validation.unsupported"
 msgstr "Nie zostanie odczytane przez AI"

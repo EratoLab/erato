@@ -370,7 +370,7 @@ msgstr "Entfernen"
 #. js-lingui-explicit-id
 #: src/outlook/components/AddinChatInput.tsx
 msgid "officeAddin.chatInput.removeDroppedEmailNamed"
-msgstr "{subject} entfernen"
+msgstr "Entfernen: {subject}"
 
 #. js-lingui-explicit-id
 #: src/outlook/components/AddinChatInput.tsx
@@ -413,6 +413,7 @@ msgid "officeAddin.chatInput.validation.tooLarge"
 msgstr "Datei überschreitet das Serverlimit von {globalMaxFormatted}"
 
 #. js-lingui-explicit-id
+#: src/outlook/components/AddinChatAddMenuExtraContent.tsx
 #: src/outlook/utils/validateStagedPart.ts
 msgid "officeAddin.chatInput.validation.unsupported"
 msgstr "Wird von der KI nicht gelesen"

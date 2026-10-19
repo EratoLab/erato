@@ -213,6 +213,8 @@ interface OutlookEmailSourceContextValue {
    * are unioned with the user's dismissals; an empty list clears the key.
    */
   setPolicyExcludedAttachmentIds: (key: string, ids: readonly string[]) => void;
+  /** What `setPolicyExcludedAttachmentIds` holds, keyed the same way. */
+  policyExcludedAttachmentIds: ReadonlyMap<string, ReadonlySet<string>>;
   addDroppedEmail: (parsed: ParsedEmail) => string | null;
   removeDroppedEmail: (key: string) => void;
   selectedAttachmentItems: LocalFilePreviewItem[];
@@ -253,6 +255,7 @@ const defaultValue: OutlookEmailSourceContextValue = {
   dismissStagedEmailAttachment: () => {},
   restoreStagedEmailAttachment: () => {},
   setPolicyExcludedAttachmentIds: () => {},
+  policyExcludedAttachmentIds: new Map(),
   addDroppedEmail: () => null,
   removeDroppedEmail: () => {},
   selectedAttachmentItems: [],
@@ -876,6 +879,7 @@ export function OutlookEmailSourceProvider({
       dismissStagedEmailAttachment,
       restoreStagedEmailAttachment,
       setPolicyExcludedAttachmentIds,
+      policyExcludedAttachmentIds: policyExcludedIds,
       addDroppedEmail,
       removeDroppedEmail,
       selectedAttachmentItems,
@@ -926,6 +930,7 @@ export function OutlookEmailSourceProvider({
       restoreStagedEmailBody,
       selectedAttachmentItems,
       setPolicyExcludedAttachmentIds,
+      policyExcludedIds,
       stagedEmails,
     ],
   );

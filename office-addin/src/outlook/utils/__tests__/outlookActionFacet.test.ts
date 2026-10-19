@@ -657,6 +657,45 @@ describe("previewOutlookSend", () => {
     expect(result.draft).toBe("unchanged");
   });
 
+  it("re-includes the draft once a reported recipient edit changed them", () => {
+    const recipients = '{"to":["mark@example.com"]}';
+    const edited = '{"to":["mark@example.com","ana@example.com"]}';
+    const withRecipients = {
+      ...draft,
+      availableFacetArgs: new Map([
+        ["outlook_review_draft", new Set(["recipients"])],
+      ]),
+    };
+    const sent = outlookDraftFingerprint({ ...withRecipients, recipients });
+    const lastSentDraft = { sent, seen: sent, recipients };
+
+    const result = previewOutlookSend({
+      ...withRecipients,
+      lastSentDraft,
+      liveRecipients: edited,
+    });
+    expect(result.draft).toBe("sent");
+    expect(result.facetId).toBe("outlook_review_draft");
+    // The send reads the same edited recipients and attaches the draft too.
+    expect(
+      resolveOutlookActionFacet({
+        ...withRecipients,
+        recipients: edited,
+        lastSentDraftFingerprint: sent,
+        nowIso,
+        timezone,
+      }).facet?.id,
+    ).toBe("outlook_review_draft");
+
+    expect(
+      previewOutlookSend({
+        ...withRecipients,
+        lastSentDraft,
+        liveRecipients: recipients,
+      }).draft,
+    ).toBe("unchanged");
+  });
+
   describe("appointments", () => {
     const bindTime = {
       subject: "Planning",

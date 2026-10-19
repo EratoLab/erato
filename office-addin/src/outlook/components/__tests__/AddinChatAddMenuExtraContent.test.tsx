@@ -41,6 +41,7 @@ const state = vi.hoisted(() => ({
   restoreStagedEmailBody: vi.fn(),
   restoreStagedEmailAttachment: vi.fn(),
   dismissStagedEmailAttachment: vi.fn(),
+  policyExcludedAttachmentIds: new Map<string, Set<string>>(),
 }));
 
 // The library is mocked at one seam only: the chat snapshot decides whether a
@@ -82,6 +83,7 @@ vi.mock("../../providers/OutlookEmailSourceProvider", () => ({
     restoreStagedEmailBody: state.restoreStagedEmailBody,
     restoreStagedEmailAttachment: state.restoreStagedEmailAttachment,
     dismissStagedEmailAttachment: state.dismissStagedEmailAttachment,
+    policyExcludedAttachmentIds: state.policyExcludedAttachmentIds,
   }),
 }));
 
@@ -114,6 +116,7 @@ describe("AddinChatAddMenuExtraContent", () => {
     state.currentThread = null;
     state.stagedEmails = [];
     state.threadTrimError = null;
+    state.policyExcludedAttachmentIds = new Map();
   });
   afterEach(() => {
     cleanup();
@@ -452,8 +455,100 @@ describe("AddinChatAddMenuExtraContent", () => {
       Object.assign(state, settled);
       rerender(ui());
 
-      expect(threadRow()).not.toHaveTextContent("Updating…");
+      // Ticked again but without a file, there is nothing left to offer.
+      expect(screen.queryByTestId("addin-add-menu-email-thread")).toBeNull();
       expect(upload).not.toHaveBeenCalled();
+    });
+
+    it("offers no thread row on a follow-up chat while a ticked thread has no file", () => {
+      stageThread(["<earlier@x>"]);
+      // The deferred rebuild after a toggle has not produced the file yet.
+      state.emailBodyFile = null;
+      state.isThreadEmlStale = true;
+      const upload = vi.fn(() => Promise.resolve());
+      render(
+        <AddinChatAddMenuExtraContent
+          onSelectFiles={upload}
+          onClose={() => {}}
+        />,
+      );
+
+      expect(screen.queryByTestId("addin-add-menu-email-thread")).toBeNull();
+      expect(state.restoreEmailBody).not.toHaveBeenCalled();
+      expect(upload).not.toHaveBeenCalled();
+    });
+
+    it("does not call a thread the send refuses already added", () => {
+      freshChat();
+      stageThread(["<earlier@x>"]);
+      state.emailBodyFile = null;
+      state.threadTrimError = new Error("trim");
+      render(
+        <AddinChatAddMenuExtraContent
+          onSelectFiles={onSelectFiles}
+          onClose={() => {}}
+        />,
+      );
+
+      expect(screen.queryByTestId("addin-add-menu-email-thread")).toBeNull();
+    });
+
+    it("says a policy-excluded attachment is not read rather than added", () => {
+      freshChat();
+      stageThread([]);
+      state.policyExcludedAttachmentIds = new Map([
+        ["<open@x>", new Set(["<open@x>:a1"])],
+      ]);
+      render(
+        <AddinChatAddMenuExtraContent
+          onSelectFiles={onSelectFiles}
+          onClose={() => {}}
+        />,
+      );
+
+      expect(attachmentRow()).toBeDisabled();
+      expect(attachmentRow()).toHaveTextContent("Won't be read by the AI");
+      expect(attachmentRow()).not.toHaveTextContent("Already added");
+    });
+
+    it("leaves policy-excluded siblings alone when it brings a message back", () => {
+      freshChat();
+      stageThread(["<open@x>"]);
+      state.policyExcludedAttachmentIds = new Map([
+        ["<open@x>", new Set(["<open@x>:a2"])],
+      ]);
+      render(
+        <AddinChatAddMenuExtraContent
+          onSelectFiles={onSelectFiles}
+          onClose={() => {}}
+        />,
+      );
+
+      fireEvent.click(attachmentRow());
+      expect(state.restoreStagedEmailBody).toHaveBeenCalledWith("<open@x>");
+      expect(state.dismissStagedEmailAttachment).not.toHaveBeenCalled();
+    });
+
+    it("restores the message and the attachment when both were unticked", () => {
+      freshChat();
+      stageThread(["<open@x>"], ["<open@x>:a1"]);
+      render(
+        <AddinChatAddMenuExtraContent
+          onSelectFiles={onSelectFiles}
+          onClose={() => {}}
+        />,
+      );
+
+      expect(attachmentRow()).toBeEnabled();
+      fireEvent.click(attachmentRow());
+      expect(state.restoreStagedEmailBody).toHaveBeenCalledWith("<open@x>");
+      expect(state.restoreStagedEmailAttachment).toHaveBeenCalledWith(
+        "<open@x>",
+        "<open@x>:a1",
+      );
+      expect(state.dismissStagedEmailAttachment.mock.calls).toEqual([
+        ["<open@x>", "<open@x>:a2"],
+      ]);
     });
 
     it("only restores on a follow-up chat while a drop is staged", () => {

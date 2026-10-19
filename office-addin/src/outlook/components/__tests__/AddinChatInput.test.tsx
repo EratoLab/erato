@@ -843,6 +843,148 @@ describe("AddinChatInput", () => {
     });
   });
 
+  describe("draft row after edits the host reports", () => {
+    const eventTypes = Office.EventType as unknown as Record<
+      string,
+      string | undefined
+    >;
+    const handlers = new Map<string, () => void>();
+    const succeeded = (value: unknown) => ({
+      status: Office.AsyncResultStatus.Succeeded,
+      value,
+    });
+    const liveItem = (extra: Record<string, unknown>) => {
+      (Office.context.mailbox as unknown as { item: unknown }).item = {
+        subject: {},
+        body: {
+          getTypeAsync: (callback: (result: unknown) => void) =>
+            callback(succeeded(Office.CoercionType.Text)),
+        },
+        addHandlerAsync: (eventType: string, handler: () => void) => {
+          handlers.set(eventType, handler);
+        },
+        removeHandlerAsync: (eventType: string) => {
+          handlers.delete(eventType);
+        },
+        ...extra,
+      };
+    };
+    const draftRow = () => screen.getByTestId("outlook-draft-chip");
+    const facetOf = (onSendMessage: ReturnType<typeof vi.fn>, call: number) =>
+      onSendMessage.mock.calls[call]?.[4] as
+        | { id: string; args?: Record<string, unknown> }
+        | undefined;
+
+    beforeEach(() => {
+      unstageDrops();
+      handlers.clear();
+      eventTypes.RecipientsChanged = "olkRecipientsChanged";
+      eventTypes.AppointmentTimeChanged = "olkAppointmentTimeChanged";
+    });
+    afterEach(() => {
+      delete eventTypes.RecipientsChanged;
+      delete eventTypes.AppointmentTimeChanged;
+    });
+
+    it("re-includes the draft after a recipient edit, as the next send does", async () => {
+      let to = [{ displayName: "Mark", emailAddress: "mark@example.com" }];
+      h.mailItem = {
+        itemKind: "message",
+        isComposeMode: true,
+        bodyText: "Dear Bob",
+        bodyHtml: null,
+        subject: "",
+      };
+      liveItem({
+        to: {
+          getAsync: (callback: (result: unknown) => void) =>
+            callback(succeeded(to)),
+        },
+      });
+      h.availableFacetArgs = new Map([
+        ["outlook_review_draft", new Set(["recipients"])],
+      ]);
+      const { onSendMessage } = renderInput({ chatId: "chat-1" });
+
+      send();
+      await waitFor(() => expect(onSendMessage).toHaveBeenCalledTimes(1));
+      expect(facetOf(onSendMessage, 0)?.id).toBe("outlook_review_draft");
+      await waitFor(() =>
+        expect(draftRow()).toHaveAttribute("data-state", "superseded"),
+      );
+
+      to = [...to, { displayName: "Ana", emailAddress: "ana@example.com" }];
+      act(() => handlers.get("olkRecipientsChanged")?.());
+      await waitFor(() =>
+        expect(draftRow()).toHaveAttribute("data-state", "included"),
+      );
+      expect(draftRow()).toHaveTextContent("Your draft is included as context");
+
+      send();
+      await waitFor(() => expect(onSendMessage).toHaveBeenCalledTimes(2));
+      expect(facetOf(onSendMessage, 1)?.id).toBe("outlook_review_draft");
+      expect(facetOf(onSendMessage, 1)?.args?.recipients).toBe(
+        JSON.stringify({ to }),
+      );
+      await waitFor(() =>
+        expect(draftRow()).toHaveAttribute("data-state", "superseded"),
+      );
+    });
+
+    it("re-includes appointment details after a time edit, as the next send does", async () => {
+      const bindTime = {
+        subject: "Planning",
+        organizer: null,
+        requiredAttendees: [],
+        optionalAttendees: [],
+        location: "",
+        start: new Date("2026-08-10T08:00:00.000Z"),
+        end: new Date("2026-08-10T09:00:00.000Z"),
+        bodyText: "Agenda",
+        bodyHtml: null,
+      };
+      h.mailItem = {
+        ...bindTime,
+        itemKind: "appointment",
+        isComposeMode: true,
+      };
+      liveItem({ itemType: "appointment" });
+      h.availableFacetArgs = new Map([
+        ["outlook_review_appointment", new Set<string>()],
+      ]);
+      h.readAppointmentComposeSnapshot.mockResolvedValue(bindTime);
+      const { onSendMessage } = renderInput({ chatId: "chat-1" });
+
+      send();
+      await waitFor(() => expect(onSendMessage).toHaveBeenCalledTimes(1));
+      await waitFor(() =>
+        expect(draftRow()).toHaveTextContent(
+          "Appointment details unchanged, not re-sent",
+        ),
+      );
+
+      const moved = {
+        ...bindTime,
+        start: new Date("2026-08-11T08:00:00.000Z"),
+        end: new Date("2026-08-11T09:00:00.000Z"),
+      };
+      h.readAppointmentComposeSnapshot.mockResolvedValue(moved);
+      act(() => handlers.get("olkAppointmentTimeChanged")?.());
+      await waitFor(() =>
+        expect(draftRow()).toHaveAttribute("data-state", "included"),
+      );
+
+      send();
+      await waitFor(() => expect(onSendMessage).toHaveBeenCalledTimes(2));
+      expect(facetOf(onSendMessage, 1)?.id).toBe("outlook_review_appointment");
+      await waitFor(() =>
+        expect(draftRow()).toHaveTextContent(
+          "Appointment details unchanged, not re-sent",
+        ),
+      );
+    });
+  });
+
   describe("selection chip", () => {
     const longSelection = `${"a".repeat(79)}😀 and the rest of it`;
 
@@ -924,6 +1066,22 @@ describe("AddinChatInput", () => {
       expect(onEmailSourceDropsSent).toHaveBeenCalledWith([
         { key: DROP_KEY, messageId: "<quarterly@x>" },
       ]);
+    });
+
+    it("hands focus to the composer when a keyboard Remove takes the card away", () => {
+      const { onEmailSourceDropsSent } = renderInput();
+      const remove = screen.getByRole("button", { name: "Remove Quarterly" });
+      remove.focus();
+      expect(remove).toHaveFocus();
+
+      fireEvent.keyDown(remove, { key: "Enter" });
+      fireEvent.click(remove);
+
+      expect(onEmailSourceDropsSent).toHaveBeenCalledTimes(1);
+      expect(h.controls.focusInput).toHaveBeenCalledTimes(1);
+      expect(h.controls.focusInput.mock.invocationCallOrder[0]).toBeGreaterThan(
+        onEmailSourceDropsSent.mock.invocationCallOrder[0],
+      );
     });
 
     describe("thread under an unticked message", () => {
