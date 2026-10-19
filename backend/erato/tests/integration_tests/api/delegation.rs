@@ -7772,6 +7772,11 @@ async fn task_route_continuation_dispatches_delegate_task(pool: Pool<Postgres>) 
         json!(origin_user_message_id),
         "a child dispatched by a resumed turn is anchored at that turn's user row: {configuration}"
     );
+    assert_eq!(
+        configuration["task"]["parent_mcp_allowlist"],
+        json!(["erato/delegate_task", "mock_mcp_approval/*"]),
+        "a resumed turn stores the same ceiling a fresh one would: {configuration}"
+    );
 }
 
 /// The same turn, with the feature off: nothing is offered even though the
@@ -8314,6 +8319,225 @@ async fn a_task_planned_on_a_word_turn_gets_no_word_client_tools(pool: Pool<Post
     assert!(child[0].contains(BRIEF), "the recorded turn is the child's");
     assert!(offered_tool(&child[0], "read_document_probe").is_none());
     assert!(offered_tool(&child[0], "delegate_task").is_none());
+}
+
+/// Register a mock MCP endpoint under `id`, open to every user. Two of them
+/// let a test tell offered and withheld tools apart by name.
+fn allow_mcp_server(config: &mut erato::config::AppConfig, id: &str, path: &str) {
+    config.mcp_servers.insert(
+        id.to_string(),
+        erato::config::McpServerConfig {
+            url: format!("{}{path}", mock_mcp_base_url()),
+            ..approval_fixture_server()
+        },
+    );
+    config.mcp_server_permissions.rules.insert(
+        format!("allow-{id}"),
+        erato::config::McpServerPermissionRule::AllowAll {
+            mcp_server_ids: vec![id.to_string()],
+        },
+    );
+}
+
+/// A child that names no facet is still bounded by the turn that planned it.
+/// Its own facets would leave MCP unfiltered here, since the global allowlist
+/// is empty, so the stored parent allowlist is the only thing keeping the
+/// other server's tools away from it.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_task_child_without_facets_stays_within_the_parent_mcp_allowlist(pool: Pool<Postgres>) {
+    const USER_MESSAGE: &str = "ceiling parent question";
+    const BRIEF: &str = "CEILING-BRIEF-SENTINEL: look up the ticket";
+    const CHILD_ANSWER: &str = "CEILING-CHILD-ANSWER";
+    let parent = RequestBodyRecorder::new();
+    let child = RequestBodyRecorder::new();
+    let mut mocks = MockSet::new();
+    {
+        let child = child.clone();
+        mocks.mock(move |when, then| {
+            when.post()
+                .path("/v1/chat/completions")
+                .matcher(BodyContainsMatcher::new(&[BRIEF], &[USER_MESSAGE]))
+                .matcher(child);
+            mock_llm_sse_response(
+                then,
+                crate::test_utils::build_openai_text_streaming_response(&[CHILD_ANSWER]),
+            );
+        });
+    }
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(&[CHILD_ANSWER, USER_MESSAGE], &[]));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_text_streaming_response(&["CEILING-PARENT-FINAL"]),
+        );
+    });
+    {
+        let parent = parent.clone();
+        mocks.mock(move |when, then| {
+            when.post()
+                .path("/v1/chat/completions")
+                .matcher(BodyContainsMatcher::new(
+                    &[USER_MESSAGE],
+                    &[BRIEF, CHILD_ANSWER],
+                ))
+                .matcher(parent);
+            mock_llm_sse_response(
+                then,
+                crate::test_utils::build_openai_tool_calls_streaming_response(&[(
+                    "call_ceiling_task",
+                    "delegate_task",
+                    json!({ "task": BRIEF }),
+                )]),
+            );
+        });
+    }
+
+    let (app_state, _llm) = task_state(pool, mocks, &["erato/delegate_task", "jira/*"], |config| {
+        allow_mcp_server(config, "jira", "/mcp/approval-policy");
+        allow_mcp_server(config, "wiki", "/mcp/auth-none");
+        config.facets.tool_call_allowlist.clear();
+    })
+    .await;
+    let server = app_server(app_state.clone());
+    let chat = create_chat(&server, None).await;
+    let events = submit_with_facets(&server, &chat, USER_MESSAGE, &["plan"]).await;
+
+    let output = find_tool_call_update_output(&events, "delegate_task");
+    assert_eq!(output["status"], "completed", "{output}");
+    assert!(extract_full_text_answer(&events).contains("CEILING-PARENT-FINAL"));
+    let parent = generation_bodies(&parent);
+    assert_eq!(parent.len(), 1);
+    assert!(offered_tool(&parent[0], "read_approval_fixture").is_some());
+    assert!(offered_tool(&parent[0], "auth_none_probe").is_none());
+
+    let child_chat = delegated_child_chat(&app_state.db, Uuid::parse_str(&chat).unwrap()).await;
+    let configuration = child_chat
+        .assistant_configuration
+        .expect("the child carries a configuration");
+    assert_eq!(
+        configuration["task"]["parent_mcp_allowlist"],
+        json!(["erato/delegate_task", "jira/*"]),
+        "the planning turn's allowlist is stored on the run: {configuration}"
+    );
+    let child = generation_bodies(&child);
+    assert_eq!(child.len(), 1, "expected exactly one child turn");
+    assert!(offered_tool(&child[0], "read_approval_fixture").is_some());
+    assert!(
+        offered_tool(&child[0], "auth_none_probe").is_none(),
+        "a tool the parent was never offered must not reach its child"
+    );
+}
+
+/// An unrestricted parent sets no ceiling, so the facet the task names decides
+/// alone, and narrows the child below what the parent had.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn an_unrestricted_parent_leaves_the_child_facet_in_charge(pool: Pool<Postgres>) {
+    const USER_MESSAGE: &str = "unrestricted parent question";
+    const BRIEF: &str = "UNRESTRICTED-BRIEF-SENTINEL: search the wiki";
+    const CHILD_ANSWER: &str = "UNRESTRICTED-CHILD-ANSWER";
+    let parent = RequestBodyRecorder::new();
+    let child = RequestBodyRecorder::new();
+    let mut mocks = MockSet::new();
+    {
+        let child = child.clone();
+        mocks.mock(move |when, then| {
+            when.post()
+                .path("/v1/chat/completions")
+                .matcher(BodyContainsMatcher::new(&[BRIEF], &[USER_MESSAGE]))
+                .matcher(child);
+            mock_llm_sse_response(
+                then,
+                crate::test_utils::build_openai_text_streaming_response(&[CHILD_ANSWER]),
+            );
+        });
+    }
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(&[CHILD_ANSWER, USER_MESSAGE], &[]));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_text_streaming_response(&["UNRESTRICTED-PARENT-FINAL"]),
+        );
+    });
+    {
+        let parent = parent.clone();
+        mocks.mock(move |when, then| {
+            when.post()
+                .path("/v1/chat/completions")
+                .matcher(BodyContainsMatcher::new(
+                    &[USER_MESSAGE],
+                    &[BRIEF, CHILD_ANSWER],
+                ))
+                .matcher(parent);
+            mock_llm_sse_response(
+                then,
+                crate::test_utils::build_openai_tool_calls_streaming_response(&[(
+                    "call_unrestricted_task",
+                    "delegate_task",
+                    json!({ "task": BRIEF, "facet_ids": ["wiki_only"] }),
+                )]),
+            );
+        });
+    }
+
+    // The Word turn plans through its action facet and selects no facet, so
+    // no allowlist restricts the parent's MCP tools.
+    let (app_state, _llm) = task_state(pool, mocks, &["erato/delegate_task"], |config| {
+        word_task_config(config);
+        allow_mcp_server(config, "jira", "/mcp/approval-policy");
+        allow_mcp_server(config, "wiki", "/mcp/auth-none");
+        config.facets.tool_call_allowlist.clear();
+        let mut wiki_only = config.facets.facets["files"].clone();
+        wiki_only.tool_call_allowlist = vec!["wiki/*".to_string()];
+        config
+            .facets
+            .facets
+            .insert("wiki_only".to_string(), wiki_only);
+        word_facet_mut(config, "word_opted").delegation = Some(
+            serde_json::from_value(json!({ "child_facet_ids": ["files", "wiki_only"] })).unwrap(),
+        );
+    })
+    .await;
+    let server = app_server(app_state.clone());
+    let chat = create_chat(&server, None).await;
+    let events = submit_on_word_turn(&server, &chat, USER_MESSAGE, &[], "word_opted").await;
+
+    let output = find_tool_call_update_output(&events, "delegate_task");
+    assert_eq!(output["status"], "completed", "{output}");
+    let parent = generation_bodies(&parent);
+    assert_eq!(parent.len(), 1);
+    assert!(offered_tool(&parent[0], "read_approval_fixture").is_some());
+    assert!(offered_tool(&parent[0], "auth_none_probe").is_some());
+
+    let child_chat = delegated_child_chat(&app_state.db, Uuid::parse_str(&chat).unwrap()).await;
+    let configuration = child_chat
+        .assistant_configuration
+        .expect("the child carries a configuration");
+    assert!(
+        configuration["task"].get("parent_mcp_allowlist").is_none(),
+        "an unrestricted parent stores no ceiling: {configuration}"
+    );
+    let child = generation_bodies(&child);
+    assert_eq!(child.len(), 1, "expected exactly one child turn");
+    assert!(offered_tool(&child[0], "auth_none_probe").is_some());
+    assert!(offered_tool(&child[0], "read_approval_fixture").is_none());
 }
 
 /// The happy path: the model plans a sub-task, the child runs it, and the
@@ -10703,6 +10927,7 @@ async fn seed_child_before_recording(
             expected_output: None,
             constraints: None,
             facet_ids: Vec::new(),
+            parent_mcp_allowlist: None,
             max_server_tool_calls_per_task: None,
             max_client_tool_calls_per_task: None,
             persona: Default::default(),
@@ -13478,6 +13703,7 @@ fn retry_task_spec() -> erato::models::chat::TaskSpec {
         expected_output: Some("a number".to_string()),
         constraints: Some("be brief".to_string()),
         facet_ids: Vec::new(),
+        parent_mcp_allowlist: None,
         max_server_tool_calls_per_task: Some(7),
         max_client_tool_calls_per_task: Some(3),
         persona: erato_config::config::TaskPersona::Bare,
@@ -14051,6 +14277,99 @@ async fn retry_reauthorizes_facets_for_the_owner(pool: Pool<Postgres>) {
     assert!(
         !facets.contains(&json!("withdrawn")),
         "a facet the owner has lost is dropped, not re-granted: {configuration}"
+    );
+}
+
+/// A retry keeps the original run's MCP ceiling. The turn that set it is gone,
+/// so the stored value is copied as it is, and the retried child is offered
+/// only what the original child could have been.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn retry_keeps_the_runs_parent_mcp_allowlist(pool: Pool<Postgres>) {
+    let child = RequestBodyRecorder::new();
+    let mut mocks = MockSet::new();
+    {
+        let child = child.clone();
+        mocks.mock(move |when, then| {
+            when.post()
+                .path("/v1/chat/completions")
+                .matcher(BodyContainsMatcher::new(&[RETRY_BRIEF_SENTINEL], &[]))
+                .matcher(child);
+            mock_llm_sse_response(
+                then,
+                crate::test_utils::build_openai_text_streaming_response(&["RETRIED-CHILD-ANSWER"]),
+            );
+        });
+    }
+    let (app_state, _llm) = task_state(pool, mocks, &["erato/delegate_task"], |config| {
+        config.delegation.tasks.run_modes = vec![
+            erato_config::config::TaskRunMode::Wait,
+            erato_config::config::TaskRunMode::Async,
+        ];
+        allow_mcp_server(config, "jira", "/mcp/approval-policy");
+        allow_mcp_server(config, "wiki", "/mcp/auth-none");
+    })
+    .await;
+    let me = erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        TEST_USER_SUBJECT,
+        None,
+    )
+    .await
+    .unwrap();
+    let server = app_server(app_state.clone());
+    let origin = create_chat(&server, None).await;
+    let spec = erato::models::chat::TaskSpec {
+        parent_mcp_allowlist: Some(vec!["jira/*".to_string()]),
+        ..retry_task_spec()
+    };
+    let seeded = seed_failed_task_run(
+        &app_state,
+        &me.id.to_string(),
+        Uuid::parse_str(&origin).unwrap(),
+        spec,
+        true,
+    )
+    .await;
+
+    let response = retry_run(
+        &server,
+        &origin,
+        seeded.child_chat_id,
+        json!({"kind": "task"}),
+    )
+    .await;
+    response.assert_status(http::StatusCode::ACCEPTED);
+    let new_child_id =
+        Uuid::parse_str(response.json::<Value>()["child_chat_id"].as_str().unwrap()).unwrap();
+
+    let configuration = retry_child_configuration(&app_state, new_child_id).await;
+    assert_eq!(
+        configuration["task"]["parent_mcp_allowlist"],
+        json!(["jira/*"]),
+        "the retry carries the original run's ceiling: {configuration}"
+    );
+    let mut bodies = generation_bodies(&child);
+    for _ in 0..100 {
+        if !bodies.is_empty() {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+        bodies = generation_bodies(&child);
+    }
+    // A delivery reaction in the origin quotes the brief too, but only after
+    // the child has answered, so the first recorded turn is the child's.
+    assert!(!bodies.is_empty(), "the retried child never ran");
+    assert!(offered_tool(&bodies[0], "read_approval_fixture").is_some());
+    assert!(
+        offered_tool(&bodies[0], "auth_none_probe").is_none(),
+        "the retried child must not reach past the original run's ceiling"
     );
 }
 
@@ -15328,6 +15647,90 @@ async fn approve_resumes_child_and_parent_settles_slot(pool: Pool<Postgres>) {
     assert_eq!(
         generation_state(&app_state.db, parent_chat_id).await,
         "completed"
+    );
+}
+
+/// A parked child resumes under the ceiling it was launched with. The
+/// continuation rebuilds its tools from the persisted turn, which names no
+/// facet here, so only the stored parent allowlist keeps the other server out.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_resumed_child_keeps_its_stored_mcp_allowlist(pool: Pool<Postgres>) {
+    let resumed_child = RequestBodyRecorder::new();
+    let mut mocks = MockSet::new();
+    mock_child_reaches_the_gate(&mut mocks, GATED_BRIEF, "call_child_probe");
+    {
+        let resumed_child = resumed_child.clone();
+        mocks.mock(move |when, then| {
+            when.post()
+                .path("/v1/chat/completions")
+                .matcher(BodyContainsMatcher::new(
+                    &[GATED_BRIEF, PARKED_TOOL_RESULT],
+                    &["child_run_id"],
+                ))
+                .matcher(resumed_child);
+            mock_llm_sse_response(
+                then,
+                crate::test_utils::build_openai_text_streaming_response(&[
+                    "CHILD-GATED-DONE with the probe",
+                ]),
+            );
+        });
+    }
+    // Planned without facets: the shared helper names `plan`, whose own
+    // allowlist would hide a missing ceiling.
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(
+                &[PARK_USER_MESSAGE],
+                &[GATED_BRIEF],
+            ));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_tool_calls_streaming_response(&[(
+                "call_task_one",
+                "delegate_task",
+                json!({ "task": GATED_BRIEF }),
+            )]),
+        );
+    });
+    mock_parent_final_answer(&mut mocks, PARK_USER_MESSAGE);
+
+    let (app_state, _llm) = task_state(
+        pool,
+        mocks,
+        &["erato/delegate_task", "mock_mcp_approval/*"],
+        |config| {
+            gate_mock_mcp_tools_on_approval(config);
+            allow_mcp_server(config, "wiki", "/mcp/auth-none");
+        },
+    )
+    .await;
+    let server = app_server(app_state.clone());
+    let chat = create_chat(&server, None).await;
+    let events = submit_with_facets(&server, &chat, PARK_USER_MESSAGE, &["plan"]).await;
+    let parent_message_id = Uuid::parse_str(&assistant_message_id_from_events(&events)).unwrap();
+
+    let continued = post_continuestream(&server, parent_message_id, "approve").await;
+    continued.assert_status_ok();
+    assert!(
+        extract_full_text_answer(&parse_sse_events(&continued)).contains("PARENT-GATED-FINAL"),
+        "the origin turn finishes once its child has reported"
+    );
+
+    let resumed = generation_bodies(&resumed_child);
+    assert_eq!(resumed.len(), 1, "expected exactly one resumed child turn");
+    assert!(offered_tool(&resumed[0], "read_approval_fixture").is_some());
+    assert!(
+        offered_tool(&resumed[0], "auth_none_probe").is_none(),
+        "a continuation must not lift the ceiling the run was launched with"
     );
 }
 
