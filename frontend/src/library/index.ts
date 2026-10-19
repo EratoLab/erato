@@ -199,6 +199,14 @@ export {
   type TeamsConversationViewProps,
 } from "@/components/ui/Teams/TeamsConversationView";
 export {
+  TeamsAttachmentsPreview,
+  type TeamsAttachmentsPreviewProps,
+} from "@/components/ui/Teams/TeamsAttachmentsPreview";
+export {
+  useTeamsTranscriptIndex,
+  type TeamsTranscriptIndexRead,
+} from "@/hooks/teams/useTeamsTranscriptIndex";
+export {
   DefaultGroupedFileAttachmentsPreview,
   GroupedFileAttachmentsPreview,
 } from "@/components/ui/FileUpload/GroupedFileAttachmentsPreview";
@@ -569,12 +577,19 @@ export {
   transformEmailFencesForCopy,
 } from "@/utils/emailClipboard";
 export { mapOutsideCodeFences } from "@/utils/codeFences";
-export type {
-  TeamsChannelConversationRef,
-  TeamsChatConversationRef,
-  TeamsConversationRef,
-  TeamsMessageRef,
+export {
+  conversationKey,
+  type TeamsChannelConversationRef,
+  type TeamsChatConversationRef,
+  type TeamsConversationRef,
+  type TeamsMessageRef,
 } from "@/utils/teams/teamsConversationRef";
+export {
+  buildTeamsAttachmentGroups,
+  buildTeamsMessageAttachmentGroups,
+  type TeamsAttachedTranscript,
+  type TeamsAttachmentPreviewGroups,
+} from "@/utils/teams/teamsAttachmentGroups";
 export {
   TEAMS_TRANSCRIPT_INDEX_MARKER,
   TEAMS_TRANSCRIPT_INDEX_VERSION,

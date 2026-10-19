@@ -21,19 +21,14 @@ export type {
   TeamsMessageRef,
 };
 
+export { conversationKey } from "@erato/frontend/teams";
+
 export function messageRef(
   conversation: TeamsConversationRef,
   messageId: string,
   parentMessageId: string | null = null,
 ): TeamsMessageRef {
   return { conversation, messageId, parentMessageId };
-}
-
-/** Stable identity for grouping, dedupe keys and the per-conversation gate. */
-export function conversationKey(ref: TeamsConversationRef): string {
-  return ref.kind === "chat"
-    ? `chat:${ref.chatId}`
-    : `channel:${ref.teamId}/${ref.channelId}`;
 }
 
 export function chatRef(chatId: string): TeamsChatConversationRef {

@@ -8,6 +8,8 @@ import {
 } from "@/components/ui/FileUpload/FilePreviewBase";
 import { GroupedFileAttachmentsPreview } from "@/components/ui/FileUpload/GroupedFileAttachmentsPreview";
 import { useResolvedFiles } from "@/hooks/files/useResolvedFiles";
+import { useStoredTeamsTranscriptIndexes } from "@/hooks/teams/useStoredTeamsTranscriptIndexes";
+import { buildTeamsMessageAttachmentGroups } from "@/utils/teams/teamsAttachmentGroups";
 import { groupTeamsSentAttachments } from "@/utils/teams/teamsSentAttachmentGroups";
 import { teamsUploadDisplayName } from "@/utils/teams/teamsUploadName";
 
@@ -102,13 +104,19 @@ const useAttachmentTiles = (
   );
 
   // A Teams conversation arrives as a transcript plus the files shared inside
-  // it. Ungrouped they read as unrelated siblings.
+  // it. Ungrouped they read as unrelated siblings. Until a transcript's index
+  // has been read — or when it has none — the picker's minted names still say
+  // which files belong together.
+  const files = useMemo(
+    () => items.map((item) => item.file as FileUploadItem),
+    [items],
+  );
+  const transcriptIndexes = useStoredTeamsTranscriptIndexes(files);
   const teamsGrouping = useMemo(
     () =>
-      groupTeamsSentAttachments(
-        items.map((item) => item.file as FileUploadItem),
-      ),
-    [items],
+      buildTeamsMessageAttachmentGroups(files, transcriptIndexes) ??
+      groupTeamsSentAttachments(files),
+    [files, transcriptIndexes],
   );
 
   return { items, teamsGrouping };
