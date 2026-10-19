@@ -3870,6 +3870,11 @@ msgid "message.taskResult.truncated"
 msgstr "This answer was shortened to fit."
 
 #. js-lingui-explicit-id
+#: src/components/ui/MessageList/ScrollToBottomButton.tsx
+msgid "messageList.scrollToBottom.newMessageCount"
+msgstr "{newMessageCount, plural, one {# new message} other {# new messages}}"
+
+#. js-lingui-explicit-id
 #: src/App.tsx
 msgid "navigation.goHome"
 msgstr "Go Home"

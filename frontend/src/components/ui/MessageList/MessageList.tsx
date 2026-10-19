@@ -15,6 +15,7 @@ import {
   useMessageClassNameHelper,
   useMessageAnimations,
 } from "./MessageListUtils";
+import { ScrollToBottomButton } from "./ScrollToBottomButton";
 import { StandardMessageList } from "./StandardMessageList";
 import { VirtualizedMessageList } from "./VirtualizedMessageList";
 import { ConversationMessagesProvider } from "../Message/ConversationMessages";
@@ -436,6 +437,107 @@ function useLoadMoreOnScroll({
   }, [isNearTop, hasOlderMessages, isPending, handleLoadMore]);
 }
 
+interface LastSeenSnapshot {
+  sessionId: string | null;
+  messageId: string;
+  createdAt: number;
+  contentSize: number;
+}
+
+const getContentSize = (message: ChatMessage) =>
+  message.content.reduce(
+    (size, part) =>
+      size +
+      1 +
+      ("text" in part && typeof part.text === "string" ? part.text.length : 0),
+    0,
+  );
+
+const takeLastSeenSnapshot = (
+  messageOrder: string[],
+  messages: Record<string, ChatMessage>,
+  sessionId: string | null,
+): LastSeenSnapshot | null => {
+  const messageId = messageOrder.at(-1);
+  if (messageId === undefined) return null;
+
+  const message = messages[messageId];
+  return {
+    sessionId,
+    messageId,
+    createdAt: Date.parse(message.createdAt),
+    contentSize: getContentSize(message),
+  };
+};
+
+// Counts assistant output that arrived below the viewport since the user left
+// the bottom: messages after the last one they saw, plus that message itself
+// if it kept streaming. The user's own sends are not counted.
+function useUnseenMessageCount({
+  messageOrder,
+  messages,
+  currentSessionId,
+  isAwayFromBottom,
+}: {
+  messageOrder: string[];
+  messages: Record<string, ChatMessage>;
+  currentSessionId: string | null;
+  isAwayFromBottom: boolean;
+}) {
+  const [lastSeen, setLastSeen] = useState<LastSeenSnapshot | null>(null);
+
+  useEffect(() => {
+    if (!isAwayFromBottom) {
+      setLastSeen(null);
+      return;
+    }
+
+    // Switching chats keeps this list mounted with a stale scroll position,
+    // so the new chat's existing messages become the baseline.
+    setLastSeen((current) =>
+      current?.sessionId === currentSessionId
+        ? current
+        : takeLastSeenSnapshot(messageOrder, messages, currentSessionId),
+    );
+  }, [isAwayFromBottom, currentSessionId, messageOrder, messages]);
+
+  return useMemo(() => {
+    if (!isAwayFromBottom || lastSeen?.sessionId !== currentSessionId) {
+      return 0;
+    }
+
+    // The last seen message disappears when its optimistic id is replaced
+    // (createdAt is preserved) or an edit/regenerate drops it, so fall back
+    // to timestamps; history loaded above is never newer.
+    const lastSeenIndex = messageOrder.indexOf(lastSeen.messageId);
+    let count = 0;
+
+    messageOrder.forEach((messageId, index) => {
+      const message = messages[messageId];
+      if (message.role === "user") return;
+
+      const isUnseen =
+        lastSeenIndex >= 0
+          ? index > lastSeenIndex
+          : Date.parse(message.createdAt) >= lastSeen.createdAt;
+      if (isUnseen) count += 1;
+    });
+
+    if (lastSeenIndex >= 0) {
+      const lastSeenMessage = messages[lastSeen.messageId];
+      // Growth only: the post-stream refetch may normalize persisted content.
+      if (
+        lastSeenMessage.role !== "user" &&
+        getContentSize(lastSeenMessage) > lastSeen.contentSize
+      ) {
+        count += 1;
+      }
+    }
+
+    return count;
+  }, [isAwayFromBottom, lastSeen, currentSessionId, messageOrder, messages]);
+}
+
 /**
  * MessageList component for rendering chat messages with scroll behavior
  */
@@ -653,16 +755,19 @@ export const MessageList = memo<MessageListProps>(
       direction: "backward", // Use backward pagination for chat (older messages first)
     });
 
-    // Add a message when user scrolls back down to new messages
-    useEffect(() => {
-      // Don't show any notification while loading or if no messages
-      if (isPending || messageOrder.length === 0) return;
+    // A paused completion streams below the viewport even while the user is
+    // still within the scrolled-up threshold.
+    const newMessageCount = useUnseenMessageCount({
+      messageOrder,
+      messages,
+      currentSessionId,
+      isAwayFromBottom: isScrolledUp || isAutoScrollPaused,
+    });
 
-      // User was scrolled up but now scrolled back down, check if there are new messages
-      if (isScrolledUp === false && visibleData.length < messageOrder.length) {
-        // This is where you'd show a "new messages" indicator if desired
-      }
-    }, [isScrolledUp, isPending, messageOrder.length, visibleData.length]);
+    const handleNewMessagesClick = useCallback(() => {
+      resumeAutoScrollForActiveCompletion();
+      scrollToBottom();
+    }, [resumeAutoScrollForActiveCompletion, scrollToBottom]);
 
     // Create debounced function with useMemo
     const debouncedLoadMore = useMemo(
@@ -890,65 +995,73 @@ export const MessageList = memo<MessageListProps>(
     );
 
     return (
-      <div
-        ref={containerRef}
-        className={containerClass}
-        data-testid="message-list"
-        data-ui="chat-body"
-        onCopy={handleCopyPlainText}
-      >
-        {renderMessageListHeader}
-        {showEmptyState && emptyStateComponent ? (
-          <div className="flex min-h-[300px] w-full items-center justify-center pb-6 pt-16 sm:pb-10 sm:pt-24">
-            {emptyStateComponent}
-          </div>
-        ) : (
-          <div className="mx-auto w-full" style={contentWidthStyle}>
-            <ConversationMessagesProvider messages={messages}>
-              {shouldUseVirtualization ? (
-                <VirtualizedMessageList
-                  messages={messages}
-                  visibleData={visibleData}
-                  containerSize={containerSize}
-                  isNewlyLoaded={isNewlyLoaded}
-                  getMessageClassName={getMessageClassName}
-                  maxWidth={maxWidth}
-                  showTimestamps={showTimestamps}
-                  showAvatars={showAvatars}
-                  userProfile={userProfile}
-                  userDisplayNameOverride={userDisplayNameOverride}
-                  controls={controls}
-                  messageRenderer={messageRenderer}
-                  controlsContext={controlsContext}
-                  onMessageAction={onMessageAction}
-                  onFilePreview={onFilePreview}
-                  onViewFeedback={onViewFeedback}
-                  allFilesById={allFilesById}
-                  modelSwitches={modelSwitches}
-                />
-              ) : (
-                <StandardMessageList
-                  messages={messages}
-                  visibleData={visibleData}
-                  isNewlyLoaded={isNewlyLoaded}
-                  getMessageClassName={getMessageClassName}
-                  maxWidth={maxWidth}
-                  showTimestamps={showTimestamps}
-                  showAvatars={showAvatars}
-                  userProfile={userProfile}
-                  userDisplayNameOverride={userDisplayNameOverride}
-                  controls={controls}
-                  messageRenderer={messageRenderer}
-                  controlsContext={controlsContext}
-                  onMessageAction={onMessageAction}
-                  onFilePreview={onFilePreview}
-                  onViewFeedback={onViewFeedback}
-                  allFilesById={allFilesById}
-                  modelSwitches={modelSwitches}
-                />
-              )}
-            </ConversationMessagesProvider>
-          </div>
+      <div className="relative flex min-h-0 flex-1 flex-col">
+        <div
+          ref={containerRef}
+          className={containerClass}
+          data-testid="message-list"
+          data-ui="chat-body"
+          onCopy={handleCopyPlainText}
+        >
+          {renderMessageListHeader}
+          {showEmptyState && emptyStateComponent ? (
+            <div className="flex min-h-[300px] w-full items-center justify-center pb-6 pt-16 sm:pb-10 sm:pt-24">
+              {emptyStateComponent}
+            </div>
+          ) : (
+            <div className="mx-auto w-full" style={contentWidthStyle}>
+              <ConversationMessagesProvider messages={messages}>
+                {shouldUseVirtualization ? (
+                  <VirtualizedMessageList
+                    messages={messages}
+                    visibleData={visibleData}
+                    containerSize={containerSize}
+                    isNewlyLoaded={isNewlyLoaded}
+                    getMessageClassName={getMessageClassName}
+                    maxWidth={maxWidth}
+                    showTimestamps={showTimestamps}
+                    showAvatars={showAvatars}
+                    userProfile={userProfile}
+                    userDisplayNameOverride={userDisplayNameOverride}
+                    controls={controls}
+                    messageRenderer={messageRenderer}
+                    controlsContext={controlsContext}
+                    onMessageAction={onMessageAction}
+                    onFilePreview={onFilePreview}
+                    onViewFeedback={onViewFeedback}
+                    allFilesById={allFilesById}
+                    modelSwitches={modelSwitches}
+                  />
+                ) : (
+                  <StandardMessageList
+                    messages={messages}
+                    visibleData={visibleData}
+                    isNewlyLoaded={isNewlyLoaded}
+                    getMessageClassName={getMessageClassName}
+                    maxWidth={maxWidth}
+                    showTimestamps={showTimestamps}
+                    showAvatars={showAvatars}
+                    userProfile={userProfile}
+                    userDisplayNameOverride={userDisplayNameOverride}
+                    controls={controls}
+                    messageRenderer={messageRenderer}
+                    controlsContext={controlsContext}
+                    onMessageAction={onMessageAction}
+                    onFilePreview={onFilePreview}
+                    onViewFeedback={onViewFeedback}
+                    allFilesById={allFilesById}
+                    modelSwitches={modelSwitches}
+                  />
+                )}
+              </ConversationMessagesProvider>
+            </div>
+          )}
+        </div>
+        {newMessageCount > 0 && (
+          <ScrollToBottomButton
+            onClick={handleNewMessagesClick}
+            newMessageCount={newMessageCount}
+          />
         )}
       </div>
     );
