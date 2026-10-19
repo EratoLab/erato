@@ -1,6 +1,5 @@
 use crate::db::entity::prelude::*;
 use crate::db::entity::{chat_file_uploads, file_uploads};
-use crate::models::teams_transcript::TeamsTranscriptSummary;
 use crate::policy::prelude::*;
 use crate::services::file_storage::{FileStorage, SHAREPOINT_PROVIDER_ID, SharepointContext};
 use eyre::{ContextCompat, OptionExt, Report, WrapErr};
@@ -176,27 +175,6 @@ pub async fn set_audio_transcription_metadata(
     .wrap_err("Failed to update audio transcription metadata")?;
 
     Ok(())
-}
-
-/// Returns the stored JSON, ready to hand back on the upload response.
-pub async fn set_teams_transcript_summary(
-    conn: &DatabaseConnection,
-    file_upload_id: &Uuid,
-    summary: &TeamsTranscriptSummary,
-) -> Result<serde_json::Value, Report> {
-    let summary =
-        serde_json::to_value(summary).wrap_err("Failed to serialize Teams transcript summary")?;
-
-    file_uploads::ActiveModel {
-        id: ActiveValue::Set(*file_upload_id),
-        teams_transcript: ActiveValue::Set(Some(summary.clone())),
-        ..Default::default()
-    }
-    .update(conn)
-    .await
-    .wrap_err("Failed to update Teams transcript summary")?;
-
-    Ok(summary)
 }
 
 pub async fn get_audio_transcription_upload_for_mutation(
@@ -487,7 +465,6 @@ pub struct FileUploadWithUrl {
     pub audio_transcription: Option<AudioTranscriptionMetadata>,
     pub external_id_ews_id: Option<String>,
     pub outlook_provenance: Option<serde_json::Value>,
-    pub teams_transcript: Option<serde_json::Value>,
 }
 
 /// Get a specific file upload by ID, including a pre-signed download URL.
@@ -575,7 +552,6 @@ pub async fn get_file_upload_with_url_and_token(
         id: file_upload.id,
         external_id_ews_id: file_upload.external_id_ews_id,
         outlook_provenance: file_upload.outlook_provenance,
-        teams_transcript: file_upload.teams_transcript,
         filename,
         file_storage_provider_id,
         file_storage_path,
@@ -700,7 +676,6 @@ pub async fn get_chat_file_uploads_with_urls_and_token(
             id: upload.id,
             external_id_ews_id: upload.external_id_ews_id,
             outlook_provenance: upload.outlook_provenance,
-            teams_transcript: upload.teams_transcript,
             filename,
             file_storage_provider_id,
             file_storage_path,

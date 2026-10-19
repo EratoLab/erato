@@ -3,16 +3,16 @@
  * attachment groups: one card per conversation, with the transcript demoted to
  * a single summary row inside it.
  *
- * Two sources describe a transcript. The composer reads the full index block
- * out of the `File` it is holding; a sent or generated message only has the
- * summary the backend derived from the same block at upload. Both become the
- * same cards, so a conversation looks alike wherever it is attached.
+ * Everything it renders comes out of the transcript's own index block — read
+ * from the local `File` in the composer, and from the stored upload on a sent
+ * or generated message — so a conversation looks alike wherever it is
+ * attached, and every surface describes the file that was actually uploaded.
  *
  * One group per section, never one merged stream — a selection can span chats
  * and channels that share no timeline. A whole conversation stays a summary:
  * the default window is a few hundred messages, and that many cards in a task
- * pane is unusable. Hand-picked messages get a card each where the index is at
- * hand, because verifying them one by one is exactly why the user picked them.
+ * pane is unusable. In the composer, hand-picked messages get a card each,
+ * because verifying them one by one is exactly why the user picked them.
  *
  * Pure, and null whenever the structure is not fully available — a
  * half-rendered conversation is worse than the flat chips it replaces.
@@ -26,6 +26,7 @@ import type {
   TeamsTranscriptIndex,
   TeamsTranscriptIndexAsset,
   TeamsTranscriptIndexMessage,
+  TeamsTranscriptIndexSection,
   TeamsTranscriptIndexWindow,
 } from "./teamsTranscriptIndex";
 import type { FileResource } from "@/components/ui/FileUpload/FilePreviewBase";
@@ -33,10 +34,7 @@ import type {
   FileAttachmentGroup,
   FileAttachmentGroupItem,
 } from "@/components/ui/FileUpload/GroupedFileAttachmentsPreview";
-import type {
-  FileUploadItem,
-  TeamsTranscriptSummary,
-} from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type { FileUploadItem } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
 /**
  * What the composer needs to recognise a transcript it is already holding: the
@@ -54,19 +52,10 @@ export interface TeamsAttachmentPreviewGroups {
   claimedFileIds: Set<string>;
 }
 
-/** One conversation as a card needs it, whichever source described it. */
 interface CardSection {
   key: string;
-  title: string;
-  teamName: string | null;
-  selection: "whole-chat" | "messages";
-  truncated: boolean;
-  skippedCount: number;
-  window: TeamsTranscriptIndexWindow;
-  messageCount: number;
-  /** Hand-picked messages, a card each; only the full index carries them. */
-  pickedMessages: TeamsTranscriptIndexMessage[] | null;
-  assets: TeamsTranscriptIndexAsset[];
+  section: TeamsTranscriptIndexSection;
+  messages: TeamsTranscriptIndexMessage[];
 }
 
 /** The composer's grouping, from the index block of the transcript it holds. */
@@ -83,30 +72,10 @@ export function buildTeamsAttachmentGroups(
   if (!transcript) return null;
   uploads.claimFile(transcript);
 
-  const bySection = messagesBySection(attached.index.messages);
-  const sections = attached.index.sections.map(
-    (section, position): CardSection => {
-      // Index order, not a re-sort: the rows then read in the order the
-      // transcript itself does, which for a channel is thread by thread rather
-      // than one interleaved timeline.
-      const messages = bySection.get(position) ?? [];
-      return {
-        key: conversationKey(section.ref),
-        title: section.title,
-        teamName: section.teamName,
-        selection: section.selection,
-        truncated: section.truncated,
-        skippedCount: section.skippedCount,
-        window: section.window,
-        messageCount: messages.length,
-        pickedMessages: section.selection === "messages" ? messages : null,
-        assets: messages.flatMap((message) => message.assets),
-      };
-    },
-  );
-
-  const groups = sections.map((section, position) =>
-    buildGroup(section, {
+  const groups = cardSections(attached.index, (section) =>
+    conversationKey(section.ref),
+  ).map((card, position) =>
+    buildGroup(card, {
       transcript,
       rowFile: (file, displayName) => ({
         id: file.id,
@@ -114,9 +83,10 @@ export function buildTeamsAttachmentGroups(
         displayName,
       }),
       uploads,
+      cardPerMessage: card.section.selection === "messages",
       onOpen: onOpenSection ? () => onOpenSection(position) : undefined,
       // The composer stays reachable below a whole conversation's files.
-      defaultCollapsed: section.selection !== "messages",
+      defaultCollapsed: card.section.selection !== "messages",
     }),
   );
 
@@ -124,32 +94,40 @@ export function buildTeamsAttachmentGroups(
 }
 
 /**
- * A message's grouping, from the summary the backend stored with each
- * transcript upload. Opening a row hands the transcript itself to the file
- * preview, which renders it as the conversation.
+ * A sent or generated message's grouping, for every attached transcript whose
+ * stored index has been read (`indexes`, by file id). Opening a row hands the
+ * transcript to the file preview, which renders it as the conversation.
  *
- * Null when no file carries a summary: the caller then falls back to whatever
- * it renders otherwise.
+ * Null when none has: the caller then renders the attachments as it otherwise
+ * would.
  */
-export function buildTeamsSummaryAttachmentGroups(
+export function buildTeamsMessageAttachmentGroups(
   files: readonly FileUploadItem[],
+  indexes: ReadonlyMap<string, TeamsTranscriptIndex>,
 ): TeamsAttachmentPreviewGroups | null {
   const transcripts = files.flatMap((file) => {
-    const summary = file.teams_transcript;
-    return summary && summary.sections.length > 0 ? [{ file, summary }] : [];
+    const index = indexes.get(file.id);
+    return index && index.sections.length > 0 ? [{ file, index }] : [];
   });
   if (transcripts.length === 0) return null;
 
   const uploads = new UploadClaims(files);
   for (const { file } of transcripts) uploads.claimFile(file);
 
-  const groups = transcripts.flatMap(({ file, summary }) =>
-    summarySections(file, summary).map((section) =>
-      buildGroup(section, {
+  const groups = transcripts.flatMap(({ file, index }) =>
+    // A message can carry two transcripts of one conversation, so the upload
+    // keeps their group ids apart.
+    cardSections(
+      index,
+      (section) => `${file.id}:${conversationKey(section.ref)}`,
+    ).map((card) =>
+      buildGroup(card, {
         transcript: file,
         // The whole upload, so a row can show its thumbnail and open it.
         rowFile: (upload, displayName) => ({ ...upload, displayName }),
         uploads,
+        // Picking is reviewed before sending; afterwards the card summarises.
+        cardPerMessage: false,
         // Only the transcript row opens the conversation, so it must not hide.
         defaultCollapsed: false,
       }),
@@ -159,30 +137,18 @@ export function buildTeamsSummaryAttachmentGroups(
   return { groups, claimedFileIds: uploads.claimed };
 }
 
-function summarySections(
-  file: FileUploadItem,
-  summary: TeamsTranscriptSummary,
+function cardSections(
+  index: TeamsTranscriptIndex,
+  key: (section: TeamsTranscriptIndexSection) => string,
 ): CardSection[] {
-  return summary.sections.map((section, position) => ({
-    // A message can carry two transcripts of the same conversation, so the
-    // upload, not the conversation, keeps the group ids apart.
-    key: `${file.id}:${position}`,
-    title: section.title,
-    teamName: section.team_name ?? null,
-    selection: section.selection,
-    truncated: section.truncated,
-    skippedCount: section.skipped_count,
-    window: {
-      from: section.window.from ?? null,
-      to: section.window.to ?? null,
-    },
-    messageCount: section.message_count,
-    pickedMessages: null,
-    assets: section.assets.map((asset) => ({
-      name: asset.name,
-      displayName: asset.display_name ?? null,
-      kind: asset.kind,
-    })),
+  const bySection = messagesBySection(index.messages);
+  // Index order, not a re-sort: the rows then read in the order the transcript
+  // itself does, which for a channel is thread by thread rather than one
+  // interleaved timeline.
+  return index.sections.map((section, position) => ({
+    key: key(section),
+    section,
+    messages: bySection.get(position) ?? [],
   }));
 }
 
@@ -224,18 +190,26 @@ interface GroupOptions {
   /** What a row shows for an upload, under a name fit for a reader. */
   rowFile: (file: FileUploadItem, displayName: string) => FileResource;
   uploads: UploadClaims;
+  cardPerMessage: boolean;
   onOpen?: () => void;
   defaultCollapsed: boolean;
 }
 
 function buildGroup(
-  section: CardSection,
-  { transcript, rowFile, uploads, onOpen, defaultCollapsed }: GroupOptions,
+  { key, section, messages }: CardSection,
+  {
+    transcript,
+    rowFile,
+    uploads,
+    cardPerMessage,
+    onOpen,
+    defaultCollapsed,
+  }: GroupOptions,
 ): FileAttachmentGroup {
   const items: FileAttachmentGroupItem[] = [
     {
       kind: "attachment",
-      id: `${section.key}:transcript`,
+      id: `${key}:transcript`,
       // One transcript covers every section, so it is named by what this
       // section contributes to it rather than by its filename. Removing the
       // row removes the file, which drops the whole preview back to chips.
@@ -248,11 +222,11 @@ function buildGroup(
     },
   ];
 
-  if (section.pickedMessages) {
-    for (const message of section.pickedMessages) {
+  if (cardPerMessage) {
+    for (const message of messages) {
       items.push({
         kind: "threadMessageGroup",
-        id: `${section.key}:${message.ref.messageId}`,
+        id: `${key}:${message.ref.messageId}`,
         label: message.sender,
         sublabel: messageSublabel(message),
         defaultCollapsed: false,
@@ -265,7 +239,8 @@ function buildGroup(
   } else {
     // The summary row stands for the messages; the files that rode along
     // with them still get a row each, so nothing is attached invisibly.
-    for (const claimed of claimAssets(section.assets, uploads)) {
+    const assets = messages.flatMap((message) => message.assets);
+    for (const claimed of claimAssets(assets, uploads)) {
       items.push({
         kind: "attachment",
         id: claimed.file.id,
@@ -275,11 +250,11 @@ function buildGroup(
   }
 
   return {
-    id: `teams:${section.key}`,
+    id: `teams:${key}`,
     label: section.teamName
       ? `${section.title} · ${section.teamName}`
       : section.title,
-    metaLabel: sectionMeta(section),
+    metaLabel: sectionMeta(section, messages.length),
     items,
     collapsible: true,
     defaultCollapsed,
@@ -299,8 +274,10 @@ function messagesBySection(
 }
 
 /** The header line: how much of the conversation this card stands for. */
-function sectionMeta(section: CardSection): string {
-  const count = section.messageCount;
+function sectionMeta(
+  section: TeamsTranscriptIndexSection,
+  count: number,
+): string {
   const countLabel = t({
     id: "teams.preview.messageCount",
     message: plural(count, { one: "# message", other: "# messages" }),
@@ -318,7 +295,7 @@ function sectionMeta(section: CardSection): string {
  * A partial window is not called "recent": the desktop export centres it on a
  * search hit, so newer messages can be missing as well as older ones.
  */
-function includedSummary(section: CardSection): string {
+function includedSummary(section: TeamsTranscriptIndexSection): string {
   const parts = [
     section.selection === "messages"
       ? t({

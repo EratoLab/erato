@@ -586,7 +586,7 @@ export {
 } from "@/utils/teams/teamsConversationRef";
 export {
   buildTeamsAttachmentGroups,
-  buildTeamsSummaryAttachmentGroups,
+  buildTeamsMessageAttachmentGroups,
   type TeamsAttachedTranscript,
   type TeamsAttachmentPreviewGroups,
 } from "@/utils/teams/teamsAttachmentGroups";
@@ -639,9 +639,6 @@ export type {
   ContentPart,
   FacetsResponse,
   FileUploadItem,
-  TeamsTranscriptSummary,
-  TeamsTranscriptSummaryAsset,
-  TeamsTranscriptSummarySection,
   UpdateProfilePreferencesRequest,
   UserProfile,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";

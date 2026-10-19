@@ -77,24 +77,6 @@ type Enabled<
 // --- Fix nullable string fields that the generator incorrectly narrows to null | undefined ---
 const schemaFile = path.join(targetDir, "v1betaApiSchemas.ts");
 const schemaStringFieldFixes = [
-  // Teams transcript summary. Leading indentation keeps `display_name` from
-  // also matching `owner_display_name`.
-  {
-    from: "  team_name?: null | undefined;",
-    to: "  team_name?: string | null | undefined;",
-  },
-  {
-    from: "  display_name?: null | undefined;",
-    to: "  display_name?: string | null | undefined;",
-  },
-  {
-    from: "  from?: null | undefined;",
-    to: "  from?: string | null | undefined;",
-  },
-  {
-    from: "  to?: null | undefined;",
-    to: "  to?: string | null | undefined;",
-  },
   {
     from: "progress_message?: null | undefined;",
     to: "progress_message?: string | null | undefined;",

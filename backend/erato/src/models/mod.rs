@@ -11,7 +11,6 @@ pub mod permissions;
 pub mod runtime_configuration;
 pub mod share_grant;
 pub mod share_link;
-pub mod teams_transcript;
 pub mod user;
 pub mod user_preference;
 pub mod user_tool_approval_setting;

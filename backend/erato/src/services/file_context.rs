@@ -464,7 +464,7 @@ pub(crate) fn prepare_eager_attachment(
     if ((limits.bounded_text_preview && config.max_inline_tokens_per_file > 0)
         || limits.max_extracted_chars > 0)
         && matches!(extension.as_str(), "csv" | "txt")
-        && !raw_text.contains(crate::models::teams_transcript::TEAMS_TRANSCRIPT_INDEX_MARKER)
+        && !raw_text.contains("erato:teams-transcript")
     {
         static MAX_TOKEN_BYTES: LazyLock<usize> = LazyLock::new(|| {
             let tokenizer = shared_tokenizer();

@@ -23,8 +23,6 @@ pub struct Model {
     pub external_id_ews_id: Option<String>,
     #[sea_orm(column_type = "JsonBinary", nullable)]
     pub outlook_provenance: Option<Json>,
-    #[sea_orm(column_type = "JsonBinary", nullable)]
-    pub teams_transcript: Option<Json>,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

@@ -3,11 +3,11 @@
  * conversation — so the transcript and the files shared inside it read as one
  * thing rather than as loose siblings.
  *
- * Only the fallback for transcripts uploaded before the backend stored a
- * summary of their index block (`teams_transcript`); those are grouped by
- * `buildTeamsSummaryAttachmentGroups`. Without a summary, membership comes from
- * the names the picker minted, which are already in the message — re-deriving
- * the index would mean downloading every transcript in the rendered history.
+ * The fallback behind `buildTeamsMessageAttachmentGroups`, which groups from
+ * the transcript's own index block. This applies while that download is in
+ * flight, when it fails, and for a transcript whose block is missing, damaged
+ * or of a version this build cannot read. Membership comes from the names the
+ * picker minted, which are already in the message.
  *
  * Both halves of the pattern are required before anything is grouped. A
  * transcript name is only `teams-*.md`, which a user could plausibly upload by

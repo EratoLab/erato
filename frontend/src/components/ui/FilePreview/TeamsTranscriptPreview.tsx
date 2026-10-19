@@ -7,15 +7,19 @@ import { SpinnerIcon } from "@/components/ui/Feedback/SpinnerIcon";
 import { TeamsConversationView } from "@/components/ui/Teams/TeamsConversationView";
 import { ArrowLeftIcon } from "@/components/ui/icons";
 import { createLogger } from "@/utils/debugLogger";
-import { parseTeamsTranscriptIndex } from "@/utils/teams/teamsTranscriptIndex";
+import {
+  loadStoredTeamsTranscript,
+  peekStoredTeamsTranscript,
+} from "@/utils/teams/storedTeamsTranscript";
 
 import { FilePreviewContent } from "./FilePreviewContent";
 
 import type { FileUploadItem } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type {
-  TeamsTranscriptIndex,
-  TeamsTranscriptIndexAsset,
-} from "@/utils/teams/teamsTranscriptIndex";
+  StoredTeamsTranscript,
+  StoredTeamsTranscriptOutcome,
+} from "@/utils/teams/storedTeamsTranscript";
+import type { TeamsTranscriptIndexAsset } from "@/utils/teams/teamsTranscriptIndex";
 
 const logger = createLogger("UI", "TeamsTranscriptPreview");
 
@@ -34,19 +38,22 @@ interface TeamsTranscriptPreviewProps {
   relatedFiles?: readonly FileUploadItem[];
 }
 
-type LoadState =
-  | { kind: "loading" }
-  | { kind: "unreachable" }
-  | { kind: "conversation"; index: TeamsTranscriptIndex }
-  /** Readable, but carrying no block this build understands. */
-  | { kind: "markdown"; text: string };
+type LoadState = { kind: "loading" } | StoredTeamsTranscriptOutcome;
+
+/** A transcript a message card already read opens without a spinner. */
+const settledState = (url: string): LoadState => {
+  const settled = peekStoredTeamsTranscript(url);
+  return settled && settled.kind !== "unreachable"
+    ? settled
+    : { kind: "loading" };
+};
 
 const MESSAGE_ANCHOR = "#msg=";
 
 /**
  * Citations deep-link into a transcript as "…teams-chat.md#msg=7" (see the
  * erato-file:// handling in MessageContent). The fragment never reaches the
- * server — fetch strips it — so it only has to be read out here.
+ * server — the load drops it — so it only has to be read out here.
  */
 const parseMessageAnchor = (url: string): number | null => {
   const anchorAt = url.lastIndexOf(MESSAGE_ANCHOR);
@@ -61,7 +68,9 @@ const parseMessageAnchor = (url: string): number | null => {
  * Shaped after `EmlPreview`: fetch the one stored artifact and re-derive its
  * structure on demand, rather than reading anything kept beside it. What comes
  * back is the same index block the composer already renders before sending, so
- * both surfaces show the same conversation from the same source.
+ * both surfaces show the same conversation from the same source. The load is
+ * shared with the message's Teams cards, so opening one does not download the
+ * transcript again.
  *
  * The rendering itself is not here — `TeamsConversationView` owns it, and is
  * handed an already-parsed index. This component is only the acquisition half.
@@ -74,7 +83,7 @@ export const TeamsTranscriptPreview: React.FC<TeamsTranscriptPreviewProps> = ({
   url,
   relatedFiles,
 }) => {
-  const [state, setState] = useState<LoadState>({ kind: "loading" });
+  const [state, setState] = useState<LoadState>(() => settledState(url));
   const [selected, setSelected] = useState<FileUploadItem | null>(null);
 
   // The minted upload name is the join key the transcript recorded, and it is
@@ -87,27 +96,17 @@ export const TeamsTranscriptPreview: React.FC<TeamsTranscriptPreviewProps> = ({
 
   useEffect(() => {
     let aborted = false;
-    setState({ kind: "loading" });
+    setState(settledState(url));
 
-    const load = async () => {
-      let text: string;
-      try {
-        const response = await fetch(url);
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        text = await response.text();
-      } catch (error) {
+    loadStoredTeamsTranscript(url).then(
+      (stored: StoredTeamsTranscript) => {
+        if (!aborted) setState(stored);
+      },
+      (error: unknown) => {
         logger.error("failed to fetch transcript", error);
         if (!aborted) setState({ kind: "unreachable" });
-        return;
-      }
-      if (aborted) return;
-      const index = parseTeamsTranscriptIndex(text);
-      setState(
-        index ? { kind: "conversation", index } : { kind: "markdown", text },
-      );
-    };
-
-    void load();
+      },
+    );
     return () => {
       aborted = true;
     };

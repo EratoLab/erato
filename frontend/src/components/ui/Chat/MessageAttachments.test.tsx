@@ -1,19 +1,29 @@
 import { I18nProvider } from "@lingui/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { http, HttpResponse } from "msw";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ThemeProvider } from "@/components/providers/ThemeProvider";
 import { server } from "@/lib/mocks/server";
 import { messages as enMessages } from "@/locales/en/messages.json";
+import {
+  teamsIndex,
+  teamsMessage,
+  teamsSection,
+  teamsTranscriptText,
+} from "@/test/teamsTranscriptFixtures";
+import { forgetStoredTeamsTranscripts } from "@/utils/teams/storedTeamsTranscript";
 
 import { MessageAttachments } from "./MessageAttachments";
 
-import type {
-  FileUploadItem,
-  TeamsTranscriptSummaryAsset,
-} from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type { FileUploadItem } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { Messages } from "@lingui/core";
 
 const fetchSpy = vi.spyOn(globalThis, "fetch");
@@ -66,29 +76,30 @@ const recording = (
     audio_transcription: audioTranscription,
   }) as unknown as FileUploadItem;
 
-const summarisedTranscript = (
-  assets: TeamsTranscriptSummaryAsset[] = [],
-): FileUploadItem => ({
-  ...file("t1", "teams-chat.md"),
-  teams_transcript: {
-    sections: [
-      {
-        kind: "chat",
-        title: "Product sync",
-        team_name: null,
-        selection: "whole-chat",
-        truncated: true,
-        skipped_count: 0,
-        message_count: 12,
-        window: { from: "2026-03-01T08:00:00Z", to: "2026-03-03T09:14:00Z" },
-        participants: ["Ada Lovelace"],
-        assets,
-      },
-    ],
-  },
-});
+const serveTranscript = (id: string, body: string) =>
+  server.use(
+    http.get(`https://example.invalid/${id}`, () => HttpResponse.text(body)),
+  );
+
+const storedTranscript = (
+  messages = [teamsMessage("m1"), teamsMessage("m2")],
+): string =>
+  teamsTranscriptText(
+    teamsIndex([teamsSection({ truncated: true })], messages),
+  );
 
 describe("MessageAttachments", () => {
+  // A transcript without an index block, as everything before #957 was: the
+  // name-based grouping is what such a message falls back to.
+  beforeEach(() => {
+    server.use(
+      http.get("https://example.invalid/:id", () =>
+        HttpResponse.text("# Teams chat\n\nProse only.\n"),
+      ),
+    );
+  });
+  afterEach(forgetStoredTeamsTranscripts);
+
   it("resolves attachments from the conversation's own file map", async () => {
     const files = [file("1", "spec.pdf"), file("2", "notes.txt")];
 
@@ -265,8 +276,9 @@ describe("MessageAttachments", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("renders a summarised Teams transcript as its conversation", async () => {
-    const files = [summarisedTranscript(), file("o1", "holiday.pdf")];
+  it("renders a stored Teams transcript as its conversation", async () => {
+    serveTranscript("t1", storedTranscript());
+    const files = [file("t1", "teams-chat.md"), file("o1", "holiday.pdf")];
 
     await renderWithProviders(
       <MessageAttachments
@@ -277,15 +289,16 @@ describe("MessageAttachments", () => {
       />,
     );
 
-    expect(screen.getByText("Product sync")).toBeInTheDocument();
-    expect(screen.getByText(/12 messages/)).toBeInTheDocument();
+    expect(await screen.findByText("Product sync")).toBeInTheDocument();
+    expect(screen.getByText(/2 messages/)).toBeInTheDocument();
     expect(screen.getByText("Part of the conversation")).toBeInTheDocument();
     expect(screen.getByText("holiday.pdf")).toBeInTheDocument();
   });
 
   it("opens the transcript from its conversation card", async () => {
+    serveTranscript("t1", storedTranscript());
     const onFilePreview = vi.fn();
-    const files = [summarisedTranscript()];
+    const files = [file("t1", "teams-chat.md")];
 
     await renderWithProviders(
       <MessageAttachments
@@ -297,7 +310,7 @@ describe("MessageAttachments", () => {
     );
 
     fireEvent.click(
-      screen.getByRole("button", { name: /part of the conversation/i }),
+      await screen.findByRole("button", { name: /part of the conversation/i }),
     );
     expect(onFilePreview).toHaveBeenCalledWith(
       expect.objectContaining({ id: "t1", filename: "teams-chat.md" }),
@@ -306,14 +319,22 @@ describe("MessageAttachments", () => {
   });
 
   it("names a transcript's shared files as Teams named them", async () => {
-    const files = [
-      summarisedTranscript([
-        {
-          name: "teams-file-abcd1234-Q3_report.pdf",
-          display_name: "Q3 report.pdf",
-          kind: "file",
-        },
+    serveTranscript(
+      "t1",
+      storedTranscript([
+        teamsMessage("m1", {
+          assets: [
+            {
+              name: "teams-file-abcd1234-Q3_report.pdf",
+              displayName: "Q3 report.pdf",
+              kind: "file",
+            },
+          ],
+        }),
       ]),
+    );
+    const files = [
+      file("t1", "teams-chat.md"),
       file("f1", "teams-file-abcd1234-Q3_report.pdf"),
     ];
 
@@ -326,11 +347,18 @@ describe("MessageAttachments", () => {
       />,
     );
 
-    expect(screen.getByText("Q3 report.pdf")).toBeInTheDocument();
+    expect(await screen.findByText("Q3 report.pdf")).toBeInTheDocument();
     expect(screen.queryByText("Q3_report.pdf")).not.toBeInTheDocument();
   });
 
-  it("keeps a hand-uploaded Teams-named file without an index as a tile", async () => {
+  it("keeps a Teams-named file without an index as a tile", async () => {
+    let served = false;
+    server.use(
+      http.get("https://example.invalid/t1", () => {
+        served = true;
+        return HttpResponse.text("# Notes\n\nNothing structured here.\n");
+      }),
+    );
     const files = [file("t1", "teams-notes.md")];
 
     await renderWithProviders(
@@ -341,6 +369,8 @@ describe("MessageAttachments", () => {
       />,
     );
 
+    await waitFor(() => expect(served).toBe(true));
+    await act(async () => {});
     expect(screen.getByText("teams-notes.md")).toBeInTheDocument();
     expect(screen.queryByText("Teams conversation")).not.toBeInTheDocument();
   });

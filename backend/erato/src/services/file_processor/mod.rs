@@ -8,7 +8,6 @@ use xberg::detect_mime_type_from_bytes;
 
 mod calendar_vcard;
 use self::calendar_vcard::register_calendar_vcard_extractor;
-use crate::models::teams_transcript::TEAMS_TRANSCRIPT_INDEX_MARKER;
 
 const DOCX_MIME_TYPE: &str =
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
@@ -1289,10 +1288,13 @@ fn strip_empty_markdown_table_rows(text: &str) -> String {
     output.join("\n")
 }
 
+/// Names the machine-readable index the Teams add-in appends to a transcript.
+const TRANSCRIPT_INDEX_MARKER: &str = "erato:teams-transcript";
+
 /// Whether text beginning at the marker opens a real index block, i.e. the
 /// marker is followed by the serializer's `v<n>` version token.
 fn starts_index_block(from_marker: &str) -> bool {
-    let mut after = from_marker[TEAMS_TRANSCRIPT_INDEX_MARKER.len()..]
+    let mut after = from_marker[TRANSCRIPT_INDEX_MARKER.len()..]
         .trim_start()
         .chars();
     after.next() == Some('v') && after.next().is_some_and(|char| char.is_ascii_digit())
@@ -1314,13 +1316,13 @@ fn starts_index_block(from_marker: &str) -> bool {
 /// survived extraction and by the line otherwise, because a markdown renderer
 /// may have escaped them (`\<!--`) or dropped them.
 fn strip_transcript_index(content: &str) -> String {
-    if !content.contains(TEAMS_TRANSCRIPT_INDEX_MARKER) {
+    if !content.contains(TRANSCRIPT_INDEX_MARKER) {
         return content.to_string();
     }
 
     let mut kept = String::with_capacity(content.len());
     let mut rest = content;
-    while let Some(found) = rest.find(TEAMS_TRANSCRIPT_INDEX_MARKER) {
+    while let Some(found) = rest.find(TRANSCRIPT_INDEX_MARKER) {
         let line_end = rest[found..]
             .find('\n')
             .map_or(rest.len(), |index| found + index);

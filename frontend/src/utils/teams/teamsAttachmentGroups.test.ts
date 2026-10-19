@@ -8,7 +8,7 @@ import {
 
 import {
   buildTeamsAttachmentGroups,
-  buildTeamsSummaryAttachmentGroups,
+  buildTeamsMessageAttachmentGroups,
 } from "./teamsAttachmentGroups";
 
 import type {
@@ -23,11 +23,7 @@ import type {
   FileAttachmentGroup,
   FileAttachmentGroupItem,
 } from "@/components/ui/FileUpload/GroupedFileAttachmentsPreview";
-import type {
-  FileUploadItem,
-  TeamsTranscriptSummary,
-  TeamsTranscriptSummarySection,
-} from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type { FileUploadItem } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
 function upload(filename: string, id = filename): FileUploadItem {
   return { id, filename } as FileUploadItem;
@@ -326,94 +322,93 @@ describe("buildTeamsAttachmentGroups", () => {
   });
 });
 
-function summarySection(
-  overrides: Partial<TeamsTranscriptSummarySection> = {},
-): TeamsTranscriptSummarySection {
-  return {
-    kind: "chat",
-    title: "Product sync",
-    team_name: null,
-    selection: "whole-chat",
-    truncated: false,
-    skipped_count: 0,
-    message_count: 12,
-    window: { from: "2026-03-01T08:00:00Z", to: "2026-03-03T09:14:00Z" },
-    participants: ["Ada Lovelace"],
-    assets: [],
-    ...overrides,
-  };
-}
+describe("buildTeamsMessageAttachmentGroups", () => {
+  const index = (
+    section: Partial<TeamsTranscriptIndexSection> = {},
+    messages: TeamsTranscriptIndexMessage[] = [
+      teamsMessage("m1"),
+      teamsMessage("m2"),
+    ],
+  ) => teamsIndex([teamsSection(section)], messages);
 
-function summarised(
-  file: FileUploadItem,
-  sections: TeamsTranscriptSummarySection[],
-): FileUploadItem {
-  const summary: TeamsTranscriptSummary = { sections };
-  return { ...file, teams_transcript: summary };
-}
-
-describe("buildTeamsSummaryAttachmentGroups", () => {
-  it("leaves files without a summary to the caller", () => {
+  it("leaves a message whose transcripts are not read yet to the caller", () => {
     expect(
-      buildTeamsSummaryAttachmentGroups([TRANSCRIPT, upload("holiday.pdf")]),
+      buildTeamsMessageAttachmentGroups([TRANSCRIPT], new Map()),
     ).toBeNull();
     expect(
-      buildTeamsSummaryAttachmentGroups([summarised(TRANSCRIPT, [])]),
+      buildTeamsMessageAttachmentGroups(
+        [TRANSCRIPT],
+        new Map([[TRANSCRIPT.id, teamsIndex([], [])]]),
+      ),
     ).toBeNull();
   });
 
-  it("renders a stored transcript as its conversation, open and expanded", () => {
-    const transcript = summarised(TRANSCRIPT, [
-      summarySection({ truncated: true }),
-    ]);
-    const preview = buildTeamsSummaryAttachmentGroups([
-      transcript,
-      upload("holiday.pdf"),
-    ]);
+  it("renders a stored transcript as its conversation, expanded", () => {
+    const preview = buildTeamsMessageAttachmentGroups(
+      [TRANSCRIPT, upload("holiday.pdf")],
+      new Map([[TRANSCRIPT.id, index({ truncated: true })]]),
+    );
 
     const [group] = groupsOf(preview);
     expect(group.label).toBe("Product sync");
-    expect(group.metaLabel).toContain("12 messages");
+    expect(group.metaLabel).toContain("2 messages");
     expect(group.defaultCollapsed).toBe(false);
     // The whole upload, so opening the row previews the transcript itself.
     expect(transcriptRow(group).file).toEqual({
-      ...transcript,
+      ...TRANSCRIPT,
       displayName: "Part of the conversation",
     });
     expect(transcriptRow(group).onOpen).toBeUndefined();
     expect([...preview!.claimedFileIds]).toEqual([TRANSCRIPT.id]);
   });
 
+  it("keeps hand-picked messages to the summary row once sent", () => {
+    const preview = buildTeamsMessageAttachmentGroups(
+      [TRANSCRIPT],
+      new Map([[TRANSCRIPT.id, index({ selection: "messages" })]]),
+    );
+
+    const [group] = groupsOf(preview);
+    expect(itemKinds(group)).toEqual(["attachment"]);
+    expect(transcriptRow(group).file).toMatchObject({
+      displayName: "Selected messages",
+    });
+  });
+
   it("claims the shared files under the names Teams gave them", () => {
     const image = upload("teams-img-0123456789abcdef.png", "upload-image");
     const shared = upload("teams-file-abcd1234-Q3_report.pdf", "upload-file");
-    const preview = buildTeamsSummaryAttachmentGroups([
-      summarised(TRANSCRIPT, [
-        summarySection({
-          assets: [
-            { name: image.filename, display_name: null, kind: "image" },
-            {
-              name: shared.filename,
-              display_name: "Q3 report.pdf",
-              kind: "file",
-            },
-            {
-              name: "teams-img-never-uploaded.png",
-              display_name: null,
-              kind: "image",
-            },
-          ],
-        }),
+    const preview = buildTeamsMessageAttachmentGroups(
+      [TRANSCRIPT, image, shared],
+      new Map([
+        [
+          TRANSCRIPT.id,
+          index({}, [
+            teamsMessage("m1", {
+              assets: [
+                { name: image.filename, displayName: null, kind: "image" },
+                {
+                  name: "teams-img-never-uploaded.png",
+                  displayName: null,
+                  kind: "image",
+                },
+              ],
+            }),
+            teamsMessage("m2", {
+              assets: [
+                {
+                  name: shared.filename,
+                  displayName: "Q3 report.pdf",
+                  kind: "file",
+                },
+              ],
+            }),
+          ]),
+        ],
       ]),
-      image,
-      shared,
-    ]);
+    );
 
     const [group] = groupsOf(preview);
-    expect(group.items.slice(1).map((item) => item.kind)).toEqual([
-      "attachment",
-      "attachment",
-    ]);
     expect(
       group.items
         .slice(1)
@@ -426,17 +421,18 @@ describe("buildTeamsSummaryAttachmentGroups", () => {
 
   it("keeps two transcripts of one message apart", () => {
     const second = upload("teams-chat.md", "upload-second");
-    const preview = buildTeamsSummaryAttachmentGroups([
-      summarised(TRANSCRIPT, [summarySection()]),
-      summarised(second, [
-        summarySection({
-          kind: "channel",
-          title: "Releases",
-          team_name: "Contoso",
-          selection: "messages",
-        }),
+    const preview = buildTeamsMessageAttachmentGroups(
+      [TRANSCRIPT, second],
+      new Map([
+        [TRANSCRIPT.id, index()],
+        [
+          second.id,
+          index({ title: "Releases", teamName: "Contoso" }, [
+            teamsMessage("c1"),
+          ]),
+        ],
       ]),
-    ]);
+    );
 
     const groups = groupsOf(preview);
     expect(groups.map((group) => group.label)).toEqual([
@@ -444,9 +440,6 @@ describe("buildTeamsSummaryAttachmentGroups", () => {
       "Releases · Contoso",
     ]);
     expect(new Set(groups.map((group) => group.id)).size).toBe(2);
-    expect(transcriptRow(groups[1]).file).toMatchObject({
-      id: second.id,
-      displayName: "Selected messages",
-    });
+    expect(transcriptRow(groups[1]).file).toMatchObject({ id: second.id });
   });
 });
