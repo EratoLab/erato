@@ -16,6 +16,7 @@ export default [
       "storybook-welcome-layout/**/*.ts",
       "storybook-chip-retune/**/*.ts",
       "storybook-tabrail-retune/**/*.ts",
+      "storybook-composer-context-fixes/**/*.ts",
     ],
     languageOptions: { parser: tsParser },
     plugins: { playwright },
