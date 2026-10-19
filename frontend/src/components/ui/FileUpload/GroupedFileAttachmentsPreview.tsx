@@ -3,6 +3,7 @@ import clsx from "clsx";
 import { Fragment, useState } from "react";
 
 import { componentRegistry } from "@/config/componentRegistry";
+import { isImageFile } from "@/utils/file/fileTypeUtils";
 
 import {
   AttachmentNotice,
@@ -99,8 +100,9 @@ export type FileAttachmentGroupItem =
        * message in the thread instead of flattening to siblings.
        *
        * The header checkbox toggles inclusion of the whole message (body +
-       * its attachments). Individual attachment checkboxes inside override
-       * the header for fine control.
+       * its attachments). An attachment checkbox reads unticked while its
+       * message is, since nothing of an unticked message is sent; ticking one
+       * there brings the message back with only that attachment.
        */
       kind: "threadMessageGroup";
       id: string;
@@ -148,6 +150,11 @@ export interface FileAttachmentGroup {
    */
   collapsible?: boolean;
   defaultCollapsed?: boolean;
+  /**
+   * Render this group's `groupActions` in its header, so they stay reachable
+   * while the group is collapsed.
+   */
+  pinActions?: boolean;
 }
 
 export interface GroupedFileAttachmentsPreviewProps {
@@ -212,13 +219,31 @@ function getFileKey(item: ItemWithFile): string {
  * A stored upload can be shown as a thumbnail; a file that has not been
  * uploaded yet has no URL to point at and stays an icon tile.
  */
-function getItemPreviewUrl(item: ItemWithFile): string | undefined {
-  if (!("preview_url" in item.file)) {
+function getUploadPreviewUrl(file: FileResource): string | undefined {
+  if (!("preview_url" in file)) {
     return undefined;
   }
-  return typeof item.file.preview_url === "string"
-    ? item.file.preview_url
-    : undefined;
+  return typeof file.preview_url === "string" ? file.preview_url : undefined;
+}
+
+/**
+ * An upload shown under a friendlier name ("Image") keeps its type in the
+ * stored filename. `undefined`, never `false`, so extension detection still
+ * runs; the upload gate keeps out items whose `filename` is a label, such as
+ * a reply context titled "Fwd: logo.png".
+ */
+function getUploadIsImage(file: FileResource): true | undefined {
+  if (
+    getUploadPreviewUrl(file) !== undefined &&
+    "displayName" in file &&
+    typeof file.displayName === "string" &&
+    file.displayName !== "" &&
+    "filename" in file &&
+    isImageFile(file.filename)
+  ) {
+    return true;
+  }
+  return undefined;
 }
 
 function getFileId(item: ItemWithFile): string {
@@ -365,6 +390,7 @@ export function useGroupedFileAttachmentsPreview(
         ? baseItems.slice(0, defaultVisibleItems)
         : baseItems;
     const hiddenCount = isCollapsed ? 0 : itemCount - visibleItems.length;
+    const actionsPinned = group.pinActions === true;
     return {
       group,
       itemCount,
@@ -381,7 +407,10 @@ export function useGroupedFileAttachmentsPreview(
       }),
       toggleCollapsed: () => toggleGroupCollapsed(group),
       setExpanded: (expanded: boolean) => setGroupExpanded(group.id, expanded),
-      actions: isCollapsed ? undefined : groupActions?.[group.id],
+      /** The renderer draws `actions` in the header rather than the body. */
+      actionsPinned,
+      actions:
+        isCollapsed && !actionsPinned ? undefined : groupActions?.[group.id],
       content: visibleItems.map((item) => {
         if (item.kind === "loading") {
           // Inside a group the placeholder is a bare centred
@@ -433,6 +462,8 @@ export function useGroupedFileAttachmentsPreview(
                     ? () => onFilePreview(attachment.file)
                     : undefined,
                   file: attachment.file,
+                  previewUrl: getUploadPreviewUrl(attachment.file),
+                  isImage: getUploadIsImage(attachment.file),
                   variant: "row",
                   selection: attachment.onToggle
                     ? {
@@ -486,7 +517,8 @@ export function useGroupedFileAttachmentsPreview(
           key: getFileKey(item),
           kind: item.kind,
           file: item.file,
-          previewUrl: getItemPreviewUrl(item),
+          previewUrl: getUploadPreviewUrl(item.file),
+          isImage: getUploadIsImage(item.file),
           labelOverride: item.labelOverride,
           disabled,
           onRemove:
@@ -530,6 +562,7 @@ export const DefaultGroupedFileAttachmentsPreview: React.FC<
           showLessLabel,
           toggleCollapsed,
           setExpanded,
+          actionsPinned,
           actions,
           content,
         } = state;
@@ -608,7 +641,29 @@ export const DefaultGroupedFileAttachmentsPreview: React.FC<
             bodyClassName={itemsClassName}
             data-ui="attachment-group"
             header={
-              collapsible ? (
+              collapsible && actionsPinned && actions != null ? (
+                // The action sits beside the disclosure, never inside it: a
+                // control nested in a button is unreachable.
+                <div
+                  className={headerClassName}
+                  data-collapsed={isCollapsed || undefined}
+                >
+                  <button
+                    type="button"
+                    onClick={toggleCollapsed}
+                    className="flex min-w-0 flex-1 items-start gap-2 text-left"
+                    aria-expanded={!isCollapsed}
+                  >
+                    {headerInner}
+                  </button>
+                  <div
+                    className="flex shrink-0 items-center self-center"
+                    data-ui="attachment-group-header-actions"
+                  >
+                    {actions}
+                  </div>
+                </div>
+              ) : collapsible ? (
                 <button
                   type="button"
                   onClick={toggleCollapsed}
@@ -649,7 +704,7 @@ export const DefaultGroupedFileAttachmentsPreview: React.FC<
               </Button>
             )}
 
-            {actions}
+            {!actionsPinned && actions}
           </Card>
         );
       })}

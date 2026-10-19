@@ -1,12 +1,22 @@
 import { I18nProvider } from "@lingui/react";
-import { fireEvent, render, screen } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  renderHook,
+  screen,
+  within,
+} from "@testing-library/react";
 import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 
 import { ThemeProvider } from "@/components/providers/ThemeProvider";
 import { messages as enMessages } from "@/locales/en/messages.json";
 
-import { GroupedFileAttachmentsPreview } from "./GroupedFileAttachmentsPreview";
+import {
+  GroupedFileAttachmentsPreview,
+  useGroupedFileAttachmentsPreview,
+  type FileAttachmentGroup,
+} from "./GroupedFileAttachmentsPreview";
 
 import type { Messages } from "@lingui/core";
 
@@ -760,5 +770,208 @@ describe("GroupedFileAttachmentsPreview", () => {
     expect(
       container.querySelector('[data-ui="attachment-tile"]'),
     ).not.toBeNull();
+  });
+
+  const pinnedDropGroup: FileAttachmentGroup = {
+    id: "drop",
+    label: "Re: Offsite agenda",
+    collapsible: true,
+    pinActions: true,
+    items: [{ kind: "status", id: "body", label: "Email body" }],
+  };
+
+  it.each([false, true])(
+    "keeps a pinned group action in the header while collapsed (sticky: %s)",
+    async (stickyGroupHeaders) => {
+      const remove = vi.fn();
+      await renderWithI18n(
+        <GroupedFileAttachmentsPreview
+          stickyGroupHeaders={stickyGroupHeaders}
+          groups={[pinnedDropGroup]}
+          groupActions={{
+            drop: <button onClick={remove}>Remove Re: Offsite agenda</button>,
+          }}
+        />,
+      );
+
+      const toggle = screen.getByRole("button", {
+        name: /offsite agenda.*1 item/i,
+      });
+      expect(toggle).toHaveAttribute("aria-expanded", "false");
+      const action = screen.getByRole("button", {
+        name: "Remove Re: Offsite agenda",
+      });
+      expect(toggle).not.toContainElement(action);
+      expect(
+        action.closest('[data-ui="attachment-group-header-actions"]'),
+      ).not.toBeNull();
+      fireEvent.click(action);
+      expect(remove).toHaveBeenCalledTimes(1);
+
+      fireEvent.click(toggle);
+      expect(toggle).toHaveAttribute("aria-expanded", "true");
+      expect(screen.getByText("Email body")).toBeVisible();
+      expect(
+        screen.getAllByRole("button", { name: "Remove Re: Offsite agenda" }),
+      ).toHaveLength(1);
+    },
+  );
+
+  it("reports pinned actions from the hook while the group is collapsed", async () => {
+    const { i18n } = await import("@lingui/core");
+    i18n.load("en", enMessages as unknown as Messages);
+    i18n.activate("en");
+    const action = <button>Remove</button>;
+
+    const { result } = renderHook(() =>
+      useGroupedFileAttachmentsPreview({
+        groups: [
+          pinnedDropGroup,
+          { ...pinnedDropGroup, id: "unpinned", pinActions: undefined },
+        ],
+        groupActions: { drop: action, unpinned: action },
+      }),
+    );
+
+    const [pinned, unpinned] = result.current;
+    expect(pinned.isCollapsed).toBe(true);
+    expect(pinned.actionsPinned).toBe(true);
+    expect(pinned.actions).toBe(action);
+    expect(unpinned.actionsPinned).toBe(false);
+    expect(unpinned.actions).toBeUndefined();
+  });
+
+  it("draws a display-named image upload as a thumbnail", async () => {
+    const { container } = await renderWithI18n(
+      <GroupedFileAttachmentsPreview
+        groups={[
+          {
+            id: "conversation",
+            label: "Product sync",
+            items: [
+              {
+                kind: "attachment",
+                id: "image-1",
+                file: {
+                  id: "image-1",
+                  filename: "teams-img-abc.png",
+                  displayName: "Image",
+                  download_url: "/files/image-1",
+                  preview_url: "/files/image-1/preview",
+                } as never,
+              },
+            ],
+          },
+        ]}
+        onRemoveFile={() => {}}
+      />,
+    );
+
+    const tile = container.querySelector('[data-ui="attachment-tile"]');
+    expect(tile?.tagName).toBe("IMG");
+    expect(tile).toHaveAttribute("src", "/files/image-1/preview");
+    expect(container.querySelector('[data-filetype="image"]')).toContainElement(
+      tile as HTMLElement,
+    );
+  });
+
+  it("gives a display-named image row the image family", async () => {
+    const { container } = await renderWithI18n(
+      <GroupedFileAttachmentsPreview
+        showFileTypes={true}
+        groups={[
+          {
+            id: "conversation",
+            label: "Product sync",
+            items: [
+              {
+                kind: "threadMessageGroup",
+                id: "message-1",
+                label: "Anna Schmidt",
+                defaultCollapsed: false,
+                attachments: [
+                  {
+                    id: "image-1",
+                    file: {
+                      id: "image-1",
+                      filename: "teams-img-abc.png",
+                      displayName: "Image",
+                      preview_url: "/files/image-1/preview",
+                    },
+                    selected: true,
+                    onToggle: () => {},
+                  },
+                ],
+              },
+            ],
+          },
+        ]}
+      />,
+    );
+
+    const row = container.querySelector('[data-filetype="image"]');
+    expect(row).not.toBeNull();
+    // Rows stay rows: the type shows, the thumbnail does not.
+    expect(row?.querySelector("img")).toBeNull();
+    expect(within(row as HTMLElement).getByText(/^IMAGE/)).toBeVisible();
+  });
+
+  it("keeps a context item named like an image a document", async () => {
+    const { container } = await renderWithI18n(
+      <GroupedFileAttachmentsPreview
+        groups={[
+          {
+            id: "reply-context",
+            label: "Reply context",
+            metaLabel: "",
+            items: [
+              {
+                kind: "context",
+                id: "reply-context",
+                file: {
+                  id: "reply-context",
+                  filename: "Fwd: logo.png",
+                  displayName: "Fwd: logo.png — Anna",
+                },
+                labelOverride: "Reply context",
+              },
+            ],
+          },
+        ]}
+      />,
+    );
+
+    expect(container.querySelector("img")).toBeNull();
+    expect(container.querySelector('[data-filetype="image"]')).toBeNull();
+  });
+
+  it("keeps extension detection when the stored filename is no image", async () => {
+    const { container } = await renderWithI18n(
+      <GroupedFileAttachmentsPreview
+        groups={[
+          {
+            id: "conversation",
+            label: "Product sync",
+            items: [
+              {
+                kind: "attachment",
+                id: "file-1",
+                file: {
+                  id: "file-1",
+                  filename: "teams-file-abc",
+                  displayName: "roadmap.png",
+                  preview_url: "/files/file-1/preview",
+                } as never,
+              },
+            ],
+          },
+        ]}
+      />,
+    );
+
+    expect(container.querySelector("img")).toHaveAttribute(
+      "src",
+      "/files/file-1/preview",
+    );
   });
 });

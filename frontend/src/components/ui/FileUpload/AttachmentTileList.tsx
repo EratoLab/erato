@@ -55,6 +55,11 @@ export interface AttachmentTileListProps {
   capHeight?: boolean;
   /** Shows the staged count against the host's limit, e.g. "3/50". */
   maxFiles?: number;
+  /**
+   * Files staged in all, when some are shown elsewhere; the count label reads
+   * it against `maxFiles`.
+   */
+  stagedCount?: number;
   className?: string;
 }
 
@@ -72,6 +77,7 @@ export const AttachmentTileList: React.FC<AttachmentTileListProps> = ({
   removeAllThreshold = 3,
   capHeight = false,
   maxFiles,
+  stagedCount,
   className,
 }) => {
   if (items.length === 0) {
@@ -82,7 +88,7 @@ export const AttachmentTileList: React.FC<AttachmentTileListProps> = ({
     Boolean(onRemoveAll) && items.length >= removeAllThreshold;
   const count = items.length;
   const countLabel = maxFiles
-    ? `${count}/${maxFiles}`
+    ? `${stagedCount ?? count}/${maxFiles}`
     : count === 1
       ? t`1 file`
       : t`${count} files`;

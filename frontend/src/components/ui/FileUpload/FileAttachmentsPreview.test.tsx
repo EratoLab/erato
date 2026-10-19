@@ -177,6 +177,27 @@ describe("FileAttachmentsPreview", () => {
     expect(screen.getByText("3/50")).toBeInTheDocument();
   });
 
+  it("counts files staged elsewhere against the limit", async () => {
+    await renderWithProviders(
+      <FileAttachmentsPreview
+        attachedFiles={[
+          file("1", "spec.pdf"),
+          file("2", "notes.txt"),
+          file("3", "data.csv"),
+        ]}
+        stagedCount={5}
+        maxFiles={5}
+        onRemoveFile={vi.fn()}
+        onRemoveAllFiles={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("5/5")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Remove all attachments" }),
+    ).toBeVisible();
+  });
+
   it("renders nothing when there is nothing attached", async () => {
     const { container } = await renderWithProviders(
       <FileAttachmentsPreview

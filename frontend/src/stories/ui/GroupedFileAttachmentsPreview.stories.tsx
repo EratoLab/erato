@@ -1,3 +1,4 @@
+import { Button } from "../../components/ui/Controls/Button";
 import { GroupedFileAttachmentsPreview } from "../../components/ui/FileUpload/GroupedFileAttachmentsPreview";
 
 import type { Meta, StoryObj } from "@storybook/react";
@@ -259,6 +260,178 @@ export const WithLoading: Story = {
     ],
     onRemoveFile: () => {},
     defaultVisibleItems: 2,
+    showFileTypes: true,
+  },
+};
+
+/* The Outlook add-in's dropped-email card: Remove sits beside the disclosure,
+   so a collapsed drop can still be removed in one click. */
+const droppedEmail = (subject: string) => ({
+  groups: [
+    {
+      id: "drop",
+      label: subject,
+      metaLabel: "2 items · 96 KB of 25 MB",
+      collapsible: true,
+      defaultCollapsed: true,
+      pinActions: true,
+      items: [
+        {
+          kind: "selectableAttachment" as const,
+          id: "body",
+          file: { id: "body", filename: `${subject}.eml`, size: 14000 },
+          selected: true,
+          onToggle: () => {},
+          labelOverride: "Email body",
+        },
+        {
+          kind: "selectableAttachment" as const,
+          id: "agenda",
+          file: { id: "agenda", filename: "agenda.pdf", size: 82000 },
+          selected: true,
+          onToggle: () => {},
+        },
+      ],
+    },
+  ],
+  groupActions: {
+    drop: (
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        className="self-start px-0 text-xs"
+        aria-label={`Remove ${subject}`}
+      >
+        Remove
+      </Button>
+    ),
+  },
+  stickyGroupHeaders: true,
+  showFileTypes: true,
+  defaultVisibleItems: 10,
+});
+
+export const PinnedGroupAction: Story = {
+  args: droppedEmail("Re: Offsite agenda"),
+};
+
+export const PinnedGroupActionLongSubject: Story = {
+  args: droppedEmail(
+    "Re: AW: Offsite agenda for the leadership team, travel booking, room plan and the catering order",
+  ),
+};
+
+/* An unticked message sends nothing, so its attachment boxes read unticked
+   with it. */
+export const ThreadMessageUnticked: Story = {
+  args: {
+    groups: [
+      {
+        id: "thread",
+        label: "Re: Kickoff Kundenportal 2.0",
+        metaLabel: "2 messages · 240 KB of 25 MB",
+        collapsible: true,
+        defaultCollapsed: false,
+        items: [
+          {
+            ...threadMessage(
+              "m1",
+              "Daniel Person",
+              "19/05/2026, 18:58:51 · Kickoff Kundenportal 2.0",
+              [
+                { id: "a1", filename: "Lastenheft.pdf", size: 240000 },
+                { id: "a2", filename: "Zeitplan.xlsx", size: 18000 },
+              ],
+            ),
+            selected: false,
+            defaultCollapsed: false,
+            attachments: [
+              { id: "a1", filename: "Lastenheft.pdf", size: 240000 },
+              { id: "a2", filename: "Zeitplan.xlsx", size: 18000 },
+            ].map((file) => ({
+              id: file.id,
+              file,
+              selected: false,
+              onToggle: () => {},
+            })),
+          },
+          threadMessage(
+            "m2",
+            "Max Token",
+            "19/05/2026, 19:00:16 · AW: Kickoff Kundenportal 2.0",
+            [],
+          ),
+        ],
+      },
+    ],
+    onRemoveFile: () => {},
+    stickyGroupHeaders: true,
+    showFileTypes: true,
+    defaultVisibleItems: 10,
+  },
+};
+
+// A 1x1 PNG, so the thumbnail loads without a network.
+const PIXEL_PNG =
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+
+const teamsImage = (id: string) => ({
+  id,
+  filename: `teams-img-${id}.png`,
+  displayName: "Image",
+  download_url: PIXEL_PNG,
+  preview_url: PIXEL_PNG,
+  file_contents_unavailable_missing_permissions: false,
+  is_sharepoint_file: false,
+});
+
+/* Teams names an inline image "Image"; its stored filename keeps the type, so
+   it still draws as a thumbnail, and as an image row in a picked message. */
+export const DisplayNamedImage: Story = {
+  args: {
+    groups: [
+      {
+        id: "conversation",
+        label: "Product sync",
+        metaLabel: "Whole conversation",
+        items: [
+          {
+            kind: "attachment",
+            id: "transcript",
+            file: {
+              id: "transcript",
+              filename: "teams-Product_sync.md",
+              displayName: "All messages",
+            },
+          },
+          { kind: "attachment", id: "img-1", file: teamsImage("abc") },
+        ],
+      },
+      {
+        id: "picked",
+        label: "Picked messages",
+        metaLabel: "1 message",
+        items: [
+          {
+            kind: "threadMessageGroup",
+            id: "message-1",
+            label: "Anna Schmidt",
+            sublabel: "Here is the dashboard",
+            defaultCollapsed: false,
+            attachments: [
+              {
+                id: "img-2",
+                file: teamsImage("def"),
+                selected: true,
+                onToggle: () => {},
+              },
+            ],
+          },
+        ],
+      },
+    ],
+    onRemoveFile: () => {},
     showFileTypes: true,
   },
 };
