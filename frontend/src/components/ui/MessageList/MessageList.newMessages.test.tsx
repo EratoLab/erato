@@ -1,5 +1,6 @@
 import { i18n } from "@lingui/core";
 import { I18nProvider } from "@lingui/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { useRef } from "react";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
@@ -59,18 +60,23 @@ const toProps = (list: ChatMessage[], sessionId = "chat-1") => ({
 });
 
 const renderList = (list: ChatMessage[], sessionId?: string) => {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
   const ui = (props: ReturnType<typeof toProps>) => (
-    <I18nProvider i18n={i18n}>
-      <MessageList
-        {...props}
-        loadOlderMessages={vi.fn()}
-        hasOlderMessages={false}
-        isPending={false}
-        controlsContext={{}}
-        onMessageAction={vi.fn(async () => true)}
-        messageRenderer={({ message: entry }) => <div>{entry.id}</div>}
-      />
-    </I18nProvider>
+    <QueryClientProvider client={queryClient}>
+      <I18nProvider i18n={i18n}>
+        <MessageList
+          {...props}
+          loadOlderMessages={vi.fn()}
+          hasOlderMessages={false}
+          isPending={false}
+          controlsContext={{}}
+          onMessageAction={vi.fn(async () => true)}
+          messageRenderer={({ message: entry }) => <div>{entry.id}</div>}
+        />
+      </I18nProvider>
+    </QueryClientProvider>
   );
   const view = render(ui(toProps(list, sessionId)));
   return {
