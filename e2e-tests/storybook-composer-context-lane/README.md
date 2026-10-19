@@ -19,10 +19,16 @@ library (ERMAIN-1022):
 - one capped scroll area shared with files: "+N more", "Show less", a pinned
   "Remove all", an unclipped focus outline, and the German strings;
 - the web app's composer unchanged, a kit face inside the host's chip, and
-  notices above the lane with a role by tone.
+  notices above the lane with a role by tone;
+- every host state of the target prototype (Word, Outlook reading and
+  composing, Teams) as `composer-context-hosts.spec.ts` checks it: each chip's
+  kind, state, tone, name and (x)/(+) name as the prototype has them, all of
+  them in view at 340 and 480 px, contrast in light and dark, and the host
+  flows the prototype settles (an error dismissed to suggested, + retrying,
+  host-worded removals, locked chips, the last chip handing focus back).
 
-No host feeds the lane yet; the stories under `Chat/ComposerContextLane` play
-the host resolver. Start Storybook from `frontend/`; the providers need an API
+No host feeds the lane yet; the stories under `Chat/ComposerContextLane` and
+`Chat/ComposerContextHosts` play the host resolver from data. Start Storybook from `frontend/`; the providers need an API
 root to render, though nothing is fetched:
 
 ```bash

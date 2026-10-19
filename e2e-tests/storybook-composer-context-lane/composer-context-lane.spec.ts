@@ -1,94 +1,23 @@
-import { expect, test, type Locator, type Page } from "@playwright/test";
+import { expect, test, type Locator } from "@playwright/test";
+
+import {
+  AREA,
+  boxOf,
+  chip,
+  CHIP,
+  contrastOf,
+  LANE,
+  live,
+  LIVE,
+  OPEN,
+  openButton,
+  openStory,
+  STORY,
+  tokenColor,
+} from "./lane-helpers";
 
 // Measurements only, no pixel snapshots: jsdom has no layout, so geometry,
 // focus, scrolling and colour are checked here.
-
-const LANE = '[data-ui="composer-context-lane"]';
-const CHIP = '[data-ui="composer-context-chip"]';
-const OPEN = '[data-ui="composer-context-chip-open"]';
-const AREA = '[data-ui="composer-staged-area"]';
-const LIVE = '[data-ui="composer-context-live"]';
-const STORY = "chat-composercontextlane";
-
-const openStory = async (
-  page: Page,
-  story: string,
-  ready: string,
-  {
-    theme = "light",
-    width = 340,
-    locale,
-  }: { theme?: "light" | "dark"; width?: number; locale?: string } = {},
-) => {
-  await page.setViewportSize({ width, height: 800 });
-  const globals = [`theme:${theme}`, ...(locale ? [`locale:${locale}`] : [])];
-  await page.goto(
-    `/iframe.html?id=${story}&viewMode=story&globals=${globals.join(";")}`,
-  );
-  // The first request compiles the story bundle; later ones are instant.
-  await expect(page.locator(ready).first()).toBeVisible({ timeout: 60_000 });
-};
-
-const chip = (page: Page, label: string) =>
-  page.locator(CHIP).filter({
-    has: page.locator('[data-ui="composer-context-chip-label"]', {
-      hasText: label,
-    }),
-  });
-
-const openButton = (page: Page, label: string) =>
-  chip(page, label).locator(OPEN);
-
-const live = (page: Page) => page.locator(LIVE).first();
-
-// WCAG contrast of an element's text on the first opaque fill behind it.
-const contrastOf = (element: Element) => {
-  const parse = (color: string) => {
-    const [r, g, b, a = 1] = (color.match(/[\d.]+/g) ?? []).map(Number);
-    return { r, g, b, a };
-  };
-  let fill = { r: 255, g: 255, b: 255, a: 1 };
-  for (let node: Element | null = element; node; node = node.parentElement) {
-    const color = parse(getComputedStyle(node).backgroundColor);
-    if (color.a > 0) {
-      fill = color;
-      break;
-    }
-  }
-  const text = parse(getComputedStyle(element).color);
-  const mix = (channel: "r" | "g" | "b") =>
-    text[channel] * text.a + fill[channel] * (1 - text.a);
-  const luminance = (r: number, g: number, b: number) => {
-    const linear = (value: number) => {
-      const v = value / 255;
-      return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
-    };
-    return 0.2126 * linear(r) + 0.7152 * linear(g) + 0.0722 * linear(b);
-  };
-  const foreground = luminance(mix("r"), mix("g"), mix("b"));
-  const background = luminance(fill.r, fill.g, fill.b);
-  return (
-    (Math.max(foreground, background) + 0.05) /
-    (Math.min(foreground, background) + 0.05)
-  );
-};
-
-/** A token as the element would paint it, resolved through a probe. */
-const tokenColor = (locator: Locator, token: string) =>
-  locator.evaluate((element, name) => {
-    const probe = document.createElement("span");
-    probe.style.color = `var(${name})`;
-    element.appendChild(probe);
-    const value = getComputedStyle(probe).color;
-    probe.remove();
-    return value;
-  }, token);
-
-const boxOf = async (locator: Locator) => {
-  const box = await locator.boundingBox();
-  if (!box) throw new Error("no box");
-  return box;
-};
 
 test.describe("semantics", () => {
   test("one named list, one tab stop, state words at the end of each name", async ({
@@ -188,6 +117,34 @@ test.describe("geometry", () => {
     expect((await boxOf(page.locator(CHIP).first())).height).toBeCloseTo(32, 0);
   });
 
+  for (const [story, width] of [
+    ["in-chat-input", 340],
+    ["in-chat-input-wide", 1280],
+  ] as const) {
+    test(`chips and files sit inside the composer box, chips first, at ${width}px`, async ({
+      page,
+    }) => {
+      await openStory(page, `${STORY}--${story}`, LANE, { width });
+      const shell = await boxOf(page.locator('[data-ui="chat-input-shell"]'));
+      const parts = page.locator(
+        `${CHIP}, ${AREA} [data-ui="attachment-tile"]`,
+      );
+      await expect(parts).toHaveCount(5);
+      for (const part of await parts.all()) {
+        const box = await boxOf(part);
+        expect(box.x).toBeGreaterThanOrEqual(shell.x);
+        expect(box.x + box.width).toBeLessThanOrEqual(shell.x + shell.width);
+        expect(box.y).toBeGreaterThanOrEqual(shell.y);
+        expect(box.y + box.height).toBeLessThanOrEqual(shell.y + shell.height);
+      }
+      const lastChip = await boxOf(page.locator(CHIP).last());
+      const firstTile = await boxOf(
+        page.locator(`${AREA} [data-ui="attachment-tile"]`).first(),
+      );
+      expect(firstTile.y).toBeGreaterThanOrEqual(lastChip.y + lastChip.height);
+    });
+  }
+
   test("an opted-in host with nothing to show adds no space", async ({
     page,
   }) => {
@@ -213,45 +170,49 @@ test.describe("geometry", () => {
 });
 
 test.describe("state styles", () => {
-  test("suggested dashes, superseded mutes, tones colour, loading spins", async ({
-    page,
-  }) => {
-    await openStory(page, `${STORY}--all-states`, LANE);
-    const suggested = page.locator(`${CHIP}[data-state="suggested"]`).first();
-    const style = (locator: Locator, property: string) =>
-      locator.evaluate(
-        (element, name) => getComputedStyle(element).getPropertyValue(name),
-        property,
+  for (const theme of ["light", "dark"] as const) {
+    test(`suggested dashes, superseded mutes, tones colour, loading spins, ${theme}`, async ({
+      page,
+    }) => {
+      await openStory(page, `${STORY}--all-states`, LANE, { theme });
+      const suggested = page.locator(`${CHIP}[data-state="suggested"]`).first();
+      const style = (locator: Locator, property: string) =>
+        locator.evaluate(
+          (element, name) => getComputedStyle(element).getPropertyValue(name),
+          property,
+        );
+      expect(await style(suggested, "border-top-style")).toBe("dashed");
+      expect(await style(suggested, "border-top-color")).toBe(
+        await tokenColor(suggested, "--theme-border-strong"),
       );
-    expect(await style(suggested, "border-top-style")).toBe("dashed");
-    expect(await style(suggested, "border-top-color")).toBe(
-      await tokenColor(suggested, "--theme-border-strong"),
-    );
 
-    const superseded = page.locator(`${CHIP}[data-state="superseded"]`).first();
-    expect(await style(superseded, "background-color")).toBe(
-      "rgba(0, 0, 0, 0)",
-    );
-    expect(
-      await style(
-        superseded.locator('[data-ui="composer-context-chip-meta"]'),
-        "font-style",
-      ),
-    ).toBe("italic");
-
-    for (const tone of ["warning", "error"]) {
-      const toned = page
-        .locator(`${CHIP}[data-tone="${tone}"]:not([data-state="suggested"])`)
+      const superseded = page
+        .locator(`${CHIP}[data-state="superseded"]`)
         .first();
-      expect(await style(toned, "border-top-color")).toBe(
-        await tokenColor(toned, `--theme-${tone}-border`),
+      expect(await style(superseded, "background-color")).toBe(
+        "rgba(0, 0, 0, 0)",
       );
-    }
+      expect(
+        await style(
+          superseded.locator('[data-ui="composer-context-chip-meta"]'),
+          "font-style",
+        ),
+      ).toBe("italic");
 
-    const loading = page.locator(`${CHIP}[data-state="loading"]`).first();
-    await expect(loading.locator('[data-ui="spinner"]')).toHaveCount(1);
-    await expect(loading.locator('[role="status"]')).toHaveCount(0);
-  });
+      for (const tone of ["warning", "error"]) {
+        const toned = page
+          .locator(`${CHIP}[data-tone="${tone}"]:not([data-state="suggested"])`)
+          .first();
+        expect(await style(toned, "border-top-color")).toBe(
+          await tokenColor(toned, `--theme-${tone}-border`),
+        );
+      }
+
+      const loading = page.locator(`${CHIP}[data-state="loading"]`).first();
+      await expect(loading.locator('[data-ui="spinner"]')).toHaveCount(1);
+      await expect(loading.locator('[role="status"]')).toHaveCount(0);
+    });
+  }
 
   for (const theme of ["light", "dark"] as const) {
     test(`label and meta read at 4.5:1 in every state, ${theme}`, async ({
