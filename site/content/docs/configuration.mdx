@@ -4974,7 +4974,7 @@ Unlike the assistants route, this route has no dependency on `assistants.enabled
 Enabling the feature is not sufficient on its own: the tool is only offered when a selected facet's `tool_call_allowlist` also selects it, or the [action facet](#action-facet-delegation) the request runs under, which keeps the capability scoped to the facets where planning makes sense.
 
 <Callout type="warn">
-  Always pair a reserved `erato/*` pattern with a real MCP pattern on the same facet. An allowlist naming only `erato/*` patterns narrows the derived MCP server filter to nothing, so the parent turn loses every MCP tool while that facet is selected.
+  Always pair a reserved `erato/*` pattern with a real MCP pattern on the same facet. An allowlist naming only `erato/*` patterns narrows the derived MCP server filter to nothing, so the parent turn loses every MCP tool while that facet is selected, and so does every task it launches: a child is capped at the planning turn's allowlist, so `child_facet_ids` cannot add an MCP server the planning turn does not allow.
 </Callout>
 
 #### `delegation.tasks.enabled`
@@ -5083,7 +5083,7 @@ max_client_tool_calls_per_task = 30
 
 {/* erato_toml_config_key: delegation.tasks.persona */}
 
-Whether a task child runs with the origin chat's assistant persona (`"inherit"`) or on the bare model (`"bare"`). With `"inherit"`, a child spawned from a chat bound to an assistant uses that assistant's system prompt and model settings; a chat with no assistant bound runs bare either way.
+Whether a task child runs with the origin chat's assistant persona (`"inherit"`) or on the bare model (`"bare"`). With `"inherit"`, a child spawned from a chat bound to an assistant uses that assistant's system prompt and model settings; a chat with no assistant bound runs bare either way. A `"bare"` child still gets only the MCP servers that assistant is restricted to.
 
 **Default value:** `"inherit"`
 
@@ -5770,7 +5770,7 @@ plan_min_tasks = 3
 - `max_server_tool_calls_per_task` - Overrides `delegation.tasks.max_server_tool_calls_per_task`.
 - `max_client_tool_calls_per_task` - Overrides `delegation.tasks.max_client_tool_calls_per_task`. Raising this while leaving the server budget alone is the usual shape for a planning facet.
 - `persona` - Overrides `delegation.tasks.persona`.
-- `child_facet_ids` - Overrides `delegation.tasks.child_facet_ids`. Each entry must name a configured facet.
+- `child_facet_ids` - Added to `delegation.tasks.child_facet_ids` (union). Like the global list, it only widens what a task may name, and a child never gets an MCP tool outside the planning turn's allowlist. Each entry must name a configured facet.
 - `run_modes` - Overrides `delegation.tasks.run_modes`. Unioned with the global list rather than replacing it, because a run mode is a capability the facet's author meant to grant; `wait` is always kept available.
 - `scheduling` - Overrides `delegation.tasks.scheduling`. The first selected facet that states one wins.
 - `approval.mode` and `approval.plan_min_tasks` - Override `delegation.tasks.approval.mode` and `delegation.tasks.approval.plan_min_tasks`. Merged like a cap rather than replacing: the strictest `mode` (`always` beats `plan` beats `async_only` beats `never`) and the lowest `plan_min_tasks` win, so selecting a second planning facet can only ever make a turn ask more.
@@ -5816,7 +5816,7 @@ The `erato` namespace is reserved for tools the backend exposes itself, and no M
 Selection is opt-in: unlike the MCP allowlist, where leaving it unset means "all tools allowed", an empty tool allowlist selects no built-in at all. A built-in also stands down if a real MCP tool claims its name, matching the precedence the other synthetic tools already follow.
 
 <Callout type="warn">
-  Always pair a reserved pattern with a real MCP pattern on the same facet. Adding any pattern to a facet turns the derived MCP server filter from "no restriction" into a concrete set; if the only patterns are `erato/*` ones, that set is empty and the turn loses **every** MCP tool while the facet is selected. Write `["erato/delegate_task", "web-search-mcp/*"]`, not `["erato/delegate_task"]`.
+  Always pair a reserved pattern with a real MCP pattern on the same facet. Adding any pattern to a facet turns the derived MCP server filter from "no restriction" into a concrete set; if the only patterns are `erato/*` ones, that set is empty and the turn loses **every** MCP tool while the facet is selected, and so does every task it launches, whatever its `child_facet_ids` allow. Write `["erato/delegate_task", "web-search-mcp/*"]`, not `["erato/delegate_task"]`.
 </Callout>
 
 Note that the `delegate_to_assistant` tool of the [`delegation.assistants`](#delegationassistants) route is **not** allowlist-gated: it is offered whenever the user's message carries validated assistant mentions. Gating it would silently disable in-chat delegation in every deployment whose facets already carry narrow allowlists.

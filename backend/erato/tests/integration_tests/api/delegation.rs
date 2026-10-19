@@ -8339,6 +8339,71 @@ fn allow_mcp_server(config: &mut erato::config::AppConfig, id: &str, path: &str)
     );
 }
 
+const CEILING_CHILD_ANSWER: &str = "CEILING-CHILD-ANSWER";
+const CEILING_PARENT_FINAL: &str = "CEILING-PARENT-FINAL";
+
+/// One planned task, with each side's requests recorded: the parent plans
+/// `brief` scoped to `facet_ids`, the child answers, and the parent finishes
+/// on that answer.
+fn mock_recorded_task_round(
+    mocks: &mut MockSet,
+    user_message: &'static str,
+    brief: &'static str,
+    facet_ids: &[&str],
+    parent: &RequestBodyRecorder,
+    child: &RequestBodyRecorder,
+) {
+    let child = child.clone();
+    mocks.mock(move |when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(&[brief], &[user_message]))
+            .matcher(child);
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_text_streaming_response(&[CEILING_CHILD_ANSWER]),
+        );
+    });
+    mocks.mock(move |when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(
+                &[CEILING_CHILD_ANSWER, user_message],
+                &[],
+            ));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_text_streaming_response(&[CEILING_PARENT_FINAL]),
+        );
+    });
+    let parent = parent.clone();
+    let task = json!({ "task": brief, "facet_ids": facet_ids });
+    mocks.mock(move |when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(
+                &[user_message],
+                &[brief, CEILING_CHILD_ANSWER],
+            ))
+            .matcher(parent);
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_tool_calls_streaming_response(&[(
+                "call_ceiling_task",
+                "delegate_task",
+                task,
+            )]),
+        );
+    });
+}
+
+/// The single recorded turn of a task child.
+fn only_child_turn(child: &RequestBodyRecorder) -> String {
+    let mut bodies = generation_bodies(child);
+    assert_eq!(bodies.len(), 1, "expected exactly one child turn");
+    bodies.remove(0)
+}
+
 /// A child that names no facet is still bounded by the turn that planned it.
 /// Its own facets would leave MCP unfiltered here, since the global allowlist
 /// is empty, so the stored parent allowlist is the only thing keeping the
@@ -8354,52 +8419,10 @@ fn allow_mcp_server(config: &mut erato::config::AppConfig, id: &str, path: &str)
 async fn a_task_child_without_facets_stays_within_the_parent_mcp_allowlist(pool: Pool<Postgres>) {
     const USER_MESSAGE: &str = "ceiling parent question";
     const BRIEF: &str = "CEILING-BRIEF-SENTINEL: look up the ticket";
-    const CHILD_ANSWER: &str = "CEILING-CHILD-ANSWER";
     let parent = RequestBodyRecorder::new();
     let child = RequestBodyRecorder::new();
     let mut mocks = MockSet::new();
-    {
-        let child = child.clone();
-        mocks.mock(move |when, then| {
-            when.post()
-                .path("/v1/chat/completions")
-                .matcher(BodyContainsMatcher::new(&[BRIEF], &[USER_MESSAGE]))
-                .matcher(child);
-            mock_llm_sse_response(
-                then,
-                crate::test_utils::build_openai_text_streaming_response(&[CHILD_ANSWER]),
-            );
-        });
-    }
-    mocks.mock(|when, then| {
-        when.post()
-            .path("/v1/chat/completions")
-            .matcher(BodyContainsMatcher::new(&[CHILD_ANSWER, USER_MESSAGE], &[]));
-        mock_llm_sse_response(
-            then,
-            crate::test_utils::build_openai_text_streaming_response(&["CEILING-PARENT-FINAL"]),
-        );
-    });
-    {
-        let parent = parent.clone();
-        mocks.mock(move |when, then| {
-            when.post()
-                .path("/v1/chat/completions")
-                .matcher(BodyContainsMatcher::new(
-                    &[USER_MESSAGE],
-                    &[BRIEF, CHILD_ANSWER],
-                ))
-                .matcher(parent);
-            mock_llm_sse_response(
-                then,
-                crate::test_utils::build_openai_tool_calls_streaming_response(&[(
-                    "call_ceiling_task",
-                    "delegate_task",
-                    json!({ "task": BRIEF }),
-                )]),
-            );
-        });
-    }
+    mock_recorded_task_round(&mut mocks, USER_MESSAGE, BRIEF, &[], &parent, &child);
 
     let (app_state, _llm) = task_state(pool, mocks, &["erato/delegate_task", "jira/*"], |config| {
         allow_mcp_server(config, "jira", "/mcp/approval-policy");
@@ -8413,7 +8436,7 @@ async fn a_task_child_without_facets_stays_within_the_parent_mcp_allowlist(pool:
 
     let output = find_tool_call_update_output(&events, "delegate_task");
     assert_eq!(output["status"], "completed", "{output}");
-    assert!(extract_full_text_answer(&events).contains("CEILING-PARENT-FINAL"));
+    assert!(extract_full_text_answer(&events).contains(CEILING_PARENT_FINAL));
     let parent = generation_bodies(&parent);
     assert_eq!(parent.len(), 1);
     assert!(offered_tool(&parent[0], "read_approval_fixture").is_some());
@@ -8428,12 +8451,202 @@ async fn a_task_child_without_facets_stays_within_the_parent_mcp_allowlist(pool:
         json!(["erato/delegate_task", "jira/*"]),
         "the planning turn's allowlist is stored on the run: {configuration}"
     );
-    let child = generation_bodies(&child);
-    assert_eq!(child.len(), 1, "expected exactly one child turn");
-    assert!(offered_tool(&child[0], "read_approval_fixture").is_some());
+    let child = only_child_turn(&child);
+    assert!(offered_tool(&child, "read_approval_fixture").is_some());
     assert!(
-        offered_tool(&child[0], "auth_none_probe").is_none(),
+        offered_tool(&child, "auth_none_probe").is_none(),
         "a tool the parent was never offered must not reach its child"
+    );
+}
+
+/// A facet the task names may allow more than the planning turn did, as a
+/// `child_facet_ids` entry is meant to. The child still gets only what both
+/// allow: its facet narrows nothing here, and the stored ceiling holds the
+/// second server back.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_wider_child_facet_stays_within_the_parent_mcp_allowlist(pool: Pool<Postgres>) {
+    const USER_MESSAGE: &str = "wider facet parent question";
+    const BRIEF: &str = "WIDER-BRIEF-SENTINEL: look up the ticket and its page";
+    let parent = RequestBodyRecorder::new();
+    let child = RequestBodyRecorder::new();
+    let mut mocks = MockSet::new();
+    mock_recorded_task_round(
+        &mut mocks,
+        USER_MESSAGE,
+        BRIEF,
+        &["jira_and_wiki"],
+        &parent,
+        &child,
+    );
+
+    let (app_state, _llm) = task_state(pool, mocks, &["erato/delegate_task", "jira/*"], |config| {
+        allow_mcp_server(config, "jira", "/mcp/approval-policy");
+        allow_mcp_server(config, "wiki", "/mcp/auth-none");
+        config.facets.tool_call_allowlist.clear();
+        let mut jira_and_wiki = config.facets.facets["plan"].clone();
+        jira_and_wiki.tool_call_allowlist = vec!["jira/*".to_string(), "wiki/*".to_string()];
+        config
+            .facets
+            .facets
+            .insert("jira_and_wiki".to_string(), jira_and_wiki);
+        config.delegation.tasks.child_facet_ids = vec!["jira_and_wiki".to_string()];
+    })
+    .await;
+    let server = app_server(app_state.clone());
+    let chat = create_chat(&server, None).await;
+    let events = submit_with_facets(&server, &chat, USER_MESSAGE, &["plan"]).await;
+
+    let output = find_tool_call_update_output(&events, "delegate_task");
+    assert_eq!(output["status"], "completed", "{output}");
+    let child_chat = delegated_child_chat(&app_state.db, Uuid::parse_str(&chat).unwrap()).await;
+    let configuration = child_chat
+        .assistant_configuration
+        .expect("the child carries a configuration");
+    assert_eq!(
+        configuration["task"]["facet_ids"],
+        json!(["jira_and_wiki"]),
+        "{configuration}"
+    );
+    let child = only_child_turn(&child);
+    assert!(offered_tool(&child, "read_approval_fixture").is_some());
+    assert!(
+        offered_tool(&child, "auth_none_probe").is_none(),
+        "a child facet must not lift the planning turn's ceiling"
+    );
+}
+
+/// A child facet that shares no server with the planning turn leaves the
+/// child with no MCP tools at all, rather than with either side's.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_disjoint_child_facet_leaves_the_child_no_mcp_tools(pool: Pool<Postgres>) {
+    const USER_MESSAGE: &str = "disjoint facet parent question";
+    const BRIEF: &str = "DISJOINT-BRIEF-SENTINEL: search the wiki";
+    let parent = RequestBodyRecorder::new();
+    let child = RequestBodyRecorder::new();
+    let mut mocks = MockSet::new();
+    mock_recorded_task_round(
+        &mut mocks,
+        USER_MESSAGE,
+        BRIEF,
+        &["wiki_only"],
+        &parent,
+        &child,
+    );
+
+    let (app_state, _llm) = task_state(pool, mocks, &["erato/delegate_task", "jira/*"], |config| {
+        allow_mcp_server(config, "jira", "/mcp/approval-policy");
+        allow_mcp_server(config, "wiki", "/mcp/auth-none");
+        config.facets.tool_call_allowlist.clear();
+        let mut wiki_only = config.facets.facets["plan"].clone();
+        wiki_only.tool_call_allowlist = vec!["wiki/*".to_string()];
+        config
+            .facets
+            .facets
+            .insert("wiki_only".to_string(), wiki_only);
+        config.delegation.tasks.child_facet_ids = vec!["wiki_only".to_string()];
+    })
+    .await;
+    let server = app_server(app_state.clone());
+    let chat = create_chat(&server, None).await;
+    let events = submit_with_facets(&server, &chat, USER_MESSAGE, &["plan"]).await;
+
+    let output = find_tool_call_update_output(&events, "delegate_task");
+    assert_eq!(output["status"], "completed", "{output}");
+    let child = only_child_turn(&child);
+    assert!(offered_tool(&child, "read_approval_fixture").is_none());
+    assert!(offered_tool(&child, "auth_none_probe").is_none());
+}
+
+/// A `bare` child runs without the origin chat's assistant, so that
+/// assistant's server restriction is part of the ceiling it is launched with.
+/// The planning facet allows both servers here; only the assistant held the
+/// parent to one of them.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_bare_task_child_keeps_the_parent_assistants_mcp_servers(pool: Pool<Postgres>) {
+    const USER_MESSAGE: &str = "bare child parent question";
+    const BRIEF: &str = "BARE-BRIEF-SENTINEL: look up the ticket";
+    let parent = RequestBodyRecorder::new();
+    let child = RequestBodyRecorder::new();
+    let mut mocks = MockSet::new();
+    mock_recorded_task_round(&mut mocks, USER_MESSAGE, BRIEF, &[], &parent, &child);
+
+    let (app_state, _llm) = task_state(
+        pool,
+        mocks,
+        &["erato/delegate_task", "jira/*", "wiki/*"],
+        |config| {
+            allow_mcp_server(config, "jira", "/mcp/approval-policy");
+            allow_mcp_server(config, "wiki", "/mcp/auth-none");
+            config.facets.tool_call_allowlist.clear();
+            config.delegation.tasks.persona = erato_config::config::TaskPersona::Bare;
+        },
+    )
+    .await;
+    let server = app_server(app_state.clone());
+    let assistant = server
+        .post("/api/v1beta/assistants")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({
+            "name": "Jira Only",
+            "prompt": "You answer from Jira.",
+            "file_ids": [],
+            "mcp_server_ids": ["jira"],
+        }))
+        .await;
+    assistant.assert_status(axum::http::StatusCode::CREATED);
+    let assistant_id = assistant.json::<Value>()["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let chat = create_chat(&server, Some(&assistant_id)).await;
+    let events = submit_with_facets(&server, &chat, USER_MESSAGE, &["plan"]).await;
+
+    let output = find_tool_call_update_output(&events, "delegate_task");
+    assert_eq!(output["status"], "completed", "{output}");
+    let parent = generation_bodies(&parent);
+    assert_eq!(parent.len(), 1);
+    assert!(offered_tool(&parent[0], "read_approval_fixture").is_some());
+    assert!(offered_tool(&parent[0], "auth_none_probe").is_none());
+
+    let child_chat = delegated_child_chat(&app_state.db, Uuid::parse_str(&chat).unwrap()).await;
+    assert!(
+        child_chat.assistant_id.is_none(),
+        "a bare child has no assistant"
+    );
+    let configuration = child_chat
+        .assistant_configuration
+        .expect("the child carries a configuration");
+    assert_eq!(
+        configuration["task"]["parent_mcp_server_ids"],
+        json!(["jira"]),
+        "the planning turn's assistant restriction is stored on the run: {configuration}"
+    );
+    let child = only_child_turn(&child);
+    assert!(offered_tool(&child, "read_approval_fixture").is_some());
+    assert!(
+        offered_tool(&child, "auth_none_probe").is_none(),
+        "a bare child must not reach a server its parent's assistant excluded"
     );
 }
 
@@ -8450,52 +8663,17 @@ async fn a_task_child_without_facets_stays_within_the_parent_mcp_allowlist(pool:
 async fn an_unrestricted_parent_leaves_the_child_facet_in_charge(pool: Pool<Postgres>) {
     const USER_MESSAGE: &str = "unrestricted parent question";
     const BRIEF: &str = "UNRESTRICTED-BRIEF-SENTINEL: search the wiki";
-    const CHILD_ANSWER: &str = "UNRESTRICTED-CHILD-ANSWER";
     let parent = RequestBodyRecorder::new();
     let child = RequestBodyRecorder::new();
     let mut mocks = MockSet::new();
-    {
-        let child = child.clone();
-        mocks.mock(move |when, then| {
-            when.post()
-                .path("/v1/chat/completions")
-                .matcher(BodyContainsMatcher::new(&[BRIEF], &[USER_MESSAGE]))
-                .matcher(child);
-            mock_llm_sse_response(
-                then,
-                crate::test_utils::build_openai_text_streaming_response(&[CHILD_ANSWER]),
-            );
-        });
-    }
-    mocks.mock(|when, then| {
-        when.post()
-            .path("/v1/chat/completions")
-            .matcher(BodyContainsMatcher::new(&[CHILD_ANSWER, USER_MESSAGE], &[]));
-        mock_llm_sse_response(
-            then,
-            crate::test_utils::build_openai_text_streaming_response(&["UNRESTRICTED-PARENT-FINAL"]),
-        );
-    });
-    {
-        let parent = parent.clone();
-        mocks.mock(move |when, then| {
-            when.post()
-                .path("/v1/chat/completions")
-                .matcher(BodyContainsMatcher::new(
-                    &[USER_MESSAGE],
-                    &[BRIEF, CHILD_ANSWER],
-                ))
-                .matcher(parent);
-            mock_llm_sse_response(
-                then,
-                crate::test_utils::build_openai_tool_calls_streaming_response(&[(
-                    "call_unrestricted_task",
-                    "delegate_task",
-                    json!({ "task": BRIEF, "facet_ids": ["wiki_only"] }),
-                )]),
-            );
-        });
-    }
+    mock_recorded_task_round(
+        &mut mocks,
+        USER_MESSAGE,
+        BRIEF,
+        &["wiki_only"],
+        &parent,
+        &child,
+    );
 
     // The Word turn plans through its action facet and selects no facet, so
     // no allowlist restricts the parent's MCP tools.
@@ -8534,10 +8712,9 @@ async fn an_unrestricted_parent_leaves_the_child_facet_in_charge(pool: Pool<Post
         configuration["task"].get("parent_mcp_allowlist").is_none(),
         "an unrestricted parent stores no ceiling: {configuration}"
     );
-    let child = generation_bodies(&child);
-    assert_eq!(child.len(), 1, "expected exactly one child turn");
-    assert!(offered_tool(&child[0], "auth_none_probe").is_some());
-    assert!(offered_tool(&child[0], "read_approval_fixture").is_none());
+    let child = only_child_turn(&child);
+    assert!(offered_tool(&child, "auth_none_probe").is_some());
+    assert!(offered_tool(&child, "read_approval_fixture").is_none());
 }
 
 /// The happy path: the model plans a sub-task, the child runs it, and the
@@ -10928,6 +11105,7 @@ async fn seed_child_before_recording(
             constraints: None,
             facet_ids: Vec::new(),
             parent_mcp_allowlist: None,
+            parent_mcp_server_ids: None,
             max_server_tool_calls_per_task: None,
             max_client_tool_calls_per_task: None,
             persona: Default::default(),
@@ -13704,6 +13882,7 @@ fn retry_task_spec() -> erato::models::chat::TaskSpec {
         constraints: Some("be brief".to_string()),
         facet_ids: Vec::new(),
         parent_mcp_allowlist: None,
+        parent_mcp_server_ids: None,
         max_server_tool_calls_per_task: Some(7),
         max_client_tool_calls_per_task: Some(3),
         persona: erato_config::config::TaskPersona::Bare,
@@ -15180,13 +15359,25 @@ fn mock_child_reaches_the_gate(mocks: &mut MockSet, brief: &'static str, call_id
     });
 }
 
-/// The origin's first turn: plan exactly one sub-task.
+/// The origin's first turn: plan exactly one sub-task, scoped to `plan`.
 fn mock_parent_plans_one_task(
     mocks: &mut MockSet,
     user_message: &'static str,
     brief: &'static str,
     call_id: &'static str,
 ) {
+    mock_parent_plans_one_task_scoped(mocks, user_message, brief, call_id, &["plan"]);
+}
+
+/// As [`mock_parent_plans_one_task`], with the task scoped to `facet_ids`.
+fn mock_parent_plans_one_task_scoped(
+    mocks: &mut MockSet,
+    user_message: &'static str,
+    brief: &'static str,
+    call_id: &'static str,
+    facet_ids: &[&str],
+) {
+    let task = json!({ "task": brief, "facet_ids": facet_ids });
     mocks.mock(move |when, then| {
         when.post()
             .path("/v1/chat/completions")
@@ -15196,7 +15387,7 @@ fn mock_parent_plans_one_task(
             crate::test_utils::build_openai_tool_calls_streaming_response(&[(
                 call_id,
                 "delegate_task",
-                json!({ "task": brief, "facet_ids": ["plan"] }),
+                task,
             )]),
         );
     });
@@ -15665,42 +15856,16 @@ async fn a_resumed_child_keeps_its_stored_mcp_allowlist(pool: Pool<Postgres>) {
     let resumed_child = RequestBodyRecorder::new();
     let mut mocks = MockSet::new();
     mock_child_reaches_the_gate(&mut mocks, GATED_BRIEF, "call_child_probe");
-    {
-        let resumed_child = resumed_child.clone();
-        mocks.mock(move |when, then| {
-            when.post()
-                .path("/v1/chat/completions")
-                .matcher(BodyContainsMatcher::new(
-                    &[GATED_BRIEF, PARKED_TOOL_RESULT],
-                    &["child_run_id"],
-                ))
-                .matcher(resumed_child);
-            mock_llm_sse_response(
-                then,
-                crate::test_utils::build_openai_text_streaming_response(&[
-                    "CHILD-GATED-DONE with the probe",
-                ]),
-            );
-        });
-    }
-    // Planned without facets: the shared helper names `plan`, whose own
-    // allowlist would hide a missing ceiling.
-    mocks.mock(|when, then| {
-        when.post()
-            .path("/v1/chat/completions")
-            .matcher(BodyContainsMatcher::new(
-                &[PARK_USER_MESSAGE],
-                &[GATED_BRIEF],
-            ));
-        mock_llm_sse_response(
-            then,
-            crate::test_utils::build_openai_tool_calls_streaming_response(&[(
-                "call_task_one",
-                "delegate_task",
-                json!({ "task": GATED_BRIEF }),
-            )]),
-        );
-    });
+    mock_child_answers_after_the_gate_recorded(&mut mocks, Some(resumed_child.clone()));
+    // Planned without facets: under `plan`, the child's own allowlist would
+    // hide a missing ceiling.
+    mock_parent_plans_one_task_scoped(
+        &mut mocks,
+        PARK_USER_MESSAGE,
+        GATED_BRIEF,
+        "call_task_one",
+        &[],
+    );
     mock_parent_final_answer(&mut mocks, PARK_USER_MESSAGE);
 
     let (app_state, _llm) = task_state(
@@ -15841,13 +16006,26 @@ async fn deny_child_finishes_in_prose_and_parent_continues(pool: Pool<Postgres>)
 
 /// The child's second turn, once the call it asked about has run.
 fn mock_child_answers_after_the_gate(mocks: &mut MockSet) {
-    mocks.mock(|when, then| {
-        when.post()
+    mock_child_answers_after_the_gate_recorded(mocks, None);
+}
+
+/// As [`mock_child_answers_after_the_gate`], recording the turn when given a
+/// recorder.
+fn mock_child_answers_after_the_gate_recorded(
+    mocks: &mut MockSet,
+    recorder: Option<RequestBodyRecorder>,
+) {
+    mocks.mock(move |when, then| {
+        let when = when
+            .post()
             .path("/v1/chat/completions")
             .matcher(BodyContainsMatcher::new(
                 &[GATED_BRIEF, PARKED_TOOL_RESULT],
                 &["child_run_id"],
             ));
+        if let Some(recorder) = recorder {
+            when.matcher(recorder);
+        }
         mock_llm_sse_response(
             then,
             crate::test_utils::build_openai_text_streaming_response(&[

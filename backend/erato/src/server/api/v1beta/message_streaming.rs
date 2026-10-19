@@ -3875,15 +3875,27 @@ pub(crate) fn task_tool_budgets_for_chat(
     })
 }
 
-/// The MCP ceiling a task run was launched with, read off its own chat row
-/// for the same reason as its budgets. `None` for every other chat, and for
-/// a run whose parent turn was unrestricted.
-pub(crate) fn task_parent_mcp_allowlist_for_chat(chat: &chats::Model) -> Option<Vec<String>> {
+/// The MCP ceiling a task run was launched with: the planning turn's
+/// allowlist and its assistant's server restriction, `None` each meaning
+/// unrestricted.
+#[derive(Default)]
+pub(crate) struct ParentMcpCeiling {
+    pub allowlist: Option<Vec<String>>,
+    pub server_ids: Option<Vec<String>>,
+}
+
+/// A task run's MCP ceiling, read off its own chat row for the same reason
+/// as its budgets. Unrestricted for every other chat.
+pub(crate) fn task_parent_mcp_ceiling_for_chat(chat: &chats::Model) -> ParentMcpCeiling {
     crate::models::chat::parse_chat_configuration(chat)
         .ok()
-        .flatten()?
-        .task?
-        .parent_mcp_allowlist
+        .flatten()
+        .and_then(|configuration| configuration.task)
+        .map(|task| ParentMcpCeiling {
+            allowlist: task.parent_mcp_allowlist,
+            server_ids: task.parent_mcp_server_ids,
+        })
+        .unwrap_or_default()
 }
 
 pub(crate) fn resolve_effective_selected_facet_ids(
@@ -4216,7 +4228,7 @@ async fn prepare_chat_request_with_adapters_memory_inner(
         oidc_token: Some(me_profile_input.oidc_token),
         access_token: me_profile_input.access_token,
     };
-    let parent_mcp_allowlist = task_parent_mcp_allowlist_for_chat(chat);
+    let parent_mcp_ceiling = task_parent_mcp_ceiling_for_chat(chat);
     let GenerationMcpToolSet {
         tools: generation_mcp_tools,
         mcp_claimed_names,
@@ -4235,7 +4247,8 @@ async fn prepare_chat_request_with_adapters_memory_inner(
         GenerationMcpToolInputs {
             effective_selected_facet_ids: &effective_selected_facet_ids,
             action_facet_id: user_input.action_facet.as_ref().map(|af| af.id.as_str()),
-            parent_mcp_allowlist: parent_mcp_allowlist.as_deref(),
+            parent_mcp_allowlist: parent_mcp_ceiling.allowlist.as_deref(),
+            parent_mcp_server_ids: parent_mcp_ceiling.server_ids.as_deref(),
             assistant_config: assistant_config.as_ref(),
             subject: &me_profile_input.subject,
             user_groups: me_profile_input.user_groups,
@@ -4585,6 +4598,9 @@ async fn prepare_chat_request_with_adapters_memory_inner(
                 me_profile_input.user_groups,
                 &effective_selected_facet_ids,
                 user_input.action_facet.as_ref().map(|af| af.id.as_str()),
+                assistant_config
+                    .as_ref()
+                    .and_then(|assistant| assistant.mcp_server_ids.as_deref()),
             )
             .await?;
             chat_request_tools.push(crate::services::delegation::build_delegate_task_tool(
@@ -10949,6 +10965,9 @@ pub(crate) struct GenerationMcpToolInputs<'a> {
     /// A tool must pass it as well as this turn's own allowlist. `None` sets
     /// no ceiling.
     pub parent_mcp_allowlist: Option<&'a [String]>,
+    /// The other half of that ceiling: the servers the launching turn's
+    /// assistant was restricted to. `None` sets no ceiling.
+    pub parent_mcp_server_ids: Option<&'a [String]>,
     pub assistant_config: Option<&'a crate::models::assistant::AssistantWithFiles>,
     pub subject: &'a Subject,
     pub user_groups: &'a [String],
@@ -11047,6 +11066,8 @@ async fn resolve_generation_mcp_tools(
         .and_then(|assistant| assistant.mcp_server_ids.as_deref());
     let effective_server_filter =
         apply_assistant_server_filter(server_filter_from_allowlist, assistant_server_ids);
+    let effective_server_filter =
+        apply_assistant_server_filter(effective_server_filter, inputs.parent_mcp_server_ids);
     let authorized_server_ids: HashSet<String> = policy
         .filter_authorized_mcp_server_ids(
             inputs.subject,
@@ -11082,7 +11103,9 @@ async fn resolve_generation_mcp_tools(
         .discover_tools_for_server_ids(chat_id, effective_server_filter.as_ref(), mcp_auth_context)
         .await;
     let filtered_mcp_tools =
-        filter_mcp_tools_by_assistant(tool_discovery.tools, inputs.assistant_config);
+        filter_mcp_tools_by_server_ids(tool_discovery.tools, assistant_server_ids);
+    let filtered_mcp_tools =
+        filter_mcp_tools_by_server_ids(filtered_mcp_tools, inputs.parent_mcp_server_ids);
     let generation_mcp_tools =
         filter_mcp_tools_by_allowlist(filtered_mcp_tools, facet_allowlist.as_deref());
     let generation_mcp_tools =
@@ -11243,28 +11266,22 @@ fn mcp_tool_matches_disabled_patterns(
     is_qualified_tool_allowed(server_id, tool_name, disabled_tool_patterns)
 }
 
-/// Filter MCP tools based on assistant configuration
+/// Filter MCP tools by an assistant's server restriction.
 ///
-/// If the assistant has specific mcp_server_ids configured, only tools from those servers are returned.
-/// If the assistant has no mcp_server_ids configured (None), all tools are returned.
-/// If no assistant is configured, all tools are returned.
-fn filter_mcp_tools_by_assistant(
+/// If `allowed_server_ids` is set, only tools from those servers are returned.
+/// If it is `None` (no assistant, or one without a restriction), all tools are
+/// returned.
+fn filter_mcp_tools_by_server_ids(
     all_tools: Vec<crate::services::mcp_session_manager::ManagedTool>,
-    assistant_config: Option<&crate::models::assistant::AssistantWithFiles>,
+    allowed_server_ids: Option<&[String]>,
 ) -> Vec<crate::services::mcp_session_manager::ManagedTool> {
-    // If no assistant or assistant has no specific MCP server restrictions, return all tools
-    if let Some(assistant) = assistant_config
-        && let Some(ref allowed_server_ids) = assistant.mcp_server_ids
-    {
-        // Filter tools to only those from allowed servers
-        return all_tools
-            .into_iter()
-            .filter(|tool| allowed_server_ids.contains(&tool.server_id))
-            .collect();
-    }
-
-    // No restrictions, return all tools
+    let Some(allowed_server_ids) = allowed_server_ids else {
+        return all_tools;
+    };
     all_tools
+        .into_iter()
+        .filter(|tool| allowed_server_ids.contains(&tool.server_id))
+        .collect()
 }
 
 /// Derive a set of MCP server IDs that may be needed for this request.
@@ -11434,6 +11451,7 @@ pub(crate) async fn resolve_task_offer_scope(
     user_groups: &[String],
     effective_selected_facet_ids: &[String],
     action_facet_id: Option<&str>,
+    assistant_mcp_server_ids: Option<&[String]>,
 ) -> Result<crate::services::delegation::TaskOfferScope, Report> {
     // Which of the SELECTED facets asked for the tool. The allowlist the slot
     // tested is the union of all of them, so it can say "selected" but never
@@ -11507,6 +11525,7 @@ pub(crate) async fn resolve_task_offer_scope(
             effective_selected_facet_ids,
             action_facet_id,
         ),
+        mcp_server_ids: assistant_mcp_server_ids.map(<[String]>::to_vec),
         effective,
     })
 }
@@ -18506,7 +18525,7 @@ pub(crate) async fn run_continuation(
         .map(|(facet_id, _)| facet_id.clone())
         .collect();
     effective_selected_facet_ids.sort();
-    let parent_mcp_allowlist = task_parent_mcp_allowlist_for_chat(&chat);
+    let parent_mcp_ceiling = task_parent_mcp_ceiling_for_chat(&chat);
     let GenerationMcpToolSet {
         tools: available_mcp_tools,
         mcp_claimed_names,
@@ -18525,7 +18544,8 @@ pub(crate) async fn run_continuation(
         GenerationMcpToolInputs {
             effective_selected_facet_ids: &effective_selected_facet_ids,
             action_facet_id: generation_parameters.action_facet_id.as_deref(),
-            parent_mcp_allowlist: parent_mcp_allowlist.as_deref(),
+            parent_mcp_allowlist: parent_mcp_ceiling.allowlist.as_deref(),
+            parent_mcp_server_ids: parent_mcp_ceiling.server_ids.as_deref(),
             assistant_config: assistant_config.as_ref(),
             subject: &me_profile_input.subject,
             user_groups: me_profile_input.user_groups,
@@ -19189,6 +19209,7 @@ pub(crate) async fn run_continuation(
         None,
         request.registered_client_tools.clone(),
         request.executor.clone(),
+        assistant_config.and_then(|assistant| assistant.mcp_server_ids),
     )
     .await
 }
@@ -19290,6 +19311,7 @@ async fn resume_parked_generation(
     operation_attempt: Option<Uuid>,
     continuing_client_tools: Option<Vec<String>>,
     continuing_executor: Option<crate::services::client_operations::ExecutorBinding>,
+    assistant_mcp_server_ids: Option<Vec<String>>,
 ) -> Result<(), Report> {
     let mcp = app_state.mcp_state().await;
     let me_profile_input = MeProfileChatRequestInput::from_me_profile(me_user);
@@ -19507,6 +19529,7 @@ async fn resume_parked_generation(
             me_profile_input.user_groups,
             &effective_selected_facet_ids,
             generation_parameters.action_facet_id.as_deref(),
+            assistant_mcp_server_ids.as_deref(),
         )
         .await?;
         delegation_offered_file_ids = crate::models::file_upload::get_chat_file_uploads(
@@ -19957,7 +19980,7 @@ pub(crate) async fn run_client_operation_continuation(
         .map(|(id, _)| id.clone())
         .collect();
     facets.sort();
-    let parent_mcp_allowlist = task_parent_mcp_allowlist_for_chat(&chat);
+    let parent_mcp_ceiling = task_parent_mcp_ceiling_for_chat(&chat);
     let auth = McpRequestAuthContext {
         app_state: Some(app_state),
         user_id: Some(account_id),
@@ -19972,7 +19995,8 @@ pub(crate) async fn run_client_operation_continuation(
         GenerationMcpToolInputs {
             effective_selected_facet_ids: &facets,
             action_facet_id: parameters.action_facet_id.as_deref(),
-            parent_mcp_allowlist: parent_mcp_allowlist.as_deref(),
+            parent_mcp_allowlist: parent_mcp_ceiling.allowlist.as_deref(),
+            parent_mcp_server_ids: parent_mcp_ceiling.server_ids.as_deref(),
             assistant_config: assistant.as_ref(),
             subject: &profile.subject,
             user_groups: profile.user_groups,
@@ -20002,6 +20026,7 @@ pub(crate) async fn run_client_operation_continuation(
             .as_ref()
             .map(|context| context.registered_client_tools.clone()),
         context.and_then(|context| context.executor),
+        assistant.and_then(|assistant| assistant.mcp_server_ids),
     )
     .await
 }
