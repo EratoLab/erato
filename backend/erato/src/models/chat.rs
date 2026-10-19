@@ -122,6 +122,12 @@ pub struct TaskSpec {
     /// provenance envelope because nothing in SQL reads them.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub facet_ids: Vec<String>,
+    /// The MCP allowlist of the turn that launched the run, `None` meaning
+    /// unrestricted. Every turn of the run is offered only MCP tools that
+    /// both this list and its own facets allow, so a child never reaches
+    /// further than the parent that planned it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parent_mcp_allowlist: Option<Vec<String>>,
     /// Server-executed (MCP) tool calls this run may make, resolved from the
     /// config and the planning facets when it was launched. Resolved at
     /// launch rather than read live: the run must be bounded by what was

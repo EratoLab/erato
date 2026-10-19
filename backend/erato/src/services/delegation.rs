@@ -653,6 +653,9 @@ pub(crate) struct TaskOfferScope {
     /// Facet ids the model may name in `facet_ids`. Already authorization-
     /// filtered for the chat owner, and re-checked at dispatch.
     pub facet_enum: Vec<String>,
+    /// This turn's effective MCP allowlist, `None` meaning unrestricted. A
+    /// task launched from the turn stores it as its ceiling.
+    pub mcp_allowlist: Option<Vec<String>>,
     /// The `[delegation.tasks]` keys after the selected planning facets have
     /// had their say.
     pub effective: EffectiveTasksConfig,
@@ -2040,6 +2043,7 @@ pub(crate) async fn launch_delegation(
         expected_output: bounded_brief_field(brief.expected_output.as_deref()),
         constraints: bounded_brief_field(brief.constraints.as_deref()),
         facet_ids: task_facet_ids,
+        parent_mcp_allowlist: task_scope.and_then(|scope| scope.mcp_allowlist.clone()),
         // Only a task run carries budgets: a mention run is bounded by the
         // ordinary per-message cap, as it always has been.
         max_server_tool_calls_per_task: task_scope
@@ -3649,6 +3653,7 @@ mod tests {
     ) -> TaskOfferScope {
         TaskOfferScope {
             facet_enum: facet_enum.iter().map(|s| s.to_string()).collect(),
+            mcp_allowlist: None,
             effective: EffectiveTasksConfig {
                 max_tasks_per_turn: 5,
                 max_server_tool_calls_per_task: 5,

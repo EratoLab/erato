@@ -487,8 +487,11 @@ chat_provider_ids = ["test-token-limit"]
 # # Whether a task child runs with the origin chat's assistant persona
 # # ("inherit") or on the bare model ("bare") (default: "inherit")
 # persona = "inherit"
-# # Facets composed into every task child. Each id must name a facet configured
-# # under facets.facets (default: [])
+# # Facets a task may name in facet_ids beyond the planning turn's selected
+# # ones. They widen the list the model picks from: a child gets one only when
+# # its task names it, and it never gets an MCP tool outside the planning
+# # turn's own allowlist. Each id must name a facet configured under
+# # facets.facets (default: [])
 # child_facet_ids = []
 # # How a delivered task result is presented to the model that has to react to
 # # it. Presentation only: {{result}} is REQUIRED and is replaced with the

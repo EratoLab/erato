@@ -5456,7 +5456,7 @@ persona = "inherit"
 
 {/* erato_toml_config_key: delegation.tasks.child_facet_ids.[] */}
 
-Facets composed into every task child. Each entry must name a facet configured under `facets.facets`; an unknown id is rejected at startup. Use this to give task children a capability the origin turn does not need to carry itself, such as web search.
+Facets a task may name in `facet_ids` beyond the ones selected on the planning turn. They widen the list the model picks from, and a task child gets one only when its task names it. Whatever its facets allow, a child is never offered an MCP tool outside the planning turn's own allowlist. Each entry must name a facet configured under `facets.facets`; an unknown id is rejected at startup.
 
 **Default value:** `[]`
 

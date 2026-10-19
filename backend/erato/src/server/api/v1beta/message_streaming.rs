@@ -3912,6 +3912,17 @@ pub(crate) fn task_tool_budgets_for_chat(
     })
 }
 
+/// The MCP ceiling a task run was launched with, read off its own chat row
+/// for the same reason as its budgets. `None` for every other chat, and for
+/// a run whose parent turn was unrestricted.
+pub(crate) fn task_parent_mcp_allowlist_for_chat(chat: &chats::Model) -> Option<Vec<String>> {
+    crate::models::chat::parse_chat_configuration(chat)
+        .ok()
+        .flatten()?
+        .task?
+        .parent_mcp_allowlist
+}
+
 pub(crate) fn resolve_effective_selected_facet_ids(
     config: &FacetsConfig,
     requested_facet_ids: &[String],
@@ -4256,6 +4267,7 @@ async fn prepare_chat_request_with_adapters_memory_inner(
         oidc_token: Some(me_profile_input.oidc_token),
         access_token: me_profile_input.access_token,
     };
+    let parent_mcp_allowlist = task_parent_mcp_allowlist_for_chat(chat);
     let GenerationMcpToolSet {
         tools: generation_mcp_tools,
         mcp_claimed_names,
@@ -4274,6 +4286,7 @@ async fn prepare_chat_request_with_adapters_memory_inner(
         GenerationMcpToolInputs {
             effective_selected_facet_ids: &effective_selected_facet_ids,
             action_facet_id: user_input.action_facet.as_ref().map(|af| af.id.as_str()),
+            parent_mcp_allowlist: parent_mcp_allowlist.as_deref(),
             assistant_config: assistant_config.as_ref(),
             subject: &me_profile_input.subject,
             user_groups: me_profile_input.user_groups,
@@ -11041,6 +11054,10 @@ async fn get_assistant_files_for_generation(
 pub(crate) struct GenerationMcpToolInputs<'a> {
     pub effective_selected_facet_ids: &'a [String],
     pub action_facet_id: Option<&'a str>,
+    /// A task run's ceiling: the MCP allowlist of the turn that launched it.
+    /// A tool must pass it as well as this turn's own allowlist. `None` sets
+    /// no ceiling.
+    pub parent_mcp_allowlist: Option<&'a [String]>,
     pub assistant_config: Option<&'a crate::models::assistant::AssistantWithFiles>,
     pub subject: &'a Subject,
     pub user_groups: &'a [String],
@@ -11081,10 +11098,31 @@ pub(crate) struct GenerationMcpToolSet {
     pub missing_credential_server_ids: Vec<String>,
 }
 
+/// The MCP allowlist a turn runs under: the selected facets' allowlists with
+/// the active action facet's folded in. `None` means unrestricted.
+fn effective_mcp_allowlist(
+    config: &crate::config::AppConfig,
+    selected_facet_ids: &[String],
+    action_facet_id: Option<&str>,
+) -> Option<Vec<String>> {
+    let facet_allowlist = build_mcp_tool_allowlist(&config.facets, selected_facet_ids);
+    // The active action facet's `tool_call_allowlist` selects MCP tools too
+    // (same pattern space as regular facets), so an action facet activates both
+    // its client tools and MCP tools through one field.
+    if let Some(action_facet_id) = action_facet_id
+        && let Some(facet_config) = config.action_facets.facets.get(action_facet_id)
+    {
+        merge_action_facet_into_mcp_allowlist(facet_allowlist, &facet_config.tool_call_allowlist)
+    } else {
+        facet_allowlist
+    }
+}
+
 /// Resolve the MCP tool set of one generation: facet and action-facet
-/// allowlists, the assistant's server restriction, the policy engine's
-/// server authorization, the user's own denials, the chat's write toggle,
-/// and the servers and tools the user switched off for the chat.
+/// allowlists, a task run's parent ceiling, the assistant's server
+/// restriction, the policy engine's server authorization, the user's own
+/// denials, the chat's write toggle, and the servers and tools the user
+/// switched off for the chat.
 ///
 /// This is the only place that chain lives. A continued turn (after a tool
 /// approval) rebuilds the set through here from the persisted generation
@@ -11099,24 +11137,20 @@ async fn resolve_generation_mcp_tools(
     inputs: GenerationMcpToolInputs<'_>,
     mcp_auth_context: &McpRequestAuthContext<'_>,
 ) -> Result<GenerationMcpToolSet, Report> {
-    let facet_allowlist = build_mcp_tool_allowlist(
-        &app_state.config.facets,
+    let facet_allowlist = effective_mcp_allowlist(
+        &app_state.config,
         inputs.effective_selected_facet_ids,
+        inputs.action_facet_id,
     );
-    // The active action facet's `tool_call_allowlist` selects MCP tools too
-    // (same pattern space as regular facets), so an action facet activates both
-    // its client tools and MCP tools through one field.
-    let facet_allowlist = if let Some(action_facet_id) = inputs.action_facet_id
-        && let Some(facet_config) = app_state.config.action_facets.facets.get(action_facet_id)
-    {
-        merge_action_facet_into_mcp_allowlist(facet_allowlist, &facet_config.tool_call_allowlist)
-    } else {
-        facet_allowlist
+    let facets_configured = !app_state.config.facets.facets.is_empty();
+    let server_filter_from_allowlist = match (
+        derive_requested_server_ids_from_allowlist(facet_allowlist.as_deref(), facets_configured),
+        derive_requested_server_ids_from_allowlist(inputs.parent_mcp_allowlist, facets_configured),
+    ) {
+        (Some(own), Some(ceiling)) => Some(own.intersection(&ceiling).cloned().collect()),
+        (own, None) => own,
+        (None, ceiling) => ceiling,
     };
-    let server_filter_from_allowlist = derive_requested_server_ids_from_allowlist(
-        facet_allowlist.as_deref(),
-        !app_state.config.facets.facets.is_empty(),
-    );
     let assistant_server_ids = inputs
         .assistant_config
         .and_then(|assistant| assistant.mcp_server_ids.as_deref());
@@ -11160,6 +11194,8 @@ async fn resolve_generation_mcp_tools(
         filter_mcp_tools_by_assistant(tool_discovery.tools, inputs.assistant_config);
     let generation_mcp_tools =
         filter_mcp_tools_by_allowlist(filtered_mcp_tools, facet_allowlist.as_deref());
+    let generation_mcp_tools =
+        filter_mcp_tools_by_allowlist(generation_mcp_tools, inputs.parent_mcp_allowlist);
     let mcp_claimed_names: HashSet<String> = generation_mcp_tools
         .iter()
         .map(|tool| tool.tool.name.to_string())
@@ -11575,6 +11611,11 @@ pub(crate) async fn resolve_task_offer_scope(
 
     Ok(crate::services::delegation::TaskOfferScope {
         facet_enum,
+        mcp_allowlist: effective_mcp_allowlist(
+            &app_state.config,
+            effective_selected_facet_ids,
+            action_facet_id,
+        ),
         effective,
     })
 }
@@ -18623,6 +18664,7 @@ pub(crate) async fn run_continuation(
         .map(|(facet_id, _)| facet_id.clone())
         .collect();
     effective_selected_facet_ids.sort();
+    let parent_mcp_allowlist = task_parent_mcp_allowlist_for_chat(&chat);
     let GenerationMcpToolSet {
         tools: available_mcp_tools,
         mcp_claimed_names,
@@ -18641,6 +18683,7 @@ pub(crate) async fn run_continuation(
         GenerationMcpToolInputs {
             effective_selected_facet_ids: &effective_selected_facet_ids,
             action_facet_id: generation_parameters.action_facet_id.as_deref(),
+            parent_mcp_allowlist: parent_mcp_allowlist.as_deref(),
             assistant_config: assistant_config.as_ref(),
             subject: &me_profile_input.subject,
             user_groups: me_profile_input.user_groups,
@@ -20077,6 +20120,7 @@ pub(crate) async fn run_client_operation_continuation(
         .map(|(id, _)| id.clone())
         .collect();
     facets.sort();
+    let parent_mcp_allowlist = task_parent_mcp_allowlist_for_chat(&chat);
     let auth = McpRequestAuthContext {
         app_state: Some(app_state),
         user_id: Some(account_id),
@@ -20091,6 +20135,7 @@ pub(crate) async fn run_client_operation_continuation(
         GenerationMcpToolInputs {
             effective_selected_facet_ids: &facets,
             action_facet_id: parameters.action_facet_id.as_deref(),
+            parent_mcp_allowlist: parent_mcp_allowlist.as_deref(),
             assistant_config: assistant.as_ref(),
             subject: &profile.subject,
             user_groups: profile.user_groups,
