@@ -1610,7 +1610,7 @@ mod tests {
                 .additional_environment
                 .get(FRONTEND_ENV_KEY_MS_OFFICE_ADDIN_DEFAULT_SETTINGS),
             Some(&serde_json::json!({
-                "mode": "resume",
+                "mode": "ask",
                 "compose_inherits_from_read": true,
                 "word_include_document": true,
                 "word_apply": {
@@ -1633,7 +1633,7 @@ mod tests {
         );
 
         let default_settings = &mut config.integrations.ms_office.addin.default_settings;
-        default_settings.mode = crate::config::MsOfficeAddinSessionMode::Ask;
+        default_settings.mode = crate::config::MsOfficeAddinSessionMode::Resume;
         default_settings.compose_inherits_from_read = false;
         default_settings.word_include_document = false;
         default_settings.word_apply.mac.in_place = Some(false);
@@ -1653,7 +1653,7 @@ mod tests {
                 .additional_environment
                 .get(FRONTEND_ENV_KEY_MS_OFFICE_ADDIN_DEFAULT_SETTINGS),
             Some(&serde_json::json!({
-                "mode": "ask",
+                "mode": "resume",
                 "compose_inherits_from_read": false,
                 "word_include_document": false,
                 "word_apply": {
