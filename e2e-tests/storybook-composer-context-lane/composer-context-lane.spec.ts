@@ -499,6 +499,17 @@ test.describe("overflow", () => {
     expect(removeBox.y + removeBox.height).toBeLessThanOrEqual(
       areaBox.y + areaBox.height + 1,
     );
+    // Chips fold first, but never past the top half of the first file.
+    const firstTile = await boxOf(
+      area.locator('[data-ui="attachment-tile"]').first(),
+    );
+    const pinnedTop = (
+      await boxOf(area.locator('[data-ui="attachment-bulk-controls"]'))
+    ).y;
+    expect(firstTile.y).toBeGreaterThanOrEqual(areaBox.y);
+    expect(pinnedTop - firstTile.y).toBeGreaterThanOrEqual(
+      firstTile.height / 2 - 1,
+    );
 
     await more.click();
     await expect(page.locator(CHIP)).toHaveCount(8);
@@ -516,9 +527,7 @@ test.describe("overflow", () => {
     ).toBe(true);
     // With every chip shown the files sit further down the same area, and
     // Remove all comes with them.
-    await area.evaluate((element) =>
-      element.scrollTo(0, element.scrollHeight),
-    );
+    await area.evaluate((element) => element.scrollTo(0, element.scrollHeight));
     const pinned = await boxOf(removeAll);
     const box = await boxOf(area);
     expect(pinned.y).toBeGreaterThanOrEqual(box.y - 1);
@@ -644,6 +653,22 @@ test.describe("notices", () => {
         };
       });
       expect(order).toEqual({ inShell: "chat-input-shell", before: true });
+      // The mark, spinner included, centres on the first line of text.
+      const offset = await notice.evaluate((element) => {
+        const mark = element
+          .querySelector('[data-ui="composer-notice-icon"]')!
+          .getBoundingClientRect();
+        const text = element.querySelector(
+          '[data-ui="alert"] .text-sm > div > span',
+        )!;
+        const range = document.createRange();
+        range.selectNodeContents(text);
+        const line = range.getClientRects()[0];
+        return Math.abs(
+          mark.top + mark.height / 2 - (line.top + line.height / 2),
+        );
+      });
+      expect(offset).toBeLessThanOrEqual(3);
     }
   });
 });

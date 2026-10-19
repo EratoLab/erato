@@ -55,6 +55,41 @@ export const fitChipsInBudget = (
   return 1;
 };
 
+export interface StagedAreaGeometry {
+  /** The shared cap minus the area's vertical padding. */
+  inner: number;
+  /** The area's row gap, between the lane and the files. */
+  gap: number;
+  /** The files slot's height; 0 without files. */
+  filesHeight: number;
+  /** The first file tile's height; null for a kit slot without tiles. */
+  firstTileHeight: number | null;
+  /** The pinned "Remove all" row's height; 0 when it is not drawn. */
+  pinnedHeight: number;
+}
+
+/**
+ * The height the chips may take before "+N more". Chips come first, as in the
+ * prototype, where files fold away before any chip does; the files keep
+ * their pinned "Remove all" row and the top half of their first tile, so the
+ * user still sees them. A kit's slot has no tile to halve and counts whole.
+ */
+export const chipBudgetInStagedArea = ({
+  inner,
+  gap,
+  filesHeight,
+  firstTileHeight,
+  pinnedHeight,
+}: StagedAreaGeometry): number => {
+  if (filesHeight <= 0) {
+    return Math.max(0, Math.round(inner));
+  }
+  const peek = firstTileHeight === null ? filesHeight : firstTileHeight / 2;
+  const pinned = pinnedHeight > 0 ? pinnedHeight + gap : 0;
+  const reserve = Math.min(filesHeight, peek + pinned) + gap;
+  return Math.max(0, Math.round(inner - reserve));
+};
+
 const px = (value: string) => {
   const parsed = Number.parseFloat(value);
   return Number.isFinite(parsed) ? parsed : 0;

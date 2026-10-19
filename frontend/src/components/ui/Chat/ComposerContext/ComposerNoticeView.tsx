@@ -1,12 +1,38 @@
 import { Button } from "@/components/ui/Controls/Button";
 import { Alert } from "@/components/ui/Feedback/Alert";
 import { SpinnerIcon } from "@/components/ui/Feedback/SpinnerIcon";
+import { WarningCircleIcon, WarningIcon } from "@/components/ui/icons";
 
 import type { ComposerNotice } from "./types";
 
 interface ComposerNoticeViewProps {
   notice: ComposerNotice | null;
 }
+
+/**
+ * The chips' own warning and error marks, so a mark means one thing across
+ * the composer; the themed error mark is an (x), which beside the dismiss
+ * (x) reads as a second close button. Boxed at the alert's icon size, since
+ * an inline spinner sits on the text baseline below the first line.
+ */
+const noticeIcon = (notice: ComposerNotice) => {
+  const glyph = notice.busy ? (
+    <SpinnerIcon size="md" aria-hidden="true" />
+  ) : notice.tone === "error" ? (
+    <WarningCircleIcon className="size-5" />
+  ) : notice.tone === "warning" ? (
+    <WarningIcon className="size-5" />
+  ) : null;
+  return glyph ? (
+    <span
+      aria-hidden="true"
+      data-ui="composer-notice-icon"
+      className="flex size-5 items-center justify-center"
+    >
+      {glyph}
+    </span>
+  ) : undefined;
+};
 
 /**
  * A one-off send prompt above the chips. The wrapper stays mounted while the
@@ -28,9 +54,7 @@ export const ComposerNoticeView = ({ notice }: ComposerNoticeViewProps) => (
         type={notice.tone}
         role="none"
         geometryVariant="message"
-        icon={
-          notice.busy ? <SpinnerIcon size="sm" aria-hidden="true" /> : undefined
-        }
+        icon={noticeIcon(notice)}
         dismissible={Boolean(notice.onDismiss)}
         onDismiss={notice.onDismiss}
       >
