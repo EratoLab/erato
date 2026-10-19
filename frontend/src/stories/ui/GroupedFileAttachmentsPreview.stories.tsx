@@ -266,14 +266,25 @@ export const WithLoading: Story = {
 
 /* The Outlook add-in's dropped-email card: Remove sits beside the disclosure,
    so a collapsed drop can still be removed in one click. */
-const droppedEmail = (subject: string) => ({
+const droppedEmail = (
+  subject: string,
+  {
+    collapsed = true,
+    attachments = [{ id: "agenda", filename: "agenda.pdf", size: 82000 }],
+  }: {
+    collapsed?: boolean;
+    attachments?: { id: string; filename: string; size: number }[];
+  } = {},
+) => ({
   groups: [
     {
       id: "drop",
       label: subject,
-      metaLabel: "2 items · 96 KB of 25 MB",
+      metaLabel: `${attachments.length + 1} items · ${Math.round(
+        (14000 + attachments.reduce((sum, file) => sum + file.size, 0)) / 1000,
+      )} KB of 25 MB`,
       collapsible: true,
-      defaultCollapsed: true,
+      defaultCollapsed: collapsed,
       pinActions: true,
       items: [
         {
@@ -284,13 +295,13 @@ const droppedEmail = (subject: string) => ({
           onToggle: () => {},
           labelOverride: "Email body",
         },
-        {
+        ...attachments.map((file) => ({
           kind: "selectableAttachment" as const,
-          id: "agenda",
-          file: { id: "agenda", filename: "agenda.pdf", size: 82000 },
+          id: file.id,
+          file,
           selected: true,
           onToggle: () => {},
-        },
+        })),
       ],
     },
   ],
@@ -322,10 +333,40 @@ export const PinnedGroupActionLongSubject: Story = {
   ),
 };
 
-/* An unticked message sends nothing, so its attachment boxes read unticked
-   with it. */
-export const ThreadMessageUnticked: Story = {
-  args: {
+/* Opened in the add-in's bounded scroll region: the sticky header keeps the
+   pinned Remove above the rows scrolling under it. */
+export const PinnedGroupActionScrolled: Story = {
+  decorators: [boundedScroll],
+  args: droppedEmail("Re: Offsite agenda", {
+    collapsed: false,
+    attachments: [
+      "agenda.pdf",
+      "travel-booking.pdf",
+      "room-plan.png",
+      "catering-order.xlsx",
+      "speaker-list.docx",
+      "budget.xlsx",
+      "parking.pdf",
+      "dinner-menu.pdf",
+    ].map((filename, index) => ({
+      id: `att-${index}`,
+      filename,
+      size: 20000 + index * 4000,
+    })),
+  }),
+};
+
+/* The Outlook add-in's staged thread, with what the first message sends:
+   the message itself and one tick per attachment. */
+const kickoffThread = (
+  messageSelected: boolean,
+  ticked: { a1: boolean; a2: boolean },
+) => {
+  const files = [
+    { id: "a1", filename: "Lastenheft.pdf", size: 240000 },
+    { id: "a2", filename: "Zeitplan.xlsx", size: 18000 },
+  ] as const;
+  return {
     groups: [
       {
         id: "thread",
@@ -339,20 +380,14 @@ export const ThreadMessageUnticked: Story = {
               "m1",
               "Daniel Person",
               "19/05/2026, 18:58:51 · Kickoff Kundenportal 2.0",
-              [
-                { id: "a1", filename: "Lastenheft.pdf", size: 240000 },
-                { id: "a2", filename: "Zeitplan.xlsx", size: 18000 },
-              ],
+              [...files],
             ),
-            selected: false,
+            selected: messageSelected,
             defaultCollapsed: false,
-            attachments: [
-              { id: "a1", filename: "Lastenheft.pdf", size: 240000 },
-              { id: "a2", filename: "Zeitplan.xlsx", size: 18000 },
-            ].map((file) => ({
+            attachments: files.map((file) => ({
               id: file.id,
               file,
-              selected: false,
+              selected: ticked[file.id],
               onToggle: () => {},
             })),
           },
@@ -369,7 +404,19 @@ export const ThreadMessageUnticked: Story = {
     stickyGroupHeaders: true,
     showFileTypes: true,
     defaultVisibleItems: 10,
-  },
+  };
+};
+
+/* An unticked message sends nothing, so its attachment boxes read unticked
+   with it. */
+export const ThreadMessageUnticked: Story = {
+  args: kickoffThread(false, { a1: false, a2: false }),
+};
+
+/* Ticking one attachment there brings the message back with only that
+   attachment; its sibling stays unticked. */
+export const ThreadMessageRetickedAttachment: Story = {
+  args: kickoffThread(true, { a1: true, a2: false }),
 };
 
 // A 1x1 PNG, so the thumbnail loads without a network.
