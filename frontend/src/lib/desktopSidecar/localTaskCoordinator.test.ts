@@ -144,6 +144,7 @@ function fixture() {
   const operations = {
     list: vi.fn<ClientOperationApi["list"]>(async () => ({
       enabled: true,
+      executor_stream_enabled: false,
       account_id: "account",
       operations:
         job.state === "completed"
@@ -338,6 +339,7 @@ describe("durable shared local coordinator", () => {
     const f = fixture();
     f.operations.list.mockResolvedValue({
       enabled: true,
+      executor_stream_enabled: false,
       account_id: "other-account",
       operations: [],
     });
@@ -397,6 +399,7 @@ it("stops after cloud disablement", async () => {
   const f = fixture();
   f.operations.list.mockResolvedValue({
     enabled: false,
+    executor_stream_enabled: false,
     account_id: "account",
     operations: [],
   });
@@ -475,6 +478,7 @@ it("queues cancellation refresh behind an in-flight poll", async () => {
         release = () =>
           resolve({
             enabled: true,
+            executor_stream_enabled: false,
             account_id: "account",
             operations: [stale],
           });
