@@ -656,6 +656,22 @@ export { DEFAULT_MAX_FILES_PER_MESSAGE } from "@/utils/fileUploadLimits";
 export { formatFileSize } from "@/components/ui/FileUpload/FilePreviewBase";
 export { FileAttachmentsPreview } from "@/components/ui/FileUpload/FileAttachmentsPreview";
 export type { ChatInputAttachmentPreviewProps } from "@/components/ui/FileUpload/FileAttachmentsPreview";
+export {
+  ComposerContextArea,
+  ComposerContextLane,
+  DefaultComposerContextChipFace,
+  type ComposerContextAreaProps,
+  type ComposerContextChipFaceProps,
+  type ComposerContextDetail,
+  type ComposerContextDetailAction,
+  type ComposerContextDismissScope,
+  type ComposerContextIconName,
+  type ComposerContextItem,
+  type ComposerContextLaneProps,
+  type ComposerContextState,
+  type ComposerContextTone,
+  type ComposerNotice,
+} from "@/components/ui/Chat/ComposerContext";
 export type { FileAttachmentsPreviewProps } from "@/components/ui/FileUpload/FileAttachmentsPreview";
 export type {
   FileAttachmentGroup,

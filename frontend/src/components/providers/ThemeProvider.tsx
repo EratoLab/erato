@@ -402,6 +402,14 @@ const getThemeVariableEntries = (theme: Theme): Array<[string, string]> => {
       "--theme-layout-attachment-tile-staged-max-height",
       theme.layout.attachmentTile.stagedMaxHeight,
     ],
+    [
+      "--theme-layout-composer-context-chip-height",
+      theme.layout.composerContext.chipHeight,
+    ],
+    [
+      "--theme-layout-composer-context-detail-width",
+      theme.layout.composerContext.detailWidth,
+    ],
     ["--theme-layout-sidebar-width", theme.layout.sidebar.width],
     ["--theme-layout-sidebar-slim-width", theme.layout.sidebar.slimWidth],
     ["--theme-layout-dropdown-min-width", theme.layout.dropdown.minWidth],

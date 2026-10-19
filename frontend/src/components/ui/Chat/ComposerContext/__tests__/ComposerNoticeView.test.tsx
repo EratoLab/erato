@@ -1,0 +1,103 @@
+import {
+  cleanup,
+  fireEvent,
+  render as renderBare,
+  screen,
+} from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+import { ThemeProvider } from "@/components/providers/ThemeProvider";
+
+import { ComposerNoticeView } from "../ComposerNoticeView";
+
+import type { ReactElement, ReactNode } from "react";
+
+afterEach(cleanup);
+
+const Themed = ({ children }: { children: ReactNode }) => (
+  <ThemeProvider
+    enableCustomTheme={false}
+    initialThemeMode="light"
+    persistThemeMode={false}
+  >
+    {children}
+  </ThemeProvider>
+);
+
+const render = (ui: ReactElement) => renderBare(ui, { wrapper: Themed });
+
+const notice = () =>
+  document.querySelector<HTMLElement>('[data-ui="composer-notice"]')!;
+
+describe("ComposerNoticeView", () => {
+  it("speaks politely for info and warnings, assertively for errors", () => {
+    const { rerender } = render(
+      <ComposerNoticeView
+        notice={{ id: "n", tone: "warning", text: "Choose a comment first." }}
+      />,
+    );
+    expect(notice()).toHaveAttribute("role", "status");
+    expect(notice()).toHaveAttribute("data-tone", "warning");
+    expect(notice()).toHaveTextContent("Choose a comment first.");
+
+    rerender(
+      <ComposerNoticeView
+        notice={{
+          id: "n",
+          tone: "error",
+          text: "Couldn't read the selection.",
+        }}
+      />,
+    );
+    expect(notice()).toHaveAttribute("role", "alert");
+    // The live region itself is the only one: the alert inside it is inert.
+    expect(
+      notice().querySelectorAll('[role="alert"], [role="status"]'),
+    ).toHaveLength(0);
+  });
+
+  it("keeps one live node while the host opts in, empty or not", () => {
+    const { rerender } = render(<ComposerNoticeView notice={null} />);
+    const node = notice();
+    expect(node).toBeEmptyDOMElement();
+    expect(node).toHaveClass("empty:absolute");
+
+    rerender(
+      <ComposerNoticeView
+        notice={{ id: "n", tone: "info", text: "Reading the document…" }}
+      />,
+    );
+    expect(notice()).toBe(node);
+    rerender(
+      <ComposerNoticeView
+        notice={{ id: "n", tone: "info", text: "Still reading…" }}
+      />,
+    );
+    expect(notice()).toBe(node);
+    expect(node).toHaveTextContent("Still reading…");
+  });
+
+  it("draws a spinner while busy, and the host's actions and dismiss", () => {
+    const onSelect = vi.fn();
+    const onDismiss = vi.fn();
+    render(
+      <ComposerNoticeView
+        notice={{
+          id: "n",
+          tone: "info",
+          text: "Reading the document…",
+          busy: true,
+          actions: [{ id: "skip", label: "Send without it", onSelect }],
+          onDismiss,
+        }}
+      />,
+    );
+    const spinner = notice().querySelector('[data-ui="spinner"]');
+    expect(spinner).not.toBeNull();
+    expect(spinner).not.toHaveAttribute("role");
+    fireEvent.click(screen.getByRole("button", { name: "Send without it" }));
+    expect(onSelect).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
+    expect(onDismiss).toHaveBeenCalledTimes(1);
+  });
+});

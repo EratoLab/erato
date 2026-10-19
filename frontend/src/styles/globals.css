@@ -294,6 +294,8 @@
   --theme-layout-attachment-tile-medium-media-size: 7rem;
   --theme-layout-attachment-tile-medium-doc-max-width: 18rem;
   --theme-layout-attachment-tile-staged-max-height: 12rem;
+  --theme-layout-composer-context-chip-height: 2rem;
+  --theme-layout-composer-context-detail-width: 24rem;
   --theme-layout-sidebar-width: 17.5rem;
   --theme-layout-sidebar-slim-width: 4rem;
   --theme-layout-dropdown-min-width: 12rem;
@@ -844,6 +846,20 @@ body {
     border-radius: var(--attachment-tile-radius, var(--theme-radius-base));
   }
 
+  /* Composer context chips stand in the same row as file tiles, so they read
+     the tile corner too; one line high where a file tile takes two. */
+  .composer-context-chip-geometry {
+    height: var(--theme-layout-composer-context-chip-height);
+    border-radius: var(--attachment-tile-radius, var(--theme-radius-base));
+  }
+
+  /* The always-visible (x)/(+): a 24px target (WCAG 2.5.8) inside the chip. */
+  .composer-context-control-geometry {
+    width: 1.5rem;
+    height: 1.5rem;
+    border-radius: var(--attachment-tile-radius, var(--theme-radius-base));
+  }
+
   /* Tab rail family. --tab-rail-radius is READ, never declared (a declaration
      on the hook element would shadow a theme's value set on any ancestor); the
      track vars are anatomy and are declared per variant on the rail, inheriting
@@ -1109,6 +1125,98 @@ body {
 
 .attachment-notice-label-skin {
   color: var(--attachment-notice-label, var(--theme-fg-primary));
+}
+
+/* Composer context chips. State and tone move variables rather than final
+   values, so one rule reaches the frame and every part of the face, and a
+   kit's own face can read the same variables. Muted states are carried by the
+   fill, the border and the glyph, never by text below 4.5:1: the label and
+   meta stay on --theme-fg-secondary or stronger. */
+.composer-context-chip-skin {
+  border-width: 1px;
+  border-style: var(--composer-context-chip-border-style, solid);
+  border-color: var(
+    --composer-context-chip-border,
+    var(--theme-border-attachment)
+  );
+  background-color: var(--composer-context-chip-bg, var(--theme-bg-secondary));
+}
+
+.composer-context-chip-skin:hover {
+  border-color: var(--composer-context-chip-border, var(--theme-border-focus));
+}
+
+/* Drawn inside the frame: the staged area clips anything past its edges. */
+.composer-context-chip-skin:focus-visible {
+  outline: 2px solid var(--theme-focus-ring);
+  outline-offset: -2px;
+}
+
+/* Its own rule: a selector list fails whole where :has() is unsupported. */
+.composer-context-chip-skin:has(
+    > [data-ui="composer-context-chip-open"]:focus-visible
+  ) {
+  outline: 2px solid var(--theme-focus-ring);
+  outline-offset: -2px;
+}
+
+.composer-context-chip-skin[data-state="suggested"] {
+  --composer-context-chip-border-style: dashed;
+  --composer-context-chip-border: var(--theme-border-strong);
+  --composer-context-chip-bg: transparent;
+  --composer-context-chip-label: var(--theme-fg-secondary);
+  --composer-context-chip-label-weight: 450;
+  --composer-context-chip-icon: var(--theme-fg-muted);
+}
+
+.composer-context-chip-skin[data-state="superseded"] {
+  --composer-context-chip-bg: transparent;
+  --composer-context-chip-label: var(--theme-fg-secondary);
+  --composer-context-chip-label-weight: 450;
+  --composer-context-chip-icon: var(--theme-fg-muted);
+  --composer-context-chip-meta-style: italic;
+}
+
+.composer-context-chip-skin[data-tone="warning"] {
+  --composer-context-chip-border: var(--theme-warning-border);
+  --composer-context-chip-bg: var(--theme-warning-bg);
+  --composer-context-chip-icon: var(--theme-warning-fg);
+  --composer-context-chip-meta: var(--theme-warning-fg);
+}
+
+.composer-context-chip-skin[data-tone="error"] {
+  --composer-context-chip-border: var(--theme-error-border);
+  --composer-context-chip-bg: var(--theme-error-bg);
+  --composer-context-chip-icon: var(--theme-error-fg);
+  --composer-context-chip-meta: var(--theme-error-fg);
+}
+
+/* A suggested chip keeps its tone's border but not its fill: it is not part
+   of the send, so it must not read as a filled, included one. */
+.composer-context-chip-skin[data-state="suggested"][data-tone] {
+  --composer-context-chip-bg: transparent;
+}
+
+.composer-context-chip-skin [data-ui="composer-context-chip-icon"] {
+  color: var(--composer-context-chip-icon, var(--theme-fg-secondary));
+}
+
+.composer-context-chip-skin [data-ui="composer-context-chip-label"] {
+  color: var(--composer-context-chip-label, var(--theme-fg-primary));
+  font-weight: var(--composer-context-chip-label-weight, 500);
+}
+
+.composer-context-chip-skin [data-ui="composer-context-chip-separator"],
+.composer-context-chip-skin [data-ui="composer-context-chip-meta"] {
+  color: var(--composer-context-chip-meta, var(--theme-fg-secondary));
+}
+
+.composer-context-chip-skin [data-ui="composer-context-chip-meta"] {
+  font-style: var(--composer-context-chip-meta-style, normal);
+}
+
+.composer-context-chip-skin [data-ui="composer-context-chip-lock"] {
+  color: var(--theme-fg-secondary);
 }
 
 /* The sidebar's own width stays inline — it is computed from slim/expanded

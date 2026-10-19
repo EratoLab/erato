@@ -16,6 +16,11 @@ interface ModalBaseProps {
   title?: string;
   className?: string;
   contentClassName?: string;
+  /**
+   * `bottom` docks the dialog as a near-full-width sheet at the foot of the
+   * viewport, for narrow panes.
+   */
+  placement?: "center" | "bottom";
 }
 
 /**
@@ -28,6 +33,7 @@ export const ModalBase: React.FC<ModalBaseProps> = ({
   title,
   className,
   contentClassName,
+  placement = "center",
 }) => {
   const modalRef = useRef<HTMLDivElement>(null);
   // Dialogs stack (a file preview over a conversation), so each names itself.
@@ -83,7 +89,12 @@ export const ModalBase: React.FC<ModalBaseProps> = ({
   const modalContent = (
     <div
       className={clsx(
-        "modal-overlay-skin fixed inset-0 z-50 flex items-center justify-center",
+        // Alignment lives here, not in `className`: Tailwind emits
+        // items-center after items-end, so a caller could not override it.
+        // The skin's viewport gutter is unlayered, hence the important inset.
+        placement === "bottom"
+          ? "modal-overlay-skin fixed inset-0 z-50 flex items-end justify-center !p-2"
+          : "modal-overlay-skin fixed inset-0 z-50 flex items-center justify-center",
         className,
       )}
       onMouseDown={handleOverlayMouseDown}
@@ -97,6 +108,7 @@ export const ModalBase: React.FC<ModalBaseProps> = ({
         className={clsx(
           "modal-shell-skin modal-shell-frame-geometry theme-transition relative flex w-full flex-col overflow-hidden font-sans",
           "focus-ring",
+          placement === "bottom" && "max-h-[calc(100%-3.25rem)] max-w-full",
           contentClassName,
         )}
         // Make the content div focusable
@@ -104,6 +116,7 @@ export const ModalBase: React.FC<ModalBaseProps> = ({
         role="dialog"
         aria-labelledby={title ? titleId : undefined}
         data-ui="modal-shell"
+        data-placement={placement === "bottom" ? "bottom" : undefined}
       >
         {/* Optional Header */}
         {title && (
