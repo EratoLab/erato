@@ -516,12 +516,14 @@ clickable: a click on the face opens the chip's detail. Wrap
 look without redrawing it, and read the chip's state from
 `ComposerContextChipFaceProps` (`item.state`, the resolved `tone`, the host
 glyph in `icon`, and the `meta` line, which for a suggested chip states how
-long it stays off).
+long it stays off). Draw the `meta` line: it is how a sighted user learns why
+a chip is not sent.
 
 Themes and kits can reach the lane through these hooks and classes:
 
 - `data-ui="composer-staged-area"` (the shared scroll area), `composer-staged-files`,
-  `composer-context-lane`, `composer-context-live`, `composer-notice[data-tone]`;
+  `composer-context-lane`, `composer-context-live`, `composer-notice[data-tone]`
+  with its `composer-notice-polite` and `composer-notice-assertive` regions;
 - `composer-context-chip[data-kind][data-state][data-tone][data-origin][data-locked][data-has-detail]`,
   with `composer-context-chip-open`, `composer-context-chip-face`,
   `composer-context-chip-state`, `composer-context-remove`,
@@ -537,8 +539,8 @@ can read the same values the default face does.
 
 `@erato/frontend/conformance` exports `composerContextChipFaceConformanceFailures(Face, { render })`.
 It mounts the host lane around the face in all six states, with and without a
-detail and locked, and reports a face that drops the label, holds a control of
-its own, or breaks the host's control, popup or state word.
+detail and locked, and reports a face that drops the label or the meta, holds
+a control of its own, or breaks the host's control, popup or state word.
 `component-kit-example/src/components/ExampleComposerContextChipFace.test.tsx`
 is a working harness. The point arrived with shared surface 1.19; declare
 `builtAgainstSharedSurfaceMinor: 19` on the registration.

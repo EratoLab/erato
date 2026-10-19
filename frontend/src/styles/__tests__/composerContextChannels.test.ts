@@ -136,6 +136,33 @@ describe("composer context chip channels", () => {
     }
   });
 
+  it("rings a focused chip with or without :has()", () => {
+    const open =
+      '.composer-context-chip-skin > [data-ui="composer-context-chip-open"]:focus-visible';
+    declares(open, "outline", "2px solid var(--theme-focus-ring)");
+    const supports = globalsCss.slice(
+      globalsCss.indexOf("@supports selector(:has(*)) {"),
+    );
+    expect(supports).toMatch(
+      /^@supports selector\(:has\(\*\)\) \{ \.composer-context-chip-skin > \[data-ui="composer-context-chip-open"\]:focus-visible \{ outline: none; \}/,
+    );
+    expect(supports).toContain(
+      '.composer-context-chip-skin:has( > [data-ui="composer-context-chip-open"]:focus-visible ) {',
+    );
+  });
+
+  it("steps a superseded chip's frame and glyph back in dark", () => {
+    for (const selector of [
+      ':root[data-theme="dark"] .composer-context-chip-skin[data-state="superseded"]',
+      ':root:not([data-theme="light"]) .composer-context-chip-skin[data-state="superseded"]',
+    ]) {
+      declares(selector, "--composer-context-chip-icon-opacity", "0.6");
+      expect(ruleBody(selector)).toContain(
+        "--composer-context-chip-border:color-mix(",
+      );
+    }
+  });
+
   it("declares both layout tokens", () => {
     expect(globalsCss).toContain(
       "--theme-layout-composer-context-chip-height: 2rem;",

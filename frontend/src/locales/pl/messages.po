@@ -3300,7 +3300,7 @@ msgstr "Wyłączone w tym czacie"
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ComposerContext/composerContextStrings.ts
 msgid "composer.context.scope.item"
-msgstr "Wyłączone do zmiany elementu"
+msgstr "Wyłączone do przełączenia na inną wiadomość"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ComposerContext/composerContextStrings.ts

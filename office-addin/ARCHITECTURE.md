@@ -155,8 +155,13 @@ again; the lane renders the state it gets back and announces that outcome.
 Pass a memoized array, give included items an `estimate` instead of adding
 the same content to `virtualFiles` (both count toward the token estimate),
 and list files a chip stands for in `claimsFileIds` so the file row does not
-draw them twice. Locking is per item (`locked`, `lockReason`); the lane does
-not inherit the composer's lock.
+draw them twice. Claimed files hide only while their chip is included or
+loading; a chip that stops being sent must unstage them in the same update,
+or they show in the file row again, because they still send. Give items with
+a quoted or long label a `spokenLabel` ("Selection", "Email thread") for
+announcements. Locking is per item (`locked`, `lockReason`); the lane does
+not inherit the composer's lock, except that a chip claiming files is locked
+while the file row is.
 
 ## Landmines
 

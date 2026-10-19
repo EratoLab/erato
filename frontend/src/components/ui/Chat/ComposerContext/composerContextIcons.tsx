@@ -53,8 +53,10 @@ interface ComposerContextGlyphProps {
 
 /**
  * The chip's leading glyph: the item's own icon, or the state's when the state
- * says more (a spinner while loading, a warning or error mark). Always hidden
- * from screen readers; the open button carries the state in words.
+ * says more (a spinner while loading, a warning or error mark for an error or
+ * a choice). A tone alone, such as an included document with a warning, keeps
+ * the item's icon. Always hidden from screen readers; the open button carries
+ * the state in words.
  */
 export const ComposerContextGlyph = ({
   icon,
@@ -65,10 +67,14 @@ export const ComposerContextGlyph = ({
     return <SpinnerIcon size="sm" aria-hidden="true" />;
   }
   const Glyph =
-    tone === "error"
-      ? WarningCircleIcon
-      : tone === "warning"
+    state === "error"
+      ? tone === "warning"
         ? WarningIcon
+        : WarningCircleIcon
+      : state === "attention"
+        ? tone === "error"
+          ? WarningCircleIcon
+          : WarningIcon
         : GLYPHS[isIconName(icon) ? icon : "file"];
   return (
     <span aria-hidden="true" className="inline-flex">

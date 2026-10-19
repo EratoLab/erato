@@ -6,6 +6,7 @@
 /* eslint-disable lingui/no-unlocalized-strings -- failure text and fixtures for a test run, never shown to a user */
 import { createElement } from "react";
 
+import { composerContextMeta } from "@/components/ui/Chat/ComposerContext/ComposerContextChip";
 import { ComposerContextLane } from "@/components/ui/Chat/ComposerContext/ComposerContextLane";
 
 import type {
@@ -97,8 +98,15 @@ const chipFailures = (
   }
   const failures: string[] = [];
 
-  if (!(open.textContent ?? "").includes(item.label)) {
+  const text = open.textContent ?? "";
+  if (!text.includes(item.label)) {
     failures.push(`${name}: the face does not show the item's label`);
+  }
+  // The meta says why a chip is not sent and how long it stays off; read
+  // through the active catalog, so a kit's own catalog passes too.
+  const meta = composerContextMeta(item);
+  if (meta && !text.includes(meta)) {
+    failures.push(`${name}: the face does not show the item's meta`);
   }
 
   const nested = [...open.querySelectorAll(INTERACTIVE)];

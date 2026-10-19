@@ -15,6 +15,7 @@ import {
   ComposerContextChip,
   DefaultComposerContextChipFace,
   composerContextControl,
+  composerContextSpokenLabel,
 } from "./ComposerContextChip";
 import { ComposerContextDetail } from "./ComposerContextDetail";
 import { fitChipsInBudget, readLaneGeometry } from "./composerContextLayout";
@@ -47,7 +48,10 @@ import type { ComponentType, KeyboardEvent as ReactKeyboardEvent } from "react";
 const MORE_KEY = "__more";
 // eslint-disable-next-line lingui/no-unlocalized-strings
 const LESS_KEY = "__less";
-/** How long a click waits for the host to answer with a new state. */
+/**
+ * How long a click waits for the host to answer with a new state. A host
+ * still loading keeps it waiting: what that loading ends in is the outcome.
+ */
 const PENDING_TIMEOUT_MS = 3000;
 
 interface PendingAction {
@@ -55,10 +59,15 @@ interface PendingAction {
   state: ComposerContextState;
   label: string;
   removedText?: string;
+  /** A user item's claimed files, unstaged once the host drops the item. */
+  claimsFileIds?: string[];
   at: number;
-  /** The tab stops when the user acted, to find the next one if the chip leaves. */
-  stops: string[];
+  /** The lane's order when the user acted, to find the next chip if this one leaves. */
+  order: string[];
 }
+
+const needsTheUser = (item: ComposerContextItem) =>
+  item.state === "error" || item.state === "attention";
 
 export interface ComposerContextLaneProps {
   /**
@@ -70,7 +79,7 @@ export interface ComposerContextLaneProps {
   budget?: number;
   /** Where focus goes when the last chip leaves; the composer's textarea. */
   onFocusComposer?: () => void;
-  /** Removes a user item's claimed files, before its `onRemove` runs. */
+  /** Unstages a user item's claimed files once the host drops it after its (x). */
   onRemoveClaimedFiles?: (fileIds: string[]) => void;
   /** Speak through the owner's live region; omitted, the lane renders its own. */
   announce?: (text: string) => void;
@@ -123,9 +132,13 @@ export const ComposerContextLane = memo(function ComposerContextLane({
   const pendingRef = useRef(new Map<string, PendingAction>());
   const prevStatesRef = useRef(new Map<string, ComposerContextState>());
   const prevStopsRef = useRef<string[]>([]);
+  const prevOrderRef = useRef<string[]>([]);
   const warnedRef = useRef(new Set<string>());
   const focusAfterExpandRef = useRef<number | null>(null);
   const focusAfterCollapseRef = useRef(false);
+  // Whether "+N more" or "Show less" held focus last, so its unmounting
+  // can hand focus on; a click elsewhere in the lane or page clears it.
+  const overflowFocusRef = useRef(false);
 
   const [activeKey, setActiveKey] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(false);
@@ -157,13 +170,20 @@ export const ComposerContextLane = memo(function ComposerContextLane({
     measureKey !== null && measured?.key === measureKey
       ? measured.visible
       : ordered.length;
-  // A re-collapse never hides the chip the user is on.
+  // A re-collapse never hides the chip the user is on, nor one that needs
+  // the user (an error, a choice) behind "+N more".
   const focusedIndex = hasFocus
     ? ordered.findIndex((item) => item.id === activeKey)
     : -1;
+  let lastNeedIndex = -1;
+  ordered.forEach((item, index) => {
+    if (needsTheUser(item)) {
+      lastNeedIndex = index;
+    }
+  });
   const visibleCount = Math.min(
     ordered.length,
-    Math.max(fitCount, focusedIndex + 1),
+    Math.max(fitCount, focusedIndex + 1, lastNeedIndex + 1),
   );
   const shown =
     expanded || measuring ? ordered : ordered.slice(0, visibleCount);
@@ -172,14 +192,14 @@ export const ComposerContextLane = memo(function ComposerContextLane({
 
   const stops = useMemo(() => {
     const keys = shown.map((item) => item.id);
-    if (showMore && !measuring) {
+    if (showMore) {
       keys.push(MORE_KEY);
     }
     if (expanded && ordered.length > 0) {
       keys.push(LESS_KEY);
     }
     return keys;
-  }, [shown, showMore, measuring, expanded, ordered.length]);
+  }, [shown, showMore, expanded, ordered.length]);
 
   // The remembered stop, or its nearest surviving neighbour when it left.
   const tabStop = useMemo(() => {
@@ -219,24 +239,35 @@ export const ComposerContextLane = memo(function ComposerContextLane({
     [elementFor],
   );
 
+  // The chip that takes the removed one's place, from the lane's order when
+  // the user acted, so a chip folded behind "+N more" then still counts.
   const focusAfterRemoval = useCallback(
-    (id: string, stopsWhenActed: string[]) => {
-      const index = stopsWhenActed.indexOf(id);
-      const after = stopsWhenActed
+    (id: string, orderWhenActed: string[]) => {
+      const present = new Set(ordered.map((item) => item.id));
+      const index = orderWhenActed.indexOf(id);
+      const after = orderWhenActed
         .slice(index + 1)
-        .find((key) => stops.includes(key));
-      const before = stopsWhenActed
+        .find((key) => present.has(key));
+      const before = orderWhenActed
         .slice(0, Math.max(0, index))
         .reverse()
-        .find((key) => stops.includes(key));
+        .find((key) => present.has(key));
       const next = after ?? before;
-      if (next) {
-        focusKey(next);
+      const target =
+        next === undefined
+          ? null
+          : stops.includes(next)
+            ? next
+            : stops.includes(MORE_KEY)
+              ? MORE_KEY
+              : null;
+      if (target) {
+        focusKey(target);
       } else {
         onFocusComposer?.();
       }
     },
-    [stops, focusKey, onFocusComposer],
+    [ordered, stops, focusKey, onFocusComposer],
   );
 
   useEffect(() => {
@@ -266,23 +297,33 @@ export const ComposerContextLane = memo(function ComposerContextLane({
     const lane = laneRef.current;
 
     for (const [id, pending] of pendingRef.current) {
+      // A late change is not the answer to the click; a host still loading
+      // has not answered yet.
+      if (
+        pending.state !== "loading" &&
+        now - pending.at > PENDING_TIMEOUT_MS
+      ) {
+        pendingRef.current.delete(id);
+        continue;
+      }
       const item = byId.get(id);
       if (!item) {
         pendingRef.current.delete(id);
         handled.add(id);
-        say(pending.removedText ?? announceRemoved(pending.label));
+        if (pending.action === "remove") {
+          if (pending.claimsFileIds?.length) {
+            onRemoveClaimedFiles?.(pending.claimsFileIds);
+          }
+          say(pending.removedText ?? announceRemoved(pending.label));
+        }
         if (isFocusAvailable(lane)) {
-          focusAfterRemoval(id, pending.stops);
+          focusAfterRemoval(id, pending.order);
         }
         continue;
       }
       if (item.state === pending.state) {
-        if (now - pending.at > PENDING_TIMEOUT_MS) {
-          pendingRef.current.delete(id);
-        }
         continue;
       }
-      // Still working on it: wait for where it lands.
       if (item.state === "loading") {
         pending.state = "loading";
         pending.at = now;
@@ -290,10 +331,15 @@ export const ComposerContextLane = memo(function ComposerContextLane({
       }
       pendingRef.current.delete(id);
       handled.add(id);
+      const spoken = composerContextSpokenLabel(item);
       if (pending.action === "remove" && item.state === "suggested") {
-        say(item.announcements?.removed ?? announceRemovedAmbient(item.label));
+        say(item.announcements?.removed ?? announceRemovedAmbient(spoken));
       } else if (pending.action === "restore" && item.state === "included") {
-        say(item.announcements?.restored ?? announceRestored(item.label));
+        say(item.announcements?.restored ?? announceRestored(spoken));
+      } else {
+        // Not what the user asked for (a retry that failed again, a
+        // selection that wins): say where it landed.
+        say(announceOutcome(spoken, item.meta ?? statePill(item.state)));
       }
       if (isFocusAvailable(lane)) {
         focusKey(id);
@@ -305,9 +351,14 @@ export const ComposerContextLane = memo(function ComposerContextLane({
       if (
         !handled.has(item.id) &&
         previous === "loading" &&
-        (item.state === "error" || item.state === "attention")
+        needsTheUser(item)
       ) {
-        say(announceOutcome(item.label, item.meta ?? statePill(item.state)));
+        say(
+          announceOutcome(
+            composerContextSpokenLabel(item),
+            item.meta ?? statePill(item.state),
+          ),
+        );
       }
     }
     prevStatesRef.current = new Map(
@@ -317,9 +368,22 @@ export const ComposerContextLane = memo(function ComposerContextLane({
     if (openDetailId !== null && !byId.has(openDetailId)) {
       setOpenDetailId(null);
       if (!handled.has(openDetailId) && isFocusAvailable(lane)) {
-        focusAfterRemoval(openDetailId, prevStopsRef.current);
+        focusAfterRemoval(openDetailId, prevOrderRef.current);
       }
     }
+
+    // A lane that empties, or whose items are all new (another email,
+    // another document), starts folded again.
+    const ids = ordered.map((item) => item.id);
+    const previousIds = prevOrderRef.current;
+    if (
+      expanded &&
+      (ids.length === 0 ||
+        (previousIds.length > 0 && !ids.some((id) => previousIds.includes(id))))
+    ) {
+      setExpanded(false);
+    }
+    prevOrderRef.current = ids;
     // Only a new items array is an outcome; the other inputs are read as of it.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ordered]);
@@ -327,9 +391,26 @@ export const ComposerContextLane = memo(function ComposerContextLane({
   useLayoutEffect(() => {
     prevStopsRef.current = stops;
     if (tabStop !== activeKey && tabStop !== null && activeKey !== null) {
+      // "+N more" or "Show less" left while focused (a re-measure that
+      // hides nothing, a lane that folds again): keep the user in the lane.
+      const lostOverflowChip =
+        overflowFocusRef.current &&
+        (activeKey === MORE_KEY || activeKey === LESS_KEY) &&
+        focusAfterExpandRef.current === null &&
+        !focusAfterCollapseRef.current &&
+        (document.activeElement === null ||
+          document.activeElement === document.body);
       setActiveKey(tabStop);
+      if (lostOverflowChip) {
+        elementFor(tabStop)?.focus();
+      }
     }
-  }, [stops, tabStop, activeKey]);
+    // A focused chip the host took away leaves no blur behind; without this
+    // the lane would keep unfolding for a chip nobody is on.
+    if (hasFocus && !laneRef.current?.contains(document.activeElement)) {
+      setHasFocus(false);
+    }
+  }, [stops, tabStop, activeKey, elementFor, hasFocus]);
 
   // Measuring pass: every chip and the "+N more" chip are in the DOM, so one
   // read decides how many fit; the count commits before paint.
@@ -344,6 +425,22 @@ export const ComposerContextLane = memo(function ComposerContextLane({
       visible: geometry ? fitChipsInBudget(geometry, budget) : ordered.length,
     });
   }, [measuring, measureKey, budget, ordered.length]);
+
+  // Expanded only while folding is still needed: once every chip fits, the
+  // lane goes back to its default.
+  useLayoutEffect(() => {
+    if (!expanded || budget === undefined) {
+      return;
+    }
+    const lane = laneRef.current;
+    const geometry = lane ? readLaneGeometry(lane) : null;
+    if (
+      geometry?.boxes.length === ordered.length &&
+      fitChipsInBudget(geometry, budget) >= ordered.length
+    ) {
+      setExpanded(false);
+    }
+  }, [expanded, budget, itemsKey, laneWidth, ordered.length]);
 
   const hasItems = ordered.length > 0;
   const folds = budget !== undefined;
@@ -372,14 +469,20 @@ export const ComposerContextLane = memo(function ComposerContextLane({
     }
     if (!expanded && focusAfterCollapseRef.current && !measuring) {
       focusAfterCollapseRef.current = false;
-      focusKey(stops.includes(MORE_KEY) ? MORE_KEY : (stops.at(0) ?? MORE_KEY));
+      focusKey(
+        stops.includes(MORE_KEY) ? MORE_KEY : (stops.at(-1) ?? MORE_KEY),
+      );
     }
   }, [expanded, measuring, ordered, stops, focusKey]);
 
+  // Claimed files leave with the item, after the host drops it, so a host
+  // that keeps the chip never shows "included" over files no longer sent.
   const runRemove = useCallback(
     (item: ComposerContextItem) => {
       if (item.locked) {
-        say(item.lockReason ?? announceLocked(item.label));
+        say(
+          item.lockReason ?? announceLocked(composerContextSpokenLabel(item)),
+        );
         return;
       }
       if (!item.onRemove) {
@@ -388,23 +491,23 @@ export const ComposerContextLane = memo(function ComposerContextLane({
       pendingRef.current.set(item.id, {
         action: "remove",
         state: item.state,
-        label: item.label,
+        label: composerContextSpokenLabel(item),
         removedText: item.announcements?.removed,
+        claimsFileIds: item.origin === "user" ? item.claimsFileIds : undefined,
         at: Date.now(),
-        stops: prevStopsRef.current,
+        order: prevOrderRef.current,
       });
-      if (item.origin === "user" && item.claimsFileIds?.length) {
-        onRemoveClaimedFiles?.(item.claimsFileIds);
-      }
       item.onRemove();
     },
-    [say, onRemoveClaimedFiles],
+    [say],
   );
 
   const runRestore = useCallback(
     (item: ComposerContextItem) => {
       if (item.locked) {
-        say(item.lockReason ?? announceLocked(item.label));
+        say(
+          item.lockReason ?? announceLocked(composerContextSpokenLabel(item)),
+        );
         return;
       }
       if (!item.onRestore) {
@@ -413,9 +516,9 @@ export const ComposerContextLane = memo(function ComposerContextLane({
       pendingRef.current.set(item.id, {
         action: "restore",
         state: item.state,
-        label: item.label,
+        label: composerContextSpokenLabel(item),
         at: Date.now(),
-        stops: prevStopsRef.current,
+        order: prevOrderRef.current,
       });
       item.onRestore();
     },
@@ -432,6 +535,16 @@ export const ComposerContextLane = memo(function ComposerContextLane({
     },
     [openDetailId, focusKey],
   );
+
+  const focusChip = useCallback((id: string) => {
+    overflowFocusRef.current = false;
+    setActiveKey(id);
+  }, []);
+
+  const focusOverflowChip = useCallback((key: string) => {
+    overflowFocusRef.current = true;
+    setActiveKey(key);
+  }, []);
 
   const openDetail = useCallback((item: ComposerContextItem) => {
     if (!item.detail) {
@@ -473,6 +586,7 @@ export const ComposerContextLane = memo(function ComposerContextLane({
         return;
       }
       const control = composerContextControl(item);
+      const spoken = composerContextSpokenLabel(item);
       if (event.key === "Delete" || event.key === "Backspace") {
         event.preventDefault();
         if (control === "remove") {
@@ -480,11 +594,11 @@ export const ComposerContextLane = memo(function ComposerContextLane({
         } else if (control === "restore") {
           say(
             item.locked
-              ? (item.lockReason ?? announceLocked(item.label))
-              : announceNotIncluded(item.label),
+              ? (item.lockReason ?? announceLocked(spoken))
+              : announceNotIncluded(spoken),
           );
         } else {
-          say(item.lockReason ?? announceCannotRemove(item.label));
+          say(item.lockReason ?? announceCannotRemove(spoken));
         }
       } else if (
         (event.key === "+" || event.key === "Insert") &&
@@ -540,6 +654,9 @@ export const ComposerContextLane = memo(function ComposerContextLane({
         onBlur={(event) => {
           if (!event.currentTarget.contains(event.relatedTarget)) {
             setHasFocus(false);
+            if (event.relatedTarget !== null) {
+              overflowFocusRef.current = false;
+            }
           }
         }}
       >
@@ -554,7 +671,7 @@ export const ComposerContextLane = memo(function ComposerContextLane({
             onOpen={openDetail}
             onRemove={runRemove}
             onRestore={runRestore}
-            onFocus={setActiveKey}
+            onFocus={focusChip}
             onKeyDown={handleChipKeyDown}
           />
         ))}
@@ -568,11 +685,11 @@ export const ComposerContextLane = memo(function ComposerContextLane({
             <button
               ref={moreRef}
               type="button"
-              tabIndex={!measuring && tabStop === MORE_KEY ? 0 : -1}
+              tabIndex={tabStop === MORE_KEY ? 0 : -1}
               aria-label={moreChipLabel(
                 measuring ? ordered.length : hiddenCount,
               )}
-              onFocus={() => setActiveKey(MORE_KEY)}
+              onFocus={() => focusOverflowChip(MORE_KEY)}
               onKeyDown={(event) => {
                 moveFrom(event, MORE_KEY);
               }}
@@ -598,7 +715,7 @@ export const ComposerContextLane = memo(function ComposerContextLane({
               ref={lessRef}
               type="button"
               tabIndex={tabStop === LESS_KEY ? 0 : -1}
-              onFocus={() => setActiveKey(LESS_KEY)}
+              onFocus={() => focusOverflowChip(LESS_KEY)}
               onKeyDown={(event) => {
                 moveFrom(event, LESS_KEY);
               }}

@@ -3300,7 +3300,7 @@ msgstr "Désactivé dans ce chat"
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ComposerContext/composerContextStrings.ts
 msgid "composer.context.scope.item"
-msgstr "Désactivé jusqu’à ce que vous changiez d’élément"
+msgstr "Désactivé jusqu’à ce que vous passiez à un autre e-mail"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ComposerContext/composerContextStrings.ts

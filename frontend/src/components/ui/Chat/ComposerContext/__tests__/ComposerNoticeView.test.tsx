@@ -36,16 +36,27 @@ const pathsOf = (root: Element | null) =>
     .join("|");
 
 describe("ComposerNoticeView", () => {
+  const polite = () =>
+    notice().querySelector<HTMLElement>('[data-ui="composer-notice-polite"]')!;
+  const assertive = () =>
+    notice().querySelector<HTMLElement>(
+      '[data-ui="composer-notice-assertive"]',
+    )!;
+
   it("speaks politely for info and warnings, assertively for errors", () => {
     const { rerender } = render(
       <ComposerNoticeView
         notice={{ id: "n", tone: "warning", text: "Choose a comment first." }}
       />,
     );
-    expect(notice()).toHaveAttribute("role", "status");
+    expect(polite()).toHaveAttribute("role", "status");
+    expect(assertive()).toHaveAttribute("role", "alert");
     expect(notice()).toHaveAttribute("data-tone", "warning");
-    expect(notice()).toHaveTextContent("Choose a comment first.");
+    expect(polite()).toHaveTextContent("Choose a comment first.");
+    expect(assertive()).toBeEmptyDOMElement();
 
+    const politeNode = polite();
+    const assertiveNode = assertive();
     rerender(
       <ComposerNoticeView
         notice={{
@@ -55,18 +66,26 @@ describe("ComposerNoticeView", () => {
         }}
       />,
     );
-    expect(notice()).toHaveAttribute("role", "alert");
-    // The live region itself is the only one: the alert inside it is inert.
+    expect(polite()).toBe(politeNode);
+    expect(assertive()).toBe(assertiveNode);
+    expect(polite()).toHaveAttribute("role", "status");
+    expect(assertive()).toHaveAttribute("role", "alert");
+    expect(polite()).toBeEmptyDOMElement();
+    expect(assertive()).toHaveTextContent("Couldn't read the selection.");
+    // The live regions are the only ones: the alert inside is inert.
     expect(
       notice().querySelectorAll('[role="alert"], [role="status"]'),
-    ).toHaveLength(0);
+    ).toHaveLength(2);
   });
 
-  it("keeps one live node while the host opts in, empty or not", () => {
+  it("keeps both live regions while the host opts in, empty or not", () => {
     const { rerender } = render(<ComposerNoticeView notice={null} />);
     const node = notice();
-    expect(node).toBeEmptyDOMElement();
-    expect(node).toHaveClass("empty:absolute");
+    const politeNode = polite();
+    expect(politeNode).toBeEmptyDOMElement();
+    expect(assertive()).toBeEmptyDOMElement();
+    // Empty, it takes no room in the shell's gapped column.
+    expect(node).toHaveClass("absolute");
 
     rerender(
       <ComposerNoticeView
@@ -74,13 +93,15 @@ describe("ComposerNoticeView", () => {
       />,
     );
     expect(notice()).toBe(node);
+    expect(node).not.toHaveClass("absolute");
+    expect(polite()).toBe(politeNode);
     rerender(
       <ComposerNoticeView
         notice={{ id: "n", tone: "info", text: "Still reading…" }}
       />,
     );
-    expect(notice()).toBe(node);
-    expect(node).toHaveTextContent("Still reading…");
+    expect(polite()).toBe(politeNode);
+    expect(politeNode).toHaveTextContent("Still reading…");
   });
 
   it("draws a spinner while busy, and the host's actions and dismiss", () => {
