@@ -6846,6 +6846,16 @@ msgstr "Delegated to an assistant"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Trace/steps/DelegationStep.tsx
+msgid "trace.delegation.model"
+msgstr "Model: {modelName}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/DelegationStep.tsx
+msgid "trace.delegation.model.unavailable"
+msgstr "The model set up for this task is not available to you, so it ran on this conversation's model."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/DelegationStep.tsx
 msgid "trace.delegation.openRun"
 msgstr "Open delegated run"
 

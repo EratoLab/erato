@@ -6846,6 +6846,16 @@ msgstr "Delegado a un asistente"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Trace/steps/DelegationStep.tsx
+msgid "trace.delegation.model"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/DelegationStep.tsx
+msgid "trace.delegation.model.unavailable"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/DelegationStep.tsx
 msgid "trace.delegation.openRun"
 msgstr "Abrir la ejecución delegada"
 
