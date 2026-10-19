@@ -386,7 +386,8 @@ CREATE TABLE public.file_uploads (
     owner_user_id text NOT NULL,
     audio_transcription text,
     external_id_ews_id text,
-    outlook_provenance jsonb
+    outlook_provenance jsonb,
+    teams_transcript jsonb
 );
 
 

@@ -2029,6 +2029,7 @@ export type FileUploadItem = {
    * Proxied URL for inline preview without forcing download when available
    */
   preview_url?: string | null | undefined;
+  teams_transcript?: TeamsTranscriptSummary;
 };
 
 /**
@@ -3678,6 +3679,66 @@ export type TaskResultInput = {
    */
   sequence: number;
   status: string;
+};
+
+export type TeamsConversationKind = "chat" | "channel";
+
+export type TeamsTranscriptAssetKind = "image" | "file";
+
+export type TeamsTranscriptSelection = "whole-chat" | "messages";
+
+export type TeamsTranscriptSummary = {
+  /**
+   * One entry per conversation in the transcript, in transcript order.
+   */
+  sections: TeamsTranscriptSummarySection[];
+};
+
+export type TeamsTranscriptSummaryAsset = {
+  /**
+   * The name Teams gave the file; null for a pasted image.
+   */
+  display_name?: string | null | undefined;
+  kind: TeamsTranscriptAssetKind;
+  /**
+   * Uploaded filename; the key the transcript joins files to messages by.
+   */
+  name: string;
+};
+
+export type TeamsTranscriptSummarySection = {
+  /**
+   * Uploads shared in this section's messages, in message order.
+   */
+  assets: TeamsTranscriptSummaryAsset[];
+  kind: TeamsConversationKind;
+  /**
+   * @format int32
+   * @minimum 0
+   */
+  message_count: number;
+  participants: string[];
+  selection: TeamsTranscriptSelection;
+  /**
+   * @format int32
+   * @minimum 0
+   */
+  skipped_count: number;
+  team_name?: string | null | undefined;
+  /**
+   * Chat title, or the channel's own name.
+   */
+  title: string;
+  /**
+   * Whether messages outside the exported window were left out.
+   */
+  truncated: boolean;
+  window: TeamsTranscriptSummaryWindow;
+};
+
+export type TeamsTranscriptSummaryWindow = {
+  from?: string | null | undefined;
+  to?: string | null | undefined;
 };
 
 export type TokenUsageFileInput = {

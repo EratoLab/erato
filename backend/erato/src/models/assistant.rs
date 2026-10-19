@@ -641,6 +641,7 @@ pub async fn create_standalone_file_upload(
         audio_transcription: Set(None),
         external_id_ews_id: Set(external_id_ews_id),
         outlook_provenance: Set(outlook_provenance),
+        teams_transcript: Set(None),
         created_at: Set(Utc::now().into()),
         updated_at: Set(Utc::now().into()),
     };

@@ -46,6 +46,7 @@ use crate::models::message::{
     get_generation_chat_provider_id_from_message,
 };
 use crate::models::permissions;
+use crate::models::teams_transcript::{TranscriptTail, may_carry_teams_transcript};
 use crate::policy::engine::PolicyEngine;
 use crate::policy::engine::authorize;
 use crate::policy::types::{Action, Resource, Subject};
@@ -1940,6 +1941,10 @@ pub struct FileUploadItem {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false)]
     audio_transcription: Option<crate::models::file_upload::AudioTranscriptionMetadata>,
+    /// Conversations a Teams transcript upload covers, read from its index block at upload.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(value_type = Option<crate::models::teams_transcript::TeamsTranscriptSummary>, nullable = false)]
+    teams_transcript: Option<serde_json::Value>,
 }
 
 /// Minimal file reference containing only the file ID
@@ -2191,6 +2196,8 @@ async fn upload_file_memory_inner(
                 StatusCode::INTERNAL_SERVER_ERROR
             })?;
 
+        let mut transcript_tail =
+            may_carry_teams_transcript(&filename).then(TranscriptTail::default);
         let size_bytes = stream_multipart_field_with_limit(
             &mut field,
             &mut multipart,
@@ -2198,6 +2205,7 @@ async fn upload_file_memory_inner(
             max_upload_size,
             &me_user.id,
             &filename,
+            transcript_tail.as_mut(),
         )
         .await?;
 
@@ -2279,6 +2287,23 @@ async fn upload_file_memory_inner(
             })?;
         }
 
+        let teams_transcript = match transcript_tail.and_then(|tail| tail.summarize()) {
+            Some(summary) => models::file_upload::set_teams_transcript_summary(
+                &app_state.db,
+                &file_upload.id,
+                &summary,
+            )
+            .await
+            .inspect_err(|error| {
+                tracing::warn!(
+                    file_upload_id = %file_upload.id,
+                    "Failed to store Teams transcript summary: {error:#}"
+                );
+            })
+            .ok(),
+            None => None,
+        };
+
         // Add this file to our list of uploaded files
         uploaded_files.push(FileUploadItem {
             id: file_upload.id.to_string(),
@@ -2291,6 +2316,7 @@ async fn upload_file_memory_inner(
             is_sharepoint_file: false,
             file_capability,
             audio_transcription,
+            teams_transcript,
         });
     }
 
@@ -2306,6 +2332,7 @@ async fn upload_file_memory_inner(
     }))
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn stream_multipart_field_with_limit(
     field: &mut axum_extra::extract::multipart::Field,
     _multipart: &mut Multipart,
@@ -2313,6 +2340,7 @@ async fn stream_multipart_field_with_limit(
     max_upload_size: usize,
     user_id: &str,
     filename: &str,
+    mut transcript_tail: Option<&mut TranscriptTail>,
 ) -> Result<usize, StatusCode> {
     let mut size_bytes = 0usize;
 
@@ -2346,6 +2374,9 @@ async fn stream_multipart_field_with_limit(
         }
 
         size_bytes += chunk.len();
+        if let Some(tail) = transcript_tail.as_deref_mut() {
+            tail.push(&chunk);
+        }
         let _source_chunk = crate::metrics::memory::upload_chunk("source", chunk.len());
         let _writer_copy = crate::metrics::memory::upload_chunk("writer_copy", chunk.len());
 
@@ -2581,6 +2612,7 @@ async fn link_sharepoint_file_impl(
             is_sharepoint_file: true,
             file_capability,
             audio_transcription,
+            teams_transcript: file_upload.teams_transcript,
         }],
         rejected_files: Vec::new(),
     }))
@@ -3160,6 +3192,7 @@ async fn assemble_chat_messages_response(
                     audio_transcription: file_upload.audio_transcription,
                     external_id_ews_id: file_upload.external_id_ews_id,
                     outlook_provenance: file_upload.outlook_provenance,
+                    teams_transcript: file_upload.teams_transcript,
                 },
             );
         }
@@ -4191,6 +4224,7 @@ pub async fn get_file(
         audio_transcription: file_upload.audio_transcription,
         external_id_ews_id: file_upload.external_id_ews_id,
         outlook_provenance: file_upload.outlook_provenance,
+        teams_transcript: file_upload.teams_transcript,
     }))
 }
 

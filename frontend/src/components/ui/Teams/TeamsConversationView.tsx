@@ -165,9 +165,11 @@ const ConversationSection: React.FC<
             {participants}
           </p>
         )}
+        {/* Direction-neutral: the desktop export centres its window on a
+            search hit, so newer messages can be missing too. */}
         {section.truncated && (
           <p className="text-xs text-theme-fg-muted">
-            {t`Older messages are not included.`}
+            {t`Only part of this conversation is included.`}
           </p>
         )}
         {skipped > 0 && (

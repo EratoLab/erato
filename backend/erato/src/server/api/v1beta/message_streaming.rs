@@ -14226,6 +14226,7 @@ mod summary_generation_tests {
             audio_transcription: audio_transcription.map(str::to_string),
             external_id_ews_id: None,
             outlook_provenance: None,
+            teams_transcript: None,
             created_at: chrono::Utc::now().into(),
             updated_at: chrono::Utc::now().into(),
         }

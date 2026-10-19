@@ -6630,6 +6630,56 @@ msgid "taskPlanApproval.unnamedTask"
 msgstr ""
 
 #. js-lingui-explicit-id
+#: src/utils/teams/teamsAttachmentGroups.ts
+msgid "teams.preview.allMessages"
+msgstr "Todos los mensajes"
+
+#. js-lingui-explicit-id
+#: src/utils/teams/teamsAttachmentGroups.ts
+msgid "teams.preview.attachment"
+msgstr "Archivo adjunto"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Teams/TeamsAttachmentsPreview.tsx
+msgid "teams.preview.conversationRegion"
+msgstr "Vista previa de la conversación de Teams"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Teams/TeamsAttachmentsPreview.tsx
+msgid "teams.preview.conversationTitle"
+msgstr "Conversación de Teams"
+
+#. js-lingui-explicit-id
+#: src/utils/teams/teamsAttachmentGroups.ts
+msgid "teams.preview.image"
+msgstr "Imagen"
+
+#. js-lingui-explicit-id
+#: src/utils/teams/teamsAttachmentGroups.ts
+msgid "teams.preview.messageCount"
+msgstr "{count, plural, one {# mensaje} other {# mensajes}}"
+
+#. js-lingui-explicit-id
+#: src/utils/teams/teamsAttachmentGroups.ts
+msgid "teams.preview.partialConversation"
+msgstr "Parte de la conversación"
+
+#. js-lingui-explicit-id
+#: src/utils/teams/teamsAttachmentGroups.ts
+msgid "teams.preview.selectedMessages"
+msgstr "Mensajes seleccionados"
+
+#. js-lingui-explicit-id
+#: src/utils/teams/teamsAttachmentGroups.ts
+msgid "teams.preview.skipped"
+msgstr "{skipped, plural, one {# no se pudo cargar} other {# no se pudieron cargar}}"
+
+#. js-lingui-explicit-id
+#: src/utils/teams/teamsAttachmentGroups.ts
+msgid "teams.preview.transcriptLabel"
+msgstr "Conversación de Teams"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Message/TextComparison.tsx
 msgid "textComparison.added"
 msgstr "+ Añadido"
@@ -8355,8 +8405,8 @@ msgstr "supresión de ruido: {noiseSuppression}"
 #~ msgstr "de"
 
 #: src/components/ui/Teams/TeamsConversationView.tsx
-msgid "Older messages are not included."
-msgstr "Los mensajes anteriores no se incluyen."
+#~ msgid "Older messages are not included."
+#~ msgstr "Los mensajes anteriores no se incluyen."
 
 #: src/components/ui/Trace/SidecarLocalTraceView.tsx
 msgid "On this device: {headline}"
@@ -8365,6 +8415,10 @@ msgstr "En este dispositivo: {headline}"
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Only one message can be queued. Replacing discards the message you queued earlier."
 msgstr ""
+
+#: src/components/ui/Teams/TeamsConversationView.tsx
+msgid "Only part of this conversation is included."
+msgstr "Solo se incluye parte de esta conversación."
 
 #: src/components/ui/FileUpload/GroupedFileAttachmentsPreview.tsx
 msgid "Open"

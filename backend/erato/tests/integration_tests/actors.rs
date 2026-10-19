@@ -178,6 +178,7 @@ async fn test_cleanup_logic_with_file_uploads(pool: Pool<Postgres>) {
         audio_transcription: ActiveValue::Set(None),
         external_id_ews_id: ActiveValue::Set(None),
         outlook_provenance: ActiveValue::Set(None),
+        teams_transcript: ActiveValue::Set(None),
         created_at: ActiveValue::Set(Utc::now().into()),
         updated_at: ActiveValue::Set(Utc::now().into()),
     };
@@ -193,6 +194,7 @@ async fn test_cleanup_logic_with_file_uploads(pool: Pool<Postgres>) {
         audio_transcription: ActiveValue::Set(None),
         external_id_ews_id: ActiveValue::Set(None),
         outlook_provenance: ActiveValue::Set(None),
+        teams_transcript: ActiveValue::Set(None),
         created_at: ActiveValue::Set(Utc::now().into()),
         updated_at: ActiveValue::Set(Utc::now().into()),
     };

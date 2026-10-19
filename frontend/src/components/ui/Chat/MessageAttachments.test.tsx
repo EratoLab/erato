@@ -10,7 +10,10 @@ import { messages as enMessages } from "@/locales/en/messages.json";
 
 import { MessageAttachments } from "./MessageAttachments";
 
-import type { FileUploadItem } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type {
+  FileUploadItem,
+  TeamsTranscriptSummaryAsset,
+} from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { Messages } from "@lingui/core";
 
 const fetchSpy = vi.spyOn(globalThis, "fetch");
@@ -62,6 +65,28 @@ const recording = (
     ...file(id, `${id}.wav`),
     audio_transcription: audioTranscription,
   }) as unknown as FileUploadItem;
+
+const summarisedTranscript = (
+  assets: TeamsTranscriptSummaryAsset[] = [],
+): FileUploadItem => ({
+  ...file("t1", "teams-chat.md"),
+  teams_transcript: {
+    sections: [
+      {
+        kind: "chat",
+        title: "Product sync",
+        team_name: null,
+        selection: "whole-chat",
+        truncated: true,
+        skipped_count: 0,
+        message_count: 12,
+        window: { from: "2026-03-01T08:00:00Z", to: "2026-03-03T09:14:00Z" },
+        participants: ["Ada Lovelace"],
+        assets,
+      },
+    ],
+  },
+});
 
 describe("MessageAttachments", () => {
   it("resolves attachments from the conversation's own file map", async () => {
@@ -238,6 +263,86 @@ describe("MessageAttachments", () => {
     expect(
       screen.queryByRole("button", { name: /^Remove/ }),
     ).not.toBeInTheDocument();
+  });
+
+  it("renders a summarised Teams transcript as its conversation", async () => {
+    const files = [summarisedTranscript(), file("o1", "holiday.pdf")];
+
+    await renderWithProviders(
+      <MessageAttachments
+        fileIds={["t1", "o1"]}
+        filesById={byId(...files)}
+        relatedFiles={files}
+        onFilePreview={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("Product sync")).toBeInTheDocument();
+    expect(screen.getByText(/12 messages/)).toBeInTheDocument();
+    expect(screen.getByText("Part of the conversation")).toBeInTheDocument();
+    expect(screen.getByText("holiday.pdf")).toBeInTheDocument();
+  });
+
+  it("opens the transcript from its conversation card", async () => {
+    const onFilePreview = vi.fn();
+    const files = [summarisedTranscript()];
+
+    await renderWithProviders(
+      <MessageAttachments
+        fileIds={["t1"]}
+        filesById={byId(...files)}
+        relatedFiles={files}
+        onFilePreview={onFilePreview}
+      />,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /part of the conversation/i }),
+    );
+    expect(onFilePreview).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "t1", filename: "teams-chat.md" }),
+      files,
+    );
+  });
+
+  it("names a transcript's shared files as Teams named them", async () => {
+    const files = [
+      summarisedTranscript([
+        {
+          name: "teams-file-abcd1234-Q3_report.pdf",
+          display_name: "Q3 report.pdf",
+          kind: "file",
+        },
+      ]),
+      file("f1", "teams-file-abcd1234-Q3_report.pdf"),
+    ];
+
+    await renderWithProviders(
+      <MessageAttachments
+        fileIds={["t1", "f1"]}
+        filesById={byId(...files)}
+        relatedFiles={files}
+        onFilePreview={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("Q3 report.pdf")).toBeInTheDocument();
+    expect(screen.queryByText("Q3_report.pdf")).not.toBeInTheDocument();
+  });
+
+  it("keeps a hand-uploaded Teams-named file without an index as a tile", async () => {
+    const files = [file("t1", "teams-notes.md")];
+
+    await renderWithProviders(
+      <MessageAttachments
+        fileIds={["t1"]}
+        filesById={byId(...files)}
+        relatedFiles={files}
+      />,
+    );
+
+    expect(screen.getByText("teams-notes.md")).toBeInTheDocument();
+    expect(screen.queryByText("Teams conversation")).not.toBeInTheDocument();
   });
 
   it("leaves an ordinary message ungrouped", async () => {

@@ -3,13 +3,11 @@
  * conversation — so the transcript and the files shared inside it read as one
  * thing rather than as loose siblings.
  *
- * Membership comes from the names the picker minted, which are already in the
- * message. The composer groups far more richly, per conversation and per
- * message, but it does that from the transcript's index block, which it reads
- * out of the local `File` it is holding. That file is gone once the message is
- * sent, and re-deriving it would mean downloading and parsing every transcript
- * in the rendered history. This buys the part that matters — "these belong
- * together" — for nothing.
+ * Only the fallback for transcripts uploaded before the backend stored a
+ * summary of their index block (`teams_transcript`); those are grouped by
+ * `buildTeamsSummaryAttachmentGroups`. Without a summary, membership comes from
+ * the names the picker minted, which are already in the message — re-deriving
+ * the index would mean downloading every transcript in the rendered history.
  *
  * Both halves of the pattern are required before anything is grouped. A
  * transcript name is only `teams-*.md`, which a user could plausibly upload by
