@@ -1,8 +1,5 @@
 import {
-  Button,
   DEFAULT_MAX_FILES_PER_MESSAGE,
-  GroupedFileAttachmentsPreview,
-  SpinnerIcon,
   UploadTooLargeError,
   UploadUnknownError,
   fetchUploadFile,
@@ -18,8 +15,6 @@ import {
   type ChatInputControlsHandle,
   type ChatModel,
   type ComposerSizeLimit,
-  type FileAttachmentGroup,
-  type FileAttachmentGroupItem,
   type ActionFacetRequest,
   type AssistantMention,
   type DelegationRunMode,
@@ -31,10 +26,11 @@ import {
   forwardRef,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
-  type ReactNode,
+  type MutableRefObject,
 } from "react";
 
 import { AddinChatInputCore } from "../../core/AddinChatInputCore";
@@ -42,14 +38,18 @@ import {
   useAvailableActionFacetArgs,
   useAvailableActionFacetIds,
 } from "../../core/clientActions/useAvailableActionFacets";
-import { AddinSelectionChip } from "../../core/selection/AddinSelectionChip";
-import { useSelectionDismissal } from "../../core/selection/useSelectionDismissal";
+import { useConversationKey } from "../../core/selection/useConversationKey";
 import { useOffice } from "../../providers/OfficeProvider";
+import { outlookContextStore } from "../hooks/outlookContextStore";
 import { useLiveComposeFields } from "../hooks/useLiveComposeFields";
 import { useOutlookCalendarFetcher } from "../hooks/useOutlookCalendarFetcher";
 import { useOutlookComposeSelection } from "../hooks/useOutlookComposeSelection";
+import { useOutlookContextItems } from "../hooks/useOutlookContextItems";
 import { useSchedulingThreadActive } from "../hooks/useSchedulingThreadActive";
-import { useOutlookEmailSource } from "../providers/OutlookEmailSourceProvider";
+import {
+  useOutlookEmailSource,
+  type StagedEmail,
+} from "../providers/OutlookEmailSourceProvider";
 import {
   NO_ITEM_SEND_IDENTITY,
   readAppointmentComposeSnapshot,
@@ -61,9 +61,11 @@ import {
   isMessageRead,
   resolveSupportedMailboxItem,
 } from "../sessionPolicy";
+import { OutlookComposerMenuContext } from "./OutlookComposerMenuContext";
 import {
-  buildDropEmailGroup,
+  dropAttachmentCounts,
   judgeDropEmailParts,
+  senderAndDate,
 } from "../utils/buildDropEmailGroup";
 import {
   outlookAppointmentFingerprint,
@@ -81,10 +83,22 @@ import {
   type BodyFormat,
 } from "../utils/outlookComposeWrite";
 import {
+  appointmentFields,
+  outlookContextChips,
+  type OutlookAppointmentDisplay,
+  type OutlookContextDisplay,
+} from "../utils/outlookContextChips";
+import {
+  formatAppointmentWhen,
+  formatClockTime,
+} from "../utils/outlookContextFormat";
+import {
   OUTLOOK_SCHEDULE_FACET_ID,
-  isSchedulingThreadFresh,
+  SCHEDULING_THREAD_MAX_AGE_MS,
+  isStickySchedulingOn,
   toLocalOffsetIso,
 } from "../utils/outlookScheduleTool";
+import { planOutlookFiles } from "../utils/outlookSendFiles";
 import { restoreComposerDraft } from "../utils/restoreComposerDraft";
 import { findStagedSendLimit } from "../utils/stagedSendLimit";
 import { EmailTrimError } from "../utils/trimRawEmlBytes";
@@ -96,6 +110,11 @@ import {
 } from "../utils/validateStagedPart";
 
 import type { DropPipelineState } from "../hooks/useDropPipeline";
+import type {
+  OutlookContextDetailData,
+  OutlookContextHandlers,
+} from "../hooks/useOutlookContextItems";
+import type { StagedThread } from "../utils/buildThreadGroup";
 
 /** Verdicts keyed like the dismissals: thread message id or drop key, then attachment id. */
 type StagedPartVerdicts = ReadonlyMap<
@@ -134,10 +153,22 @@ interface AddinChatInputProps {
   initialModel?: ChatModel | null;
   initialSelectedFacetIds?: string[];
   onFacetSelectionChange?: (selectedFacetIds: string[]) => void;
-  showSuggestedEmailSource?: boolean;
+  /**
+   * No message has been sent in this chat yet: the open email and the item's
+   * attachments go by default. On a follow-up they are offered, never sent
+   * unasked.
+   */
+  freshChat?: boolean;
+  /** The open email is staged as a drop (or being read as one): its drop chip stands for it. */
+  openEmailStagedAsDrop?: boolean;
+  /**
+   * Set to the open email's Message-ID while its thread goes with the next
+   * send, so the owner refuses a drop of the same email.
+   */
+  includedEmailMessageIdRef?: MutableRefObject<string | null>;
   /**
    * Called with the dropped emails a send attached, and with a single drop
-   * when the user removes it from its card. The owner clears the drop from
+   * when the user removes its chip. The owner clears the drop from
    * BOTH the provider drop-state and the AddinChat-owned dedup set (the two
    * live in different layers, so neither can release the other alone). A
    * failed upload sends nothing, so the chips stay for a retry.
@@ -151,18 +182,12 @@ interface AddinChatInputProps {
   sizeLimitExceeded?: ComposerSizeLimit | null;
   /**
    * `true` while one or more dropped emails are being expanded or
-   * deduplicated. Gates the send button and renders a non-blocking inline
-   * indicator so the user knows attachments are still materializing.
+   * deduplicated. Gates the send button and draws a progress chip so the
+   * user knows attachments are still materializing.
    */
   isExpandingDroppedEmails?: boolean;
-  /** Which step the dropped items are in; refines the indicator's copy. */
+  /** Which step the dropped items are in; refines the progress chip's copy. */
   dropPipeline?: DropPipelineState;
-  /**
-   * Forwarded to `ChatInput.virtualFiles`. The add-in passes its previewed
-   * email body here so the token estimate covers it without polluting
-   * `attachedFilesState`. Pass a memoized array.
-   */
-  virtualFiles?: File[];
   /**
    * Forwarded to `ChatInput.maxFiles`. The add-in lifts the cap above the
    * web default (5) because Outlook drops expand one email into body + N
@@ -230,44 +255,38 @@ function formatAttendees(
     .join(", ");
 }
 
-// The placeholder stays `count` so the catalog entry reads {count, plural, …}.
-function threadMessageCountLabel(count: number): string {
-  return t({
-    id: "officeAddin.chatInput.threadMessageCount",
-    message: plural(count, { one: "# message", other: "# messages" }),
-  });
+function attendeeNames(
+  attendees: readonly { displayName: string; emailAddress: string }[],
+): string[] {
+  return attendees.map(
+    (attendee) => attendee.displayName || attendee.emailAddress,
+  );
 }
 
-function draftRowText(
-  state: "sent" | "unchanged" | "scheduling",
-  isAppointment: boolean,
-): string {
-  if (state === "scheduling") {
-    return t({
-      id: "officeAddin.chatInput.draftContextScheduling",
-      message: "Your draft is not sent while scheduling",
-    });
-  }
-  if (state === "unchanged") {
-    return isAppointment
-      ? t({
-          id: "officeAddin.chatInput.appointmentContextUnchanged",
-          message: "Appointment details unchanged, not re-sent",
-        })
-      : t({
-          id: "officeAddin.chatInput.draftContextUnchanged",
-          message: "Your draft is unchanged, not re-sent",
-        });
-  }
-  return isAppointment
-    ? t({
-        id: "officeAddin.chatInput.appointmentContext",
-        message: "Appointment details are included as context",
-      })
-    : t({
-        id: "officeAddin.chatInput.draftContext",
-        message: "Your draft is included as context",
-      });
+function appointmentDisplay(
+  snapshot: AppointmentComposeSnapshot,
+): OutlookAppointmentDisplay {
+  return {
+    subject: snapshot.subject,
+    when: formatAppointmentWhen(snapshot.start, snapshot.end),
+    whenLong: formatAppointmentWhen(snapshot.start, snapshot.end, {
+      long: true,
+    }),
+    location: snapshot.location,
+    attendees: attendeeNames([
+      ...snapshot.requiredAttendees,
+      ...snapshot.optionalAttendees,
+    ]),
+  };
+}
+
+/** A polite region for what no chip says: drops being read and added, a thread added from "+". */
+function useHostAnnouncer(): [string, (text: string) => void] {
+  const [text, setText] = useState("");
+  const announce = useCallback((next: string) => {
+    setText((current) => (current === next ? `${next}\u200b` : next));
+  }, []);
+  return [text, announce];
 }
 
 export const AddinChatInput = forwardRef<
@@ -277,7 +296,9 @@ export const AddinChatInput = forwardRef<
   {
     chatId,
     className,
-    showSuggestedEmailSource = false,
+    freshChat = false,
+    openEmailStagedAsDrop = false,
+    includedEmailMessageIdRef,
     isExpandingDroppedEmails = false,
     dropPipeline,
     onEmailSourceDropsSent,
@@ -289,7 +310,7 @@ export const AddinChatInput = forwardRef<
   },
   ref,
 ) {
-  const { host } = useOffice();
+  const { host, mailboxUser } = useOffice();
   const availableFacetIds = useAvailableActionFacetIds();
   const availableFacetArgs = useAvailableActionFacetArgs();
   const composeEmailAvailable = availableFacetIds.has("compose_email");
@@ -310,43 +331,42 @@ export const AddinChatInput = forwardRef<
   const composeSelection = useOutlookComposeSelection();
   const { mailItem, itemIdentity } = useOutlookMailItem();
   const isAppointmentCompose = mailItem?.itemKind === "appointment";
-  // A dismissal lasts until the selection changes or another item opens
-  // (ERMAIN-431).
-  const selectionDismissal = useSelectionDismissal(
-    composeSelection.data
-      ? `${composeSelection.sourceProperty}:${composeSelection.data}`
-      : "",
-    itemIdentity ?? "",
+
+  // Every (x)/(+) choice lives in memory, per conversation, and the
+  // item-scoped ones end with the mail item (ERMAIN-431 for the selection).
+  const conversationKey = useConversationKey(
+    chatId,
+    mailboxUser?.emailAddress ?? "",
   );
+  const itemKey = itemIdentity ?? "";
+  const selectionKey = composeSelection.data
+    ? `${composeSelection.sourceProperty}:${composeSelection.data}`
+    : "";
+  const choices = outlookContextStore.useChoices(conversationKey, {
+    itemKey,
+    selectionKey,
+  });
   // Appointment facets are config-defined (subscription content, not
   // builtins): when the backend doesn't advertise them, the resolver would
-  // drop the facet — so the selection/draft context must not count as
-  // included, or the chips would promise context the send doesn't carry.
-  const hasActiveSelection =
+  // drop the facet, so the selection and draft must not count as included.
+  const selectionCarriable =
     composeSelection.data.length > 0 &&
-    !selectionDismissal.dismissed &&
     (!isAppointmentCompose || appointmentRewriteAvailable);
+  const hasActiveSelection = selectionCarriable && !choices.selectionDismissed;
 
-  // Draft-as-context (#1): a non-empty compose body is eligible to ride along
-  // as `outlook_review_draft`, but the user can switch it off via the draft
-  // chip. Default on; reset to on when the Outlook item changes (a new draft).
+  // A non-empty compose body (or an appointment) can ride along as
+  // `outlook_review_draft`; its chip switches it off until the item changes.
   const draftBodyText = mailItem?.bodyText ?? mailItem?.bodyHtml ?? "";
-  const [isDraftDismissed, setIsDraftDismissed] = useState(false);
-  const lastDraftItemIdentityRef = useRef(itemIdentity);
-  if (itemIdentity !== lastDraftItemIdentityRef.current) {
-    lastDraftItemIdentityRef.current = itemIdentity;
-    setIsDraftDismissed(false);
-  }
-  const isDraftContextIncluded =
+  const draftAvailable =
     !!mailItem?.isComposeMode &&
     (draftBodyText.length > 0 || isAppointmentCompose) &&
-    !isDraftDismissed &&
     (!isAppointmentCompose || appointmentContextAvailable);
+  const isDraftContextIncluded = draftAvailable && !choices.draftOff;
 
   // Draft de-dup marker (#4): what the last send of the draft context left in
   // this chat (see `OutlookSentDraft`). Client-side by design — the backend is
   // action-facet toggle-stateless. Reset when the chat changes so a fresh
-  // chat re-sends the draft. The send reads the ref; the draft row reads the
+  // chat re-sends the draft. The send reads the ref; the draft chip reads the
   // state, so it re-renders when the marker moves.
   const lastSentDraftRef = useRef<OutlookSentDraft | null>(null);
   const [lastSentDraft, setLastSentDraft] = useState<OutlookSentDraft | null>(
@@ -371,9 +391,11 @@ export const AddinChatInput = forwardRef<
     }
   }
 
-  const schedulingThreadActive = useSchedulingThreadActive(
-    lastSchedulingSignalAt,
-  );
+  // Ending scheduling holds for the signal the user ended; Erato reading the
+  // calendar again turns it back on.
+  const schedulingFresh = useSchedulingThreadActive(lastSchedulingSignalAt);
+  const schedulingThreadActive =
+    schedulingFresh && lastSchedulingSignalAt !== choices.schedulingEndedAt;
   // What the send falls back to per field when a live appointment read fails.
   const appointmentFallback = useMemo<AppointmentComposeSnapshot>(
     () => ({
@@ -389,13 +411,16 @@ export const AddinChatInput = forwardRef<
     }),
     [mailItem],
   );
+  const reviewCarriesRecipients = !!availableFacetArgs
+    .get("outlook_review_draft")
+    ?.has("recipients");
   const liveComposeFields = useLiveComposeFields({
     watch:
       host !== "Outlook" || !mailItem?.isComposeMode
         ? null
         : isAppointmentCompose
           ? "appointment"
-          : availableFacetArgs.get("outlook_review_draft")?.has("recipients")
+          : reviewCarriesRecipients
             ? "recipients"
             : null,
     itemIdentity,
@@ -407,9 +432,9 @@ export const AddinChatInput = forwardRef<
       ? (liveComposeFields.appointmentFingerprint ??
         outlookAppointmentFingerprint(mailItem))
       : undefined;
-  // The draft row says what the send would do with the draft, from the same
-  // resolver, so it never claims context the send leaves out.
-  const draftPreview = previewOutlookSend({
+  // The chips say what the send would do with the draft and selection, from
+  // the same resolver, so they never claim context the send leaves out.
+  const sendPreview = previewOutlookSend({
     itemKind: mailItem?.itemKind ?? null,
     hasActiveSelection,
     selectionData: composeSelection.data,
@@ -431,27 +456,26 @@ export const AddinChatInput = forwardRef<
     lastSentDraft,
     liveRecipients: liveComposeFields.recipients,
   });
-  // A live selection replaces the draft; that row stays hidden as before.
-  const draftRowState =
-    host === "Outlook" &&
-    (draftPreview.draft === "sent" ||
-      draftPreview.draft === "unchanged" ||
-      draftPreview.draft === "scheduling")
-      ? draftPreview.draft
-      : null;
   const {
-    hasSelectedEmailSource,
     emailSubject,
-    isLoadingEmailBody,
-    emailThreadLoadError,
-    selectedAttachmentItems,
+    stagedEmails,
+    currentThread,
+    threadFile,
+    threadStatus,
+    threadTrimError,
+    emailThreadSignIn,
+    signingIn,
+    retryEmailThread,
+    signInForEmail,
+    restoreEmailBody,
+    itemAttachments,
+    dismissedAttachmentIds,
     isLoadingAttachments,
     removeAttachment,
+    restoreAttachment,
     resolveSelectedFilesForSend,
     getFileProvenance,
     parentReplyContext,
-    isLoadingParentReplyContext,
-    stagedEmails,
     dismissStagedEmailAttachment,
     restoreStagedEmailAttachment,
     dismissStagedEmailBody,
@@ -461,7 +485,6 @@ export const AddinChatInput = forwardRef<
     isDropResolutionStale,
     resolvedDrops,
     resolvedParts,
-    resolvedTotalBytes,
   } = useOutlookEmailSource();
   const { maxSizeBytes: globalMaxSizeBytes, maxSizeFormatted } =
     useUploadFeature();
@@ -500,39 +523,23 @@ export const AddinChatInput = forwardRef<
       ),
     [chatInputControls],
   );
-  // Drop-staged emails are always user-driven, so they bypass the
-  // `showSuggestedEmailSource` gate (which is for the auto-suggest of the
-  // currently-open email when the chat is still fresh). Without this the
-  // preview region stays hidden after a drop into a chat that already has
-  // messages.
-  const hasDroppedStagedEmails = stagedEmails.some(
-    (staged) => staged.source === "drop",
+  const threadStaged = useMemo(
+    () =>
+      stagedEmails.find(
+        (staged): staged is StagedThread => staged.source === "current-thread",
+      ) ?? null,
+    [stagedEmails],
   );
-  const shouldUseSuggestedEmailSource =
-    (showSuggestedEmailSource && hasSelectedEmailSource) ||
-    hasDroppedStagedEmails;
-  const isWaitingForSuggestedEmail =
-    showSuggestedEmailSource &&
-    !hasDroppedStagedEmails &&
-    isLoadingEmailBody &&
-    !emailThreadLoadError;
-  // Render the email-source preview whenever there is *something* to show:
-  // a real attachment, an in-flight attachment fetch, or the reply-context
-  // chip (resolved or still loading). Without this gate the preview region
-  // would render an empty card whenever the host is Outlook in compose
-  // mode but Graph hasn't yet returned a parent message.
-  const shouldShowEmailSourcePreview =
-    host === "Outlook" &&
-    (hasDroppedStagedEmails ||
-      (showSuggestedEmailSource &&
-        (hasSelectedEmailSource ||
-          isLoadingEmailBody ||
-          emailThreadLoadError ||
-          isLoadingAttachments ||
-          parentReplyContext !== null ||
-          isLoadingParentReplyContext)));
-  // One verdict per rendered attachment row, shared by the rows and the
-  // exclusions handed to the provider so the two can never disagree.
+  const stagedDrops = useMemo(
+    () =>
+      stagedEmails.filter(
+        (staged): staged is Extract<StagedEmail, { source: "drop" }> =>
+          staged.source === "drop",
+      ),
+    [stagedEmails],
+  );
+  // One verdict per checklist row, shared by the rows and the exclusions
+  // handed to the provider so the two can never disagree.
   const { stagedPartVerdicts, policyExclusions } = useMemo<{
     stagedPartVerdicts: StagedPartVerdicts;
     policyExclusions: ReadonlyMap<string, string[]>;
@@ -581,6 +588,96 @@ export const AddinChatInput = forwardRef<
     }
   }, [policyExclusions, setPolicyExcludedAttachmentIds]);
 
+  // The thread's conversation, known while it loads too, so an email already
+  // sent in this chat stays hidden when the user comes back to it.
+  const threadConversationId =
+    currentThread?.conversationId ?? mailItem?.conversationId ?? null;
+  const attachmentMode: "compose" | "read" = mailItem?.isComposeMode
+    ? "compose"
+    : "read";
+  const resolvedDropByKey = useMemo(
+    () => new Map(resolvedDrops.map((drop) => [drop.key, drop])),
+    [resolvedDrops],
+  );
+  // Which files the send uploads, one decision per file; the chips render
+  // this plan and the send uploads exactly it.
+  const plan = useMemo(
+    () =>
+      planOutlookFiles({
+        freshChat,
+        thread: {
+          status: threadStatus,
+          signIn: emailThreadSignIn,
+          messageCount: threadStaged?.thread.messages.length ?? 0,
+          includedMessageCount: threadStaged
+            ? threadStaged.thread.messages.filter(
+                (message) => !threadStaged.dismissedMessageIds.has(message.id),
+              ).length
+            : 0,
+          file: threadFile,
+          partKey: threadStaged?.key ?? null,
+          trimError: threadTrimError !== null,
+          conversationId: threadConversationId,
+          choice: choices.threadChoice,
+          sentInChat:
+            threadConversationId !== null &&
+            choices.threadsSentInChat.has(threadConversationId),
+          stagedAsDrop: openEmailStagedAsDrop,
+        },
+        attachments: {
+          mode: attachmentMode,
+          items: itemAttachments.map((attachment) => ({
+            id: attachment.id,
+            cloud: attachment.cloud,
+            ticked: !dismissedAttachmentIds.includes(attachment.id),
+          })),
+          loading: isLoadingAttachments,
+          groupOff: choices.attachmentsGroupOff,
+          includeOnFollowUpIds: choices.includeOnFollowUpIds,
+          sentIds: choices.sentAttachmentIds,
+        },
+        drops: stagedDrops.map((staged) => {
+          const resolved = resolvedDropByKey.get(staged.key);
+          return {
+            key: staged.key,
+            file: resolved?.file ?? null,
+            size: resolved?.size ?? 0,
+            error: !!resolved?.error,
+          };
+        }),
+      }),
+    [
+      attachmentMode,
+      choices,
+      dismissedAttachmentIds,
+      emailThreadSignIn,
+      freshChat,
+      isLoadingAttachments,
+      itemAttachments,
+      openEmailStagedAsDrop,
+      resolvedDropByKey,
+      stagedDrops,
+      threadConversationId,
+      threadFile,
+      threadStaged,
+      threadStatus,
+      threadTrimError,
+    ],
+  );
+
+  // The owner refuses a drop of the email the next send already carries. Set
+  // after the commit: a drop is handled asynchronously, never mid-render.
+  useLayoutEffect(() => {
+    if (!includedEmailMessageIdRef) return;
+    includedEmailMessageIdRef.current = plan.uploadThread
+      ? (mailItem?.internetMessageId ?? null)
+      : null;
+  }, [
+    includedEmailMessageIdRef,
+    mailItem?.internetMessageId,
+    plan.uploadThread,
+  ]);
+
   // The composer's own attachments, mirrored here so the limit check can
   // count them next to the staged emails it will upload alongside.
   const [composerFiles, setComposerFiles] = useState<FileUploadItem[]>([]);
@@ -600,386 +697,337 @@ export const AddinChatInput = forwardRef<
   );
   const stagedLimitExceeded = useMemo<ComposerSizeLimit | null>(
     () =>
-      findStagedSendLimit(
-        // The send only uploads the staged emails on this path.
-        shouldUseSuggestedEmailSource ? resolvedParts : [],
-        composerFiles,
-        {
-          maxBytes: globalMaxSizeBytes,
-          maxFormatted: maxSizeFormatted,
-          maxFiles,
-        },
-      ),
-    [
-      composerFiles,
-      globalMaxSizeBytes,
-      maxFiles,
-      maxSizeFormatted,
-      resolvedParts,
-      shouldUseSuggestedEmailSource,
-    ],
+      findStagedSendLimit(plan.parts, composerFiles, {
+        maxBytes: globalMaxSizeBytes,
+        maxFormatted: maxSizeFormatted,
+        maxFiles,
+      }),
+    [composerFiles, globalMaxSizeBytes, maxFiles, maxSizeFormatted, plan.parts],
   );
   const sizeLimitExceeded = ownerSizeLimitExceeded ?? stagedLimitExceeded;
 
-  const emailSourceGroups = useMemo<FileAttachmentGroup[]>(() => {
-    const groups: FileAttachmentGroup[] = [];
-    const updatingLabel = t({
-      id: "officeAddin.fileSource.updatingThread",
-      message: "Updating…",
-    });
-    // What the send would upload right now, against the upload limit.
-    const used = formatFileSize(resolvedTotalBytes);
-    const limit = maxSizeFormatted;
-    const usedOfLimitLabel =
-      isThreadEmlStale || isDropResolutionStale
-        ? updatingLabel
-        : t({
-            id: "officeAddin.chatInput.stagedSize",
-            message: `${used} of ${limit}`,
-          });
-
-    if (
-      showSuggestedEmailSource &&
-      !hasDroppedStagedEmails &&
-      stagedEmails.every((staged) => staged.source !== "current-thread") &&
-      (isLoadingEmailBody || emailThreadLoadError)
-    ) {
-      groups.push({
-        id: "current-email-thread-status",
-        label:
-          emailSubject ||
-          t({
-            id: "officeAddin.chatInput.emailFallback",
-            message: "Email",
+  const [hostAnnouncement, announce] = useHostAnnouncer();
+  // The lane says nothing of chips that appear, so the drop pipeline's start
+  // and outcome are said here.
+  const dropCount = stagedDrops.length;
+  const dropsBeforeRef = useRef<number | null>(null);
+  const dropTotal = dropPipeline?.total ?? 0;
+  useEffect(() => {
+    if (isExpandingDroppedEmails && dropsBeforeRef.current === null) {
+      dropsBeforeRef.current = dropCount;
+      const count = Math.max(1, dropTotal);
+      announce(
+        t({
+          id: "officeAddin.outlook.context.drop.announce.reading",
+          message: plural(count, {
+            one: "Reading # dropped email.",
+            other: "Reading # dropped emails.",
           }),
-        metaLabel: "",
-        items: isLoadingEmailBody
-          ? [
-              {
-                kind: "loading",
-                id: "current-email-thread-loading",
-                label: t({
-                  id: "officeAddin.chatInput.loadingEmailThread",
-                  message: "Loading email thread...",
-                }),
-                description: t({
-                  id: "officeAddin.chatInput.loadingEmailThreadDescription",
-                  message: "Preparing the email context",
-                }),
-              },
-            ]
-          : [
-              {
-                kind: "status",
-                id: "current-email-thread-error",
-                tone: "error",
-                label: t({
-                  id: "officeAddin.chatInput.emailThreadLoadError",
-                  message: "Couldn't load the email thread",
-                }),
-                description: t({
-                  id: "officeAddin.chatInput.emailThreadLoadErrorDescription",
-                  message: "You can still send without this email context.",
-                }),
-              },
-            ],
-      });
-    }
-
-    // Reply-context chip (compose mode) — read-only, not threaded into
-    // `resolveSelectedFilesForSend` (the parent body reaches the LLM via
-    // the `outlook_review_draft.full_body` action facet).
-    if (parentReplyContext || isLoadingParentReplyContext) {
-      const items: FileAttachmentGroupItem[] = [];
-      if (parentReplyContext) {
-        const senderLabel =
-          parentReplyContext.fromName?.trim() ||
-          parentReplyContext.fromAddress?.trim() ||
-          "";
-        const subjectLabel =
-          parentReplyContext.subject.trim() ||
-          t({
-            id: "officeAddin.chatInput.replyContext.untitled",
-            message: "(no subject)",
-          });
-        items.push({
-          kind: "context",
-          id: "reply-context",
-          file: {
-            id: "reply-context",
-            filename: subjectLabel,
-            displayName: senderLabel
-              ? `${subjectLabel} — ${senderLabel}`
-              : subjectLabel,
-          },
-          labelOverride: t({
-            id: "officeAddin.chatInput.replyContext.label",
-            message: "Reply context",
-          }),
-        });
-      } else {
-        items.push({ kind: "loading", id: "reply-context-loading" });
-      }
-      groups.push({
-        id: "reply-context",
-        label: t({
-          id: "officeAddin.chatInput.replyContext.groupLabel",
-          message: "Reply context",
         }),
-        metaLabel: "",
-        items,
-      });
-    }
-
-    // Staged emails: the currently-open Outlook conversation renders as one
-    // card with each thread message nested inside (threadMessageGroup items);
-    // drag-dropped .eml files render as flat cards (one per drop).
-    for (const staged of stagedEmails) {
-      if (staged.source === "current-thread") {
-        const messageCount = staged.thread.messages.length;
-        const items: FileAttachmentGroupItem[] = staged.thread.messages.map(
-          (message) => {
-            const senderLabel =
-              message.from?.name?.trim() ||
-              message.from?.address?.trim() ||
-              t({
-                id: "officeAddin.chatInput.unknownSender",
-                message: "Unknown sender",
-              });
-            const dateLabel = message.date
-              ? new Date(message.date).toLocaleString()
-              : "";
-            const sublabel = [dateLabel, message.subject]
-              .filter((part) => part.trim().length > 0)
-              .join(" · ");
-
-            const messageDismissed = staged.dismissedMessageIds.has(message.id);
-            const messageVerdicts = stagedPartVerdicts.get(message.id);
-            const sendable = message.attachments.filter((attachment) => {
-              if (attachment.isInline) return false;
-              const verdict = messageVerdicts?.get(attachment.id);
-              return !verdict || !isPolicyExcluded(verdict);
-            });
-            const attachmentItems = message.attachments
-              .filter((attachment) => !attachment.isInline)
-              .map((attachment) => {
-                const dismissed = staged.dismissedAttachmentIds.has(
-                  attachment.id,
-                );
-                const validation = messageVerdicts?.get(attachment.id);
-                const excluded = !!validation && isPolicyExcluded(validation);
-                return {
-                  id: attachment.id,
-                  file: {
-                    id: attachment.id,
-                    filename: attachment.filename,
-                    size: attachment.size,
-                  },
-                  // Nothing of an unticked message is sent.
-                  selected: !messageDismissed && !dismissed,
-                  onToggle: excluded
-                    ? undefined
-                    : () => {
-                        if (messageDismissed) {
-                          // Bringing the message back would bring every
-                          // sibling with it; only the ticked one should come.
-                          for (const sibling of sendable) {
-                            if (
-                              sibling.id !== attachment.id &&
-                              !staged.dismissedAttachmentIds.has(sibling.id)
-                            ) {
-                              dismissStagedEmailAttachment(
-                                message.id,
-                                sibling.id,
-                              );
-                            }
-                          }
-                          restoreStagedEmailBody(message.id);
-                          if (dismissed) {
-                            restoreStagedEmailAttachment(
-                              message.id,
-                              attachment.id,
-                            );
-                          }
-                        } else if (dismissed) {
-                          restoreStagedEmailAttachment(
-                            message.id,
-                            attachment.id,
-                          );
-                        } else {
-                          dismissStagedEmailAttachment(
-                            message.id,
-                            attachment.id,
-                          );
-                        }
-                      },
-                  validation,
-                };
-              });
-
-            return {
-              kind: "threadMessageGroup" as const,
-              id: message.id,
-              label: senderLabel,
-              sublabel,
-              selected: !messageDismissed,
-              onToggle: () => {
-                if (messageDismissed) {
-                  restoreStagedEmailBody(message.id);
-                } else {
-                  dismissStagedEmailBody(message.id);
-                }
-              },
-              defaultCollapsed: true,
-              attachments: attachmentItems,
-            };
-          },
+      );
+    } else if (!isExpandingDroppedEmails && dropsBeforeRef.current !== null) {
+      const count = dropCount - dropsBeforeRef.current;
+      dropsBeforeRef.current = null;
+      if (count > 0) {
+        announce(
+          t({
+            id: "officeAddin.outlook.context.drop.announce.added",
+            message: plural(count, {
+              one: "# email added.",
+              other: "# emails added.",
+            }),
+          }),
         );
-
-        groups.push({
-          id: `staged-email:${staged.key}`,
-          label:
-            staged.thread.subject ||
-            emailSubject ||
-            t({
-              id: "officeAddin.chatInput.emailFallback",
-              message: "Email",
-            }),
-          metaLabel: `${threadMessageCountLabel(messageCount)} · ${usedOfLimitLabel}`,
-          items,
-          collapsible: true,
-          defaultCollapsed: true,
-        });
-        continue;
-      }
-
-      // source === "drop" — one .eml dragged onto the chat.
-      // The trimmed file is what gets sent, so its size is the one to show;
-      // a dismissed or failed drop has none and falls back to the original.
-      const resolvedDrop = resolvedDrops.find(
-        (drop) => drop.key === staged.key,
-      );
-      groups.push({
-        ...buildDropEmailGroup(staged, {
-          resolvedSize: resolvedDrop?.file?.size,
-          bodyMetaLabel: isDropResolutionStale ? updatingLabel : undefined,
-          verdicts: stagedPartVerdicts.get(staged.key),
-          fallbackSubject: emailSubject,
-          dismissBody: () => dismissStagedEmailBody(staged.key),
-          restoreBody: () => restoreStagedEmailBody(staged.key),
-          dismissAttachment: (attachmentId) =>
-            dismissStagedEmailAttachment(staged.key, attachmentId),
-          restoreAttachment: (attachmentId) =>
-            restoreStagedEmailAttachment(staged.key, attachmentId),
-        }),
-        // Removing a drop must not need the card opened first.
-        pinActions: true,
-      });
-    }
-
-    // Office.js compose-mode attachments fallback. These are only relevant
-    // when no `.eml` is staged (compose mode); in read mode they would be
-    // redundant copies of the in-eml attachments shown in the staged group.
-    if (stagedEmails.length === 0) {
-      const items: FileAttachmentGroupItem[] = [];
-
-      for (const attachmentItem of selectedAttachmentItems) {
-        items.push({
-          kind: "attachment",
-          id: attachmentItem.id,
-          file: attachmentItem,
-        });
-      }
-
-      if (isLoadingAttachments) {
-        items.push({ kind: "loading", id: "attachments-loading" });
-      }
-
-      if (items.length > 0) {
-        groups.push({
-          id: "current-email-fallback",
-          label:
-            emailSubject ||
-            t({
-              id: "officeAddin.chatInput.emailFallback",
-              message: "Email",
-            }),
-          metaLabel: "",
-          items,
-        });
       }
     }
+  }, [announce, dropCount, dropTotal, isExpandingDroppedEmails]);
 
-    return groups;
-  }, [
-    dismissStagedEmailAttachment,
-    dismissStagedEmailBody,
-    emailThreadLoadError,
-    emailSubject,
-    hasDroppedStagedEmails,
-    isDropResolutionStale,
-    isLoadingAttachments,
-    isLoadingEmailBody,
-    isLoadingParentReplyContext,
-    isThreadEmlStale,
+  const recipientNames = (
+    recipients: readonly { displayName: string; emailAddress: string }[] = [],
+  ) => attendeeNames(recipients);
+  const liveRecipientList = liveComposeFields.recipientList;
+  const display: OutlookContextDisplay = {
+    freshChat,
+    itemKind: mailItem?.itemKind ?? null,
+    selection:
+      host === "Outlook" && selectionCarriable
+        ? { text: composeSelection.data, dismissed: choices.selectionDismissed }
+        : null,
+    draft:
+      host === "Outlook" && draftAvailable
+        ? {
+            kind: isAppointmentCompose ? "appointment" : "message",
+            off: choices.draftOff,
+            body: draftBodyText,
+            parent: parentReplyContext
+              ? {
+                  subject: parentReplyContext.subject,
+                  sender:
+                    parentReplyContext.fromName?.trim() ||
+                    parentReplyContext.fromAddress?.trim() ||
+                    "",
+                }
+              : null,
+            recipients:
+              !isAppointmentCompose && reviewCarriesRecipients
+                ? {
+                    to: recipientNames(liveRecipientList?.to ?? mailItem?.to),
+                    cc: recipientNames(liveRecipientList?.cc ?? mailItem?.cc),
+                  }
+                : null,
+            appointment: isAppointmentCompose
+              ? appointmentDisplay(
+                  liveComposeFields.appointment ?? appointmentFallback,
+                )
+              : null,
+          }
+        : null,
+    thread: {
+      subject: threadStaged?.thread.subject || emailSubject,
+      sizeLabel: threadFile ? formatFileSize(threadFile.size) : null,
+      stale: isThreadEmlStale,
+      signingIn,
+    },
     maxSizeFormatted,
-    parentReplyContext,
-    resolvedDrops,
-    resolvedTotalBytes,
-    restoreStagedEmailAttachment,
-    restoreStagedEmailBody,
-    selectedAttachmentItems,
-    showSuggestedEmailSource,
-    stagedEmails,
-    stagedPartVerdicts,
-  ]);
+    attachments: {
+      mode: attachmentMode,
+      rows: itemAttachments.map((attachment) => ({
+        id: attachment.id,
+        name: attachment.name,
+        size: attachment.size,
+        sizeLabel: formatFileSize(attachment.size),
+        type: attachment.contentType,
+        ticked: !dismissedAttachmentIds.includes(attachment.id),
+        cloud: attachment.cloud,
+      })),
+      groupOff: choices.attachmentsGroupOff,
+    },
+    drops: stagedDrops.map((staged) => ({
+      key: staged.key,
+      subject: staged.parsed.subject ?? "",
+      senderAndDate: senderAndDate(staged.parsed),
+      ...dropAttachmentCounts(staged, stagedPartVerdicts.get(staged.key)),
+    })),
+    dropProgress: isExpandingDroppedEmails
+      ? dropPipelineLabel(dropPipeline)
+      : null,
+    schedulingUntil:
+      sendPreview.mode === "scheduling" && lastSchedulingSignalAt
+        ? formatClockTime(
+            new Date(
+              Date.parse(lastSchedulingSignalAt) + SCHEDULING_THREAD_MAX_AGE_MS,
+            ),
+          )
+        : null,
+    formatSize: formatFileSize,
+  };
+  const models = outlookContextChips(sendPreview, plan, display);
 
-  // A dropped email leaves through the same door a sent one does, so the
-  // owner releases its dedup claim too. The card pins it to its header.
-  const emailSourceGroupActions = useMemo(() => {
-    const actions: Partial<Record<string, ReactNode>> = {};
-    for (const staged of stagedEmails) {
-      if (staged.source !== "drop") continue;
-      const drop = {
-        key: staged.key,
-        messageId: staged.parsed.messageId ?? null,
-      };
-      const groupId = `staged-email:${staged.key}`;
-      const subject =
-        emailSourceGroups.find((group) => group.id === groupId)?.label ?? "";
-      actions[groupId] = (
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="self-start px-0 text-xs"
-          disabled={isUploadingEmail}
-          onClick={() => {
-            onEmailSourceDropsSent?.([drop]);
-            // The card goes with the button, which would drop focus to the
-            // page outside the task pane's composer.
-            chatInputControls.focusInput();
-          }}
-          data-testid={`addin-staged-email-remove-${staged.key}`}
-          aria-label={t({
-            id: "officeAddin.chatInput.removeDroppedEmailNamed",
-            message: `Remove ${subject}`,
-          })}
-        >
-          {t({
-            id: "officeAddin.chatInput.removeDroppedEmail",
-            message: "Remove",
-          })}
-        </Button>
-      );
-    }
-    return actions;
+  const handlers = useMemo<OutlookContextHandlers>(
+    () => ({
+      dismissSelection: () =>
+        outlookContextStore.dismissSelection(
+          conversationKey,
+          itemKey,
+          selectionKey,
+        ),
+      rearmSelection: () =>
+        outlookContextStore.rearmSelection(
+          conversationKey,
+          itemKey,
+          selectionKey,
+        ),
+      sendDraftInstead: () =>
+        outlookContextStore.dismissSelection(
+          conversationKey,
+          itemKey,
+          selectionKey,
+        ),
+      setDraftOff: (off) =>
+        outlookContextStore.setDraftOff(conversationKey, itemKey, off),
+      excludeThread: () =>
+        outlookContextStore.setThreadChoice(
+          conversationKey,
+          itemKey,
+          "excluded",
+        ),
+      includeThread: () =>
+        outlookContextStore.setThreadChoice(
+          conversationKey,
+          itemKey,
+          "included",
+        ),
+      retryThread: retryEmailThread,
+      signInForEmail: () => void signInForEmail(),
+      restoreEveryMessage: restoreEmailBody,
+      dismissAttachment: removeAttachment,
+      restoreAttachment,
+      includeAttachmentsOnFollowUp: (ids) =>
+        outlookContextStore.includeAttachmentsOnFollowUp(
+          conversationKey,
+          itemKey,
+          ids,
+        ),
+      setAttachmentsGroupOff: (off) =>
+        outlookContextStore.setAttachmentsGroupOff(
+          conversationKey,
+          itemKey,
+          off,
+        ),
+      // A dropped email leaves through the same door a sent one does, so the
+      // owner releases its dedup claim too.
+      removeDrop: (key) => {
+        const staged = stagedDrops.find((drop) => drop.key === key);
+        onEmailSourceDropsSent?.([
+          { key, messageId: staged?.parsed.messageId ?? null },
+        ]);
+      },
+      endScheduling: () => {
+        if (lastSchedulingSignalAt === null) return;
+        outlookContextStore.endScheduling(
+          conversationKey,
+          itemKey,
+          lastSchedulingSignalAt,
+        );
+      },
+      thread: {
+        dismissMessage: dismissStagedEmailBody,
+        restoreMessage: restoreStagedEmailBody,
+        dismissAttachment: dismissStagedEmailAttachment,
+        restoreAttachment: restoreStagedEmailAttachment,
+      },
+      dismissDropAttachment: dismissStagedEmailAttachment,
+      restoreDropAttachment: restoreStagedEmailAttachment,
+    }),
+    [
+      conversationKey,
+      dismissStagedEmailAttachment,
+      dismissStagedEmailBody,
+      itemKey,
+      lastSchedulingSignalAt,
+      onEmailSourceDropsSent,
+      removeAttachment,
+      restoreAttachment,
+      restoreEmailBody,
+      restoreStagedEmailAttachment,
+      restoreStagedEmailBody,
+      retryEmailThread,
+      selectionKey,
+      signInForEmail,
+      stagedDrops,
+    ],
+  );
+
+  // The appointment detail re-reads the live form once it opens, as the send
+  // does: editing it fires no event the bound item sees.
+  const readAppointmentFields = useCallback(async () => {
+    const live = resolveSupportedMailboxItem(Office.context.mailbox?.item);
+    if (!live || !isAppointmentComposeItem(live)) return null;
+    const snapshot = await readAppointmentComposeSnapshot(
+      live,
+      liveComposeFields.appointment ?? appointmentFallback,
+    );
+    return appointmentFields(appointmentDisplay(snapshot));
+  }, [appointmentFallback, liveComposeFields.appointment]);
+
+  const updatingLabel = t({
+    id: "officeAddin.fileSource.updatingThread",
+    message: "Updating…",
+  });
+  const detail = useMemo<OutlookContextDetailData>(
+    () => ({
+      threadStaged,
+      threadVerdicts: stagedPartVerdicts,
+      threadExcluded: choices.threadChoice === "excluded",
+      threadFile,
+      drops: stagedDrops,
+      dropVerdicts: stagedPartVerdicts,
+      dropFiles: new Map(
+        stagedDrops.map((staged) => [
+          staged.key,
+          resolvedDropByKey.get(staged.key)?.file ?? null,
+        ]),
+      ),
+      dropSizeLabels: new Map(
+        stagedDrops.map((staged) => [
+          staged.key,
+          isDropResolutionStale
+            ? updatingLabel
+            : formatFileSize(
+                resolvedDropByKey.get(staged.key)?.file?.size ??
+                  staged.parsed.rawEmlFile.size,
+              ),
+        ]),
+      ),
+      fallbackSubject: emailSubject,
+      readAppointmentFields: isAppointmentCompose
+        ? readAppointmentFields
+        : undefined,
+    }),
+    [
+      choices.threadChoice,
+      emailSubject,
+      isAppointmentCompose,
+      isDropResolutionStale,
+      readAppointmentFields,
+      resolvedDropByKey,
+      stagedDrops,
+      stagedPartVerdicts,
+      threadFile,
+      threadStaged,
+      updatingLabel,
+    ],
+  );
+  const { items: contextItems, modes: composerModes } = useOutlookContextItems({
+    models,
+    handlers,
+    detail,
+    sending: isUploadingEmail,
+  });
+
+  const menuState = useMemo(() => {
+    const disposition = plan.thread;
+    const row =
+      disposition.kind === "none"
+        ? ("none" as const)
+        : disposition.kind === "hidden"
+          ? disposition.why === "dropped"
+            ? ("dropped" as const)
+            : ("add-again" as const)
+          : ("in-composer" as const);
+    return {
+      thread: {
+        row,
+        fileName:
+          threadFile?.name ??
+          (threadStaged?.thread.subject ||
+            emailSubject ||
+            t({ id: "officeAddin.chatInput.emailFallback", message: "Email" })),
+        size: threadFile?.size ?? null,
+        addAgain: () => {
+          if (threadConversationId === null) return;
+          outlookContextStore.includeThreadAgain(
+            conversationKey,
+            itemKey,
+            threadConversationId,
+          );
+        },
+      },
+      attachments:
+        disposition.kind === "hidden" && disposition.why === "sent-in-chat"
+          ? ("upload" as const)
+          : ("in-composer" as const),
+      announce,
+    };
   }, [
-    chatInputControls,
-    emailSourceGroups,
-    isUploadingEmail,
-    onEmailSourceDropsSent,
-    stagedEmails,
+    announce,
+    conversationKey,
+    emailSubject,
+    itemKey,
+    plan.thread,
+    threadConversationId,
+    threadFile,
+    threadStaged,
   ]);
 
   const wrappedOnSendMessage = useCallback(
@@ -1002,6 +1050,8 @@ export const AddinChatInput = forwardRef<
       // actions like create-appointment can auto-prompt) while item-bound
       // executors treat it as a mismatch and fail closed.
       const sendItemIdentity = itemIdentity ?? NO_ITEM_SEND_IDENTITY;
+      const sendConversationKey = conversationKey;
+      const sendItemKey = itemKey;
       setSendFailure(null);
 
       // Recipient edits do not fire ItemChanged. Read the live fields at send
@@ -1102,8 +1152,9 @@ export const AddinChatInput = forwardRef<
           calendarAvailable: calendarFetcher !== null,
           // Judged again here rather than read from render: the send can
           // come after the window closed and before the re-render.
-          schedulingThreadActive: isSchedulingThreadFresh(
+          schedulingThreadActive: isStickySchedulingOn(
             lastSchedulingSignalAt,
+            choices.schedulingEndedAt,
             Date.now(),
           ),
           nowIso: toLocalOffsetIso(new Date().toISOString()),
@@ -1113,7 +1164,7 @@ export const AddinChatInput = forwardRef<
       const previousSentDraft = lastSentDraftRef.current;
       if (sentDraftFingerprint !== null) {
         // Remember what we sent so an unchanged follow-up de-dupes (#4). The
-        // draft row sees the appointment as last read at render time, which
+        // draft chip sees the appointment as last read at render time, which
         // can lag the live form, so it compares against that as well.
         rememberSentDraft({
           sent: sentDraftFingerprint,
@@ -1130,18 +1181,28 @@ export const AddinChatInput = forwardRef<
       // succeeded) — the chat-message dispatch itself is fire-and-forget, so the
       // upload is the meaningful "were these attached?" boundary. Clearing
       // releases both the provider drop-state and the dedup claim via the owner.
-      const sentDrops = stagedEmails.flatMap((staged) =>
-        staged.source === "drop"
-          ? [{ key: staged.key, messageId: staged.parsed.messageId ?? null }]
-          : [],
-      );
+      const sentDrops = stagedDrops.map((staged) => ({
+        key: staged.key,
+        messageId: staged.parsed.messageId ?? null,
+      }));
       const clearSentDrops = () => {
         if (sentDrops.length > 0) {
           onEmailSourceDropsSent?.(sentDrops);
         }
       };
+      // What a dispatched send carried, so the chips can say "sent earlier"
+      // and one-message choices end; a declined send records nothing.
+      const recordSent = (sent: {
+        threadSent: boolean;
+        attachmentIdsSent: string[];
+      }) =>
+        outlookContextStore.afterSend(sendConversationKey, {
+          itemKey: sendItemKey,
+          threadSent: sent.threadSent ? threadConversationId : null,
+          attachmentIdsSent: sent.attachmentIdsSent,
+        });
 
-      if (!shouldUseSuggestedEmailSource) {
+      if (!plan.uploads) {
         chatInputProps.onSendMessage(
           message,
           inputFileIds,
@@ -1155,6 +1216,7 @@ export const AddinChatInput = forwardRef<
           disabledMcpServerIds,
           disabledMcpTools,
         );
+        recordSent({ threadSent: false, attachmentIdsSent: [] });
         return;
       }
 
@@ -1166,12 +1228,18 @@ export const AddinChatInput = forwardRef<
         rememberSentDraft(previousSentDraft);
         restoreDraft(message, inputFileIds);
       };
-      let resolvedFileIds: string[] = [];
+      const resolvedFileIds: string[] = [];
       // Outside the try so the catch can name the files.
       let attemptedFileNames: string[] = [];
+      let sent = { threadSent: false, attachmentIdsSent: [] as string[] };
 
       try {
-        const filesToUpload = await resolveSelectedFilesForSend();
+        const { files: filesToUpload, sentAttachmentIds } =
+          await resolveSelectedFilesForSend(plan);
+        sent = {
+          threadSent: threadFile !== null && filesToUpload.includes(threadFile),
+          attachmentIdsSent: sentAttachmentIds,
+        };
         if (filesToUpload.length === 0) {
           // No files resolved (e.g. only dismissed drops remain), but the
           // action facet must still ride along: the dedup marker was already
@@ -1193,6 +1261,7 @@ export const AddinChatInput = forwardRef<
           // No upload was attempted (e.g. only dismissed drops remain) and
           // nothing failed, so the staged drops are safe to clear.
           clearSentDrops();
+          recordSent(sent);
           return;
         }
 
@@ -1286,28 +1355,33 @@ export const AddinChatInput = forwardRef<
       );
 
       clearSentDrops();
+      recordSent(sent);
     },
     [
       availableFacetArgs,
       calendarFetcher,
       chatId,
       chatInputProps,
+      choices.schedulingEndedAt,
       composeEmailAvailable,
       appointmentContextAvailable,
       appointmentFallback,
       appointmentRewriteAvailable,
       composeSelection.data,
       composeSelection.sourceProperty,
+      conversationKey,
       draftBodyText,
       globalMaxSizeBytes,
       hasActiveSelection,
       isAppointmentCompose,
       isDraftContextIncluded,
       itemIdentity,
+      itemKey,
       lastSchedulingSignalAt,
       mailItem,
       maxSizeFormatted,
       onEmailSourceDropsSent,
+      plan,
       rememberSentDraft,
       replyFromReadAvailable,
       resolvedParts,
@@ -1316,8 +1390,9 @@ export const AddinChatInput = forwardRef<
       restoreDraft,
       scheduleFacetAvailable,
       seenAppointmentFingerprint,
-      shouldUseSuggestedEmailSource,
-      stagedEmails,
+      stagedDrops,
+      threadConversationId,
+      threadFile,
     ],
   );
 
@@ -1329,126 +1404,28 @@ export const AddinChatInput = forwardRef<
           : "flex min-w-0 flex-col"
       }
     >
-      {shouldShowEmailSourcePreview && (
-        <div className="mx-auto w-full max-w-[var(--theme-layout-chat-input-max-width)] overflow-hidden overscroll-none px-2 pb-1 sm:px-4">
-          <div
-            className="max-h-[40vh] overflow-y-auto overscroll-none pr-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-theme-focus"
-            role="region"
-            // The attachment preview is a bounded scroll area in the task pane;
-            // keyboard users need a focus target before arrow/page scrolling.
-            // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex
-            tabIndex={0}
-            aria-label={t({
-              id: "officeAddin.chatInput.emailSourcePreviewRegion",
-              message: "Email context preview",
-            })}
-          >
-            <GroupedFileAttachmentsPreview
-              groups={emailSourceGroups}
-              groupActions={emailSourceGroupActions}
-              onRemoveFile={removeAttachment}
-              disabled={isUploadingEmail}
-              showFileTypes={true}
-              showFileSizes={true}
-              defaultVisibleItems={10}
-              stickyGroupHeaders={true}
-            />
-          </div>
-        </div>
-      )}
-
-      {isExpandingDroppedEmails && (
-        <div className="mx-auto w-full max-w-[var(--theme-layout-chat-input-max-width)] px-2 pb-1 sm:px-4">
-          <div
-            className="flex items-center gap-2 rounded-[var(--theme-radius-message)] border border-theme-border bg-theme-bg-secondary px-3 py-1.5 text-xs text-theme-fg-secondary"
-            role="status"
-            aria-live="polite"
-            data-testid="addin-chat-email-expansion-indicator"
-          >
-            <SpinnerIcon size="sm" aria-hidden />
-            <span className="min-w-0 truncate">
-              {dropPipelineLabel(dropPipeline)}
-            </span>
-          </div>
-        </div>
-      )}
-
-      {host === "Outlook" && hasActiveSelection && (
-        <AddinSelectionChip
-          preview={composeSelection.data}
-          armed
-          onDismiss={selectionDismissal.dismiss}
-          testId="outlook-selection-chip"
-        />
-      )}
-
-      {draftRowState && (
-        <div className="mx-auto w-full max-w-[var(--theme-layout-chat-input-max-width)] px-2 pb-1 sm:px-4">
-          <div
-            // Muted text on the secondary fill misses 4.5:1, so a superseded
-            // row sits on the primary fill instead.
-            className={`flex items-center gap-2 rounded-[var(--theme-radius-message)] border border-theme-border px-3 py-1.5 text-xs ${
-              draftRowState === "sent"
-                ? "bg-theme-bg-secondary text-theme-fg-secondary"
-                : "bg-theme-bg-primary text-theme-fg-muted"
-            }`}
-            data-testid="outlook-draft-chip"
-            data-state={draftRowState === "sent" ? "included" : "superseded"}
-          >
-            <span
-              className={`shrink-0 ${draftRowState === "sent" ? "" : "opacity-60"}`}
-              aria-hidden="true"
-            >
-              &#x1F4DD;
-            </span>
-            {/* Wraps rather than truncates: several locales put "not sent" last. */}
-            <span className="min-w-0 break-words">
-              {draftRowText(draftRowState, isAppointmentCompose)}
-            </span>
-            <button
-              type="button"
-              onClick={() => setIsDraftDismissed(true)}
-              className="ml-auto shrink-0 rounded-[var(--theme-radius-control)] p-0.5 hover:bg-theme-bg-tertiary"
-              aria-label={
-                isAppointmentCompose
-                  ? t({
-                      id: "officeAddin.chatInput.dismissAppointmentContext",
-                      message: "Don't include appointment details",
-                    })
-                  : t({
-                      id: "officeAddin.chatInput.dismissDraftContext",
-                      message: "Don't include draft",
-                    })
-              }
-            >
-              &#x2715;
-            </button>
-          </div>
-        </div>
-      )}
-
-      <AddinChatInputCore
-        ref={ref}
-        chatId={chatId}
-        {...chatInputProps}
-        handleFileAttachments={handleFileAttachments}
-        sizeLimitExceeded={sizeLimitExceeded}
-        uploadError={sendFailure?.error ?? ownerUploadError}
-        // The action facet rides along implicitly with every send from
-        // here, so the write switch pauses Reply and Send as well.
-        pausesHostActionsWhenWritesOff
-        onSendMessage={(
-          message,
-          inputFileIds,
-          modelId,
-          selectedFacetIds,
-          mentionedAssistants,
-          delegationRunMode,
-          mcpWriteToolsEnabled,
-          disabledMcpServerIds,
-          disabledMcpTools,
-        ) => {
-          void wrappedOnSendMessage(
+      <div
+        className="sr-only"
+        aria-live="polite"
+        aria-atomic="true"
+        data-testid="outlook-drop-announcer"
+      >
+        {hostAnnouncement}
+      </div>
+      <OutlookComposerMenuContext.Provider value={menuState}>
+        <AddinChatInputCore
+          ref={ref}
+          chatId={chatId}
+          {...chatInputProps}
+          handleFileAttachments={handleFileAttachments}
+          sizeLimitExceeded={sizeLimitExceeded}
+          uploadError={sendFailure?.error ?? ownerUploadError}
+          contextItems={contextItems}
+          composerModes={composerModes}
+          // The action facet rides along implicitly with every send from
+          // here, so the write switch pauses Reply and Send as well.
+          pausesHostActionsWhenWritesOff
+          onSendMessage={(
             message,
             inputFileIds,
             modelId,
@@ -1458,15 +1435,27 @@ export const AddinChatInput = forwardRef<
             mcpWriteToolsEnabled,
             disabledMcpServerIds,
             disabledMcpTools,
-          );
-        }}
-        disabled={
-          isUploadingEmail ||
-          isExpandingDroppedEmails ||
-          isWaitingForSuggestedEmail ||
-          chatInputProps.disabled
-        }
-      />
+          ) => {
+            void wrappedOnSendMessage(
+              message,
+              inputFileIds,
+              modelId,
+              selectedFacetIds,
+              mentionedAssistants,
+              delegationRunMode,
+              mcpWriteToolsEnabled,
+              disabledMcpServerIds,
+              disabledMcpTools,
+            );
+          }}
+          disabled={
+            isUploadingEmail ||
+            isExpandingDroppedEmails ||
+            plan.waitingForThread ||
+            chatInputProps.disabled
+          }
+        />
+      </OutlookComposerMenuContext.Provider>
     </div>
   );
 });
