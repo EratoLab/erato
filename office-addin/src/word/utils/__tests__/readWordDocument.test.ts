@@ -469,16 +469,16 @@ describe("readWordDocument without paragraph IDs", () => {
   });
 });
 
-describe("readWordDocument on Word for Mac while its proofing pass is pending", () => {
+describe("readWordDocument while Word's proofing pass is pending", () => {
   const W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
   const PKG = "http://schemas.microsoft.com/office/2006/xmlPackage";
   const REL = "http://schemas.openxmlformats.org/package/2006/relationships";
   const R =
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
   const TEXTS = ["The Annual Report", "Der Umsatz stieg.", "Revenue grew."];
-  /** A de-DE document as Word for Mac exports it: English paragraphs gain w:lang en-GB, mark and
-   * runs, as its proofing pass reaches them; w:proofState follows once the pass is done. */
-  const macPackage = ({
+  /** A de-DE document as Word exports it: English paragraphs gain w:lang (en-GB on Mac, en-US on
+   * PC), mark and runs, as its proofing pass reaches them; w:proofState follows once it is done. */
+  const wordPackage = ({
     tagged = [] as number[],
     clean = false,
     texts = TEXTS,
@@ -548,7 +548,7 @@ describe("readWordDocument on Word for Mac while its proofing pass is pending", 
       document: { insertFileFromBase64: vi.fn() },
       sync: async () => {},
     } as unknown as Word.RequestContext;
-    insertWordDocumentFile(context, wordDocumentOoxmlToFile(macPackage()));
+    insertWordDocumentFile(context, wordDocumentOoxmlToFile(wordPackage()));
     await syncWordDocumentImport(context);
   };
   /** Each read takes `ms`, and Word tags one more paragraph per read without reporting done. */
@@ -563,7 +563,7 @@ describe("readWordDocument on Word for Mac while its proofing pass is pending", 
           transfers.finished++;
           resolve(
             snapshot(
-              macPackage({
+              wordPackage({
                 texts,
                 tagged: Array.from({ length: index }, (_, j) => j),
               }),
@@ -585,7 +585,6 @@ describe("readWordDocument on Word for Mac while its proofing pass is pending", 
   beforeEach(() => {
     installMockWordDocument(TEXTS.map((text) => ({ text })));
     vi.mocked(supportsWordDocumentPackage).mockReturnValue(true);
-    onPlatform("Mac");
     vi.useFakeTimers();
   });
   afterEach(() => {
@@ -597,265 +596,335 @@ describe("readWordDocument on Word for Mac while its proofing pass is pending", 
     uninstallMockWordDocument();
   });
 
-  it("waits until Word reports the pass done and captures Word's language tags with it", async () => {
-    await imported();
-    const done = macPackage({ tagged: [0, 2], clean: true });
-    const count = reads(
-      "https://contoso.example/opened.docx",
-      macPackage(),
-      macPackage(),
-      macPackage(),
-      macPackage({ tagged: [0] }),
-      done,
-    );
-
-    expect(await capture(10_000)).toMatchObject({ ooxml: done });
-    expect(count()).toBe(5);
-  });
-
-  it("captures at once when Word reports the pass done", async () => {
-    const count = reads(
-      "https://contoso.example/settled.docx",
-      macPackage({ tagged: [0, 2], clean: true }),
-    );
-
-    await capture(0);
-    expect(count()).toBe(1);
-  });
-
-  it.each(["PC", "OfficeOnline"])("does not wait on %s", async (platform) => {
-    onPlatform(platform);
-    const count = reads(
-      `https://contoso.example/${platform}.docx`,
-      macPackage(),
-      macPackage({ tagged: [0, 2], clean: true }),
-    );
-
-    expect(await capture(WORD_PROOFING_DEADLINE_MS)).toEqual(
-      expect.objectContaining({ ooxml: macPackage() }),
-    );
-    expect(count()).toBe(1);
-  });
-
-  it("stops at a change that is not Word's tagging and keeps the read before it", async () => {
-    await imported();
-    const first = macPackage();
-    const count = reads(
-      "https://contoso.example/edited.docx",
-      first,
-      macPackage({ texts: ["The Annual Report", "Edited.", "Revenue grew."] }),
-      macPackage({ tagged: [0, 2], clean: true }),
-    );
-
-    expect(await capture(10_000)).toMatchObject({
-      ooxml: first,
-      proofingPending: "changed",
+  describe.each([
+    { platform: "Mac", host: "Word for Mac" },
+    { platform: "PC", host: "Word PC" },
+  ] as const)("on $host", ({ platform }) => {
+    beforeEach(() => {
+      onPlatform(platform);
     });
-    expect(count()).toBe(2);
-  });
 
-  it("stops after the window once nothing happens, and then no longer waits for that document", async () => {
-    vi.setSystemTime(Date.now() + 10 * WORD_PROOFING_WINDOW_MS);
-    const count = reads("https://contoso.example/quiet.docx", macPackage());
-
-    const quiet = await capture(WORD_PROOFING_DEADLINE_MS);
-    expect(quiet?.ooxml).toBe(macPackage());
-    expect(quiet?.proofingPending).toBeUndefined();
-    expect(count()).toBe(4);
-
-    await capture(WORD_PROOFING_DEADLINE_MS);
-    expect(count()).toBe(5);
-  });
-
-  it("waits through the window after an import for a pass that has not started", async () => {
-    vi.setSystemTime(Date.now() + 20 * WORD_PROOFING_WINDOW_MS);
-    await imported();
-    const done = macPackage({ tagged: [0, 2], clean: true });
-    const count = reads(
-      "https://contoso.example/reimported.docx",
-      ...Array.from({ length: 9 }, () => macPackage()),
-      done,
-    );
-
-    expect(await capture(WORD_PROOFING_WINDOW_MS)).toMatchObject({
-      ooxml: done,
-    });
-    expect(count()).toBe(10);
-  });
-
-  it("bounds the wait while Word keeps tagging", async () => {
-    await imported();
-    const texts = Array.from({ length: 40 }, (_, i) => `Paragraph ${i}.`);
-    const count = reads(
-      "https://contoso.example/long.docx",
-      ...texts.map((_, i) =>
-        macPackage({ texts, tagged: Array.from({ length: i }, (_, j) => j) }),
-      ),
-    );
-
-    const captured = await capture(2 * WORD_PROOFING_DEADLINE_MS);
-    expect(count()).toBe(1 + WORD_PROOFING_DEADLINE_MS / 1_000);
-    expect(captured).toMatchObject({
-      ooxml: macPackage({
-        texts,
-        tagged: Array.from({ length: count() - 1 }, (_, j) => j),
-      }),
-      proofingPending: "tagging",
-    });
-  });
-
-  it("does not wait past the read's deadline after a slow transfer, and marks the capture for the next send", async () => {
-    await imported();
-    const texts = Array.from({ length: 40 }, (_, i) => `Paragraph ${i}.`);
-    const count = reads(
-      "https://contoso.example/slow.docx",
-      ...texts.map((_, i) =>
-        macPackage({ texts, tagged: Array.from({ length: i }, (_, j) => j) }),
-      ),
-    );
-    const slow = WORD_PROOFING_DEADLINE_MS - 16_000;
-    const reading = vi
-      .mocked(captureWordDocumentPackage)
-      .getMockImplementation()!;
-    vi.mocked(captureWordDocumentPackage).mockImplementationOnce(
-      () =>
-        new Promise((resolve) => setTimeout(() => resolve(reading()), slow)),
-    );
-
-    const captured = await capture(WORD_PROOFING_DEADLINE_MS + 5_000);
-    expect(count()).toBe(1 + 16);
-    expect(captured).toMatchObject({ proofingPending: "tagging" });
-  });
-
-  it("fails the capture when another document becomes active while it waits", async () => {
-    await imported();
-    let next = 0;
-    vi.mocked(captureWordDocumentPackage).mockImplementation(async () =>
-      snapshot(
-        macPackage(),
-        next++
-          ? "https://contoso.example/other.docx"
-          : "https://contoso.example/first.docx",
-      ),
-    );
-
-    const read = readWordDocument(true);
-    await vi.advanceTimersByTimeAsync(2_000);
-    const result = await read;
-    expect(result.ok && result.authoring).toBeUndefined();
-    expect(result.ok && result.authoringUnavailable).toMatchObject({
-      issue: "unavailable",
-      detail: "package-failed",
-    });
-  });
-
-  it("fails the capture when the open document changes during a poll", async () => {
-    await imported();
-    const url = "https://contoso.example/renamed.docx";
-    openDocument(url);
-    let next = 0;
-    vi.mocked(captureWordDocumentPackage).mockImplementation(async () => {
-      if (!next++) return snapshot(macPackage(), url);
-      openDocument("https://contoso.example/saved-as.docx");
-      throw new WordDocumentTransferError(
-        "The open document changed during capture.",
+    it("waits until Word reports the pass done and captures Word's language tags with it", async () => {
+      await imported();
+      const done = wordPackage({ tagged: [0, 2], clean: true });
+      const count = reads(
+        `https://contoso.example/${platform}/opened.docx`,
+        wordPackage(),
+        wordPackage(),
+        wordPackage(),
+        wordPackage({ tagged: [0] }),
+        done,
       );
+
+      expect(await capture(10_000)).toMatchObject({ ooxml: done });
+      expect(count()).toBe(5);
     });
 
-    const read = readWordDocument(true);
-    await vi.advanceTimersByTimeAsync(2_000);
-    const result = await read;
-    expect(result.ok && result.authoring).toBeUndefined();
-    expect(result.ok && result.authoringUnavailable).toMatchObject({
-      issue: "unavailable",
-      detail: "package-failed",
-    });
-  });
+    it("captures at once when Word reports the pass done", async () => {
+      const count = reads(
+        `https://contoso.example/${platform}/settled.docx`,
+        wordPackage({ tagged: [0, 2], clean: true }),
+      );
 
-  it("ends the wait in time for the send's capture deadline while Word keeps tagging", async () => {
-    await imported();
-    slowTagging("https://contoso.example/send.docx", 500);
-
-    let settled = false;
-    const read = readWordDocument(true).finally(() => {
-      settled = true;
+      await capture(0);
+      expect(count()).toBe(1);
     });
-    // Leaves the send's deadline room to build the snapshot from the read.
-    await vi.advanceTimersByTimeAsync(WORD_SEND_CAPTURE_DEADLINE_MS - 5_000);
-    expect(settled).toBe(true);
-    const result = await read;
-    expect(result.ok && result.authoring).toMatchObject({
-      proofingPending: "tagging",
-    });
-  });
 
-  it("does not start a poll it cannot finish before the deadline", async () => {
-    await imported();
-    const transfers = slowTagging(
-      "https://contoso.example/handles.docx",
-      4_500,
-    );
+    it("stops at a change that is not Word's tagging and keeps the read before it", async () => {
+      await imported();
+      const first = wordPackage();
+      const count = reads(
+        `https://contoso.example/${platform}/edited.docx`,
+        first,
+        wordPackage({
+          texts: ["The Annual Report", "Edited.", "Revenue grew."],
+        }),
+        wordPackage({ tagged: [0, 2], clean: true }),
+      );
 
-    let running = -1;
-    const read = readWordDocument(true).then((result) => {
-      running = transfers.started - transfers.finished;
-      return result;
+      expect(await capture(10_000)).toMatchObject({
+        ooxml: first,
+        proofingPending: "changed",
+      });
+      expect(count()).toBe(2);
     });
-    await vi.advanceTimersByTimeAsync(WORD_PROOFING_DEADLINE_MS + 10_000);
-    const result = await read;
-    expect(transfers.started).toBeGreaterThan(2);
-    expect(running).toBe(0);
-    expect(result.ok && result.authoring).toMatchObject({
-      proofingPending: "tagging",
-    });
-  });
 
-  it("keeps waiting for a document whose last wait the deadline cut short", async () => {
-    vi.setSystemTime(Date.now() + 40 * WORD_PROOFING_WINDOW_MS);
-    const count = reads("https://contoso.example/cut.docx", macPackage());
-    const reading = vi
-      .mocked(captureWordDocumentPackage)
-      .getMockImplementation()!;
-    vi.mocked(captureWordDocumentPackage).mockImplementationOnce(
-      () =>
-        new Promise((resolve) =>
-          setTimeout(
-            () => resolve(reading()),
-            WORD_PROOFING_DEADLINE_MS - 2_000,
-          ),
+    it("stops after the window once nothing happens, and then no longer waits for that document", async () => {
+      vi.setSystemTime(Date.now() + 10 * WORD_PROOFING_WINDOW_MS[platform]);
+      const count = reads(
+        `https://contoso.example/${platform}/quiet.docx`,
+        wordPackage(),
+      );
+
+      const quiet = await capture(WORD_PROOFING_DEADLINE_MS);
+      expect(quiet?.ooxml).toBe(wordPackage());
+      expect(quiet?.proofingPending).toBeUndefined();
+      expect(count()).toBe(4);
+
+      await capture(WORD_PROOFING_DEADLINE_MS);
+      expect(count()).toBe(5);
+    });
+
+    it("waits through the window after an import for a pass that has not started", async () => {
+      vi.setSystemTime(Date.now() + 20 * WORD_PROOFING_WINDOW_MS[platform]);
+      await imported();
+      const done = wordPackage({ tagged: [0, 2], clean: true });
+      const count = reads(
+        `https://contoso.example/${platform}/reimported.docx`,
+        ...Array.from({ length: 9 }, () => wordPackage()),
+        done,
+      );
+
+      expect(await capture(WORD_PROOFING_WINDOW_MS[platform])).toMatchObject({
+        ooxml: done,
+      });
+      expect(count()).toBe(10);
+    });
+
+    it("bounds the wait while Word keeps tagging", async () => {
+      await imported();
+      const texts = Array.from({ length: 40 }, (_, i) => `Paragraph ${i}.`);
+      const count = reads(
+        `https://contoso.example/${platform}/long.docx`,
+        ...texts.map((_, i) =>
+          wordPackage({
+            texts,
+            tagged: Array.from({ length: i }, (_, j) => j),
+          }),
         ),
-    );
+      );
 
-    expect(await capture(WORD_PROOFING_DEADLINE_MS)).toMatchObject({
-      proofingPending: "tagging",
+      const captured = await capture(2 * WORD_PROOFING_DEADLINE_MS);
+      expect(count()).toBe(1 + WORD_PROOFING_DEADLINE_MS / 1_000);
+      expect(captured).toMatchObject({
+        ooxml: wordPackage({
+          texts,
+          tagged: Array.from({ length: count() - 1 }, (_, j) => j),
+        }),
+        proofingPending: "tagging",
+      });
     });
-    const before = count();
-    const quiet = await capture(WORD_PROOFING_DEADLINE_MS);
-    expect(quiet?.proofingPending).toBeUndefined();
-    expect(count() - before).toBe(4);
+
+    it("does not wait past the read's deadline after a slow transfer, and marks the capture for the next send", async () => {
+      await imported();
+      const texts = Array.from({ length: 40 }, (_, i) => `Paragraph ${i}.`);
+      const count = reads(
+        `https://contoso.example/${platform}/slow.docx`,
+        ...texts.map((_, i) =>
+          wordPackage({
+            texts,
+            tagged: Array.from({ length: i }, (_, j) => j),
+          }),
+        ),
+      );
+      const slow = WORD_PROOFING_DEADLINE_MS - 16_000;
+      const reading = vi
+        .mocked(captureWordDocumentPackage)
+        .getMockImplementation()!;
+      vi.mocked(captureWordDocumentPackage).mockImplementationOnce(
+        () =>
+          new Promise((resolve) => setTimeout(() => resolve(reading()), slow)),
+      );
+
+      const captured = await capture(WORD_PROOFING_DEADLINE_MS + 5_000);
+      expect(count()).toBe(1 + 16);
+      expect(captured).toMatchObject({ proofingPending: "tagging" });
+    });
+
+    it("fails the capture when another document becomes active while it waits", async () => {
+      await imported();
+      let next = 0;
+      vi.mocked(captureWordDocumentPackage).mockImplementation(async () =>
+        snapshot(
+          wordPackage(),
+          next++
+            ? `https://contoso.example/${platform}/other.docx`
+            : `https://contoso.example/${platform}/first.docx`,
+        ),
+      );
+
+      const read = readWordDocument(true);
+      await vi.advanceTimersByTimeAsync(2_000);
+      const result = await read;
+      expect(result.ok && result.authoring).toBeUndefined();
+      expect(result.ok && result.authoringUnavailable).toMatchObject({
+        issue: "unavailable",
+        detail: "package-failed",
+      });
+    });
+
+    it("fails the capture when the open document changes during a poll", async () => {
+      await imported();
+      const url = `https://contoso.example/${platform}/renamed.docx`;
+      openDocument(url);
+      let next = 0;
+      vi.mocked(captureWordDocumentPackage).mockImplementation(async () => {
+        if (!next++) return snapshot(wordPackage(), url);
+        openDocument(`https://contoso.example/${platform}/saved-as.docx`);
+        throw new WordDocumentTransferError(
+          "The open document changed during capture.",
+        );
+      });
+
+      const read = readWordDocument(true);
+      await vi.advanceTimersByTimeAsync(2_000);
+      const result = await read;
+      expect(result.ok && result.authoring).toBeUndefined();
+      expect(result.ok && result.authoringUnavailable).toMatchObject({
+        issue: "unavailable",
+        detail: "package-failed",
+      });
+    });
+
+    it("ends the wait in time for the send's capture deadline while Word keeps tagging", async () => {
+      await imported();
+      slowTagging(`https://contoso.example/${platform}/send.docx`, 500);
+
+      let settled = false;
+      const read = readWordDocument(true).finally(() => {
+        settled = true;
+      });
+      // Leaves the send's deadline room to build the snapshot from the read.
+      await vi.advanceTimersByTimeAsync(WORD_SEND_CAPTURE_DEADLINE_MS - 5_000);
+      expect(settled).toBe(true);
+      const result = await read;
+      expect(result.ok && result.authoring).toMatchObject({
+        proofingPending: "tagging",
+      });
+    });
+
+    it("does not start a poll it cannot finish before the deadline", async () => {
+      await imported();
+      const transfers = slowTagging(
+        `https://contoso.example/${platform}/handles.docx`,
+        4_500,
+      );
+
+      let running = -1;
+      const read = readWordDocument(true).then((result) => {
+        running = transfers.started - transfers.finished;
+        return result;
+      });
+      await vi.advanceTimersByTimeAsync(WORD_PROOFING_DEADLINE_MS + 10_000);
+      const result = await read;
+      expect(transfers.started).toBeGreaterThan(2);
+      expect(running).toBe(0);
+      expect(result.ok && result.authoring).toMatchObject({
+        proofingPending: "tagging",
+      });
+    });
+
+    it("keeps waiting for a document whose last wait the deadline cut short", async () => {
+      vi.setSystemTime(Date.now() + 40 * WORD_PROOFING_WINDOW_MS[platform]);
+      const count = reads(
+        `https://contoso.example/${platform}/cut.docx`,
+        wordPackage(),
+      );
+      const reading = vi
+        .mocked(captureWordDocumentPackage)
+        .getMockImplementation()!;
+      vi.mocked(captureWordDocumentPackage).mockImplementationOnce(
+        () =>
+          new Promise((resolve) =>
+            setTimeout(
+              () => resolve(reading()),
+              WORD_PROOFING_DEADLINE_MS - 2_000,
+            ),
+          ),
+      );
+
+      expect(await capture(WORD_PROOFING_DEADLINE_MS)).toMatchObject({
+        proofingPending: "tagging",
+      });
+      const before = count();
+      const quiet = await capture(WORD_PROOFING_DEADLINE_MS);
+      expect(quiet?.proofingPending).toBeUndefined();
+      expect(count() - before).toBe(4);
+    });
+
+    it("waits again for a quiet document once an import starts a new pass", async () => {
+      vi.setSystemTime(Date.now() + 50 * WORD_PROOFING_WINDOW_MS[platform]);
+      const url = `https://contoso.example/${platform}/quiet-import.docx`;
+      let count = reads(url, wordPackage());
+      await capture(WORD_PROOFING_DEADLINE_MS);
+      expect(count()).toBe(4);
+      await capture(WORD_PROOFING_DEADLINE_MS);
+      expect(count()).toBe(5);
+
+      await imported();
+      const done = wordPackage({ tagged: [0, 2], clean: true });
+      count = reads(
+        url,
+        wordPackage(),
+        wordPackage(),
+        wordPackage({ tagged: [0] }),
+        done,
+      );
+      expect(await capture(WORD_PROOFING_WINDOW_MS[platform])).toMatchObject({
+        ooxml: done,
+      });
+      expect(count()).toBe(4);
+    });
   });
 
-  it("waits again for a quiet document once an import starts a new pass", async () => {
-    vi.setSystemTime(Date.now() + 50 * WORD_PROOFING_WINDOW_MS);
-    const url = "https://contoso.example/quiet-import.docx";
-    let count = reads(url, macPackage());
-    await capture(WORD_PROOFING_DEADLINE_MS);
-    expect(count()).toBe(4);
-    await capture(WORD_PROOFING_DEADLINE_MS);
-    expect(count()).toBe(5);
+  it.each(["OfficeOnline", "unknown"])(
+    "does not wait on %s",
+    async (platform) => {
+      onPlatform(platform);
+      const count = reads(
+        `https://contoso.example/${platform}.docx`,
+        wordPackage(),
+        wordPackage({ tagged: [0, 2], clean: true }),
+      );
 
+      expect(await capture(WORD_PROOFING_DEADLINE_MS)).toEqual(
+        expect.objectContaining({ ooxml: wordPackage() }),
+      );
+      expect(count()).toBe(1);
+    },
+  );
+
+  it.each([
+    { platform: "PC", captured: "the tagged read" },
+    { platform: "Mac", captured: "the untagged read" },
+  ] as const)(
+    "on $platform, a pass that starts 21 s into the window gives $captured",
+    async ({ platform }) => {
+      onPlatform(platform);
+      await imported();
+      const done = wordPackage({ tagged: [0, 2], clean: true });
+      reads(
+        `https://contoso.example/${platform}/late-pass.docx`,
+        ...Array.from({ length: 21 }, () => wordPackage()),
+        done,
+      );
+
+      const captured = await capture(WORD_PROOFING_DEADLINE_MS);
+      expect(captured?.ooxml).toBe(platform === "PC" ? done : wordPackage());
+    },
+  );
+
+  it("on Word PC with spell checking off, takes Word's settled tags once the window has passed", async () => {
+    onPlatform("PC");
     await imported();
-    const done = macPackage({ tagged: [0, 2], clean: true });
-    count = reads(
-      url,
-      macPackage(),
-      macPackage(),
-      macPackage({ tagged: [0] }),
-      done,
+    const tagged = wordPackage({ tagged: [0, 2] });
+    const count = reads(
+      "https://contoso.example/PC/spelling-off.docx",
+      ...Array.from({ length: 6 }, () => wordPackage()),
+      tagged,
     );
-    expect(await capture(WORD_PROOFING_WINDOW_MS)).toMatchObject({
-      ooxml: done,
-    });
-    expect(count()).toBe(4);
+
+    const first = await capture(WORD_PROOFING_DEADLINE_MS);
+    expect(first).toMatchObject({ ooxml: tagged, proofingPending: "tagging" });
+    expect(count()).toBe(1 + WORD_PROOFING_WINDOW_MS.PC / 1_000);
+
+    const before = count();
+    const next = await capture(WORD_PROOFING_DEADLINE_MS);
+    expect(next?.ooxml).toBe(tagged);
+    expect(next?.proofingPending).toBeUndefined();
+    expect(count() - before).toBe(4);
+
+    await capture(WORD_PROOFING_DEADLINE_MS);
+    expect(count() - before).toBe(5);
   });
 });

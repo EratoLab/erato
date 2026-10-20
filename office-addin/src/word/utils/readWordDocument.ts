@@ -28,7 +28,7 @@ export type WordDocumentReadResult =
         tracking: string;
         fullDocument?: boolean;
         documentUrl?: string;
-        /** Word for Mac had not reported its proofing pass done when the capture stopped waiting. */
+        /** Word had not reported its proofing pass done when the capture stopped waiting. */
         proofingPending?: WordProofingPending;
       };
       /** The full package failed; the paragraphs still stand. */
@@ -67,9 +67,11 @@ export const WORD_PARAGRAPH_READ_TIMEOUT_MS = 30_000;
 /** Bounds the whole transfer however many slices Word returns, so a slow file keeps its text. */
 export const WORD_PACKAGE_CAPTURE_TIMEOUT_MS = 45_000;
 
-/** Word for Mac starts its proofing pass, which tags each paragraph with the language it detects,
- * 7–15 s after a document opens or is imported (ERMAIN-974). */
-export const WORD_PROOFING_WINDOW_MS = 20_000;
+/** How long after the pane loads, or after an import, Word's proofing pass (which tags each
+ * paragraph with the language it detects) may still start. Word for Mac: 7–15 s after a document
+ * opens or is imported (ERMAIN-974). Word PC: for the first document after Word starts, up to
+ * 19.5 s after the pane loaded (ERMAIN-981); later documents are tagged before the pane loads. */
+export const WORD_PROOFING_WINDOW_MS = { Mac: 20_000, PC: 22_000 } as const;
 /** The pass tags a few paragraphs at a time, about a second apart at most. */
 const WORD_PROOFING_QUIET_MS = 3_000;
 const WORD_PROOFING_POLL_MS = 1_000;
@@ -84,11 +86,11 @@ const paneLoadedAt = Date.now();
 const proofingQuiet = new Map<string, number>();
 
 /**
- * A capture taken on Word for Mac before its proofing pass is done lacks the language tags Word
- * adds next, which Apply and Revert would refuse as a change. Reads again until Word reports the
- * pass done and captures that read, so no comparison has to set a language aside. A change other
- * than a w:lang in Word's detected form ends the wait with the read before it. Bounded, and only
- * paid while the pass is pending.
+ * A capture taken on Word for Mac or Word PC before its proofing pass is done lacks the language
+ * tags Word adds next, which Apply and Revert would refuse as a change. Reads again until Word
+ * reports the pass done and captures that read, so no comparison has to set a language aside. A
+ * change other than a w:lang in Word's detected form ends the wait with the read before it.
+ * Bounded, and only paid while the pass is pending.
  */
 async function settleWordProofing(
   first: WordDocumentPackageSnapshot,
@@ -98,15 +100,17 @@ async function settleWordProofing(
   read: WordDocumentPackageSnapshot;
   pending?: WordProofingPending;
 }> {
+  const platform = wordHostPlatform();
   const quietAt = proofingQuiet.get(first.documentUrl);
   if (
-    wordHostPlatform() !== "Mac" ||
+    (platform !== "Mac" && platform !== "PC") ||
     (quietAt !== undefined && quietAt > wordDocumentImportedAt()) ||
     wordProofingComplete(first.ooxml)
   )
     return { read: first };
   const windowEnd =
-    Math.max(paneLoadedAt, wordDocumentImportedAt()) + WORD_PROOFING_WINDOW_MS;
+    Math.max(paneLoadedAt, wordDocumentImportedAt()) +
+    WORD_PROOFING_WINDOW_MS[platform];
   let current = first;
   let changedAt = Date.now();
   let transfer = transferMs;

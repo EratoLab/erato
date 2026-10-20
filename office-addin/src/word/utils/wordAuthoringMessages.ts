@@ -14,7 +14,7 @@ import type {
 } from "./wordInPlaceRoute";
 import type { WordPlanIssue } from "@erato/frontend/word-review";
 
-/** `proofingPending`: the plan's capture was taken while Word for Mac was still tagging languages
+/** `proofingPending`: the plan's capture was taken while Word was still tagging languages
  * (WordAuthoringSnapshot.proofingPending). */
 export function wordDocumentDiagnosticText(
   diagnostic: WordDocumentDiagnostic,
