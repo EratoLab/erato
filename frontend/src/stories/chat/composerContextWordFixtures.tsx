@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useRef, useState } from "react";
 
 import { Alert } from "@/components/ui/Feedback/Alert";
+import { CopyErrorButton } from "@/components/ui/Feedback/CopyErrorButton";
 
 import type {
   ComposerContextDetailAction,
@@ -28,6 +29,7 @@ export const WORD_LONG_TEXT = Array.from(
 ).join("\n");
 
 type DocumentStatus =
+  | "unknown"
   | "ready"
   | "reading"
   | "error"
@@ -36,6 +38,8 @@ type DocumentStatus =
   | "noFacetEmpty";
 
 export interface WordStorySeed {
+  /** The document's file name. */
+  name?: string;
   selection?: "user" | "erato" | null;
   selectionOff?: boolean;
   selectionFailed?: boolean;
@@ -52,6 +56,8 @@ export interface WordStorySeed {
   readOnly?: boolean;
   cannotEdit?: boolean;
   coverage?: { sent: number; total: number };
+  /** The first paragraph alone is over the send limit, so only its beginning goes. */
+  partialParagraph?: boolean;
   /** A comment thread goes in place of the passage and the document. */
   commentReplaces?: boolean;
   commentLines?: string[];
@@ -63,6 +69,7 @@ type WordStoryState = Required<Omit<WordStorySeed, "selection">> & {
 };
 
 const DEFAULTS: WordStoryState = {
+  name: WORD_DOCUMENT_NAME,
   selection: null,
   selectionOff: false,
   selectionFailed: false,
@@ -77,6 +84,7 @@ const DEFAULTS: WordStoryState = {
   readOnly: false,
   cannotEdit: false,
   coverage: { sent: 86, total: 86 },
+  partialParagraph: false,
   commentReplaces: false,
   commentLines: [
     "A list of the 12 comments in the document: each one's author, place, status and how it starts.",
@@ -124,7 +132,12 @@ const Section = ({
 );
 
 const Lifetime = ({ text }: { text: string }) => (
-  <p className="text-xs text-theme-fg-secondary">{text}</p>
+  <p
+    className="text-xs text-theme-fg-secondary"
+    data-ui="word-context-detail-lifetime"
+  >
+    {text}
+  </p>
 );
 
 const SelectionDetail = ({
@@ -161,11 +174,13 @@ const DocumentDetail = ({
   coverage,
   hint,
   comments,
+  readReport,
 }: {
   notes: Note[];
   coverage: string[] | null;
   hint?: string;
   comments: string[];
+  readReport?: string;
 }) => (
   <div className="flex flex-col gap-3">
     {notes.map((note) => (
@@ -189,6 +204,7 @@ const DocumentDetail = ({
         ))}
       </Section>
     )}
+    {readReport && <CopyErrorButton report={readReport} />}
     <Lifetime text="Leaving it out lasts for this chat. New chats follow your setting “Include the open document in new chats”." />
   </div>
 );
@@ -201,6 +217,8 @@ const CANNOT_EDIT_NOTE =
   "Word did not supply a complete editable structure for this document. No rewrite was applied.";
 const BODY_ONLY_NOTE =
   "Word for the web didn't hand over the complete file, for example because the document has a sensitivity label. Erato read the body only, so it can't change headers, footers or page layout, and any change replaces the whole body instead of editing passages in place.";
+const READ_REPORT =
+  "Word add-in document read failed\nStatus: unreadable\nError: GeneralException: The operation failed because of a backend error.";
 const SELECT_LATER_PART =
   "Only the beginning is sent. To work on a later part, select it in Word.";
 
@@ -402,18 +420,24 @@ export const useWordStoryResolver = (
       ? ["The document is empty, so only its name is sent."]
       : authoring
         ? ["Erato reads the parts of the document your request needs."]
-        : truncated
+        : state.partialParagraph
           ? [
-              `Erato receives the first ${count(sent)} of ${count(total)} paragraphs.`,
+              "Erato receives only the beginning of the first paragraph, because it alone exceeds the send limit.",
             ]
-          : [`Erato receives the whole document, ${count(total)} paragraphs.`];
+          : truncated
+            ? [
+                `Erato receives the first ${count(sent)} of ${count(total)} paragraphs.`,
+              ]
+            : [
+                `Erato receives the whole document, ${count(total)} paragraphs.`,
+              ];
     if (state.changed)
       coverage.push(
         "Changed since last send: Erato reads it again with this message.",
       );
     const hint = state.readInParts
       ? "This document is too large to rewrite as a whole. Erato can still read and edit it section by section."
-      : !authoring && truncated
+      : !authoring && (truncated || state.partialParagraph)
         ? SELECT_LATER_PART
         : undefined;
 
@@ -461,6 +485,11 @@ export const useWordStoryResolver = (
       ];
     } else if (state.status === "reading") {
       document = { state: "loading", meta: "Reading document…" };
+      notes = [];
+      shownCoverage = null;
+    } else if (state.status === "unknown") {
+      // Before the first read nothing is known yet, and Send reads first.
+      document = { state: "included" };
       notes = [];
       shownCoverage = null;
     } else if (state.status === "error") {
@@ -519,9 +548,11 @@ export const useWordStoryResolver = (
         ? "Changed since last send"
         : empty
           ? "New document"
-          : !authoring && truncated
-            ? `First ${count(sent)} of ${count(total)} ¶`
-            : `${count(total)} ¶`;
+          : !authoring && state.partialParagraph
+            ? "Beginning only"
+            : !authoring && truncated
+              ? `First ${count(sent)} of ${count(total)} ¶`
+              : `${count(total)} ¶`;
       document = {
         state: "included",
         meta: [lead, tail].filter(Boolean).join(" · "),
@@ -537,7 +568,7 @@ export const useWordStoryResolver = (
       origin: "ambient",
       dismissScope: "chat",
       icon: "document",
-      label: WORD_DOCUMENT_NAME,
+      label: state.name,
       spokenLabel: "Document",
       removeLabel: "Don't include this document",
       ...(state.locked
@@ -554,13 +585,14 @@ export const useWordStoryResolver = (
               setState((current) => ({ ...current, documentOff: true })),
           }),
       detail: {
-        title: WORD_DOCUMENT_NAME,
+        title: state.name,
         render: () => (
           <DocumentDetail
             notes={notes}
             coverage={shownCoverage}
             hint={documentGoes ? hint : undefined}
             comments={documentGoes ? state.commentLines : []}
+            readReport={state.status === "error" ? READ_REPORT : undefined}
           />
         ),
         ...(actions.length > 0 ? { actions } : {}),

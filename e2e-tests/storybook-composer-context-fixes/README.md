@@ -17,9 +17,10 @@ pieces the add-in's composer context fixes rely on:
 - stacked dialogs each named by their own title, including the web app's
   Archive all chats confirmation over Preferences.
 
-The Outlook draft row, the compose selection chip, the Word document row and
-the "+" menu rows are add-in markup with no Storybook; their states are pinned
-by the office-addin unit tests.
+The Outlook draft row, the compose selection chip and the "+" menu rows are
+add-in markup with no Storybook; their states are pinned by the office-addin
+unit tests. The Word document row is now the document chip in the composer's
+lane, measured by `../storybook-word-context-chips`.
 
 No theme pack is needed. Start Storybook from `frontend/`; the providers need
 an API root to render, though nothing is fetched:
