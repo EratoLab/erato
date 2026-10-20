@@ -8,6 +8,7 @@ import {
   MailIcon,
   PageIcon,
   QuoteIcon,
+  TimerIcon,
   WarningCircleIcon,
   WarningIcon,
 } from "@/components/ui/icons";
@@ -33,6 +34,7 @@ const GLYPHS: Record<
   attachment: AttachmentIcon,
   chats: ChatBubbleIcon,
   file: PageIcon,
+  clock: TimerIcon,
 };
 
 const isIconName = (icon: string): icon is ComposerContextIconName =>

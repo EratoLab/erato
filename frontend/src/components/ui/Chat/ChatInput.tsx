@@ -95,6 +95,7 @@ import { ChatInputTokenUsage } from "./ChatInputTokenUsage";
 import { ChatTaskPlanAdvisory } from "./ChatTaskPlanAdvisory";
 import { ChatUsageAdvisory } from "./ChatUsageAdvisory";
 import { ComposerContextArea } from "./ComposerContext/ComposerContextArea";
+import { ComposerModeChips } from "./ComposerContext/ComposerModeChips";
 import { ComposerNoticeView } from "./ComposerContext/ComposerNoticeView";
 import { useStableFileList } from "./ComposerContext/useStableFileList";
 import { DelegationRunModePopover } from "./DelegationRunModePopover";
@@ -114,6 +115,7 @@ import type { AssistantMentionPopoverHandle } from "./AssistantMentionPopover";
 import type { ChatInputControlsHandle } from "./ChatInputControlsContext";
 import type {
   ComposerContextItem,
+  ComposerMode,
   ComposerNotice,
 } from "./ComposerContext/types";
 import type { ToastAction } from "../Toast/types";
@@ -322,6 +324,11 @@ interface ChatInputProps {
    * renders.
    */
   composerNotice?: ComposerNotice | null;
+  /**
+   * Modes the next send runs in (the host's resolver decides), drawn after
+   * the add controls. Omitted, nothing renders.
+   */
+  composerModes?: ComposerMode[];
   /** Show file type in previews */
   showFileTypes?: boolean;
   // Add prop for preview callback
@@ -453,6 +460,7 @@ export const ChatInput = ({
   virtualFiles,
   contextItems,
   composerNotice,
+  composerModes,
   showFileTypes = false,
   // Destructure the new props
   onFilePreview,
@@ -3357,6 +3365,12 @@ export const ChatInput = ({
                     )}
                   </>
                 ))}
+              {composerModes !== undefined && (
+                <ComposerModeChips
+                  modes={composerModes}
+                  onFocusComposer={focusInput}
+                />
+              )}
               {useUnifiedMobileMenu && showModelSelector && (
                 <ModelSelector
                   availableModels={availableModels}

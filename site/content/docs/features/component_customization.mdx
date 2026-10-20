@@ -529,6 +529,10 @@ Themes and kits can reach the lane through these hooks and classes:
   `composer-context-chip-state`, `composer-context-remove`,
   `composer-context-restore` and `composer-context-more[data-expanded]` inside;
 - `composer-context-detail[data-placement]` and `composer-context-detail-state`;
+- `composer-mode-chip[data-mode-id][data-locked]` in the controls row, with
+  `composer-mode-chip-label`, `composer-mode-end` and the `composer-mode-live`
+  region; it is drawn with tokens only and has no face point yet (it arrived
+  with 1.19);
 - the classes `composer-context-chip-geometry`, `composer-context-chip-skin` and
   `composer-context-control-geometry`, and the layout tokens
   `layout.composerContext.chipHeight` and `layout.composerContext.detailWidth`.

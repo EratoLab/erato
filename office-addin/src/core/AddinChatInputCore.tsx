@@ -4,6 +4,7 @@ import {
   type ChatInputControlsHandle,
   type ChatModel,
   type ComposerContextItem,
+  type ComposerMode,
   type ComposerSizeLimit,
   type DelegationRunMode,
   type FileType,
@@ -61,6 +62,8 @@ export interface AddinChatInputCoreProps {
    * Pass a memoized array.
    */
   contextItems?: ComposerContextItem[];
+  /** Modes the next send runs in, from the same resolver; drawn next to "+". */
+  composerModes?: ComposerMode[];
 }
 
 /** Generic add-in composer. Hosts add their context chips and action facets. */
