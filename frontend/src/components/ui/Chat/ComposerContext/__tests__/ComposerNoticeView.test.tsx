@@ -148,6 +148,8 @@ describe("ComposerNoticeView", () => {
     )!;
     expect(progress).toHaveTextContent("3 of 12");
     expect(progress).toHaveAttribute("aria-hidden", "true");
+    // A count split over two lines ("3 of" / "12") reads as two numbers.
+    expect(progress).toHaveClass("whitespace-nowrap");
     expect(polite()).toContainElement(progress);
     const spoken = polite().cloneNode(true) as HTMLElement;
     spoken

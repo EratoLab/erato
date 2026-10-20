@@ -82,7 +82,7 @@ export const ComposerNoticeView = ({
             <span
               aria-hidden="true"
               data-ui="composer-notice-progress"
-              className="ml-1.5 tabular-nums"
+              className="ml-1.5 whitespace-nowrap tabular-nums"
             >
               {notice.progressLabel}
             </span>

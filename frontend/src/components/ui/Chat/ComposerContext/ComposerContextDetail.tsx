@@ -99,8 +99,26 @@ interface ComposerContextDetailProps {
   ) => void;
 }
 
+/** The pill carries the chip's tone only where the state is the problem the detail resolves. */
+const PILL_TONE = {
+  attention: {
+    tone: "warning",
+    className:
+      "border-theme-warning-border bg-theme-warning-bg text-theme-warning-fg",
+  },
+  error: {
+    tone: "error",
+    className:
+      "border-theme-error-border bg-theme-error-bg text-theme-error-fg",
+  },
+} as const;
+
 const DetailHeaderMeta = ({ item }: { item: ComposerContextItem }) => {
   const meta = composerContextMeta(item);
+  const toned =
+    item.state === "attention" || item.state === "error"
+      ? PILL_TONE[item.state]
+      : null;
   return (
     <p
       className="flex flex-wrap items-center gap-1 text-xs text-theme-fg-secondary"
@@ -109,7 +127,8 @@ const DetailHeaderMeta = ({ item }: { item: ComposerContextItem }) => {
       <span
         data-ui="composer-context-detail-state"
         data-state={item.state}
-        className="pill-geometry border border-theme-border px-1.5 py-px font-medium text-theme-fg-primary"
+        data-tone={toned?.tone}
+        className={`pill-geometry border px-1.5 py-px font-medium ${toned?.className ?? "border-theme-border text-theme-fg-primary"}`}
       >
         {statePill(item.state)}
       </span>

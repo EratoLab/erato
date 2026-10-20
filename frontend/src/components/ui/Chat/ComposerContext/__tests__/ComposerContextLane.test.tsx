@@ -1087,6 +1087,40 @@ describe("ComposerContextLane", () => {
       expect(open).toHaveFocus();
     });
 
+    it("tints the state pill only for a state the detail resolves", () => {
+      const pill = () =>
+        screen
+          .getByRole("dialog")
+          .querySelector('[data-ui="composer-context-detail-state"]');
+      const { unmount } = render(
+        <Resolver
+          initial={[withDetail({ state: "attention", tone: "warning" })]}
+        />,
+      );
+      fireEvent.click(openButton("Supply agreement"));
+      expect(pill()).toHaveTextContent("Needs a choice");
+      expect(pill()).toHaveAttribute("data-tone", "warning");
+      expect(pill()).toHaveClass(
+        "bg-theme-warning-bg",
+        "text-theme-warning-fg",
+      );
+      unmount();
+
+      render(
+        <Resolver initial={[withDetail({ state: "error", tone: "error" })]} />,
+      );
+      fireEvent.click(openButton("Supply agreement"));
+      expect(pill()).toHaveAttribute("data-tone", "error");
+      expect(pill()).toHaveClass("bg-theme-error-bg", "text-theme-error-fg");
+      cleanup();
+
+      render(<Resolver initial={[withDetail({ tone: "warning" })]} />);
+      fireEvent.click(openButton("Supply agreement"));
+      expect(pill()).toHaveTextContent("Included");
+      expect(pill()).not.toHaveAttribute("data-tone");
+      expect(pill()).toHaveClass("border-theme-border");
+    });
+
     it("keeps Tab inside the popover", () => {
       render(<Resolver initial={[withDetail()]} />);
       fireEvent.click(openButton("Supply agreement"));
