@@ -4,7 +4,9 @@
 use super::attached::serve;
 use super::executor_stream::Pane;
 use super::*;
-use crate::test_utils::build_openai_paused_tool_calls_streaming_response;
+use crate::test_utils::{
+    build_openai_delayed_text_streaming_response, build_openai_paused_tool_calls_streaming_response,
+};
 use erato::services::client_operations::executor_stream;
 use futures::StreamExt;
 use sea_orm::ConnectionTrait;
@@ -196,12 +198,23 @@ fn mock_client_child(
     first: Vec<mocktail::body::BodyAction>,
     first_call: &'static str,
 ) {
+    mock_client_child_for(mocks, recorder, CLIENT_BRIEF, first, first_call);
+}
+
+/// [`mock_client_child`] for the client task with `brief`.
+fn mock_client_child_for(
+    mocks: &mut MockSet,
+    recorder: &RequestBodyRecorder,
+    brief: &'static str,
+    first: Vec<mocktail::body::BodyAction>,
+    first_call: &'static str,
+) {
     let capture = recorder.clone();
     mocks.mock(move |when, then| {
         when.post()
             .path("/v1/chat/completions")
             .matcher(BodyContainsMatcher::new(
-                &[CLIENT_BRIEF],
+                &[brief],
                 &[USER_MESSAGE, first_call],
             ))
             .matcher(capture);
@@ -212,7 +225,7 @@ fn mock_client_child(
         when.post()
             .path("/v1/chat/completions")
             .matcher(BodyContainsMatcher::new(
-                &[CLIENT_BRIEF, first_call],
+                &[brief, first_call],
                 &[USER_MESSAGE],
             ))
             .matcher(capture);
@@ -309,6 +322,10 @@ async fn finish(parent: tokio::task::JoinHandle<String>) -> String {
 /// Answers a pushed call as the pane: to the requesting chat, with the pane's
 /// binding.
 async fn answer_call(state: &erato::state::AppState, event: &Value) {
+    answer_call_with(state, event, json!({"text": PANE_TEXT})).await;
+}
+
+async fn answer_call_with(state: &erato::state::AppState, event: &Value, result: Value) {
     let chat_id: Uuid = event["chat_id"].as_str().unwrap().parse().unwrap();
     let call = (
         event["message_id"].as_str().unwrap().parse().unwrap(),
@@ -318,7 +335,7 @@ async fn answer_call(state: &erato::state::AppState, event: &Value) {
         state,
         chat_id,
         &call,
-        json!({"result": {"text": PANE_TEXT}}),
+        json!({ "result": result }),
         Some(&word_pane()),
     )
     .await;
@@ -1220,5 +1237,603 @@ async fn a_retried_client_task_gets_no_grant(pool: Pool<Postgres>) {
     );
     assert!(task_spec(&replacement).get("client_grant").is_none());
     assert!(task_spec(&replacement).get("client_task").is_none());
+    server.abort();
+}
+
+const CLIENT_BRIEF_2: &str = "SECOND-CLIENT-SENTINEL: read the conclusion";
+const CLIENT_TASK_CALL_2: &str = "call_client_task_2";
+const PARENT_READ_CALL: &str = "call_parent_read";
+const ASK_UNAVAILABLE: &str = "requires user approval, which is unavailable in a delegated run";
+
+fn second_client_task() -> (&'static str, Value) {
+    (
+        CLIENT_TASK_CALL_2,
+        json!({ "task": CLIENT_BRIEF_2, "facet_ids": [CHILD_FACET] }),
+    )
+}
+
+async fn ask_before_reads(state: &erato::state::AppState) {
+    erato::models::user_preference::set_client_tool_decision(
+        &state.db,
+        &account(state).await,
+        READ_QUALIFIED,
+        erato::models::user_preference::ClientToolDecision::Ask,
+    )
+    .await
+    .unwrap();
+}
+
+/// The stop a row ends on.
+fn parked_part(row: &erato::db::entity::messages::Model) -> Value {
+    let last = row.raw_message["content"]
+        .as_array()
+        .unwrap()
+        .last()
+        .unwrap()
+        .clone();
+    assert_eq!(last["content_type"], "tool_approval_request", "{last}");
+    last
+}
+
+/// Decides a parked turn over a real connection, without an executor binding,
+/// and hands back the full SSE body once the continuation ends.
+fn spawn_decision(base: &str, body: Value) -> tokio::task::JoinHandle<String> {
+    let request = reqwest::Client::new()
+        .post(format!("{base}/me/messages/continuestream"))
+        .bearer_auth(TEST_JWT_TOKEN)
+        .json(&body);
+    tokio::spawn(async move {
+        let response = request.send().await.unwrap();
+        let status = response.status();
+        let mut body = response.bytes_stream();
+        let mut received = String::new();
+        while let Some(bytes) = body.next().await {
+            received.push_str(&String::from_utf8_lossy(&bytes.unwrap()));
+        }
+        assert!(status.is_success(), "{status}: {received}");
+        received
+    })
+}
+
+async fn wait_parked(db: &sea_orm::DatabaseConnection, chat_id: Uuid) {
+    tokio::time::timeout(Duration::from_secs(15), async {
+        while reload(db, chat_id).await.generation_state.as_deref() != Some("awaiting_approval") {
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .expect("the chat parks");
+}
+
+/// A parent with one client task whose read asks first, parked on the
+/// child's item.
+struct AskedChild {
+    state: erato::state::AppState,
+    base: String,
+    server: tokio::task::JoinHandle<()>,
+    _llm: MockServer,
+    pane: Pane,
+    chat_id: Uuid,
+    parent_message: erato::db::entity::messages::Model,
+    child: chats::Model,
+    recorder: RequestBodyRecorder,
+}
+
+async fn ask_in_a_client_task(
+    pool: Pool<Postgres>,
+    tweak: impl FnOnce(&mut erato::config::AppConfig),
+) -> AskedChild {
+    let (parent, child) = (RequestBodyRecorder::new(), RequestBodyRecorder::new());
+    let mut mocks = MockSet::new();
+    mock_parent(&mut mocks, &parent, vec![client_task(None)]);
+    mock_client_child_reads(&mut mocks, &child);
+    let (state, llm) = delegated_state(pool, mocks, tweak).await;
+    ask_before_reads(&state).await;
+    let (base, server) = serve(&state).await;
+    let mut pane = open_pane(&base).await;
+    let chat_id = seed_origin_chat(&state.db).await;
+    finish(spawn_parent(
+        &base,
+        chat_id,
+        ACTION_FACET,
+        Some(word_pane()),
+    ))
+    .await;
+    assert_eq!(pane.next(Duration::from_millis(300)).await, None);
+    assert_eq!(
+        reload(&state.db, chat_id).await.generation_state.as_deref(),
+        Some("awaiting_approval")
+    );
+    let child_chat = child_chat(&state.db, chat_id, CHILD_FACET).await.unwrap();
+    AskedChild {
+        parent_message: assistant_row(&state.db, chat_id).await,
+        state,
+        base,
+        server,
+        _llm: llm,
+        pane,
+        chat_id,
+        child: child_chat,
+        recorder: child,
+    }
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_childs_client_tool_ask_shows_one_item_per_child_and_parks_the_parent(
+    pool: Pool<Postgres>,
+) {
+    let (parent, child) = (RequestBodyRecorder::new(), RequestBodyRecorder::new());
+    let mut mocks = MockSet::new();
+    mock_parent(
+        &mut mocks,
+        &parent,
+        vec![client_task(None), second_client_task()],
+    );
+    mock_client_child_reads(&mut mocks, &child);
+    mock_client_child_for(
+        &mut mocks,
+        &child,
+        CLIENT_BRIEF_2,
+        read_call("forged"),
+        CHILD_READ_CALL,
+    );
+    let (state, _llm) = delegated_state(pool, mocks, |_| {}).await;
+    ask_before_reads(&state).await;
+    let (base, server) = serve(&state).await;
+    let mut pane = open_pane(&base).await;
+    let chat_id = seed_origin_chat(&state.db).await;
+    finish(spawn_parent(
+        &base,
+        chat_id,
+        ACTION_FACET,
+        Some(word_pane()),
+    ))
+    .await;
+
+    assert_eq!(pane.next(Duration::from_millis(500)).await, None);
+    assert_eq!(
+        reload(&state.db, chat_id).await.generation_state.as_deref(),
+        Some("awaiting_approval")
+    );
+    let parent_message = assistant_row(&state.db, chat_id).await;
+    let request = parked_part(&parent_message);
+    assert_eq!(request["kind"], "delegated_task");
+    let items = request["approvals"].as_array().unwrap();
+    assert_eq!(items.len(), 2, "{request}");
+    // In the order the children parked.
+    let mut approval_ids: Vec<&str> = items
+        .iter()
+        .map(|item| item["approval_id"].as_str().unwrap())
+        .collect();
+    approval_ids.sort();
+    let mut expected = [CLIENT_TASK_CALL, CLIENT_TASK_CALL_2]
+        .map(|call| generated_tool_call_id(parent_message.id, 1, call));
+    expected.sort();
+    assert_eq!(approval_ids, expected);
+    let mut children = Vec::new();
+    for item in items {
+        let child = &item["child"];
+        assert_eq!(child["kind"], "client_tool", "{item}");
+        assert_eq!(child["tool_name"], READ_TOOL);
+        assert_eq!(child["mcp_server_id"], "word");
+        assert_eq!(child["allow_always"], true);
+        assert_eq!(child["input"]["snapshot"], "forged");
+        children.push(child["child_chat_id"].as_str().unwrap().to_string());
+    }
+    children.dedup();
+    assert_eq!(children.len(), 2, "one item per child");
+    for child in children {
+        assert_eq!(
+            reload(&state.db, child.parse().unwrap())
+                .await
+                .generation_state
+                .as_deref(),
+            Some("awaiting_approval")
+        );
+    }
+    server.abort();
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn an_approved_child_call_reaches_the_pane_under_the_same_grant(pool: Pool<Postgres>) {
+    let mut asked = ask_in_a_client_task(pool, |_| {}).await;
+    let decided = spawn_decision(
+        &asked.base,
+        json!({ "message_id": asked.parent_message.id, "decision": "approve" }),
+    );
+    let event = asked.pane.call().await;
+    let child_row = assistant_row(&asked.state.db, asked.child.id).await;
+    assert_eq!(event["chat_id"], json!(asked.child.id));
+    assert_eq!(event["message_id"], json!(child_row.id));
+    assert_eq!(
+        event["input"],
+        json!({"snapshot": SNAPSHOT, "part": "intro"})
+    );
+    assert_eq!(
+        event["lineage"],
+        json!({
+            "owner_chat_id": asked.chat_id,
+            "owner_message_id": asked.parent_message.id,
+            "requesting_chat_id": asked.child.id,
+            "requesting_message_id": child_row.id,
+            "context_ref": SNAPSHOT,
+        })
+    );
+    answer_call(&asked.state, &event).await;
+    assert!(finish(decided).await.contains(PARENT_FINAL));
+
+    let read = part_for(
+        &assistant_row(&asked.state.db, asked.child.id).await,
+        CHILD_READ_CALL,
+    );
+    assert_eq!(read["status"], "success", "{read}");
+    let child_turns = turn_bodies(&asked.recorder);
+    assert_eq!(child_turns.len(), 2);
+    assert!(offers(&child_turns[1], READ_TOOL));
+    assert!(child_turns[1].to_string().contains(PANE_TEXT));
+    let slot = part_for(
+        &assistant_row(&asked.state.db, asked.chat_id).await,
+        CLIENT_TASK_CALL,
+    );
+    assert_eq!(slot["output"]["status"], "completed", "{slot}");
+    assert!(
+        slot["output"]["result"]
+            .as_str()
+            .unwrap()
+            .contains(CHILD_ANSWER)
+    );
+    asked.server.abort();
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_denied_child_call_is_declined_and_the_task_result_says_so(pool: Pool<Postgres>) {
+    let mut asked = ask_in_a_client_task(pool, |_| {}).await;
+    let decided = spawn_decision(
+        &asked.base,
+        json!({ "message_id": asked.parent_message.id, "decision": "reject" }),
+    );
+    assert!(finish(decided).await.contains(PARENT_FINAL));
+    assert_eq!(asked.pane.next(Duration::from_millis(300)).await, None);
+
+    let read = part_for(
+        &assistant_row(&asked.state.db, asked.child.id).await,
+        CHILD_READ_CALL,
+    );
+    assert_eq!(read["status"], "error");
+    assert_eq!(read["output"]["status"], "cancelled", "{read}");
+    assert_eq!(read["output"]["reason"], "declined");
+    let child_turns = turn_bodies(&asked.recorder);
+    assert_eq!(child_turns.len(), 2);
+    assert!(
+        child_turns[1]
+            .to_string()
+            .contains("The user declined this call")
+    );
+    let slot = part_for(
+        &assistant_row(&asked.state.db, asked.chat_id).await,
+        CLIENT_TASK_CALL,
+    );
+    assert_eq!(slot["output"]["status"], "completed", "{slot}");
+    assert_eq!(slot["output"]["client_tools"], json!({"declined": 1}));
+    asked.server.abort();
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_child_ask_joins_the_coordinators_own_client_tool_ask(pool: Pool<Postgres>) {
+    let child = RequestBodyRecorder::new();
+    let mut mocks = MockSet::new();
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(&[USER_MESSAGE], &["child_run_id"]));
+        let (task_call, task_args) = client_task(None);
+        mock_llm_sse_response(
+            then,
+            build_openai_tool_calls_streaming_response(&[
+                (task_call, "delegate_task", task_args),
+                (PARENT_READ_CALL, READ_TOOL, json!({"part": "outline"})),
+            ]),
+        );
+    });
+    mock_client_child_reads(&mut mocks, &child);
+    let (state, _llm) = delegated_state(pool, mocks, |_| {}).await;
+    ask_before_reads(&state).await;
+    let (base, server) = serve(&state).await;
+    let _pane = open_pane(&base).await;
+    let chat_id = seed_origin_chat(&state.db).await;
+    finish(spawn_parent(
+        &base,
+        chat_id,
+        ACTION_FACET,
+        Some(word_pane()),
+    ))
+    .await;
+
+    let parent_message = assistant_row(&state.db, chat_id).await;
+    let parts: Vec<&Value> = parent_message.raw_message["content"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|part| part["content_type"] == "tool_approval_request")
+        .collect();
+    assert_eq!(parts.len(), 1, "one stop: {}", parent_message.raw_message);
+    let request = parked_part(&parent_message);
+    assert_eq!(request["kind"], "client_tool");
+    let items = request["approvals"].as_array().unwrap();
+    assert_eq!(items.len(), 2, "{request}");
+    assert_eq!(
+        items[0]["tool_call_id"],
+        generated_tool_call_id(parent_message.id, 1, PARENT_READ_CALL)
+    );
+    assert!(items[0]["child"].is_null());
+    assert_eq!(
+        items[1]["approval_id"],
+        generated_tool_call_id(parent_message.id, 1, CLIENT_TASK_CALL)
+    );
+    assert_eq!(items[1]["child"]["kind"], "client_tool");
+    assert_eq!(items[1]["child"]["tool_name"], READ_TOOL);
+    server.abort();
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn always_allow_on_a_client_tool_child_item_is_accepted_under_a_strict_mcp_policy(
+    pool: Pool<Postgres>,
+) {
+    let mut asked = ask_in_a_client_task(pool, |config| {
+        config.mcp_servers_global.approval.enabled = true;
+        config.mcp_servers_global.approval.allow_always = false;
+    })
+    .await;
+    let request = parked_part(&asked.parent_message);
+    assert_eq!(request["allow_always"], false);
+    let approval_id = request["approvals"][0]["approval_id"].clone();
+    let decided = spawn_decision(
+        &asked.base,
+        json!({
+            "message_id": asked.parent_message.id,
+            "decisions": [{ "approval_id": approval_id, "decision": "approve_always" }],
+        }),
+    );
+    answer_call(&asked.state, &asked.pane.call().await).await;
+    assert!(finish(decided).await.contains(PARENT_FINAL));
+
+    assert_eq!(
+        erato::models::user_preference::find_client_tool_decision(
+            &asked.state.db,
+            &account(&asked.state).await,
+            READ_QUALIFIED,
+        )
+        .await
+        .unwrap(),
+        Some(erato::models::user_preference::ClientToolDecision::AlwaysAllow)
+    );
+    assert_eq!(
+        table_rows(&asked.state, "user_tool_approval_settings").await,
+        0,
+        "no MCP setting is written for a client tool"
+    );
+    asked.server.abort();
+}
+
+fn freshness() -> Value {
+    json!({
+        "context_ref": SNAPSHOT,
+        "capturedAt": "2026-10-20T10:00:00Z",
+        "changes": "none",
+        "counts": {"own": 1, "local": 0, "remote": 0, "unknown": 0},
+    })
+}
+
+/// The read tool keeps its part in replay receipts, so the trace shows it.
+fn read_keeps_its_part(config: &mut erato::config::AppConfig) {
+    let mut tool = read_tool(false);
+    tool.replay = erato::config::ClientToolReplayConfig {
+        mode: erato::config::ClientToolReplayMode::Receipt,
+        keep_input_fields: vec!["$.snapshot".into(), "$.part".into()],
+        keep_output_fields: vec!["$.status".into()],
+    };
+    config
+        .client_tools
+        .tools
+        .insert("word_read_blocks".into(), tool);
+}
+
+fn assert_freshness_reported(slot: &Value) {
+    assert_eq!(
+        slot["output"]["client_tools"],
+        json!({ "freshness": freshness() }),
+        "{slot}"
+    );
+    let reads: Vec<&Value> = slot["output"]["localTrace"]["steps"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|step| step["id"] == READ_TOOL)
+        .collect();
+    assert_eq!(reads.len(), 1, "{slot}");
+    assert_eq!(reads[0]["status"], "ok");
+    assert_eq!(reads[0]["detail"], "intro · changes: none");
+    assert_eq!(
+        reads[0]["counts"],
+        json!({"local": 0, "own": 1, "remote": 0, "unknown": 0})
+    );
+    assert!(!slot["output"]["localTrace"].to_string().contains(SNAPSHOT));
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn freshness_reaches_the_task_result_and_the_parent_trace(pool: Pool<Postgres>) {
+    let (parent, child) = (RequestBodyRecorder::new(), RequestBodyRecorder::new());
+    let mut mocks = MockSet::new();
+    mock_parent(&mut mocks, &parent, vec![client_task(None)]);
+    mock_client_child_reads(&mut mocks, &child);
+    let (state, _llm) = delegated_state(pool, mocks, read_keeps_its_part).await;
+    let (base, server) = serve(&state).await;
+    let mut pane = open_pane(&base).await;
+    let chat_id = seed_origin_chat(&state.db).await;
+    let run = spawn_parent(&base, chat_id, ACTION_FACET, Some(word_pane()));
+    answer_call_with(
+        &state,
+        &pane.call().await,
+        json!({"text": PANE_TEXT, "freshness": freshness()}),
+    )
+    .await;
+    assert!(finish(run).await.contains(PARENT_FINAL));
+
+    assert_freshness_reported(&part_for(
+        &assistant_row(&state.db, chat_id).await,
+        CLIENT_TASK_CALL,
+    ));
+    server.abort();
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn freshness_after_an_approval_reaches_the_task_result_and_the_trace(pool: Pool<Postgres>) {
+    let mut asked = ask_in_a_client_task(pool, read_keeps_its_part).await;
+    let decided = spawn_decision(
+        &asked.base,
+        json!({ "message_id": asked.parent_message.id, "decision": "approve" }),
+    );
+    answer_call_with(
+        &asked.state,
+        &asked.pane.call().await,
+        json!({"text": PANE_TEXT, "freshness": freshness()}),
+    )
+    .await;
+    assert!(finish(decided).await.contains(PARENT_FINAL));
+
+    assert_freshness_reported(&part_for(
+        &assistant_row(&asked.state.db, asked.chat_id).await,
+        CLIENT_TASK_CALL,
+    ));
+    asked.server.abort();
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn the_granted_tool_disappears_once_the_parent_turn_is_over(pool: Pool<Postgres>) {
+    let (parent, child, research) = (
+        RequestBodyRecorder::new(),
+        RequestBodyRecorder::new(),
+        RequestBodyRecorder::new(),
+    );
+    let mut mocks = MockSet::new();
+    mock_parent(
+        &mut mocks,
+        &parent,
+        vec![client_task(None), research_task(None)],
+    );
+    mock_client_child_reads(&mut mocks, &child);
+    // Keeps the parent's turn running after the client task has parked.
+    let capture = research.clone();
+    mocks.mock(move |when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(&[RESEARCH_BRIEF], &[USER_MESSAGE]))
+            .matcher(capture);
+        mock_llm_sse_response(
+            then,
+            build_openai_delayed_text_streaming_response(
+                &[RESEARCH_ANSWER, " and more"],
+                Duration::from_secs(4),
+            ),
+        );
+    });
+    let (state, _llm) = delegated_state(pool, mocks, |_| {}).await;
+    ask_before_reads(&state).await;
+    let (base, server) = serve(&state).await;
+    let mut pane = open_pane(&base).await;
+    let chat_id = seed_origin_chat(&state.db).await;
+    let run = spawn_parent(&base, chat_id, ACTION_FACET, Some(word_pane()));
+    let client_child = wait_child(&state.db, chat_id, CHILD_FACET).await;
+    wait_parked(&state.db, client_child.id).await;
+    let research_child = wait_child(&state.db, chat_id, RESEARCH_FACET).await;
+    app_server(state.clone())
+        .post("/api/v1beta/me/messages/abortstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "chat_id": chat_id }))
+        .await
+        .assert_status_ok();
+    finish(run).await;
+    assert_ne!(
+        reload(&state.db, chat_id).await.generation_state.as_deref(),
+        Some("awaiting_approval"),
+        "a stopped parent carries no card"
+    );
+
+    let child_row = assistant_row(&state.db, client_child.id).await;
+    let decided = app_server(state.clone())
+        .post("/api/v1beta/me/messages/continuestream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "message_id": child_row.id, "decision": "approve" }))
+        .await;
+    decided.assert_status_ok();
+    assert!(extract_full_text(&parse_sse_events(&decided)).contains(CHILD_ANSWER));
+
+    assert_eq!(pane.next(Duration::from_millis(300)).await, None);
+    let read = part_for(
+        &assistant_row(&state.db, client_child.id).await,
+        CHILD_READ_CALL,
+    );
+    assert_eq!(read["status"], "error", "{read}");
+    let child_turns = turn_bodies(&child);
+    assert_eq!(child_turns.len(), 2);
+    assert!(offers(&child_turns[0], READ_TOOL));
+    assert!(
+        !offers(&child_turns[1], READ_TOOL),
+        "the owner turn no longer runs"
+    );
+    tokio::time::timeout(Duration::from_secs(15), async {
+        while reload(&state.db, research_child.id)
+            .await
+            .generation_state
+            .as_deref()
+            == Some("running")
+        {
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+    })
+    .await
+    .expect("the stopped research task winds down");
+    server.abort();
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_child_client_ask_is_refused_when_child_approvals_are_off(pool: Pool<Postgres>) {
+    let (parent, child) = (RequestBodyRecorder::new(), RequestBodyRecorder::new());
+    let mut mocks = MockSet::new();
+    mock_parent(&mut mocks, &parent, vec![client_task(None)]);
+    mock_client_child_reads(&mut mocks, &child);
+    let (state, _llm) = delegated_state(pool, mocks, |config| {
+        config.delegation.tasks.propagate_child_mcp_approvals = false;
+    })
+    .await;
+    ask_before_reads(&state).await;
+    let (base, server) = serve(&state).await;
+    let mut pane = open_pane(&base).await;
+    let chat_id = seed_origin_chat(&state.db).await;
+    let run = spawn_parent(&base, chat_id, ACTION_FACET, Some(word_pane()));
+    assert!(finish(run).await.contains(PARENT_FINAL));
+
+    assert_eq!(pane.next(Duration::from_millis(300)).await, None);
+    let client_child = child_chat(&state.db, chat_id, CHILD_FACET).await.unwrap();
+    let read = part_for(
+        &assistant_row(&state.db, client_child.id).await,
+        CHILD_READ_CALL,
+    );
+    assert_eq!(read["status"], "error");
+    assert!(
+        read["output"]["error"]
+            .as_str()
+            .unwrap()
+            .contains(ASK_UNAVAILABLE),
+        "{read}"
+    );
+    for chat in [client_child.id, chat_id] {
+        assert_ne!(
+            reload(&state.db, chat).await.generation_state.as_deref(),
+            Some("awaiting_approval")
+        );
+    }
+    let slot = part_for(&assistant_row(&state.db, chat_id).await, CLIENT_TASK_CALL);
+    assert_eq!(slot["output"]["status"], "completed", "{slot}");
     server.abort();
 }
