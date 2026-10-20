@@ -55,6 +55,35 @@ export const approvalItemsOf = (
         },
       ];
 
+/**
+ * The open items in the order they were asked: a parked child's by its own
+ * request, the turn's own call by the part's. Ties keep row order, the order
+ * the server settles them in.
+ */
+export const approvalQueueOf = (
+  request: { requested_at: string },
+  open: ApprovalItemPart[],
+): ApprovalItemPart[] => {
+  const askedAt = (item: ApprovalItemPart) => {
+    const at = Date.parse(item.child?.requested_at ?? request.requested_at);
+    return Number.isNaN(at) ? Number.POSITIVE_INFINITY : at;
+  };
+  return open
+    .map((item, index) => ({ item, index, at: askedAt(item) }))
+    .sort((a, b) => (a.at === b.at ? a.index - b.index : a.at - b.at))
+    .map(({ item }) => item);
+};
+
+/**
+ * Whether "Always allow" may be offered for one item. A child carries its own
+ * policy snapshot: the part's flag describes the part's own call, and on a
+ * `client_tool` part no MCP policy binds that one.
+ */
+export const itemAllowsAlways = (
+  item: ApprovalItemPart,
+  request: { allow_always: boolean },
+): boolean => item.child?.allow_always ?? request.allow_always;
+
 export interface ApprovalStopState {
   /** The items still waiting on the user; a decision must cover exactly these. */
   open: ApprovalItemPart[];

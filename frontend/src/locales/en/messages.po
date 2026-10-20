@@ -57,6 +57,26 @@ msgid "actionConfirmation.title"
 msgstr "Allow this action?"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Message/ApprovalQueueCard.tsx
+msgid "approvalQueue.description"
+msgstr "{itemCount, plural, one {The response continues once you decide.} other {They are shown one at a time, oldest first. The response continues once all of them are decided.}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ApprovalQueueCard.tsx
+msgid "approvalQueue.position"
+msgstr "Decision {ordinal} of {itemCount}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ApprovalQueueCard.tsx
+msgid "approvalQueue.remaining"
+msgstr "{remaining, plural, one {# more after this one} other {# more after this one}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ApprovalQueueCard.tsx
+msgid "approvalQueue.title"
+msgstr "{itemCount, plural, one {This response is waiting on your decision} other {This response is waiting on # decisions}}"
+
+#. js-lingui-explicit-id
 #: src/pages/AssistantEditPage.tsx
 msgid "assistant.action.backToAssistants"
 msgstr "Back to Assistants"
@@ -2861,12 +2881,12 @@ msgid "chatInput.mentions.sectionHeader"
 msgstr "Assistants"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Message/McpToolApprovalCard.tsx
+#: src/components/ui/Message/OwnCallApprovalItem.tsx
 msgid "clientToolApproval.thisDevice"
 msgstr "This device"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Message/McpToolApprovalCard.tsx
+#: src/components/ui/Message/OwnCallApprovalItem.tsx
 msgid "clientToolApproval.title"
 msgstr "Allow this tool to run on your device?"
 
@@ -3170,27 +3190,27 @@ msgid "common.yes"
 msgstr "Yes"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Message/DelegatedTaskApprovalCard.tsx
+#: src/components/ui/Message/ParkedChildItem.tsx
 msgid "delegatedTaskApproval.childMissing"
 msgstr "The run this decision covers was not recorded."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/DelegatedTaskApprovalCard.tsx
-msgid "delegatedTaskApproval.description"
-msgstr "{itemCount, plural, one {It stopped at a tool call it needs permission for. The response continues once you decide.} other {Each one stopped at a tool call it needs permission for. The response continues once all of them are decided.}}"
+#~ msgid "delegatedTaskApproval.description"
+#~ msgstr "{itemCount, plural, one {It stopped at a tool call it needs permission for. The response continues once you decide.} other {Each one stopped at a tool call it needs permission for. The response continues once all of them are decided.}}"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Message/DelegatedTaskApprovalCard.tsx
+#: src/components/ui/Message/ParkedChildItem.tsx
 msgid "delegatedTaskApproval.itemTitle"
 msgstr "Allow this task to make the call?"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/DelegatedTaskApprovalCard.tsx
-msgid "delegatedTaskApproval.title"
-msgstr "{itemCount, plural, one {A task is waiting on your decision} other {Tasks are waiting on your decision}}"
+#~ msgid "delegatedTaskApproval.title"
+#~ msgstr "{itemCount, plural, one {A task is waiting on your decision} other {Tasks are waiting on your decision}}"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Message/DelegatedTaskApprovalCard.tsx
+#: src/components/ui/Message/ParkedChildItem.tsx
 msgid "delegatedTaskApproval.unnamedTask"
 msgstr "A task this response started"
 
@@ -3763,8 +3783,8 @@ msgid "mcp.callback.openSettings"
 msgstr "Open settings"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Message/DelegatedTaskApprovalCard.tsx
-#: src/components/ui/Message/McpToolApprovalCard.tsx
+#: src/components/ui/Message/OwnCallApprovalItem.tsx
+#: src/components/ui/Message/ParkedChildItem.tsx
 msgid "mcpApproval.alwaysAllowDisabled"
 msgstr "Locked: your organization requires confirmation each time this tool runs."
 
@@ -3774,13 +3794,13 @@ msgstr "Locked: your organization requires confirmation each time this tool runs
 #~ msgstr "View input parameters"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Message/DelegatedTaskApprovalCard.tsx
-#: src/components/ui/Message/McpToolApprovalCard.tsx
+#: src/components/ui/Message/OwnCallApprovalItem.tsx
+#: src/components/ui/Message/ParkedChildItem.tsx
 msgid "mcpApproval.openWorldWarning"
 msgstr "This tool may send data to an external service."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Message/McpToolApprovalCard.tsx
+#: src/components/ui/Message/OwnCallApprovalItem.tsx
 msgid "mcpApproval.title"
 msgstr "Allow MCP tool call?"
 
@@ -4714,6 +4734,16 @@ msgstr "Remove {label}, keep its content"
 #: src/components/ui/WordReview/WordRichBlockPreview.tsx
 msgid "officeAddin.word.rich.updateObject"
 msgstr "Update {label}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ParkedTaskNotice.tsx
+msgid "parkedTaskNotice.open"
+msgstr "Open the task"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ParkedTaskNotice.tsx
+msgid "parkedTaskNotice.text"
+msgstr "This task is waiting for your decision in its own chat."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
