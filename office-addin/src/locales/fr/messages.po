@@ -4542,6 +4542,11 @@ msgstr "Désactivé pour ce message"
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordCommentChips.ts
+msgid "officeAddin.word.context.comment.meta.readFailed"
+msgstr "Impossible de lire les commentaires"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordCommentChips.ts
 msgid "officeAddin.word.context.comment.spoken"
 msgstr "Commentaires"
 
@@ -4663,6 +4668,11 @@ msgstr "commentaires désactivés"
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordContextChips.ts
+msgid "officeAddin.word.context.document.meta.commentsUnread"
+msgstr "impossible de lire les commentaires"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordContextChips.ts
 msgid "officeAddin.word.context.document.meta.firstOf"
 msgstr "{sent} premiers sur {total} ¶"
 
@@ -4755,6 +4765,11 @@ msgstr "Affiché tant que le document est désactivé, pour que vous puissiez en
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordCommentChips.ts
+msgid "officeAddin.word.context.openComments.introNoDocument"
+msgstr "Envoie les commentaires ouverts du document avec leurs réponses."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordCommentChips.ts
 msgid "officeAddin.word.context.openComments.label"
 msgstr "Commentaires ouverts ({count})"
 
@@ -4770,8 +4785,18 @@ msgstr "Avec leurs réponses"
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordCommentChips.ts
+msgid "officeAddin.word.context.openComments.meta.noneOpen"
+msgstr "Aucun ouvert"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordCommentChips.ts
 msgid "officeAddin.word.context.openComments.meta.notIncluded"
 msgstr "Non inclus"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordCommentChips.ts
+msgid "officeAddin.word.context.openComments.noneOpenIntro"
+msgstr "Aucun commentaire de ce document n’est ouvert. Utilisez « Choisir un commentaire… » pour travailler sur un commentaire résolu."
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordCommentChips.ts
@@ -4832,7 +4857,12 @@ msgstr "Passage sélectionné · {paragraphs} ¶"
 #. js-lingui-explicit-id
 #: src/word/utils/wordContextChips.ts
 msgid "officeAddin.word.context.selection.meta.commentsOff"
-msgstr "Sélectionné · {paragraphs} ¶ · commentaires désactivés"
+msgstr "Commentaires désactivés · {paragraphs} ¶"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordContextChips.ts
+msgid "officeAddin.word.context.selection.meta.commentsUnread"
+msgstr "Impossible de lire les commentaires · {paragraphs} ¶"
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordContextChips.ts
@@ -4857,7 +4887,7 @@ msgstr "Trop long · début seulement"
 #. js-lingui-explicit-id
 #: src/word/utils/wordContextChips.ts
 msgid "officeAddin.word.context.selection.meta.withComments"
-msgstr "{commentCount, plural, one {Sélectionné · {paragraphs} ¶ · # commentaire} other {Sélectionné · {paragraphs} ¶ · # commentaires}}"
+msgstr "{commentCount, plural, one {# commentaire · {paragraphs} ¶} other {# commentaires · {paragraphs} ¶}}"
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordContextChips.ts
@@ -5940,11 +5970,6 @@ msgstr "Passage sélectionné dans Word. Cela peut modifier la position d’inse
 #: src/word/components/WordReviewCardParts.tsx
 #~ msgid "officeAddin.word.review.showDetails"
 #~ msgstr "Afficher les détails"
-
-#. js-lingui-explicit-id
-#: src/word/components/WordReviewCardParts.tsx
-#~ msgid "officeAddin.word.review.showInWord"
-#~ msgstr "Afficher dans Word ↗"
 
 #. js-lingui-explicit-id
 #. placeholder {0}: filtered.length

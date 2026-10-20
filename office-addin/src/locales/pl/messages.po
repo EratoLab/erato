@@ -4542,6 +4542,11 @@ msgstr "Wyłączone dla tej wiadomości"
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordCommentChips.ts
+msgid "officeAddin.word.context.comment.meta.readFailed"
+msgstr "Nie udało się odczytać komentarzy"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordCommentChips.ts
 msgid "officeAddin.word.context.comment.spoken"
 msgstr "Komentarze"
 
@@ -4663,6 +4668,11 @@ msgstr "komentarze wyłączone"
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordContextChips.ts
+msgid "officeAddin.word.context.document.meta.commentsUnread"
+msgstr "nie udało się odczytać komentarzy"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordContextChips.ts
 msgid "officeAddin.word.context.document.meta.firstOf"
 msgstr "Pierwsze {sent} z {total} ¶"
 
@@ -4755,6 +4765,11 @@ msgstr "Widoczne, gdy dokument jest wyłączony, aby można było wysłać jego 
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordCommentChips.ts
+msgid "officeAddin.word.context.openComments.introNoDocument"
+msgstr "Wysyła otwarte komentarze dokumentu wraz z odpowiedziami."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordCommentChips.ts
 msgid "officeAddin.word.context.openComments.label"
 msgstr "Otwarte komentarze ({count})"
 
@@ -4770,8 +4785,18 @@ msgstr "Z odpowiedziami"
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordCommentChips.ts
+msgid "officeAddin.word.context.openComments.meta.noneOpen"
+msgstr "Brak otwartych"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordCommentChips.ts
 msgid "officeAddin.word.context.openComments.meta.notIncluded"
 msgstr "Niedołączone"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordCommentChips.ts
+msgid "officeAddin.word.context.openComments.noneOpenIntro"
+msgstr "Żaden komentarz w tym dokumencie nie jest otwarty. Użyj „Wybierz komentarz…”, aby pracować nad rozwiązanym."
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordCommentChips.ts
@@ -4832,7 +4857,12 @@ msgstr "Zaznaczony fragment · {paragraphs} ¶"
 #. js-lingui-explicit-id
 #: src/word/utils/wordContextChips.ts
 msgid "officeAddin.word.context.selection.meta.commentsOff"
-msgstr "Zaznaczono · {paragraphs} ¶ · komentarze wyłączone"
+msgstr "Komentarze wyłączone · {paragraphs} ¶"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordContextChips.ts
+msgid "officeAddin.word.context.selection.meta.commentsUnread"
+msgstr "Nie udało się odczytać komentarzy · {paragraphs} ¶"
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordContextChips.ts
@@ -4857,7 +4887,7 @@ msgstr "Za długie · tylko początek"
 #. js-lingui-explicit-id
 #: src/word/utils/wordContextChips.ts
 msgid "officeAddin.word.context.selection.meta.withComments"
-msgstr "{commentCount, plural, one {Zaznaczono · {paragraphs} ¶ · # komentarz} few {Zaznaczono · {paragraphs} ¶ · # komentarze} many {Zaznaczono · {paragraphs} ¶ · # komentarzy} other {Zaznaczono · {paragraphs} ¶ · # komentarza}}"
+msgstr "{commentCount, plural, one {# komentarz · {paragraphs} ¶} few {# komentarze · {paragraphs} ¶} many {# komentarzy · {paragraphs} ¶} other {# komentarza · {paragraphs} ¶}}"
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordContextChips.ts
@@ -5940,11 +5970,6 @@ msgstr "Zaznaczono fragment w Wordzie. Może to zmienić miejsce wstawiania przy
 #: src/word/components/WordReviewCardParts.tsx
 #~ msgid "officeAddin.word.review.showDetails"
 #~ msgstr "Pokaż szczegóły"
-
-#. js-lingui-explicit-id
-#: src/word/components/WordReviewCardParts.tsx
-#~ msgid "officeAddin.word.review.showInWord"
-#~ msgstr "Pokaż w Wordzie ↗"
 
 #. js-lingui-explicit-id
 #. placeholder {0}: filtered.length

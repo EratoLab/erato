@@ -1617,6 +1617,11 @@ msgstr "Reintentando…"
 
 #. js-lingui-explicit-id
 #: src/components/ui/FileUpload/audioTranscriptionStatus.ts
+msgid "chat.audio.retryingNamed"
+msgstr "Reintentando… {filename}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/FileUpload/audioTranscriptionStatus.ts
 msgid "chat.audio.retryNamed"
 msgstr "Reintentar la transcripción: {filename}"
 
@@ -9087,7 +9092,7 @@ msgstr "Mostrar menos"
 
 #: src/components/ui/FileUpload/AudioTranscriptExcerpt.tsx
 msgid "Show more"
-msgstr ""
+msgstr "Mostrar más"
 
 #: src/components/ui/Settings/ToolCallSettings.tsx
 msgid "Show tool calls"
@@ -9409,7 +9414,7 @@ msgstr ""
 #: src/components/ui/Chat/ChatInput.tsx
 #: src/components/ui/FileUpload/AudioTranscriptExcerpt.tsx
 msgid "Transcript"
-msgstr ""
+msgstr "Transcripción"
 
 #: src/components/ui/Feedback/ChatErrorBoundary.tsx
 msgid "Try Again"

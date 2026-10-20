@@ -1617,6 +1617,11 @@ msgstr "Ponawianie…"
 
 #. js-lingui-explicit-id
 #: src/components/ui/FileUpload/audioTranscriptionStatus.ts
+msgid "chat.audio.retryingNamed"
+msgstr "Ponawianie… {filename}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/FileUpload/audioTranscriptionStatus.ts
 msgid "chat.audio.retryNamed"
 msgstr "Ponów transkrypcję: {filename}"
 
@@ -9087,7 +9092,7 @@ msgstr "Pokaż mniej"
 
 #: src/components/ui/FileUpload/AudioTranscriptExcerpt.tsx
 msgid "Show more"
-msgstr ""
+msgstr "Pokaż więcej"
 
 #: src/components/ui/Settings/ToolCallSettings.tsx
 msgid "Show tool calls"
@@ -9409,7 +9414,7 @@ msgstr ""
 #: src/components/ui/Chat/ChatInput.tsx
 #: src/components/ui/FileUpload/AudioTranscriptExcerpt.tsx
 msgid "Transcript"
-msgstr ""
+msgstr "Transkrypcja"
 
 #: src/components/ui/Feedback/ChatErrorBoundary.tsx
 msgid "Try Again"

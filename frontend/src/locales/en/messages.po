@@ -1617,6 +1617,11 @@ msgstr "Retrying…"
 
 #. js-lingui-explicit-id
 #: src/components/ui/FileUpload/audioTranscriptionStatus.ts
+msgid "chat.audio.retryingNamed"
+msgstr "Retrying… {filename}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/FileUpload/audioTranscriptionStatus.ts
 msgid "chat.audio.retryNamed"
 msgstr "Retry transcription: {filename}"
 

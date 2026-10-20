@@ -4528,7 +4528,7 @@ msgstr "Ein ausgewählter Kommentar bleibt, bis Sie einen anderen auswählen, ih
 #. js-lingui-explicit-id
 #: src/word/utils/wordCommentChips.ts
 msgid "officeAddin.word.context.comment.meta.chooseOne"
-msgstr "Einen auswählen"
+msgstr "Auswählen"
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordCommentChips.ts
@@ -4539,6 +4539,11 @@ msgstr "Nicht mehr im Dokument"
 #: src/word/utils/wordCommentChips.ts
 msgid "officeAddin.word.context.comment.meta.offForMessage"
 msgstr "Für diese Nachricht aus"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordCommentChips.ts
+msgid "officeAddin.word.context.comment.meta.readFailed"
+msgstr "Kommentare nicht lesbar"
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordCommentChips.ts
@@ -4663,6 +4668,11 @@ msgstr "Kommentare aus"
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordContextChips.ts
+msgid "officeAddin.word.context.document.meta.commentsUnread"
+msgstr "Kommentare nicht lesbar"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordContextChips.ts
 msgid "officeAddin.word.context.document.meta.firstOf"
 msgstr "Erste {sent} von {total} ¶"
 
@@ -4755,8 +4765,13 @@ msgstr "Wird angezeigt, solange das Dokument aus ist, damit Sie seine Kommentare
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordCommentChips.ts
+msgid "officeAddin.word.context.openComments.introNoDocument"
+msgstr "Sendet die offenen Kommentare des Dokuments mit ihren Antworten."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordCommentChips.ts
 msgid "officeAddin.word.context.openComments.label"
-msgstr "Offene Kommentare ({count})"
+msgstr "{count, plural, one {# offener Kommentar} other {# offene Kommentare}}"
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordCommentChips.ts
@@ -4770,8 +4785,18 @@ msgstr "Mit ihren Antworten"
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordCommentChips.ts
+msgid "officeAddin.word.context.openComments.meta.noneOpen"
+msgstr "Keiner offen"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordCommentChips.ts
 msgid "officeAddin.word.context.openComments.meta.notIncluded"
-msgstr "Nicht einbezogen"
+msgstr "Nicht dabei"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordCommentChips.ts
+msgid "officeAddin.word.context.openComments.noneOpenIntro"
+msgstr "Kein Kommentar in diesem Dokument ist offen. Mit „Kommentar wählen…“ können Sie an einem erledigten arbeiten."
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordCommentChips.ts
@@ -4832,7 +4857,12 @@ msgstr "Ausgewählte Passage · {paragraphs} ¶"
 #. js-lingui-explicit-id
 #: src/word/utils/wordContextChips.ts
 msgid "officeAddin.word.context.selection.meta.commentsOff"
-msgstr "Ausgewählt · {paragraphs} ¶ · Kommentare aus"
+msgstr "Kommentare aus · {paragraphs} ¶"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordContextChips.ts
+msgid "officeAddin.word.context.selection.meta.commentsUnread"
+msgstr "Kommentare nicht lesbar · {paragraphs} ¶"
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordContextChips.ts
@@ -4857,7 +4887,7 @@ msgstr "Zu lang · nur der Anfang"
 #. js-lingui-explicit-id
 #: src/word/utils/wordContextChips.ts
 msgid "officeAddin.word.context.selection.meta.withComments"
-msgstr "{commentCount, plural, one {Ausgewählt · {paragraphs} ¶ · # Kommentar} other {Ausgewählt · {paragraphs} ¶ · # Kommentare}}"
+msgstr "{commentCount, plural, one {# Kommentar · {paragraphs} ¶} other {# Kommentare · {paragraphs} ¶}}"
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordContextChips.ts
@@ -5940,11 +5970,6 @@ msgstr "Passage in Word markiert. Dies kann die Einfügeposition einer späteren
 #: src/word/components/WordReviewCardParts.tsx
 #~ msgid "officeAddin.word.review.showDetails"
 #~ msgstr "Details anzeigen"
-
-#. js-lingui-explicit-id
-#: src/word/components/WordReviewCardParts.tsx
-#~ msgid "officeAddin.word.review.showInWord"
-#~ msgstr "In Word anzeigen ↗"
 
 #. js-lingui-explicit-id
 #. placeholder {0}: filtered.length

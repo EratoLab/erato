@@ -4542,6 +4542,11 @@ msgstr "Off for this message"
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordCommentChips.ts
+msgid "officeAddin.word.context.comment.meta.readFailed"
+msgstr "Couldn't read comments"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordCommentChips.ts
 msgid "officeAddin.word.context.comment.spoken"
 msgstr "Comments"
 
@@ -4663,6 +4668,11 @@ msgstr "comments off"
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordContextChips.ts
+msgid "officeAddin.word.context.document.meta.commentsUnread"
+msgstr "couldn't read comments"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordContextChips.ts
 msgid "officeAddin.word.context.document.meta.firstOf"
 msgstr "First {sent} of {total} ¶"
 
@@ -4755,6 +4765,11 @@ msgstr "Shown while the document is off, so you can still send its comments with
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordCommentChips.ts
+msgid "officeAddin.word.context.openComments.introNoDocument"
+msgstr "Sends the document's open comments with their replies."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordCommentChips.ts
 msgid "officeAddin.word.context.openComments.label"
 msgstr "Open comments ({count})"
 
@@ -4770,8 +4785,18 @@ msgstr "With their replies"
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordCommentChips.ts
+msgid "officeAddin.word.context.openComments.meta.noneOpen"
+msgstr "None open"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordCommentChips.ts
 msgid "officeAddin.word.context.openComments.meta.notIncluded"
 msgstr "Not included"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordCommentChips.ts
+msgid "officeAddin.word.context.openComments.noneOpenIntro"
+msgstr "No comment in this document is open. Choose comment… to work on a resolved one."
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordCommentChips.ts
@@ -4832,7 +4857,12 @@ msgstr "Selected passage · {paragraphs} ¶"
 #. js-lingui-explicit-id
 #: src/word/utils/wordContextChips.ts
 msgid "officeAddin.word.context.selection.meta.commentsOff"
-msgstr "Selected · {paragraphs} ¶ · comments off"
+msgstr "Comments off · {paragraphs} ¶"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordContextChips.ts
+msgid "officeAddin.word.context.selection.meta.commentsUnread"
+msgstr "Couldn't read comments · {paragraphs} ¶"
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordContextChips.ts
@@ -4857,7 +4887,7 @@ msgstr "Too long · beginning only"
 #. js-lingui-explicit-id
 #: src/word/utils/wordContextChips.ts
 msgid "officeAddin.word.context.selection.meta.withComments"
-msgstr "{commentCount, plural, one {Selected · {paragraphs} ¶ · # comment} other {Selected · {paragraphs} ¶ · # comments}}"
+msgstr "{commentCount, plural, one {# comment · {paragraphs} ¶} other {# comments · {paragraphs} ¶}}"
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordContextChips.ts
@@ -5940,11 +5970,6 @@ msgstr "Passage selected in Word. This may change the insertion location for a l
 #: src/word/components/WordReviewCardParts.tsx
 #~ msgid "officeAddin.word.review.showDetails"
 #~ msgstr "Show details"
-
-#. js-lingui-explicit-id
-#: src/word/components/WordReviewCardParts.tsx
-#~ msgid "officeAddin.word.review.showInWord"
-#~ msgstr "Show in Word ↗"
 
 #. js-lingui-explicit-id
 #. placeholder {0}: filtered.length
