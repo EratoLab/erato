@@ -537,8 +537,16 @@ Themes and kits can reach the lane through these hooks and classes:
 - `composer-context-detail[data-placement]` and `composer-context-detail-state`;
 - `composer-mode-chip[data-mode-id][data-locked]` in the controls row, with
   `composer-mode-chip-label`, `composer-mode-end` and the `composer-mode-live`
-  region; it is drawn with tokens only and has no face point yet (it arrived
-  with 1.19);
+  region; it is drawn with tokens only and has no face point (it arrived with
+  1.19);
+- `composer-tool-chips` (a `role="group"` named "Selected tools") in the same
+  row, after the mode chips, wherever the unified "+" menu is used: one
+  `composer-tool-chip[data-facet-id][data-locked]` button per selected tool
+  (`data-testid="selected-facet-{id}"`, as on the desktop Tools buttons), with
+  `composer-tool-chip-label` and the `composer-tool-live` region. Like the mode
+  chips it is drawn with `--theme-radius-control`, `--theme-bg-secondary`,
+  `--theme-bg-hover` and `--theme-spacing-control-gap` only, and has no face
+  point. The "+" carries no count badge;
 - the classes `composer-context-chip-geometry`, `composer-context-chip-skin` and
   `composer-context-control-geometry`, and the layout tokens
   `layout.composerContext.chipHeight` and `layout.composerContext.detailWidth`.
@@ -583,6 +591,31 @@ a control of its own, or breaks the host's control, popup or state word.
 `component-kit-example/src/components/ExampleComposerContextChipFace.test.tsx`
 is a working harness. The point arrived with shared surface 1.19; declare
 `builtAgainstSharedSurfaceMinor: 19` on the registration.
+
+### Sent messages and the edit composer
+
+A sent user message names the context its action facet carried in a read-only
+"Sent with" row under its text: `data-ui="message-sent-with"`, with
+`message-sent-with-label`, `message-sent-with-list` and one
+`message-sent-with-chip[data-kind]` (with `message-sent-with-chip-label`) per
+chip, drawn with `--theme-border-attachment`, `--theme-radius-base`,
+`--theme-bg-secondary`, `--theme-fg-secondary` and `--theme-fg-muted`. Nothing
+in it is focusable. The host that sent the facet names its chips
+(`registerSentWithDescriptors()`); a facet no host registered shows no row.
+
+A `ChatMessageRenderer` override reads the chips from
+`useChatMessageRenderer().sentWith` and draws them with the host's own
+`hostComponents.MessageSentWith`, which arrived with shared surface 1.21. A
+host before 1.21 hands over neither, so check for the component before drawing
+it, and declare `builtAgainstSharedSurfaceMinor: 21` on the registration that
+draws it.
+
+Editing a message runs the composer's lane (`data-ui="message-editor"`, the
+list named "Attachments of this message"): the message's files go through
+`ChatInputAttachmentPreview` like the composer's, a sent Teams transcript is
+one chip again, and the context the message was sent with is a locked chip
+whose meta reads "Sent as before", because an edit sends it again. Kit chip
+faces and attachment previews apply there unchanged.
 
 ### Staged recordings
 
