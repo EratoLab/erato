@@ -30,6 +30,7 @@ const state = vi.hoisted(() => ({
     | null
     | ((update: (files: FileUploadItem[]) => FileUploadItem[]) => void),
   renders: [] as string[][],
+  entries: [] as readonly TeamsTranscriptContextEntry[],
   options: null as TeamsTranscriptContextOptions | null,
   composer: null as TeamsComposerContextValue | null,
   controls: {
@@ -84,6 +85,7 @@ vi.mock("@erato/frontend/library", async () => {
       options: TeamsTranscriptContextOptions,
     ): ComposerContextItem[] => {
       state.options = options;
+      state.entries = entries;
       return entries.map((entry) => ({
         id: `teams.transcript:${entry.id}`,
         kind: "teams.transcript",
@@ -145,10 +147,14 @@ const record = (
   transcriptUploadId: string,
   assetUploadIds: string[],
   lineage = "lineage-1",
+  names: { assetNames?: string[]; excludedAssetNames?: string[] } = {},
 ): TeamsTranscriptRecord => ({
   lineage,
   transcriptUploadId,
   assetUploadIds,
+  assetNames: assetUploadIds.map((id) => `${id}.pdf`),
+  excludedAssetNames: [],
+  ...names,
   file: transcriptFile,
   selections: [],
   messageLimit: 200,
@@ -157,6 +163,7 @@ const record = (
 const picker = {
   forget: vi.fn(),
   open: vi.fn(),
+  excludeAsset: vi.fn(),
 };
 
 let setRecords: (records: TeamsTranscriptRecord[]) => void = () => {};
@@ -215,6 +222,7 @@ describe("TeamsChatInput", () => {
     };
     picker.forget.mockReset();
     picker.open.mockReset();
+    picker.excludeAsset.mockReset();
     onFilePreview.mockReset();
   });
   afterEach(cleanup);
@@ -275,6 +283,8 @@ describe("TeamsChatInput", () => {
     );
     act(() => state.options?.onRemoveFile("a1"));
     expect(state.controls.removeUploadedFiles).toHaveBeenCalledWith(["a1"]);
+    // Remembered on the record, so an Update does not bring it back.
+    expect(picker.excludeAsset).toHaveBeenCalledWith("t1", "a1.pdf");
 
     const named = { ...upload("a2"), displayName: "roadmap-q1.pdf" };
     state.options?.onFilePreview?.(named);
@@ -320,11 +330,31 @@ describe("TeamsChatInput", () => {
     expect(state.composer?.bridge).toBeDefined();
   });
 
-  it("speaks what the picker did through its own region", () => {
+  it("speaks what the picker did through its own region, a repeat too", () => {
     renderInput([], []);
-    act(() => state.composer?.bridge.announce("Teams transcript attached."));
-    expect(screen.getByTestId("teams-composer-announcer")).toHaveTextContent(
-      "Teams transcript attached.",
+    const region = screen.getByTestId("teams-composer-announcer");
+    act(() => state.composer?.bridge.announce("Teams transcript updated."));
+    expect(region).toHaveTextContent("Teams transcript updated.");
+    const first = region.textContent;
+    act(() => state.composer?.bridge.announce("Teams transcript updated."));
+    expect(region.textContent).not.toBe(first);
+    expect(region).toHaveTextContent("Teams transcript updated.");
+  });
+
+  it("tells the chip which of its files the composer did not take", () => {
+    renderInput(
+      [
+        record("t1", ["a1", "a2"], "lineage-1", {
+          assetNames: ["a1.pdf", "a2.pdf", "past-the-limit.pdf"],
+          excludedAssetNames: ["a2.pdf"],
+        }),
+      ],
+      [upload("t1"), upload("a1")],
     );
+    expect(state.entries).toHaveLength(1);
+    // a2 was removed by the user, so only the one the limit cut is missing.
+    expect(state.entries[0].notAttachedAssetNames).toEqual([
+      "past-the-limit.pdf",
+    ]);
   });
 });

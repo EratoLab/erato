@@ -59,6 +59,8 @@ const record = (
   lineage: "lineage-1",
   transcriptUploadId,
   assetUploadIds,
+  assetNames: [],
+  excludedAssetNames: [],
   file: transcript,
   selections: [],
   messageLimit: 200,

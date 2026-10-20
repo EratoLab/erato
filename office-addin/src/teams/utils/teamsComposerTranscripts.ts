@@ -18,6 +18,10 @@ export interface TeamsTranscriptRecord {
   transcriptUploadId: string;
   /** The uploads of its images and shared files that the composer took. */
   assetUploadIds: readonly string[];
+  /** Upload names of every image and shared file handed over with it. */
+  assetNames: readonly string[];
+  /** Upload names the user removed from it; an Update leaves them out. */
+  excludedAssetNames: readonly string[];
   /** The local transcript, read for its index block. */
   file: File;
   /** What the picker reopens with. */
@@ -30,6 +34,11 @@ export interface TeamsComposerTranscript {
   transcript: FileUploadItem;
   /** The record's staged assets, in staged order. */
   assets: FileUploadItem[];
+  /**
+   * Upload names of assets handed over that the composer did not take, past
+   * its file limit or of a type it refuses, and that the user did not remove.
+   */
+  notAttachedAssetNames: string[];
 }
 
 export interface TeamsSendPreview {
@@ -52,10 +61,18 @@ export function previewTeamsSend(
     const record = byTranscriptId.get(file.id);
     if (!record) continue;
     const assetIds = new Set(record.assetUploadIds);
+    const assets = staged.filter((candidate) => assetIds.has(candidate.id));
+    const taken = new Set([
+      ...assets.map((asset) => asset.filename),
+      ...record.excludedAssetNames,
+    ]);
     transcripts.push({
       record,
       transcript: file,
-      assets: staged.filter((candidate) => assetIds.has(candidate.id)),
+      assets,
+      notAttachedAssetNames: record.assetNames.filter(
+        (name) => !taken.has(name),
+      ),
     });
   }
   return { transcripts, fileIds: staged.map((file) => file.id) };

@@ -52,6 +52,12 @@ import type { TeamsChatSelection } from "../utils/teamsChatSelection";
 import type { TeamsTranscriptRecord } from "../utils/teamsComposerTranscripts";
 import type { ReactNode } from "react";
 
+type DeliverOutcome =
+  | "delivered"
+  | "failed"
+  /** The dialog closed while the upload ran; nothing was staged. */
+  | "abandoned";
+
 export type TeamsAttachFailure =
   /** Every selected message came back empty or unreadable. */
   | "nothing-to-attach"
@@ -101,6 +107,8 @@ export interface TeamsChatPickerContextValue {
   /** Abort an in-flight build, keeping the dialog and the selection. */
   cancelBuild: () => void;
   isBuilding: boolean;
+  /** A built transcript is uploading; closing the dialog drops it. */
+  isDelivering: boolean;
   progress: TeamsTranscriptProgress | null;
   partialOutcome: TeamsTranscriptBuildOutcome | null;
   attachError: TeamsAttachFailure | null;
@@ -112,6 +120,8 @@ export interface TeamsChatPickerContextValue {
   transcripts: ReadonlyMap<string, TeamsTranscriptRecord>;
   /** Drops a record, e.g. after its chip's (x). */
   forget: (transcriptUploadId: string) => void;
+  /** Notes an asset the user removed from a transcript, so Update keeps it out. */
+  excludeAsset: (transcriptUploadId: string, assetName: string) => void;
 }
 
 const EMPTY_CHAT_LIST: UseTeamsChatListResult = {
@@ -159,11 +169,13 @@ const CLOSED_PICKER: TeamsChatPickerContextValue = {
   attachPartial: () => Promise.resolve(),
   cancelBuild: () => {},
   isBuilding: false,
+  isDelivering: false,
   progress: null,
   partialOutcome: null,
   attachError: null,
   transcripts: new Map<string, TeamsTranscriptRecord>(),
   forget: () => {},
+  excludeAsset: () => {},
 };
 
 const TeamsChatPickerContext =
@@ -220,6 +232,10 @@ export function TeamsChatPickerProvider({ children }: { children: ReactNode }) {
   const composerRef = useRef<TeamsComposerBridge | null>(null);
   const cancelledRef = useRef(false);
   const lastBuildRef = useRef<{ key: string; files: File[] } | null>(null);
+  // One per opening of the dialog: work that outlives the dialog it started
+  // in (an upload still running after Cancel) must not stage anything.
+  const sessionRef = useRef(0);
+  const [isDelivering, setIsDelivering] = useState(false);
 
   // The object id is the reliable match; the login hint can differ from a
   // member's primary SMTP address, which would leave the viewer in their own
@@ -246,6 +262,7 @@ export function TeamsChatPickerProvider({ children }: { children: ReactNode }) {
       options: { edit?: TeamsTranscriptRecord } = {},
     ) => {
       const edit = options.edit ?? null;
+      sessionRef.current += 1;
       composerRef.current = composer;
       editingRef.current = edit;
       setEditing(edit);
@@ -276,6 +293,8 @@ export function TeamsChatPickerProvider({ children }: { children: ReactNode }) {
   const close = useCallback(() => {
     cancelBuild();
     reset();
+    sessionRef.current += 1;
+    setIsDelivering(false);
     composerRef.current = null;
     editingRef.current = null;
     lastBuildRef.current = null;
@@ -294,6 +313,22 @@ export function TeamsChatPickerProvider({ children }: { children: ReactNode }) {
       return next;
     });
   }, []);
+
+  const excludeAsset = useCallback(
+    (transcriptUploadId: string, assetName: string) => {
+      setTranscripts((current) => {
+        const record = current.get(transcriptUploadId);
+        if (!record || record.excludedAssetNames.includes(assetName)) {
+          return current;
+        }
+        return new Map(current).set(transcriptUploadId, {
+          ...record,
+          excludedAssetNames: [...record.excludedAssetNames, assetName],
+        });
+      });
+    },
+    [],
+  );
 
   // After the dialog's own focus return: an Attach started from "+" or an
   // Update that removed the chip leaves no opener to go back to.
@@ -343,40 +378,56 @@ export function TeamsChatPickerProvider({ children }: { children: ReactNode }) {
    * of the transcript being edited. `retryKey` keeps the built transcript
    * around after a failure: rebuilding it means walking Graph again, which is
    * tens of seconds. A failed upload leaves the record and its files as they
-   * were.
+   * were, and so does closing the dialog while the upload runs.
    */
   const deliver = useCallback(
     async (
-      files: File[],
-      built: {
+      built: File[],
+      options: {
         selections: readonly TeamsChatSelection[];
         limit: number;
         retryKey?: string;
       },
-    ): Promise<boolean> => {
+    ): Promise<DeliverOutcome> => {
+      const session = sessionRef.current;
       const composer = composerRef.current;
-      const fail = () => {
-        if (built.retryKey) {
-          lastBuildRef.current = { key: built.retryKey, files };
+      // Read before the first await: the dialog can close during one.
+      const previous = editingRef.current;
+      const fail = (): DeliverOutcome => {
+        if (options.retryKey) {
+          lastBuildRef.current = { key: options.retryKey, files: built };
         }
         setAttachError("upload-failed");
-        return false;
+        return "failed";
       };
       // The transcript leads, its assets follow — the order every caller
       // hands over, and what makes the first file the one the chip reads.
-      const [file] = files;
+      const [file, ...builtAssets] = built;
       if (!composer || !file) return fail();
-      // Read before staging, so the chip's first render already knows the
-      // conversation.
-      await readTeamsTranscriptIndex(file);
-      const uploaded = await composer.upload(files);
+      // What the user took out of the transcript stays out of its update.
+      const excluded = new Set(previous?.excludedAssetNames ?? []);
+      const assets = builtAssets.filter((asset) => !excluded.has(asset.name));
+      const files = [file, ...assets];
+      const ended = () => sessionRef.current !== session;
+
+      setIsDelivering(true);
+      let uploaded: Awaited<ReturnType<TeamsComposerBridge["upload"]>>;
+      try {
+        // Read before staging, so the chip's first render already knows the
+        // conversation.
+        await readTeamsTranscriptIndex(file);
+        if (ended()) return "abandoned";
+        uploaded = await composer.upload(files);
+      } finally {
+        if (!ended()) setIsDelivering(false);
+      }
+      if (ended()) return "abandoned";
       if (!uploaded) return fail();
 
       const transcriptUpload = uploaded.find(
         (upload) => upload.filename === file.name,
       );
       if (!transcriptUpload) return fail();
-      const previous = editingRef.current;
       lineageRef.current += 1;
       const record: TeamsTranscriptRecord = {
         lineage: previous?.lineage ?? `teams-transcript-${lineageRef.current}`,
@@ -384,9 +435,11 @@ export function TeamsChatPickerProvider({ children }: { children: ReactNode }) {
         assetUploadIds: uploaded
           .filter((upload) => upload !== transcriptUpload)
           .map((upload) => upload.id),
+        assetNames: assets.map((asset) => asset.name),
+        excludedAssetNames: previous?.excludedAssetNames ?? [],
         file,
-        selections: [...built.selections],
-        messageLimit: built.limit,
+        selections: [...options.selections],
+        messageLimit: options.limit,
       };
       if (previous) {
         composer.replace(previous, uploaded);
@@ -412,12 +465,14 @@ export function TeamsChatPickerProvider({ children }: { children: ReactNode }) {
       );
       close();
       setRefocus({ composer });
-      return true;
+      return "delivered";
     },
     [close],
   );
 
   const attach = useCallback(async () => {
+    // A second click while the first transcript uploads would build again.
+    if (isDelivering) return;
     const selections = [...selection.values()];
     const previous = editingRef.current;
     const composer = composerRef.current;
@@ -482,6 +537,7 @@ export function TeamsChatPickerProvider({ children }: { children: ReactNode }) {
     close,
     deliver,
     forget,
+    isDelivering,
     maxFileBytes,
     messageLimit,
     selection,
@@ -498,7 +554,7 @@ export function TeamsChatPickerProvider({ children }: { children: ReactNode }) {
       selections: [...selection.values()],
       limit: messageLimit,
     });
-    if (!delivered) {
+    if (delivered === "failed") {
       setPartialOutcome(outcome);
     }
   }, [deliver, messageLimit, partialOutcome, selection]);
@@ -528,11 +584,13 @@ export function TeamsChatPickerProvider({ children }: { children: ReactNode }) {
       attachPartial,
       cancelBuild,
       isBuilding,
+      isDelivering,
       progress,
       partialOutcome,
       attachError,
       transcripts,
       forget,
+      excludeAsset,
     }),
     [
       attach,
@@ -544,10 +602,12 @@ export function TeamsChatPickerProvider({ children }: { children: ReactNode }) {
       chatList,
       close,
       editing,
+      excludeAsset,
       fetcher,
       fileFetcher,
       forget,
       isBuilding,
+      isDelivering,
       isMessageSelectionFull,
       isOpen,
       isSelected,

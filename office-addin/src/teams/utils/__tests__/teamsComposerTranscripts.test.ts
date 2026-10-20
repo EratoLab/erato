@@ -12,10 +12,16 @@ const record = (
   lineage: string,
   transcriptUploadId: string,
   assetUploadIds: string[] = [],
+  names: Partial<
+    Pick<TeamsTranscriptRecord, "assetNames" | "excludedAssetNames">
+  > = {},
 ): TeamsTranscriptRecord => ({
   lineage,
   transcriptUploadId,
   assetUploadIds,
+  assetNames: assetUploadIds.map((id) => `${id}.pdf`),
+  excludedAssetNames: [],
+  ...names,
   // Both read `teams-chats-3.md`: the name never tells two apart.
   file: new File(["#"], "teams-chats-3.md"),
   selections: [],
@@ -56,6 +62,19 @@ describe("previewTeamsSend", () => {
     );
     expect(preview.transcripts).toEqual([]);
     expect(preview.fileIds).toEqual(["a1", "holiday"]);
+  });
+
+  it("names the assets handed over that the composer did not take", () => {
+    const attached = record("a", "t1", ["a1", "a2"], {
+      assetNames: ["a1.pdf", "a2.pdf", "a3.pdf", "a4.pdf"],
+      excludedAssetNames: ["a2.pdf"],
+    });
+    const [entry] = previewTeamsSend(
+      [attached],
+      [upload("t1", "teams-chats-3.md"), upload("a1")],
+    ).transcripts;
+    // a2 the user removed; a3 and a4 never came back from the upload.
+    expect(entry.notAttachedAssetNames).toEqual(["a3.pdf", "a4.pdf"]);
   });
 
   it("reads records from any iterable, such as the picker's map", () => {

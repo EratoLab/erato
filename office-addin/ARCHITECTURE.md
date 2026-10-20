@@ -285,7 +285,13 @@ use the router.
   Update rebuilds, unstages the old uploads before staging the new ones (the
   composer trims to `maxFiles` as it adds), and keeps the lineage, so the chip
   updates in place; Update with nothing ticked removes it; a failed upload
-  leaves the old transcript as it was. Records live in memory for the session.
+  leaves the old transcript as it was, and so does closing the dialog while the
+  upload runs (each opening is a session; an upload that outlives its session
+  stages nothing). A file removed in the chip's detail is noted on the record
+  (`excludedAssetNames`), so an Update leaves it out. The record also keeps the
+  names of every asset it handed over (`assetNames`); those the composer did
+  not take, past `maxFiles` or of a refused type, are named in the detail
+  rather than dropped silently. Records live in memory for the session.
 - The standalone Teams manifest is staged as `manifest-teams.json` and served
   with its package from `/office-addin/teams`. Teams distribution is configured
   separately from the Outlook and Word XML add-ins.

@@ -139,6 +139,35 @@ function TeamsChatPickerDialogBody({
     }
     return counts;
   }, [picker.selection]);
+  // Unticking a conversation with picked messages takes them out, as it
+  // would take out the whole chat.
+  const clearPicked = (ref: Parameters<typeof conversationKey>[0]) => {
+    const key = conversationKey(ref);
+    for (const selected of picker.selection.values()) {
+      if (
+        selected.kind === "message" &&
+        conversationKey(selected.ref) === key
+      ) {
+        picker.toggle(selected);
+      }
+    }
+  };
+  const conversationToggle = (selection: {
+    kind: "conversation";
+    ref: Parameters<typeof conversationKey>[0];
+    title: string;
+  }) => {
+    const checked = picker.isSelected(selection);
+    const mixed =
+      !checked &&
+      (pickedByConversation.get(conversationKey(selection.ref)) ?? 0) > 0;
+    return {
+      checked,
+      mixed,
+      onToggle: () =>
+        mixed ? clearPicked(selection.ref) : picker.toggle(selection),
+    };
+  };
   const pickedSubline = (ref: Parameters<typeof conversationKey>[0]) => {
     const count = pickedByConversation.get(conversationKey(ref)) ?? 0;
     return count > 0
@@ -489,8 +518,7 @@ function TeamsChatPickerDialogBody({
     return (
       <TeamsPickerRow
         key={chat.chatId}
-        checked={picker.isSelected(selection)}
-        onToggle={() => picker.toggle(selection)}
+        {...conversationToggle(selection)}
         selectLabel={t({
           id: "officeAddin.teams.picker.selectChat",
           message: `Select ${chatTitle}`,
@@ -609,8 +637,7 @@ function TeamsChatPickerDialogBody({
       <TeamsPickerRow
         key={`${channel.teamId}/${channel.channelId}`}
         isChannel
-        checked={picker.isSelected(selection)}
-        onToggle={() => picker.toggle(selection)}
+        {...conversationToggle(selection)}
         selectLabel={t({
           id: "officeAddin.teams.picker.selectChannel",
           message: `Select ${channel.name}`,
@@ -1090,7 +1117,7 @@ function TeamsChatPickerDialogBody({
             </Button>
             <Button
               variant="primary"
-              loading={picker.isBuilding}
+              loading={picker.isBuilding || picker.isDelivering}
               disabled={!editing && selectedCount === 0}
               onClick={() => void picker.attach()}
             >

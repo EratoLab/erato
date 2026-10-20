@@ -15,6 +15,7 @@ import {
   TEAMS_STORY_FLOWS,
   teamsStoryFileName,
   teamsStoryId,
+  teamsStoryRemovedNames,
   teamsStoryStaged,
   teamsStoryTranscriptText,
   teamsStoryTranscriptUploads,
@@ -85,6 +86,10 @@ async function addinItems(seed: TeamsStorySeed) {
         assetUploadIds: teamsStoryTranscriptUploads(transcript).assets.map(
           (asset) => asset.id,
         ),
+        assetNames: teamsStoryTranscriptUploads(transcript).assets.map(
+          (asset) => asset.filename,
+        ),
+        excludedAssetNames: teamsStoryRemovedNames(transcript),
         file,
         selections: [],
         messageLimit: 200,
@@ -97,10 +102,16 @@ async function addinItems(seed: TeamsStorySeed) {
   const preview = previewTeamsSend(records, staged);
   const canPick = seed.picker !== false;
   const entries = preview.transcripts.map(
-    ({ record, transcript, assets }): TeamsTranscriptContextEntry => ({
+    ({
+      record,
+      transcript,
+      assets,
+      notAttachedAssetNames,
+    }): TeamsTranscriptContextEntry => ({
       id: record.lineage,
       transcript: record.file,
       uploads: { transcript, assets },
+      notAttachedAssetNames,
       onRemove: noop,
       onEditSelection: canPick ? noop : undefined,
     }),
@@ -108,7 +119,13 @@ async function addinItems(seed: TeamsStorySeed) {
   const { result } = renderHook(() =>
     useTeamsTranscriptContextItems(entries, { onRemoveFile: noop }),
   );
-  return { items: result.current, sendFileIds: preview.fileIds };
+  return {
+    items: result.current,
+    sendFileIds: preview.fileIds,
+    notAttached: preview.transcripts.map(
+      (entry) => entry.notAttachedAssetNames.length,
+    ),
+  };
 }
 
 /** What a chip shows and claims: the fields the Storybook spec reads. */
@@ -117,11 +134,16 @@ function summary(
   {
     items,
     sendFileIds,
-  }: { items: ComposerContextItem[]; sendFileIds: string[] },
+    notAttached,
+  }: {
+    items: ComposerContextItem[];
+    sendFileIds: string[];
+    notAttached: number[];
+  },
 ) {
   return {
     composerLocked: seed.locked === true,
-    chips: items.map((item) => ({
+    chips: items.map((item, position) => ({
       kind: item.kind,
       origin: item.origin,
       state: item.state,
@@ -134,6 +156,7 @@ function summary(
       detailTitle: item.detail?.title ?? null,
       actions: (item.detail?.actions ?? []).map((action) => action.label),
       claims: item.claimsFileIds ?? [],
+      notAttached: notAttached[position] ?? 0,
     })),
     sendFileIds,
   };

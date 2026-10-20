@@ -1,5 +1,6 @@
 import {
   useChatInputControls,
+  useLiveAnnouncement,
   useTeamsTranscriptContextItems,
   useUploadFeature,
 } from "@erato/frontend/library";
@@ -53,14 +54,15 @@ export const TeamsChatInput = forwardRef<
   useLayoutEffect(() => {
     stagedRef.current = staged;
   }, [staged]);
-  const [announcement, setAnnouncement] = useState("");
+  // Repeats still speak: a second "Teams transcript updated." is news too.
+  const [announcement, announce] = useLiveAnnouncement();
 
   const bridge = useTeamsComposerBridge({
     uploadFiles: props.uploadFiles,
     controls,
     stagedRef,
     setStaged,
-    announce: setAnnouncement,
+    announce,
     maxSizeBytes,
     maxSizeFormatted,
   });
@@ -76,6 +78,7 @@ export const TeamsChatInput = forwardRef<
     records: new Map<string, TeamsTranscriptRecord>(),
     forget: picker.forget,
     open: picker.open,
+    excludeAsset: picker.excludeAsset,
     bridge,
   });
   useLayoutEffect(() => {
@@ -85,6 +88,7 @@ export const TeamsChatInput = forwardRef<
       ),
       forget: picker.forget,
       open: picker.open,
+      excludeAsset: picker.excludeAsset,
       bridge,
     };
   });
@@ -112,12 +116,18 @@ export const TeamsChatInput = forwardRef<
   const entries = useMemo(
     () =>
       preview.transcripts.map(
-        ({ record, transcript, assets }): TeamsTranscriptContextEntry => {
+        ({
+          record,
+          transcript,
+          assets,
+          notAttachedAssetNames,
+        }): TeamsTranscriptContextEntry => {
           const handlers = handlersFor(record.lineage);
           return {
             id: record.lineage,
             transcript: record.file,
             uploads: { transcript, assets },
+            notAttachedAssetNames,
             onRemove: handlers.onRemove,
             onEditSelection: canPick ? handlers.onEditSelection : undefined,
           };
@@ -126,10 +136,18 @@ export const TeamsChatInput = forwardRef<
     [canPick, handlersFor, preview],
   );
 
-  const onRemoveFile = useCallback(
-    (fileId: string) => bridge.remove([fileId]),
-    [bridge],
-  );
+  // The record remembers the removal, so an Update leaves the file out.
+  const onRemoveFile = useCallback((fileId: string) => {
+    const latest = latestRef.current;
+    const upload = stagedRef.current.find((file) => file.id === fileId);
+    const record = [...latest.records.values()].find((candidate) =>
+      candidate.assetUploadIds.includes(fileId),
+    );
+    if (record && upload) {
+      latest.excludeAsset(record.transcriptUploadId, upload.filename);
+    }
+    latest.bridge.remove([fileId]);
+  }, []);
   const previewRef = useRef(props.onFilePreview);
   useLayoutEffect(() => {
     previewRef.current = props.onFilePreview;

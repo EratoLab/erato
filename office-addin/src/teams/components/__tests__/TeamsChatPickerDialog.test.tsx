@@ -73,7 +73,8 @@ vi.mock("@erato/frontend/library", () => ({
   }) => (
     <button
       type="button"
-      disabled={disabled ?? loading ?? false}
+      // As the library's Button: loading disables whatever `disabled` says.
+      disabled={Boolean(disabled) || Boolean(loading)}
       onClick={onClick}
       {...omitStyleProps(rest)}
     >
@@ -533,6 +534,47 @@ function renderPicker(
 
 const selectChat = () =>
   screen.getByRole("checkbox", { name: "Select Product sync" });
+
+/** Holds the composer's upload open until the test lets it finish. */
+function holdUpload() {
+  let finish: () => void = () => {};
+  const upload = bridge.upload;
+  bridge.upload = vi.fn(
+    (files: File[]) =>
+      new Promise<FileUploadItem[] | null>((resolve) => {
+        finish = () => void upload(files).then(resolve);
+      }),
+  );
+  return { finish: () => finish() };
+}
+
+/** A chat whose one message carries a pasted image. */
+function imageFetcher(): TeamsChatFetcher {
+  return {
+    ...fakeFetcher(),
+    pageChatBackwards: () =>
+      Promise.resolve({
+        messages: [
+          mockGraphChatMessage({
+            id: "a",
+            body: {
+              contentType: "html",
+              content: `<p>see this</p><img src="https://graph.microsoft.com/v1.0/chats/x/messages/1/hostedContents/aWQ9/$value">`,
+            },
+          }),
+        ],
+        nextLink: null,
+        truncated: false,
+        oldestCreatedDateTime: "2026-03-03T09:14:00Z",
+        state: "ok",
+      }),
+    getHostedContent: () =>
+      Promise.resolve({
+        bytes: new TextEncoder().encode("png-bytes").buffer,
+        contentType: "image/png",
+      }),
+  };
+}
 
 describe("TeamsChatPickerDialog", () => {
   let originalOffice: PropertyDescriptor | undefined;
@@ -1457,6 +1499,26 @@ describe("TeamsChatPickerDialog", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 
+  it("stages nothing when the dialog closes while the upload runs", async () => {
+    const upload = holdUpload();
+    renderPicker();
+    fireEvent.click(selectChat());
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Attach" }));
+    });
+    await waitFor(() => expect(bridge.upload).toHaveBeenCalledTimes(1));
+    // Busy, so a second click can't start another build.
+    expect(screen.getByRole("button", { name: "Attach" })).toBeDisabled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    await act(async () => upload.finish());
+
+    expect(bridge.add).not.toHaveBeenCalled();
+    expect(bridge.announce).not.toHaveBeenCalled();
+    expect(records()).toEqual([]);
+  });
+
   it("registers nothing when the upload fails", async () => {
     hooks.uploadStore.error = new Error("413");
     renderPicker();
@@ -1490,10 +1552,13 @@ describe("TeamsChatPickerDialog", () => {
     const editRecord = (
       selections: TeamsChatSelection[],
       messageLimit = 200,
+      excludedAssetNames: string[] = [],
     ): TeamsTranscriptRecord => ({
       lineage: "lineage-7",
       transcriptUploadId: "old-t",
       assetUploadIds: ["old-a"],
+      assetNames: ["teams-img-0000000000000000.png"],
+      excludedAssetNames,
       file: new File(["#"], "teams-Product_sync.md"),
       selections,
       messageLimit,
@@ -1511,7 +1576,8 @@ describe("TeamsChatPickerDialog", () => {
       });
 
       expect(screen.getByText("3 picked messages")).toBeInTheDocument();
-      expect(selectChat()).not.toBeChecked();
+      // Part of the chat is in the transcript: neither ticked nor empty.
+      expect(selectChat()).toBePartiallyChecked();
       expect(
         screen.getByText("Whole chats add the last 400 messages."),
       ).toBeInTheDocument();
@@ -1577,6 +1643,78 @@ describe("TeamsChatPickerDialog", () => {
       );
       expect(screen.queryByRole("dialog")).toBeNull();
       expect(bridge.focusComposer).toHaveBeenCalled();
+    });
+
+    it("takes a chat's picked messages out when its mixed row is unticked", () => {
+      renderPicker({
+        open: "edit",
+        edit: editRecord([
+          picked("m1"),
+          picked("m2"),
+          {
+            kind: "conversation",
+            ref: { kind: "chat", chatId: "19:design-review" },
+            title: "Design review",
+          },
+        ]),
+      });
+      expect(selectChat()).toBePartiallyChecked();
+
+      fireEvent.click(selectChat());
+
+      expect(selectChat()).not.toBePartiallyChecked();
+      expect(selectChat()).not.toBeChecked();
+      expect(screen.queryByText("2 picked messages")).toBeNull();
+      // The other conversation stays as it was.
+      expect(screen.getByText("1 item selected")).toBeInTheDocument();
+    });
+
+    it("drops the Update when the dialog closes while its upload runs", async () => {
+      const previous = editRecord([whole]);
+      const upload = holdUpload();
+      renderPicker({ open: "edit", edit: previous });
+
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "Update" }));
+      });
+      await waitFor(() => expect(bridge.upload).toHaveBeenCalledTimes(1));
+      expect(screen.getByRole("button", { name: "Update" })).toBeDisabled();
+
+      fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+      await act(async () => upload.finish());
+
+      // Not a second transcript next to the first: nothing changed at all.
+      expect(bridge.add).not.toHaveBeenCalled();
+      expect(bridge.replace).not.toHaveBeenCalled();
+      expect(bridge.announce).not.toHaveBeenCalled();
+      expect(records()).toEqual([]);
+    });
+
+    it("keeps a file the user removed out of the update", async () => {
+      hooks.fetcher = imageFetcher();
+      renderPicker({ open: null });
+      fireEvent.click(screen.getByText("open picker"));
+      fireEvent.click(selectChat());
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "Attach" }));
+      });
+      await waitFor(() => expect(records()).toHaveLength(1));
+      const image = uploads[0][1].name;
+      cleanup();
+
+      // As the detail's remove leaves it: the image noted on the record.
+      renderPicker({
+        open: "edit",
+        edit: editRecord([whole], 200, [image]),
+      });
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "Update" }));
+      });
+      await waitFor(() => expect(bridge.replace).toHaveBeenCalledTimes(1));
+
+      expect(uploads[1].map((file) => file.name)).toEqual([
+        "teams-Product_sync.md",
+      ]);
     });
 
     it("changes nothing on Cancel and forgets the reopened selection", () => {

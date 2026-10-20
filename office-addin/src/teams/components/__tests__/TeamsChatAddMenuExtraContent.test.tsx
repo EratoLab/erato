@@ -59,6 +59,8 @@ const record = {
   lineage: "lineage-1",
   transcriptUploadId: "u-transcript",
   assetUploadIds: [],
+  assetNames: [],
+  excludedAssetNames: [],
   file: new File(["#"], "teams-Product_sync.md"),
   selections: [],
   messageLimit: 200,

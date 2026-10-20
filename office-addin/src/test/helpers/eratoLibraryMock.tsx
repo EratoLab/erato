@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 
 import type * as EratoLibrary from "@erato/frontend/library";
 import type { ReactNode } from "react";
@@ -512,6 +512,17 @@ export const DEFAULT_STUBS = {
     clearQueuedMessage: noop,
   }),
   useTeamsTranscriptContextItems: () => [],
+  // Keeps the library's one rule a test can see: a repeat still changes the
+  // region's text.
+  useLiveAnnouncement: () => {
+    const [text, setText] = useState("");
+    const announce = useCallback(
+      (next: string) =>
+        setText((current) => (current === next ? `${next}\u200b` : next)),
+      [],
+    );
+    return [text, announce];
+  },
   useUploadFeature: () => ({
     enabled: true,
     maxSizeBytes: 20 * 1024 * 1024,
