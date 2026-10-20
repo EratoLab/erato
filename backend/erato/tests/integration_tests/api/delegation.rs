@@ -14459,17 +14459,12 @@ async fn retry_reauthorizes_facets_for_the_owner(pool: Pool<Postgres>) {
     );
 }
 
-/// A retry keeps the original run's MCP ceiling. The turn that set it is gone,
-/// so the stored value is copied as it is, and the retried child is offered
-/// only what the original child could have been.
-///
-/// # Test Categories
-/// - `uses-db`
-/// - `auth-required`
-/// - `uses-mocked-llm`
-/// - `uses-mock-mcp`
-#[sqlx::test(migrator = "crate::MIGRATOR")]
-async fn retry_keeps_the_runs_parent_mcp_allowlist(pool: Pool<Postgres>) {
+/// Retry a failed run seeded with `spec`, with both mock servers open to the
+/// user, and return the retried run's configuration and its child's turn.
+async fn retried_task_child(
+    pool: Pool<Postgres>,
+    spec: erato::models::chat::TaskSpec,
+) -> (Value, String) {
     let child = RequestBodyRecorder::new();
     let mut mocks = MockSet::new();
     {
@@ -14504,10 +14499,6 @@ async fn retry_keeps_the_runs_parent_mcp_allowlist(pool: Pool<Postgres>) {
     .unwrap();
     let server = app_server(app_state.clone());
     let origin = create_chat(&server, None).await;
-    let spec = erato::models::chat::TaskSpec {
-        parent_mcp_allowlist: Some(vec!["jira/*".to_string()]),
-        ..retry_task_spec()
-    };
     let seeded = seed_failed_task_run(
         &app_state,
         &me.id.to_string(),
@@ -14529,11 +14520,6 @@ async fn retry_keeps_the_runs_parent_mcp_allowlist(pool: Pool<Postgres>) {
         Uuid::parse_str(response.json::<Value>()["child_chat_id"].as_str().unwrap()).unwrap();
 
     let configuration = retry_child_configuration(&app_state, new_child_id).await;
-    assert_eq!(
-        configuration["task"]["parent_mcp_allowlist"],
-        json!(["jira/*"]),
-        "the retry carries the original run's ceiling: {configuration}"
-    );
     let mut bodies = generation_bodies(&child);
     for _ in 0..100 {
         if !bodies.is_empty() {
@@ -14545,10 +14531,64 @@ async fn retry_keeps_the_runs_parent_mcp_allowlist(pool: Pool<Postgres>) {
     // A delivery reaction in the origin quotes the brief too, but only after
     // the child has answered, so the first recorded turn is the child's.
     assert!(!bodies.is_empty(), "the retried child never ran");
-    assert!(offered_tool(&bodies[0], "read_approval_fixture").is_some());
+    (configuration, bodies.remove(0))
+}
+
+/// A retry keeps the original run's MCP ceiling. The turn that set it is gone,
+/// so the stored value is copied as it is, and the retried child is offered
+/// only what the original child could have been.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn retry_keeps_the_runs_parent_mcp_allowlist(pool: Pool<Postgres>) {
+    let spec = erato::models::chat::TaskSpec {
+        parent_mcp_allowlist: Some(vec!["jira/*".to_string()]),
+        ..retry_task_spec()
+    };
+    let (configuration, child) = retried_task_child(pool, spec).await;
+
+    assert_eq!(
+        configuration["task"]["parent_mcp_allowlist"],
+        json!(["jira/*"]),
+        "the retry carries the original run's ceiling: {configuration}"
+    );
+    assert!(offered_tool(&child, "read_approval_fixture").is_some());
     assert!(
-        offered_tool(&bodies[0], "auth_none_probe").is_none(),
+        offered_tool(&child, "auth_none_probe").is_none(),
         "the retried child must not reach past the original run's ceiling"
+    );
+}
+
+/// The assistant half of the ceiling survives a retry the same way. The
+/// seeded run is `bare` and its origin chat has no assistant, so the copied
+/// server list is all that holds the second server back.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn retry_keeps_the_runs_parent_mcp_server_ids(pool: Pool<Postgres>) {
+    let spec = erato::models::chat::TaskSpec {
+        parent_mcp_server_ids: Some(vec!["jira".to_string()]),
+        ..retry_task_spec()
+    };
+    let (configuration, child) = retried_task_child(pool, spec).await;
+
+    assert_eq!(
+        configuration["task"]["parent_mcp_server_ids"],
+        json!(["jira"]),
+        "the retry carries the original run's server list: {configuration}"
+    );
+    assert!(offered_tool(&child, "read_approval_fixture").is_some());
+    assert!(
+        offered_tool(&child, "auth_none_probe").is_none(),
+        "the retried child must not reach a server the original run could not"
     );
 }
 
