@@ -365,6 +365,8 @@ test.describe("every story", () => {
   }
 
   test("fits the 480 px breakpoint", async ({ page }) => {
+    // One test walks every story; the default 30 s is about what that takes.
+    test.setTimeout(120_000);
     for (const { id } of STORIES) {
       await openOutlook(page, id, { width: 480 });
       await expandLane(page);
@@ -373,6 +375,7 @@ test.describe("every story", () => {
   });
 
   test("reads at 4.5:1 in dark", async ({ page }) => {
+    test.setTimeout(120_000);
     for (const { id, mode } of STORIES) {
       await openOutlook(page, id, { theme: "dark" });
       await expandLane(page);
