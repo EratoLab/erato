@@ -231,6 +231,92 @@ use the router.
   manifest reference for future work. It is not staged or used by the current
   standalone Teams distribution or local Teams package flow.
 
+## Client tools in delegated tasks
+
+A delegated task can read through the pane its parent turn was sent from,
+under a grant the server writes when the task launches. The core is
+host-neutral (`backend/delegated-client-tools.md`); the Linear document
+"Contract: delegated tasks with client tools" is the contract. Each host
+supplies an adapter, and two conformance suites hold every adapter to the same
+lineage check, read-only mode, freshness shape and loss outcomes.
+
+### Checklist (contract §13)
+
+| #   | Item                                                                        | Where it lives                                                                                                                                                                                                                                                                                              |
+| --- | --------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | A host context kind and a binding sent as `X-Erato-Executor`                | The kind is compiled (`ClientToolHostContext` in `backend/erato_config/src/config.rs`). The pane registers its binding per tool with `registerOperationExecutor`; Word builds it in `word/utils/wordDocumentOperationBinding.ts`, Outlook in `outlook/hooks/useOutlookClientTools.ts`.                      |
+| 2   | The executor stream, handlers by tool, grant-capable tools advertised       | The shared coordinator opens the stream (`openExecutorStream` in `frontend/src/lib/clientOperations/`). Register each read with `registerClientToolExecutor(name, execute, isAvailable, { acceptsGrantCalls: true })`; only those are listed in `X-Erato-Child-Client-Tools`.                               |
+| 3   | The lineage check (§7)                                                      | The handler compares `ClientToolCallContext.hostGrant` with its own context owner and version before it reads anything.                                                                                                                                                                                     |
+| 4   | A read-only mode for every child-eligible tool                              | Configuration marks the tool: `child_access = "read"` and `host_context`, plus `child_context_arg` and `child_context_input` for a captured context version. Under `hostGrant` the handler returns no write token and no write guidance and leaves the coordinator's state alone; write handlers refuse it. |
+| 5   | A freshness producer, with its blind spots documented                       | `result.freshness` on every read (§10), listed in the host context template below.                                                                                                                                                                                                                          |
+| 6   | Typed loss outcomes (§6)                                                    | `ok: false` with `validationErrors[].code` set to `capture-unavailable` (Word) or `context_unavailable`, and `declined` when the user refuses on the device.                                                                                                                                                |
+| 7   | An overlay child facet                                                      | `facets.facets.<id>` with `child_host_context`: regular, not `hidden`, prompt only without `tool_call_allowlist`, listed in the coordinator facet's `delegation.child_facet_ids` and named in `facet_ids` by its template. Example: `[facets.facets.mailbox_reader]` in `backend/erato.template.toml`.      |
+| 8   | Read results framed as untrusted data                                       | ERMAIN-946, before enablement.                                                                                                                                                                                                                                                                              |
+| 9   | A native gate matrix                                                        | The template below, filled for the host.                                                                                                                                                                                                                                                                    |
+| 10  | The conformance tests pass                                                  | A backend row and a frontend handler test, see "Adding a host".                                                                                                                                                                                                                                             |
+| 11  | An approval scope and its outside-change signal, or approval per call       | ERMAIN-1033.                                                                                                                                                                                                                                                                                                |
+| 12  | Pickup of durable calls after a reconnect, if the context outlives the pane | ERMAIN-1032. Word never takes the slow path.                                                                                                                                                                                                                                                                |
+| 13  | Device approvals for a grant call registered under the owner chat           | `useConfirmationRegistryStore` under `hostGrant.ownerChatId`. The shared file approval moves there in ERMAIN-1034.                                                                                                                                                                                          |
+| 14  | The release decision where a native component holds the data                | CT-9, in that component.                                                                                                                                                                                                                                                                                    |
+
+### Host context template
+
+Fill one in per host and keep it with the host's issue.
+
+```text
+Host context:          kind; identity (what the binding names); realm
+Context version:       source; child_context_arg -> child_context_input, or none
+Read tools:            qualified names, registered with acceptsGrantCalls
+Write tools:           qualified names, each refusing hostGrant
+Loss code:             capture-unavailable | context_unavailable
+Freshness:             producer; capturedAt | readAt; blind spots (each reports unknown)
+Child facet:           id; prompt text
+Approval scope:        call | context; the outside-change signal
+Outlives the pane:     no | yes (slow path, ERMAIN-1032)
+Device approvals:      none | which, under the owner chat; release decision (CT-9)
+Framing:               untrusted-data framing of read results (ERMAIN-946)
+Conformance:           backend row; frontend handler test; enabling issue
+```
+
+### Native gate matrix template
+
+Each cell holds "date · build · result". Windows first, then Mac and the web.
+
+| Check                                                          | Windows | Mac | Web |
+| -------------------------------------------------------------- | ------- | --- | --- |
+| A grant read reaches the pane and returns                      |         |     |     |
+| A foreign or stale grant gets the loss code                    |         |     |     |
+| After a new Send, the earlier turn's grant gets the loss code  |         |     |     |
+| A closed pane gives `context_unavailable`                      |         |     |     |
+| Ask on the parent's card: approve reads, deny gives `declined` |         |     |     |
+| A blind spot reports `unknown`                                 |         |     |     |
+| Write tools refuse grant calls                                 |         |     |     |
+| A device approval shows in the parent chat                     |         |     |     |
+
+### Adding a host
+
+- Backend: `client_tool_operations/delegated/conformance.rs` (under
+  `backend/erato/tests/integration_tests/api/messages/`) runs every case once
+  per row of `delegated/rows.rs`, against a test-driven pane. A row names the
+  host's binding, read tool, action-facet arguments, context version, the part
+  a read asks for and the freshness its pane reports. A new host adds one row
+  constructor and one `host_conformance!` line.
+- Frontend: `clientToolHostAdapterConformanceFailures` from
+  `@erato/frontend/conformance` runs the host's registered handlers through
+  the registration, lineage, read-only, write, device-approval and freshness
+  rules and returns the failures. The host's handler test supplies the
+  harness: how a turn starts, the coordinator's state, one call per read and
+  write tool, the write markers, the blind spots and any device approval.
+
+Status:
+
+- fake host: passes on both sides (`frontend/src/conformance/clientToolHostAdapter.test.ts`);
+- `word_document`: registered and skipped until ERMAIN-1003
+  (`word/utils/__tests__/wordGrantReadConformance.test.ts`);
+- `outlook_mailbox`: registered and skipped until ERMAIN-1006
+  (`outlook/hooks/__tests__/outlookGrantReadConformance.test.ts`);
+- `desktop_sidecar`: ERMAIN-1034 adds the kind and its rows.
+
 ## Scoped Word cell reads
 
 Authoring sends document identity, snapshot token, status and paragraph counts;
