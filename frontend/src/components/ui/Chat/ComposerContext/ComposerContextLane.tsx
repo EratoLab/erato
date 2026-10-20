@@ -123,8 +123,8 @@ export const ComposerContextLane = memo(function ComposerContextLane({
 
   const ordered = useMemo(
     () => [
-      ...items.filter((item) => item.origin === "ambient"),
-      ...items.filter((item) => item.origin === "user"),
+      ...items.filter((item) => (item.placement ?? item.origin) === "ambient"),
+      ...items.filter((item) => (item.placement ?? item.origin) === "user"),
     ],
     [items],
   );

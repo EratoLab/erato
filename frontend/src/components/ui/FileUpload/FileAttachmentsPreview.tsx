@@ -47,9 +47,11 @@ export interface ChatInputAttachmentPreviewProps {
    */
   sharedHeightCap?: boolean;
   /**
-   * Staged recordings carry their status in `audio_transcription`; draw it on
-   * the file (see `audioTranscriptionTileStatus`), and offer the retry for the
-   * ids `canRetry` accepts.
+   * Passed by the composer for its staged files: recordings carry their
+   * status in `audio_transcription`; draw it on the file (see
+   * `audioTranscriptionTileStatus`), and offer the retry for the ids
+   * `canRetry` accepts. Absent elsewhere (an edited message), where the
+   * default preview draws no status.
    */
   audioTranscription?: ChatInputAudioTranscriptionControls;
 }
@@ -104,11 +106,14 @@ export const FileAttachmentsPreview: React.FC<FileAttachmentsPreviewProps> = ({
   const items = useMemo<AttachmentTileItem[]>(
     () =>
       attachedFiles.map((file) => {
-        const audio = audioTranscriptionTileStatus(file, {
-          retryable: audioTranscription?.canRetry(file.id) ?? false,
-          retrying: audioTranscription?.retryingFileId === file.id,
-          locked: audioTranscription?.disabled,
-        });
+        // Only the composer passes the controls; an edited message's files show no status.
+        const audio = audioTranscription
+          ? audioTranscriptionTileStatus(file, {
+              retryable: audioTranscription.canRetry(file.id),
+              retrying: audioTranscription.retryingFileId === file.id,
+              locked: audioTranscription.disabled,
+            })
+          : null;
         if (!audio) {
           return { id: file.id, file, previewUrl: file.preview_url };
         }

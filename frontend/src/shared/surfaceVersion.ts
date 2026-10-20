@@ -25,6 +25,9 @@ export const EXTENSION_POINT_REQUIRED_SURFACE_MINOR: Partial<
   Record<keyof ComponentRegistry, number>
 > = {
   ChatHistoryList: 8,
+  // A staged recording's status moved from a card above the composer onto its
+  // file; an older override hides why Send is disabled.
+  ChatInputAttachmentPreview: 20,
 };
 
 export type ComponentKitVersionStance = "warn" | "enforce";

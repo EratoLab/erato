@@ -78,14 +78,18 @@ export const ComposerNoticeView = ({
       <div className="flex flex-col gap-2">
         <span>
           {notice.text}
+          {/* A space, not a margin, so a count that wraps starts flush. */}
           {notice.progressLabel ? (
-            <span
-              aria-hidden="true"
-              data-ui="composer-notice-progress"
-              className="ml-1.5 whitespace-nowrap tabular-nums"
-            >
-              {notice.progressLabel}
-            </span>
+            <>
+              {" "}
+              <span
+                aria-hidden="true"
+                data-ui="composer-notice-progress"
+                className="whitespace-nowrap tabular-nums"
+              >
+                {notice.progressLabel}
+              </span>
+            </>
           ) : null}
         </span>
         {notice.actions && notice.actions.length > 0 ? (

@@ -103,7 +103,11 @@ describe("audioTranscriptionTileStatus", () => {
     expect(
       audioTranscriptionTileStatus(failed, { retryable: true, retrying: true })
         ?.action,
-    ).toMatchObject({ label: "Retrying…", disabled: true });
+    ).toEqual({
+      label: "Retrying…",
+      name: "Retrying… audio-recording-20261020-1200.wav",
+      disabled: true,
+    });
     expect(
       audioTranscriptionTileStatus(failed, {
         retryable: true,

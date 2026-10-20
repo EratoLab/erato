@@ -213,10 +213,16 @@ export function audioTranscriptionTileStatus(
             label: options.retrying
               ? t({ id: "chat.audio.retrying", message: "Retrying…" })
               : t({ id: "chat.audio.retry", message: "Retry transcription" }),
-            name: t({
-              id: "chat.audio.retryNamed",
-              message: `Retry transcription: ${filename}`,
-            }),
+            // The visible label stays part of the name (WCAG 2.5.3).
+            name: options.retrying
+              ? t({
+                  id: "chat.audio.retryingNamed",
+                  message: `Retrying… ${filename}`,
+                })
+              : t({
+                  id: "chat.audio.retryNamed",
+                  message: `Retry transcription: ${filename}`,
+                }),
             disabled: options.retrying || Boolean(options.locked),
           },
         }

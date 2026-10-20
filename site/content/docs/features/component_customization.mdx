@@ -519,6 +519,11 @@ glyph in `icon`, and the `meta` line, which for a suggested chip states how
 long it stays off). Draw the `meta` line: it is how a sighted user learns why
 a chip is not sent.
 
+The lane draws ambient items first and the user's own after them. An item
+whose origin changes as the user acts on it, such as a comment chosen in place
+of the one at the cursor, sets `placement` to the group it belongs to, so the
+chip keeps its place when its state changes.
+
 Themes and kits can reach the lane through these hooks and classes:
 
 - `data-ui="composer-staged-area"` (the shared scroll area), `composer-staged-files`,
@@ -594,12 +599,18 @@ recording is transcribed.
 (`ChatInputAudioTranscriptionControls`: `canRetry(fileId)`, `retryingFileId`,
 `onRetry(fileId)`, `disabled`). `audioTranscriptionTileStatus(file, options)`
 from `@erato/frontend/shared` turns a file into the words and state the default
-tile draws. An override that ignores both still works; it just shows no status.
-The composer announces the outcome itself in `chat-audio-status-live`, so a kit
-draws no live region of its own. The default tile exposes
-`attachment-tile[data-status="busy"|"error"]`, `attachment-tile-meta` and the
-`attachment-tile-action` button. The prop arrived with shared surface 1.20;
-declare `builtAgainstSharedSurfaceMinor: 20` on a registration that uses it.
+tile draws. The composer announces the outcome itself in
+`chat-audio-status-live`, so a kit draws no live region of its own. The default
+tile exposes `attachment-tile[data-status="busy"|"error"]`,
+`attachment-tile-meta` and the `attachment-tile-action` button.
+
+The prop arrived with shared surface 1.20, and the point requires it: an
+override that draws no status leaves a recording that is still transcribing,
+or failed, with Send disabled and nothing on screen to say why. A registration
+that declares less than 20 is reported at startup. Under the `"enforce"` stance
+the host draws its own preview, status included; under `"warn"` the override
+is installed and shows no status, and only the outcome announcements remain.
+Draw the status, then declare `builtAgainstSharedSurfaceMinor: 20`.
 
 ## Full Registry Example
 

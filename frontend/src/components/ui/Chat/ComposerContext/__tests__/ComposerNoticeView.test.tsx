@@ -150,12 +150,14 @@ describe("ComposerNoticeView", () => {
     expect(progress).toHaveAttribute("aria-hidden", "true");
     // A count split over two lines ("3 of" / "12") reads as two numbers.
     expect(progress).toHaveClass("whitespace-nowrap");
+    // Wrapped to its own line, a margin would indent it.
+    expect(progress.className).not.toMatch(/\bm[lx]-/);
     expect(polite()).toContainElement(progress);
     const spoken = polite().cloneNode(true) as HTMLElement;
     spoken
       .querySelectorAll('[aria-hidden="true"]')
       .forEach((node) => node.remove());
-    expect(spoken.textContent).toBe("Reading comments…");
+    expect(spoken.textContent?.trim()).toBe("Reading comments…");
     const text = screen.getByText("Reading comments…", { exact: false });
 
     rerender(

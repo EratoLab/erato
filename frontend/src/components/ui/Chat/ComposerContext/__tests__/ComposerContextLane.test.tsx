@@ -205,6 +205,33 @@ describe("ComposerContextLane", () => {
     expect(chip("Notes.txt")).toHaveAttribute("data-origin", "user");
   });
 
+  it("keeps an item where its placement says when its origin changes", () => {
+    const labelsOf = () =>
+      within(screen.getByRole("list", { name: "Message context" }))
+        .getAllByRole("listitem")
+        .map(
+          (item) =>
+            item.querySelector('[data-ui="composer-context-chip-label"]')
+              ?.textContent,
+        );
+    const items = (origin: "ambient" | "user") => [
+      ambient({ id: "doc", label: "Supply agreement" }),
+      origin === "user"
+        ? user({ id: "c", label: "Comment", placement: "ambient" })
+        : ambient({ id: "c", label: "Comment", placement: "ambient" }),
+      ambient({ id: "open", label: "Open comments" }),
+      user({ id: "u1", label: "Notes.txt" }),
+    ];
+    const { rerender } = render(
+      <ComposerContextLane items={items("ambient")} />,
+    );
+    const order = ["Supply agreement", "Comment", "Open comments", "Notes.txt"];
+    expect(labelsOf()).toEqual(order);
+    rerender(<ComposerContextLane items={items("user")} />);
+    expect(labelsOf()).toEqual(order);
+    expect(chip("Comment")).toHaveAttribute("data-origin", "user");
+  });
+
   it("renders nothing without items", () => {
     const { container } = render(<ComposerContextLane items={[]} />);
     expect(container.querySelector('[role="list"]')).toBeNull();
