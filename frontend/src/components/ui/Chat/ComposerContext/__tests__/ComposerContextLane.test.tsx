@@ -379,6 +379,28 @@ describe("ComposerContextLane", () => {
       expect(label("Supply agreement.docx")).toHaveClass("min-w-[7em]");
     });
 
+    it("counts wide characters twice, so a short CJK name still truncates", () => {
+      render(
+        <ComposerContextLane
+          items={[
+            ambient({
+              id: "cjk",
+              label: "供应协议最终版本文件",
+              meta: "Track Changes on · First 453 of 1,590 ¶",
+            }),
+            ambient({ id: "kana", label: "メモ.docx", meta: "86 ¶" }),
+          ]}
+        />,
+      );
+      const label = (text: string) =>
+        screen.getByText(text, {
+          selector: '[data-ui="composer-context-chip-label"]',
+        });
+      expect(label("供应协议最终版本文件")).toHaveClass("min-w-[7em]");
+      expect(label("供应协议最终版本文件")).not.toHaveClass("shrink-0");
+      expect(label("メモ.docx")).toHaveClass("shrink-0");
+    });
+
     it("hides every glyph and draws no text glyphs", () => {
       render(
         <ComposerContextLane
@@ -475,6 +497,29 @@ describe("ComposerContextLane", () => {
       expect(glyph("Choose")).not.toBe(glyph("Plain"));
       expect(glyph("Broken")).not.toBe(glyph("Plain"));
       expect(glyph("Broken")).not.toBe(glyph("Choose"));
+    });
+
+    it("draws the tone's mark when the item asks for it", () => {
+      const glyph = (label: string) =>
+        chip(label).querySelector('[data-ui="composer-context-chip-icon"]')!
+          .innerHTML;
+      render(
+        <ComposerContextLane
+          items={[
+            ambient({ id: "a", label: "Plain" }),
+            ambient({ id: "b", label: "Choose", state: "attention" }),
+            ambient({
+              id: "c",
+              label: "Cut",
+              tone: "warning",
+              toneIcon: "tone",
+            }),
+            ambient({ id: "d", label: "Neutral", toneIcon: "tone" }),
+          ]}
+        />,
+      );
+      expect(glyph("Cut")).toBe(glyph("Choose"));
+      expect(glyph("Neutral")).toBe(glyph("Plain"));
     });
 
     it("prefers the chipFace prop over the registry", () => {
