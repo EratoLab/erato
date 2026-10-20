@@ -137,7 +137,11 @@ export function WordDocumentDetail({
           {model.commentsNote ? (
             <p>{model.commentsNote}</p>
           ) : (
-            model.comments.map((line) => <p key={line}>{line}</p>)
+            <ul className="flex list-disc flex-col gap-1 pl-4 text-xs text-theme-fg-secondary">
+              {model.comments.map((line) => (
+                <li key={line}>{line}</li>
+              ))}
+            </ul>
           )}
         </DetailSection>
       )}

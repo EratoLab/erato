@@ -206,13 +206,14 @@ function coverageOf(
   input: WordCommentChipsInput,
   plan: WordSendPreview["comments"],
   heading: string,
+  openComments = input.gestures.includeOpenComments,
 ): WordCommentCoverageSection | null {
   const info = wordCommentCoverageInfo(plan, input.list, {
     // A passage or a thread goes instead of the document, and reads follow what went.
     document:
       input.documentOn && !input.passageGoes && plan.carrier.kind !== "thread",
     picked: input.pick !== null,
-    openComments: input.gestures.includeOpenComments,
+    openComments,
   });
   return info ? { heading, lines: wordCommentCoverageLines(info) } : null;
 }
@@ -422,6 +423,7 @@ export function wordOpenCommentsChip(
     id: "officeAddin.word.context.openComments.lifetime",
     message: "Leaving them out lasts for this chat.",
   });
+  // Lines for the message that carries them, so "If included" reads as "What is sent" will.
   const openPlan = (heading: string) =>
     coverageOf(
       input,
@@ -430,6 +432,7 @@ export function wordOpenCommentsChip(
         carrier: { kind: "open-comments" },
       },
       heading,
+      true,
     );
   const actions: WordOpenCommentsChipAction[] = ["choose"];
 

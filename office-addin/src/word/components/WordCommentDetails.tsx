@@ -146,24 +146,24 @@ export function WordCommentDetail({
       data-ui="word-comment-detail"
       data-variant={model.variant}
     >
-      {detail.why && <WordCommentWhyTag why={detail.why} />}
-      {detail.intro && <p className="text-sm">{detail.intro}</p>}
-      {thread && (
+      {thread ? (
         <div
-          className="flex flex-col gap-1"
+          className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm [&>.word-review__hint]:basis-full"
           data-ui="word-comment-detail-quote"
         >
-          <p className="text-xs text-theme-fg-secondary">
+          {detail.why && <WordCommentWhyTag why={detail.why} />}
+          <span className="break-words text-theme-fg-secondary">
             {wordCommentQuoteText(thread.quote)}
-          </p>
-          <div className="self-start">
-            <WordShowInWordButton
-              onShow={() => onShowInWord(thread)}
-              disabled={false}
-            />
-          </div>
+          </span>
+          <WordShowInWordButton
+            onShow={() => onShowInWord(thread)}
+            disabled={false}
+          />
         </div>
+      ) : (
+        detail.why && <WordCommentWhyTag why={detail.why} />
       )}
+      {detail.intro && <p className="text-sm">{detail.intro}</p>}
       {thread && <ThreadCard thread={thread} />}
       {detail.choices.length > 0 && (
         <ul

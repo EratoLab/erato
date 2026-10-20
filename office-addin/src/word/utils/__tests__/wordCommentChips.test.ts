@@ -439,6 +439,11 @@ describe("wordOpenCommentsChip", () => {
     const off = wordOpenCommentsChip(inputOf({ openCommentsDismissed: true }));
     expect(off?.state).toBe("suggested");
     expect(off?.meta).toBeUndefined();
+    // "If included" promises the reach the included chip states, not the selection's.
+    expect(off?.detail.coverage?.heading).toBe("If included");
+    expect(off?.detail.coverage?.lines).toEqual(
+      included?.detail.coverage?.lines,
+    );
   });
 
   it("says Off for this message under Send without comments, and + undoes that", () => {

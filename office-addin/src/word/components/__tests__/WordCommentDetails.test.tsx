@@ -128,9 +128,20 @@ describe("WordCommentDetail", () => {
     expect(
       document.querySelector('[data-ui="word-comment-detail-why"]'),
     ).toHaveTextContent("At your cursor");
-    expect(
-      document.querySelector('[data-ui="word-comment-detail-quote"]'),
-    ).toHaveTextContent("on “delivery dates set out in Schedule 2 of this …”");
+    const where = document.querySelector<HTMLElement>(
+      '[data-ui="word-comment-detail-quote"]',
+    )!;
+    expect(where).toHaveTextContent(
+      "on “delivery dates set out in Schedule 2 of this …”",
+    );
+    expect(where).toContainElement(
+      document.querySelector<HTMLElement>(
+        '[data-ui="word-comment-detail-why"]',
+      ),
+    );
+    expect(where).toContainElement(
+      screen.getByRole("button", { name: "Show in Word" }),
+    );
     const card = document.querySelector<HTMLElement>(
       '[data-ui="word-comment-detail-thread"]',
     )!;

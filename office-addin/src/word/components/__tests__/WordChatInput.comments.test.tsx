@@ -663,7 +663,9 @@ describe("WordChatInput comment context", () => {
         return section!;
       });
       expect(documentChip()).toHaveAttribute("data-state", "included");
-      expect(comments).toHaveTextContent(
+      expect(
+        within(comments as HTMLElement).getAllByRole("listitem")[0],
+      ).toHaveTextContent(
         "A list of the 14 comments in the document: each one's author, place, status and how it starts.",
       );
     });
