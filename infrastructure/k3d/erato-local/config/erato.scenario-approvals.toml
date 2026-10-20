@@ -97,14 +97,16 @@ tool_call_allowlist = ["web-search-mcp/*", "web-access-mcp/*"]
 additional_system_prompt = "Please execute one or multiple web searches to answer the user's question."
 
 # Selecting this facet is what offers `erato/delegate_task`. The reserved
-# pattern is paired with a real MCP pattern on purpose: an allowlist naming only
+# pattern is paired with real MCP patterns on purpose: an allowlist naming only
 # reserved tools narrows the turn's MCP tool set to nothing, which would leave
-# the parent with no tools at all. That pattern is `mock_mcp_file` and not the
-# gated server, so a call under decision can only have come from a task child.
+# the parent with no tools at all. The gated server is listed too, because a
+# task child never gets a tool its parent turn could not reach (ERMAIN-999).
+# A call under decision still comes from a task child: the mock LLM only calls
+# the gated tool from a child's turn.
 [facets.facets.plan]
 display_name = "Plan & delegate"
 icon = "iconoir-strategy"
-tool_call_allowlist = ["erato/delegate_task", "mock_mcp_file/*"]
+tool_call_allowlist = ["erato/delegate_task", "mock_mcp_file/*", "mock_mcp_approval/*"]
 disable_facet_prompt_template = true
 
 # The same planning route under the `plan` dispatch-approval mode, so one
@@ -120,7 +122,7 @@ disable_facet_prompt_template = true
 [facets.facets.plan_gate]
 display_name = "Plan & confirm"
 icon = "iconoir-strategy"
-tool_call_allowlist = ["erato/delegate_task", "mock_mcp_file/*"]
+tool_call_allowlist = ["erato/delegate_task", "mock_mcp_file/*", "mock_mcp_approval/*"]
 disable_facet_prompt_template = true
 
 [facets.facets.plan_gate.delegation.approval]
@@ -136,7 +138,7 @@ mode = "plan"
 [facets.facets.plan_serial]
 display_name = "Plan & queue"
 icon = "iconoir-strategy"
-tool_call_allowlist = ["erato/delegate_task", "mock_mcp_file/*"]
+tool_call_allowlist = ["erato/delegate_task", "mock_mcp_file/*", "mock_mcp_approval/*"]
 disable_facet_prompt_template = true
 
 [facets.facets.plan_serial.delegation]
