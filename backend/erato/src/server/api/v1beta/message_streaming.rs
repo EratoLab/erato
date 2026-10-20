@@ -2396,6 +2396,12 @@ pub struct ContinueStreamRequest {
     decisions: Vec<ApprovalDecisionItem>,
     #[serde(default)]
     decision: Option<ToolApprovalDecision>,
+    /// Whether the client shows each task child an `mcp_tool` or `client_tool`
+    /// part carries as an item of its own. Decisions on such a part are refused
+    /// without it while a child is open: an older client shows only the turn's
+    /// own call and would answer the children unseen.
+    #[serde(default)]
+    shows_child_items: bool,
     /// The `X-Erato-Client-Tools` of the device answering, when it sent one.
     #[serde(skip)]
     registered_client_tools: Option<Vec<String>>,
@@ -2407,6 +2413,7 @@ pub struct ContinueStreamRequest {
 impl ContinueStreamRequest {
     /// The decisions an approval card submitted, one per approval id. The
     /// set is validated like any other continuation (exact, no duplicates).
+    /// The card lists every item, a parked child's included.
     pub(crate) fn with_decisions(
         message_id: Uuid,
         decisions: Vec<(String, ToolApprovalDecision)>,
@@ -2421,6 +2428,7 @@ impl ContinueStreamRequest {
                 })
                 .collect(),
             decision: None,
+            shows_child_items: true,
             registered_client_tools: None,
             executor: None,
         }
@@ -12565,6 +12573,7 @@ mod tests {
             message_id: Uuid::nil(),
             decisions: Vec::new(),
             decision: Some(decision),
+            shows_child_items: false,
             registered_client_tools: None,
             executor: None,
         }
@@ -12581,6 +12590,7 @@ mod tests {
                 })
                 .collect(),
             decision: None,
+            shows_child_items: false,
             registered_client_tools: None,
             executor: None,
         }
@@ -12754,6 +12764,38 @@ mod tests {
     }
 
     #[test]
+    fn only_a_part_that_carries_an_open_child_needs_a_client_that_shows_it() {
+        use crate::models::message::ContentPart;
+
+        let state = |part: super::ContentPartToolApprovalRequest| {
+            super::parked_approval_state(&[ContentPart::ToolApprovalRequest(part)])
+                .expect("a parked row")
+        };
+        let mut mixed = gated_request("own", "2026-10-20T10:00:01Z");
+        super::fold_parked_children(
+            &mut mixed,
+            &[parked_child("task-a", "2026-10-20T10:00:02Z")],
+        );
+        assert!(super::decision_needs_child_items(&state(mixed.clone())));
+        mixed.kind = ToolApprovalKind::ClientTool;
+        assert!(super::decision_needs_child_items(&state(mixed)));
+
+        assert!(!super::decision_needs_child_items(&state(gated_request(
+            "own",
+            "2026-10-20T10:00:01Z"
+        ))));
+        let delegated = super::delegated_task_approval_part(
+            &[parked_child("task-a", "2026-10-20T10:00:02Z")],
+            Vec::new(),
+            false,
+        );
+        assert!(
+            !super::decision_needs_child_items(&state(delegated)),
+            "a `delegated_task` card has always listed its children"
+        );
+    }
+
+    #[test]
     fn a_mixed_part_stays_open_until_every_item_is_decided() {
         use crate::models::message::{ContentPart, ContentPartToolApproval, ToolUse};
 
@@ -12814,33 +12856,61 @@ mod tests {
             fn_name: "read_document".to_string(),
             fn_arguments: json!({}),
         };
-        let approved = ContentPart::ToolApproval(ContentPartToolApproval {
-            tool_call_id: "own".to_string(),
-            always_allow: false,
-            user_tool_approval_setting_id: None,
-            approved_at: "2026-10-20T10:01:00Z".to_string(),
-            approval_id: Some("own".to_string()),
-            child_chat_id: None,
-        });
-
-        let (carried, rest) = super::previously_approved_pending(
-            std::slice::from_ref(&approved),
-            vec![pending("own"), pending("later")],
-        );
-        assert_eq!(carried, vec![pending("own")]);
-        assert_eq!(rest, vec![pending("later")]);
-
-        let ran = ContentPart::ToolUse(ToolUse {
+        let approval = |call_id: &str| {
+            ContentPart::ToolApproval(ContentPartToolApproval {
+                tool_call_id: call_id.to_string(),
+                always_allow: false,
+                user_tool_approval_setting_id: None,
+                approved_at: "2026-10-20T10:01:00Z".to_string(),
+                approval_id: Some(call_id.to_string()),
+                child_chat_id: None,
+            })
+        };
+        let own_ran = ContentPart::ToolUse(ToolUse {
             tool_call_id: "own".to_string(),
             ..ToolUse::default()
         });
+
+        let mut reparked = gated_request("task-a", "2026-10-20T10:00:01Z");
+        reparked.kind = ToolApprovalKind::DelegatedTask;
+        reparked.pending_tool_calls = vec![pending("own"), pending("later")];
+        let (carried, rest) = super::previously_approved_pending(&[approval("own")], &reparked);
+        assert_eq!(carried, vec![pending("own")]);
+        assert_eq!(rest, vec![pending("later")]);
+
+        reparked.pending_tool_calls = vec![pending("own")];
         let (carried, rest) =
-            super::previously_approved_pending(&[approved, ran], vec![pending("own")]);
+            super::previously_approved_pending(&[approval("own"), own_ran.clone()], &reparked);
         assert!(
             carried.is_empty(),
             "a call that already ran is not re-seeded"
         );
         assert_eq!(rest, vec![pending("own")]);
+
+        // A continuation that died after approving a client-tool part's own
+        // call and before dispatching it left the call on no part's pending
+        // list: the item itself is what still names it.
+        let mut client = gated_request("own", "2026-10-20T10:00:01Z");
+        client.kind = ToolApprovalKind::ClientTool;
+        super::fold_parked_children(
+            &mut client,
+            &[parked_child("task-a", "2026-10-20T10:00:02Z")],
+        );
+        client.pending_tool_calls = vec![pending("later")];
+        let (carried, rest) =
+            super::previously_approved_pending(&[approval("own"), approval("task-a")], &client);
+        assert_eq!(
+            carried,
+            vec![PendingToolCall {
+                call_id: "own".to_string(),
+                fn_name: "publish".to_string(),
+                fn_arguments: json!({"topic": "own"}),
+            }],
+            "a child's item is never re-seeded as a call of this turn"
+        );
+        assert_eq!(rest, vec![pending("later")]);
+        let (carried, _) = super::previously_approved_pending(&[approval("own"), own_ran], &client);
+        assert!(carried.is_empty());
     }
 
     #[test]
@@ -13037,6 +13107,7 @@ mod tests {
             message_id: Uuid::nil(),
             decisions: Vec::new(),
             decision: None,
+            shows_child_items: false,
             registered_client_tools: None,
             executor: None,
         };
@@ -18225,6 +18296,21 @@ fn resolve_submitted_decisions(
         })
         .collect())
 }
+
+/// Whether deciding this stop needs a client that shows a parked child as an
+/// item of its own.
+///
+/// A `delegated_task` part has always been read per item. An `mcp_tool` or
+/// `client_tool` part only carries children since the turn's own gated call
+/// shares its part with them, and a client that predates that renders the own
+/// call alone while it answers every open item.
+fn decision_needs_child_items(state: &ParkedApprovalState) -> bool {
+    matches!(
+        state.request.kind,
+        ToolApprovalKind::McpTool | ToolApprovalKind::ClientTool
+    ) && state.open.iter().any(|item| item.child.is_some())
+}
+
 /// Whether a set of decisions asks for an "always allow" the MCP policy
 /// forbids.
 ///
@@ -18334,6 +18420,13 @@ pub(crate) async fn start_continuation(
         }
         ContinuationEntry::ResumeCrashed
     } else {
+        if !request.shows_child_items && decision_needs_child_items(&state) {
+            return Err((
+                axum::http::StatusCode::CONFLICT,
+                "This decision also covers tasks this version of the app cannot show. Reload the page to see and decide each of them.".to_string(),
+            )
+                .into());
+        }
         // Validated here as well as in the worker: a body that does not answer
         // the turn should be an HTTP status, not a stream that opens and dies.
         let submitted_decisions = resolve_submitted_decisions(&request, &state.open)?;
@@ -18452,7 +18545,7 @@ pub(crate) async fn start_continuation(
         (status = OK, content_type = "text/event-stream", body = MessageSubmitStreamingResponseMessage),
         (status = BAD_REQUEST, body = ApprovalDecisionsError, description = "The message has no pending approval, the decision is invalid, or the submitted decisions do not cover the open approvals (JSON, code = decisions_mismatch)"),
         (status = NOT_FOUND, description = "When the chat does not exist or is not accessible"),
-        (status = CONFLICT, body = GenerationRunningError, description = "When the chat is archived (plain text), the chat's generation lease is already held and delegation.tasks.enabled is on (JSON, code = generation_running), every approval the row opened is already decided (JSON, code = already_continued, body = AlreadyContinuedError), or the chat that dispatched this delegated run is still asking the same question (JSON, code = covered_by_parent, body = CoveredByParentError)"),
+        (status = CONFLICT, body = GenerationRunningError, description = "When the chat is archived (plain text), the chat's generation lease is already held and delegation.tasks.enabled is on (JSON, code = generation_running), every approval the row opened is already decided (JSON, code = already_continued, body = AlreadyContinuedError), the chat that dispatched this delegated run is still asking the same question (JSON, code = covered_by_parent, body = CoveredByParentError), or the stop carries open task children and the request did not set `shows_child_items` (plain text)"),
         (status = UNAUTHORIZED, description = "When no valid JWT token is provided"),
         (status = INTERNAL_SERVER_ERROR, description = "When an internal server error occurs")
     ),
@@ -18715,6 +18808,7 @@ async fn resume_parked_child(
                 })
                 .collect(),
             decision: None,
+            shows_child_items: false,
             registered_client_tools: None,
             executor: None,
         };
@@ -19011,20 +19105,23 @@ async fn settle_parked_children(
     Ok(reparked)
 }
 
-/// Split a park's pending calls into those the row already approved and the
-/// rest.
+/// The calls of a park the row already approved that have not run yet, and
+/// the park's other pending calls.
 ///
-/// A child that parks again after a mixed decision carries the turn's approved
-/// own call into the new part as pending, because it has not run yet. Seeded as
-/// an ordinary pending call it would be asked about a second time.
+/// Two kinds of call are approved but not run. A child that parks again after
+/// a mixed decision carries the turn's approved own call into the new part as
+/// pending; seeded as an ordinary pending call it would be asked about a second
+/// time. And a `client_tool` part's own call is approved before its children
+/// resume and dispatched only after they have, so a continuation that died in
+/// between leaves it approved on the row and in no part's pending calls.
 fn previously_approved_pending(
     content: &[ContentPart],
-    pending: Vec<crate::models::message::PendingToolCall>,
+    request: &ContentPartToolApprovalRequest,
 ) -> (
     Vec<crate::models::message::PendingToolCall>,
     Vec<crate::models::message::PendingToolCall>,
 ) {
-    pending.into_iter().partition(|call| {
+    let approved_unrun = |call: &crate::models::message::PendingToolCall| {
         let approved = content.iter().any(|part| {
             matches!(part, ContentPart::ToolApproval(approval) if approval.tool_call_id == call.call_id)
         });
@@ -19032,7 +19129,32 @@ fn previously_approved_pending(
             matches!(part, ContentPart::ToolUse(tool_use) if tool_use.tool_call_id == call.call_id)
         });
         approved && !ran
-    })
+    };
+    let own_calls = if request.kind == ToolApprovalKind::ClientTool {
+        request
+            .approval_items()
+            .into_iter()
+            .filter(|item| item.child.is_none())
+            .map(|item| crate::models::message::PendingToolCall {
+                call_id: item.tool_call_id,
+                fn_name: item.tool_name,
+                fn_arguments: item.input,
+            })
+            .collect()
+    } else {
+        Vec::new()
+    };
+    let (carried, rest): (Vec<_>, Vec<_>) = request
+        .pending_tool_calls
+        .iter()
+        .cloned()
+        .partition(&approved_unrun);
+    let approved = own_calls
+        .into_iter()
+        .filter(&approved_unrun)
+        .chain(carried)
+        .collect();
+    (approved, rest)
 }
 
 /// Split a stop's decisions into the lanes that settle them, keeping row order
@@ -19852,6 +19974,17 @@ pub(crate) async fn run_continuation(
         .await?
     };
 
+    let (mut approved_calls, pending_from_park) =
+        previously_approved_pending(&parsed.content, &approval_request);
+    for call in approved_plan_calls {
+        if !approved_calls
+            .iter()
+            .any(|approved| approved.call_id == call.call_id)
+        {
+            approved_calls.push(call);
+        }
+    }
+
     if let Some(error) = mcp_content_filter_error {
         // All approval items have settled durably. A filtered result ends the
         // generation, as in the normal path, without another model request. A
@@ -19920,11 +20053,10 @@ pub(crate) async fn run_continuation(
             .collect();
         // An approved own client-tool call has not run yet, and the new part is
         // the only record the next continuation reads, so it goes first.
-        let pending_tool_calls = approved_plan_calls
+        let pending_tool_calls = approved_calls
             .iter()
             .chain(
-                approval_request
-                    .pending_tool_calls
+                pending_from_park
                     .iter()
                     .filter(|call| !settled_call_ids.contains(call.call_id.as_str())),
             )
@@ -19969,12 +20101,6 @@ pub(crate) async fn run_continuation(
         .await;
     }
 
-    let (carried_approved, pending_from_park) =
-        previously_approved_pending(&parsed.content, approval_request.pending_tool_calls);
-    let approved_plan_calls: Vec<_> = carried_approved
-        .into_iter()
-        .chain(approved_plan_calls)
-        .collect();
     resume_parked_generation(
         task,
         tx,
@@ -19996,7 +20122,7 @@ pub(crate) async fn run_continuation(
             needing_auth_server_ids: mcp_servers_needing_auth,
             missing_credential_server_ids: mcp_servers_missing_credential,
         },
-        approved_plan_calls,
+        approved_calls,
         pending_from_park,
         None,
         request.registered_client_tools.clone(),
