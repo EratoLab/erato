@@ -41,6 +41,7 @@ const h = vi.hoisted(() => {
     return {};
   }
   const uploadedFile = { id: "f1", filename: "notes.txt" };
+  const checklistVisibleItems: Record<string, number | undefined> = {};
   const chatInput: { props: Record<string, unknown> } = { props: {} };
   const source: {
     state: Record<string, unknown>;
@@ -54,6 +55,7 @@ const h = vi.hoisted(() => {
     calendarFetcher: null as object | null,
     readAppointmentComposeSnapshot: vi.fn(),
     detailGroups: groupsById(),
+    checklistVisibleItems,
     capabilities: [] as unknown[],
     availableFacetArgs: new Map<string, Set<string>>(),
     controls: {
@@ -145,10 +147,15 @@ vi.mock("@erato/frontend/library", async () => {
     // Every row a detail draws, with its toggle as a button.
     GroupedFileAttachmentsPreview: ({
       groups,
+      defaultVisibleItems,
     }: {
       groups: FileAttachmentGroup[];
+      defaultVisibleItems?: number;
     }) => {
-      for (const group of groups) h.detailGroups[group.id] = group;
+      for (const group of groups) {
+        h.detailGroups[group.id] = group;
+        h.checklistVisibleItems[group.id] = defaultVisibleItems;
+      }
       return (
         <div>
           {groups.flatMap((group) =>
@@ -580,6 +587,7 @@ describe("AddinChatInput", () => {
     h.composeSelection = { data: "", sourceProperty: "body" };
     h.calendarFetcher = null;
     h.detailGroups = {};
+    h.checklistVisibleItems = {};
     h.capabilities = [];
     h.availableFacetArgs = new Map();
     attachmentFiles.clear();
@@ -1405,6 +1413,13 @@ describe("AddinChatInput", () => {
       setSource({ itemAttachments: [attachment("a"), attachment("b")] });
       const { onSendMessage } = renderInput({ freshChat: true });
       expect(meta("outlook-attachment:a")).toBe("Draft attachment · 100 B");
+      // The detail names the type as the file tiles do, not by MIME type.
+      expect(
+        within(chip("outlook-attachment:a")).getByText("PDF"),
+      ).toBeTruthy();
+      expect(
+        within(chip("outlook-attachment:a")).queryByText("application/pdf"),
+      ).toBeNull();
 
       press("outlook-attachment:a", "Don't include a.pdf");
       expect(chip("outlook-attachment:a")).toHaveAttribute(
@@ -1558,6 +1573,15 @@ describe("AddinChatInput", () => {
       // Sent in this chat: no chip, the "+" menu adds it again.
       await waitFor(() => expect(queryChip("outlook-thread")).toBeNull());
       expect(ref.current).toBeNull();
+    });
+
+    it("lists every message in its detail, none folded behind Show more", () => {
+      stageThread({ dismissed: ["m4", "m5"] });
+      renderInput({ freshChat: true });
+
+      expect(Object.values(h.checklistVisibleItems)).toEqual([
+        Number.POSITIVE_INFINITY,
+      ]);
     });
 
     it("keeps the partial choice through (x) and (+)", async () => {

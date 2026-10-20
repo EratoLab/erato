@@ -89,6 +89,7 @@ import {
   type OutlookContextDisplay,
 } from "../utils/outlookContextChips";
 import {
+  attachmentTypeLabel,
   formatAppointmentWhen,
   formatClockTime,
 } from "../utils/outlookContextFormat";
@@ -796,7 +797,7 @@ export const AddinChatInput = forwardRef<
         name: attachment.name,
         size: attachment.size,
         sizeLabel: formatFileSize(attachment.size),
-        type: attachment.contentType,
+        type: attachmentTypeLabel(attachment.name, attachment.contentType),
         ticked: !dismissedAttachmentIds.includes(attachment.id),
         cloud: attachment.cloud,
       })),

@@ -626,6 +626,9 @@ function threadModel(
     checklist: false,
     checklistMeta: sizeLabel,
   };
+  // Nothing ticked, or a trim the bytes refuse: no file is coming, so the
+  // checklist states no size rather than "Updating…".
+  const noFileMeta = thread.stale ? updating : "";
   switch (disposition.kind) {
     case "loading":
       return {
@@ -674,6 +677,7 @@ function threadModel(
         tone: "error",
         meta: trimFailedMeta(),
         removeLabel: dismiss,
+        checklistMeta: noFileMeta,
         notes: [
           {
             tone: "error",
@@ -760,6 +764,7 @@ function threadModel(
         ...base,
         state: "suggested",
         meta: nothingChosenMeta(),
+        checklistMeta: noFileMeta,
         restoreLabel: t({
           id: "officeAddin.outlook.context.thread.includeEvery",
           message: "Include every message",

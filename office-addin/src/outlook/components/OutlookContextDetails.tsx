@@ -21,7 +21,8 @@ function DetailNote({ note }: { note: OutlookContextNote }) {
       <Alert role="none" type={note.tone}>
         {note.title ? (
           <>
-            <strong className="font-semibold">{note.title}</strong> {note.text}
+            <strong className="block font-semibold">{note.title}</strong>{" "}
+            {note.text}
           </>
         ) : (
           note.text
@@ -101,6 +102,9 @@ function Checklist({
         disabled={disabled}
         showFileTypes={true}
         showFileSizes={true}
+        // The detail is the expanded view and scrolls on its own; folding
+        // rows behind "Show more" would hide what is unticked.
+        defaultVisibleItems={Number.POSITIVE_INFINITY}
       />
     </div>
   );

@@ -35,6 +35,15 @@ export function formatDateTime(value: string | Date | null | undefined) {
     : "";
 }
 
+/**
+ * An attachment's type as the file tiles name it, from its extension ("PDF");
+ * the MIME type only when the name has none.
+ */
+export function attachmentTypeLabel(name: string, contentType: string) {
+  const extension = /\.([A-Za-z0-9]{1,8})$/u.exec(name.trim())?.[1];
+  return extension ? extension.toUpperCase() : contentType;
+}
+
 /** The clock time scheduling stays on until, in the locale's hour cycle. */
 export function formatClockTime(value: string | Date | null | undefined) {
   const date = toDate(value);

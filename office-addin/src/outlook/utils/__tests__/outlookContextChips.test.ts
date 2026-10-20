@@ -81,7 +81,7 @@ const row = (
   name: `${id}.pdf`,
   size: 1024 * 240,
   sizeLabel: "240 KB",
-  type: "application/pdf",
+  type: "PDF",
   ticked: true,
   cloud: false,
   ...over,
@@ -509,6 +509,7 @@ describe("outlookContextChips", () => {
         restoreLabel: "Include every message",
         restore: "include-every",
         restoredAnnouncement: "Email thread included.",
+        checklistMeta: "",
       });
     });
 
@@ -520,7 +521,26 @@ describe("outlookContextChips", () => {
         meta: "Couldn't leave out unticked parts",
         removeLabel: "Dismiss email thread",
         checklist: true,
+        checklistMeta: "",
       });
+    });
+
+    it("gives the checklist a size only while a file is coming", () => {
+      const rebuilding = {
+        thread: {
+          subject: "S",
+          sizeLabel: null,
+          stale: true,
+          signingIn: false,
+        },
+      };
+      expect(
+        threadOf(
+          { thread: { includedMessageCount: 0, file: null } },
+          rebuilding,
+        )?.checklistMeta,
+      ).toBe("Updating…");
+      expect(threadOf({})?.checklistMeta).toBe("1.5 MB of 25 MB");
     });
 
     it("has no chip while hidden or absent", () => {
@@ -576,7 +596,7 @@ describe("outlookContextChips", () => {
         meta: "Draft attachment · 482 KB",
         removeLabel: "Don't include contract-v3.pdf",
         fields: [
-          { label: "Type", value: "application/pdf" },
+          { label: "Type", value: "PDF" },
           { label: "Size", value: "482 KB" },
         ],
       });

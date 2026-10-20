@@ -2,6 +2,7 @@ import { i18n } from "@lingui/core";
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
+  attachmentTypeLabel,
   formatAppointmentWhen,
   formatClockTime,
   formatDateTime,
@@ -58,6 +59,19 @@ describe("outlookContextFormat", () => {
     expect(formatDateTime("not a date")).toBe("");
     expect(formatClockTime(undefined)).toBe("");
     expect(formatAppointmentWhen(null, end)).toBe("");
+  });
+
+  it("names an attachment's type by its extension, as the file tiles do", () => {
+    expect(attachmentTypeLabel("contract-v3.pdf", "application/pdf")).toBe(
+      "PDF",
+    );
+    expect(
+      attachmentTypeLabel(
+        "pricing.xlsx",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      ),
+    ).toBe("XLSX");
+    expect(attachmentTypeLabel("README", "text/plain")).toBe("text/plain");
   });
 
   it("gives the start alone without a usable end", () => {
