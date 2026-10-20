@@ -1211,3 +1211,5 @@ mod attached;
 mod word;
 
 mod executor_stream;
+
+mod delegated;

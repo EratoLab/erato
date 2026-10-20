@@ -97,33 +97,63 @@ async fn setup_stream(
 type Body = Pin<Box<dyn futures::Stream<Item = reqwest::Result<Vec<u8>>> + Send>>;
 
 /// A pane's executor stream, read one SSE event at a time.
-struct Pane {
+pub(super) struct Pane {
     body: Body,
     buffer: String,
 }
 
 fn stream_request(base: &str, binding: &ExecutorBinding) -> reqwest::RequestBuilder {
-    reqwest::Client::new()
+    serving_request(base, binding, TOOL, None)
+}
+
+/// A stream advertising `client_tools`, of which `child_client_tools` accept
+/// grant calls.
+fn serving_request(
+    base: &str,
+    binding: &ExecutorBinding,
+    client_tools: &str,
+    child_client_tools: Option<&str>,
+) -> reqwest::RequestBuilder {
+    let request = reqwest::Client::new()
         .get(format!("{base}/me/client-operations/stream"))
         .bearer_auth(TEST_JWT_TOKEN)
-        .header("X-Erato-Client-Tools", TOOL)
-        .header("X-Erato-Executor", serde_json::to_string(binding).unwrap())
+        .header("X-Erato-Client-Tools", client_tools)
+        .header("X-Erato-Executor", serde_json::to_string(binding).unwrap());
+    match child_client_tools {
+        Some(names) => request.header("X-Erato-Child-Client-Tools", names),
+        None => request,
+    }
 }
 
 impl Pane {
     async fn open(base: &str, binding: &ExecutorBinding) -> Self {
-        Self::connect(stream_request(base, binding)).await
+        Self::open_request(stream_request(base, binding)).await
     }
 
     /// A stream sent with the pane's `X-Erato-Executor-Instance`.
     async fn open_as(base: &str, binding: &ExecutorBinding, instance: Uuid) -> Self {
-        Self::connect(
+        Self::open_request(
             stream_request(base, binding).header("X-Erato-Executor-Instance", instance.to_string()),
         )
         .await
     }
 
-    async fn connect(request: reqwest::RequestBuilder) -> Self {
+    pub(super) async fn open_serving(
+        base: &str,
+        binding: &ExecutorBinding,
+        client_tools: &str,
+        child_client_tools: Option<&str>,
+    ) -> Self {
+        Self::open_request(serving_request(
+            base,
+            binding,
+            client_tools,
+            child_client_tools,
+        ))
+        .await
+    }
+
+    async fn open_request(request: reqwest::RequestBuilder) -> Self {
         let response = request.send().await.unwrap();
         assert_eq!(response.status(), 200);
         assert_eq!(response.headers()["content-type"], "text/event-stream");
@@ -138,7 +168,7 @@ impl Pane {
     }
 
     /// The next event's data, or `None` when nothing arrives in time.
-    async fn next(&mut self, within: Duration) -> Option<Value> {
+    pub(super) async fn next(&mut self, within: Duration) -> Option<Value> {
         tokio::time::timeout(within, async {
             loop {
                 if let Some(end) = self.buffer.find("\n\n") {
@@ -156,7 +186,7 @@ impl Pane {
         .ok()
     }
 
-    async fn call(&mut self) -> Value {
+    pub(super) async fn call(&mut self) -> Value {
         let event = self
             .next(Duration::from_secs(10))
             .await
