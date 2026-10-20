@@ -12,6 +12,7 @@ import {
 
 import { FileAttachmentsPreview } from "@/components/ui/FileUpload";
 import { FileUploadWithTokenCheck } from "@/components/ui/FileUpload/FileUploadWithTokenCheck";
+import { isAudioTranscriptionComplete } from "@/components/ui/FileUpload/audioTranscriptionStatus";
 import { ConfirmationDialog } from "@/components/ui/Modal/ConfirmationDialog";
 import { componentRegistry } from "@/config/componentRegistry";
 import { useAudioDictationRecorder } from "@/hooks/audio/useAudioDictationRecorder";
@@ -105,6 +106,7 @@ import { ModelSelector } from "./ModelSelector";
 import { WaveformButton } from "./WaveformButton";
 import { buildAssistantMentionSection } from "./assistantMentionSection";
 import { buildMcpToolsSection } from "./mcpToolsSection";
+import { useAudioTranscriptionAnnouncements } from "./useAudioTranscriptionAnnouncements";
 import { Button } from "../Controls/Button";
 import { Alert } from "../Feedback/Alert";
 import { BudgetWarning } from "../Feedback/ChatWarnings/BudgetWarning";
@@ -113,6 +115,7 @@ import { toast } from "../Toast/toast";
 
 import type { AssistantMentionPopoverHandle } from "./AssistantMentionPopover";
 import type { ChatInputControlsHandle } from "./ChatInputControlsContext";
+import type { ChatInputAudioTranscriptionControls } from "../FileUpload/FileAttachmentsPreview";
 import type {
   ComposerContextItem,
   ComposerMode,
@@ -143,101 +146,8 @@ const AUDIO_MODE_SELECTOR_TOAST_ID = "chat-input-audio-mode-selector-toast";
 const AUDIO_MODE_SELECTOR_DEDUPE_KEY = "chat-input-audio-mode-selector";
 const CONVERSATIONAL_AUTO_SEND_EMPTY_TRANSCRIPT_TIMEOUT_MS = 8000;
 
-type AudioTranscriptionAttachment = {
-  fileId: string;
-  filename: string;
-  status: string;
-  transcript?: string | null;
-  error?: string | null;
-  progress?: number | null;
-  chunks?:
-    | {
-        index: number;
-        start_ms: number | null;
-        end_ms: number | null;
-        byte_start: number | null;
-        byte_end: number | null;
-        status: string;
-        transcript?: string | null;
-        attempts: number;
-        error?: string | null;
-      }[]
-    | null;
-};
-
-function getCompletedChunkTranscript(
-  chunks?: AudioTranscriptionAttachment["chunks"],
-): string | undefined {
-  if (!chunks || chunks.length === 0) {
-    return undefined;
-  }
-
-  const completedChunkText = chunks
-    .filter((chunk) => chunk.status.toLowerCase() === "completed")
-    .map((chunk) => chunk.transcript?.trim())
-    .filter((transcript): transcript is string => Boolean(transcript))
-    .join(" ");
-
-  return completedChunkText.length > 0 ? completedChunkText : undefined;
-}
-
-function isAudioTranscriptionComplete(
-  status?: string,
-  chunks?: AudioTranscriptionAttachment["chunks"],
-): boolean {
-  const normalizedStatus = status?.toLowerCase();
-
-  if (normalizedStatus) {
-    return normalizedStatus === "completed";
-  }
-
-  if (!chunks || chunks.length === 0) {
-    return false;
-  }
-
-  return chunks.every((chunk) => chunk.status.toLowerCase() === "completed");
-}
-
-function getDisplayTranscript(
-  transcript?: string | null,
-  chunks?: AudioTranscriptionAttachment["chunks"],
-): string | undefined {
-  if (transcript?.trim()) {
-    return transcript;
-  }
-
-  return getCompletedChunkTranscript(chunks);
-}
-
-function getDisplayAudioTranscriptionStatus(status: string) {
-  const normalizedStatus = status.toLowerCase();
-
-  switch (normalizedStatus) {
-    case "completed":
-      return t`Completed`;
-    case "failed":
-      return t`Failed`;
-    case "recording":
-      return t`Recording`;
-    case "uploading":
-      return t`Uploading`;
-    case "transcribing":
-      return t`Transcribing`;
-    case "canceled":
-      return t`Canceled`;
-    default:
-      return status;
-  }
-}
-
 function isAudioTranscriptionAttachment(file: FileUploadItem): boolean {
   return Boolean(file.audio_transcription);
-}
-
-function isAudioTranscriptionInProgress(status: string) {
-  const normalizedStatus = status.toLowerCase();
-
-  return !["completed", "failed", "canceled"].includes(normalizedStatus);
 }
 
 function areFacetIdListsEqual(a: string[], b: string[]) {
@@ -1557,32 +1467,6 @@ export const ChatInput = ({
     };
   }, [attachedFiles, incompleteAudioTranscriptionFileIds, setAttachedFiles]);
 
-  const audioTranscriptionAttachments = useMemo(
-    (): AudioTranscriptionAttachment[] =>
-      attachedFiles.flatMap((file) => {
-        const audioTranscription = file.audio_transcription;
-        if (!audioTranscription) {
-          return [];
-        }
-
-        return [
-          {
-            fileId: file.id,
-            filename: file.filename,
-            status: audioTranscription.status ?? "unknown",
-            transcript: getDisplayTranscript(
-              audioTranscription.transcript,
-              audioTranscription.chunks,
-            ),
-            progress: audioTranscription.progress,
-            chunks: audioTranscription.chunks,
-            error: audioTranscription.error,
-          },
-        ];
-      }),
-    [attachedFiles],
-  );
-
   // Create the submit handler
   // Use isPendingResponse instead of isStreaming to block submission immediately when send is clicked
   //
@@ -1904,6 +1788,28 @@ export const ChatInput = ({
     isRecording ||
     isRecordingUpload;
   const isDisabled = composeLocked || sendLocked;
+  const audioTranscriptionControls = useMemo(
+    (): ChatInputAudioTranscriptionControls => ({
+      canRetry: hasRecordedAudioFile,
+      retryingFileId: retryingAudioFileId,
+      onRetry: (fileId) => void retryAudioTranscription(fileId),
+      disabled: isDisabled || isRecordingUpload,
+    }),
+    [
+      hasRecordedAudioFile,
+      retryingAudioFileId,
+      retryAudioTranscription,
+      isDisabled,
+      isRecordingUpload,
+    ],
+  );
+  const audioStatusAnnouncement = useAudioTranscriptionAnnouncements(
+    attachedFiles,
+    chatId,
+  );
+  const showAudioStatusLive =
+    audioTranscriptionEnabled ||
+    attachedFiles.some(isAudioTranscriptionAttachment);
 
   const handleTextareaPaste = useCallback(
     (event: ReactClipboardEvent<HTMLTextAreaElement>) => {
@@ -2898,75 +2804,6 @@ export const ChatInput = ({
         {/* Budget warning - shows when user approaches spending limit */}
         <BudgetWarning />
 
-        {audioTranscriptionAttachments.length > 0 && (
-          <div className="mb-2 space-y-2">
-            {audioTranscriptionAttachments.map((attachment) =>
-              (() => {
-                const displayStatus = getDisplayAudioTranscriptionStatus(
-                  attachment.status,
-                );
-
-                return (
-                  <div
-                    key={attachment.fileId}
-                    className="message-frame-geometry mb-0 border bg-theme-bg-primary text-theme-fg-primary [border-color:var(--theme-border-attachment)]"
-                    role="status"
-                    data-testid={`chat-audio-transcription-${attachment.fileId}`}
-                  >
-                    <p
-                      className={clsx(
-                        "flex items-center gap-2 text-sm font-medium",
-                        isAudioTranscriptionInProgress(attachment.status) &&
-                          "animate-pulse",
-                      )}
-                    >
-                      <VoiceIcon
-                        className="size-4 shrink-0"
-                        aria-hidden="true"
-                      />
-                      <span>
-                        {t`Audio recording - Status: ${displayStatus}`}
-                      </span>
-                    </p>
-                    {attachment.transcript?.trim() && (
-                      <p className="mt-2 whitespace-pre-wrap rounded-md border border-theme-border bg-theme-bg-secondary p-2 text-sm">
-                        {attachment.transcript}
-                      </p>
-                    )}
-                    {attachment.error?.trim() && (
-                      <p className="mt-1 text-sm text-theme-error-fg">
-                        {attachment.error}
-                      </p>
-                    )}
-                    {attachment.status.toLowerCase() === "failed" &&
-                      hasRecordedAudioFile(attachment.fileId) && (
-                        <Button
-                          type="button"
-                          variant="secondary"
-                          size="sm"
-                          onClick={() =>
-                            retryAudioTranscription(attachment.fileId)
-                          }
-                          disabled={
-                            retryingAudioFileId === attachment.fileId ||
-                            isDisabled ||
-                            isRecordingUpload
-                          }
-                          className="mt-2"
-                          data-testid={`chat-input-retry-audio-${attachment.fileId}`}
-                        >
-                          {retryingAudioFileId === attachment.fileId
-                            ? t`Retrying...`
-                            : t`Retry transcription`}
-                        </Button>
-                      )}
-                  </div>
-                );
-              })(),
-            )}
-          </div>
-        )}
-
         {/* File error message */}
         {fileError && (
           <Alert
@@ -3184,6 +3021,7 @@ export const ChatInput = ({
                   onFilePreview={onFilePreview}
                   disabled={composeLocked}
                   showFileTypes={showFileTypes}
+                  audioTranscription={audioTranscriptionControls}
                 />
               );
             }
@@ -3199,6 +3037,7 @@ export const ChatInput = ({
               disabled: composeLocked,
               showFileTypes,
               sharedHeightCap: true,
+              audioTranscription: audioTranscriptionControls,
             };
             return (
               <ComposerContextArea
@@ -3709,6 +3548,16 @@ export const ChatInput = ({
           )}
         </div>
       </form>
+      {showAudioStatusLive && (
+        <div
+          className="sr-only"
+          aria-live="polite"
+          aria-atomic="true"
+          data-ui="chat-audio-status-live"
+        >
+          {audioStatusAnnouncement}
+        </div>
+      )}
       {/* Above the AI advisory: this one is about what happens to THIS
           message, which is the more immediate of the two. */}
       <ChatTaskPlanAdvisory />

@@ -192,6 +192,7 @@ export const DEFAULT_STUBS = {
   AttachmentNotice: StubNothing,
   AttachmentTile: StubNothing,
   AttachmentTileList: StubNothing,
+  audioTranscriptionTileStatus: () => null,
   Avatar: StubNothing,
   Button: StubButton,
   Card: StubPassthrough,

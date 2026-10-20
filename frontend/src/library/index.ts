@@ -661,7 +661,15 @@ export type {
 export { DEFAULT_MAX_FILES_PER_MESSAGE } from "@/utils/fileUploadLimits";
 export { formatFileSize } from "@/components/ui/FileUpload/FilePreviewBase";
 export { FileAttachmentsPreview } from "@/components/ui/FileUpload/FileAttachmentsPreview";
-export type { ChatInputAttachmentPreviewProps } from "@/components/ui/FileUpload/FileAttachmentsPreview";
+export type {
+  ChatInputAttachmentPreviewProps,
+  ChatInputAudioTranscriptionControls,
+} from "@/components/ui/FileUpload/FileAttachmentsPreview";
+export type { AttachmentTileStatus } from "@/components/ui/FileUpload/AttachmentTile";
+export {
+  audioTranscriptionTileStatus,
+  type AudioTranscriptionTileStatus,
+} from "@/components/ui/FileUpload/audioTranscriptionStatus";
 export {
   ComposerContextArea,
   ComposerContextLane,

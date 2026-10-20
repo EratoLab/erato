@@ -1,9 +1,9 @@
+import { useLayoutEffect, useRef } from "react";
+
 import { Button } from "@/components/ui/Controls/Button";
 import { Alert } from "@/components/ui/Feedback/Alert";
 import { SpinnerIcon } from "@/components/ui/Feedback/SpinnerIcon";
 import { WarningCircleIcon, WarningIcon } from "@/components/ui/icons";
-
-import { useLayoutEffect, useRef } from "react";
 
 import type { ComposerNotice } from "./types";
 

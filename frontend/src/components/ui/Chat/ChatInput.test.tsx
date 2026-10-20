@@ -152,16 +152,42 @@ vi.mock("@/lib/generated/v1betaApi/v1betaApiComponents", () => ({
   recentChatsQuery: () => ({ queryKey: ["me", "recent_chats"] }),
 }));
 
-vi.mock("@/components/ui/FileUpload", () => ({
-  FileAttachmentsPreview: ({
-    attachedFiles,
-    onRemoveFile,
-    onRemoveAllFiles,
-  }: {
-    attachedFiles: FileUploadItem[];
-    onRemoveFile: (id: string) => void;
-    onRemoveAllFiles: () => void;
-  }) => (
+// Staged recordings are checked on the real tiles; everything else counts files.
+const stagedPreview = vi.hoisted(() => ({ real: false }));
+
+vi.mock("@/components/ui/FileUpload", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@/components/ui/FileUpload")>();
+  const { ThemeProvider: Themed } = await import(
+    "@/components/providers/ThemeProvider"
+  );
+  const Real = actual.FileAttachmentsPreview;
+  return {
+    FileAttachmentsPreview: (props: Parameters<typeof Real>[0]) =>
+      stagedPreview.real ? (
+        <Themed
+          enableCustomTheme={false}
+          initialThemeMode="light"
+          persistThemeMode={false}
+        >
+          <Real {...props} />
+        </Themed>
+      ) : (
+        <CountingPreview {...props} />
+      ),
+  };
+});
+
+function CountingPreview({
+  attachedFiles,
+  onRemoveFile,
+  onRemoveAllFiles,
+}: {
+  attachedFiles: FileUploadItem[];
+  onRemoveFile: (id: string) => void;
+  onRemoveAllFiles: () => void;
+}) {
+  return (
     <div>
       <div data-testid="attachments-preview">{attachedFiles.length}</div>
       {attachedFiles.map((file) => (
@@ -182,8 +208,8 @@ vi.mock("@/components/ui/FileUpload", () => ({
         remove-all
       </button>
     </div>
-  ),
-}));
+  );
+}
 
 vi.mock("@/components/ui/FileUpload/FileUploadWithTokenCheck", () => ({
   FileUploadWithTokenCheck: (props: { disabled?: boolean }) => {
@@ -331,6 +357,7 @@ vi.mock("../icons", async (importOriginal) => ({
 describe("ChatInput", () => {
   beforeEach(async () => {
     vi.clearAllMocks();
+    stagedPreview.real = false;
     mockUseChatCompaction.mockReturnValue({
       available: false,
       isPending: false,
@@ -1301,6 +1328,7 @@ describe("ChatInput", () => {
   });
 
   it("blocks compose send when attached audio transcription is incomplete", async () => {
+    stagedPreview.real = true;
     const queryClient = new QueryClient({
       defaultOptions: {
         queries: { retry: false },
@@ -1350,9 +1378,24 @@ describe("ChatInput", () => {
       screen.queryByTestId("chat-audio-transcription-blocker"),
     ).not.toBeInTheDocument();
     expect(screen.getByTestId("chat-input-send-message")).toBeDisabled();
+    // The status rides on the file's own tile; no card above the composer.
+    expect(
+      document.querySelector('[data-testid^="chat-audio-transcription-"]'),
+    ).toBeNull();
+    const tile = document.querySelector<HTMLElement>(
+      '[data-ui="attachment-tile"]',
+    )!;
+    expect(tile).toHaveAttribute("data-status", "busy");
+    expect(tile).toHaveTextContent("Transcribing…");
+    expect(
+      tile.querySelector(
+        '[data-ui="attachment-tile-icon"] [data-ui="spinner"]',
+      ),
+    ).not.toBeNull();
   });
 
-  it("shows the live transcript section for attached audio files", async () => {
+  it("shows a ready recording's status on its tile, with no card above the composer", async () => {
+    stagedPreview.real = true;
     const queryClient = new QueryClient({
       defaultOptions: {
         queries: { retry: false },
@@ -1399,13 +1442,16 @@ describe("ChatInput", () => {
       </QueryClientProvider>,
     );
 
-    const transcriptSection = screen.getByTestId(
-      "chat-audio-transcription-audio-file-1",
-    );
-    expect(transcriptSection).toBeInTheDocument();
-    expect(transcriptSection).toHaveTextContent(
-      "Hello team, this is the transcribed text for testing.",
-    );
+    expect(
+      document.querySelector('[data-testid^="chat-audio-transcription-"]'),
+    ).toBeNull();
+    const tile = document.querySelector<HTMLElement>(
+      '[data-ui="attachment-tile"]',
+    )!;
+    expect(tile).not.toHaveAttribute("data-status");
+    expect(tile).toHaveTextContent("Transcript ready");
+    // The transcript itself opens with the file's preview.
+    expect(tile).not.toHaveTextContent("Hello team");
   });
 
   it("refreshes incomplete audio transcription attachment metadata", async () => {
@@ -1475,6 +1521,7 @@ describe("ChatInput", () => {
   });
 
   it("shows transcript section error details when transcription fails", async () => {
+    stagedPreview.real = true;
     const queryClient = new QueryClient({
       defaultOptions: {
         queries: { retry: false },
@@ -1521,14 +1568,167 @@ describe("ChatInput", () => {
       </QueryClientProvider>,
     );
 
-    const transcriptSection = screen.getByTestId(
-      "chat-audio-transcription-audio-file-2",
-    );
-    expect(transcriptSection).toBeInTheDocument();
-    expect(transcriptSection).toHaveTextContent("Chunk transcription failed");
     expect(
-      screen.queryByTestId("chat-audio-transcription-blocker"),
-    ).not.toBeInTheDocument();
+      document.querySelector('[data-testid^="chat-audio-transcription-"]'),
+    ).toBeNull();
+    const tile = document.querySelector<HTMLElement>(
+      '[data-ui="attachment-tile"]',
+    )!;
+    expect(tile).toHaveAttribute("data-status", "error");
+    expect(tile).toHaveTextContent("Couldn't transcribe");
+    expect(tile.closest("[title]")?.getAttribute("title")).toContain(
+      "Chunk transcription failed after all retries.",
+    );
+    // Today's gate: a failed recording blocks the send until it is removed.
+    expect(screen.getByTestId("chat-input-send-message")).toBeDisabled();
+    // Not held by the recorder, so nothing to retry.
+    expect(
+      screen.queryByRole("button", { name: /Retry transcription/ }),
+    ).toBeNull();
+  });
+
+  describe("staged recordings", () => {
+    beforeEach(() => {
+      stagedPreview.real = true;
+    });
+
+    const recording = (
+      status: string,
+      over: Record<string, unknown> = {},
+    ): FileUploadItem =>
+      ({
+        id: "audio-rec-1",
+        filename: "audio-recording-20261020-1200.wav",
+        download_url: "/files/rec.wav",
+        preview_url: undefined,
+        file_contents_unavailable_missing_permissions: false,
+        file_capability: {
+          extensions: ["wav"],
+          id: "audio",
+          mime_types: ["audio/wav"],
+          operations: ["extract_text"],
+        },
+        audio_transcription: { status, ...over },
+      }) as unknown as FileUploadItem;
+
+    const stage = (files: FileUploadItem[]) =>
+      mockUseChatInputHandlers.mockReturnValue({
+        attachedFiles: files,
+        fileError: null,
+        setFileError: vi.fn(),
+        handleFilesUploaded: vi.fn(),
+        handleRemoveFile: vi.fn(),
+        handleRemoveAllFiles: vi.fn(),
+        setAttachedFiles: vi.fn(),
+        createSubmitHandler: () => (event: FormEvent) => event.preventDefault(),
+      });
+
+    const renderComposer = async (
+      props: Partial<Parameters<typeof ChatInput>[0]> = {},
+    ) => {
+      const queryClient = new QueryClient({
+        defaultOptions: { queries: { retry: false } },
+      });
+      const { i18n } = await import("@lingui/core");
+      const ui = (next: Partial<Parameters<typeof ChatInput>[0]> = {}) => (
+        <QueryClientProvider client={queryClient}>
+          <I18nProvider i18n={i18n}>
+            <ChatInput onSendMessage={vi.fn()} {...props} {...next} />
+          </I18nProvider>
+        </QueryClientProvider>
+      );
+      const view = render(ui());
+      return { ...view, rerenderComposer: () => view.rerender(ui()) };
+    };
+
+    const audioLive = () =>
+      document.querySelector('[data-ui="chat-audio-status-live"]');
+
+    it("retries a recording the recorder still holds from inside its tile", async () => {
+      const retryAudioTranscription = vi.fn();
+      mockUseAudioTranscriptionRecorder.mockReturnValue({
+        ...mockUseAudioTranscriptionRecorder(),
+        retryAudioTranscription,
+        hasRecordedAudioFile: (id: string) => id === "audio-rec-1",
+      });
+      stage([recording("failed", { error: "Provider timed out." })]);
+      await renderComposer({ onFilePreview: vi.fn() });
+
+      const tile = document.querySelector<HTMLElement>(
+        '[data-ui="attachment-tile"]',
+      )!;
+      const retry = within(tile).getByRole("button", {
+        name: "Retry transcription: audio-recording-20261020-1200.wav",
+      });
+      expect(retry).toHaveAttribute("data-ui", "attachment-tile-action");
+      expect(retry).toHaveTextContent("Retry transcription");
+      const activation = within(tile).getByRole("button", {
+        name: /^Preview attachment audio-recording-20261020-1200\.wav, Couldn't transcribe$/,
+      });
+      expect(activation.contains(retry)).toBe(false);
+      fireEvent.click(retry);
+      expect(retryAudioTranscription).toHaveBeenCalledWith("audio-rec-1");
+    });
+
+    it("says what a transcription ended in, never on mount", async () => {
+      mockUseAudioTranscriptionFeature.mockReturnValue({ enabled: true });
+      stage([recording("completed")]);
+      const view = await renderComposer({ chatId: "chat-1" });
+      expect(audioLive()).toBeEmptyDOMElement();
+
+      stage([recording("transcribing")]);
+      view.rerenderComposer();
+      expect(audioLive()).toBeEmptyDOMElement();
+
+      stage([recording("completed", { transcript: "Hello." })]);
+      view.rerenderComposer();
+      expect(audioLive()).toHaveTextContent(
+        "audio-recording-20261020-1200.wav: transcript ready.",
+      );
+
+      stage([recording("processing")]);
+      view.rerenderComposer();
+      stage([recording("failed")]);
+      view.rerenderComposer();
+      expect(audioLive()).toHaveTextContent(
+        "audio-recording-20261020-1200.wav: couldn't transcribe.",
+      );
+    });
+
+    it("hands a kit's attachment slot the retry controls, with or without the lane", async () => {
+      const slotProps = vi.fn();
+      componentRegistry.ChatInputAttachmentPreview = function KitFiles(
+        props: ChatInputAttachmentPreviewProps,
+      ) {
+        slotProps(props);
+        return <div data-testid="kit-files" />;
+      };
+      mockUseAudioTranscriptionRecorder.mockReturnValue({
+        ...mockUseAudioTranscriptionRecorder(),
+        retryingAudioFileId: "audio-rec-1",
+        hasRecordedAudioFile: (id: string) => id === "audio-rec-1",
+      });
+      try {
+        stage([recording("failed")]);
+        const view = await renderComposer();
+        const legacy = slotProps.mock.calls.at(-1)?.[0] as
+          | ChatInputAttachmentPreviewProps
+          | undefined;
+        expect(legacy?.audioTranscription?.canRetry("audio-rec-1")).toBe(true);
+        expect(legacy?.audioTranscription?.canRetry("other")).toBe(false);
+        expect(legacy?.audioTranscription?.retryingFileId).toBe("audio-rec-1");
+        view.unmount();
+
+        await renderComposer({ contextItems: [] });
+        const lane = slotProps.mock.calls.at(-1)?.[0] as
+          | ChatInputAttachmentPreviewProps
+          | undefined;
+        expect(lane?.sharedHeightCap).toBe(true);
+        expect(lane?.audioTranscription?.canRetry("audio-rec-1")).toBe(true);
+      } finally {
+        componentRegistry.ChatInputAttachmentPreview = null;
+      }
+    });
   });
 
   it("shows the dictation button when audio dictation is enabled", async () => {
@@ -6784,6 +6984,27 @@ describe("ChatInput", () => {
       ).toHaveTextContent("1");
     });
 
+    it("puts focus back in the textarea when a notice action settles the notice", async () => {
+      stageFiles([]);
+      const view = await renderComposer({
+        contextItems: [],
+        composerNotice: {
+          id: "slow",
+          tone: "info",
+          text: "Word is still handing over the document.",
+          actions: [
+            { id: "skip", label: "Send without document", onSelect: vi.fn() },
+          ],
+        },
+      });
+      const action = screen.getByRole("button", {
+        name: "Send without document",
+      });
+      action.focus();
+      view.rerenderWith({ contextItems: [], composerNotice: null });
+      expect(screen.getByPlaceholderText("Type a message...")).toHaveFocus();
+    });
+
     it("renders the lane even when a kit replaces the files slot", async () => {
       const slotProps = vi.fn();
       componentRegistry.ChatInputAttachmentPreview = function KitFiles(
@@ -7015,7 +7236,9 @@ describe("ChatInput", () => {
         ],
       });
       fireEvent.click(screen.getByRole("button", { name: /^Weekly sync/ }));
-      expect(renderBody).toHaveBeenLastCalledWith({ locked: true });
+      expect(renderBody).toHaveBeenLastCalledWith(
+        expect.objectContaining({ locked: true }),
+      );
 
       mockUseChatContext.mockReturnValue({
         isPendingResponse: false,
@@ -7030,7 +7253,9 @@ describe("ChatInput", () => {
           }),
         ],
       });
-      expect(renderBody).toHaveBeenLastCalledWith({ locked: false });
+      expect(renderBody).toHaveBeenLastCalledWith(
+        expect.objectContaining({ locked: false }),
+      );
     });
 
     it("does not re-render the chips on a keystroke", async () => {

@@ -58,9 +58,17 @@ export { AttachmentTileList } from "@/components/ui/FileUpload/AttachmentTileLis
 export type {
   AttachmentTileProps,
   AttachmentTilePresentation,
+  AttachmentTileStatus,
 } from "@/components/ui/FileUpload/AttachmentTile";
 export { FileAttachmentsPreview } from "@/components/ui/FileUpload/FileAttachmentsPreview";
-export type { FileAttachmentsPreviewProps } from "@/components/ui/FileUpload/FileAttachmentsPreview";
+export type {
+  ChatInputAudioTranscriptionControls,
+  FileAttachmentsPreviewProps,
+} from "@/components/ui/FileUpload/FileAttachmentsPreview";
+// A staged recording's status as the default tile draws it, for a kit's
+// attachment preview (surface 1.20).
+export { audioTranscriptionTileStatus } from "@/components/ui/FileUpload/audioTranscriptionStatus";
+export type { AudioTranscriptionTileStatus } from "@/components/ui/FileUpload/audioTranscriptionStatus";
 export {
   getFileName,
   getFilePreviewUrl,
@@ -275,6 +283,8 @@ export const ERATO_KIT_SURFACE_EXPORTS = [
   "AttachmentTileList",
   "AttachmentTilePresentation",
   "AttachmentTileProps",
+  "AttachmentTileStatus",
+  "AudioTranscriptionTileStatus",
   "Avatar",
   "Button",
   "CHAT_HISTORY_ROW_MENU_ID",
@@ -292,6 +302,7 @@ export const ERATO_KIT_SURFACE_EXPORTS = [
   "ChatHistoryRowMenuId",
   "ChatHistoryRowMenuOptions",
   "ChatHistoryRowPresentation",
+  "ChatInputAudioTranscriptionControls",
   "ChatMessageRendererState",
   "ChevronDownIcon",
   "ChevronRightIcon",
@@ -398,6 +409,7 @@ export const ERATO_KIT_SURFACE_EXPORTS = [
   "ToolCallOutput",
   "ToolCallOutputProps",
   "Tooltip",
+  "audioTranscriptionTileStatus",
   "findCapabilityByExtension",
   "getChatUrl",
   "getFileName",

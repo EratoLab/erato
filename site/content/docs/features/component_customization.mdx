@@ -523,7 +523,8 @@ Themes and kits can reach the lane through these hooks and classes:
 
 - `data-ui="composer-staged-area"` (the shared scroll area), `composer-staged-files`,
   `composer-context-lane`, `composer-context-live`, `composer-notice[data-tone]`
-  with its `composer-notice-polite` and `composer-notice-assertive` regions;
+  with its `composer-notice-polite` and `composer-notice-assertive` regions and
+  `composer-notice-progress` (a count such as "3 of 12", drawn but not announced);
 - `composer-context-chip[data-kind][data-state][data-tone][data-origin][data-locked][data-has-detail]`,
   with `composer-context-chip-open`, `composer-context-chip-face`,
   `composer-context-chip-state`, `composer-context-remove`,
@@ -551,9 +552,11 @@ Teams tab's other files as it does everywhere else. Its detail adds the hooks
 `teams-transcript-not-attached`, `teams-transcript-back` and
 `teams-transcript-detail-live`, with each file as an `attachment-tile` beside
 its `attachment-remove`. The conversation inside it stays behind the
-`TeamsConversationView` point. A detail body receives `{ locked }`
+`TeamsConversationView` point. A detail body receives `{ locked, runAction }`
 (`ComposerContextDetailRenderContext`), so its own controls follow the chip's
-lock.
+lock, and a choice the body draws itself (a list of comments to pick from)
+runs through `runAction` exactly as a footer action does: announced once the
+item changes, then the detail closes and focus returns to the chip.
 
 `@erato/frontend/conformance` exports `composerContextChipFaceConformanceFailures(Face, { render })`.
 It mounts the host lane around the face in all six states, with and without a
@@ -562,6 +565,28 @@ a control of its own, or breaks the host's control, popup or state word.
 `component-kit-example/src/components/ExampleComposerContextChipFace.test.tsx`
 is a working harness. The point arrived with shared surface 1.19; declare
 `builtAgainstSharedSurfaceMinor: 19` on the registration.
+
+### Staged recordings
+
+A recording staged in the composer carries its transcription status on its own
+file tile; there is no status card above the composer. The tile shows a
+spinner while the recording uploads or transcribes, "Transcript ready" once
+done, and the error colours with "Retry transcription" inside the tile when
+transcription failed and the recorder still holds the audio. The transcript
+opens with the file's preview. Send stays disabled until every staged
+recording is transcribed.
+
+`ChatInputAttachmentPreview` receives the status in each file's
+`audio_transcription` and the retry through the `audioTranscription` prop
+(`ChatInputAudioTranscriptionControls`: `canRetry(fileId)`, `retryingFileId`,
+`onRetry(fileId)`, `disabled`). `audioTranscriptionTileStatus(file, options)`
+from `@erato/frontend/shared` turns a file into the words and state the default
+tile draws. An override that ignores both still works; it just shows no status.
+The composer announces the outcome itself in `chat-audio-status-live`, so a kit
+draws no live region of its own. The default tile exposes
+`attachment-tile[data-status="busy"|"error"]`, `attachment-tile-meta` and the
+`attachment-tile-action` button. The prop arrived with shared surface 1.20;
+declare `builtAgainstSharedSurfaceMinor: 20` on a registration that uses it.
 
 ## Full Registry Example
 
