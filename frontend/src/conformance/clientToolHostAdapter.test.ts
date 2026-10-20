@@ -24,6 +24,9 @@ type Flaw =
   | "accepts mismatched requesting ids"
   | "accepts an earlier turn's grant"
   | "accepts a context version it does not have"
+  | "ignores the context version"
+  | "skips the context check without a grant version"
+  | "returns a non-terminal loss"
   | "leaks a write token"
   | "leaks write guidance"
   | "changes the coordinator's state"
@@ -31,8 +34,13 @@ type Flaw =
   | "advertises its write"
   | "does not advertise its read"
   | "returns no freshness"
+  | "returns a non-ISO time"
+  | "reports another turn's context_ref"
   | "reports none in a blind spot"
+  | "never asks on the device"
   | "asks under the requesting chat"
+  | "asks under a third chat"
+  | "never settles after the answer"
   | "declines without the declined code";
 
 const READ = "fake_read";
@@ -43,14 +51,18 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 
 /**
  * The smallest host that keeps the contract, with one switch per way to break
- * it. Without `versioned` it has no context version, like a live read.
+ * it. Without `versioned` it has no context version, like a live read. With
+ * `late` it registers and deregisters its approvals a tick late, as a React
+ * effect does.
  */
 const fakeHost = ({
   flaw,
   versioned = true,
+  late = false,
 }: {
   flaw?: Flaw;
   versioned?: boolean;
+  late?: boolean;
 } = {}): ClientToolHostConformanceHarness => {
   const turns: ClientToolHostTurn[] = [];
   const edits: string[] = [];
@@ -67,6 +79,11 @@ const fakeHost = ({
         message: "Start a new request.",
       },
     ],
+    ...(flaw === "returns a non-terminal loss"
+      ? {}
+      : {
+          submissionFeedback: { terminal: true, recovery: "cannot_continue" },
+        }),
   };
 
   const grantedTurn = (
@@ -83,33 +100,59 @@ const fakeHost = ({
     if (!requesting && flaw !== "accepts mismatched requesting ids") {
       return undefined;
     }
+    const contextMatches = (turn: ClientToolHostTurn) =>
+      flaw === "ignores the context version" ||
+      (flaw === "skips the context check without a grant version" &&
+        grant.contextRef === undefined) ||
+      ((grant.contextRef === turn.contextRef ||
+        (flaw === "accepts a context version it does not have" &&
+          turn.contextRef === undefined)) &&
+        (!versioned || (isRecord(input) && input.context === turn.contextRef)));
     const candidates =
       flaw === "accepts an earlier turn's grant" ? turns : turns.slice(-1);
     return candidates.find(
       (turn) =>
         turn.ownerChatId === grant.ownerChatId &&
         turn.ownerMessageId === grant.ownerMessageId &&
-        (grant.contextRef === turn.contextRef ||
-          (flaw === "accepts a context version it does not have" &&
-            turn.contextRef === undefined)) &&
-        (!versioned || (isRecord(input) && input.context === turn.contextRef)),
+        contextMatches(turn),
     );
+  };
+
+  const later = (step: () => void) => {
+    if (late) {
+      setTimeout(step, 0);
+    } else {
+      step();
+    }
   };
 
   const askOnDevice = async (
     grant: ClientToolHostGrant,
     context: ClientToolCallContext,
   ): Promise<boolean> => {
+    if (flaw === "never asks on the device") {
+      return true;
+    }
     const chatId =
       flaw === "asks under the requesting chat"
         ? grant.requestingChatId
-        : grant.ownerChatId;
+        : flaw === "asks under a third chat"
+          ? "third-chat"
+          : grant.ownerChatId;
     const registry = useConfirmationRegistryStore.getState();
-    registry.registerConfirmation(chatId, context.toolCallId);
     const approved = await new Promise<boolean>((resolve) => {
-      answer = resolve;
+      later(() => {
+        registry.registerConfirmation(chatId, context.toolCallId);
+        answer = (approved) => {
+          answer = undefined;
+          resolve(approved);
+        };
+      });
     });
-    registry.unregisterConfirmation(chatId, context.toolCallId);
+    later(() => registry.unregisterConfirmation(chatId, context.toolCallId));
+    if (flaw === "never settles after the answer") {
+      await new Promise<never>(() => {});
+    }
     return approved;
   };
 
@@ -146,6 +189,12 @@ const fakeHost = ({
     }
     const changes =
       blind && flaw !== "reports none in a blind spot" ? "unknown" : "none";
+    const time =
+      flaw === "returns a non-ISO time" ? "yesterday" : "2026-10-20T10:00:00Z";
+    const contextRef =
+      flaw === "reports another turn's context_ref"
+        ? turns[0]?.contextRef
+        : turn.contextRef;
     return {
       ok: true,
       result: {
@@ -159,11 +208,8 @@ const fakeHost = ({
           : {
               freshness: {
                 ...(turn.contextRef === undefined
-                  ? { readAt: "2026-10-20T10:00:00.000Z" }
-                  : {
-                      context_ref: turn.contextRef,
-                      capturedAt: "2026-10-20T10:00:00.000Z",
-                    }),
+                  ? { readAt: time }
+                  : { context_ref: contextRef, capturedAt: time }),
                 changes,
                 counts: { own: 0, local: 0, remote: 0, unknown: blind ? 1 : 0 },
               },
@@ -240,9 +286,15 @@ describe("clientToolHostAdapterConformanceFailures", () => {
     ).toEqual([]);
   });
 
+  it("passes a host that registers its approvals a tick late", async () => {
+    expect(
+      await clientToolHostAdapterConformanceFailures(fakeHost({ late: true })),
+    ).toEqual([]);
+  });
+
   const lost = 'expected the "context_unavailable" code';
 
-  it.each<[Flaw, string, boolean]>([
+  it.each<[Flaw, string | readonly string[], boolean]>([
     [
       "skips the lineage check",
       `lineage (fake_host): "fake_read" under a grant with a foreign owner chat succeeds, ${lost}`,
@@ -262,6 +314,21 @@ describe("clientToolHostAdapterConformanceFailures", () => {
       "accepts a context version it does not have",
       `lineage (fake_host): "fake_read" under a grant with a context version for a turn that has none succeeds, ${lost}`,
       false,
+    ],
+    [
+      "ignores the context version",
+      `lineage (fake_host): "fake_read" under a grant with a forged context version succeeds, ${lost}`,
+      true,
+    ],
+    [
+      "skips the context check without a grant version",
+      `lineage (fake_host): "fake_read" under a grant with no context version for a turn that has one succeeds, ${lost}`,
+      true,
+    ],
+    [
+      "returns a non-terminal loss",
+      'lineage (fake_host): "fake_read" under a grant with a foreign owner chat returns a non-terminal loss',
+      true,
     ],
     [
       "leaks a write token",
@@ -299,13 +366,41 @@ describe("clientToolHostAdapterConformanceFailures", () => {
       true,
     ],
     [
+      "returns a non-ISO time",
+      'freshness (fake_host): "fake_read" under a valid grant has neither an ISO capturedAt nor readAt',
+      true,
+    ],
+    [
+      "reports another turn's context_ref",
+      `freshness (fake_host): "fake_read" under a valid grant reports context_ref "CONTEXT-1", not the turn's "CONTEXT-2"`,
+      true,
+    ],
+    [
       "reports none in a blind spot",
       'freshness (fake_host): "fake_read" after its change events dropping out reports changes "none", expected "unknown"',
       true,
     ],
     [
+      "never asks on the device",
+      'device approval (fake_host): "fake_read" approved on the device raises no approval',
+      true,
+    ],
+    [
       "asks under the requesting chat",
-      'device approval (fake_host): "fake_read" approved on the device asks under the requesting chat, not the owner chat',
+      [
+        'device approval (fake_host): "fake_read" approved on the device asks under the requesting chat, not the owner chat',
+        'device approval (fake_host): "fake_read" approved on the device is not pending under the owner chat',
+      ],
+      true,
+    ],
+    [
+      "asks under a third chat",
+      'device approval (fake_host): "fake_read" approved on the device is not pending under the owner chat',
+      true,
+    ],
+    [
+      "never settles after the answer",
+      'device approval (fake_host): "fake_read" approved on the device does not settle once the approval is answered',
       true,
     ],
     [
@@ -313,11 +408,12 @@ describe("clientToolHostAdapterConformanceFailures", () => {
       'device approval (fake_host): "fake_read" declined on the device fails with "The user declined this read." and codes [rejected], expected the "declined" code',
       true,
     ],
-  ])("reports a host that %s", async (flaw, failure, versioned) => {
-    expect(
-      await clientToolHostAdapterConformanceFailures(
-        fakeHost({ flaw, versioned }),
-      ),
-    ).toContain(failure);
+  ])("reports a host that %s", async (flaw, expected, versioned) => {
+    const failures = await clientToolHostAdapterConformanceFailures(
+      fakeHost({ flaw, versioned }),
+    );
+    for (const failure of [expected].flat()) {
+      expect(failures).toContain(failure);
+    }
   });
 });
