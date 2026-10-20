@@ -153,3 +153,72 @@ pub(super) fn fake_host(host: ClientToolHostContext) -> HostRow {
         wait_note: wait_note(host),
     }
 }
+
+const SNAPSHOT: &str = "SNAPSHOT-TOKEN-7";
+
+/// The overlay's Word read tool as it stands; ERMAIN-1003 adjusts the row to
+/// what ships.
+pub(super) fn word_document() -> HostRow {
+    HostRow {
+        host: ClientToolHostContext::WordDocument,
+        device: "word-device",
+        identity: "pane-session-1",
+        platform: "word",
+        namespace: "word",
+        read_tool: "read_document_blocks",
+        read_parameters: json!({"type": "object", "properties": {
+            "snapshot": {"type": "string"},
+            "documentIdentity": {"type": "string"},
+            "target": {"type": "object"}},
+            "required": ["snapshot"]}),
+        requires_client_registration: true,
+        model_input: json!({
+            "snapshot": "forged",
+            "documentIdentity": "document-1",
+            "target": {"kind": "heading", "text": "Introduction"},
+        }),
+        turn_args: json!({}),
+        context: Some(ContextVersion {
+            arg: "document_snapshot",
+            input: "snapshot",
+            value: SNAPSHOT,
+        }),
+        part: ("$.target.text", "Introduction"),
+        freshness: json!({
+            "context_ref": SNAPSHOT,
+            "capturedAt": "2026-10-20T10:00:00Z",
+            "changes": "none",
+            "counts": counts(),
+        }),
+        wait_note: wait_note(ClientToolHostContext::WordDocument),
+    }
+}
+
+/// The overlay's Outlook availability read as it stands; ERMAIN-1006 adjusts
+/// the row to what ships.
+pub(super) fn outlook_mailbox() -> HostRow {
+    HostRow {
+        host: ClientToolHostContext::OutlookMailbox,
+        device: "outlook-device",
+        identity: "mailbox-digest-1",
+        platform: "outlook",
+        namespace: "outlook",
+        read_tool: "fetch_availability",
+        read_parameters: json!({"type": "object", "properties": {
+            "lookahead_days": {"type": "integer", "minimum": 1, "maximum": 62},
+            "attendees": {"type": "array", "items": {"type": "string"}, "maxItems": 15},
+            "duration_minutes": {"type": "integer", "minimum": 5, "maximum": 1440}},
+            "additionalProperties": false}),
+        requires_client_registration: false,
+        model_input: json!({"lookahead_days": 7, "duration_minutes": 30}),
+        turn_args: json!({"now_iso": "2026-10-20T09:00:00+02:00", "timezone": "Europe/Berlin"}),
+        context: None,
+        part: ("$.lookahead_days", "7"),
+        freshness: json!({
+            "readAt": "2026-10-20T10:00:00Z",
+            "changes": "none",
+            "counts": counts(),
+        }),
+        wait_note: wait_note(ClientToolHostContext::OutlookMailbox),
+    }
+}
