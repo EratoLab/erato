@@ -3803,7 +3803,7 @@ msgid "officeAddin.word.comments.askAgainNote"
 msgstr "Ihre Anfrage steht wieder im Nachrichtenfeld: Senden Sie sie erneut, um mit den aktuellen Kommentaren zu arbeiten."
 
 #. js-lingui-explicit-id
-#: src/word/components/WordCommentChip.tsx
+#: src/word/utils/wordCommentChips.ts
 msgid "officeAddin.word.comments.atCursorMany"
 msgstr "{count, plural, one {Ihr Cursor steht in # Kommentar} other {Ihr Cursor steht in # Kommentaren}}"
 
@@ -3856,29 +3856,30 @@ msgid "officeAddin.word.comments.attribution.youNamed"
 msgstr "Ihnen ({0})"
 
 #. js-lingui-explicit-id
-#: src/word/components/WordChatInput.tsx
+#: src/word/utils/wordCommentChips.ts
+#: src/word/utils/wordComposerNotice.ts
 msgid "officeAddin.word.comments.blocked.chooseComment"
 msgstr "Ihr Cursor steht in mehr als einem Kommentar, daher weiß Erato nicht, welchen Sie meinen."
 
 #. js-lingui-explicit-id
-#: src/word/components/WordChatInput.tsx
-#: src/word/components/WordCommentChip.tsx
+#: src/word/utils/wordCommentChips.ts
+#: src/word/utils/wordComposerNotice.ts
 msgid "officeAddin.word.comments.blocked.pickedGone"
 msgstr "Der von Ihnen gewählte Kommentar ist nicht mehr im Dokument."
 
 #. js-lingui-explicit-id
-#: src/word/components/WordChatInput.tsx
 #: src/word/components/WordCommentPicker.tsx
+#: src/word/utils/wordComposerNotice.ts
 msgid "officeAddin.word.comments.blocked.readFailed"
 msgstr "Erato konnte die Kommentare in Word nicht lesen."
 
 #. js-lingui-explicit-id
-#: src/word/components/WordCommentChip.tsx
+#: src/word/utils/wordCommentText.ts
 msgid "officeAddin.word.comments.changeDefault"
 msgstr "Standard ändern"
 
 #. js-lingui-explicit-id
-#: src/word/components/WordCommentChip.tsx
+#: src/word/utils/wordCommentText.ts
 msgid "officeAddin.word.comments.choose"
 msgstr "Kommentar wählen…"
 
@@ -3968,57 +3969,57 @@ msgid "officeAddin.word.comments.copyMode"
 msgstr "Erato kann Kommentare in dieser Word-Version gerade nicht ändern. Kopieren Sie jeden Kommentar und fügen Sie ihn selbst in Word ein."
 
 #. js-lingui-explicit-id
-#: src/word/components/WordCommentCoverage.tsx
+#: src/word/utils/wordCommentCoverage.ts
 msgid "officeAddin.word.comments.coverage.emails"
 msgstr "E-Mail-Adressen der Kommentarautoren werden nie gesendet."
 
 #. js-lingui-explicit-id
-#: src/word/components/WordCommentCoverage.tsx
+#: src/word/utils/wordCommentCoverage.ts
 msgid "officeAddin.word.comments.coverage.nearbyDocument"
 msgstr "Wenn Ihre Frage es erfordert, kann Erato die übrigen Kommentare im Dokument lesen."
 
 #. js-lingui-explicit-id
-#: src/word/components/WordCommentCoverage.tsx
+#: src/word/utils/wordCommentCoverage.ts
 msgid "officeAddin.word.comments.coverage.nearbyNear"
 msgstr "Wenn Ihre Frage es erfordert, kann Erato bis zu {limit} Kommentare oberhalb und {limit} unterhalb Ihrer Auswahl lesen."
 
 #. js-lingui-explicit-id
-#: src/word/components/WordCommentCoverage.tsx
+#: src/word/utils/wordCommentCoverage.ts
 msgid "officeAddin.word.comments.coverage.resolved"
 msgstr "Erledigte Kommentare werden nur gesendet, wenn sie in Ihrer Auswahl liegen oder Sie danach fragen."
 
 #. js-lingui-explicit-id
-#: src/word/components/WordCommentCoverage.tsx
+#: src/word/utils/wordCommentCoverage.ts
 msgid "officeAddin.word.comments.coverage.resolvedMap"
 msgstr "Die Liste enthält auch erledigte Kommentare, jeweils mit ihrem Anfang."
 
 #. js-lingui-explicit-id
-#: src/word/components/WordCommentCoverage.tsx
+#: src/word/utils/wordCommentCoverage.ts
 msgid "officeAddin.word.comments.coverage.rest"
 msgstr "{rest, plural, one {# weiterer Kommentar wird nicht gesendet.} other {# weitere Kommentare werden nicht gesendet.}}"
 
 #. js-lingui-explicit-id
-#: src/word/components/WordCommentCoverage.tsx
+#: src/word/utils/wordCommentCoverage.ts
 msgid "officeAddin.word.comments.coverage.sentMap"
 msgstr "{threads, plural, one {Eine Liste des Kommentars im Dokument: Autor, Stelle, Status und Anfang.} other {Eine Liste der # Kommentare im Dokument: jeweils Autor, Stelle, Status und Anfang.}}"
 
 #. js-lingui-explicit-id
-#: src/word/components/WordCommentCoverage.tsx
+#: src/word/utils/wordCommentCoverage.ts
 msgid "officeAddin.word.comments.coverage.sentOpen"
 msgstr "{threads, plural, one {Der offene Kommentar im Dokument mit seinen Antworten.} other {Die # offenen Kommentare im Dokument mit ihren Antworten.}}"
 
 #. js-lingui-explicit-id
-#: src/word/components/WordCommentCoverage.tsx
+#: src/word/utils/wordCommentCoverage.ts
 msgid "officeAddin.word.comments.coverage.sentSelection"
 msgstr "{threads, plural, one {Der Kommentar in Ihrer Auswahl mit seinen Antworten.} other {Die # Kommentare in Ihrer Auswahl mit ihren Antworten.}}"
 
 #. js-lingui-explicit-id
-#: src/word/components/WordCommentCoverage.tsx
+#: src/word/utils/wordCommentCoverage.ts
 msgid "officeAddin.word.comments.coverage.sentThread"
 msgstr "Der Kommentar von {author} mit seinen Antworten."
 
 #. js-lingui-explicit-id
-#: src/word/components/WordCommentCoverage.tsx
+#: src/word/utils/wordCommentCoverage.ts
 msgid "officeAddin.word.comments.coverage.trigger"
 msgstr "Was gesendet wird"
 
@@ -4034,7 +4035,7 @@ msgid "officeAddin.word.comments.deleteReplies"
 msgstr "{0, plural, one {Löscht auch # Antwort von {authors}.} other {Löscht auch # Antworten von {authors}.}}"
 
 #. js-lingui-explicit-id
-#: src/word/components/WordCommentChip.tsx
+#: src/word/utils/wordCommentText.ts
 msgid "officeAddin.word.comments.dismissPick"
 msgstr "Gewählten Kommentar entfernen"
 
@@ -4049,14 +4050,14 @@ msgid "officeAddin.word.comments.expired"
 msgstr "Diese Kommentaränderungen gehören zu einer früheren Sitzung dieses Bereichs und können nicht mehr angewendet werden. Fragen Sie erneut, um einen neuen Vorschlag zu erhalten."
 
 #. js-lingui-explicit-id
-#: src/word/components/WordChatInput.tsx
+#: src/word/utils/wordCommentChips.ts
 msgid "officeAddin.word.comments.includeOpen"
 msgstr "Offene Kommentare einbeziehen"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordCommentChip.tsx
-msgid "officeAddin.word.comments.inSelection"
-msgstr "{count, plural, one {# Kommentar in der Auswahl} other {# Kommentare in der Auswahl}}"
+#~ msgid "officeAddin.word.comments.inSelection"
+#~ msgstr "{count, plural, one {# Kommentar in der Auswahl} other {# Kommentare in der Auswahl}}"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordCommentChangesCard.tsx
@@ -4070,8 +4071,8 @@ msgstr "Behalten"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordCommentChip.tsx
-msgid "officeAddin.word.comments.mapListed"
-msgstr "{threads, plural, one {# Kommentar wird mit dem Dokument aufgelistet} other {# Kommentare werden mit dem Dokument aufgelistet}}"
+#~ msgid "officeAddin.word.comments.mapListed"
+#~ msgstr "{threads, plural, one {# Kommentar wird mit dem Dokument aufgelistet} other {# Kommentare werden mit dem Dokument aufgelistet}}"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordCommentChangesCard.tsx
@@ -4144,7 +4145,7 @@ msgid "officeAddin.word.comments.picker.refresh"
 msgstr "Aktualisieren"
 
 #. js-lingui-explicit-id
-#: src/word/components/WordCommentPicker.tsx
+#: src/word/utils/wordCommentText.ts
 msgid "officeAddin.word.comments.picker.replies"
 msgstr "{replies, plural, =0 {keine Antworten} one {# Antwort} other {# Antworten}}"
 
@@ -4174,17 +4175,17 @@ msgid "officeAddin.word.comments.picker.sortDocument"
 msgstr "Reihenfolge im Dokument"
 
 #. js-lingui-explicit-id
-#: src/word/components/WordCommentPicker.tsx
+#: src/word/utils/wordCommentText.ts
 msgid "officeAddin.word.comments.picker.statusOpen"
 msgstr "Offen"
 
 #. js-lingui-explicit-id
-#: src/word/components/WordCommentPicker.tsx
+#: src/word/utils/wordCommentText.ts
 msgid "officeAddin.word.comments.picker.statusResolved"
 msgstr "Erledigt"
 
 #. js-lingui-explicit-id
-#: src/word/components/WordCommentPicker.tsx
+#: src/word/utils/wordCommentText.ts
 msgid "officeAddin.word.comments.picker.timeUnknown"
 msgstr "Zeit unbekannt"
 
@@ -4214,7 +4215,12 @@ msgid "officeAddin.word.comments.preparing"
 msgstr "Kommentaränderungen werden vorbereitet…"
 
 #. js-lingui-explicit-id
-#: src/word/components/WordCommentPicker.tsx
+#: src/word/utils/wordCommentText.ts
+msgid "officeAddin.word.comments.readingCount"
+msgstr "{done} von {total}"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordCommentText.ts
 msgid "officeAddin.word.comments.readingProgress"
 msgstr "Kommentare werden gelesen… {done} von {total}"
 
@@ -4262,7 +4268,7 @@ msgid "officeAddin.word.comments.revertWarning"
 msgstr "Zurücksetzen, was Erato hier getan hat? Kommentare oder Antworten, die seitdem jemand geändert hat, bleiben unberührt. Gelöschte Kommentare lassen sich nicht wiederherstellen."
 
 #. js-lingui-explicit-id
-#: src/word/components/WordCommentChip.tsx
+#: src/word/utils/wordCommentText.ts
 msgid "officeAddin.word.comments.sendWithout"
 msgstr "Ohne Kommentare senden"
 
@@ -4307,12 +4313,12 @@ msgid "officeAddin.word.comments.status.unverified"
 msgstr "Geschrieben, aber nicht bestätigt. Prüfen Sie das Dokument, bevor Sie es erneut versuchen."
 
 #. js-lingui-explicit-id
-#: src/word/components/WordCommentChip.tsx
+#: src/word/utils/wordCommentText.ts
 msgid "officeAddin.word.comments.switchToComment"
 msgstr "Stattdessen mit dem Kommentar von {author} arbeiten"
 
 #. js-lingui-explicit-id
-#: src/word/components/WordCommentChip.tsx
+#: src/word/utils/wordCommentText.ts
 msgid "officeAddin.word.comments.switchToPassage"
 msgstr "Stattdessen den ausgewählten Text verwenden"
 
@@ -4329,27 +4335,27 @@ msgid "officeAddin.word.comments.target"
 msgstr "{0}: „{1}“"
 
 #. js-lingui-explicit-id
-#: src/word/components/WordCommentChip.tsx
+#: src/word/utils/wordCommentText.ts
 msgid "officeAddin.word.comments.thread.on"
 msgstr "zu „{shown}“"
 
 #. js-lingui-explicit-id
-#: src/word/components/WordCommentChip.tsx
+#: src/word/utils/wordCommentText.ts
 msgid "officeAddin.word.comments.thread.point"
 msgstr "an einer Stelle ohne markierten Text"
 
 #. js-lingui-explicit-id
-#: src/word/components/WordCommentChip.tsx
+#: src/word/utils/wordCommentText.ts
 msgid "officeAddin.word.comments.thread.title"
 msgstr "Kommentar von {author}"
 
 #. js-lingui-explicit-id
-#: src/word/components/WordCommentChip.tsx
+#: src/word/utils/wordCommentText.ts
 msgid "officeAddin.word.comments.thread.titleWithReplies"
 msgstr "{replies, plural, =0 {Kommentar von {author}} one {Kommentar von {author} · # Antwort} other {Kommentar von {author} · # Antworten}}"
 
 #. js-lingui-explicit-id
-#: src/word/components/WordCommentChip.tsx
+#: src/word/utils/wordCommentText.ts
 msgid "officeAddin.word.comments.thread.unknown"
 msgstr "Gewählter Kommentar"
 
@@ -4444,29 +4450,105 @@ msgid "officeAddin.word.comments.verb.resolve"
 msgstr "Den Thread als aufgelöst markieren"
 
 #. js-lingui-explicit-id
-#: src/word/components/WordCommentChip.tsx
+#: src/word/utils/wordCommentText.ts
 msgid "officeAddin.word.comments.why.chosen"
 msgstr "Von Ihnen gewählt"
 
 #. js-lingui-explicit-id
-#: src/word/components/WordCommentChip.tsx
+#: src/word/utils/wordCommentText.ts
 msgid "officeAddin.word.comments.why.cursor"
 msgstr "An Ihrem Cursor"
 
 #. js-lingui-explicit-id
-#: src/word/components/WordCommentChip.tsx
+#: src/word/utils/wordCommentText.ts
 msgid "officeAddin.word.comments.why.default"
 msgstr "Ihr Standard"
 
 #. js-lingui-explicit-id
-#: src/word/components/WordCommentChip.tsx
+#: src/word/utils/wordCommentText.ts
 msgid "officeAddin.word.comments.withAgain"
 msgstr "Kommentare einbeziehen"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordCommentChip.tsx
-msgid "officeAddin.word.comments.without"
-msgstr "Diese Nachricht wird ohne Kommentare gesendet."
+#~ msgid "officeAddin.word.comments.without"
+#~ msgstr "Diese Nachricht wird ohne Kommentare gesendet."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordChatInput.tsx
+#: src/word/components/WordCommentDetails.tsx
+msgid "officeAddin.word.context.comment.announce.chosen"
+msgstr "Kommentar von {author} ausgewählt."
+
+#. js-lingui-explicit-id
+#: src/word/hooks/useWordContextItems.tsx
+msgid "officeAddin.word.context.comment.announce.commentInstead"
+msgstr "Kommentar von {author} eingeschlossen. Er wird anstelle der Passage gesendet."
+
+#. js-lingui-explicit-id
+#: src/word/hooks/useWordContextItems.tsx
+msgid "officeAddin.word.context.comment.announce.passageInstead"
+msgstr "Auswahl eingeschlossen. Der Kommentar wird mit dieser Nachricht nicht gesendet."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordCommentChips.ts
+msgid "officeAddin.word.context.comment.announce.removed"
+msgstr "Kommentare für diese Nachricht entfernt. Mit + wieder einbeziehen"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordCommentChips.ts
+msgid "officeAddin.word.context.comment.atCursor"
+msgstr "Kommentare am Cursor"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordCommentChips.ts
+msgid "officeAddin.word.context.comment.attention"
+msgstr "{count, plural, one {Cursor steht in # Kommentar} other {Cursor steht in # Kommentaren}}"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentDetails.tsx
+msgid "officeAddin.word.context.comment.choices"
+msgstr "Kommentare am Cursor"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordCommentChips.ts
+msgid "officeAddin.word.context.comment.ifIncluded"
+msgstr "Falls einbezogen"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordCommentChips.ts
+msgid "officeAddin.word.context.comment.lifetime.message"
+msgstr "Das Weglassen der Kommentare gilt nur für die nächste Nachricht."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordCommentChips.ts
+msgid "officeAddin.word.context.comment.lifetime.pick"
+msgstr "Ein ausgewählter Kommentar bleibt, bis Sie einen anderen auswählen, ihn entfernen oder anderen Text markieren."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordCommentChips.ts
+msgid "officeAddin.word.context.comment.meta.chooseOne"
+msgstr "Einen auswählen"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordCommentChips.ts
+msgid "officeAddin.word.context.comment.meta.gone"
+msgstr "Nicht mehr im Dokument"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordCommentChips.ts
+msgid "officeAddin.word.context.comment.meta.offForMessage"
+msgstr "Für diese Nachricht aus"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordCommentChips.ts
+msgid "officeAddin.word.context.comment.spoken"
+msgstr "Kommentare"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordCommentChips.ts
+msgid "officeAddin.word.context.comment.spokenPicked"
+msgstr "Ausgewählter Kommentar"
 
 #. js-lingui-explicit-id
 #: src/word/hooks/useWordContextItems.tsx
@@ -4479,9 +4561,19 @@ msgid "officeAddin.word.context.document.announce.sentInstead"
 msgstr "Dokument eingeschlossen. Ihre Auswahl bleibt aus, bis sie sich ändert."
 
 #. js-lingui-explicit-id
+#: src/word/hooks/useWordContextItems.tsx
+msgid "officeAddin.word.context.document.announce.sentInsteadOfComment"
+msgstr "Dokument eingeschlossen. Der Kommentar wird mit dieser Nachricht nicht gesendet."
+
+#. js-lingui-explicit-id
 #: src/word/components/WordContextDetails.tsx
 msgid "officeAddin.word.context.document.commentsHeading"
 msgstr "Kommentare"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordContextChips.ts
+msgid "officeAddin.word.context.document.commentsOffNote"
+msgstr "Kommentare sind für diese Nachricht aus."
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordContextChips.ts
@@ -4519,6 +4611,7 @@ msgid "officeAddin.word.context.document.coverageHeading"
 msgstr "Umfang"
 
 #. js-lingui-explicit-id
+#: src/word/utils/wordCommentChips.ts
 #: src/word/utils/wordContextChips.ts
 msgid "officeAddin.word.context.document.coverageIfSentHeading"
 msgstr "Falls stattdessen gesendet"
@@ -4560,6 +4653,16 @@ msgstr "Seit dem letzten Senden geändert"
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordContextChips.ts
+msgid "officeAddin.word.context.document.meta.comments"
+msgstr "{comments, plural, one {# Kommentar} other {# Kommentare}}"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordContextChips.ts
+msgid "officeAddin.word.context.document.meta.commentsOff"
+msgstr "Kommentare aus"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordContextChips.ts
 msgid "officeAddin.word.context.document.meta.firstOf"
 msgstr "Erste {sent} von {total} ¶"
 
@@ -4584,11 +4687,13 @@ msgid "officeAddin.word.context.document.meta.readOnly"
 msgstr "Schreibgeschützt"
 
 #. js-lingui-explicit-id
+#: src/word/utils/wordCommentChips.ts
 #: src/word/utils/wordContextChips.ts
 msgid "officeAddin.word.context.document.meta.replacedByComment"
 msgstr "Durch Kommentar ersetzt"
 
 #. js-lingui-explicit-id
+#: src/word/utils/wordCommentChips.ts
 #: src/word/utils/wordContextChips.ts
 msgid "officeAddin.word.context.document.meta.replacedBySelection"
 msgstr "Durch Auswahl ersetzt"
@@ -4630,6 +4735,62 @@ msgstr "Word hat dieses Dokument nicht übergeben, daher wird es nicht gesendet.
 
 #. js-lingui-explicit-id
 #: src/word/hooks/useWordContextItems.tsx
+msgid "officeAddin.word.context.openComments.announce.sentInstead"
+msgstr "Offene Kommentare eingeschlossen. Der Kommentar wird mit dieser Nachricht nicht gesendet."
+
+#. js-lingui-explicit-id
+#: src/word/hooks/useWordContextItems.tsx
+msgid "officeAddin.word.context.openComments.announce.sentInsteadOfSelection"
+msgstr "Offene Kommentare eingeschlossen. Ihre Auswahl bleibt aus, bis sie sich ändert."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordCommentChips.ts
+msgid "officeAddin.word.context.openComments.commentInstead"
+msgstr "Statt der offenen Kommentare wird ein Kommentar an Ihrem Cursor oder einer, den Sie gewählt haben, gesendet."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordCommentChips.ts
+msgid "officeAddin.word.context.openComments.intro"
+msgstr "Wird angezeigt, solange das Dokument aus ist, damit Sie seine Kommentare auch ohne seinen Text senden können."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordCommentChips.ts
+msgid "officeAddin.word.context.openComments.label"
+msgstr "Offene Kommentare ({count})"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordCommentChips.ts
+msgid "officeAddin.word.context.openComments.lifetime"
+msgstr "Das Weglassen gilt für diesen Chat."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordCommentChips.ts
+msgid "officeAddin.word.context.openComments.meta.included"
+msgstr "Mit ihren Antworten"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordCommentChips.ts
+msgid "officeAddin.word.context.openComments.meta.notIncluded"
+msgstr "Nicht einbezogen"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordCommentChips.ts
+msgid "officeAddin.word.context.openComments.remove"
+msgstr "Offene Kommentare nicht einbeziehen"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordCommentChips.ts
+msgid "officeAddin.word.context.openComments.selectionInstead"
+msgstr "Ihre Auswahl wird statt der offenen Kommentare gesendet."
+
+#. js-lingui-explicit-id
+#: src/word/hooks/useWordContextItems.tsx
+#: src/word/utils/wordCommentChips.ts
+msgid "officeAddin.word.context.openComments.spoken"
+msgstr "Offene Kommentare"
+
+#. js-lingui-explicit-id
+#: src/word/hooks/useWordContextItems.tsx
 msgid "officeAddin.word.context.retry"
 msgstr "Erneut versuchen"
 
@@ -4642,6 +4803,11 @@ msgstr "Auswahl eingeschlossen. Sie wird statt des Dokuments gesendet."
 #: src/word/utils/wordContextChips.ts
 msgid "officeAddin.word.context.selection.commentInstead"
 msgstr "Statt dieser Passage wird ein Kommentar gesendet."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentDetails.tsx
+msgid "officeAddin.word.context.selection.commentsHeading"
+msgstr "Kommentare in dieser Passage"
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordContextChips.ts
@@ -4665,6 +4831,11 @@ msgstr "Ausgewählte Passage · {paragraphs} ¶"
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordContextChips.ts
+msgid "officeAddin.word.context.selection.meta.commentsOff"
+msgstr "Ausgewählt · {paragraphs} ¶ · Kommentare aus"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordContextChips.ts
 msgid "officeAddin.word.context.selection.meta.readFailed"
 msgstr "Nicht lesbar · erneut senden"
 
@@ -4685,6 +4856,11 @@ msgstr "Zu lang · nur der Anfang"
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordContextChips.ts
+msgid "officeAddin.word.context.selection.meta.withComments"
+msgstr "{commentCount, plural, one {Ausgewählt · {paragraphs} ¶ · # Kommentar} other {Ausgewählt · {paragraphs} ¶ · # Kommentare}}"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordContextChips.ts
 msgid "officeAddin.word.context.selection.paragraphs"
 msgstr "{count, plural, one {# Absatz} other {# Absätze}}"
 
@@ -4697,6 +4873,16 @@ msgstr "{count, plural, one {# Absatz · Von Erato nach „In Word anzeigen“ a
 #: src/word/components/WordContextDetails.tsx
 msgid "officeAddin.word.context.selection.quoteLabel"
 msgstr "Ausgewählter Text"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentDetails.tsx
+msgid "officeAddin.word.context.selection.sendComments"
+msgstr "{count, plural, one {Den Kommentar in dieser Passage senden} other {Die # Kommentare in dieser Passage senden}}"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentDetails.tsx
+msgid "officeAddin.word.context.selection.sendCommentsHint"
+msgstr "Aus gilt nur für diese Nachricht"
 
 #. js-lingui-explicit-id
 #: src/word/hooks/useWordContextItems.tsx
@@ -6233,7 +6419,7 @@ msgid "officeAddin.word.selection.rangeUnproven"
 msgstr "Word konnte die Passage in ihrem Absatz nicht genau finden. Es wurde nichts ersetzt."
 
 #. js-lingui-explicit-id
-#: src/word/components/WordChatInput.tsx
+#: src/word/utils/wordComposerNotice.ts
 #: src/word/utils/wordContextChips.ts
 msgid "officeAddin.word.selection.readFailed"
 msgstr "Erato konnte Ihre Auswahl in Word nicht lesen, daher wurde Ihre Nachricht nicht gesendet. Senden Sie sie erneut oder verwerfen Sie die Auswahl, um ohne sie zu senden."
@@ -6484,7 +6670,7 @@ msgstr "Word hat die Passage möglicherweise ersetzt, aber das Ergebnis konnte n
 #~ msgstr "Aktuelle Auswahl verwenden"
 
 #. js-lingui-explicit-id
-#: src/word/components/WordChatInput.tsx
+#: src/word/utils/wordComposerNotice.ts
 msgid "officeAddin.word.send.notIncluded"
 msgstr "Das Lesen des Dokuments hat zu lange gedauert, daher wurde diese Nachricht ohne das Dokument gesendet."
 
@@ -6494,13 +6680,13 @@ msgstr "Das Lesen des Dokuments hat zu lange gedauert, daher wurde diese Nachric
 #~ msgstr "Dokument wird vorbereitet…"
 
 #. js-lingui-explicit-id
-#: src/word/components/WordChatInput.tsx
+#: src/word/utils/wordComposerNotice.ts
 msgid "officeAddin.word.send.previousCapture"
 msgstr "Das Lesen des Dokuments hat zu lange gedauert, daher hat Erato eine frühere Kopie verwendet. Neueste Änderungen fehlen möglicherweise."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx
-#: src/word/components/WordCommentPicker.tsx
+#: src/word/utils/wordCommentText.ts
 msgid "officeAddin.word.send.readingComments"
 msgstr "Kommentare werden gelesen…"
 
@@ -6515,12 +6701,12 @@ msgid "officeAddin.word.send.readingSelection"
 msgstr "Auswahl wird gelesen…"
 
 #. js-lingui-explicit-id
-#: src/word/components/WordChatInput.tsx
+#: src/word/utils/wordComposerNotice.ts
 msgid "officeAddin.word.send.stillReading"
 msgstr "Word übergibt das Dokument noch."
 
 #. js-lingui-explicit-id
-#: src/word/components/WordChatInput.tsx
+#: src/word/utils/wordComposerNotice.ts
 msgid "officeAddin.word.send.withoutDocument"
 msgstr "Ohne Dokument senden"
 

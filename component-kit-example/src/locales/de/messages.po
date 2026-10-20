@@ -28,5 +28,15 @@ msgstr "Alle entfernen"
 
 #. js-lingui-explicit-id
 #: src/i18n/messages.ts
+msgid "componentKit.example.attachment.retry"
+msgstr "Transkription wiederholen"
+
+#. js-lingui-explicit-id
+#: src/i18n/messages.ts
+msgid "componentKit.example.attachment.retryNamed"
+msgstr "Transkription wiederholen: {filename}"
+
+#. js-lingui-explicit-id
+#: src/i18n/messages.ts
 msgid "componentKit.example.welcome"
 msgstr "Beispiel-Komponentenkit"

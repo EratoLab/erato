@@ -1591,6 +1591,86 @@ msgid "chat.attachments.toggle"
 msgstr "Przełącz załączniki"
 
 #. js-lingui-explicit-id
+#: src/components/ui/FileUpload/audioTranscriptionStatus.ts
+msgid "chat.audio.announce.failed"
+msgstr "{filename}: nie udało się transkrybować."
+
+#. js-lingui-explicit-id
+#: src/components/ui/FileUpload/audioTranscriptionStatus.ts
+msgid "chat.audio.announce.ready"
+msgstr "{filename}: transkrypcja gotowa."
+
+#. js-lingui-explicit-id
+#: src/components/ui/FileUpload/audioTranscriptionStatus.ts
+msgid "chat.audio.preview.pending"
+msgstr "Transkrypcja pojawi się tutaj, gdy będzie gotowa."
+
+#. js-lingui-explicit-id
+#: src/components/ui/FileUpload/audioTranscriptionStatus.ts
+msgid "chat.audio.retry"
+msgstr "Ponów transkrypcję"
+
+#. js-lingui-explicit-id
+#: src/components/ui/FileUpload/audioTranscriptionStatus.ts
+msgid "chat.audio.retrying"
+msgstr "Ponawianie…"
+
+#. js-lingui-explicit-id
+#: src/components/ui/FileUpload/audioTranscriptionStatus.ts
+msgid "chat.audio.retryNamed"
+msgstr "Ponów transkrypcję: {filename}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/FileUpload/audioTranscriptionStatus.ts
+msgid "chat.audio.status.canceled"
+msgstr "Transkrypcję anulowano"
+
+#. js-lingui-explicit-id
+#: src/components/ui/FileUpload/audioTranscriptionStatus.ts
+msgid "chat.audio.status.failed"
+msgstr "Nie udało się transkrybować"
+
+#. js-lingui-explicit-id
+#: src/components/ui/FileUpload/audioTranscriptionStatus.ts
+msgid "chat.audio.status.ready"
+msgstr "Transkrypcja gotowa"
+
+#. js-lingui-explicit-id
+#: src/components/ui/FileUpload/audioTranscriptionStatus.ts
+msgid "chat.audio.status.readyDuration"
+msgstr "Transkrypcja gotowa · {duration}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/FileUpload/audioTranscriptionStatus.ts
+msgid "chat.audio.status.recording"
+msgstr "Nagrywanie…"
+
+#. js-lingui-explicit-id
+#: src/components/ui/FileUpload/audioTranscriptionStatus.ts
+msgid "chat.audio.status.recordingDuration"
+msgstr "Nagrywanie · {duration}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/FileUpload/audioTranscriptionStatus.ts
+msgid "chat.audio.status.transcribing"
+msgstr "Transkrybowanie…"
+
+#. js-lingui-explicit-id
+#: src/components/ui/FileUpload/audioTranscriptionStatus.ts
+msgid "chat.audio.status.transcribingDuration"
+msgstr "Transkrybowanie · {duration}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/FileUpload/audioTranscriptionStatus.ts
+msgid "chat.audio.status.uploading"
+msgstr "Przesyłanie…"
+
+#. js-lingui-explicit-id
+#: src/components/ui/FileUpload/audioTranscriptionStatus.ts
+msgid "chat.audio.status.uploadingDuration"
+msgstr "Przesyłanie · {duration}"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatInput.tsx
 #: src/components/ui/Chat/CompactionSuggestion.tsx
 msgid "chat.compaction.action"
@@ -7855,8 +7935,8 @@ msgstr "Wybór urządzenia wejściowego audio nie jest obsługiwany w tej przegl
 #~ msgstr "Nagranie audio - Status: {0}"
 
 #: src/components/ui/Chat/ChatInput.tsx
-msgid "Audio recording - Status: {displayStatus}"
-msgstr "Nagranie audio - Status: {displayStatus}"
+#~ msgid "Audio recording - Status: {displayStatus}"
+#~ msgstr "Nagranie audio - Status: {displayStatus}"
 
 #: src/hooks/audio/useAudioDictationRecorder.ts
 #: src/hooks/audio/useAudioInputLevelPreview.ts
@@ -7965,8 +8045,8 @@ msgid "Cancel task"
 msgstr "Anuluj zadanie"
 
 #: src/components/ui/Chat/ChatInput.tsx
-msgid "Canceled"
-msgstr ""
+#~ msgid "Canceled"
+#~ msgstr ""
 
 #: src/components/ui/Trace/SidecarLocalTraceView.tsx
 msgid "Cancelled"
@@ -8061,8 +8141,8 @@ msgid "Collecting evidence on this device"
 msgstr "Zbieranie materiałów źródłowych na tym urządzeniu"
 
 #: src/components/ui/Chat/ChatInput.tsx
-msgid "Completed"
-msgstr ""
+#~ msgid "Completed"
+#~ msgstr ""
 
 #: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
 #~ msgid "Configuration"
@@ -8389,8 +8469,8 @@ msgstr "facets.<facet-id>.displayName"
 #~ msgstr "nie udało się"
 
 #: src/components/ui/Chat/ChatInput.tsx
-msgid "Failed"
-msgstr "Niepowodzenie"
+#~ msgid "Failed"
+#~ msgstr "Niepowodzenie"
 
 #: src/hooks/audio/useAudioDictationRecorder.ts
 msgid "Failed to complete audio dictation."
@@ -8841,8 +8921,8 @@ msgstr "Ostatnie czaty"
 #~ msgstr "Nagraj audio"
 
 #: src/components/ui/Chat/ChatInput.tsx
-msgid "Recording"
-msgstr "Nagrywanie"
+#~ msgid "Recording"
+#~ msgstr "Nagrywanie"
 
 #: src/components/ui/Chat/ChatInputAudioModeButton.tsx
 #~ msgid "Recording audio"
@@ -8905,12 +8985,12 @@ msgid "Resize sidebar"
 msgstr ""
 
 #: src/components/ui/Chat/ChatInput.tsx
-msgid "Retry transcription"
-msgstr "Ponów transkrypcję"
+#~ msgid "Retry transcription"
+#~ msgstr "Ponów transkrypcję"
 
 #: src/components/ui/Chat/ChatInput.tsx
-msgid "Retrying..."
-msgstr "Ponawianie..."
+#~ msgid "Retrying..."
+#~ msgstr "Ponawianie..."
 
 #: src/providers/LocalTaskCoordinator.tsx
 msgid "Review and choose evidence in the desktop app. Collection continues if this pane closes; uploading and cloud continuation wait until you return signed in."
@@ -9323,8 +9403,8 @@ msgstr ""
 #~ msgstr "ogółem"
 
 #: src/components/ui/Chat/ChatInput.tsx
-msgid "Transcribing"
-msgstr "Transkrybowanie"
+#~ msgid "Transcribing"
+#~ msgstr "Transkrybowanie"
 
 #: src/components/ui/Chat/ChatInput.tsx
 #: src/components/ui/FileUpload/AudioTranscriptExcerpt.tsx
@@ -9376,8 +9456,8 @@ msgstr ""
 #~ msgstr "Przesłane pliki"
 
 #: src/components/ui/Chat/ChatInput.tsx
-msgid "Uploading"
-msgstr "Przesyłanie"
+#~ msgid "Uploading"
+#~ msgstr "Przesyłanie"
 
 #: src/components/ui/FileUpload/FileUploadStates.tsx
 msgid "Uploading file"
