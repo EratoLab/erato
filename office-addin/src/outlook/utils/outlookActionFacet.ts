@@ -408,6 +408,13 @@ export interface OutlookSendPreview {
   facetId: string | null;
   draft: OutlookDraftDisposition;
   fingerprint: string;
+  /**
+   * "scheduling" when sticky scheduling holds the facet slot and ending it
+   * would change what the send carries: the scheduling mode chip reads this.
+   * Never for the neutral surface's ambient schedule facet, nor on an
+   * appointment, where ending changes nothing.
+   */
+  mode: "scheduling" | null;
 }
 
 /**
@@ -427,16 +434,30 @@ export function previewOutlookSend(
       ? fingerprint
       : lastSentDraft.sent
     : null;
-  const result = resolveOutlookActionFacet({
+  const facetInput = {
     ...rest,
     recipients,
     lastSentDraftFingerprint,
     nowIso: "",
     timezone: "",
-  });
+  };
+  const result = resolveOutlookActionFacet(facetInput);
+  const facetId = result.facet?.id ?? null;
+  const withoutScheduling =
+    facetId === OUTLOOK_SCHEDULE_FACET_ID && rest.schedulingThreadActive
+      ? resolveOutlookActionFacet({
+          ...facetInput,
+          schedulingThreadActive: false,
+        })
+      : null;
   return {
-    facetId: result.facet?.id ?? null,
+    facetId,
     draft: result.draft,
     fingerprint,
+    mode:
+      withoutScheduling &&
+      (withoutScheduling.facet?.id ?? null) !== OUTLOOK_SCHEDULE_FACET_ID
+        ? "scheduling"
+        : null,
   };
 }

@@ -821,3 +821,18 @@ export function isSchedulingThreadFresh(
   }
   return nowMs - createdMs <= SCHEDULING_THREAD_MAX_AGE_MS;
 }
+
+/**
+ * Sticky scheduling as the user left it: fresh, and not the signal the user
+ * ended. A newer signal, Erato reading the calendar again, turns it back on.
+ */
+export function isStickySchedulingOn(
+  lastSignalAtIso: string | null,
+  endedSignalAtIso: string | null,
+  nowMs: number,
+): boolean {
+  return (
+    isSchedulingThreadFresh(lastSignalAtIso, nowMs) &&
+    lastSignalAtIso !== endedSignalAtIso
+  );
+}

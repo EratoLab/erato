@@ -12,6 +12,7 @@ import type { OutlookSelectedConversation } from "../../sessionPolicy";
 import type { OutlookMessageFetcher } from "../../utils/fetchOutlookMessage";
 import type { ParsedEmail } from "../../utils/parsedEmail";
 import type { ParsedThread, ThreadMessage } from "../../utils/parsedThread";
+import type { OutlookSendFilesRequest } from "../OutlookEmailSourceProvider";
 
 // The provider only needs these three hooks; mocking them keeps the test off
 // Office.js / MSAL / the network and lets us inject a fixed thread. Note
@@ -20,6 +21,17 @@ import type { ParsedThread, ThreadMessage } from "../../utils/parsedThread";
 const mockUseCurrentThread = vi.fn();
 const mockUseOutlookMailItem = vi.fn();
 const mockUseOutlookMessageFetcher = vi.fn();
+const graph = vi.hoisted(() => ({
+  value: null as null | {
+    signInCount: number;
+    signInNeeded: "sign-in" | "consent" | null;
+    signIn: () => Promise<void>;
+  },
+}));
+
+vi.mock("../EntraGraphTokenProvider", () => ({
+  useGraphTokenOptional: () => graph.value,
+}));
 
 vi.mock("../OutlookMailItemProvider", () => ({
   useOutlookMailItem: () => mockUseOutlookMailItem(),
@@ -130,6 +142,23 @@ async function makeThreadWithForward(
 
 type ContextValue = ReturnType<typeof useOutlookEmailSource>;
 
+/** A plan that sends the thread and every drop, as a fresh chat does. */
+const SEND_ALL: OutlookSendFilesRequest = {
+  thread: { kind: "sent", included: 1, total: 1 },
+  uploadThread: true,
+  composeAttachmentIds: [],
+};
+/** A plan whose thread chip says the trim failed: the send is refused. */
+const TRIM_REFUSED: OutlookSendFilesRequest = {
+  thread: { kind: "error", why: "trim" },
+  uploadThread: false,
+  composeAttachmentIds: [],
+};
+
+async function sendFiles(plan: OutlookSendFilesRequest = SEND_ALL) {
+  return (await captured!.resolveSelectedFilesForSend(plan)).files;
+}
+
 let captured: ContextValue | null = null;
 /** `isDropResolutionStale` per committed render, oldest first. */
 let dropStaleHistory: boolean[] = [];
@@ -153,6 +182,7 @@ function renderProvider() {
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  graph.value = null;
 });
 
 describe("OutlookEmailSourceProvider — current-thread emailBodyFile", () => {
@@ -205,7 +235,7 @@ describe("OutlookEmailSourceProvider — current-thread emailBodyFile", () => {
 
     let sent: File[] = [];
     await act(async () => {
-      sent = await captured!.resolveSelectedFilesForSend();
+      sent = await sendFiles();
     });
     expect(sent).toEqual([trimmed]);
   });
@@ -221,7 +251,7 @@ describe("OutlookEmailSourceProvider — current-thread emailBodyFile", () => {
       isLoadingSharedContext: false,
     });
     renderProvider();
-    const [file] = await captured!.resolveSelectedFilesForSend();
+    const [file] = await sendFiles();
     expect(captured!.getFileProvenance(file)).toEqual({
       version: 1,
       origins: [
@@ -261,9 +291,17 @@ describe("OutlookEmailSourceProvider — current-thread emailBodyFile", () => {
     // The thread card stays so the refusal has something to point at.
     expect(captured!.stagedEmails).toHaveLength(1);
     expect(captured!.hasSelectedEmailSource).toBe(true);
-    await expect(captured!.resolveSelectedFilesForSend()).rejects.toBe(
-      captured!.threadTrimError,
-    );
+    await expect(
+      captured!.resolveSelectedFilesForSend(TRIM_REFUSED),
+    ).rejects.toBe(captured!.threadTrimError);
+    // A send that leaves the thread out is not refused for it.
+    await expect(
+      sendFiles({
+        thread: { kind: "off", retry: false },
+        uploadThread: false,
+        composeAttachmentIds: [],
+      }),
+    ).resolves.toEqual([]);
 
     act(() => {
       captured!.restoreStagedEmailAttachment("<m1@x>", "<m1@x>:fwd/att-0");
@@ -297,7 +335,7 @@ describe("OutlookEmailSourceProvider — current-thread emailBodyFile", () => {
 
     let sent: File[] = [];
     await act(async () => {
-      sent = await captured!.resolveSelectedFilesForSend();
+      sent = await sendFiles();
     });
 
     // The invariant the whole refactor exists for: the token estimate measures
@@ -323,7 +361,7 @@ describe("OutlookEmailSourceProvider — current-thread emailBodyFile", () => {
 
     let sent: File[] = [];
     await act(async () => {
-      sent = await captured!.resolveSelectedFilesForSend();
+      sent = await sendFiles();
     });
 
     // The deferred recompute does not break the invariant: what we upload is
@@ -348,7 +386,7 @@ describe("OutlookEmailSourceProvider — current-thread emailBodyFile", () => {
 
     let sent: File[] = [];
     await act(async () => {
-      sent = await captured!.resolveSelectedFilesForSend();
+      sent = await sendFiles();
     });
     expect(sent).toHaveLength(0);
   });
@@ -638,7 +676,7 @@ describe("OutlookEmailSourceProvider — appointment isolation", () => {
 
     let files: File[] = [];
     await act(async () => {
-      files = await captured!.resolveSelectedFilesForSend();
+      files = await sendFiles();
     });
     expect(files).toEqual([]);
     expect(getAttachmentFile).not.toHaveBeenCalled();
@@ -922,7 +960,7 @@ describe("OutlookEmailSourceProvider — dropped email resolution", () => {
 
     let sent: File[] = [];
     await act(async () => {
-      sent = await captured!.resolveSelectedFilesForSend();
+      sent = await sendFiles();
     });
 
     expect(sent).toHaveLength(1);
@@ -952,7 +990,7 @@ describe("OutlookEmailSourceProvider — dropped email resolution", () => {
     expect(captured!.isDropResolutionStale).toBe(false);
   });
 
-  it("drops a dismissed body from the resolved files without an error", async () => {
+  it("leaves a drop's body to its chip: restoring the thread never touches a drop", async () => {
     primeDropOnly();
     const parsed = await parseDrop();
     renderProvider();
@@ -961,29 +999,18 @@ describe("OutlookEmailSourceProvider — dropped email resolution", () => {
       captured!.addDroppedEmail(parsed);
       captured!.dismissStagedEmailBody("<drop-1@x>");
     });
-
     expect(captured!.resolvedDrops).toEqual([
       { key: "<drop-1@x>", file: null, size: 0 },
     ]);
-    expect(captured!.resolvedFiles).toEqual([]);
-    expect(captured!.resolvedParts).toEqual([]);
-    expect(captured!.resolvedTotalBytes).toBe(0);
-    // The "+" menu keeps its restore row on the original file.
-    expect(captured!.emailBodyFile).toBe(parsed.rawEmlFile);
-    expect(captured!.isEmailBodyDismissed).toBe(true);
 
     act(() => {
       captured!.restoreEmailBody();
     });
-    expect(captured!.isEmailBodyDismissed).toBe(false);
-    expect(captured!.resolvedFiles).toEqual([parsed.rawEmlFile]);
-    act(() => {
-      captured!.dismissStagedEmailBody("<drop-1@x>");
-    });
 
+    expect(captured!.resolvedFiles).toEqual([]);
     let sent: File[] = [];
     await act(async () => {
-      sent = await captured!.resolveSelectedFilesForSend();
+      sent = await sendFiles();
     });
     expect(sent).toEqual([]);
   });
@@ -1008,9 +1035,7 @@ describe("OutlookEmailSourceProvider — dropped email resolution", () => {
     expect(captured!.resolvedParts).toEqual([]);
     expect(captured!.resolvedTotalBytes).toBe(0);
 
-    await expect(captured!.resolveSelectedFilesForSend()).rejects.toBe(
-      failed.error,
-    );
+    await expect(sendFiles()).rejects.toBe(failed.error);
 
     // Restoring the attachment clears the error and ships the original.
     act(() => {
@@ -1138,7 +1163,7 @@ describe("OutlookEmailSourceProvider — policy exclusions", () => {
 
     let sent: File[] = [];
     await act(async () => {
-      sent = await captured!.resolveSelectedFilesForSend();
+      sent = await sendFiles();
     });
     expect(sent).toEqual([withoutDeck]);
 
@@ -1146,5 +1171,279 @@ describe("OutlookEmailSourceProvider — policy exclusions", () => {
       captured!.setPolicyExcludedAttachmentIds("<m2@x>", []);
     });
     expect(await captured!.emailBodyFile!.text()).toContain("Deck.pdf");
+  });
+});
+
+describe("OutlookEmailSourceProvider — sending what the plan says", () => {
+  function primeRead(thread: ParsedThread | null = makeThread()) {
+    mockUseOutlookMailItem.mockReturnValue({
+      itemIdentity: "id-1",
+      mailItem: {
+        itemId: "item-1",
+        conversationId: "conv-1",
+        internetMessageId: "<m2@x>",
+        subject: "Project kickoff",
+        isComposeMode: false,
+      },
+      selectedConversation: null,
+      attachments: [],
+      isLoadingAttachments: false,
+      getAttachmentFile: vi.fn(),
+    });
+    mockUseCurrentThread.mockReturnValue({
+      thread,
+      isLoading: false,
+      error: false,
+      retry: vi.fn(),
+      errorCount: 0,
+    });
+    mockUseOutlookMessageFetcher.mockReturnValue({
+      fetcher: null,
+      unavailableReason: "unsupported-mode",
+    });
+  }
+
+  it("leaves the thread file out when the plan does not send it", async () => {
+    primeRead();
+    renderProvider();
+    expect(captured!.threadStatus).toBe("ready");
+    expect(captured!.threadFile).toBe(captured!.emailBodyFile);
+
+    let sent: File[] = [];
+    await act(async () => {
+      sent = await sendFiles({
+        thread: { kind: "follow-up" },
+        uploadThread: false,
+        composeAttachmentIds: [],
+      });
+    });
+    expect(sent).toEqual([]);
+  });
+
+  it("reads only the planned attachments and reports the ones that resolved", async () => {
+    const files: Record<string, File> = {
+      a1: new File(["one"], "one.pdf"),
+      a2: new File(["two"], "two.pdf"),
+    };
+    const getAttachmentFile = vi.fn(async (id: string) => {
+      if (id === "a3") throw new Error("gone");
+      return files[id];
+    });
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    mockUseOutlookMailItem.mockReturnValue({
+      itemIdentity: "draft-1",
+      mailItem: {
+        itemId: null,
+        conversationId: null,
+        internetMessageId: null,
+        subject: "Contract",
+        isComposeMode: true,
+      },
+      selectedConversation: null,
+      attachments: [
+        {
+          id: "a1",
+          name: "one.pdf",
+          size: 3,
+          isInline: false,
+          attachmentType: "file",
+          contentType: "application/pdf",
+        },
+        {
+          id: "a2",
+          name: "two.pdf",
+          size: 3,
+          isInline: false,
+          attachmentType: "file",
+          contentType: "application/pdf",
+        },
+        {
+          id: "a3",
+          name: "gone.pdf",
+          size: 3,
+          isInline: false,
+          attachmentType: "file",
+          contentType: "application/pdf",
+        },
+        {
+          id: "c1",
+          name: "cloud.docx",
+          size: 9,
+          isInline: false,
+          attachmentType: "cloud",
+          contentType: "",
+        },
+        {
+          id: "i1",
+          name: "logo.png",
+          size: 1,
+          isInline: true,
+          attachmentType: "file",
+          contentType: "image/png",
+        },
+      ],
+      isLoadingAttachments: false,
+      getAttachmentFile,
+    });
+    mockUseCurrentThread.mockReturnValue({
+      thread: null,
+      isLoading: false,
+      error: false,
+      retry: vi.fn(),
+      errorCount: 0,
+    });
+    mockUseOutlookMessageFetcher.mockReturnValue({
+      fetcher: null,
+      unavailableReason: "unsupported-mode",
+    });
+    renderProvider();
+
+    expect(captured!.threadStatus).toBe("none");
+    expect(captured!.itemAttachments).toEqual([
+      {
+        id: "a1",
+        name: "one.pdf",
+        size: 3,
+        contentType: "application/pdf",
+        cloud: false,
+      },
+      {
+        id: "a2",
+        name: "two.pdf",
+        size: 3,
+        contentType: "application/pdf",
+        cloud: false,
+      },
+      {
+        id: "a3",
+        name: "gone.pdf",
+        size: 3,
+        contentType: "application/pdf",
+        cloud: false,
+      },
+      { id: "c1", name: "cloud.docx", size: 9, contentType: "", cloud: true },
+    ]);
+
+    let result = { files: [] as File[], sentAttachmentIds: [] as string[] };
+    await act(async () => {
+      result = await captured!.resolveSelectedFilesForSend({
+        thread: { kind: "none" },
+        uploadThread: false,
+        composeAttachmentIds: ["a2", "a3", "c1"],
+      });
+    });
+
+    expect(result.files).toEqual([files.a2]);
+    // A file that did not resolve is never recorded as sent.
+    expect(result.sentAttachmentIds).toEqual(["a2"]);
+    expect(getAttachmentFile.mock.calls.map(([id]) => id)).toEqual([
+      "a2",
+      "a3",
+    ]);
+  });
+
+  it("reads a retry as loading until the thread answers again", () => {
+    primeRead(null);
+    const retry = vi.fn();
+    mockUseCurrentThread.mockReturnValue({
+      thread: null,
+      isLoading: false,
+      error: true,
+      retry,
+      errorCount: 1,
+    });
+    renderProvider();
+    expect(captured!.threadStatus).toBe("error");
+    expect(captured!.emailThreadLoadError).toBe(true);
+
+    act(() => captured!.retryEmailThread());
+
+    expect(retry).toHaveBeenCalledTimes(1);
+    expect(captured!.threadStatus).toBe("loading");
+    expect(captured!.isLoadingEmailBody).toBe(true);
+    expect(captured!.emailThreadLoadError).toBe(false);
+
+    // The refetch failed again before a render saw it load.
+    mockUseCurrentThread.mockReturnValue({
+      thread: null,
+      isLoading: false,
+      error: true,
+      retry,
+      errorCount: 2,
+    });
+    act(() => captured!.setPolicyExcludedAttachmentIds("rerender", ["x"]));
+
+    expect(captured!.threadStatus).toBe("error");
+  });
+
+  it("asks for the sign-in Graph needs while the thread failed, and loads after it", async () => {
+    primeRead(null);
+    let finishSignIn: (() => void) | null = null;
+    const signIn = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          finishSignIn = resolve;
+        }),
+    );
+    graph.value = { signInCount: 0, signInNeeded: "consent", signIn };
+    mockUseCurrentThread.mockReturnValue({
+      thread: null,
+      isLoading: false,
+      error: true,
+      retry: vi.fn(),
+      errorCount: 1,
+    });
+    renderProvider();
+    expect(captured!.emailThreadSignIn).toBe("consent");
+
+    act(() => void captured!.signInForEmail());
+
+    expect(signIn).toHaveBeenCalledTimes(1);
+    expect(captured!.signingIn).toBe(true);
+    expect(captured!.threadStatus).toBe("loading");
+    expect(captured!.emailThreadSignIn).toBeNull();
+
+    await act(async () => {
+      finishSignIn?.();
+    });
+    // The popup closed; the thread reloads through `signInCount`.
+    expect(captured!.signingIn).toBe(false);
+    expect(captured!.threadStatus).toBe("loading");
+
+    mockUseCurrentThread.mockReturnValue({
+      thread: makeThread(),
+      isLoading: false,
+      error: false,
+      retry: vi.fn(),
+      errorCount: 1,
+    });
+    graph.value = { signInCount: 1, signInNeeded: null, signIn };
+    act(() => captured!.setPolicyExcludedAttachmentIds("rerender", ["x"]));
+
+    expect(captured!.threadStatus).toBe("ready");
+  });
+
+  it("goes back to the sign-in when the popup is cancelled", async () => {
+    primeRead(null);
+    const signIn = vi.fn(async () => {
+      throw new Error("popup closed");
+    });
+    graph.value = { signInCount: 0, signInNeeded: "sign-in", signIn };
+    mockUseCurrentThread.mockReturnValue({
+      thread: null,
+      isLoading: false,
+      error: true,
+      retry: vi.fn(),
+      errorCount: 1,
+    });
+    renderProvider();
+
+    await act(async () => {
+      await captured!.signInForEmail();
+    });
+
+    expect(captured!.signingIn).toBe(false);
+    expect(captured!.threadStatus).toBe("error");
+    expect(captured!.emailThreadSignIn).toBe("sign-in");
   });
 });

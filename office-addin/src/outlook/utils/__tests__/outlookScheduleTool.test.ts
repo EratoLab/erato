@@ -8,6 +8,7 @@ import {
   containsSchedulingSignal,
   createFetchAvailabilityExecutor,
   isSchedulingThreadFresh,
+  isStickySchedulingOn,
   newestSchedulingSignalAt,
   parseAttendees,
   parseDurationMinutes,
@@ -963,5 +964,28 @@ describe("isSchedulingThreadFresh", () => {
 
   it("treats an unparseable timestamp as fresh (optimistic in-session message)", () => {
     expect(isSchedulingThreadFresh("not-a-date", NOW_MS)).toBe(true);
+  });
+});
+
+describe("isStickySchedulingOn", () => {
+  const NOW_MS = Date.parse("2026-07-03T12:00:00Z");
+  const signal = "2026-07-03T11:30:00Z";
+
+  it("holds a fresh signal until the user ends that very one", () => {
+    expect(isStickySchedulingOn(signal, null, NOW_MS)).toBe(true);
+    expect(isStickySchedulingOn(signal, signal, NOW_MS)).toBe(false);
+  });
+
+  it("turns on again with a newer signal", () => {
+    expect(isStickySchedulingOn("2026-07-03T11:50:00Z", signal, NOW_MS)).toBe(
+      true,
+    );
+  });
+
+  it("stays off once the signal is stale or absent", () => {
+    expect(isStickySchedulingOn("2026-07-02T12:00:00Z", null, NOW_MS)).toBe(
+      false,
+    );
+    expect(isStickySchedulingOn(null, null, NOW_MS)).toBe(false);
   });
 });

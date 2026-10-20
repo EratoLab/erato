@@ -1,5 +1,6 @@
 import { t } from "@lingui/core/macro";
 
+import { formatShortDate } from "./outlookContextFormat";
 import { isPolicyExcluded } from "./validateStagedPart";
 
 import type { ParsedAttachment, ParsedEmail } from "./parsedEmail";
@@ -22,16 +23,15 @@ export interface StagedDropEmail {
 }
 
 export interface DropEmailGroupOptions {
-  /** Size of the file the send would upload; the original's when unresolved. */
-  resolvedSize?: number;
-  /** Replaces the body row's size line while the resolution catches up. */
-  bodyMetaLabel?: string;
+  /**
+   * The size of the file the send would upload, formatted, or "Updating…"
+   * while the resolution catches up.
+   */
+  bodySizeLabel?: string;
   /** Verdicts by attachment id, at every level the card renders. */
   verdicts?: ReadonlyMap<string, StagedPartValidation>;
-  /** Group label when the email has no subject. */
+  /** Group label when the email has neither sender nor date nor subject. */
   fallbackSubject: string;
-  dismissBody: () => void;
-  restoreBody: () => void;
   dismissAttachment: (attachmentId: string) => void;
   restoreAttachment: (attachmentId: string) => void;
 }
@@ -77,12 +77,38 @@ export function judgeDropEmailParts(
 }
 
 /**
- * The card for one dropped email: its body, then one row per attachment. A
- * forwarded email that was expanded renders as a nested card whose header
- * toggles the whole forward and whose rows toggle the parts inside it — but
- * only when those parts can be cut out of the bytes; otherwise the rows are
- * read-only and the forward goes whole or not at all. Rows under an
- * unchecked forward stay live; the forward's removal covers them.
+ * Of a dropped email's attachments (forwards count as one), how many go: the
+ * drop chip's "2/3 attachments". A part policy leaves out does not.
+ */
+export function dropAttachmentCounts(
+  staged: StagedDropEmail,
+  verdicts: ReadonlyMap<string, StagedPartValidation> | undefined,
+): { kept: number; total: number } {
+  let kept = 0;
+  let total = 0;
+  for (const attachment of staged.parsed.attachments) {
+    if (isEmailBodyPart(attachment)) continue;
+    total += 1;
+    const verdict = verdicts?.get(attachment.id);
+    if (
+      !staged.dismissedAttachmentIds.has(attachment.id) &&
+      !(verdict && isPolicyExcluded(verdict))
+    ) {
+      kept += 1;
+    }
+  }
+  return { kept, total };
+}
+
+/**
+ * The checklist for one dropped email's detail: its body, which always goes
+ * and so is read-only (the chip's (x) removes the email), then one row per
+ * attachment. A forwarded email that was expanded renders as a nested card
+ * whose header toggles the whole forward and whose rows toggle the parts
+ * inside it — but only when those parts can be cut out of the bytes;
+ * otherwise the rows are read-only and the forward goes whole or not at all.
+ * Rows under an unchecked forward stay live; the forward's removal covers
+ * them.
  */
 export function buildDropEmailGroup(
   staged: StagedDropEmail,
@@ -104,6 +130,10 @@ export function buildDropEmailGroup(
   const excluded = (validation: StagedPartValidation | undefined) =>
     !!validation && isPolicyExcluded(validation);
 
+  const emailLabel = t({
+    id: "officeAddin.chatInput.emailLabel",
+    message: "Email",
+  });
   items.push({
     kind: "selectableAttachment",
     id: `${key}:body`,
@@ -114,21 +144,20 @@ export function buildDropEmailGroup(
         id: "officeAddin.chatInput.emailBody",
         message: "Email body",
       }),
-      size: options.resolvedSize ?? parsed.rawEmlFile.size,
+      size: parsed.rawEmlFile.size,
     },
-    metaLabel: options.bodyMetaLabel,
-    selected: !staged.bodyDismissed,
-    onToggle: () => {
-      if (staged.bodyDismissed) {
-        options.restoreBody();
-      } else {
-        options.dismissBody();
-      }
-    },
-    labelOverride: t({
-      id: "officeAddin.chatInput.emailLabel",
-      message: "Email",
-    }),
+    metaLabel: [
+      emailLabel,
+      options.bodySizeLabel,
+      t({
+        id: "officeAddin.outlook.context.drop.bodyAlwaysSent",
+        message: "Always sent",
+      }),
+    ]
+      .filter((part): part is string => Boolean(part))
+      .join(" · "),
+    selected: true,
+    labelOverride: emailLabel,
   });
 
   for (const attachment of parsed.attachments) {
@@ -201,21 +230,21 @@ export function buildDropEmailGroup(
   return {
     id: `staged-email:${key}`,
     label:
+      senderAndDate(parsed) ||
       parsed.subject ||
       options.fallbackSubject ||
       t({
         id: "officeAddin.chatInput.emailFallback",
         message: "Email",
       }),
-    metaLabel: senderAndDate(parsed),
+    metaLabel: "",
     items,
-    collapsible: true,
-    defaultCollapsed: true,
   };
 }
 
-function senderAndDate(email: ParsedEmail): string {
+/** "Lena Hoffmann • 10/7/2026", in the app's language. */
+export function senderAndDate(email: ParsedEmail): string {
   const fromLabel = email.from ? email.from.name || email.from.address : "";
-  const dateLabel = email.date ? new Date(email.date).toLocaleDateString() : "";
+  const dateLabel = formatShortDate(email.date);
   return [fromLabel, dateLabel].filter((part) => part.length > 0).join(" • ");
 }

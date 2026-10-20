@@ -77,7 +77,7 @@ describe("useCurrentThread", () => {
         }),
       { wrapper: createWrapper() },
     );
-    expect(result.current).toEqual({
+    expect(result.current).toMatchObject({
       thread: null,
       isLoading: false,
       error: false,
@@ -91,7 +91,7 @@ describe("useCurrentThread", () => {
         }),
       { wrapper: createWrapper() },
     );
-    expect(result2.current).toEqual({
+    expect(result2.current).toMatchObject({
       thread: null,
       isLoading: false,
       error: false,
@@ -271,7 +271,7 @@ describe("useCurrentThread", () => {
     // The composer's send gate keys on this. "No backend" here would open
     // the composer with no thread attached for one host round-trip per
     // navigation.
-    expect(result.current).toEqual({
+    expect(result.current).toMatchObject({
       thread: null,
       isLoading: true,
       error: false,
@@ -372,5 +372,75 @@ describe("useCurrentThread", () => {
     });
     expect(fetch).toHaveBeenCalledTimes(2);
     expect(result.current.error).toBe(false);
+  });
+
+  it("reads a retry of a failed fetch as loading, then the thread", async () => {
+    type Fetch = NonNullable<Parameters<typeof useCurrentThread>[2]>;
+    let answer: ((value: Awaited<ReturnType<Fetch>>) => void) | null = null;
+    const fetch = vi
+      .fn<Fetch>()
+      .mockRejectedValueOnce(new Error("network down"))
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            answer = resolve;
+          }),
+      );
+    const consoleWarn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    const { result } = renderHook(
+      () => useCurrentThread("item-1", "conv-1", fetch),
+      { wrapper: createWrapper() },
+    );
+    await waitFor(() => expect(result.current.error).toBe(true));
+    const firstErrorCount = result.current.errorCount;
+    expect(firstErrorCount).toBe(1);
+
+    act(() => result.current.retry());
+
+    // The old failure is never read while the retry runs.
+    await waitFor(() => expect(result.current.isLoading).toBe(true));
+    expect(result.current.error).toBe(false);
+
+    await act(async () => {
+      answer?.({
+        messages: [
+          {
+            id: "m1",
+            internetMessageId: "<m1@x>",
+            subject: "Loaded on retry",
+            body: { contentType: "text", content: "body" },
+            receivedDateTime: "2026-03-01T10:00:00Z",
+            isDraft: false,
+          },
+        ],
+        state: "ok",
+      });
+    });
+    await waitFor(() =>
+      expect(result.current.thread?.subject).toBe("Loaded on retry"),
+    );
+    expect(result.current.isLoading).toBe(false);
+    expect(result.current.error).toBe(false);
+    consoleWarn.mockRestore();
+  });
+
+  it("counts a retry that fails again as a new failure", async () => {
+    type Fetch = NonNullable<Parameters<typeof useCurrentThread>[2]>;
+    const fetch = vi.fn<Fetch>().mockRejectedValue(new Error("still down"));
+    const consoleWarn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    const { result } = renderHook(
+      () => useCurrentThread("item-1", "conv-1", fetch),
+      { wrapper: createWrapper() },
+    );
+    await waitFor(() => expect(result.current.errorCount).toBe(1));
+
+    act(() => result.current.retry());
+
+    await waitFor(() => expect(result.current.errorCount).toBe(2));
+    expect(result.current.error).toBe(true);
+    expect(result.current.isLoading).toBe(false);
+    consoleWarn.mockRestore();
   });
 });

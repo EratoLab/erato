@@ -4,6 +4,7 @@ import {
   useCallback,
   useContext,
   useMemo,
+  useRef,
   useState,
 } from "react";
 
@@ -66,6 +67,18 @@ export interface GraphTokenContextValue {
    * Graph-backed query can retry it — nothing else ever invalidates one.
    */
   signInCount: number;
+  /**
+   * What the last silent acquire that raised the prompt needs, until an
+   * interactive sign-in succeeds: a sign-in, or a scope grant ("consent").
+   * Lets a surface that failed on it ask in place as well as through the
+   * prompt.
+   */
+  signInNeeded: "sign-in" | "consent" | null;
+  /**
+   * The prompt's action, for the scopes that last raised it. Rejects when the
+   * popup is cancelled or blocked, which leaves `signInNeeded` set.
+   */
+  signIn: () => Promise<void>;
 }
 
 const GraphTokenContext = createContext<GraphTokenContextValue | null>(null);
@@ -99,13 +112,18 @@ export function GraphTokenProvider({
 }) {
   const { redeemSessionForToken, lastRedeemedAtRef } = useSessionRedeem();
   const [signInCount, setSignInCount] = useState(0);
+  const [signInNeeded, setSignInNeeded] = useState<
+    "sign-in" | "consent" | null
+  >(null);
+  const promptedScopesRef = useRef<string[]>([]);
 
-  // Explicit, user-initiated interactive sign-in for Graph. Fired ONLY from the
-  // toast's "Sign in" action (a real click), never automatically.
+  // Explicit, user-initiated interactive sign-in for Graph. Fired ONLY from a
+  // real click (the toast's action or a surface's own), never automatically.
   const signInForGraph = useCallback(
     async (scopes: string[]): Promise<void> => {
       await source.acquireGraphToken(scopes, { allowInteraction: true });
       setSignInCount((count) => count + 1);
+      setSignInNeeded(null);
       toast.success({
         dedupeKey: prompt.dedupeKey,
         title: prompt.signedInTitle,
@@ -154,6 +172,8 @@ export function GraphTokenProvider({
           // to sign in.
           const consent =
             error.reason === "consent" ? prompt.consent : undefined;
+          promptedScopesRef.current = scopes;
+          setSignInNeeded(error.reason === "consent" ? "consent" : "sign-in");
           toast.warning({
             dedupeKey: prompt.dedupeKey,
             title: consent?.title ?? prompt.title,
@@ -188,9 +208,14 @@ export function GraphTokenProvider({
     ],
   );
 
+  const signIn = useCallback(
+    () => signInForGraph(promptedScopesRef.current),
+    [signInForGraph],
+  );
+
   const value = useMemo<GraphTokenContextValue>(
-    () => ({ acquireToken, signInCount }),
-    [acquireToken, signInCount],
+    () => ({ acquireToken, signInCount, signInNeeded, signIn }),
+    [acquireToken, signInCount, signInNeeded, signIn],
   );
 
   return (

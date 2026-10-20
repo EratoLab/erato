@@ -628,6 +628,62 @@ describe("previewOutlookSend", () => {
     expect(send.draft).toBe(state);
   });
 
+  describe("the scheduling mode", () => {
+    const sticky = { ...scheduleReady, schedulingThreadActive: true };
+
+    it("holds the review facet's slot, so ending it sends the draft again", () => {
+      const result = previewOutlookSend({ ...draft, ...sticky });
+      expect(result.facetId).toBe("outlook_schedule");
+      expect(result.mode).toBe("scheduling");
+      expect(previewOutlookSend({ ...draft, ...scheduleReady }).facetId).toBe(
+        "outlook_review_draft",
+      );
+    });
+
+    it("holds reply-from-read's slot in read mode", () => {
+      const read = {
+        ...preview,
+        isComposeMode: false,
+        isReadMode: true,
+        replyFromReadAvailable: true,
+      };
+      expect(previewOutlookSend({ ...read, ...sticky }).mode).toBe(
+        "scheduling",
+      );
+    });
+
+    it("never shows for the neutral surface's own schedule facet", () => {
+      const neutral = { ...preview, itemKind: null, isComposeMode: false };
+      const result = previewOutlookSend({ ...neutral, ...sticky });
+      expect(result.facetId).toBe("outlook_schedule");
+      expect(result.mode).toBeNull();
+    });
+
+    it("never shows on an appointment, nor without stickiness", () => {
+      expect(
+        previewOutlookSend({
+          ...draft,
+          ...sticky,
+          itemKind: "appointment",
+          appointmentContextAvailable: true,
+        }).mode,
+      ).toBeNull();
+      expect(
+        previewOutlookSend({ ...draft, ...scheduleReady }).mode,
+      ).toBeNull();
+      expect(previewOutlookSend(draft).mode).toBeNull();
+    });
+
+    it("shows where ending it drops the facet altogether", () => {
+      const unchanged = {
+        ...draft,
+        ...sticky,
+        lastSentDraft: { sent: "Hello", seen: "Hello" },
+      };
+      expect(previewOutlookSend(unchanged).mode).toBe("scheduling");
+    });
+  });
+
   it("re-includes a draft whose body changed since the send", () => {
     expect(
       previewOutlookSend({
