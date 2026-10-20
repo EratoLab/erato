@@ -69,8 +69,8 @@ export const WORD_PACKAGE_CAPTURE_TIMEOUT_MS = 45_000;
 
 /** How long after the pane loads, or after an import, Word's proofing pass (which tags each
  * paragraph with the language it detects) may still start. Word for Mac: 7–15 s after a document
- * opens or is imported (ERMAIN-974). Word PC: for the first document after Word starts, up to
- * 19.5 s after the pane loaded (ERMAIN-981); later documents are tagged before the pane loads. */
+ * opens or is imported (ERMAIN-974). Word PC: up to 19.5 s after the pane loaded, for the first
+ * document after Word starts and for long documents (ERMAIN-981). */
 export const WORD_PROOFING_WINDOW_MS = { Mac: 20_000, PC: 22_000 } as const;
 /** The pass tags a few paragraphs at a time, about a second apart at most. */
 const WORD_PROOFING_QUIET_MS = 3_000;
