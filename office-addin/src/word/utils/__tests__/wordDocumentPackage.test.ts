@@ -476,6 +476,21 @@ describe("Word for Mac's proofing pass", () => {
     expect(wordProofingComplete(withGlossary("", clean))).toBe(false);
   });
 
+  it("fingerprints two exports alike though Word rewrote the glossary's rsids", () => {
+    const exported = (glossary: string) =>
+      wordPackageFingerprint(
+        wordDocumentFileToOoxml(
+          wordDocumentOoxmlToFile(withGlossary("", glossary)),
+        ),
+      );
+    const rsids = (rsid: string) =>
+      `<w:rsids><w:rsidRoot w:val="00786A3F"/><w:rsid w:val="${rsid}"/></w:rsids>`;
+    expect(exported(rsids("00514891"))).toBe(exported(rsids("002C1862")));
+    expect(
+      exported(`<w:defaultTabStop w:val="1440"/>${rsids("002C1862")}`),
+    ).not.toBe(exported(rsids("002C1862")));
+  });
+
   it("tells Word's language tags apart from other changes", () => {
     const differ = (a: string, b: string) =>
       wordPackagesDifferInDetectedLanguageOnly({ ooxml: a }, { ooxml: b });

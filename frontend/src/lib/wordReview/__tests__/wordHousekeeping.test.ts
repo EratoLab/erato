@@ -193,6 +193,52 @@ describe("complete packages", () => {
   });
 });
 
+describe("glossary-rsids", () => {
+  // Two exports of one unedited document by Word for Mac (ERMAIN-974 drift-notes).
+  const rsids = (first: string) =>
+    `<w:rsids><w:rsidRoot w:val="00786A3F"/><w:rsid w:val="${first}"/><w:rsid w:val="00786A3F"/><w:rsid w:val="00DB43C7"/><w:rsid w:val="00ED083C"/></w:rsids>`;
+  const glossary = ({
+    body = "<w:p/>",
+    tabStop = "720",
+    revisions = rsids("002C1862"),
+    placeholder = "Enter the date here.",
+  } = {}) =>
+    pkg({ body }).replace(
+      "</pkg:package>",
+      part(
+        "/word/glossary/settings.xml",
+        `<w:settings xmlns:w="${W}"><w:view w:val="normal"/><w:defaultTabStop w:val="${tabStop}"/>${revisions}<w:themeFontLang w:val="en-DE"/><w:decimalSymbol w:val=","/></w:settings>`,
+      ) +
+        part(
+          "/word/glossary/document.xml",
+          `<w:glossaryDocument xmlns:w="${W}"><w:docParts><w:docPart><w:docPartPr><w:name w:val="D3D05F838BB4A54490E3EABEDBBDBC10"/><w:category><w:name w:val="General"/><w:gallery w:val="placeholder"/></w:category><w:types><w:type w:val="bbPlcHdr"/></w:types></w:docPartPr><w:docPartBody><w:p w:rsidR="00ED083C" w:rsidRDefault="00786A3F"><w:r><w:rPr><w:rStyle w:val="PlaceholderText"/></w:rPr><w:t>${placeholder}</w:t></w:r></w:p></w:docPartBody></w:docPart></w:docParts></w:glossaryDocument>`,
+        ) +
+        "</pkg:package>",
+    );
+  const fingerprint = (xml: string) =>
+    createWordXmlComparison(parse(xml)).fingerprint();
+
+  it("reads the glossary's settings alike whatever rsids an export gives them", () => {
+    expect(fingerprint(glossary({ revisions: rsids("00514891") }))).toBe(
+      fingerprint(glossary()),
+    );
+    expect(fingerprint(glossary({ revisions: "" }))).toBe(
+      fingerprint(glossary()),
+    );
+  });
+
+  it("still sees a change to the glossary's settings, its placeholder text or the body", () => {
+    const base = fingerprint(glossary());
+    expect(fingerprint(glossary({ tabStop: "1440" }))).not.toBe(base);
+    expect(fingerprint(glossary({ placeholder: "Pick a date." }))).not.toBe(
+      base,
+    );
+    expect(
+      fingerprint(glossary({ body: "<w:p><w:r><w:t>Later</w:t></w:r></w:p>" })),
+    ).not.toBe(base);
+  });
+});
+
 describe("proofing-language", () => {
   const tag = (val: string, extra = "") =>
     `<w:rPr><w:lang w:val="${val}"${extra}/></w:rPr>`;

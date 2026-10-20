@@ -9,7 +9,8 @@ export type WordHousekeepingId =
   | "theme-font-language"
   | "proofing-language"
   | "revision-id"
-  | "people-list";
+  | "people-list"
+  | "glossary-rsids";
 
 export interface WordHousekeepingEntry {
   id: WordHousekeepingId;
@@ -19,8 +20,8 @@ export interface WordHousekeepingEntry {
   /** The native run that showed Word changing it with nobody editing. */
   probe: string;
   /** "body-read": wherever a Body.getOoxml read is fingerprinted or compared; "written": a write's
-   * result, compared against the document it replaced. */
-  scope: "body-read" | "written";
+   * result, compared against the document it replaced; "any": every fingerprint and comparison. */
+  scope: "body-read" | "written" | "any";
 }
 
 /**
@@ -85,6 +86,16 @@ export const WORD_HOUSEKEEPING: readonly WordHousekeepingEntry[] = [
     probe:
       "ERMAIN-950 gate C3 (the person whose last comment went is dropped; Word PC and Word for Mac), C5 (the others reordered; Word PC), 2026-10-15",
     scope: "written",
+  },
+  {
+    id: "glossary-rsids",
+    element:
+      "w:rsids (w:rsidRoot and each w:rsid) of the glossary document, which holds content-control placeholder text",
+    part: "/word/glossary/settings.xml",
+    hosts: ["Word PC", "Word for Mac"],
+    probe:
+      "ERMAIN-974 drift-glossary, drift-notes (Word for Mac 16.113, 2026-10-14); ERMAIN-980 drift-glossary, drift-notes (Word for Mac 16.114, Word PC 16.0.20430, 2026-10-20): one w:rsid replaced by a new one on every export of an unedited document",
+    scope: "any",
   },
 ];
 
@@ -194,6 +205,15 @@ export function isWordInertTableLook(
   const mask = tableLookMask(look);
   return (
     mask !== undefined && UNSET_LOOKS.has(mask) && conditional(table) === false
+  );
+}
+
+/** glossary-rsids. */
+export function isWordGlossaryRsids(element: Element, part: string): boolean {
+  return (
+    part === "/word/glossary/settings.xml" &&
+    element.namespaceURI === W &&
+    element.localName === "rsids"
   );
 }
 
