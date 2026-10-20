@@ -70,6 +70,12 @@ interface ComposerContextItemBase {
   meta?: string;
   icon: ComposerContextIconName | (string & {});
   tone?: ComposerContextTone;
+  /**
+   * Which glyph a warning or error tone draws: the item's own icon (default),
+   * or the tone's mark, for a fact that changes what is sent, e.g. a passage
+   * cut to its beginning.
+   */
+  toneIcon?: "item" | "tone";
   /** Counts toward the token estimate while the item is included. */
   estimate?: File;
   /** Disables (x)/(+) only; the detail stays openable. */

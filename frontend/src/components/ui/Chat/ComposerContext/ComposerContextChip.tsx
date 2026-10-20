@@ -26,8 +26,21 @@ import type {
 
 export type ComposerContextControl = "remove" | "restore" | null;
 
-/** At the chip's 13px label size, 13 characters ("This document") are about 7em wide. */
-const SHORT_LABEL_CODE_POINTS = 13;
+/** At the chip's 13px label size, 13 Latin characters ("This document") are about 7em wide. */
+const SHORT_LABEL_WIDTH = 13;
+
+// East Asian wide and fullwidth characters take about twice a Latin letter's width.
+const WIDE_CHARACTER =
+  /[\u1100-\u115F\u2E80-\u303E\u3041-\u33FF\u3400-\u4DBF\u4E00-\u9FFF\uA000-\uA4CF\uAC00-\uD7A3\uF900-\uFAFF\uFE30-\uFE4F\uFF00-\uFF60\uFFE0-\uFFE6\u{20000}-\u{3FFFD}]/u;
+
+const isShortLabel = (label: string) => {
+  let width = 0;
+  for (const character of label) {
+    width += WIDE_CHARACTER.test(character) ? 2 : 1;
+    if (width > SHORT_LABEL_WIDTH) return false;
+  }
+  return true;
+};
 
 /**
  * Which control a chip draws, from its state alone: a suggested item offers
@@ -86,10 +99,7 @@ export const DefaultComposerContextChipFace = ({
         "shrink-[2] truncate text-[0.8125rem] leading-4",
         // A label narrower than the 7em floor would be padded out to it,
         // leaving a gap before the meta; it keeps its own width instead.
-        meta &&
-          ([...item.label].length <= SHORT_LABEL_CODE_POINTS
-            ? "shrink-0"
-            : "min-w-[7em]"),
+        meta && (isShortLabel(item.label) ? "shrink-0" : "min-w-[7em]"),
       )}
     >
       {item.label}
@@ -192,6 +202,7 @@ export const ComposerContextChip = ({
               icon={item.icon}
               state={item.state}
               tone={tone}
+              toneIcon={item.toneIcon}
             />
           }
         />
