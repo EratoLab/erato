@@ -25,7 +25,11 @@ describe("buildContinueStreamBody", () => {
         decision: "approve",
         approvalIds: ["call-a"],
       }),
-    ).toEqual({ message_id: "message-1", decision: "approve" });
+    ).toEqual({
+      message_id: "message-1",
+      decision: "approve",
+      shows_child_items: true,
+    });
   });
 
   it("covers every open item once a stop carries more than one", () => {
@@ -41,6 +45,7 @@ describe("buildContinueStreamBody", () => {
         { approval_id: "call-a", decision: "reject" },
         { approval_id: "call-b", decision: "reject" },
       ],
+      shows_child_items: true,
     });
   });
 
@@ -61,6 +66,7 @@ describe("buildContinueStreamBody", () => {
         { approval_id: "plan:0:0", decision: "approve" },
         { approval_id: "plan:0:1", decision: "reject" },
       ],
+      shows_child_items: true,
     });
   });
 
@@ -74,7 +80,11 @@ describe("buildContinueStreamBody", () => {
         approvalIds: ["plan:0:0"],
         itemDecisions: [{ approvalId: "plan:0:0", decision: "withdraw" }],
       }),
-    ).toEqual({ message_id: "message-1", decision: "withdraw" });
+    ).toEqual({
+      message_id: "message-1",
+      decision: "withdraw",
+      shows_child_items: true,
+    });
   });
 
   it("falls back to the legacy body for a row written before items existed", () => {
@@ -83,6 +93,10 @@ describe("buildContinueStreamBody", () => {
         messageId: "message-1",
         decision: "approve_always",
       }),
-    ).toEqual({ message_id: "message-1", decision: "approve_always" });
+    ).toEqual({
+      message_id: "message-1",
+      decision: "approve_always",
+      shows_child_items: true,
+    });
   });
 });

@@ -347,6 +347,7 @@ export { stagedItemPresentation } from "@/components/ui/Message/ApprovalDecision
 export { approvalItemsOf } from "@/components/ui/Message/approvalItems";
 export { approvalQueueOf } from "@/components/ui/Message/approvalItems";
 export { approvalStopState } from "@/components/ui/Message/approvalItems";
+export { isChildItem } from "@/components/ui/Message/approvalItems";
 export { itemAllowsAlways } from "@/components/ui/Message/approvalItems";
 export type { ApprovalItemPart } from "@/components/ui/Message/approvalItems";
 export type { ApprovalRequestSummary } from "@/components/ui/Message/approvalItems";

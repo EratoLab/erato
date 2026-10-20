@@ -1640,6 +1640,13 @@ export type ContinueStreamRequest = {
    * @format uuid
    */
   message_id: string;
+  /**
+   * Whether the client shows each task child an `mcp_tool` or `client_tool`
+   * part carries as an item of its own. Decisions on such a part are refused
+   * without it while a child is open: an older client shows only the turn's
+   * own call and would answer the children unseen.
+   */
+  shows_child_items?: boolean;
 };
 
 export type Coverage = "complete" | "partial" | "unavailable";

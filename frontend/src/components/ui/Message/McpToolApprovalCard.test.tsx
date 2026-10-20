@@ -483,6 +483,7 @@ describe("McpToolApprovalCard", () => {
           body: JSON.stringify({
             message_id: "message-1",
             decision: "reject_always",
+            shows_child_items: true,
           }),
         }),
       );
@@ -937,6 +938,7 @@ describe("McpToolApprovalCard", () => {
               { approval_id: "tool-call-1", decision: "approve" },
               { approval_id: "tool-call-2", decision: "approve" },
             ],
+            shows_child_items: true,
           }),
         }),
       );
@@ -979,6 +981,7 @@ describe("McpToolApprovalCard", () => {
           body: JSON.stringify({
             message_id: "message-1",
             decision: "approve",
+            shows_child_items: true,
           }),
         }),
       );
@@ -1175,6 +1178,7 @@ describe("McpToolApprovalCard", () => {
               { approval_id: "plan:0:0", decision: "approve" },
               { approval_id: "plan:0:1", decision: "reject" },
             ],
+            shows_child_items: true,
           }),
         }),
       );
@@ -1224,6 +1228,7 @@ describe("McpToolApprovalCard", () => {
               { approval_id: "plan:0:0", decision: "withdraw" },
               { approval_id: "plan:0:1", decision: "withdraw" },
             ],
+            shows_child_items: true,
           }),
         }),
       );
@@ -1713,6 +1718,54 @@ describe("approval queue", () => {
       ]);
     },
   );
+
+  it("keeps an answer the queue no longer shows when everything else is allowed", async () => {
+    const fetchMock = okResponse();
+    vi.stubGlobal("fetch", fetchMock);
+    renderCard(
+      <McpToolApprovalCard
+        messageId="message-1"
+        request={mixedRequest}
+        resolution={null}
+      />,
+    );
+
+    fireEvent.click(screen.getByText("Deny once"));
+    expect(screen.getByTestId("approval-queue")).toHaveAttribute(
+      "data-position",
+      "2",
+    );
+    fireEvent.click(screen.getByTestId("tool-approval-allow-all"));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(sentDecisions(fetchMock)).toEqual([
+      { approval_id: "tool-call-1", decision: "approve" },
+      { approval_id: "task-a", decision: "reject" },
+      { approval_id: "task-b", decision: "approve" },
+    ]);
+  });
+
+  it("withdraws an answer already given along with the rest", async () => {
+    const fetchMock = okResponse();
+    vi.stubGlobal("fetch", fetchMock);
+    renderCard(
+      <McpToolApprovalCard
+        messageId="message-1"
+        request={mixedRequest}
+        resolution={null}
+      />,
+    );
+
+    fireEvent.click(screen.getByText("Allow once"));
+    fireEvent.click(screen.getByTestId("tool-approval-withdraw"));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(sentDecisions(fetchMock)).toEqual([
+      { approval_id: "tool-call-1", decision: "withdraw" },
+      { approval_id: "task-a", decision: "withdraw" },
+      { approval_id: "task-b", decision: "withdraw" },
+    ]);
+  });
 
   it("puts the queue back at its first approval when the stop is refused", async () => {
     vi.stubGlobal(
