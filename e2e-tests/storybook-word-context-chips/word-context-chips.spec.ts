@@ -60,12 +60,16 @@ const selIncluded: Expected = {
   control: "Dismiss selection",
 };
 
+// The comment map goes with the document, so its count is the meta's third fact
+// wherever nothing leads and nothing changed.
+const WHOLE = "86 ¶ · 12 comments";
+
 const STORIES: Story[] = [
-  { id: "included", document: docIncluded("86 ¶") },
+  { id: "included", document: docIncluded(WHOLE) },
   {
     id: "short-document-name",
     label: "Memo.docx",
-    document: docIncluded("86 ¶"),
+    document: docIncluded(WHOLE),
   },
   { id: "before-first-read", document: docIncluded(null) },
   {
@@ -125,7 +129,10 @@ const STORIES: Story[] = [
     id: "changed-long-document",
     document: docIncluded("Changed since last send"),
   },
-  { id: "beginning-only", document: docIncluded("Beginning only") },
+  {
+    id: "beginning-only",
+    document: docIncluded("Beginning only · 12 comments"),
+  },
   {
     id: "track-changes",
     document: docIncluded("Track Changes on · 86 ¶", "warning"),
@@ -137,7 +144,7 @@ const STORIES: Story[] = [
     document: docIncluded("Read only · First 453 of 1,590 ¶", "warning"),
   },
   { id: "cannot-edit", document: docIncluded("Can't edit · 86 ¶", "warning") },
-  { id: "locked", document: { ...docIncluded("86 ¶"), locked: true } },
+  { id: "locked", document: { ...docIncluded(WHOLE), locked: true } },
   {
     id: "locked-selection-replaces-document",
     selection: selIncluded,
@@ -156,7 +163,7 @@ const STORIES: Story[] = [
       meta: "Off until the selection changes",
       control: "Include selection",
     },
-    document: docIncluded("86 ¶"),
+    document: docIncluded(WHOLE),
   },
   {
     id: "erato-passage",
@@ -165,7 +172,7 @@ const STORIES: Story[] = [
       meta: "Shown by Erato · 1 ¶",
       control: "Use this selection",
     },
-    document: docIncluded("86 ¶"),
+    document: docIncluded(WHOLE),
   },
   {
     id: "too-long-selection",
@@ -202,7 +209,7 @@ const STORIES: Story[] = [
     document: docReplaced("selection"),
     files: 5,
   },
-  { id: "interactive", document: docIncluded("86 ¶") },
+  { id: "interactive", document: docIncluded(WHOLE) },
 ];
 
 const STATE_WORD: Record<string, string> = {
@@ -607,6 +614,54 @@ test.describe("flows", () => {
       "data-state",
       "included",
     );
+    await expect(kind(page, "word.selection")).toHaveAttribute(
+      "data-state",
+      "suggested",
+    );
+    await expect(open(page, "word.document")).toBeFocused();
+    await expect(live(page)).toHaveText(
+      "Document included. Your selection is off until it changes.",
+    );
+  });
+
+  test("a comment in place of the passage and the document: either can be sent instead", async ({
+    page,
+  }) => {
+    await openWord(page, "replaced-by-comment");
+    await open(page, "word.selection").click();
+    await page
+      .getByRole("dialog", { name: "Selected passage" })
+      .getByRole("button", { name: "Send this instead" })
+      .click();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect(kind(page, "word.selection")).toHaveAttribute(
+      "data-state",
+      "included",
+    );
+    await expect(kind(page, "word.document")).toHaveAttribute(
+      "data-state",
+      "superseded",
+    );
+    await expect(open(page, "word.selection")).toBeFocused();
+    await expect(live(page)).toHaveText(
+      "Selection included. The comment is not sent with this message.",
+    );
+
+    await openWord(page, "replaced-by-comment");
+    await open(page, "word.document").click();
+    await page
+      .getByRole("dialog", { name: docName })
+      .getByRole("button", { name: "Send this instead" })
+      .click();
+    await expect(kind(page, "word.document")).toHaveAttribute(
+      "data-state",
+      "included",
+    );
+    await expect(
+      kind(page, "word.document").locator(
+        '[data-ui="composer-context-chip-meta"]',
+      ),
+    ).toHaveText(WHOLE);
     await expect(kind(page, "word.selection")).toHaveAttribute(
       "data-state",
       "suggested",
