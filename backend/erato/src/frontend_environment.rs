@@ -672,11 +672,17 @@ fn build_frontend_environment(
         env.additional_environment
             .insert("DESKTOP_SIDECAR_URL".to_owned(), Value::String(endpoint));
     }
+    env.additional_environment.insert(
+        "DESKTOP_SIDECAR_WINDOWS_LAUNCH_SCHEME".into(),
+        Value::String(config.desktop_sidecar.windows_launch_scheme()),
+    );
 
     // Inject pairs from frontend.additional_environment
     for (key, value) in &config.additional_frontend_environment() {
         // An explicit sidecar port is the shared source of truth for downloads and clients.
-        if key == "DESKTOP_SIDECAR_URL" && config.desktop_sidecar.port.is_some() {
+        if (key == "DESKTOP_SIDECAR_URL" && config.desktop_sidecar.port.is_some())
+            || key == "DESKTOP_SIDECAR_WINDOWS_LAUNCH_SCHEME"
+        {
             continue;
         }
         env.additional_environment
@@ -1576,6 +1582,7 @@ mod tests {
     fn desktop_sidecar_endpoint_matches_bootstrap_for_both_frontends() {
         let mut config = AppConfig::default();
         config.desktop_sidecar.port = Some(23124);
+        config.desktop_sidecar.launch_suffix = Some("-staging".into());
         config.frontend.additional_environment.insert(
             "DESKTOP_SIDECAR_URL".into(),
             Value::String("http://127.0.0.1:23123/erato/sidecar/rpc".into()),
@@ -1586,6 +1593,12 @@ mod tests {
             let scheme = if tls { "https" } else { "http" };
             for kind in [FrontendKind::Web, FrontendKind::OfficeAddin] {
                 let environment = build_frontend_environment(&config, kind);
+                assert_eq!(
+                    environment
+                        .additional_environment
+                        .get("DESKTOP_SIDECAR_WINDOWS_LAUNCH_SCHEME"),
+                    Some(&Value::String("erato-launch-staging".into()))
+                );
                 let values: Vec<_> = environment
                     .additional_environment
                     .iter()

@@ -782,6 +782,20 @@ pub struct DesktopSidecarConfig {
     /// At most 64 ASCII letters, digits, hyphens or underscores; empty by default.
     pub directory_suffix: Option<String>,
 
+    /// Appended literally to the Windows launch URI scheme; empty by default.
+    /// At most 64 ASCII letters, digits, hyphens, dots or plus signs.
+    pub launch_suffix: Option<String>,
+
+    /// Windows MSI ProductCode override. A non-nil UUID, with optional braces.
+    /// When omitted, derived from the template product code and directory suffix.
+    /// Keep stable for repeated downloads; change for a major upgrade.
+    pub product_code: Option<String>,
+
+    /// Windows MSI UpgradeCode override. A non-nil UUID, with optional braces.
+    /// When omitted, derived from the template upgrade code and directory suffix.
+    /// Keep stable across releases within one environment.
+    pub upgrade_code: Option<String>,
+
     /// Base64-encoded PNG tray icon, up to 256x256 pixels (no data URL prefix).
     /// The complete bootstrap must fit the artifact's embedded capacity.
     pub icon: Option<String>,
@@ -841,6 +855,17 @@ pub struct LocalDelegationConfig {
 }
 
 impl DesktopSidecarConfig {
+    /// URI schemes are case-insensitive; normalize the plain configured suffix.
+    pub fn windows_launch_scheme(&self) -> String {
+        format!(
+            "erato-launch{}",
+            self.launch_suffix
+                .as_deref()
+                .unwrap_or("")
+                .to_ascii_lowercase()
+        )
+    }
+
     /// Public loopback endpoint matching the personalized artifact.
     pub fn endpoint(&self) -> Option<String> {
         if self.port.is_none() && !self.distribution.enabled {
@@ -856,6 +881,19 @@ impl DesktopSidecarConfig {
     }
 
     pub fn bootstrap_fields(&self) -> eyre::Result<serde_json::Map<String, serde_json::Value>> {
+        for (name, value) in [
+            ("product_code", &self.product_code),
+            ("upgrade_code", &self.upgrade_code),
+        ] {
+            if let Some(value) = value {
+                let code = uuid::Uuid::parse_str(value)
+                    .map_err(|_| eyre::eyre!("desktop_sidecar.{name} must be a UUID"))?;
+                eyre::ensure!(
+                    !code.is_nil(),
+                    "desktop_sidecar.{name} must not be a nil UUID"
+                );
+            }
+        }
         let mut fields = serde_json::Map::new();
         if self.local_delegation.enabled {
             let policy = &self.local_delegation;
@@ -897,6 +935,16 @@ impl DesktopSidecarConfig {
                 "Invalid desktop_sidecar.directory_suffix"
             );
             fields.insert("directory_suffix".into(), suffix.clone().into());
+        }
+        if let Some(suffix) = &self.launch_suffix {
+            eyre::ensure!(
+                suffix.len() <= 64
+                    && suffix
+                        .bytes()
+                        .all(|c| c.is_ascii_alphanumeric() || matches!(c, b'-' | b'.' | b'+')),
+                "Invalid desktop_sidecar.launch_suffix"
+            );
+            fields.insert("launch_suffix".into(), suffix.clone().into());
         }
         if let Some(name) = &self.display_name {
             eyre::ensure!(
@@ -8488,12 +8536,17 @@ mod desktop_sidecar_installation_tests {
         let mut config = DesktopSidecarConfig::default();
         assert!(config.bootstrap_fields().unwrap().is_empty());
         assert_eq!(config.endpoint(), None);
+        assert_eq!(config.windows_launch_scheme(), "erato-launch");
         config.port = Some(23124);
-        config.directory_suffix = Some("-staging".into());
+        config.directory_suffix = Some("_staging".into());
+        assert_eq!(config.windows_launch_scheme(), "erato-launch");
+        config.launch_suffix = Some("-STAGING".into());
         config.display_name = Some("Erato Staging".into());
         let fields = config.bootstrap_fields().unwrap();
         assert_eq!(fields["port"], 23124);
-        assert_eq!(fields["directory_suffix"], "-staging");
+        assert_eq!(fields["directory_suffix"], "_staging");
+        assert_eq!(config.windows_launch_scheme(), "erato-launch-staging");
+        assert_eq!(fields["launch_suffix"], "-STAGING");
         assert_eq!(fields["display_name"], "Erato Staging");
         assert_eq!(
             config.endpoint().unwrap(),
@@ -8526,15 +8579,30 @@ mod desktop_sidecar_installation_tests {
     fn rejects_invalid_installation_configuration() {
         for value in [
             serde_json::json!({"port": 0}),
+            serde_json::json!({"launch_suffix": "_staging"}),
+            serde_json::json!({"launch_suffix": "a".repeat(65)}),
+            serde_json::json!({"launch_suffix": "://bad"}),
             serde_json::json!({"directory_suffix": "../other"}),
             serde_json::json!({"directory_suffix": "a".repeat(65)}),
             serde_json::json!({"display_name": "  "}),
             serde_json::json!({"display_name": "bad\nname"}),
             serde_json::json!({"icon": "not base64"}),
+            serde_json::json!({"product_code": "invalid"}),
+            serde_json::json!({"upgrade_code": "00000000-0000-0000-0000-000000000000"}),
         ] {
             let config: DesktopSidecarConfig = serde_json::from_value(value).unwrap();
             assert!(config.bootstrap_fields().is_err());
         }
+    }
+
+    #[test]
+    fn msi_codes_are_validated_but_not_exposed_in_bootstrap() {
+        let config: DesktopSidecarConfig = serde_json::from_value(serde_json::json!({
+            "product_code": "{0E35A9BE-8AED-4C67-9356-72A84A6AFB74}",
+            "upgrade_code": "e448c4d6-cb15-4d8a-8d1d-94c28d41f286"
+        }))
+        .unwrap();
+        assert!(config.bootstrap_fields().unwrap().is_empty());
     }
 }
 
