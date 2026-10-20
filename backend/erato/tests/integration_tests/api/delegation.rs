@@ -16325,8 +16325,11 @@ async fn approve_always_upserts_on_child_server_and_tool(pool: Pool<Postgres>) {
 /// A `wait` child answered on its own card, with the turn that dispatched it
 /// gone.
 ///
-/// Archiving is the only route that reaches this: a withdrawal or a settlement
-/// closes the child's own copy, and a crashed parent still reads as covering.
+/// Archiving is one route that reaches this; a stop before the child was
+/// carried up is the other (see
+/// `a_child_parked_before_an_abort_stays_answerable_in_its_own_chat`). A
+/// withdrawal or a settlement closes the child's own copy, and a crashed parent
+/// still reads as covering.
 ///
 /// # Test Categories
 /// - `uses-db`
@@ -16604,6 +16607,833 @@ async fn child_card_answerable_again_after_parent_settled_withdrawn_or_origin_ar
         call["status"], "success",
         "an orphaned parked chat is answered by its owner: {call}"
     );
+}
+
+// ---------------------------------------------------------------------------
+// A turn whose own gated call and parked children ask together (ERMAIN-1050).
+// ---------------------------------------------------------------------------
+
+const MIXED_USER_MESSAGE: &str = "publish the probe yourself and plan two gated sub-tasks";
+const MIXED_BRIEF_A: &str = "MIXED-CHILD-A-BRIEF: publish the probe";
+const MIXED_BRIEF_B: &str = "MIXED-CHILD-B-BRIEF: publish the probe";
+const MIXED_OWN_CALL: &str = "call_own_probe";
+
+/// A child's first turn, held back so it parks after the coordinator's own call
+/// has reached its gate. A later child waits longer, so the park order is the
+/// launch order.
+fn mock_mixed_child_reaches_the_gate(
+    mocks: &mut MockSet,
+    brief: &'static str,
+    call_id: &'static str,
+    delay_secs: u64,
+) {
+    mocks.mock(move |when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(
+                &[brief],
+                &["child_run_id", PARKED_TOOL_RESULT, CHILD_DENIAL_TEXT],
+            ));
+        let mut actions = crate::test_utils::build_openai_tool_calls_streaming_response(&[(
+            call_id,
+            PARKED_TOOL,
+            json!({}),
+        )]);
+        actions.insert(
+            0,
+            BodyAction::Delay(std::time::Duration::from_secs(delay_secs)),
+        );
+        mock_llm_sse_response(then, actions);
+    });
+}
+
+/// The coordinator's first turn: two gated tasks, then its own gated call.
+fn mock_mixed_parent_batch(mocks: &mut MockSet) {
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(
+                &[MIXED_USER_MESSAGE],
+                &[MIXED_BRIEF_A],
+            ));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_tool_calls_streaming_response(&[
+                (
+                    "call_task_a",
+                    "delegate_task",
+                    json!({ "task": MIXED_BRIEF_A, "facet_ids": ["plan"] }),
+                ),
+                (
+                    "call_task_b",
+                    "delegate_task",
+                    json!({ "task": MIXED_BRIEF_B, "facet_ids": ["plan"] }),
+                ),
+                (MIXED_OWN_CALL, PARKED_TOOL, json!({})),
+            ]),
+        );
+    });
+    mock_mixed_child_reaches_the_gate(mocks, MIXED_BRIEF_A, "call_child_a_probe", 2);
+    mock_mixed_child_reaches_the_gate(mocks, MIXED_BRIEF_B, "call_child_b_probe", 3);
+}
+
+/// Child B's answer once its call was denied.
+fn mock_mixed_child_b_answers_the_denial(mocks: &mut MockSet) {
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(
+                &[MIXED_BRIEF_B, CHILD_DENIAL_TEXT],
+                &["child_run_id"],
+            ));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_text_streaming_response(&[
+                "CHILD-B-DENIED without the probe",
+            ]),
+        );
+    });
+}
+
+struct MixedPark {
+    parent_chat_id: Uuid,
+    parent_message_id: Uuid,
+    child_a: Uuid,
+    child_b: Uuid,
+}
+
+impl MixedPark {
+    fn own_id(&self) -> String {
+        generated_tool_call_id(self.parent_message_id, 1, MIXED_OWN_CALL)
+    }
+    fn task_a_id(&self) -> String {
+        generated_tool_call_id(self.parent_message_id, 1, "call_task_a")
+    }
+    fn task_b_id(&self) -> String {
+        generated_tool_call_id(self.parent_message_id, 1, "call_task_b")
+    }
+}
+
+async fn park_mixed_batch(server: &TestServer, app_state: &erato::state::AppState) -> MixedPark {
+    let chat = create_chat(server, None).await;
+    let events = submit_with_facets(server, &chat, MIXED_USER_MESSAGE, &["plan"]).await;
+    let parent_chat_id = Uuid::parse_str(&chat).unwrap();
+    let parent_message_id = Uuid::parse_str(&assistant_message_id_from_events(&events)).unwrap();
+    let children = delegated_child_chats(&app_state.db, parent_chat_id).await;
+    assert_eq!(children.len(), 2, "both tasks ran");
+    MixedPark {
+        parent_chat_id,
+        parent_message_id,
+        child_a: children[0].id,
+        child_b: children[1].id,
+    }
+}
+
+async fn post_decisions(
+    server: &TestServer,
+    message_id: Uuid,
+    decisions: &[(&str, &str)],
+) -> axum_test::TestResponse {
+    let decisions: Vec<Value> = decisions
+        .iter()
+        .map(|(approval_id, decision)| json!({ "approval_id": approval_id, "decision": decision }))
+        .collect();
+    server
+        .post("/api/v1beta/me/messages/continuestream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "message_id": message_id, "decisions": decisions }))
+        .await
+}
+
+fn mixed_task_state_config(config: &mut erato::config::AppConfig) {
+    gate_mock_mcp_tools_on_approval(config);
+}
+
+/// The coordinator's own call and two children ask in the same batch, and the
+/// parent chat carries all three on ONE part: the turn's own call first, under
+/// the part's kind and flat fields, then one item per parked child in park
+/// order. One part, because `parked_approval_state` reads an earlier request
+/// as an earlier park whose decisions are already recorded.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_gated_call_and_two_parked_children_ask_on_one_part(pool: Pool<Postgres>) {
+    let mut mocks = MockSet::new();
+    mock_mixed_parent_batch(&mut mocks);
+
+    let (app_state, _llm) = task_state(
+        pool,
+        mocks,
+        &["erato/delegate_task", "mock_mcp_approval/*"],
+        mixed_task_state_config,
+    )
+    .await;
+    let server = app_server(app_state.clone());
+    let park = park_mixed_batch(&server, &app_state).await;
+
+    let content = content_of(&message_row(&app_state.db, park.parent_message_id).await);
+    let requests: Vec<&Value> = content
+        .iter()
+        .filter(|part| part["content_type"] == "tool_approval_request")
+        .collect();
+    assert_eq!(
+        requests.len(),
+        1,
+        "one stop for the whole turn: {content:?}"
+    );
+    let request = content.last().unwrap();
+    assert_eq!(request["content_type"], "tool_approval_request");
+    assert_eq!(
+        request["kind"], "mcp_tool",
+        "the part keeps the kind of its own call"
+    );
+    assert_eq!(request["tool_call_id"], park.own_id());
+    assert_eq!(request["tool_name"], PARKED_TOOL);
+    assert_eq!(request["mcp_server_id"], "mock_mcp_approval");
+
+    let approvals = request["approvals"].as_array().unwrap();
+    let ids: Vec<&str> = approvals
+        .iter()
+        .map(|item| item["approval_id"].as_str().unwrap())
+        .collect();
+    let (own_id, task_a_id, task_b_id) = (park.own_id(), park.task_a_id(), park.task_b_id());
+    assert_eq!(
+        ids,
+        [own_id.as_str(), task_a_id.as_str(), task_b_id.as_str()]
+    );
+    assert!(
+        approvals[0]["child"].is_null(),
+        "the turn's own call names no child"
+    );
+    assert_eq!(approvals[1]["child"]["child_chat_id"], json!(park.child_a));
+    assert_eq!(approvals[2]["child"]["child_chat_id"], json!(park.child_b));
+    for item in &approvals[1..] {
+        assert_eq!(item["child"]["tool_name"], PARKED_TOOL);
+        assert_eq!(item["child"]["mcp_server_id"], "mock_mcp_approval");
+        assert_eq!(item["child"]["allow_always"], false);
+        assert!(item["child"]["requested_at"].is_string());
+    }
+
+    for (slot, child) in [("call_task_a", park.child_a), ("call_task_b", park.child_b)] {
+        let slot = slot_for(&content, slot);
+        assert_eq!(slot["output"]["status"], "input_required");
+        assert_eq!(slot["output"]["delegate_chat_id"], json!(child));
+    }
+
+    assert_eq!(
+        generation_state(&app_state.db, park.parent_chat_id).await,
+        "awaiting_approval"
+    );
+    for child in [park.child_a, park.child_b] {
+        assert_eq!(
+            generation_state(&app_state.db, child).await,
+            "awaiting_approval"
+        );
+    }
+
+    let child_message_id = child_parked_row(&app_state.db, park.child_a).await.id;
+    let refused = post_continuestream(&server, child_message_id, "approve").await;
+    refused.assert_status(http::StatusCode::CONFLICT);
+    assert_eq!(refused.json::<Value>()["code"], "covered_by_parent");
+}
+
+/// Deciding the mixed part settles each item in its own lane: the turn's own
+/// call runs here, each child resumes in its own chat with its own decision,
+/// and the turn then answers with all three results.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn deciding_a_mixed_part_settles_the_call_and_resumes_each_child(pool: Pool<Postgres>) {
+    let mut mocks = MockSet::new();
+    mock_mixed_parent_batch(&mut mocks);
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(
+                &[MIXED_BRIEF_A, PARKED_TOOL_RESULT],
+                &["child_run_id"],
+            ));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_text_streaming_response(&[
+                "CHILD-A-DONE with the probe",
+            ]),
+        );
+    });
+    mock_mixed_child_b_answers_the_denial(&mut mocks);
+    mock_parent_final_answer(&mut mocks, MIXED_USER_MESSAGE);
+
+    let (app_state, _llm) = task_state(
+        pool,
+        mocks,
+        &["erato/delegate_task", "mock_mcp_approval/*"],
+        mixed_task_state_config,
+    )
+    .await;
+    let server = app_server(app_state.clone());
+    let park = park_mixed_batch(&server, &app_state).await;
+    let (own_id, task_a_id, task_b_id) = (park.own_id(), park.task_a_id(), park.task_b_id());
+
+    let continued = post_decisions(
+        &server,
+        park.parent_message_id,
+        &[
+            (&task_b_id, "reject"),
+            (&own_id, "approve"),
+            (&task_a_id, "approve"),
+        ],
+    )
+    .await;
+    continued.assert_status_ok();
+    assert!(
+        extract_full_text_answer(&parse_sse_events(&continued)).contains("PARENT-GATED-FINAL"),
+        "the turn answers once every item is settled"
+    );
+
+    let content = content_of(&message_row(&app_state.db, park.parent_message_id).await);
+    let request_index = content
+        .iter()
+        .position(|part| part["content_type"] == "tool_approval_request")
+        .unwrap();
+    let settled: Vec<(&str, &str)> = content[request_index + 1..]
+        .iter()
+        .filter(|part| part["content_type"] != "text")
+        .map(|part| {
+            (
+                part["content_type"].as_str().unwrap(),
+                part["tool_call_id"].as_str().unwrap_or_default(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        settled,
+        [
+            ("tool_approval", own_id.as_str()),
+            ("tool_use", own_id.as_str()),
+            ("tool_approval", task_a_id.as_str()),
+            ("tool_rejection", task_b_id.as_str()),
+        ],
+        "own items settle first, then the children, in row order: {content:?}"
+    );
+    let own_call = &content[request_index + 2];
+    assert_eq!(own_call["status"], "success");
+    assert!(
+        serde_json::to_string(&own_call["output"])
+            .unwrap()
+            .contains(PARKED_TOOL_RESULT)
+    );
+    assert!(content[request_index + 1]["child_chat_id"].is_null());
+    assert_eq!(
+        content[request_index + 3]["child_chat_id"],
+        json!(park.child_a)
+    );
+    assert_eq!(
+        content[request_index + 4]["child_chat_id"],
+        json!(park.child_b)
+    );
+
+    let slot_a = slot_for(&content, "call_task_a");
+    assert_eq!(slot_a["status"], "success");
+    assert_eq!(slot_a["output"]["status"], "completed");
+    assert!(
+        slot_a["output"]["result"]
+            .as_str()
+            .unwrap()
+            .contains("CHILD-A-DONE")
+    );
+    let slot_b = slot_for(&content, "call_task_b");
+    assert_eq!(slot_b["status"], "success");
+    assert_eq!(slot_b["output"]["status"], "completed");
+    assert!(
+        slot_b["output"]["result"]
+            .as_str()
+            .unwrap()
+            .contains("CHILD-B-DENIED")
+    );
+
+    let child_a_call = content_of(&child_parked_row(&app_state.db, park.child_a).await)
+        .into_iter()
+        .find(|part| part["content_type"] == "tool_use" && part["tool_name"] == PARKED_TOOL)
+        .expect("child A's gated call");
+    assert_eq!(child_a_call["status"], "success");
+    let child_b_call = content_of(&child_parked_row(&app_state.db, park.child_b).await)
+        .into_iter()
+        .find(|part| part["content_type"] == "tool_use" && part["tool_name"] == PARKED_TOOL)
+        .expect("child B's gated call");
+    assert_eq!(child_b_call["status"], "error");
+
+    for chat in [park.parent_chat_id, park.child_a, park.child_b] {
+        assert_eq!(generation_state(&app_state.db, chat).await, "completed");
+    }
+}
+
+/// A child that asks again after a mixed decision re-parks the turn on its own:
+/// the turn's call has already run, so the new part is a `delegated_task` part
+/// naming only that child, and deciding it finishes the turn.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_child_that_asks_again_after_a_mixed_decision_reparks_the_turn(pool: Pool<Postgres>) {
+    let mut mocks = MockSet::new();
+    mock_mixed_parent_batch(&mut mocks);
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(
+                &[MIXED_BRIEF_A, PARKED_TOOL_RESULT],
+                &["child_run_id", "call_child_a_again"],
+            ));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_tool_calls_streaming_response(&[(
+                "call_child_a_again",
+                PARKED_TOOL,
+                json!({}),
+            )]),
+        );
+    });
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(
+                &[MIXED_BRIEF_A, "call_child_a_again", PARKED_TOOL_RESULT],
+                &["child_run_id"],
+            ));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_text_streaming_response(&[
+                "CHILD-A-DONE after asking twice",
+            ]),
+        );
+    });
+    mock_mixed_child_b_answers_the_denial(&mut mocks);
+    mock_parent_final_answer(&mut mocks, MIXED_USER_MESSAGE);
+
+    let (app_state, _llm) = task_state(
+        pool,
+        mocks,
+        &["erato/delegate_task", "mock_mcp_approval/*"],
+        mixed_task_state_config,
+    )
+    .await;
+    let server = app_server(app_state.clone());
+    let park = park_mixed_batch(&server, &app_state).await;
+    let (own_id, task_a_id, task_b_id) = (park.own_id(), park.task_a_id(), park.task_b_id());
+
+    post_decisions(
+        &server,
+        park.parent_message_id,
+        &[
+            (&own_id, "approve"),
+            (&task_a_id, "approve"),
+            (&task_b_id, "reject"),
+        ],
+    )
+    .await
+    .assert_status_ok();
+
+    let content = content_of(&message_row(&app_state.db, park.parent_message_id).await);
+    let reparked = content.last().unwrap();
+    assert_eq!(reparked["content_type"], "tool_approval_request");
+    assert_eq!(reparked["kind"], "delegated_task");
+    let approvals = reparked["approvals"].as_array().unwrap();
+    assert_eq!(approvals.len(), 1, "only the child that asked again");
+    assert_eq!(approvals[0]["approval_id"], task_a_id);
+    assert_eq!(approvals[0]["child"]["child_chat_id"], json!(park.child_a));
+    assert!(
+        reparked["pending_tool_calls"]
+            .as_array()
+            .unwrap()
+            .is_empty(),
+        "the turn's own call already ran: {reparked}"
+    );
+    assert_eq!(slot_for(&content, MIXED_OWN_CALL)["status"], "success");
+    assert_eq!(
+        generation_state(&app_state.db, park.parent_chat_id).await,
+        "awaiting_approval"
+    );
+
+    let finished = post_continuestream(&server, park.parent_message_id, "approve").await;
+    finished.assert_status_ok();
+    assert!(extract_full_text_answer(&parse_sse_events(&finished)).contains("PARENT-GATED-FINAL"));
+    let slot_a = slot_for(
+        &content_of(&message_row(&app_state.db, park.parent_message_id).await),
+        "call_task_a",
+    );
+    assert_eq!(slot_a["output"]["status"], "completed");
+    assert!(
+        slot_a["output"]["result"]
+            .as_str()
+            .unwrap()
+            .contains("CHILD-A-DONE after asking twice")
+    );
+    assert_eq!(
+        generation_state(&app_state.db, park.parent_chat_id).await,
+        "completed"
+    );
+}
+
+/// A `continuestream` retry after a crash between persisting the decisions of
+/// a mixed part and finishing the turn: every item is decided and both children
+/// have settled, so the retry decides nothing again and only makes the model
+/// call, which carries all three results.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn continuestream_retry_after_a_crash_resumes_a_mixed_part(pool: Pool<Postgres>) {
+    let final_turn = RequestBodyRecorder::new();
+    let mut mocks = MockSet::new();
+    mock_mixed_parent_batch(&mut mocks);
+    {
+        let recorder = final_turn.clone();
+        mocks.mock(move |when, then| {
+            when.post()
+                .path("/v1/chat/completions")
+                .matcher(BodyContainsMatcher::new(
+                    &[MIXED_USER_MESSAGE, "child_run_id"],
+                    &[],
+                ))
+                .matcher(recorder);
+            mock_llm_sse_response(
+                then,
+                crate::test_utils::build_openai_text_streaming_response(&[
+                    "MIXED-CRASH-RETRY-ANSWER",
+                ]),
+            );
+        });
+    }
+
+    let (app_state, _llm) = task_state(
+        pool,
+        mocks,
+        &["erato/delegate_task", "mock_mcp_approval/*"],
+        mixed_task_state_config,
+    )
+    .await;
+    let server = app_server(app_state.clone());
+    let park = park_mixed_batch(&server, &app_state).await;
+    let (own_id, task_a_id, task_b_id) = (park.own_id(), park.task_a_id(), park.task_b_id());
+
+    // What the lost continuation had already written: every decision, the
+    // turn's own call, and both children's settled slots.
+    let row = message_row(&app_state.db, park.parent_message_id).await;
+    let mut content = content_of(&row);
+    for part in content.iter_mut() {
+        if part["content_type"] != "tool_use" {
+            continue;
+        }
+        let result = if part["tool_call_id"] == task_a_id {
+            "CHILD-A-RESULT"
+        } else if part["tool_call_id"] == task_b_id {
+            "CHILD-B-RESULT"
+        } else {
+            continue;
+        };
+        part["status"] = json!("success");
+        part["ended_at"] = json!(sqlx::types::chrono::Utc::now().to_rfc3339());
+        part["output"]["status"] = json!("completed");
+        part["output"]["reason"] = Value::Null;
+        part["output"]["result"] = json!(result);
+    }
+    content.push(json!({
+        "content_type": "tool_approval",
+        "tool_call_id": own_id,
+        "approval_id": own_id,
+        "always_allow": false,
+        "approved_at": sqlx::types::chrono::Utc::now().to_rfc3339(),
+    }));
+    content.push(json!({
+        "content_type": "tool_use",
+        "tool_call_id": own_id,
+        "tool_name": PARKED_TOOL,
+        "status": "success",
+        "input": {},
+        "output": { "content": [{ "type": "text", "text": PARKED_TOOL_RESULT }] },
+    }));
+    content.push(json!({
+        "content_type": "tool_approval",
+        "tool_call_id": task_a_id,
+        "approval_id": task_a_id,
+        "child_chat_id": park.child_a,
+        "always_allow": false,
+        "approved_at": sqlx::types::chrono::Utc::now().to_rfc3339(),
+    }));
+    content.push(json!({
+        "content_type": "tool_rejection",
+        "tool_call_id": task_b_id,
+        "approval_id": task_b_id,
+        "child_chat_id": park.child_b,
+        "never_allow": false,
+        "rejected_at": sqlx::types::chrono::Utc::now().to_rfc3339(),
+    }));
+    let decided_parts = content.len();
+    let mut raw_message = row.raw_message.clone();
+    raw_message["content"] = Value::Array(content);
+    let mut active: erato::db::entity::messages::ActiveModel = row.into();
+    active.raw_message = ActiveValue::Set(raw_message);
+    active.update(&app_state.db).await.unwrap();
+
+    let chat = erato::db::entity::chats::Entity::find_by_id(park.parent_chat_id)
+        .one(&app_state.db)
+        .await
+        .unwrap()
+        .unwrap();
+    let mut active: erato::db::entity::chats::ActiveModel = chat.into();
+    active.generation_state = ActiveValue::Set(Some("errored".to_string()));
+    active.update(&app_state.db).await.unwrap();
+
+    let child_rows_before = [
+        child_parked_row(&app_state.db, park.child_a)
+            .await
+            .raw_message,
+        child_parked_row(&app_state.db, park.child_b)
+            .await
+            .raw_message,
+    ];
+
+    let retried = post_continuestream(&server, park.parent_message_id, "approve").await;
+    retried.assert_status_ok();
+    assert!(
+        extract_full_text_answer(&parse_sse_events(&retried)).contains("MIXED-CRASH-RETRY-ANSWER")
+    );
+
+    let content = content_of(&message_row(&app_state.db, park.parent_message_id).await);
+    assert!(
+        content[decided_parts..]
+            .iter()
+            .all(|part| part["content_type"] == "text"),
+        "the retry decides and calls nothing a second time: {content:?}"
+    );
+    let child_rows_after = [
+        child_parked_row(&app_state.db, park.child_a)
+            .await
+            .raw_message,
+        child_parked_row(&app_state.db, park.child_b)
+            .await
+            .raw_message,
+    ];
+    assert_eq!(
+        child_rows_before, child_rows_after,
+        "no child is resumed by a retry"
+    );
+
+    let bodies = generation_bodies(&final_turn);
+    assert_eq!(bodies.len(), 1, "exactly one model call");
+    for result in [PARKED_TOOL_RESULT, "CHILD-A-RESULT", "CHILD-B-RESULT"] {
+        assert!(
+            bodies[0].contains(result),
+            "the model hears every result, {result} included"
+        );
+    }
+}
+
+/// A child that parked before the user stopped the turn is not carried up: the
+/// parent has no open item for it, its slot keeps `input_required` with the
+/// chat it waits in, and its own card answers it. That decision settles the
+/// parent's slot.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_child_parked_before_an_abort_stays_answerable_in_its_own_chat(pool: Pool<Postgres>) {
+    const ABORT_USER_MESSAGE: &str = "plan a gated and a slow sub-task";
+    const SLOW_BRIEF: &str = "SLOW-CHILD-BRIEF: take your time";
+
+    let mut mocks = MockSet::new();
+    mock_child_reaches_the_gate(&mut mocks, GATED_BRIEF, "call_child_probe");
+    mock_child_answers_after_the_gate(&mut mocks);
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(&[SLOW_BRIEF], &["child_run_id"]));
+        mock_llm_sse_response(
+            then,
+            vec![
+                BodyAction::Delay(std::time::Duration::from_secs(30)),
+                BodyAction::Bytes("data: [DONE]\n\n".into()),
+            ],
+        );
+    });
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(
+                &[ABORT_USER_MESSAGE],
+                &[GATED_BRIEF],
+            ));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_tool_calls_streaming_response(&[
+                (
+                    "call_task_gated",
+                    "delegate_task",
+                    json!({ "task": GATED_BRIEF, "facet_ids": ["plan"] }),
+                ),
+                (
+                    "call_task_slow",
+                    "delegate_task",
+                    json!({ "task": SLOW_BRIEF, "facet_ids": ["plan"] }),
+                ),
+            ]),
+        );
+    });
+
+    let (app_state, _llm) = task_state(
+        pool,
+        mocks,
+        &["erato/delegate_task", "mock_mcp_approval/*"],
+        gate_mock_mcp_tools_on_approval,
+    )
+    .await;
+
+    // A real server, so the abort can land while the turn is still joining.
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let server_addr = listener.local_addr().unwrap();
+    let app: Router = erato::server::router::router(app_state.clone())
+        .split_for_parts()
+        .0
+        .with_state(app_state.clone());
+    tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    let client = reqwest::Client::new();
+    let base_url = format!("http://{server_addr}");
+
+    let created = client
+        .post(format!("{base_url}/api/v1beta/me/chats"))
+        .header("Authorization", format!("Bearer {TEST_JWT_TOKEN}"))
+        .json(&json!({}))
+        .send()
+        .await
+        .unwrap();
+    assert!(created.status().is_success());
+    let parent_chat = created.json::<Value>().await.unwrap()["chat_id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let parent_chat_id = Uuid::parse_str(&parent_chat).unwrap();
+
+    let submit = tokio::spawn({
+        let client = client.clone();
+        let base_url = base_url.clone();
+        let parent_chat = parent_chat.clone();
+        async move {
+            client
+                .post(format!("{base_url}/api/v1beta/me/messages/submitstream"))
+                .header("Authorization", format!("Bearer {TEST_JWT_TOKEN}"))
+                .json(&json!({
+                    "existing_chat_id": parent_chat,
+                    "user_message": ABORT_USER_MESSAGE,
+                    "input_files_ids": [],
+                    "selected_facet_ids": ["plan"],
+                }))
+                .send()
+                .await
+                .unwrap()
+                .text()
+                .await
+                .unwrap()
+        }
+    });
+
+    let mut gated_child = None;
+    for _ in 0..150 {
+        for child in delegated_child_chats(&app_state.db, parent_chat_id).await {
+            if child.generation_state.as_deref() == Some("awaiting_approval") {
+                gated_child = Some(child.id);
+            }
+        }
+        if gated_child.is_some() {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+    let gated_child = gated_child.expect("the gated child never parked");
+
+    let aborted = client
+        .post(format!("{base_url}/api/v1beta/me/messages/abortstream"))
+        .header("Authorization", format!("Bearer {TEST_JWT_TOKEN}"))
+        .json(&json!({ "chat_id": parent_chat }))
+        .send()
+        .await
+        .unwrap();
+    assert!(aborted.status().is_success());
+    tokio::time::timeout(std::time::Duration::from_secs(20), submit)
+        .await
+        .expect("the parent stream closes after the abort")
+        .unwrap();
+
+    let parent_row = chat_messages_by_created_at(&app_state.db, parent_chat_id)
+        .await
+        .into_iter()
+        .rfind(|row| row.raw_message["role"] == "assistant")
+        .expect("the parent's assistant row");
+    let content = content_of(&parent_row);
+    assert!(
+        !content
+            .iter()
+            .any(|part| part["content_type"] == "tool_approval_request"),
+        "nothing in the parent asks on the child's behalf: {content:?}"
+    );
+    let slot = slot_for(&content, "call_task_gated");
+    assert_eq!(slot["output"]["status"], "input_required");
+    assert_eq!(slot["output"]["delegate_chat_id"], json!(gated_child));
+
+    let child_message_id = child_parked_row(&app_state.db, gated_child).await.id;
+    let decided = client
+        .post(format!("{base_url}/api/v1beta/me/messages/continuestream"))
+        .header("Authorization", format!("Bearer {TEST_JWT_TOKEN}"))
+        .json(&json!({ "message_id": child_message_id, "decision": "approve" }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(
+        decided.status(),
+        reqwest::StatusCode::OK,
+        "the child's own card answers it once no parent item covers it"
+    );
+    decided.text().await.unwrap();
+    wait_for_generation_state(&app_state.db, gated_child, "completed").await;
+
+    let mut settled = Value::Null;
+    for _ in 0..100 {
+        let row = message_row(&app_state.db, parent_row.id).await;
+        settled = slot_for(&content_of(&row), "call_task_gated");
+        if settled["output"]["status"] != "input_required" {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+    assert_eq!(
+        settled["output"]["status"], "completed",
+        "the child's decision settles the parent's slot: {settled}"
+    );
+    assert_eq!(settled["status"], "success");
 }
 
 // ---------------------------------------------------------------------------
