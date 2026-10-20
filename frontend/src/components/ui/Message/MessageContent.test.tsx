@@ -1989,7 +1989,43 @@ describe("MessageContent", () => {
       // The second stop reuses the first's ids, so only its position says that
       // the decision above answered the question below it. Read unscoped, both
       // cards vanish and the turn can never be finished.
-      expect(screen.getAllByTestId("delegated-task-approval")).toHaveLength(1);
+      expect(screen.getAllByTestId("approval-queue")).toHaveLength(1);
+    });
+
+    it("asks a later park of the same turn through the same queue", () => {
+      const mixedRequest = {
+        ...(childApprovalRequest() as unknown as Record<string, unknown>),
+        tool_call_id: "own-call",
+        tool_name: "publish_approval_probe",
+        mcp_server_id: "mock_mcp_approval",
+        kind: "mcp_tool",
+        approvals: [
+          {
+            approval_id: "own-call",
+            tool_call_id: "own-call",
+            tool_name: "publish_approval_probe",
+            input: {},
+          },
+          ...(childApprovalRequest() as unknown as { approvals: unknown[] })
+            .approvals,
+        ],
+      } as unknown as ContentPart;
+      renderWithQueryClient(
+        <MessageContent
+          messageId="message-1"
+          content={[
+            mixedRequest,
+            planDecision("own-call", "own-call"),
+            planDecision("call-task", "call-task"),
+            childApprovalRequest(),
+          ]}
+        />,
+      );
+
+      const queue = screen.getByTestId("approval-queue");
+      expect(queue).toHaveAttribute("data-approval-kind", "delegated_task");
+      expect(queue).toHaveAttribute("data-item-count", "1");
+      expect(screen.getByText("Publish the notes")).toBeInTheDocument();
     });
 
     it("hides the card once every item of the stop is decided", () => {
@@ -2010,6 +2046,101 @@ describe("MessageContent", () => {
         screen.queryByTestId("task-plan-approval"),
       ).not.toBeInTheDocument();
     });
+  });
+});
+
+describe("tasks waiting in their own chat", () => {
+  const childChatId = "33333333-3333-3333-3333-333333333333";
+  const taskSlot = (status: string): ContentPart =>
+    ({
+      content_type: "tool_use",
+      tool_call_id: "call-task",
+      tool_name: "delegate_task",
+      input: { task: "Publish the notes" },
+      status: status === "input_required" ? "in_progress" : "success",
+      output: {
+        status,
+        child_run_id: childChatId,
+        delegate_chat_id: childChatId,
+      },
+    }) as unknown as ContentPart;
+
+  it("points at a parked task nothing in this chat asks for", () => {
+    renderWithQueryClient(
+      <MessageContent
+        messageId="message-1"
+        content={[taskSlot("input_required"), ...textContent("Stopped.")]}
+      />,
+    );
+
+    expect(screen.getByTestId("parked-task-notice")).toHaveTextContent(
+      "Publish the notes",
+    );
+    expect(screen.getByTestId("parked-task-open")).toHaveAttribute(
+      "href",
+      `/chat/${childChatId}`,
+    );
+  });
+
+  it("points at it beside the turn's own open approval", () => {
+    renderWithQueryClient(
+      <MessageContent
+        messageId="message-1"
+        content={[
+          taskSlot("input_required"),
+          {
+            ...(childApprovalRequest() as unknown as Record<string, unknown>),
+            tool_call_id: "own-call",
+            kind: "mcp_tool",
+            approvals: [
+              {
+                approval_id: "own-call",
+                tool_call_id: "own-call",
+                tool_name: "publish_approval_probe",
+                input: {},
+              },
+            ],
+          } as unknown as ContentPart,
+        ]}
+      />,
+    );
+
+    expect(screen.getByTestId("parked-task-notice")).toBeInTheDocument();
+  });
+
+  it("says nothing while an open item of the stop asks for the task", () => {
+    renderWithQueryClient(
+      <MessageContent
+        messageId="message-1"
+        content={[taskSlot("input_required"), childApprovalRequest()]}
+      />,
+    );
+
+    expect(screen.queryByTestId("parked-task-notice")).not.toBeInTheDocument();
+    expect(screen.getByTestId("approval-queue")).toBeInTheDocument();
+  });
+
+  it("says nothing while the turn is streaming", () => {
+    renderWithQueryClient(
+      <MessageContent
+        messageId="message-1"
+        isStreaming
+        content={[taskSlot("input_required")]}
+      />,
+    );
+
+    expect(screen.queryByTestId("parked-task-notice")).not.toBeInTheDocument();
+  });
+
+  it("says nothing once the task has settled", () => {
+    renderWithQueryClient(
+      <MessageContent
+        messageId="message-1"
+        content={[taskSlot("completed"), ...textContent("Done.")]}
+      />,
+    );
+
+    expect(screen.queryByTestId("parked-task-notice")).not.toBeInTheDocument();
   });
 });
 

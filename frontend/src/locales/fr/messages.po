@@ -57,6 +57,26 @@ msgid "actionConfirmation.title"
 msgstr "Autoriser cette action ?"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Message/ApprovalQueueCard.tsx
+msgid "approvalQueue.description"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ApprovalQueueCard.tsx
+msgid "approvalQueue.position"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ApprovalQueueCard.tsx
+msgid "approvalQueue.remaining"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ApprovalQueueCard.tsx
+msgid "approvalQueue.title"
+msgstr ""
+
+#. js-lingui-explicit-id
 #: src/pages/AssistantEditPage.tsx
 msgid "assistant.action.backToAssistants"
 msgstr "Retour aux assistants"
@@ -3178,12 +3198,12 @@ msgid "chatInput.mentions.sectionHeader"
 msgstr "Assistants"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Message/McpToolApprovalCard.tsx
+#: src/components/ui/Message/OwnCallApprovalItem.tsx
 msgid "clientToolApproval.thisDevice"
 msgstr ""
 
 #. js-lingui-explicit-id
-#: src/components/ui/Message/McpToolApprovalCard.tsx
+#: src/components/ui/Message/OwnCallApprovalItem.tsx
 msgid "clientToolApproval.title"
 msgstr ""
 
@@ -3725,27 +3745,27 @@ msgid "composer.context.state.superseded"
 msgstr "Non envoyé."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Message/DelegatedTaskApprovalCard.tsx
+#: src/components/ui/Message/ParkedChildItem.tsx
 msgid "delegatedTaskApproval.childMissing"
 msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/DelegatedTaskApprovalCard.tsx
-msgid "delegatedTaskApproval.description"
-msgstr ""
+#~ msgid "delegatedTaskApproval.description"
+#~ msgstr ""
 
 #. js-lingui-explicit-id
-#: src/components/ui/Message/DelegatedTaskApprovalCard.tsx
+#: src/components/ui/Message/ParkedChildItem.tsx
 msgid "delegatedTaskApproval.itemTitle"
 msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/DelegatedTaskApprovalCard.tsx
-msgid "delegatedTaskApproval.title"
-msgstr ""
+#~ msgid "delegatedTaskApproval.title"
+#~ msgstr ""
 
 #. js-lingui-explicit-id
-#: src/components/ui/Message/DelegatedTaskApprovalCard.tsx
+#: src/components/ui/Message/ParkedChildItem.tsx
 msgid "delegatedTaskApproval.unnamedTask"
 msgstr ""
 
@@ -4333,8 +4353,8 @@ msgid "mcp.callback.openSettings"
 msgstr "Ouvrir les paramètres"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Message/DelegatedTaskApprovalCard.tsx
-#: src/components/ui/Message/McpToolApprovalCard.tsx
+#: src/components/ui/Message/OwnCallApprovalItem.tsx
+#: src/components/ui/Message/ParkedChildItem.tsx
 msgid "mcpApproval.alwaysAllowDisabled"
 msgstr "Verrouillé : votre organisation exige une confirmation chaque fois que cet outil s'exécute."
 
@@ -4344,13 +4364,13 @@ msgstr "Verrouillé : votre organisation exige une confirmation chaque fois que 
 #~ msgstr ""
 
 #. js-lingui-explicit-id
-#: src/components/ui/Message/DelegatedTaskApprovalCard.tsx
-#: src/components/ui/Message/McpToolApprovalCard.tsx
+#: src/components/ui/Message/OwnCallApprovalItem.tsx
+#: src/components/ui/Message/ParkedChildItem.tsx
 msgid "mcpApproval.openWorldWarning"
 msgstr ""
 
 #. js-lingui-explicit-id
-#: src/components/ui/Message/McpToolApprovalCard.tsx
+#: src/components/ui/Message/OwnCallApprovalItem.tsx
 msgid "mcpApproval.title"
 msgstr ""
 
@@ -5294,6 +5314,16 @@ msgstr "Supprimer {label}, conserver son contenu"
 #: src/components/ui/WordReview/WordRichBlockPreview.tsx
 msgid "officeAddin.word.rich.updateObject"
 msgstr "Mettre à jour {label}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ParkedTaskNotice.tsx
+msgid "parkedTaskNotice.open"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ParkedTaskNotice.tsx
+msgid "parkedTaskNotice.text"
+msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx

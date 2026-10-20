@@ -30,6 +30,14 @@ import {
 } from "@/config/componentRegistry";
 import { useOptionalTranslation } from "@/hooks/i18n";
 import {
+  DELEGATE_TASK_TOOL_NAME,
+  parseDelegationEnvelope,
+} from "@/lib/delegation/delegationEnvelope";
+import {
+  TASK_BRIEF_PREVIEW_CHARS,
+  taskBriefFromInput,
+} from "@/lib/delegation/taskBrief";
+import {
   WORD_EDITS_FENCE,
   WORD_INSERT_FENCE,
   WORD_PLAN_FENCE,
@@ -48,6 +56,7 @@ import { ImageContentDisplay } from "./ImageContentDisplay";
 import { LocalSearchCoverageNotice } from "./LocalSearchCoverageNotice";
 import { McpToolApprovalCard } from "./McpToolApprovalCard";
 import { MermaidBlock } from "./MermaidBlock";
+import { ParkedTaskNotice } from "./ParkedTaskNotice";
 import {
   SyntaxHighlightedCode,
   useCodeBlockSurfaceStyle,
@@ -841,6 +850,52 @@ export const MessageContent = memo(function MessageContent({
       }, {}),
     [content],
   );
+
+  // Tasks of this turn that stopped to ask while nothing here asks for them:
+  // the turn was stopped, or it ended on a stop no task's question can join.
+  // Only the last stop counts, as on the server: an earlier one is settled.
+  const tasksWaitingElsewhere = React.useMemo(() => {
+    if (isStreaming) {
+      return [];
+    }
+    const covered = new Set<string>();
+    for (let index = content.length - 1; index >= 0; index--) {
+      const part = content[index];
+      if (part.content_type !== "tool_approval_request") {
+        continue;
+      }
+      approvalStopState(part, content.slice(index + 1)).open.forEach((item) => {
+        if (item.child) {
+          covered.add(item.child.child_chat_id);
+        }
+      });
+      break;
+    }
+    return content.flatMap((part) => {
+      if (
+        part.content_type !== "tool_use" ||
+        part.tool_name !== DELEGATE_TASK_TOOL_NAME
+      ) {
+        return [];
+      }
+      const envelope = parseDelegationEnvelope(part.output);
+      const childChatId = envelope?.delegateChatId;
+      if (
+        envelope?.status !== "input_required" ||
+        childChatId === undefined ||
+        covered.has(childChatId)
+      ) {
+        return [];
+      }
+      return [
+        {
+          toolCallId: part.tool_call_id,
+          childChatId,
+          brief: taskBriefFromInput(part.input, TASK_BRIEF_PREVIEW_CHARS),
+        },
+      ];
+    });
+  }, [content, isStreaming]);
 
   const generatedImageFileIds = React.useMemo(() => {
     const fileIds = new Set<string>();
@@ -1661,6 +1716,13 @@ export const MessageContent = memo(function MessageContent({
           />
         </React.Suspense>
       )}
+      {tasksWaitingElsewhere.map((task) => (
+        <ParkedTaskNotice
+          key={`parked-task-${task.toolCallId}`}
+          childChatId={task.childChatId}
+          brief={task.brief}
+        />
+      ))}
       {messageId && <ClientToolFileApprovals messageId={messageId} />}
       <LocalSearchCoverageNotice content={content} />
       <WordCommentReadNotice content={content} />

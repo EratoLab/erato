@@ -1,4 +1,4 @@
-import { plural, t } from "@lingui/core/macro";
+import { t } from "@lingui/core/macro";
 
 import { ToolCallInput } from "@/components/ui/ToolCall";
 import {
@@ -8,14 +8,10 @@ import {
 
 import { ResolvedIcon } from "../icons";
 import { ActionConfirmationCard } from "./ActionConfirmationCard";
-import {
-  APPROVAL_CARD_SHELL_CLASS,
-  ApprovalBulkActions,
-  stagedItemPresentation,
-} from "./ApprovalDecisionActions";
+import { stagedItemPresentation } from "./ApprovalDecisionActions";
 import { ApprovalToolHeading } from "./ApprovalToolHeading";
 
-import type { ApprovalItemPart, StagedDecisions } from "./approvalItems";
+import type { ApprovalItemPart } from "./approvalItems";
 import type { ToolApprovalDecision } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
 /**
@@ -26,9 +22,9 @@ import type { ToolApprovalDecision } from "@/lib/generated/v1betaApi/v1betaApiSc
  * parent's: what is being decided is a call in another chat, and the
  * `delegate_task` name on the item describes the dispatch, not the tool.
  */
-const ParkedChildItem = ({
+export const ParkedChildItem = ({
   item,
-  isFirst,
+  scrollIntoViewOnMount,
   staged,
   allowAlways,
   isArchived,
@@ -36,8 +32,7 @@ const ParkedChildItem = ({
   onDecide,
 }: {
   item: ApprovalItemPart;
-  /** Only the first row scrolls the card into view; N would fight over it. */
-  isFirst: boolean;
+  scrollIntoViewOnMount: boolean;
   staged: ToolApprovalDecision | undefined;
   allowAlways: boolean;
   isArchived: boolean;
@@ -130,88 +125,9 @@ const ParkedChildItem = ({
         status={status}
         resolvedLabel={resolvedLabel}
         isBusy={isBusy}
-        scrollIntoViewOnMount={isFirst}
+        scrollIntoViewOnMount={scrollIntoViewOnMount}
         data-testid="delegated-task-approval-item-card"
       />
-    </div>
-  );
-};
-
-/**
- * The parent's surface for children that stopped to ask.
- *
- * One card for the whole stop, one row per parked child: the turn is waiting on
- * all of them, and the server settles them in one request — so a row answered
- * while another is still open is held, not sent. The child's own card in its
- * own chat is refused while this one is open, because only this turn can use
- * the answer.
- */
-export const DelegatedTaskApprovalCard = ({
-  items,
-  staged,
-  allowAlways,
-  isArchived,
-  isBusy,
-  onDecideItem,
-  onDecideAll,
-}: {
-  items: ApprovalItemPart[];
-  staged: StagedDecisions;
-  allowAlways: boolean;
-  isArchived: boolean;
-  isBusy: boolean;
-  onDecideItem: (approvalId: string, decision: ToolApprovalDecision) => void;
-  onDecideAll: (decision: ToolApprovalDecision) => void;
-}) => {
-  const itemCount = items.length;
-  return (
-    <div
-      data-testid="delegated-task-approval"
-      data-approval-kind="delegated_task"
-      data-item-count={itemCount}
-      className={`${APPROVAL_CARD_SHELL_CLASS} space-y-2`}
-    >
-      <div>
-        <p className="text-sm font-medium text-theme-fg-primary">
-          {t({
-            id: "delegatedTaskApproval.title",
-            message: plural(itemCount, {
-              one: "A task is waiting on your decision",
-              other: "Tasks are waiting on your decision",
-            }),
-          })}
-        </p>
-        <p className="text-sm text-theme-fg-secondary">
-          {t({
-            id: "delegatedTaskApproval.description",
-            message: plural(itemCount, {
-              one: "It stopped at a tool call it needs permission for. The response continues once you decide.",
-              other:
-                "Each one stopped at a tool call it needs permission for. The response continues once all of them are decided.",
-            }),
-          })}
-        </p>
-      </div>
-      {items.map((item, index) => (
-        <ParkedChildItem
-          key={item.approval_id}
-          item={item}
-          isFirst={index === 0}
-          staged={staged[item.approval_id]}
-          allowAlways={allowAlways}
-          isArchived={isArchived}
-          isBusy={isBusy}
-          onDecide={(decision) => onDecideItem(item.approval_id, decision)}
-        />
-      ))}
-      {!isArchived && (
-        <ApprovalBulkActions
-          itemCount={itemCount}
-          onDecideAll={onDecideAll}
-          isBusy={isBusy}
-          testId="delegated-task-approval-bulk"
-        />
-      )}
     </div>
   );
 };
