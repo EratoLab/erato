@@ -85,6 +85,7 @@ const threadModel = (
     coverage: COVERAGE,
     lifetime: "Leaving comments out lasts for the next message only.",
     notes: [],
+    showInWordPicks: true,
   },
   actions: ["choose"],
   ...over,
@@ -210,6 +211,7 @@ describe("WordCommentDetail", () => {
           coverage: null,
           lifetime: "Leaving comments out lasts for the next message only.",
           notes: [],
+          showInWordPicks: false,
         },
       }),
       given,
@@ -250,6 +252,7 @@ describe("WordCommentDetail", () => {
           choices: [],
           coverage: null,
           lifetime: "A chosen comment stays…",
+          showInWordPicks: false,
           notes: [
             {
               tone: "error",
@@ -302,6 +305,7 @@ describe("WordPassageCommentsSection", () => {
     coverage: COVERAGE,
     switchTo: MAYA,
     offerChoose: true,
+    readFailed: false,
     canChangeDefault: true,
   };
 

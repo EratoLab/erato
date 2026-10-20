@@ -368,6 +368,7 @@ export function wordSelectionChip(
   };
 }
 
+// The comment fact leads, so the one that changes survives the chip's ellipsis.
 function selectionMeta(
   paragraphCount: number,
   comments: WordPassageCommentsModel | null,
@@ -378,17 +379,22 @@ function selectionMeta(
       id: "officeAddin.word.context.selection.meta",
       message: `Selected passage · ${paragraphs} ¶`,
     });
+  if (comments.readFailed)
+    return t({
+      id: "officeAddin.word.context.selection.meta.commentsUnread",
+      message: `Couldn't read comments · ${paragraphs} ¶`,
+    });
   if (!comments.checked)
     return t({
       id: "officeAddin.word.context.selection.meta.commentsOff",
-      message: `Selected · ${paragraphs} ¶ · comments off`,
+      message: `Comments off · ${paragraphs} ¶`,
     });
   const commentCount = comments.count;
   return t({
     id: "officeAddin.word.context.selection.meta.withComments",
     message: plural(commentCount, {
-      one: `Selected · ${paragraphs} ¶ · # comment`,
-      other: `Selected · ${paragraphs} ¶ · # comments`,
+      one: `# comment · ${paragraphs} ¶`,
+      other: `# comments · ${paragraphs} ¶`,
     }),
   });
 }
@@ -735,14 +741,19 @@ export function wordDocumentChip(
   const commentFact =
     lead || document.changed || !comments
       ? undefined
-      : comments.count !== null && comments.count > 0
-        ? commentCountText(comments.count)
-        : comments.mapOff
-          ? t({
-              id: "officeAddin.word.context.document.meta.commentsOff",
-              message: "comments off",
-            })
-          : undefined;
+      : comments.readFailed
+        ? t({
+            id: "officeAddin.word.context.document.meta.commentsUnread",
+            message: "couldn't read comments",
+          })
+        : comments.count !== null && comments.count > 0
+          ? commentCountText(comments.count)
+          : comments.mapOff
+            ? t({
+                id: "officeAddin.word.context.document.meta.commentsOff",
+                message: "comments off",
+              })
+            : undefined;
   const meta = [lead?.text, tail, commentFact].filter(Boolean).join(" · ");
   return {
     ...base,

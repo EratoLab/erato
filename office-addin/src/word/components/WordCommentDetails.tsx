@@ -119,7 +119,7 @@ function ThreadCard({ thread }: { thread: WordCommentListThread }) {
 export interface WordCommentDetailProps {
   model: WordCommentChipModel;
   context: ComposerContextDetailRenderContext;
-  /** Show in Word from a cursor thread picks it first, so it stays the target. */
+  /** Shows the thread in Word; the host decides whether that also picks it (`showInWordPicks`). */
   onShowInWord: (
     thread: WordCommentListThread,
   ) => Promise<WordSelectionShowResult>;
@@ -248,7 +248,7 @@ export function WordOpenCommentsDetail({
       {model.detail.coverage && (
         <WordCommentCoverageList coverage={model.detail.coverage} />
       )}
-      <Lifetime text={model.detail.lifetime} />
+      {model.detail.lifetime && <Lifetime text={model.detail.lifetime} />}
     </div>
   );
 }

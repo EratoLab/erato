@@ -44,6 +44,7 @@ import {
 } from "../utils/wordAuthoringMessages";
 import {
   wordCommentChip,
+  wordCommentMapFacet,
   wordDocumentComments,
   wordOpenCommentsChip,
   wordPassageComments,
@@ -387,9 +388,15 @@ export function WordChatInput({
   const composerRef = useRef<ChatInputControlsHandle>(null);
   // Picks made outside the lane (the picker, Show in Word) are said here; the lane says its own.
   const [pickAnnouncement, announcePick] = useLiveAnnouncement();
-  /** A pick also answers a Send waiting on a choice, and is never left off for the message. */
+  /**
+   * A pick is never left off for the message, and answers a Send waiting on a choice unless it only
+   * keeps a thread the target while Word shows it.
+   */
   const pickComment = useCallback(
-    (ref: string, options: { announce?: boolean } = {}) => {
+    (
+      ref: string,
+      options: { announce?: boolean; answersSend?: boolean } = {},
+    ) => {
       wordCommentGestureStore.pick({
         kind: "pick",
         ref,
@@ -397,7 +404,10 @@ export function WordChatInput({
       });
       wordCommentGestureStore.set({ withoutComments: false });
       const block = commentBlockRef.current;
-      if (block === "choose-comment" || block === "picked-gone")
+      if (
+        options.answersSend !== false &&
+        (block === "choose-comment" || block === "picked-gone")
+      )
         decideCommentsRef.current?.({ kind: "pick", ref });
       setPickerOpen(false);
       const thread = commentListRef.current.threads.find(
@@ -423,19 +433,22 @@ export function WordChatInput({
     (ref: string) => pickComment(ref, { announce: true }),
     [pickComment],
   );
-  /** Word's own select is Erato's, which ends nothing; picking first keeps the thread the target. */
+  /**
+   * Word's own select is Erato's, which moves the caret off the thread; a thread that goes because of
+   * the caret is picked first to stay the target. Showing changes nothing else that is sent.
+   */
   const showComment = useCallback(
-    (thread: WordCommentListThread) => {
-      if (pickRefRef.current !== thread.ref)
-        pickComment(thread.ref, { announce: true });
+    (thread: WordCommentListThread, pickFirst: boolean) => {
+      if (pickFirst && pickRefRef.current !== thread.ref)
+        pickComment(thread.ref, { announce: true, answersSend: false });
       return showWordComment(thread.commentId, thread.para);
     },
     [pickComment],
   );
-  /** A Send waiting on a choice is answered; otherwise the next message goes without comments. */
+  /** A waiting Send is answered; otherwise the next message goes without comments. */
   const sendWithoutCommentsGesture = useCallback(() => {
     const block = commentBlockRef.current;
-    if (block === "choose-comment" || block === "picked-gone") {
+    if (block) {
       if (block === "picked-gone")
         wordCommentGestureStore.pick({ kind: "dismiss" });
       decideCommentsRef.current?.({ kind: "without" });
@@ -445,7 +458,7 @@ export function WordChatInput({
   }, []);
   const endPick = useCallback(() => {
     wordCommentGestureStore.pick({ kind: "dismiss" });
-    if (commentBlockRef.current === "picked-gone")
+    if (commentBlockRef.current)
       decideCommentsRef.current?.({ kind: "without" });
   }, []);
   const restoreComments = useCallback(() => {
@@ -469,11 +482,13 @@ export function WordChatInput({
     [],
   );
   // "Include open comments" lasts for the chat, as the document's inclusion does, so it locks too.
+  // Asking for them also ends "Send without comments", which would keep them out of this message.
   const includeOpenCommentsGesture = useCallback(() => {
     if (lockedRef.current) return;
     wordCommentGestureStore.set({
       includeOpenComments: true,
       openCommentsDismissed: false,
+      withoutComments: false,
     });
   }, []);
   const excludeOpenComments = useCallback(() => {
@@ -482,15 +497,23 @@ export function WordChatInput({
       includeOpenComments: false,
       openCommentsDismissed: true,
     });
+    if (commentBlockRef.current === "read-failed")
+      decideCommentsRef.current?.({ kind: "without" });
   }, []);
-  const setPassageComments = useCallback(
-    (on: boolean) => wordCommentGestureStore.set({ withoutComments: !on }),
-    [],
-  );
+  const setPassageComments = useCallback((on: boolean) => {
+    if (!on && commentBlockRef.current === "read-failed") {
+      decideCommentsRef.current?.({ kind: "without" });
+      return;
+    }
+    wordCommentGestureStore.set({ withoutComments: !on });
+  }, []);
   /** The document or the open comments instead of the thread, and of a passage that would win. */
   const sendInsteadOfComment = useCallback(() => {
     wordCommentGestureStore.pick({ kind: "dismiss" });
-    wordCommentGestureStore.set({ override: "passage" });
+    wordCommentGestureStore.set({
+      override: "passage",
+      withoutComments: false,
+    });
     if (passageGoesRef.current) dismissSelection();
   }, [dismissSelection]);
   // A pick from the picker resolves after the notice that opened it is gone, so focus has no opener.
@@ -1312,8 +1335,10 @@ export function WordChatInput({
       openCommentsDismissed,
     },
     documentOn: chipEnabled,
+    documentAdvertised: chipAvailable,
     threadAdvertised: commentAdvertised.thread,
-    mapAdvertised: commentAdvertised.map.size > 0,
+    mapFacet: wordCommentMapFacet(sendPreview, commentAdvertised),
+    readFailed: commentBlock === "read-failed",
     canChangeDefault: commentAdvertised.thread && !!onOpenWordSettings,
     passageGoes,
   };
@@ -1407,15 +1432,14 @@ export function WordChatInput({
   const noticeHandlers = useMemo(
     () => ({
       openPicker,
-      sendWithoutComments: () =>
-        decideCommentsRef.current?.({ kind: "without" }),
+      sendWithoutComments: sendWithoutCommentsGesture,
       sendWithoutDocument: () =>
         settleCaptureRef.current?.({ kind: "skipped" }),
       dismissSelectionReadFailed: () => setSelectionReadFailed(false),
       dismiss: (id: string) =>
         setDismissedNotices((current) => new Set(current).add(id)),
     }),
-    [openPicker],
+    [openPicker, sendWithoutCommentsGesture],
   );
   const budgetDetails = notice.authoringDetails;
   const composerNotice = useMemo(

@@ -15,7 +15,11 @@ import {
   wordCommentWhyText,
 } from "./wordCommentText";
 
-import type { WordCommentOverride, WordCommentWhy } from "./wordCommentSend";
+import type {
+  WordCommentAdvertised,
+  WordCommentOverride,
+  WordCommentWhy,
+} from "./wordCommentSend";
 import type { WordContextNote } from "./wordContextChips";
 import type { WordSendPreview } from "./wordSendPreview";
 import type {
@@ -45,9 +49,13 @@ export interface WordCommentChipsInput {
   };
   /** The document chip is on and a document facet is advertised. */
   documentOn: boolean;
+  /** A document facet is advertised, so the document chip shows, on or off. */
+  documentAdvertised: boolean;
   threadAdvertised: boolean;
-  /** A document facet takes the comment map. */
-  mapAdvertised: boolean;
+  /** The document facet this Send would use takes comment_map (`wordCommentMapFacet`). */
+  mapFacet: boolean;
+  /** A Send waits because Word did not hand over the comments it needs. */
+  readFailed: boolean;
   /** The precedence setting exists and the host can open it. */
   canChangeDefault: boolean;
   /** The passage is shown, armed and advertised. */
@@ -91,6 +99,11 @@ export interface WordCommentChipModel {
     coverage: WordCommentCoverageSection | null;
     lifetime: string;
     notes: WordContextNote[];
+    /**
+     * Show in Word moves Word's caret off the comment, so a thread that goes because of where the
+     * caret is gets picked first to stay the target. Anything else is only shown.
+     */
+    showInWordPicks: boolean;
   };
   actions: WordCommentChipAction[];
 }
@@ -99,20 +112,24 @@ export type WordOpenCommentsChipAction = "choose" | "send-instead";
 
 export interface WordOpenCommentsChipModel {
   state: ComposerContextState;
+  tone?: ComposerContextTone;
   label: string;
   meta?: string;
   /** Present unless suggested. */
   removeLabel?: string;
   restoreLabel?: string;
-  /** What (+) does: turn them on for the chat, or undo "Send without comments". */
-  restore: "include" | "restore-comments";
+  /**
+   * What (+) does: turn them on for the chat (which also undoes "Send without comments"), undo
+   * "Send without comments", or nothing, where none is open and the chip only leads to the picker.
+   */
+  restore: "include" | "restore-comments" | null;
   actions: WordOpenCommentsChipAction[];
   /** "Send this instead" also turns the passage off. */
   sendInsteadDismissesSelection: boolean;
   detail: {
     intro: string;
     coverage: WordCommentCoverageSection | null;
-    lifetime: string;
+    lifetime?: string;
     notes: WordContextNote[];
   };
 }
@@ -129,6 +146,8 @@ export interface WordPassageCommentsModel {
   switchTo: WordCommentListThread | null;
   offerChoose: boolean;
   canChangeDefault: boolean;
+  /** They were due with the waiting Send, and Word did not hand them over. */
+  readFailed: boolean;
 }
 
 /** What the document chip says about the comment map. */
@@ -140,8 +159,16 @@ export interface WordDocumentCommentsModel {
   off: boolean;
   /** The map is what that gesture turned off, so the meta says it and + is offered. */
   mapOff: boolean;
+  /** The map was due with the waiting Send, and Word did not hand the comments over. */
+  readFailed: boolean;
   offerChoose: boolean;
 }
+
+/** Whether the document facet this Send would use takes the comment map, as the Send adds it. */
+export const wordCommentMapFacet = (
+  preview: WordSendPreview,
+  advertised: WordCommentAdvertised,
+): boolean => preview.facetId !== null && advertised.map.has(preview.facetId);
 
 const lifetimeMessage = () =>
   t({
@@ -176,6 +203,12 @@ const ifIncludedHeading = () =>
 
 const spokenComments = () =>
   t({ id: "officeAddin.word.context.comment.spoken", message: "Comments" });
+
+const readFailedMeta = () =>
+  t({
+    id: "officeAddin.word.context.comment.meta.readFailed",
+    message: "Couldn't read comments",
+  });
 
 const spokenPicked = () =>
   t({
@@ -254,6 +287,7 @@ export function wordCommentChip(
         choices: [],
         coverage: null,
         lifetime: lifetimePick(),
+        showInWordPicks: false,
         notes: [
           {
             tone: "error",
@@ -318,6 +352,7 @@ export function wordCommentChip(
         coverage: null,
         lifetime: lifetimeMessage(),
         notes: [],
+        showInWordPicks: false,
       },
       actions: [],
     };
@@ -341,17 +376,22 @@ export function wordCommentChip(
       actions.push("passage-instead");
     if (!picked && why === "default" && input.canChangeDefault)
       actions.push("change-default");
+    // The waiting Send cannot carry it until the user sends without comments.
+    const unread = !suggested && input.readFailed;
     return {
       variant: "thread",
       origin: picked ? "user" : "ambient",
-      state: suggested ? "suggested" : "included",
+      state: suggested ? "suggested" : unread ? "error" : "included",
+      ...(unread ? { tone: "error" as const } : {}),
       label,
       spokenLabel: picked ? spokenPicked() : spokenComments(),
-      ...(why && !suggested
-        ? { meta: wordCommentWhyText(why) }
-        : suggested && picked
-          ? { meta: offForMessage() }
-          : {}),
+      ...(unread
+        ? { meta: readFailedMeta() }
+        : why && !suggested
+          ? { meta: wordCommentWhyText(why) }
+          : suggested && picked
+            ? { meta: offForMessage() }
+            : {}),
       removeLabel: picked
         ? wordCommentDismissPickText()
         : wordCommentSendWithoutText(),
@@ -370,6 +410,7 @@ export function wordCommentChip(
         ),
         lifetime: picked ? lifetimePick() : lifetimeMessage(),
         notes: [],
+        showInWordPicks: !picked && !suggested,
       },
       actions,
     };
@@ -386,15 +427,23 @@ export function wordCommentChip(
 
 /**
  * "Open comments (9)", only while the document is off: with the document on, its map lists them
- * already. Included only while the Send carries the open threads.
+ * already. Included only while the Send carries the open threads, even none (they last for the
+ * chat). With none open and no document chip, it stays the way to the picker.
  */
 export function wordOpenCommentsChip(
   input: WordCommentChipsInput,
 ): WordOpenCommentsChipModel | null {
   const { preview, asIf, list, gestures } = input;
-  if (input.documentOn || !input.threadAdvertised || list.counts.open === 0)
-    return null;
+  if (input.documentOn || !input.threadAdvertised) return null;
   const count = list.counts.open;
+  const carries =
+    preview.carrier === "open-comments" ||
+    asIf.carrier === "open-comments" ||
+    gestures.includeOpenComments;
+  // Nothing to include, but without a document chip nothing else may lead to a resolved thread.
+  const pickerOnly = count === 0 && !carries;
+  if (pickerOnly && (input.documentAdvertised || list.threads.length === 0))
+    return null;
   const label =
     list.status === "ready"
       ? t({
@@ -414,11 +463,16 @@ export function wordOpenCommentsChip(
       id: "officeAddin.word.comments.includeOpen",
       message: "Include open comments",
     });
-  const intro = t({
-    id: "officeAddin.word.context.openComments.intro",
-    message:
-      "Shown while the document is off, so you can still send its comments without its text.",
-  });
+  const intro = input.documentAdvertised
+    ? t({
+        id: "officeAddin.word.context.openComments.intro",
+        message:
+          "Shown while the document is off, so you can still send its comments without its text.",
+      })
+    : t({
+        id: "officeAddin.word.context.openComments.introNoDocument",
+        message: "Sends the document's open comments with their replies.",
+      });
   const lifetime = t({
     id: "officeAddin.word.context.openComments.lifetime",
     message: "Leaving them out lasts for this chat.",
@@ -436,14 +490,39 @@ export function wordOpenCommentsChip(
     );
   const actions: WordOpenCommentsChipAction[] = ["choose"];
 
-  if (preview.carrier === "open-comments")
+  if (pickerOnly)
     return {
-      state: "included",
+      state: "suggested",
       label,
       meta: t({
-        id: "officeAddin.word.context.openComments.meta.included",
-        message: "With their replies",
+        id: "officeAddin.word.context.openComments.meta.noneOpen",
+        message: "None open",
       }),
+      restore: null,
+      actions,
+      sendInsteadDismissesSelection: false,
+      detail: {
+        intro: t({
+          id: "officeAddin.word.context.openComments.noneOpenIntro",
+          message:
+            "No comment in this document is open. Choose comment… to work on a resolved one.",
+        }),
+        coverage: null,
+        notes: [],
+      },
+    };
+  if (preview.carrier === "open-comments") {
+    const unread = input.readFailed;
+    return {
+      state: unread ? "error" : "included",
+      ...(unread ? { tone: "error" as const } : {}),
+      label,
+      meta: unread
+        ? readFailedMeta()
+        : t({
+            id: "officeAddin.word.context.openComments.meta.included",
+            message: "With their replies",
+          }),
       removeLabel,
       restore: "include",
       actions,
@@ -455,6 +534,7 @@ export function wordOpenCommentsChip(
         notes: [],
       },
     };
+  }
   if (!gestures.includeOpenComments)
     return {
       state: "suggested",
@@ -478,64 +558,70 @@ export function wordOpenCommentsChip(
         notes: [],
       },
     };
-  if (asIf.carrier === "open-comments")
+  // On for the chat, and the Send carries something else first: say what, from the same preview.
+  const bySelection = preview.carrier === "selection";
+  if (
+    bySelection ||
+    preview.carrier === "comment" ||
+    preview.comments.block !== null
+  )
     return {
-      state: "suggested",
+      state: "superseded",
       label,
-      meta: offForMessage(),
-      restoreLabel: wordCommentIncludeText(),
-      restore: "restore-comments",
-      actions,
-      sendInsteadDismissesSelection: false,
+      meta: bySelection
+        ? t({
+            id: "officeAddin.word.context.document.meta.replacedBySelection",
+            message: "Replaced by selection",
+          })
+        : t({
+            id: "officeAddin.word.context.document.meta.replacedByComment",
+            message: "Replaced by comment",
+          }),
+      removeLabel,
+      restore: "include",
+      actions: ["choose", "send-instead"],
+      sendInsteadDismissesSelection: input.passageGoes,
       detail: {
         intro,
-        coverage: openPlan(ifIncludedHeading()),
+        coverage: openPlan(
+          t({
+            id: "officeAddin.word.context.document.coverageIfSentHeading",
+            message: "If sent instead",
+          }),
+        ),
         lifetime,
-        notes: [],
+        notes: [
+          {
+            tone: "info",
+            text: bySelection
+              ? t({
+                  id: "officeAddin.word.context.openComments.selectionInstead",
+                  message:
+                    "Your selection is sent instead of the open comments.",
+                })
+              : t({
+                  id: "officeAddin.word.context.openComments.commentInstead",
+                  message:
+                    "A comment at your cursor or one you chose is sent instead of the open comments.",
+                }),
+          },
+        ],
       },
     };
-  // On for the chat, but a passage, a thread or a choice at the caret goes first.
-  const bySelection = preview.carrier === "selection";
+  // Nothing goes only because "Send without comments" holds for this message.
   return {
-    state: "superseded",
+    state: "suggested",
     label,
-    meta: bySelection
-      ? t({
-          id: "officeAddin.word.context.document.meta.replacedBySelection",
-          message: "Replaced by selection",
-        })
-      : t({
-          id: "officeAddin.word.context.document.meta.replacedByComment",
-          message: "Replaced by comment",
-        }),
-    removeLabel,
-    restore: "include",
-    actions: ["choose", "send-instead"],
-    sendInsteadDismissesSelection: input.passageGoes,
+    meta: offForMessage(),
+    restoreLabel: wordCommentIncludeText(),
+    restore: "restore-comments",
+    actions,
+    sendInsteadDismissesSelection: false,
     detail: {
       intro,
-      coverage: openPlan(
-        t({
-          id: "officeAddin.word.context.document.coverageIfSentHeading",
-          message: "If sent instead",
-        }),
-      ),
+      coverage: openPlan(ifIncludedHeading()),
       lifetime,
-      notes: [
-        {
-          tone: "info",
-          text: bySelection
-            ? t({
-                id: "officeAddin.word.context.openComments.selectionInstead",
-                message: "Your selection is sent instead of the open comments.",
-              })
-            : t({
-                id: "officeAddin.word.context.openComments.commentInstead",
-                message:
-                  "A comment at your cursor or one you chose is sent instead of the open comments.",
-              }),
-        },
-      ],
+      notes: [],
     },
   };
 }
@@ -580,6 +666,7 @@ export function wordPassageComments(
         : null,
     offerChoose: input.threadAdvertised,
     canChangeDefault: input.canChangeDefault && plan.why === "default",
+    readFailed: checked && input.readFailed,
   };
 }
 
@@ -590,6 +677,7 @@ export function wordDocumentComments(
   const { preview, asIf, list } = input;
   const offerChoose = input.threadAdvertised && list.threads.length > 0;
   const mapGoes =
+    input.mapFacet &&
     preview.document === "sent" &&
     preview.comments.carrier.kind === "map" &&
     list.threads.length > 0;
@@ -600,17 +688,20 @@ export function wordDocumentComments(
       openComments: input.gestures.includeOpenComments,
     });
     return {
-      count: wordCommentMapListed(list.threads.length),
+      count: input.readFailed
+        ? null
+        : wordCommentMapListed(list.threads.length),
       lines: info ? wordCommentCoverageLines(info) : [],
       off: false,
       mapOff: false,
+      readFailed: input.readFailed,
       offerChoose,
     };
   }
   const off =
     input.gestures.withoutComments &&
+    input.mapFacet &&
     preview.document === "sent" &&
-    input.mapAdvertised &&
     list.threads.length > 0;
   if (off)
     return {
@@ -618,9 +709,17 @@ export function wordDocumentComments(
       lines: [],
       off: true,
       mapOff: asIf.document === "sent" && asIf.comments.carrier.kind === "map",
+      readFailed: false,
       offerChoose,
     };
   return offerChoose
-    ? { count: null, lines: [], off: false, mapOff: false, offerChoose }
+    ? {
+        count: null,
+        lines: [],
+        off: false,
+        mapOff: false,
+        readFailed: false,
+        offerChoose,
+      }
     : null;
 }

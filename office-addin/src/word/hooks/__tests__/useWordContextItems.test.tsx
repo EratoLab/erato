@@ -97,6 +97,7 @@ const comment: WordCommentChipModel = {
     coverage: null,
     lifetime: "Leaving comments out lasts for the next message only.",
     notes: [],
+    showInWordPicks: true,
   },
   actions: ["choose", "passage-instead", "change-default"],
 };
@@ -213,6 +214,9 @@ describe("useWordContextItems", () => {
     )!;
     expect(user.origin).toBe("user");
     expect(user).not.toHaveProperty("dismissScope");
+    // A choice keeps the chip before the open comments in the lane.
+    expect(ambient.placement).toBe("ambient");
+    expect(user.placement).toBe("ambient");
     user.onRemove?.();
     expect(given.handlers.endPick).toHaveBeenCalledTimes(1);
 
@@ -234,6 +238,73 @@ describe("useWordContextItems", () => {
     });
     suggested.onRestore?.();
     expect(given.handlers.restoreComments).toHaveBeenCalledTimes(1);
+  });
+
+  it("lets Show in Word pick the thread only where the model says so", async () => {
+    const given = input();
+    const { result, rerender } = renderHook(
+      (props: WordContextItemsInput) => useWordContextItems(props),
+      { initialProps: given },
+    );
+    const thread = {
+      ref: "t1",
+      commentId: "1",
+      author: "Maya Krüger",
+      status: "open" as const,
+      quote: "delivery dates",
+      text: "Can we commit?",
+      replies: null,
+      lastActivity: null,
+      pos: 1,
+      para: 9,
+      inSelection: false,
+    };
+    const showFrom = (items: typeof result.current) => {
+      const item = items.find((entry) => entry.id === WORD_COMMENT_CHIP_ID)!;
+      const body = item.detail!.render({ locked: false, runAction: vi.fn() });
+      return (
+        body as { props: { onShowInWord: (t: typeof thread) => unknown } }
+      ).props.onShowInWord;
+    };
+    await showFrom(result.current)(thread);
+    expect(given.handlers.showComment).toHaveBeenLastCalledWith(thread, true);
+    rerender({
+      ...given,
+      comment: {
+        ...comment,
+        state: "suggested",
+        restoreLabel: "Include comments",
+        detail: { ...comment.detail, showInWordPicks: false },
+      },
+    });
+    await showFrom(result.current)(thread);
+    expect(given.handlers.showComment).toHaveBeenLastCalledWith(thread, false);
+  });
+
+  it("draws no + on an open-comments chip that only leads to the picker", () => {
+    const { result } = renderHook(() =>
+      useWordContextItems(
+        input({
+          openComments: {
+            ...openComments,
+            state: "suggested",
+            meta: "None open",
+            removeLabel: undefined,
+            restore: null,
+            actions: ["choose"],
+          },
+        }),
+      ),
+    );
+    const open = result.current.find(
+      (item) => item.id === WORD_OPEN_COMMENTS_CHIP_ID,
+    )!;
+    expect(open.state).toBe("suggested");
+    expect(open.onRestore).toBeUndefined();
+    expect(open.onRemove).toBeUndefined();
+    expect(open.detail?.actions?.map((action) => action.id)).toEqual([
+      "choose",
+    ]);
   });
 
   it("sends the superseded item instead, with what it means", () => {

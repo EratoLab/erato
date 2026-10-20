@@ -614,6 +614,8 @@ describe("WordChatInput prepared send", () => {
   it("offers to send without the document once the capture is slow, and does so on request", async () => {
     vi.useFakeTimers();
     host.capture.mockReturnValue(neverSettles());
+    // The source marks the read slow long before the offer.
+    host.preview = { ...host.readyPreview, reading: true };
     renderInput();
     send();
     const result = startPreparation();
@@ -624,6 +626,8 @@ describe("WordChatInput prepared send", () => {
     expect(noticeOf("word.send.slowCapture")).toHaveTextContent(
       "Word is still handing over the document.",
     );
+    // The chip and the notice say the same: the document is still being read.
+    expect(chip()).toHaveAttribute("data-state", "loading");
 
     fireEvent.click(
       screen.getByRole("button", { name: "Send without document" }),

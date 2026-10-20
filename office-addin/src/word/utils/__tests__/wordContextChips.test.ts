@@ -611,6 +611,7 @@ describe("wordDocumentChip", () => {
         lines,
         off: false,
         mapOff: false,
+        readFailed: false,
         offerChoose: true,
       };
       expect(chip({ comments })?.comments).toEqual(lines);
@@ -633,6 +634,7 @@ describe("comments on the selection and the document", () => {
     switchTo: null,
     offerChoose: true,
     canChangeDefault: false,
+    readFailed: false,
     ...over,
   });
   const documentComments = (
@@ -642,6 +644,7 @@ describe("comments on the selection and the document", () => {
     lines: ["A list of the 12 comments in the document."],
     off: false,
     mapOff: false,
+    readFailed: false,
     offerChoose: true,
     ...over,
   });
@@ -657,17 +660,19 @@ describe("comments on the selection and the document", () => {
     send: Partial<WordSendPreviewInput> = {},
   ) => wordDocumentChip(resolve({ document: documentInput(document), send }));
 
-  it("counts the passage's comments in the selection's meta, or says they are off", () => {
+  it("counts the passage's comments first in the selection's meta, or says they are off or unread", () => {
     expect(selectionChip(passage())).toMatchObject({
-      meta: "Selected · 2 ¶ · 1 comment",
+      meta: "1 comment · 2 ¶",
       actions: ["choose"],
     });
-    expect(selectionChip(passage({ count: 2 }))?.meta).toBe(
-      "Selected · 2 ¶ · 2 comments",
-    );
+    expect(selectionChip(passage({ count: 2 }))?.meta).toBe("2 comments · 2 ¶");
     expect(selectionChip(passage({ checked: false }))?.meta).toBe(
-      "Selected · 2 ¶ · comments off",
+      "Comments off · 2 ¶",
     );
+    expect(selectionChip(passage({ readFailed: true }))).toMatchObject({
+      state: "included",
+      meta: "Couldn't read comments · 2 ¶",
+    });
     // Cut to the send limit says so first.
     expect(selectionChip(passage(), { truncated: true })?.meta).toBe(
       "Too long · beginning only",
@@ -707,6 +712,11 @@ describe("comments on the selection and the document", () => {
     expect(
       documentChip({ comments: documentComments({ count: 1 }) })?.meta,
     ).toBe("86 ¶ · 1 comment");
+    expect(
+      documentChip({
+        comments: documentComments({ count: null, readFailed: true }),
+      })?.meta,
+    ).toBe("86 ¶ · couldn't read comments");
   });
 
   it("says the comments are off for this message, and offers them back where the map is what is off", () => {

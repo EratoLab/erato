@@ -4,11 +4,13 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import { NO_WORD_COMMENT_LIST } from "../../hooks/useWordComments";
 import {
+  WORD_AUTHORING_FACET_ID,
   WORD_DOCUMENT_REVIEW_FACET_ID,
   WORD_SELECTION_FACET_ID,
 } from "../wordActionFacet";
 import {
   wordCommentChip,
+  wordCommentMapFacet,
   wordDocumentComments,
   wordOpenCommentsChip,
   wordPassageComments,
@@ -112,6 +114,10 @@ interface Scene {
   precedence?: WordCommentPrecedence;
   advertised?: WordCommentAdvertised;
   canChangeDefault?: boolean;
+  /** A document facet is advertised; default yes. */
+  documentAdvertised?: boolean;
+  /** A Send waits on comments Word did not hand over. */
+  readFailed?: boolean;
 }
 
 /** What WordChatInput hands the chip models: the preview and its as-if twin, from one scene. */
@@ -149,8 +155,9 @@ function inputOf(scene: Scene): WordCommentChipsInput {
     unreadable: false,
     availableFacetIds: FACETS,
   };
+  const preview = previewWordSend({ ...base, override, withoutComments });
   return {
-    preview: previewWordSend({ ...base, override, withoutComments }),
+    preview,
     asIf: previewWordSend({
       ...base,
       override: override === "passage" ? null : override,
@@ -165,8 +172,10 @@ function inputOf(scene: Scene): WordCommentChipsInput {
       openCommentsDismissed: scene.openCommentsDismissed ?? false,
     },
     documentOn: documentIncluded,
+    documentAdvertised: scene.documentAdvertised ?? true,
     threadAdvertised: advertised.thread,
-    mapAdvertised: advertised.map.size > 0,
+    mapFacet: wordCommentMapFacet(preview, advertised),
+    readFailed: scene.readFailed ?? false,
     canChangeDefault: scene.canChangeDefault ?? true,
     passageGoes,
   };
@@ -392,6 +401,57 @@ describe("wordCommentChip", () => {
     ).toBeNull();
   });
 
+  it("picks first on Show in Word only for a thread that goes because of the caret", () => {
+    const picks = (scene: Scene) =>
+      wordCommentChip(inputOf(scene))?.detail.showInWordPicks;
+    expect(picks({ list: caretIn(MAYA) })).toBe(true);
+    expect(
+      picks({
+        list: passageOver(MAYA),
+        passage: { rewritable: true },
+        precedence: "comment",
+      }),
+    ).toBe(true);
+    // Off for this message, or chosen already: showing must not change what is sent.
+    expect(picks({ list: caretIn(MAYA), withoutComments: true })).toBe(false);
+    expect(
+      picks({
+        list: passageOver(MAYA),
+        passage: { rewritable: true },
+        precedence: "comment",
+        override: "passage",
+      }),
+    ).toBe(false);
+    expect(picks({ pick: JONAS.ref })).toBe(false);
+  });
+
+  it("turns a thread the waiting Send could not read into an error its (x) answers", () => {
+    expect(
+      wordCommentChip(inputOf({ pick: JONAS.ref, readFailed: true })),
+    ).toMatchObject({
+      origin: "user",
+      state: "error",
+      tone: "error",
+      meta: "Couldn't read comments",
+      removeAction: "end-pick",
+    });
+    expect(
+      wordCommentChip(
+        inputOf({
+          list: passageOver(MAYA),
+          passage: { rewritable: true },
+          precedence: "comment",
+          readFailed: true,
+        }),
+      ),
+    ).toMatchObject({
+      origin: "ambient",
+      state: "error",
+      meta: "Couldn't read comments",
+      removeAction: "without",
+    });
+  });
+
   it("calls a thread the live list has not seen yet a chosen comment", () => {
     const chip = wordCommentChip(
       inputOf({
@@ -485,7 +545,105 @@ describe("wordOpenCommentsChip", () => {
     expect(byThread?.detail.coverage?.heading).toBe("If sent instead");
   });
 
-  it("shows only while the document is off, the thread facet is advertised and a thread is open", () => {
+  it("says Off for this message, not Replaced, when only Send without comments keeps them out", () => {
+    // The cursor's thread was left out with its (x): nothing replaces the open comments.
+    expect(
+      wordOpenCommentsChip(
+        inputOf({
+          includeOpenComments: true,
+          list: caretIn(MAYA),
+          withoutComments: true,
+        }),
+      ),
+    ).toMatchObject({
+      state: "suggested",
+      meta: "Off for this message",
+      restore: "restore-comments",
+    });
+    // The passage's own comments are off, but the passage still goes in their place.
+    expect(
+      wordOpenCommentsChip(
+        inputOf({
+          includeOpenComments: true,
+          list: passageOver(MAYA),
+          passage: { rewritable: false },
+          withoutComments: true,
+        }),
+      ),
+    ).toMatchObject({ state: "superseded", meta: "Replaced by selection" });
+  });
+
+  it("stays while the Send carries them, even with none open", () => {
+    const resolvedOnly = listOf({ kind: "none" }, [LENA]);
+    expect(
+      wordOpenCommentsChip(
+        inputOf({ list: resolvedOnly, includeOpenComments: true }),
+      ),
+    ).toMatchObject({
+      state: "included",
+      label: "Open comments (0)",
+      removeLabel: "Don't include open comments",
+    });
+    expect(
+      wordOpenCommentsChip(
+        inputOf({
+          list: listOf({ kind: "none" }, []),
+          includeOpenComments: true,
+        }),
+      ),
+    ).toMatchObject({ state: "included", label: "Open comments (0)" });
+  });
+
+  it("leads to the picker with none open only where no document chip does", () => {
+    const resolvedOnly = listOf({ kind: "none" }, [LENA]);
+    expect(
+      wordOpenCommentsChip(
+        inputOf({ list: resolvedOnly, documentAdvertised: false }),
+      ),
+    ).toMatchObject({
+      state: "suggested",
+      label: "Open comments (0)",
+      meta: "None open",
+      restore: null,
+      actions: ["choose"],
+      detail: {
+        intro:
+          "No comment in this document is open. Choose comment… to work on a resolved one.",
+        coverage: null,
+      },
+    });
+    expect(wordOpenCommentsChip(inputOf({ list: resolvedOnly }))).toBeNull();
+    expect(
+      wordOpenCommentsChip(
+        inputOf({
+          list: listOf({ kind: "none" }, []),
+          documentAdvertised: false,
+        }),
+      ),
+    ).toBeNull();
+  });
+
+  it("does not speak of the document being off where there is no document chip", () => {
+    expect(
+      wordOpenCommentsChip(inputOf({ documentAdvertised: false }))?.detail
+        .intro,
+    ).toBe("Sends the document's open comments with their replies.");
+  });
+
+  it("turns open comments the waiting Send could not read into an error", () => {
+    expect(
+      wordOpenCommentsChip(
+        inputOf({ includeOpenComments: true, readFailed: true }),
+      ),
+    ).toMatchObject({
+      state: "error",
+      tone: "error",
+      meta: "Couldn't read comments",
+      removeLabel: "Don't include open comments",
+    });
+  });
+
+  it("shows only while the document is off and the thread facet is advertised", () => {
     expect(
       wordOpenCommentsChip(inputOf({ documentIncluded: true })),
     ).toBeNull();
@@ -562,6 +720,51 @@ describe("comments on their parent", () => {
     );
   });
 
+  it("counts the map only where the facet the Send uses takes it", () => {
+    // comment_map on authoring only; this Send reviews.
+    const authoringOnly: WordCommentAdvertised = {
+      ...ALL,
+      map: new Set([WORD_AUTHORING_FACET_ID]),
+    };
+    const input = inputOf({
+      documentIncluded: true,
+      advertised: authoringOnly,
+    });
+    expect(input.preview.comments.carrier.kind).toBe("map");
+    expect(input.preview.facetId).toBe(WORD_DOCUMENT_REVIEW_FACET_ID);
+    expect(wordDocumentComments(input)).toMatchObject({
+      count: null,
+      lines: [],
+      off: false,
+    });
+    expect(
+      wordDocumentComments(
+        inputOf({
+          documentIncluded: true,
+          advertised: authoringOnly,
+          withoutComments: true,
+        }),
+      ),
+    ).toMatchObject({ off: false, mapOff: false });
+  });
+
+  it("says when the waiting Send could not read the comments its parent carries", () => {
+    expect(
+      wordPassageComments(
+        inputOf({
+          list: passageOver(MAYA),
+          passage: { rewritable: false },
+          readFailed: true,
+        }),
+      ),
+    ).toMatchObject({ checked: true, readFailed: true });
+    expect(
+      wordDocumentComments(
+        inputOf({ documentIncluded: true, readFailed: true }),
+      ),
+    ).toMatchObject({ count: null, readFailed: true });
+  });
+
   it("says when Send without comments takes the map, and when it took only a thread", () => {
     expect(
       wordDocumentComments(
@@ -596,6 +799,16 @@ describe("agreement with the send preview", () => {
     passage: { rewritable: boolean } | null;
   }[] = [
     { name: "none", list: listOf({ kind: "none" }), passage: null },
+    {
+      name: "none, resolved only",
+      list: listOf({ kind: "none" }, [LENA]),
+      passage: null,
+    },
+    {
+      name: "none, no comments",
+      list: listOf({ kind: "none" }, []),
+      passage: null,
+    },
     ...[[], [MAYA], [MAYA, JONAS, PAUL]].map((threads) => ({
       name: `caret ${threads.length}`,
       list: caretIn(...threads),
@@ -614,6 +827,7 @@ describe("agreement with the send preview", () => {
     noThread: { ...ALL, thread: false },
     noAnchored: { ...ALL, anchored: false },
     noMap: { ...ALL, map: new Set() },
+    mapOnAuthoringOnly: { ...ALL, map: new Set([WORD_AUTHORING_FACET_ID]) },
   };
   const scenes: Scene[] = [];
   for (const selection of SELECTIONS)
@@ -664,8 +878,53 @@ describe("agreement with the send preview", () => {
       expect((map?.count ?? null) !== null, where).toBe(
         preview.document === "sent" &&
           preview.comments.carrier.kind === "map" &&
+          preview.facetId !== null &&
+          (scene.advertised ?? ALL).map.has(preview.facetId) &&
           input.list.threads.length > 0,
       );
+      // Replaced only by what the Send carries first, never by "Send without comments".
+      if (open?.state === "superseded")
+        expect(
+          preview.carrier === "selection" ||
+            preview.carrier === "comment" ||
+            preview.comments.block !== null,
+          where,
+        ).toBe(true);
+      if (open?.restore === "restore-comments")
+        expect(
+          preview.carrier === "none" && input.gestures.withoutComments,
+          where,
+        ).toBe(true);
+    }
+  });
+
+  it("sends the open comments that Send this instead and + promise", () => {
+    for (const scene of scenes) {
+      const input = inputOf(scene);
+      const open = wordOpenCommentsChip(input);
+      const where = JSON.stringify({ ...scene, list: scene.list?.selection });
+      if (open?.state === "superseded") {
+        const instead = inputOf({
+          ...scene,
+          pick: null,
+          override: "passage",
+          withoutComments: false,
+          passage: open.sendInsteadDismissesSelection ? null : scene.passage,
+        });
+        expect(instead.preview.carrier, where).toBe("open-comments");
+        expect(wordOpenCommentsChip(instead)?.state, where).toBe("included");
+      }
+      if (open?.state === "suggested" && open.restore === "include") {
+        const after = wordOpenCommentsChip(
+          inputOf({
+            ...scene,
+            includeOpenComments: true,
+            openCommentsDismissed: false,
+            withoutComments: false,
+          }),
+        );
+        expect(["included", "superseded"], where).toContain(after?.state);
+      }
     }
   });
 
@@ -709,9 +968,12 @@ describe("agreement with the send preview", () => {
           openCommentsDismissed: true,
         });
         expect(off.preview.carrier, where).not.toBe("open-comments");
-        expect(wordOpenCommentsChip(off), where).toMatchObject({
-          state: "suggested",
-        });
+        // With none open there is nothing to bring back, and the document chip leads to the picker.
+        if (input.list.counts.open > 0 || !input.documentAdvertised)
+          expect(wordOpenCommentsChip(off), where).toMatchObject({
+            state: "suggested",
+          });
+        else expect(wordOpenCommentsChip(off), where).toBeNull();
       }
     }
   });

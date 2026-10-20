@@ -70,8 +70,10 @@ export interface WordContextHandlers {
   includeOpenComments: () => void;
   excludeOpenComments: () => void;
   setPassageComments: (on: boolean) => void;
+  /** Picks the thread first when `pickFirst`, so it stays the target once Word selects it. */
   showComment: (
     thread: WordCommentListThread,
+    pickFirst: boolean,
   ) => Promise<WordSelectionShowResult>;
 }
 
@@ -388,6 +390,8 @@ export function useWordContextItems({
       const base = {
         id: WORD_COMMENT_CHIP_ID,
         kind: "word.comment",
+        // A choice turns the caret's comment into the user's, in the same place before open comments.
+        placement: "ambient",
         icon: comment.variant === "choose" ? "comments" : "comment",
         state: comment.state,
         ...(comment.tone ? { tone: comment.tone } : {}),
@@ -404,7 +408,9 @@ export function useWordContextItems({
             <WordCommentDetail
               model={comment}
               context={context}
-              onShowInWord={showComment}
+              onShowInWord={(thread) =>
+                showComment(thread, comment.detail.showInWordPicks)
+              }
               onPick={pickComment}
               onOpenPicker={openPicker}
             />
@@ -450,6 +456,7 @@ export function useWordContextItems({
         dismissScope: "chat",
         icon: "comments",
         state: openComments.state,
+        ...(openComments.tone ? { tone: openComments.tone } : {}),
         ...(openComments.meta ? { meta: openComments.meta } : {}),
         label: openComments.label,
         spokenLabel: t({
@@ -458,13 +465,15 @@ export function useWordContextItems({
         }),
         ...lockedProps,
         ...(openComments.state === "suggested"
-          ? {
-              onRestore:
-                openComments.restore === "restore-comments"
-                  ? restoreComments
-                  : includeOpenComments,
-              restoreLabel: openComments.restoreLabel,
-            }
+          ? openComments.restore
+            ? {
+                onRestore:
+                  openComments.restore === "restore-comments"
+                    ? restoreComments
+                    : includeOpenComments,
+                restoreLabel: openComments.restoreLabel,
+              }
+            : {}
           : {
               onRemove: excludeOpenComments,
               removeLabel: openComments.removeLabel,

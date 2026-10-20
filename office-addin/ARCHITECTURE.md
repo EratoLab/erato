@@ -175,14 +175,22 @@ comments" and switch to the passage undone): `wordCommentChip` names the
 thread that goes (at the cursor, the pick, the passage's under the setting),
 the caret in several threads as a choice, or a pick that is gone, and turns
 suggested when only the as-if preview carries it, so (+) brings back exactly
-that. The id stays across variants and origins, so a choice in the detail
-keeps focus on the chip. Passage threads and the comment map are no chip of
-their own: `wordPassageComments` and `wordDocumentComments` put them on the
-selection and the document. "Open comments (N)" (`wordOpenCommentsChip`)
-shows only while the document is off. Quote, Show in Word, the switches,
-"What is sent" and the picker live in the details. The gestures stay in
-`wordCommentGestureStore`; while a Send waits on a choice, the chip's (x)
-answers that Send rather than the next one.
+that. The id stays across variants and origins, and its `placement` stays
+ambient, so a choice in the detail keeps focus on the chip and its place in
+the lane. Passage threads and the comment map are no chip of their own:
+`wordPassageComments` and `wordDocumentComments` put them on the selection and
+the document; the map counts only where the facet the Send uses takes
+comment_map (`wordCommentMapFacet`). "Open comments (N)"
+(`wordOpenCommentsChip`) shows only while the document is off: included
+whenever the Send carries them, even none, and without a document chip it is
+the way to the picker when every comment is resolved. Quote, Show in Word, the
+switches, "What is sent" and the picker live in the details; Show in Word
+picks only a thread that goes because of the caret, and otherwise changes
+nothing that is sent. The gestures stay in `wordCommentGestureStore`; while a
+Send waits (a choice, a gone pick, comments Word did not hand over), the
+chip's (x) and the notice's "Send without comments" answer that Send rather
+than the next one, and comments the waiting Send could not read show as an
+error on their chip.
 
 The one-off send prompts (a Send waiting on a choice, a slow capture, comment
 read progress, a failed selection read, the after-send capture and budget

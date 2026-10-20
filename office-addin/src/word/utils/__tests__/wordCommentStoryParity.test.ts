@@ -21,6 +21,7 @@ import {
 } from "../wordActionFacet";
 import {
   wordCommentChip,
+  wordCommentMapFacet,
   wordDocumentComments,
   wordOpenCommentsChip,
   wordPassageComments,
@@ -214,8 +215,8 @@ function recordingHandlers(calls: [string, unknown?][]): WordContextHandlers {
     includeOpenComments: record("includeOpenComments"),
     excludeOpenComments: record("excludeOpenComments"),
     setPassageComments: record("setPassageComments"),
-    showComment: async (thread) => {
-      calls.push(["showComment", thread.ref]);
+    showComment: async (thread, pickFirst) => {
+      calls.push(["showComment", { ref: thread.ref, pickFirst }]);
       return "selected";
     },
   };
@@ -226,7 +227,8 @@ function noticeHandlers(
 ): WordComposerNoticeHandlers {
   return {
     openPicker: () => calls.push(["openPicker"]),
-    sendWithoutComments: () => calls.push(["decideWithout"]),
+    // The notice's button is the chip's (x) gesture: both answer the waiting Send.
+    sendWithoutComments: () => calls.push(["withoutComments"]),
     sendWithoutDocument: () => calls.push(["sendWithoutDocument"]),
     dismissSelectionReadFailed: () =>
       calls.push(["dismissSelectionReadFailed"]),
@@ -303,8 +305,10 @@ function resolve(scene: Scene): Resolved {
       openCommentsDismissed: scene.openCommentsDismissed,
     },
     documentOn: scene.documentIncluded,
+    documentAdvertised: true,
     threadAdvertised: advertised.thread,
-    mapAdvertised: advertised.map.size > 0,
+    mapFacet: wordCommentMapFacet(preview, advertised),
+    readFailed: scene.waiting === "read-failed",
     canChangeDefault: advertised.thread,
     passageGoes,
   };
@@ -326,7 +330,8 @@ function resolve(scene: Scene): Resolved {
       available: true,
       included: scene.documentIncluded,
       status: "included" as const,
-      reading: false,
+      // Word is slow to hand the document over: the chip reads it while the notice offers to skip.
+      reading: scene.slowCapture,
       coverage: {
         paragraphsSent: 86,
         paragraphsTotal: 86,
@@ -396,6 +401,10 @@ const sent = (scene: Scene): Scene => ({
 const waitsOnChoice = (scene: Scene) =>
   scene.waiting === "choose-comment" || scene.waiting === "picked-gone";
 
+/** Showing a thread keeps it the target; it never answers a waiting Send. */
+const keepTarget = (scene: Scene, ref: string): Scene =>
+  scene.pick === ref ? scene : { ...scene, pick: ref, withoutComments: false };
+
 /** WordChatInput's handlers, on the scene. */
 function applyCall(scene: Scene, [name, arg]: [string, unknown?]): Scene {
   const passageGoes =
@@ -430,16 +439,12 @@ function applyCall(scene: Scene, [name, arg]: [string, unknown?]): Scene {
     case "includeDocument":
       return scene.locked ? scene : { ...scene, documentIncluded: true };
     case "withoutComments":
-      if (waitsOnChoice(scene))
+      if (scene.waiting)
         return sent({
           ...scene,
           pick: scene.waiting === "picked-gone" ? null : scene.pick,
         });
       return { ...scene, withoutComments: true };
-    case "decideWithout":
-      return waitsOnChoice(scene) || scene.waiting === "read-failed"
-        ? sent(scene)
-        : scene;
     case "restoreComments":
       return {
         ...scene,
@@ -448,29 +453,48 @@ function applyCall(scene: Scene, [name, arg]: [string, unknown?]): Scene {
       };
     case "endPick": {
       const next = { ...scene, pick: null };
-      return scene.waiting === "picked-gone" ? sent(next) : next;
+      return scene.waiting ? sent(next) : next;
     }
     case "sendPassageInstead":
       return { ...scene, pick: null, override: "passage" };
     case "sendCommentInstead":
       return { ...scene, override: "comment" };
     case "sendInsteadOfComment": {
-      const next: Scene = { ...scene, pick: null, override: "passage" };
+      const next: Scene = {
+        ...scene,
+        pick: null,
+        override: "passage",
+        withoutComments: false,
+      };
       return passageGoes ? dismissSelection(next) : next;
     }
     case "pickComment":
       return pickComment(arg as string);
-    case "showComment":
-      return scene.pick === arg ? scene : pickComment(arg as string);
+    case "showComment": {
+      const { ref, pickFirst } = arg as { ref: string; pickFirst: boolean };
+      return pickFirst ? keepTarget(scene, ref) : scene;
+    }
     case "includeOpenComments":
       return scene.locked
         ? scene
-        : { ...scene, includeOpenComments: true, openCommentsDismissed: false };
-    case "excludeOpenComments":
-      return scene.locked
-        ? scene
-        : { ...scene, includeOpenComments: false, openCommentsDismissed: true };
+        : {
+            ...scene,
+            includeOpenComments: true,
+            openCommentsDismissed: false,
+            withoutComments: false,
+          };
+    case "excludeOpenComments": {
+      if (scene.locked) return scene;
+      const next = {
+        ...scene,
+        includeOpenComments: false,
+        openCommentsDismissed: true,
+      };
+      return scene.waiting === "read-failed" ? sent(next) : next;
+    }
     case "setPassageComments":
+      if (!(arg as boolean) && scene.waiting === "read-failed")
+        return sent(scene);
       return { ...scene, withoutComments: !(arg as boolean) };
     case "sendWithoutDocument":
       return sent(scene);
@@ -582,9 +606,11 @@ function applyGesture(scene: Scene, resolved: Resolved, gesture: string): Step {
         announce: chosenText(target),
       };
     case "show": {
-      const picks = scene.pick !== target;
+      const pickFirst =
+        resolved.models.comment?.detail.showInWordPicks ?? false;
+      const picks = pickFirst && scene.pick !== target;
       return {
-        to: applyCall(scene, ["showComment", target]),
+        to: applyCall(scene, ["showComment", { ref: target, pickFirst }]),
         ...(picks ? { announce: chosenText(target) } : {}),
       };
     }
@@ -709,6 +735,7 @@ function itemData(item: ComposerContextItem, models: Resolved["models"]) {
     id: item.id,
     kind: item.kind,
     origin: item.origin,
+    ...optional("placement", item.placement),
     ...optional("dismissScope", item.dismissScope),
     icon: item.icon,
     state: item.state,
@@ -770,18 +797,24 @@ function sendData(preview: WordSendPreview) {
 }
 
 /** The hard rule: no chip says "included" about something the Send does not carry. */
-function assertAgrees(resolved: Resolved, story: string) {
+function assertAgrees(resolved: Resolved, scene: Scene, story: string) {
   const { preview } = resolved;
   const stateOf = (kind: string) =>
     resolved.items.find((item) => item.kind === kind)?.state;
   const included = (kind: string) => stateOf(kind) === "included";
+  // Comments Word did not hand over wait on the user, so their chip is an error, not included.
+  const unread = scene.waiting === "read-failed";
   // A passage whose last read failed still goes; its chip says to send again.
   if (included("word.selection")) expect(preview.selection, story).toBe("sent");
   if (included("word.document")) expect(preview.document, story).toBe("sent");
-  expect(included("word.comment"), story).toBe(preview.carrier === "comment");
-  expect(included("word.openComments"), story).toBe(
-    preview.carrier === "open-comments",
+  expect(included("word.comment"), story).toBe(
+    preview.carrier === "comment" && !unread,
   );
+  expect(included("word.openComments"), story).toBe(
+    preview.carrier === "open-comments" && !unread,
+  );
+  if (unread && preview.carrier === "comment")
+    expect(stateOf("word.comment"), story).toBe("error");
   expect(stateOf("word.comment") === "attention", story).toBe(
     preview.comments.block === "choose-comment",
   );
@@ -863,7 +896,7 @@ it("writes what every Word comment story draws, and where each gesture leads", a
     const key = hashOf(scene);
     if (states[key]) return { key, resolved: null };
     const resolved = resolve(scene);
-    assertAgrees(resolved, story);
+    assertAgrees(resolved, scene, story);
     states[key] = {
       items: resolved.items.map((item) => {
         const data = itemData(item, resolved.models);
