@@ -247,6 +247,83 @@ pub(crate) async fn granted_tools(
     Some((grant.binding, tools))
 }
 
+/// What the parent's trace reports as the part each granted read asked for:
+/// the tool's receipt input fields, without the context version the server
+/// writes into every call.
+pub fn client_read_fields(
+    config: &crate::config::ClientToolsConfig,
+    grant: &ClientToolGrant,
+) -> crate::services::delegation_trace::ClientReadFields {
+    config
+        .tools
+        .values()
+        .filter(|tool| grant.tools.contains(&tool.qualified_name()))
+        .map(|tool| {
+            let context_input = tool
+                .child_context_input
+                .as_ref()
+                .map(|field| vec![field.clone()]);
+            let paths = tool
+                .replay
+                .keep_input_fields
+                .iter()
+                .filter_map(|path| crate::config::parse_receipt_field_path(path).ok())
+                .filter(|path| Some(path) != context_input.as_ref())
+                .collect();
+            (tool.name.clone(), paths)
+        })
+        .collect()
+}
+
+/// The model-facing name of a granted tool: what its calls are stored under.
+fn granted_name(qualified: &str) -> &str {
+    qualified
+        .rsplit_once('/')
+        .map_or(qualified, |(_, name)| name)
+}
+
+/// What a client task's answer says about its granted calls.
+#[derive(Debug, Default, PartialEq)]
+pub struct GrantedCallSummary {
+    /// The `freshness` the last successful granted call reported.
+    pub freshness: Option<Value>,
+    /// Granted calls the user declined.
+    pub declined: u32,
+}
+
+/// Reads the granted calls off a child's stored answer parts.
+pub fn granted_call_summary(grant: &ClientToolGrant, content: &[Value]) -> GrantedCallSummary {
+    let mut summary = GrantedCallSummary::default();
+    for part in content {
+        let granted = part.get("content_type").and_then(Value::as_str) == Some("tool_use")
+            && part
+                .get("tool_name")
+                .and_then(Value::as_str)
+                .is_some_and(|name| grant.tools.iter().any(|tool| granted_name(tool) == name));
+        let Some(output) = part.get("output").filter(|_| granted) else {
+            continue;
+        };
+        match output.get("status").and_then(Value::as_str) {
+            Some("success") => {
+                if let Some(freshness) = output
+                    .pointer("/result/freshness")
+                    .filter(|freshness| freshness.is_object())
+                {
+                    summary.freshness = Some(freshness.clone());
+                }
+            }
+            Some("cancelled") if output.get("reason").and_then(Value::as_str) == Some(DECLINED) => {
+                summary.declined += 1;
+            }
+            _ => {}
+        }
+    }
+    summary
+}
+
+/// The outcome of a granted call the user declined.
+pub const DECLINED: &str = "declined";
+
 /// The input a granted call is dispatched with: the grant's context version
 /// in place of whatever the model put there, or nothing when the grant has
 /// none. The stored call keeps the model's input.
@@ -282,6 +359,8 @@ mod tests {
             }),
         }
     }
+
+    const READ_NAME: &str = "read_document_blocks";
 
     fn grant() -> ClientToolGrant {
         ClientToolGrant {
@@ -470,6 +549,67 @@ mod tests {
             &facets,
             &call(json!({"facet_ids": "word_reader"}))
         ));
+    }
+
+    #[test]
+    fn the_summary_keeps_the_last_freshness_and_counts_declined_granted_calls() {
+        let part = |tool: &str, output: Value| {
+            json!({"content_type": "tool_use", "tool_call_id": "c", "tool_name": tool,
+                   "status": "success", "output": output})
+        };
+        let fresh = |changes: &str| json!({"status": "success", "result": {"text": "t", "freshness": {"changes": changes}}});
+        let declined = json!({"status": "cancelled", "reason": "declined", "error": "e"});
+        let content = [
+            part(READ_NAME, fresh("none")),
+            part(READ_NAME, declined.clone()),
+            part(READ_NAME, fresh("in-scope")),
+            part(
+                READ_NAME,
+                json!({"status": "success", "result": {"text": "no freshness"}}),
+            ),
+            part(
+                READ_NAME,
+                json!({"status": "cancelled", "reason": "timeout"}),
+            ),
+            part("search_web", fresh("elsewhere")),
+            part("search_web", declined.clone()),
+            part(READ_NAME, declined),
+            json!({"content_type": "text", "text": "answer"}),
+        ];
+        assert_eq!(
+            granted_call_summary(&grant(), &content),
+            GrantedCallSummary {
+                freshness: Some(json!({"changes": "in-scope"})),
+                declined: 2,
+            }
+        );
+        assert_eq!(
+            granted_call_summary(&grant(), &[]),
+            GrantedCallSummary::default()
+        );
+    }
+
+    #[test]
+    fn a_reads_trace_fields_leave_out_the_context_version() {
+        let mut config = crate::config::ClientToolsConfig::default();
+        let mut read = read_tool();
+        read.replay.keep_input_fields = vec!["$.snapshot".into(), "$.range.start".into()];
+        config.tools.insert("read".into(), read);
+        config.tools.insert(
+            "other".into(),
+            ClientToolConfig {
+                name: "read_document_outline".into(),
+                namespace: Some("word".into()),
+                ..Default::default()
+            },
+        );
+        assert_eq!(
+            client_read_fields(&config, &grant()),
+            crate::services::delegation_trace::ClientReadFields::from([(
+                READ_NAME.to_string(),
+                vec![vec!["range".to_string(), "start".to_string()]],
+            )])
+        );
     }
 
     #[test]

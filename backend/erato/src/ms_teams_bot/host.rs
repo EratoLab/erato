@@ -1127,6 +1127,7 @@ mod tests {
                     preset: "restrictive".to_string(),
                     requested_at: String::new(),
                     allow_always: Some(false),
+                    kind: Some(ToolApprovalKind::McpTool),
                 }),
             });
         ContentPart::ToolApprovalRequest(request)
