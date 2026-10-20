@@ -123,7 +123,7 @@ const sendMessage = async (page: Page, prompt: string) => {
   await page.waitForURL(/\/chat\/[0-9a-fA-F-]+/, { timeout: 15000 });
 };
 
-/** The two paired tasks, dispatched and parked on one card of two rows. */
+/** The two paired tasks, dispatched and parked on one queue of two items. */
 const parkOnBothPairedTasks = async (page: Page): Promise<Locator> => {
   await gotoAppPage(page, "/");
   await chatIsReadyToChat(page);
@@ -131,25 +131,27 @@ const parkOnBothPairedTasks = async (page: Page): Promise<Locator> => {
   await sendMessage(page, PAIRED_TASKS_PROMPT);
 
   const assistantMessage = page.getByTestId("message-assistant").last();
-  const approval = assistantMessage.getByTestId("delegated-task-approval");
+  const approval = assistantMessage.getByTestId("approval-queue");
   await expect(approval).toBeVisible({ timeout: PARK_TIMEOUT_MS });
-  // One card for the stop, one row per child that asked. Two rows are the whole
-  // point: a stop that covers several decisions is settled in one request, and
-  // that is the shape neither the single MCP card nor an integration test drives
-  // through a client.
+  // One queue for the stop, one item per child that asked, shown one at a time.
+  // Two items are the whole point: a stop that covers several decisions is
+  // settled in one request, and that is the shape neither the single MCP card
+  // nor an integration test drives through a client.
   await expect(approval).toHaveAttribute("data-item-count", "2");
-  const items = approval.getByTestId("delegated-task-approval-item");
-  await expect(items).toHaveCount(2);
-  for (const item of await items.all()) {
-    await expect(item).toContainText(GATED_TOOL);
-    // The child chat the row covers, matched as an id rather than as "not
-    // empty": an attribute that had been dropped altogether would satisfy the
-    // latter.
-    await expect(item).toHaveAttribute(
-      "data-child-chat-id",
-      /^[0-9a-fA-F-]{36}$/,
-    );
-  }
+  await expect(approval).toHaveAttribute("data-position", "1");
+  await expect(approval.getByTestId("approval-queue-counter")).toContainText(
+    "Decision 1 of 2",
+  );
+  const item = approval.getByTestId("delegated-task-approval-item");
+  await expect(item).toHaveCount(1);
+  await expect(item).toContainText(GATED_TOOL);
+  // The child chat the item covers, matched as an id rather than as "not
+  // empty": an attribute that had been dropped altogether would satisfy the
+  // latter.
+  await expect(item).toHaveAttribute(
+    "data-child-chat-id",
+    /^[0-9a-fA-F-]{36}$/,
+  );
   return assistantMessage;
 };
 
@@ -232,26 +234,24 @@ test("refuses a decision that answers only one of two open items, keeps the card
   test.setTimeout(300000);
 
   const assistantMessage = await parkOnBothPairedTasks(page);
-  const approval = assistantMessage.getByTestId("delegated-task-approval");
-  const items = approval.getByTestId("delegated-task-approval-item");
+  const approval = assistantMessage.getByTestId("approval-queue");
+  const item = approval.getByTestId("delegated-task-approval-item");
 
   const messageId = await assistantMessage.getAttribute("data-message-id");
   expect(messageId, "the parked assistant message carries its id").toBeTruthy();
-  const approvalIds = await items.evaluateAll((nodes) =>
-    nodes.map((node) => node.getAttribute("data-approval-id") ?? ""),
-  );
-  expect(approvalIds.filter(Boolean)).toHaveLength(2);
+  const firstApprovalId = await item.getAttribute("data-approval-id");
+  expect(firstApprovalId, "the current item names its approval").toBeTruthy();
 
-  // Through the API, because the card cannot be made to do this: it holds a
-  // row's answer until every row has one, precisely because the server refuses
-  // anything less. The refusal is what that behaviour rests on, so it is
+  // Through the API, because the queue cannot be made to do this: it holds an
+  // item's answer until every item has one, precisely because the server
+  // refuses anything less. The refusal is what that behaviour rests on, so it is
   // asserted here rather than assumed.
   const partial = await page.request.post(
     "/api/v1beta/me/messages/continuestream",
     {
       data: {
         message_id: messageId,
-        decisions: [{ approval_id: approvalIds[0], decision: "approve" }],
+        decisions: [{ approval_id: firstApprovalId, decision: "approve" }],
       },
     },
   );
@@ -261,29 +261,33 @@ test("refuses a decision that answers only one of two open items, keeps the card
     missing?: string[];
   };
   expect(refusal.code).toBe("decisions_mismatch");
-  expect(refusal.missing).toEqual([approvalIds[1]]);
+  expect(refusal.missing).toHaveLength(1);
+  const secondApprovalId = refusal.missing?.[0];
+  expect(secondApprovalId).not.toBe(firstApprovalId);
 
   // Refused, not half-applied: the same two questions are still being asked and
   // the answer the user is about to give still covers them.
   await expect(approval).toBeVisible();
   await expect(approval).toHaveAttribute("data-item-count", "2");
-  await expect(items).toHaveCount(2);
-
-  // The first row's answer is held rather than sent, and says so.
-  await items
-    .first()
-    .getByRole("button", { name: "Allow once", exact: true })
-    .click();
-  await expect(items.first()).toContainText(
-    "Allowed — sent once every item is decided",
+  await expect(item).toHaveAttribute(
+    "data-approval-id",
+    String(firstApprovalId),
   );
-  await expect(approval).toBeVisible();
+
+  // The first answer is held rather than sent, and the queue moves on to the
+  // other child.
+  await item.getByRole("button", { name: "Allow once", exact: true }).click();
+  await expect(approval).toHaveAttribute("data-position", "2");
+  await expect(item).toHaveAttribute(
+    "data-approval-id",
+    String(secondApprovalId),
+  );
+  await expect(approval.getByTestId("approval-queue-counter")).toContainText(
+    "Decision 2 of 2",
+  );
 
   // The second answer completes the set, so now it goes.
-  await items
-    .last()
-    .getByRole("button", { name: "Allow once", exact: true })
-    .click();
+  await item.getByRole("button", { name: "Allow once", exact: true }).click();
   await expect(approval).toHaveCount(0, { timeout: RESUME_TIMEOUT_MS });
 
   await chatIsReadyToChat(page, {
@@ -325,10 +329,10 @@ test("withdrawing denies both open items and the turn still finishes in prose", 
   test.setTimeout(300000);
 
   const assistantMessage = await parkOnBothPairedTasks(page);
-  const approval = assistantMessage.getByTestId("delegated-task-approval");
+  const approval = assistantMessage.getByTestId("approval-queue");
 
   // Withdraw is a decision, not a cancellation, and the card says so.
-  const bulk = approval.getByTestId("delegated-task-approval-bulk");
+  const bulk = approval.getByTestId("approval-queue-bulk");
   await expect(bulk).toContainText(
     "Withdrawing denies everything still open; the assistant answers with what it has.",
   );

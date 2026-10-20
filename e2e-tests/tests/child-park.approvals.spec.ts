@@ -157,7 +157,7 @@ const parkOnTaskPrompt = async (
   await sendMessage(page, prompt);
 
   const assistantMessage = page.getByTestId("message-assistant").last();
-  const approval = assistantMessage.getByTestId("delegated-task-approval");
+  const approval = assistantMessage.getByTestId("approval-queue");
   await expect(approval).toBeVisible({ timeout: PARK_TIMEOUT_MS });
   return { assistantMessage, approval };
 };
@@ -174,7 +174,7 @@ test("denies a parked child, which finishes in prose, and the origin turn comple
     REFUSED_TASK_PROMPT,
   );
 
-  // One card for the stop, one row for the one child that asked, naming the
+  // One queue for the stop, one item for the one child that asked, naming the
   // CHILD's call: the `delegate_task` name on the item describes the dispatch,
   // so a row showing that instead would mean the question came from the wrong
   // side of the run.
