@@ -22,11 +22,11 @@ interface UseTokenUsageWithFilesOptions {
   attachedFiles: FileUploadItem[];
   /**
    * Inline `File`s that should count toward the estimate without being
-   * persisted to the upload pipeline. The Outlook add-in passes its
-   * previewed email body here so the user sees an accurate token total
-   * before clicking Send. Pass a memoized array; the React Query cache key
-   * derives a digest from the file content, so an unstable reference will
-   * repeat digest work.
+   * persisted to the upload pipeline: the context items' estimates. Debounced
+   * like the message, since ambient context (a Word selection, a polled
+   * draft) changes with every click; a list that becomes empty clears at
+   * once. Pass a memoized array; the React Query cache key derives a digest
+   * from the file content, so an unstable reference will repeat digest work.
    */
   virtualFiles?: File[];
   /** Current chat ID */
@@ -83,13 +83,18 @@ export function useTokenUsageWithFiles({
 
   // Debounce the message to prevent spamming the estimate endpoint
   const [debouncedMessage] = useDebounce(message, debounceDelay);
+  const [debouncedVirtualFiles] = useDebounce(virtualFiles, debounceDelay);
+  const liveVirtualFiles =
+    virtualFiles?.length && debouncedVirtualFiles?.length
+      ? debouncedVirtualFiles
+      : undefined;
 
   // Extract file IDs for query
   const fileIds = useMemo(
     () => attachedFiles.map((file) => file.id),
     [attachedFiles],
   );
-  const hasVirtualFiles = (virtualFiles?.length ?? 0) > 0;
+  const hasVirtualFiles = (liveVirtualFiles?.length ?? 0) > 0;
   const [virtualFilesDigest, setVirtualFilesDigest] = useState<string | null>(
     hasVirtualFiles ? null : "",
   );
@@ -97,13 +102,13 @@ export function useTokenUsageWithFiles({
   useEffect(() => {
     let cancelled = false;
 
-    if (!virtualFiles || virtualFiles.length === 0) {
+    if (!liveVirtualFiles || liveVirtualFiles.length === 0) {
       setVirtualFilesDigest("");
       return;
     }
 
     setVirtualFilesDigest(null);
-    void digestVirtualFilesContent(virtualFiles)
+    void digestVirtualFilesContent(liveVirtualFiles)
       .then((digest) => {
         if (!cancelled) {
           setVirtualFilesDigest(digest);
@@ -111,14 +116,14 @@ export function useTokenUsageWithFiles({
       })
       .catch(() => {
         if (!cancelled) {
-          setVirtualFilesDigest(digestVirtualFiles(virtualFiles));
+          setVirtualFilesDigest(digestVirtualFiles(liveVirtualFiles));
         }
       });
 
     return () => {
       cancelled = true;
     };
-  }, [virtualFiles]);
+  }, [liveVirtualFiles]);
 
   const isVirtualFilesDigestReady = virtualFilesDigest !== null;
   const shouldEstimate =
@@ -150,7 +155,7 @@ export function useTokenUsageWithFiles({
         previousMessageId,
         fileIds.length > 0 ? fileIds : undefined,
         chatProviderId,
-        virtualFiles && virtualFiles.length > 0 ? virtualFiles : undefined,
+        liveVirtualFiles,
       );
     },
     enabled: shouldEstimate && isVirtualFilesDigestReady,
@@ -177,7 +182,7 @@ export function useTokenUsageWithFiles({
       previousMessageId,
       fileIds.length > 0 ? fileIds : undefined,
       chatProviderId,
-      virtualFiles && virtualFiles.length > 0 ? virtualFiles : undefined,
+      liveVirtualFiles,
     );
   }, [
     disabled,
@@ -188,7 +193,7 @@ export function useTokenUsageWithFiles({
     assistantId,
     previousMessageId,
     chatProviderId,
-    virtualFiles,
+    liveVirtualFiles,
   ]);
 
   // Function to clear the current estimation

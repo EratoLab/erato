@@ -106,6 +106,7 @@ vi.mock("@/providers/FeatureConfigProvider", () => ({
 
 vi.mock("@/hooks/i18n", () => ({
   useOptionalTranslation: (id: string) => mockUseOptionalTranslation(id),
+  getOptionalTranslation: () => undefined,
 }));
 
 vi.mock("@/hooks/chat", () => ({
@@ -6343,6 +6344,361 @@ describe("ChatInput", () => {
       expect(
         screen.getByTestId("chat-input-send-message"),
       ).toHaveAccessibleName("Send message");
+    });
+  });
+
+  describe("lane send gate (ERMAIN-1027)", () => {
+    const staged = (id: string, size?: number): FileUploadItem =>
+      ({
+        id,
+        filename: `${id}.pdf`,
+        download_url: `https://example.com/${id}`,
+        file_contents_unavailable_missing_permissions: false,
+        is_sharepoint_file: false,
+        ...(size === undefined ? {} : { size }),
+      }) as FileUploadItem;
+
+    const bytes = (name: string, length: number) =>
+      new File(["x".repeat(length)], name, { type: "message/rfc822" });
+
+    const chip = (
+      id: string,
+      over: Partial<Extract<ComposerContextItem, { origin: "ambient" }>> = {},
+    ): ComposerContextItem => ({
+      id,
+      kind: "outlook.thread",
+      origin: "ambient",
+      dismissScope: "item",
+      state: "included",
+      label: id,
+      icon: "mail",
+      onRemove: vi.fn(),
+      ...over,
+    });
+
+    const renderLane = async (
+      files: FileUploadItem[],
+      props: Partial<Parameters<typeof ChatInput>[0]>,
+    ) => {
+      mockUseUploadFeature.mockReturnValue({
+        enabled: true,
+        maxSizeBytes: 10,
+        maxSizeFormatted: "10 B",
+      });
+      mockUseChatInputFeature.mockReturnValue({
+        autofocus: false,
+        showUsageAdvisory: true,
+        maxFiles: 3,
+      });
+      mockUseChatInputHandlers.mockReturnValue({
+        attachedFiles: files,
+        fileError: null,
+        setFileError: vi.fn(),
+        handleFilesUploaded: vi.fn(),
+        handleRemoveFile: vi.fn(),
+        handleRemoveAllFiles: vi.fn(),
+        setAttachedFiles: vi.fn(),
+        createSubmitHandler: () => (event: FormEvent) => event.preventDefault(),
+      });
+      const queryClient = new QueryClient({
+        defaultOptions: { queries: { retry: false } },
+      });
+      const { i18n } = await import("@lingui/core");
+      const ui = (next: Partial<Parameters<typeof ChatInput>[0]>) => (
+        <QueryClientProvider client={queryClient}>
+          <I18nProvider i18n={i18n}>
+            <ChatInput onSendMessage={vi.fn()} {...props} {...next} />
+          </I18nProvider>
+        </QueryClientProvider>
+      );
+      const view = render(ui({}));
+      return {
+        rerenderWith: (next: Partial<Parameters<typeof ChatInput>[0]>) =>
+          view.rerender(ui(next)),
+      };
+    };
+
+    const send = () => screen.getByTestId("chat-input-send-message");
+
+    it("blocks an included upload over the per-file limit", async () => {
+      await renderLane([], {
+        contextItems: [
+          chip("thread", {
+            estimate: bytes("thread.eml", 20),
+            estimateUpload: true,
+          }),
+        ],
+      });
+
+      expect(
+        screen.getByPlaceholderText(
+          "Cannot send: thread.eml exceeds the 10 B limit. Remove it to send.",
+        ),
+      ).toBeInTheDocument();
+      expect(send()).toBeDisabled();
+      expect(send()).toHaveAccessibleName(
+        "Cannot send: File size limit exceeded",
+      );
+    });
+
+    it("counts included uploads with the staged files against the message's cap", async () => {
+      await renderLane([staged("a"), staged("b")], {
+        contextItems: [
+          chip("thread", {
+            estimate: bytes("thread.eml", 1),
+            estimateUpload: true,
+          }),
+          chip("drop", {
+            estimate: bytes("drop.eml", 1),
+            estimateUpload: true,
+          }),
+        ],
+      });
+
+      expect(
+        screen.getByPlaceholderText(
+          "Cannot send: a message can carry at most 3 files. Remove some to send.",
+        ),
+      ).toBeInTheDocument();
+      expect(send()).toHaveAccessibleName(
+        "Cannot send: File count limit exceeded",
+      );
+    });
+
+    it("blocks staged files alone over the cap while a host passes items", async () => {
+      await renderLane([staged("a"), staged("b"), staged("c"), staged("d")], {
+        contextItems: [],
+      });
+
+      expect(
+        screen.getByPlaceholderText(
+          "Cannot send: a message can carry at most 3 files. Remove some to send.",
+        ),
+      ).toBeInTheDocument();
+    });
+
+    it("never counts a facet estimate, nor an item that is not included", async () => {
+      await renderLane([staged("a")], {
+        contextItems: [
+          chip("selection", { estimate: bytes("word_selection.txt", 50) }),
+          chip("off", {
+            state: "suggested",
+            onRestore: vi.fn(),
+            estimate: bytes("off.eml", 50),
+            estimateUpload: true,
+          }),
+        ],
+      });
+
+      expect(
+        screen.getByPlaceholderText("Type a message..."),
+      ).toBeInTheDocument();
+      expect(send()).toHaveAccessibleName("Send message");
+    });
+
+    it("lets the owner's verdict win", async () => {
+      await renderLane([], {
+        contextItems: [
+          chip("thread", {
+            estimate: bytes("thread.eml", 20),
+            estimateUpload: true,
+          }),
+        ],
+        sizeLimitExceeded: { names: [], formatted: "7", kind: "count" },
+      });
+
+      expect(
+        screen.getByPlaceholderText(
+          "Cannot send: a message can carry at most 7 files. Remove some to send.",
+        ),
+      ).toBeInTheDocument();
+    });
+
+    it("leaves a composer without items ungated", async () => {
+      await renderLane(
+        [staged("a", 50), staged("b"), staged("c"), staged("d")],
+        {},
+      );
+
+      expect(
+        screen.getByPlaceholderText("Type a message..."),
+      ).toBeInTheDocument();
+    });
+
+    it("hands included estimates to the token check with a stable identity", async () => {
+      const facet = bytes("word_selection.txt", 5);
+      const items = [chip("selection", { estimate: facet })];
+      const { rerenderWith } = await renderLane([], { contextItems: items });
+      const first = (
+        mockChatInputTokenUsage.mock.calls.at(-1)?.[0] as {
+          virtualFiles?: File[];
+        }
+      ).virtualFiles;
+      expect(first).toEqual([facet]);
+
+      rerenderWith({ contextItems: [chip("selection", { estimate: facet })] });
+      expect(
+        (
+          mockChatInputTokenUsage.mock.calls.at(-1)?.[0] as {
+            virtualFiles?: File[];
+          }
+        ).virtualFiles,
+      ).toBe(first);
+    });
+  });
+
+  describe("tool chips next to + (ERMAIN-1027)", () => {
+    const facets = [
+      {
+        id: "web_search",
+        display_name: "Web search",
+        icon: "iconoir-globe",
+        default_enabled: false,
+      },
+      {
+        id: "thinking",
+        display_name: "Extended thinking",
+        icon: "iconoir-brain",
+        default_enabled: false,
+      },
+      {
+        id: "code",
+        display_name: "Code",
+        icon: "iconoir-code",
+        default_enabled: false,
+      },
+    ];
+
+    beforeEach(() => {
+      mockUseUploadFeature.mockReturnValue({ enabled: true });
+      mockUseFacets.mockReturnValue({
+        data: { facets, global_facet_settings: undefined },
+        error: null,
+      });
+    });
+
+    const renderTools = async (
+      props: Partial<Parameters<typeof ChatInput>[0]> = {},
+    ) => {
+      const queryClient = new QueryClient({
+        defaultOptions: { queries: { retry: false } },
+      });
+      const { i18n } = await import("@lingui/core");
+      render(
+        <QueryClientProvider client={queryClient}>
+          <I18nProvider i18n={i18n}>
+            <ChatInput
+              onSendMessage={vi.fn()}
+              handleFileAttachments={vi.fn()}
+              chatId="chat-1"
+              initialSelectedFacetIds={["code", "web_search"]}
+              {...props}
+            />
+          </I18nProvider>
+        </QueryClientProvider>,
+      );
+    };
+
+    const chipNames = () =>
+      Array.from(
+        document.querySelectorAll('[data-ui="composer-tool-chip"]'),
+      ).map((chip) => chip.getAttribute("aria-label"));
+
+    it("draws the selected tools after + and the modes, in the server's order", async () => {
+      mockUseIsMobile.mockReturnValue(true);
+      await renderTools({
+        composerModes: [
+          {
+            id: "outlook.scheduling",
+            label: "Scheduling",
+            icon: "calendar",
+            endLabel: "End scheduling",
+            onEnd: vi.fn(),
+          },
+        ],
+      });
+
+      expect(chipNames()).toEqual(["Deselect Web search", "Deselect Code"]);
+      const controls = document.querySelector(
+        '[data-ui="chat-input-controls"]',
+      )!;
+      const plus = screen.getByTestId("chat-input-add-controls");
+      const mode = controls.querySelector('[data-ui="composer-mode-chip"]')!;
+      const group = screen.getByRole("group", { name: "Selected tools" });
+      expect(controls.contains(group)).toBe(true);
+      expect(
+        plus.compareDocumentPosition(mode) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+      expect(
+        mode.compareDocumentPosition(group) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+    });
+
+    it("deselects through the same path as the menu, then hands focus to +", async () => {
+      mockUseIsMobile.mockReturnValue(true);
+      const onFacetSelectionChange = vi.fn();
+      await renderTools({ onFacetSelectionChange });
+      const trigger = document.createElement("button");
+      trigger.dataset.testid = "chat-input-add-menu-trigger";
+      screen.getByTestId("chat-input-add-controls").appendChild(trigger);
+
+      fireEvent.click(
+        screen.getByRole("button", { name: "Deselect Web search" }),
+      );
+      expect(onFacetSelectionChange).toHaveBeenLastCalledWith(["code"]);
+      expect(
+        screen.getByRole("button", { name: "Deselect Code" }),
+      ).toHaveFocus();
+      expect(
+        document.querySelector('[data-ui="composer-tool-live"]'),
+      ).toHaveTextContent("Web search deselected.");
+      expect(
+        (
+          mockChatInputAddControls.mock.calls.at(-1)?.[0] as {
+            selectedFacetIds: string[];
+          }
+        ).selectedFacetIds,
+      ).toEqual(["code"]);
+
+      fireEvent.click(screen.getByRole("button", { name: "Deselect Code" }));
+      expect(onFacetSelectionChange).toHaveBeenLastCalledWith([]);
+      expect(trigger).toHaveFocus();
+      expect(
+        document.querySelector('[data-ui="composer-tool-live"]'),
+      ).toHaveTextContent("Code deselected.");
+    });
+
+    it("locks the chips an assistant enforces, and says why", async () => {
+      mockUseIsMobile.mockReturnValue(true);
+      const onFacetSelectionChange = vi.fn();
+      await renderTools({
+        enforceSelectedFacetIds: true,
+        onFacetSelectionChange,
+      });
+      onFacetSelectionChange.mockClear();
+
+      const chip = screen.getByRole("button", { name: "Deselect Web search" });
+      expect(chip).toHaveAttribute("aria-disabled", "true");
+      expect(chip).toHaveAttribute(
+        "title",
+        "This assistant sets the tools for its chats.",
+      );
+      fireEvent.click(chip);
+      expect(onFacetSelectionChange).not.toHaveBeenCalled();
+      expect(chipNames()).toHaveLength(2);
+    });
+
+    it("keeps the desktop Tools dropdown and draws no chips there", async () => {
+      mockUseIsMobile.mockReturnValue(false);
+      await renderTools();
+
+      expect(screen.getByTestId("facet-selector")).toBeInTheDocument();
+      expect(
+        document.querySelector('[data-ui="composer-tool-chip"]'),
+      ).toBeNull();
+      expect(
+        document.querySelector('[data-ui="composer-tool-live"]'),
+      ).toBeNull();
     });
   });
 

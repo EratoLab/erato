@@ -52,6 +52,8 @@ interface ComposerContextGlyphProps {
   state: ComposerContextState;
   tone: ComposerContextTone;
   toneIcon?: "item" | "tone";
+  /** "sm" draws the glyph at 13 px, for the sent-with row. */
+  size?: "md" | "sm";
 }
 
 /**
@@ -66,6 +68,7 @@ export const ComposerContextGlyph = ({
   state,
   tone,
   toneIcon = "item",
+  size = "md",
 }: ComposerContextGlyphProps) => {
   if (state === "loading") {
     return <SpinnerIcon size="sm" aria-hidden="true" />;
@@ -82,7 +85,7 @@ export const ComposerContextGlyph = ({
       : WarningIcon;
   return (
     <span aria-hidden="true" className="inline-flex">
-      <Glyph className="size-4" />
+      <Glyph className={size === "sm" ? "size-[13px]" : "size-4"} />
     </span>
   );
 };

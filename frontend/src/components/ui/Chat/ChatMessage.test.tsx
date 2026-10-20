@@ -4,14 +4,24 @@ import { MemoryRouter, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { messages as enMessages } from "@/locales/en/messages.json";
+import {
+  registerSentWithDescriptors,
+  resetSentWithDescriptors,
+} from "@/utils/chat/sentWith";
 
-import { CHAT_MESSAGE_HOST_COMPONENTS, ChatMessage } from "./ChatMessage";
+import {
+  CHAT_MESSAGE_HOST_COMPONENTS,
+  ChatMessage,
+  useChatMessageRenderer,
+} from "./ChatMessage";
 import { McpNotices } from "./McpNotices";
 import { AudioTranscriptExcerpt } from "../FileUpload/AudioTranscriptExcerpt";
 import { ActionFacetContext } from "../Message/ActionFacetContext";
+import { MessageSentWith } from "../Message/MessageSentWith";
 import { setWordLiveCards } from "../WordReview/useWordHistoryMessage";
 
 import type { UiChatMessage } from "@/utils/adapters/messageAdapter";
+import type { SentWithChip } from "@/utils/chat/sentWith";
 import type { Messages } from "@lingui/core";
 
 const messageContentMock = vi.hoisted(() => vi.fn());
@@ -979,6 +989,126 @@ describe("ChatMessage", () => {
     });
   });
 
+  describe("the sent-with row", () => {
+    afterEach(() => resetSentWithDescriptors());
+
+    const controlsContext = {
+      currentUserId: "user_1",
+      dialogOwnerId: "user_1",
+      isSharedDialog: false,
+    };
+
+    const facetMessage = (
+      overrides: Partial<UiChatMessage> = {},
+    ): UiChatMessage => ({
+      id: "msg_user_facet",
+      content: [{ content_type: "text", text: "Shorten it" }],
+      role: "user",
+      sender: "user",
+      authorId: "user_1",
+      createdAt: new Date("2025-01-01T12:00:00Z").toISOString(),
+      status: "complete",
+      action_facet_id: "word_selection",
+      action_facet_args: { selected_text: "The Supplier shall deliver." },
+      ...overrides,
+    });
+
+    const registerSelection = () =>
+      registerSentWithDescriptors({
+        word_selection: (args) => [
+          {
+            id: "word.selection",
+            kind: "word.selection",
+            icon: "selection",
+            label: `“${args.selected_text}”`,
+            meta: "Selected passage",
+          },
+        ],
+      });
+
+    const renderMessage = async (message: UiChatMessage) => {
+      const { i18n } = await import("@lingui/core");
+      i18n.load("en", enMessages as unknown as Messages);
+      i18n.activate("en");
+      return render(
+        <I18nProvider i18n={i18n}>
+          <ChatMessage
+            message={message}
+            controls={() => null}
+            controlsContext={controlsContext}
+            onMessageAction={async () => true}
+          />
+        </I18nProvider>,
+      );
+    };
+
+    it("draws the facet's chips in the body, after the quote and the text", async () => {
+      registerSelection();
+      const { container } = await renderMessage(facetMessage());
+
+      const body = container.querySelector('[data-ui="message-body"]')!;
+      const row = body.querySelector('[data-ui="message-sent-with"]')!;
+      expect(row).not.toBeNull();
+      expect(screen.getByRole("list", { name: "Sent with" })).toBe(
+        row.querySelector("ul"),
+      );
+      const content = screen.getByTestId("message-content-stub");
+      const quote = screen.getByText("Selection");
+      expect(
+        quote.compareDocumentPosition(content) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+      expect(
+        content.compareDocumentPosition(row) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+      expect(
+        row.querySelector('[data-ui="message-sent-with-chip"]'),
+      ).toHaveAttribute("data-kind", "word.selection");
+    });
+
+    it("never draws a row on an assistant message", async () => {
+      registerSelection();
+      const { container } = await renderMessage(
+        facetMessage({ role: "assistant", sender: "assistant" }),
+      );
+      expect(
+        container.querySelector('[data-ui="message-sent-with"]'),
+      ).toBeNull();
+    });
+
+    it("keeps only the quote for a facet no host registered", async () => {
+      const { container } = await renderMessage(facetMessage());
+      expect(screen.getByText("Selection")).toBeInTheDocument();
+      expect(
+        container.querySelector('[data-ui="message-sent-with"]'),
+      ).toBeNull();
+    });
+
+    it("hands the chips to a renderer override", async () => {
+      registerSelection();
+      let seen: readonly SentWithChip[] | undefined;
+      const Probe = () => {
+        seen = useChatMessageRenderer({
+          message: facetMessage(),
+          controlsContext,
+          onMessageAction: async () => true,
+        }).sentWith;
+        return null;
+      };
+      const { i18n } = await import("@lingui/core");
+      i18n.load("en", enMessages as unknown as Messages);
+      i18n.activate("en");
+      render(
+        <I18nProvider i18n={i18n}>
+          <Probe />
+        </I18nProvider>,
+      );
+      expect(seen?.map((chip) => chip.label)).toEqual([
+        "“The Supplier shall deliver.”",
+      ]);
+    });
+  });
+
   // A kit renders in its own bundle and can only receive these by reference,
   // so a placeholder in the bag is indistinguishable from the real thing at
   // the call site — it has to be caught here.
@@ -990,6 +1120,9 @@ describe("ChatMessage", () => {
       );
       expect(CHAT_MESSAGE_HOST_COMPONENTS.AudioTranscriptExcerpt).toBe(
         AudioTranscriptExcerpt,
+      );
+      expect(CHAT_MESSAGE_HOST_COMPONENTS.MessageSentWith).toBe(
+        MessageSentWith,
       );
     });
   });

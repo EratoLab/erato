@@ -6,6 +6,7 @@ import { memo, useCallback, useMemo, useState } from "react";
 import { useImageLightbox } from "@/hooks/ui/useImageLightbox";
 import { useMessageFeedbackFeature } from "@/providers/FeatureConfigProvider";
 import { hasToolCalls as messageHasToolCalls } from "@/utils/adapters/toolCallAdapter";
+import { sentWithChipsFor } from "@/utils/chat/sentWith";
 
 import { McpNotices } from "./McpNotices";
 import { MessageAttachments } from "./MessageAttachments";
@@ -18,6 +19,7 @@ import { ActionFacetContext } from "../Message/ActionFacetContext";
 import { DefaultMessageControls } from "../Message/DefaultMessageControls";
 import { ImageLightbox } from "../Message/ImageLightbox";
 import { MessageContent } from "../Message/MessageContent";
+import { MessageSentWith } from "../Message/MessageSentWith";
 import { messageStyles } from "../styles/chatMessageStyles";
 
 import type {
@@ -32,6 +34,7 @@ import type {
   UserProfile,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { UiChatMessage } from "@/utils/adapters/messageAdapter";
+import type { SentWithChip } from "@/utils/chat/sentWith";
 import type { ComponentProps } from "react";
 
 /**
@@ -48,6 +51,8 @@ export interface ChatMessageHostComponents {
   ActionFacetContext: typeof ActionFacetContext;
   /** For the `transcript` a recording's attachment item carries. */
   AudioTranscriptExcerpt: typeof AudioTranscriptExcerpt;
+  /** Draws `ChatMessageRendererState.sentWith`; absent on hosts before surface 1.21. */
+  MessageSentWith?: typeof MessageSentWith;
 }
 
 export const CHAT_MESSAGE_HOST_COMPONENTS: ChatMessageHostComponents = {
@@ -56,6 +61,7 @@ export const CHAT_MESSAGE_HOST_COMPONENTS: ChatMessageHostComponents = {
   McpNotices,
   ActionFacetContext,
   AudioTranscriptExcerpt,
+  MessageSentWith,
 };
 
 export interface ChatMessageProps {
@@ -117,6 +123,11 @@ export interface ChatMessageRendererState {
   contentProps: ComponentProps<typeof MessageContent>;
   controlsProps: MessageControlsProps;
   lightbox: ReturnType<typeof useImageLightbox>;
+  /**
+   * The context a user message's facet carried, as the host that sent it
+   * names it; empty for every other message.
+   */
+  sentWith: readonly SentWithChip[];
 }
 
 /**
@@ -233,6 +244,7 @@ export const useChatMessageRenderer = ({
       onViewFeedback,
     },
     lightbox,
+    sentWith: sentWithChipsFor(message),
   };
 };
 
@@ -261,6 +273,7 @@ export const ChatMessage = memo(function ChatMessage(props: ChatMessageProps) {
     contentProps,
     controlsProps,
     lightbox,
+    sentWith,
   } = useChatMessageRenderer(props);
 
   const messageContentRowStyle = {
@@ -355,6 +368,8 @@ export const ChatMessage = memo(function ChatMessage(props: ChatMessageProps) {
             )}
 
             <MessageContent {...contentProps} />
+
+            <MessageSentWith chips={sentWith} />
 
             <McpNotices
               message={message}

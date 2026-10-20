@@ -122,6 +122,54 @@ describe("MessageList", () => {
     },
   );
 
+  it("re-renders a message whose stored facet arrives under the same id", () => {
+    const seen: (string | undefined)[] = [];
+    function Renderer({ message }: ChatMessageProps) {
+      seen.push(message.action_facet_args?.document_name);
+      return null;
+    }
+    const base = {
+      id: "user-1",
+      role: "user" as const,
+      sender: "user",
+      authorId: "user",
+      createdAt: "2026-01-01T00:00:00Z",
+      content: [{ content_type: "text" as const, text: "Summarize" }],
+    };
+    const props = {
+      messageOrder: ["user-1"],
+      loadOlderMessages: vi.fn(),
+      hasOlderMessages: false,
+      isPending: false,
+      currentSessionId: "chat",
+      controlsContext: {},
+      onMessageAction: vi.fn(async () => true),
+      messageRenderer: Renderer,
+    };
+    const { rerender } = render(
+      <MessageList messages={{ "user-1": base }} {...props} />,
+    );
+    rerender(
+      <QueryClientProvider client={new QueryClient()}>
+        <StaticFeatureConfigProvider>
+          <ThemeProvider enableCustomTheme={false}>
+            <MessageList
+              messages={{
+                "user-1": {
+                  ...base,
+                  action_facet_id: "word_document_review",
+                  action_facet_args: { document_name: "Report.docx" },
+                },
+              }}
+              {...props}
+            />
+          </ThemeProvider>
+        </StaticFeatureConfigProvider>
+      </QueryClientProvider>,
+    );
+    expect(seen.at(-1)).toBe("Report.docx");
+  });
+
   it("centers empty state components independently from message width", () => {
     render(
       <MessageList

@@ -183,10 +183,12 @@ const MessageEditorRow = ({
       isSubmitBlocked={isTokenLimitExceeded || messageEdit.isStreaming === true}
       initialFiles={messageFiles}
       onFilePreview={onFilePreview}
-      renderTokenUsage={(draft) => (
+      isActionFacetAvailable={messageEdit.isActionFacetAvailable}
+      renderTokenUsage={(draft, context) => (
         <ChatInputTokenUsage
           message={draft}
-          attachedFiles={messageFiles}
+          attachedFiles={context.files}
+          virtualFiles={context.virtualFiles}
           chatId={messageEdit.chatId}
           assistantId={messageEdit.assistantId}
           previousMessageId={message.previous_message_id}

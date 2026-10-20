@@ -44,26 +44,15 @@ describe("ChatInputAddMenu", () => {
     expect(screen.queryByRole("menu")).not.toBeInTheDocument();
   });
 
-  it("renders the count badge alongside the icon, and drops it while processing", () => {
-    const { rerender } = render(
-      <ChatInputAddMenu fileSources={fileSources} selectedCount={3} />,
-    );
-
-    expect(screen.getByTestId("chat-input-add-menu-badge")).toHaveTextContent(
-      "3",
-    );
-
-    rerender(
-      <ChatInputAddMenu
-        fileSources={fileSources}
-        selectedCount={3}
-        isProcessing
-      />,
-    );
+  it("carries no count badge: selected tools show as chips beside it", () => {
+    render(<ChatInputAddMenu fileSources={fileSources} />);
 
     expect(
       screen.queryByTestId("chat-input-add-menu-badge"),
     ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Add files and tools" }),
+    ).toHaveTextContent("");
   });
 
   // A mention row puts focus in the composer; closing after the select delay

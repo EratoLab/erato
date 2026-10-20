@@ -46,6 +46,16 @@ export {
   type ChatMessageHostComponents,
   type ChatMessageProps,
 } from "@/components/ui/Chat/ChatMessage";
+export {
+  MessageSentWith,
+  type MessageSentWithProps,
+} from "@/components/ui/Message/MessageSentWith";
+export {
+  registerSentWithDescriptors,
+  sentWithChipsFor,
+  type SentWithChip,
+  type SentWithDescriptor,
+} from "@/utils/chat/sentWith";
 export * from "@/components/ui/MessageList";
 // Named explicitly: the library build drops re-exported bindings from the
 // `export *` above unless something in the bundle references them directly.
@@ -57,6 +67,7 @@ export {
 export {
   MessageEditor,
   type MessageEditorProps,
+  type MessageEditorTokenContext,
 } from "@/components/ui/MessageList/MessageEditor";
 export {
   MessageContent,
@@ -671,11 +682,13 @@ export {
   type AudioTranscriptionTileStatus,
 } from "@/components/ui/FileUpload/audioTranscriptionStatus";
 export {
+  actionFacetEstimate,
   ComposerContextArea,
   ComposerContextLane,
   ComposerModeChips,
   DefaultComposerContextChipFace,
   useLiveAnnouncement,
+  type ActionFacetForEstimate,
   type ComposerContextAreaProps,
   type ComposerContextChipFaceProps,
   type ComposerContextDetail,

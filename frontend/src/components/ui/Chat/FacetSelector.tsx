@@ -3,11 +3,11 @@ import clsx from "clsx";
 import { useCallback, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/Controls/Button";
-import { getOptionalTranslation } from "@/hooks/i18n";
 
 import { DropdownMenu } from "../Controls/DropdownMenu";
 import { AtSignIcon, ChevronDownIcon, ResolvedIcon, ToolsIcon } from "../icons";
 import { isAddMenuToolItem } from "./ChatInputAddMenu";
+import { getFacetDisplayName } from "./facetDisplayName";
 
 import type { AddMenuSection } from "./ChatInputAddMenu";
 import type { DropdownMenuItem } from "../Controls/DropdownMenu";
@@ -40,11 +40,7 @@ interface FacetSelectorProps {
   className?: string;
 }
 
-export function getFacetDisplayName(facet: FacetInfo): string {
-  // eslint-disable-next-line lingui/no-unlocalized-strings -- Translation key is dynamic by facet ID
-  const translationId = `facets.${facet.id}.display_name`;
-  return getOptionalTranslation(translationId) ?? facet.display_name;
-}
+export { getFacetDisplayName };
 
 export const FacetSelector = ({
   facets,

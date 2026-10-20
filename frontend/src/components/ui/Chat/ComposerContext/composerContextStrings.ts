@@ -5,8 +5,9 @@ import type {
   ComposerContextState,
 } from "./types";
 
-export const laneLabel = () =>
-  t({ id: "composer.context.lane.label", message: "Message context" });
+/** The lane list's name; a host's own name for it wins. */
+export const laneLabel = (label?: string) =>
+  label ?? t({ id: "composer.context.lane.label", message: "Message context" });
 
 /** Read after the chip's name, so each ends a sentence. */
 export const stateWord = (state: ComposerContextState): string => {

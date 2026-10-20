@@ -1,120 +1,29 @@
-import { plural, t } from "@lingui/core/macro";
 import { useMemo, useRef } from "react";
 
 import { useTeamsTranscriptIndexes } from "@/hooks/teams/useTeamsTranscriptIndex";
-import { teamsTranscriptChipText } from "@/utils/teams/teamsTranscriptContext";
 
-import { TeamsTranscriptDetail } from "./TeamsTranscriptDetail";
+import {
+  teamsTranscriptContextItem,
+  teamsTranscriptItemId,
+} from "./teamsTranscriptContextItem";
 
-import type { TeamsTranscriptNamedUpload } from "./TeamsTranscriptDetail";
+import type {
+  TeamsTranscriptContextOptions,
+  TeamsTranscriptItemEntry,
+} from "./teamsTranscriptContextItem";
 import type { ComposerContextItem } from "@/components/ui/Chat/ComposerContext/types";
 import type { TeamsTranscriptIndexRead } from "@/hooks/teams/useTeamsTranscriptIndex";
-import type { FileUploadItem } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
 /** One transcript the composer holds, with the uploads it brought that are still staged. */
-export interface TeamsTranscriptContextEntry {
-  /** Stable across "Edit selection", so the chip updates in place. */
-  id: string;
+export interface TeamsTranscriptContextEntry extends TeamsTranscriptItemEntry {
   /** The local transcript, read for its index block. */
   transcript: File;
-  uploads: { transcript: FileUploadItem; assets: readonly FileUploadItem[] };
-  /**
-   * Upload names of files the transcript brought that the composer did not
-   * take, e.g. past its file limit. The detail says so in their section.
-   */
-  notAttachedAssetNames?: readonly string[];
-  onRemove: () => void;
-  /** Omitted where the picker can't run; the detail then has no such action. */
-  onEditSelection?: () => void;
 }
 
-export interface TeamsTranscriptContextOptions {
-  /** Unstages one of a transcript's files. */
-  onRemoveFile: (fileId: string) => void;
-  onFilePreview?: (file: TeamsTranscriptNamedUpload) => void;
-}
+export { teamsTranscriptItemId };
+export type { TeamsTranscriptContextOptions };
 
 const READING: TeamsTranscriptIndexRead = { index: null, isReading: true };
-
-export const teamsTranscriptItemId = (entryId: string) =>
-  `teams.transcript:${entryId}`;
-
-function buildItem(
-  entry: TeamsTranscriptContextEntry,
-  read: TeamsTranscriptIndexRead,
-  { onRemoveFile, onFilePreview }: TeamsTranscriptContextOptions,
-): ComposerContextItem {
-  const text = teamsTranscriptChipText(read.index, {
-    reading: read.isReading,
-  });
-  const assets = entry.uploads.assets;
-  const count = assets.length;
-  return {
-    id: teamsTranscriptItemId(entry.id),
-    kind: "teams.transcript",
-    origin: "user",
-    state: read.isReading ? "loading" : "included",
-    label: text.label,
-    meta: text.meta,
-    spokenLabel: text.spokenLabel,
-    icon: "chats",
-    claimsFileIds: [
-      entry.uploads.transcript.id,
-      ...assets.map((file) => file.id),
-    ],
-    onRemove: entry.onRemove,
-    removeLabel: t({
-      id: "teams.context.remove",
-      message: "Remove Teams transcript",
-    }),
-    removeActionLabel: t({
-      id: "teams.context.removeAction",
-      message: "Remove transcript",
-    }),
-    announcements: {
-      removed:
-        count > 0
-          ? t({
-              id: "teams.context.announce.removedWithFiles",
-              message: plural(count, {
-                one: "Teams transcript removed, with # shared file.",
-                other: "Teams transcript removed, with # shared files.",
-              }),
-            })
-          : t({
-              id: "teams.context.announce.removed",
-              message: "Teams transcript removed.",
-            }),
-    },
-    detail: {
-      title: text.spokenLabel,
-      render: ({ locked }) => (
-        <TeamsTranscriptDetail
-          index={read.index}
-          reading={read.isReading}
-          assets={assets}
-          notAttached={entry.notAttachedAssetNames}
-          locked={locked}
-          onRemoveFile={onRemoveFile}
-          onFilePreview={onFilePreview}
-        />
-      ),
-      actions: entry.onEditSelection
-        ? [
-            {
-              id: "teams.editSelection",
-              label: t({
-                id: "teams.context.detail.editSelection",
-                message: "Edit selection",
-              }),
-              variant: "primary",
-              onSelect: entry.onEditSelection,
-            },
-          ]
-        : [],
-    },
-  };
-}
 
 const sameList = (a: readonly unknown[], b: readonly unknown[]) =>
   a.length === b.length && a.every((value, index) => value === b[index]);
@@ -167,7 +76,10 @@ export function useTeamsTranscriptContextItems(
       const item =
         cached && sameList(cached.deps, deps)
           ? cached.item
-          : buildItem(entry, read, { onRemoveFile, onFilePreview });
+          : teamsTranscriptContextItem(entry, read, {
+              onRemoveFile,
+              onFilePreview,
+            });
       next.set(entry.id, { deps, item });
       return item;
     });

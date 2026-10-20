@@ -89,6 +89,8 @@ export interface ComposerContextLaneProps {
   announce?: (text: string) => void;
   /** Wins over `componentRegistry.ComposerContextChipFace`. */
   chipFace?: ComponentType<ComposerContextChipFaceProps>;
+  /** Names the list; defaults to "Message context". */
+  label?: string;
 }
 
 const isFocusAvailable = (lane: HTMLElement | null) => {
@@ -113,6 +115,7 @@ export const ComposerContextLane = memo(function ComposerContextLane({
   onRemoveClaimedFiles,
   announce,
   chipFace,
+  label,
 }: ComposerContextLaneProps) {
   const Face =
     chipFace ??
@@ -698,7 +701,7 @@ export const ComposerContextLane = memo(function ComposerContextLane({
       <div
         ref={laneRef}
         role="list"
-        aria-label={laneLabel()}
+        aria-label={laneLabel(label)}
         data-ui="composer-context-lane"
         className="flex min-w-0 flex-wrap items-start gap-1.5"
         onFocus={() => setHasFocus(true)}

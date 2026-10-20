@@ -205,6 +205,18 @@ describe("ComposerContextLane", () => {
     expect(chip("Notes.txt")).toHaveAttribute("data-origin", "user");
   });
 
+  it("takes the host's own name for the list", () => {
+    render(
+      <ComposerContextLane
+        items={[ambient()]}
+        label="Attachments of this message"
+      />,
+    );
+    expect(
+      screen.getByRole("list", { name: "Attachments of this message" }),
+    ).toHaveAttribute("data-ui", "composer-context-lane");
+  });
+
   it("keeps an item where its placement says when its origin changes", () => {
     const labelsOf = () =>
       within(screen.getByRole("list", { name: "Message context" }))

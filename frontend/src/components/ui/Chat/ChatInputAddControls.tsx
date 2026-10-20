@@ -143,7 +143,6 @@ export function ChatInputAddControls({
               )
             : undefined
         }
-        selectedCount={selectedFacetIds.length}
         isProcessing={isProcessing}
         disabled={disabled}
       />
