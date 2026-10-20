@@ -1,4 +1,4 @@
-import { t } from "@lingui/core/macro";
+import { plural, t } from "@lingui/core/macro";
 import clsx from "clsx";
 import { useCallback } from "react";
 
@@ -6,6 +6,7 @@ import {
   componentRegistry,
   resolveComponentOverride,
 } from "@/config/componentRegistry";
+import { formatTeamsDay } from "@/utils/teams/teamsTranscriptContext";
 
 import { AttachmentTile } from "../FileUpload/AttachmentTile";
 import { MessageTimestamp } from "../Message/MessageTimestamp";
@@ -174,9 +175,13 @@ const ConversationSection: React.FC<
         )}
         {skipped > 0 && (
           <p className="text-xs text-theme-fg-muted">
-            {skipped === 1
-              ? t`1 message could not be loaded.`
-              : t`${skipped} messages could not be loaded.`}
+            {t({
+              id: "teams.conversation.skipped",
+              message: plural(skipped, {
+                one: "# message could not be loaded.",
+                other: "# messages could not be loaded.",
+              }),
+            })}
           </p>
         )}
       </header>
@@ -415,15 +420,12 @@ function groupByDay(
   return days;
 }
 
-/** Local, not the transcript's zone: the prose is for the model, this is not. */
+/**
+ * Local, not the transcript's zone: the prose is for the model, this is not.
+ * The app's language, not the browser's, so the date reads like the labels.
+ */
 function dayLabel(iso: string | null): string {
-  const date = toDate(iso);
-  if (!date) return t`Unknown date`;
-  return date.toLocaleDateString(undefined, {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
+  return formatTeamsDay(iso) ?? t`Unknown date`;
 }
 
 function dateRange(from: string | null, to: string | null): string {

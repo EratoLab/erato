@@ -541,6 +541,19 @@ The skin moves variables (`--composer-context-chip-border`, `-bg`, `-label`,
 `-meta`, `-icon`) per state and tone rather than final colours, so a kit face
 can read the same values the default face does.
 
+A Teams transcript is one such chip (`data-kind="teams.transcript"`), standing
+for the transcript upload and every file it brought. Files a chip claims never
+reach `ChatInputAttachmentPreview`, so a kit's attachment preview renders the
+Teams tab's other files as it does everywhere else. Its detail adds the hooks
+`teams-transcript-detail[data-view]`, `teams-transcript-section[data-selection][data-kind]`,
+`teams-transcript-open-conversation`, `teams-transcript-picked`,
+`teams-transcript-files`, `teams-transcript-back` and
+`teams-transcript-detail-live`, with each file as an `attachment-tile` beside
+its `attachment-remove`. The conversation inside it stays behind the
+`TeamsConversationView` point. A detail body receives `{ locked }`
+(`ComposerContextDetailRenderContext`), so its own controls follow the chip's
+lock.
+
 `@erato/frontend/conformance` exports `composerContextChipFaceConformanceFailures(Face, { render })`.
 It mounts the host lane around the face in all six states, with and without a
 detail and locked, and reports a face that drops the label or the meta, holds

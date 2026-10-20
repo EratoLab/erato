@@ -203,7 +203,20 @@ export {
   type TeamsAttachmentsPreviewProps,
 } from "@/components/ui/Teams/TeamsAttachmentsPreview";
 export {
+  TeamsTranscriptDetail,
+  type TeamsTranscriptDetailProps,
+  type TeamsTranscriptNamedUpload,
+} from "@/components/ui/Teams/TeamsTranscriptDetail";
+export {
+  teamsTranscriptItemId,
+  useTeamsTranscriptContextItems,
+  type TeamsTranscriptContextEntry,
+  type TeamsTranscriptContextOptions,
+} from "@/components/ui/Teams/useTeamsTranscriptContextItems";
+export {
+  readTeamsTranscriptIndex,
   useTeamsTranscriptIndex,
+  useTeamsTranscriptIndexes,
   type TeamsTranscriptIndexRead,
 } from "@/hooks/teams/useTeamsTranscriptIndex";
 export {
@@ -590,6 +603,10 @@ export {
   type TeamsAttachedTranscript,
   type TeamsAttachmentPreviewGroups,
 } from "@/utils/teams/teamsAttachmentGroups";
+export {
+  teamsTranscriptChipText,
+  type TeamsTranscriptChipText,
+} from "@/utils/teams/teamsTranscriptContext";
 export {
   TEAMS_TRANSCRIPT_INDEX_MARKER,
   TEAMS_TRANSCRIPT_INDEX_VERSION,

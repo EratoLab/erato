@@ -11,16 +11,25 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
-import { act, createRef } from "react";
+import { act, createRef, useCallback, useMemo, useRef, useState } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { ThemeProvider } from "@/components/providers/ThemeProvider";
+import { useTeamsTranscriptContextItems } from "@/components/ui/Teams/useTeamsTranscriptContextItems";
 import { componentRegistry } from "@/config/componentRegistry";
 import { useComposeSessionStore } from "@/hooks/chat/store/composeSessionStore";
 import { useConfirmationRegistryStore } from "@/hooks/chat/store/confirmationRegistryStore";
 import { useMessageQueueStore } from "@/hooks/chat/store/messageQueueStore";
 import { UploadTooLargeError } from "@/hooks/files/errors";
 import { useFileUploadStore } from "@/hooks/files/useFileUploadStore";
+import { readTeamsTranscriptIndex } from "@/hooks/teams/useTeamsTranscriptIndex";
 import { messages as enMessages } from "@/locales/en/messages.json";
+import {
+  teamsIndex,
+  teamsMessage,
+  teamsSection,
+  teamsTranscriptFile,
+} from "@/test/teamsTranscriptFixtures";
 
 import { ChatInput, type ComposerSizeLimit } from "./ChatInput";
 import { useToastStore } from "../Toast/toastStore";
@@ -32,6 +41,7 @@ import type {
   ComposerContextItem,
 } from "./ComposerContext/types";
 import type { ChatInputAttachmentPreviewProps } from "@/components/ui/FileUpload/FileAttachmentsPreview";
+import type { TeamsTranscriptContextEntry } from "@/components/ui/Teams/useTeamsTranscriptContextItems";
 import type { FileUploadItem } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { ChatContextValue } from "@/providers/ChatProvider";
 import type { I18n, Messages } from "@lingui/core";
@@ -7361,6 +7371,194 @@ describe("ChatInput", () => {
       expect(screen.getByTestId("attachments-preview")).toHaveTextContent("1");
       act(() => ref.current!.removeUploadedFiles(["f1"]));
       expect(screen.getByTestId("attachments-preview")).toHaveTextContent("0");
+    });
+  });
+
+  describe("a Teams transcript chip agrees with the send (ERMAIN-1025)", () => {
+    const upload = (filename: string, id: string): FileUploadItem =>
+      ({
+        id,
+        filename,
+        download_url: `https://example.com/${id}`,
+        file_contents_unavailable_missing_permissions: false,
+        is_sharepoint_file: false,
+      }) as FileUploadItem;
+    const transcriptUpload = upload("teams-chats-2.md", "t");
+    const roadmap = upload("teams-file-1a2b3c4d-roadmap-q1.pdf", "a1");
+    const shot = upload("teams-img-0123456789abcdef.png", "a2");
+    const holiday = upload("holiday.pdf", "u");
+    const transcriptFile = teamsTranscriptFile(
+      teamsIndex(
+        [teamsSection(), teamsSection({ title: "Design review" })],
+        [
+          teamsMessage("m1", {
+            assets: [
+              {
+                name: roadmap.filename,
+                displayName: "roadmap-q1.pdf",
+                kind: "file",
+              },
+              { name: shot.filename, displayName: null, kind: "image" },
+            ],
+          }),
+        ],
+      ),
+      transcriptUpload.filename,
+    );
+
+    /** The add-in's part: entries from the staged list, keyed by upload id. */
+    function TeamsHost({
+      onSendMessage,
+      initialFiles,
+    }: {
+      onSendMessage: Parameters<typeof ChatInput>[0]["onSendMessage"];
+      initialFiles: FileUploadItem[];
+    }) {
+      const ref = useRef<ChatInputControlsHandle>(null);
+      const [staged, setStaged] = useState<FileUploadItem[]>([]);
+      const [forgotten, setForgotten] = useState(false);
+      const entries = useMemo((): TeamsTranscriptContextEntry[] => {
+        const ids = new Set(staged.map((file) => file.id));
+        if (forgotten || !ids.has(transcriptUpload.id)) {
+          return [];
+        }
+        return [
+          {
+            id: "lineage",
+            transcript: transcriptFile,
+            uploads: {
+              transcript: transcriptUpload,
+              assets: [roadmap, shot].filter((file) => ids.has(file.id)),
+            },
+            onRemove: () => setForgotten(true),
+          },
+        ];
+      }, [staged, forgotten]);
+      const onRemoveFile = useCallback(
+        (fileId: string) => ref.current?.removeUploadedFiles([fileId]),
+        [],
+      );
+      const contextItems = useTeamsTranscriptContextItems(entries, {
+        onRemoveFile,
+      });
+      return (
+        <ChatInput
+          ref={ref}
+          onSendMessage={onSendMessage}
+          initialFiles={initialFiles}
+          onStagedFilesChange={setStaged}
+          contextItems={contextItems}
+        />
+      );
+    }
+
+    const renderHost = async (initialFiles: FileUploadItem[]) => {
+      await readTeamsTranscriptIndex(transcriptFile);
+      const actual = await vi.importActual<
+        typeof import("@/hooks/ui/useChatInputHandlers")
+      >("@/hooks/ui/useChatInputHandlers");
+      mockUseChatInputHandlers.mockImplementation((...args: unknown[]) =>
+        actual.useChatInputHandlers(
+          ...(args as Parameters<typeof actual.useChatInputHandlers>),
+        ),
+      );
+      mockUseUploadFeature.mockReturnValue({ enabled: true });
+      const { i18n } = await import("@lingui/core");
+      const onSendMessage = vi.fn();
+      render(
+        <QueryClientProvider client={new QueryClient()}>
+          <I18nProvider i18n={i18n}>
+            <ThemeProvider
+              enableCustomTheme={false}
+              initialThemeMode="light"
+              persistThemeMode={false}
+            >
+              <TeamsHost
+                onSendMessage={onSendMessage}
+                initialFiles={initialFiles}
+              />
+            </ThemeProvider>
+          </I18nProvider>
+        </QueryClientProvider>,
+      );
+      return onSendMessage;
+    };
+
+    const send = (text: string) => {
+      const textarea = screen.getByPlaceholderText("Type a message...");
+      fireEvent.change(textarea, { target: { value: text } });
+      fireEvent.keyDown(textarea, { key: "Enter", shiftKey: false });
+    };
+    const sentIds = (onSendMessage: ReturnType<typeof vi.fn>) =>
+      onSendMessage.mock.calls.at(-1)?.[1] as string[] | undefined;
+    const chipCount = () =>
+      [...document.querySelectorAll('[data-ui="composer-context-chip"]')]
+        .length;
+
+    it("shows one chip for the transcript and its files, and sends them all", async () => {
+      const onSendMessage = await renderHost([
+        transcriptUpload,
+        roadmap,
+        shot,
+        holiday,
+      ]);
+      expect(chipCount()).toBe(1);
+      expect(
+        screen.getByRole("button", { name: /^Product sync \+1/ }),
+      ).toBeInTheDocument();
+      expect(screen.getByTestId("attachments-preview")).toHaveTextContent("1");
+      expect(screen.getByTestId("remove-file-u")).toBeInTheDocument();
+
+      fireEvent.click(screen.getByTestId("remove-all-files"));
+      expect(chipCount()).toBe(1);
+
+      send("summarise");
+      expect(sentIds(onSendMessage)).toEqual(["t", "a1", "a2"]);
+      expect(chipCount()).toBe(0);
+    });
+
+    it("sends none of the transcript's files once its chip is removed", async () => {
+      const onSendMessage = await renderHost([
+        transcriptUpload,
+        roadmap,
+        shot,
+        holiday,
+      ]);
+      fireEvent.click(
+        screen.getByRole("button", { name: "Remove Teams transcript" }),
+      );
+      expect(chipCount()).toBe(0);
+      expect(
+        document.querySelector('[data-ui="composer-context-live"]'),
+      ).toHaveTextContent("Teams transcript removed, with 2 shared files.");
+      send("only the holiday");
+      expect(sentIds(onSendMessage)).toEqual(["u"]);
+    });
+
+    it("drops a file removed in the detail from the send, and keeps the chip", async () => {
+      const onSendMessage = await renderHost([
+        transcriptUpload,
+        roadmap,
+        shot,
+        holiday,
+      ]);
+      fireEvent.click(
+        screen.getByRole("button", { name: /^Product sync \+1/ }),
+      );
+      fireEvent.click(
+        screen.getByRole("button", { name: "Remove roadmap-q1.pdf" }),
+      );
+      expect(chipCount()).toBe(1);
+      send("without the roadmap");
+      expect(sentIds(onSendMessage)).toEqual(["t", "a2", "u"]);
+    });
+
+    it("claims only what is staged when the composer took fewer files", async () => {
+      const onSendMessage = await renderHost([transcriptUpload, roadmap]);
+      expect(chipCount()).toBe(1);
+      expect(screen.getByTestId("attachments-preview")).toHaveTextContent("0");
+      send("short");
+      expect(sentIds(onSendMessage)).toEqual(["t", "a1"]);
     });
   });
 });
