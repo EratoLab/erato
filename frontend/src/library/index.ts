@@ -660,6 +660,7 @@ export {
   type ComposerContextChipFaceProps,
   type ComposerContextDetail,
   type ComposerContextDetailAction,
+  type ComposerContextDetailRenderContext,
   type ComposerContextDismissScope,
   type ComposerContextIconName,
   type ComposerContextItem,

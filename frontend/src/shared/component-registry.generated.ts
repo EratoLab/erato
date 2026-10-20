@@ -46,6 +46,7 @@ export type { ChatTopLeftAccessoryProps } from "@/components/ui/Chat/ChatTopLeft
 export type { ComposerContextChipFaceProps } from "@/components/ui/Chat/ComposerContext/types";
 export type { ComposerContextDetail } from "@/components/ui/Chat/ComposerContext/types";
 export type { ComposerContextDetailAction } from "@/components/ui/Chat/ComposerContext/types";
+export type { ComposerContextDetailRenderContext } from "@/components/ui/Chat/ComposerContext/types";
 export type { ComposerContextDismissScope } from "@/components/ui/Chat/ComposerContext/types";
 export type { ComposerContextIconName } from "@/components/ui/Chat/ComposerContext/types";
 export type { ComposerContextItem } from "@/components/ui/Chat/ComposerContext/types";

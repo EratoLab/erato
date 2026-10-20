@@ -10,6 +10,7 @@ import { useMemo, useState } from "react";
 import { flushSync } from "react-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { ModalBase } from "@/components/ui/Modal/ModalBase";
 import { componentRegistry } from "@/config/componentRegistry";
 
 import { ComposerContextLane } from "../ComposerContextLane";
@@ -1113,6 +1114,88 @@ describe("ComposerContextLane", () => {
       expect(screen.queryByRole("dialog")).toBeNull();
 
       fireEvent.click(open);
+      fireEvent.pointerDown(screen.getByRole("button", { name: "elsewhere" }));
+      expect(screen.queryByRole("dialog")).toBeNull();
+    });
+
+    it("tells the body whether the item is locked", () => {
+      const renderBody = vi.fn(({ locked }: { locked: boolean }) => (
+        <p>{locked ? "locked body" : "open body"}</p>
+      ));
+      const item = user({
+        detail: { title: "Teams transcript", render: renderBody },
+      });
+      const { rerender } = render(<ComposerContextLane items={[item]} />);
+      fireEvent.click(openButton("Re: Offsite agenda"));
+      expect(renderBody).toHaveBeenLastCalledWith({ locked: false });
+      expect(screen.getByText("open body")).toBeInTheDocument();
+
+      rerender(<ComposerContextLane items={[{ ...item, locked: true }]} />);
+      expect(renderBody).toHaveBeenLastCalledWith({ locked: true });
+      expect(screen.getByText("locked body")).toBeInTheDocument();
+    });
+
+    it("stays open under a dialog it opened over itself", () => {
+      const Preview = () => {
+        const [open, setOpen] = useState(false);
+        return (
+          <>
+            <button type="button" onClick={() => setOpen(true)}>
+              Preview notes.pdf
+            </button>
+            {open ? (
+              <ModalBase
+                isOpen
+                onClose={() => setOpen(false)}
+                title="Preview: notes.pdf"
+              >
+                <button type="button">Page 2</button>
+              </ModalBase>
+            ) : null}
+          </>
+        );
+      };
+      render(
+        <>
+          <button type="button">elsewhere</button>
+          <Resolver
+            initial={[
+              withDetail({
+                detail: {
+                  title: "Document details",
+                  render: () => <Preview />,
+                },
+              }),
+            ]}
+          />
+        </>,
+      );
+      fireEvent.click(openButton("Supply agreement"));
+      const preview = screen.getByRole("button", { name: "Preview notes.pdf" });
+      preview.focus();
+      fireEvent.click(preview);
+      const stacked = screen.getByRole("dialog", {
+        name: "Preview: notes.pdf",
+      });
+      fireEvent.pointerDown(
+        within(stacked).getByRole("button", { name: "Page 2" }),
+      );
+      fireEvent.pointerDown(
+        document.querySelector<HTMLElement>('[data-ui="modal-overlay"]')!,
+      );
+      expect(
+        screen.getByRole("dialog", { name: "Document details" }),
+      ).toBeInTheDocument();
+
+      fireEvent.keyDown(document, { key: "Escape" });
+      expect(
+        screen.queryByRole("dialog", { name: "Preview: notes.pdf" }),
+      ).toBeNull();
+      expect(
+        screen.getByRole("dialog", { name: "Document details" }),
+      ).toBeInTheDocument();
+      expect(preview).toHaveFocus();
+
       fireEvent.pointerDown(screen.getByRole("button", { name: "elsewhere" }));
       expect(screen.queryByRole("dialog")).toBeNull();
     });

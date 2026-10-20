@@ -252,7 +252,10 @@ export const ComposerContextDetail = ({
       if (
         !target ||
         panelRef.current?.contains(target) ||
-        trigger?.contains(target)
+        trigger?.contains(target) ||
+        // A dialog the detail opened over itself, e.g. a file preview.
+        (target instanceof Element &&
+          target.closest('[data-ui="modal-overlay"]'))
       ) {
         return;
       }
@@ -325,6 +328,7 @@ export const ComposerContextDetail = ({
     return null;
   }
 
+  const renderContext = { locked: Boolean(item.locked) };
   const hasFooter =
     composerContextControl(item) !== null || (detail.actions?.length ?? 0) > 0;
   const footer = (
@@ -352,7 +356,9 @@ export const ComposerContextDetail = ({
           className="flex flex-col gap-3"
         >
           <DetailHeaderMeta item={item} />
-          <div className="text-sm text-theme-fg-primary">{detail.render()}</div>
+          <div className="text-sm text-theme-fg-primary">
+            {detail.render(renderContext)}
+          </div>
         </div>
       </ModalBase>
     );
@@ -390,7 +396,7 @@ export const ComposerContextDetail = ({
         />
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto px-3.5 py-3 text-sm text-theme-fg-primary">
-        {detail.render()}
+        {detail.render(renderContext)}
       </div>
       {hasFooter ? (
         <div className="shrink-0 border-t border-theme-border px-3.5 py-2.5">

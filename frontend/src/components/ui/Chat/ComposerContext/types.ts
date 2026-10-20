@@ -49,9 +49,18 @@ export interface ComposerContextDetailAction {
   announcement?: string;
 }
 
+/** What the lane tells a detail body as it draws it. */
+export interface ComposerContextDetailRenderContext {
+  /**
+   * The item as the lane shows it is locked, the composer's own lock
+   * included, so a body's controls that change what is sent stay disabled.
+   */
+  locked: boolean;
+}
+
 export interface ComposerContextDetail {
   title: string;
-  render: () => ReactNode;
+  render: (context: ComposerContextDetailRenderContext) => ReactNode;
   /** Host choices drawn in the footer, before the default include/leave-out action. */
   actions?: ComposerContextDetailAction[];
 }

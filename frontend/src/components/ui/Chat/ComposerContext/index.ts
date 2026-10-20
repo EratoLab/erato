@@ -10,6 +10,7 @@ export type {
   ComposerContextChipFaceProps,
   ComposerContextDetail,
   ComposerContextDetailAction,
+  ComposerContextDetailRenderContext,
   ComposerContextDismissScope,
   ComposerContextIconName,
   ComposerContextItem,

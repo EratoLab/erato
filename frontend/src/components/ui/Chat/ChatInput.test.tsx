@@ -6988,6 +6988,41 @@ describe("ChatInput", () => {
       ).toBeEnabled();
     });
 
+    it("tells a claim-holding item's detail about the composer's lock", async () => {
+      const renderBody = vi.fn(() => null);
+      stageFiles([fileItem("f1"), fileItem("f2"), fileItem("f3")]);
+      mockUseChatContext.mockReturnValue({
+        isPendingResponse: false,
+        isMessagingLoading: false,
+        isUploading: true,
+        cancelMessage: vi.fn(),
+      });
+      const { rerenderWith } = await renderComposer({
+        contextItems: [
+          transcript({
+            detail: { title: "Teams transcript", render: renderBody },
+          }),
+        ],
+      });
+      fireEvent.click(screen.getByRole("button", { name: /^Weekly sync/ }));
+      expect(renderBody).toHaveBeenLastCalledWith({ locked: true });
+
+      mockUseChatContext.mockReturnValue({
+        isPendingResponse: false,
+        isMessagingLoading: false,
+        isUploading: false,
+        cancelMessage: vi.fn(),
+      });
+      rerenderWith({
+        contextItems: [
+          transcript({
+            detail: { title: "Teams transcript", render: renderBody },
+          }),
+        ],
+      });
+      expect(renderBody).toHaveBeenLastCalledWith({ locked: false });
+    });
+
     it("does not re-render the chips on a keystroke", async () => {
       let faceRenders = 0;
       componentRegistry.ComposerContextChipFace = function CountingFace({
