@@ -12,7 +12,11 @@ export interface SeedableApprovalItem {
   tool_call_id: string;
   tool_name: string;
   input: unknown;
-  child?: { child_chat_id: string; mcp_server_id: string } | null;
+  child?: {
+    child_chat_id: string;
+    mcp_server_id: string;
+    kind?: ToolApprovalKind | null;
+  } | null;
 }
 
 /** One open item of a stop with the answer given for it. */
@@ -111,7 +115,8 @@ export const seedDecisionParts = (
 /**
  * Where a set of standing answers was saved, per item. A parked child's answer
  * lands on the child's own MCP server, so one stop can touch several rosters; a
- * client tool's own answer is a preference on the user's profile instead.
+ * client tool's answer, the turn's own or a child's, is a preference on the
+ * user's profile instead.
  */
 export const standingAnswerTargets = (
   answers: readonly {
@@ -129,7 +134,10 @@ export const standingAnswerTargets = (
     item,
   }: {
     item: Pick<SeedableApprovalItem, "child"> | undefined;
-  }) => kind === "client_tool" && item?.child == null;
+  }) =>
+    item?.child == null
+      ? kind === "client_tool"
+      : item.child.kind === "client_tool";
   const mcpAnswers = standing.filter(
     (answer) => !savesClientPreference(answer),
   );

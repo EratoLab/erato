@@ -1007,8 +1007,10 @@ pub fn resolve_delegation_run_mode(
     mode
 }
 
-/// Whether this chat is a delegated run that may park on an approval-gated MCP
-/// call instead of having it refused.
+/// Whether this chat is a delegated run that may park on an approval-gated
+/// call instead of having it refused: an MCP call, or a client call it makes
+/// under its grant. The switch keeps its MCP name because it predates client
+/// tasks; it governs both.
 ///
 /// Every condition is a surface that has to exist. A `task` child is asked
 /// about somewhere — an awaited run on the origin turn's `ToolUse` slot, an
@@ -1372,15 +1374,34 @@ pub struct TaskClientTools {
     /// Why the task got no client tools.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub unavailable: Option<String>,
+    /// What the host reported about the context the task's last read saw.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub freshness: Option<serde_json::Value>,
+    /// Granted calls the user declined, so their results are missing.
+    #[serde(skip_serializing_if = "is_zero")]
+    pub declined: u32,
+}
+
+fn is_zero(count: &u32) -> bool {
+    *count == 0
 }
 
 impl TaskClientTools {
-    fn from_note(note: &crate::models::chat::ClientTaskNote) -> Option<Self> {
+    fn new(
+        note: &crate::models::chat::ClientTaskNote,
+        calls: crate::services::delegated_client_tools::GrantedCallSummary,
+    ) -> Option<Self> {
         let tools = Self {
             run_mode: note.run_mode.clone(),
             unavailable: note.unavailable.clone(),
+            freshness: calls.freshness,
+            declined: calls.declined,
         };
-        (tools.run_mode.is_some() || tools.unavailable.is_some()).then_some(tools)
+        (tools.run_mode.is_some()
+            || tools.unavailable.is_some()
+            || tools.freshness.is_some()
+            || tools.declined > 0)
+            .then_some(tools)
     }
 }
 
@@ -1901,14 +1922,13 @@ pub(crate) async fn build_result_envelope<C: sea_orm::ConnectionTrait>(
                 .is_some_and(|role| role == "assistant")
         });
     let assistant_row = assistant_row.as_ref();
+    let content = assistant_row
+        .and_then(|row| row.raw_message.get("content"))
+        .and_then(|content| content.as_array())
+        .cloned()
+        .unwrap_or_default();
 
     if let Some(row) = assistant_row {
-        let content = row
-            .raw_message
-            .get("content")
-            .and_then(|content| content.as_array())
-            .cloned()
-            .unwrap_or_default();
         let stopped_on_approval = crate::models::message::MessageSchema::validate(&row.raw_message)
             .is_ok_and(|message| crate::models::message::is_durable_stop(&message.content));
         if stopped_on_approval && status == DelegationRunStatus::Completed {
@@ -1975,8 +1995,19 @@ pub(crate) async fn build_result_envelope<C: sea_orm::ConnectionTrait>(
             .as_ref()
             .and_then(|chat| crate::models::chat::parse_chat_configuration(chat).ok())
             .flatten()
-            .and_then(|configuration| configuration.task?.client_task)
-            .and_then(|note| TaskClientTools::from_note(&note)),
+            .and_then(|configuration| configuration.task)
+            .and_then(|task| {
+                let calls = task
+                    .client_grant
+                    .as_ref()
+                    .map(|grant| {
+                        crate::services::delegated_client_tools::granted_call_summary(
+                            grant, &content,
+                        )
+                    })
+                    .unwrap_or_default();
+                TaskClientTools::new(task.client_task.as_ref()?, calls)
+            }),
         Err(error) => {
             tracing::warn!(%error, %child_chat_id, "Failed to read a task's client note");
             None
@@ -2149,6 +2180,8 @@ pub(crate) struct LaunchedDelegation {
     /// the batch took and could classify a child the deadline already killed
     /// as a clean completion.
     run_deadline: tokio::time::Instant,
+    /// What the trace reports for the reads the run's grant allows.
+    client_reads: crate::services::delegation_trace::ClientReadFields,
 }
 
 /// What a launch settled into.
@@ -2399,6 +2432,16 @@ pub(crate) async fn launch_delegation(
             .and_then(|client_task| client_task.grant.clone()),
         client_task: run.client_task.map(|client_task| client_task.note),
     };
+    let client_reads = task
+        .client_grant
+        .as_ref()
+        .map(|grant| {
+            crate::services::delegated_client_tools::client_read_fields(
+                &app_state.config.client_tools,
+                grant,
+            )
+        })
+        .unwrap_or_default();
     let child_chat = crate::models::chat::create_delegated_chat(
         &app_state.db,
         policy,
@@ -2516,6 +2559,7 @@ pub(crate) async fn launch_delegation(
         spawned_at,
         dispatch_started,
         run_deadline,
+        client_reads,
     }))
 }
 
@@ -2542,12 +2586,13 @@ pub(crate) async fn await_delegation(
         spawned_at,
         dispatch_started,
         run_deadline,
+        client_reads,
     } = launched;
 
     let config = app_state.config.delegation.clone();
     let parent_task = parent.map(|parent| parent.task);
 
-    let mut trace = DelegationTraceCollector::new(dispatch_started);
+    let mut trace = DelegationTraceCollector::new(dispatch_started).with_client_reads(client_reads);
     let mut progress = DelegationProgressEmitter {
         parent,
         tool_call_id: tool_call.call_id.clone(),
@@ -2882,21 +2927,32 @@ pub(crate) fn suspended_envelope(
 
 /// The settled output of a slot whose child a continuation resumed.
 ///
-/// The trace is carried over from the part the park left behind rather than
-/// rebuilt: the resumed run's events go to a detached sink, so a fresh trace
-/// would show the user a delegate that did nothing.
+/// The trace is the one the park left behind with the resumed run's steps
+/// folded in, or the parked one as it was when nothing ran.
 pub(crate) fn resumed_slot_output(
     envelope: &DelegationResultEnvelope,
     parked_output: Option<&serde_json::Value>,
+    resumed_trace: Option<&DelegationTrace>,
 ) -> serde_json::Value {
     let mut value =
         serde_json::to_value(envelope).unwrap_or_else(|_| json!({ "status": "failed" }));
-    if let Some(trace) = parked_output.and_then(|output| output.get(DELEGATION_LOCAL_TRACE_KEY))
+    let trace = match resumed_trace {
+        Some(trace) => serde_json::to_value(trace).ok(),
+        None => parked_output
+            .and_then(|output| output.get(DELEGATION_LOCAL_TRACE_KEY))
+            .cloned(),
+    };
+    if let Some(trace) = trace
         && let Some(object) = value.as_object_mut()
     {
-        object.insert(DELEGATION_LOCAL_TRACE_KEY.to_string(), trace.clone());
+        object.insert(DELEGATION_LOCAL_TRACE_KEY.to_string(), trace);
     }
     value
+}
+
+/// The trace a parked slot carries, to go on from when its child resumes.
+pub(crate) fn parked_trace(parked_output: Option<&serde_json::Value>) -> Option<DelegationTrace> {
+    serde_json::from_value(parked_output?.get(DELEGATION_LOCAL_TRACE_KEY)?.clone()).ok()
 }
 
 /// One `delegate_task` call that passed validation and is ready to launch.

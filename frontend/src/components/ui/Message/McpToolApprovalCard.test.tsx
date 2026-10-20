@@ -1954,4 +1954,83 @@ describe("approval queue", () => {
       });
     });
   });
+
+  describe("on a client task's stop", () => {
+    // A task that reads through the user's pane asked about a client tool,
+    // under a deployment whose MCP policy forbids standing grants.
+    const clientTaskRequest = {
+      ...delegatedTaskRequest,
+      allow_always: false,
+      approvals: [
+        {
+          ...delegatedTaskRequest.approvals[0],
+          child: {
+            ...childApprovalRef,
+            tool_name: "read_document_blocks",
+            mcp_server_id: "word",
+            input: { part: "intro" },
+            preset: "",
+            allow_always: true,
+            kind: "client_tool" as const,
+          },
+        },
+      ],
+    };
+
+    it("names this device, without the MCP warning, and offers Always allow", () => {
+      renderCard(
+        <McpToolApprovalCard
+          messageId="message-1"
+          request={clientTaskRequest}
+          resolution={null}
+        />,
+      );
+
+      const item = screen.getByTestId("delegated-task-approval-item");
+      expect(item).toHaveTextContent("read_document_blocks");
+      expect(item).toHaveTextContent("This device");
+      expect(item).not.toHaveTextContent("word");
+      expect(
+        screen.queryByText("This tool may send data to an external service."),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByText(/requires confirmation each time/),
+      ).not.toBeInTheDocument();
+    });
+
+    it("saves its standing answer as the user's client tool preference", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi
+          .fn()
+          .mockImplementation(() =>
+            Promise.resolve(new Response("", { status: 200 })),
+          ),
+      );
+      const { queryClient } = renderCard(
+        <McpToolApprovalCard
+          messageId="message-1"
+          request={clientTaskRequest}
+          resolution={null}
+        />,
+      );
+      const invalidate = vi.spyOn(queryClient, "invalidateQueries");
+
+      fireEvent.click(screen.getByText("Always allow"));
+
+      await waitFor(() => {
+        expect(invalidate).toHaveBeenCalledWith({
+          queryKey: profileQuery({}).queryKey,
+        });
+      });
+      expect(invalidate).not.toHaveBeenCalledWith({
+        queryKey: listMcpServerToolsQuery({
+          pathParams: { serverId: "word" },
+        }).queryKey,
+      });
+      expect(invalidate).not.toHaveBeenCalledWith({
+        queryKey: listUserToolApprovalSettingsQuery({}).queryKey,
+      });
+    });
+  });
 });

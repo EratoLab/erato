@@ -1139,6 +1139,7 @@ export type ChildApprovalRef = {
   child_tool_call_id: string;
   display?: null | ToolDisplayMetadata;
   input: Value;
+  kind?: null | ToolApprovalKind;
   mcp_server_id: string;
   preset: string;
   requested_at: string;

@@ -459,6 +459,10 @@ pub struct ChildApprovalRef {
     /// call, which on a `client_tool` part is never bound by the MCP policy.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub allow_always: Option<bool>,
+    /// What the child's gated call is: `mcp_tool` or `client_tool`. Absent on
+    /// items recorded before client tasks could park, which were all MCP.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kind: Option<ToolApprovalKind>,
 }
 
 /// One decision the user owes on a parked turn. A stop carries several of

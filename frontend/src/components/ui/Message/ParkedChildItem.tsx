@@ -6,7 +6,7 @@ import {
   taskBriefFromInput,
 } from "@/lib/delegation/taskBrief";
 
-import { ResolvedIcon } from "../icons";
+import { ComputerIcon, ResolvedIcon } from "../icons";
 import { ActionConfirmationCard } from "./ActionConfirmationCard";
 import { stagedItemPresentation } from "./ApprovalDecisionActions";
 import { ApprovalToolHeading } from "./ApprovalToolHeading";
@@ -18,9 +18,10 @@ import type { ToolApprovalDecision } from "@/lib/generated/v1betaApi/v1betaApiSc
  * One parked child: which task it is, and the call it stopped on.
  *
  * The task brief is the only thing that names it — a task child has no
- * assistant of its own — and the MCP referent is the child's, never the
+ * assistant of its own — and the tool referent is the child's, never the
  * parent's: what is being decided is a call in another chat, and the
- * `delegate_task` name on the item describes the dispatch, not the tool.
+ * `delegate_task` name on the item describes the dispatch, not the tool. A
+ * child's call is either an MCP tool's or a client tool's on this device.
  */
 export const ParkedChildItem = ({
   item,
@@ -40,6 +41,7 @@ export const ParkedChildItem = ({
   onDecide: (decision: ToolApprovalDecision) => void;
 }) => {
   const child = item.child ?? undefined;
+  const isClientTool = child?.kind === "client_tool";
   const brief = taskBriefFromInput(item.input, TASK_BRIEF_PREVIEW_CHARS);
   const { status, resolvedLabel } = stagedItemPresentation(staged, isArchived);
 
@@ -64,19 +66,31 @@ export const ParkedChildItem = ({
             toolName={child.tool_name}
             display={child.display}
             icon={
-              <ResolvedIcon
-                iconId="simpleicons-modelcontextprotocol"
-                className="size-4 shrink-0 text-theme-fg-secondary"
-              />
+              isClientTool ? (
+                <ComputerIcon className="size-4 shrink-0 text-theme-fg-secondary" />
+              ) : (
+                <ResolvedIcon
+                  iconId="simpleicons-modelcontextprotocol"
+                  className="size-4 shrink-0 text-theme-fg-secondary"
+                />
+              )
             }
-            source={child.mcp_server_id}
+            source={
+              isClientTool
+                ? t({
+                    id: "clientToolApproval.thisDevice",
+                    message: "This device",
+                  })
+                : child.mcp_server_id
+            }
             // The task brief above is this item's heading.
             titleClassName="font-normal"
           />
           <div className="mt-2 max-h-48 overflow-y-auto">
             <ToolCallInput input={child.input} />
           </div>
-          {child.annotations.openWorldHint && (
+          {/* A client tool declares no annotations of its own. */}
+          {!isClientTool && child.annotations.openWorldHint && (
             <p className="mt-1 text-xs text-theme-fg-muted">
               {t({
                 id: "mcpApproval.openWorldWarning",

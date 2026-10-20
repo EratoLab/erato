@@ -558,6 +558,12 @@ fn gate_mcp_tool_call(
     }
 }
 
+fn approval_unavailable_in_delegated_run(tool_name: &str) -> String {
+    format!(
+        "The tool '{tool_name}' requires user approval, which is unavailable in a delegated run; the call was not executed."
+    )
+}
+
 fn refuse_denied_tool_call(tool_call: &genai::chat::ToolCall) -> ToolCallGate {
     ToolCallGate::Refuse(format!(
         "The user has disabled the tool '{}' in their settings; the call was not executed.",
@@ -5506,6 +5512,7 @@ fn parked_child_approval_item(child: &ParkedChild) -> ApprovalItem {
             preset: child.request.preset.clone(),
             requested_at: child.request.requested_at.clone(),
             allow_always: Some(child.request.allow_always),
+            kind: Some(child.request.kind),
         }),
     }
 }
@@ -6128,8 +6135,8 @@ async fn stream_generate_chat_completion<'a>(
     initial_message_content: Vec<ContentPart>,
     is_delegated_run: bool,
     // Whether a delegated run of this chat may stop on an approval-gated MCP
-    // call and let its origin turn ask, instead of having the call refused.
-    // Always `false` for a turn that is not a delegated run at all.
+    // or granted client call and let its origin turn ask, instead of having
+    // the call refused. Always `false` for a turn that is not a delegated run.
     child_may_park: bool,
     delegation: Option<DelegationDispatchContext<'_>>,
     // What this run may spend on tool calls, when it is a task run. `None`
@@ -7707,6 +7714,13 @@ async fn stream_generate_chat_completion<'a>(
                             decision,
                         ) {
                             ToolCallGate::Ask(_) if registered_kind => ToolCallGate::Run,
+                            // The MCP arm's rule: a child with nowhere to ask
+                            // finishes without the call instead of parking.
+                            ToolCallGate::Ask(_) if is_delegated_run && !child_may_park => {
+                                ToolCallGate::Refuse(approval_unavailable_in_delegated_run(
+                                    &tool_name,
+                                ))
+                            }
                             gate => gate,
                         }
                     }
@@ -8498,9 +8512,8 @@ async fn stream_generate_chat_completion<'a>(
                     // awaited one its slot on the origin turn, an `async` one
                     // its own card, announced to the origin by an
                     // `input_required` delivery.
-                    Some(format!(
-                        "The tool '{}' requires user approval, which is unavailable in a delegated run; the call was not executed.",
-                        unfinished_tool_call.fn_name
+                    Some(approval_unavailable_in_delegated_run(
+                        &unfinished_tool_call.fn_name,
                     ))
                 }
                 ToolCallGate::Ask(approval_request) => {
@@ -12802,6 +12815,7 @@ mod tests {
             assert_eq!(child.mcp_server_id, "server");
             assert_eq!(child.requested_at, parked.request.requested_at);
             assert_eq!(child.allow_always, Some(false));
+            assert_eq!(child.kind, Some(ToolApprovalKind::McpTool));
             assert_eq!(item.tool_name, "delegate_task");
         }
 
@@ -12893,6 +12907,38 @@ mod tests {
             &[("own".to_string(), ToolApprovalDecision::Approve)],
             false
         ));
+
+        let mut client_child = parked_child("task-c", "2026-10-20T10:00:02Z");
+        client_child.request.kind = ToolApprovalKind::ClientTool;
+        client_child.request.allow_always = true;
+        let mut legacy_child = child_item("task-l");
+        if let Some(child) = legacy_child.child.as_mut() {
+            child.kind = None;
+        }
+        let tasks = super::delegated_task_approval_part(
+            std::slice::from_ref(&client_child),
+            Vec::new(),
+            false,
+        );
+        let open = [
+            super::parked_child_approval_item(&client_child),
+            child_item("task-a"),
+            legacy_child,
+        ];
+        assert!(
+            !super::approve_always_refused(&tasks, &open, &always("task-c"), false),
+            "a child asking about a client tool is not the MCP policy's to forbid"
+        );
+        assert!(super::approve_always_refused(
+            &tasks,
+            &open,
+            &always("task-a"),
+            false
+        ));
+        assert!(
+            super::approve_always_refused(&tasks, &open, &always("task-l"), false),
+            "an item without a kind asked about an MCP tool"
+        );
     }
 
     #[test]
@@ -18464,21 +18510,27 @@ fn decision_needs_child_items(state: &ParkedApprovalState) -> bool {
 /// Whether a set of decisions asks for an "always allow" the MCP policy
 /// forbids.
 ///
-/// Checked per item: a client tool's own standing answer is the user's
-/// preference and no MCP policy binds it, but a child on the same part is
-/// asking about an MCP tool.
+/// Checked per item: a client tool's standing answer is the user's preference
+/// and no MCP policy binds it, whether the turn's own call or a child's asks
+/// about it. A child item recorded before its kind was asked about an MCP tool.
 fn approve_always_refused(
     request: &ContentPartToolApprovalRequest,
     open: &[ApprovalItem],
     decisions: &[(String, ToolApprovalDecision)],
     mcp_allows_always: bool,
 ) -> bool {
-    if mcp_allows_always {
-        return false;
-    }
     decisions.iter().any(|(approval_id, decision)| {
+        let asked_about = match open
+            .iter()
+            .find(|item| &item.approval_id == approval_id)
+            .and_then(|item| item.child.as_ref())
+        {
+            Some(child) => child.kind.unwrap_or_default(),
+            None => request.kind,
+        };
         matches!(decision, ToolApprovalDecision::ApproveAlways)
-            && (request.kind != ToolApprovalKind::ClientTool || names_child(open, approval_id))
+            && asked_about != ToolApprovalKind::ClientTool
+            && !mcp_allows_always
     })
 }
 
@@ -18875,7 +18927,7 @@ fn run_child_approval_continuation(
 }
 
 /// Resume one child the user has decided about, and read the result its origin
-/// slot is owed.
+/// slot is owed, with the trace of the run it resumed when one ran.
 ///
 /// A decision is applied to whatever the child still has open rather than to
 /// the id the parent's card recorded: the child's own row is the executable
@@ -18889,7 +18941,14 @@ async fn resume_parked_child(
     child: &crate::models::message::ChildApprovalRef,
     parent_tool_call_id: String,
     decision: ToolApprovalDecision,
-) -> Result<crate::services::delegation::DelegationResultEnvelope, String> {
+    parked_output: Option<&JsonValue>,
+) -> Result<
+    (
+        crate::services::delegation::DelegationResultEnvelope,
+        Option<crate::services::delegation_trace::DelegationTrace>,
+    ),
+    String,
+> {
     use sea_orm::EntityTrait;
 
     let child_chat = crate::db::entity::chats::Entity::find_by_id(child.child_chat_id)
@@ -18931,8 +18990,9 @@ async fn resume_parked_child(
 
     let mut status = crate::services::delegation::DelegationRunStatus::Completed;
     let mut hit_tool_budget = false;
+    let mut resumed_trace = None;
     if !open.is_empty() {
-        let (_child_rx, child_task) = app_state
+        let (mut child_rx, child_task) = app_state
             .background_tasks
             .try_start_task(
                 child.child_chat_id,
@@ -18955,25 +19015,65 @@ async fn resume_parked_child(
                 .collect(),
             decision: None,
             shows_child_items: false,
+            // None on purpose: the child goes on with the binding it was
+            // launched on, which its grant names, not the deciding client's.
             registered_client_tools: None,
             executor: None,
         };
-        let resumed = run_child_approval_continuation(
+        let client_reads = configuration
+            .as_ref()
+            .and_then(|configuration| configuration.task.as_ref())
+            .and_then(|task| task.client_grant.as_ref())
+            .map(|grant| {
+                crate::services::delegated_client_tools::client_read_fields(
+                    &app_state.config.client_tools,
+                    grant,
+                )
+            })
+            .unwrap_or_default();
+        let mut trace = match crate::services::delegation::parked_trace(parked_output) {
+            Some(parked) => {
+                crate::services::delegation_trace::DelegationTraceCollector::resumed(parked)
+            }
+            None => crate::services::delegation_trace::DelegationTraceCollector::new(
+                std::time::Instant::now(),
+            ),
+        }
+        .with_client_reads(client_reads);
+        let run = run_child_approval_continuation(
             app_state.clone(),
             policy.clone(),
             me_user.clone(),
             child_task.clone(),
             request,
             child.child_chat_id,
-        )
-        .await;
+        );
+        tokio::pin!(run);
+        let mut tap_open = true;
+        let resumed = loop {
+            tokio::select! {
+                resumed = &mut run => break resumed,
+                received = child_rx.recv(), if tap_open => match received {
+                    Ok(event) => {
+                        trace.apply(&event);
+                    }
+                    Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {}
+                    Err(tokio::sync::broadcast::error::RecvError::Closed) => tap_open = false,
+                },
+            }
+        };
+        while let Ok(event) = child_rx.try_recv() {
+            trace.apply(&event);
+        }
+        trace.finish();
+        resumed_trace = Some(trace.snapshot());
         if resumed.is_err() {
             status = crate::services::delegation::DelegationRunStatus::Failed;
         }
         hit_tool_budget = child_task.tool_budget_exhausted();
     }
 
-    Ok(crate::services::delegation::build_result_envelope(
+    let envelope = crate::services::delegation::build_result_envelope(
         &app_state.db,
         child.child_chat_id,
         child.child_message_id,
@@ -18990,7 +19090,8 @@ async fn resume_parked_child(
         hit_tool_budget,
         app_state.config.delegation.result_max_chars,
     )
-    .await)
+    .await;
+    Ok((envelope, resumed_trace))
 }
 
 /// Overwrite the origin slot a resumed child owes, and tell the client.
@@ -19101,10 +19202,39 @@ async fn settle_parked_children(
         };
         let child = item.child.clone();
 
+        // A child asking about a client tool keeps its standing answer as the
+        // user's client-tool preference, as its own card would.
+        let client_standing = match (child.as_ref(), decision) {
+            (
+                Some(child),
+                ToolApprovalDecision::ApproveAlways | ToolApprovalDecision::RejectAlways,
+            ) if child.kind == Some(ToolApprovalKind::ClientTool) => {
+                let standing = if decision == ToolApprovalDecision::ApproveAlways {
+                    crate::models::user_preference::ClientToolDecision::AlwaysAllow
+                } else {
+                    crate::models::user_preference::ClientToolDecision::NeverAllow
+                };
+                crate::models::user_preference::set_client_tool_decision(
+                    &app_state.db,
+                    &user_id,
+                    &format!("{}/{}", child.mcp_server_id, child.tool_name),
+                    standing,
+                )
+                .await
+                .inspect_err(|error| {
+                    warn_and_capture_error("store a task's standing client tool decision", error)
+                })
+                .is_ok()
+            }
+            _ => false,
+        };
+        let mcp_child = child
+            .as_ref()
+            .filter(|child| child.kind != Some(ToolApprovalKind::ClientTool));
         // The standing decision belongs to the CHILD's server and tool. The
         // parent's `delegate_task` is a synthetic name no grant can name, and
         // storing it would produce a setting no gate ever consults.
-        let always_allow_setting = match child.as_ref() {
+        let always_allow_setting = match mcp_child {
             Some(child) if matches!(decision, ToolApprovalDecision::ApproveAlways) => {
                 store_standing_tool_decision(
                     app_state,
@@ -19117,7 +19247,7 @@ async fn settle_parked_children(
             }
             _ => None,
         };
-        let never_allow_setting = match child.as_ref() {
+        let never_allow_setting = match mcp_child {
             Some(child) if matches!(decision, ToolApprovalDecision::RejectAlways) => {
                 store_standing_tool_decision(
                     app_state,
@@ -19134,7 +19264,7 @@ async fn settle_parked_children(
         if decision.is_approval() {
             content.push(ContentPart::ToolApproval(ContentPartToolApproval {
                 tool_call_id: item.tool_call_id.clone(),
-                always_allow: always_allow_setting.is_some(),
+                always_allow: always_allow_setting.is_some() || client_standing,
                 user_tool_approval_setting_id: always_allow_setting
                     .as_ref()
                     .map(|setting| setting.id),
@@ -19145,7 +19275,7 @@ async fn settle_parked_children(
         } else {
             content.push(ContentPart::ToolRejection(ContentPartToolRejection {
                 tool_call_id: item.tool_call_id.clone(),
-                never_allow: never_allow_setting.is_some(),
+                never_allow: never_allow_setting.is_some() || client_standing,
                 user_tool_approval_setting_id: never_allow_setting
                     .as_ref()
                     .map(|setting| setting.id),
@@ -19172,6 +19302,7 @@ async fn settle_parked_children(
                     child,
                     item.tool_call_id.clone(),
                     decision,
+                    parked_output.as_ref(),
                 )
                 .await
             }
@@ -19181,7 +19312,7 @@ async fn settle_parked_children(
             None => Err("The delegated run this decision covers was not recorded.".to_string()),
         };
         let (output, still_parked, failed) = match resumed {
-            Ok(envelope) => {
+            Ok((envelope, resumed_trace)) => {
                 let still_parked = envelope.status
                     == crate::services::delegation::DelegationRunStatus::InputRequired;
                 let failed =
@@ -19190,6 +19321,7 @@ async fn settle_parked_children(
                     crate::services::delegation::resumed_slot_output(
                         &envelope,
                         parked_output.as_ref(),
+                        resumed_trace.as_ref(),
                     ),
                     still_parked,
                     failed,
@@ -19969,6 +20101,9 @@ pub(crate) async fn run_continuation(
     // the refusal the model reads instead of the task's result. No child exists
     // on either path yet — that is what asking before dispatch bought.
     let mut approved_plan_calls: Vec<crate::models::message::PendingToolCall> = Vec::new();
+    // A delegated run is offered client tools only under its grant.
+    let declines_client_calls = approval_request.kind == ToolApprovalKind::ClientTool
+        && crate::models::chat::chat_is_delegated_run(&chat);
     for (approval_id, decision) in &plan_decisions {
         let decision = *decision;
         let Some(item) = state
@@ -20042,15 +20177,27 @@ pub(crate) async fn run_continuation(
             progress: None,
             total: None,
             // A plan denial carries no `reason`: the closed envelope vocabulary
-            // has none for it, and "the user said no" is not a run outcome.
-            output: Some(json!({
-                "status": "rejected",
-                "error": if approval_request.kind == ToolApprovalKind::ClientTool {
-                    "The user denied this tool call."
-                } else {
-                    "The user declined this task."
-                },
-            })),
+            // has none for it, and "the user said no" is not a run outcome. A
+            // task's client call does: its result counts what was declined.
+            output: Some(if declines_client_calls {
+                json!({
+                    "status": "cancelled",
+                    "reason": crate::services::delegated_client_tools::DECLINED,
+                    "error": format!(
+                        "The user declined this call, so the task has no result from '{}'; say in the answer what is missing because of it.",
+                        item.tool_name
+                    ),
+                })
+            } else {
+                json!({
+                    "status": "rejected",
+                    "error": if approval_request.kind == ToolApprovalKind::ClientTool {
+                        "The user denied this tool call."
+                    } else {
+                        "The user declined this task."
+                    },
+                })
+            }),
             started_at: Some(now_timestamp()),
             ended_at: Some(now_timestamp()),
         };
