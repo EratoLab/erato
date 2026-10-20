@@ -36,8 +36,18 @@ const editLabel = (expected: {
   expected.labelIsExcerpt && expected.spokenLabel
     ? expected.spokenLabel
     : expected.label;
+// Ellipsis shows on any fraction cut off, which scrollWidth rounds away, so
+// the box is compared with the text's own width.
 const isCut = (locator: Locator) =>
-  locator.evaluate((element) => element.scrollWidth > element.clientWidth);
+  locator.evaluate((element) => {
+    const probe = element.cloneNode(true) as HTMLElement;
+    probe.style.cssText =
+      "position:absolute;visibility:hidden;width:auto;min-width:0;max-width:none";
+    document.body.appendChild(probe);
+    const natural = probe.getBoundingClientRect().width;
+    probe.remove();
+    return element.getBoundingClientRect().width < natural - 0.01;
+  });
 const tileNames = (page: Page) =>
   page
     .locator(`${EDITOR} [data-ui="composer-staged-files"] button[title]`)

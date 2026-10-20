@@ -170,7 +170,7 @@ export const MessageEditor = ({
           hasLane && "mb-2",
           // "Sent as before" is why a chip here cannot be removed: the label
           // gives way first, down to its own floor.
-          "[&_[data-locked=true]_[data-ui=composer-context-chip-meta]]:shrink-[0.01]",
+          "[&_[data-locked=true]_[data-ui=composer-context-chip-meta]]:shrink-[0.0001]",
         )}
       >
         <ComposerContextArea
