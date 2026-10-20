@@ -1,7 +1,7 @@
 //! Delegated tasks that read through their parent's client tools (ERMAIN-1001).
 //! The host is a test-driven pane on an executor stream, described by a
 //! [`rows::HostRow`]; the parent turn runs on that pane's binding. This file
-//! holds the kit and three tests of the core alone, on the fake host;
+//! holds the kit and four tests of the core alone, on the fake host;
 //! `conformance` runs the cases every host must pass.
 use super::attached::serve;
 use super::executor_stream::{Pane, account, rows as row_count};
@@ -884,6 +884,41 @@ async fn never_allow_on_a_client_tool_child_item_is_stored_as_the_client_tool_pr
         "{slot}"
     );
     asked.server.abort();
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_turn_without_the_context_version_dispatches_the_read_without_one(pool: Pool<Postgres>) {
+    let row = &fake_host();
+    // The same tools and pane; only the parent turn has no context version.
+    let bare_turn = &HostRow {
+        context: None,
+        ..fake_host()
+    };
+    let (parent, child) = (RequestBodyRecorder::new(), RequestBodyRecorder::new());
+    let mut mocks = MockSet::new();
+    mock_parent(&mut mocks, &parent, vec![client_task(None)]);
+    mock_client_child_reads(row, &mut mocks, &child);
+    let (state, _llm) = delegated_state(row, pool, mocks, |_| {}).await;
+    let (base, server) = serve(&state).await;
+    let mut pane = open_pane(row, &base).await;
+    let chat_id = seed_origin_chat(&state.db).await;
+    let run = spawn_parent(bare_turn, &base, chat_id, ACTION_FACET, Some(row.binding()));
+    let event = pane.call().await;
+    let client_child = child_chat(&state.db, chat_id, CHILD_FACET).await.unwrap();
+    let grant = &task_spec(&client_child)["client_grant"];
+    assert!(
+        grant.is_object() && grant.get("context_ref").is_none(),
+        "{grant}"
+    );
+    assert_eq!(
+        event["input"],
+        json!({"part": "intro"}),
+        "the model's context version is removed, not passed on"
+    );
+    assert!(event["lineage"].get("context_ref").is_none(), "{event}");
+    answer_call(row, &state, &event).await;
+    assert!(finish(run).await.contains(PARENT_FINAL));
+    server.abort();
 }
 
 #[sqlx::test(migrator = "crate::MIGRATOR")]

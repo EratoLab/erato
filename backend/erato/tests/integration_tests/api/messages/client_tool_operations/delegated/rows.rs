@@ -154,6 +154,24 @@ pub(super) fn fake_host(host: ClientToolHostContext) -> HostRow {
     }
 }
 
+/// [`fake_host`] without a context version, like a live read: the grant and
+/// the lineage carry no `context_ref`, and the pane reports `readAt`.
+pub(super) fn fake_live_host(host: ClientToolHostContext) -> HostRow {
+    HostRow {
+        identity: "fake-live-session-1",
+        read_parameters: json!({"type": "object", "properties": {
+            "part": {"type": "string"}}}),
+        model_input: json!({"part": "intro"}),
+        context: None,
+        freshness: json!({
+            "readAt": "2026-10-20T10:00:00Z",
+            "changes": "none",
+            "counts": counts(),
+        }),
+        ..fake_host(host)
+    }
+}
+
 const SNAPSHOT: &str = "SNAPSHOT-TOKEN-7";
 
 /// The overlay's Word read tool as it stands; ERMAIN-1003 adjusts the row to

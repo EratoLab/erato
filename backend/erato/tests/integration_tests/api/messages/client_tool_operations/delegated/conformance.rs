@@ -7,7 +7,7 @@ use erato::services::client_operations::executor_stream;
 use sea_orm::ConnectionTrait;
 use std::collections::BTreeSet;
 
-/// One module per row, with one test per case.
+/// One module per row, named before the colon, with one test per case.
 macro_rules! host_conformance {
     (@cases [$($why:literal)?]) => {};
     (@cases [$($why:literal)?] $case:ident $($rest:ident)*) => {
@@ -19,8 +19,8 @@ macro_rules! host_conformance {
 
         host_conformance!(@cases [$($why)?] $($rest)*);
     };
-    ($row:ident($($arg:expr),*) $(, ignore = $why:literal)?) => {
-        mod $row {
+    ($name:ident: $row:ident($($arg:expr),*) $(, ignore = $why:literal)?) => {
+        mod $name {
             use super::*;
 
             fn row() -> HostRow {
@@ -40,10 +40,11 @@ macro_rules! host_conformance {
                 a_turn_without_the_hosts_binding_gets_no_grant
                 never_before_the_turn_leaves_nothing_to_grant
                 never_after_the_offer_writes_no_grant
+                never_after_the_childs_offer_refuses_its_call
                 no_pane_at_launch_means_no_grant_and_the_result_says_why
                 a_pane_that_takes_no_task_calls_gets_no_grant
                 a_granted_call_reaches_the_pane_with_lineage_and_the_server_context_ref
-                a_child_cannot_call_write_tools_tools_without_child_access_or_invented_tools
+                a_child_cannot_call_write_tools_without_child_access_or_invented_tools
                 a_pane_gone_before_dispatch_is_context_unavailable_at_once
                 a_pane_lost_in_flight_is_context_unavailable_after_the_grace
                 a_child_call_never_waits_for_the_inbox_even_for_a_durable_tool
@@ -61,15 +62,16 @@ macro_rules! host_conformance {
     };
 }
 
-host_conformance!(fake_host(ClientToolHostContext::WordDocument));
+host_conformance!(fake_host: fake_host(ClientToolHostContext::WordDocument));
+host_conformance!(fake_live_host: fake_live_host(ClientToolHostContext::OutlookMailbox));
 // A host's row is enabled by the issue that makes its pane take grant calls,
 // so a passing row never stands for a host whose pane would refuse them.
 host_conformance!(
-    word_document(),
+    word_document: word_document(),
     ignore = "ERMAIN-1003: enabled once the Word pane takes grant calls"
 );
 host_conformance!(
-    outlook_mailbox(),
+    outlook_mailbox: outlook_mailbox(),
     ignore = "ERMAIN-1006: enabled once the Outlook pane takes grant calls"
 );
 
@@ -512,6 +514,65 @@ async fn never_after_the_offer_writes_no_grant(pool: Pool<Postgres>, row: &HostR
     server.abort();
 }
 
+async fn never_after_the_childs_offer_refuses_its_call(pool: Pool<Postgres>, row: &HostRow) {
+    let (parent, child) = (RequestBodyRecorder::new(), RequestBodyRecorder::new());
+    let mut mocks = MockSet::new();
+    mock_parent(&mut mocks, &parent, vec![client_task(None)]);
+    mock_client_child(
+        &mut mocks,
+        &child,
+        build_openai_paused_tool_calls_streaming_response(
+            "Reading the introduction.",
+            PLAN_PAUSE,
+            &[(CHILD_READ_CALL, row.read_tool, row.model_input.clone())],
+        ),
+        CHILD_READ_CALL,
+    );
+    let (state, _llm) = delegated_state(row, pool, mocks, |_| {}).await;
+    let (base, server) = serve(&state).await;
+    let mut pane = open_pane(row, &base).await;
+    let chat_id = seed_origin_chat(&state.db).await;
+    let run = spawn_parent(row, &base, chat_id, ACTION_FACET, Some(row.binding()));
+    tokio::time::timeout(Duration::from_secs(15), async {
+        while turn_bodies(&child).is_empty() {
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .expect("the child's model is asked");
+    erato::models::user_preference::set_client_tool_decision(
+        &state.db,
+        &account(&state).await,
+        &row.qualified(),
+        erato::models::user_preference::ClientToolDecision::NeverAllow,
+    )
+    .await
+    .unwrap();
+    assert!(finish(run).await.contains(PARENT_FINAL));
+
+    assert!(offers(&turn_bodies(&child)[0], row.read_tool));
+    assert_eq!(pane.next(Duration::from_millis(300)).await, None);
+    let client_child = child_chat(&state.db, chat_id, CHILD_FACET).await.unwrap();
+    assert!(task_spec(&client_child)["client_grant"].is_object());
+    let read = part_for(
+        &assistant_row(&state.db, client_child.id).await,
+        CHILD_READ_CALL,
+    );
+    assert_eq!(read["status"], "error");
+    assert_eq!(
+        read["output"],
+        json!({
+            "status": "rejected",
+            "error": format!(
+                "The user has disabled the tool '{}' in their settings; the call was not executed.",
+                row.read_tool
+            ),
+        })
+    );
+    assert_eq!(row_count(&state, "client_executor_calls").await, 0);
+    server.abort();
+}
+
 async fn no_pane_at_launch_means_no_grant_and_the_result_says_why(
     pool: Pool<Postgres>,
     row: &HostRow,
@@ -604,7 +665,7 @@ async fn a_granted_call_reaches_the_pane_with_lineage_and_the_server_context_ref
     server.abort();
 }
 
-async fn a_child_cannot_call_write_tools_tools_without_child_access_or_invented_tools(
+async fn a_child_cannot_call_write_tools_without_child_access_or_invented_tools(
     pool: Pool<Postgres>,
     row: &HostRow,
 ) {
