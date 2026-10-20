@@ -322,4 +322,31 @@ describe("FilePreviewModal", () => {
     ).not.toBeInTheDocument();
     expect(screen.queryByTestId("file-preview-pdf")).not.toBeInTheDocument();
   });
+
+  it("titles a file by the name its caller supplies, else its filename", () => {
+    const { rerender } = renderWithTheme(
+      <FilePreviewModal isOpen onClose={vi.fn()} file={makeFile()} />,
+    );
+    expect(
+      screen.getByRole("dialog", { name: "Preview: shared-report.pdf" }),
+    ).toBeInTheDocument();
+
+    rerender(
+      <ThemeProvider enableCustomTheme={false}>
+        <FilePreviewModal
+          isOpen
+          onClose={vi.fn()}
+          file={
+            {
+              ...makeFile({ filename: "teams-file-1a2b3c4d-roadmap-q1.pdf" }),
+              displayName: "roadmap-q1.pdf",
+            } as FileUploadItem
+          }
+        />
+      </ThemeProvider>,
+    );
+    expect(
+      screen.getByRole("dialog", { name: "Preview: roadmap-q1.pdf" }),
+    ).toBeInTheDocument();
+  });
 });

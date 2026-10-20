@@ -1,4 +1,5 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ModalBase } from "./ModalBase";
@@ -169,5 +170,127 @@ describe("ModalBase", () => {
     const dialog = screen.getByRole("dialog", { name: "Details" });
     expect(dialog).toHaveAttribute("data-placement", "bottom");
     expect(dialog).toHaveClass("max-w-full", "max-h-[calc(100%-3.25rem)]");
+  });
+
+  describe("stacked dialogs (ERMAIN-1025)", () => {
+    const Stack = () => {
+      const [outer, setOuter] = useState(false);
+      const [inner, setInner] = useState(false);
+      return (
+        <>
+          <button type="button" onClick={() => setOuter(true)}>
+            Open detail
+          </button>
+          <ModalBase
+            isOpen={outer}
+            onClose={() => setOuter(false)}
+            title="Teams transcript"
+          >
+            <button type="button" onClick={() => setInner(true)}>
+              Preview roadmap.pdf
+            </button>
+          </ModalBase>
+          <ModalBase
+            isOpen={inner}
+            onClose={() => setInner(false)}
+            title="Preview: roadmap.pdf"
+          >
+            <p>Pages</p>
+          </ModalBase>
+        </>
+      );
+    };
+
+    it("closes one dialog per Escape, newest first, and returns focus to each opener", () => {
+      render(<Stack />);
+      const openDetail = screen.getByRole("button", { name: "Open detail" });
+      openDetail.focus();
+      fireEvent.click(openDetail);
+      const preview = screen.getByRole("button", {
+        name: "Preview roadmap.pdf",
+      });
+      preview.focus();
+      fireEvent.click(preview);
+      expect(screen.getAllByRole("dialog")).toHaveLength(2);
+
+      fireEvent.keyDown(document, { key: "Escape" });
+      expect(
+        screen.queryByRole("dialog", { name: "Preview: roadmap.pdf" }),
+      ).toBeNull();
+      expect(
+        screen.getByRole("dialog", { name: "Teams transcript" }),
+      ).toBeInTheDocument();
+      expect(preview).toHaveFocus();
+
+      fireEvent.keyDown(document, { key: "Escape" });
+      expect(screen.queryByRole("dialog")).toBeNull();
+      expect(openDetail).toHaveFocus();
+    });
+
+    it("leaves focus that the caller moved while closing", () => {
+      const Moving = () => {
+        const [open, setOpen] = useState(false);
+        return (
+          <>
+            <button type="button" onClick={() => setOpen(true)}>
+              Opener
+            </button>
+            <textarea aria-label="Message" />
+            <ModalBase
+              isOpen={open}
+              onClose={() => {
+                setOpen(false);
+                screen.getByRole("textbox", { name: "Message" }).focus();
+              }}
+              title="Picker"
+            >
+              <p>Rows</p>
+            </ModalBase>
+          </>
+        );
+      };
+      render(<Moving />);
+      const opener = screen.getByRole("button", { name: "Opener" });
+      opener.focus();
+      fireEvent.click(opener);
+      expect(screen.getByRole("dialog")).toHaveFocus();
+      fireEvent.keyDown(document, { key: "Escape" });
+      expect(screen.queryByRole("dialog")).toBeNull();
+      expect(screen.getByRole("textbox", { name: "Message" })).toHaveFocus();
+    });
+
+    it("skips an opener that is gone", () => {
+      const Gone = () => {
+        const [open, setOpen] = useState(false);
+        const [opener, setOpener] = useState(true);
+        return (
+          <>
+            {opener ? (
+              <button type="button" onClick={() => setOpen(true)}>
+                Chip
+              </button>
+            ) : null}
+            <ModalBase
+              isOpen={open}
+              onClose={() => {
+                setOpener(false);
+                setOpen(false);
+              }}
+              title="Picker"
+            >
+              <p>Rows</p>
+            </ModalBase>
+          </>
+        );
+      };
+      render(<Gone />);
+      const chip = screen.getByRole("button", { name: "Chip" });
+      chip.focus();
+      fireEvent.click(chip);
+      fireEvent.keyDown(document, { key: "Escape" });
+      expect(screen.queryByRole("dialog")).toBeNull();
+      expect(chip.isConnected).toBe(false);
+      expect(document.activeElement).toBe(document.body);
+    });
   });
 });
