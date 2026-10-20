@@ -540,12 +540,13 @@ Themes and kits can reach the lane through these hooks and classes:
   region; it is drawn with tokens only and has no face point (it arrived with
   1.19);
 - `composer-tool-chips` (a `role="group"` named "Selected tools") in the same
-  row, after the mode chips and the model selector, wherever the unified "+"
-  menu is used; it wraps inside the row's left group while Send keeps its
-  corner: one
+  row, after "+" and the mode chips and before the model selector, wherever the
+  unified "+" menu is used; it wraps inside the row's left group while Send
+  keeps its corner: one
   `composer-tool-chip[data-facet-id][data-locked]` button per selected tool
   (`data-testid="selected-facet-{id}"`, as on the desktop Tools buttons), with
-  `composer-tool-chip-label` and the `composer-tool-live` region. Like the mode
+  `composer-tool-chip-label`, `composer-tool-chip-x` (or
+  `composer-tool-chip-lock` while locked) and the `composer-tool-live` region. Like the mode
   chips it is drawn with `--theme-radius-control`, `--theme-bg-secondary`,
   `--theme-bg-hover` and `--theme-spacing-control-gap` only, and has no face
   point. The "+" carries no count badge;

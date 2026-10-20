@@ -159,7 +159,8 @@ the facet the resolver built, so equal args keep one `File`. Mark an estimate
 the send uploads as a file of its own (an email thread, a dropped email)
 `estimateUpload`: the composer then checks it with the staged files against
 the upload size and the per-message file count, and blocks Send as the server
-would. List files a chip stands for in `claimsFileIds` so the file row does not
+would. The placeholder names an item over the size limit by its label, and the
+lane draws that chip in the error tone with the limit leading its meta. List files a chip stands for in `claimsFileIds` so the file row does not
 draw them twice. Claimed files hide only while their chip is included or
 loading; a chip that stops being sent must unstage them in the same update,
 or they show in the file row again, because they still send. Give items with
@@ -242,10 +243,12 @@ A staged recording's transcription status is drawn by the shared composer on
 its own file tile, in every host; there is no status card above the composer.
 
 Selected tools show as chips next to "+" wherever the unified "+" menu is used
-(every add-in surface): one button per tool that deselects it, after the mode
-chips and the model selector, so picking a tool never moves the selector. In a
-narrow pane the chips wrap under the controls before them and Send keeps its
-corner. The "+" carries no count badge.
+(every add-in surface): one button per tool that deselects it, after "+" and
+the mode chips and before the model selector, as in the prototype. Under an
+assistant that sets the tools, each chip shows a lock in place of its x. In a
+narrow pane the chips wrap beside the controls before them and Send keeps its
+corner; when the right side is wide (Exit audio mode) it moves to a line of its
+own rather than cutting the chips' names. The "+" carries no count badge.
 
 A sent user message names the context its facet carried under its text, in a
 read-only "Sent with" row. Each host registers a descriptor per facet id
@@ -262,7 +265,10 @@ slot, a sent Teams transcript is one chip standing for its files again, and the
 facet the message was sent with is a locked "Sent as before" chip: the server
 sends the stored facet again with the edit, and only while it still offers
 that facet, so `AddinChatCore` passes `isActionFacetAvailable` and an edit
-never claims a facet the server would drop.
+never claims a facet the server would drop. Until `/me/facets` has loaded that
+check says no, so the chip and its estimate appear once the facets are known.
+A chip whose label is an excerpt (a quoted selection) shows its short name
+there, so "Sent as before" keeps its room; the detail holds the passage.
 
 ## Landmines
 
