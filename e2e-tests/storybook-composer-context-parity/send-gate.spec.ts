@@ -28,10 +28,16 @@ test.describe("The composer's send gate on context items", () => {
     page,
   }) => {
     await openGate(page, "send-gate-size");
+    // Named as its chip reads, and the chip shows that it blocks Send.
     await expect(textarea(page)).toHaveAttribute(
       "placeholder",
-      "Cannot send: Re: Offsite agenda.eml exceeds the 50 MB limit. Remove it to send.",
+      "Cannot send: Re: Offsite agenda exceeds the 50 MB limit. Remove it to send.",
     );
+    const drop = page.locator(`${CHIP}[data-kind="outlook.drop"]`);
+    await expect(drop).toHaveAttribute("data-tone", "error");
+    await expect(
+      drop.locator('[data-ui="composer-context-chip-meta"]'),
+    ).toHaveText("Over the 50 MB limit · Lena Hoffmann · 60 MB");
     expect(await placeholderColor(page)).toBe(
       await tokenColor(page.locator(SHELL), "--theme-error-fg"),
     );
@@ -61,6 +67,10 @@ test.describe("The composer's send gate on context items", () => {
     page,
   }) => {
     await openGate(page, "send-gate-count");
+    // No single chip is at fault for the count.
+    for (const chip of await page.locator(CHIP).all()) {
+      await expect(chip).not.toHaveAttribute("data-tone", "error");
+    }
     await expect(textarea(page)).toHaveAttribute(
       "placeholder",
       "Cannot send: a message can carry at most 3 files. Remove some to send.",
@@ -86,7 +96,7 @@ test.describe("The composer's send gate on context items", () => {
     await openGate(page, "send-gate-size", "de");
     await expect(textarea(page)).toHaveAttribute(
       "placeholder",
-      "Senden nicht möglich: Re: Offsite agenda.eml überschreitet das Limit von 50 MB. Entfernen Sie die Datei, um zu senden.",
+      "Senden nicht möglich: Re: Offsite agenda überschreitet das Limit von 50 MB. Entfernen Sie die Datei, um zu senden.",
     );
   });
 });

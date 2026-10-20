@@ -428,6 +428,8 @@ export interface ToolComposerProps {
   contextItems?: ComposerContextItem[];
   initialFiles?: FileUploadItem[];
   maxFiles?: number;
+  /** Audio mode is on: the controls row carries "Exit audio mode". */
+  audioMode?: boolean;
   /** Rendered instead of the plain composer, inside the seeded providers. */
   children?: ReactNode;
 }
@@ -442,6 +444,7 @@ export const ToolComposer = ({
   contextItems,
   initialFiles,
   maxFiles = 20,
+  audioMode = false,
   children,
 }: ToolComposerProps) => {
   const [queryClient] = useState(() => {
@@ -475,6 +478,12 @@ export const ToolComposer = ({
               controlledSelectedModel={model}
               controlledIsModelSelectionReady
               onControlledSelectedModelChange={setModel}
+              {...(audioMode
+                ? {
+                    controlledIsAudioMode: true,
+                    onControlledIsAudioModeChange: noop,
+                  }
+                : {})}
             />
           )}
           <AnnouncementLog

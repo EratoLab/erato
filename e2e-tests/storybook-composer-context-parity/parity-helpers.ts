@@ -19,6 +19,7 @@ export interface SentChip {
   meta?: string;
   spokenLabel?: string;
   quote?: string;
+  labelIsExcerpt?: boolean;
 }
 
 interface FacetData {

@@ -42,7 +42,7 @@ const centre = async (locator: Locator) => {
 };
 
 test.describe("Tool chips next to +", () => {
-  test("two tools are chips in the controls row, after + and the model", async ({
+  test("two tools are chips in the controls row, after + and before the model", async ({
     page,
   }) => {
     await openTools(page, "tool-chips-pane");
@@ -59,7 +59,14 @@ test.describe("Tool chips next to +", () => {
     // The count badge on + is gone; the chips say what is on.
     await expect(page.getByTestId("chat-input-add-menu-badge")).toHaveCount(0);
     expect(await precedes(plus(page), tools)).toBe(true);
-    expect(await precedes(modelSelector(page), tools)).toBe(true);
+    expect(await precedes(tools, modelSelector(page))).toBe(true);
+    // + sits on the first chip row, not between the rows.
+    expect(
+      Math.abs(
+        (await centre(plus(page))) -
+          (await centre(tools.locator(TOOL_CHIP).first())),
+      ),
+    ).toBeLessThanOrEqual(2);
 
     const shell = await boxOf(page.locator(SHELL));
     for (const chip of await tools.locator(TOOL_CHIP).all()) {
@@ -68,16 +75,23 @@ test.describe("Tool chips next to +", () => {
       expect(box.x).toBeGreaterThanOrEqual(shell.x);
       expect(box.x + box.width).toBeLessThanOrEqual(shell.x + shell.width);
     }
-    // Send keeps its corner: right edge and bottom row of the controls.
+    // Send keeps its corner: right edge and bottom row of the controls, with
+    // the model selector beside it.
     const sendBox = await boxOf(send(page));
+    const controls = await boxOf(page.locator(CONTROLS));
     const lastChip = await boxOf(tools.locator(TOOL_CHIP).last());
     expect(sendBox.x).toBeGreaterThan(lastChip.x + lastChip.width);
     expect(
+      Math.abs(sendBox.x + sendBox.width - (controls.x + controls.width)),
+    ).toBeLessThanOrEqual(1);
+    expect(
+      Math.abs(sendBox.y + sendBox.height - (controls.y + controls.height)),
+    ).toBeLessThanOrEqual(1);
+    expect(
       Math.abs(
-        (await centre(send(page))) -
-          (await centre(tools.locator(TOOL_CHIP).last())),
+        (await centre(send(page))) - (await centre(modelSelector(page))),
       ),
-    ).toBeLessThanOrEqual(4);
+    ).toBeLessThanOrEqual(2);
     await noPageOverflow(page, 340);
   });
 
@@ -113,21 +127,13 @@ test.describe("Tool chips next to +", () => {
   }) => {
     await openTools(page, "tool-chips-pane");
     const live = page.locator(TOOL_LIVE);
-    // Where the model selector sits beside +; the composer itself may move.
-    const besidePlus = async () => {
-      const [model, trigger] = [
-        await boxOf(modelSelector(page)),
-        await boxOf(plus(page)),
-      ];
-      return { dx: model.x - trigger.x, dy: model.y - trigger.y };
-    };
-    const before = await besidePlus();
     await toolChip(page, "Web search").click();
     await expect(toolChip(page, "Web search")).toHaveCount(0);
     await expect(live).toHaveText("Web search deselected.");
     await expect(toolChip(page, "Extended thinking")).toBeFocused();
-    // Dropping a tool never moves the model selector.
-    expect(await besidePlus()).toEqual(before);
+    expect(
+      await precedes(toolChip(page, "Extended thinking"), modelSelector(page)),
+    ).toBe(true);
 
     await page.keyboard.press("Enter");
     await expect(page.locator(TOOL_CHIP)).toHaveCount(0);
@@ -167,9 +173,54 @@ test.describe("Tool chips next to +", () => {
     await expect(chip).toHaveAttribute("title", LOCK_REASON);
     await expect(chip).toHaveAccessibleDescription(LOCK_REASON);
     expect(Number(await style(chip, "opacity"))).toBeCloseTo(0.5, 2);
+    // A lock, as on locked context chips, not an x that does nothing.
+    await expect(
+      chip.locator('[data-ui="composer-tool-chip-lock"]'),
+    ).toHaveCount(1);
+    await expect(chip.locator('[data-ui="composer-tool-chip-x"]')).toHaveCount(
+      0,
+    );
     await chip.click({ force: true });
     await expect(toolChip(page, "Web search")).toHaveCount(1);
     await expect(page.locator(TOOL_LIVE)).toHaveText("");
+  });
+
+  test("audio mode at 340: the tools keep their names and Send its corner", async ({
+    page,
+  }) => {
+    await openTools(page, "tool-chips-audio-mode");
+    const exitAudio = page.getByTestId("chat-input-exit-audio-mode");
+    await expect(exitAudio).toBeVisible();
+    const chips = page.locator(TOOL_CHIP);
+    await expect(chips).toHaveCount(2);
+    for (const label of await page
+      .locator('[data-ui="composer-tool-chip-label"]')
+      .all()) {
+      expect(
+        await label.evaluate(
+          (element) => element.scrollWidth > element.clientWidth,
+        ),
+      ).toBe(false);
+    }
+    expect(
+      Math.abs((await centre(plus(page))) - (await centre(chips.first()))),
+    ).toBeLessThanOrEqual(2);
+    // Send ends the controls: right of every chip's row, at the bottom.
+    const controls = await boxOf(page.locator(CONTROLS));
+    const exitBox = await boxOf(exitAudio);
+    for (const chip of await chips.all()) {
+      const box = await boxOf(chip);
+      expect(box.x + box.width).toBeLessThanOrEqual(
+        controls.x + controls.width,
+      );
+    }
+    expect(exitBox.x + exitBox.width).toBeLessThanOrEqual(
+      controls.x + controls.width + 0.5,
+    );
+    expect(exitBox.y + exitBox.height).toBeGreaterThan(
+      controls.y + controls.height - 40,
+    );
+    await noPageOverflow(page, 340);
   });
 
   test("a long name is cut inside the chip's width", async ({ page }) => {

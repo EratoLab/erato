@@ -105,6 +105,11 @@ export const ToolChipsLongName: Story = {
   ),
 };
 
+/** Audio mode puts "Exit audio mode" beside Send; the tools keep their names. */
+export const ToolChipsAudioMode: Story = {
+  render: () => <ToolComposer audioMode />,
+};
+
 const OutlookScheduling = () => {
   const { items, modes } = useOutlookStoryResolver(
     OUTLOOK_STORIES.ReadScheduling,

@@ -27,6 +27,17 @@ const labelOf = (item: Locator) =>
   item.locator('[data-ui="composer-context-chip-label"]');
 const metaOf = (item: Locator) =>
   item.locator('[data-ui="composer-context-chip-meta"]');
+/** An excerpt label gives way to the short name in the edit lane. */
+const editLabel = (expected: {
+  label: string;
+  spokenLabel?: string;
+  labelIsExcerpt?: boolean;
+}) =>
+  expected.labelIsExcerpt && expected.spokenLabel
+    ? expected.spokenLabel
+    : expected.label;
+const isCut = (locator: Locator) =>
+  locator.evaluate((element) => element.scrollWidth > element.clientWidth);
 const tileNames = (page: Page) =>
   page
     .locator(`${EDITOR} [data-ui="composer-staged-files"] button[title]`)
@@ -283,10 +294,10 @@ test.describe("Edit composer: the context the edit sends again", () => {
       await expect(item).toHaveCount(1);
       await expect(item).toHaveAttribute("data-state", "included");
       await expect(item).toHaveAttribute("data-locked", "true");
-      await expect(labelOf(item)).toHaveText(expected.label);
+      await expect(labelOf(item)).toHaveText(editLabel(expected));
       await expect(metaOf(item)).toHaveText("Sent as before");
       await expect(item.locator(OPEN)).toHaveAccessibleName(
-        `${expected.label} Sent as before Included. Locked.`,
+        `${editLabel(expected)} Sent as before Included. Locked.`,
       );
       const remove = item.locator(REMOVE);
       await expect(remove).toBeVisible();
@@ -294,6 +305,39 @@ test.describe("Edit composer: the context the edit sends again", () => {
       await expect(remove).toHaveAttribute("title", LOCK_REASON);
     });
   }
+
+  for (const [name, kind] of [
+    ["EditWordSelection", "word.selection"],
+    ["EditWordDocument", "word.document"],
+    ["EditOutlookDraft", "outlook.draft"],
+  ] as const) {
+    for (const locale of ["en", "de"]) {
+      test(`${name} at 340 in ${locale}: "Sent as before" is not cut`, async ({
+        page,
+      }) => {
+        await openEdit(page, name, { locale });
+        const [expected] = chipsOf(name, locale);
+        const item = chip(page, kind);
+        await expect(labelOf(item)).toHaveText(editLabel(expected));
+        await expect(metaOf(item)).toBeVisible();
+        expect(await isCut(metaOf(item))).toBe(false);
+      });
+    }
+  }
+
+  test("the selection's chip names it; its detail holds the passage", async ({
+    page,
+  }) => {
+    await openEdit(page, "EditWordSelection");
+    const [expected] = chipsOf("EditWordSelection");
+    expect(expected.labelIsExcerpt).toBe(true);
+    const item = chip(page, "word.selection");
+    await expect(labelOf(item)).toHaveText("Selection");
+    await expect(item.locator(OPEN)).toHaveAttribute(
+      "title",
+      "Selection · Sent as before",
+    );
+  });
 
   test("Delete on the locked chip says why it stays", async ({ page }) => {
     await openEdit(page, "EditWordSelection");
