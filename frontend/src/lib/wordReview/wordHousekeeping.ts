@@ -10,7 +10,8 @@ export type WordHousekeepingId =
   | "proofing-language"
   | "revision-id"
   | "people-list"
-  | "glossary-rsids";
+  | "glossary-rsids"
+  | "placeholder-entries";
 
 export interface WordHousekeepingEntry {
   id: WordHousekeepingId;
@@ -96,6 +97,16 @@ export const WORD_HOUSEKEEPING: readonly WordHousekeepingEntry[] = [
     probe:
       "ERMAIN-974 drift-glossary, drift-notes (Word for Mac 16.113, 2026-10-14); ERMAIN-980 drift-glossary, drift-notes (Word for Mac 16.114, Word PC 16.0.20430, 2026-10-20): one w:rsid replaced by a new one on every export of an unedited document",
     scope: "any",
+  },
+  {
+    id: "placeholder-entries",
+    element:
+      "w:docPart name and w:guid of each content-control placeholder entry, the controls' w:placeholder/w:docPart, the entries' order, and the empty entry-named paragraph style (w:pStyle in the entry, w:style in /word/glossary/styles.xml, never removed)",
+    part: "/word/glossary/document.xml",
+    hosts: ["Word PC", "Word for Mac"],
+    probe:
+      "ERMAIN-980 dump-*, p4-*, p7-* (Word for Mac 16.114, Word PC 16.0.20430, 2026-10-20): every import gives every placeholder entry, Word's defaults included, a new name and guid, re-points its controls (shared entries stay shared), orders the entries by their first control and adds one entry-named style; placeholder text and rendering unchanged",
+    scope: "written",
   },
 ];
 
@@ -380,4 +391,315 @@ export function normalizeWordPeopleList(
     return false;
   people.replaceChildren(...next);
   return true;
+}
+
+const GLOSSARY_DOCUMENT = "/word/glossary/document.xml";
+const GLOSSARY_STYLES = "/word/glossary/styles.xml";
+const STYLE_REFERENCES = new Set([
+  "pStyle",
+  "rStyle",
+  "basedOn",
+  "next",
+  "link",
+]);
+const isW = (e: Element | null | undefined, local: string): e is Element =>
+  e?.namespaceURI === W && e.localName === local;
+const value = (e: Element | null | undefined) =>
+  e?.getAttributeNS(W, "val") ?? "";
+const onlyW = (e: Element, names: readonly string[]) =>
+  ownAttributes(e).every(
+    (a) => a.namespaceURI === W && names.includes(a.localName),
+  );
+
+/** Package roots by part name, from a flat (pkg:package) document. */
+export type WordPackageRoots = ReadonlyMap<string, Element>;
+
+/** Each content control's link to its placeholder entry (w:sdtPr/w:placeholder/w:docPart), by part
+ * name and in document order; the glossary's own parts are not stories. */
+function placeholderLinks(roots: WordPackageRoots): Element[] {
+  return [...roots.keys()]
+    .filter((path) => !path.startsWith("/word/glossary/"))
+    .sort()
+    .flatMap((path) =>
+      elements(roots.get(path)!, "docPart").filter(
+        (e) =>
+          isW(e.parentElement, "placeholder") &&
+          isW(e.parentElement.parentElement, "sdtPr"),
+      ),
+    );
+}
+
+const entryProperties = (entry: Element) => child(entry, "docPartPr");
+const entryName = (entry: Element) => {
+  const properties = entryProperties(entry);
+  return value(properties && child(properties, "name"));
+};
+
+/** The glossary's entries by name; undefined when names repeat or anything else sits there. */
+function placeholderEntries(
+  glossary: Element,
+): Map<string, Element> | undefined {
+  const entries = new Map<string, Element>();
+  const parts = child(glossary, "docParts");
+  for (const entry of Array.from(parts?.children ?? [])) {
+    const name = isW(entry, "docPart") ? entryName(entry) : "";
+    if (!name || entries.has(name)) return undefined;
+    entries.set(name, entry);
+  }
+  return entries;
+}
+
+/** A placeholder entry as Word writes one for a content control, Word's default ones included. */
+function isPlaceholderEntry(entry: Element): boolean {
+  const properties = entryProperties(entry);
+  const types = properties && child(properties, "types");
+  const category = properties && child(properties, "category");
+  const gallery = category && child(category, "gallery");
+  const kinds = types ? Array.from(types.children) : [];
+  return (
+    kinds.length > 0 &&
+    kinds.every((t) => isW(t, "type") && value(t) === "bbPlcHdr") &&
+    (!gallery || value(gallery) === "placeholder")
+  );
+}
+
+/** The style Word adds to the glossary on import for entry `name`: a custom paragraph style named
+ * after the entry, holding nothing but its name, an rsid and, on Word PC, a run language. */
+function isWordEntryStyle(style: Element, name: string): boolean {
+  if (
+    !isW(style, "style") ||
+    !onlyW(style, ["type", "customStyle", "styleId"]) ||
+    style.getAttributeNS(W, "type") !== "paragraph" ||
+    !["1", "true", "on"].includes(
+      style.getAttributeNS(W, "customStyle") ?? "",
+    ) ||
+    style.getAttributeNS(W, "styleId") !== name
+  )
+    return false;
+  const seen = new Set<string>();
+  for (const c of Array.from(style.children)) {
+    if (c.namespaceURI !== W || seen.has(c.localName)) return false;
+    seen.add(c.localName);
+    const ok =
+      c.localName === "name"
+        ? value(c) === name && onlyW(c, ["val"]) && !c.children.length
+        : c.localName === "rsid"
+          ? onlyW(c, ["val"]) && !c.children.length
+          : c.localName === "rPr" &&
+            !ownAttributes(c).length &&
+            Array.from(c.children).every(
+              (l) =>
+                isW(l, "lang") &&
+                !l.children.length &&
+                onlyW(l, ["val", "eastAsia", "bidi"]),
+            );
+    if (!ok) return false;
+  }
+  return seen.has("name");
+}
+
+/** References to style `id` from the glossary's entries and styles. */
+const styleReferences = (roots: WordPackageRoots, id: string) =>
+  [roots.get(GLOSSARY_DOCUMENT), roots.get(GLOSSARY_STYLES)].flatMap((root) =>
+    root
+      ? Array.from(root.getElementsByTagNameNS(W, "*")).filter(
+          (e) => STYLE_REFERENCES.has(e.localName) && value(e) === id,
+        )
+      : [],
+  );
+
+const wordEntryStyles = (roots: WordPackageRoots | undefined) => {
+  const styles = roots?.get(GLOSSARY_STYLES);
+  return new Map(
+    (styles ? elements(styles, "style") : [])
+      .map((s) => [s.getAttributeNS(W, "styleId") ?? "", s] as const)
+      .filter(([id, s]) => isWordEntryStyle(s, id)),
+  );
+};
+
+/** Drops entry `name`'s pStyle and its style when that style is Word's empty entry style and the
+ * entry is all that uses it. */
+function dropEntryStyle(
+  roots: WordPackageRoots,
+  entry: Element,
+  name: string,
+): void {
+  const style = wordEntryStyles(roots).get(name);
+  const uses = styleReferences(roots, name);
+  if (
+    !style ||
+    !uses.length ||
+    !uses.every(
+      (use) =>
+        isW(use, "pStyle") &&
+        isW(use.parentElement, "pPr") &&
+        isW(use.parentElement.parentElement, "p") &&
+        entry.contains(use),
+    )
+  )
+    return;
+  for (const use of uses) use.remove();
+  style.remove();
+}
+
+/** Entry names paired control by control: each entry on one side is one entry on the other, so
+ * shared entries stay shared and none swap. Undefined when not, or when the counts differ. */
+function pairedNames(
+  from: readonly Element[],
+  to: readonly Element[],
+): Map<string, string> | undefined {
+  if (!from.length || from.length !== to.length) return undefined;
+  const pairs = new Map<string, string>();
+  const reverse = new Map<string, string>();
+  for (let i = 0; i < from.length; i++) {
+    const x = value(from[i]),
+      y = value(to[i]);
+    if ((pairs.get(x) ?? y) !== y || (reverse.get(y) ?? x) !== x)
+      return undefined;
+    pairs.set(x, y);
+    reverse.set(y, x);
+  }
+  return pairs;
+}
+
+/**
+ * placeholder-entries: names each placeholder entry by its controls, in their order, on both sides
+ * of a whole-document import (and in `replaced`, the package the write wrote over), and leaves out
+ * Word's entry styles: the current entries' own, and ones `replaced` already held, which Word never
+ * removes.
+ * Entries are paired through the controls that point at them, so a control pointing at another
+ * entry, or an entry whose content changed, still differs. Returns how many entries Word renamed;
+ * 0 and nothing changed when the glossary is outside what the probes measured.
+ */
+export function normalizeWordPlaceholderEntries(
+  expected: WordPackageRoots,
+  actual: WordPackageRoots,
+  replaced?: WordPackageRoots,
+): number {
+  const sides = [expected, actual].map((roots) => {
+    const glossary = roots.get(GLOSSARY_DOCUMENT);
+    return {
+      roots,
+      glossary,
+      links: placeholderLinks(roots),
+      entries: glossary && placeholderEntries(glossary),
+    };
+  });
+  const [e, a] = sides;
+  if (
+    !e.glossary ||
+    !a.glossary ||
+    !e.entries ||
+    !a.entries ||
+    !e.links.length ||
+    e.links.length !== a.links.length
+  )
+    return 0;
+  const pairs = pairedNames(e.links, a.links);
+  if (!pairs) return 0;
+  if (
+    pairs.size !== e.entries.size ||
+    pairs.size !== a.entries.size ||
+    [...pairs].some(([x, y]) => {
+      const before = e.entries!.get(x),
+        after = a.entries!.get(y);
+      return (
+        !before ||
+        !after ||
+        !isPlaceholderEntry(before) ||
+        !isPlaceholderEntry(after)
+      );
+    })
+  )
+    return 0;
+  const kept = new Set(wordEntryStyles(replaced).keys());
+  // The replaced package's controls take the same names, so a control's paragraph reads alike there
+  // too ("proofing-language" compares written paragraphs against that package).
+  const replacedLinks = replaced ? placeholderLinks(replaced) : [];
+  const fromReplaced = pairedNames(replacedLinks, e.links);
+  const tokens = new Map<string, string>();
+  let renamed = 0;
+  let index = 0;
+  for (const [x, y] of pairs) {
+    const token = `placeholder-entry-${index++}`;
+    tokens.set(x, token);
+    if (x !== y) renamed++;
+    for (const [side, name] of [
+      [e, x],
+      [a, y],
+    ] as const) {
+      const entry = side.entries!.get(name)!;
+      dropEntryStyle(side.roots, entry, name);
+      const properties = entryProperties(entry)!;
+      child(properties, "name")!.setAttributeNS(W, "w:val", token);
+      child(properties, "guid")?.setAttributeNS(W, "w:val", token);
+      for (const link of side.links)
+        if (value(link) === name) link.setAttributeNS(W, "w:val", token);
+      entry.parentElement!.append(entry);
+    }
+  }
+  if (fromReplaced)
+    for (const link of replacedLinks) {
+      const token = tokens.get(fromReplaced.get(value(link)) ?? "");
+      if (token) link.setAttributeNS(W, "w:val", token);
+    }
+  for (const side of sides)
+    for (const [id, style] of wordEntryStyles(side.roots))
+      if (kept.has(id) && !styleReferences(side.roots, id).length)
+        style.remove();
+  return renamed;
+}
+
+export type WordPlaceholderImportIssue =
+  | "entry-shape"
+  | "unreferenced-entry"
+  | "missing-entry"
+  | "story"
+  | "nested";
+
+/**
+ * placeholder-entries, before a whole-document import: undefined when the package has no glossary or
+ * its content-control placeholders are all of a shape the probes measured (every entry a
+ * placeholder entry used by a control in the main document, every control outside other controls
+ * and pointing at an entry), otherwise what is not.
+ */
+export function wordPlaceholderImportIssue(
+  roots: WordPackageRoots,
+): WordPlaceholderImportIssue | undefined {
+  const glossary = roots.get(GLOSSARY_DOCUMENT);
+  if (!glossary) return undefined;
+  const links = placeholderLinks(roots);
+  const entries = placeholderEntries(glossary);
+  if (!entries || [...entries.values()].some((e) => !isPlaceholderEntry(e)))
+    return "entry-shape";
+  const used = new Set(links.map(value));
+  if ([...used].some((name) => !entries.has(name))) return "missing-entry";
+  if ([...entries.keys()].some((name) => !used.has(name)))
+    return "unreferenced-entry";
+  const main = roots.get("/word/document.xml");
+  if (links.some((link) => !main?.contains(link))) return "story";
+  if (
+    links.some((link) => {
+      const control = link.parentElement!.parentElement!.parentElement;
+      for (let up = control?.parentElement; up; up = up.parentElement)
+        if (up.namespaceURI === W && up.localName === "sdt") return true;
+      return false;
+    })
+  )
+    return "nested";
+  return undefined;
+}
+
+/** A flat package's roots by part name, for the functions above. */
+export function wordPackageRoots(doc: Document): WordPackageRoots {
+  const PKG = "http://schemas.microsoft.com/office/2006/xmlPackage";
+  const roots = new Map<string, Element>();
+  for (const part of Array.from(doc.getElementsByTagNameNS(PKG, "part"))) {
+    const data = Array.from(part.children).find(
+      (c) => c.namespaceURI === PKG && c.localName === "xmlData",
+    );
+    if (data?.firstElementChild)
+      roots.set(part.getAttributeNS(PKG, "name") ?? "", data.firstElementChild);
+  }
+  return roots;
 }

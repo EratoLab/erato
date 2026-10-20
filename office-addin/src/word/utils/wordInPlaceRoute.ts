@@ -1,9 +1,16 @@
-import { wordReadScope } from "@erato/frontend/word-review";
+import {
+  wordPackageRoots,
+  wordPlaceholderImportIssue,
+  wordReadScope,
+} from "@erato/frontend/word-review";
 
+import { wordApplyHost } from "./wordApplyPolicy";
+import { parseWordXml } from "./wordDocumentPackageCodec";
 import {
   captureWordAuthoringSnapshot,
   compileWordDocumentPlan,
 } from "./wordDocumentXml";
+import { wordHostPlatform } from "./wordHostPlatform";
 import { wordTrackedInPlaceCapabilities } from "./wordInPlaceCapabilities";
 import { classifyWordInPlacePlan } from "./wordInPlacePlan";
 import { isWordTrackingMode } from "./wordInPlaceSwitch";
@@ -16,6 +23,7 @@ import type { WordInPlaceAvailability } from "./wordInPlaceSwitch";
 import type {
   WordAuthoringSnapshot,
   WordDocumentPlan,
+  WordPlaceholderImportIssue,
   WordReadScope,
 } from "@erato/frontend/word-review";
 
@@ -86,7 +94,10 @@ export function routeWordDocumentPlan(
 export type WordWholeDocumentRefusal =
   | "import-disabled"
   /** A scoped read authorizes one passage, object or cell; it never becomes a whole-document write. */
-  | "scoped-needs-in-place";
+  | "scoped-needs-in-place"
+  /** Word renames content-control placeholder entries on every import; Erato verifies that only for
+   * the placeholder shapes the probes measured (WORD_HOUSEKEEPING "placeholder-entries"). */
+  | "placeholders-unverified";
 
 /** Whether a route replaces the whole document (the import, or the body route's whole-body
  * insertOoxml Replace), and what the host's policy lets it do. */
@@ -104,21 +115,50 @@ export function wordPlanReadScope(
   return wordReadScope(snapshot, plan.readToken)?.kind;
 }
 
-/** In-place and Track Changes-blocked routes never replace the whole document. */
+/** Whether an import of `compiled` over `captured` leaves the content-control placeholders the
+ * probes measured, on both sides; undefined when it does or neither has a glossary. */
+export function wordImportPlaceholderIssue(
+  captured: string,
+  compiled: string,
+): WordPlaceholderImportIssue | undefined {
+  for (const ooxml of [captured, compiled]) {
+    if (!ooxml.includes('"/word/glossary/document.xml"')) continue;
+    const issue = wordPlaceholderImportIssue(
+      wordPackageRoots(parseWordXml(ooxml)),
+    );
+    if (issue) return issue;
+  }
+  return undefined;
+}
+
+/** In-place and Track Changes-blocked routes never replace the whole document. `compiled`, the
+ * package an import would write, lets a desktop import refuse placeholders it can't verify. */
 export function wordWholeDocumentWrite(
   route: Pick<WordPlanRoute, "route">,
   plan: WordDocumentPlan,
   snapshot: WordAuthoringSnapshot,
   policy: Pick<WordApplyPolicy, "wholeDocumentImport">,
+  compiled?: string,
 ): WordWholeDocumentWrite {
   if (route.route !== "import" && route.route !== "body")
     return { write: "none" };
-  if (policy.wholeDocumentImport === "allowed") return { write: "allowed" };
-  if (wordPlanReadScope(plan, snapshot))
-    return { write: "refuse", reason: "scoped-needs-in-place" };
-  return policy.wholeDocumentImport === "off"
-    ? { write: "refuse", reason: "import-disabled" }
-    : { write: "confirm" };
+  const write: WordWholeDocumentWrite =
+    policy.wholeDocumentImport === "allowed"
+      ? { write: "allowed" }
+      : wordPlanReadScope(plan, snapshot)
+        ? { write: "refuse", reason: "scoped-needs-in-place" }
+        : policy.wholeDocumentImport === "off"
+          ? { write: "refuse", reason: "import-disabled" }
+          : { write: "confirm" };
+  if (
+    write.write !== "refuse" &&
+    route.route === "import" &&
+    compiled !== undefined &&
+    wordApplyHost(wordHostPlatform()) !== "web" &&
+    wordImportPlaceholderIssue(snapshot.ooxml, compiled)
+  )
+    return { write: "refuse", reason: "placeholders-unverified" };
+  return write;
 }
 
 /** Plain-language groups for why a plan replaces the whole document. */

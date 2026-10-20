@@ -134,6 +134,12 @@ export function wordDocumentDiagnosticText(
           message:
             "This change needs a full-document rewrite, which is turned off for this version of Word. Nothing was applied. Ask for a smaller edit that can be written in place.",
         });
+  if (diagnostic.reason === "placeholders-unverified")
+    return t({
+      id: "officeAddin.word.authoring.placeholdersUnverified",
+      message:
+        "This change needs a full-document rewrite, and Erato can't yet check how Word rewrites the placeholder text of this document's content controls. Nothing was applied. Ask for a smaller edit that can be written in place.",
+    });
   if (diagnostic.reason === "scoped-needs-in-place")
     return t({
       id: "officeAddin.word.authoring.scopedNeedsInPlace",
@@ -182,6 +188,12 @@ function wordNotAllowedText(restoring: boolean): string {
 export function wordWholeDocumentRefusalText(
   reason: WordWholeDocumentRefusal,
 ): string {
+  if (reason === "placeholders-unverified")
+    return t({
+      id: "officeAddin.word.importRefusal.placeholders",
+      message:
+        "This change needs a full-document rewrite, and Erato can't yet check how Word rewrites the placeholder text of this document's content controls.",
+    });
   if (reason === "scoped-needs-in-place")
     return t({
       id: "officeAddin.word.importRefusal.scoped",

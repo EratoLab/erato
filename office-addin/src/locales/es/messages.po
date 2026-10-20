@@ -2735,6 +2735,11 @@ msgid "officeAddin.word.authoring.partlyWritten"
 msgstr "Word se detuvo tras {applied} de {total} cambios. Su original está guardado."
 
 #. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.placeholdersUnverified"
+msgstr "Este cambio requiere reescribir todo el documento, y Erato aún no puede comprobar cómo reescribe Word el texto de marcador de posición de los controles de contenido de este documento. No se aplicó nada. Pida una modificación más pequeña que pueda escribirse directamente en el documento."
+
+#. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts
 #~ msgid "officeAddin.word.authoring.portrait"
 #~ msgstr "Vertical"
@@ -3893,6 +3898,11 @@ msgstr "«Deshacer» de Word no puede revertir este cambio. Erato no puede verif
 #: src/word/utils/wordAuthoringMessages.ts
 msgid "officeAddin.word.importRefusal.disabled"
 msgstr "Este cambio requiere reescribir todo el documento, algo que tu organización ha desactivado para esta versión de Word."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.importRefusal.placeholders"
+msgstr "Este cambio requiere reescribir todo el documento, y Erato aún no puede comprobar cómo reescribe Word el texto de marcador de posición de los controles de contenido de este documento."
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordAuthoringMessages.ts

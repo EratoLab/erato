@@ -2735,6 +2735,11 @@ msgid "officeAddin.word.authoring.partlyWritten"
 msgstr "Word s’est arrêté après {applied} sur {total} modifications. Votre original est enregistré."
 
 #. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.placeholdersUnverified"
+msgstr "Cette modification nécessite de réécrire tout le document, et Erato ne peut pas encore vérifier comment Word réécrit le texte d'espace réservé des contrôles de contenu de ce document. Rien n'a été appliqué. Demandez une modification plus limitée qui puisse être écrite directement dans le document."
+
+#. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts
 #~ msgid "officeAddin.word.authoring.portrait"
 #~ msgstr "Portrait"
@@ -3893,6 +3898,11 @@ msgstr "L’annulation de Word ne peut pas revenir sur cette modification. Erato
 #: src/word/utils/wordAuthoringMessages.ts
 msgid "officeAddin.word.importRefusal.disabled"
 msgstr "Cette modification nécessite de réécrire tout le document, ce que votre organisation a désactivé pour cette version de Word."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.importRefusal.placeholders"
+msgstr "Cette modification nécessite de réécrire tout le document, et Erato ne peut pas encore vérifier comment Word réécrit le texte d'espace réservé des contrôles de contenu de ce document."
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordAuthoringMessages.ts
