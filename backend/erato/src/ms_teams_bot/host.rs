@@ -1096,6 +1096,88 @@ mod tests {
         assert!(!completion.needs_client);
     }
 
+    /// The turn's own gated call with one parked child folded onto its part.
+    fn mixed_approval(kind: ToolApprovalKind) -> ContentPart {
+        let ContentPart::ToolApprovalRequest(mut request) = approval(kind) else {
+            unreachable!()
+        };
+        request.approvals = request.approval_items();
+        request
+            .approvals
+            .push(crate::models::message::ApprovalItem {
+                approval_id: "task-a".to_string(),
+                tool_call_id: "task-a".to_string(),
+                tool_name: "delegate_task".to_string(),
+                display: None,
+                input: json!({"task": "Publish the page"}),
+                child: Some(crate::models::message::ChildApprovalRef {
+                    child_chat_id: Uuid::new_v4(),
+                    child_message_id: Uuid::new_v4(),
+                    child_tool_call_id: "child-call".to_string(),
+                    tool_name: "publish_page".to_string(),
+                    display: None,
+                    mcp_server_id: "wiki".to_string(),
+                    input: json!({"page": 1}),
+                    annotations: ToolApprovalAnnotations {
+                        read_only_hint: false,
+                        destructive_hint: true,
+                        idempotent_hint: false,
+                        open_world_hint: true,
+                    },
+                    preset: "restrictive".to_string(),
+                    requested_at: String::new(),
+                    allow_always: Some(false),
+                }),
+            });
+        ContentPart::ToolApprovalRequest(request)
+    }
+
+    #[test]
+    fn a_mixed_approval_lists_the_turns_call_and_each_child() {
+        let completion = completion_from_content(
+            Uuid::nil(),
+            Uuid::nil(),
+            &[mixed_approval(ToolApprovalKind::McpTool)],
+        );
+        let approvals = completion.approvals.expect("an approval card");
+        assert_eq!(approvals.kind, ApprovalKind::McpTool);
+        let items: Vec<(&str, &str, Option<&str>)> = approvals
+            .items
+            .iter()
+            .map(|item| {
+                (
+                    item.approval_id.as_str(),
+                    item.tool_name.as_str(),
+                    item.source.as_deref(),
+                )
+            })
+            .collect();
+        assert_eq!(
+            items,
+            [
+                ("call-1", "search_sidecar_index", Some("desktop")),
+                ("task-a", "publish_page", Some("wiki")),
+            ],
+            "the child's item names the child's call, not the delegation"
+        );
+        assert_eq!(approvals.items[1].input, json!({"page": 1}));
+        assert!(!completion.needs_client);
+    }
+
+    #[test]
+    fn a_mixed_client_tool_approval_is_left_to_the_erato_app() {
+        let completion = completion_from_content(
+            Uuid::nil(),
+            Uuid::nil(),
+            &[mixed_approval(ToolApprovalKind::ClientTool)],
+        );
+        assert!(
+            completion.approvals.is_none(),
+            "Teams cannot run the turn's own call, so it decides none of the stop"
+        );
+        assert!(completion.needs_client);
+    }
+
     #[test]
     fn answer_separates_earlier_text_without_discarding_it() {
         use crate::models::message::{ContentPartText, ToolUse};
