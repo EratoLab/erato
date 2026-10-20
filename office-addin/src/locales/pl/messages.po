@@ -359,9 +359,9 @@ msgstr "Przetwarzanie upuszczonych e-maili…"
 #~ msgstr "Wczytywanie wątku e-maili..."
 
 #. js-lingui-explicit-id
-#: src/outlook/components/AddinChatInput.tsx
-#~ msgid "officeAddin.chatInput.loadingEmailThreadDescription"
-#~ msgstr "Przygotowywanie kontekstu e-maila"
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.chatInput.loadingEmailThreadDescription"
+msgstr "Przygotowywanie kontekstu e-maila"
 
 #. js-lingui-explicit-id
 #: src/outlook/components/AddinChatInput.tsx
@@ -455,7 +455,7 @@ msgstr "Zezwól na dostęp, aby załadować e-mail"
 #. js-lingui-explicit-id
 #: src/outlook/providers/EntraGraphTokenProvider.tsx
 msgid "officeAddin.email.signedIn.title"
-msgstr "Zalogowano. Wczytywanie wiadomości."
+msgstr "Zalogowano."
 
 #. js-lingui-explicit-id
 #: src/outlook/providers/EntraGraphTokenProvider.tsx
@@ -844,6 +844,11 @@ msgstr "Załącznik wiadomości · {size}"
 
 #. js-lingui-explicit-id
 #: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.attachment.meta.followUp"
+msgstr "Nie jest dołączany do kolejnych wiadomości"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
 msgid "officeAddin.outlook.context.attachment.meta.notWithDrops"
 msgstr "Nie jest wysyłany z upuszczonymi wiadomościami"
 
@@ -856,6 +861,36 @@ msgstr "Wysłano wcześniej, nie ponownie"
 #: src/outlook/utils/outlookContextChips.ts
 msgid "officeAddin.outlook.context.attachment.remove"
 msgstr "Nie dołączaj {name}"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.attachments.detail.cloud"
+msgstr "To linki do plików w chmurze, których Outlook nie może przekazać, więc nie zostaną wysłane."
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.attachments.detail.followUp"
+msgstr "Załączniki są wysyłane tylko z pierwszą wiadomością. Dołącz je, aby wysłać je z tą."
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.attachments.detail.notIncluded"
+msgstr "Załączniki nie są teraz dołączone. Twoje zaznaczenia poniżej zostają zachowane i wrócą, gdy je dołączysz."
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.attachments.detail.sentEarlier"
+msgstr "Erato ma już te pliki z wcześniejszej wiadomości, więc nie zostaną wysłane ponownie."
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.attachments.dismiss.draft"
+msgstr "Odrzuć załączniki wersji roboczej"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.attachments.dismiss.email"
+msgstr "Odrzuć załączniki wiadomości"
 
 #. js-lingui-explicit-id
 #: src/outlook/utils/outlookContextChips.ts
@@ -876,6 +911,31 @@ msgstr "Załączniki wersji roboczej ({count})"
 #: src/outlook/utils/outlookContextChips.ts
 msgid "officeAddin.outlook.context.attachments.label.email"
 msgstr "Załączniki wiadomości ({count})"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.attachments.meta.cloud"
+msgstr "Pliki w chmurze · nie można wysłać"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.attachments.meta.followUp"
+msgstr "Nie są dołączane do kolejnych wiadomości"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.attachments.meta.nothingChosen"
+msgstr "Nic nie wybrano"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.attachments.meta.notWithDrops"
+msgstr "Nie są wysyłane z upuszczonymi wiadomościami"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.attachments.meta.sentEarlier"
+msgstr "Wysłano wcześniej, nie ponownie"
 
 #. js-lingui-explicit-id
 #: src/outlook/utils/outlookContextChips.ts
@@ -1059,13 +1119,13 @@ msgstr "Nie można zmienić podczas wysyłania wiadomości"
 
 #. js-lingui-explicit-id
 #: src/outlook/utils/outlookContextChips.ts
-msgid "officeAddin.outlook.context.meta.followUp"
-msgstr "Nie jest dołączany do kolejnych wiadomości"
+#~ msgid "officeAddin.outlook.context.meta.followUp"
+#~ msgstr "Nie jest dołączany do kolejnych wiadomości"
 
 #. js-lingui-explicit-id
 #: src/outlook/utils/outlookContextChips.ts
-msgid "officeAddin.outlook.context.meta.nothingChosen"
-msgstr "Nic nie wybrano"
+#~ msgid "officeAddin.outlook.context.meta.nothingChosen"
+#~ msgstr "Nic nie wybrano"
 
 #. js-lingui-explicit-id
 #: src/outlook/hooks/useOutlookContextItems.tsx
@@ -1197,8 +1257,18 @@ msgstr "Dołącz wszystkie wiadomości"
 
 #. js-lingui-explicit-id
 #: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.thread.meta.followUp"
+msgstr "Nie jest dołączany do kolejnych wiadomości"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
 msgid "officeAddin.outlook.context.thread.meta.loading"
 msgstr "Wczytywanie wątku wiadomości…"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.thread.meta.nothingChosen"
+msgstr "Nic nie wybrano"
 
 #. js-lingui-explicit-id
 #: src/outlook/utils/outlookContextChips.ts

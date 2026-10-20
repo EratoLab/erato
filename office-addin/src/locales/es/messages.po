@@ -335,7 +335,7 @@ msgstr "Correo electrónico"
 #. js-lingui-explicit-id
 #: src/outlook/utils/outlookContextChips.ts
 msgid "officeAddin.chatInput.emailThreadLoadError"
-msgstr "No se pudo cargar la conversación de correo electrónico"
+msgstr "No se pudo cargar el hilo de correo"
 
 #. js-lingui-explicit-id
 #: src/outlook/utils/outlookContextChips.ts
@@ -359,9 +359,9 @@ msgstr "Procesando los correos electrónicos soltados…"
 #~ msgstr "Cargando conversación de correo electrónico..."
 
 #. js-lingui-explicit-id
-#: src/outlook/components/AddinChatInput.tsx
-#~ msgid "officeAddin.chatInput.loadingEmailThreadDescription"
-#~ msgstr "Preparando el contexto del correo electrónico"
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.chatInput.loadingEmailThreadDescription"
+msgstr "Preparando el contexto del correo electrónico"
 
 #. js-lingui-explicit-id
 #: src/outlook/components/AddinChatInput.tsx
@@ -455,7 +455,7 @@ msgstr "Permite el acceso para cargar el correo"
 #. js-lingui-explicit-id
 #: src/outlook/providers/EntraGraphTokenProvider.tsx
 msgid "officeAddin.email.signedIn.title"
-msgstr "Sesión iniciada. Cargando el correo."
+msgstr "Sesión iniciada."
 
 #. js-lingui-explicit-id
 #: src/outlook/providers/EntraGraphTokenProvider.tsx
@@ -844,6 +844,11 @@ msgstr "Adjunto del correo · {size}"
 
 #. js-lingui-explicit-id
 #: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.attachment.meta.followUp"
+msgstr "No se incluye en los mensajes de seguimiento"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
 msgid "officeAddin.outlook.context.attachment.meta.notWithDrops"
 msgstr "No se envía con correos soltados"
 
@@ -856,6 +861,36 @@ msgstr "Ya enviado, no se reenvía"
 #: src/outlook/utils/outlookContextChips.ts
 msgid "officeAddin.outlook.context.attachment.remove"
 msgstr "No incluir {name}"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.attachments.detail.cloud"
+msgstr "Son enlaces a archivos en la nube que Outlook no puede entregar, así que no se envían."
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.attachments.detail.followUp"
+msgstr "Los adjuntos solo se envían con el primer mensaje. Inclúyalos para enviarlos con este."
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.attachments.detail.notIncluded"
+msgstr "Los adjuntos no están incluidos ahora. Sus marcas de abajo se conservan y vuelven cuando los incluya."
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.attachments.detail.sentEarlier"
+msgstr "Erato ya tiene estos archivos de un mensaje anterior, así que no se vuelven a enviar."
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.attachments.dismiss.draft"
+msgstr "Descartar los adjuntos del borrador"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.attachments.dismiss.email"
+msgstr "Descartar los adjuntos del correo"
 
 #. js-lingui-explicit-id
 #: src/outlook/utils/outlookContextChips.ts
@@ -876,6 +911,31 @@ msgstr "Adjuntos del borrador ({count})"
 #: src/outlook/utils/outlookContextChips.ts
 msgid "officeAddin.outlook.context.attachments.label.email"
 msgstr "Adjuntos del correo ({count})"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.attachments.meta.cloud"
+msgstr "Archivos en la nube · no se pueden enviar"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.attachments.meta.followUp"
+msgstr "No se incluyen en los mensajes de seguimiento"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.attachments.meta.nothingChosen"
+msgstr "Nada seleccionado"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.attachments.meta.notWithDrops"
+msgstr "No se envían con correos soltados"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.attachments.meta.sentEarlier"
+msgstr "Ya enviados, no se reenvían"
 
 #. js-lingui-explicit-id
 #: src/outlook/utils/outlookContextChips.ts
@@ -1059,13 +1119,13 @@ msgstr "No se puede cambiar mientras se envía el mensaje"
 
 #. js-lingui-explicit-id
 #: src/outlook/utils/outlookContextChips.ts
-msgid "officeAddin.outlook.context.meta.followUp"
-msgstr "No se incluye en los mensajes de seguimiento"
+#~ msgid "officeAddin.outlook.context.meta.followUp"
+#~ msgstr "No se incluye en los mensajes de seguimiento"
 
 #. js-lingui-explicit-id
 #: src/outlook/utils/outlookContextChips.ts
-msgid "officeAddin.outlook.context.meta.nothingChosen"
-msgstr "Nada seleccionado"
+#~ msgid "officeAddin.outlook.context.meta.nothingChosen"
+#~ msgstr "Nada seleccionado"
 
 #. js-lingui-explicit-id
 #: src/outlook/hooks/useOutlookContextItems.tsx
@@ -1197,8 +1257,18 @@ msgstr "Incluir todos los mensajes"
 
 #. js-lingui-explicit-id
 #: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.thread.meta.followUp"
+msgstr "No se incluye en los mensajes de seguimiento"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
 msgid "officeAddin.outlook.context.thread.meta.loading"
 msgstr "Cargando el hilo de correo…"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.thread.meta.nothingChosen"
+msgstr "Nada seleccionado"
 
 #. js-lingui-explicit-id
 #: src/outlook/utils/outlookContextChips.ts

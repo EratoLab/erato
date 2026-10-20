@@ -359,9 +359,9 @@ msgstr "Processing dropped emails…"
 #~ msgstr "Loading email thread..."
 
 #. js-lingui-explicit-id
-#: src/outlook/components/AddinChatInput.tsx
-#~ msgid "officeAddin.chatInput.loadingEmailThreadDescription"
-#~ msgstr "Preparing the email context"
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.chatInput.loadingEmailThreadDescription"
+msgstr "Preparing the email context"
 
 #. js-lingui-explicit-id
 #: src/outlook/components/AddinChatInput.tsx
@@ -455,7 +455,7 @@ msgstr "Allow access to load email"
 #. js-lingui-explicit-id
 #: src/outlook/providers/EntraGraphTokenProvider.tsx
 msgid "officeAddin.email.signedIn.title"
-msgstr "Signed in. Loading the email."
+msgstr "Signed in."
 
 #. js-lingui-explicit-id
 #: src/outlook/providers/EntraGraphTokenProvider.tsx
@@ -844,6 +844,11 @@ msgstr "Email attachment · {size}"
 
 #. js-lingui-explicit-id
 #: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.attachment.meta.followUp"
+msgstr "Not included on follow-up messages"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
 msgid "officeAddin.outlook.context.attachment.meta.notWithDrops"
 msgstr "Not sent with dropped emails"
 
@@ -856,6 +861,36 @@ msgstr "Sent earlier, not re-sent"
 #: src/outlook/utils/outlookContextChips.ts
 msgid "officeAddin.outlook.context.attachment.remove"
 msgstr "Don't include {name}"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.attachments.detail.cloud"
+msgstr "These are links to cloud files, which Outlook can't hand over, so they are not sent."
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.attachments.detail.followUp"
+msgstr "Attachments go with the first message only. Include them to send them with this one."
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.attachments.detail.notIncluded"
+msgstr "The attachments are not included right now. Your ticks below are kept and come back when you include them."
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.attachments.detail.sentEarlier"
+msgstr "Erato already has these files from an earlier message, so they are not sent again."
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.attachments.dismiss.draft"
+msgstr "Dismiss draft attachments"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.attachments.dismiss.email"
+msgstr "Dismiss email attachments"
 
 #. js-lingui-explicit-id
 #: src/outlook/utils/outlookContextChips.ts
@@ -876,6 +911,31 @@ msgstr "Draft attachments ({count})"
 #: src/outlook/utils/outlookContextChips.ts
 msgid "officeAddin.outlook.context.attachments.label.email"
 msgstr "Email attachments ({count})"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.attachments.meta.cloud"
+msgstr "Cloud files · can't be sent"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.attachments.meta.followUp"
+msgstr "Not included on follow-up messages"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.attachments.meta.nothingChosen"
+msgstr "Nothing chosen"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.attachments.meta.notWithDrops"
+msgstr "Not sent with dropped emails"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.attachments.meta.sentEarlier"
+msgstr "Sent earlier, not re-sent"
 
 #. js-lingui-explicit-id
 #: src/outlook/utils/outlookContextChips.ts
@@ -1059,13 +1119,13 @@ msgstr "Can't change this while the message is being sent"
 
 #. js-lingui-explicit-id
 #: src/outlook/utils/outlookContextChips.ts
-msgid "officeAddin.outlook.context.meta.followUp"
-msgstr "Not included on follow-up messages"
+#~ msgid "officeAddin.outlook.context.meta.followUp"
+#~ msgstr "Not included on follow-up messages"
 
 #. js-lingui-explicit-id
 #: src/outlook/utils/outlookContextChips.ts
-msgid "officeAddin.outlook.context.meta.nothingChosen"
-msgstr "Nothing chosen"
+#~ msgid "officeAddin.outlook.context.meta.nothingChosen"
+#~ msgstr "Nothing chosen"
 
 #. js-lingui-explicit-id
 #: src/outlook/hooks/useOutlookContextItems.tsx
@@ -1197,8 +1257,18 @@ msgstr "Include every message"
 
 #. js-lingui-explicit-id
 #: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.thread.meta.followUp"
+msgstr "Not included on follow-up messages"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
 msgid "officeAddin.outlook.context.thread.meta.loading"
 msgstr "Loading email thread…"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.thread.meta.nothingChosen"
+msgstr "Nothing chosen"
 
 #. js-lingui-explicit-id
 #: src/outlook/utils/outlookContextChips.ts
