@@ -821,6 +821,10 @@ mod tests {
             submission: None,
             replay: Default::default(),
             durable: None,
+            child_access: Default::default(),
+            host_context: None,
+            child_context_arg: None,
+            child_context_input: None,
         }
     }
 

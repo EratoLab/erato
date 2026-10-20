@@ -3141,6 +3141,7 @@ mod tests {
             hidden: false,
             hidden_always_active_for_platform: None,
             delegation: overrides,
+            child_host_context: None,
         }
     }
 
