@@ -57,7 +57,7 @@ fn read_tool(durable: bool) -> ClientToolConfig {
         host_context: Some(erato::config::ClientToolHostContext::WordDocument),
         child_context_arg: Some("document_snapshot".into()),
         child_context_input: Some("snapshot".into()),
-        durable: durable.then(|| erato::config::ClientToolDurableConfig {
+        durable: durable.then_some(erato::config::ClientToolDurableConfig {
             host_context: erato::config::ClientToolHostContext::WordDocument,
             result_schema: None,
             attempt_expiry_secs: 900,

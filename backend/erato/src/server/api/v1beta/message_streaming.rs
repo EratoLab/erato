@@ -20274,9 +20274,6 @@ pub(crate) async fn run_continuation(
     .await
 }
 
-/// Synthetic durable kinds use the same offered-policy dispatch map without
-/// requiring a configured client tool or weakening its child-run suppression.
-#[allow(clippy::too_many_arguments)]
 /// Offers a delegated run the client tools its grant still covers, the same
 /// way on a fresh turn and on a continuation. The grant already implies the
 /// allowlist and the executor's registration, so neither is consulted; an MCP
@@ -20346,6 +20343,9 @@ async fn append_granted_client_tools(
     Ok(())
 }
 
+/// Synthetic durable kinds use the same offered-policy dispatch map without
+/// requiring a configured client tool or weakening its child-run suppression.
+#[allow(clippy::too_many_arguments)]
 fn append_operation_kind_offers(
     app_state: &AppState,
     chat: &crate::db::entity::chats::Model,
