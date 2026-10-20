@@ -3244,7 +3244,7 @@
             "description": "When the chat does not exist or is not accessible"
           },
           "409": {
-            "description": "When the chat is archived (plain text), the chat's generation lease is already held and delegation.tasks.enabled is on (JSON, code = generation_running), every approval the row opened is already decided (JSON, code = already_continued, body = AlreadyContinuedError), or the chat that dispatched this delegated run is still asking the same question (JSON, code = covered_by_parent, body = CoveredByParentError)",
+            "description": "When the chat is archived (plain text), the chat's generation lease is already held and delegation.tasks.enabled is on (JSON, code = generation_running), every approval the row opened is already decided (JSON, code = already_continued, body = AlreadyContinuedError), the chat that dispatched this delegated run is still asking the same question (JSON, code = covered_by_parent, body = CoveredByParentError), or the stop carries open task children and the request did not set `shows_child_items` (plain text)",
             "content": {
               "application/json": {
                 "schema": {
@@ -7568,6 +7568,10 @@
             "type": "string",
             "format": "uuid",
             "description": "The assistant message/generation that contains the pending approval request."
+          },
+          "shows_child_items": {
+            "type": "boolean",
+            "description": "Whether the client shows each task child an `mcp_tool` or `client_tool`\npart carries as an item of its own. Decisions on such a part are refused\nwithout it while a child is open: an older client shows only the turn's\nown call and would answer the children unseen."
           }
         }
       },
