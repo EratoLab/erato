@@ -1066,7 +1066,9 @@ function TeamsChatPickerDialogBody({
           </p>
         )}
 
-        <div className="flex items-center justify-between gap-2">
+        {/* Wraps so a long "Update" (de "Aktualisieren") moves the buttons
+            to their own row instead of past the dialog's edge. */}
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <span className="text-xs text-theme-fg-muted" role="status">
             {t({
               id: "officeAddin.teams.picker.selectionCount",
@@ -1076,7 +1078,7 @@ function TeamsChatPickerDialogBody({
               }),
             })}
           </span>
-          <div className="flex gap-2">
+          <div className="ml-auto flex gap-2">
             <Button
               variant="secondary"
               onClick={picker.isBuilding ? picker.cancelBuild : picker.close}

@@ -1135,6 +1135,42 @@ describe("ComposerContextLane", () => {
       expect(screen.getByText("locked body")).toBeInTheDocument();
     });
 
+    it("locks the host choices of a locked item that claims files", () => {
+      const onSelect = vi.fn();
+      const detail = {
+        title: "Teams transcript",
+        render: () => <p>Three conversations.</p>,
+        actions: [{ id: "edit", label: "Edit selection", onSelect }],
+      };
+      const item = user({ claimsFileIds: ["f1"], detail });
+      const { rerender } = render(<ComposerContextLane items={[item]} />);
+      fireEvent.click(openButton("Re: Offsite agenda"));
+      expect(
+        screen.getByRole("button", { name: "Edit selection" }),
+      ).toBeEnabled();
+
+      rerender(
+        <ComposerContextLane
+          items={[{ ...item, locked: true, lockReason: "Uploading" }]}
+        />,
+      );
+      const locked = screen.getByRole("button", { name: "Edit selection" });
+      expect(locked).toBeDisabled();
+      expect(locked).toHaveAttribute("title", "Uploading");
+      fireEvent.click(locked);
+      expect(onSelect).not.toHaveBeenCalled();
+
+      // Without files of its own, a locked item keeps choices that read.
+      rerender(
+        <ComposerContextLane
+          items={[{ ...item, claimsFileIds: undefined, locked: true }]}
+        />,
+      );
+      expect(
+        screen.getByRole("button", { name: "Edit selection" }),
+      ).toBeEnabled();
+    });
+
     it("stays open under a dialog it opened over itself", () => {
       const Preview = () => {
         const [open, setOpen] = useState(false);

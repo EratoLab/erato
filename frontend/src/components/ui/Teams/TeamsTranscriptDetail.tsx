@@ -330,8 +330,10 @@ export function TeamsTranscriptDetail({
             aria-labelledby={headingId}
             className="flex flex-col gap-2"
           >
-            <div className="flex items-start gap-2">
-              <div className="min-w-0 flex-1">
+            {/* Stacked rather than beside the heading: at pane width a link
+                there squeezes the title and its date range onto extra lines. */}
+            <div className="flex min-w-0 flex-col items-start gap-1">
+              <div className="min-w-0 self-stretch">
                 <h3
                   id={headingId}
                   className="break-words text-sm font-semibold text-theme-fg-primary"
@@ -348,7 +350,7 @@ export function TeamsTranscriptDetail({
                 variant="link"
                 data-ui="teams-transcript-open-conversation"
                 data-section={section.position}
-                className="shrink-0 text-xs"
+                className="text-xs"
                 aria-label={t({
                   id: "teams.context.detail.openConversationNamed",
                   message: `Open conversation: ${title}`,

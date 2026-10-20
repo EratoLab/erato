@@ -133,6 +133,10 @@ const DetailFooter = ({
   if (actions.length === 0 && control === null) {
     return null;
   }
+  // The lane locks an item that stands for staged files while the composer
+  // is locked; a host choice on it would change those files all the same.
+  const actionsLocked =
+    Boolean(item.locked) && (item.claimsFileIds?.length ?? 0) > 0;
   return (
     <div
       className="flex flex-wrap items-center justify-end gap-2"
@@ -143,6 +147,8 @@ const DetailFooter = ({
           key={action.id}
           size="sm"
           variant={action.variant === "primary" ? "primary" : "secondary"}
+          disabled={actionsLocked}
+          title={actionsLocked ? item.lockReason : undefined}
           onClick={() => onAction(action)}
         >
           {action.label}

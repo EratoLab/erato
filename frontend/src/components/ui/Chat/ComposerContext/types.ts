@@ -61,7 +61,11 @@ export interface ComposerContextDetailRenderContext {
 export interface ComposerContextDetail {
   title: string;
   render: (context: ComposerContextDetailRenderContext) => ReactNode;
-  /** Host choices drawn in the footer, before the default include/leave-out action. */
+  /**
+   * Host choices drawn in the footer, before the default include/leave-out
+   * action. Disabled, like the remove, while an item that claims files is
+   * locked.
+   */
   actions?: ComposerContextDetailAction[];
 }
 
