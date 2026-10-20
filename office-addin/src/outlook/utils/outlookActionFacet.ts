@@ -250,7 +250,13 @@ export function resolveOutlookActionFacet(
           ...(input.bodyFormat ? { body_format: input.bodyFormat } : {}),
         },
       },
-      draft: draftEligible ? "selection" : "none",
+      // A draft already sent unchanged would not go without the selection
+      // either, so the selection replaces nothing.
+      draft: draftUnchanged
+        ? "unchanged"
+        : draftEligible
+          ? "selection"
+          : "none",
       // A selection send never touches the draft dedup marker.
       sentDraftFingerprint: null,
     };
@@ -280,7 +286,9 @@ export function resolveOutlookActionFacet(
     input.schedulingThreadActive &&
     itemKind !== "appointment"
   ) {
-    return scheduleFacet(draftEligible ? "scheduling" : "none");
+    return scheduleFacet(
+      draftUnchanged ? "unchanged" : draftEligible ? "scheduling" : "none",
+    );
   }
 
   if (draftEligible && !draftUnchanged) {
@@ -415,6 +423,16 @@ export interface OutlookSendPreview {
    * appointment, where ending changes nothing.
    */
   mode: "scheduling" | null;
+  /**
+   * What the draft would do once the active selection is dismissed ("Send
+   * this instead"); null without an active selection.
+   */
+  draftWithoutSelection: OutlookDraftDisposition | null;
+  /**
+   * What the draft would do once sticky scheduling ends; null while it does
+   * not hold the facet slot.
+   */
+  draftWithoutScheduling: OutlookDraftDisposition | null;
 }
 
 /**
@@ -450,6 +468,9 @@ export function previewOutlookSend(
           schedulingThreadActive: false,
         })
       : null;
+  const withoutSelection = rest.hasActiveSelection
+    ? resolveOutlookActionFacet({ ...facetInput, hasActiveSelection: false })
+    : null;
   return {
     facetId,
     draft: result.draft,
@@ -459,5 +480,7 @@ export function previewOutlookSend(
       (withoutScheduling.facet?.id ?? null) !== OUTLOOK_SCHEDULE_FACET_ID
         ? "scheduling"
         : null,
+    draftWithoutSelection: withoutSelection?.draft ?? null,
+    draftWithoutScheduling: withoutScheduling?.draft ?? null,
   };
 }

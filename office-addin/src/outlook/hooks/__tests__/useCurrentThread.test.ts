@@ -3,6 +3,7 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { createElement } from "react";
 import { describe, expect, it, vi } from "vitest";
 
+import { InteractionRequiredError } from "../../../core/auth/AuthSource";
 import { createGraphOutlookMessageFetcher } from "../../utils/fetchOutlookMessage";
 import { useCurrentThread } from "../useCurrentThread";
 
@@ -193,6 +194,36 @@ describe("useCurrentThread", () => {
     consoleWarn.mockRestore();
     expect(result.current.thread).toBeNull();
     expect(result.current.error).toBe(true);
+    // A server error is not a sign-in the user can fix.
+    expect(result.current.signInNeeded).toBeNull();
+  });
+
+  it("says when its own fetch failed for a sign-in or a grant", async () => {
+    const consent = createGraphOutlookMessageFetcher(async () => {
+      throw new InteractionRequiredError("consent_required", {
+        reason: "consent",
+      });
+    });
+    const transport = buildResponder({ value: [] });
+
+    const consoleWarn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { result } = renderHook(
+      () =>
+        useCurrentThread(
+          "item-1",
+          "conv-1",
+          consent.fetchConversationMessages,
+          { transport },
+        ),
+      { wrapper: createWrapper() },
+    );
+
+    await waitFor(() => {
+      expect(result.current.error).toBe(true);
+    });
+    consoleWarn.mockRestore();
+    expect(result.current.signInNeeded).toBe("consent");
+    expect(transport).not.toHaveBeenCalled();
   });
 
   it("keeps cached thread data non-loading during a background refetch", async () => {

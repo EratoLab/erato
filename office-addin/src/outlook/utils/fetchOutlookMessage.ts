@@ -116,6 +116,11 @@ export const GRAPH_MAIL_SCOPES = ["Mail.Read"];
  */
 export const GRAPH_SHARED_MAIL_SCOPES = ["Mail.Read.Shared"];
 
+/** The scopes a Graph mail fetch bound to `owner` (or the user's own store) asks for. */
+export function graphMailScopes(owner?: string | null): string[] {
+  return owner ? GRAPH_SHARED_MAIL_SCOPES : GRAPH_MAIL_SCOPES;
+}
+
 /**
  * Token acquirer that takes the scopes to ask for — the shape of
  * `GraphTokenContextValue.acquireToken`. The Graph factory chooses the scope
@@ -152,7 +157,7 @@ export function createGraphOutlookMessageFetcher(
   acquireToken: AcquireScopedGraphToken,
   { owner }: { owner?: string | null } = {},
 ): OutlookMessageFetcher {
-  const scopes = owner ? GRAPH_SHARED_MAIL_SCOPES : GRAPH_MAIL_SCOPES;
+  const scopes = graphMailScopes(owner);
   const acquireMailToken: AcquireGraphToken = (options) =>
     acquireToken(scopes, options);
   return {

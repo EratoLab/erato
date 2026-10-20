@@ -25,7 +25,7 @@ const graph = vi.hoisted(() => ({
   value: null as null | {
     signInCount: number;
     signInNeeded: "sign-in" | "consent" | null;
-    signIn: () => Promise<void>;
+    signIn: (scopes?: string[]) => Promise<void>;
   },
 }));
 
@@ -1212,7 +1212,7 @@ describe("OutlookEmailSourceProvider — sending what the plan says", () => {
     let sent: File[] = [];
     await act(async () => {
       sent = await sendFiles({
-        thread: { kind: "follow-up" },
+        thread: { kind: "follow-up", retry: false },
         uploadThread: false,
         composeAttachmentIds: [],
       });
@@ -1376,7 +1376,7 @@ describe("OutlookEmailSourceProvider — sending what the plan says", () => {
     expect(captured!.threadStatus).toBe("error");
   });
 
-  it("asks for the sign-in Graph needs while the thread failed, and loads after it", async () => {
+  it("asks for the sign-in the thread's own fetch needs, and loads after it", async () => {
     primeRead(null);
     let finishSignIn: (() => void) | null = null;
     const signIn = vi.fn(
@@ -1385,11 +1385,12 @@ describe("OutlookEmailSourceProvider — sending what the plan says", () => {
           finishSignIn = resolve;
         }),
     );
-    graph.value = { signInCount: 0, signInNeeded: "consent", signIn };
+    graph.value = { signInCount: 0, signInNeeded: null, signIn };
     mockUseCurrentThread.mockReturnValue({
       thread: null,
       isLoading: false,
       error: true,
+      signInNeeded: "consent",
       retry: vi.fn(),
       errorCount: 1,
     });
@@ -1398,7 +1399,8 @@ describe("OutlookEmailSourceProvider — sending what the plan says", () => {
 
     act(() => void captured!.signInForEmail());
 
-    expect(signIn).toHaveBeenCalledTimes(1);
+    // The mail scope, whichever Graph surface prompted last.
+    expect(signIn).toHaveBeenCalledWith(["Mail.Read"]);
     expect(captured!.signingIn).toBe(true);
     expect(captured!.threadStatus).toBe("loading");
     expect(captured!.emailThreadSignIn).toBeNull();
@@ -1423,6 +1425,23 @@ describe("OutlookEmailSourceProvider — sending what the plan says", () => {
     expect(captured!.threadStatus).toBe("ready");
   });
 
+  it("reads a failure for another reason as an error while another Graph surface wants a sign-in", () => {
+    primeRead(null);
+    graph.value = { signInCount: 0, signInNeeded: "consent", signIn: vi.fn() };
+    mockUseCurrentThread.mockReturnValue({
+      thread: null,
+      isLoading: false,
+      error: true,
+      signInNeeded: null,
+      retry: vi.fn(),
+      errorCount: 1,
+    });
+    renderProvider();
+
+    expect(captured!.threadStatus).toBe("error");
+    expect(captured!.emailThreadSignIn).toBeNull();
+  });
+
   it("goes back to the sign-in when the popup is cancelled", async () => {
     primeRead(null);
     const signIn = vi.fn(async () => {
@@ -1433,6 +1452,7 @@ describe("OutlookEmailSourceProvider — sending what the plan says", () => {
       thread: null,
       isLoading: false,
       error: true,
+      signInNeeded: "sign-in",
       retry: vi.fn(),
       errorCount: 1,
     });

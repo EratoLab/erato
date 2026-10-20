@@ -613,6 +613,26 @@ describe("previewOutlookSend", () => {
       "outlook_rewrite_selection",
     ],
     ["none", { ...draft, draftContextIncluded: false }, null],
+    [
+      "unchanged",
+      {
+        ...draft,
+        hasActiveSelection: true,
+        selectionData: "Hel",
+        lastSentDraft: { sent: "Hello", seen: "Hello" },
+      },
+      "outlook_rewrite_selection",
+    ],
+    [
+      "unchanged",
+      {
+        ...draft,
+        ...scheduleReady,
+        schedulingThreadActive: true,
+        lastSentDraft: { sent: "Hello", seen: "Hello" },
+      },
+      "outlook_schedule",
+    ],
   ] as const)("reports %s together with the facet", (state, input, facetId) => {
     const result = previewOutlookSend(input);
     expect(result.draft).toBe(state);
@@ -682,6 +702,40 @@ describe("previewOutlookSend", () => {
       };
       expect(previewOutlookSend(unchanged).mode).toBe("scheduling");
     });
+
+    it("says what the draft does once scheduling ends", () => {
+      expect(
+        previewOutlookSend({ ...draft, ...sticky }).draftWithoutScheduling,
+      ).toBe("sent");
+      expect(
+        previewOutlookSend({
+          ...draft,
+          ...sticky,
+          lastSentDraft: { sent: "Hello", seen: "Hello" },
+        }).draftWithoutScheduling,
+      ).toBe("unchanged");
+      expect(previewOutlookSend(draft).draftWithoutScheduling).toBeNull();
+    });
+  });
+
+  it("says what the draft does once the selection is dismissed", () => {
+    const selected = { ...draft, hasActiveSelection: true, selectionData: "H" };
+    expect(previewOutlookSend(selected).draftWithoutSelection).toBe("sent");
+    // Sticky scheduling would still hold the draft back.
+    expect(
+      previewOutlookSend({
+        ...selected,
+        ...scheduleReady,
+        schedulingThreadActive: true,
+      }).draftWithoutSelection,
+    ).toBe("scheduling");
+    expect(
+      previewOutlookSend({
+        ...selected,
+        lastSentDraft: { sent: "Hello", seen: "Hello" },
+      }).draftWithoutSelection,
+    ).toBe("unchanged");
+    expect(previewOutlookSend(draft).draftWithoutSelection).toBeNull();
   });
 
   it("re-includes a draft whose body changed since the send", () => {

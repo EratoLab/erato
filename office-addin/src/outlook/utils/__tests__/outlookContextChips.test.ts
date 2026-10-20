@@ -30,6 +30,8 @@ const preview = (
   draft: "none",
   fingerprint: "",
   mode: null,
+  draftWithoutSelection: null,
+  draftWithoutScheduling: null,
   ...over,
 });
 
@@ -43,6 +45,7 @@ const thread = (
   messageCount: 5,
   includedMessageCount: 5,
   file: threadFile,
+  stale: false,
   partKey: "current-thread:conv-1",
   trimError: false,
   conversationId: "conv-1",
@@ -60,6 +63,7 @@ const planInput = (
 ): OutlookFilePlanInput => ({
   freshChat: true,
   drops: [],
+  dropsStale: false,
   ...over,
   thread: thread(over.thread),
   attachments: {
@@ -87,19 +91,15 @@ const row = (
   ...over,
 });
 
-const display = (
-  over: Partial<OutlookContextDisplay> = {},
-): OutlookContextDisplay => ({
+type DisplayOverrides = Partial<Omit<OutlookContextDisplay, "thread">> & {
+  thread?: Partial<OutlookContextDisplay["thread"]>;
+};
+
+const display = (over: DisplayOverrides = {}): OutlookContextDisplay => ({
   freshChat: true,
   itemKind: "message",
   selection: null,
   draft: null,
-  thread: {
-    subject: "RE: Q4 vendor contract renewal",
-    sizeLabel: "1.5 MB",
-    stale: false,
-    signingIn: false,
-  },
   maxSizeFormatted: "25 MB",
   attachments: { mode: "compose", rows: [], groupOff: false },
   drops: [],
@@ -107,6 +107,15 @@ const display = (
   schedulingUntil: null,
   formatSize: kb,
   ...over,
+  thread: {
+    subject: "RE: Q4 vendor contract renewal",
+    sizeLabel: "1.5 MB",
+    stale: false,
+    signingIn: false,
+    includedMessages: 5,
+    totalMessages: 5,
+    ...over.thread,
+  },
 });
 
 const messageDraft = (
@@ -133,7 +142,11 @@ describe("outlookContextChips", () => {
 
     it("replaces the draft it is sent instead of", () => {
       const { selection, draft } = chips(
-        preview({ facetId: "outlook_rewrite_selection", draft: "selection" }),
+        preview({
+          facetId: "outlook_rewrite_selection",
+          draft: "selection",
+          draftWithoutSelection: "sent",
+        }),
         planOutlookFiles(planInput()),
         display({
           selection: { text, dismissed: false },
@@ -158,6 +171,28 @@ describe("outlookContextChips", () => {
         meta: "Replaced by selection",
         actions: ["send-instead"],
       });
+    });
+
+    it("offers the draft instead only where dismissing the selection sends it", () => {
+      const draftOf = (draftWithoutSelection: "scheduling" | "unchanged") =>
+        chips(
+          preview({
+            facetId: "outlook_rewrite_selection",
+            draft: "selection",
+            draftWithoutSelection,
+          }),
+          planOutlookFiles(planInput()),
+          display({
+            selection: { text: "Hello", dismissed: false },
+            draft: messageDraft(),
+          }),
+        ).draft;
+      expect(draftOf("scheduling")).toMatchObject({
+        state: "superseded",
+        meta: "Replaced by selection",
+        actions: [],
+      });
+      expect(draftOf("unchanged")?.actions).toEqual([]);
     });
 
     it("never claims to replace a draft there is none of", () => {
@@ -289,7 +324,9 @@ describe("outlookContextChips", () => {
     ] as const)(
       "reads %s as not sent, and says why",
       (state, meta, actions, note) => {
-        const draft = draftOf(preview({ draft: state }));
+        const draft = draftOf(
+          preview({ draft: state, draftWithoutScheduling: "sent" }),
+        );
         expect(draft).toMatchObject({ state: "superseded", meta, actions });
         expect(draft?.notes.map((entry) => entry.text)).toEqual([note]);
       },
@@ -344,7 +381,7 @@ describe("outlookContextChips", () => {
   describe("the thread", () => {
     const threadOf = (
       over: Parameters<typeof planInput>[0] = {},
-      shown: Partial<OutlookContextDisplay> = {},
+      shown: DisplayOverrides = {},
     ) =>
       chips(
         preview(),
@@ -377,13 +414,15 @@ describe("outlookContextChips", () => {
             thread: {
               subject: "RE: Q4",
               sizeLabel: "1.2 MB",
-              stale: false,
-              signingIn: false,
+              includedMessages: 3,
             },
           },
         ),
       ).toMatchObject({
         meta: "3 of 5 messages · 1.2 MB of 25 MB",
+        // The checklist inside repeats the same count, never another one.
+        checklistLabel: "3 of 5 messages",
+        checklistMeta: "1.2 MB of 25 MB",
         restoredAnnouncement:
           "Email thread included. Your earlier choice is back.",
       });
@@ -395,17 +434,7 @@ describe("outlookContextChips", () => {
 
     it("says Updating… while the file rebuilds", () => {
       expect(
-        threadOf(
-          {},
-          {
-            thread: {
-              subject: "S",
-              sizeLabel: "1.5 MB",
-              stale: true,
-              signingIn: false,
-            },
-          },
-        )?.meta,
+        threadOf({}, { thread: { subject: "S", stale: true } })?.meta,
       ).toBe("5 messages · Updating…");
     });
 
@@ -414,18 +443,19 @@ describe("outlookContextChips", () => {
         state: "loading",
         meta: "Loading email thread…",
         removeLabel: "Leave out the email",
+        // The sheet says what is going on rather than standing empty.
+        notes: [
+          {
+            tone: "info",
+            title: "Loading email thread…",
+            text: "Preparing the email context",
+          },
+        ],
       });
       expect(
         threadOf(
           { thread: { status: "loading" } },
-          {
-            thread: {
-              subject: "S",
-              sizeLabel: null,
-              stale: false,
-              signingIn: true,
-            },
-          },
+          { thread: { subject: "S", sizeLabel: null, signingIn: true } },
         )?.meta,
       ).toBe("Signing in…");
     });
@@ -473,6 +503,8 @@ describe("outlookContextChips", () => {
         state: "suggested",
         restoreLabel: "Include the email",
         restore: "include",
+        intro:
+          "Untick what Erato should not read. Attachments count toward the 25 MB limit.",
         checklist: true,
       });
       expect(
@@ -486,6 +518,9 @@ describe("outlookContextChips", () => {
         restore: "include-and-retry",
         checklist: false,
       });
+      expect(
+        threadOf({ thread: { status: "error", choice: "excluded" } })?.intro,
+      ).toBeUndefined();
     });
 
     it("is offered, never sent, on a follow-up", () => {
@@ -494,10 +529,32 @@ describe("outlookContextChips", () => {
         state: "suggested",
         meta: "Not included on follow-up messages",
         restoreLabel: "Include the email",
+        restore: "include",
+        intro:
+          "Untick what Erato should not read. Attachments count toward the 25 MB limit.",
+        checklist: true,
       });
       expect(followUp?.notes[0]?.text).toBe(
         "The email is not included right now. Your choices below are kept and come back when you include it.",
       );
+    });
+
+    it("keeps a follow-up's failed load quiet and loads it again on (+)", () => {
+      for (const signIn of [null, "sign-in"] as const) {
+        expect(
+          threadOf({
+            freshChat: false,
+            thread: { status: "error", file: null, signIn },
+          }),
+        ).toMatchObject({
+          state: "suggested",
+          meta: "Not included on follow-up messages",
+          restoreLabel: "Include the email",
+          restore: "include-and-retry",
+          actions: [],
+          checklist: false,
+        });
+      }
     });
 
     it("offers every message back when none is ticked", () => {
@@ -527,12 +584,7 @@ describe("outlookContextChips", () => {
 
     it("gives the checklist a size only while a file is coming", () => {
       const rebuilding = {
-        thread: {
-          subject: "S",
-          sizeLabel: null,
-          stale: true,
-          signingIn: false,
-        },
+        thread: { subject: "S", sizeLabel: null, stale: true },
       };
       expect(
         threadOf(
@@ -544,7 +596,13 @@ describe("outlookContextChips", () => {
     });
 
     it("has no chip while hidden or absent", () => {
-      expect(threadOf({ thread: { sentInChat: true } })).toBeNull();
+      expect(
+        threadOf({ freshChat: false, thread: { sentInChat: true } }),
+      ).toBeNull();
+      // A chat that is fresh again has sent nothing, whatever was recorded.
+      expect(threadOf({ thread: { sentInChat: true } })?.state).toBe(
+        "included",
+      );
       expect(threadOf({ thread: { stagedAsDrop: true } })).toBeNull();
       expect(threadOf({ thread: { status: "none" } })).toBeNull();
     });
@@ -664,6 +722,18 @@ describe("outlookContextChips", () => {
       );
     });
 
+    it("lists no size for a cloud link, which has none", () => {
+      const cloud = row("terms", {
+        cloud: true,
+        size: 0,
+        sizeLabel: "0 B",
+        type: "DOCX",
+      });
+      expect(attachmentsOf({}, {}, [cloud]).attachments[0]?.fields).toEqual([
+        { label: "Type", value: "DOCX" },
+      ]);
+    });
+
     it("reads a read email's attachments as the email's", () => {
       expect(
         attachmentsOf({
@@ -714,6 +784,12 @@ describe("outlookContextChips", () => {
           state: "suggested",
           restoreLabel: "Include draft attachments",
           restore: { tickAll: false, followUpIds: [] },
+          notes: [
+            {
+              tone: "info",
+              text: "The attachments are not included right now. Your ticks below are kept and come back when you include them.",
+            },
+          ],
         });
         const none = three.map((entry) => ({ ...entry, ticked: false }));
         expect(
@@ -765,6 +841,45 @@ describe("outlookContextChips", () => {
         ).toMatchObject({
           state: "superseded",
           meta: "Sent earlier, not re-sent",
+          notes: [
+            {
+              tone: "info",
+              text: "Erato already has these files from an earlier message, so they are not sent again.",
+            },
+          ],
+        });
+      });
+
+      it("says a group of cloud links can't go, rather than offering a (+) that does nothing", () => {
+        const clouds = three.map((entry) => ({
+          ...entry,
+          cloud: true,
+          size: 0,
+        }));
+        const cloudItems = clouds.map(({ id }) => ({
+          id,
+          cloud: true,
+          ticked: true,
+        }));
+        expect(
+          group({ attachments: { items: cloudItems } }, clouds),
+        ).toMatchObject({
+          state: "error",
+          tone: "error",
+          meta: "Cloud files · can't be sent",
+          removeLabel: "Dismiss draft attachments",
+          notes: [
+            {
+              tone: "error",
+              text: "These are links to cloud files, which Outlook can't hand over, so they are not sent.",
+            },
+          ],
+        });
+        expect(
+          group({ attachments: { items: cloudItems, groupOff: true } }, clouds),
+        ).toMatchObject({
+          state: "suggested",
+          restoreLabel: "Include draft attachments",
         });
       });
     });
@@ -847,12 +962,13 @@ describe("outlookContextChips", () => {
   });
 
   describe("the scheduling mode", () => {
-    it("says until when, and that the draft goes again once it ends", () => {
+    it("says until when, and that the draft goes again only where it would", () => {
       const models = chips(
         preview({
           facetId: "outlook_schedule",
           draft: "scheduling",
           mode: "scheduling",
+          draftWithoutScheduling: "sent",
         }),
         planOutlookFiles(planInput()),
         display({ schedulingUntil: "3:40 PM", draft: messageDraft() }),
@@ -871,6 +987,23 @@ describe("outlookContextChips", () => {
           display({ schedulingUntil: "3:40 PM" }),
         ).scheduling?.endedAnnouncement,
       ).toBe("Scheduling ended.");
+      // A draft already sent unchanged stays out after the end too.
+      const unchanged = chips(
+        preview({
+          facetId: "outlook_schedule",
+          draft: "unchanged",
+          mode: "scheduling",
+          draftWithoutScheduling: "unchanged",
+        }),
+        planOutlookFiles(planInput()),
+        display({ schedulingUntil: "3:40 PM", draft: messageDraft() }),
+      );
+      expect(unchanged.scheduling?.endedAnnouncement).toBe("Scheduling ended.");
+      expect(unchanged.draft).toMatchObject({
+        state: "superseded",
+        meta: "Unchanged, not re-sent",
+        actions: [],
+      });
       expect(
         chips(preview(), planOutlookFiles(planInput()), display()).scheduling,
       ).toBeNull();
@@ -896,10 +1029,20 @@ describe("chips and send agree (matrix)", () => {
     sendPreview: OutlookSendPreview,
     plan: OutlookFilePlan,
     withoutScheduling: OutlookSendPreview | null,
+    withoutSelection: OutlookSendPreview | null = null,
   ) {
     const { draft, selection, thread, attachments, attachmentsGroup } = models;
     if (draft) {
       expect(draft.state === "included").toBe(sendPreview.draft === "sent");
+      // An action that promises the draft is offered only where it would go.
+      expect(draft.actions.includes("send-instead")).toBe(
+        draft.state !== "suggested" && withoutSelection?.draft === "sent",
+      );
+      expect(draft.actions.includes("end-scheduling")).toBe(
+        draft.state !== "suggested" &&
+          sendPreview.draft === "scheduling" &&
+          withoutScheduling?.draft === "sent",
+      );
       if (draft.state === "included") {
         expect(REVIEW_FACETS.has(sendPreview.facetId ?? "")).toBe(true);
       }
@@ -939,6 +1082,13 @@ describe("chips and send agree (matrix)", () => {
       expect(plan.composeAttachmentIds).toEqual([]);
     }
     expect(models.scheduling !== null).toBe(sendPreview.mode === "scheduling");
+    if (models.scheduling) {
+      expect(models.scheduling.endedAnnouncement).toBe(
+        withoutScheduling?.draft === "sent"
+          ? "Scheduling ended. Your draft is sent again."
+          : "Scheduling ended.",
+      );
+    }
     if (withoutScheduling) {
       expect(sendPreview.mode === "scheduling").toBe(
         withoutScheduling.facetId !== sendPreview.facetId,
@@ -1017,6 +1167,12 @@ describe("chips and send agree (matrix)", () => {
                             schedulingThreadActive: false,
                           })
                         : null;
+                      const withoutSelection = hasActiveSelection
+                        ? previewOutlookSend({
+                            ...input,
+                            hasActiveSelection: false,
+                          })
+                        : null;
                       const ids = Array.from(
                         { length: appointment ? 0 : count },
                         (_, i) => `a${i}`,
@@ -1079,7 +1235,13 @@ describe("chips and send agree (matrix)", () => {
                           schedulingUntil: sendPreview.mode ? "3:40 PM" : null,
                         }),
                       );
-                      check(models, sendPreview, plan, withoutScheduling);
+                      check(
+                        models,
+                        sendPreview,
+                        plan,
+                        withoutScheduling,
+                        withoutSelection,
+                      );
                       checked += 1;
                     }
     expect(checked).toBeGreaterThan(1000);
@@ -1096,86 +1258,104 @@ describe("chips and send agree (matrix)", () => {
                 for (const freshChat of [true, false])
                   for (const stagedAsDrop of [false, true])
                     for (const scheduling of [false, true])
-                      for (const count of [0, 2, 3]) {
-                        const input = {
-                          itemKind: "message" as const,
-                          hasActiveSelection: false,
-                          selectionData: "",
-                          selectionSource: "body" as const,
-                          draftContextIncluded: false,
-                          draftBody: "",
-                          isComposeMode: false,
-                          composeEmailAvailable: true,
-                          isReadMode: true,
-                          replyFromReadAvailable: true,
-                          scheduleFacetAvailable: true,
-                          calendarAvailable: true,
-                          schedulingThreadActive: scheduling,
-                          lastSentDraft: null,
-                        };
-                        const sendPreview = previewOutlookSend(input);
-                        const ids = Array.from(
-                          { length: count },
-                          (_, i) => `a${i}`,
-                        );
-                        const rows = ids.map((id) => row(id));
-                        const plan = planOutlookFiles(
-                          planInput({
-                            freshChat,
-                            thread: {
-                              status,
-                              signIn: status === "error" ? signIn : null,
-                              includedMessageCount: ticks,
-                              file: ticks > 0 && !trimError ? threadFile : null,
-                              trimError,
-                              choice,
-                              sentInChat,
-                              stagedAsDrop,
-                            },
-                            attachments: {
-                              mode: "read",
-                              items: rows.map(({ id, cloud, ticked }) => ({
-                                id,
-                                cloud,
-                                ticked,
-                              })),
-                            },
-                          }),
-                        );
-                        const models = outlookContextChips(
-                          sendPreview,
-                          plan,
-                          display({
-                            freshChat,
-                            attachments: {
-                              mode: "read",
-                              rows,
-                              groupOff: false,
-                            },
-                            schedulingUntil: sendPreview.mode
-                              ? "3:40 PM"
+                      for (const stale of [false, true])
+                        for (const count of [0, 2, 3]) {
+                          const input = {
+                            itemKind: "message" as const,
+                            hasActiveSelection: false,
+                            selectionData: "",
+                            selectionSource: "body" as const,
+                            draftContextIncluded: false,
+                            draftBody: "",
+                            isComposeMode: false,
+                            composeEmailAvailable: true,
+                            isReadMode: true,
+                            replyFromReadAvailable: true,
+                            scheduleFacetAvailable: true,
+                            calendarAvailable: true,
+                            schedulingThreadActive: scheduling,
+                            lastSentDraft: null,
+                          };
+                          const sendPreview = previewOutlookSend(input);
+                          const ids = Array.from(
+                            { length: count },
+                            (_, i) => `a${i}`,
+                          );
+                          const rows = ids.map((id) => row(id));
+                          const plan = planOutlookFiles(
+                            planInput({
+                              freshChat,
+                              thread: {
+                                status,
+                                signIn: status === "error" ? signIn : null,
+                                includedMessageCount: ticks,
+                                file:
+                                  ticks > 0 && !trimError ? threadFile : null,
+                                stale,
+                                trimError,
+                                choice,
+                                sentInChat,
+                                stagedAsDrop,
+                              },
+                              attachments: {
+                                mode: "read",
+                                items: rows.map(({ id, cloud, ticked }) => ({
+                                  id,
+                                  cloud,
+                                  ticked,
+                                })),
+                              },
+                            }),
+                          );
+                          const models = outlookContextChips(
+                            sendPreview,
+                            plan,
+                            display({
+                              freshChat,
+                              attachments: {
+                                mode: "read",
+                                rows,
+                                groupOff: false,
+                              },
+                              schedulingUntil: sendPreview.mode
+                                ? "3:40 PM"
+                                : null,
+                            }),
+                          );
+                          check(
+                            models,
+                            sendPreview,
+                            plan,
+                            scheduling
+                              ? previewOutlookSend({
+                                  ...input,
+                                  schedulingThreadActive: false,
+                                })
                               : null,
-                          }),
-                        );
-                        check(
-                          models,
-                          sendPreview,
-                          plan,
-                          scheduling
-                            ? previewOutlookSend({
-                                ...input,
-                                schedulingThreadActive: false,
-                              })
-                            : null,
-                        );
-                        if (
-                          status === "loading" &&
-                          plan.thread.kind === "loading"
-                        ) {
-                          expect(plan.uploadThread).toBe(false);
+                          );
+                          if (
+                            status === "loading" &&
+                            plan.thread.kind === "loading"
+                          ) {
+                            expect(plan.uploadThread).toBe(false);
+                          }
+                          // The composer waits for a file the send would upload.
+                          if (plan.uploadThread) {
+                            expect(plan.waitingForThread).toBe(stale);
+                          }
+                          // A follow-up never turns red or asks for a sign-in
+                          // over an email the user did not ask for.
+                          if (!freshChat && choice === null && models.thread) {
+                            expect(models.thread.state).toBe("suggested");
+                          }
+                          if (freshChat) {
+                            expect(plan.thread).not.toEqual({
+                              kind: "hidden",
+                              why: "sent-in-chat",
+                            });
+                          }
+                          checked += 1;
                         }
-                        checked += 1;
-                      }
     expect(checked).toBeGreaterThan(1000);
   });
 });

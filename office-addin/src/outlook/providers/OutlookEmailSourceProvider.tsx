@@ -16,6 +16,7 @@ import { useCurrentThread } from "../hooks/useCurrentThread";
 import { useOutlookMessageFetcher } from "../hooks/useOutlookMessageFetcher";
 import { buildThreadEmlFile } from "../utils/buildThreadEmlFile";
 import { collectDismissedPaths } from "../utils/dismissedAttachmentPaths";
+import { graphMailScopes } from "../utils/fetchOutlookMessage";
 import {
   OUTLOOK_GRAPH_MESSAGE_TIMEOUT_MS,
   runWithGraphTimeout,
@@ -406,6 +407,7 @@ export function OutlookEmailSourceProvider({
     thread: currentThread,
     isLoading: isLoadingThread,
     error: threadLoadFailed,
+    signInNeeded: threadSignInNeeded,
     retry: retryThreadFetch,
     errorCount: threadErrorCount,
   } = useCurrentThread(
@@ -443,9 +445,10 @@ export function OutlookEmailSourceProvider({
   }, [isLoadingThread, threadErrorCount, threadLoadFailed, threadReload]);
   const isLoadingEmailBody = isLoadingThread || threadReload !== null;
   const emailThreadLoadError = threadLoadFailed && threadReload === null;
-  const emailThreadSignIn = emailThreadLoadError
-    ? (graph?.signInNeeded ?? null)
-    : null;
+  // From the thread's own failure: another Graph surface needing a sign-in
+  // says nothing about why this one failed.
+  const emailThreadSignIn =
+    emailThreadLoadError && graph ? threadSignInNeeded : null;
   const retryEmailThread = useCallback(() => {
     setThreadReload({
       phase: "reloading",
@@ -455,6 +458,8 @@ export function OutlookEmailSourceProvider({
   }, [retryThreadFetch]);
   const graphSignIn = graph?.signIn;
   // The completed sign-in bumps `signInCount`, which refetches the thread.
+  // It asks for the scopes this thread's fetch uses, whichever surface
+  // raised the prompt last.
   const signInForEmail = useCallback(async () => {
     if (!graphSignIn) return;
     setThreadReload({
@@ -462,7 +467,7 @@ export function OutlookEmailSourceProvider({
       errorCount: threadErrorCountRef.current,
     });
     try {
-      await graphSignIn();
+      await graphSignIn(graphMailScopes(mailboxRoot));
     } catch {
       setThreadReload(null);
       return;
@@ -471,7 +476,7 @@ export function OutlookEmailSourceProvider({
       phase: "reloading",
       errorCount: threadErrorCountRef.current,
     });
-  }, [graphSignIn]);
+  }, [graphSignIn, mailboxRoot]);
 
   // Reply-context chip for compose mode (drafts have no itemId but do have a
   // conversationId). Display-only — the parent body reaches the LLM via the

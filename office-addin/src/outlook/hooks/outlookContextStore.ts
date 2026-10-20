@@ -14,10 +14,17 @@ interface DraftChoice {
 interface ThreadChoiceEntry {
   itemKey: string;
   choice: OutlookThreadChoice;
+  /**
+   * Conversation ids whose thread went with a message of this conversation
+   * while this item was open. Another item shows it again, as suggested.
+   */
+  sentInChat: ReadonlySet<string>;
 }
 
 interface AttachmentChoices {
   itemKey: string;
+  /** A single attachment chip's (x), by id; the provider's ticks are the group checklist's. */
+  offIds: ReadonlySet<string>;
   /** The group chip's (x); the ticks underneath are kept. */
   groupOff: boolean;
   /** Included on a follow-up message, for the next send only. */
@@ -31,8 +38,6 @@ interface OutlookConversationChoices {
   selection: SelectionDismissalState;
   draft: DraftChoice;
   thread: ThreadChoiceEntry;
-  /** Conversation ids whose thread went with a message of this conversation. */
-  threadsSentInChat: ReadonlySet<string>;
   attachments: AttachmentChoices;
   /** The scheduling signal the user ended; a newer one turns scheduling on again. */
   schedulingEndedAt: string | null;
@@ -44,6 +49,7 @@ export interface OutlookContextChoices {
   draftOff: boolean;
   threadChoice: OutlookThreadChoice;
   threadsSentInChat: ReadonlySet<string>;
+  attachmentsOffIds: ReadonlySet<string>;
   attachmentsGroupOff: boolean;
   includeOnFollowUpIds: ReadonlySet<string>;
   sentAttachmentIds: ReadonlySet<string>;
@@ -64,6 +70,7 @@ const NO_IDS: ReadonlySet<string> = new Set();
 
 const freshAttachments = (itemKey: string): AttachmentChoices => ({
   itemKey,
+  offIds: NO_IDS,
   groupOff: false,
   includeOnFollowUpIds: NO_IDS,
   sentIds: NO_IDS,
@@ -72,8 +79,7 @@ const freshAttachments = (itemKey: string): AttachmentChoices => ({
 const freshChoices = (itemKey: string): OutlookConversationChoices => ({
   selection: { contextKey: itemKey, selectionKey: "", dismissed: false },
   draft: { itemKey, off: false },
-  thread: { itemKey, choice: null },
-  threadsSentInChat: NO_IDS,
+  thread: { itemKey, choice: null, sentInChat: NO_IDS },
   attachments: freshAttachments(itemKey),
   schedulingEndedAt: null,
 });
@@ -98,7 +104,7 @@ function settle(
   const thread =
     current.thread.itemKey === itemKey
       ? current.thread
-      : { itemKey, choice: null };
+      : { itemKey, choice: null, sentInChat: NO_IDS };
   const attachments =
     current.attachments.itemKey === itemKey
       ? current.attachments
@@ -203,7 +209,8 @@ export const outlookContextStore = {
       selectionDismissed: settled.selection.dismissed,
       draftOff: settled.draft.off,
       threadChoice: settled.thread.choice,
-      threadsSentInChat: settled.threadsSentInChat,
+      threadsSentInChat: settled.thread.sentInChat,
+      attachmentsOffIds: settled.attachments.offIds,
       attachmentsGroupOff: settled.attachments.groupOff,
       includeOnFollowUpIds: settled.attachments.includeOnFollowUpIds,
       sentAttachmentIds: settled.attachments.sentIds,
@@ -261,7 +268,7 @@ export const outlookContextStore = {
     write(conversationKey, itemKey, (current) =>
       current.thread.choice === choice
         ? current
-        : { ...current, thread: { itemKey, choice } },
+        : { ...current, thread: { ...current.thread, choice } },
     );
   },
   /** The "+" menu's "add it again": the thread goes with the next message. */
@@ -271,12 +278,29 @@ export const outlookContextStore = {
     conversationId: string,
   ) {
     write(conversationKey, itemKey, (current) => {
-      const threadsSentInChat = new Set(current.threadsSentInChat);
-      threadsSentInChat.delete(conversationId);
+      const sentInChat = new Set(current.thread.sentInChat);
+      sentInChat.delete(conversationId);
       return {
         ...current,
-        thread: { itemKey, choice: "included" },
-        threadsSentInChat,
+        thread: { itemKey, choice: "included", sentInChat },
+      };
+    });
+  },
+  setAttachmentOff(
+    conversationKey: string,
+    itemKey: string,
+    id: string,
+    off: boolean,
+  ) {
+    write(conversationKey, itemKey, (current) => {
+      const { offIds } = current.attachments;
+      if (offIds.has(id) === off) return current;
+      const next = new Set(offIds);
+      if (off) next.add(id);
+      else next.delete(id);
+      return {
+        ...current,
+        attachments: { ...current.attachments, offIds: next },
       };
     });
   },
@@ -330,13 +354,14 @@ export const outlookContextStore = {
   ) {
     write(conversationKey, itemKey, (current) => ({
       ...current,
-      thread:
-        current.thread.choice === "included"
-          ? { itemKey, choice: null }
-          : current.thread,
-      threadsSentInChat: threadSent
-        ? withId(current.threadsSentInChat, [threadSent])
-        : current.threadsSentInChat,
+      thread: {
+        ...current.thread,
+        choice:
+          current.thread.choice === "included" ? null : current.thread.choice,
+        sentInChat: threadSent
+          ? withId(current.thread.sentInChat, [threadSent])
+          : current.thread.sentInChat,
+      },
       attachments: {
         ...current.attachments,
         includeOnFollowUpIds: NO_IDS,

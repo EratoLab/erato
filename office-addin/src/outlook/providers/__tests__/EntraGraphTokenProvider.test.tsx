@@ -216,11 +216,58 @@ describe("EntraGraphTokenProvider", () => {
       });
       expect(latest.current?.signInCount).toBe(1);
       expect(latest.current?.signInNeeded).toBeNull();
-      // The prompt stays for every other Graph caller; its success says what follows.
+      // The prompt stays for every other Graph caller, and its success
+      // promises nothing about an email: any Graph surface may have asked.
       expect(toast.warning).toHaveBeenCalledTimes(1);
       expect(toast.success).toHaveBeenCalledWith(
-        expect.objectContaining({ title: "Signed in. Loading the email." }),
+        expect.objectContaining({ title: "Signed in." }),
       );
+    });
+
+    it("signs in for the scopes a surface names, whoever prompted last", async () => {
+      const { source, acquireGraphToken } = interactiveSource();
+      const latest = mountLatest(source);
+      await act(async () => {
+        await expect(
+          latest.current!.acquireToken(["Calendars.Read"]),
+        ).rejects.toBeInstanceOf(InteractionRequiredError);
+      });
+
+      await act(async () => {
+        await latest.current!.signIn(["Mail.Read"]);
+      });
+
+      expect(acquireGraphToken).toHaveBeenLastCalledWith(["Mail.Read"], {
+        allowInteraction: true,
+      });
+    });
+
+    it("clears the need once a silent acquire for those scopes succeeds", async () => {
+      let needsUser = true;
+      const source = {
+        acquireGraphToken: vi.fn(async () => {
+          if (needsUser) throw new InteractionRequiredError("interaction");
+          return { accessToken: "t", bootstrap: { idToken: "i" } };
+        }),
+      } as unknown as AuthSource & GraphCapableSource;
+      const latest = mountLatest(source);
+      await act(async () => {
+        await expect(
+          latest.current!.acquireToken(["Mail.Read"]),
+        ).rejects.toBeInstanceOf(InteractionRequiredError);
+      });
+      expect(latest.current?.signInNeeded).toBe("sign-in");
+
+      needsUser = false;
+      await act(async () => {
+        await latest.current!.acquireToken(["Calendars.Read"]);
+      });
+      expect(latest.current?.signInNeeded).toBe("sign-in");
+
+      await act(async () => {
+        await latest.current!.acquireToken(["Mail.Read"]);
+      });
+      expect(latest.current?.signInNeeded).toBeNull();
     });
 
     it("keeps the need when the popup is cancelled", async () => {

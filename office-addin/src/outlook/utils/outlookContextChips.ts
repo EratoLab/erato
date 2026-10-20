@@ -81,6 +81,8 @@ export interface OutlookThreadChipModel {
   lifetime?: string;
   /** The checklist's group meta: "1.5 MB of 25 MB" or "Updating…". */
   checklistMeta: string;
+  /** The checklist's group label, the same count the chip's meta gives. */
+  checklistLabel: string;
 }
 
 export interface OutlookAttachmentRow {
@@ -112,6 +114,7 @@ export interface OutlookAttachmentChipModel {
 export interface OutlookAttachmentsGroupModel {
   kind: "outlook.draftAttachments" | "outlook.mailAttachments";
   state: ComposerContextState;
+  tone?: ComposerContextTone;
   label: string;
   spokenLabel: string;
   meta?: string;
@@ -173,6 +176,9 @@ export interface OutlookContextDisplay {
     sizeLabel: string | null;
     stale: boolean;
     signingIn: boolean;
+    /** Ticked messages of the loaded thread, and all of them. */
+    includedMessages: number;
+    totalMessages: number;
   };
   maxSizeFormatted: string;
   attachments: {
@@ -206,15 +212,34 @@ const lifetimeItem = () =>
     message: "Leaving it out lasts until you switch mail items.",
   });
 
-const followUpMeta = () =>
+// Each subject has its own ids, so a language can agree them in gender and number.
+const threadFollowUpMeta = () =>
   t({
-    id: "officeAddin.outlook.context.meta.followUp",
+    id: "officeAddin.outlook.context.thread.meta.followUp",
     message: "Not included on follow-up messages",
   });
 
-const nothingChosenMeta = () =>
+const attachmentFollowUpMeta = () =>
   t({
-    id: "officeAddin.outlook.context.meta.nothingChosen",
+    id: "officeAddin.outlook.context.attachment.meta.followUp",
+    message: "Not included on follow-up messages",
+  });
+
+const attachmentsFollowUpMeta = () =>
+  t({
+    id: "officeAddin.outlook.context.attachments.meta.followUp",
+    message: "Not included on follow-up messages",
+  });
+
+const threadNothingChosenMeta = () =>
+  t({
+    id: "officeAddin.outlook.context.thread.meta.nothingChosen",
+    message: "Nothing chosen",
+  });
+
+const attachmentsNothingChosenMeta = () =>
+  t({
+    id: "officeAddin.outlook.context.attachments.meta.nothingChosen",
     message: "Nothing chosen",
   });
 
@@ -224,15 +249,27 @@ const trimFailedMeta = () =>
     message: "Couldn't leave out unticked parts",
   });
 
-const sentEarlierMeta = () =>
+const attachmentSentEarlierMeta = () =>
   t({
     id: "officeAddin.outlook.context.attachment.meta.sentEarlier",
     message: "Sent earlier, not re-sent",
   });
 
-const notWithDropsMeta = () =>
+const attachmentsSentEarlierMeta = () =>
+  t({
+    id: "officeAddin.outlook.context.attachments.meta.sentEarlier",
+    message: "Sent earlier, not re-sent",
+  });
+
+const attachmentNotWithDropsMeta = () =>
   t({
     id: "officeAddin.outlook.context.attachment.meta.notWithDrops",
+    message: "Not sent with dropped emails",
+  });
+
+const attachmentsNotWithDropsMeta = () =>
+  t({
+    id: "officeAddin.outlook.context.attachments.meta.notWithDrops",
     message: "Not sent with dropped emails",
   });
 
@@ -477,7 +514,10 @@ function draftModel(
               id: "officeAddin.outlook.context.draft.meta.replacedBySelection",
               message: "Replaced by selection",
             }),
-        actions: ["send-instead"],
+        // Only where dismissing the selection gives the draft back; under
+        // sticky scheduling it would stay out.
+        actions:
+          preview.draftWithoutSelection === "sent" ? ["send-instead"] : [],
         notes: [
           {
             tone: "info",
@@ -502,7 +542,8 @@ function draftModel(
           id: "officeAddin.outlook.context.draft.meta.scheduling",
           message: "Not sent while scheduling",
         }),
-        actions: ["end-scheduling"],
+        actions:
+          preview.draftWithoutScheduling === "sent" ? ["end-scheduling"] : [],
         notes: [
           {
             tone: "info",
@@ -563,6 +604,16 @@ function draftModel(
   }
 }
 
+function someMessagesLabel(included: number, total: number): string {
+  return t({
+    id: "officeAddin.outlook.context.thread.meta.someMessages",
+    message: plural(total, {
+      one: `${included} of # message`,
+      other: `${included} of # messages`,
+    }),
+  });
+}
+
 function threadModel(
   plan: OutlookFilePlan,
   display: OutlookContextDisplay,
@@ -617,6 +668,7 @@ function threadModel(
     message:
       "Leaving the email out lasts until you switch mail items. Including it again restores these ticks.",
   });
+  const { includedMessages, totalMessages } = thread;
   const base = {
     label,
     removeLabel: leaveOut,
@@ -625,25 +677,41 @@ function threadModel(
     notes: [] as OutlookContextNote[],
     checklist: false,
     checklistMeta: sizeLabel,
+    checklistLabel:
+      includedMessages < totalMessages
+        ? someMessagesLabel(includedMessages, totalMessages)
+        : threadMessageCountLabel(totalMessages),
   };
   // Nothing ticked, or a trim the bytes refuse: no file is coming, so the
   // checklist states no size rather than "Updating…".
   const noFileMeta = thread.stale ? updating : "";
   switch (disposition.kind) {
-    case "loading":
+    case "loading": {
+      const meta = thread.signingIn
+        ? t({
+            id: "officeAddin.outlook.context.thread.meta.signingIn",
+            message: "Signing in…",
+          })
+        : t({
+            id: "officeAddin.outlook.context.thread.meta.loading",
+            message: "Loading email thread…",
+          });
       return {
         ...base,
         state: "loading",
-        meta: thread.signingIn
-          ? t({
-              id: "officeAddin.outlook.context.thread.meta.signingIn",
-              message: "Signing in…",
-            })
-          : t({
-              id: "officeAddin.outlook.context.thread.meta.loading",
-              message: "Loading email thread…",
+        meta,
+        notes: [
+          {
+            tone: "info",
+            title: meta,
+            text: t({
+              id: "officeAddin.chatInput.loadingEmailThreadDescription",
+              message: "Preparing the email context",
             }),
+          },
+        ],
       };
+    }
     case "error":
       if (disposition.why === "load") {
         return {
@@ -745,25 +813,29 @@ function threadModel(
             })
           : include,
         restore: disposition.retry ? "include-and-retry" : "include",
+        ...(disposition.retry ? {} : { intro }),
         notes: [notIncluded],
         checklist: !disposition.retry,
         lifetime,
       };
     case "follow-up":
+      // A failure on a follow-up is loaded again when the user includes it.
       return {
         ...base,
         state: "suggested",
-        meta: followUpMeta(),
+        meta: threadFollowUpMeta(),
         restoreLabel: include,
+        restore: disposition.retry ? "include-and-retry" : "include",
+        ...(disposition.retry ? {} : { intro }),
         notes: [notIncluded],
-        checklist: true,
+        checklist: !disposition.retry,
         lifetime,
       };
     case "nothing":
       return {
         ...base,
         state: "suggested",
-        meta: nothingChosenMeta(),
+        meta: threadNothingChosenMeta(),
         checklistMeta: noFileMeta,
         restoreLabel: t({
           id: "officeAddin.outlook.context.thread.includeEvery",
@@ -782,13 +854,7 @@ function threadModel(
       const { included, total } = disposition;
       const partial = included < total;
       const count = partial
-        ? t({
-            id: "officeAddin.outlook.context.thread.meta.someMessages",
-            message: plural(total, {
-              one: `${included} of # message`,
-              other: `${included} of # messages`,
-            }),
-          })
+        ? someMessagesLabel(included, total)
         : threadMessageCountLabel(total);
       return {
         ...base,
@@ -863,6 +929,43 @@ function attachmentNote(
   }
 }
 
+function attachmentsNote(
+  disposition: "cloud" | "sent-earlier" | "not-with-drops" | "follow-up",
+  mode: "compose" | "read",
+): OutlookContextNote {
+  switch (disposition) {
+    case "cloud":
+      return {
+        tone: "error",
+        text: t({
+          id: "officeAddin.outlook.context.attachments.detail.cloud",
+          message:
+            "These are links to cloud files, which Outlook can't hand over, so they are not sent.",
+        }),
+      };
+    case "sent-earlier":
+      return {
+        tone: "info",
+        text: t({
+          id: "officeAddin.outlook.context.attachments.detail.sentEarlier",
+          message:
+            "Erato already has these files from an earlier message, so they are not sent again.",
+        }),
+      };
+    case "not-with-drops":
+      return attachmentNote("not-with-drops", mode) as OutlookContextNote;
+    case "follow-up":
+      return {
+        tone: "info",
+        text: t({
+          id: "officeAddin.outlook.context.attachments.detail.followUp",
+          message:
+            "Attachments go with the first message only. Include them to send them with this one.",
+        }),
+      };
+  }
+}
+
 function attachmentModels(
   plan: OutlookFilePlan,
   display: OutlookContextDisplay,
@@ -882,6 +985,26 @@ function attachmentModels(
       attachments: shown.map(({ row, disposition }) => {
         const name = row.name;
         const note = attachmentNote(disposition, mode);
+        const fields: OutlookDetailField[] = [];
+        if (row.type) {
+          fields.push({
+            label: t({
+              id: "officeAddin.outlook.context.detail.field.type",
+              message: "Type",
+            }),
+            value: row.type,
+          });
+        }
+        // Office.js reports no size for a link to a cloud file.
+        if (!row.cloud && row.size > 0) {
+          fields.push({
+            label: t({
+              id: "officeAddin.outlook.context.detail.field.size",
+              message: "Size",
+            }),
+            value: row.sizeLabel,
+          });
+        }
         const base = {
           id: row.id,
           kind: compose
@@ -893,22 +1016,7 @@ function attachmentModels(
             message: `Don't include ${name}`,
           }),
           restore: "restore" as const,
-          fields: [
-            {
-              label: t({
-                id: "officeAddin.outlook.context.detail.field.type",
-                message: "Type",
-              }),
-              value: row.type,
-            },
-            {
-              label: t({
-                id: "officeAddin.outlook.context.detail.field.size",
-                message: "Size",
-              }),
-              value: row.sizeLabel,
-            },
-          ].filter((field) => field.value),
+          fields,
           notes: note ? [note] : [],
           lifetime: lifetimeItem(),
         };
@@ -944,19 +1052,19 @@ function attachmentModels(
             return {
               ...base,
               state: "superseded" as const,
-              meta: sentEarlierMeta(),
+              meta: attachmentSentEarlierMeta(),
             };
           case "not-with-drops":
             return {
               ...base,
               state: "superseded" as const,
-              meta: notWithDropsMeta(),
+              meta: attachmentNotWithDropsMeta(),
             };
           case "follow-up":
             return {
               ...base,
               state: "suggested" as const,
-              meta: followUpMeta(),
+              meta: attachmentFollowUpMeta(),
               restoreLabel: includeLabel,
               restore: "follow-up" as const,
             };
@@ -1040,92 +1148,97 @@ function attachmentModels(
           : unsentTicked
         ).map(({ row }) => row.id),
   };
-  const note = (disposition: OutlookAttachmentDisposition) => {
-    const found = attachmentNote(disposition, mode);
-    return found ? [found] : [];
-  };
+  const group = (
+    model: Pick<
+      OutlookAttachmentsGroupModel,
+      "state" | "tone" | "meta" | "restoreLabel" | "notes"
+    > & { removeLabel?: string },
+  ): Pick<OutlookContextModels, "attachments" | "attachmentsGroup"> => ({
+    attachments: [],
+    attachmentsGroup: { ...base, restore, ...model },
+  });
   if (groupOff) {
-    return {
-      attachments: [],
-      attachmentsGroup: {
-        ...base,
-        state: "suggested",
-        restoreLabel,
-        restore,
-        notes: [],
-      },
-    };
+    return group({
+      state: "suggested",
+      restoreLabel,
+      notes: [
+        {
+          tone: "info",
+          text: t({
+            id: "officeAddin.outlook.context.attachments.detail.notIncluded",
+            message:
+              "The attachments are not included right now. Your ticks below are kept and come back when you include them.",
+          }),
+        },
+      ],
+    });
+  }
+  // Nothing here can go, whatever is ticked, so (+) would change nothing.
+  if (shown.every(({ row }) => row.cloud)) {
+    return group({
+      state: "error",
+      tone: "error",
+      meta: t({
+        id: "officeAddin.outlook.context.attachments.meta.cloud",
+        message: "Cloud files · can't be sent",
+      }),
+      removeLabel: compose
+        ? t({
+            id: "officeAddin.outlook.context.attachments.dismiss.draft",
+            message: "Dismiss draft attachments",
+          })
+        : t({
+            id: "officeAddin.outlook.context.attachments.dismiss.email",
+            message: "Dismiss email attachments",
+          }),
+      notes: [attachmentsNote("cloud", mode)],
+    });
   }
   if (going.length === 0) {
     if (tickedSendable.length > 0 && unsentTicked.length === 0) {
-      return {
-        attachments: [],
-        attachmentsGroup: {
-          ...base,
-          state: "superseded",
-          meta: sentEarlierMeta(),
-          restore,
-          notes: note("sent-earlier"),
-        },
-      };
+      return group({
+        state: "superseded",
+        meta: attachmentsSentEarlierMeta(),
+        notes: [attachmentsNote("sent-earlier", mode)],
+      });
     }
     if (
       tickedSendable.some(({ disposition }) => disposition === "not-with-drops")
     ) {
-      return {
-        attachments: [],
-        attachmentsGroup: {
-          ...base,
-          state: "superseded",
-          meta: notWithDropsMeta(),
-          restore,
-          notes: note("not-with-drops"),
-        },
-      };
+      return group({
+        state: "superseded",
+        meta: attachmentsNotWithDropsMeta(),
+        notes: [attachmentsNote("not-with-drops", mode)],
+      });
     }
     if (unsentTicked.length > 0) {
-      return {
-        attachments: [],
-        attachmentsGroup: {
-          ...base,
-          state: "suggested",
-          meta: followUpMeta(),
-          restoreLabel,
-          restore,
-          notes: note("follow-up"),
-        },
-      };
-    }
-    return {
-      attachments: [],
-      attachmentsGroup: {
-        ...base,
+      return group({
         state: "suggested",
-        meta: nothingChosenMeta(),
+        meta: attachmentsFollowUpMeta(),
         restoreLabel,
-        restore,
-        notes: [],
-      },
-    };
+        notes: [attachmentsNote("follow-up", mode)],
+      });
+    }
+    return group({
+      state: "suggested",
+      meta: attachmentsNothingChosenMeta(),
+      restoreLabel,
+      notes: [],
+    });
   }
   const sent = going.length;
   const total = count;
   const size = display.formatSize(
     going.reduce((total, { row }) => total + row.size, 0),
   );
-  return {
-    attachments: [],
-    attachmentsGroup: {
-      ...base,
-      state: "included",
-      meta: t({
-        id: "officeAddin.outlook.context.attachments.meta.some",
-        message: `${sent} of ${total} · ${size}`,
-      }),
-      restore,
-      notes: [],
-    },
-  };
+  return group({
+    state: "included",
+    meta: t({
+      id: "officeAddin.outlook.context.attachments.meta.some",
+      message: `${sent} of ${total} · ${size}`,
+    }),
+    notes: [],
+  });
 }
 
 function dropModels(
@@ -1206,7 +1319,7 @@ function schedulingModel(
       message: "End scheduling",
     }),
     endedAnnouncement:
-      preview.draft === "scheduling"
+      preview.draftWithoutScheduling === "sent"
         ? t({
             id: "officeAddin.outlook.context.scheduling.announce.endedDraft",
             message: "Scheduling ended. Your draft is sent again.",

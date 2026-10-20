@@ -600,6 +600,19 @@ export const AddinChatInput = forwardRef<
     () => new Map(resolvedDrops.map((drop) => [drop.key, drop])),
     [resolvedDrops],
   );
+  const includedMessageCount = threadStaged
+    ? threadStaged.thread.messages.filter(
+        (message) => !threadStaged.dismissedMessageIds.has(message.id),
+      ).length
+    : 0;
+  // Ticked in the group's checklist (the provider) and not switched off by
+  // its own chip (this conversation's store).
+  const attachmentsOffIds = choices.attachmentsOffIds;
+  const attachmentTicked = useCallback(
+    (id: string) =>
+      !dismissedAttachmentIds.includes(id) && !attachmentsOffIds.has(id),
+    [attachmentsOffIds, dismissedAttachmentIds],
+  );
   // Which files the send uploads, one decision per file; the chips render
   // this plan and the send uploads exactly it.
   const plan = useMemo(
@@ -610,12 +623,9 @@ export const AddinChatInput = forwardRef<
           status: threadStatus,
           signIn: emailThreadSignIn,
           messageCount: threadStaged?.thread.messages.length ?? 0,
-          includedMessageCount: threadStaged
-            ? threadStaged.thread.messages.filter(
-                (message) => !threadStaged.dismissedMessageIds.has(message.id),
-              ).length
-            : 0,
+          includedMessageCount,
           file: threadFile,
+          stale: isThreadEmlStale,
           partKey: threadStaged?.key ?? null,
           trimError: threadTrimError !== null,
           conversationId: threadConversationId,
@@ -630,7 +640,7 @@ export const AddinChatInput = forwardRef<
           items: itemAttachments.map((attachment) => ({
             id: attachment.id,
             cloud: attachment.cloud,
-            ticked: !dismissedAttachmentIds.includes(attachment.id),
+            ticked: attachmentTicked(attachment.id),
           })),
           loading: isLoadingAttachments,
           groupOff: choices.attachmentsGroupOff,
@@ -646,14 +656,18 @@ export const AddinChatInput = forwardRef<
             error: !!resolved?.error,
           };
         }),
+        dropsStale: isDropResolutionStale,
       }),
     [
       attachmentMode,
+      attachmentTicked,
       choices,
-      dismissedAttachmentIds,
       emailThreadSignIn,
       freshChat,
+      includedMessageCount,
+      isDropResolutionStale,
       isLoadingAttachments,
+      isThreadEmlStale,
       itemAttachments,
       openEmailStagedAsDrop,
       resolvedDropByKey,
@@ -788,6 +802,8 @@ export const AddinChatInput = forwardRef<
       sizeLabel: threadFile ? formatFileSize(threadFile.size) : null,
       stale: isThreadEmlStale,
       signingIn,
+      includedMessages: includedMessageCount,
+      totalMessages: threadStaged?.thread.messages.length ?? 0,
     },
     maxSizeFormatted,
     attachments: {
@@ -798,7 +814,7 @@ export const AddinChatInput = forwardRef<
         size: attachment.size,
         sizeLabel: formatFileSize(attachment.size),
         type: attachmentTypeLabel(attachment.name, attachment.contentType),
-        ticked: !dismissedAttachmentIds.includes(attachment.id),
+        ticked: attachmentTicked(attachment.id),
         cloud: attachment.cloud,
       })),
       groupOff: choices.attachmentsGroupOff,
@@ -861,8 +877,32 @@ export const AddinChatInput = forwardRef<
       retryThread: retryEmailThread,
       signInForEmail: () => void signInForEmail(),
       restoreEveryMessage: restoreEmailBody,
-      dismissAttachment: removeAttachment,
-      restoreAttachment,
+      dismissAttachment: (id) =>
+        outlookContextStore.setAttachmentOff(
+          conversationKey,
+          itemKey,
+          id,
+          true,
+        ),
+      restoreAttachment: (id) => {
+        outlookContextStore.setAttachmentOff(
+          conversationKey,
+          itemKey,
+          id,
+          false,
+        );
+        restoreAttachment(id);
+      },
+      untickAttachment: removeAttachment,
+      tickAttachment: (id) => {
+        restoreAttachment(id);
+        outlookContextStore.setAttachmentOff(
+          conversationKey,
+          itemKey,
+          id,
+          false,
+        );
+      },
       includeAttachmentsOnFollowUp: (ids) =>
         outlookContextStore.includeAttachmentsOnFollowUp(
           conversationKey,
@@ -1014,10 +1054,15 @@ export const AddinChatInput = forwardRef<
           );
         },
       },
+      // A row is "in the composer" only while its bytes ride in a chip: its
+      // own, or the thread's on a send that carries the thread. Otherwise
+      // the menu adds it as a file of its own.
       attachments:
-        disposition.kind === "hidden" && disposition.why === "sent-in-chat"
-          ? ("upload" as const)
-          : ("in-composer" as const),
+        plan.attachments.length > 0 ||
+        disposition.kind === "sent" ||
+        disposition.kind === "loading"
+          ? ("in-composer" as const)
+          : ("upload" as const),
       announce,
     };
   }, [
@@ -1025,6 +1070,7 @@ export const AddinChatInput = forwardRef<
     conversationKey,
     emailSubject,
     itemKey,
+    plan.attachments.length,
     plan.thread,
     threadConversationId,
     threadFile,
@@ -1453,6 +1499,7 @@ export const AddinChatInput = forwardRef<
             isUploadingEmail ||
             isExpandingDroppedEmails ||
             plan.waitingForThread ||
+            plan.waitingForDrops ||
             chatInputProps.disabled
           }
         />

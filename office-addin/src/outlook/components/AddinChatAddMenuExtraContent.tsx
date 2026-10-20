@@ -32,7 +32,7 @@ const inComposerText = () =>
  * Outlook rows. It only adds what has no chip: the composer's chips are the
  * one way back for the open email, its thread and its attachments, so their
  * rows here say so. The thread already sent in this chat can be added again,
- * and its attachments uploaded as separate files.
+ * and an attachment no chip carries is uploaded as a file of its own.
  */
 export function AddinChatAddMenuExtraContent({
   onSelectFiles,

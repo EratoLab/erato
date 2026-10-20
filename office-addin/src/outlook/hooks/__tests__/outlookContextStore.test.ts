@@ -218,7 +218,7 @@ describe("outlookContextStore", () => {
       expect(choices.threadsSentInChat.size).toBe(0);
     });
 
-    it("forgets the attachments sent with another item, never the thread", () => {
+    it("forgets what went with another item, so coming back offers it again", () => {
       const view = renderChoices();
       const { key } = current(view);
       act(() =>
@@ -230,10 +230,37 @@ describe("outlookContextStore", () => {
       );
 
       view.rerender({ chatId: "chat-1", itemKey: "item-2", selectionKey: "" });
-
       expect(current(view).choices.sentAttachmentIds.size).toBe(0);
-      expect(current(view).choices.threadsSentInChat.has("conv-1")).toBe(true);
+      expect(current(view).choices.threadsSentInChat.size).toBe(0);
+
+      view.rerender({ chatId: "chat-1", itemKey: "item-1", selectionKey: "" });
+      expect(current(view).choices.threadsSentInChat.size).toBe(0);
     });
+  });
+
+  it("switches a single attachment off for this conversation and item only", () => {
+    const view = renderChoices();
+    const { key } = current(view);
+    act(() => outlookContextStore.setAttachmentOff(key, "item-1", "a1", true));
+    expect([...current(view).choices.attachmentsOffIds]).toEqual(["a1"]);
+
+    act(() =>
+      outlookContextStore.afterSend(key, {
+        itemKey: "item-1",
+        threadSent: null,
+        attachmentIdsSent: [],
+      }),
+    );
+    expect(current(view).choices.attachmentsOffIds.has("a1")).toBe(true);
+
+    act(() => outlookContextStore.setAttachmentOff(key, "item-1", "a1", false));
+    expect(current(view).choices.attachmentsOffIds.size).toBe(0);
+
+    act(() => outlookContextStore.setAttachmentOff(key, "item-1", "a1", true));
+    view.rerender({ chatId: "chat-2", itemKey: "item-1", selectionKey: "" });
+    expect(current(view).choices.attachmentsOffIds.size).toBe(0);
+    view.rerender({ chatId: "chat-2", itemKey: "item-2", selectionKey: "" });
+    expect(current(view).choices.attachmentsOffIds.size).toBe(0);
   });
 
   it("holds an ended scheduling run for its own signal only", () => {

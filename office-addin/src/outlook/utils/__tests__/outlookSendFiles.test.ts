@@ -18,6 +18,7 @@ const readyThread = (
   messageCount: 5,
   includedMessageCount: 5,
   file: threadFile,
+  stale: false,
   partKey: "current-thread:conv-1",
   trimError: false,
   conversationId: "conv-1",
@@ -35,6 +36,7 @@ const input = (
 ): OutlookFilePlanInput => ({
   freshChat: true,
   drops: [],
+  dropsStale: false,
   ...over,
   thread: readyThread(over.thread),
   attachments: {
@@ -65,8 +67,13 @@ describe("planOutlookFiles", () => {
       ],
       [
         "sent earlier in this chat",
-        { thread: { sentInChat: true } },
+        { freshChat: false, thread: { sentInChat: true } },
         { kind: "hidden", why: "sent-in-chat" },
+      ],
+      [
+        "a sent record on a chat that is fresh again",
+        { thread: { sentInChat: true } },
+        { kind: "sent", included: 5, total: 5 },
       ],
       [
         "loading on a fresh chat",
@@ -76,7 +83,28 @@ describe("planOutlookFiles", () => {
       [
         "loading on a follow-up with no choice",
         { freshChat: false, thread: { status: "loading", file: null } },
-        { kind: "follow-up" },
+        { kind: "follow-up", retry: false },
+      ],
+      [
+        "a load error on a follow-up",
+        { freshChat: false, thread: { status: "error", file: null } },
+        { kind: "follow-up", retry: true },
+      ],
+      [
+        "a sign-in on a follow-up",
+        {
+          freshChat: false,
+          thread: { status: "error", file: null, signIn: "sign-in" },
+        },
+        { kind: "follow-up", retry: true },
+      ],
+      [
+        "a load error after (+) on a follow-up",
+        {
+          freshChat: false,
+          thread: { status: "error", file: null, choice: "included" },
+        },
+        { kind: "error", why: "load" },
       ],
       [
         "loading after (+) on a follow-up",
@@ -116,7 +144,11 @@ describe("planOutlookFiles", () => {
         { thread: { choice: "excluded" } },
         { kind: "off", retry: false },
       ],
-      ["a follow-up", { freshChat: false }, { kind: "follow-up" }],
+      [
+        "a follow-up",
+        { freshChat: false },
+        { kind: "follow-up", retry: false },
+      ],
       [
         "every message unticked",
         { thread: { includedMessageCount: 0, file: null } },
@@ -165,7 +197,7 @@ describe("planOutlookFiles", () => {
         { freshChat: false },
         { thread: { choice: "excluded" as const } },
         { thread: { status: "error" as const, file: null } },
-        { thread: { sentInChat: true } },
+        { freshChat: false, thread: { sentInChat: true } },
         { thread: { trimError: true } },
       ]) {
         const plan = planOutlookFiles(input(over));
@@ -176,10 +208,44 @@ describe("planOutlookFiles", () => {
       }
     });
 
+    it("waits while the thread that goes has no current file", () => {
+      const firstBuild = planOutlookFiles(input({ thread: { file: null } }));
+      expect(firstBuild.thread).toEqual({
+        kind: "sent",
+        included: 5,
+        total: 5,
+      });
+      expect(firstBuild.waitingForThread).toBe(true);
+      expect(firstBuild.parts).toEqual([]);
+
+      const rebuilding = planOutlookFiles(input({ thread: { stale: true } }));
+      expect(rebuilding.uploadThread).toBe(true);
+      expect(rebuilding.waitingForThread).toBe(true);
+
+      // A thread that stays behind holds nothing up, stale or not.
+      const leftOut = planOutlookFiles(
+        input({ thread: { stale: true, choice: "excluded" } }),
+      );
+      expect(leftOut.waitingForThread).toBe(false);
+    });
+
+    it("waits while a drop's file rebuilds after a tick", () => {
+      expect(
+        planOutlookFiles(input({ drops: [drop], dropsStale: true }))
+          .waitingForDrops,
+      ).toBe(true);
+      expect(planOutlookFiles(input({ drops: [drop] })).waitingForDrops).toBe(
+        false,
+      );
+      expect(
+        planOutlookFiles(input({ dropsStale: true })).waitingForDrops,
+      ).toBe(false);
+    });
+
     it("sends only the drop on a follow-up with a drop staged", () => {
       const plan = planOutlookFiles(input({ freshChat: false, drops: [drop] }));
 
-      expect(plan.thread).toEqual({ kind: "follow-up" });
+      expect(plan.thread).toEqual({ kind: "follow-up", retry: false });
       expect(plan.uploadThread).toBe(false);
       expect(plan.uploads).toBe(true);
       expect(plan.parts).toEqual([
@@ -262,6 +328,11 @@ describe("planOutlookFiles", () => {
         "one sent earlier",
         [{ sentIds: new Set(["a1"]) }, { freshChat: false }],
         "sent-earlier",
+      ],
+      [
+        "a sent record on a chat that is fresh again",
+        [{ sentIds: new Set(["a1"]) }],
+        "sent",
       ],
       ["a drop staged", [{}, { drops: [drop] }], "not-with-drops"],
       ["a follow-up", [{}, { freshChat: false }], "follow-up"],

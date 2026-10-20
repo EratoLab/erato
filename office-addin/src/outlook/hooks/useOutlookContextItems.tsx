@@ -51,8 +51,12 @@ export interface OutlookContextHandlers {
   retryThread: () => void;
   signInForEmail: () => void;
   restoreEveryMessage: () => void;
+  /** A single attachment chip's (x) and (+): off for this conversation and item. */
   dismissAttachment: (id: string) => void;
   restoreAttachment: (id: string) => void;
+  /** A tick in the attachments group's checklist. */
+  untickAttachment: (id: string) => void;
+  tickAttachment: (id: string) => void;
   includeAttachmentsOnFollowUp: (ids: string[]) => void;
   setAttachmentsGroupOff: (off: boolean) => void;
   removeDrop: (key: string) => void;
@@ -245,6 +249,7 @@ export function useOutlookContextItems({
         ? buildThreadGroup({
             staged: threadStaged,
             verdicts: detail.threadVerdicts,
+            label: thread.checklistLabel,
             metaLabel: thread.checklistMeta,
             handlers: {
               dismissMessage: tick(handlers.thread.dismissMessage),
@@ -268,7 +273,11 @@ export function useOutlookContextItems({
                   id: "officeAddin.outlook.context.thread.announce.loaded",
                   message: "Email thread loaded.",
                 }),
-                onSelect: handlers.retryThread,
+                // Asking for the email again means it goes once it loads.
+                onSelect: () => {
+                  handlers.retryThread();
+                  handlers.includeThread();
+                },
               }
             : {
                 id: "sign-in",
@@ -278,7 +287,10 @@ export function useOutlookContextItems({
                   id: "officeAddin.outlook.context.thread.announce.loaded",
                   message: "Email thread loaded.",
                 }),
-                onSelect: handlers.signInForEmail,
+                onSelect: () => {
+                  handlers.signInForEmail();
+                  handlers.includeThread();
+                },
               },
       );
       const restore =
@@ -389,8 +401,8 @@ export function useOutlookContextItems({
             : {
                 onToggle: () =>
                   row.ticked
-                    ? handlers.dismissAttachment(row.id)
-                    : handlers.restoreAttachment(row.id),
+                    ? handlers.untickAttachment(row.id)
+                    : handlers.tickAttachment(row.id),
               }),
         })),
       };
@@ -402,6 +414,7 @@ export function useOutlookContextItems({
         dismissScope: "item",
         icon: "attachment",
         state: attachmentsGroup.state,
+        ...(attachmentsGroup.tone ? { tone: attachmentsGroup.tone } : {}),
         ...(attachmentsGroup.meta ? { meta: attachmentsGroup.meta } : {}),
         label: attachmentsGroup.label,
         spokenLabel: attachmentsGroup.spokenLabel,
@@ -413,7 +426,7 @@ export function useOutlookContextItems({
                 if (tickAll) {
                   for (const row of attachmentsGroup.rows) {
                     if (!row.ticked && !row.cloud) {
-                      handlers.restoreAttachment(row.id);
+                      handlers.tickAttachment(row.id);
                     }
                   }
                 }

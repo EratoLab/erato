@@ -175,7 +175,31 @@ describe("AddinChatAddMenuExtraContent", () => {
     expect(thread).toHaveTextContent("Already added");
   });
 
-  it("uploads an attachment as its own file only once its thread was sent", async () => {
+  it.each([
+    ["a follow-up's suggested thread", "in-composer"],
+    ["a thread already sent in this chat", "add-again"],
+  ] as const)(
+    "uploads an attachment as its own file beside %s, which does not carry it",
+    async (_name, row) => {
+      const file = new File(["pdf"], "quarterly-report.pdf");
+      state.getAttachmentFile.mockResolvedValue(file);
+      const { onSelectFiles, onClose } = renderMenu(
+        menuState({ attachments: "upload" }, { row }),
+      );
+
+      const attachmentRow = screen.getByTestId(
+        "addin-add-menu-attachment-att-1",
+      );
+      expect(attachmentRow).toBeEnabled();
+      fireEvent.click(attachmentRow);
+
+      await waitFor(() => expect(onSelectFiles).toHaveBeenCalledWith([file]));
+      expect(onClose).toHaveBeenCalled();
+      expectNoRestore();
+    },
+  );
+
+  it("uploads an attachment as its own file when the composer says no chip carries it", async () => {
     const file = new File(["pdf"], "quarterly-report.pdf");
     state.getAttachmentFile.mockResolvedValue(file);
     const { onSelectFiles, onClose } = renderMenu(

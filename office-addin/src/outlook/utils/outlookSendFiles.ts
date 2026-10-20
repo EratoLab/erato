@@ -9,8 +9,10 @@ export interface OutlookFilePlanThreadInput {
   /** Messages of the loaded thread and how many are ticked. */
   messageCount: number;
   includedMessageCount: number;
-  /** The `.eml` the send would upload; null while it rebuilds or when nothing is ticked. */
+  /** The `.eml` the send would upload; null before it is first built or when nothing is ticked. */
   file: File | null;
+  /** `file` still reflects the ticks before the latest one. */
+  stale: boolean;
   /** The key `resolvedParts` uses for the thread. */
   partKey: string | null;
   /** A dismissal inside a forwarded email cannot be cut out of its bytes. */
@@ -52,6 +54,8 @@ export interface OutlookFilePlanInput {
     size: number;
     error: boolean;
   }[];
+  /** The drops' files still reflect the ticks before the latest one. */
+  dropsStale: boolean;
 }
 
 export type OutlookThreadDisposition =
@@ -61,7 +65,7 @@ export type OutlookThreadDisposition =
   | { kind: "error"; why: "load" | "trim" }
   | { kind: "sign-in"; consent: boolean }
   | { kind: "off"; retry: boolean }
-  | { kind: "follow-up" }
+  | { kind: "follow-up"; retry: boolean }
   | { kind: "nothing" }
   | { kind: "sent"; included: number; total: number };
 
@@ -84,8 +88,13 @@ export interface OutlookFilePlan {
   parts: ResolvedPart[];
   /** The send has something to upload, so it takes the upload path. */
   uploads: boolean;
-  /** The thread is loading and would go, so the composer waits for it. */
+  /**
+   * The thread would go but its file is not ready: it is loading, or the
+   * `.eml` is not built for the latest ticks yet. The composer waits.
+   */
   waitingForThread: boolean;
+  /** A drop's file is rebuilding after a tick; the composer waits. */
+  waitingForDrops: boolean;
 }
 
 function threadDisposition(
@@ -95,15 +104,16 @@ function threadDisposition(
   const { status, choice } = thread;
   if (status === "none") return { kind: "none" };
   if (thread.stagedAsDrop) return { kind: "hidden", why: "dropped" };
-  if (thread.sentInChat && choice !== "included") {
+  // A fresh chat has sent nothing, whatever a send that never arrived recorded.
+  if (!freshChat && thread.sentInChat && choice !== "included") {
     return { kind: "hidden", why: "sent-in-chat" };
   }
-  if (status === "loading") {
-    if ((freshChat && choice !== "excluded") || choice === "included") {
-      return { kind: "loading" };
-    }
-    if (choice === null) return { kind: "follow-up" };
+  // A follow-up never sends the open email unasked, so neither its loading
+  // nor its failure is the user's concern until they include it.
+  if (!freshChat && choice === null) {
+    return { kind: "follow-up", retry: status === "error" };
   }
+  if (status === "loading" && choice !== "excluded") return { kind: "loading" };
   if (status === "error" && choice !== "excluded") {
     return thread.signIn
       ? { kind: "sign-in", consent: thread.signIn === "consent" }
@@ -112,7 +122,6 @@ function threadDisposition(
   if (choice === "excluded") {
     return { kind: "off", retry: status === "error" };
   }
-  if (!freshChat && choice !== "included") return { kind: "follow-up" };
   if (thread.includedMessageCount === 0) return { kind: "nothing" };
   if (thread.trimError) return { kind: "error", why: "trim" };
   return {
@@ -140,7 +149,7 @@ function attachmentDisposition(
   if (!item.ticked) return "off";
   if (item.cloud) return "cloud";
   if (attachments.groupOff) return "off";
-  if (attachments.sentIds.has(item.id)) return "sent-earlier";
+  if (!freshChat && attachments.sentIds.has(item.id)) return "sent-earlier";
   if (dropStaged) return "not-with-drops";
   if (!freshChat && !attachments.includeOnFollowUpIds.has(item.id)) {
     return "follow-up";
@@ -168,6 +177,10 @@ export function planOutlookFiles(input: OutlookFilePlanInput): OutlookFilePlan {
     state: drop.error ? ("error" as const) : ("sent" as const),
   }));
   const uploadThread = thread.kind === "sent";
+  // Without a current file the send would upload nothing, or the bytes of
+  // the ticks before the last one.
+  const threadFileNotReady =
+    uploadThread && (input.thread.file === null || input.thread.stale);
   const composeAttachmentIds = attachments
     .filter((attachment) => attachment.disposition === "sent")
     .map((attachment) => attachment.id);
@@ -192,6 +205,7 @@ export function planOutlookFiles(input: OutlookFilePlanInput): OutlookFilePlan {
     composeAttachmentIds,
     parts,
     uploads: uploadThread || dropStaged || composeAttachmentIds.length > 0,
-    waitingForThread: thread.kind === "loading",
+    waitingForThread: thread.kind === "loading" || threadFileNotReady,
+    waitingForDrops: dropStaged && input.dropsStale,
   };
 }

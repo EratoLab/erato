@@ -80,6 +80,20 @@ vi.mock("@erato/frontend/library", async () => {
   const { AlertMock, ContextLaneDouble } = await import(
     "../../../test/helpers/contextLaneDouble"
   );
+  const { useOutlookComposerMenu } = await import(
+    "../OutlookComposerMenuContext"
+  );
+  // What the registered "+" menu content reads from the composer.
+  const MenuProbe = () => {
+    const menu = useOutlookComposerMenu();
+    return (
+      <div
+        data-testid="menu-state"
+        data-thread={menu?.thread.row ?? ""}
+        data-attachments={menu?.attachments ?? ""}
+      />
+    );
+  };
   class UploadTooLargeError extends Error {
     readonly filenames: string[];
     constructor(maxSizeFormatted?: string, filenames: string[] = []) {
@@ -113,6 +127,7 @@ vi.mock("@erato/frontend/library", async () => {
           <ContextLaneDouble
             items={props.contextItems as ComposerContextItem[]}
           />
+          <MenuProbe />
           <div data-testid="composer-modes">
             {modes?.map((mode) => (
               <button
@@ -555,6 +570,26 @@ function modeButton(name: string) {
 
 function endScheduling() {
   fireEvent.click(modeButton("End scheduling"));
+}
+
+function composerDisabled() {
+  return screen.getByTestId("chat-input").getAttribute("data-disabled");
+}
+
+function menuState() {
+  const probe = screen.getByTestId("menu-state");
+  return {
+    thread: probe.getAttribute("data-thread"),
+    attachments: probe.getAttribute("data-attachments"),
+  };
+}
+
+/** Whatever the store recorded as sent, across conversations. */
+function recordedSends() {
+  return [...outlookContextStore.getSnapshot().values()].flatMap((entry) => [
+    ...entry.thread.sentInChat,
+    ...entry.attachments.sentIds,
+  ]);
 }
 
 function uploadedNames() {
@@ -1045,6 +1080,32 @@ describe("AddinChatInput", () => {
         expect(facetOf(onSendMessage, 0)?.id).toBe("outlook_review_draft");
       });
 
+      it("promises no draft for one already sent unchanged", async () => {
+        composeMessage("Dear Bob");
+        const { onSendMessage, rerender, ui } = renderInput({
+          chatId: "chat-1",
+        });
+        send();
+        await waitFor(() => expect(onSendMessage).toHaveBeenCalledTimes(1));
+        expect(facetOf(onSendMessage, 0)?.id).toBe("outlook_review_draft");
+
+        rerender(
+          ui({
+            lastSchedulingSignalAt: new Date(Date.now() - 60_000).toISOString(),
+          }),
+        );
+
+        await waitFor(() =>
+          expect(meta("outlook-draft")).toBe("Unchanged, not re-sent"),
+        );
+        expect(item("outlook-draft")?.detail?.actions).toBeUndefined();
+        const modes = h.chatInput.props.composerModes as ComposerMode[];
+        expect(modes[0]?.endedAnnouncement).toBe("Scheduling ended.");
+
+        endScheduling();
+        expect(meta("outlook-draft")).toBe("Unchanged, not re-sent");
+      });
+
       it("turns on again with a newer signal", () => {
         composeMessage("Dear Bob");
         const { rerender, ui } = renderInput({
@@ -1361,6 +1422,22 @@ describe("AddinChatInput", () => {
       expect(chip("outlook-draft")).toHaveAttribute("data-state", "included");
     });
 
+    it("replaces nothing when the draft went unchanged already", async () => {
+      h.composeSelection = { data: "", sourceProperty: "body" };
+      const { onSendMessage, rerender, ui } = renderInput({ chatId: "chat-1" });
+      send();
+      await waitFor(() => expect(onSendMessage).toHaveBeenCalledTimes(1));
+
+      h.composeSelection = { data: longSelection, sourceProperty: "body" };
+      rerender(ui());
+
+      await waitFor(() =>
+        expect(meta("outlook-draft")).toBe("Unchanged, not re-sent"),
+      );
+      expect(meta("outlook-selection")).toBe("Selected text");
+      expect(item("outlook-draft")?.detail?.actions).toBeUndefined();
+    });
+
     it("stays off until the selection or the item changes (ERMAIN-431)", () => {
       const { rerender, ui } = renderInput();
       press("outlook-selection", "Dismiss selection");
@@ -1544,6 +1621,94 @@ describe("AddinChatInput", () => {
       renderInput({ freshChat: true });
       expect(queryChip("outlook-attachment:a")).toBeNull();
     });
+
+    it("never reads sent earlier on a chat whose send never arrived", async () => {
+      setSource({ itemAttachments: [attachment("a")] });
+      const { onSendMessage, rerender, ui } = renderInput({
+        chatId: "chat-1",
+        freshChat: true,
+      });
+      send();
+      await waitFor(() => expect(onSendMessage).toHaveBeenCalledTimes(1));
+
+      rerender(ui({ freshChat: true }));
+
+      expect(meta("outlook-attachment:a")).toBe("Draft attachment · 100 B");
+    });
+
+    it("stays included and records nothing when the upload fails", async () => {
+      setSource({ itemAttachments: [attachment("a")] });
+      h.fetchUploadFile.mockRejectedValueOnce(new Error("network down"));
+      const { onSendMessage, rerender, ui } = renderInput({
+        chatId: "chat-1",
+        freshChat: true,
+      });
+
+      send();
+      await expectDeclinedSend(onSendMessage);
+
+      expect(chip("outlook-attachment:a")).toHaveAttribute(
+        "data-state",
+        "included",
+      );
+      expect(recordedSends()).toEqual([]);
+      rerender(ui({ freshChat: false }));
+      expect(meta("outlook-attachment:a")).toBe(
+        "Not included on follow-up messages",
+      );
+    });
+
+    it("gives a single chip's (x) and the group's (x) one lifetime: this chat and item", () => {
+      setSource({ itemAttachments: [attachment("a"), attachment("b")] });
+      const { rerender, ui } = renderInput({
+        chatId: "chat-1",
+        freshChat: true,
+      });
+      press("outlook-attachment:a", "Don't include a.pdf");
+      expect(chip("outlook-attachment:a")).toHaveAttribute(
+        "data-state",
+        "suggested",
+      );
+      // The provider's tick stays: the (x) is the chip's, not the checklist's.
+      expect(source().removeAttachment).not.toHaveBeenCalled();
+
+      rerender(ui({ chatId: "chat-2" }));
+      expect(chip("outlook-attachment:a")).toHaveAttribute(
+        "data-state",
+        "included",
+      );
+
+      setSource({
+        itemAttachments: [attachment("a"), attachment("b"), attachment("c")],
+      });
+      press("outlook-attachments", "Don't include draft attachments");
+      rerender(ui({ chatId: "chat-3" }));
+      expect(chip("outlook-attachments")).toHaveAttribute(
+        "data-state",
+        "included",
+      );
+    });
+
+    it("says a group of cloud links can't go, and its (x) dismisses it", () => {
+      setSource({
+        itemAttachments: ["x", "y", "z"].map((id) =>
+          attachment(id, { cloud: true, size: 0 }),
+        ),
+      });
+      renderInput({ freshChat: true });
+      expect(chip("outlook-attachments")).toHaveAttribute(
+        "data-state",
+        "error",
+      );
+      expect(meta("outlook-attachments")).toBe("Cloud files · can't be sent");
+
+      press("outlook-attachments", "Dismiss draft attachments");
+      expect(chip("outlook-attachments")).toHaveAttribute(
+        "data-state",
+        "suggested",
+      );
+      expect(menuState().attachments).toBe("in-composer");
+    });
   });
 
   describe("the open thread", () => {
@@ -1554,7 +1719,7 @@ describe("AddinChatInput", () => {
 
     it("goes with a fresh chat, with its stats and the file it uploads as the estimate", async () => {
       const ref = createRef<string | null>() as { current: string | null };
-      const { onSendMessage } = renderInput({
+      const { onSendMessage, rerender, ui } = renderInput({
         freshChat: true,
         includedEmailMessageIdRef: ref,
       });
@@ -1570,9 +1735,68 @@ describe("AddinChatInput", () => {
       send();
       await waitFor(() => expect(onSendMessage).toHaveBeenCalledTimes(1));
       expect(uploadedNames()).toEqual(["conversation.eml"]);
-      // Sent in this chat: no chip, the "+" menu adds it again.
+      // The chat has its first message: sent in this chat, no chip, and the
+      // "+" menu adds it again.
+      rerender(ui({ freshChat: false }));
       await waitFor(() => expect(queryChip("outlook-thread")).toBeNull());
       expect(ref.current).toBeNull();
+      expect(menuState().thread).toBe("add-again");
+    });
+
+    it("holds the composer until the file it uploads matches the latest ticks", async () => {
+      setSource({ threadFile: null, isThreadEmlStale: true });
+      const { onSendMessage } = renderInput({ freshChat: true });
+      expect(chip("outlook-thread")).toHaveAttribute("data-state", "included");
+      expect(meta("outlook-thread")).toBe("5 messages · Updating…");
+      expect(composerDisabled()).toBe("true");
+
+      setSource({ threadFile, isThreadEmlStale: false });
+      expect(composerDisabled()).toBe("false");
+
+      // An untick: until the rebuild the file still holds message m2.
+      stageThread({ dismissed: ["m2"] });
+      setSource({ isThreadEmlStale: true });
+      expect(meta("outlook-thread")).toBe("4 of 5 messages · Updating…");
+      expect(composerDisabled()).toBe("true");
+
+      const rebuilt = new File(["four"], "conversation.eml");
+      setSource({ threadFile: rebuilt, isThreadEmlStale: false });
+      expect(composerDisabled()).toBe("false");
+      send();
+      await waitFor(() => expect(onSendMessage).toHaveBeenCalledTimes(1));
+      const uploaded = h.fetchUploadFile.mock.calls[0]?.[0] as {
+        body: FormData;
+      };
+      expect((uploaded.body.get("file") as File).size).toBe(rebuilt.size);
+    });
+
+    it("comes back when the send never reached the chat", async () => {
+      const { onSendMessage, rerender, ui } = renderInput({ freshChat: true });
+      send();
+      await waitFor(() => expect(onSendMessage).toHaveBeenCalledTimes(1));
+
+      // The host dropped the send before the server saw it: still a fresh chat.
+      rerender(ui({ freshChat: true }));
+
+      expect(chip("outlook-thread")).toHaveAttribute("data-state", "included");
+      expect(menuState().thread).toBe("in-composer");
+    });
+
+    it("records nothing for a send whose upload failed", async () => {
+      stageDrop();
+      h.fetchUploadFile.mockRejectedValueOnce(new Error("network down"));
+      const { onSendMessage, rerender, ui } = renderInput({ freshChat: true });
+      const included = meta("outlook-thread");
+
+      send();
+      await expectDeclinedSend(onSendMessage);
+
+      expect(chip("outlook-thread")).toHaveAttribute("data-state", "included");
+      expect(meta("outlook-thread")).toBe(included);
+      expect(recordedSends()).toEqual([]);
+      // Nothing claims it went: a follow-up offers it rather than hiding it.
+      rerender(ui({ freshChat: false }));
+      expect(chip("outlook-thread")).toHaveAttribute("data-state", "suggested");
     });
 
     it("lists every message in its detail, none folded behind Show more", () => {
@@ -1672,6 +1896,10 @@ describe("AddinChatInput", () => {
 
       detailAction("outlook-thread", "retry");
       expect(source().retryEmailThread).toHaveBeenCalledTimes(1);
+      expect(outlookContextStore.getSnapshot().size).toBe(1);
+      expect(
+        [...outlookContextStore.getSnapshot().values()][0]?.thread.choice,
+      ).toBe("included");
 
       press("outlook-thread", "Dismiss email thread");
       expect(chip("outlook-thread")).toHaveAttribute("data-state", "suggested");
@@ -1679,6 +1907,59 @@ describe("AddinChatInput", () => {
       press("outlook-thread", "Try loading the email again");
       expect(source().retryEmailThread).toHaveBeenCalledTimes(2);
       expect(chip("outlook-thread")).toHaveAttribute("data-state", "error");
+    });
+
+    it("keeps a follow-up's failed load quiet, and (+) loads it again and sends it", async () => {
+      setSource({
+        threadStatus: "error",
+        emailThreadSignIn: "sign-in",
+        stagedEmails: [],
+        currentThread: null,
+        threadFile: null,
+      });
+      const { onSendMessage } = renderInput({
+        chatId: "chat-1",
+        freshChat: false,
+      });
+      expect(chip("outlook-thread")).toHaveAttribute("data-state", "suggested");
+      expect(meta("outlook-thread")).toBe("Not included on follow-up messages");
+      expect(item("outlook-thread")?.detail?.actions).toBeUndefined();
+
+      press("outlook-thread", "Include the email");
+      expect(source().retryEmailThread).toHaveBeenCalledTimes(1);
+      // The reload lands; the email goes with this message.
+      stageThread();
+      expect(chip("outlook-thread")).toHaveAttribute("data-state", "included");
+      send();
+      await waitFor(() => expect(onSendMessage).toHaveBeenCalledTimes(1));
+      expect(uploadedNames()).toEqual(["conversation.eml"]);
+    });
+
+    it("sends the email it signed in for on a follow-up", async () => {
+      const { onSendMessage } = renderInput({
+        chatId: "chat-1",
+        freshChat: false,
+      });
+      press("outlook-thread", "Include the email");
+      // The included load then needed a sign-in.
+      setSource({
+        threadStatus: "error",
+        emailThreadSignIn: "sign-in",
+        stagedEmails: [],
+        currentThread: null,
+        threadFile: null,
+      });
+      expect(chip("outlook-thread")).toHaveAttribute("data-state", "attention");
+
+      detailAction("outlook-thread", "sign-in");
+      expect(source().signInForEmail).toHaveBeenCalledTimes(1);
+      setSource({ emailThreadSignIn: null });
+      stageThread();
+
+      expect(chip("outlook-thread")).toHaveAttribute("data-state", "included");
+      send();
+      await waitFor(() => expect(onSendMessage).toHaveBeenCalledTimes(1));
+      expect(uploadedNames()).toEqual(["conversation.eml"]);
     });
 
     it("asks for a sign-in in its detail, and for access where a grant is missing", () => {
@@ -1739,6 +2020,26 @@ describe("AddinChatInput", () => {
       await waitFor(() => expect(queryChip("outlook-thread")).toBeNull());
     });
 
+    it("shows an email sent in this chat as suggested once the user comes back to it", async () => {
+      const { onSendMessage, rerender, ui } = renderInput({
+        chatId: "chat-1",
+        freshChat: true,
+      });
+      send();
+      await waitFor(() => expect(onSendMessage).toHaveBeenCalledTimes(1));
+      rerender(ui({ freshChat: false }));
+      await waitFor(() => expect(queryChip("outlook-thread")).toBeNull());
+
+      h.itemIdentity = "item-2";
+      rerender(ui({ freshChat: false }));
+      h.itemIdentity = "item-1";
+      rerender(ui({ freshChat: false }));
+
+      expect(chip("outlook-thread")).toHaveAttribute("data-state", "suggested");
+      expect(meta("outlook-thread")).toBe("Not included on follow-up messages");
+      expect(menuState().thread).toBe("in-composer");
+    });
+
     it("resets the choice on another item", () => {
       const { rerender, ui } = renderInput({ freshChat: true });
       press("outlook-thread", "Leave out the email");
@@ -1762,7 +2063,7 @@ describe("AddinChatInput", () => {
       expect(uploadedNames()).toEqual(["quarterly.eml"]);
     });
 
-    it("sends only the drop on a follow-up, and does not grow its size by the drop", async () => {
+    it("sends only the drop on a follow-up", async () => {
       stageDrop();
       const { onSendMessage } = renderInput({ freshChat: false });
       expect(meta("outlook-thread")).toBe("Not included on follow-up messages");
@@ -1770,6 +2071,33 @@ describe("AddinChatInput", () => {
       send();
       await waitFor(() => expect(onSendMessage).toHaveBeenCalledTimes(1));
       expect(uploadedNames()).toEqual(["quarterly.eml"]);
+    });
+
+    it("measures the thread's own file, not the drop staged beside it", async () => {
+      stageDrop();
+      const { onSendMessage } = renderInput({ freshChat: true });
+      expect(meta("outlook-thread")).toBe(
+        `5 messages · ${threadFile.size} B of 1 KB`,
+      );
+
+      send();
+      await waitFor(() => expect(onSendMessage).toHaveBeenCalledTimes(1));
+      expect(uploadedNames()).toEqual(["conversation.eml", "quarterly.eml"]);
+    });
+
+    it("lets the + menu add an attachment as its own file wherever no chip carries it", () => {
+      const { rerender, ui } = renderInput({ freshChat: true });
+      expect(menuState().attachments).toBe("in-composer");
+
+      rerender(ui({ freshChat: false }));
+      expect(meta("outlook-thread")).toBe("Not included on follow-up messages");
+      expect(menuState().attachments).toBe("upload");
+
+      press("outlook-thread", "Include the email");
+      expect(menuState().attachments).toBe("in-composer");
+
+      press("outlook-thread", "Leave out the email");
+      expect(menuState().attachments).toBe("upload");
     });
 
     it("never sends Office.js attachments beside the thread", () => {

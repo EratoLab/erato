@@ -13,9 +13,9 @@ export interface OutlookComposerMenuState {
     addAgain: () => void;
   };
   /**
-   * The item's own attachments: shown as chips or inside the thread's
-   * ("in-composer"), or uploaded as separate files because the thread they
-   * came with was already sent ("upload").
+   * The item's own attachments: their bytes ride in a chip, their own or the
+   * thread's on a send that carries the thread ("in-composer"), or nothing
+   * carries them, so a row uploads one as a file of its own ("upload").
    */
   attachments: "in-composer" | "upload";
   /** Says what an add did where no chip appears to say it. */

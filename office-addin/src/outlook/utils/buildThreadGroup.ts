@@ -42,11 +42,14 @@ export function threadMessageCountLabel(count: number): string {
 export function buildThreadGroup({
   staged,
   verdicts,
+  label,
   metaLabel,
   handlers,
 }: {
   staged: StagedThread;
   verdicts: ThreadPartVerdicts;
+  /** The ticked count, as the chip's meta gives it; defaults to every message. */
+  label?: string;
   /** "{size} of {limit}", or "Updating…" while the file rebuilds. */
   metaLabel: string;
   handlers: ThreadGroupHandlers;
@@ -131,7 +134,7 @@ export function buildThreadGroup({
   );
   return {
     id: `staged-email:${staged.key}`,
-    label: threadMessageCountLabel(staged.thread.messages.length),
+    label: label ?? threadMessageCountLabel(staged.thread.messages.length),
     metaLabel,
     items,
   };

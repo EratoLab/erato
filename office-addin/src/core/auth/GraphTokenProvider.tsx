@@ -75,13 +75,19 @@ export interface GraphTokenContextValue {
    */
   signInNeeded: "sign-in" | "consent" | null;
   /**
-   * The prompt's action, for the scopes that last raised it. Rejects when the
-   * popup is cancelled or blocked, which leaves `signInNeeded` set.
+   * The prompt's action: an interactive sign-in for `scopes`, or for the
+   * scopes that last raised the prompt. A surface that failed on its own
+   * scopes passes them. Rejects when the popup is cancelled or blocked,
+   * which leaves `signInNeeded` set.
    */
-  signIn: () => Promise<void>;
+  signIn: (scopes?: string[]) => Promise<void>;
 }
 
 const GraphTokenContext = createContext<GraphTokenContextValue | null>(null);
+
+function sameScopes(a: readonly string[], b: readonly string[]): boolean {
+  return a.length === b.length && a.every((scope) => b.includes(scope));
+}
 
 /**
  * Reads the Graph token context, or null when no {@link GraphTokenProvider}
@@ -147,6 +153,11 @@ export function GraphTokenProvider({
           scopes,
           options,
         );
+        // A silent token for the prompted scopes means the need went away,
+        // e.g. the user signed in elsewhere.
+        if (sameScopes(scopes, promptedScopesRef.current)) {
+          setSignInNeeded(null);
+        }
         // Opportunistically warm the proxy session from the token we just got,
         // but only if it's gone stale — reusing the core's dedup + staleness ref.
         // Skipped for custom-audience tokens (skipSessionWarm): the proxy can
@@ -209,7 +220,7 @@ export function GraphTokenProvider({
   );
 
   const signIn = useCallback(
-    () => signInForGraph(promptedScopesRef.current),
+    (scopes?: string[]) => signInForGraph(scopes ?? promptedScopesRef.current),
     [signInForGraph],
   );
 

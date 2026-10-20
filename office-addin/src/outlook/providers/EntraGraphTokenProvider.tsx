@@ -67,7 +67,7 @@ export function EntraGraphTokenProvider({
     }),
     signedInTitle: t({
       id: "officeAddin.email.signedIn.title",
-      message: "Signed in. Loading the email.",
+      message: "Signed in.",
     }),
     consent: consentPrompt,
   };
