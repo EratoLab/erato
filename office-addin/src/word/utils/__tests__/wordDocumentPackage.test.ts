@@ -1,4 +1,5 @@
 import { removeWordDetectedLanguages } from "@erato/frontend/word-review";
+import * as CFB from "cfb";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -416,6 +417,81 @@ describe("native complete-document capture", () => {
     officeFile(wordDocumentOoxmlToFile(fixture("Later footer")));
     const after = await captureWordDocumentPackage();
     expect(before.fingerprint).not.toBe(after.fingerprint);
+  });
+});
+
+const TASK_PANES =
+  "http://schemas.microsoft.com/office/2011/relationships/webextensiontaskpanes";
+
+/** The file Word for Mac 16.114 hands over for a document that auto-opens a task pane: no
+ * word/webextensions/* parts or content types, but the root relationship to them, with Target="NULL". */
+function macAutoShowFile(
+  relationship = `<Relationship Id="rId2" Type="${TASK_PANES}" Target="NULL"/>`,
+) {
+  const zip = CFB.utils.cfb_new();
+  const add = (path: string, xml: string) =>
+    CFB.utils.cfb_add(
+      zip,
+      path,
+      new TextEncoder().encode(
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n${xml}`,
+      ),
+    );
+  add(
+    "[Content_Types].xml",
+    `<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>`,
+  );
+  add(
+    "_rels/.rels",
+    `<Relationships xmlns="${REL}">${relationship}<Relationship Id="rId1" Type="${R}/officeDocument" Target="word/document.xml"/></Relationships>`,
+  );
+  add(
+    "word/document.xml",
+    `<w:document xmlns:w="${W}"><w:body><w:p><w:r><w:t>Opens with its pane</w:t></w:r></w:p></w:body></w:document>`,
+  );
+  return new Uint8Array(
+    CFB.write(zip, {
+      type: "array",
+      fileType: "zip",
+      compression: true,
+    }) as number[],
+  );
+}
+
+describe("Word for Mac 16.114's file of a document that auto-opens a task pane", () => {
+  it("drops the task-pane relationship whose part Word left out", () => {
+    const rels = wordXmlText(
+      readWordPackage(macAutoShowFile()).get("_rels/.rels")!,
+    );
+    expect(rels).not.toContain(TASK_PANES);
+    expect(rels).toContain('Target="word/document.xml"');
+  });
+
+  it("captures the document and imports the captured file again", async () => {
+    officeFile(macAutoShowFile());
+    const captured = await captureWordDocumentPackage();
+    expect(captured.ooxml).toContain("Opens with its pane");
+    expect(captured.fingerprint).toBe(
+      wordPackageFingerprint(wordDocumentFileToOoxml(macAutoShowFile(""))),
+    );
+    const insert = vi.fn();
+    insertWordDocumentFile(
+      {
+        document: { insertFileFromBase64: insert },
+      } as unknown as Word.RequestContext,
+      captured.bytes,
+    );
+    expect(insert).toHaveBeenCalledOnce();
+  });
+
+  it("still rejects any other relationship without its part", () => {
+    expect(() =>
+      readWordPackage(
+        macAutoShowFile(
+          `<Relationship Id="rId2" Type="${R}/extended-properties" Target="NULL"/>`,
+        ),
+      ),
+    ).toThrow("Missing relationship target: NULL");
   });
 });
 
