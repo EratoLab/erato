@@ -244,17 +244,73 @@ describe("wordSelectionChip", () => {
 
   it("warns that a passage too long to send whole is cut", () => {
     const chip = wordSelectionChip(
-      resolve({ selection: selectionInput({ truncated: true }) }),
+      resolve({
+        selection: selectionInput({ truncated: true, paragraphCount: 14 }),
+      }),
     );
     expect(chip).toMatchObject({
       state: "included",
       tone: "warning",
+      toneIcon: "tone",
       meta: "Too long · beginning only",
+      cut: true,
+      paragraphs: "Erato receives the first 2 of 14 paragraphs.",
     });
     expect(chip?.notes.map((note) => note.text)).toEqual([
       "Too long to send in full. Only the beginning is sent.",
       "Sent instead of the document.",
     ]);
+  });
+});
+
+describe("how much of a cut passage goes", () => {
+  it.each([
+    [
+      "one paragraph cut inside",
+      { text: "Revenue grew", paragraphCount: 1 },
+      "Erato receives only the beginning of the first paragraph, because it alone exceeds the send limit.",
+    ],
+    [
+      "more lines than paragraphs",
+      { text: "a\nb\nc", paragraphCount: 2 },
+      "2 paragraphs",
+    ],
+  ])("says so for %s", (_, selection, paragraphs) => {
+    expect(
+      wordSelectionChip(
+        resolve({
+          selection: selectionInput({ truncated: true, ...selection }),
+        }),
+      )?.paragraphs,
+    ).toBe(paragraphs);
+  });
+
+  it("counts only, and keeps the cut mark, while the passage does not go", () => {
+    const dismissed = wordSelectionChip(
+      resolve({
+        selection: selectionInput({
+          truncated: true,
+          paragraphCount: 14,
+          dismissed: true,
+        }),
+      }),
+    );
+    expect(dismissed).toMatchObject({
+      state: "suggested",
+      paragraphs: "14 paragraphs",
+      cut: true,
+    });
+    expect(dismissed?.toneIcon).toBeUndefined();
+  });
+
+  it("names where Erato's passage came from", () => {
+    expect(
+      wordSelectionChip(
+        resolve({
+          selection: selectionInput({ armed: false, paragraphCount: 1 }),
+        }),
+      )?.paragraphs,
+    ).toBe("1 paragraph · Shown by Erato after Show in Word");
   });
 });
 
@@ -277,6 +333,7 @@ describe("wordDocumentChip", () => {
       actions: [],
       notes: [],
       coverage: {
+        heading: "Coverage",
         lines: ["Erato receives the whole document, 86 paragraphs."],
       },
       lifetime:
@@ -297,6 +354,37 @@ describe("wordDocumentChip", () => {
       "include-and-retry",
     );
   });
+
+  it("claims no coverage while off, though it was read and changed", () => {
+    expect(chip({ included: false, changed: true })?.coverage).toBeNull();
+  });
+
+  it.each([
+    ["the selection", { selection: selectionInput() }],
+    [
+      "a thread",
+      {
+        send: {
+          advertised: EVERYTHING,
+          commentSelection: { kind: "caret" as const, threads: ["c1"] },
+        },
+      },
+    ],
+  ])(
+    "states its coverage only as what goes if it is sent instead of %s, and reads nothing again",
+    (_, rest) => {
+      const superseded = chip(
+        { coverage: coverage(120, 300), changed: true },
+        rest,
+      );
+      expect(superseded?.state).toBe("superseded");
+      expect(superseded?.coverage).toEqual({
+        heading: "If sent instead",
+        lines: ["Erato receives the first 120 of 300 paragraphs."],
+        hint: "Only the beginning is sent. To work on a later part, select it in Word.",
+      });
+    },
+  );
 
   it("is superseded while the selection goes, and offers to send it instead", () => {
     expect(chip({}, { selection: selectionInput() })).toMatchObject({
@@ -350,7 +438,7 @@ describe("wordDocumentChip", () => {
       state: "error",
       tone: "error",
       meta: "Couldn't read the document",
-      removeLabel: "Dismiss",
+      removeLabel: "Dismiss document",
       actions: ["retry"],
       readReport: "report",
       coverage: null,
@@ -384,9 +472,9 @@ describe("wordDocumentChip", () => {
       state: "error",
       tone: "error",
       meta: "Can't be sent in this chat",
-      removeLabel: "Dismiss",
+      removeLabel: "Dismiss document",
       actions: [],
-      notes: [{ tone: "warning", text: note }],
+      notes: [{ tone: "error", text: note }],
     });
   });
 
@@ -408,7 +496,10 @@ describe("wordDocumentChip", () => {
     ).toMatchObject({
       state: "included",
       meta: "New document",
-      coverage: { lines: ["The document is empty, so only its name is sent."] },
+      coverage: {
+        heading: "Coverage",
+        lines: ["The document is empty, so only its name is sent."],
+      },
     });
   });
 
@@ -471,6 +562,7 @@ describe("wordDocumentChip", () => {
       expect(
         chip({ coverage: coverage(120, 300), changed: true })?.coverage,
       ).toEqual({
+        heading: "Coverage",
         lines: [
           "Erato receives the first 120 of 300 paragraphs.",
           "Changed since last send: Erato reads it again with this message.",
@@ -486,6 +578,7 @@ describe("wordDocumentChip", () => {
           { send: { availableFacetIds: new Set(DOCUMENT_FACETS) } },
         )?.coverage,
       ).toEqual({
+        heading: "Coverage",
         lines: ["Erato reads the parts of the document your request needs."],
         hint: "This document is too large to rewrite as a whole. Erato can still read and edit it section by section.",
       });

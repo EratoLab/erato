@@ -210,6 +210,64 @@ describe("wordContextStore", () => {
     });
   });
 
+  it("keeps two composers on different conversations apart", () => {
+    const render = () =>
+      renderHook(
+        () => {
+          const main = useConversationKey("chat-1", "doc-a");
+          const other = useConversationKey("chat-2", "doc-a");
+          return {
+            main,
+            other,
+            mainDismissed: wordContextStore.useSelectionDismissed(main, "A"),
+            otherDismissed: wordContextStore.useSelectionDismissed(other, "A"),
+            mainIncluded: wordContextStore.useDocumentIncluded(main, {
+              chatStarted: true,
+              includeByDefault: true,
+            }),
+            otherIncluded: wordContextStore.useDocumentIncluded(other, {
+              chatStarted: true,
+              includeByDefault: false,
+            }),
+          };
+        },
+        { wrapper: StrictMode },
+      );
+    const { result } = render();
+
+    act(() => wordContextStore.dismissSelection(result.current.main, "A"));
+    act(() => wordContextStore.setDocumentIncluded(result.current.other, true));
+
+    expect(result.current).toMatchObject({
+      mainDismissed: true,
+      otherDismissed: false,
+      mainIncluded: true,
+      otherIncluded: true,
+    });
+    act(() => wordContextStore.dismissSelection(result.current.other, "A"));
+    act(() => wordContextStore.rearmSelection(result.current.main, "A"));
+    expect(result.current).toMatchObject({
+      mainDismissed: false,
+      otherDismissed: true,
+    });
+  });
+
+  it("forgets a conversation once no composer shows it", () => {
+    const { result, rerender } = renderDocument({
+      chatId: "chat-1",
+      includeByDefault: true,
+    });
+    act(() => wordContextStore.setDocumentIncluded(result.current.key, false));
+
+    rerender({ chatId: "chat-2", includeByDefault: true });
+    rerender({ chatId: "chat-1", includeByDefault: true });
+
+    expect(result.current.included).toBe(true);
+    expect([...wordContextStore.getSnapshot().keys()]).toEqual([
+      result.current.key,
+    ]);
+  });
+
   it("writes to no browser storage", () => {
     const setItem = vi.spyOn(Storage.prototype, "setItem");
     const removeItem = vi.spyOn(Storage.prototype, "removeItem");

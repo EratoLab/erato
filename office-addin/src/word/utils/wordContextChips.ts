@@ -68,6 +68,8 @@ export interface WordContextChipInput {
 export interface WordSelectionChipModel {
   state: ComposerContextState;
   tone?: ComposerContextTone;
+  /** The warning glyph, not the quote: what goes is cut. */
+  toneIcon?: "tone";
   meta?: string;
   /** Null: no (x), as for a passage Erato selected. */
   removeLabel: string | null;
@@ -78,6 +80,8 @@ export interface WordSelectionChipModel {
   restoredAnnouncement?: string;
   title: string;
   text: string;
+  /** The text stops where the send stops, before the end of the passage. */
+  cut: boolean;
   paragraphs: string;
   notes: WordContextNote[];
   lifetime: string;
@@ -95,8 +99,8 @@ export interface WordDocumentChipModel {
   restore: "include" | "include-and-retry";
   actions: WordDocumentChipAction[];
   notes: WordContextNote[];
-  /** Null before anything is known of the document. */
-  coverage: { lines: string[]; hint?: string } | null;
+  /** Null before anything is known of the document, or while nothing of it is sent. */
+  coverage: { heading: string; lines: string[]; hint?: string } | null;
   comments: string[];
   readReport?: string;
   lifetime: string;
@@ -120,7 +124,7 @@ const dontIncludeText = () =>
 const dismissErrorText = () =>
   t({
     id: "officeAddin.word.context.document.dismissError",
-    message: "Dismiss",
+    message: "Dismiss document",
   });
 
 function selectionParagraphsText(count: number): string {
@@ -128,6 +132,44 @@ function selectionParagraphsText(count: number): string {
     id: "officeAddin.word.context.selection.paragraphs",
     message: plural(count, { one: "# paragraph", other: "# paragraphs" }),
   });
+}
+
+function eratoParagraphsText(count: number): string {
+  return t({
+    id: "officeAddin.word.context.selection.paragraphsErato",
+    message: plural(count, {
+      one: "# paragraph · Shown by Erato after Show in Word",
+      other: "# paragraphs · Shown by Erato after Show in Word",
+    }),
+  });
+}
+
+function firstParagraphsText(sentCount: number, total: number): string {
+  const sent = count(sentCount);
+  return t({
+    id: "officeAddin.word.context.document.coverage.first",
+    message: plural(total, {
+      one: `Erato receives the first ${sent} of # paragraph.`,
+      other: `Erato receives the first ${sent} of # paragraphs.`,
+    }),
+  });
+}
+
+const partialParagraphText = () =>
+  t({
+    id: "officeAddin.word.context.document.coverage.partial",
+    message:
+      "Erato receives only the beginning of the first paragraph, because it alone exceeds the send limit.",
+  });
+
+/** What of a passage cut to the send limit goes: its first whole lines, or the start of its one paragraph. */
+function sentParagraphsText(selection: WordSelectionChipInput): string {
+  const lines = selection.text.split("\n").length;
+  if (lines < selection.paragraphCount)
+    return firstParagraphsText(lines, selection.paragraphCount);
+  return selection.paragraphCount <= 1
+    ? partialParagraphText()
+    : selectionParagraphsText(selection.paragraphCount);
 }
 
 /**
@@ -143,7 +185,10 @@ export function wordSelectionChip(
   const paragraphs = count(selection.paragraphCount);
   const base = {
     text: selection.text,
-    paragraphs: selectionParagraphsText(selection.paragraphCount),
+    cut: selection.truncated,
+    paragraphs: selection.armed
+      ? selectionParagraphsText(selection.paragraphCount)
+      : eratoParagraphsText(selection.paragraphCount),
     title: selection.armed
       ? t({
           id: "officeAddin.word.context.selection.title",
@@ -241,14 +286,8 @@ export function wordSelectionChip(
         },
       ],
     };
-  if (preview.selection !== "sent")
-    return {
-      ...base,
-      state: "suggested",
-      removeLabel: null,
-      restore: "rearm",
-      notes: [],
-    };
+  // An armed, kept passage always goes or gives way to a thread; anything else would draw a dead +.
+  if (preview.selection !== "sent") return null;
 
   const notes: WordContextNote[] = [];
   if (selection.truncated)
@@ -275,6 +314,8 @@ export function wordSelectionChip(
     ...(selection.truncated
       ? {
           tone: "warning" as const,
+          toneIcon: "tone" as const,
+          paragraphs: sentParagraphsText(selection),
           meta: t({
             id: "officeAddin.word.context.selection.meta.tooLong",
             message: "Too long · beginning only",
@@ -374,6 +415,7 @@ function leadFact(
 
 function coverageSection(
   document: WordDocumentChipInput,
+  { superseded }: { superseded: boolean },
 ): WordDocumentChipModel["coverage"] {
   const coverage = document.coverage;
   const known =
@@ -406,26 +448,11 @@ function coverageSection(
     if (document.readInParts) hint = wordAuthoringIssueText("too-large");
   } else {
     const total = coverage.paragraphsTotal;
-    const sent = count(coverage.paragraphsSent);
     if (coverage.partialParagraph) {
-      lines.push(
-        t({
-          id: "officeAddin.word.context.document.coverage.partial",
-          message:
-            "Erato receives only the beginning of the first paragraph, because it alone exceeds the send limit.",
-        }),
-      );
+      lines.push(partialParagraphText());
       hint = selectLaterPart();
     } else if (coverage.truncated) {
-      lines.push(
-        t({
-          id: "officeAddin.word.context.document.coverage.first",
-          message: plural(total, {
-            one: `Erato receives the first ${sent} of # paragraph.`,
-            other: `Erato receives the first ${sent} of # paragraphs.`,
-          }),
-        }),
-      );
+      lines.push(firstParagraphsText(coverage.paragraphsSent, total));
       hint = selectLaterPart();
     } else {
       lines.push(
@@ -439,7 +466,8 @@ function coverageSection(
       );
     }
   }
-  if (document.changed)
+  // Something else goes with this message, so it reads nothing again.
+  if (document.changed && !superseded)
     lines.push(
       t({
         id: "officeAddin.word.context.document.coverage.changed",
@@ -447,7 +475,16 @@ function coverageSection(
           "Changed since last send: Erato reads it again with this message.",
       }),
     );
-  return hint ? { lines, hint } : { lines };
+  const heading = superseded
+    ? t({
+        id: "officeAddin.word.context.document.coverageIfSentHeading",
+        message: "If sent instead",
+      })
+    : t({
+        id: "officeAddin.word.context.document.coverageHeading",
+        message: "Coverage",
+      });
+  return hint ? { heading, lines, hint } : { heading, lines };
 }
 
 /** What lasts about the document, whatever goes in its place this time. */
@@ -491,7 +528,7 @@ export function wordDocumentChip(
     removeLabel: dontIncludeText(),
     restore,
     actions: [] as WordDocumentChipAction[],
-    coverage: coverageSection(document),
+    coverage: coverageSection(document, { superseded: false }),
     comments: [] as string[],
     lifetime: t({
       id: "officeAddin.word.context.document.lifetime",
@@ -499,6 +536,7 @@ export function wordDocumentChip(
     }),
   };
 
+  // Off: nothing of it is sent, so the detail claims no coverage.
   if (!document.included || preview.document === "off")
     return {
       ...base,
@@ -507,12 +545,15 @@ export function wordDocumentChip(
         id: "officeAddin.word.chip.include",
         message: "Include this document",
       }),
+      coverage: null,
       notes: [],
     };
+  const supersededCoverage = coverageSection(document, { superseded: true });
   if (preview.document === "replaced-by-selection")
     return {
       ...base,
       state: "superseded",
+      coverage: supersededCoverage,
       meta: t({
         id: "officeAddin.word.context.document.meta.replacedBySelection",
         message: "Replaced by selection",
@@ -533,6 +574,7 @@ export function wordDocumentChip(
     return {
       ...base,
       state: "superseded",
+      coverage: supersededCoverage,
       meta: t({
         id: "officeAddin.word.context.document.meta.replacedByComment",
         message: "Replaced by comment",
@@ -596,7 +638,7 @@ export function wordDocumentChip(
       coverage: null,
       notes: [
         {
-          tone: "warning",
+          tone: "error",
           text:
             document.status === "empty"
               ? t({

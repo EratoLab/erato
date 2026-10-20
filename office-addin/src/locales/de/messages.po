@@ -3925,14 +3925,19 @@ msgid "officeAddin.word.context.document.coverage.whole"
 msgstr "{total, plural, one {Erato erhält das ganze Dokument, # Absatz.} other {Erato erhält das ganze Dokument, # Absätze.}}"
 
 #. js-lingui-explicit-id
-#: src/word/components/WordContextDetails.tsx
+#: src/word/utils/wordContextChips.ts
 msgid "officeAddin.word.context.document.coverageHeading"
 msgstr "Umfang"
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordContextChips.ts
+msgid "officeAddin.word.context.document.coverageIfSentHeading"
+msgstr "Falls stattdessen gesendet"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordContextChips.ts
 msgid "officeAddin.word.context.document.dismissError"
-msgstr "Verwerfen"
+msgstr "Dokument verwerfen"
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordContextChips.ts
@@ -3987,7 +3992,7 @@ msgstr "Wird abschnittsweise gelesen"
 #. js-lingui-explicit-id
 #: src/word/utils/wordContextChips.ts
 msgid "officeAddin.word.context.document.meta.readOnly"
-msgstr "Nur lesen"
+msgstr "Schreibgeschützt"
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordContextChips.ts
@@ -4093,6 +4098,11 @@ msgstr "Zu lang · nur der Anfang"
 #: src/word/utils/wordContextChips.ts
 msgid "officeAddin.word.context.selection.paragraphs"
 msgstr "{count, plural, one {# Absatz} other {# Absätze}}"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordContextChips.ts
+msgid "officeAddin.word.context.selection.paragraphsErato"
+msgstr "{count, plural, one {# Absatz · Von Erato nach „In Word anzeigen“ angezeigt} other {# Absätze · Von Erato nach „In Word anzeigen“ angezeigt}}"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordContextDetails.tsx

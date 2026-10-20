@@ -22,8 +22,11 @@ export const WORD_SELECTION_TEXT =
   "The Supplier shall deliver the Goods no later than the delivery date stated in the Order.\nAny delay must be notified to the Buyer in writing without undue delay.";
 export const WORD_ERATO_TEXT =
   "The Buyer may audit the Supplier's records once per contract year, with 30 days' notice.";
+export const WORD_LONG_PARAGRAPHS = 14;
+/** What Send carries of the long passage: its first whole paragraphs up to the send limit. */
+export const WORD_LONG_SENT_PARAGRAPHS = 9;
 export const WORD_LONG_TEXT = Array.from(
-  { length: 14 },
+  { length: WORD_LONG_SENT_PARAGRAPHS },
   (_, index) =>
     `Clause ${index + 1}. The Supplier warrants that the Goods conform to the specification, are free from defects in design, material and workmanship, and remain fit for the purpose made known to it.`,
 ).join("\n");
@@ -142,11 +145,13 @@ const Lifetime = ({ text }: { text: string }) => (
 
 const SelectionDetail = ({
   text,
+  cut,
   paragraphs,
   notes,
 }: {
   text: string;
-  paragraphs: number;
+  cut: boolean;
+  paragraphs: string;
   notes: Note[];
 }) => (
   <div className="flex flex-col gap-3">
@@ -157,11 +162,9 @@ const SelectionDetail = ({
       data-ui="word-context-detail-quote"
       className="max-h-48 overflow-y-auto whitespace-pre-wrap break-words rounded-r-[var(--theme-radius-control)] border-l-2 border-theme-border bg-theme-bg-secondary py-2 pl-3 pr-2 text-sm text-theme-fg-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-theme-focus"
     >
-      {text}
+      {cut ? `${text}…` : text}
     </blockquote>
-    <p className="text-xs text-theme-fg-secondary">
-      {paragraphs === 1 ? "1 paragraph" : `${paragraphs} paragraphs`}
-    </p>
+    <p className="text-xs text-theme-fg-secondary">{paragraphs}</p>
     {notes.map((note) => (
       <DetailNote key={note.text} note={note} />
     ))}
@@ -169,16 +172,20 @@ const SelectionDetail = ({
   </div>
 );
 
+interface Coverage {
+  heading: string;
+  lines: string[];
+  hint?: string;
+}
+
 const DocumentDetail = ({
   notes,
   coverage,
-  hint,
   comments,
   readReport,
 }: {
   notes: Note[];
-  coverage: string[] | null;
-  hint?: string;
+  coverage: Coverage | null;
   comments: string[];
   readReport?: string;
 }) => (
@@ -187,13 +194,17 @@ const DocumentDetail = ({
       <DetailNote key={note.text} note={note} />
     ))}
     {coverage && (
-      <Section title="Coverage" dataUi="word-context-detail-coverage">
-        {coverage.slice(0, 1).map((line) => (
+      <Section title={coverage.heading} dataUi="word-context-detail-coverage">
+        {coverage.lines.slice(0, 1).map((line) => (
           <p key={line}>{line}</p>
         ))}
-        {hint && <p className="text-xs text-theme-fg-secondary">{hint}</p>}
-        {coverage.slice(1).map((line) => (
-          <p key={line}>{line}</p>
+        {coverage.hint && (
+          <p className="text-xs text-theme-fg-secondary">{coverage.hint}</p>
+        )}
+        {coverage.lines.slice(1).map((line) => (
+          <p key={line} className="text-xs text-theme-fg-secondary">
+            {line}
+          </p>
         ))}
       </Section>
     )}
@@ -298,8 +309,14 @@ export const useWordStoryResolver = (
           : state.long
             ? WORD_LONG_TEXT
             : WORD_SELECTION_TEXT;
-      const paragraphs = text.split("\n").length;
       const erato = state.selection === "erato";
+      const paragraphCount = state.long
+        ? WORD_LONG_PARAGRAPHS
+        : text.split("\n").length;
+      const counted = `${count(paragraphCount)} ${paragraphCount === 1 ? "paragraph" : "paragraphs"}`;
+      let paragraphs = erato
+        ? `${counted} · Shown by Erato after Show in Word`
+        : counted;
       const notes: Note[] = [];
       let item: Partial<ComposerContextItem> & {
         state: ComposerContextItem["state"];
@@ -313,7 +330,7 @@ export const useWordStoryResolver = (
         item = {
           state: "suggested",
           ...(erato && !state.selectionOff
-            ? { meta: `Shown by Erato · ${count(paragraphs)} ¶` }
+            ? { meta: `Shown by Erato · ${count(paragraphCount)} ¶` }
             : {}),
           restoreLabel: erato ? "Use this selection" : "Include selection",
           onRestore: () =>
@@ -341,6 +358,8 @@ export const useWordStoryResolver = (
         item = { state: "superseded", meta: "Replaced by comment" };
       } else {
         if (state.long)
+          paragraphs = `Erato receives the first ${WORD_LONG_SENT_PARAGRAPHS} of ${WORD_LONG_PARAGRAPHS} paragraphs.`;
+        if (state.long)
           notes.push({
             tone: "warning",
             text: "Too long to send in full. Only the beginning is sent.",
@@ -352,9 +371,10 @@ export const useWordStoryResolver = (
           ...(state.long
             ? {
                 tone: "warning" as ComposerContextTone,
+                toneIcon: "tone" as const,
                 meta: "Too long · beginning only",
               }
-            : { meta: `Selected passage · ${count(paragraphs)} ¶` }),
+            : { meta: `Selected passage · ${count(paragraphCount)} ¶` }),
           ...(!state.documentOff
             ? {
                 announcements: {
@@ -389,6 +409,7 @@ export const useWordStoryResolver = (
           render: () => (
             <SelectionDetail
               text={text}
+              cut={state.long}
               paragraphs={paragraphs}
               notes={notes}
             />
@@ -416,7 +437,7 @@ export const useWordStoryResolver = (
     ];
     const authoring = state.readInParts || state.bodyOnly || state.cannotEdit;
     const empty = state.status === "empty";
-    const coverage = empty
+    const coverageLines = empty
       ? ["The document is empty, so only its name is sent."]
       : authoring
         ? ["Erato reads the parts of the document your request needs."]
@@ -431,10 +452,6 @@ export const useWordStoryResolver = (
             : [
                 `Erato receives the whole document, ${count(total)} paragraphs.`,
               ];
-    if (state.changed)
-      coverage.push(
-        "Changed since last send: Erato reads it again with this message.",
-      );
     const hint = state.readInParts
       ? "This document is too large to rewrite as a whole. Erato can still read and edit it section by section."
       : !authoring && (truncated || state.partialParagraph)
@@ -444,9 +461,21 @@ export const useWordStoryResolver = (
     let document: Partial<ComposerContextItem> & {
       state: ComposerContextItem["state"];
     };
+    const coverageFor = (superseded: boolean): Coverage => ({
+      heading: superseded ? "If sent instead" : "Coverage",
+      // Something else goes with this message, so nothing is read again.
+      lines:
+        state.changed && !superseded
+          ? [
+              ...coverageLines,
+              "Changed since last send: Erato reads it again with this message.",
+            ]
+          : coverageLines,
+      ...(hint ? { hint } : {}),
+    });
     let notes: Note[] = lasting;
     let actions: ComposerContextDetailAction[] = [];
-    let shownCoverage: string[] | null = coverage;
+    let shownCoverage: Coverage | null = coverageFor(false);
     if (state.documentOff) {
       document = {
         state: "suggested",
@@ -457,8 +486,10 @@ export const useWordStoryResolver = (
         },
       };
       notes = [];
+      shownCoverage = null;
     } else if (passageGoes && !state.commentReplaces) {
       document = { state: "superseded", meta: "Replaced by selection" };
+      shownCoverage = coverageFor(true);
       notes = [
         {
           tone: "info",
@@ -466,19 +497,23 @@ export const useWordStoryResolver = (
         },
         ...lasting,
       ];
-      actions = [
-        {
-          id: "send-instead",
-          label: "Send this instead",
-          variant: "primary",
-          announcement:
-            "Document included. Your selection is off until it changes.",
-          onSelect: () =>
-            setState((current) => ({ ...current, selectionOff: true })),
-        },
-      ];
+      // A locked chat keeps its document choice, so it cannot be sent instead.
+      actions = state.locked
+        ? []
+        : [
+            {
+              id: "send-instead",
+              label: "Send this instead",
+              variant: "primary",
+              announcement:
+                "Document included. Your selection is off until it changes.",
+              onSelect: () =>
+                setState((current) => ({ ...current, selectionOff: true })),
+            },
+          ];
     } else if (state.commentReplaces) {
       document = { state: "superseded", meta: "Replaced by comment" };
+      shownCoverage = coverageFor(true);
       notes = [
         { tone: "info", text: "A comment is sent instead of the document." },
         ...lasting,
@@ -497,7 +532,7 @@ export const useWordStoryResolver = (
         state: "error",
         tone: "error",
         meta: "Couldn't read the document",
-        removeLabel: "Dismiss",
+        removeLabel: "Dismiss document",
       };
       notes = [
         {
@@ -520,11 +555,11 @@ export const useWordStoryResolver = (
         state: "error",
         tone: "error",
         meta: "Can't be sent in this chat",
-        removeLabel: "Dismiss",
+        removeLabel: "Dismiss document",
       };
       notes = [
         {
-          tone: "warning",
+          tone: "error",
           text:
             state.status === "noFacetEmpty"
               ? "This chat can only work with documents that have text, so an empty document is not sent."
@@ -590,7 +625,6 @@ export const useWordStoryResolver = (
           <DocumentDetail
             notes={notes}
             coverage={shownCoverage}
-            hint={documentGoes ? hint : undefined}
             comments={documentGoes ? state.commentLines : []}
             readReport={state.status === "error" ? READ_REPORT : undefined}
           />

@@ -124,6 +124,10 @@ export const ReadOnlyFallback = story({
 });
 export const CannotEdit = story({ cannotEdit: true });
 export const Locked = story({ locked: true });
+export const LockedSelectionReplacesDocument = story({
+  selection: "user",
+  locked: true,
+});
 export const DocumentReplacedByComment = story({ commentReplaces: true });
 
 export const SelectionReplacesDocument = story({ selection: "user" });

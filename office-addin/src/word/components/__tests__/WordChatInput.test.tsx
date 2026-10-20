@@ -357,7 +357,7 @@ describe("WordChatInput", () => {
     expect(chip()).toHaveAttribute("data-state", "error");
     expect(chip()).toHaveAttribute("data-tone", "error");
     expect(
-      within(chip()).getByRole("button", { name: "Dismiss" }),
+      within(chip()).getByRole("button", { name: "Dismiss document" }),
     ).toBeInTheDocument();
     expect(
       within(detail()).getByText(
@@ -432,7 +432,9 @@ describe("WordChatInput", () => {
     word.word.run.mockRejectedValueOnce(new Error("GeneralException"));
     renderInput();
     await waitFor(() => expect(meta()).toBe("Couldn't read the document"));
-    fireEvent.click(within(chip()).getByRole("button", { name: "Dismiss" }));
+    fireEvent.click(
+      within(chip()).getByRole("button", { name: "Dismiss document" }),
+    );
     expect(chip()).toHaveAttribute("data-state", "suggested");
     const reads = word.word.run.mock.calls.length;
 
@@ -569,7 +571,7 @@ describe("WordChatInput", () => {
     await waitFor(() => expect(sends).toHaveLength(1));
     exclude();
     include();
-    const key = wordContextStore.getSnapshot().document.conversationKey;
+    const [key] = wordContextStore.getSnapshot().keys();
     act(() => {
       wordContextStore.dismissSelection(key, "passage");
       wordContextStore.rearmSelection(key, "passage");

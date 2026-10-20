@@ -9,6 +9,7 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { ACTION_FACET_ARG_MAX_BYTES } from "../../../core/clientActions/actionFacetArgs";
 import { __resetOfficeSelectionChangedBrokerForTests } from "../../../hooks/officeSelectionChangedBroker";
 import { ContextLaneDouble } from "../../../test/helpers/contextLaneDouble";
 import {
@@ -611,6 +612,56 @@ describe("WordChatInput with a Word selection", () => {
     await settle();
     expect(chip()).toHaveAttribute("data-state", "included");
     expect(documentChip()).toHaveAttribute("data-state", "superseded");
+  });
+
+  it("offers no Send this instead on a locked document, and keeps the selection's (x)", async () => {
+    host.includeDocument = true;
+    render(
+      <WordChatInput
+        chatInputProps={{ ...props("chat-1"), disabled: true }}
+        documentIdentity={IDENTITY}
+        stagePendingCapture={(capture) => staged.push(capture)}
+      />,
+    );
+    await settle();
+
+    expect(documentChip()).toHaveAttribute("data-state", "superseded");
+    expect(documentChip()).toHaveAttribute("data-locked", "true");
+    expect(host.items[1].detail?.actions).toBeUndefined();
+    expect(
+      within(documentDetail()).queryByRole("button", {
+        name: "Send this instead",
+      }),
+    ).toBeNull();
+
+    press(chip(), "Dismiss selection");
+    expect(chip()).toHaveAttribute("data-state", "suggested");
+    expect(documentChip()).toHaveAttribute("data-state", "included");
+  });
+
+  it("marks where a passage over the send limit stops, and says how much of it goes", async () => {
+    const tags = Array.from({ length: 14 }, (_, index) => `CL${index + 1}`);
+    const clause = "lorem ipsum ".repeat(500);
+    word = installWordSelectionHost({
+      body: tags.map((tag) => `${tag} ${clause}`),
+    });
+    word.select({ p: tags[0], to: { p: tags.at(-1)! } });
+    await renderInput();
+
+    const sentLines = Math.floor(
+      ACTION_FACET_ARG_MAX_BYTES / (`${tags[0]} ${clause}`.length + 1),
+    );
+    expect(sentLines).toBeLessThan(tags.length);
+    expect(chip()).toHaveAttribute("data-tone", "warning");
+    expect(host.items[0]).toMatchObject({ toneIcon: "tone" });
+    const quote = selectionDetail().querySelector(
+      '[data-ui="word-context-detail-quote"]',
+    );
+    expect(quote?.textContent?.endsWith("…")).toBe(true);
+    expect(quote?.textContent).not.toContain(tags.at(-1));
+    expect(selectionDetail()).toHaveTextContent(
+      `Erato receives the first ${sentLines} of 14 paragraphs.`,
+    );
   });
 
   it("shows the whole passage in the detail, beyond what the label shows", async () => {
