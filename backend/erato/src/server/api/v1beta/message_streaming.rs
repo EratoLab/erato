@@ -3164,8 +3164,11 @@ async fn reconcile_orphaned_parent_slot(
     // Deliberately no archived check, unlike the `async` path's
     // `DELIVERY_REASON_ORIGIN_ARCHIVED`: that one appends a row and runs a
     // reaction turn, this rewrites a slot already in the row. An archived
-    // origin is also the only route that reaches here at all — a withdrawal or
-    // a settlement closes the child's own copy, so those never run again.
+    // origin is one route that reaches here. The others are a child the origin
+    // never carried up: one that parked before the user stopped the turn, or
+    // on a turn that ended on a stop no child item can share (the tool-call
+    // limit, a durable client operation). A withdrawal or a settlement closes
+    // the child's own copy, so those never run again.
     //
     // A running lease means the dispatching turn may yet write the slot itself.
     if origin_chat.generation_state.as_deref() == Some("running") {
@@ -5429,6 +5432,47 @@ struct ParkedChild {
     request: ContentPartToolApprovalRequest,
 }
 
+/// The item a parked child adds to the stop that carries it up.
+///
+/// Named after the origin call, because that is the slot a decision settles;
+/// the child's own gated call is copied onto `child` so a card renders without
+/// reading another chat.
+fn parked_child_approval_item(child: &ParkedChild) -> ApprovalItem {
+    // The child parked on exactly one call - its gate stops the batch at the
+    // first gated one - so the first item is that call.
+    let gated = child.request.approval_items().into_iter().next();
+    let (child_tool_call_id, child_tool_name, child_input, child_display) = gated
+        .map(|item| (item.tool_call_id, item.tool_name, item.input, item.display))
+        .unwrap_or_else(|| {
+            (
+                child.request.tool_call_id.clone(),
+                child.request.tool_name.clone(),
+                child.request.input.clone(),
+                child.request.display.clone(),
+            )
+        });
+    ApprovalItem {
+        approval_id: child.tool_call.call_id.clone(),
+        tool_call_id: child.tool_call.call_id.clone(),
+        tool_name: child.tool_call.fn_name.clone(),
+        display: None,
+        input: child.tool_call.fn_arguments.clone(),
+        child: Some(crate::models::message::ChildApprovalRef {
+            child_chat_id: child.child_chat_id,
+            child_message_id: child.child_message_id,
+            child_tool_call_id,
+            tool_name: child_tool_name,
+            display: child_display,
+            mcp_server_id: child.request.mcp_server_id.clone(),
+            input: child_input,
+            annotations: child.request.annotations.clone(),
+            preset: child.request.preset.clone(),
+            requested_at: child.request.requested_at.clone(),
+            allow_always: Some(child.request.allow_always),
+        }),
+    }
+}
+
 /// The one `delegated_task` approval part a parked batch leaves behind.
 ///
 /// The flat fields describe the first item only, for readers that predate
@@ -5439,43 +5483,7 @@ fn delegated_task_approval_part(
     pending_tool_calls: Vec<crate::models::message::PendingToolCall>,
     allow_always: bool,
 ) -> ContentPartToolApprovalRequest {
-    let approvals: Vec<ApprovalItem> = parked
-        .iter()
-        .map(|child| {
-            // The child parked on exactly one call - its gate stops the batch
-            // at the first gated one - so the first item is that call.
-            let gated = child.request.approval_items().into_iter().next();
-            let (child_tool_call_id, child_tool_name, child_input, child_display) = gated
-                .map(|item| (item.tool_call_id, item.tool_name, item.input, item.display))
-                .unwrap_or_else(|| {
-                    (
-                        child.request.tool_call_id.clone(),
-                        child.request.tool_name.clone(),
-                        child.request.input.clone(),
-                        child.request.display.clone(),
-                    )
-                });
-            ApprovalItem {
-                approval_id: child.tool_call.call_id.clone(),
-                tool_call_id: child.tool_call.call_id.clone(),
-                tool_name: child.tool_call.fn_name.clone(),
-                display: None,
-                input: child.tool_call.fn_arguments.clone(),
-                child: Some(crate::models::message::ChildApprovalRef {
-                    child_chat_id: child.child_chat_id,
-                    child_message_id: child.child_message_id,
-                    child_tool_call_id,
-                    tool_name: child_tool_name,
-                    display: child_display,
-                    mcp_server_id: child.request.mcp_server_id.clone(),
-                    input: child_input,
-                    annotations: child.request.annotations.clone(),
-                    preset: child.request.preset.clone(),
-                    requested_at: child.request.requested_at.clone(),
-                }),
-            }
-        })
-        .collect();
+    let approvals: Vec<ApprovalItem> = parked.iter().map(parked_child_approval_item).collect();
     let head = &parked[0];
     ContentPartToolApprovalRequest {
         tool_call_id: head.tool_call.call_id.clone(),
@@ -5491,6 +5499,20 @@ fn delegated_task_approval_part(
         approvals,
         pending_tool_calls,
     }
+}
+
+/// Carry parked children up on the stop the turn's own gated call already
+/// owns, so the user answers the turn and its tasks in one place.
+///
+/// The part keeps its kind and flat fields: they still describe its own call,
+/// which stays the first item. Only children launched before that call can be
+/// here - a child that parks first ends the batch before the call is popped.
+fn fold_parked_children(part: &mut ContentPartToolApprovalRequest, parked: &[ParkedChild]) {
+    if part.approvals.is_empty() {
+        part.approvals = part.approval_items();
+    }
+    part.approvals
+        .extend(parked.iter().map(parked_child_approval_item));
 }
 
 /// The `task_plan` approval part a gated batch leaves behind.
@@ -8939,10 +8961,10 @@ async fn stream_generate_chat_completion<'a>(
             }
             let settled = tokio::select! {
                 settled = in_flight.next(), if !in_flight.is_empty() => settled,
-                () = wait_for_optional_abort(streaming_task), if !aborting => {
-                    aborting = true;
-                    continue;
-                }
+                // Handled at the top of the loop, which also ends the turn. Setting
+                // `aborting` here would skip that and let the turn carry on as if
+                // nobody had stopped it.
+                () = wait_for_optional_abort(streaming_task), if !aborting => continue,
             };
             let Some(settled) = settled else {
                 // Nothing left in flight; anything still queued is released on
@@ -9029,14 +9051,29 @@ async fn stream_generate_chat_completion<'a>(
         // place, so the children's requests can now be carried up as the one
         // part that ends the turn.
         //
-        // Skipped when something else already ended the turn. An abort means
-        // the user withdrew the question, and a gated call of this turn's own
-        // already owns the single approval part — one part carries one kind, so
-        // a parked child cannot be folded into an `mcp_tool` card. In both
-        // cases the child keeps its `input_required` slot and stays answerable
-        // from its own chat.
+        // A gated call of this turn's own already owns that part, so the
+        // children join it as items with `child` set: one stop, decided per
+        // item. Any other exit keeps them out. An abort means the user withdrew
+        // the question; the tool-call limit and a durable client operation are
+        // stops that no item of a child can share. There the child keeps its
+        // `input_required` slot and stays answerable from its own chat.
         if !parked_children.is_empty() {
-            if pending_approval_part.is_none() && exit_error.is_none() && !exit_after_join {
+            let own_gated_call = pending_approval_part.as_ref().is_some_and(|part| {
+                matches!(
+                    part.kind,
+                    ToolApprovalKind::McpTool | ToolApprovalKind::ClientTool
+                )
+            });
+            let aborted = streaming_task.is_some_and(|task| task.is_abort_requested());
+            if own_gated_call && exit_error.is_none() && !aborted {
+                if let Some(part) = pending_approval_part.as_mut() {
+                    fold_parked_children(part, &parked_children);
+                }
+            } else if pending_approval_part.is_none()
+                && exit_error.is_none()
+                && !exit_after_join
+                && !aborted
+            {
                 let pending_tool_calls = unfinished_tool_calls
                     .drain(..)
                     .map(|call| crate::models::message::PendingToolCall {
@@ -12547,6 +12584,263 @@ mod tests {
             registered_client_tools: None,
             executor: None,
         }
+    }
+
+    fn gated_request(call_id: &str, requested_at: &str) -> super::ContentPartToolApprovalRequest {
+        let restrictive = McpToolApprovalConfig {
+            enabled: true,
+            preset: McpToolApprovalPreset::Restrictive,
+            allow_always: false,
+        };
+        let call = ToolCall {
+            call_id: call_id.to_string(),
+            fn_name: "publish".to_string(),
+            fn_arguments: json!({"topic": call_id}),
+            thought_signatures: None,
+        };
+        let tool = Tool::new("publish", "publish", Map::new());
+        let ToolCallGate::Ask(request) =
+            gate_mcp_tool_call(&restrictive, "server", &tool, &call, None)
+        else {
+            panic!("expected approval");
+        };
+        let mut request = *request;
+        request.requested_at = requested_at.to_string();
+        request
+    }
+
+    fn parked_child(parent_call_id: &str, requested_at: &str) -> super::ParkedChild {
+        super::ParkedChild {
+            tool_call: ToolCall {
+                call_id: parent_call_id.to_string(),
+                fn_name: "delegate_task".to_string(),
+                fn_arguments: json!({"task": parent_call_id}),
+                thought_signatures: None,
+            },
+            child_chat_id: Uuid::new_v4(),
+            child_message_id: Uuid::new_v4(),
+            request: gated_request(&format!("{parent_call_id}-child"), requested_at),
+        }
+    }
+
+    fn child_item(approval_id: &str) -> ApprovalItem {
+        let child = parked_child(approval_id, "2026-10-20T10:00:00Z");
+        super::parked_child_approval_item(&child)
+    }
+
+    #[test]
+    fn folding_children_keeps_the_gated_call_first_and_its_flat_fields() {
+        let mut part = gated_request("own-call", "2026-10-20T10:00:01Z");
+        let before = part.clone();
+        let children = [
+            parked_child("task-a", "2026-10-20T10:00:02Z"),
+            parked_child("task-b", "2026-10-20T10:00:03Z"),
+        ];
+        super::fold_parked_children(&mut part, &children);
+
+        assert_eq!(part.kind, ToolApprovalKind::McpTool);
+        assert_eq!(part.tool_call_id, before.tool_call_id);
+        assert_eq!(part.tool_name, before.tool_name);
+        assert_eq!(part.mcp_server_id, before.mcp_server_id);
+        assert_eq!(part.input, before.input);
+        assert_eq!(part.requested_at, before.requested_at);
+        assert_eq!(part.pending_tool_calls, before.pending_tool_calls);
+        let ids: Vec<&str> = part
+            .approvals
+            .iter()
+            .map(|item| item.approval_id.as_str())
+            .collect();
+        assert_eq!(ids, ["own-call", "task-a", "task-b"]);
+        assert!(part.approvals[0].child.is_none());
+        for (item, parked) in part.approvals[1..].iter().zip(&children) {
+            let child = item.child.as_ref().expect("a child item");
+            assert_eq!(child.child_chat_id, parked.child_chat_id);
+            assert_eq!(child.child_message_id, parked.child_message_id);
+            assert_eq!(child.tool_name, "publish");
+            assert_eq!(child.mcp_server_id, "server");
+            assert_eq!(child.requested_at, parked.request.requested_at);
+            assert_eq!(child.allow_always, Some(false));
+            assert_eq!(item.tool_name, "delegate_task");
+        }
+
+        // A part written before `approvals` existed is projected first, so its
+        // own call is never lost behind the children.
+        let mut legacy = gated_request("legacy-call", "2026-10-20T10:00:01Z");
+        legacy.approvals.clear();
+        super::fold_parked_children(&mut legacy, &children[..1]);
+        assert_eq!(legacy.approvals.len(), 2);
+        assert_eq!(legacy.approvals[0].approval_id, "legacy-call");
+        assert!(legacy.approvals[0].child.is_none());
+    }
+
+    #[test]
+    fn decisions_route_per_item() {
+        let open = [open_approval("own"), child_item("task-a")];
+        let submitted = vec![
+            ("own".to_string(), ToolApprovalDecision::Approve),
+            ("task-a".to_string(), ToolApprovalDecision::Reject),
+        ];
+
+        let (mcp, child, plan) =
+            super::split_decisions_by_lane(ToolApprovalKind::McpTool, &open, submitted.clone());
+        assert_eq!(mcp, vec![submitted[0].clone()]);
+        assert_eq!(child, vec![submitted[1].clone()]);
+        assert!(plan.is_empty());
+
+        let (mcp, child, plan) =
+            super::split_decisions_by_lane(ToolApprovalKind::ClientTool, &open, submitted.clone());
+        assert!(mcp.is_empty());
+        assert_eq!(child, vec![submitted[1].clone()]);
+        assert_eq!(plan, vec![submitted[0].clone()]);
+
+        // A `delegated_task` item that lost its child is still the child lane's,
+        // which settles it as a failure.
+        let orphan = [open_approval("task-x"), child_item("task-y")];
+        let decided = vec![
+            ("task-x".to_string(), ToolApprovalDecision::Approve),
+            ("task-y".to_string(), ToolApprovalDecision::Approve),
+        ];
+        let (mcp, child, plan) = super::split_decisions_by_lane(
+            ToolApprovalKind::DelegatedTask,
+            &orphan,
+            decided.clone(),
+        );
+        assert!(mcp.is_empty());
+        assert!(plan.is_empty());
+        assert_eq!(child, decided, "row order is kept");
+
+        let (mcp, child, plan) =
+            super::split_decisions_by_lane(ToolApprovalKind::ToolCallLimit, &open, submitted);
+        assert!(mcp.is_empty() && child.is_empty() && plan.is_empty());
+    }
+
+    #[test]
+    fn approve_always_is_refused_per_item() {
+        let always = |approval_id: &str| {
+            vec![(approval_id.to_string(), ToolApprovalDecision::ApproveAlways)]
+        };
+        let mut client = gated_request("own", "2026-10-20T10:00:01Z");
+        client.kind = ToolApprovalKind::ClientTool;
+        let open = [open_approval("own"), child_item("task-a")];
+
+        assert!(
+            !super::approve_always_refused(&client, &open, &always("own"), false),
+            "a client tool's own standing answer is not the MCP policy's to forbid"
+        );
+        assert!(
+            super::approve_always_refused(&client, &open, &always("task-a"), false),
+            "a child on a client-tool part asks about an MCP tool"
+        );
+        assert!(!super::approve_always_refused(
+            &client,
+            &open,
+            &always("task-a"),
+            true
+        ));
+
+        let mcp = gated_request("own", "2026-10-20T10:00:01Z");
+        assert!(super::approve_always_refused(
+            &mcp,
+            &open,
+            &always("own"),
+            false
+        ));
+        assert!(!super::approve_always_refused(
+            &mcp,
+            &open,
+            &[("own".to_string(), ToolApprovalDecision::Approve)],
+            false
+        ));
+    }
+
+    #[test]
+    fn a_mixed_part_stays_open_until_every_item_is_decided() {
+        use crate::models::message::{ContentPart, ContentPartToolApproval, ToolUse};
+
+        let mut part = gated_request("own", "2026-10-20T10:00:01Z");
+        super::fold_parked_children(
+            &mut part,
+            &[
+                parked_child("task-a", "2026-10-20T10:00:02Z"),
+                parked_child("task-b", "2026-10-20T10:00:03Z"),
+            ],
+        );
+        let approval = |approval_id: &str| {
+            ContentPart::ToolApproval(ContentPartToolApproval {
+                tool_call_id: approval_id.to_string(),
+                always_allow: false,
+                user_tool_approval_setting_id: None,
+                approved_at: "2026-10-20T10:01:00Z".to_string(),
+                approval_id: Some(approval_id.to_string()),
+                child_chat_id: None,
+            })
+        };
+        let own_ran = ContentPart::ToolUse(ToolUse {
+            tool_call_id: "own".to_string(),
+            ..ToolUse::default()
+        });
+
+        let mut content = vec![
+            ContentPart::ToolApprovalRequest(part),
+            approval("own"),
+            own_ran,
+        ];
+        let state = super::parked_approval_state(&content).expect("a parked row");
+        let open: Vec<&str> = state
+            .open
+            .iter()
+            .map(|item| item.approval_id.as_str())
+            .collect();
+        assert_eq!(open, ["task-a", "task-b"]);
+
+        content.push(approval("task-a"));
+        content.push(approval("task-b"));
+        let state = super::parked_approval_state(&content).expect("a parked row");
+        assert!(state.open.is_empty());
+        assert!(
+            state.unanswered,
+            "decisions and tool output answer nothing, so a crash retry is admitted"
+        );
+    }
+
+    #[test]
+    fn an_approved_pending_call_is_carried_as_approved_until_it_runs() {
+        use crate::models::message::{
+            ContentPart, ContentPartToolApproval, PendingToolCall, ToolUse,
+        };
+
+        let pending = |call_id: &str| PendingToolCall {
+            call_id: call_id.to_string(),
+            fn_name: "read_document".to_string(),
+            fn_arguments: json!({}),
+        };
+        let approved = ContentPart::ToolApproval(ContentPartToolApproval {
+            tool_call_id: "own".to_string(),
+            always_allow: false,
+            user_tool_approval_setting_id: None,
+            approved_at: "2026-10-20T10:01:00Z".to_string(),
+            approval_id: Some("own".to_string()),
+            child_chat_id: None,
+        });
+
+        let (carried, rest) = super::previously_approved_pending(
+            std::slice::from_ref(&approved),
+            vec![pending("own"), pending("later")],
+        );
+        assert_eq!(carried, vec![pending("own")]);
+        assert_eq!(rest, vec![pending("later")]);
+
+        let ran = ContentPart::ToolUse(ToolUse {
+            tool_call_id: "own".to_string(),
+            ..ToolUse::default()
+        });
+        let (carried, rest) =
+            super::previously_approved_pending(&[approved, ran], vec![pending("own")]);
+        assert!(
+            carried.is_empty(),
+            "a call that already ran is not re-seeded"
+        );
+        assert_eq!(rest, vec![pending("own")]);
     }
 
     #[test]
@@ -17931,6 +18225,31 @@ fn resolve_submitted_decisions(
         })
         .collect())
 }
+/// Whether a set of decisions asks for an "always allow" the MCP policy
+/// forbids.
+///
+/// Checked per item: a client tool's own standing answer is the user's
+/// preference and no MCP policy binds it, but a child on the same part is
+/// asking about an MCP tool.
+fn approve_always_refused(
+    request: &ContentPartToolApprovalRequest,
+    open: &[ApprovalItem],
+    decisions: &[(String, ToolApprovalDecision)],
+    mcp_allows_always: bool,
+) -> bool {
+    if mcp_allows_always {
+        return false;
+    }
+    decisions.iter().any(|(approval_id, decision)| {
+        matches!(decision, ToolApprovalDecision::ApproveAlways)
+            && (request.kind != ToolApprovalKind::ClientTool
+                || open
+                    .iter()
+                    .find(|item| &item.approval_id == approval_id)
+                    .is_some_and(|item| item.child.is_some()))
+    })
+}
+
 /// A continuation running in the background, and its event feed.
 pub(crate) struct StartedContinuation {
     pub chat_id: Uuid,
@@ -18032,12 +18351,12 @@ pub(crate) async fn start_continuation(
             )
                 .into());
         }
-        if state.request.kind != ToolApprovalKind::ClientTool
-            && submitted_decisions
-                .iter()
-                .any(|(_, decision)| matches!(decision, ToolApprovalDecision::ApproveAlways))
-            && !mcp.config.mcp_servers_global.approval.allow_always
-        {
+        if approve_always_refused(
+            &state.request,
+            &state.open,
+            &submitted_decisions,
+            mcp.config.mcp_servers_global.approval.allow_always,
+        ) {
             return Err((
                 axum::http::StatusCode::BAD_REQUEST,
                 "Always allow is disabled by MCP approval policy".to_string(),
@@ -18692,6 +19011,71 @@ async fn settle_parked_children(
     Ok(reparked)
 }
 
+/// Split a park's pending calls into those the row already approved and the
+/// rest.
+///
+/// A child that parks again after a mixed decision carries the turn's approved
+/// own call into the new part as pending, because it has not run yet. Seeded as
+/// an ordinary pending call it would be asked about a second time.
+fn previously_approved_pending(
+    content: &[ContentPart],
+    pending: Vec<crate::models::message::PendingToolCall>,
+) -> (
+    Vec<crate::models::message::PendingToolCall>,
+    Vec<crate::models::message::PendingToolCall>,
+) {
+    pending.into_iter().partition(|call| {
+        let approved = content.iter().any(|part| {
+            matches!(part, ContentPart::ToolApproval(approval) if approval.tool_call_id == call.call_id)
+        });
+        let ran = content.iter().any(|part| {
+            matches!(part, ContentPart::ToolUse(tool_use) if tool_use.tool_call_id == call.call_id)
+        });
+        approved && !ran
+    })
+}
+
+/// Split a stop's decisions into the lanes that settle them, keeping row order
+/// within each.
+///
+/// The lanes share no settlement: an MCP item names a tool this process calls,
+/// a child item a child whose own continuation makes the call, and a plan or
+/// client-tool item a call that never reached its executor, re-seeded on
+/// approval and refused on denial. An item with `child` set is a child's
+/// whatever the part's kind, because a turn's own gated call carries its parked
+/// children on its own part.
+fn split_decisions_by_lane(
+    kind: ToolApprovalKind,
+    open: &[ApprovalItem],
+    submitted: SubmittedDecisions,
+) -> (SubmittedDecisions, SubmittedDecisions, SubmittedDecisions) {
+    let mut mcp = Vec::new();
+    let mut child = Vec::new();
+    let mut plan = Vec::new();
+    if kind == ToolApprovalKind::ToolCallLimit {
+        return (mcp, child, plan);
+    }
+    for (approval_id, decision) in submitted {
+        let names_child = open
+            .iter()
+            .find(|item| item.approval_id == approval_id)
+            .is_some_and(|item| item.child.is_some());
+        let lane = if names_child {
+            &mut child
+        } else {
+            match kind {
+                ToolApprovalKind::McpTool => &mut mcp,
+                // An item that lost its child still settles there, as a failure.
+                ToolApprovalKind::DelegatedTask => &mut child,
+                ToolApprovalKind::TaskPlan | ToolApprovalKind::ClientTool => &mut plan,
+                ToolApprovalKind::ToolCallLimit => continue,
+            }
+        };
+        lane.push((approval_id, decision));
+    }
+    (mcp, child, plan)
+}
+
 /// Apply a user's approval decisions to a parked turn and finish it.
 ///
 /// Takes no `Sender` of its own on purpose: a continuation may be started by an
@@ -18961,25 +19345,8 @@ pub(crate) async fn run_continuation(
     )
     .await?;
 
-    // The two kinds share no settlement: an `mcp_tool` item names a tool this
-    // process calls, a `delegated_task` item names a child whose own
-    // continuation makes the call. Splitting the decisions here keeps each loop
-    // reading only the items it can act on.
-    let (mcp_decisions, child_decisions, plan_decisions): (
-        SubmittedDecisions,
-        SubmittedDecisions,
-        SubmittedDecisions,
-    ) = match approval_request.kind {
-        ToolApprovalKind::McpTool => (submitted_decisions, Vec::new(), Vec::new()),
-        ToolApprovalKind::DelegatedTask => (Vec::new(), submitted_decisions, Vec::new()),
-        // A client tool item, like a plan item, names a call that never
-        // reached its executor, so it settles the same way: re-seeded on
-        // approval, refused on denial.
-        ToolApprovalKind::TaskPlan | ToolApprovalKind::ClientTool => {
-            (Vec::new(), Vec::new(), submitted_decisions)
-        }
-        ToolApprovalKind::ToolCallLimit => (Vec::new(), Vec::new(), Vec::new()),
-    };
+    let (mcp_decisions, child_decisions, plan_decisions) =
+        split_decisions_by_lane(approval_request.kind, &state.open, submitted_decisions);
 
     // Why an approved call the rebuilt tool set no longer carries cannot run.
     // `None` is the one retryable answer: a denial is final whatever the
@@ -19332,50 +19699,6 @@ pub(crate) async fn run_continuation(
         .await?;
     }
 
-    if let Some(error) = mcp_content_filter_error {
-        // All approval items have settled durably. A filtered result ends the
-        // generation, as in the normal path, without another model request.
-        let mut metadata = message
-            .generation_metadata
-            .as_ref()
-            .and_then(|value| serde_json::from_value::<GenerationMetadata>(value.clone()).ok())
-            .unwrap_or_default();
-        metadata.error = Some(error.clone());
-        metadata.continuation_in_flight = None;
-        update_message_generation_metadata(
-            &app_state.db,
-            policy,
-            &me_user.to_subject(),
-            &message.id,
-            metadata,
-        )
-        .await?;
-        let event =
-            MessageSubmitStreamingResponseMessage::Error(MessageSubmitStreamingResponseError {
-                message_id: Some(message.id),
-                error,
-            });
-        send_background_event(
-            task,
-            StreamingEvent::Error {
-                error: Some(serde_json::to_value(&event)?),
-            },
-            "broadcast continued MCP content-filter error",
-        )
-        .await;
-        send_generation_event(&event, tx.clone()).await?;
-        return stream_update_assistant_message_completion::<MessageSubmitStreamingResponseMessage>(
-            tx,
-            task,
-            app_state,
-            policy,
-            parsed.content,
-            me_user,
-            message.id,
-        )
-        .await;
-    }
-
     // A plan item names a call that was never made, so there is nothing to
     // resume and nothing to overwrite: an approved item is re-seeded into the
     // dispatch loop exactly as an abandoned call is, and a denied one settles as
@@ -19529,6 +19852,60 @@ pub(crate) async fn run_continuation(
         .await?
     };
 
+    if let Some(error) = mcp_content_filter_error {
+        // All approval items have settled durably. A filtered result ends the
+        // generation, as in the normal path, without another model request. A
+        // child that parked again stays answerable from its own chat, as one
+        // that parks on a turn ended by a filtered result does.
+        if !reparked_children.is_empty() {
+            tracing::warn!(
+                chat_id = %chat.id,
+                parked = reparked_children.len(),
+                "A task child parked again on a continuation ended by a filtered result; \
+                 it stays answerable from its own chat"
+            );
+        }
+        let mut metadata = message
+            .generation_metadata
+            .as_ref()
+            .and_then(|value| serde_json::from_value::<GenerationMetadata>(value.clone()).ok())
+            .unwrap_or_default();
+        metadata.error = Some(error.clone());
+        metadata.continuation_in_flight = None;
+        update_message_generation_metadata(
+            &app_state.db,
+            policy,
+            &me_user.to_subject(),
+            &message.id,
+            metadata,
+        )
+        .await?;
+        let event =
+            MessageSubmitStreamingResponseMessage::Error(MessageSubmitStreamingResponseError {
+                message_id: Some(message.id),
+                error,
+            });
+        send_background_event(
+            task,
+            StreamingEvent::Error {
+                error: Some(serde_json::to_value(&event)?),
+            },
+            "broadcast continued MCP content-filter error",
+        )
+        .await;
+        send_generation_event(&event, tx.clone()).await?;
+        return stream_update_assistant_message_completion::<MessageSubmitStreamingResponseMessage>(
+            tx,
+            task,
+            app_state,
+            policy,
+            parsed.content,
+            me_user,
+            message.id,
+        )
+        .await;
+    }
+
     // A child that stopped a second time re-parks the turn waiting on it: one
     // new part of the same shape, and no model call — this turn has learnt
     // nothing yet that it could answer with.
@@ -19541,10 +19918,16 @@ pub(crate) async fn run_continuation(
                 _ => None,
             })
             .collect();
-        let pending_tool_calls = approval_request
-            .pending_tool_calls
+        // An approved own client-tool call has not run yet, and the new part is
+        // the only record the next continuation reads, so it goes first.
+        let pending_tool_calls = approved_plan_calls
             .iter()
-            .filter(|call| !settled_call_ids.contains(call.call_id.as_str()))
+            .chain(
+                approval_request
+                    .pending_tool_calls
+                    .iter()
+                    .filter(|call| !settled_call_ids.contains(call.call_id.as_str())),
+            )
             .cloned()
             .collect();
         parsed.content.push(ContentPart::ToolApprovalRequest(
@@ -19586,6 +19969,12 @@ pub(crate) async fn run_continuation(
         .await;
     }
 
+    let (carried_approved, pending_from_park) =
+        previously_approved_pending(&parsed.content, approval_request.pending_tool_calls);
+    let approved_plan_calls: Vec<_> = carried_approved
+        .into_iter()
+        .chain(approved_plan_calls)
+        .collect();
     resume_parked_generation(
         task,
         tx,
@@ -19608,7 +19997,7 @@ pub(crate) async fn run_continuation(
             missing_credential_server_ids: mcp_servers_missing_credential,
         },
         approved_plan_calls,
-        approval_request.pending_tool_calls,
+        pending_from_park,
         None,
         request.registered_client_tools.clone(),
         request.executor.clone(),
