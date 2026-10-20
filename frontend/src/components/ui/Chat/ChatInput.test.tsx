@@ -11,7 +11,7 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
-import { act } from "react";
+import { act, createRef } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { componentRegistry } from "@/config/componentRegistry";
@@ -26,6 +26,7 @@ import { ChatInput, type ComposerSizeLimit } from "./ChatInput";
 import { useToastStore } from "../Toast/toastStore";
 
 import type { AddMenuActionItem, AddMenuSection } from "./ChatInputAddMenu";
+import type { ChatInputControlsHandle } from "./ChatInputControlsContext";
 import type {
   ComposerContextChipFaceProps,
   ComposerContextItem,
@@ -7150,6 +7151,181 @@ describe("ChatInput", () => {
         expect(childOrder()).toEqual(before);
         unmount();
       });
+    });
+  });
+
+  describe("staged files for hosts (ERMAIN-1025)", () => {
+    const upload = (id: string): FileUploadItem =>
+      ({
+        id,
+        filename: `${id}.pdf`,
+        download_url: `https://example.com/${id}`,
+        file_contents_unavailable_missing_permissions: false,
+        is_sharepoint_file: false,
+      }) as FileUploadItem;
+
+    const useRealHandlers = async () => {
+      const actual = await vi.importActual<
+        typeof import("@/hooks/ui/useChatInputHandlers")
+      >("@/hooks/ui/useChatInputHandlers");
+      mockUseChatInputHandlers.mockImplementation((...args: unknown[]) =>
+        actual.useChatInputHandlers(
+          ...(args as Parameters<typeof actual.useChatInputHandlers>),
+        ),
+      );
+    };
+
+    const renderStaged = async (
+      props: Partial<Parameters<typeof ChatInput>[0]> = {},
+    ) => {
+      const queryClient = new QueryClient({
+        defaultOptions: { queries: { retry: false } },
+      });
+      const { i18n } = await import("@lingui/core");
+      const ref = createRef<ChatInputControlsHandle>();
+      const onSendMessage = vi.fn();
+      const ui = (next: Partial<Parameters<typeof ChatInput>[0]>) => (
+        <QueryClientProvider client={queryClient}>
+          <I18nProvider i18n={i18n}>
+            <ChatInput
+              ref={ref}
+              onSendMessage={onSendMessage}
+              {...props}
+              {...next}
+            />
+          </I18nProvider>
+        </QueryClientProvider>
+      );
+      const view = render(ui({}));
+      return {
+        ...view,
+        ref,
+        onSendMessage,
+        rerenderWith: (next: Partial<Parameters<typeof ChatInput>[0]>) =>
+          view.rerender(ui(next)),
+      };
+    };
+
+    const stagedIds = (onStagedFilesChange: ReturnType<typeof vi.fn>) =>
+      (onStagedFilesChange.mock.calls.at(-1)?.[0] as FileUploadItem[]).map(
+        (file) => file.id,
+      );
+
+    it("reports the staged files on mount, add, remove and send", async () => {
+      await useRealHandlers();
+      const onStagedFilesChange = vi.fn();
+      const { ref, onSendMessage } = await renderStaged({
+        onStagedFilesChange,
+        initialFiles: [upload("f1")],
+      });
+      expect(stagedIds(onStagedFilesChange)).toEqual(["f1"]);
+
+      act(() => ref.current!.addUploadedFiles([upload("f2"), upload("f3")]));
+      expect(stagedIds(onStagedFilesChange)).toEqual(["f1", "f2", "f3"]);
+
+      act(() => ref.current!.removeUploadedFiles(["f2"]));
+      expect(stagedIds(onStagedFilesChange)).toEqual(["f1", "f3"]);
+
+      fireEvent.change(screen.getByPlaceholderText("Type a message..."), {
+        target: { value: "hello" },
+      });
+      fireEvent.keyDown(screen.getByPlaceholderText("Type a message..."), {
+        key: "Enter",
+        shiftKey: false,
+      });
+      expect(onSendMessage.mock.calls[0][1]).toEqual(["f1", "f3"]);
+      expect(stagedIds(onStagedFilesChange)).toEqual([]);
+    });
+
+    it("reports each chat's own files across a draft switch", async () => {
+      await useRealHandlers();
+      const onStagedFilesChange = vi.fn();
+      const { ref, rerenderWith } = await renderStaged({
+        onStagedFilesChange,
+        chatId: "chat-a",
+      });
+      act(() => ref.current!.addUploadedFiles([upload("a1")]));
+      expect(stagedIds(onStagedFilesChange)).toEqual(["a1"]);
+
+      rerenderWith({ chatId: "chat-b" });
+      await waitFor(() => expect(stagedIds(onStagedFilesChange)).toEqual([]));
+
+      rerenderWith({ chatId: "chat-a" });
+      await waitFor(() =>
+        expect(stagedIds(onStagedFilesChange)).toEqual(["a1"]),
+      );
+    });
+
+    it("reports the files a queued message brings back", async () => {
+      await useRealHandlers();
+      mockUseChatContext.mockReturnValue({
+        isPendingResponse: true,
+        isMessagingLoading: false,
+        isUploading: false,
+        cancelMessage: vi.fn(),
+        messagingError: null,
+      });
+      useMessageQueueStore.setState({ queuedBySessionId: {} });
+      const onStagedFilesChange = vi.fn();
+      const { ref } = await renderStaged({
+        onStagedFilesChange,
+        chatId: "chat-q",
+      });
+      act(() => ref.current!.addUploadedFiles([upload("q1")]));
+      const textarea = screen.getByPlaceholderText("Type a message...");
+      fireEvent.change(textarea, { target: { value: "later" } });
+      fireEvent.keyDown(textarea, { key: "Enter", shiftKey: false });
+      expect(stagedIds(onStagedFilesChange)).toEqual([]);
+
+      fireEvent.click(screen.getByTestId("chat-input-queued-message-edit"));
+      expect(stagedIds(onStagedFilesChange)).toEqual(["q1"]);
+    });
+
+    it("removes files by id while the composer is uploading, and resets limits for the rest", async () => {
+      await useRealHandlers();
+      const resetTokenLimitsOnFileRemoval = vi.fn();
+      mockUseTokenManagement.mockReturnValue({
+        isAnyTokenLimitExceeded: false,
+        handleMessageTokenLimitExceeded: vi.fn(),
+        handleFileTokenLimitExceeded: vi.fn(),
+        resetTokenLimits: vi.fn(),
+        resetTokenLimitsOnFileRemoval,
+      });
+      mockUseChatContext.mockReturnValue({
+        isPendingResponse: false,
+        isMessagingLoading: false,
+        isUploading: true,
+        cancelMessage: vi.fn(),
+      });
+      const onStagedFilesChange = vi.fn();
+      const { ref } = await renderStaged({
+        onStagedFilesChange,
+        initialFiles: [upload("f1"), upload("f2"), upload("f3")],
+      });
+
+      act(() => {
+        ref.current!.removeUploadedFiles(["f1", "f3", "missing"]);
+        ref.current!.addUploadedFiles([upload("f4")]);
+      });
+      expect(stagedIds(onStagedFilesChange)).toEqual(["f2", "f4"]);
+      expect(resetTokenLimitsOnFileRemoval).toHaveBeenCalledWith(1, 0);
+      expect(
+        mockUseAudioTranscriptionRecorder.mock.results.at(-1)?.value
+          .removeRecordedAudioFile,
+      ).toHaveBeenCalledWith("f1");
+
+      act(() => ref.current!.removeUploadedFiles(["f2", "f4"]));
+      expect(stagedIds(onStagedFilesChange)).toEqual([]);
+      expect(resetTokenLimitsOnFileRemoval).toHaveBeenLastCalledWith(0, 0);
+    });
+
+    it("keeps the web composer's file row as it was without the callback", async () => {
+      await useRealHandlers();
+      mockUseUploadFeature.mockReturnValue({ enabled: true });
+      const { ref } = await renderStaged({ initialFiles: [upload("f1")] });
+      expect(screen.getByTestId("attachments-preview")).toHaveTextContent("1");
+      act(() => ref.current!.removeUploadedFiles(["f1"]));
+      expect(screen.getByTestId("attachments-preview")).toHaveTextContent("0");
     });
   });
 });

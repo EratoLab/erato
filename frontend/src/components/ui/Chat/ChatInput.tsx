@@ -290,6 +290,12 @@ interface ChatInputProps {
   ) => void;
   onRegenerate?: () => void;
   handleFileAttachments?: (files: FileUploadItem[]) => void;
+  /**
+   * Called with the files the next send would carry after every change, a
+   * draft switch or a queue restore included, before the browser paints.
+   * Pass a stable callback.
+   */
+  onStagedFilesChange?: (files: FileUploadItem[]) => void;
   isLoading?: boolean;
   disabled?: boolean;
   className?: string;
@@ -449,6 +455,7 @@ export const ChatInput = ({
   onSendMessage,
   onRegenerate: _onRegenerate,
   handleFileAttachments,
+  onStagedFilesChange,
   isLoading: propIsLoading,
   disabled = false,
   className = "",
@@ -659,6 +666,16 @@ export const ChatInput = ({
     setAttachedFiles,
     createSubmitHandler,
   } = useChatInputHandlers(maxFiles, handleFileAttachments, initialFiles);
+
+  // Layout, so a host chip built from this list never paints a frame that
+  // disagrees with the file row.
+  useLayoutEffect(() => {
+    onStagedFilesChange?.(attachedFiles);
+  }, [attachedFiles, onStagedFilesChange]);
+  const attachedFilesRef = useRef(attachedFiles);
+  useLayoutEffect(() => {
+    attachedFilesRef.current = attachedFiles;
+  }, [attachedFiles]);
 
   const hasComposeContent =
     message.trim().length > 0 || attachedFiles.length > 0;
@@ -1134,6 +1151,32 @@ export const ChatInput = ({
     [availableModels, setSelectedModel],
   );
 
+  // A host call, so not gated by the compose lock: a host replacing files
+  // calls it in the same tick its upload resolves, while this closure can
+  // still read `isUploading`. The user's own paths keep their lock.
+  const removeUploadedFiles = useCallback(
+    (fileIds: string[]) => {
+      const ids = new Set(fileIds);
+      if (ids.size === 0) {
+        return;
+      }
+      for (const fileId of ids) {
+        removeRecordedAudioFile(fileId);
+        handleRemoveFile(fileId);
+      }
+      resetTokenLimitsOnFileRemoval(
+        attachedFilesRef.current.filter((file) => !ids.has(file.id)).length,
+        message.trim().length,
+      );
+    },
+    [
+      handleRemoveFile,
+      message,
+      removeRecordedAudioFile,
+      resetTokenLimitsOnFileRemoval,
+    ],
+  );
+
   useImperativeHandle(
     ref,
     () => ({
@@ -1143,12 +1186,14 @@ export const ChatInput = ({
       setSelectedChatProviderId: applySelectedChatProviderId,
       toggleFacetId,
       addUploadedFiles: handleFilesUploaded,
+      removeUploadedFiles,
       clearQueuedMessage: () => clearQueuedBySessionId(composeSessionId),
     }),
     [
       clearQueuedBySessionId,
       composeSessionId,
       handleFilesUploaded,
+      removeUploadedFiles,
       applySelectedChatProviderId,
       applySelectedFacetIds,
       focusInput,
