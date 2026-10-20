@@ -96,10 +96,13 @@ export const DefaultComposerContextChipFace = ({
     <span
       data-ui="composer-context-chip-label"
       className={clsx(
-        "shrink-[2] truncate text-[0.8125rem] leading-4",
+        "truncate text-[0.8125rem] leading-4",
         // A label narrower than the 7em floor would be padded out to it,
         // leaving a gap before the meta; it keeps its own width instead.
-        meta && (isShortLabel(item.label) ? "shrink-0" : "min-w-[7em]"),
+        // Never both shrink classes: the stylesheet order would let
+        // shrink-[2] win and cut the short label after all.
+        meta && isShortLabel(item.label) ? "shrink-0" : "shrink-[2]",
+        meta && !isShortLabel(item.label) && "min-w-[7em]",
       )}
     >
       {item.label}
