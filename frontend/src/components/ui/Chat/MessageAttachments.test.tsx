@@ -11,6 +11,7 @@ import { http, HttpResponse } from "msw";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ThemeProvider } from "@/components/providers/ThemeProvider";
+import { getFileName } from "@/components/ui/FileUpload/FilePreviewBase";
 import { server } from "@/lib/mocks/server";
 import { messages as enMessages } from "@/locales/en/messages.json";
 import {
@@ -316,6 +317,9 @@ describe("MessageAttachments", () => {
       expect.objectContaining({ id: "t1", filename: "teams-chat.md" }),
       files,
     );
+    // The row reads "Part of the conversation"; the preview is titled by
+    // the file it shows, not by that summary.
+    expect(getFileName(onFilePreview.mock.calls[0][0])).toBe("teams-chat.md");
   });
 
   it("names a transcript's shared files as Teams named them", async () => {

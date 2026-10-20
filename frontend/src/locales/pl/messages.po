@@ -1433,6 +1433,7 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatMessage.tsx
+#: src/components/ui/Teams/TeamsConversationView.tsx
 #: src/utils/teams/teamsTranscriptContext.ts
 msgid "branding.user_form_of_address"
 msgstr "Ty"
@@ -6851,6 +6852,11 @@ msgstr "Czat"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Teams/TeamsTranscriptDetail.tsx
+msgid "teams.context.detail.notAttached"
+msgstr "{count, plural, one {# udostępniony plik nie został załączony} few {# udostępnione pliki nie zostały załączone} many {# udostępnionych plików nie zostało załączonych} other {# udostępnionego pliku nie załączono}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Teams/TeamsTranscriptDetail.tsx
 msgid "teams.context.detail.oneFile"
 msgstr "{count, plural, one {Jeden plik obejmuje tę konwersację} few {Jeden plik obejmuje wszystkie # konwersacje} many {Jeden plik obejmuje wszystkie # konwersacji} other {Jeden plik obejmuje wszystkie # konwersacji}}"
 
@@ -6863,6 +6869,11 @@ msgstr "Otwórz konwersację"
 #: src/components/ui/Teams/TeamsTranscriptDetail.tsx
 msgid "teams.context.detail.openConversationNamed"
 msgstr "Otwórz konwersację: {title}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Teams/TeamsTranscriptDetail.tsx
+msgid "teams.context.detail.otherFiles"
+msgstr "Inne udostępnione pliki"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Teams/TeamsTranscriptDetail.tsx
@@ -6880,6 +6891,7 @@ msgid "teams.context.meta.conversations"
 msgstr "{count, plural, one {# konwersacja} few {# konwersacje} many {# konwersacji} other {# konwersacji}}"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Teams/TeamsTranscriptDetail.tsx
 #: src/utils/teams/teamsTranscriptContext.ts
 msgid "teams.context.meta.reading"
 msgstr "Odczytywanie transkrypcji…"

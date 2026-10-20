@@ -1433,6 +1433,7 @@ msgstr "LLM Chat"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatMessage.tsx
+#: src/components/ui/Teams/TeamsConversationView.tsx
 #: src/utils/teams/teamsTranscriptContext.ts
 msgid "branding.user_form_of_address"
 msgstr "You"
@@ -6851,6 +6852,11 @@ msgstr "Chat"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Teams/TeamsTranscriptDetail.tsx
+msgid "teams.context.detail.notAttached"
+msgstr "{count, plural, one {# shared file not attached} other {# shared files not attached}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Teams/TeamsTranscriptDetail.tsx
 msgid "teams.context.detail.oneFile"
 msgstr "{count, plural, one {One file covers this conversation} other {One file covers all # conversations}}"
 
@@ -6863,6 +6869,11 @@ msgstr "Open conversation"
 #: src/components/ui/Teams/TeamsTranscriptDetail.tsx
 msgid "teams.context.detail.openConversationNamed"
 msgstr "Open conversation: {title}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Teams/TeamsTranscriptDetail.tsx
+msgid "teams.context.detail.otherFiles"
+msgstr "Other shared files"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Teams/TeamsTranscriptDetail.tsx
@@ -6880,6 +6891,7 @@ msgid "teams.context.meta.conversations"
 msgstr "{count, plural, one {# conversation} other {# conversations}}"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Teams/TeamsTranscriptDetail.tsx
 #: src/utils/teams/teamsTranscriptContext.ts
 msgid "teams.context.meta.reading"
 msgstr "Reading transcript…"

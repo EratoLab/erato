@@ -1433,6 +1433,7 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatMessage.tsx
+#: src/components/ui/Teams/TeamsConversationView.tsx
 #: src/utils/teams/teamsTranscriptContext.ts
 msgid "branding.user_form_of_address"
 msgstr "Du"
@@ -6851,6 +6852,11 @@ msgstr "Chat"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Teams/TeamsTranscriptDetail.tsx
+msgid "teams.context.detail.notAttached"
+msgstr "{count, plural, one {# geteilte Datei nicht angehängt} other {# geteilte Dateien nicht angehängt}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Teams/TeamsTranscriptDetail.tsx
 msgid "teams.context.detail.oneFile"
 msgstr "{count, plural, one {Eine Datei enthält diese Unterhaltung} other {Eine Datei enthält alle # Unterhaltungen}}"
 
@@ -6863,6 +6869,11 @@ msgstr "Unterhaltung öffnen"
 #: src/components/ui/Teams/TeamsTranscriptDetail.tsx
 msgid "teams.context.detail.openConversationNamed"
 msgstr "Unterhaltung öffnen: {title}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Teams/TeamsTranscriptDetail.tsx
+msgid "teams.context.detail.otherFiles"
+msgstr "Weitere geteilte Dateien"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Teams/TeamsTranscriptDetail.tsx
@@ -6880,6 +6891,7 @@ msgid "teams.context.meta.conversations"
 msgstr "{count, plural, one {# Unterhaltung} other {# Unterhaltungen}}"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Teams/TeamsTranscriptDetail.tsx
 #: src/utils/teams/teamsTranscriptContext.ts
 msgid "teams.context.meta.reading"
 msgstr "Transkript wird gelesen…"

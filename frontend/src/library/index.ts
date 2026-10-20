@@ -667,6 +667,7 @@ export {
   ComposerContextLane,
   ComposerModeChips,
   DefaultComposerContextChipFace,
+  useLiveAnnouncement,
   type ComposerContextAreaProps,
   type ComposerContextChipFaceProps,
   type ComposerContextDetail,

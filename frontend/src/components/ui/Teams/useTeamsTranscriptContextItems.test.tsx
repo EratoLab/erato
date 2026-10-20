@@ -130,6 +130,11 @@ describe("useTeamsTranscriptContextItems", () => {
       label: "Teams transcript",
       meta: "Reading transcript…",
     });
+    // The detail says the same while it reads, not that it can't.
+    const reading = result.current[0].detail?.render({ locked: false }) as {
+      props: { index: unknown; reading: boolean };
+    };
+    expect(reading.props).toMatchObject({ index: null, reading: true });
     await waitFor(() => expect(result.current[0].state).toBe("included"));
     expect(result.current[0].label).toBe("Product sync +2");
   });
@@ -169,5 +174,31 @@ describe("useTeamsTranscriptContextItems", () => {
     expect(body.props.locked).toBe(true);
     expect(body.props.assets).toEqual([roadmap, shot]);
     act(() => undefined);
+  });
+
+  it("hands the detail the files the composer did not take, and rebuilds when they change", async () => {
+    const transcript = threeConversations();
+    await readTeamsTranscriptIndex(transcript);
+    const entry = entryFor(transcript, {
+      notAttachedAssetNames: ["teams-file-ffffffff-gone.pdf"],
+    });
+    const { result, rerender } = renderHook(
+      ({ entries }) => useTeamsTranscriptContextItems(entries, options),
+      { initialProps: { entries: [entry] } },
+    );
+    const body = result.current[0].detail?.render({ locked: false }) as {
+      props: { notAttached: readonly string[] };
+    };
+    expect(body.props.notAttached).toEqual(["teams-file-ffffffff-gone.pdf"]);
+
+    const first = result.current[0];
+    rerender({
+      entries: [
+        { ...entry, notAttachedAssetNames: ["teams-file-ffffffff-gone.pdf"] },
+      ],
+    });
+    expect(result.current[0]).toBe(first);
+    rerender({ entries: [{ ...entry, notAttachedAssetNames: [] }] });
+    expect(result.current[0]).not.toBe(first);
   });
 });

@@ -146,8 +146,10 @@ function buildGroup(
       kind: "attachment",
       id: `${key}:transcript`,
       // One transcript covers every section, so it is named by what this
-      // section contributes to it rather than by its filename.
+      // section contributes to it rather than by its filename. The preview
+      // shows the file itself, and is titled by it.
       file: rowFile(transcript, includedSummary(section)),
+      previewFile: transcript,
       labelOverride: t({
         id: "teams.preview.transcriptLabel",
         message: "Teams conversation",

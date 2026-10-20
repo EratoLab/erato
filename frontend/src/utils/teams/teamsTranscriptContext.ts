@@ -11,6 +11,7 @@ import { i18n } from "@lingui/core";
 import { plural, t } from "@lingui/core/macro";
 
 import { conversationKey } from "./teamsConversationRef";
+import { teamsUploadDisplayName } from "./teamsUploadName";
 
 import type {
   TeamsTranscriptIndex,
@@ -121,16 +122,21 @@ export interface TeamsTranscriptSectionView {
   picked: TeamsTranscriptPickedMessage[];
   /** Staged uploads the section's messages carried, each upload once. */
   files: TeamsTranscriptSectionFile[];
+  /** Files its messages carried that the composer never took. */
+  notAttached: number;
 }
 
 /**
  * One view per section in index order. `uploads` are the staged uploads the
  * transcript brought; an asset whose upload is not staged has no row.
+ * `notAttached` names the assets the composer did not take, by upload name.
  */
 export function teamsTranscriptSections(
   index: TeamsTranscriptIndex,
   uploads: readonly FileUploadItem[],
+  notAttached: readonly string[] = [],
 ): TeamsTranscriptSectionView[] {
+  const missing = new Set(notAttached);
   const uploadsByName = new Map<string, FileUploadItem>();
   for (const upload of uploads) {
     if (!uploadsByName.has(upload.filename)) {
@@ -148,7 +154,9 @@ export function teamsTranscriptSections(
   return index.sections.map((section, position) => {
     const messages = bySection.get(position) ?? [];
     const files: TeamsTranscriptSectionFile[] = [];
+    const missed = new Set<string>();
     for (const asset of messages.flatMap((message) => message.assets)) {
+      if (missing.has(asset.name)) missed.add(asset.name);
       const upload = uploadsByName.get(asset.name);
       if (!upload || placed.has(upload.id)) continue;
       placed.add(upload.id);
@@ -173,8 +181,36 @@ export function teamsTranscriptSections(
           ? messages.map((message) => pickedMessage(message, section))
           : [],
       files,
+      notAttached: missed.size,
     };
   });
+}
+
+/**
+ * Staged uploads of the transcript that no section names: still sent, so the
+ * detail still lists them.
+ */
+export function teamsTranscriptOtherFiles(
+  sections: readonly TeamsTranscriptSectionView[],
+  uploads: readonly FileUploadItem[],
+): TeamsTranscriptSectionFile[] {
+  const placed = new Set(
+    sections.flatMap((section) => section.files.map((file) => file.upload.id)),
+  );
+  return uploads
+    .filter((upload) => !placed.has(upload.id))
+    .map(teamsTranscriptUploadFile);
+}
+
+/** A staged upload with no index entry to name it, named from the upload. */
+export function teamsTranscriptUploadFile(
+  upload: FileUploadItem,
+): TeamsTranscriptSectionFile {
+  return {
+    upload,
+    displayName: teamsUploadDisplayName(upload.filename) ?? upload.filename,
+    isImage: upload.filename.startsWith("teams-img-"),
+  };
 }
 
 export function sectionTitle(section: TeamsTranscriptIndexSection): string {
@@ -270,6 +306,17 @@ function excerpt(text: string): string {
 
 /** Before a catalog is active Lingui reports no locale; the runtime's default then applies. */
 export const appLocale = (): string | undefined => i18n.locale || undefined;
+
+/** "09:30", in the app's language. */
+export function formatTeamsTime(iso: string | null): string | null {
+  const date = toDate(iso);
+  return date
+    ? date.toLocaleTimeString(appLocale(), {
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    : null;
+}
 
 /** "Oct 1, 2026", in the app's language. */
 export function formatTeamsDay(iso: string | null): string | null {

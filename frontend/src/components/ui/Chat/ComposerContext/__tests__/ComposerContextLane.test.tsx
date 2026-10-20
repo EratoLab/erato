@@ -1160,6 +1160,12 @@ describe("ComposerContextLane", () => {
       fireEvent.click(locked);
       expect(onSelect).not.toHaveBeenCalled();
 
+      // The lane's own lock gives no reason; the button still says why.
+      rerender(<ComposerContextLane items={[{ ...item, locked: true }]} />);
+      expect(
+        screen.getByRole("button", { name: "Edit selection" }),
+      ).toHaveAttribute("title", "Re: Offsite agenda is locked.");
+
       // Without files of its own, a locked item keeps choices that read.
       rerender(
         <ComposerContextLane

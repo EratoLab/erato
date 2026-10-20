@@ -97,7 +97,8 @@ describe("TeamsConversationView", () => {
     expect(screen.getByRole("heading", { level: 2 })).toHaveTextContent(
       "Product sync",
     );
-    expect(screen.getByText("Ada Lovelace, Grace Hopper")).toBeVisible();
+    // The viewer is addressed as chat messages address the user.
+    expect(screen.getByText("Ada Lovelace, You")).toBeVisible();
   });
 
   it("collapses a run of messages from one speaker under a single name", async () => {
@@ -114,7 +115,7 @@ describe("TeamsConversationView", () => {
 
     // Ada speaks twice, then again after Grace: two runs, not three headers.
     expect(screen.getAllByText("Ada Lovelace")).toHaveLength(2);
-    expect(screen.getAllByText("Grace Hopper")).toHaveLength(1);
+    expect(screen.getAllByText("You")).toHaveLength(1);
     expect(screen.getByText("Message 1")).toBeVisible();
     expect(screen.getByText("Message 2")).toBeVisible();
   });
@@ -313,6 +314,9 @@ describe("TeamsConversationView", () => {
         screen.getByText("1 Nachricht konnte nicht geladen werden."),
       ).toBeVisible();
       expect(screen.getAllByText("2. Okt. 2026").length).toBeGreaterThan(0);
+      // The bubble's time too, whatever the browser's own language.
+      expect(screen.getByText(/^\d{2}:\d{2}$/)).toBeVisible();
+      expect(screen.queryByText(/[AP]M$/)).toBeNull();
 
       i18n.load("pl", plMessages as unknown as Messages);
       i18n.activate("pl");
@@ -372,10 +376,10 @@ describe("TeamsConversationView", () => {
       />,
     );
 
-    // `viewer` is Grace, so her run header carries the accent and Ada's does not.
-    expect(screen.getByText("Grace Hopper")).toHaveClass(
-      "text-theme-fg-accent",
-    );
+    // `viewer` is Grace, so her run header reads "You" with the accent, and
+    // Ada's carries neither.
+    expect(screen.getByText("You")).toHaveClass("text-theme-fg-accent");
+    expect(screen.queryByText("Grace Hopper")).toBeNull();
     expect(screen.getByText("Ada Lovelace")).not.toHaveClass(
       "text-theme-fg-accent",
     );
@@ -415,6 +419,6 @@ describe("TeamsConversationView", () => {
 
     expect(screen.queryByRole("heading")).toBeNull();
     // The window and participants still carry, only the name goes.
-    expect(screen.getByText("Ada Lovelace, Grace Hopper")).toBeVisible();
+    expect(screen.getByText("Ada Lovelace, You")).toBeVisible();
   });
 });

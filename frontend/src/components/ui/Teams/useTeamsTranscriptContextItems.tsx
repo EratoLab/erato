@@ -18,6 +18,11 @@ export interface TeamsTranscriptContextEntry {
   /** The local transcript, read for its index block. */
   transcript: File;
   uploads: { transcript: FileUploadItem; assets: readonly FileUploadItem[] };
+  /**
+   * Upload names of files the transcript brought that the composer did not
+   * take, e.g. past its file limit. The detail says so in their section.
+   */
+  notAttachedAssetNames?: readonly string[];
   onRemove: () => void;
   /** Omitted where the picker can't run; the detail then has no such action. */
   onEditSelection?: () => void;
@@ -86,7 +91,9 @@ function buildItem(
       render: ({ locked }) => (
         <TeamsTranscriptDetail
           index={read.index}
+          reading={read.isReading}
           assets={assets}
+          notAttached={entry.notAttachedAssetNames}
           locked={locked}
           onRemoveFile={onRemoveFile}
           onFilePreview={onFilePreview}
@@ -148,6 +155,7 @@ export function useTeamsTranscriptContextItems(
         entry.transcript,
         entry.uploads.transcript,
         ...entry.uploads.assets,
+        entry.notAttachedAssetNames?.join("\n") ?? "",
         read.index,
         read.isReading,
         entry.onRemove,

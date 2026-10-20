@@ -21,8 +21,10 @@ import { isImeComposing } from "@/utils/isImeComposing";
 import {
   composerContextControl,
   composerContextMeta,
+  composerContextSpokenLabel,
 } from "./ComposerContextChip";
 import {
+  announceLocked,
   closeDetailLabel,
   includeLabel,
   leaveOutLabel,
@@ -137,6 +139,10 @@ const DetailFooter = ({
   // is locked; a host choice on it would change those files all the same.
   const actionsLocked =
     Boolean(item.locked) && (item.claimsFileIds?.length ?? 0) > 0;
+  // The lane's own lock carries no reason; say what Delete on the chip says.
+  const lockTitle = item.locked
+    ? (item.lockReason ?? announceLocked(composerContextSpokenLabel(item)))
+    : undefined;
   return (
     <div
       className="flex flex-wrap items-center justify-end gap-2"
@@ -148,7 +154,7 @@ const DetailFooter = ({
           size="sm"
           variant={action.variant === "primary" ? "primary" : "secondary"}
           disabled={actionsLocked}
-          title={actionsLocked ? item.lockReason : undefined}
+          title={actionsLocked ? lockTitle : undefined}
           onClick={() => onAction(action)}
         >
           {action.label}
@@ -159,7 +165,7 @@ const DetailFooter = ({
           size="sm"
           variant="secondary"
           disabled={item.locked}
-          title={item.locked ? item.lockReason : undefined}
+          title={lockTitle}
           onClick={() => onRemove(item)}
         >
           {item.removeActionLabel ??
@@ -171,7 +177,7 @@ const DetailFooter = ({
           size="sm"
           variant="primary"
           disabled={item.locked}
-          title={item.locked ? item.lockReason : undefined}
+          title={lockTitle}
           onClick={() => onRestore(item)}
         >
           {item.restoreLabel ?? includeLabel()}

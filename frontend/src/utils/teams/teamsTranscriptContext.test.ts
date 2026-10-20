@@ -11,7 +11,9 @@ import {
 } from "@/test/teamsTranscriptFixtures";
 
 import {
+  formatTeamsTime,
   teamsTranscriptChipText,
+  teamsTranscriptOtherFiles,
   teamsTranscriptSections,
 } from "./teamsTranscriptContext";
 
@@ -228,9 +230,60 @@ describe("teamsTranscriptSections", () => {
     expect(second.files).toEqual([]);
   });
 
+  it("counts each section's files the composer did not take, once each", () => {
+    const shared = {
+      name: "teams-file-ffffffff-gone.pdf",
+      displayName: "gone.pdf",
+      kind: "file" as const,
+    };
+    const index = teamsIndex(
+      [teamsSection(), teamsSection({ title: "Design review" })],
+      [
+        teamsMessage("m1", { assets: [shared] }),
+        teamsMessage("m2", { assets: [shared] }),
+        teamsMessage("m3", { section: 1 }),
+      ],
+    );
+    const [first, second] = teamsTranscriptSections(index, [], [shared.name]);
+    expect(first.notAttached).toBe(1);
+    expect(second.notAttached).toBe(0);
+  });
+
+  it("keeps uploads no section names apart, named from the upload", () => {
+    const roadmap = upload("teams-file-1a2b3c4d-roadmap-q1.pdf", "u-roadmap");
+    const stray = upload("teams-img-0123456789abcdef.png", "u-stray");
+    const index = teamsIndex(
+      [teamsSection()],
+      [
+        teamsMessage("m1", {
+          assets: [
+            {
+              name: roadmap.filename,
+              displayName: "roadmap-q1.pdf",
+              kind: "file",
+            },
+          ],
+        }),
+      ],
+    );
+    const sections = teamsTranscriptSections(index, [roadmap, stray]);
+    expect(teamsTranscriptOtherFiles(sections, [roadmap, stray])).toEqual([
+      { upload: stray, displayName: "Image.png", isImage: true },
+    ]);
+  });
+
   it("keeps two sections of one conversation apart", () => {
     const index = teamsIndex([teamsSection(), teamsSection()], []);
     const [first, second] = teamsTranscriptSections(index, []);
     expect(first.key).not.toBe(second.key);
+  });
+});
+
+describe("formatTeamsTime", () => {
+  it("reads in the app's language, not the browser's", () => {
+    activate("de");
+    expect(formatTeamsTime("2026-10-01T09:30:00Z")).toMatch(/^\d{2}:\d{2}$/);
+    expect(formatTeamsTime(null)).toBeNull();
+    expect(formatTeamsTime("not a date")).toBeNull();
   });
 });

@@ -312,4 +312,149 @@ describe("TeamsTranscriptDetail", () => {
       screen.getByRole("button", { name: "Remove Image.png" }),
     ).toBeInTheDocument();
   });
+
+  it("keeps focus inside when the last file of an unreadable transcript goes", () => {
+    renderDetail({ index: null });
+    for (const name of [
+      "Remove roadmap-q1.pdf",
+      "Remove Image.png",
+      "Remove wireframes-v2.pdf",
+    ]) {
+      fireEvent.click(screen.getByRole("button", { name }));
+    }
+    expect(screen.queryByRole("button", { name: /^Remove / })).toBeNull();
+    expect(root()).toHaveFocus();
+  });
+
+  it("says it is still reading rather than that it can't read", () => {
+    wrap(
+      <TeamsTranscriptDetail
+        index={null}
+        reading
+        assets={[roadmap]}
+        locked={false}
+        onRemoveFile={vi.fn()}
+      />,
+    );
+    expect(root()).toHaveAttribute("data-view", "reading");
+    expect(screen.getByText("Reading transcript…")).toBeInTheDocument();
+    expect(screen.queryByText(/can't be shown here/)).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Remove roadmap-q1.pdf" }),
+    ).toBeInTheDocument();
+  });
+
+  it("lists a section's files before its picked messages", () => {
+    const picked = teamsIndex(
+      [teamsSection({ selection: "messages" })],
+      [
+        teamsMessage("m1", {
+          assets: [
+            {
+              name: roadmap.filename,
+              displayName: "roadmap-q1.pdf",
+              kind: "file",
+            },
+          ],
+        }),
+      ],
+    );
+    renderDetail({ index: picked });
+    const [section] = sections();
+    const files = section.querySelector('[data-ui="teams-transcript-files"]')!;
+    const messages = section.querySelector(
+      '[data-ui="teams-transcript-picked"]',
+    )!;
+    expect(
+      files.compareDocumentPosition(messages) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("speaks a second removal that reads like the first", () => {
+    const first = upload("teams-img-1111111111111111.png", "u-1", 10);
+    const second = upload("teams-img-2222222222222222.png", "u-2", 10);
+    const pasted = teamsIndex(
+      [teamsSection()],
+      [
+        teamsMessage("m1", {
+          assets: [
+            { name: first.filename, displayName: null, kind: "image" },
+            { name: second.filename, displayName: null, kind: "image" },
+          ],
+        }),
+      ],
+    );
+    function TwoImages() {
+      const [assets, setAssets] = useState([first, second]);
+      return (
+        <TeamsTranscriptDetail
+          index={pasted}
+          assets={assets}
+          locked={false}
+          onRemoveFile={(id) =>
+            setAssets((current) => current.filter((file) => file.id !== id))
+          }
+        />
+      );
+    }
+    wrap(<TwoImages />);
+    const region = document.querySelector(
+      '[data-ui="teams-transcript-detail-live"]',
+    )!;
+    fireEvent.click(screen.getAllByRole("button", { name: "Remove Image" })[0]);
+    const spoken = region.textContent;
+    expect(spoken).toBe("Image removed.");
+    fireEvent.click(screen.getByRole("button", { name: "Remove Image" }));
+    expect(region.textContent).not.toBe(spoken);
+    expect(region.textContent).toContain("Image removed.");
+  });
+
+  it("lists staged uploads no conversation names under other shared files", () => {
+    const notes = upload("teams-file-0f0f0f0f-notes.txt", "u-notes", 2_048);
+    const onRemoveFile = vi.fn();
+    wrap(
+      <TeamsTranscriptDetail
+        index={index}
+        assets={[roadmap, shot, wireframes, notes]}
+        locked={false}
+        onRemoveFile={onRemoveFile}
+      />,
+    );
+    const others = document.querySelector<HTMLElement>(
+      '[data-ui="teams-transcript-other-files"]',
+    )!;
+    expect(within(others).getByRole("heading", { level: 3 })).toHaveTextContent(
+      "Other shared files",
+    );
+    fireEvent.click(
+      within(others).getByRole("button", { name: "Remove notes.txt" }),
+    );
+    expect(onRemoveFile).toHaveBeenCalledWith("u-notes");
+    expect(
+      within(sections()[0]).queryByRole("button", { name: "Remove notes.txt" }),
+    ).toBeNull();
+  });
+
+  it("says which conversation's files the composer did not take", () => {
+    wrap(
+      <TeamsTranscriptDetail
+        index={index}
+        assets={[roadmap, shot]}
+        notAttached={[wireframes.filename]}
+        locked={false}
+        onRemoveFile={vi.fn()}
+      />,
+    );
+    const [first, second] = sections();
+    expect(
+      within(second).getByText("1 shared file not attached"),
+    ).toHaveAttribute("data-ui", "teams-transcript-not-attached");
+    expect(
+      first.querySelector('[data-ui="teams-transcript-not-attached"]'),
+    ).toBeNull();
+    expect(
+      document.querySelector('[data-ui="teams-transcript-other-files"]'),
+    ).toBeNull();
+  });
 });

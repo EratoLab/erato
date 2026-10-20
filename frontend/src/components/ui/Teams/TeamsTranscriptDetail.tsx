@@ -9,6 +9,7 @@ import {
 } from "react";
 
 import { announceRemoved } from "@/components/ui/Chat/ComposerContext/composerContextStrings";
+import { useLiveAnnouncement } from "@/components/ui/Chat/ComposerContext/useLiveAnnouncement";
 import { Button } from "@/components/ui/Controls/Button";
 import { AttachmentTile } from "@/components/ui/FileUpload/AttachmentTile";
 import { isFileUploadItem } from "@/components/ui/FileUpload/FilePreviewBase";
@@ -20,9 +21,10 @@ import {
 import {
   teamsAssetDisplayName,
   teamsTranscriptName,
+  teamsTranscriptOtherFiles,
   teamsTranscriptSections,
+  teamsTranscriptUploadFile,
 } from "@/utils/teams/teamsTranscriptContext";
-import { teamsUploadDisplayName } from "@/utils/teams/teamsUploadName";
 
 import { TeamsConversationView } from "./TeamsConversationView";
 
@@ -41,10 +43,14 @@ export type TeamsTranscriptNamedUpload = FileUploadItem & {
 };
 
 export interface TeamsTranscriptDetailProps {
-  /** Null for a transcript whose index block can't be read. */
+  /** Null for a transcript whose index block can't be read, or isn't yet. */
   index: TeamsTranscriptIndex | null;
+  /** The index is still being read; null then means "not yet". */
+  reading?: boolean;
   /** The staged uploads the transcript brought, its own file excluded. */
   assets: readonly FileUploadItem[];
+  /** Upload names of files the transcript brought that the composer never took. */
+  notAttached?: readonly string[];
   /** Disables every control that changes what is sent. */
   locked: boolean;
   onRemoveFile: (fileId: string) => void;
@@ -55,8 +61,11 @@ export interface TeamsTranscriptDetailProps {
 interface PendingFocus {
   removed: string;
   candidates: string[];
-  section: number;
+  /** The section whose way into its conversation is next in line, if any. */
+  section: number | null;
 }
+
+const NO_NAMES: readonly string[] = [];
 
 const openInTeams = (message: TeamsTranscriptIndexMessage) => {
   window.open(message.deepLink, "_blank", "noopener,noreferrer"); // eslint-disable-line lingui/no-unlocalized-strings
@@ -75,22 +84,42 @@ const named = (
  */
 export function TeamsTranscriptDetail({
   index,
+  reading = false,
   assets,
+  notAttached = NO_NAMES,
   locked,
   onRemoveFile,
   onFilePreview,
 }: TeamsTranscriptDetailProps) {
   const [openSection, setOpenSection] = useState<number | null>(null);
-  const [announcement, setAnnouncement] = useState("");
+  const [announcement, announce] = useLiveAnnouncement();
   const rootRef = useRef<HTMLDivElement>(null);
   const returnToSectionRef = useRef<number | null>(null);
   const pendingFocusRef = useRef<PendingFocus | null>(null);
   const idPrefix = useId();
+  const othersHeadingId = useId();
 
   const sections = useMemo(
-    () => (index ? teamsTranscriptSections(index, assets) : []),
-    [index, assets],
+    () => (index ? teamsTranscriptSections(index, assets, notAttached) : []),
+    [index, assets, notAttached],
   );
+  const others = useMemo(
+    () =>
+      index
+        ? teamsTranscriptOtherFiles(sections, assets)
+        : assets.map(teamsTranscriptUploadFile),
+    [index, sections, assets],
+  );
+  // Files no section names; with no index, every one of them.
+  const othersNotAttached = useMemo(() => {
+    if (!index) return notAttached.length;
+    const named = new Set(
+      index.messages.flatMap((message) =>
+        message.assets.map((asset) => asset.name),
+      ),
+    );
+    return notAttached.filter((name) => !named.has(name)).length;
+  }, [index, notAttached]);
   const conversation =
     openSection === null ? undefined : sections.at(openSection);
 
@@ -138,16 +167,22 @@ export function TeamsTranscriptDetail({
         return;
       }
     }
-    query(
-      `[data-ui="teams-transcript-open-conversation"][data-section="${pending.section}"]`,
-    )?.focus();
+    const conversation =
+      pending.section === null
+        ? null
+        : query(
+            `[data-ui="teams-transcript-open-conversation"][data-section="${pending.section}"]`,
+          );
+    // The removed button is gone; without a target in the detail, focus
+    // would fall out of the dialog.
+    (conversation ?? rootRef.current)?.focus();
   }, [assets, query]);
 
   const removeFile = useCallback(
     (
       files: readonly TeamsTranscriptSectionFile[],
       position: number,
-      section: number,
+      section: number | null,
       label: string,
     ) => {
       const removed = files[position].upload.id;
@@ -159,10 +194,10 @@ export function TeamsTranscriptDetail({
         ].map((file) => file.upload.id),
         section,
       };
-      setAnnouncement(announceRemoved(label));
+      announce(announceRemoved(label));
       onRemoveFile(removed);
     },
-    [onRemoveFile],
+    [announce, onRemoveFile],
   );
 
   const resolveAsset = useCallback(
@@ -186,7 +221,7 @@ export function TeamsTranscriptDetail({
 
   const fileRows = (
     files: readonly TeamsTranscriptSectionFile[],
-    section: number,
+    section: number | null,
     label: string,
   ) => (
     <ul
@@ -235,30 +270,35 @@ export function TeamsTranscriptDetail({
     </div>
   );
 
+  const rootProps = {
+    ref: rootRef,
+    "data-ui": "teams-transcript-detail",
+    // Focus lands here only when the control that had it is gone.
+    tabIndex: -1,
+  } as const;
+
   if (!index) {
-    const files = assets.map(
-      (upload): TeamsTranscriptSectionFile => ({
-        upload,
-        displayName: teamsUploadDisplayName(upload.filename) ?? upload.filename,
-        isImage: upload.filename.startsWith("teams-img-"),
-      }),
-    );
     const name = teamsTranscriptName();
     return (
       <div
-        ref={rootRef}
-        data-ui="teams-transcript-detail"
-        data-view="unreadable"
-        className="flex flex-col gap-3"
+        {...rootProps}
+        data-view={reading ? "reading" : "unreadable"}
+        className="flex flex-col gap-3 outline-none"
       >
         <p className="text-sm text-theme-fg-secondary">
-          {t({
-            id: "teams.context.detail.unreadable",
-            message:
-              "This transcript is still sent, but its conversations can't be shown here.",
-          })}
+          {reading
+            ? t({
+                id: "teams.context.meta.reading",
+                message: "Reading transcript…",
+              })
+            : t({
+                id: "teams.context.detail.unreadable",
+                message:
+                  "This transcript is still sent, but its conversations can't be shown here.",
+              })}
         </p>
-        {files.length > 0 ? fileRows(files, -1, filesLabel(name)) : null}
+        {others.length > 0 ? fileRows(others, null, filesLabel(name)) : null}
+        {notAttachedLine(othersNotAttached)}
         {live}
       </div>
     );
@@ -267,10 +307,9 @@ export function TeamsTranscriptDetail({
   if (conversation) {
     return (
       <div
-        ref={rootRef}
-        data-ui="teams-transcript-detail"
+        {...rootProps}
         data-view="conversation"
-        className="flex flex-col gap-3"
+        className="flex flex-col gap-3 outline-none"
       >
         <Button
           variant="link"
@@ -302,10 +341,9 @@ export function TeamsTranscriptDetail({
   const count = sections.length;
   return (
     <div
-      ref={rootRef}
-      data-ui="teams-transcript-detail"
+      {...rootProps}
       data-view="sections"
-      className="flex flex-col gap-4"
+      className="flex flex-col gap-4 outline-none"
     >
       {count >= 2 ? (
         <p className="text-xs text-theme-fg-secondary">
@@ -350,7 +388,9 @@ export function TeamsTranscriptDetail({
                 variant="link"
                 data-ui="teams-transcript-open-conversation"
                 data-section={section.position}
-                className="text-xs"
+                // The only way into the conversation; drawn as a link, not
+                // in the muted tone of the meta lines around it.
+                className="text-xs underline-offset-2 data-[ui=teams-transcript-open-conversation]:text-theme-fg-primary data-[ui=teams-transcript-open-conversation]:underline"
                 aria-label={t({
                   id: "teams.context.detail.openConversationNamed",
                   message: `Open conversation: ${title}`,
@@ -367,6 +407,10 @@ export function TeamsTranscriptDetail({
             <p className="text-xs text-theme-fg-secondary">
               {section.selectionLine}
             </p>
+            {section.files.length > 0
+              ? fileRows(section.files, section.position, filesLabel(title))
+              : null}
+            {notAttachedLine(section.notAttached)}
             {section.picked.length > 0 ? (
               <ul
                 data-ui="teams-transcript-picked"
@@ -396,14 +440,53 @@ export function TeamsTranscriptDetail({
                 ))}
               </ul>
             ) : null}
-            {section.files.length > 0
-              ? fileRows(section.files, section.position, filesLabel(title))
-              : null}
           </section>
         );
       })}
+      {others.length > 0 || othersNotAttached > 0 ? (
+        <section
+          data-ui="teams-transcript-other-files"
+          aria-labelledby={othersHeadingId}
+          className="flex flex-col gap-2"
+        >
+          <h3
+            id={othersHeadingId}
+            className="text-sm font-semibold text-theme-fg-primary"
+          >
+            {otherFilesTitle()}
+          </h3>
+          {others.length > 0 ? fileRows(others, null, otherFilesTitle()) : null}
+          {notAttachedLine(othersNotAttached)}
+        </section>
+      ) : null}
       {live}
     </div>
+  );
+}
+
+const otherFilesTitle = () =>
+  t({ id: "teams.context.detail.otherFiles", message: "Other shared files" });
+
+/**
+ * The transcript still mentions these files, so the detail says they are not
+ * sent rather than letting them disappear: the composer takes a limited
+ * number of files, and refuses a type it can't read.
+ */
+function notAttachedLine(count: number) {
+  if (count === 0) return null;
+  return (
+    <p
+      data-ui="teams-transcript-not-attached"
+      className="text-xs text-theme-fg-secondary"
+    >
+      {t({
+        id: "teams.context.detail.notAttached",
+        message: plural(count, {
+          one: "# shared file not attached",
+          other: "# shared files not attached",
+        }),
+      })}
+    </p>
   );
 }
 
