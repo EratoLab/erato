@@ -157,6 +157,16 @@ error, without running the handler, when the executor was not registered with
 `acceptsGrantCalls`. Calls of the user's own turn are unchanged. The host checks
 `hostGrant` against its local context (contract §7).
 
+## Conformance
+
+`erato/tests/integration_tests/api/messages/client_tool_operations/delegated/conformance.rs`
+runs every case above for each host row in `delegated/rows.rs`: a fake host on
+a test-driven pane, and the `word_document` and `outlook_mailbox` rows, which
+stay ignored until ERMAIN-1003 and ERMAIN-1006 enable them. A host's handlers
+pass `clientToolHostAdapterConformanceFailures` from
+`@erato/frontend/conformance`. The adapter checklist and templates are in
+`office-addin/ARCHITECTURE.md`, "Client tools in delegated tasks".
+
 ## Not in this record
 
 - ERMAIN-1032: the slow path, where a child's call waits durably for a client
