@@ -27,6 +27,7 @@ export interface ItemData {
   id: string;
   kind: string;
   origin: "ambient" | "user";
+  placement?: "ambient" | "user";
   dismissScope?: "message" | "selection" | "item" | "chat";
   state: string;
   tone?: "warning" | "error";
@@ -141,12 +142,13 @@ export function stateAfter(story: string, gestures: string[] = []): string {
   return key;
 }
 
-/** The chips in lane order: ambient first, then the user's. */
+/** The chips in lane order: ambient first, then the user's, each where its placement puts it. */
 export const laneItems = (stateKey: string): ItemData[] => {
   const items = DATA.states[stateKey].items.map((key) => DATA.items[key]);
+  const group = (item: ItemData) => item.placement ?? item.origin;
   return [
-    ...items.filter((item) => item.origin === "ambient"),
-    ...items.filter((item) => item.origin === "user"),
+    ...items.filter((item) => group(item) === "ambient"),
+    ...items.filter((item) => group(item) === "user"),
   ];
 };
 export const noticeOf = (stateKey: string) => DATA.states[stateKey].notice;

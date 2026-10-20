@@ -304,7 +304,11 @@ export const WORD_COMMENT_STORIES = {
   NoThreadFacet: { selection: CARET_THREE, advertised: "no-thread" },
   NoticeChooseComment: { selection: CARET_THREE, waiting: "choose-comment" },
   NoticePickedGone: { pick: "t13", waiting: "picked-gone" },
-  NoticeCommentsReadFailed: { waiting: "read-failed" },
+  NoticeCommentsReadFailed: {
+    pick: "t5",
+    waiting: "read-failed",
+    flows: [["x:word-comment"]],
+  },
   NoticeSlowCapture: { slowCapture: true },
   NoticeCommentProgress: { commentProgress: { done: 3, total: 12 } },
   NoticeSelectionReadFailed: {

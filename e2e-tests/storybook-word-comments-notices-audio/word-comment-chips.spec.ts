@@ -265,6 +265,25 @@ test.describe("the comment at the cursor", () => {
     await expectLane(page, after, "after Show in Word");
   });
 
+  test("Show in Word on a comment left out for this message only shows it", async ({
+    page,
+  }) => {
+    await openWord(page, "CursorCommentOff");
+    const start = stateAfter("CursorCommentOff");
+    expect(DATA.transitions[start]?.["show:t1"]).toBeUndefined();
+    await open(kind(page, COMMENT)).click();
+    const detail = detailNamed(page, "Comment by Maya Krüger");
+    await detail.getByRole("button", { name: "Show in Word" }).click();
+    await expect(detail).toBeVisible();
+    await expect(wordLive(page)).toHaveText("");
+    await page.keyboard.press("Escape");
+    await expectLane(page, start, "after Show in Word");
+    await expect(kind(page, COMMENT)).toHaveAttribute(
+      "data-state",
+      "suggested",
+    );
+  });
+
   test("Choose comment… swaps the detail for the picker; Escape returns to the chip; a pick is chosen", async ({
     page,
   }) => {
@@ -361,7 +380,7 @@ test.describe("a cursor in several comments", () => {
     await expect(live(page)).toHaveText("Chosen comment removed.");
   });
 
-  test("with the document off, the chosen comment moves behind Open comments and keeps focus", async ({
+  test("with the document off, the chosen comment keeps its place before Open comments and keeps focus", async ({
     page,
   }) => {
     await openWord(page, "OpenCommentsCursorInThree");
@@ -382,7 +401,8 @@ test.describe("a cursor in several comments", () => {
         .evaluateAll((chips) =>
           chips.map((chip) => chip.getAttribute("data-kind")),
         ),
-    ).toEqual([DOCUMENT, OPEN_COMMENTS, COMMENT]);
+    ).toEqual([DOCUMENT, COMMENT, OPEN_COMMENTS]);
+    await expect(comment).toHaveAttribute("data-origin", "user");
     expect(await isTagged(comment, "__moved")).toBe(true);
     await expect(open(comment)).toBeFocused();
   });

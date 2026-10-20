@@ -246,7 +246,7 @@
     },
     "NoticeCommentsReadFailed": {
       "id": "chat-composercontextwordcomments--notice-comments-read-failed",
-      "start": "72cad1069e",
+      "start": "4785e81b57",
       "pickable": ["t5"]
     },
     "NoticeSlowCapture": {
@@ -292,7 +292,7 @@
   },
   "states": {
     "2327548299": {
-      "items": ["5eee946009", "d3625d4b06"],
+      "items": ["5eee946009", "846ad9fca6"],
       "notice": null,
       "send": {
         "carrier": "document",
@@ -302,7 +302,7 @@
       }
     },
     "bf513d86d3": {
-      "items": ["a38bc5e9fb", "578671e3c0"],
+      "items": ["a38bc5e9fb", "ff08deb2c4"],
       "notice": null,
       "send": {
         "carrier": "comment",
@@ -312,7 +312,7 @@
       }
     },
     "65e32838f4": {
-      "items": ["5d5eec8edc", "578671e3c0", "e3f6bd1197"],
+      "items": ["5d5eec8edc", "ff08deb2c4", "e3f6bd1197"],
       "notice": null,
       "send": {
         "carrier": "comment",
@@ -322,7 +322,7 @@
       }
     },
     "e77bdafe29": {
-      "items": ["bc37834e9d", "d3625d4b06"],
+      "items": ["bc37834e9d", "846ad9fca6"],
       "notice": null,
       "send": {
         "carrier": "document",
@@ -332,7 +332,7 @@
       }
     },
     "795ede5bb9": {
-      "items": ["a38bc5e9fb", "aeae860f49"],
+      "items": ["a38bc5e9fb", "f8c384d83c"],
       "notice": null,
       "send": {
         "carrier": "comment",
@@ -342,7 +342,7 @@
       }
     },
     "c182aa708d": {
-      "items": ["a38bc5e9fb", "abd62bfecb"],
+      "items": ["a38bc5e9fb", "91d475146b"],
       "notice": null,
       "send": {
         "carrier": "comment",
@@ -352,7 +352,7 @@
       }
     },
     "97d86fff35": {
-      "items": ["5d5eec8edc", "d3625d4b06", "e3f6bd1197"],
+      "items": ["5d5eec8edc", "846ad9fca6", "e3f6bd1197"],
       "notice": null,
       "send": {
         "carrier": "none",
@@ -362,7 +362,7 @@
       }
     },
     "b2fc80c347": {
-      "items": ["5d5eec8edc", "771429e465", "f64c014ba2"],
+      "items": ["5d5eec8edc", "68f3b3e66d", "f64c014ba2"],
       "notice": null,
       "send": {
         "carrier": "comment",
@@ -372,7 +372,7 @@
       }
     },
     "3cc02ef9d4": {
-      "items": ["5d5eec8edc", "aeae860f49", "e3f6bd1197"],
+      "items": ["5d5eec8edc", "f8c384d83c", "e3f6bd1197"],
       "notice": null,
       "send": {
         "carrier": "comment",
@@ -382,7 +382,7 @@
       }
     },
     "6fbd537d31": {
-      "items": ["5d5eec8edc", "abd62bfecb", "e3f6bd1197"],
+      "items": ["5d5eec8edc", "91d475146b", "e3f6bd1197"],
       "notice": null,
       "send": {
         "carrier": "comment",
@@ -392,7 +392,7 @@
       }
     },
     "d0ad6191e7": {
-      "items": ["5d5eec8edc", "d3625d4b06", "e3f6bd1197"],
+      "items": ["5d5eec8edc", "846ad9fca6", "e3f6bd1197"],
       "notice": null,
       "send": {
         "carrier": "none",
@@ -402,7 +402,7 @@
       }
     },
     "02791bd465": {
-      "items": ["a38bc5e9fb", "aeae860f49"],
+      "items": ["a38bc5e9fb", "f8c384d83c"],
       "notice": null,
       "send": {
         "carrier": "comment",
@@ -412,7 +412,7 @@
       }
     },
     "2754745b38": {
-      "items": ["a38bc5e9fb", "abd62bfecb"],
+      "items": ["a38bc5e9fb", "91d475146b"],
       "notice": null,
       "send": {
         "carrier": "comment",
@@ -421,18 +421,8 @@
         "comments": "thread:t5"
       }
     },
-    "b2c6700e93": {
-      "items": ["5d5eec8edc", "523aba8208", "f64c014ba2"],
-      "notice": null,
-      "send": {
-        "carrier": "none",
-        "document": "off",
-        "selection": "not-sent",
-        "comments": "none"
-      }
-    },
     "d0aa6d9f81": {
-      "items": ["a38bc5e9fb", "abd62bfecb"],
+      "items": ["a38bc5e9fb", "91d475146b"],
       "notice": null,
       "send": {
         "carrier": "comment",
@@ -442,7 +432,7 @@
       }
     },
     "003aa20d4c": {
-      "items": ["5d5eec8edc", "abd62bfecb", "e3f6bd1197"],
+      "items": ["5d5eec8edc", "91d475146b", "e3f6bd1197"],
       "notice": null,
       "send": {
         "carrier": "comment",
@@ -482,7 +472,7 @@
       }
     },
     "31197fcee1": {
-      "items": ["5d5eec8edc", "abd62bfecb", "f64c014ba2"],
+      "items": ["5d5eec8edc", "91d475146b", "f64c014ba2"],
       "notice": null,
       "send": {
         "carrier": "comment",
@@ -502,7 +492,7 @@
       }
     },
     "afe3cc9673": {
-      "items": ["a38bc5e9fb", "abd62bfecb"],
+      "items": ["a38bc5e9fb", "91d475146b"],
       "notice": null,
       "send": {
         "carrier": "comment",
@@ -512,7 +502,7 @@
       }
     },
     "63c4b8d79b": {
-      "items": ["b7cde43191", "c1692d1a66", "9708c877d4"],
+      "items": ["b7cde43191", "c1692d1a66", "b102c97bfe"],
       "notice": null,
       "send": {
         "carrier": "comment",
@@ -522,7 +512,7 @@
       }
     },
     "46e44ccb7f": {
-      "items": ["a4b0c88fe8", "a38bc5e9fb", "abd62bfecb"],
+      "items": ["a4b0c88fe8", "a38bc5e9fb", "91d475146b"],
       "notice": null,
       "send": {
         "carrier": "comment",
@@ -542,7 +532,7 @@
       }
     },
     "a9d1fc1c6d": {
-      "items": ["b7cde43191", "5d5eec8edc", "9708c877d4", "e3f6bd1197"],
+      "items": ["b7cde43191", "5d5eec8edc", "b102c97bfe", "e3f6bd1197"],
       "notice": null,
       "send": {
         "carrier": "comment",
@@ -572,7 +562,7 @@
       }
     },
     "748bfc727d": {
-      "items": ["b7cde43191", "c1692d1a66", "9708c877d4"],
+      "items": ["b7cde43191", "c1692d1a66", "b102c97bfe"],
       "notice": null,
       "send": {
         "carrier": "comment",
@@ -582,7 +572,7 @@
       }
     },
     "91deae3cc8": {
-      "items": ["a4b0c88fe8", "5d5eec8edc", "abd62bfecb", "e3f6bd1197"],
+      "items": ["a4b0c88fe8", "5d5eec8edc", "91d475146b", "e3f6bd1197"],
       "notice": null,
       "send": {
         "carrier": "comment",
@@ -612,7 +602,7 @@
       }
     },
     "809cacfd5c": {
-      "items": ["b7cde43191", "c1692d1a66", "9708c877d4"],
+      "items": ["b7cde43191", "c1692d1a66", "b102c97bfe"],
       "notice": null,
       "send": {
         "carrier": "comment",
@@ -632,7 +622,7 @@
       }
     },
     "92b6ba909c": {
-      "items": ["b7cde43191", "5d5eec8edc", "9708c877d4", "1f5ab4cd26"],
+      "items": ["b7cde43191", "5d5eec8edc", "b102c97bfe", "1f5ab4cd26"],
       "notice": null,
       "send": {
         "carrier": "comment",
@@ -662,7 +652,7 @@
       }
     },
     "91ecaa8bd7": {
-      "items": ["a4b0c88fe8", "a38bc5e9fb", "abd62bfecb"],
+      "items": ["a4b0c88fe8", "a38bc5e9fb", "91d475146b"],
       "notice": null,
       "send": {
         "carrier": "comment",
@@ -672,7 +662,7 @@
       }
     },
     "27333804db": {
-      "items": ["0b6e5cf5f9", "2750d3fed5"],
+      "items": ["0b6e5cf5f9", "2d0410cc07"],
       "notice": null,
       "send": {
         "carrier": "document",
@@ -683,7 +673,7 @@
       }
     },
     "3041277e89": {
-      "items": ["5d5eec8edc", "2750d3fed5", "e3f6bd1197"],
+      "items": ["5d5eec8edc", "2d0410cc07", "e3f6bd1197"],
       "notice": null,
       "send": {
         "carrier": "none",
@@ -694,7 +684,7 @@
       }
     },
     "160a25702f": {
-      "items": ["0b6e5cf5f9", "2750d3fed5"],
+      "items": ["0b6e5cf5f9", "2d0410cc07"],
       "notice": {
         "id": "word.comments.block.gone",
         "tone": "warning",
@@ -714,7 +704,7 @@
       }
     },
     "a355720eb4": {
-      "items": ["5d5eec8edc", "2750d3fed5", "f64c014ba2"],
+      "items": ["5d5eec8edc", "2d0410cc07", "f64c014ba2"],
       "notice": null,
       "send": {
         "carrier": "none",
@@ -725,7 +715,7 @@
       }
     },
     "f44aab5662": {
-      "items": ["5d5eec8edc", "2750d3fed5", "e3f6bd1197"],
+      "items": ["5d5eec8edc", "2d0410cc07", "e3f6bd1197"],
       "notice": {
         "id": "word.comments.block.gone",
         "tone": "warning",
@@ -745,7 +735,7 @@
       }
     },
     "51c334e5b1": {
-      "items": ["0b6e5cf5f9", "aa99e6cf39"],
+      "items": ["0b6e5cf5f9", "8703ec6b89"],
       "notice": null,
       "send": {
         "carrier": "document",
@@ -756,7 +746,7 @@
       }
     },
     "622b768a6d": {
-      "items": ["5d5eec8edc", "aa99e6cf39", "e3f6bd1197"],
+      "items": ["5d5eec8edc", "8703ec6b89", "e3f6bd1197"],
       "notice": null,
       "send": {
         "carrier": "none",
@@ -767,7 +757,7 @@
       }
     },
     "4390ef16b1": {
-      "items": ["5eee946009", "837aad3483"],
+      "items": ["5eee946009", "fe748955c6"],
       "notice": null,
       "send": {
         "carrier": "document",
@@ -777,7 +767,7 @@
       }
     },
     "aabd08eba8": {
-      "items": ["a38bc5e9fb", "aeae860f49"],
+      "items": ["a38bc5e9fb", "f8c384d83c"],
       "notice": null,
       "send": {
         "carrier": "comment",
@@ -787,7 +777,7 @@
       }
     },
     "bf906be1d9": {
-      "items": ["a38bc5e9fb", "27a97e5949"],
+      "items": ["a38bc5e9fb", "4fe394fe4d"],
       "notice": null,
       "send": {
         "carrier": "comment",
@@ -797,7 +787,7 @@
       }
     },
     "8ab4784b42": {
-      "items": ["a38bc5e9fb", "7d77f12595"],
+      "items": ["a38bc5e9fb", "6957974e64"],
       "notice": null,
       "send": {
         "carrier": "comment",
@@ -807,7 +797,7 @@
       }
     },
     "60e000cbf8": {
-      "items": ["a38bc5e9fb", "abd62bfecb"],
+      "items": ["a38bc5e9fb", "91d475146b"],
       "notice": null,
       "send": {
         "carrier": "comment",
@@ -817,7 +807,7 @@
       }
     },
     "bb868c5caa": {
-      "items": ["0b6e5cf5f9", "aa99e6cf39"],
+      "items": ["0b6e5cf5f9", "8703ec6b89"],
       "notice": {
         "id": "word.comments.block.choose",
         "tone": "warning",
@@ -837,7 +827,7 @@
       }
     },
     "efd2f4e58a": {
-      "items": ["5d5eec8edc", "837aad3483", "e3f6bd1197"],
+      "items": ["5d5eec8edc", "fe748955c6", "e3f6bd1197"],
       "notice": null,
       "send": {
         "carrier": "none",
@@ -847,7 +837,7 @@
       }
     },
     "b184619de1": {
-      "items": ["5d5eec8edc", "aa99e6cf39", "f64c014ba2"],
+      "items": ["5d5eec8edc", "8703ec6b89", "f64c014ba2"],
       "notice": null,
       "send": {
         "carrier": "none",
@@ -858,7 +848,7 @@
       }
     },
     "199a3a6d91": {
-      "items": ["5d5eec8edc", "aeae860f49", "e3f6bd1197"],
+      "items": ["5d5eec8edc", "f8c384d83c", "e3f6bd1197"],
       "notice": null,
       "send": {
         "carrier": "comment",
@@ -868,7 +858,7 @@
       }
     },
     "c0935c8b72": {
-      "items": ["5d5eec8edc", "27a97e5949", "e3f6bd1197"],
+      "items": ["5d5eec8edc", "4fe394fe4d", "e3f6bd1197"],
       "notice": null,
       "send": {
         "carrier": "comment",
@@ -878,7 +868,7 @@
       }
     },
     "9b2ce61dd1": {
-      "items": ["5d5eec8edc", "7d77f12595", "e3f6bd1197"],
+      "items": ["5d5eec8edc", "6957974e64", "e3f6bd1197"],
       "notice": null,
       "send": {
         "carrier": "comment",
@@ -888,7 +878,7 @@
       }
     },
     "051b4611a6": {
-      "items": ["5d5eec8edc", "abd62bfecb", "e3f6bd1197"],
+      "items": ["5d5eec8edc", "91d475146b", "e3f6bd1197"],
       "notice": null,
       "send": {
         "carrier": "comment",
@@ -898,7 +888,7 @@
       }
     },
     "9424a78848": {
-      "items": ["5d5eec8edc", "aa99e6cf39", "e3f6bd1197"],
+      "items": ["5d5eec8edc", "8703ec6b89", "e3f6bd1197"],
       "notice": {
         "id": "word.comments.block.choose",
         "tone": "warning",
@@ -918,7 +908,7 @@
       }
     },
     "88617b0579": {
-      "items": ["bc37834e9d", "837aad3483"],
+      "items": ["bc37834e9d", "fe748955c6"],
       "notice": null,
       "send": {
         "carrier": "document",
@@ -927,18 +917,8 @@
         "comments": "map"
       }
     },
-    "929c64654c": {
-      "items": ["5d5eec8edc", "837aad3483", "f64c014ba2"],
-      "notice": null,
-      "send": {
-        "carrier": "none",
-        "document": "off",
-        "selection": "not-sent",
-        "comments": "none"
-      }
-    },
     "bf6899ee56": {
-      "items": ["9ec427e988", "905c9cab67"],
+      "items": ["3ceda06f0c", "905c9cab67"],
       "notice": null,
       "send": {
         "carrier": "selection",
@@ -958,7 +938,7 @@
       }
     },
     "3b713c5fd2": {
-      "items": ["6314092554", "c1692d1a66", "0967b9a503"],
+      "items": ["6314092554", "c1692d1a66", "3b49cbf426"],
       "notice": null,
       "send": {
         "carrier": "comment",
@@ -968,7 +948,7 @@
       }
     },
     "6e088c13c0": {
-      "items": ["9ee1992596", "5d5eec8edc", "e3f6bd1197"],
+      "items": ["c29fcd023a", "5d5eec8edc", "e3f6bd1197"],
       "notice": null,
       "send": {
         "carrier": "selection",
@@ -978,7 +958,7 @@
       }
     },
     "22f0a55fb8": {
-      "items": ["3df620ac20", "905c9cab67"],
+      "items": ["5bed05799a", "905c9cab67"],
       "notice": null,
       "send": {
         "carrier": "selection",
@@ -988,7 +968,7 @@
       }
     },
     "4a4199e0fa": {
-      "items": ["6314092554", "c1692d1a66", "c037211fd3"],
+      "items": ["6314092554", "c1692d1a66", "1fadf52411"],
       "notice": null,
       "send": {
         "carrier": "comment",
@@ -998,7 +978,7 @@
       }
     },
     "9cc5ee463b": {
-      "items": ["6314092554", "c1692d1a66", "9708c877d4"],
+      "items": ["6314092554", "c1692d1a66", "b102c97bfe"],
       "notice": null,
       "send": {
         "carrier": "comment",
@@ -1008,7 +988,7 @@
       }
     },
     "fa406bfd89": {
-      "items": ["9ec427e988", "905c9cab67"],
+      "items": ["3ceda06f0c", "905c9cab67"],
       "notice": null,
       "send": {
         "carrier": "selection",
@@ -1028,7 +1008,7 @@
       }
     },
     "eaef57f52e": {
-      "items": ["406f0fcde3", "a38bc5e9fb", "bbf5c6f799"],
+      "items": ["406f0fcde3", "a38bc5e9fb", "5fd63da05e"],
       "notice": null,
       "send": {
         "carrier": "comment",
@@ -1038,7 +1018,7 @@
       }
     },
     "baee20ebc4": {
-      "items": ["406f0fcde3", "a38bc5e9fb", "abd62bfecb"],
+      "items": ["406f0fcde3", "a38bc5e9fb", "91d475146b"],
       "notice": null,
       "send": {
         "carrier": "comment",
@@ -1058,7 +1038,7 @@
       }
     },
     "727e8c9652": {
-      "items": ["821091a7b2", "905c9cab67"],
+      "items": ["b2d85c5ec0", "905c9cab67"],
       "notice": null,
       "send": {
         "carrier": "selection",
@@ -1068,7 +1048,7 @@
       }
     },
     "e2549ba08a": {
-      "items": ["6314092554", "5d5eec8edc", "0967b9a503", "e3f6bd1197"],
+      "items": ["6314092554", "5d5eec8edc", "3b49cbf426", "e3f6bd1197"],
       "notice": null,
       "send": {
         "carrier": "comment",
@@ -1088,7 +1068,7 @@
       }
     },
     "8c3123f343": {
-      "items": ["16a8c93cbb", "905c9cab67", "252a5b0569"],
+      "items": ["16a8c93cbb", "905c9cab67", "5871fd53ef"],
       "notice": null,
       "send": {
         "carrier": "selection",
@@ -1098,7 +1078,7 @@
       }
     },
     "de5979b72c": {
-      "items": ["6314092554", "c1692d1a66", "c037211fd3"],
+      "items": ["6314092554", "c1692d1a66", "1fadf52411"],
       "notice": null,
       "send": {
         "carrier": "comment",
@@ -1108,7 +1088,7 @@
       }
     },
     "450247a9f4": {
-      "items": ["6314092554", "c1692d1a66", "9708c877d4"],
+      "items": ["6314092554", "c1692d1a66", "b102c97bfe"],
       "notice": null,
       "send": {
         "carrier": "comment",
@@ -1118,7 +1098,7 @@
       }
     },
     "05298bf9b3": {
-      "items": ["f2e13ac2c2", "5d5eec8edc", "e61accfecd"],
+      "items": ["1fa7cfc8e4", "5d5eec8edc", "e61accfecd"],
       "notice": null,
       "send": {
         "carrier": "selection",
@@ -1128,7 +1108,7 @@
       }
     },
     "812854f4ff": {
-      "items": ["f8935146c4", "5d5eec8edc", "e3f6bd1197"],
+      "items": ["bbe4090dc2", "5d5eec8edc", "e3f6bd1197"],
       "notice": null,
       "send": {
         "carrier": "selection",
@@ -1138,7 +1118,7 @@
       }
     },
     "9eccbeaac9": {
-      "items": ["6314092554", "5d5eec8edc", "c037211fd3", "e3f6bd1197"],
+      "items": ["6314092554", "5d5eec8edc", "1fadf52411", "e3f6bd1197"],
       "notice": null,
       "send": {
         "carrier": "comment",
@@ -1148,7 +1128,7 @@
       }
     },
     "1c762896d0": {
-      "items": ["6314092554", "5d5eec8edc", "9708c877d4", "e3f6bd1197"],
+      "items": ["6314092554", "5d5eec8edc", "b102c97bfe", "e3f6bd1197"],
       "notice": null,
       "send": {
         "carrier": "comment",
@@ -1168,7 +1148,7 @@
       }
     },
     "28d357b6e9": {
-      "items": ["3df620ac20", "905c9cab67"],
+      "items": ["5bed05799a", "905c9cab67"],
       "notice": null,
       "send": {
         "carrier": "selection",
@@ -1198,7 +1178,7 @@
       }
     },
     "4217306f35": {
-      "items": ["fb41bcd84e", "5d5eec8edc", "252a5b0569", "e3f6bd1197"],
+      "items": ["fb41bcd84e", "5d5eec8edc", "5871fd53ef", "e3f6bd1197"],
       "notice": null,
       "send": {
         "carrier": "selection",
@@ -1208,7 +1188,7 @@
       }
     },
     "e030609d5f": {
-      "items": ["3df620ac20", "905c9cab67"],
+      "items": ["5bed05799a", "905c9cab67"],
       "notice": null,
       "send": {
         "carrier": "selection",
@@ -1217,18 +1197,8 @@
         "comments": "none"
       }
     },
-    "99f0748097": {
-      "items": ["ddd2a3882d", "5d5eec8edc", "e61accfecd"],
-      "notice": null,
-      "send": {
-        "carrier": "selection",
-        "document": "off",
-        "selection": "sent",
-        "comments": "none"
-      }
-    },
     "8b1de0ffbf": {
-      "items": ["9b5ce74dd3", "905c9cab67"],
+      "items": ["adc99db049", "905c9cab67"],
       "notice": null,
       "send": {
         "carrier": "selection",
@@ -1248,7 +1218,7 @@
       }
     },
     "14282661c9": {
-      "items": ["e31957090b", "5d5eec8edc", "e3f6bd1197"],
+      "items": ["9b3b462ecb", "5d5eec8edc", "e3f6bd1197"],
       "notice": null,
       "send": {
         "carrier": "selection",
@@ -1258,7 +1228,7 @@
       }
     },
     "d2e3cf7b16": {
-      "items": ["e809c90d45", "905c9cab67"],
+      "items": ["1b8ca5616d", "905c9cab67"],
       "notice": null,
       "send": {
         "carrier": "selection",
@@ -1268,7 +1238,7 @@
       }
     },
     "722d557f49": {
-      "items": ["932423aa72", "c1692d1a66", "c037211fd3"],
+      "items": ["932423aa72", "c1692d1a66", "1fadf52411"],
       "notice": null,
       "send": {
         "carrier": "comment",
@@ -1278,7 +1248,7 @@
       }
     },
     "f1978d2285": {
-      "items": ["932423aa72", "c1692d1a66", "8c058adeab"],
+      "items": ["932423aa72", "c1692d1a66", "d308313a73"],
       "notice": null,
       "send": {
         "carrier": "comment",
@@ -1288,7 +1258,7 @@
       }
     },
     "cf7f10c51f": {
-      "items": ["932423aa72", "c1692d1a66", "9708c877d4"],
+      "items": ["932423aa72", "c1692d1a66", "b102c97bfe"],
       "notice": null,
       "send": {
         "carrier": "comment",
@@ -1298,7 +1268,7 @@
       }
     },
     "932c11a452": {
-      "items": ["9b5ce74dd3", "905c9cab67"],
+      "items": ["adc99db049", "905c9cab67"],
       "notice": null,
       "send": {
         "carrier": "selection",
@@ -1318,7 +1288,7 @@
       }
     },
     "cd68406028": {
-      "items": ["2ff6320786", "a38bc5e9fb", "bbf5c6f799"],
+      "items": ["2ff6320786", "a38bc5e9fb", "5fd63da05e"],
       "notice": null,
       "send": {
         "carrier": "comment",
@@ -1328,7 +1298,7 @@
       }
     },
     "a6a8098d82": {
-      "items": ["2ff6320786", "a38bc5e9fb", "e932a3cdcf"],
+      "items": ["2ff6320786", "a38bc5e9fb", "c7c96dbde2"],
       "notice": null,
       "send": {
         "carrier": "comment",
@@ -1338,7 +1308,7 @@
       }
     },
     "429ebbf74b": {
-      "items": ["2ff6320786", "a38bc5e9fb", "abd62bfecb"],
+      "items": ["2ff6320786", "a38bc5e9fb", "91d475146b"],
       "notice": null,
       "send": {
         "carrier": "comment",
@@ -1348,7 +1318,7 @@
       }
     },
     "be5b42de88": {
-      "items": ["c6d62dfe84", "5d5eec8edc", "e61accfecd"],
+      "items": ["5046db6b71", "5d5eec8edc", "e61accfecd"],
       "notice": null,
       "send": {
         "carrier": "selection",
@@ -1358,7 +1328,7 @@
       }
     },
     "362a71f99d": {
-      "items": ["098e3922bf", "5d5eec8edc", "e3f6bd1197"],
+      "items": ["0b58746094", "5d5eec8edc", "e3f6bd1197"],
       "notice": null,
       "send": {
         "carrier": "selection",
@@ -1368,7 +1338,7 @@
       }
     },
     "55bec707c9": {
-      "items": ["932423aa72", "5d5eec8edc", "c037211fd3", "e3f6bd1197"],
+      "items": ["932423aa72", "5d5eec8edc", "1fadf52411", "e3f6bd1197"],
       "notice": null,
       "send": {
         "carrier": "comment",
@@ -1378,7 +1348,7 @@
       }
     },
     "58f130161f": {
-      "items": ["932423aa72", "5d5eec8edc", "8c058adeab", "e3f6bd1197"],
+      "items": ["932423aa72", "5d5eec8edc", "d308313a73", "e3f6bd1197"],
       "notice": null,
       "send": {
         "carrier": "comment",
@@ -1388,7 +1358,7 @@
       }
     },
     "3fc5a25ec5": {
-      "items": ["932423aa72", "5d5eec8edc", "9708c877d4", "e3f6bd1197"],
+      "items": ["932423aa72", "5d5eec8edc", "b102c97bfe", "e3f6bd1197"],
       "notice": null,
       "send": {
         "carrier": "comment",
@@ -1408,7 +1378,7 @@
       }
     },
     "28121b463c": {
-      "items": ["9b5ce74dd3", "905c9cab67"],
+      "items": ["adc99db049", "905c9cab67"],
       "notice": null,
       "send": {
         "carrier": "selection",
@@ -1428,7 +1398,7 @@
       }
     },
     "b9cfd01819": {
-      "items": ["6314092554", "c1692d1a66", "36d8846840"],
+      "items": ["6314092554", "c1692d1a66", "ecc3d23fdf"],
       "notice": null,
       "send": {
         "carrier": "comment",
@@ -1448,7 +1418,7 @@
       }
     },
     "75a81b075d": {
-      "items": ["821091a7b2", "905c9cab67", "d114a87b49"],
+      "items": ["b2d85c5ec0", "905c9cab67", "3dbbe28ce8"],
       "notice": null,
       "send": {
         "carrier": "selection",
@@ -1458,7 +1428,7 @@
       }
     },
     "002e0287ed": {
-      "items": ["6314092554", "5d5eec8edc", "36d8846840", "e3f6bd1197"],
+      "items": ["6314092554", "5d5eec8edc", "ecc3d23fdf", "e3f6bd1197"],
       "notice": null,
       "send": {
         "carrier": "comment",
@@ -1478,7 +1448,7 @@
       }
     },
     "c9e30a99b9": {
-      "items": ["16a8c93cbb", "905c9cab67", "d114a87b49"],
+      "items": ["16a8c93cbb", "905c9cab67", "3dbbe28ce8"],
       "notice": null,
       "send": {
         "carrier": "selection",
@@ -1488,7 +1458,7 @@
       }
     },
     "8a92654b7b": {
-      "items": ["6314092554", "c1692d1a66", "c037211fd3"],
+      "items": ["6314092554", "c1692d1a66", "1fadf52411"],
       "notice": null,
       "send": {
         "carrier": "comment",
@@ -1498,7 +1468,7 @@
       }
     },
     "6d5601584c": {
-      "items": ["6314092554", "c1692d1a66", "9708c877d4"],
+      "items": ["6314092554", "c1692d1a66", "b102c97bfe"],
       "notice": null,
       "send": {
         "carrier": "comment",
@@ -1508,7 +1478,7 @@
       }
     },
     "4f36dad947": {
-      "items": ["6314092554", "c1692d1a66", "36d8846840"],
+      "items": ["6314092554", "c1692d1a66", "ecc3d23fdf"],
       "notice": null,
       "send": {
         "carrier": "comment",
@@ -1528,7 +1498,7 @@
       }
     },
     "75981d7eb4": {
-      "items": ["406f0fcde3", "a38bc5e9fb", "bbf5c6f799"],
+      "items": ["406f0fcde3", "a38bc5e9fb", "5fd63da05e"],
       "notice": null,
       "send": {
         "carrier": "comment",
@@ -1538,7 +1508,7 @@
       }
     },
     "63a2211754": {
-      "items": ["406f0fcde3", "a38bc5e9fb", "abd62bfecb"],
+      "items": ["406f0fcde3", "a38bc5e9fb", "91d475146b"],
       "notice": null,
       "send": {
         "carrier": "comment",
@@ -1548,7 +1518,7 @@
       }
     },
     "3a9c0805eb": {
-      "items": ["6314092554", "c1692d1a66", "0967b9a503"],
+      "items": ["6314092554", "c1692d1a66", "3b49cbf426"],
       "notice": null,
       "send": {
         "carrier": "comment",
@@ -1558,7 +1528,7 @@
       }
     },
     "fc5306540b": {
-      "items": ["ab03cb8428", "5d5eec8edc", "d114a87b49", "e3f6bd1197"],
+      "items": ["8c96fcf761", "5d5eec8edc", "3dbbe28ce8", "e3f6bd1197"],
       "notice": null,
       "send": {
         "carrier": "selection",
@@ -1567,18 +1537,8 @@
         "comments": "selection:t2"
       }
     },
-    "c5b1b36371": {
-      "items": ["6314092554", "c1692d1a66", "c037211fd3"],
-      "notice": null,
-      "send": {
-        "carrier": "comment",
-        "document": "replaced-by-comment",
-        "selection": "replaced-by-comment",
-        "comments": "thread:t2"
-      }
-    },
     "e13544e897": {
-      "items": ["16a8c93cbb", "905c9cab67", "d114a87b49"],
+      "items": ["16a8c93cbb", "905c9cab67", "3dbbe28ce8"],
       "notice": null,
       "send": {
         "carrier": "selection",
@@ -1587,8 +1547,18 @@
         "comments": "none"
       }
     },
+    "c5b1b36371": {
+      "items": ["6314092554", "c1692d1a66", "1fadf52411"],
+      "notice": null,
+      "send": {
+        "carrier": "comment",
+        "document": "replaced-by-comment",
+        "selection": "replaced-by-comment",
+        "comments": "thread:t2"
+      }
+    },
     "e1071a050a": {
-      "items": ["6314092554", "c1692d1a66", "9708c877d4"],
+      "items": ["6314092554", "c1692d1a66", "b102c97bfe"],
       "notice": null,
       "send": {
         "carrier": "comment",
@@ -1598,7 +1568,7 @@
       }
     },
     "910d7ef064": {
-      "items": ["fb41bcd84e", "5d5eec8edc", "d114a87b49", "e3f6bd1197"],
+      "items": ["fb41bcd84e", "5d5eec8edc", "3dbbe28ce8", "e3f6bd1197"],
       "notice": null,
       "send": {
         "carrier": "selection",
@@ -1608,7 +1578,7 @@
       }
     },
     "cd446e28dc": {
-      "items": ["6314092554", "5d5eec8edc", "8f99af78e9", "1f5ab4cd26"],
+      "items": ["6314092554", "5d5eec8edc", "8f5a379d02", "1f5ab4cd26"],
       "notice": null,
       "send": {
         "carrier": "comment",
@@ -1618,7 +1588,7 @@
       }
     },
     "4b8c1d08f5": {
-      "items": ["6314092554", "5d5eec8edc", "c037211fd3", "e3f6bd1197"],
+      "items": ["6314092554", "5d5eec8edc", "1fadf52411", "e3f6bd1197"],
       "notice": null,
       "send": {
         "carrier": "comment",
@@ -1628,7 +1598,7 @@
       }
     },
     "1fe20b434e": {
-      "items": ["6314092554", "5d5eec8edc", "9708c877d4", "e3f6bd1197"],
+      "items": ["6314092554", "5d5eec8edc", "b102c97bfe", "e3f6bd1197"],
       "notice": null,
       "send": {
         "carrier": "comment",
@@ -1638,7 +1608,7 @@
       }
     },
     "19a195695c": {
-      "items": ["821091a7b2", "905c9cab67", "d114a87b49"],
+      "items": ["b2d85c5ec0", "905c9cab67", "3dbbe28ce8"],
       "notice": null,
       "send": {
         "carrier": "selection",
@@ -1658,7 +1628,7 @@
       }
     },
     "11edd91b70": {
-      "items": ["406f0fcde3", "a38bc5e9fb", "bbf5c6f799"],
+      "items": ["406f0fcde3", "a38bc5e9fb", "5fd63da05e"],
       "notice": null,
       "send": {
         "carrier": "comment",
@@ -1668,7 +1638,7 @@
       }
     },
     "97ac7de3af": {
-      "items": ["406f0fcde3", "a38bc5e9fb", "abd62bfecb"],
+      "items": ["406f0fcde3", "a38bc5e9fb", "91d475146b"],
       "notice": null,
       "send": {
         "carrier": "comment",
@@ -1717,16 +1687,6 @@
         "comments": "none"
       }
     },
-    "7afacdb2b1": {
-      "items": ["5d5eec8edc", "16ec408df7"],
-      "notice": null,
-      "send": {
-        "carrier": "none",
-        "document": "off",
-        "selection": "not-sent",
-        "comments": "none"
-      }
-    },
     "49355575db": {
       "items": ["bc37834e9d"],
       "notice": null,
@@ -1758,7 +1718,7 @@
       }
     },
     "8d9b9587a8": {
-      "items": ["a38bc5e9fb", "abd62bfecb"],
+      "items": ["a38bc5e9fb", "91d475146b"],
       "notice": null,
       "send": {
         "carrier": "comment",
@@ -1768,7 +1728,7 @@
       }
     },
     "005064b02f": {
-      "items": ["5d5eec8edc", "abd62bfecb", "e30ae955d6"],
+      "items": ["5d5eec8edc", "91d475146b", "e30ae955d6"],
       "notice": null,
       "send": {
         "carrier": "comment",
@@ -1788,13 +1748,23 @@
       }
     },
     "b5f27f3079": {
-      "items": ["a38bc5e9fb", "abd62bfecb"],
+      "items": ["a38bc5e9fb", "91d475146b"],
       "notice": null,
       "send": {
         "carrier": "comment",
         "document": "replaced-by-comment",
         "selection": "not-sent",
         "comments": "thread:t5"
+      }
+    },
+    "7afacdb2b1": {
+      "items": ["5d5eec8edc", "16ec408df7"],
+      "notice": null,
+      "send": {
+        "carrier": "none",
+        "document": "off",
+        "selection": "not-sent",
+        "comments": "none"
       }
     },
     "da7c8fb0a8": {
@@ -1808,7 +1778,7 @@
       }
     },
     "3d5f3c87fb": {
-      "items": ["a38bc5e9fb", "771429e465"],
+      "items": ["a38bc5e9fb", "68f3b3e66d"],
       "notice": null,
       "send": {
         "carrier": "comment",
@@ -1817,8 +1787,18 @@
         "comments": "thread:t1"
       }
     },
+    "b2c6700e93": {
+      "items": ["5d5eec8edc", "893dab9c97", "16ec408df7"],
+      "notice": null,
+      "send": {
+        "carrier": "none",
+        "document": "off",
+        "selection": "not-sent",
+        "comments": "none"
+      }
+    },
     "3a38142ecd": {
-      "items": ["5d5eec8edc", "578671e3c0", "e30ae955d6"],
+      "items": ["5d5eec8edc", "ff08deb2c4", "e30ae955d6"],
       "notice": null,
       "send": {
         "carrier": "comment",
@@ -1828,7 +1808,7 @@
       }
     },
     "c18f5c8f86": {
-      "items": ["5d5eec8edc", "523aba8208", "c844b9f4e5"],
+      "items": ["5d5eec8edc", "893dab9c97", "c844b9f4e5"],
       "notice": null,
       "send": {
         "carrier": "open-comments",
@@ -1838,7 +1818,7 @@
       }
     },
     "248462c6f3": {
-      "items": ["5d5eec8edc", "aeae860f49", "f64c014ba2"],
+      "items": ["5d5eec8edc", "f8c384d83c", "f64c014ba2"],
       "notice": null,
       "send": {
         "carrier": "comment",
@@ -1848,7 +1828,7 @@
       }
     },
     "5029c86fb2": {
-      "items": ["5d5eec8edc", "abd62bfecb", "f64c014ba2"],
+      "items": ["5d5eec8edc", "91d475146b", "f64c014ba2"],
       "notice": null,
       "send": {
         "carrier": "comment",
@@ -1858,7 +1838,7 @@
       }
     },
     "5a6d4f0605": {
-      "items": ["bc37834e9d", "523aba8208"],
+      "items": ["bc37834e9d", "893dab9c97"],
       "notice": null,
       "send": {
         "carrier": "document",
@@ -1868,7 +1848,7 @@
       }
     },
     "2142f4c64e": {
-      "items": ["5eee946009", "523aba8208"],
+      "items": ["5eee946009", "893dab9c97"],
       "notice": null,
       "send": {
         "carrier": "document",
@@ -1878,7 +1858,7 @@
       }
     },
     "f0d9ad2efc": {
-      "items": ["a38bc5e9fb", "aeae860f49"],
+      "items": ["a38bc5e9fb", "f8c384d83c"],
       "notice": null,
       "send": {
         "carrier": "comment",
@@ -1888,7 +1868,7 @@
       }
     },
     "9c65eabbb7": {
-      "items": ["a38bc5e9fb", "abd62bfecb"],
+      "items": ["a38bc5e9fb", "91d475146b"],
       "notice": null,
       "send": {
         "carrier": "comment",
@@ -1897,28 +1877,8 @@
         "comments": "thread:t5"
       }
     },
-    "89c21d856a": {
-      "items": ["5d5eec8edc", "d3625d4b06", "e30ae955d6"],
-      "notice": null,
-      "send": {
-        "carrier": "none",
-        "document": "off",
-        "selection": "not-sent",
-        "comments": "none"
-      }
-    },
-    "22f7f890e4": {
-      "items": ["5d5eec8edc", "523aba8208", "f64c014ba2"],
-      "notice": null,
-      "send": {
-        "carrier": "none",
-        "document": "off",
-        "selection": "not-sent",
-        "comments": "none"
-      }
-    },
     "ec59dcce76": {
-      "items": ["a38bc5e9fb", "578671e3c0"],
+      "items": ["a38bc5e9fb", "ff08deb2c4"],
       "notice": null,
       "send": {
         "carrier": "comment",
@@ -1927,8 +1887,18 @@
         "comments": "thread:t1"
       }
     },
+    "89c21d856a": {
+      "items": ["5d5eec8edc", "846ad9fca6", "e30ae955d6"],
+      "notice": null,
+      "send": {
+        "carrier": "none",
+        "document": "off",
+        "selection": "not-sent",
+        "comments": "none"
+      }
+    },
     "bcc1c5c7e4": {
-      "items": ["5d5eec8edc", "aeae860f49", "e30ae955d6"],
+      "items": ["5d5eec8edc", "f8c384d83c", "e30ae955d6"],
       "notice": null,
       "send": {
         "carrier": "comment",
@@ -1938,7 +1908,7 @@
       }
     },
     "44fdfe4840": {
-      "items": ["5d5eec8edc", "abd62bfecb", "e30ae955d6"],
+      "items": ["5d5eec8edc", "91d475146b", "e30ae955d6"],
       "notice": null,
       "send": {
         "carrier": "comment",
@@ -1948,7 +1918,7 @@
       }
     },
     "6c4374f3bb": {
-      "items": ["5d5eec8edc", "d3625d4b06", "e30ae955d6"],
+      "items": ["5d5eec8edc", "846ad9fca6", "e30ae955d6"],
       "notice": null,
       "send": {
         "carrier": "none",
@@ -1958,7 +1928,7 @@
       }
     },
     "a7f1b34ee3": {
-      "items": ["5d5eec8edc", "aeae860f49", "f64c014ba2"],
+      "items": ["5d5eec8edc", "f8c384d83c", "f64c014ba2"],
       "notice": null,
       "send": {
         "carrier": "comment",
@@ -1968,7 +1938,7 @@
       }
     },
     "74643b8778": {
-      "items": ["5d5eec8edc", "abd62bfecb", "f64c014ba2"],
+      "items": ["5d5eec8edc", "91d475146b", "f64c014ba2"],
       "notice": null,
       "send": {
         "carrier": "comment",
@@ -1978,7 +1948,7 @@
       }
     },
     "833cffd4f6": {
-      "items": ["0b6e5cf5f9", "aa99e6cf39"],
+      "items": ["0b6e5cf5f9", "8703ec6b89"],
       "notice": null,
       "send": {
         "carrier": "document",
@@ -1988,8 +1958,18 @@
         "block": "choose-comment"
       }
     },
+    "929c64654c": {
+      "items": ["5d5eec8edc", "fe748955c6", "16ec408df7"],
+      "notice": null,
+      "send": {
+        "carrier": "none",
+        "document": "off",
+        "selection": "not-sent",
+        "comments": "none"
+      }
+    },
     "c6636474b0": {
-      "items": ["5d5eec8edc", "aa99e6cf39", "e30ae955d6"],
+      "items": ["5d5eec8edc", "8703ec6b89", "e30ae955d6"],
       "notice": null,
       "send": {
         "carrier": "none",
@@ -2000,7 +1980,7 @@
       }
     },
     "8d77d984d2": {
-      "items": ["5d5eec8edc", "837aad3483", "c844b9f4e5"],
+      "items": ["5d5eec8edc", "fe748955c6", "c844b9f4e5"],
       "notice": null,
       "send": {
         "carrier": "open-comments",
@@ -2010,7 +1990,7 @@
       }
     },
     "524ca2ee89": {
-      "items": ["5d5eec8edc", "aeae860f49", "f64c014ba2"],
+      "items": ["5d5eec8edc", "f8c384d83c", "f64c014ba2"],
       "notice": null,
       "send": {
         "carrier": "comment",
@@ -2020,7 +2000,7 @@
       }
     },
     "3231925bfc": {
-      "items": ["5d5eec8edc", "27a97e5949", "f64c014ba2"],
+      "items": ["5d5eec8edc", "4fe394fe4d", "f64c014ba2"],
       "notice": null,
       "send": {
         "carrier": "comment",
@@ -2030,7 +2010,7 @@
       }
     },
     "d102830753": {
-      "items": ["5d5eec8edc", "7d77f12595", "f64c014ba2"],
+      "items": ["5d5eec8edc", "6957974e64", "f64c014ba2"],
       "notice": null,
       "send": {
         "carrier": "comment",
@@ -2040,7 +2020,7 @@
       }
     },
     "433350f4f2": {
-      "items": ["5d5eec8edc", "abd62bfecb", "f64c014ba2"],
+      "items": ["5d5eec8edc", "91d475146b", "f64c014ba2"],
       "notice": null,
       "send": {
         "carrier": "comment",
@@ -2050,7 +2030,7 @@
       }
     },
     "a55a9ff73a": {
-      "items": ["5d5eec8edc", "aa99e6cf39", "f64c014ba2"],
+      "items": ["5d5eec8edc", "8703ec6b89", "f64c014ba2"],
       "notice": {
         "id": "word.comments.block.choose",
         "tone": "warning",
@@ -2080,7 +2060,7 @@
       }
     },
     "e4c495ceef": {
-      "items": ["f96ac7ec11", "abd62bfecb", "952195423f"],
+      "items": ["f96ac7ec11", "91d475146b", "952195423f"],
       "notice": null,
       "send": {
         "carrier": "comment",
@@ -2110,7 +2090,7 @@
       }
     },
     "00b02be3fc": {
-      "items": ["5d5eec8edc", "2750d3fed5", "f64c014ba2"],
+      "items": ["5d5eec8edc", "2d0410cc07", "f64c014ba2"],
       "notice": {
         "id": "word.comments.block.gone",
         "tone": "warning",
@@ -2129,44 +2109,8 @@
         "block": "picked-gone"
       }
     },
-    "72cad1069e": {
-      "items": ["bc37834e9d"],
-      "notice": {
-        "id": "word.comments.block.readFailed",
-        "tone": "error",
-        "text": "Erato could not read the comments in Word.",
-        "actions": [
-          { "id": "send-without-comments", "label": "Send without comments" }
-        ],
-        "dismissible": false
-      },
-      "send": {
-        "carrier": "document",
-        "document": "sent",
-        "selection": "not-sent",
-        "comments": "map"
-      }
-    },
-    "87724746fc": {
-      "items": ["5d5eec8edc", "e3f6bd1197"],
-      "notice": {
-        "id": "word.comments.block.readFailed",
-        "tone": "error",
-        "text": "Erato could not read the comments in Word.",
-        "actions": [
-          { "id": "send-without-comments", "label": "Send without comments" }
-        ],
-        "dismissible": false
-      },
-      "send": {
-        "carrier": "none",
-        "document": "off",
-        "selection": "not-sent",
-        "comments": "none"
-      }
-    },
     "4785e81b57": {
-      "items": ["a38bc5e9fb", "abd62bfecb"],
+      "items": ["a38bc5e9fb", "b73da1fba2"],
       "notice": {
         "id": "word.comments.block.readFailed",
         "tone": "error",
@@ -2183,26 +2127,8 @@
         "comments": "thread:t5"
       }
     },
-    "f67edab6f6": {
-      "items": ["5d5eec8edc", "c844b9f4e5"],
-      "notice": {
-        "id": "word.comments.block.readFailed",
-        "tone": "error",
-        "text": "Erato could not read the comments in Word.",
-        "actions": [
-          { "id": "send-without-comments", "label": "Send without comments" }
-        ],
-        "dismissible": false
-      },
-      "send": {
-        "carrier": "open-comments",
-        "document": "off",
-        "selection": "not-sent",
-        "comments": "open-comments"
-      }
-    },
     "e275bdc37c": {
-      "items": ["5d5eec8edc", "abd62bfecb", "e3f6bd1197"],
+      "items": ["5d5eec8edc", "b73da1fba2", "e3f6bd1197"],
       "notice": {
         "id": "word.comments.block.readFailed",
         "tone": "error",
@@ -2220,7 +2146,7 @@
       }
     },
     "29917924a5": {
-      "items": ["bc37834e9d"],
+      "items": ["9aaf562237"],
       "notice": {
         "id": "word.comments.block.readFailed",
         "tone": "error",
@@ -2237,8 +2163,62 @@
         "comments": "map"
       }
     },
+    "e730a16b40": {
+      "items": ["5d5eec8edc", "b73da1fba2", "f64c014ba2"],
+      "notice": {
+        "id": "word.comments.block.readFailed",
+        "tone": "error",
+        "text": "Erato could not read the comments in Word.",
+        "actions": [
+          { "id": "send-without-comments", "label": "Send without comments" }
+        ],
+        "dismissible": false
+      },
+      "send": {
+        "carrier": "comment",
+        "document": "off",
+        "selection": "not-sent",
+        "comments": "thread:t5"
+      }
+    },
+    "dc8ce31f88": {
+      "items": ["5d5eec8edc", "e3f6bd1197"],
+      "notice": {
+        "id": "word.comments.block.readFailed",
+        "tone": "error",
+        "text": "Erato could not read the comments in Word.",
+        "actions": [
+          { "id": "send-without-comments", "label": "Send without comments" }
+        ],
+        "dismissible": false
+      },
+      "send": {
+        "carrier": "none",
+        "document": "off",
+        "selection": "not-sent",
+        "comments": "none"
+      }
+    },
+    "ad396df0ee": {
+      "items": ["a38bc5e9fb", "b73da1fba2"],
+      "notice": {
+        "id": "word.comments.block.readFailed",
+        "tone": "error",
+        "text": "Erato could not read the comments in Word.",
+        "actions": [
+          { "id": "send-without-comments", "label": "Send without comments" }
+        ],
+        "dismissible": false
+      },
+      "send": {
+        "carrier": "comment",
+        "document": "replaced-by-comment",
+        "selection": "not-sent",
+        "comments": "thread:t5"
+      }
+    },
     "99f2ba8225": {
-      "items": ["bc37834e9d"],
+      "items": ["870f4e335a"],
       "notice": {
         "id": "word.send.slowCapture",
         "tone": "info",
@@ -2267,7 +2247,7 @@
       }
     },
     "3c6b953e2a": {
-      "items": ["a38bc5e9fb", "abd62bfecb"],
+      "items": ["a38bc5e9fb", "91d475146b"],
       "notice": {
         "id": "word.send.slowCapture",
         "tone": "info",
@@ -2296,7 +2276,7 @@
       }
     },
     "2476181eec": {
-      "items": ["5d5eec8edc", "abd62bfecb", "e3f6bd1197"],
+      "items": ["5d5eec8edc", "91d475146b", "e3f6bd1197"],
       "notice": null,
       "send": {
         "carrier": "comment",
@@ -2306,7 +2286,7 @@
       }
     },
     "97200ad916": {
-      "items": ["bc37834e9d"],
+      "items": ["870f4e335a"],
       "notice": {
         "id": "word.send.slowCapture",
         "tone": "info",
@@ -2361,7 +2341,7 @@
       }
     },
     "f8a0233b89": {
-      "items": ["a38bc5e9fb", "abd62bfecb"],
+      "items": ["a38bc5e9fb", "91d475146b"],
       "notice": {
         "id": "word.comments.progress",
         "tone": "info",
@@ -2397,7 +2377,7 @@
       }
     },
     "14b119ee4c": {
-      "items": ["5d5eec8edc", "abd62bfecb", "e3f6bd1197"],
+      "items": ["5d5eec8edc", "91d475146b", "e3f6bd1197"],
       "notice": {
         "id": "word.comments.progress",
         "tone": "info",
@@ -2481,7 +2461,7 @@
       }
     },
     "3f0184e3bf": {
-      "items": ["7bde50d46d", "a38bc5e9fb", "9708c877d4"],
+      "items": ["7bde50d46d", "a38bc5e9fb", "b102c97bfe"],
       "notice": {
         "id": "word.selection.readFailed",
         "tone": "error",
@@ -2539,7 +2519,7 @@
       }
     },
     "f8ae46618e": {
-      "items": ["a4b0c88fe8", "a38bc5e9fb", "abd62bfecb"],
+      "items": ["a4b0c88fe8", "a38bc5e9fb", "91d475146b"],
       "notice": {
         "id": "word.selection.readFailed",
         "tone": "error",
@@ -2581,7 +2561,7 @@
       }
     },
     "664b397ca7": {
-      "items": ["7bde50d46d", "5d5eec8edc", "9708c877d4", "e3f6bd1197"],
+      "items": ["7bde50d46d", "5d5eec8edc", "b102c97bfe", "e3f6bd1197"],
       "notice": {
         "id": "word.selection.readFailed",
         "tone": "error",
@@ -2639,7 +2619,7 @@
       }
     },
     "0c5b728463": {
-      "items": ["7bde50d46d", "a38bc5e9fb", "9708c877d4"],
+      "items": ["7bde50d46d", "a38bc5e9fb", "b102c97bfe"],
       "notice": null,
       "send": {
         "carrier": "comment",
@@ -2675,7 +2655,7 @@
       }
     },
     "32e9ae8501": {
-      "items": ["a38bc5e9fb", "abd62bfecb"],
+      "items": ["a38bc5e9fb", "91d475146b"],
       "notice": {
         "id": "word.send.previousCapture",
         "tone": "warning",
@@ -2711,7 +2691,7 @@
       }
     },
     "0f5f343441": {
-      "items": ["5d5eec8edc", "abd62bfecb", "e3f6bd1197"],
+      "items": ["5d5eec8edc", "91d475146b", "e3f6bd1197"],
       "notice": null,
       "send": {
         "carrier": "comment",
@@ -2737,7 +2717,7 @@
       }
     },
     "da50b138b7": {
-      "items": ["a38bc5e9fb", "abd62bfecb"],
+      "items": ["a38bc5e9fb", "91d475146b"],
       "notice": null,
       "send": {
         "carrier": "comment",
@@ -2783,7 +2763,7 @@
       }
     },
     "396bc7ce17": {
-      "items": ["a38bc5e9fb", "abd62bfecb"],
+      "items": ["a38bc5e9fb", "91d475146b"],
       "notice": {
         "id": "word.send.notIncluded",
         "tone": "warning",
@@ -2819,7 +2799,7 @@
       }
     },
     "03c6b710b3": {
-      "items": ["5d5eec8edc", "abd62bfecb", "e3f6bd1197"],
+      "items": ["5d5eec8edc", "91d475146b", "e3f6bd1197"],
       "notice": null,
       "send": {
         "carrier": "comment",
@@ -2845,7 +2825,7 @@
       }
     },
     "4b01dc9bae": {
-      "items": ["a38bc5e9fb", "abd62bfecb"],
+      "items": ["a38bc5e9fb", "91d475146b"],
       "notice": null,
       "send": {
         "carrier": "comment",
@@ -2891,7 +2871,7 @@
       }
     },
     "878f995816": {
-      "items": ["a38bc5e9fb", "abd62bfecb"],
+      "items": ["a38bc5e9fb", "91d475146b"],
       "notice": {
         "id": "word.send.budget.model-budget",
         "tone": "warning",
@@ -2927,7 +2907,7 @@
       }
     },
     "365341c699": {
-      "items": ["5d5eec8edc", "abd62bfecb", "e3f6bd1197"],
+      "items": ["5d5eec8edc", "91d475146b", "e3f6bd1197"],
       "notice": null,
       "send": {
         "carrier": "comment",
@@ -2953,7 +2933,7 @@
       }
     },
     "31a1503e57": {
-      "items": ["a38bc5e9fb", "abd62bfecb"],
+      "items": ["a38bc5e9fb", "91d475146b"],
       "notice": null,
       "send": {
         "carrier": "comment",
@@ -3015,10 +2995,11 @@
         }
       }
     },
-    "578671e3c0": {
+    "ff08deb2c4": {
       "id": "word-comment",
       "kind": "word.comment",
       "origin": "ambient",
+      "placement": "ambient",
       "dismissScope": "message",
       "icon": "comment",
       "state": "included",
@@ -3147,10 +3128,11 @@
         }
       }
     },
-    "d3625d4b06": {
+    "846ad9fca6": {
       "id": "word-comment",
       "kind": "word.comment",
       "origin": "ambient",
+      "placement": "ambient",
       "dismissScope": "message",
       "icon": "comment",
       "state": "suggested",
@@ -3215,10 +3197,11 @@
         }
       }
     },
-    "aeae860f49": {
+    "f8c384d83c": {
       "id": "word-comment",
       "kind": "word.comment",
       "origin": "user",
+      "placement": "ambient",
       "icon": "comment",
       "state": "included",
       "label": "Comment by Maya Krüger",
@@ -3252,10 +3235,11 @@
         }
       }
     },
-    "abd62bfecb": {
+    "91d475146b": {
       "id": "word-comment",
       "kind": "word.comment",
       "origin": "user",
+      "placement": "ambient",
       "icon": "comment",
       "state": "included",
       "label": "Comment by Sara Nowak",
@@ -3289,10 +3273,11 @@
         }
       }
     },
-    "771429e465": {
+    "68f3b3e66d": {
       "id": "word-comment",
       "kind": "word.comment",
       "origin": "ambient",
+      "placement": "ambient",
       "dismissScope": "message",
       "icon": "comment",
       "state": "included",
@@ -3378,45 +3363,6 @@
         }
       }
     },
-    "523aba8208": {
-      "id": "word-comment",
-      "kind": "word.comment",
-      "origin": "ambient",
-      "dismissScope": "message",
-      "icon": "comment",
-      "state": "suggested",
-      "label": "Comment by Maya Krüger",
-      "spokenLabel": "Comments",
-      "restoreLabel": "Include comments",
-      "announcements": {
-        "removed": "Comments removed for this message. Include again with +"
-      },
-      "remove": false,
-      "restore": true,
-      "detail": {
-        "title": "Comment by Maya Krüger",
-        "actions": [{ "id": "choose", "label": "Choose comment…" }],
-        "body": {
-          "kind": "comment",
-          "variant": "thread",
-          "why": "At your cursor",
-          "thread": "t1",
-          "choices": [],
-          "notes": [],
-          "coverage": {
-            "heading": "If included",
-            "lines": [
-              "The comment by Maya Krüger, with its replies.",
-              "If your question needs them, Erato may read the other comments in the document.",
-              "11 other comments are not sent.",
-              "Resolved comments are sent only when they are in your selection or when you ask for them.",
-              "Email addresses of comment authors are never sent."
-            ]
-          },
-          "lifetime": "Leaving comments out lasts for the next message only."
-        }
-      }
-    },
     "b7cde43191": {
       "id": "word-selection",
       "kind": "word.selection",
@@ -3497,10 +3443,11 @@
         }
       }
     },
-    "9708c877d4": {
+    "b102c97bfe": {
       "id": "word-comment",
       "kind": "word.comment",
       "origin": "user",
+      "placement": "ambient",
       "icon": "comment",
       "state": "included",
       "label": "Comment by Sara Nowak",
@@ -3743,10 +3690,11 @@
         }
       }
     },
-    "2750d3fed5": {
+    "2d0410cc07": {
       "id": "word-comment",
       "kind": "word.comment",
       "origin": "user",
+      "placement": "ambient",
       "icon": "comment",
       "state": "error",
       "tone": "error",
@@ -3777,10 +3725,11 @@
         }
       }
     },
-    "aa99e6cf39": {
+    "8703ec6b89": {
       "id": "word-comment",
       "kind": "word.comment",
       "origin": "ambient",
+      "placement": "ambient",
       "dismissScope": "message",
       "icon": "comments",
       "state": "attention",
@@ -3811,10 +3760,11 @@
         }
       }
     },
-    "837aad3483": {
+    "fe748955c6": {
       "id": "word-comment",
       "kind": "word.comment",
       "origin": "ambient",
+      "placement": "ambient",
       "dismissScope": "message",
       "icon": "comments",
       "state": "suggested",
@@ -3842,10 +3792,11 @@
         }
       }
     },
-    "27a97e5949": {
+    "4fe394fe4d": {
       "id": "word-comment",
       "kind": "word.comment",
       "origin": "user",
+      "placement": "ambient",
       "icon": "comment",
       "state": "included",
       "label": "Comment by Tom Becker",
@@ -3879,10 +3830,11 @@
         }
       }
     },
-    "7d77f12595": {
+    "6957974e64": {
       "id": "word-comment",
       "kind": "word.comment",
       "origin": "user",
+      "placement": "ambient",
       "icon": "comment",
       "state": "included",
       "label": "Comment by Paul Martin",
@@ -3916,7 +3868,7 @@
         }
       }
     },
-    "9ec427e988": {
+    "3ceda06f0c": {
       "id": "word-selection",
       "kind": "word.selection",
       "origin": "ambient",
@@ -3925,7 +3877,7 @@
       "state": "included",
       "label": "“Payment is due within 30 days of the invoice date. Late paym…”",
       "spokenLabel": "Selection",
-      "meta": "Selected · 1 ¶ · 1 comment",
+      "meta": "1 comment · 1 ¶",
       "removeLabel": "Dismiss selection",
       "announcements": {
         "restored": "Selection included. It is sent instead of the document."
@@ -4036,10 +3988,11 @@
         }
       }
     },
-    "0967b9a503": {
+    "3b49cbf426": {
       "id": "word-comment",
       "kind": "word.comment",
       "origin": "ambient",
+      "placement": "ambient",
       "dismissScope": "message",
       "icon": "comment",
       "state": "included",
@@ -4084,7 +4037,7 @@
         }
       }
     },
-    "9ee1992596": {
+    "c29fcd023a": {
       "id": "word-selection",
       "kind": "word.selection",
       "origin": "ambient",
@@ -4093,7 +4046,7 @@
       "state": "included",
       "label": "“Payment is due within 30 days of the invoice date. Late paym…”",
       "spokenLabel": "Selection",
-      "meta": "Selected · 1 ¶ · 1 comment",
+      "meta": "1 comment · 1 ¶",
       "removeLabel": "Dismiss selection",
       "remove": true,
       "restore": false,
@@ -4134,7 +4087,7 @@
         }
       }
     },
-    "3df620ac20": {
+    "5bed05799a": {
       "id": "word-selection",
       "kind": "word.selection",
       "origin": "ambient",
@@ -4143,7 +4096,7 @@
       "state": "included",
       "label": "“Payment is due within 30 days of the invoice date. Late paym…”",
       "spokenLabel": "Selection",
-      "meta": "Selected · 1 ¶ · comments off",
+      "meta": "Comments off · 1 ¶",
       "removeLabel": "Dismiss selection",
       "announcements": {
         "restored": "Selection included. It is sent instead of the document."
@@ -4189,10 +4142,11 @@
         }
       }
     },
-    "c037211fd3": {
+    "1fadf52411": {
       "id": "word-comment",
       "kind": "word.comment",
       "origin": "user",
+      "placement": "ambient",
       "icon": "comment",
       "state": "included",
       "label": "Comment by Jonas Weber",
@@ -4233,10 +4187,11 @@
         }
       }
     },
-    "bbf5c6f799": {
+    "5fd63da05e": {
       "id": "word-comment",
       "kind": "word.comment",
       "origin": "user",
+      "placement": "ambient",
       "icon": "comment",
       "state": "included",
       "label": "Comment by Jonas Weber",
@@ -4270,7 +4225,7 @@
         }
       }
     },
-    "821091a7b2": {
+    "b2d85c5ec0": {
       "id": "word-selection",
       "kind": "word.selection",
       "origin": "ambient",
@@ -4279,7 +4234,7 @@
       "state": "included",
       "label": "“Payment is due within 30 days of the invoice date. Late paym…”",
       "spokenLabel": "Selection",
-      "meta": "Selected · 1 ¶ · 1 comment",
+      "meta": "1 comment · 1 ¶",
       "removeLabel": "Dismiss selection",
       "announcements": {
         "restored": "Selection included. It is sent instead of the document."
@@ -4357,10 +4312,11 @@
         }
       }
     },
-    "252a5b0569": {
+    "5871fd53ef": {
       "id": "word-comment",
       "kind": "word.comment",
       "origin": "ambient",
+      "placement": "ambient",
       "dismissScope": "message",
       "icon": "comment",
       "state": "suggested",
@@ -4403,7 +4359,7 @@
         }
       }
     },
-    "f2e13ac2c2": {
+    "1fa7cfc8e4": {
       "id": "word-selection",
       "kind": "word.selection",
       "origin": "ambient",
@@ -4412,7 +4368,7 @@
       "state": "included",
       "label": "“Payment is due within 30 days of the invoice date. Late paym…”",
       "spokenLabel": "Selection",
-      "meta": "Selected · 1 ¶ · 1 comment",
+      "meta": "1 comment · 1 ¶",
       "removeLabel": "Dismiss selection",
       "remove": true,
       "restore": false,
@@ -4501,7 +4457,7 @@
         }
       }
     },
-    "f8935146c4": {
+    "bbe4090dc2": {
       "id": "word-selection",
       "kind": "word.selection",
       "origin": "ambient",
@@ -4510,7 +4466,7 @@
       "state": "included",
       "label": "“Payment is due within 30 days of the invoice date. Late paym…”",
       "spokenLabel": "Selection",
-      "meta": "Selected · 1 ¶ · comments off",
+      "meta": "Comments off · 1 ¶",
       "removeLabel": "Dismiss selection",
       "remove": true,
       "restore": false,
@@ -4610,57 +4566,7 @@
         }
       }
     },
-    "ddd2a3882d": {
-      "id": "word-selection",
-      "kind": "word.selection",
-      "origin": "ambient",
-      "dismissScope": "selection",
-      "icon": "selection",
-      "state": "included",
-      "label": "“Payment is due within 30 days of the invoice date. Late paym…”",
-      "spokenLabel": "Selection",
-      "meta": "Selected · 1 ¶ · comments off",
-      "removeLabel": "Dismiss selection",
-      "remove": true,
-      "restore": false,
-      "detail": {
-        "title": "Selected passage",
-        "actions": [
-          {
-            "id": "comment-instead",
-            "label": "Work on Jonas Weber's comment instead",
-            "announcement": "Comment by Jonas Weber included. It is sent instead of the passage."
-          },
-          { "id": "choose", "label": "Choose comment…" }
-        ],
-        "body": {
-          "kind": "selection",
-          "text": "Payment is due within 30 days of the invoice date. Late payments bear interest at the statutory rate.",
-          "cut": false,
-          "paragraphs": "1 paragraph",
-          "notes": [],
-          "comments": {
-            "count": 1,
-            "checked": false,
-            "threads": ["t2"],
-            "why": null,
-            "coverage": {
-              "heading": "If included",
-              "lines": [
-                "The comment in your selection, with its replies.",
-                "If your question needs them, Erato may read the other comments in the document.",
-                "11 other comments are not sent.",
-                "Resolved comments are sent only when they are in your selection or when you ask for them.",
-                "Email addresses of comment authors are never sent."
-              ]
-            },
-            "sendLabel": "Send the comment in this passage"
-          },
-          "lifetime": "Leaving it out lasts until the selection changes."
-        }
-      }
-    },
-    "9b5ce74dd3": {
+    "adc99db049": {
       "id": "word-selection",
       "kind": "word.selection",
       "origin": "ambient",
@@ -4669,7 +4575,7 @@
       "state": "included",
       "label": "“Payment is due within 30 days of the invoice date. The Suppl…”",
       "spokenLabel": "Selection",
-      "meta": "Selected · 2 ¶ · 2 comments",
+      "meta": "2 comments · 2 ¶",
       "removeLabel": "Dismiss selection",
       "announcements": {
         "restored": "Selection included. It is sent instead of the document."
@@ -4734,7 +4640,7 @@
         }
       }
     },
-    "e31957090b": {
+    "9b3b462ecb": {
       "id": "word-selection",
       "kind": "word.selection",
       "origin": "ambient",
@@ -4743,7 +4649,7 @@
       "state": "included",
       "label": "“Payment is due within 30 days of the invoice date. The Suppl…”",
       "spokenLabel": "Selection",
-      "meta": "Selected · 2 ¶ · 2 comments",
+      "meta": "2 comments · 2 ¶",
       "removeLabel": "Dismiss selection",
       "remove": true,
       "restore": false,
@@ -4777,7 +4683,7 @@
         }
       }
     },
-    "e809c90d45": {
+    "1b8ca5616d": {
       "id": "word-selection",
       "kind": "word.selection",
       "origin": "ambient",
@@ -4786,7 +4692,7 @@
       "state": "included",
       "label": "“Payment is due within 30 days of the invoice date. The Suppl…”",
       "spokenLabel": "Selection",
-      "meta": "Selected · 2 ¶ · comments off",
+      "meta": "Comments off · 2 ¶",
       "removeLabel": "Dismiss selection",
       "announcements": {
         "restored": "Selection included. It is sent instead of the document."
@@ -4864,10 +4770,11 @@
         }
       }
     },
-    "8c058adeab": {
+    "d308313a73": {
       "id": "word-comment",
       "kind": "word.comment",
       "origin": "user",
+      "placement": "ambient",
       "icon": "comment",
       "state": "included",
       "label": "Comment by Lena Fischer",
@@ -4908,10 +4815,11 @@
         }
       }
     },
-    "e932a3cdcf": {
+    "c7c96dbde2": {
       "id": "word-comment",
       "kind": "word.comment",
       "origin": "user",
+      "placement": "ambient",
       "icon": "comment",
       "state": "included",
       "label": "Comment by Lena Fischer",
@@ -4945,7 +4853,7 @@
         }
       }
     },
-    "c6d62dfe84": {
+    "5046db6b71": {
       "id": "word-selection",
       "kind": "word.selection",
       "origin": "ambient",
@@ -4954,7 +4862,7 @@
       "state": "included",
       "label": "“Payment is due within 30 days of the invoice date. The Suppl…”",
       "spokenLabel": "Selection",
-      "meta": "Selected · 2 ¶ · 2 comments",
+      "meta": "2 comments · 2 ¶",
       "removeLabel": "Dismiss selection",
       "remove": true,
       "restore": false,
@@ -4988,7 +4896,7 @@
         }
       }
     },
-    "098e3922bf": {
+    "0b58746094": {
       "id": "word-selection",
       "kind": "word.selection",
       "origin": "ambient",
@@ -4997,7 +4905,7 @@
       "state": "included",
       "label": "“Payment is due within 30 days of the invoice date. The Suppl…”",
       "spokenLabel": "Selection",
-      "meta": "Selected · 2 ¶ · comments off",
+      "meta": "Comments off · 2 ¶",
       "removeLabel": "Dismiss selection",
       "remove": true,
       "restore": false,
@@ -5031,10 +4939,11 @@
         }
       }
     },
-    "36d8846840": {
+    "ecc3d23fdf": {
       "id": "word-comment",
       "kind": "word.comment",
       "origin": "ambient",
+      "placement": "ambient",
       "dismissScope": "message",
       "icon": "comment",
       "state": "included",
@@ -5080,10 +4989,11 @@
         }
       }
     },
-    "d114a87b49": {
+    "3dbbe28ce8": {
       "id": "word-comment",
       "kind": "word.comment",
       "origin": "ambient",
+      "placement": "ambient",
       "dismissScope": "message",
       "icon": "comment",
       "state": "suggested",
@@ -5127,7 +5037,7 @@
         }
       }
     },
-    "ab03cb8428": {
+    "8c96fcf761": {
       "id": "word-selection",
       "kind": "word.selection",
       "origin": "ambient",
@@ -5136,7 +5046,7 @@
       "state": "included",
       "label": "“Payment is due within 30 days of the invoice date. Late paym…”",
       "spokenLabel": "Selection",
-      "meta": "Selected · 1 ¶ · 1 comment",
+      "meta": "1 comment · 1 ¶",
       "removeLabel": "Dismiss selection",
       "remove": true,
       "restore": false,
@@ -5177,10 +5087,11 @@
         }
       }
     },
-    "8f99af78e9": {
+    "8f5a379d02": {
       "id": "word-comment",
       "kind": "word.comment",
       "origin": "ambient",
+      "placement": "ambient",
       "dismissScope": "message",
       "icon": "comment",
       "state": "included",
@@ -5261,6 +5172,39 @@
         }
       }
     },
+    "e30ae955d6": {
+      "id": "word-open-comments",
+      "kind": "word.openComments",
+      "origin": "ambient",
+      "dismissScope": "chat",
+      "icon": "comments",
+      "state": "suggested",
+      "label": "Open comments (9)",
+      "spokenLabel": "Open comments",
+      "restoreLabel": "Include open comments",
+      "remove": false,
+      "restore": true,
+      "detail": {
+        "title": "Open comments (9)",
+        "actions": [{ "id": "choose", "label": "Choose comment…" }],
+        "body": {
+          "kind": "openComments",
+          "intro": "Shown while the document is off, so you can still send its comments without its text.",
+          "notes": [],
+          "coverage": {
+            "heading": "If included",
+            "lines": [
+              "The 9 open comments in the document, with their replies.",
+              "If your question needs them, Erato may read the other comments in the document.",
+              "3 other comments are not sent.",
+              "Resolved comments are sent only when they are in your selection or when you ask for them.",
+              "Email addresses of comment authors are never sent."
+            ]
+          },
+          "lifetime": "Leaving them out lasts for this chat."
+        }
+      }
+    },
     "16ec408df7": {
       "id": "word-open-comments",
       "kind": "word.openComments",
@@ -5295,36 +5239,43 @@
         }
       }
     },
-    "e30ae955d6": {
-      "id": "word-open-comments",
-      "kind": "word.openComments",
+    "893dab9c97": {
+      "id": "word-comment",
+      "kind": "word.comment",
       "origin": "ambient",
-      "dismissScope": "chat",
-      "icon": "comments",
+      "placement": "ambient",
+      "dismissScope": "message",
+      "icon": "comment",
       "state": "suggested",
-      "label": "Open comments (9)",
-      "spokenLabel": "Open comments",
-      "restoreLabel": "Include open comments",
+      "label": "Comment by Maya Krüger",
+      "spokenLabel": "Comments",
+      "restoreLabel": "Include comments",
+      "announcements": {
+        "removed": "Comments removed for this message. Include again with +"
+      },
       "remove": false,
       "restore": true,
       "detail": {
-        "title": "Open comments (9)",
+        "title": "Comment by Maya Krüger",
         "actions": [{ "id": "choose", "label": "Choose comment…" }],
         "body": {
-          "kind": "openComments",
-          "intro": "Shown while the document is off, so you can still send its comments without its text.",
+          "kind": "comment",
+          "variant": "thread",
+          "why": "At your cursor",
+          "thread": "t1",
+          "choices": [],
           "notes": [],
           "coverage": {
             "heading": "If included",
             "lines": [
-              "The 9 open comments in the document, with their replies.",
+              "The comment by Maya Krüger, with its replies.",
               "If your question needs them, Erato may read the other comments in the document.",
-              "3 other comments are not sent.",
+              "11 other comments are not sent.",
               "Resolved comments are sent only when they are in your selection or when you ask for them.",
               "Email addresses of comment authors are never sent."
             ]
           },
-          "lifetime": "Leaving them out lasts for this chat."
+          "lifetime": "Leaving comments out lasts for the next message only."
         }
       }
     },
@@ -5490,6 +5441,103 @@
         }
       }
     },
+    "b73da1fba2": {
+      "id": "word-comment",
+      "kind": "word.comment",
+      "origin": "user",
+      "placement": "ambient",
+      "icon": "comment",
+      "state": "error",
+      "tone": "error",
+      "label": "Comment by Sara Nowak",
+      "spokenLabel": "Chosen comment",
+      "meta": "Couldn't read comments",
+      "removeLabel": "Remove the chosen comment",
+      "removeActionLabel": "Remove the chosen comment",
+      "remove": true,
+      "restore": false,
+      "detail": {
+        "title": "Comment by Sara Nowak",
+        "actions": [{ "id": "choose", "label": "Choose comment…" }],
+        "body": {
+          "kind": "comment",
+          "variant": "thread",
+          "why": "Chosen by you",
+          "thread": "t5",
+          "choices": [],
+          "notes": [],
+          "coverage": {
+            "heading": "What is sent",
+            "lines": [
+              "The comment by Sara Nowak, with its replies.",
+              "If your question needs them, Erato may read the other comments in the document.",
+              "11 other comments are not sent.",
+              "Resolved comments are sent only when they are in your selection or when you ask for them.",
+              "Email addresses of comment authors are never sent."
+            ]
+          },
+          "lifetime": "A chosen comment stays until you choose another, remove it or select other text."
+        }
+      }
+    },
+    "9aaf562237": {
+      "id": "word-document",
+      "kind": "word.document",
+      "origin": "ambient",
+      "dismissScope": "chat",
+      "icon": "document",
+      "state": "included",
+      "label": "Supply agreement.docx",
+      "spokenLabel": "Document",
+      "meta": "86 ¶ · couldn't read comments",
+      "removeLabel": "Don't include this document",
+      "remove": true,
+      "restore": false,
+      "detail": {
+        "title": "Supply agreement.docx",
+        "actions": [{ "id": "choose", "label": "Choose comment…" }],
+        "body": {
+          "kind": "document",
+          "notes": [],
+          "coverage": {
+            "heading": "Coverage",
+            "lines": ["Erato receives the whole document, 86 paragraphs."]
+          },
+          "comments": [
+            "A list of the 12 comments in the document: each one's author, place, status and how it starts.",
+            "If your question needs them, Erato may read the other comments in the document.",
+            "The list includes resolved comments too, each with how it starts.",
+            "Email addresses of comment authors are never sent."
+          ],
+          "lifetime": "Leaving it out lasts for this chat. New chats follow your setting “Include the open document in new chats”."
+        }
+      }
+    },
+    "870f4e335a": {
+      "id": "word-document",
+      "kind": "word.document",
+      "origin": "ambient",
+      "dismissScope": "chat",
+      "icon": "document",
+      "state": "loading",
+      "label": "Supply agreement.docx",
+      "spokenLabel": "Document",
+      "meta": "Reading document…",
+      "removeLabel": "Don't include this document",
+      "remove": true,
+      "restore": false,
+      "detail": {
+        "title": "Supply agreement.docx",
+        "actions": [{ "id": "choose", "label": "Choose comment…" }],
+        "body": {
+          "kind": "document",
+          "notes": [],
+          "coverage": null,
+          "comments": [],
+          "lifetime": "Leaving it out lasts for this chat. New chats follow your setting “Include the open document in new chats”."
+        }
+      }
+    },
     "7bde50d46d": {
       "id": "word-selection",
       "kind": "word.selection",
@@ -5528,10 +5576,6 @@
     "2327548299": {
       "x:word-document": { "to": "97d86fff35" },
       "+:word-comment": { "to": "bf513d86d3" },
-      "show:t1": {
-        "to": "795ede5bb9",
-        "announce": "Comment by Maya Krüger chosen."
-      },
       "picker:t1": {
         "to": "795ede5bb9",
         "announce": "Comment by Maya Krüger chosen."
@@ -5579,10 +5623,6 @@
     "e77bdafe29": {
       "x:word-document": { "to": "d0ad6191e7" },
       "+:word-comment": { "to": "bf513d86d3" },
-      "show:t1": {
-        "to": "02791bd465",
-        "announce": "Comment by Maya Krüger chosen."
-      },
       "picker:t1": {
         "to": "02791bd465",
         "announce": "Comment by Maya Krüger chosen."
@@ -5622,11 +5662,7 @@
     "97d86fff35": {
       "+:word-document": { "to": "2327548299" },
       "+:word-comment": { "to": "65e32838f4" },
-      "+:word-open-comments": { "to": "b2c6700e93" },
-      "show:t1": {
-        "to": "3cc02ef9d4",
-        "announce": "Comment by Maya Krüger chosen."
-      },
+      "+:word-open-comments": { "to": "b2fc80c347" },
       "picker:t1": {
         "to": "3cc02ef9d4",
         "announce": "Comment by Maya Krüger chosen."
@@ -5758,7 +5794,7 @@
         "to": "d0aa6d9f81",
         "announce": "Comment by Sara Nowak chosen."
       },
-      "notice:send-without-comments": { "to": "27333804db" }
+      "notice:send-without-comments": { "to": "892c0cab62" }
     },
     "51c334e5b1": {
       "x:word-document": { "to": "622b768a6d" },
@@ -5944,7 +5980,7 @@
     "efd2f4e58a": {
       "+:word-document": { "to": "4390ef16b1" },
       "+:word-comment": { "to": "622b768a6d" },
-      "+:word-open-comments": { "to": "929c64654c" },
+      "+:word-open-comments": { "to": "b184619de1" },
       "pick:t1": { "to": "199a3a6d91" },
       "pick:t4": { "to": "c0935c8b72" },
       "pick:t6": { "to": "9b2ce61dd1" },
@@ -6097,10 +6133,6 @@
       "action:word-document:send-instead": { "to": "07844549ba" },
       "+:word-comment": { "to": "3b713c5fd2" },
       "action:word-comment:passage-instead": { "to": "e030609d5f" },
-      "show:t2": {
-        "to": "de5979b72c",
-        "announce": "Comment by Jonas Weber chosen."
-      },
       "picker:t2": {
         "to": "de5979b72c",
         "announce": "Comment by Jonas Weber chosen."
@@ -6115,7 +6147,7 @@
       "x:word-selection": { "to": "c023c79094" },
       "action:word-selection:comment-instead": { "to": "4217306f35" },
       "+:word-document": { "to": "22f0a55fb8" },
-      "+:word-open-comments": { "to": "99f0748097" },
+      "+:word-open-comments": { "to": "05298bf9b3" },
       "passage-comments:on": { "to": "6e088c13c0" },
       "picker:t2": {
         "to": "9eccbeaac9",
@@ -6296,10 +6328,6 @@
       "x:word-document": { "to": "fc5306540b" },
       "action:word-document:send-instead": { "to": "8ab78c11d2" },
       "+:word-comment": { "to": "b9cfd01819" },
-      "show:t2": {
-        "to": "c5b1b36371",
-        "announce": "Comment by Jonas Weber chosen."
-      },
       "passage-comments:off": { "to": "e13544e897" },
       "picker:t2": {
         "to": "c5b1b36371",
@@ -6350,10 +6378,6 @@
       "action:word-document:send-instead": { "to": "ba19ce3add" },
       "+:word-comment": { "to": "b9cfd01819" },
       "action:word-comment:passage-instead": { "to": "e13544e897" },
-      "show:t2": {
-        "to": "8a92654b7b",
-        "announce": "Comment by Jonas Weber chosen."
-      },
       "picker:t2": {
         "to": "8a92654b7b",
         "announce": "Comment by Jonas Weber chosen."
@@ -6415,7 +6439,7 @@
     },
     "45cfa3bcbe": {
       "+:word-document": { "to": "da269c42c7" },
-      "+:word-open-comments": { "to": "7afacdb2b1" },
+      "+:word-open-comments": { "to": "f65d57fce6" },
       "picker:t5": {
         "to": "003aa20d4c",
         "announce": "Comment by Sara Nowak chosen."
@@ -6527,12 +6551,7 @@
     "b2c6700e93": {
       "+:word-document": { "to": "2142f4c64e" },
       "+:word-comment": { "to": "b2fc80c347" },
-      "x:word-open-comments": { "to": "89c21d856a" },
-      "action:word-open-comments:send-instead": { "to": "22f7f890e4" },
-      "show:t1": {
-        "to": "248462c6f3",
-        "announce": "Comment by Maya Krüger chosen."
-      },
+      "+:word-open-comments": { "to": "b2fc80c347" },
       "picker:t1": {
         "to": "248462c6f3",
         "announce": "Comment by Maya Krüger chosen."
@@ -6564,10 +6583,6 @@
       "+:word-document": { "to": "5a6d4f0605" },
       "+:word-comment": { "to": "b2fc80c347" },
       "x:word-open-comments": { "to": "6c4374f3bb" },
-      "show:t1": {
-        "to": "a7f1b34ee3",
-        "announce": "Comment by Maya Krüger chosen."
-      },
       "picker:t1": {
         "to": "a7f1b34ee3",
         "announce": "Comment by Maya Krüger chosen."
@@ -6764,34 +6779,35 @@
         "to": "003aa20d4c",
         "announce": "Comment by Sara Nowak chosen."
       },
-      "notice:send-without-comments": { "to": "3041277e89" }
-    },
-    "72cad1069e": {
-      "x:word-document": { "to": "87724746fc" },
-      "picker:t5": {
-        "to": "4785e81b57",
-        "announce": "Comment by Sara Nowak chosen."
-      },
-      "notice:send-without-comments": { "to": "892c0cab62" }
-    },
-    "87724746fc": {
-      "+:word-document": { "to": "72cad1069e" },
-      "+:word-open-comments": { "to": "f67edab6f6" },
-      "picker:t5": {
-        "to": "e275bdc37c",
-        "announce": "Comment by Sara Nowak chosen."
-      },
       "notice:send-without-comments": { "to": "87408915d0" }
     },
     "4785e81b57": {
       "x:word-document": { "to": "e275bdc37c" },
       "action:word-document:send-instead": { "to": "29917924a5" },
-      "x:word-comment": { "to": "72cad1069e" },
+      "x:word-comment": { "to": "892c0cab62" },
       "picker:t5": {
         "to": "4785e81b57",
         "announce": "Comment by Sara Nowak chosen."
       },
       "notice:send-without-comments": { "to": "d0aa6d9f81" }
+    },
+    "e275bdc37c": {
+      "+:word-document": { "to": "4785e81b57" },
+      "x:word-comment": { "to": "87408915d0" },
+      "+:word-open-comments": { "to": "e730a16b40" },
+      "picker:t5": {
+        "to": "e275bdc37c",
+        "announce": "Comment by Sara Nowak chosen."
+      },
+      "notice:send-without-comments": { "to": "003aa20d4c" }
+    },
+    "29917924a5": {
+      "x:word-document": { "to": "dc8ce31f88" },
+      "picker:t5": {
+        "to": "ad396df0ee",
+        "announce": "Comment by Sara Nowak chosen."
+      },
+      "notice:send-without-comments": { "to": "892c0cab62" }
     },
     "99f2ba8225": {
       "x:word-document": { "to": "c0d6fbd50a" },

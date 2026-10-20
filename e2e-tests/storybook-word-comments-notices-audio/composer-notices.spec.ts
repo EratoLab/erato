@@ -188,9 +188,35 @@ test.describe("answering a notice", () => {
 
   test("Send without document lets the slow Send go", async ({ page }) => {
     await openWord(page, "NoticeSlowCapture");
+    // The chip says the document is still being read, as the notice does.
+    await expect(kind(page, "word.document")).toHaveAttribute(
+      "data-state",
+      "loading",
+    );
     await page.getByRole("button", { name: "Send without document" }).click();
     await expect(page.locator(ALERT)).toHaveCount(0);
     await expect(textarea(page)).toBeFocused();
+  });
+
+  test("comments that could not be read: the chip says so, and its (x) answers the waiting Send", async ({
+    page,
+  }) => {
+    await openWord(page, "NoticeCommentsReadFailed");
+    const comment = kind(page, "word.comment");
+    await expect(comment).toHaveAttribute("data-state", "error");
+    await expect(
+      comment.locator('[data-ui="composer-context-chip-meta"]'),
+    ).toHaveText("Couldn't read comments");
+    await comment
+      .getByRole("button", { name: "Remove the chosen comment" })
+      .click();
+    await expect(page.locator(ALERT)).toHaveCount(0);
+    await expectLane(
+      page,
+      stateAfter("NoticeCommentsReadFailed", ["x:word-comment"]),
+      "after",
+    );
+    await expect(kind(page, "word.comment")).toHaveCount(0);
   });
 
   test("a dismissed note leaves no gap, and focus goes back to the message field", async ({
@@ -232,7 +258,7 @@ test.describe("answering a notice", () => {
     );
   });
 
-  test("a gone pick: Send without comments lets the waiting Send go", async ({
+  test("a gone pick: Send without comments ends the pick and lets the Send go", async ({
     page,
   }) => {
     await openWord(page, "NoticePickedGone");
@@ -247,6 +273,7 @@ test.describe("answering a notice", () => {
       stateAfter("NoticePickedGone", ["notice:send-without-comments"]),
       "after",
     );
+    await expect(kind(page, "word.comment")).toHaveCount(0);
   });
 });
 

@@ -96,7 +96,7 @@ type Body =
       intro: string;
       notes: Note[];
       coverage: Coverage | null;
-      lifetime: string;
+      lifetime?: string;
     };
 
 type ItemData = Omit<
@@ -187,14 +187,15 @@ const DetailNote = ({ note }: { note: Note }) => (
   </div>
 );
 
-const Lifetime = ({ text }: { text: string }) => (
-  <p
-    className="text-xs text-theme-fg-secondary"
-    data-ui="word-context-detail-lifetime"
-  >
-    {text}
-  </p>
-);
+const Lifetime = ({ text }: { text?: string }) =>
+  text ? (
+    <p
+      className="text-xs text-theme-fg-secondary"
+      data-ui="word-context-detail-lifetime"
+    >
+      {text}
+    </p>
+  ) : null;
 
 const WhyTag = ({ text }: { text: string }) => (
   <span

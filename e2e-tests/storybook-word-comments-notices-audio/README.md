@@ -36,12 +36,14 @@ pnpm exec vitest run src/word/utils/__tests__/wordCommentStoryParity.test.ts -u
 - the comment at the cursor: (x), + and Delete with focus kept and the
   removal said; its detail (why, quote, Show in Word, the thread, What is
   sent, lifetime, footer order); Show in Word choosing the thread with the
-  detail open; Choose comment… swapping the detail for the picker, Escape back
-  to the chip, a pick chosen and announced; Send this instead on the document;
+  detail open, and changing nothing on a comment left out for the message;
+  Choose comment… swapping the detail for the picker, Escape back to the chip,
+  a pick chosen and announced; Send this instead on the document;
 - a cursor in three comments: a card picks, the same chip element turns
   "Chosen by you" with focus kept, and its (x) brings the choice back on that
-  element; with the document off the chosen chip moves behind Open comments
-  and keeps focus; Send waits on the choice and the chip's (x) answers it;
+  element; with the document off the chosen chip keeps its place before Open
+  comments and keeps focus; Send waits on the choice and the chip's (x)
+  answers it;
 - comments on their parent: the passage's checkbox flips the selection's meta
   and the section's heading; the document's count and its comment map;
 - open comments: suggested, +, (x) to "Off in this chat", gone once the
@@ -56,8 +58,10 @@ or error glyph, none for plain info), a progress count drawn but never read,
 the actions by name, a dismiss button only where the prompt can be dismissed,
 the notice inside the composer box above the chips with its buttons inside it
 at 340 px, contrast in light and dark; then answering each prompt (Send
-without comments, a pick from the picker, Send without document, dismiss),
-with focus back on the message field and no gap left behind; and German.
+without comments, which also ends a gone pick, a pick from the picker, Send
+without document beside a document chip that is still reading, dismiss, and
+the (x) of a comment the waiting Send could not read), with focus back on the
+message field and no gap left behind; and German.
 
 `audio-status-tile.spec.ts` checks the recording stories under `UI/ChatInput`:
 no status card and nothing above the composer box, the tile's meta and
