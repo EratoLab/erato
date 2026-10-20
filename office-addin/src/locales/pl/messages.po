@@ -2497,9 +2497,29 @@ msgid "officeAddin.teams.bot.setup.viewScript"
 msgstr ""
 
 #. js-lingui-explicit-id
+#: src/teams/providers/TeamsChatPickerProvider.tsx
+msgid "officeAddin.teams.composer.announce.attached"
+msgstr "Załączono transkrypcję Teams."
+
+#. js-lingui-explicit-id
+#: src/teams/providers/TeamsChatPickerProvider.tsx
+msgid "officeAddin.teams.composer.announce.removed"
+msgstr "Usunięto transkrypcję Teams."
+
+#. js-lingui-explicit-id
+#: src/teams/providers/TeamsChatPickerProvider.tsx
+msgid "officeAddin.teams.composer.announce.updated"
+msgstr "Zaktualizowano transkrypcję Teams."
+
+#. js-lingui-explicit-id
 #: src/teams/components/TeamsChatAddMenuExtraContent.tsx
 msgid "officeAddin.teams.fileSource.chats"
 msgstr "Czaty Teams…"
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatAddMenuExtraContent.tsx
+msgid "officeAddin.teams.fileSource.chatsEditHint"
+msgstr "Edytuj konwersacje w swojej transkrypcji"
 
 #. js-lingui-explicit-id
 #: src/teams/components/TeamsChatAddMenuExtraContent.tsx
@@ -2705,6 +2725,11 @@ msgstr "Wyniki częściowe — Teams ogranicza liczbę żądań."
 
 #. js-lingui-explicit-id
 #: src/teams/components/TeamsChatPickerDialog.tsx
+msgid "officeAddin.teams.picker.pickedCount"
+msgstr "{count, plural, one {# wybrana wiadomość} few {# wybrane wiadomości} many {# wybranych wiadomości} other {# wybranej wiadomości}}"
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatPickerDialog.tsx
 msgid "officeAddin.teams.picker.privateChannel"
 msgstr "Prywatny"
 
@@ -2798,6 +2823,16 @@ msgstr "Czaty Teams"
 #: src/teams/components/TeamsChatPickerDialog.tsx
 msgid "officeAddin.teams.picker.unknownSender"
 msgstr "Nieznany nadawca"
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatPickerDialog.tsx
+msgid "officeAddin.teams.picker.update"
+msgstr "Aktualizuj"
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatPickerDialog.tsx
+msgid "officeAddin.teams.picker.updateRemovesHint"
+msgstr "Nic nie wybrano: „Aktualizuj” usunie transkrypcję."
 
 #. js-lingui-explicit-id
 #: src/teams/components/TeamsChatPickerDialog.tsx

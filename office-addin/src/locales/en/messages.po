@@ -2497,9 +2497,29 @@ msgid "officeAddin.teams.bot.setup.viewScript"
 msgstr "View script"
 
 #. js-lingui-explicit-id
+#: src/teams/providers/TeamsChatPickerProvider.tsx
+msgid "officeAddin.teams.composer.announce.attached"
+msgstr "Teams transcript attached."
+
+#. js-lingui-explicit-id
+#: src/teams/providers/TeamsChatPickerProvider.tsx
+msgid "officeAddin.teams.composer.announce.removed"
+msgstr "Teams transcript removed."
+
+#. js-lingui-explicit-id
+#: src/teams/providers/TeamsChatPickerProvider.tsx
+msgid "officeAddin.teams.composer.announce.updated"
+msgstr "Teams transcript updated."
+
+#. js-lingui-explicit-id
 #: src/teams/components/TeamsChatAddMenuExtraContent.tsx
 msgid "officeAddin.teams.fileSource.chats"
 msgstr "Teams chats…"
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatAddMenuExtraContent.tsx
+msgid "officeAddin.teams.fileSource.chatsEditHint"
+msgstr "Edit the conversations in your transcript"
 
 #. js-lingui-explicit-id
 #: src/teams/components/TeamsChatAddMenuExtraContent.tsx
@@ -2705,6 +2725,11 @@ msgstr "Showing partial results — Teams is rate-limiting."
 
 #. js-lingui-explicit-id
 #: src/teams/components/TeamsChatPickerDialog.tsx
+msgid "officeAddin.teams.picker.pickedCount"
+msgstr "{count, plural, one {# picked message} other {# picked messages}}"
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatPickerDialog.tsx
 msgid "officeAddin.teams.picker.privateChannel"
 msgstr "Private"
 
@@ -2798,6 +2823,16 @@ msgstr "Teams chats"
 #: src/teams/components/TeamsChatPickerDialog.tsx
 msgid "officeAddin.teams.picker.unknownSender"
 msgstr "Unknown sender"
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatPickerDialog.tsx
+msgid "officeAddin.teams.picker.update"
+msgstr "Update"
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatPickerDialog.tsx
+msgid "officeAddin.teams.picker.updateRemovesHint"
+msgstr "Nothing selected: Update removes the transcript."
 
 #. js-lingui-explicit-id
 #: src/teams/components/TeamsChatPickerDialog.tsx
