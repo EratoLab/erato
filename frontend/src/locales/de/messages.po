@@ -3199,6 +3199,7 @@ msgstr "Assistenten"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/OwnCallApprovalItem.tsx
+#: src/components/ui/Message/ParkedChildItem.tsx
 msgid "clientToolApproval.thisDevice"
 msgstr "Dieses Gerät"
 
