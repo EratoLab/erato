@@ -95,6 +95,8 @@ const story = (
 });
 
 export const Included = story({});
+export const ShortDocumentName = story({ name: "Memo.docx" });
+export const BeforeFirstRead = story({ status: "unknown" });
 export const DocumentOff = story({ documentOff: true });
 export const Reading = story({ status: "reading" });
 export const ReadError = story({ status: "error" });
@@ -105,6 +107,10 @@ export const NewDocument = story({ status: "empty" });
 export const ChangedLongDocument = story({
   changed: true,
   coverage: { sent: 120, total: 300 },
+});
+export const BeginningOnly = story({
+  partialParagraph: true,
+  coverage: { sent: 1, total: 1 },
 });
 export const TrackChanges = story({ track: true });
 export const ReadInParts = story({

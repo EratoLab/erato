@@ -22,23 +22,28 @@ const eratoQuote =
   "“The Buyer may audit the Supplier's records once per contract…”";
 const LOCK_REASON =
   "Can't change this while the chat is archived or a task is running";
+const SELECT_LATER_PART =
+  "Only the beginning is sent. To work on a later part, select it in Word.";
+const DOCUMENT_LIFETIME =
+  "Leaving it out lasts for this chat. New chats follow your setting “Include the open document in new chats”.";
 
 interface Expected {
   state: string;
   tone?: "warning" | "error";
-  meta: string;
+  meta: string | null;
   control: string | null;
   locked?: true;
 }
 
 interface Story {
   id: string;
+  label?: string;
   selection?: Expected;
   document: Expected;
   files?: number;
 }
 
-const docIncluded = (meta: string, tone?: "warning"): Expected => ({
+const docIncluded = (meta: string | null, tone?: "warning"): Expected => ({
   state: "included",
   meta,
   control: "Don't include this document",
@@ -57,6 +62,12 @@ const selIncluded: Expected = {
 
 const STORIES: Story[] = [
   { id: "included", document: docIncluded("86 ¶") },
+  {
+    id: "short-document-name",
+    label: "Memo.docx",
+    document: docIncluded("86 ¶"),
+  },
+  { id: "before-first-read", document: docIncluded(null) },
   {
     id: "document-off",
     document: {
@@ -114,6 +125,7 @@ const STORIES: Story[] = [
     id: "changed-long-document",
     document: docIncluded("Changed since last send"),
   },
+  { id: "beginning-only", document: docIncluded("Beginning only") },
   {
     id: "track-changes",
     document: docIncluded("Track Changes on · 86 ¶", "warning"),
@@ -215,6 +227,37 @@ const style = (locator: Locator, property: string) =>
     (element, name) => getComputedStyle(element).getPropertyValue(name),
     property,
   );
+const labelOf = (chip: Locator) =>
+  chip.locator('[data-ui="composer-context-chip-label"]');
+const notesIn = (detail: Locator) =>
+  detail.locator('[data-ui="word-context-detail-note"]');
+const lifetimeIn = (detail: Locator) =>
+  detail.locator('[data-ui="word-context-detail-lifetime"]');
+
+/** A length token as the element would paint it as a corner. */
+const tokenRadius = (locator: Locator, token: string) =>
+  locator.evaluate((element, name) => {
+    const probe = document.createElement("span");
+    probe.style.borderTopRightRadius = `var(${name})`;
+    element.appendChild(probe);
+    const value = getComputedStyle(probe).borderTopRightRadius;
+    probe.remove();
+    return value;
+  }, token);
+
+const openDetail = async (
+  page: Page,
+  story: string,
+  name: "word.selection" | "word.document",
+  title: string,
+  options: { theme?: "light" | "dark" } = {},
+) => {
+  await openWord(page, story, options);
+  await open(page, name).click();
+  const detail = page.getByRole("dialog", { name: title });
+  await expect(detail).toBeVisible();
+  return detail;
+};
 
 /** Chips at their token height inside the lane, controls inside their chip, no page overflow. */
 const expectFits = async (page: Page, width: number, story: string) => {
@@ -272,15 +315,18 @@ const expectChip = async (
   if (expected.tone) {
     await expect(chip, story).toHaveAttribute("data-tone", expected.tone);
   }
-  await expect(
-    chip.locator('[data-ui="composer-context-chip-meta"]'),
-    story,
-  ).toHaveText(expected.meta);
+  const meta = chip.locator('[data-ui="composer-context-chip-meta"]');
+  if (expected.meta === null) {
+    await expect(meta, story).toHaveCount(0);
+  } else {
+    await expect(meta, story).toHaveText(expected.meta);
+  }
   const label = await chip
     .locator('[data-ui="composer-context-chip-label"]')
     .innerText();
   await expect(chip.locator(OPEN), story).toHaveAccessibleName(
     [label, expected.meta, STATE_WORD[expected.state]]
+      .filter((part) => part !== null)
       .concat(expected.locked ? ["Locked."] : [])
       .join(" "),
   );
@@ -328,6 +374,11 @@ test.describe("every story", () => {
       }
       await expectChip(page, "word.document", story.document, story.id);
       await expect(
+        kind(page, "word.document").locator(
+          '[data-ui="composer-context-chip-label"]',
+        ),
+      ).toHaveText(story.label ?? docName);
+      await expect(
         page.locator(`${AREA} [data-ui="attachment-tile"]`),
       ).toHaveCount(story.files ?? 0);
       await expectFits(page, 340, story.id);
@@ -351,6 +402,51 @@ test.describe("every story", () => {
         expect(ratio, `${id}: ${text}`).toBeGreaterThanOrEqual(4.5);
       }
     }
+  });
+});
+
+test.describe("label width", () => {
+  test("a short name keeps its own width, so the meta follows it closely", async ({
+    page,
+  }) => {
+    await openWord(page, "short-document-name");
+    const chip = kind(page, "word.document");
+    const name = labelOf(chip);
+    expect(await style(name, "min-width")).toBe("auto");
+    const box = await boxOf(name);
+    const textWidth = await name.evaluate((element) => {
+      const range = document.createRange();
+      range.selectNodeContents(element);
+      return range.getBoundingClientRect().width;
+    });
+    expect(box.width - textWidth).toBeLessThanOrEqual(1);
+    expect(
+      await name.evaluate(
+        (element) => element.scrollWidth > element.clientWidth,
+      ),
+    ).toBe(false);
+    const gap = parseFloat(
+      await style(
+        chip.locator('[data-ui="composer-context-chip-face"]'),
+        "column-gap",
+      ),
+    );
+    const separator = await boxOf(
+      chip.locator('[data-ui="composer-context-chip-separator"]'),
+    );
+    expect(separator.x - (box.x + box.width)).toBeCloseTo(gap, 0);
+  });
+
+  test("a longer name keeps the 7em floor before its meta", async ({
+    page,
+  }) => {
+    await openWord(page, "included");
+    const name = labelOf(kind(page, "word.document"));
+    const fontSize = parseFloat(await style(name, "font-size"));
+    expect(parseFloat(await style(name, "min-width"))).toBeCloseTo(
+      7 * fontSize,
+      0,
+    );
   });
 });
 
@@ -491,9 +587,9 @@ test.describe("flows", () => {
     await page.keyboard.press("Enter");
     const sheet = page.getByRole("dialog", { name: docName });
     await expect(sheet).toBeVisible();
-    await expect(sheet).toContainText(
-      "Your selection is sent instead of the document",
-    );
+    await expect(notesIn(sheet)).toHaveText([
+      "Your selection is sent instead of the document.",
+    ]);
     await sheet.getByRole("button", { name: "Send this instead" }).click();
     await expect(page.getByRole("dialog")).toHaveCount(0);
     await expect(kind(page, "word.document")).toHaveAttribute(
@@ -592,23 +688,187 @@ test.describe("detail", () => {
     const sheet = page.getByRole("dialog", { name: docName });
     await expect(sheet).toHaveAttribute("data-ui", "modal-shell");
     const coverage = sheet.locator('[data-ui="word-context-detail-coverage"]');
-    await expect(coverage).toContainText(
+    // The hint explains the first line, so it sits right under it.
+    await expect(coverage.locator("p")).toHaveText([
       "Erato receives the first 120 of 300 paragraphs.",
-    );
-    await expect(coverage).toContainText(
+      SELECT_LATER_PART,
       "Changed since last send: Erato reads it again with this message.",
-    );
-    await expect(coverage).toContainText(
-      "Only the beginning is sent. To work on a later part, select it in Word.",
+    ]);
+    const hint = coverage.locator("p").nth(1);
+    expect(await style(hint, "color")).toBe(
+      await tokenColor(hint, "--theme-fg-secondary"),
     );
     await expect(
       sheet.locator('[data-ui="word-context-detail-comments"]'),
     ).toContainText("A list of the 12 comments in the document");
-    await expect(sheet).toContainText("Leaving it out lasts for this chat.");
+    await expect(lifetimeIn(sheet)).toHaveText(DOCUMENT_LIFETIME);
     await expect(
       sheet.getByRole("button", { name: "Leave out" }),
     ).toBeVisible();
   });
+
+  test("a first paragraph too long on its own sends its beginning, with the hint", async ({
+    page,
+  }) => {
+    const sheet = await openDetail(
+      page,
+      "beginning-only",
+      "word.document",
+      docName,
+    );
+    await expect(
+      sheet.locator('[data-ui="word-context-detail-coverage"] p'),
+    ).toHaveText([
+      "Erato receives only the beginning of the first paragraph, because it alone exceeds the send limit.",
+      SELECT_LATER_PART,
+    ]);
+  });
+
+  test("before the first read the detail claims no coverage", async ({
+    page,
+  }) => {
+    const sheet = await openDetail(
+      page,
+      "before-first-read",
+      "word.document",
+      docName,
+    );
+    await expect(
+      sheet.locator('[data-ui="word-context-detail-coverage"]'),
+    ).toHaveCount(0);
+    await expect(notesIn(sheet)).toHaveCount(0);
+    await expect(lifetimeIn(sheet)).toHaveText(DOCUMENT_LIFETIME);
+  });
+
+  test("lasting facts are notes in the document's detail, by tone", async ({
+    page,
+  }) => {
+    for (const [story, tone, text] of [
+      ["track-changes", "warning", "Track Changes is on"],
+      ["read-only-fallback", "warning", "This file is too large for Erato"],
+      ["cannot-edit", "warning", "Word did not supply a complete editable"],
+      ["body-only", "info", "Word for the web didn't hand over"],
+    ] as const) {
+      const sheet = await openDetail(page, story, "word.document", docName);
+      const notes = notesIn(sheet);
+      await expect(notes, story).toHaveCount(1);
+      await expect(notes, story).toHaveAttribute("data-tone", tone);
+      await expect(notes, story).toContainText(text);
+    }
+  });
+
+  test("what goes instead is said in full sentences", async ({ page }) => {
+    for (const [story, name, title, text] of [
+      [
+        "selection-replaces-document",
+        "word.document",
+        docName,
+        "Your selection is sent instead of the document.",
+      ],
+      [
+        "selection-replaces-document",
+        "word.selection",
+        "Selected passage",
+        "Sent instead of the document.",
+      ],
+      [
+        "document-replaced-by-comment",
+        "word.document",
+        docName,
+        "A comment is sent instead of the document.",
+      ],
+      [
+        "replaced-by-comment",
+        "word.selection",
+        "Selected passage",
+        "A comment is sent instead of this passage.",
+      ],
+    ] as const) {
+      const detail = await openDetail(page, story, name, title);
+      await expect(notesIn(detail), `${story} ${name}`).toHaveText([text]);
+    }
+  });
+
+  test("an unreadable document offers its error report; one this chat can't send has none", async ({
+    page,
+  }) => {
+    const sheet = await openDetail(
+      page,
+      "read-error",
+      "word.document",
+      docName,
+    );
+    await expect(
+      sheet.getByRole("button", { name: "Copy error report" }),
+    ).toBeVisible();
+    await expect(
+      sheet.getByRole("button", { name: "Try again" }),
+    ).toBeVisible();
+    await expect(lifetimeIn(sheet)).toHaveText(DOCUMENT_LIFETIME);
+
+    const other = await openDetail(
+      page,
+      "not-sent-here",
+      "word.document",
+      docName,
+    );
+    await expect(
+      other.getByRole("button", { name: "Copy error report" }),
+    ).toHaveCount(0);
+    await expect(notesIn(other)).toHaveText([
+      "This chat can only start new documents, so a document with text is not sent.",
+    ]);
+  });
+
+  for (const theme of ["light", "dark"] as const) {
+    test(`the selected text sits in a tinted box from the theme's tokens, ${theme}`, async ({
+      page,
+    }) => {
+      const sheet = await openDetail(
+        page,
+        "selection-replaces-document",
+        "word.selection",
+        "Selected passage",
+        { theme },
+      );
+      const quoteBlock = sheet.locator('[data-ui="word-context-detail-quote"]');
+      const fill = await style(quoteBlock, "background-color");
+      expect(fill).toBe(await tokenColor(quoteBlock, "--theme-bg-secondary"));
+      const behind = await quoteBlock.evaluate((element) => {
+        for (
+          let node = element.parentElement;
+          node;
+          node = node.parentElement
+        ) {
+          const color = getComputedStyle(node).backgroundColor;
+          if (color !== "rgba(0, 0, 0, 0)" && color !== "transparent")
+            return color;
+        }
+        return "rgb(255, 255, 255)";
+      });
+      expect(fill).not.toBe(behind);
+      expect(await style(quoteBlock, "border-left-width")).toBe("2px");
+      expect(await style(quoteBlock, "border-left-color")).toBe(
+        await tokenColor(quoteBlock, "--theme-border"),
+      );
+      expect(await style(quoteBlock, "border-top-right-radius")).toBe(
+        await tokenRadius(quoteBlock, "--theme-radius-control"),
+      );
+      expect(await style(quoteBlock, "border-top-left-radius")).toBe("0px");
+      expect(
+        await quoteBlock.evaluate(
+          (element, measure) =>
+            (new Function(`return (${measure})`)() as (e: Element) => number)(
+              element,
+            ),
+          contrastOf.toString(),
+        ),
+      ).toBeGreaterThanOrEqual(4.5);
+      await expect(lifetimeIn(sheet)).toHaveText(
+        "Leaving it out lasts until the selection changes.",
+      );
+    });
+  }
 
   test("a long passage scrolls inside the sheet, focusable, with the actions in view", async ({
     page,
