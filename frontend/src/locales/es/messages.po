@@ -2230,13 +2230,28 @@ msgstr "No se pudo desarchivar el chat"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatInput.tsx
+msgid "chat.input.sendLimit.chipMeta"
+msgstr "Supera el límite de {limit}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatInput.tsx
 msgid "chat.input.sendLimit.count"
 msgstr "No se puede enviar: un mensaje puede llevar como máximo {limit} archivos. Quita algunos para enviar."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatInput.tsx
+msgid "chat.input.sendLimit.countButton"
+msgstr "No se puede enviar: se superó el límite de archivos"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatInput.tsx
 msgid "chat.input.sendLimit.size"
 msgstr "{count, plural, one {No se puede enviar: {names} supera el límite de {limit}. Quítalo para enviar.} other {No se puede enviar: {names} superan el límite de {limit}. Quítalos para enviar.}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "chat.input.sendLimit.sizeButton"
+msgstr "No se puede enviar: se superó el límite de tamaño de archivo"
 
 #. js-lingui-explicit-id
 #: src/components/ui/WordReview/WordCommentContextView.tsx
@@ -8111,12 +8126,12 @@ msgstr "Cancelado"
 #~ msgstr ""
 
 #: src/components/ui/Chat/ChatInput.tsx
-msgid "Cannot send: File count limit exceeded"
-msgstr "No se puede enviar: se superó el límite de archivos"
+#~ msgid "Cannot send: File count limit exceeded"
+#~ msgstr "No se puede enviar: se superó el límite de archivos"
 
 #: src/components/ui/Chat/ChatInput.tsx
-msgid "Cannot send: File size limit exceeded"
-msgstr "No se puede enviar: se superó el límite de tamaño de archivo"
+#~ msgid "Cannot send: File size limit exceeded"
+#~ msgstr "No se puede enviar: se superó el límite de tamaño de archivo"
 
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Cannot send: Token limit exceeded"

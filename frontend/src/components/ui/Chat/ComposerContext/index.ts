@@ -11,6 +11,7 @@ export { ComposerNoticeView } from "./ComposerNoticeView";
 export {
   claimedFileIdsOf,
   includedEstimatesOf,
+  includedUploadItemsOf,
   includedUploadsOf,
   unclaimedFiles,
 } from "./composerLaneFiles";

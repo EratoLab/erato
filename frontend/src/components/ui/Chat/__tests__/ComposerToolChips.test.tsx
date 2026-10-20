@@ -110,6 +110,17 @@ describe("ComposerToolChips", () => {
     ).toHaveFocus();
   });
 
+  it("draws an x on a chip that can be deselected", () => {
+    render(<Harness initial={tools.slice(0, 1)} />);
+    const chip = screen.getByRole("button", { name: "Deselect Web search" });
+    expect(
+      chip.querySelector('[data-ui="composer-tool-chip-x"]'),
+    ).not.toBeNull();
+    expect(
+      chip.querySelector('[data-ui="composer-tool-chip-lock"]'),
+    ).toBeNull();
+  });
+
   it("renders only its live region with no tool selected", () => {
     const { container } = render(<Harness initial={[]} />);
     expect(screen.queryByRole("group")).toBeNull();
@@ -135,6 +146,11 @@ describe("ComposerToolChips", () => {
     expect(chip).toHaveAccessibleDescription(
       "This assistant sets the tools for its chats.",
     );
+    // The lane's lock mark, not an x that does nothing.
+    expect(
+      chip.querySelector('[data-ui="composer-tool-chip-lock"]'),
+    ).not.toBeNull();
+    expect(chip.querySelector('[data-ui="composer-tool-chip-x"]')).toBeNull();
 
     fireEvent.click(chip);
     expect(screen.getAllByRole("button", { name: /^Deselect/ })).toHaveLength(

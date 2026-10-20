@@ -6420,19 +6420,34 @@ describe("ChatInput", () => {
 
     const send = () => screen.getByTestId("chat-input-send-message");
 
-    it("blocks an included upload over the per-file limit", async () => {
+    it("blocks an included upload over the per-file limit, naming its chip and marking it", async () => {
       await renderLane([], {
         contextItems: [
+          chip("drop", {
+            label: "Re: Offsite agenda",
+            meta: "Lena Hoffmann",
+            estimate: bytes("Re_ Offsite agenda.eml", 20),
+            estimateUpload: true,
+          }),
           chip("thread", {
-            estimate: bytes("thread.eml", 20),
+            estimate: bytes("thread.eml", 5),
             estimateUpload: true,
           }),
         ],
       });
 
       const textarea = screen.getByPlaceholderText(
-        "Cannot send: thread.eml exceeds the 10 B limit. Remove it to send.",
+        "Cannot send: Re: Offsite agenda exceeds the 10 B limit. Remove it to send.",
       );
+      const chips = document.querySelectorAll<HTMLElement>(
+        '[data-ui="composer-context-chip"]',
+      );
+      const [over, fits] = Array.from(chips);
+      expect(over).toHaveAttribute("data-tone", "error");
+      expect(
+        over.querySelector('[data-ui="composer-context-chip-meta"]'),
+      ).toHaveTextContent("Over the 10 B limit · Lena Hoffmann");
+      expect(fits).toHaveAttribute("data-tone", "neutral");
       expect(textarea).toHaveClass("placeholder:text-[var(--theme-error-fg)]");
       expect(textarea).not.toHaveClass(
         "placeholder:text-[var(--theme-fg-muted)]",
@@ -6636,15 +6651,19 @@ describe("ChatInput", () => {
       ).toBeTruthy();
     });
 
-    it("leaves the model selector where it was: the tools come after it", async () => {
+    it("puts the tools next to +, before the model selector", async () => {
       mockUseIsMobile.mockReturnValue(true);
       await renderTools();
 
       const model = screen.getByTestId("model-selector");
       const group = screen.getByRole("group", { name: "Selected tools" });
+      const add = screen.getByTestId("chat-input-add-controls");
       expect(model.parentElement).toBe(group.parentElement);
       expect(
-        model.compareDocumentPosition(group) & Node.DOCUMENT_POSITION_FOLLOWING,
+        add.compareDocumentPosition(group) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+      expect(
+        group.compareDocumentPosition(model) & Node.DOCUMENT_POSITION_FOLLOWING,
       ).toBeTruthy();
     });
 

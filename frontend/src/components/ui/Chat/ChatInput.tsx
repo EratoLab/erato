@@ -101,7 +101,7 @@ import { ComposerNoticeView } from "./ComposerContext/ComposerNoticeView";
 import {
   claimedFileIdsOf,
   includedEstimatesOf,
-  includedUploadsOf,
+  includedUploadItemsOf,
   unclaimedFiles,
 } from "./ComposerContext/composerLaneFiles";
 import { findComposerSendLimit } from "./ComposerContext/composerSendLimit";
@@ -581,17 +581,18 @@ export const ChatInput = ({
   // staged files, per file against the upload size and together against its
   // per-message count, so the composer refuses what the server would.
   const includedUploads = useMemo(
-    () => includedUploadsOf(contextItems),
+    () => includedUploadItemsOf(contextItems),
     [contextItems],
   );
+  // The verdict names a chip as the lane does, not by its upload's filename.
   const laneSendLimit = useMemo(
     () =>
       contextItems === undefined
         ? null
         : findComposerSendLimit(
-            includedUploads.map((file) => ({
-              name: file.name,
-              size: file.size,
+            includedUploads.map((item) => ({
+              name: item.label,
+              size: item.estimate.size,
             })),
             attachedFiles,
             {
@@ -2169,19 +2170,47 @@ export const ChatInput = ({
     }
   }, [contextItems, attachedFiles]);
 
+  const overLimitItemIds = useMemo(
+    () =>
+      new Set(
+        includedUploads
+          .filter((item) => item.estimate.size > maxUploadBytes)
+          .map((item) => item.id),
+      ),
+    [includedUploads, maxUploadBytes],
+  );
+
   // While the composer is locked (an upload, a compaction, a recording) the
   // file row cannot change, so neither can a chip standing for some of it.
-  const laneItems = useMemo(
-    () =>
-      contextItems === undefined || !composeLocked
-        ? contextItems
-        : contextItems.map((item) =>
-            item.claimsFileIds?.length && !item.locked
-              ? { ...item, locked: true }
-              : item,
-          ),
-    [contextItems, composeLocked],
-  );
+  // A chip whose upload is over the size limit shows that it blocks Send.
+  const laneItems = useMemo(() => {
+    if (
+      contextItems === undefined ||
+      (!composeLocked && overLimitItemIds.size === 0)
+    ) {
+      return contextItems;
+    }
+    return contextItems.map((item) => {
+      let next = item;
+      if (overLimitItemIds.has(item.id)) {
+        const limit = maxUploadFormatted;
+        const reason = t({
+          id: "chat.input.sendLimit.chipMeta",
+          message: `Over the ${limit} limit`,
+        });
+        next = {
+          ...next,
+          tone: "error",
+          toneIcon: "tone",
+          meta: next.meta ? `${reason} · ${next.meta}` : reason,
+        };
+      }
+      if (composeLocked && next.claimsFileIds?.length && !next.locked) {
+        next = { ...next, locked: true };
+      }
+      return next;
+    });
+  }, [contextItems, composeLocked, overLimitItemIds, maxUploadFormatted]);
   const slotFiles = useMemo(
     () => unclaimedFiles(attachedFiles, claimedFileIds),
     [attachedFiles, claimedFileIds],
@@ -3193,20 +3222,21 @@ export const ChatInput = ({
 
           <div
             className={clsx(
-              "flex justify-between gap-[calc(var(--theme-spacing-control-gap)/2)]",
-              // Mode and tool chips wrap inside the left group in a narrow
-              // pane; Send keeps its corner instead of dropping onto a line
-              // of its own under them.
-              useUnifiedMobileMenu
-                ? "flex-nowrap items-end"
-                : "flex-wrap items-center",
+              "flex flex-wrap justify-between gap-[calc(var(--theme-spacing-control-gap)/2)]",
+              useUnifiedMobileMenu ? "items-end" : "items-center",
             )}
             data-ui="chat-input-controls"
           >
             <div
               className={clsx(
-                "chat-input-controls-geometry flex min-w-0 flex-wrap items-center",
-                useUnifiedMobileMenu && "flex-1",
+                "chat-input-controls-geometry flex flex-wrap",
+                // Never narrower than its widest control: a wide right side
+                // (Exit audio mode) wraps to a line of its own rather than
+                // cutting the tool names. Top-aligned so + stays on the first
+                // chip row.
+                useUnifiedMobileMenu
+                  ? "flex-1 items-start"
+                  : "min-w-0 items-center",
               )}
             >
               {showControls &&
@@ -3328,21 +3358,9 @@ export const ChatInput = ({
                   onFocusComposer={focusInput}
                 />
               )}
-              {useUnifiedMobileMenu && showModelSelector && (
-                <ModelSelector
-                  availableModels={availableModels}
-                  selectedModel={selectedModel}
-                  onModelChange={setSelectedModel}
-                  disabled={!isSelectionReady}
-                  align="left"
-                  className="ms-[var(--theme-spacing-control-gap)]"
-                />
-              )}
               {/* The unified "+" hides the Tools dropdown and its selected
                   buttons, so the selection is drawn here instead. Mounted
-                  while tools exist, so the last chip's announcement is read.
-                  Last in the group, so picking a tool never moves the model
-                  selector. */}
+                  while tools exist, so the last chip's announcement is read. */}
               {showControls && useUnifiedMobileMenu && hasFacets && (
                 <ComposerToolChips
                   facets={selectedFacets}
@@ -3360,9 +3378,26 @@ export const ChatInput = ({
                   onFocusAfterLast={focusAddMenuTrigger}
                 />
               )}
+              {useUnifiedMobileMenu && showModelSelector && (
+                <ModelSelector
+                  availableModels={availableModels}
+                  selectedModel={selectedModel}
+                  onModelChange={setSelectedModel}
+                  disabled={!isSelectionReady}
+                  align="left"
+                  // Beside wrapped tool rows it lines up with Send, not +.
+                  className="ms-[var(--theme-spacing-control-gap)] min-h-9 self-end"
+                />
+              )}
             </div>
 
-            <div className="relative flex min-w-0 flex-wrap items-center gap-[var(--theme-spacing-control-gap)]">
+            <div
+              className={clsx(
+                "relative flex min-w-0 flex-wrap items-center gap-[var(--theme-spacing-control-gap)]",
+                // On a line of its own it still ends at the right edge.
+                useUnifiedMobileMenu && "ms-auto",
+              )}
+            >
               {/* Out of flow like the mention popover's anchor: the popover
                   positions off a measurable element, and the right edge of
                   this cluster is where the Send/Queue button that triggered
@@ -3621,9 +3656,15 @@ export const ChatInput = ({
                     isAnyTokenLimitExceeded
                       ? t`Cannot send: Token limit exceeded`
                       : effectiveSizeLimit?.kind === "size"
-                        ? t`Cannot send: File size limit exceeded`
+                        ? t({
+                            id: "chat.input.sendLimit.sizeButton",
+                            message: "Cannot send: File size limit exceeded",
+                          })
                         : effectiveSizeLimit?.kind === "count"
-                          ? t`Cannot send: File count limit exceeded`
+                          ? t({
+                              id: "chat.input.sendLimit.countButton",
+                              message: "Cannot send: File count limit exceeded",
+                            })
                           : t`Send message`
                   }
                 />

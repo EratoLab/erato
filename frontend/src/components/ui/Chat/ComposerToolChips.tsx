@@ -1,7 +1,7 @@
 import { t } from "@lingui/core/macro";
 import { useId, useLayoutEffect, useRef } from "react";
 
-import { CloseIcon, ResolvedIcon } from "@/components/ui/icons";
+import { CloseIcon, LockIcon, ResolvedIcon } from "@/components/ui/icons";
 
 import { useLiveAnnouncement } from "./ComposerContext/useLiveAnnouncement";
 import { getFacetDisplayName } from "./facetDisplayName";
@@ -95,7 +95,7 @@ export const ComposerToolChips = ({
           // first chip can share the line with the controls before it and the
           // rest wrap under it, rather than the whole group dropping to a
           // line of its own.
-          className="ms-[var(--theme-spacing-control-gap)] inline-flex min-w-0 max-w-max grow basis-[min-content] flex-wrap items-center gap-[calc(var(--theme-spacing-control-gap)/2)] sm:gap-[var(--theme-spacing-control-gap)]"
+          className="my-1 ms-[var(--theme-spacing-control-gap)] inline-flex min-w-0 max-w-max grow basis-[min-content] flex-wrap items-center gap-[calc(var(--theme-spacing-control-gap)/2)] sm:gap-[var(--theme-spacing-control-gap)]"
         >
           {facets.map((facet, index) => {
             const name = getFacetDisplayName(facet);
@@ -123,9 +123,16 @@ export const ComposerToolChips = ({
                 </span>
                 <span
                   aria-hidden="true"
+                  data-ui={
+                    locked ? "composer-tool-chip-lock" : "composer-tool-chip-x"
+                  }
                   className="inline-flex shrink-0 opacity-70"
                 >
-                  <CloseIcon className="size-[13px]" />
+                  {locked ? (
+                    <LockIcon className="size-[13px]" />
+                  ) : (
+                    <CloseIcon className="size-[13px]" />
+                  )}
                 </span>
               </button>
             );

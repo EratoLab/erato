@@ -86,7 +86,10 @@ export function useEditComposerContext({
         origin: "user",
         placement: "ambient",
         state: "included",
-        label: chip.label,
+        label:
+          chip.labelIsExcerpt && chip.spokenLabel
+            ? chip.spokenLabel
+            : chip.label,
         meta,
         spokenLabel: chip.spokenLabel,
         icon: chip.icon,

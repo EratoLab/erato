@@ -33,12 +33,18 @@ export const includedEstimatesOf = (
     item.state === "included" && item.estimate ? [item.estimate] : [],
   );
 
+/** The included items whose estimate the send uploads as a file of its own. */
+export const includedUploadItemsOf = (
+  items: readonly ComposerContextItem[] | undefined,
+): (ComposerContextItem & { estimate: File })[] =>
+  (items ?? []).filter(
+    (item): item is ComposerContextItem & { estimate: File } =>
+      item.state === "included" &&
+      item.estimateUpload === true &&
+      item.estimate !== undefined,
+  );
+
 /** The included estimates the send uploads as files of their own. */
 export const includedUploadsOf = (
   items: readonly ComposerContextItem[] | undefined,
-): File[] =>
-  (items ?? []).flatMap((item) =>
-    item.state === "included" && item.estimateUpload && item.estimate
-      ? [item.estimate]
-      : [],
-  );
+): File[] => includedUploadItemsOf(items).map((item) => item.estimate);

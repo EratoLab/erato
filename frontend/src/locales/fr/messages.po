@@ -2230,13 +2230,28 @@ msgstr "Impossible de désarchiver la discussion"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatInput.tsx
+msgid "chat.input.sendLimit.chipMeta"
+msgstr "Dépasse la limite de {limit}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatInput.tsx
 msgid "chat.input.sendLimit.count"
 msgstr "Envoi impossible : un message peut contenir au plus {limit} fichiers. Retirez-en pour envoyer."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatInput.tsx
+msgid "chat.input.sendLimit.countButton"
+msgstr "Envoi impossible : nombre maximal de fichiers dépassé"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatInput.tsx
 msgid "chat.input.sendLimit.size"
 msgstr "{count, plural, one {Envoi impossible : {names} dépasse la limite de {limit}. Retirez-le pour envoyer.} other {Envoi impossible : {names} dépassent la limite de {limit}. Retirez-les pour envoyer.}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "chat.input.sendLimit.sizeButton"
+msgstr "Envoi impossible : limite de taille de fichier dépassée"
 
 #. js-lingui-explicit-id
 #: src/components/ui/WordReview/WordCommentContextView.tsx
@@ -8111,12 +8126,12 @@ msgstr "Annulé"
 #~ msgstr ""
 
 #: src/components/ui/Chat/ChatInput.tsx
-msgid "Cannot send: File count limit exceeded"
-msgstr "Envoi impossible : nombre maximal de fichiers dépassé"
+#~ msgid "Cannot send: File count limit exceeded"
+#~ msgstr "Envoi impossible : nombre maximal de fichiers dépassé"
 
 #: src/components/ui/Chat/ChatInput.tsx
-msgid "Cannot send: File size limit exceeded"
-msgstr "Envoi impossible : limite de taille de fichier dépassée"
+#~ msgid "Cannot send: File size limit exceeded"
+#~ msgstr "Envoi impossible : limite de taille de fichier dépassée"
 
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Cannot send: Token limit exceeded"

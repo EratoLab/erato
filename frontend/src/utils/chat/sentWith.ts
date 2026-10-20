@@ -16,6 +16,11 @@ export interface SentWithChip {
   spokenLabel?: string;
   /** Full text the edit lane's detail shows, e.g. the selected passage. */
   quote?: string;
+  /**
+   * The label is the start of `quote`. The edit lane shows the spoken label
+   * instead, so its "Sent as before" is not cut for an excerpt.
+   */
+  labelIsExcerpt?: boolean;
 }
 
 /**

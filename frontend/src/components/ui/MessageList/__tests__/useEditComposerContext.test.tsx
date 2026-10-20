@@ -60,6 +60,38 @@ describe("useEditComposerContext", () => {
     expect(result.current.slotFiles).toBe(files);
   });
 
+  it("names an excerpt by its short name, so the meta keeps its room, and keeps the passage for the detail", () => {
+    registerSentWithDescriptors({
+      word_selection: (stored) => [
+        {
+          id: "word.selection",
+          kind: "word.selection",
+          icon: "selection",
+          label: "“The Supplier shall d…”",
+          spokenLabel: "Selection",
+          quote: stored.selected_text,
+          labelIsExcerpt: true,
+        },
+      ],
+    });
+    const { result } = renderHook(() =>
+      useEditComposerContext({
+        message: {
+          role: "user",
+          action_facet_id: "word_selection",
+          action_facet_args: { selected_text: "The Supplier shall deliver." },
+        },
+        files: [],
+        onRemoveFiles: vi.fn(),
+      }),
+    );
+
+    const [item] = result.current.items;
+    expect(item.label).toBe("Selection");
+    expect(item.meta).toBe("Sent as before");
+    expect(item.detail?.title).toBe("Selection");
+  });
+
   it("keeps the items, the slot files and the estimates across a re-render", () => {
     registerDocument();
     const files = [upload("o1", "budget.xlsx")];
