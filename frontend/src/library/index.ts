@@ -199,10 +199,6 @@ export {
   type TeamsConversationViewProps,
 } from "@/components/ui/Teams/TeamsConversationView";
 export {
-  TeamsAttachmentsPreview,
-  type TeamsAttachmentsPreviewProps,
-} from "@/components/ui/Teams/TeamsAttachmentsPreview";
-export {
   TeamsTranscriptDetail,
   type TeamsTranscriptDetailProps,
   type TeamsTranscriptNamedUpload,
@@ -598,9 +594,7 @@ export {
   type TeamsMessageRef,
 } from "@/utils/teams/teamsConversationRef";
 export {
-  buildTeamsAttachmentGroups,
   buildTeamsMessageAttachmentGroups,
-  type TeamsAttachedTranscript,
   type TeamsAttachmentPreviewGroups,
 } from "@/utils/teams/teamsAttachmentGroups";
 export {
