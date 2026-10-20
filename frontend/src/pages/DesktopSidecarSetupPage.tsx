@@ -98,6 +98,11 @@ function architectureLabel(os: string, architecture: string): string {
 
 function artifactKindLabel(kind: string): string {
   switch (kind) {
+    case "intunewin":
+      return t({
+        id: "desktopSidecar.setup.artifact.intunewin",
+        message: "Microsoft Intune package",
+      });
     case "installer":
       return t({
         id: "desktopSidecar.setup.artifact.installer",

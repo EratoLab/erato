@@ -3246,6 +3246,11 @@ msgstr "Installer"
 
 #. js-lingui-explicit-id
 #: src/pages/DesktopSidecarSetupPage.tsx
+msgid "desktopSidecar.setup.artifact.intunewin"
+msgstr "Microsoft Intune package"
+
+#. js-lingui-explicit-id
+#: src/pages/DesktopSidecarSetupPage.tsx
 msgid "desktopSidecar.setup.artifact.recommended"
 msgstr "Recommended"
 

@@ -258,13 +258,25 @@ async fn build_download_response(
                 u64::try_from(personalized.len()).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
             (Body::from(personalized), size)
         }
-        BootstrapTransport::WindowsMsi => {
-            let personalized = artifact
-                .personalized_msi(&personalization_bootstrap(distribution)?)
-                .map_err(|error| {
-                    tracing::error!(%error, "Failed to personalize desktop sidecar MSI");
-                    StatusCode::INTERNAL_SERVER_ERROR
-                })?;
+        BootstrapTransport::WindowsMsi | BootstrapTransport::WindowsIntunewin => {
+            let bootstrap = personalization_bootstrap(distribution)?;
+            let artifact = artifact.clone();
+            let personalized = tokio::task::spawn_blocking(move || {
+                if artifact.bootstrap_transport() == BootstrapTransport::WindowsIntunewin {
+                    artifact.personalized_intunewin(&bootstrap)
+                } else {
+                    artifact.personalized_msi(&bootstrap)
+                }
+            })
+            .await
+            .map_err(|error| {
+                tracing::error!(%error, "Windows sidecar packaging task failed");
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?
+            .map_err(|error| {
+                tracing::error!(%error, "Failed to package desktop sidecar Windows installer");
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?;
             let size = u64::try_from(personalized.len()).map_err(|error| {
                 tracing::error!(%error, "Desktop sidecar MSI size could not be encoded");
                 StatusCode::INTERNAL_SERVER_ERROR
@@ -322,6 +334,108 @@ mod tests {
     use tempfile::tempdir;
 
     use super::*;
+
+    #[tokio::test]
+    async fn intunewin_download_is_derived_from_msi_and_safe_for_concurrent_requests() {
+        let directory = tempdir().unwrap();
+        let template = crate::distribution::desktop_sidecar::tests::windows_msi_template();
+        fs::write(directory.path().join("sidecar.msi"), &template).unwrap();
+        let manifest = json!({
+            "targets": [{
+                "id": "windows-x86_64",
+                "platform": {"os": "windows", "architecture": "x86_64", "abi": "msvc"},
+                "default_file": "installer",
+                "files": [{
+                    "id": "installer", "kind": "installer", "path": "sidecar.msi",
+                    "download_filename": "sidecar.msi", "media_type": "application/octet-stream"
+                }]
+            }]
+        });
+        fs::write(directory.path().join("manifest.json"), manifest.to_string()).unwrap();
+        let config = crate::config::DesktopSidecarConfig {
+            directory_suffix: Some("-staging".into()),
+            product_code: Some("11111111-2222-4333-8444-555555555555".into()),
+            upgrade_code: Some("aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee".into()),
+            ..Default::default()
+        };
+        let distribution =
+            DesktopSidecarDistribution::load_with_config(directory.path(), &config).unwrap();
+        assert_eq!(
+            distribution.artifact("windows-x86_64", None).unwrap().id,
+            "installer"
+        );
+        let metadata = DesktopSidecarDistributionResponse::from(&distribution);
+        assert_eq!(metadata.targets[0].files.len(), 2);
+        assert_eq!(metadata.targets[0].files[1].kind, "intunewin");
+        let requests = (0..4).map(|_| {
+            build_download_response(
+                Some(&distribution),
+                DesktopSidecarDistributionDownloadQuery {
+                    target: "windows-x86_64".into(),
+                    file: Some("installer.intunewin".into()),
+                },
+            )
+        });
+        let mut packages = Vec::new();
+        for response in futures::future::join_all(requests).await {
+            let response = response.unwrap();
+            assert_eq!(response.headers()[CONTENT_TYPE], "application/octet-stream");
+            assert_eq!(response.headers()[CACHE_CONTROL], "private, no-store");
+            assert!(
+                response.headers()[CONTENT_DISPOSITION]
+                    .to_str()
+                    .unwrap()
+                    .contains("sidecar.intunewin")
+            );
+            let length: usize = response.headers()[CONTENT_LENGTH]
+                .to_str()
+                .unwrap()
+                .parse()
+                .unwrap();
+            let bytes = to_bytes(response.into_body(), 1_000_000).await.unwrap();
+            assert_eq!(bytes.len(), length);
+            assert!(bytes.starts_with(b"PK"));
+            let mut archive = zip::ZipArchive::new(std::io::Cursor::new(&bytes)).unwrap();
+            let mut xml = String::new();
+            archive
+                .by_name("IntuneWinPackage/Metadata/Detection.xml")
+                .unwrap()
+                .read_to_string(&mut xml)
+                .unwrap();
+            assert!(xml.contains(
+                "<MsiProductCode>{11111111-2222-4333-8444-555555555555}</MsiProductCode>"
+            ));
+            assert!(xml.contains(
+                "<MsiUpgradeCode>{AAAAAAAA-BBBB-4CCC-8DDD-EEEEEEEEEEEE}</MsiUpgradeCode>"
+            ));
+            drop(archive);
+            packages.push(bytes);
+        }
+        assert!(packages.windows(2).all(|pair| pair[0] != pair[1]));
+        assert_eq!(
+            fs::read(directory.path().join("sidecar.msi")).unwrap(),
+            template
+        );
+
+        let mut conflicting = manifest;
+        let mut duplicate = conflicting["targets"][0]["files"][0].clone();
+        duplicate["id"] = json!("installer.intunewin");
+        conflicting["targets"][0]["files"]
+            .as_array_mut()
+            .unwrap()
+            .push(duplicate);
+        fs::write(
+            directory.path().join("manifest.json"),
+            conflicting.to_string(),
+        )
+        .unwrap();
+        assert!(
+            DesktopSidecarDistribution::load(directory.path())
+                .unwrap_err()
+                .to_string()
+                .contains("conflicts")
+        );
+    }
 
     #[tokio::test]
     async fn distribution_response_and_download_are_built_from_the_manifest() {

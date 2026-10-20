@@ -411,6 +411,7 @@
   "desktop_sidecar.distribution.enabled": {},
   "desktop_sidecar.file_upload_approval": {},
   "desktop_sidecar.icon": {},
+  "desktop_sidecar.launch_suffix": {},
   "desktop_sidecar.local_delegation.backend_origin": {},
   "desktop_sidecar.local_delegation.enabled": {},
   "desktop_sidecar.local_delegation.signing_key_id": {},
@@ -418,6 +419,7 @@
   "desktop_sidecar.local_delegation.verification_keys.<key>": {},
   "desktop_sidecar.organization_configuration.show_tray_icon": {},
   "desktop_sidecar.port": {},
+  "desktop_sidecar.product_code": {},
   "desktop_sidecar.show_settings_tab": {},
   "desktop_sidecar.show_settings_tab_office_addin": {},
   "desktop_sidecar.tls.certificate_pem": {},
@@ -425,6 +427,7 @@
   "desktop_sidecar.tls.intermediate_private_key_pem": {},
   "desktop_sidecar.tls.private_key_pem": {},
   "desktop_sidecar.tls.validity_days": {},
+  "desktop_sidecar.upgrade_code": {},
   "environment": {
     "hide_in_docs": true
   },
