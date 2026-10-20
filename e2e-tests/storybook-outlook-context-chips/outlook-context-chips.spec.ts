@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
 import {
@@ -15,7 +17,9 @@ import {
 // The Outlook add-in's chips (ERMAIN-1024), as the `Chat/ComposerContextOutlook`
 // stories play the add-in's resolvers: compose selection, draft or
 // appointment, the open thread, the item's attachments, dropped emails and the
-// scheduling mode in the controls row.
+// scheduling mode in the controls row. What each story and flow has to draw
+// comes from the add-in itself: its parity test runs the add-in's resolvers on
+// the stories' scenarios and writes outlook-chips.expected.json.
 
 const OUTLOOK = "chat-composercontextoutlook";
 const SHELL = '[data-ui="chat-input-shell"]';
@@ -62,384 +66,85 @@ interface Expected {
   meta: string | null;
   control: string | null;
   locked?: string;
+  actions?: string[];
 }
 
 interface Story {
   id: string;
   chips: Expected[];
-  mode?: true;
+  mode?: string;
   files?: number;
 }
 
-const thread = (
-  state: string,
-  meta: string,
-  control: string,
-  tone?: "warning" | "error",
-): Expected => ({
-  kind: "outlook.thread",
-  label: THREAD,
-  state,
-  meta,
-  control,
-  ...(tone ? { tone } : {}),
-});
-const threadIncluded = thread("included", FULL, "Leave out the email");
-const drop = (
-  label: string,
-  meta: string,
-  extra: Partial<Expected> = {},
-): Expected => ({
-  kind: "outlook.droppedEmail",
-  label,
-  state: "included",
-  meta,
-  control: `Remove ${label}`,
-  ...extra,
-});
-const draft = (
-  state: string,
-  meta: string | null,
-  control = state === "suggested" ? "Include draft" : "Don't include draft",
-): Expected => ({
-  kind: "outlook.draft",
-  label: "Your draft",
-  state,
-  meta,
-  control,
-});
-const attachment = (
-  kind: "outlook.draftAttachment" | "outlook.mailAttachment",
-  name: string,
-  state: string,
-  meta: string,
-  control = state === "suggested" ? `Include ${name}` : `Don't include ${name}`,
-): Expected => ({ kind, label: name, state, meta, control });
-const draftAttachments = (
-  state: string,
-  meta: string,
-  control = state === "suggested"
-    ? "Include draft attachments"
-    : "Don't include draft attachments",
-): Expected => ({
-  kind: "outlook.draftAttachments",
-  label: "Draft attachments (3)",
-  state,
-  meta,
-  control,
-});
-const selection = (
-  state: string,
-  meta: string,
-  control = state === "suggested" ? "Include selection" : "Dismiss selection",
-): Expected => ({
-  kind: "outlook.selection",
-  label: QUOTE,
-  state,
-  meta,
-  control,
-});
-const contract = (state: string, meta: string) =>
-  attachment("outlook.draftAttachment", "contract-v3.pdf", state, meta);
-const pricing = (state: string, meta: string) =>
-  attachment("outlook.draftAttachment", "pricing.xlsx", state, meta);
-const twoAttachments = [
-  contract("included", "Draft attachment · 482 KB"),
-  pricing("included", "Draft attachment · 36 KB"),
-];
-const replyIncluded = draft("included", "Reply to Anna Weber");
+/** What the add-in's own resolvers draw for a story or flow (outlookStoryParity.test.ts). */
+interface AddinChip {
+  kind: Kind;
+  origin: "ambient" | "user";
+  dismissScope?: "item" | "selection" | "message" | "chat";
+  state: string;
+  tone?: "warning" | "error";
+  label: string;
+  meta: string | null;
+  control: string | null;
+  lockReason?: string | null;
+  actions?: { label: string; announcement: string | null }[];
+}
+interface AddinContext {
+  chips: AddinChip[];
+  modes: {
+    label: string;
+    description: string | null;
+    endLabel: string;
+    endedAnnouncement: string | null;
+  }[];
+}
+const ADDIN = JSON.parse(
+  readFileSync(
+    new URL("./outlook-chips.expected.json", import.meta.url),
+    "utf8",
+  ),
+) as {
+  stories: Record<string, AddinContext>;
+  flows: Record<string, AddinContext & { story: string }>;
+};
 
-const STORIES: Story[] = [
-  { id: "thread-included", chips: [threadIncluded] },
-  {
-    id: "thread-partial",
-    chips: [thread("included", PARTIAL, "Leave out the email")],
-  },
-  {
-    id: "thread-loading",
-    chips: [thread("loading", "Loading email thread…", "Leave out the email")],
-  },
-  {
-    id: "thread-error",
-    chips: [
-      thread(
-        "error",
-        "Couldn't load the email thread",
-        "Dismiss email thread",
-        "error",
-      ),
-    ],
-  },
-  {
-    id: "thread-error-again",
-    chips: [
-      thread(
-        "error",
-        "Couldn't load the email thread",
-        "Dismiss email thread",
-        "error",
-      ),
-    ],
-  },
-  {
-    id: "thread-sign-in",
-    chips: [
-      thread(
-        "attention",
-        "Sign in to load email",
-        "Leave out the email",
-        "warning",
-      ),
-    ],
-  },
-  {
-    id: "thread-consent",
-    chips: [
-      thread(
-        "attention",
-        "Allow access to load email",
-        "Leave out the email",
-        "warning",
-      ),
-    ],
-  },
-  {
-    id: "thread-signing-in",
-    chips: [thread("loading", "Signing in…", "Leave out the email")],
-  },
-  {
-    id: "thread-off",
-    chips: [thread("suggested", OFF_ITEM, "Include the email")],
-  },
-  {
-    id: "thread-follow-up",
-    chips: [thread("suggested", FOLLOW_UP, "Include the email")],
-  },
-  {
-    id: "thread-follow-up-loading",
-    chips: [thread("suggested", FOLLOW_UP, "Include the email")],
-  },
-  {
-    id: "thread-nothing-chosen",
-    chips: [thread("suggested", "Nothing chosen", "Include every message")],
-  },
-  {
-    id: "thread-trim-failed",
-    chips: [
-      thread(
-        "error",
-        "Couldn't leave out unticked parts",
-        "Dismiss email thread",
-        "error",
-      ),
-    ],
-  },
-  { id: "thread-sent-in-chat", chips: [] },
-  { id: "thread-dropped-as-email", chips: [drop(OFFSITE, OFFSITE_META)] },
-  {
-    id: "drops",
-    chips: [
-      threadIncluded,
-      drop(OFFSITE, OFFSITE_META),
-      drop(BUDGET, BUDGET_META),
-    ],
-  },
-  {
-    id: "drop-trim-failed",
-    chips: [
-      threadIncluded,
-      drop(OFFSITE, "Couldn't leave out unticked parts", {
-        state: "error",
-        tone: "error",
-      }),
-    ],
-  },
-  {
-    id: "dropping",
-    chips: [
-      threadIncluded,
-      {
-        kind: "outlook.dropProgress",
-        label: "Reading email 1 of 2…",
-        state: "loading",
-        meta: null,
-        control: null,
-        locked: DROPPING_LOCK,
-      },
-    ],
-  },
-  {
-    id: "mail-attachments-no-graph",
-    chips: [
-      attachment(
-        "outlook.mailAttachment",
-        "contract-v3.pdf",
-        "included",
-        "Email attachment · 482 KB",
-      ),
-      attachment(
-        "outlook.mailAttachment",
-        "pricing.xlsx",
-        "included",
-        "Email attachment · 36 KB",
-      ),
-    ],
-  },
-  {
-    id: "mail-attachments-with-drop",
-    chips: [
-      attachment(
-        "outlook.mailAttachment",
-        "contract-v3.pdf",
-        "superseded",
-        NOT_WITH_DROPS,
-      ),
-      drop(OFFSITE, OFFSITE_META),
-    ],
-  },
-  { id: "read-scheduling", chips: [threadIncluded], mode: true },
-
-  { id: "draft", chips: [replyIncluded, ...twoAttachments] },
-  { id: "draft-new-message", chips: [draft("included", null)] },
-  {
-    id: "draft-unchanged",
-    chips: [
-      draft("superseded", "Unchanged, not re-sent"),
-      contract("superseded", SENT_EARLIER),
-      pricing("superseded", SENT_EARLIER),
-    ],
-  },
-  { id: "draft-off", chips: [draft("suggested", OFF_ITEM), ...twoAttachments] },
-  {
-    id: "selection",
-    chips: [
-      selection("included", "Replaces draft"),
-      draft("superseded", "Replaced by selection"),
-      ...twoAttachments,
-    ],
-  },
-  {
-    id: "selection-dismissed",
-    chips: [
-      selection("suggested", "Off until the selection changes"),
-      replyIncluded,
-      ...twoAttachments,
-    ],
-  },
-  {
-    id: "selection-no-draft",
-    chips: [selection("included", "Selected text")],
-  },
-  {
-    id: "appointment",
-    chips: [
-      {
-        kind: "outlook.appointment",
-        label: "Appointment details",
-        state: "included",
-        meta: APPOINTMENT_WHEN,
-        control: "Don't include appointment details",
-      },
-    ],
-  },
-  {
-    id: "appointment-selection",
-    chips: [
-      selection("included", "Replaces appointment details"),
-      {
-        kind: "outlook.appointment",
-        label: "Appointment details",
-        state: "superseded",
-        meta: "Replaced by selection",
-        control: "Don't include appointment details",
-      },
-    ],
-  },
-  {
-    id: "attachments-group",
-    chips: [replyIncluded, draftAttachments("included", "3 of 3 · 738 KB")],
-  },
-  {
-    id: "attachments-group-partial",
-    chips: [replyIncluded, draftAttachments("included", "2 of 3 · 702 KB")],
-  },
-  {
-    id: "attachments-group-off",
-    chips: [replyIncluded, draftAttachments("suggested", OFF_ITEM)],
-  },
-  {
-    id: "attachments-follow-up",
-    chips: [
-      draft("superseded", "Unchanged, not re-sent"),
-      contract("superseded", SENT_EARLIER),
-      pricing("suggested", FOLLOW_UP),
-    ],
-  },
-  {
-    id: "attachments-sent-earlier",
-    chips: [
-      draft("superseded", "Unchanged, not re-sent"),
-      draftAttachments("superseded", SENT_EARLIER),
-    ],
-  },
-  {
-    id: "cloud-attachment",
-    chips: [
-      replyIncluded,
-      contract("included", "Draft attachment · 482 KB"),
-      {
-        ...attachment(
-          "outlook.draftAttachment",
-          "Renewal terms.docx",
-          "error",
-          "Cloud file · can't be sent",
-          "Dismiss Renewal terms.docx",
-        ),
-        tone: "error",
-      },
-    ],
-  },
-  {
-    id: "attachments-with-drop",
-    chips: [
-      replyIncluded,
-      contract("superseded", NOT_WITH_DROPS),
-      pricing("superseded", NOT_WITH_DROPS),
-      drop(OFFSITE, OFFSITE_META),
-    ],
-  },
-  {
-    id: "scheduling",
-    chips: [
-      draft("superseded", "Not sent while scheduling"),
-      ...twoAttachments,
-    ],
-    mode: true,
-  },
-  {
-    id: "sending",
-    chips: [
-      draft("superseded", "Not sent while scheduling"),
-      contract("superseded", NOT_WITH_DROPS),
-      pricing("superseded", NOT_WITH_DROPS),
-      drop(OFFSITE, OFFSITE_META),
-    ].map((chip) => ({ ...chip, locked: SENDING_LOCK })),
-    mode: true,
-  },
-  {
-    id: "busy",
-    chips: [
-      selection("included", "Replaces draft"),
-      draft("superseded", "Replaced by selection"),
-      draftAttachments("superseded", NOT_WITH_DROPS),
-      drop(OFFSITE, OFFSITE_META),
-      drop(BUDGET, BUDGET_META),
-    ],
-    files: 3,
-  },
-  { id: "interactive-read", chips: [threadIncluded] },
-  { id: "interactive-compose", chips: [replyIncluded, ...twoAttachments] },
-];
+// The lane's own default for a suggested ambient chip the host gives no meta.
+const SCOPE_META: Record<string, string> = {
+  item: "Off until you switch mail items",
+  selection: "Off until the selection changes",
+};
+const expectedOf = (chip: AddinChip): Expected => ({
+  kind: chip.kind,
+  label: chip.label,
+  state: chip.state,
+  ...(chip.tone ? { tone: chip.tone } : {}),
+  meta:
+    chip.meta ??
+    (chip.state === "suggested" &&
+    chip.origin === "ambient" &&
+    chip.dismissScope
+      ? SCOPE_META[chip.dismissScope]
+      : null),
+  control: chip.control,
+  ...(chip.lockReason ? { locked: chip.lockReason } : {}),
+  ...(chip.actions
+    ? { actions: chip.actions.map((action) => action.label) }
+    : {}),
+});
+const FILES: Record<string, number> = { busy: 3 };
+const STORIES: Story[] = Object.entries(ADDIN.stories).map(([id, story]) => ({
+  id,
+  chips: story.chips.map(expectedOf),
+  ...(story.modes[0]?.endedAnnouncement
+    ? { mode: story.modes[0].endedAnnouncement }
+    : {}),
+  ...(FILES[id] ? { files: FILES[id] } : {}),
+}));
+const flow = (name: string) => {
+  const found = ADDIN.flows[name];
+  if (!found) throw new Error(`no flow ${name} in outlook-chips.expected.json`);
+  return found.chips.map(expectedOf);
+};
 
 const STATE_WORD: Record<string, string> = {
   included: "Included.",
@@ -683,6 +388,171 @@ test.describe("every story", () => {
   });
 });
 
+const expectLane = async (page: Page, chips: Expected[], label: string) => {
+  const items = page.locator(CHIP);
+  await expect(items, label).toHaveCount(chips.length);
+  for (const [index, expected] of chips.entries()) {
+    await expectChip(items.nth(index), expected, label);
+  }
+};
+const press = async (page: Page, chip: Locator, key: string) => {
+  await open(chip).focus();
+  await page.keyboard.press(key);
+};
+
+/** The steps that take a story to each flow's end, as a user would take them. */
+const FLOW_STEPS: Record<string, [string, (page: Page) => Promise<void>]> = {
+  "ThreadPartial: Delete": [
+    "thread-partial",
+    (page) => press(page, kind(page, "outlook.thread"), "Delete"),
+  ],
+  "ThreadError: Delete": [
+    "thread-error",
+    (page) => press(page, kind(page, "outlook.thread"), "Delete"),
+  ],
+  "ThreadError: Delete, + loads": [
+    "thread-error",
+    async (page) => {
+      const chip = kind(page, "outlook.thread");
+      await press(page, chip, "Delete");
+      await press(page, chip, "+");
+      await expect(chip).toHaveAttribute("data-state", "included");
+    },
+  ],
+  "ThreadErrorAgain: + fails again": [
+    "thread-error-again",
+    async (page) => {
+      const chip = kind(page, "outlook.thread");
+      await press(page, chip, "Delete");
+      await press(page, chip, "+");
+      await expect(chip).toHaveAttribute("data-state", "loading");
+      await expect(chip).toHaveAttribute("data-state", "error");
+    },
+  ],
+  "ThreadSignIn: Sign in loads": [
+    "thread-sign-in",
+    async (page) => {
+      const chip = kind(page, "outlook.thread");
+      await open(chip).click();
+      await page
+        .getByRole("dialog", { name: THREAD })
+        .getByRole("button", { name: "Sign in" })
+        .click();
+      await expect(chip).toHaveAttribute("data-state", "included", {
+        timeout: 10_000,
+      });
+    },
+  ],
+  "ThreadFollowUp: +": [
+    "thread-follow-up",
+    (page) => press(page, kind(page, "outlook.thread"), "+"),
+  ],
+  "ThreadFollowUpError: + loads": [
+    "thread-follow-up-error",
+    async (page) => {
+      const chip = kind(page, "outlook.thread");
+      await press(page, chip, "+");
+      await expect(chip).toHaveAttribute("data-state", "included");
+    },
+  ],
+  "InteractiveRead: send": [
+    "interactive-read",
+    (page) =>
+      page
+        .getByRole("group", { name: "Simulate" })
+        .getByRole("button", { name: "Send" })
+        .click(),
+  ],
+  "Drops: Delete the first": [
+    "drops",
+    (page) => press(page, chipNamed(page, OFFSITE), "Delete"),
+  ],
+  "Selection: Delete": [
+    "selection",
+    (page) => press(page, kind(page, "outlook.selection"), "Delete"),
+  ],
+  "Draft: Delete": [
+    "draft",
+    (page) => press(page, kind(page, "outlook.draft"), "Delete"),
+  ],
+  "AttachmentsGroup: untick pricing, Delete": [
+    "attachments-group",
+    async (page) => {
+      const group = kind(page, "outlook.draftAttachments");
+      await open(group).click();
+      await page
+        .getByRole("dialog", { name: "Draft attachments (3)" })
+        .getByRole("checkbox", { name: "Include pricing.xlsx" })
+        .uncheck();
+      await page.keyboard.press("Escape");
+      await expect(page.getByRole("dialog")).toHaveCount(0);
+      await press(page, group, "Delete");
+    },
+  ],
+  "Scheduling: End": [
+    "scheduling",
+    (page) =>
+      page
+        .locator(MODE)
+        .getByRole("button", { name: "End scheduling" })
+        .click(),
+  ],
+};
+
+test.describe("flows land where the add-in lands", () => {
+  test("every flow in the add-in's file has its steps here", () => {
+    expect(Object.keys(FLOW_STEPS).sort()).toEqual(
+      Object.keys(ADDIN.flows).sort(),
+    );
+  });
+
+  for (const [name, [story, steps]] of Object.entries(FLOW_STEPS)) {
+    test(name, async ({ page }) => {
+      expect(ADDIN.flows[name]?.story).toBe(story);
+      await openOutlook(page, story);
+      await steps(page);
+      await expectLane(page, flow(name), name);
+      await expect(page.locator(MODE), name).toHaveCount(
+        ADDIN.flows[name]!.modes.length,
+      );
+    });
+  }
+});
+
+test.describe("details", () => {
+  // Only these kinds carry detail actions in the add-in.
+  const ACTION_KINDS = new Set([
+    "outlook.draft",
+    "outlook.appointment",
+    "outlook.thread",
+  ]);
+  test("offer exactly the add-in's actions", async ({ page }) => {
+    for (const story of STORIES) {
+      if (!story.chips.some((chip) => ACTION_KINDS.has(chip.kind))) continue;
+      await openOutlook(page, story.id);
+      await expandLane(page);
+      for (const expected of story.chips) {
+        if (!ACTION_KINDS.has(expected.kind)) continue;
+        await open(kind(page, expected.kind)).click();
+        const sheet = page.getByRole("dialog", { name: expected.label });
+        await expect(sheet, story.id).toBeVisible();
+        const buttons = await sheet
+          .locator('[data-ui="composer-context-detail-actions"] button')
+          .allInnerTexts();
+        const actions = buttons.slice(
+          0,
+          buttons.length - (expected.control === null ? 0 : 1),
+        );
+        expect(actions, `${story.id}: ${expected.label}`).toEqual(
+          expected.actions ?? [],
+        );
+        await page.keyboard.press("Escape");
+        await expect(page.getByRole("dialog")).toHaveCount(0);
+      }
+    }
+  });
+});
+
 test.describe("tones", () => {
   for (const theme of ["light", "dark"] as const) {
     test(`error, attention, superseded and suggested looks, ${theme}`, async ({
@@ -692,6 +562,7 @@ test.describe("tones", () => {
         ["thread-error", THREAD],
         ["thread-trim-failed", THREAD],
         ["cloud-attachment", "Renewal terms.docx"],
+        ["attachments-group-cloud", "Draft attachments (3)"],
         ["drop-trim-failed", OFFSITE],
       ] as const) {
         await openOutlook(page, story, { theme });

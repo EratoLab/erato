@@ -4,6 +4,27 @@ import { Alert } from "@/components/ui/Feedback/Alert";
 import { formatFileSize } from "@/components/ui/FileUpload/FilePreviewBase";
 import { GroupedFileAttachmentsPreview } from "@/components/ui/FileUpload/GroupedFileAttachmentsPreview";
 
+import {
+  BUDGET_DROP,
+  OFFSITE_DROP,
+  OUTLOOK_APPOINTMENT,
+  OUTLOOK_DRAFT_BODY,
+  OUTLOOK_LIMIT,
+  OUTLOOK_REPLY_SENDER,
+  OUTLOOK_SCHEDULING_UNTIL,
+  OUTLOOK_SELECTION_TEXT,
+  OUTLOOK_THREAD_SUBJECT,
+  THREAD_MESSAGES,
+  outlookStoryState,
+  storyDropStats,
+  storyThreadStats,
+} from "./composerContextOutlookScenarios";
+
+import type {
+  OutlookStoryAttachment,
+  OutlookStorySeed,
+  OutlookStoryState,
+} from "./composerContextOutlookScenarios";
 import type {
   ComposerContextDetailAction,
   ComposerContextItem,
@@ -17,244 +38,17 @@ import type {
 } from "@/components/ui/FileUpload/GroupedFileAttachmentsPreview";
 
 /*
- * Outlook's chips as the Office add-in builds them, played from data. The
- * rules are those of office-addin/src/outlook/utils/outlookSendFiles.ts (which
- * files the send uploads), outlookActionFacet.ts (what the facet carries) and
- * outlookContextChips.ts (the chips), and the copy is the add-in's English
- * catalog; the add-in's tests pin the real output, so these stories show the
- * lane, not the add-in's strings.
+ * Outlook's chips as the Office add-in builds them, played from data so (x),
+ * +, the detail actions and the checklists behave in Storybook. The rules
+ * copy office-addin/src/outlook/utils/outlookSendFiles.ts,
+ * outlookActionFacet.ts and outlookContextChips.ts, and the copy is the
+ * add-in's English catalog. The copy cannot drift silently: the add-in's
+ * parity test writes the chips its own resolvers give for every story and
+ * flow (composerContextOutlookScenarios.ts), and the Storybook spec holds
+ * these stories to that file.
  */
 
-const KB = 1024;
-export const OUTLOOK_LIMIT = "25 MB";
-export const OUTLOOK_THREAD_SUBJECT = "RE: Q4 vendor contract renewal";
-export const OUTLOOK_SELECTION_TEXT =
-  "Could you confirm the delivery date by Friday?";
-export const OUTLOOK_DRAFT_BODY =
-  "Hi Anna,\n\nthanks for the updated contract. Could you confirm the delivery date by Friday? We also need the revised pricing sheet before the steering meeting.\n\nBest regards,\nDaniel";
-export const OUTLOOK_APPOINTMENT = {
-  subject: "Steering committee: vendor renewal",
-  when: "Fri, Oct 23, 10:00 – 11:00 AM",
-  whenLong: "Fri, Oct 23, 2026, 10:00 – 11:00 AM",
-  location: "Room 4.12 and Teams",
-  attendees: ["Anna Weber", "Tom Fischer", "Priya Raman"],
-};
-export const OUTLOOK_SCHEDULING_UNTIL = "3:40 PM";
 const LOCK_REASON = "Can't change this while the message is being sent";
-
-interface ThreadAttachment {
-  id: string;
-  name: string;
-  size: number;
-}
-
-interface ThreadMessage {
-  id: string;
-  from: string;
-  date: string;
-  subject: string;
-  size: number;
-  attachments: ThreadAttachment[];
-}
-
-const THREAD_MESSAGES: ThreadMessage[] = [
-  {
-    id: "m1",
-    from: "Anna Weber",
-    date: "Oct 6, 2026, 9:14 AM",
-    subject: "Q4 vendor contract renewal",
-    size: 38 * KB,
-    attachments: [
-      { id: "m1:a1", name: "contract-v3.pdf", size: 482 * KB },
-      { id: "m1:a2", name: "pricing.xlsx", size: 36 * KB },
-    ],
-  },
-  {
-    id: "m2",
-    from: "Tom Fischer",
-    date: "Oct 7, 2026, 2:02 PM",
-    subject: OUTLOOK_THREAD_SUBJECT,
-    size: 22 * KB,
-    attachments: [],
-  },
-  {
-    id: "m3",
-    from: "Anna Weber",
-    date: "Oct 8, 2026, 8:47 AM",
-    subject: OUTLOOK_THREAD_SUBJECT,
-    size: 19 * KB,
-    attachments: [{ id: "m3:a1", name: "redline-v4.docx", size: 214 * KB }],
-  },
-  {
-    id: "m4",
-    from: "Priya Raman",
-    date: "Oct 9, 2026, 11:20 AM",
-    subject: OUTLOOK_THREAD_SUBJECT,
-    size: 24 * KB,
-    attachments: [
-      { id: "m4:a1", name: "legal-review-notes.pdf", size: 640 * KB },
-    ],
-  },
-  {
-    id: "m5",
-    from: "Tom Fischer",
-    date: "Oct 10, 2026, 4:05 PM",
-    subject: OUTLOOK_THREAD_SUBJECT,
-    size: 18 * KB,
-    attachments: [],
-  },
-];
-
-/** An Office.js attachment: the draft's own, or the open email's without a thread. */
-export interface OutlookStoryAttachment {
-  id: string;
-  name: string;
-  size: number;
-  type: string;
-  cloud?: boolean;
-}
-
-export const CONTRACT: OutlookStoryAttachment = {
-  id: "a1",
-  name: "contract-v3.pdf",
-  size: 482 * KB,
-  type: "PDF",
-};
-export const PRICING: OutlookStoryAttachment = {
-  id: "a2",
-  name: "pricing.xlsx",
-  size: 36 * KB,
-  type: "XLSX",
-};
-export const SCHEDULE: OutlookStoryAttachment = {
-  id: "a3",
-  name: "delivery-schedule.pdf",
-  size: 220 * KB,
-  type: "PDF",
-};
-export const CLOUD_FILE: OutlookStoryAttachment = {
-  id: "a4",
-  name: "Renewal terms.docx",
-  // Office.js reports no size for a link to a cloud file.
-  size: 0,
-  type: "DOCX",
-  cloud: true,
-};
-
-export interface OutlookStoryDrop {
-  key: string;
-  subject: string;
-  sender: string;
-  date: string;
-  fileName: string;
-  bodySize: number;
-  attachments: ThreadAttachment[];
-  /** Unticking this attachment needs a trim the bytes refuse. */
-  trimBlocked?: string;
-}
-
-export const OFFSITE_DROP: OutlookStoryDrop = {
-  key: "drop-offsite",
-  subject: "Re: Offsite agenda",
-  sender: "Lena Hoffmann",
-  date: "10/7/2026",
-  fileName: "Re Offsite agenda.eml",
-  bodySize: 41 * KB,
-  attachments: [
-    { id: "att-0", name: "agenda.docx", size: 28 * KB },
-    { id: "att-1", name: "venue-map.png", size: 310 * KB },
-  ],
-};
-export const BUDGET_DROP: OutlookStoryDrop = {
-  key: "drop-budget",
-  subject: "Budget 2027 draft",
-  sender: "Jonas Weber",
-  date: "10/12/2026",
-  fileName: "Budget 2027 draft.eml",
-  bodySize: 96 * KB,
-  attachments: [
-    { id: "att-0", name: "budget-2027.xlsx", size: 120 * KB },
-    { id: "att-1", name: "headcount.xlsx", size: 44 * KB },
-    { id: "att-2", name: "assumptions.pdf", size: 210 * KB },
-  ],
-};
-
-type ThreadStatus = "none" | "loading" | "ready" | "error";
-
-export interface OutlookStoryState {
-  host: "read" | "compose";
-  /** No message has been sent in this chat yet. */
-  freshChat: boolean;
-  /** A send is uploading: every chip and the mode keep still. */
-  sending: boolean;
-  /** Sticky scheduling: Erato read the calendar within the hour. */
-  scheduling: boolean;
-
-  /** "none": no mail backend, so no thread; the email's attachments go instead. */
-  threadStatus: ThreadStatus;
-  /** With "error": reading the mailbox needs an interactive step. */
-  signIn: "sign-in" | "consent" | null;
-  signingIn: boolean;
-  threadChoice: "included" | "excluded" | null;
-  threadSentInChat: boolean;
-  untickedMessages: string[];
-  untickedAttachments: string[];
-  /** Unticking this thread attachment needs a trim the bytes refuse. */
-  trimBlocked: string | null;
-  /** Where a load started by +, "Try again" or a switch lands. */
-  retryLandsOn: "ready" | "error";
-  openEmailDropped: boolean;
-
-  itemKind: "message" | "appointment";
-  /** The draft replies to the open thread. */
-  reply: boolean;
-  /** "none": an empty draft, which rides with nothing. */
-  draft: "changed" | "unchanged" | "none";
-  draftOff: boolean;
-  selection: "active" | "dismissed" | null;
-
-  attachments: OutlookStoryAttachment[];
-  dismissedAttachments: string[];
-  attachmentsGroupOff: boolean;
-  sentAttachmentIds: string[];
-  followUpIds: string[];
-
-  drops: OutlookStoryDrop[];
-  dismissedDropAttachments: Record<string, string[]>;
-  dropProgress: string | null;
-}
-
-export type OutlookStorySeed = Partial<OutlookStoryState>;
-
-const DEFAULTS: OutlookStoryState = {
-  host: "read",
-  freshChat: true,
-  sending: false,
-  scheduling: false,
-  threadStatus: "ready",
-  signIn: null,
-  signingIn: false,
-  threadChoice: null,
-  threadSentInChat: false,
-  untickedMessages: [],
-  untickedAttachments: [],
-  trimBlocked: null,
-  retryLandsOn: "ready",
-  openEmailDropped: false,
-  itemKind: "message",
-  reply: true,
-  draft: "changed",
-  draftOff: false,
-  selection: null,
-  attachments: [],
-  dismissedAttachments: [],
-  attachmentsGroupOff: false,
-  sentAttachmentIds: [],
-  followUpIds: [],
-  drops: [],
-  dismissedDropAttachments: {},
-  dropProgress: null,
-};
 
 const READ_MS = 600;
 const SIGN_IN_MS = 4000;
@@ -267,7 +61,7 @@ type ThreadDisposition =
   | { kind: "error"; why: "load" | "trim" }
   | { kind: "sign-in"; consent: boolean }
   | { kind: "off"; retry: boolean }
-  | { kind: "follow-up" }
+  | { kind: "follow-up"; retry: boolean }
   | { kind: "nothing" }
   | { kind: "sent"; included: number; total: number };
 
@@ -279,61 +73,34 @@ type AttachmentDisposition =
   | "cloud"
   | "not-with-drops";
 
-type DraftDisposition = "sent" | "selection" | "scheduling" | "unchanged";
-
-const threadStats = (state: OutlookStoryState) => {
-  const kept = THREAD_MESSAGES.filter(
-    (message) => !state.untickedMessages.includes(message.id),
-  );
-  const size = kept.reduce(
-    (total, message) =>
-      total +
-      message.size +
-      message.attachments
-        .filter(
-          (attachment) => !state.untickedAttachments.includes(attachment.id),
-        )
-        .reduce((sum, attachment) => sum + attachment.size, 0),
-    0,
-  );
-  const trimFailed =
-    state.trimBlocked !== null &&
-    state.untickedAttachments.includes(state.trimBlocked) &&
-    kept.some((message) =>
-      message.attachments.some(
-        (attachment) => attachment.id === state.trimBlocked,
-      ),
-    );
-  return { included: kept.length, size, trimFailed };
-};
+type DraftDisposition =
+  | "sent"
+  | "selection"
+  | "scheduling"
+  | "unchanged"
+  | "none";
 
 function threadDisposition(state: OutlookStoryState): ThreadDisposition {
   const { threadStatus: status, threadChoice: choice } = state;
   if (state.host !== "read" || status === "none") return { kind: "none" };
   if (state.openEmailDropped) return { kind: "hidden" };
-  if (state.threadSentInChat && choice !== "included")
+  if (!state.freshChat && state.threadSentInChat && choice !== "included") {
     return { kind: "hidden" };
-  if (status === "loading") {
-    if ((state.freshChat && choice !== "excluded") || choice === "included") {
-      return { kind: "loading" };
-    }
-    if (choice === null) return { kind: "follow-up" };
   }
+  if (!state.freshChat && choice === null) {
+    return { kind: "follow-up", retry: status === "error" };
+  }
+  if (status === "loading" && choice !== "excluded") return { kind: "loading" };
   if (status === "error" && choice !== "excluded") {
     return state.signIn
       ? { kind: "sign-in", consent: state.signIn === "consent" }
       : { kind: "error", why: "load" };
   }
   if (choice === "excluded") return { kind: "off", retry: status === "error" };
-  if (!state.freshChat && choice !== "included") return { kind: "follow-up" };
-  const stats = threadStats(state);
+  const stats = storyThreadStats(state);
   if (stats.included === 0) return { kind: "nothing" };
   if (stats.trimFailed) return { kind: "error", why: "trim" };
-  return {
-    kind: "sent",
-    included: stats.included,
-    total: THREAD_MESSAGES.length,
-  };
+  return { kind: "sent", included: stats.included, total: stats.total };
 }
 
 const showsAttachments = (state: OutlookStoryState) =>
@@ -349,7 +116,9 @@ function attachmentDisposition(
   if (state.dismissedAttachments.includes(attachment.id)) return "off";
   if (attachment.cloud) return "cloud";
   if (state.attachmentsGroupOff) return "off";
-  if (state.sentAttachmentIds.includes(attachment.id)) return "sent-earlier";
+  if (!state.freshChat && state.sentAttachmentIds.includes(attachment.id)) {
+    return "sent-earlier";
+  }
   if (state.drops.length > 0) return "not-with-drops";
   if (!state.freshChat && !state.followUpIds.includes(attachment.id)) {
     return "follow-up";
@@ -361,22 +130,44 @@ const hasDraft = (state: OutlookStoryState) =>
   state.host === "compose" &&
   (state.itemKind === "appointment" || state.draft !== "none");
 
-/** What the facet does with the draft, and whether sticky scheduling holds its slot. */
+/**
+ * What the facet does with the draft, whether sticky scheduling holds its
+ * slot, and what the draft would do once the selection is dismissed or
+ * scheduling ends.
+ */
 function sendPreview(state: OutlookStoryState): {
-  draft: DraftDisposition | "none";
+  draft: DraftDisposition;
   scheduling: boolean;
+  withoutSelection: DraftDisposition | null;
+  withoutScheduling: DraftDisposition | null;
 } {
   const eligible = hasDraft(state) && !state.draftOff;
+  const unchanged = eligible && state.draft === "unchanged";
+  const passedOver = (held: DraftDisposition): DraftDisposition =>
+    unchanged ? "unchanged" : eligible ? held : "none";
+  const sticky = state.scheduling && state.itemKind !== "appointment";
+  const plain = passedOver("sent");
   if (state.host === "compose" && state.selection === "active") {
-    return { draft: eligible ? "selection" : "none", scheduling: false };
+    return {
+      draft: passedOver("selection"),
+      scheduling: false,
+      withoutSelection: sticky ? passedOver("scheduling") : plain,
+      withoutScheduling: null,
+    };
   }
-  if (state.scheduling && state.itemKind !== "appointment") {
-    return { draft: eligible ? "scheduling" : "none", scheduling: true };
+  if (sticky) {
+    return {
+      draft: passedOver("scheduling"),
+      scheduling: true,
+      withoutSelection: null,
+      withoutScheduling: plain,
+    };
   }
-  if (!eligible) return { draft: "none", scheduling: false };
   return {
-    draft: state.draft === "unchanged" ? "unchanged" : "sent",
+    draft: plain,
     scheduling: false,
+    withoutSelection: null,
+    withoutScheduling: null,
   };
 }
 
@@ -504,6 +295,7 @@ const Detail = ({
 const LIFETIME_ITEM = "Leaving it out lasts until you switch mail items.";
 const FOLLOW_UP_META = "Not included on follow-up messages";
 const NOTHING_CHOSEN_META = "Nothing chosen";
+const THREAD_INTRO = `Untick what Erato should not read. Attachments count toward the ${OUTLOOK_LIMIT} limit.`;
 const TRIM_FAILED_META = "Couldn't leave out unticked parts";
 const SENT_EARLIER_META = "Sent earlier, not re-sent";
 const NOT_WITH_DROPS_META = "Not sent with dropped emails";
@@ -519,6 +311,33 @@ const EMAIL_THREAD_LOADED = "Email thread loaded.";
 
 const messageCount = (count: number) =>
   `${count} ${count === 1 ? "message" : "messages"}`;
+const someMessages = (included: number, total: number) =>
+  `${included} of ${total} ${total === 1 ? "message" : "messages"}`;
+
+function attachmentsNote(
+  disposition: "cloud" | "sent-earlier" | "not-with-drops" | "follow-up",
+  compose: boolean,
+): Note {
+  switch (disposition) {
+    case "cloud":
+      return {
+        tone: "error",
+        text: "These are links to cloud files, which Outlook can't hand over, so they are not sent.",
+      };
+    case "sent-earlier":
+      return {
+        tone: "info",
+        text: "Erato already has these files from an earlier message, so they are not sent again.",
+      };
+    case "not-with-drops":
+      return attachmentNote("not-with-drops", compose) as Note;
+    case "follow-up":
+      return {
+        tone: "info",
+        text: "Attachments go with the first message only. Include them to send them with this one.",
+      };
+  }
+}
 
 function attachmentNote(
   disposition: AttachmentDisposition,
@@ -583,10 +402,9 @@ export const useOutlookStoryResolver = (
   composerDisabled: boolean;
   simulate: OutlookStorySimulations;
 } => {
-  const [state, setState] = useState<OutlookStoryState>(() => ({
-    ...DEFAULTS,
-    ...seed,
-  }));
+  const [state, setState] = useState<OutlookStoryState>(() =>
+    outlookStoryState(seed),
+  );
   const timers = useRef<number[]>([]);
   const later = useCallback((ms: number, run: () => void) => {
     timers.current.push(window.setTimeout(run, ms));
@@ -819,17 +637,20 @@ export const useOutlookStoryResolver = (
                 : "Your selection is sent instead of your draft.",
             },
           ],
-          actions: [
-            {
-              id: "send-instead",
-              label: "Send this instead",
-              variant: "primary",
-              announcement: appointment
-                ? "Appointment details included. Your selection is off until it changes."
-                : "Draft included. Your selection is off until it changes.",
-              onSelect: () => patch(() => ({ selection: "dismissed" })),
-            },
-          ],
+          actions:
+            preview.withoutSelection === "sent"
+              ? [
+                  {
+                    id: "send-instead",
+                    label: "Send this instead",
+                    variant: "primary",
+                    announcement: appointment
+                      ? "Appointment details included. Your selection is off until it changes."
+                      : "Draft included. Your selection is off until it changes.",
+                    onSelect: () => patch(() => ({ selection: "dismissed" })),
+                  },
+                ]
+              : [],
         };
       } else if (preview.draft === "scheduling") {
         model = {
@@ -841,15 +662,18 @@ export const useOutlookStoryResolver = (
               text: "Scheduling takes priority, so this message does not carry your draft. End scheduling to send it again.",
             },
           ],
-          actions: [
-            {
-              id: "end-scheduling",
-              label: "End scheduling",
-              variant: "primary",
-              announcement: "Scheduling ended. Your draft is sent again.",
-              onSelect: () => patch(() => ({ scheduling: false })),
-            },
-          ],
+          actions:
+            preview.withoutScheduling === "sent"
+              ? [
+                  {
+                    id: "end-scheduling",
+                    label: "End scheduling",
+                    variant: "primary",
+                    announcement: "Scheduling ended. Your draft is sent again.",
+                    onSelect: () => patch(() => ({ scheduling: false })),
+                  },
+                ]
+              : [],
         };
       } else if (preview.draft === "unchanged") {
         model = {
@@ -867,7 +691,7 @@ export const useOutlookStoryResolver = (
         const meta = appointment
           ? OUTLOOK_APPOINTMENT.when
           : state.reply
-            ? "Reply to Anna Weber"
+            ? `Reply to ${OUTLOOK_REPLY_SENDER}`
             : undefined;
         model = {
           state: "included",
@@ -934,11 +758,11 @@ export const useOutlookStoryResolver = (
     // The open thread: read mode with a conversation.
     const thread = threadDisposition(state);
     if (thread.kind !== "none" && thread.kind !== "hidden") {
-      const stats = threadStats(state);
+      const stats = storyThreadStats(state);
       const used = stats.included > 0 ? formatFileSize(stats.size) : null;
       const sizeLabel =
         used === null ? "Updating…" : `${used} of ${OUTLOOK_LIMIT}`;
-      const intro = `Untick what Erato should not read. Attachments count toward the ${OUTLOOK_LIMIT} limit.`;
+      const intro = THREAD_INTRO;
       const excluded = state.threadChoice === "excluded";
       let model: {
         state: ComposerContextState;
@@ -965,13 +789,24 @@ export const useOutlookStoryResolver = (
         checklistMeta: sizeLabel,
       };
       switch (thread.kind) {
-        case "loading":
+        case "loading": {
+          const meta = state.signingIn
+            ? "Signing in…"
+            : "Loading email thread…";
           model = {
             ...base,
             state: "loading",
-            meta: state.signingIn ? "Signing in…" : "Loading email thread…",
+            meta,
+            notes: [
+              {
+                tone: "info",
+                title: meta,
+                text: "Preparing the email context",
+              },
+            ],
           };
           break;
+        }
         case "error":
           model =
             thread.why === "load"
@@ -987,7 +822,11 @@ export const useOutlookStoryResolver = (
                       label: "Try again",
                       variant: "primary",
                       announcement: EMAIL_THREAD_LOADED,
-                      onSelect: load,
+                      // Asking for the email again means it goes once it loads.
+                      onSelect: () => {
+                        load();
+                        include();
+                      },
                     },
                   ],
                   notes: [
@@ -1024,7 +863,10 @@ export const useOutlookStoryResolver = (
                 label: thread.consent ? "Allow access" : "Sign in",
                 variant: "primary",
                 announcement: EMAIL_THREAD_LOADED,
-                onSelect: signIn,
+                onSelect: () => {
+                  signIn();
+                  include();
+                },
               },
             ],
             notes: [
@@ -1050,19 +892,28 @@ export const useOutlookStoryResolver = (
                   include();
                 }
               : include,
+            ...(thread.retry ? {} : { intro }),
             notes: [THREAD_NOT_INCLUDED],
             checklist: !thread.retry,
             lifetime: THREAD_LIFETIME,
           };
           break;
         case "follow-up":
+          // A failure on a follow-up is loaded again when the user includes it.
           model = {
             ...base,
             state: "suggested",
             meta: FOLLOW_UP_META,
             restoreLabel: "Include the email",
+            restore: thread.retry
+              ? () => {
+                  load();
+                  include();
+                }
+              : include,
+            ...(thread.retry ? {} : { intro }),
             notes: [THREAD_NOT_INCLUDED],
-            checklist: true,
+            checklist: !thread.retry,
             lifetime: THREAD_LIFETIME,
           };
           break;
@@ -1086,7 +937,7 @@ export const useOutlookStoryResolver = (
         case "sent": {
           const partial = thread.included < thread.total;
           const count = partial
-            ? `${thread.included} of ${thread.total} messages`
+            ? someMessages(thread.included, thread.total)
             : messageCount(thread.total);
           model = {
             ...base,
@@ -1115,7 +966,10 @@ export const useOutlookStoryResolver = (
         }));
       const group: FileAttachmentGroup = {
         id: "staged-email:current-thread",
-        label: messageCount(THREAD_MESSAGES.length),
+        label:
+          stats.included < stats.total
+            ? someMessages(stats.included, stats.total)
+            : messageCount(stats.total),
         metaLabel: model.checklistMeta,
         items: THREAD_MESSAGES.map((message) => {
           const messageOff = state.untickedMessages.includes(message.id);
@@ -1288,7 +1142,10 @@ export const useOutlookStoryResolver = (
           }
           const fields: Field[] = [
             { label: "Type", value: attachment.type },
-            { label: "Size", value: formatFileSize(attachment.size) },
+            // Office.js reports no size for a link to a cloud file.
+            ...(attachment.cloud || attachment.size === 0
+              ? []
+              : [{ label: "Size", value: formatFileSize(attachment.size) }]),
           ];
           result.push({
             id: `outlook-attachment:${attachment.id}`,
@@ -1339,21 +1196,37 @@ export const useOutlookStoryResolver = (
         const tickAll = tickedSendable.length === 0;
         let model: {
           state: ComposerContextState;
+          tone?: ComposerContextTone;
           meta?: string;
+          removeLabel?: string;
           notes: Note[];
         };
-        const note = (disposition: AttachmentDisposition) => {
-          const found = attachmentNote(disposition, compose);
-          return found ? [found] : [];
-        };
         if (state.attachmentsGroupOff) {
-          model = { state: "suggested", notes: [] };
+          model = {
+            state: "suggested",
+            notes: [
+              {
+                tone: "info",
+                text: "The attachments are not included right now. Your ticks below are kept and come back when you include them.",
+              },
+            ],
+          };
+        } else if (shown.every(({ attachment }) => attachment.cloud)) {
+          model = {
+            state: "error",
+            tone: "error",
+            meta: "Cloud files · can't be sent",
+            removeLabel: compose
+              ? "Dismiss draft attachments"
+              : "Dismiss email attachments",
+            notes: [attachmentsNote("cloud", compose)],
+          };
         } else if (going.length === 0) {
           if (tickedSendable.length > 0 && unsentTicked.length === 0) {
             model = {
               state: "superseded",
               meta: SENT_EARLIER_META,
-              notes: note("sent-earlier"),
+              notes: [attachmentsNote("sent-earlier", compose)],
             };
           } else if (
             tickedSendable.some(
@@ -1363,13 +1236,13 @@ export const useOutlookStoryResolver = (
             model = {
               state: "superseded",
               meta: NOT_WITH_DROPS_META,
-              notes: note("not-with-drops"),
+              notes: [attachmentsNote("not-with-drops", compose)],
             };
           } else if (unsentTicked.length > 0) {
             model = {
               state: "suggested",
               meta: FOLLOW_UP_META,
-              notes: note("follow-up"),
+              notes: [attachmentsNote("follow-up", compose)],
             };
           } else {
             model = {
@@ -1425,6 +1298,7 @@ export const useOutlookStoryResolver = (
           dismissScope: "item",
           icon: "attachment",
           state: model.state,
+          ...(model.tone ? { tone: model.tone } : {}),
           ...(model.meta ? { meta: model.meta } : {}),
           label,
           spokenLabel,
@@ -1453,9 +1327,11 @@ export const useOutlookStoryResolver = (
                   })),
               }
             : {
-                removeLabel: compose
-                  ? "Don't include draft attachments"
-                  : "Don't include email attachments",
+                removeLabel:
+                  model.removeLabel ??
+                  (compose
+                    ? "Don't include draft attachments"
+                    : "Don't include email attachments"),
                 onRemove: () => patch(() => ({ attachmentsGroupOff: true })),
               }),
           detail: {
@@ -1474,20 +1350,17 @@ export const useOutlookStoryResolver = (
 
     // Dropped emails, in drop order.
     for (const drop of state.drops) {
-      const dismissed = state.dismissedDropAttachments[drop.key] ?? [];
-      const kept = drop.attachments.filter(
-        (attachment) => !dismissed.includes(attachment.id),
+      const { dismissed, kept, total, trimFailed } = storyDropStats(
+        state,
+        drop,
       );
-      const trimFailed =
-        drop.trimBlocked !== undefined && dismissed.includes(drop.trimBlocked);
       const senderAndDate = `${drop.sender} • ${drop.date}`;
-      const total = drop.attachments.length;
       const meta = trimFailed
         ? TRIM_FAILED_META
         : [
             senderAndDate,
             total > 0
-              ? `${kept.length}/${total} ${total === 1 ? "attachment" : "attachments"}`
+              ? `${kept}/${total} ${total === 1 ? "attachment" : "attachments"}`
               : "",
           ]
             .filter((part) => part.length > 0)
@@ -1593,7 +1466,7 @@ export const useOutlookStoryResolver = (
         endLabel: "End scheduling",
         onEnd: () => patch(() => ({ scheduling: false })),
         endedAnnouncement:
-          sendPreview(state).draft === "scheduling"
+          sendPreview(state).withoutScheduling === "sent"
             ? "Scheduling ended. Your draft is sent again."
             : "Scheduling ended.",
         ...(state.sending ? { locked: true, lockReason: LOCK_REASON } : {}),

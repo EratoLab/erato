@@ -2,21 +2,12 @@ import { action } from "@storybook/addon-actions";
 
 import { ChatInput } from "@/components/ui/Chat/ChatInput";
 
-import {
-  BUDGET_DROP,
-  CLOUD_FILE,
-  CONTRACT,
-  OFFSITE_DROP,
-  PRICING,
-  SCHEDULE,
-  useOutlookStoryResolver,
-} from "./composerContextOutlookFixtures";
+import { useOutlookStoryResolver } from "./composerContextOutlookFixtures";
+import { OUTLOOK_STORIES } from "./composerContextOutlookScenarios";
 import { AnnouncementLog, pane, stagedFile } from "./composerContextStoryKit";
 
-import type {
-  OutlookStorySeed,
-  OutlookStorySimulations,
-} from "./composerContextOutlookFixtures";
+import type { OutlookStorySimulations } from "./composerContextOutlookFixtures";
+import type { OutlookStorySeed } from "./composerContextOutlookScenarios";
 import type { Meta, StoryObj } from "@storybook/react";
 
 const meta: Meta = {
@@ -29,7 +20,7 @@ const meta: Meta = {
     docs: {
       description: {
         component:
-          "The Outlook add-in's chips in the composer's lane: the compose selection, the draft or appointment, the open thread, the item's attachments and dropped emails, with the scheduling mode next to +. The story plays the add-in's resolvers (office-addin/src/outlook/utils/outlookSendFiles.ts and outlookContextChips.ts) from data, so (x), +, the detail actions and the checklists behave and announce as in the add-in.",
+          "The Outlook add-in's chips in the composer's lane: the compose selection, the draft or appointment, the open thread, the item's attachments and dropped emails, with the scheduling mode next to +. The story plays the add-in's resolvers (office-addin/src/outlook/utils/outlookSendFiles.ts and outlookContextChips.ts) from data, so (x), +, the detail actions and the checklists behave and announce as in the add-in; the add-in's parity test writes the chips each story must draw, and the Storybook spec holds the stories to it.",
       },
     },
   },
@@ -120,160 +111,71 @@ const story = (
   render: () => <OutlookComposer seed={seed} {...options} />,
 });
 
-const PARTIAL = {
-  untickedMessages: ["m2", "m5"],
-  untickedAttachments: ["m3:a1"],
-};
-const EVERY_MESSAGE_OFF = {
-  untickedMessages: ["m1", "m2", "m3", "m4", "m5"],
-};
-
 // Read: the open email.
-export const ThreadIncluded = story({});
-export const ThreadPartial = story(PARTIAL);
-export const ThreadLoading = story({ threadStatus: "loading" });
-export const ThreadError = story({ threadStatus: "error" });
-export const ThreadErrorAgain = story({
-  threadStatus: "error",
-  retryLandsOn: "error",
-});
-export const ThreadSignIn = story({ threadStatus: "error", signIn: "sign-in" });
-export const ThreadConsent = story({
-  threadStatus: "error",
-  signIn: "consent",
-});
-export const ThreadSigningIn = story({
-  threadStatus: "loading",
-  signingIn: true,
-});
-export const ThreadOff = story({ ...PARTIAL, threadChoice: "excluded" });
-export const ThreadFollowUp = story({ freshChat: false });
-export const ThreadFollowUpLoading = story({
-  freshChat: false,
-  threadStatus: "loading",
-});
-export const ThreadNothingChosen = story(EVERY_MESSAGE_OFF);
-export const ThreadTrimFailed = story({
-  untickedAttachments: ["m4:a1"],
-  trimBlocked: "m4:a1",
-});
-export const ThreadSentInChat = story({
-  freshChat: false,
-  threadSentInChat: true,
-});
-export const ThreadDroppedAsEmail = story({
-  openEmailDropped: true,
-  drops: [OFFSITE_DROP],
-});
-export const Drops = story({ drops: [OFFSITE_DROP, BUDGET_DROP] });
-export const DropTrimFailed = story({
-  drops: [{ ...OFFSITE_DROP, trimBlocked: "att-1" }],
-  dismissedDropAttachments: { [OFFSITE_DROP.key]: ["att-1"] },
-});
-export const Dropping = story({ dropProgress: "Reading email 1 of 2…" });
-export const MailAttachmentsNoGraph = story({
-  threadStatus: "none",
-  attachments: [CONTRACT, PRICING],
-});
-export const MailAttachmentsWithDrop = story({
-  threadStatus: "none",
-  attachments: [CONTRACT],
-  drops: [OFFSITE_DROP],
-});
-export const ReadScheduling = story({ scheduling: true });
+export const ThreadIncluded = story(OUTLOOK_STORIES.ThreadIncluded);
+export const ThreadPartial = story(OUTLOOK_STORIES.ThreadPartial);
+export const ThreadLoading = story(OUTLOOK_STORIES.ThreadLoading);
+export const ThreadError = story(OUTLOOK_STORIES.ThreadError);
+export const ThreadErrorAgain = story(OUTLOOK_STORIES.ThreadErrorAgain);
+export const ThreadSignIn = story(OUTLOOK_STORIES.ThreadSignIn);
+export const ThreadConsent = story(OUTLOOK_STORIES.ThreadConsent);
+export const ThreadSigningIn = story(OUTLOOK_STORIES.ThreadSigningIn);
+export const ThreadOff = story(OUTLOOK_STORIES.ThreadOff);
+export const ThreadFollowUp = story(OUTLOOK_STORIES.ThreadFollowUp);
+export const ThreadFollowUpLoading = story(
+  OUTLOOK_STORIES.ThreadFollowUpLoading,
+);
+export const ThreadFollowUpError = story(OUTLOOK_STORIES.ThreadFollowUpError);
+export const ThreadNothingChosen = story(OUTLOOK_STORIES.ThreadNothingChosen);
+export const ThreadTrimFailed = story(OUTLOOK_STORIES.ThreadTrimFailed);
+export const ThreadSentInChat = story(OUTLOOK_STORIES.ThreadSentInChat);
+export const ThreadDroppedAsEmail = story(OUTLOOK_STORIES.ThreadDroppedAsEmail);
+export const Drops = story(OUTLOOK_STORIES.Drops);
+export const DropTrimFailed = story(OUTLOOK_STORIES.DropTrimFailed);
+export const Dropping = story(OUTLOOK_STORIES.Dropping);
+export const MailAttachmentsNoGraph = story(
+  OUTLOOK_STORIES.MailAttachmentsNoGraph,
+);
+export const MailAttachmentsWithDrop = story(
+  OUTLOOK_STORIES.MailAttachmentsWithDrop,
+);
+export const ReadScheduling = story(OUTLOOK_STORIES.ReadScheduling);
 
 // Compose: the draft or appointment and what rides with it.
-const COMPOSE: OutlookStorySeed = {
-  host: "compose",
-  threadStatus: "none",
-  attachments: [CONTRACT, PRICING],
-};
-export const Draft = story(COMPOSE);
-export const DraftNewMessage = story({
-  ...COMPOSE,
-  reply: false,
-  attachments: [],
-});
-export const DraftUnchanged = story({
-  ...COMPOSE,
-  freshChat: false,
-  draft: "unchanged",
-  sentAttachmentIds: [CONTRACT.id, PRICING.id],
-});
-export const DraftOff = story({ ...COMPOSE, draftOff: true });
-export const Selection = story({ ...COMPOSE, selection: "active" });
-export const SelectionDismissed = story({
-  ...COMPOSE,
-  selection: "dismissed",
-});
-export const SelectionNoDraft = story({
-  ...COMPOSE,
-  draft: "none",
-  attachments: [],
-  selection: "active",
-});
-export const Appointment = story({
-  ...COMPOSE,
-  itemKind: "appointment",
-  attachments: [],
-});
-export const AppointmentSelection = story({
-  ...COMPOSE,
-  itemKind: "appointment",
-  attachments: [],
-  selection: "active",
-});
-export const AttachmentsGroup = story({
-  ...COMPOSE,
-  attachments: [CONTRACT, PRICING, SCHEDULE],
-});
-export const AttachmentsGroupPartial = story({
-  ...COMPOSE,
-  attachments: [CONTRACT, PRICING, SCHEDULE],
-  dismissedAttachments: [PRICING.id],
-});
-export const AttachmentsGroupOff = story({
-  ...COMPOSE,
-  attachments: [CONTRACT, PRICING, SCHEDULE],
-  attachmentsGroupOff: true,
-});
-export const AttachmentsFollowUp = story({
-  ...COMPOSE,
-  freshChat: false,
-  draft: "unchanged",
-  sentAttachmentIds: [CONTRACT.id],
-});
-export const AttachmentsSentEarlier = story({
-  ...COMPOSE,
-  freshChat: false,
-  draft: "unchanged",
-  attachments: [CONTRACT, PRICING, SCHEDULE],
-  sentAttachmentIds: [CONTRACT.id, PRICING.id, SCHEDULE.id],
-});
-export const CloudAttachment = story({
-  ...COMPOSE,
-  attachments: [CONTRACT, CLOUD_FILE],
-});
-export const AttachmentsWithDrop = story({
-  ...COMPOSE,
-  drops: [OFFSITE_DROP],
-});
-export const Scheduling = story({ ...COMPOSE, scheduling: true });
-export const Sending = story({
-  ...COMPOSE,
-  scheduling: true,
-  drops: [OFFSITE_DROP],
-  sending: true,
-});
-
-export const Busy = story(
-  {
-    ...COMPOSE,
-    selection: "active",
-    attachments: [CONTRACT, PRICING, SCHEDULE],
-    drops: [OFFSITE_DROP, BUDGET_DROP],
-  },
-  { files: BUSY_FILES },
+export const Draft = story(OUTLOOK_STORIES.Draft);
+export const DraftNewMessage = story(OUTLOOK_STORIES.DraftNewMessage);
+export const DraftUnchanged = story(OUTLOOK_STORIES.DraftUnchanged);
+export const DraftOff = story(OUTLOOK_STORIES.DraftOff);
+export const Selection = story(OUTLOOK_STORIES.Selection);
+export const SelectionDismissed = story(OUTLOOK_STORIES.SelectionDismissed);
+export const SelectionNoDraft = story(OUTLOOK_STORIES.SelectionNoDraft);
+export const SelectionDraftUnchanged = story(
+  OUTLOOK_STORIES.SelectionDraftUnchanged,
 );
-export const InteractiveRead = story({}, { simulations: true });
-export const InteractiveCompose = story(COMPOSE, { simulations: true });
+export const Appointment = story(OUTLOOK_STORIES.Appointment);
+export const AppointmentSelection = story(OUTLOOK_STORIES.AppointmentSelection);
+export const AttachmentsGroup = story(OUTLOOK_STORIES.AttachmentsGroup);
+export const AttachmentsGroupPartial = story(
+  OUTLOOK_STORIES.AttachmentsGroupPartial,
+);
+export const AttachmentsGroupOff = story(OUTLOOK_STORIES.AttachmentsGroupOff);
+export const AttachmentsGroupCloud = story(
+  OUTLOOK_STORIES.AttachmentsGroupCloud,
+);
+export const AttachmentsFollowUp = story(OUTLOOK_STORIES.AttachmentsFollowUp);
+export const AttachmentsSentEarlier = story(
+  OUTLOOK_STORIES.AttachmentsSentEarlier,
+);
+export const CloudAttachment = story(OUTLOOK_STORIES.CloudAttachment);
+export const AttachmentsWithDrop = story(OUTLOOK_STORIES.AttachmentsWithDrop);
+export const Scheduling = story(OUTLOOK_STORIES.Scheduling);
+export const SchedulingUnchanged = story(OUTLOOK_STORIES.SchedulingUnchanged);
+export const Sending = story(OUTLOOK_STORIES.Sending);
+
+export const Busy = story(OUTLOOK_STORIES.Busy, { files: BUSY_FILES });
+export const InteractiveRead = story(OUTLOOK_STORIES.InteractiveRead, {
+  simulations: true,
+});
+export const InteractiveCompose = story(OUTLOOK_STORIES.InteractiveCompose, {
+  simulations: true,
+});

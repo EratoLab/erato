@@ -2,7 +2,27 @@
 
 Measures, in a real browser, the Outlook add-in's chips in the composer's
 lane (ERMAIN-1024), as the stories under `Chat/ComposerContextOutlook` play
-the add-in's resolvers from data:
+the add-in's resolvers from data.
+
+What each story and each flow has to draw is not written here: the add-in's
+parity test (`office-addin/src/outlook/utils/__tests__/outlookStoryParity.test.ts`)
+runs the add-in's own resolvers on the stories' scenarios
+(`frontend/src/stories/chat/composerContextOutlookScenarios.ts`) and writes
+`outlook-chips.expected.json`: every chip's kind, state, tone, label, meta,
+control name, lock and detail actions, and the mode. The test fails when the
+add-in no longer gives that file, and this spec fails when a story no longer
+draws it, so the stories cannot drift from the add-in unnoticed. After a
+deliberate change, rewrite the file from `office-addin/`:
+
+```bash
+pnpm exec vitest run src/outlook/utils/__tests__/outlookStoryParity.test.ts -u
+```
+
+The spec checks:
+
+- every story's lane against the add-in's file, and every flow (Delete, +,
+  "Try again", "Sign in", a send, ending scheduling) landing where the
+  add-in's handlers land; every detail offering exactly the add-in's actions;
 
 - order and names over every story: the ambient chips first in a fixed order
   (selection, draft or appointment, open thread, attachments), then the
