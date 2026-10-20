@@ -2,9 +2,10 @@
  * The host adapter contract for client tools that delegated tasks call under
  * a grant (contract §7, §9 and §10). A host runs it against its own handlers.
  * It reports failures rather than asserting: each side ends with one
- * `expect(failures).toEqual([])`. Executors are called through the shared
- * registry with the context the executor stream passes, so it needs real
- * timers.
+ * `expect(failures).toEqual([])`. Executors are looked up in the shared
+ * registry and called with a `hostGrant` built as `handleClientToolCall`
+ * builds it; write tools get a grant too, to prove they refuse it. Approval
+ * waits use `setTimeout`, so run it with real timers.
  */
 /* eslint-disable lingui/no-unlocalized-strings -- failure text for a test run, never shown to a user */
 import {
@@ -35,7 +36,10 @@ export interface ClientToolHostCall {
 export interface ClientToolHostConformanceHarness {
   /** The binding's host context kind, named in every failure. */
   hostContext: string;
-  /** What the host answers a call whose context it does not hold (contract §6). */
+  /**
+   * What the host answers a call whose context it does not hold (contract §6),
+   * always with `submissionFeedback.terminal`: a loss is never retried.
+   */
   lossCode: "capture-unavailable" | "context_unavailable";
   /** Starts a coordinator turn, as a send does; it makes earlier turns stale. */
   startTurn: () => Promise<ClientToolHostTurn>;
@@ -57,7 +61,11 @@ export interface ClientToolHostConformanceHarness {
     name: string;
     apply: () => void | Promise<void>;
   }[];
-  /** A read that asks on the device, and how the user answers it. */
+  /**
+   * A read that asks on the device, and how the user answers it. A decline
+   * answers with the `declined` code; the backend does not map that code to
+   * the `declined` outcome yet (ERMAIN-1034).
+   */
   deviceApproval?: {
     read: ClientToolHostCall;
     answer: (approved: boolean) => void | Promise<void>;
@@ -103,37 +111,69 @@ const stable = (value: unknown): string =>
       : nested,
   );
 
-const pendingChats = () =>
-  Object.entries(useConfirmationRegistryStore.getState().pendingIdsByChatId)
-    .filter(([, ids]) => (ids?.length ?? 0) > 0)
-    .map(([chatId]) => chatId);
+type PendingApprovals = Partial<Record<string, string[]>>;
 
-const waitForPendingApproval = (): Promise<boolean> =>
+const pendingApprovals = (): PendingApprovals =>
+  useConfirmationRegistryStore.getState().pendingIdsByChatId;
+
+/**
+ * Approvals registered since `before`, as chat ids. A host that deregisters
+ * in an effect cleanup can still hold an earlier call's entry.
+ */
+const approvalChatsSince = (before: PendingApprovals): string[] =>
+  Object.entries(pendingApprovals()).flatMap(([chatId, ids]) =>
+    (ids ?? [])
+      .filter((id) => !(before[chatId] ?? []).includes(id))
+      .map(() => chatId),
+  );
+
+/** The chat of the first approval registered since `before`. */
+const waitForApprovalSince = (
+  before: PendingApprovals,
+): Promise<string | undefined> =>
   new Promise((resolve) => {
-    if (pendingChats().length > 0) {
-      resolve(true);
+    const registered = approvalChatsSince(before).at(0);
+    if (registered !== undefined) {
+      resolve(registered);
       return;
     }
     const timer = setTimeout(() => {
       unsubscribe();
-      resolve(false);
+      resolve(undefined);
     }, APPROVAL_WAIT_MS);
     const unsubscribe = useConfirmationRegistryStore.subscribe(() => {
-      if (pendingChats().length > 0) {
+      const chatId = approvalChatsSince(before).at(0);
+      if (chatId !== undefined) {
         clearTimeout(timer);
         unsubscribe();
-        resolve(true);
+        resolve(chatId);
       }
     });
   });
 
-const settleWithin = <T>(promise: Promise<T>): Promise<T | undefined> =>
-  Promise.race([
-    promise,
-    new Promise<undefined>((resolve) =>
-      setTimeout(() => resolve(undefined), APPROVAL_WAIT_MS),
-    ),
-  ]);
+const settleWithin = async (
+  settled: Promise<CallOutcome>,
+): Promise<CallOutcome> => {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      settled,
+      new Promise<CallOutcome>((resolve) => {
+        timer = setTimeout(
+          () => resolve({ kind: "unsettled" }),
+          APPROVAL_WAIT_MS,
+        );
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+};
+
+const threw = (error: unknown): CallOutcome => ({
+  kind: "threw",
+  message: error instanceof Error ? error.message : String(error),
+});
 
 const describeOutcome = (outcome: CallOutcome): string => {
   switch (outcome.kind) {
@@ -158,6 +198,11 @@ const hasCode = (outcome: CallOutcome, code: string): boolean =>
   outcome.kind === "settled" &&
   !outcome.result.ok &&
   (outcome.result.validationErrors ?? []).some((issue) => issue.code === code);
+
+const isTerminal = (outcome: CallOutcome): boolean =>
+  outcome.kind === "settled" &&
+  !outcome.result.ok &&
+  outcome.result.submissionFeedback?.terminal === true;
 
 /** Every key and string in a result, however deep. */
 const walk = (
@@ -305,6 +350,13 @@ const FOREIGN_GRANTS: readonly {
     applies: (turn) => turn.contextRef === undefined,
     change: (grant) => ({ ...grant, contextRef: "conformance-context" }),
   },
+  // The server writes such a grant when the turn's action-facet arguments
+  // lack the context version, and strips the input field.
+  {
+    name: "no context version for a turn that has one",
+    applies: (turn) => turn.contextRef !== undefined,
+    change: ({ contextRef: _omitted, ...grant }) => grant,
+  },
 ];
 
 export const clientToolHostAdapterConformanceFailures = async (
@@ -338,10 +390,7 @@ export const clientToolHostAdapterConformanceFailures = async (
 
   /** The input as the server dispatches it under `grant`. */
   const dispatched = (call: ClientToolHostCall, grant: ClientToolHostGrant) => {
-    const input: unknown =
-      call.input === undefined
-        ? undefined
-        : JSON.parse(JSON.stringify(call.input));
+    const input: unknown = JSON.parse(JSON.stringify(call.input ?? null));
     if (harness.contextInput && isObject(input)) {
       if (grant.contextRef === undefined) {
         delete input[harness.contextInput];
@@ -362,7 +411,7 @@ export const clientToolHostAdapterConformanceFailures = async (
     call: ClientToolHostCall,
     turn: ClientToolHostTurn,
     change: GrantChange = (grant) => grant,
-    whilePending?: () => Promise<void>,
+    whilePending?: (approvalsBefore: PendingApprovals) => Promise<void>,
   ): Promise<CallOutcome> => {
     const executor = getClientToolExecutor(call.tool);
     if (!executor) {
@@ -370,37 +419,38 @@ export const clientToolHostAdapterConformanceFailures = async (
     }
     const ids = nextIds();
     const hostGrant = change(grantFor(turn, ids), turn);
-    const before = stable(harness.coordinatorState());
-    let underRequestingChat = pendingChats().includes(ids.chatId);
+    const stateBefore = stable(harness.coordinatorState());
+    const approvalsBefore = pendingApprovals();
+    const approvalChats = new Set<string>();
     const unsubscribe = useConfirmationRegistryStore.subscribe(() => {
-      underRequestingChat ||= pendingChats().includes(ids.chatId);
+      approvalChatsSince(approvalsBefore).forEach((chatId) =>
+        approvalChats.add(chatId),
+      );
     });
     let outcome: CallOutcome;
     try {
-      const running = executor(dispatched(call, hostGrant), {
+      // Settled into an outcome at once, so a read that rejects while the
+      // approval is pending is reported instead of escaping the run.
+      const settled = executor(dispatched(call, hostGrant), {
         ...ids,
         signal: new AbortController().signal,
         hostGrant,
-      });
+      }).then((result): CallOutcome => ({ kind: "settled", result }), threw);
       if (whilePending) {
-        await whilePending();
-        const result = await settleWithin(running);
-        outcome = result ? { kind: "settled", result } : { kind: "unsettled" };
+        await whilePending(approvalsBefore);
+        outcome = await settleWithin(settled);
       } else {
-        outcome = { kind: "settled", result: await running };
+        outcome = await settled;
       }
     } catch (error) {
-      outcome = {
-        kind: "threw",
-        message: error instanceof Error ? error.message : String(error),
-      };
+      outcome = threw(error);
     } finally {
       unsubscribe();
     }
-    if (stable(harness.coordinatorState()) !== before) {
+    if (stable(harness.coordinatorState()) !== stateBefore) {
       fail("read-only", `${label} changes the coordinator's state`);
     }
-    if (underRequestingChat) {
+    if (approvalChats.has(ids.chatId)) {
       fail(
         "device approval",
         `${label} asks under the requesting chat, not the owner chat`,
@@ -433,6 +483,8 @@ export const clientToolHostAdapterConformanceFailures = async (
         "lineage",
         `${label} ${describeOutcome(outcome)}, expected the "${harness.lossCode}" code`,
       );
+    } else if (!isTerminal(outcome)) {
+      fail("lineage", `${label} returns a non-terminal loss`);
     }
   };
 
@@ -502,10 +554,11 @@ export const clientToolHostAdapterConformanceFailures = async (
         approval.read,
         turn,
         undefined,
-        async () => {
-          if (!(await waitForPendingApproval())) {
+        async (approvalsBefore) => {
+          const chatId = await waitForApprovalSince(approvalsBefore);
+          if (chatId === undefined) {
             fail("device approval", `${label} raises no approval`);
-          } else if (!pendingChats().includes(owner)) {
+          } else if (chatId !== owner) {
             fail(
               "device approval",
               `${label} is not pending under the owner chat`,
