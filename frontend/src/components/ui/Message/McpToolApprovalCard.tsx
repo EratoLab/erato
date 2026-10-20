@@ -322,13 +322,19 @@ export const McpToolApprovalCard = ({
     }
   };
 
+  /**
+   * Decide every item still open. Allowing or denying all keeps the answers
+   * already given, which a queue no longer shows; withdrawing denies
+   * everything, as its hint says.
+   */
   const decideAll = (decision: ToolApprovalDecision) => {
+    const held = decision === "withdraw" ? {} : staged;
     setStaged({});
     void decide(
       decision,
       approvalItems.map((item) => ({
         approvalId: item.approval_id,
-        decision,
+        decision: held[item.approval_id] ?? decision,
       })),
     );
   };

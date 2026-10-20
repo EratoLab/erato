@@ -3452,6 +3452,7 @@ describe("useChatMessaging", () => {
       expect(JSON.parse((call![1] as { body: string }).body)).toEqual({
         message_id: parkedMessage.id,
         decision: "approve",
+        shows_child_items: true,
       });
     });
 
@@ -3881,6 +3882,7 @@ describe("useChatMessaging", () => {
           { approval_id: "plan:0:0", decision: "approve" },
           { approval_id: "plan:0:1", decision: "reject" },
         ],
+        shows_child_items: true,
       });
     });
 

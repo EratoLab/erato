@@ -27,6 +27,10 @@ export const isApprovalDecision = (decision: ToolApprovalDecision): boolean =>
  * them. `itemDecisions` is how a card that asks per item — a task plan, one
  * row per task — answers them differently; a card with one question for the
  * whole stop passes `approvalIds` and the one decision instead.
+ *
+ * `shows_child_items` tells the server this client shows each parked child as
+ * an item of its own; without it, a stop that carries children beside the
+ * turn's own call is refused.
  */
 export const buildContinueStreamBody = ({
   messageId,
@@ -48,10 +52,14 @@ export const buildContinueStreamBody = ({
       approval_id: item.approvalId,
       decision: item.decision,
     }));
-    return { message_id: messageId, decisions };
+    return { message_id: messageId, decisions, shows_child_items: true };
   }
   // A single open item needs no enumeration, but it still has to be answered
   // with its own decision rather than the caller's default: a one-row plan is
   // answered per row like any other.
-  return { message_id: messageId, decision: decided[0]?.decision ?? decision };
+  return {
+    message_id: messageId,
+    decision: decided[0]?.decision ?? decision,
+    shows_child_items: true,
+  };
 };

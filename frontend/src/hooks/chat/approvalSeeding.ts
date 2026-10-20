@@ -1,3 +1,4 @@
+import { isChildItem } from "@/components/ui/Message/approvalItems";
 import { isApprovalDecision } from "@/lib/toolApprovalDecisions";
 
 import type {
@@ -19,16 +20,6 @@ export interface SettledApproval {
   item: SeedableApprovalItem;
   decision: ToolApprovalDecision;
 }
-
-/**
- * Whether an item is settled by resuming a parked child rather than by this
- * turn: any item that names a child, and every item of a `delegated_task` stop,
- * including one whose child was never recorded.
- */
-const isChildItem = (
-  item: Pick<SeedableApprovalItem, "child">,
-  kind: ToolApprovalKind | undefined,
-) => item.child != null || kind === "delegated_task";
 
 const decisionPart = (
   { item, decision }: SettledApproval,
@@ -56,7 +47,6 @@ const decisionPart = (
         rejected_at: now,
         approval_id: item.approval_id,
         child_chat_id: item.child?.child_chat_id ?? null,
-
         reason: decision === "withdraw" ? "withdrawn" : null,
       }) as unknown as ContentPart;
 

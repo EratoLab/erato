@@ -70,11 +70,13 @@ describe("approvalQueueOf", () => {
     expect(ids(approvalQueueOf(request, open))).toEqual(["own", "a", "b"]);
   });
 
-  it("reads the server's microsecond timestamps", () => {
+  it("orders the server's microsecond timestamps below the millisecond", () => {
     const request = { requested_at: "2026-10-20T10:00:05.000100+00:00" };
+    // `a` is listed first and asked within the same millisecond as `own`, so
+    // only the microseconds put it after.
     const open = [
-      ownItem("own"),
       childItem("a", "2026-10-20T10:00:05.000300+00:00"),
+      ownItem("own"),
       childItem("b", "2026-10-20T10:00:04.999999+00:00"),
     ];
 

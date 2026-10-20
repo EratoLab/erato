@@ -7,7 +7,11 @@ import {
 } from "./ApprovalDecisionActions";
 import { OwnCallApprovalItem } from "./OwnCallApprovalItem";
 import { ParkedChildItem } from "./ParkedChildItem";
-import { approvalQueueOf, itemAllowsAlways } from "./approvalItems";
+import {
+  approvalQueueOf,
+  isChildItem,
+  itemAllowsAlways,
+} from "./approvalItems";
 
 import type { ApprovalItemPart, StagedDecisions } from "./approvalItems";
 import type {
@@ -58,8 +62,6 @@ export const ApprovalQueueCard = ({
   const current = queue[position] as ApprovalItemPart | undefined;
   const ordinal = position + 1;
   const remaining = itemCount - ordinal;
-  const isChildItem = (item: ApprovalItemPart) =>
-    item.child != null || kind === "delegated_task";
 
   return (
     <div
@@ -114,7 +116,7 @@ export const ApprovalQueueCard = ({
         )}
       </div>
       {current &&
-        (isChildItem(current) ? (
+        (isChildItem(current, kind) ? (
           <ParkedChildItem
             key={current.approval_id}
             item={current}

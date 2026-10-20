@@ -3,6 +3,7 @@ import type {
   ApprovalItem,
   ChildApprovalRef,
   ToolApprovalDecision,
+  ToolApprovalKind,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
 /**
@@ -56,6 +57,25 @@ export const approvalItemsOf = (
       ];
 
 /**
+ * Whether an item is settled by resuming a parked child rather than by this
+ * turn: any item that names a child, and every item of a `delegated_task` stop,
+ * including one whose child was never recorded.
+ */
+export const isChildItem = (
+  item: { child?: unknown },
+  kind: ToolApprovalKind | undefined,
+): boolean => item.child != null || kind === "delegated_task";
+
+/**
+ * The digits below the millisecond of an RFC 3339 time. `Date.parse` stops at
+ * the millisecond, and the server writes microseconds.
+ */
+const subMillisecondOf = (time: string): number => {
+  const fraction = /T[^.]*\.(\d+)/.exec(time)?.[1] ?? "";
+  return Number(fraction.slice(3, 9).padEnd(6, "0"));
+};
+
+/**
  * The open items in the order they were asked: a parked child's by its own
  * request, the turn's own call by the part's. Ties keep row order, the order
  * the server settles them in.
@@ -65,12 +85,15 @@ export const approvalQueueOf = (
   open: ApprovalItemPart[],
 ): ApprovalItemPart[] => {
   const askedAt = (item: ApprovalItemPart) => {
-    const at = Date.parse(item.child?.requested_at ?? request.requested_at);
-    return Number.isNaN(at) ? Number.POSITIVE_INFINITY : at;
+    const time = item.child?.requested_at ?? request.requested_at;
+    const at = Date.parse(time);
+    return Number.isNaN(at)
+      ? { at: Number.POSITIVE_INFINITY, below: 0 }
+      : { at, below: subMillisecondOf(time) };
   };
   return open
-    .map((item, index) => ({ item, index, at: askedAt(item) }))
-    .sort((a, b) => (a.at === b.at ? a.index - b.index : a.at - b.at))
+    .map((item, index) => ({ item, index, ...askedAt(item) }))
+    .sort((a, b) => a.at - b.at || a.below - b.below || a.index - b.index)
     .map(({ item }) => item);
 };
 
