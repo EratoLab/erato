@@ -9,7 +9,10 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { ContextLaneDouble } from "../../../test/helpers/contextLaneDouble";
+import {
+  ComposerNoticeDouble,
+  ContextLaneDouble,
+} from "../../../test/helpers/contextLaneDouble";
 import { wordContextStore } from "../../hooks/wordContextStore";
 import {
   WORD_SEND_CAPTURE_DEADLINE_MS,
@@ -21,7 +24,10 @@ import type { AddinChatInputRenderProps } from "../../../core/AddinChatCore";
 import type { WordDocumentPreview } from "../../hooks/useWordDocumentSource";
 import type { WordDocumentBuild } from "../../utils/buildWordDocumentArgs";
 import type * as wordActionFacetModule from "../../utils/wordActionFacet";
-import type { ComposerContextItem } from "@erato/frontend/library";
+import type {
+  ComposerContextItem,
+  ComposerNotice,
+} from "@erato/frontend/library";
 import type { WordDocumentCapture } from "@erato/frontend/word-review";
 
 const host = vi.hoisted(() => {
@@ -70,12 +76,15 @@ vi.mock("../../../core/AddinChatInputCore", () => ({
     onSendMessage,
     disabled,
     contextItems,
+    composerNotice,
   }: {
     onSendMessage: (message: string, inputFileIds?: string[]) => void;
     disabled?: boolean;
     contextItems?: ComposerContextItem[];
+    composerNotice?: ComposerNotice | null;
   }) => (
     <>
+      <ComposerNoticeDouble notice={composerNotice} />
       <ContextLaneDouble items={contextItems} />
       <button
         type="button"
@@ -156,13 +165,15 @@ const notes = () =>
   [...detail().querySelectorAll('[data-ui="word-context-detail-note"]')].map(
     (note) => note.textContent,
   );
-/** The one-off send prompts above the composer. */
-const oneOffAlerts = () => {
-  const rows = screen.queryByTestId("word-one-off-rows");
-  return rows
-    ? within(rows)
-        .queryAllByRole("alert")
-        .map((alert) => alert.textContent)
+/** The one-off send prompt in the composer's notice slot, of one kind or any. */
+const noticeOf = (id?: string) => {
+  const notice = screen.queryByTestId("composer-notice");
+  return notice && (!id || notice.dataset.noticeId === id) ? notice : null;
+};
+const noticeTexts = () => {
+  const notice = noticeOf();
+  return notice
+    ? [within(notice).getByTestId("composer-notice-text").textContent]
     : [];
 };
 
@@ -318,8 +329,9 @@ describe("WordChatInput prepared send", () => {
     const prepared = await settle(startPreparation());
 
     expect(prepared?.actionFacet?.args?.authoring_status).toBe("model-budget");
-    // The Send's own check says to send again: a one-off row, not a fact on the chip.
-    expect(oneOffAlerts()).toEqual([
+    // The Send's own check says to send again: a notice, not a fact on the chip.
+    expect(noticeOf()).toHaveAttribute("data-tone", "warning");
+    expect(noticeTexts()).toEqual([
       "The complete rewrite cannot fit the selected model’s available context. Start a shorter chat or choose a model with more context.",
     ]);
     expect(chip()).not.toHaveAttribute("data-tone");
@@ -356,7 +368,7 @@ describe("WordChatInput prepared send", () => {
       args: { authoring_status: "available" },
     });
     expect(screen.queryByRole("alert")).toBeNull();
-    expect(screen.queryByTestId("word-one-off-rows")).toBeNull();
+    expect(noticeOf()).toBeNull();
   });
 
   it("clears a prepared capture when the document identity changes", async () => {
@@ -607,9 +619,9 @@ describe("WordChatInput prepared send", () => {
     const result = startPreparation();
 
     await advance(WORD_SEND_SKIP_OFFER_MS - 1);
-    expect(screen.queryByTestId("word-slow-capture")).toBeNull();
+    expect(noticeOf("word.send.slowCapture")).toBeNull();
     await advance(1);
-    expect(screen.getByTestId("word-slow-capture")).toHaveTextContent(
+    expect(noticeOf("word.send.slowCapture")).toHaveTextContent(
       "Word is still handing over the document.",
     );
 
@@ -620,7 +632,7 @@ describe("WordChatInput prepared send", () => {
     expect(await settle(result)).toEqual(WITHOUT_DOCUMENT);
     expect(staged.at(-1)).toBeNull();
     expect(host.session.activate).not.toHaveBeenCalled();
-    expect(screen.queryByTestId("word-slow-capture")).toBeNull();
+    expect(noticeOf("word.send.slowCapture")).toBeNull();
   });
 
   it("withdraws the offer when the capture arrives in time", async () => {
@@ -631,13 +643,13 @@ describe("WordChatInput prepared send", () => {
     send();
     const result = startPreparation();
     await advance(WORD_SEND_SKIP_OFFER_MS);
-    expect(screen.getByTestId("word-slow-capture")).toBeInTheDocument();
+    expect(noticeOf("word.send.slowCapture")).toBeInTheDocument();
 
     capture.resolve(authoringBuild());
     const prepared = await settle(result);
 
     expect(prepared?.actionFacet?.id).toBe("word_document_authoring");
-    expect(screen.queryByTestId("word-slow-capture")).toBeNull();
+    expect(noticeOf("word.send.slowCapture")).toBeNull();
   });
 
   it("stops waiting for Word as soon as the document is removed with its (x)", async () => {
@@ -732,7 +744,7 @@ describe("WordChatInput prepared send", () => {
       expect.any(Function),
     );
     expect(staged.at(-1)?.identity).toBe(IDENTITY);
-    expect(screen.getByRole("alert")).toHaveTextContent(
+    expect(noticeOf("word.send.previousCapture")).toHaveTextContent(
       "Reading the document took too long, so Erato used an earlier copy. Recent edits may be missing.",
     );
   });
@@ -745,12 +757,12 @@ describe("WordChatInput prepared send", () => {
     const result = startPreparation();
 
     await advance(WORD_SEND_CAPTURE_DEADLINE_MS - 1);
-    expect(screen.queryByRole("alert")).toBeNull();
+    expect(noticeOf("word.send.notIncluded")).toBeNull();
     await advance(1);
 
     expect(await settle(result)).toEqual(WITHOUT_DOCUMENT);
     expect(staged.at(-1)).toBeNull();
-    expect(screen.getByRole("alert")).toHaveTextContent(
+    expect(noticeOf("word.send.notIncluded")).toHaveTextContent(
       "Reading the document took too long, so this message was sent without it.",
     );
   });
@@ -763,12 +775,12 @@ describe("WordChatInput prepared send", () => {
     const result = startPreparation();
     await advance(WORD_SEND_CAPTURE_DEADLINE_MS);
     await settle(result);
-    expect(screen.getByRole("alert")).toBeInTheDocument();
+    expect(noticeOf("word.send.notIncluded")).toBeInTheDocument();
 
     host.capture.mockResolvedValue(authoringBuild());
     send();
 
-    expect(screen.queryByRole("alert")).toBeNull();
+    expect(noticeOf("word.send.notIncluded")).toBeNull();
   });
 
   it.each([
@@ -812,7 +824,7 @@ describe("WordChatInput prepared send", () => {
       });
       expect(notes()).toContain(warning);
       expect(chip()).toHaveAttribute("data-tone", "warning");
-      expect(oneOffAlerts()).toEqual([]);
+      expect(noticeTexts()).toEqual([]);
     },
   );
 

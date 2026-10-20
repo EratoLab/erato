@@ -64,7 +64,6 @@ const documentInput = (
   trackChanges: false,
   lastingIssue: null,
   bodyOnly: false,
-  commentLines: [],
   ...overrides,
 });
 
@@ -400,7 +399,7 @@ describe("wordDocumentChip", () => {
     });
   });
 
-  it("is superseded while a thread goes in its place", () => {
+  it("is superseded while a thread goes in its place, and offers to send it instead", () => {
     const superseded = chip(
       {},
       {
@@ -413,7 +412,7 @@ describe("wordDocumentChip", () => {
     expect(superseded).toMatchObject({
       state: "superseded",
       meta: "Replaced by comment",
-      actions: [],
+      actions: ["send-instead-of-comment"],
       notes: [
         { tone: "info", text: "A comment is sent instead of the document." },
       ],
@@ -607,12 +606,157 @@ describe("wordDocumentChip", () => {
 
     it("lists the comment map only for a document that goes", () => {
       const lines = ["A list of the 3 comments in the document."];
-      expect(chip({ commentLines: lines })?.comments).toEqual(lines);
+      const comments = {
+        count: 3,
+        lines,
+        off: false,
+        mapOff: false,
+        offerChoose: true,
+      };
+      expect(chip({ comments })?.comments).toEqual(lines);
       expect(
-        chip({ commentLines: lines }, { selection: selectionInput() })
-          ?.comments,
+        chip({ comments }, { selection: selectionInput() })?.comments,
       ).toEqual([]);
     });
+  });
+});
+
+describe("comments on the selection and the document", () => {
+  const passage = (
+    over: Partial<NonNullable<WordSelectionChipInput["comments"]>> = {},
+  ): NonNullable<WordSelectionChipInput["comments"]> => ({
+    count: 1,
+    checked: true,
+    threads: [],
+    why: "default",
+    coverage: null,
+    switchTo: null,
+    offerChoose: true,
+    canChangeDefault: false,
+    ...over,
+  });
+  const documentComments = (
+    over: Partial<NonNullable<WordDocumentChipInput["comments"]>> = {},
+  ): NonNullable<WordDocumentChipInput["comments"]> => ({
+    count: 12,
+    lines: ["A list of the 12 comments in the document."],
+    off: false,
+    mapOff: false,
+    offerChoose: true,
+    ...over,
+  });
+  const selectionChip = (
+    comments: WordSelectionChipInput["comments"],
+    over: Partial<WordSelectionChipInput> = {},
+  ) =>
+    wordSelectionChip(
+      resolve({ selection: selectionInput({ comments, ...over }) }),
+    );
+  const documentChip = (
+    document: Partial<WordDocumentChipInput>,
+    send: Partial<WordSendPreviewInput> = {},
+  ) => wordDocumentChip(resolve({ document: documentInput(document), send }));
+
+  it("counts the passage's comments in the selection's meta, or says they are off", () => {
+    expect(selectionChip(passage())).toMatchObject({
+      meta: "Selected · 2 ¶ · 1 comment",
+      actions: ["choose"],
+    });
+    expect(selectionChip(passage({ count: 2 }))?.meta).toBe(
+      "Selected · 2 ¶ · 2 comments",
+    );
+    expect(selectionChip(passage({ checked: false }))?.meta).toBe(
+      "Selected · 2 ¶ · comments off",
+    );
+    // Cut to the send limit says so first.
+    expect(selectionChip(passage(), { truncated: true })?.meta).toBe(
+      "Too long · beginning only",
+    );
+    expect(selectionChip(null)?.meta).toBe("Selected passage · 2 ¶");
+  });
+
+  it("offers the passage's switches from its detail", () => {
+    const switchTo = {
+      ref: "t1",
+      commentId: "1",
+      author: "Maya Krüger",
+      status: "open" as const,
+      quote: "",
+      text: "",
+      replies: null,
+      lastActivity: null,
+      pos: 1,
+      para: 1,
+      inSelection: true,
+    };
+    expect(
+      selectionChip(passage({ switchTo, canChangeDefault: true }))?.actions,
+    ).toEqual(["comment-instead", "choose", "change-default"]);
+  });
+
+  it("counts the map as a third fact only where nothing leads and nothing changed", () => {
+    expect(documentChip({ comments: documentComments() })?.meta).toBe(
+      "86 ¶ · 12 comments",
+    );
+    expect(
+      documentChip({ comments: documentComments(), changed: true })?.meta,
+    ).toBe("Changed since last send");
+    expect(
+      documentChip({ comments: documentComments(), trackChanges: true })?.meta,
+    ).toBe("Track Changes on · 86 ¶");
+    expect(
+      documentChip({ comments: documentComments({ count: 1 }) })?.meta,
+    ).toBe("86 ¶ · 1 comment");
+  });
+
+  it("says the comments are off for this message, and offers them back where the map is what is off", () => {
+    const mapOff = documentChip({
+      comments: documentComments({
+        count: null,
+        lines: [],
+        off: true,
+        mapOff: true,
+      }),
+    });
+    expect(mapOff).toMatchObject({
+      meta: "86 ¶ · comments off",
+      commentsNote: "Comments are off for this message.",
+      comments: [],
+      actions: ["include-comments", "choose"],
+    });
+    const threadOff = documentChip({
+      comments: documentComments({ count: null, lines: [], off: true }),
+    });
+    expect(threadOff).toMatchObject({
+      meta: "86 ¶",
+      commentsNote: "Comments are off for this message.",
+      actions: ["choose"],
+    });
+  });
+
+  it("keeps the picker in reach from the document in every state", () => {
+    const comments = documentComments({ count: null, lines: [] });
+    expect(documentChip({ comments, included: false })).toMatchObject({
+      state: "suggested",
+      actions: ["choose"],
+    });
+    expect(
+      documentChip(
+        { comments, status: "unreadable" },
+        {
+          unreadable: true,
+        },
+      )?.actions,
+    ).toEqual(["retry", "choose"]);
+    expect(
+      documentChip(
+        { comments },
+        {
+          advertised: EVERYTHING,
+          commentSelection: { kind: "caret", threads: ["c1"] },
+        },
+      )?.actions,
+    ).toEqual(["send-instead-of-comment", "choose"]);
   });
 });
 

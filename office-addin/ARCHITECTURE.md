@@ -167,8 +167,28 @@ Word feeds the selection and the document this way: `wordContextChips`
 reads `previewWordSend()` and `useWordContextItems` turns the result into
 items. The (x)/(+) choices live in `wordContextStore`, in memory only
 (Office settings would save them into the DOCX), one entry per conversation
-key, so two composers never write each other's choices. One-off send prompts stay
-rows above the composer until the notice slot is used.
+key, so two composers never write each other's choices.
+
+Word's comments are one more chip, `word-comment`, from `previewWordSend()`
+and its as-if twin (the same input with this message's "Send without
+comments" and switch to the passage undone): `wordCommentChip` names the
+thread that goes (at the cursor, the pick, the passage's under the setting),
+the caret in several threads as a choice, or a pick that is gone, and turns
+suggested when only the as-if preview carries it, so (+) brings back exactly
+that. The id stays across variants and origins, so a choice in the detail
+keeps focus on the chip. Passage threads and the comment map are no chip of
+their own: `wordPassageComments` and `wordDocumentComments` put them on the
+selection and the document. "Open comments (N)" (`wordOpenCommentsChip`)
+shows only while the document is off. Quote, Show in Word, the switches,
+"What is sent" and the picker live in the details. The gestures stay in
+`wordCommentGestureStore`; while a Send waits on a choice, the chip's (x)
+answers that Send rather than the next one.
+
+The one-off send prompts (a Send waiting on a choice, a slow capture, comment
+read progress, a failed selection read, the after-send capture and budget
+notes) are `wordComposerNotice()`: one notice at a time by priority, `null`
+when there is none, so the notice's live regions stay mounted. Nothing in the
+Word composer renders above `AddinChatInputCore`.
 
 Outlook feeds its chips from `previewOutlookSend()` (the facet: selection,
 draft or appointment) and `planOutlookFiles()` (the files: the open thread,
@@ -192,6 +212,9 @@ one item (`useTeamsTranscriptContextItems`) whose `claimsFileIds` are the
 record's staged uploads, so (x) removes the transcript and every file it
 brought. The uploads are already counted, so there is no `estimate`. The chip
 follows the staged list across chat switches, queue restores and sends.
+
+A staged recording's transcription status is drawn by the shared composer on
+its own file tile, in every host; there is no status card above the composer.
 
 ## Landmines
 

@@ -11,7 +11,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ACTION_FACET_ARG_MAX_BYTES } from "../../../core/clientActions/actionFacetArgs";
 import { __resetOfficeSelectionChangedBrokerForTests } from "../../../hooks/officeSelectionChangedBroker";
-import { ContextLaneDouble } from "../../../test/helpers/contextLaneDouble";
+import {
+  ComposerNoticeDouble,
+  ContextLaneDouble,
+} from "../../../test/helpers/contextLaneDouble";
 import {
   installWordSelectionHost,
   SV2_MAIN_DOCUMENT,
@@ -32,7 +35,10 @@ import type { AddinChatInputRenderProps } from "../../../core/AddinChatCore";
 import type { WordSelectionHost } from "../../../test/mocks/word/selectionHost";
 import type { WordDocumentBuild } from "../../utils/buildWordDocumentArgs";
 import type { WordSelectionCapture } from "../../utils/wordSelectionAnchor";
-import type { ComposerContextItem } from "@erato/frontend/library";
+import type {
+  ComposerContextItem,
+  ComposerNotice,
+} from "@erato/frontend/library";
 
 const host = vi.hoisted(() => ({
   facets: [] as { id: string; allowed_args?: string[] }[],
@@ -55,13 +61,16 @@ vi.mock("../../../core/AddinChatInputCore", () => ({
   AddinChatInputCore: ({
     onSendMessage,
     contextItems,
+    composerNotice,
   }: {
     onSendMessage: (message: string) => void;
     contextItems?: ComposerContextItem[];
+    composerNotice?: ComposerNotice | null;
   }) => {
     host.items = contextItems ?? [];
     return (
       <>
+        <ComposerNoticeDouble notice={composerNotice} />
         <ContextLaneDouble items={contextItems} />
         <button
           type="button"
@@ -461,10 +470,13 @@ describe("WordChatInput with a Word selection", () => {
       await vi.advanceTimersByTimeAsync(WORD_SELECTION_CAPTURE_TIMEOUT_MS);
     });
     expect(await result).toBeNull();
-    expect(
-      within(screen.getByTestId("word-one-off-rows")).getByRole("alert")
-        .textContent,
-    ).toBe(
+    const notice = screen.getByTestId("composer-notice");
+    expect(notice).toHaveAttribute(
+      "data-notice-id",
+      "word.selection.readFailed",
+    );
+    expect(notice).toHaveAttribute("role", "alert");
+    expect(within(notice).getByTestId("composer-notice-text").textContent).toBe(
       "Erato could not read your selection in Word, so your message was not sent. Send it again, or dismiss the selection to send without it.",
     );
     expect(chip()).toHaveAttribute("data-state", "error");
@@ -716,10 +728,23 @@ describe("WordChatInput with a Word selection", () => {
       await settle();
 
       expect(chip()).toHaveAttribute("data-state", "included");
-      // The row is a one-off prompt for the failed Send: it stays until the next one.
-      expect(screen.getByTestId("word-one-off-rows")).toHaveTextContent(
+      // The notice is a one-off prompt for the failed Send: it stays until the next one.
+      expect(screen.getByTestId("composer-notice")).toHaveTextContent(
         "Erato could not read your selection in Word",
       );
+    });
+
+    it("lets the notice be dismissed while the chip keeps its error", async () => {
+      await renderInput();
+      await failRead();
+
+      fireEvent.click(
+        within(screen.getByTestId("composer-notice")).getByRole("button", {
+          name: "Dismiss",
+        }),
+      );
+      expect(screen.queryByTestId("composer-notice")).toBeNull();
+      expect(chip()).toHaveAttribute("data-state", "error");
     });
 
     it("forgets the failure once the chip is dismissed", async () => {

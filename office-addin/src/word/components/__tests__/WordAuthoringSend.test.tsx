@@ -25,6 +25,7 @@ import type { AddinChatInputRenderProps } from "../../../core/AddinChatCore";
 import type {
   ClientToolExecutor,
   ComposerContextItem,
+  ComposerNotice,
 } from "@erato/frontend/library";
 import type { WordDocumentCapture } from "@erato/frontend/word-review";
 
@@ -81,18 +82,21 @@ vi.mock("../../utils/readWordDocument", () => ({
   readWordDocument: mocks.read,
 }));
 vi.mock("../../../core/AddinChatInputCore", async () => {
-  const { ContextLaneDouble } = await import(
+  const { ComposerNoticeDouble, ContextLaneDouble } = await import(
     "../../../test/helpers/contextLaneDouble"
   );
   return {
     AddinChatInputCore: ({
       onSendMessage,
       contextItems,
+      composerNotice,
     }: {
       onSendMessage: (message: string) => void;
       contextItems?: ComposerContextItem[];
+      composerNotice?: ComposerNotice | null;
     }) => (
       <>
+        <ComposerNoticeDouble notice={composerNotice} />
         <ContextLaneDouble items={contextItems} />
         <button onClick={() => onSendMessage("Reorganize this document")}>
           Send
@@ -380,7 +384,9 @@ describe("authoring send integration", () => {
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
     await waitFor(() => expect(send).toHaveBeenCalledOnce());
     expect(send.mock.calls[0][4].args.authoring_status).toBe("model-budget");
-    expect(screen.getByText(/complete rewrite cannot fit/)).toBeVisible();
+    expect(screen.getByTestId("composer-notice")).toHaveTextContent(
+      /complete rewrite cannot fit/,
+    );
     expect(
       (stage.mock.calls.at(-1)?.[0] as WordDocumentCapture).authoring?.issue,
     ).toBe("model-budget");
@@ -396,7 +402,9 @@ describe("authoring send integration", () => {
     expect(send.mock.calls[0][4].args.authoring_status).toBe(
       "budget-unavailable (estimate-http-500)",
     );
-    expect(screen.getByText(/model context check failed/)).toBeVisible();
+    expect(screen.getByTestId("composer-notice")).toHaveTextContent(
+      /model context check failed/,
+    );
     expect(screen.queryByText(/choose a model with more context/)).toBeNull();
     const capture = stage.mock.calls.at(-1)?.[0] as WordDocumentCapture;
     expect(capture.authoring).toMatchObject({

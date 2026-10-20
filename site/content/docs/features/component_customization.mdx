@@ -558,6 +558,19 @@ lock, and a choice the body draws itself (a list of comments to pick from)
 runs through `runAction` exactly as a footer action does: announced once the
 item changes, then the detail closes and focus returns to the chip.
 
+Word's comments are chips too: `data-kind="word.comment"` for the thread that
+goes (at the cursor, chosen by the user, or under the "Word behavior"
+setting), for the cursor in several threads (a choice, `data-state="attention"`)
+and for a chosen comment that is gone, and `data-kind="word.openComments"` for
+the open comments while the document is off. A passage's threads and the
+comment map ride on the selection and document chips. Their details add the
+hooks `word-comment-detail[data-variant="thread"|"choose"|"gone"]`,
+`word-comment-detail-why`, `word-comment-detail-quote`,
+`word-comment-detail-thread`, `word-comment-choices`,
+`word-comment-what-is-sent`, `word-open-comments-detail` and
+`word-context-detail-passage-comments`. A kit face restyles them with no Word
+code of its own.
+
 `@erato/frontend/conformance` exports `composerContextChipFaceConformanceFailures(Face, { render })`.
 It mounts the host lane around the face in all six states, with and without a
 detail and locked, and reports a face that drops the label or the meta, holds
