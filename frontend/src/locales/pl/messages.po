@@ -1757,6 +1757,7 @@ msgid "chat.facets.loadError"
 msgstr "Nie udało się załadować narzędzi dla tego obszaru roboczego."
 
 #. js-lingui-explicit-id
+#: src/components/ui/Chat/ComposerToolChips.tsx
 #: src/components/ui/Chat/FacetSelector.tsx
 msgid "chat.facetSelector.deselectFacet.title"
 msgstr "Odznacz {facetDisplayName}"
@@ -2228,6 +2229,16 @@ msgstr "Nie udało się cofnąć archiwizacji czatu"
 #~ msgstr ""
 
 #. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "chat.input.sendLimit.count"
+msgstr "Nie można wysłać: wiadomość może zawierać najwyżej {limit} plików. Usuń część z nich, aby wysłać."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "chat.input.sendLimit.size"
+msgstr "{count, plural, one {Nie można wysłać: {names} przekracza limit {limit}. Usuń ten plik, aby wysłać.} few {Nie można wysłać: {names} przekraczają limit {limit}. Usuń te pliki, aby wysłać.} many {Nie można wysłać: {names} przekraczają limit {limit}. Usuń te pliki, aby wysłać.} other {Nie można wysłać: {names} przekraczają limit {limit}. Usuń te pliki, aby wysłać.}}"
+
+#. js-lingui-explicit-id
 #: src/components/ui/WordReview/WordCommentContextView.tsx
 msgid "chat.message.action_facet.comments.count"
 msgstr "{count, plural, one {# komentarz} few {# komentarze} many {# komentarzy} other {# komentarza}}"
@@ -2630,6 +2641,11 @@ msgstr "Model zmieniono z {fromModel} na {toModel}"
 #~ msgstr "Model został zmieniony. Kontynuowanie tej rozmowy z innym modelem może wpłynąć na jej kontekst."
 
 #. js-lingui-explicit-id
+#: src/components/ui/Message/MessageSentWith.tsx
+msgid "chat.message.sentWith.label"
+msgstr "Wysłano z"
+
+#. js-lingui-explicit-id
 #: src/components/ui/WordReview/WordCommentReadNotice.tsx
 msgid "chat.message.wordCommentRead.all"
 msgstr "{count, plural, one {Przeczytano # komentarz} few {Przeczytano # komentarze} many {Przeczytano # komentarzy} other {Przeczytano # komentarza}}"
@@ -2678,6 +2694,21 @@ msgstr "Edytuj swoją wiadomość"
 #: src/components/ui/MessageList/MessageEditor.tsx
 msgid "chat.messageEditor.cancel"
 msgstr "Anuluj"
+
+#. js-lingui-explicit-id
+#: src/components/ui/MessageList/useEditComposerContext.tsx
+msgid "chat.messageEditor.context.lockReason"
+msgstr "Edytowana wiadomość zachowuje kontekst, z którym została wysłana. Aby go pominąć, napisz nową wiadomość."
+
+#. js-lingui-explicit-id
+#: src/components/ui/MessageList/useEditComposerContext.tsx
+msgid "chat.messageEditor.context.meta"
+msgstr "Wysyłane jak wcześniej"
+
+#. js-lingui-explicit-id
+#: src/components/ui/MessageList/MessageEditor.tsx
+msgid "chat.messageEditor.laneLabel"
+msgstr "Załączniki tej wiadomości"
 
 #. js-lingui-explicit-id
 #: src/components/ui/MessageList/MessageEditor.tsx
@@ -2786,6 +2817,21 @@ msgstr ""
 #: src/components/ui/Chat/ChatTaskPlanAdvisory.tsx
 msgid "chat.task_approval.plan"
 msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ComposerToolChips.tsx
+msgid "chat.toolChips.announce.deselected"
+msgstr "Odznaczono narzędzie: {name}."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ComposerToolChips.tsx
+msgid "chat.toolChips.label"
+msgstr "Wybrane narzędzia"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "chat.toolChips.lockReason"
+msgstr "Ten asystent ustala narzędzia swoich czatów."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Feedback/ChatWarnings/BudgetWarning.tsx
@@ -6901,12 +6947,12 @@ msgid "taskPlanApproval.unnamedTask"
 msgstr ""
 
 #. js-lingui-explicit-id
-#: src/components/ui/Teams/useTeamsTranscriptContextItems.tsx
+#: src/components/ui/Teams/teamsTranscriptContextItem.tsx
 msgid "teams.context.announce.removed"
 msgstr "Usunięto transkrypcję Teams."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Teams/useTeamsTranscriptContextItems.tsx
+#: src/components/ui/Teams/teamsTranscriptContextItem.tsx
 msgid "teams.context.announce.removedWithFiles"
 msgstr "{count, plural, one {Usunięto transkrypcję Teams wraz z # udostępnionym plikiem.} few {Usunięto transkrypcję Teams wraz z # udostępnionymi plikami.} many {Usunięto transkrypcję Teams wraz z # udostępnionymi plikami.} other {Usunięto transkrypcję Teams wraz z # udostępnionego pliku.}}"
 
@@ -6916,7 +6962,7 @@ msgid "teams.context.detail.allConversations"
 msgstr "Wszystkie konwersacje"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Teams/useTeamsTranscriptContextItems.tsx
+#: src/components/ui/Teams/teamsTranscriptContextItem.tsx
 msgid "teams.context.detail.editSelection"
 msgstr "Edytuj wybór"
 
@@ -6992,12 +7038,12 @@ msgid "teams.context.name"
 msgstr "Transkrypcja Teams"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Teams/useTeamsTranscriptContextItems.tsx
+#: src/components/ui/Teams/teamsTranscriptContextItem.tsx
 msgid "teams.context.remove"
 msgstr "Usuń transkrypcję Teams"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Teams/useTeamsTranscriptContextItems.tsx
+#: src/components/ui/Teams/teamsTranscriptContextItem.tsx
 msgid "teams.context.removeAction"
 msgstr "Usuń transkrypcję"
 
@@ -7674,10 +7720,9 @@ msgstr ""
 msgid "{0, plural, one {# attachment ready to send} other {# attachments ready to send}}"
 msgstr ""
 
-#. placeholder {0}: sizeLimitExceeded.names.length
 #: src/components/ui/Chat/ChatInput.tsx
-msgid "{0, plural, one {Cannot send: {names} exceeds the {limit} limit. Remove it to send.} other {Cannot send: {names} exceed the {limit} limit. Remove them to send.}}"
-msgstr "{0, plural, one {Nie można wysłać: {names} przekracza limit {limit}. Usuń ten plik, aby wysłać.} few {Nie można wysłać: {names} przekraczają limit {limit}. Usuń te pliki, aby wysłać.} many {Nie można wysłać: {names} przekraczają limit {limit}. Usuń te pliki, aby wysłać.} other {Nie można wysłać: {names} przekraczają limit {limit}. Usuń te pliki, aby wysłać.}}"
+#~ msgid "{0, plural, one {Cannot send: {names} exceeds the {limit} limit. Remove it to send.} other {Cannot send: {names} exceed the {limit} limit. Remove them to send.}}"
+#~ msgstr "{0, plural, one {Nie można wysłać: {names} przekracza limit {limit}. Usuń ten plik, aby wysłać.} few {Nie można wysłać: {names} przekraczają limit {limit}. Usuń te pliki, aby wysłać.} many {Nie można wysłać: {names} przekraczają limit {limit}. Usuń te pliki, aby wysłać.} other {Nie można wysłać: {names} przekraczają limit {limit}. Usuń te pliki, aby wysłać.}}"
 
 #: src/components/ui/FileUpload/GroupedFileAttachmentsPreview.tsx
 #~ msgid "{0} items"
@@ -8058,8 +8103,8 @@ msgid "Cancelled"
 msgstr "Anulowano"
 
 #: src/components/ui/Chat/ChatInput.tsx
-msgid "Cannot send: a message can carry at most {limit} files. Remove some to send."
-msgstr "Nie można wysłać: wiadomość może zawierać najwyżej {limit} plików. Usuń część z nich, aby wysłać."
+#~ msgid "Cannot send: a message can carry at most {limit} files. Remove some to send."
+#~ msgstr "Nie można wysłać: wiadomość może zawierać najwyżej {limit} plików. Usuń część z nich, aby wysłać."
 
 #: src/components/ui/Chat/ChatInput.tsx
 #~ msgid "Cannot send: Audio transcription in progress"

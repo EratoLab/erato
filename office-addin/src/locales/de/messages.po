@@ -778,6 +778,7 @@ msgstr "Termindetails einbeziehen"
 
 #. js-lingui-explicit-id
 #: src/outlook/utils/outlookContextChips.ts
+#: src/outlook/utils/outlookSentWith.ts
 msgid "officeAddin.outlook.context.appointment.label"
 msgstr "Termindetails"
 
@@ -1054,6 +1055,7 @@ msgstr "Entwurf einbeziehen"
 
 #. js-lingui-explicit-id
 #: src/outlook/utils/outlookContextChips.ts
+#: src/outlook/utils/outlookSentWith.ts
 msgid "officeAddin.outlook.context.draft.label"
 msgstr "Ihr Entwurf"
 
@@ -1079,6 +1081,7 @@ msgstr "Unverändert, nicht erneut gesendet"
 
 #. js-lingui-explicit-id
 #: src/outlook/utils/outlookContextChips.ts
+#: src/outlook/utils/outlookSentWith.ts
 msgid "officeAddin.outlook.context.draft.spoken"
 msgstr "Entwurf"
 
@@ -1191,11 +1194,13 @@ msgstr "Ersetzt den Entwurf"
 
 #. js-lingui-explicit-id
 #: src/outlook/hooks/useOutlookContextItems.tsx
+#: src/outlook/utils/outlookSentWith.ts
 msgid "officeAddin.outlook.context.selection.spoken"
 msgstr "Auswahl"
 
 #. js-lingui-explicit-id
 #: src/outlook/utils/outlookContextChips.ts
+#: src/outlook/utils/outlookSentWith.ts
 msgid "officeAddin.outlook.context.selection.title"
 msgstr "Ausgewählter Text"
 
@@ -1299,6 +1304,11 @@ msgstr "E-Mail erneut laden"
 #: src/outlook/hooks/useOutlookContextItems.tsx
 msgid "officeAddin.outlook.context.thread.spoken"
 msgstr "E-Mail-Verlauf"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookSentWith.ts
+msgid "officeAddin.outlook.sentWith.draft.meta.to"
+msgstr "{others, plural, =0 {An {first}} other {An {first} +#}}"
 
 #. js-lingui-explicit-id
 #: src/outlook/components/AddinPinHintBanner.tsx
@@ -4730,11 +4740,13 @@ msgstr "Dieser Chat kann nur neue Dokumente beginnen, daher wird ein Dokument mi
 
 #. js-lingui-explicit-id
 #: src/word/hooks/useWordContextItems.tsx
+#: src/word/utils/wordSentWith.ts
 msgid "officeAddin.word.context.document.spoken"
 msgstr "Dokument"
 
 #. js-lingui-explicit-id
 #: src/word/hooks/useWordContextItems.tsx
+#: src/word/utils/wordSentWith.ts
 msgid "officeAddin.word.context.document.unnamed"
 msgstr "Dieses Dokument"
 
@@ -4811,6 +4823,7 @@ msgstr "Ihre Auswahl wird statt der offenen Kommentare gesendet."
 #. js-lingui-explicit-id
 #: src/word/hooks/useWordContextItems.tsx
 #: src/word/utils/wordCommentChips.ts
+#: src/word/utils/wordSentWith.ts
 msgid "officeAddin.word.context.openComments.spoken"
 msgstr "Offene Kommentare"
 
@@ -4916,6 +4929,7 @@ msgstr "Aus gilt nur für diese Nachricht"
 
 #. js-lingui-explicit-id
 #: src/word/hooks/useWordContextItems.tsx
+#: src/word/utils/wordSentWith.ts
 msgid "officeAddin.word.context.selection.spoken"
 msgstr "Auswahl"
 
