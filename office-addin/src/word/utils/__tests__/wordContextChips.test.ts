@@ -306,7 +306,7 @@ describe("wordDocumentChip", () => {
       notes: [
         {
           tone: "info",
-          text: "Your selection is sent instead of the document",
+          text: "Your selection is sent instead of the document.",
         },
       ],
     });
@@ -327,7 +327,7 @@ describe("wordDocumentChip", () => {
       meta: "Replaced by comment",
       actions: [],
       notes: [
-        { tone: "info", text: "A comment is sent instead of the document" },
+        { tone: "info", text: "A comment is sent instead of the document." },
       ],
     });
   });

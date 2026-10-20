@@ -142,7 +142,7 @@ const SelectionDetail = ({
       tabIndex={0}
       aria-label="Selected text"
       data-ui="word-context-detail-quote"
-      className="max-h-48 overflow-y-auto whitespace-pre-wrap break-words border-l-2 border-theme-border pl-3 text-sm text-theme-fg-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-theme-focus"
+      className="max-h-48 overflow-y-auto whitespace-pre-wrap break-words rounded-r-[var(--theme-radius-control)] border-l-2 border-theme-border bg-theme-bg-secondary py-2 pl-3 pr-2 text-sm text-theme-fg-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-theme-focus"
     >
       {text}
     </blockquote>
@@ -173,10 +173,13 @@ const DocumentDetail = ({
     ))}
     {coverage && (
       <Section title="Coverage" dataUi="word-context-detail-coverage">
-        {coverage.map((line) => (
+        {coverage.slice(0, 1).map((line) => (
           <p key={line}>{line}</p>
         ))}
         {hint && <p className="text-xs text-theme-fg-secondary">{hint}</p>}
+        {coverage.slice(1).map((line) => (
+          <p key={line}>{line}</p>
+        ))}
       </Section>
     )}
     {comments.length > 0 && (
@@ -435,7 +438,7 @@ export const useWordStoryResolver = (
       notes = [
         {
           tone: "info",
-          text: "Your selection is sent instead of the document",
+          text: "Your selection is sent instead of the document.",
         },
         ...lasting,
       ];
@@ -453,7 +456,7 @@ export const useWordStoryResolver = (
     } else if (state.commentReplaces) {
       document = { state: "superseded", meta: "Replaced by comment" };
       notes = [
-        { tone: "info", text: "A comment is sent instead of the document" },
+        { tone: "info", text: "A comment is sent instead of the document." },
         ...lasting,
       ];
     } else if (state.status === "reading") {

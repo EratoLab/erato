@@ -523,7 +523,7 @@ export function wordDocumentChip(
           tone: "info",
           text: t({
             id: "officeAddin.word.chip.selectionInstead",
-            message: "Your selection is sent instead of the document",
+            message: "Your selection is sent instead of the document.",
           }),
         },
         ...lastingNotes(document),
@@ -542,7 +542,7 @@ export function wordDocumentChip(
           tone: "info",
           text: t({
             id: "officeAddin.word.chip.commentInstead",
-            message: "A comment is sent instead of the document",
+            message: "A comment is sent instead of the document.",
           }),
         },
         ...lastingNotes(document),
