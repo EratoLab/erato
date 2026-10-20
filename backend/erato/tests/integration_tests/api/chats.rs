@@ -52,6 +52,7 @@ async fn test_recent_chats_endpoint(pool: Pool<Postgres>) {
             hidden_always_active_for_platform: None,
             delegation: None,
             child_chat_provider: None,
+            child_host_context: None,
         },
     );
     facets.insert(
@@ -69,6 +70,7 @@ async fn test_recent_chats_endpoint(pool: Pool<Postgres>) {
             hidden_always_active_for_platform: None,
             delegation: None,
             child_chat_provider: None,
+            child_host_context: None,
         },
     );
     app_config.facets = FacetsConfig {
