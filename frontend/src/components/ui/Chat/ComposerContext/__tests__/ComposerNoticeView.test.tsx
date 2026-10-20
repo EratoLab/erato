@@ -4,6 +4,7 @@ import {
   render as renderBare,
   screen,
 } from "@testing-library/react";
+import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ThemeProvider } from "@/components/providers/ThemeProvider";
@@ -128,6 +129,108 @@ describe("ComposerNoticeView", () => {
     expect(onSelect).toHaveBeenCalledTimes(1);
     fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
     expect(onDismiss).toHaveBeenCalledTimes(1);
+  });
+
+  it("draws a progress count it does not announce, in the same node as it ticks", () => {
+    const { rerender } = render(
+      <ComposerNoticeView
+        notice={{
+          id: "progress",
+          tone: "info",
+          text: "Reading comments…",
+          busy: true,
+          progressLabel: "3 of 12",
+        }}
+      />,
+    );
+    const progress = notice().querySelector<HTMLElement>(
+      '[data-ui="composer-notice-progress"]',
+    )!;
+    expect(progress).toHaveTextContent("3 of 12");
+    expect(progress).toHaveAttribute("aria-hidden", "true");
+    expect(polite()).toContainElement(progress);
+    const spoken = polite().cloneNode(true) as HTMLElement;
+    spoken
+      .querySelectorAll('[aria-hidden="true"]')
+      .forEach((node) => node.remove());
+    expect(spoken.textContent).toBe("Reading comments…");
+    const text = screen.getByText("Reading comments…", { exact: false });
+
+    rerender(
+      <ComposerNoticeView
+        notice={{
+          id: "progress",
+          tone: "info",
+          text: "Reading comments…",
+          busy: true,
+          progressLabel: "4 of 12",
+        }}
+      />,
+    );
+    expect(notice().querySelector('[data-ui="composer-notice-progress"]')).toBe(
+      progress,
+    );
+    expect(progress).toHaveTextContent("4 of 12");
+    expect(screen.getByText("Reading comments…", { exact: false })).toBe(text);
+  });
+
+  it("hands focus on when a pressed action takes the notice away", () => {
+    const onFocusLost = vi.fn();
+    function Host() {
+      const [shown, setShown] = useState(true);
+      return (
+        <ComposerNoticeView
+          onFocusLost={onFocusLost}
+          notice={
+            shown
+              ? {
+                  id: "slow",
+                  tone: "info",
+                  text: "Word is still handing over the document.",
+                  actions: [
+                    {
+                      id: "skip",
+                      label: "Send without document",
+                      onSelect: () => setShown(false),
+                    },
+                  ],
+                }
+              : null
+          }
+        />
+      );
+    }
+    render(<Host />);
+    const button = screen.getByRole("button", {
+      name: "Send without document",
+    });
+    button.focus();
+    fireEvent.click(button);
+    expect(screen.queryByRole("button")).toBeNull();
+    expect(onFocusLost).toHaveBeenCalledTimes(1);
+  });
+
+  it("leaves focus alone when it was elsewhere", () => {
+    const onFocusLost = vi.fn();
+    const shown = {
+      id: "n",
+      tone: "info" as const,
+      text: "Word is still handing over the document.",
+    };
+    const { rerender } = render(
+      <>
+        <button type="button">elsewhere</button>
+        <ComposerNoticeView notice={shown} onFocusLost={onFocusLost} />
+      </>,
+    );
+    screen.getByRole("button", { name: "elsewhere" }).focus();
+    rerender(
+      <>
+        <button type="button">elsewhere</button>
+        <ComposerNoticeView notice={null} onFocusLost={onFocusLost} />
+      </>,
+    );
+    expect(onFocusLost).not.toHaveBeenCalled();
   });
 
   it.each([

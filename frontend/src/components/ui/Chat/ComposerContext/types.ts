@@ -183,6 +183,11 @@ export interface ComposerNotice {
   text: string;
   /** Draws a spinner in place of the tone glyph. */
   busy?: boolean;
+  /**
+   * A counter drawn after the text and not announced, e.g. "3 of 12", so a
+   * notice whose count changes every second is spoken once.
+   */
+  progressLabel?: string;
   actions?: { id: string; label: string; onSelect: () => void }[];
   onDismiss?: () => void;
 }

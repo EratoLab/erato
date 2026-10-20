@@ -3160,7 +3160,10 @@ export const ChatInput = ({
           )}
 
           {composerNotice !== undefined && (
-            <ComposerNoticeView notice={composerNotice} />
+            <ComposerNoticeView
+              notice={composerNotice}
+              onFocusLost={focusInput}
+            />
           )}
 
           {/* Staged attachments belong inside the shell, above the textarea:
