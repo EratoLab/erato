@@ -186,6 +186,10 @@ const schemaStringFieldFixes = [
     to: "mcp_write_tools_enabled?: boolean | null | undefined;",
   },
   {
+    from: "allow_always?: null | undefined;",
+    to: "allow_always?: boolean | null | undefined;",
+  },
+  {
     from: "title_by_summary?: null | undefined;",
     to: "title_by_summary?: string | null | undefined;",
   },

@@ -1122,6 +1122,11 @@ export type ChatModel = {
  * approval item so the card renders without reading the child's chat.
  */
 export type ChildApprovalRef = {
+  /**
+   * The child's own `allow_always`. The part's flag describes the part's own
+   * call, which on a `client_tool` part is never bound by the MCP policy.
+   */
+  allow_always?: boolean | null | undefined;
   annotations: ToolApprovalAnnotations;
   /**
    * @format uuid
@@ -1569,9 +1574,10 @@ export type ContentPartToolApprovalRequest = {
   allow_always: boolean;
   annotations: ToolApprovalAnnotations;
   /**
-   * Every decision this stop covers. An `mcp_tool` stop carries one item
-   * describing the same call as the flat fields above; readers that branch
-   * on `kind` first may use either.
+   * Every decision this stop covers. An `mcp_tool` or `client_tool` stop
+   * carries its own call first, described by the flat fields above too,
+   * followed by any task children that parked in the same batch, each with
+   * `child` set. Readers must branch per item, not on `kind` alone.
    */
   approvals?: ApprovalItem[];
   display?: null | ToolDisplayMetadata;
