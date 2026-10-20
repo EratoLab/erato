@@ -11183,6 +11183,8 @@ async fn seed_child_before_recording(
             scheduling,
             parent_tool_call_id: Some("call_seeded".to_string()),
             route: erato::models::chat::DelegateRoute::Task,
+            client_grant: None,
+            client_task: None,
         }),
         "Seeded async run".to_string(),
         true,
@@ -13964,6 +13966,8 @@ fn retry_task_spec() -> erato::models::chat::TaskSpec {
         scheduling: erato_config::config::TaskScheduling::WhenIdle,
         parent_tool_call_id: Some(RETRY_CALL_ID.to_string()),
         route: erato::models::chat::DelegateRoute::Task,
+        client_grant: None,
+        client_task: None,
     }
 }
 

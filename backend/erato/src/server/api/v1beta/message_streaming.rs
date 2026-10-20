@@ -615,6 +615,16 @@ fn ask_for_tool_call(
 ///
 /// Asking parks the same durable stop an MCP approval does, so the user's time
 /// to decide never counts against the tool's result timeout.
+/// The model's text for a client call that ended without a result.
+fn cancelled_client_tool_text(reason: &str) -> String {
+    let why = match reason {
+        "context_unavailable" => "no connected client could run it",
+        "withdrawn" => "the user no longer allows this tool",
+        _ => "the client did not return a result in time",
+    };
+    format!("Client tool was not completed (reason: {reason}); {why}.")
+}
+
 fn gate_client_tool_call(
     namespace: &str,
     tool_call: &genai::chat::ToolCall,
@@ -3605,6 +3615,12 @@ pub(crate) struct DelegationDispatchContext<'a> {
     /// wall-clock. Incremented once, where the call is parsed, before
     /// anything can refuse it.
     pub tasks_this_turn: std::sync::atomic::AtomicUsize,
+    /// The client tools this turn offered with `child_access = "read"`: the
+    /// most a client task launched from it can be granted.
+    pub parent_client_tools: Vec<crate::services::client_tools::OfferedClientTool>,
+    /// This turn's persisted action-facet arguments; a grant's context
+    /// version is read from them.
+    pub action_facet_args: Option<HashMap<String, String>>,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -4446,7 +4462,8 @@ async fn prepare_chat_request_with_adapters_memory_inner(
     // park budget against nobody. Suppression acts HERE, at the offering
     // site, across every source (client-action tool, global/facet/action
     // client-tool allowlists) — a security control derived from the durable
-    // chat row, not caller-remembered state.
+    // chat row, not caller-remembered state. The one way back in is the grant
+    // a client task was launched with, which is read off the same row.
     let is_delegated_run = crate::models::chat::chat_is_delegated_run(chat);
     // Offer the synthetic client-action tool only when the current request's
     // action facet declares client actions and the chat allows writes: client
@@ -4603,6 +4620,18 @@ async fn prepare_chat_request_with_adapters_memory_inner(
                 native_strict,
             ));
         }
+    } else if is_delegated_run {
+        append_granted_client_tools(
+            app_state,
+            chat,
+            generation_request_context.executor.as_ref(),
+            me_profile_input.user_id,
+            &mcp_claimed_names,
+            effective_model_settings.compat_omit_strict,
+            &mut chat_request_tools,
+            &mut offered_client_tools,
+        )
+        .await?;
     }
     // Both delegation routes are offered here. They are request-scoped like
     // the client-action tool and never offered inside a delegated run itself
@@ -5782,7 +5811,32 @@ async fn launch_prepared_task<'a>(
         brief,
         run_mode,
         scheduling,
+        client_task,
     } = prepared;
+    // Resolved at launch, not at validation: a queued task launches later, and
+    // the grant must reflect the pane and decisions at the time it starts.
+    let client_task = match client_task {
+        Some(launch) => {
+            let grant = crate::services::delegated_client_tools::resolve_grant(
+                app_state,
+                context,
+                launch.host,
+                assistant_message_id,
+            )
+            .await;
+            Some(crate::services::delegation::ClientTaskLaunchSpec {
+                note: crate::models::chat::ClientTaskNote {
+                    host_context: launch.host,
+                    run_mode: launch
+                        .coerced
+                        .then(|| crate::services::delegated_client_tools::wait_note(launch.host)),
+                    unavailable: grant.as_ref().err().map(|reason| reason.to_string()),
+                },
+                grant: grant.ok(),
+            })
+        }
+        None => None,
+    };
     match crate::services::delegation::launch_delegation(
         app_state,
         policy,
@@ -5794,6 +5848,7 @@ async fn launch_prepared_task<'a>(
             parent_tool_call_id: Some(meta.tool_call.call_id.clone()),
             retry_of: None,
             parent_message_id: Some(assistant_message_id),
+            client_task,
         },
         brief,
     )
@@ -6106,7 +6161,11 @@ async fn stream_generate_chat_completion<'a>(
     if app_state.config.client_tools.durable_operations_enabled
         && let Some(task) = streaming_task
     {
-        for offered in offered_client_tools.values() {
+        // Granted tools are live-only: no transport is set up for them.
+        for offered in offered_client_tools
+            .values()
+            .filter(|offered| offered.grant.is_none())
+        {
             let Some(durable) = &offered.config.durable else {
                 continue;
             };
@@ -6515,6 +6574,12 @@ async fn stream_generate_chat_completion<'a>(
                         // never offered in that case.
                         && !available_mcp_tools_by_name.contains_key(&call.fn_name)
                         && !approved_task_call_ids.contains(&call.call_id)
+                },
+                |call| {
+                    crate::services::delegated_client_tools::names_child_facet(
+                        &app_state.config.facets,
+                        call,
+                    )
                 },
             );
             if !gated_positions.is_empty() {
@@ -7562,7 +7627,8 @@ async fn stream_generate_chat_completion<'a>(
                 // executor, e.g. an approval given on another machine: answer at
                 // once instead of letting the call wait out its timeout.
                 let missing_executor = tool_policy.is_some_and(|policy| {
-                    policy.config.requires_client_registration
+                    policy.grant.is_none()
+                        && policy.config.requires_client_registration
                         && continuing_client_tools
                             .as_ref()
                             .is_some_and(|registered| !registered.contains(&policy.config.name))
@@ -7641,8 +7707,14 @@ async fn stream_generate_chat_completion<'a>(
                     .get(&call_id)
                     .and_then(|charge| charge.submission_attempt)
                     .unwrap_or(0);
+                // A granted call never parks durably and never waits for the
+                // inbox: it is live on the grant's executor or it fails.
+                let grant = tool_policy.and_then(|policy| policy.grant.as_ref());
                 let operation_kind = tool_policy
-                    .filter(|_| app_state.config.client_tools.durable_operations_enabled)
+                    .filter(|policy| {
+                        app_state.config.client_tools.durable_operations_enabled
+                            && policy.grant.is_none()
+                    })
                     .and_then(|policy| {
                         app_state
                             .client_operations
@@ -7750,7 +7822,35 @@ async fn stream_generate_chat_completion<'a>(
                     });
                 }
                 let mut executor_target = None;
-                if let Some(binding) = tool_policy
+                if grant.is_some() && validation_failure.is_none() {
+                    let binding = tool_policy.and_then(|policy| policy.executor.as_ref());
+                    let route = match binding {
+                        Some(binding) if app_state.config.client_tools.executor_stream_enabled => {
+                            route_executor_call(
+                                &app_state.db,
+                                task,
+                                &user_id,
+                                binding,
+                                &tool_name,
+                                true,
+                            )
+                            .await
+                        }
+                        _ => None,
+                    };
+                    match (route, binding, Uuid::parse_str(&user_id)) {
+                        (
+                            Some(executor_stream::LiveCallRoute::Executor(_)),
+                            Some(binding),
+                            Ok(account_id),
+                        ) => executor_target = Some((binding.clone(), account_id)),
+                        _ => {
+                            validation_failure = Some(ClientToolOutcome::Cancelled {
+                                reason: "context_unavailable".into(),
+                            });
+                        }
+                    }
+                } else if let Some(binding) = tool_policy
                     .filter(|policy| {
                         app_state.config.client_tools.executor_stream_enabled
                             && validation_failure.is_none()
@@ -7806,14 +7906,30 @@ async fn stream_generate_chat_completion<'a>(
                             message_id: assistant_message_id,
                             tool_call_id: call_id.clone(),
                             tool_name: tool_name.clone(),
-                            input: tool_input.clone(),
-                            lineage: None,
+                            input: match grant {
+                                Some(grant) => {
+                                    crate::services::delegated_client_tools::dispatch_input(
+                                        &tool_input,
+                                        grant,
+                                    )
+                                }
+                                None => tool_input.clone(),
+                            },
+                            lineage: grant.map(|grant| executor_stream::CallLineage {
+                                owner_chat_id: grant.owner_chat_id,
+                                owner_message_id: grant.owner_message_id,
+                                requesting_chat_id: chat_id,
+                                requesting_message_id: assistant_message_id,
+                                context_ref: grant.context_ref.clone(),
+                            }),
                         };
                         handed_over = hand_over_executor_call(&app_state.db, task, call).await;
                     }
                     // A handed-over call is neither broadcast nor logged, so no
-                    // chat stream runs it a second time.
-                    if !inbox_only && handed_over.is_none() {
+                    // chat stream runs it a second time. A granted call has no
+                    // chat path at all.
+                    let grant_unavailable = grant.is_some() && handed_over.is_none();
+                    if !inbox_only && handed_over.is_none() && grant.is_none() {
                         // Signal the client to execute: broadcast (submit path + resume
                         // replay) AND the typed tx stream (regenerate/edit path).
                         send_background_event(
@@ -7871,6 +7987,8 @@ async fn stream_generate_chat_completion<'a>(
                     }
                     let park = if inbox_only {
                         Park::TimedOut
+                    } else if grant_unavailable {
+                        Park::TransportUnavailable
                     } else {
                         tokio::select! {
                             received = &mut result_rx => match received {
@@ -8070,9 +8188,7 @@ async fn stream_generate_chat_completion<'a>(
                             BgToolCallStatus::Error,
                             MessageToolCallStatus::Error,
                             json!({ "status": "cancelled", "reason": reason }),
-                            format!(
-                                "Client tool was not completed (reason: {reason}); the client did not return a result in time."
-                            ),
+                            cancelled_client_tool_text(reason),
                         ),
                     };
                 if let Some(output) = validated_output {
@@ -15417,6 +15533,10 @@ async fn run_generation_after_user_message_memory_inner(
         ChatProviderHeadersContext::new(&me_user.id, &me_user.id_token_claims)
             .with_chat_id(chat.id);
 
+    let parent_client_tools =
+        crate::services::delegated_client_tools::grant_candidates(offered_client_tools.values());
+    let action_facet_args = generation_parameters.action_facet_args.clone();
+
     // Save initial empty assistant message
     let empty_assistant_message_json = json!({
         "role": "assistant",
@@ -15510,6 +15630,8 @@ async fn run_generation_after_user_message_memory_inner(
             background_dispatches: std::sync::atomic::AtomicUsize::new(0),
             task_scope: task_offer_scope.clone(),
             tasks_this_turn: std::sync::atomic::AtomicUsize::new(0),
+            parent_client_tools,
+            action_facet_args,
         }),
         task_tool_budgets_for_chat(chat),
         None,
@@ -16135,6 +16257,10 @@ pub(crate) async fn start_regeneration(
                 })
                 .unwrap_or_default();
 
+            let parent_client_tools = crate::services::delegated_client_tools::grant_candidates(
+                offered_client_tools.values(),
+            );
+            let action_facet_args = generation_parameters.action_facet_args.clone();
             let initial_assistant_message = submit_message(
                 &app_state.db,
                 &policy,
@@ -16239,6 +16365,8 @@ pub(crate) async fn start_regeneration(
                     background_dispatches: std::sync::atomic::AtomicUsize::new(0),
                     task_scope: task_offer_scope.clone(),
                     tasks_this_turn: std::sync::atomic::AtomicUsize::new(0),
+                    parent_client_tools,
+                    action_facet_args,
                 }),
                 task_tool_budgets_for_chat(&chat),
                 None,
@@ -16742,6 +16870,10 @@ pub(crate) async fn start_edit(
                 })
                 .unwrap_or_default();
 
+            let parent_client_tools = crate::services::delegated_client_tools::grant_candidates(
+                offered_client_tools.values(),
+            );
+            let action_facet_args = generation_parameters.action_facet_args.clone();
             let initial_assistant_message = submit_message(
                 &app_state.db,
                 &policy,
@@ -16846,6 +16978,8 @@ pub(crate) async fn start_edit(
                     background_dispatches: std::sync::atomic::AtomicUsize::new(0),
                     task_scope: task_offer_scope.clone(),
                     tasks_this_turn: std::sync::atomic::AtomicUsize::new(0),
+                    parent_client_tools,
+                    action_facet_args,
                 }),
                 task_tool_budgets_for_chat(&chat),
                 None,
@@ -19908,6 +20042,75 @@ pub(crate) async fn run_continuation(
 /// Synthetic durable kinds use the same offered-policy dispatch map without
 /// requiring a configured client tool or weakening its child-run suppression.
 #[allow(clippy::too_many_arguments)]
+/// Offers a delegated run the client tools its grant still covers, the same
+/// way on a fresh turn and on a continuation. The grant already implies the
+/// allowlist and the executor's registration, so neither is consulted; an MCP
+/// tool of the same name still wins.
+#[allow(clippy::too_many_arguments)]
+async fn append_granted_client_tools(
+    app_state: &AppState,
+    chat: &crate::db::entity::chats::Model,
+    executor: Option<&crate::services::client_operations::ExecutorBinding>,
+    account_id: Option<Uuid>,
+    mcp_claimed_names: &HashSet<String>,
+    omit_strict: bool,
+    tools: &mut Vec<genai::chat::Tool>,
+    policies: &mut HashMap<String, crate::services::client_tools::OfferedClientTool>,
+) -> Result<(), Report> {
+    let Some((binding, granted)) = crate::services::delegated_client_tools::granted_tools(
+        app_state, chat, executor, account_id,
+    )
+    .await
+    else {
+        return Ok(());
+    };
+    let allowlist: Vec<String> = granted
+        .iter()
+        .map(|(config, _)| config.qualified_name())
+        .collect();
+    let selection = crate::services::client_tools::select_client_tools(
+        granted.iter().map(|(config, _)| config).collect(),
+        &allowlist,
+        |name| mcp_claimed_names.contains(name),
+    );
+    for (skipped_tool, skip) in &selection.skipped {
+        tracing::warn!(
+            "Not offering granted client tool '{}': {:?}",
+            skipped_tool.qualified_name(),
+            skip
+        );
+    }
+    for config in selection.offered {
+        let schema = match serde_json::from_str::<JsonValue>(&config.parameters) {
+            Ok(schema) => schema,
+            Err(error) => {
+                tracing::warn!(
+                    "Not offering granted client tool '{}': parameters are not valid JSON: {}",
+                    config.name,
+                    error
+                );
+                continue;
+            }
+        };
+        let mut policy = crate::services::client_tools::OfferedClientTool::prepare(config, &schema)
+            .map_err(|error| eyre!(error))?;
+        policy.executor = Some(binding.clone());
+        policy.grant = granted
+            .iter()
+            .find(|(granted, _)| granted.qualified_name() == config.qualified_name())
+            .map(|(_, call)| call.clone());
+        tools.push(crate::services::client_tools::build_client_tool(
+            &config.name,
+            &config.description,
+            schema,
+            omit_strict,
+            false,
+        ));
+        policies.insert(config.name.clone(), policy);
+    }
+    Ok(())
+}
+
 fn append_operation_kind_offers(
     app_state: &AppState,
     chat: &crate::db::entity::chats::Model,
@@ -20192,6 +20395,23 @@ async fn resume_parked_generation(
             ));
             offered_client_tools.insert(name.clone(), policy);
         }
+    } else {
+        // The run's own persisted binding, which it inherited at launch: a
+        // resume or an approval from another client must not move the grant.
+        append_granted_client_tools(
+            app_state,
+            &chat,
+            generation_parameters
+                .request_context
+                .as_ref()
+                .and_then(|context| context.executor.as_ref()),
+            Some(user_id),
+            &mcp_claimed_names,
+            compat_omit_strict,
+            &mut continuation_tools,
+            &mut offered_client_tools,
+        )
+        .await?;
     }
     let mut task_offer_scope: Option<crate::services::delegation::TaskOfferScope> = None;
     let mut delegation_offered_file_ids: Vec<Uuid> = Vec::new();
@@ -20456,6 +20676,10 @@ async fn resume_parked_generation(
             background_dispatches: std::sync::atomic::AtomicUsize::new(0),
             task_scope: task_offer_scope,
             tasks_this_turn: std::sync::atomic::AtomicUsize::new(0),
+            parent_client_tools: crate::services::delegated_client_tools::grant_candidates(
+                offered_client_tools.values(),
+            ),
+            action_facet_args: generation_parameters.action_facet_args.clone(),
         });
     let (end_content, generation_metadata) = stream_generate_chat_completion(
         tx.clone(),

@@ -5,6 +5,7 @@ pub mod client_actions;
 pub mod client_tools;
 pub mod config_redaction;
 pub mod configuration_reload_listener;
+pub mod delegated_client_tools;
 pub mod delegation;
 pub mod delegation_trace;
 pub mod local_delegation;
