@@ -5848,6 +5848,7 @@ plan_min_tasks = 3
 - `child_facet_ids` - Added to `delegation.tasks.child_facet_ids` (union). Like the global list, it only widens what a task may name, and a child never gets an MCP tool outside the planning turn's allowlist. Once you write into a task's chat yourself, that chat is yours and this cap no longer applies. Each entry must name a configured facet.
 - `run_modes` - Overrides `delegation.tasks.run_modes`. Unioned with the global list rather than replacing it, because a run mode is a capability the facet's author meant to grant; `wait` is always kept available.
 - `scheduling` - Overrides `delegation.tasks.scheduling`. The first selected facet that states one wins.
+- `approval.mode` and `approval.plan_min_tasks` - Override `delegation.tasks.approval.mode` and `delegation.tasks.approval.plan_min_tasks`. Merged like a cap rather than replacing: the strictest `mode` (`always` beats `plan` beats `async_only` beats `never`) and the lowest `plan_min_tasks` win, so selecting a second planning facet can only ever make a turn ask more.
 
 ##### Child facets for client tasks
 
@@ -5855,13 +5856,14 @@ plan_min_tasks = 3
 
 A facet with `child_host_context` (`word_document` or `outlook_mailbox`) marks client tasks. A delegated task that names it in `facet_ids` always runs in `wait` mode: an `async` request runs as `wait` and the task result says so. The task gets a grant for the planning turn's client tools of that host that set [`child_access = "read"`](#client_toolstoolskeychild_access). The facet restricts no tools and only carries instructions, so it must not be `hidden` or have a `tool_call_allowlist`. List it in the planning facet's `child_facet_ids`.
 
+When the user set a granted tool to ask, the task's call waits for a decision in the planning turn's chat, next to the turn's own approvals, as an MCP approval of a task does. With `delegation.tasks.propagate_child_mcp_approvals` off, the call is refused instead. A declined call ends as `declined`, and the task result counts it. The task result also carries the last freshness the client reported for the document or mailbox the task read, and the planning turn's trace shows each read with the part it asked for.
+
 ```toml
 [facets.facets.word_reader]
 display_name = "Read the open document"
 child_host_context = "word_document"
 additional_system_prompt = "Read only the part of the document your task names."
 ```
-- `approval.mode` and `approval.plan_min_tasks` - Override `delegation.tasks.approval.mode` and `delegation.tasks.approval.plan_min_tasks`. Merged like a cap rather than replacing: the strictest `mode` (`always` beats `plan` beats `async_only` beats `never`) and the lowest `plan_min_tasks` win, so selecting a second planning facet can only ever make a turn ask more.
 
 #### `facets.priority_order`
 

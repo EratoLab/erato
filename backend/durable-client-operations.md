@@ -68,8 +68,11 @@ The selected qualified client tools and submission policies, together with consu
 budgets/counters, are retained for the logical turn. Current allowlists, registration
 requirements and delegated-child restrictions still apply on continuation. A kind
 must explicitly authorize a bound child operation; no parent-to-child SSE relay is
-introduced. The executor stream below is no relay either: delegated children get
-no configured client tools until ERMAIN-1001 grants them.
+introduced. The executor stream below is no relay either: a delegated child gets
+configured client tools only through the grant its client task was launched with
+(ERMAIN-1001, [design record](delegated-client-tools.md)). A granted call is never
+a durable operation: it goes live over the executor stream or ends as
+`context_unavailable`, even for a tool with a `durable` table.
 
 ## Rollout prerequisites and current limits
 
@@ -451,8 +454,9 @@ The completed [rebase delta](local-evidence-operations.md) records the removed
 private checkpoint, job lifecycle and continuation paths. The native kind uses the
 shared attempts table, with a narrow export/binding extension. Its offer policy
 retains the single-replica, async-leaf, exclusive-scope and depth-one restrictions.
-Ordinary configured client tools remain suppressed in delegated children until
-ERMAIN-1001 grants them over the executor stream.
+Ordinary configured client tools remain suppressed in delegated children. Only a
+client task's grant offers them, live over the executor stream (ERMAIN-1001, see
+[delegated-client-tools.md](delegated-client-tools.md)).
 
 Protocol 0.1.28 keeps its existing signed fields: native `jobId` is the generic
 attempt UUID; native `attemptId` retains the original generation UUID. No native
