@@ -65,6 +65,7 @@ const h = vi.hoisted(() => {
       setSelectedChatProviderId: vi.fn(),
       toggleFacetId: vi.fn(),
       addUploadedFiles: vi.fn(),
+      removeUploadedFiles: vi.fn(),
       clearQueuedMessage: vi.fn(),
     },
     fileUploadState: { uploadedFiles: [uploadedFile], error: null },

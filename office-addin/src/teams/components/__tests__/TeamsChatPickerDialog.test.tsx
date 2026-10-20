@@ -25,6 +25,7 @@ import type { UseTeamsChannelListResult } from "../../hooks/useTeamsChannelList"
 import type { UseTeamsChatListResult } from "../../hooks/useTeamsChatList";
 import type { UseTeamsChatMessagesResult } from "../../hooks/useTeamsChatMessages";
 import type { UseTeamsChatSearchResult } from "../../hooks/useTeamsChatSearch";
+import type { TeamsComposerBridge } from "../../hooks/useTeamsComposerBridge";
 import type { ParsedTeamsChat } from "../../utils/parsedTeamsChat";
 import type {
   TeamsChannelFetcher,
@@ -32,6 +33,9 @@ import type {
   TeamsFileFetcher,
 } from "../../utils/teamsChatFetcher";
 import type { PageChatMessagesResult } from "../../utils/teamsChatPager";
+import type { TeamsChatSelection } from "../../utils/teamsChatSelection";
+import type { TeamsTranscriptRecord } from "../../utils/teamsComposerTranscripts";
+import type { FileUploadItem } from "@erato/frontend/library";
 import type { ReactNode } from "react";
 
 /* --------------------------------------------------------------- library */
@@ -155,6 +159,7 @@ vi.mock("@erato/frontend/library", () => ({
     ) : null,
   FILE_PREVIEW_STYLES: { progress: { container: "", bar: "" } },
   useFileUploadStore: { getState: () => hooks.uploadStore },
+  readTeamsTranscriptIndex: () => Promise.resolve(null),
   useFeatureConfig: () => ({ upload: { maxSizeBytes: 10 * 1024 * 1024 } }),
   mapOutsideCodeFences: (
     text: string,
@@ -191,6 +196,8 @@ const hooks = vi.hoisted(() => ({
   search: null as UseTeamsChatSearchResult | null,
   /** Stands in for the composer's shared upload store. */
   uploadStore: { isUploading: false, error: null as Error | null },
+  /** How many files the composer's upload takes (its `maxFiles`). */
+  uploadLimit: 5,
 }));
 
 vi.mock("../../providers/TeamsProvider", () => ({
@@ -428,42 +435,99 @@ function blockedFetcher(): {
 
 const uploads: File[][] = [];
 
-function Opener() {
-  const { open } = useTeamsChatPicker();
-  return (
-    <button
-      type="button"
-      onClick={() =>
-        open((files) => {
-          uploads.push(files);
-          return Promise.resolve();
-        })
+/**
+ * Stands in for the Teams composer. Its upload fails the way the composer's
+ * does (busy, or an upload error), and otherwise returns minted uploads, at
+ * most `uploadLimit` of them.
+ */
+function bridgeDouble(): TeamsComposerBridge {
+  let round = 0;
+  return {
+    upload: vi.fn(async (files: File[]) => {
+      uploads.push(files);
+      if (hooks.uploadStore.isUploading || hooks.uploadStore.error) {
+        return null;
       }
-    >
-      open picker
-    </button>
+      round += 1;
+      return files.slice(0, hooks.uploadLimit).map(
+        (file, index) =>
+          ({
+            id: `r${round}-${index}`,
+            filename: file.name,
+          }) as FileUploadItem,
+      );
+    }),
+    add: vi.fn(),
+    replace: vi.fn(),
+    remove: vi.fn(),
+    claimedIds: vi.fn((record: TeamsTranscriptRecord) => [
+      record.transcriptUploadId,
+      ...record.assetUploadIds,
+    ]),
+    announce: vi.fn(),
+    focusComposer: vi.fn(),
+  };
+}
+
+let bridge = bridgeDouble();
+
+function Opener({ edit }: { edit?: TeamsTranscriptRecord }) {
+  const { open, transcripts } = useTeamsChatPicker();
+  return (
+    <>
+      <button type="button" onClick={() => open(bridge)}>
+        open picker
+      </button>
+      <button
+        type="button"
+        onClick={() =>
+          open(bridge, { edit: edit ?? [...transcripts.values()][0] })
+        }
+      >
+        edit transcript
+      </button>
+    </>
   );
 }
 
-/** Surfaces what the composer's preview reads back off the context. */
+/** Surfaces the records a composer reads its chips from. */
 function AttachedProbe() {
-  const { attachedTranscript } = useTeamsChatPicker();
-  if (!attachedTranscript) return null;
-  return <div data-testid="attached-transcript">{attachedTranscript.name}</div>;
+  const { transcripts } = useTeamsChatPicker();
+  return (
+    <ul data-testid="attached-transcripts">
+      {[...transcripts.values()].map((record) => (
+        <li key={record.transcriptUploadId} data-lineage={record.lineage}>
+          {`${record.transcriptUploadId}:${record.file.name}:${record.assetUploadIds.join(",")}`}
+        </li>
+      ))}
+    </ul>
+  );
 }
 
-function renderPicker() {
+const records = () =>
+  [...screen.getByTestId("attached-transcripts").querySelectorAll("li")].map(
+    (item) => item.textContent,
+  );
+
+function renderPicker(
+  options: {
+    open?: "attach" | "edit" | null;
+    edit?: TeamsTranscriptRecord;
+  } = {},
+) {
+  const { open = "attach", edit } = options;
   // StrictMode on purpose: the app runs under it, and its double-mount is what
   // exposed the alive-ref arming bug the plain renderer never would.
   const view = render(
     <StrictMode>
       <TeamsChatPickerProvider>
-        <Opener />
+        <Opener edit={edit} />
         <AttachedProbe />
       </TeamsChatPickerProvider>
     </StrictMode>,
   );
-  fireEvent.click(screen.getByText("open picker"));
+  if (open === "attach") fireEvent.click(screen.getByText("open picker"));
+  if (open === "edit") fireEvent.click(screen.getByText("edit transcript"));
   return view;
 }
 
@@ -476,6 +540,8 @@ describe("TeamsChatPickerDialog", () => {
   beforeEach(() => {
     i18n.activate("en");
     uploads.length = 0;
+    bridge = bridgeDouble();
+    hooks.uploadLimit = 5;
     hooks.uploadStore = { isUploading: false, error: null };
     hooks.fetcher = fakeFetcher();
     hooks.channelFetcher = null;
@@ -587,7 +653,7 @@ describe("TeamsChatPickerDialog", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 
-  it("keeps the delivered transcript file for the composer preview", async () => {
+  it("records the attached transcript by its upload id and stages its uploads", async () => {
     renderPicker();
     fireEvent.click(selectChat());
 
@@ -596,9 +662,15 @@ describe("TeamsChatPickerDialog", () => {
     });
     await waitFor(() => expect(uploads).toHaveLength(1));
 
-    expect(screen.getByTestId("attached-transcript")).toHaveTextContent(
-      "teams-Product_sync.md",
-    );
+    expect(records()).toEqual(["r1-0:teams-Product_sync.md:"]);
+    expect(bridge.add).toHaveBeenCalledWith([
+      { id: "r1-0", filename: "teams-Product_sync.md" },
+    ]);
+    expect(bridge.replace).not.toHaveBeenCalled();
+    expect(bridge.announce).toHaveBeenCalledWith("Teams transcript attached.");
+    expect(screen.queryByRole("dialog")).toBeNull();
+    // The "+" row that opened the dialog is gone, so focus goes back home.
+    expect(bridge.focusComposer).toHaveBeenCalled();
   });
 
   it("records the window that was actually fetched in the transcript", async () => {
@@ -1343,6 +1415,215 @@ describe("TeamsChatPickerDialog", () => {
     ).toBeInTheDocument();
     expect(uploads).toHaveLength(0);
     expect(selectChat()).toBeChecked();
+  });
+
+  it("attaches what the composer took when it took fewer files than were built", async () => {
+    hooks.uploadLimit = 1;
+    hooks.fetcher = {
+      ...fakeFetcher(),
+      pageChatBackwards: () =>
+        Promise.resolve({
+          messages: [
+            mockGraphChatMessage({
+              id: "a",
+              body: {
+                contentType: "html",
+                content: `<p>see this</p><img src="https://graph.microsoft.com/v1.0/chats/x/messages/1/hostedContents/aWQ9/$value">`,
+              },
+            }),
+          ],
+          nextLink: null,
+          truncated: false,
+          oldestCreatedDateTime: "2026-03-03T09:14:00Z",
+          state: "ok",
+        }),
+      getHostedContent: () =>
+        Promise.resolve({
+          bytes: new TextEncoder().encode("png-bytes").buffer,
+          contentType: "image/png",
+        }),
+    };
+    renderPicker();
+    fireEvent.click(selectChat());
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Attach" }));
+    });
+    await waitFor(() => expect(records()).toHaveLength(1));
+
+    expect(uploads[0]).toHaveLength(2);
+    // The record claims exactly what was uploaded: the transcript alone.
+    expect(records()).toEqual(["r1-0:teams-Product_sync.md:"]);
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("registers nothing when the upload fails", async () => {
+    hooks.uploadStore.error = new Error("413");
+    renderPicker();
+    fireEvent.click(selectChat());
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Attach" }));
+    });
+
+    expect(
+      await screen.findByText("Couldn't attach the transcript. Try again."),
+    ).toBeInTheDocument();
+    expect(records()).toEqual([]);
+    expect(bridge.add).not.toHaveBeenCalled();
+  });
+
+  describe("edit selection (ERMAIN-1025)", () => {
+    const picked = (messageId: string): TeamsChatSelection => ({
+      kind: "message",
+      ref: { kind: "chat", chatId: MOCK_CHAT_ID },
+      messageId,
+      conversationTitle: "Product sync",
+      senderName: "Grace Hopper",
+      createdAt: "2026-08-10T09:15:00Z",
+      message: {
+        id: messageId,
+        senderName: "Grace Hopper",
+        createdAt: "2026-08-10T09:15:00Z",
+        text: `Message ${messageId}`,
+      } as never,
+    });
+    const editRecord = (
+      selections: TeamsChatSelection[],
+      messageLimit = 200,
+    ): TeamsTranscriptRecord => ({
+      lineage: "lineage-7",
+      transcriptUploadId: "old-t",
+      assetUploadIds: ["old-a"],
+      file: new File(["#"], "teams-Product_sync.md"),
+      selections,
+      messageLimit,
+    });
+    const whole: TeamsChatSelection = {
+      kind: "conversation",
+      ref: { kind: "chat", chatId: MOCK_CHAT_ID },
+      title: "Product sync",
+    };
+
+    it("reopens with the transcript's selection, its window and Update", () => {
+      renderPicker({
+        open: "edit",
+        edit: editRecord([picked("m1"), picked("m2"), picked("m3")], 400),
+      });
+
+      expect(screen.getByText("3 picked messages")).toBeInTheDocument();
+      expect(selectChat()).not.toBeChecked();
+      expect(
+        screen.getByText("Whole chats add the last 400 messages."),
+      ).toBeInTheDocument();
+      expect(screen.getByText("3 items selected")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Update" })).toBeEnabled();
+      expect(
+        screen.queryByRole("button", { name: "Attach" }),
+      ).not.toBeInTheDocument();
+    });
+
+    it("rebuilds on Update and swaps the record in place, keeping its lineage", async () => {
+      const base = fakeFetcher();
+      const pageChatBackwards = vi.fn(base.pageChatBackwards);
+      hooks.fetcher = { ...base, pageChatBackwards };
+      const previous = editRecord([whole]);
+      renderPicker({ open: "edit", edit: previous });
+      expect(selectChat()).toBeChecked();
+
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "Update" }));
+      });
+      await waitFor(() => expect(bridge.replace).toHaveBeenCalledTimes(1));
+
+      expect(pageChatBackwards).toHaveBeenCalledTimes(1);
+      expect(bridge.replace).toHaveBeenCalledWith(previous, [
+        { id: "r1-0", filename: "teams-Product_sync.md" },
+      ]);
+      expect(bridge.add).not.toHaveBeenCalled();
+      expect(
+        screen
+          .getByTestId("attached-transcripts")
+          .querySelector("li")
+          ?.getAttribute("data-lineage"),
+      ).toBe("lineage-7");
+      expect(bridge.announce).toHaveBeenCalledWith("Teams transcript updated.");
+      expect(screen.queryByRole("dialog")).toBeNull();
+    });
+
+    it("takes the transcript out when Update finds nothing ticked", async () => {
+      renderPicker({ open: null });
+      // Attach first, so there is a record to edit.
+      fireEvent.click(screen.getByText("open picker"));
+      fireEvent.click(selectChat());
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "Attach" }));
+      });
+      await waitFor(() => expect(records()).toHaveLength(1));
+      vi.mocked(bridge.focusComposer).mockClear();
+
+      fireEvent.click(screen.getByText("edit transcript"));
+      fireEvent.click(selectChat());
+      expect(
+        screen.getByText("Nothing selected: Update removes the transcript."),
+      ).toBeInTheDocument();
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "Update" }));
+      });
+
+      expect(bridge.remove).toHaveBeenCalledWith(["r1-0"]);
+      expect(records()).toEqual([]);
+      expect(bridge.announce).toHaveBeenLastCalledWith(
+        "Teams transcript removed.",
+      );
+      expect(screen.queryByRole("dialog")).toBeNull();
+      expect(bridge.focusComposer).toHaveBeenCalled();
+    });
+
+    it("changes nothing on Cancel and forgets the reopened selection", () => {
+      renderPicker({ open: "edit", edit: editRecord([whole]) });
+      fireEvent.click(selectChat());
+      fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+      expect(screen.queryByRole("dialog")).toBeNull();
+      expect(bridge.replace).not.toHaveBeenCalled();
+      expect(bridge.remove).not.toHaveBeenCalled();
+
+      fireEvent.click(screen.getByText("open picker"));
+      expect(selectChat()).not.toBeChecked();
+      expect(screen.getByRole("button", { name: "Attach" })).toBeDisabled();
+    });
+
+    it("keeps the old transcript when the Update's upload fails", async () => {
+      hooks.uploadStore.error = new Error("413");
+      renderPicker({ open: "edit", edit: editRecord([whole]) });
+
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "Update" }));
+      });
+
+      expect(
+        await screen.findByText("Couldn't attach the transcript. Try again."),
+      ).toBeInTheDocument();
+      expect(bridge.replace).not.toHaveBeenCalled();
+      expect(bridge.remove).not.toHaveBeenCalled();
+      expect(screen.getByRole("button", { name: "Update" })).toBeEnabled();
+    });
+
+    it("replaces the old transcript with a partial one on Attach anyway", async () => {
+      hooks.fetcher = fakeFetcher({ state: "partial" });
+      const previous = editRecord([whole]);
+      renderPicker({ open: "edit", edit: previous });
+
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "Update" }));
+      });
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "Attach anyway" }));
+      });
+
+      await waitFor(() => expect(bridge.replace).toHaveBeenCalledTimes(1));
+      expect(vi.mocked(bridge.replace).mock.calls[0][0]).toBe(previous);
+    });
   });
 
   describe("channel search hits", () => {

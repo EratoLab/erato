@@ -1,12 +1,8 @@
-import {
-  PopoverSectionHeader,
-  Row,
-  getSupportedFileTypes,
-  useFileCapabilitiesContext,
-} from "@erato/frontend/library";
+import { PopoverSectionHeader, Row } from "@erato/frontend/library";
 import { t } from "@lingui/core/macro";
 
-import { useTeamsChatFetcher } from "../hooks/useTeamsChatFetcher";
+import { useTeamsComposer } from "./TeamsComposerContext";
+import { useTeamsPickerAvailability } from "../hooks/useTeamsPickerAvailability";
 import { useTeamsChatPicker } from "../providers/TeamsChatPickerProvider";
 
 import type { ChatAddMenuExtraContentProps } from "@erato/frontend/library";
@@ -14,7 +10,8 @@ import type { ChatAddMenuExtraContentProps } from "@erato/frontend/library";
 /**
  * Teams contribution to the unified chat "+" menu: one row that opens the chat
  * picker. The dialog itself is owned by `TeamsChatPickerProvider` — this row
- * only hands over the composer's upload callback and closes the menu.
+ * only hands over the composer and closes the menu. With a transcript staged,
+ * the row edits it instead of attaching a second one.
  */
 export function TeamsChatAddMenuExtraContent({
   onSelectFiles,
@@ -23,28 +20,25 @@ export function TeamsChatAddMenuExtraContent({
   uploadDisabled = false,
   isProcessing = false,
 }: ChatAddMenuExtraContentProps) {
-  const { unavailableReason } = useTeamsChatFetcher();
-  const { capabilities, isLoading, error } = useFileCapabilitiesContext();
+  const { available, capabilitiesReady, supportsMarkdown } =
+    useTeamsPickerAvailability();
   const { open } = useTeamsChatPicker();
+  const composer = useTeamsComposer();
 
   // No Graph on this session means no chats to offer; a row that can only
   // apologise is worse than no row.
-  if (unavailableReason !== null) {
+  if (!available) {
     return null;
   }
 
-  const capabilitiesReady = !isLoading && !error && capabilities.length > 0;
-  // An explicit wildcard permission allows transcripts too. The upload accept
-  // list represents this as [], which can also mean capability data is missing.
-  const supportsMarkdown =
-    capabilities.some(
-      (capability) => capability.id === "other" && capability.upload_allowed,
-    ) || getSupportedFileTypes(capabilities).includes("text");
+  const edit = composer?.stagedTranscript ?? null;
+  // An edit replaces its own files, so a full composer does not stop it.
   const isDisabled =
     disabled ||
-    uploadDisabled ||
+    (uploadDisabled && !edit) ||
     isProcessing ||
     !onSelectFiles ||
+    !composer ||
     !capabilitiesReady ||
     !supportsMarkdown;
 
@@ -64,8 +58,8 @@ export function TeamsChatAddMenuExtraContent({
         data-testid="teams-add-menu-chats"
         disabled={isDisabled}
         onClick={() => {
-          if (!onSelectFiles) return;
-          open(onSelectFiles);
+          if (!composer) return;
+          open(composer.bridge, edit ? { edit } : undefined);
           onClose();
         }}
       >
@@ -77,15 +71,20 @@ export function TeamsChatAddMenuExtraContent({
             })}
           </div>
           <div className="truncate text-xs text-theme-fg-muted">
-            {!capabilitiesReady || supportsMarkdown
+            {capabilitiesReady && !supportsMarkdown
               ? t({
-                  id: "officeAddin.teams.fileSource.chatsHint",
-                  message: "Pick conversations or messages to attach",
-                })
-              : t({
                   id: "officeAddin.teams.fileSource.textUnsupported",
                   message: "This workspace can't accept text files",
-                })}
+                })
+              : edit
+                ? t({
+                    id: "officeAddin.teams.fileSource.chatsEditHint",
+                    message: "Edit the conversations in your transcript",
+                  })
+                : t({
+                    id: "officeAddin.teams.fileSource.chatsHint",
+                    message: "Pick conversations or messages to attach",
+                  })}
           </div>
         </div>
       </Row>

@@ -128,6 +128,29 @@ function TeamsChatPickerDialogBody({
     teamName: string;
   } | null>(null);
   const debouncedQuery = useDebouncedValue(query, SEARCH_DEBOUNCE_MS);
+  // A reopened selection is visible from the browse level, not only inside
+  // each conversation's drill-in.
+  const pickedByConversation = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const selected of picker.selection.values()) {
+      if (selected.kind !== "message") continue;
+      const key = conversationKey(selected.ref);
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+    return counts;
+  }, [picker.selection]);
+  const pickedSubline = (ref: Parameters<typeof conversationKey>[0]) => {
+    const count = pickedByConversation.get(conversationKey(ref)) ?? 0;
+    return count > 0
+      ? t({
+          id: "officeAddin.teams.picker.pickedCount",
+          message: plural(count, {
+            one: "# picked message",
+            other: "# picked messages",
+          }),
+        })
+      : undefined;
+  };
 
   const trimmed = debouncedQuery.trim();
   const isSearching = trimmed.length >= MIN_SEARCH_QUERY_LENGTH;
@@ -473,7 +496,9 @@ function TeamsChatPickerDialogBody({
           message: `Select ${chatTitle}`,
         })}
         title={chatTitle}
-        subline={chat.previewText || undefined}
+        subline={
+          pickedSubline(selection.ref) ?? (chat.previewText || undefined)
+        }
         onOpen={() => setActiveChatId(chat.chatId)}
         openLabel={t({
           id: "officeAddin.teams.picker.openChat",
@@ -608,7 +633,9 @@ function TeamsChatPickerDialogBody({
             )}
           </>
         }
-        subline={channel.teamName || undefined}
+        subline={
+          pickedSubline(selection.ref) ?? (channel.teamName || undefined)
+        }
         onOpen={() =>
           setActiveChannel({
             teamId: channel.teamId,
@@ -939,6 +966,7 @@ function TeamsChatPickerDialogBody({
     const hasWholeSelection = [...picker.selection.values()].some(
       (selection) => selection.kind === "conversation",
     );
+    const editing = picker.editing !== null;
 
     return (
       <div className="shrink-0 space-y-3 border-t border-theme-border pt-3">
@@ -1020,6 +1048,15 @@ function TeamsChatPickerDialogBody({
           )}
         </div>
 
+        {editing && selectedCount === 0 && (
+          <p className="text-xs text-theme-fg-muted" role="status">
+            {t({
+              id: "officeAddin.teams.picker.updateRemovesHint",
+              message: "Nothing selected: Update removes the transcript.",
+            })}
+          </p>
+        )}
+
         {picker.isMessageSelectionFull && (
           <p className="text-xs text-theme-fg-muted" role="status">
             {t({
@@ -1052,13 +1089,18 @@ function TeamsChatPickerDialogBody({
             <Button
               variant="primary"
               loading={picker.isBuilding}
-              disabled={selectedCount === 0}
+              disabled={!editing && selectedCount === 0}
               onClick={() => void picker.attach()}
             >
-              {t({
-                id: "officeAddin.teams.picker.attach",
-                message: "Attach",
-              })}
+              {editing
+                ? t({
+                    id: "officeAddin.teams.picker.update",
+                    message: "Update",
+                  })
+                : t({
+                    id: "officeAddin.teams.picker.attach",
+                    message: "Attach",
+                  })}
             </Button>
           </div>
         </div>

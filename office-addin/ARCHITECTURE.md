@@ -82,9 +82,9 @@ implement the seams listed below, and never modify the core itself.
    renders. The registry is a mutable global, so exactly one host per loaded
    document — contributions stay route-local because only the matched lazy
    route module is evaluated. `src/teams/TeamsApp.tsx` mirrors this with
-   `installTeamsComponentRegistrations()`, which contributes
-   `ChatAddMenuExtraContent`, and `ChatInputAttachmentPreview` only when no
-   component kit registered one. Word registers its renderer in
+   `installTeamsComponentRegistrations()`, which contributes only
+   `ChatAddMenuExtraContent`: a transcript is a context chip, so a kit's
+   `ChatInputAttachmentPreview` renders the tab's other files. Word registers its renderer in
    `HostCardCodeBlock`. Component-kit registrations are applied at the entry
    point via `applyComponentKitRegistrations()` in `src/main.tsx`, before any
    host route module is evaluated.
@@ -183,6 +183,16 @@ scheduling is a `composerModes` entry next to "+", not a chip, and shows only
 where ending it changes the facet (`previewOutlookSend().mode`). The "+" menu
 only adds what has no chip.
 
+Teams has no resolver of its own: a transcript is nothing but uploads in the
+composer's staged list, which is what the send carries. `TeamsChatInput`
+mirrors that list through `ChatInput`'s `onStagedFilesChange` and
+`previewTeamsSend()` keeps the picker's records whose transcript upload is
+staged, keyed by upload id because transcript filenames repeat. Each becomes
+one item (`useTeamsTranscriptContextItems`) whose `claimsFileIds` are the
+record's staged uploads, so (x) removes the transcript and every file it
+brought. The uploads are already counted, so there is no `estimate`. The chip
+follows the staged list across chat switches, queue restores and sends.
+
 ## Landmines
 
 - office.js nullifies `history.pushState`/`replaceState` on load (office-js
@@ -264,9 +274,18 @@ use the router.
   owns the picker dialog plus the in-flight transcript build. It cannot live
   under the composer's "+" popover — `AnchoredPopover` dismisses on any
   `pointerdown` outside its panel, and a portalled dialog is a DOM sibling of
-  that panel, so it would close itself on first click. The menu row only hands
-  over the composer's `onSelectFiles` and closes the menu; the selection is
-  serialized to one markdown `File` and goes through the ordinary upload path.
+  that panel, so it would close itself on first click. `open()` takes the
+  composer's `TeamsComposerBridge`, which uploads through the composer's own
+  path (size check, `uploadFiles`) without staging, so the provider learns the
+  upload ids and records `{ lineage, transcriptUploadId, assetUploadIds }` per
+  transcript. The bridge then stages the uploads, mirroring them into the
+  composer's staged list in the same batch so a chip never drops for a render.
+  "Edit selection" (the chip's detail, or "+" with a transcript staged)
+  reopens the dialog with that record's selection and an "Update" button:
+  Update rebuilds, unstages the old uploads before staging the new ones (the
+  composer trims to `maxFiles` as it adds), and keeps the lineage, so the chip
+  updates in place; Update with nothing ticked removes it; a failed upload
+  leaves the old transcript as it was. Records live in memory for the session.
 - The standalone Teams manifest is staged as `manifest-teams.json` and served
   with its package from `/office-addin/teams`. Teams distribution is configured
   separately from the Outlook and Word XML add-ins.

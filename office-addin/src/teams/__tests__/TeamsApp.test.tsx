@@ -258,10 +258,18 @@ describe("Teams personal tab composition", () => {
     renderTab();
     await screen.findByTestId("teams-message-list");
 
-    expect(Object.keys(componentRegistry)).toEqual([
-      "ChatAddMenuExtraContent",
-      "ChatInputAttachmentPreview",
-    ]);
+    expect(Object.keys(componentRegistry)).toEqual(["ChatAddMenuExtraContent"]);
+  });
+
+  it("composes through the Teams composer, whose transcripts are chips", async () => {
+    renderTab();
+    await screen.findByTestId("teams-message-list");
+
+    expect(screen.getByTestId("teams-chat-input")).toBeInTheDocument();
+    expect(screen.getByTestId("teams-composer-announcer")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("region", { name: "Teams conversation preview" }),
+    ).toBeNull();
   });
 
   it("selects chats under the Teams storage key, never the neutral one", async () => {
