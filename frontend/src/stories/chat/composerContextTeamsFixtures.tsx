@@ -25,6 +25,7 @@ import {
   TEAMS_STORY_CONVERSATIONS,
   TEAMS_STORY_PICKER_CHOICES,
   teamsStoryFileName,
+  teamsStoryRemovedNames,
   teamsStoryStaged,
   teamsStoryTranscriptText,
   teamsStoryTranscriptUploads,
@@ -52,6 +53,10 @@ interface StoryRecord {
   version: number;
   file: File;
   assetUploadIds: string[];
+  /** Upload names of every asset handed over with it. */
+  assetNames: string[];
+  /** Upload names the user removed; an Update leaves them out. */
+  excludedNames: string[];
 }
 
 type SizedUpload = FileUploadItem & { size: number };
@@ -65,6 +70,7 @@ function recordOf(
   transcript: TeamsStoryTranscript,
   version: number,
   release?: Promise<void>,
+  excludedNames: string[] = teamsStoryRemovedNames(transcript),
 ): StoryRecord {
   const text = teamsStoryTranscriptText(transcript, FORMAT);
   const file = new File([text], teamsStoryFileName(transcript.conversations), {
@@ -75,22 +81,27 @@ function recordOf(
       value: () => release.then(() => text),
     });
   }
+  const excluded = new Set(excludedNames);
+  const assets = teamsStoryTranscriptUploads(transcript).assets.filter(
+    (upload) => !excluded.has(upload.filename),
+  );
   return {
     transcript,
     version,
     file,
-    assetUploadIds: teamsStoryTranscriptUploads(transcript).assets.map(
-      (upload) => upload.id,
-    ),
+    assetUploadIds: assets.map((upload) => upload.id),
+    assetNames: assets.map((upload) => upload.filename),
+    excludedNames,
   };
 }
 
 /** The staged uploads of a record, the transcript sized as its file is. */
 function uploadsOf(record: StoryRecord): SizedUpload[] {
   const uploads = teamsStoryTranscriptUploads(record.transcript);
+  const handed = new Set(record.assetUploadIds);
   return [
     toUpload({ ...uploads.transcript, size: record.file.size }),
-    ...uploads.assets.map(toUpload),
+    ...uploads.assets.filter((upload) => handed.has(upload.id)).map(toUpload),
   ];
 }
 
@@ -106,11 +117,19 @@ function storyTeamsSend(
     const record = byUpload.get(file.id);
     if (!record) return [];
     const ids = new Set(record.assetUploadIds);
+    const assets = staged.filter((candidate) => ids.has(candidate.id));
+    const taken = new Set([
+      ...assets.map((asset) => asset.filename),
+      ...record.excludedNames,
+    ]);
     return [
       {
         record,
         transcript: file,
-        assets: staged.filter((candidate) => ids.has(candidate.id)),
+        assets,
+        notAttachedAssetNames: record.assetNames.filter(
+          (name) => !taken.has(name),
+        ),
       },
     ];
   });
@@ -353,12 +372,18 @@ function Composer({
   const entries = useMemo(
     () =>
       send.map(
-        ({ record, transcript, assets }): TeamsTranscriptContextEntry => {
+        ({
+          record,
+          transcript,
+          assets,
+          notAttachedAssetNames,
+        }): TeamsTranscriptContextEntry => {
           const handlers = handlersFor(record.transcript.lineage);
           return {
             id: record.transcript.lineage,
             transcript: record.file,
             uploads: { transcript, assets },
+            notAttachedAssetNames,
             onRemove: handlers.onRemove,
             onEditSelection: picker ? handlers.onEditSelection : undefined,
           };
@@ -366,8 +391,28 @@ function Composer({
       ),
     [handlersFor, picker, send],
   );
+  // The record remembers the removal, so an Update leaves the file out.
   const onRemoveFile = useCallback(
-    (fileId: string) => removeIds([fileId]),
+    (fileId: string) => {
+      const name = stagedRef.current.find(
+        (file) => file.id === fileId,
+      )?.filename;
+      if (name) {
+        setRecords((current) => {
+          const next = new Map(current);
+          for (const [lineage, record] of current) {
+            if (record.assetUploadIds.includes(fileId)) {
+              next.set(lineage, {
+                ...record,
+                excludedNames: [...record.excludedNames, name],
+              });
+            }
+          }
+          return next;
+        });
+      }
+      removeIds([fileId]);
+    },
     [removeIds],
   );
   const onFilePreview = useCallback(
@@ -401,6 +446,8 @@ function Composer({
     const next = recordOf(
       teamsStoryUpdate(record.transcript, conversations, version),
       version,
+      undefined,
+      record.excludedNames,
     );
     // The picker reads the index before it hands the files over, so the
     // chip's first render after "Update" already names the conversations.

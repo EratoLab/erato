@@ -42,6 +42,8 @@ interface AddinChip {
   detailTitle: string | null;
   actions: string[];
   claims: string[];
+  /** Files handed over that the composer did not take. */
+  notAttached: number;
 }
 interface AddinComposer {
   composerLocked: boolean;
@@ -215,9 +217,10 @@ const ratiosOf = (page: Page, selector: string) =>
     }));
   }, contrastOf.toString());
 const CHIP_TEXT = `${CHIP} [data-ui="composer-context-chip-label"], ${CHIP} [data-ui="composer-context-chip-meta"]`;
-// The detail's own text. The file rows are the shared AttachmentTile, the same
-// tile as the composer's file row, and are not measured here.
-const DETAIL_TEXT = `${DETAIL} h3, ${DETAIL} p, ${DETAIL} [data-ui="teams-transcript-picked"] span`;
+// The detail's own text, its way into each conversation included. The file
+// rows are the shared AttachmentTile, the same tile as the composer's file
+// row, and are not measured here.
+const DETAIL_TEXT = `${DETAIL} h3, ${DETAIL} p, ${DETAIL} [data-ui="teams-transcript-picked"] span, ${DETAIL} [data-ui="teams-transcript-open-conversation"]`;
 
 const openDetail = async (page: Page, chip: Locator = transcripts(page)) => {
   await open(chip).click();
@@ -464,6 +467,10 @@ test.describe("detail", () => {
       );
       // The visible text is part of the name (WCAG 2.5.3).
       await expect(ways.nth(index)).toHaveText("Open conversation");
+      // Drawn as a link, apart from the muted meta lines around it.
+      expect(await style(ways.nth(index), "text-decoration-line")).toContain(
+        "underline",
+      );
     }
     // The viewer reads as "You", times as written (UTC).
     const picked = sections
@@ -582,6 +589,14 @@ test.describe("detail", () => {
     const remove = detail.getByRole("button", { name: "Remove Image" });
     await expect(remove).toBeVisible();
     expect(Number(await style(remove, "opacity"))).toBe(1);
+    // Files first, as in the prototype: their removes stay near the top.
+    const files = await boxOf(
+      detail.locator('[data-ui="teams-transcript-files"]'),
+    );
+    const picked = await boxOf(
+      detail.locator('[data-ui="teams-transcript-picked"]'),
+    );
+    expect(files.y + files.height).toBeLessThanOrEqual(picked.y + 0.5);
   });
 
   test("an unreadable transcript still says it is sent and lists its files", async ({
@@ -596,11 +611,37 @@ test.describe("detail", () => {
     await expect(detail.locator(DETAIL)).toContainText(
       "This transcript is still sent, but its conversations can't be shown here.",
     );
+    const removes = detail.getByRole("button", {
+      name: /^Remove (roadmap-q1\.pdf|dashboard-screenshot\.png)$/,
+    });
+    await expect(removes).toHaveCount(2);
+    // Removing the last one keeps focus inside the detail.
+    await removes.first().click();
+    await removes.first().click();
+    await expect(removes).toHaveCount(0);
+    await expect(detail.locator(DETAIL)).toBeFocused();
+  });
+
+  test("a file the composer did not take is named in its conversation", async ({
+    page,
+  }) => {
+    await openTeams(page, "file-limit");
+    const expected = story("file-limit").chips[0];
+    expect(expected.notAttached).toBe(1);
+    const detail = await openDetail(page);
+    const design = detail.locator(SECTION).nth(1);
     await expect(
-      detail.getByRole("button", {
-        name: /^Remove (roadmap-q1\.pdf|dashboard-screenshot\.png)$/,
-      }),
-    ).toHaveCount(2);
+      design.locator('[data-ui="teams-transcript-not-attached"]'),
+    ).toHaveText("1 shared file not attached");
+    await expect(
+      detail.getByRole("button", { name: /wireframes-v2\.pdf/ }),
+    ).toHaveCount(0);
+    await expect(
+      detail
+        .locator(SECTION)
+        .nth(0)
+        .locator('[data-ui="teams-transcript-not-attached"]'),
+    ).toHaveCount(0);
   });
 
   test("Open conversation swaps the view in place; back returns focus", async ({
@@ -617,8 +658,9 @@ test.describe("detail", () => {
     );
     const back = detail.getByRole("button", { name: "All conversations" });
     await expect(back).toBeFocused();
+    // The viewer is "You" here too, as in the picked messages.
     await expect(detail.locator(DETAIL)).toContainText(
-      "Ada Lovelace, Grace Hopper, Alan Turing, Sam Lee",
+      "Ada Lovelace, Grace Hopper, Alan Turing, You",
     );
     await expect(
       detail.getByRole("button", { name: "Open in Teams" }),
@@ -760,6 +802,16 @@ test.describe("reading and editing", () => {
     await openTeams(page, "reading");
     const chip = transcripts(page);
     await expectChip(chip, story("reading").chips[0], false, "reading");
+    // The detail says the same while it reads, not that it can't.
+    const detail = await openDetail(page);
+    await expect(detail.locator(DETAIL)).toHaveAttribute(
+      "data-view",
+      "reading",
+    );
+    await expect(detail.locator(DETAIL)).toContainText("Reading transcript…");
+    await expect(detail.locator(DETAIL)).not.toContainText("can't be shown");
+    await page.keyboard.press("Escape");
+    await expect(detail).toHaveCount(0);
     await chip.evaluate((element) => element.setAttribute("data-probe", ""));
     await page.getByRole("button", { name: "Finish reading" }).click();
     await expectChip(chip, story("three").chips[0], false, "read");
@@ -807,6 +859,25 @@ test.describe("reading and editing", () => {
       expect(frame.chips).toBe(1);
       expect(frame.files).toEqual([]);
     }
+    expect(await sendAndRead(page)).toBe(sentLine(after.sendFileIds));
+  });
+
+  test("Edit selection: Update keeps out a file removed in the detail", async ({
+    page,
+  }) => {
+    await openTeams(page, "interactive");
+    const after = flow("updateAfterRoadmapRemoved");
+    expect(after.story).toBe("interactive");
+    let detail = await openDetail(page);
+    await detail.getByRole("button", { name: "Remove roadmap-q1.pdf" }).click();
+    await page.keyboard.press("Escape");
+    await expect(detail).toHaveCount(0);
+    detail = await openDetail(page);
+    await detail.getByRole("button", { name: "Edit selection" }).click();
+    const picker = page.getByRole("dialog", { name: "Teams chats" });
+    await picker.getByRole("button", { name: "Update" }).click();
+    await expect(picker).toHaveCount(0);
+    await expectLane(page, after, "after Update");
     expect(await sendAndRead(page)).toBe(sentLine(after.sendFileIds));
   });
 
@@ -884,6 +955,9 @@ test("speaks German in the chip, the detail and the conversation", async ({
     detail.getByRole("button", { name: "Alle Unterhaltungen" }),
   ).toBeFocused();
   await expect(detail.locator(DETAIL)).toContainText("Okt.");
+  // Times in the app's language too, whatever the browser's (en-US here).
+  await expect(detail.locator(`${DETAIL} time`).first()).toHaveText("07:30");
+  await expect(detail.locator(DETAIL)).not.toContainText(/\d (AM|PM)/);
 });
 
 test("the web composer is unchanged: no lane, the file row as before", async ({

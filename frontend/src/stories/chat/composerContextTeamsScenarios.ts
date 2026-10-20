@@ -290,6 +290,8 @@ export interface TeamsStoryTranscript {
   slowRead?: boolean;
   /** Assets (by key) the user already removed from the composer. */
   removedAssets?: string[];
+  /** Assets (by key) handed over that the composer did not take, e.g. past its file limit. */
+  notAttachedAssets?: string[];
 }
 
 export interface TeamsStoryUserFile {
@@ -351,15 +353,26 @@ export function teamsStoryTranscriptUploads(transcript: TeamsStoryTranscript): {
   };
 }
 
+/** Upload names of the assets the user removed from a transcript. */
+export function teamsStoryRemovedNames(
+  transcript: TeamsStoryTranscript,
+): string[] {
+  const removed = new Set(transcript.removedAssets ?? []);
+  return assetsOf(transcript)
+    .filter((entry) => removed.has(entry.key))
+    .map((entry) => entry.uploadName);
+}
+
 /** What the composer has staged for a seed, in staged order. */
 export function teamsStoryStaged(seed: TeamsStorySeed): TeamsStoryUpload[] {
   return [
     ...seed.transcripts.flatMap((transcript) => {
       const uploads = teamsStoryTranscriptUploads(transcript);
       const removed = new Set(
-        (transcript.removedAssets ?? []).map((key) =>
-          assetUploadId(transcript, key),
-        ),
+        [
+          ...(transcript.removedAssets ?? []),
+          ...(transcript.notAttachedAssets ?? []),
+        ].map((key) => assetUploadId(transcript, key)),
       );
       return [
         uploads.transcript,
@@ -549,6 +562,8 @@ export const TEAMS_STORIES = {
     ],
   },
   Reading: { transcripts: [{ ...THREE, slowRead: true }] },
+  // The composer took the transcript and two of its three shared files.
+  FileLimit: { transcripts: [{ ...THREE, notAttachedAssets: ["wireframes"] }] },
   NoPicker: { transcripts: [THREE], picker: false },
   Interactive: { transcripts: [THREE] },
 } satisfies Record<string, TeamsStorySeed>;
@@ -565,6 +580,19 @@ export const TEAMS_STORY_FLOWS: Record<
     story: "Interactive",
     then: {
       transcripts: [teamsStoryUpdate(THREE, ["product", "grace"], 2)],
+    },
+  },
+  // The detail's remove on roadmap-q1.pdf, then "Edit selection" → Update
+  // with the selection unchanged: the file stays out.
+  updateAfterRoadmapRemoved: {
+    story: "Interactive",
+    then: {
+      transcripts: [
+        {
+          ...teamsStoryUpdate(THREE, ["product", "design", "grace"], 2),
+          removedAssets: ["roadmap"],
+        },
+      ],
     },
   },
   // The detail's remove on roadmap-q1.pdf.

@@ -20,7 +20,8 @@
             "three-v1:roadmap",
             "three-v1:dashboard",
             "three-v1:wireframes"
-          ]
+          ],
+          "notAttached": 0
         }
       ],
       "sendFileIds": [
@@ -45,7 +46,8 @@
           "removed": "Teams transcript removed, with 2 shared files.",
           "detailTitle": "Teams transcript",
           "actions": ["Edit selection"],
-          "claims": ["one-v1", "one-v1:roadmap", "one-v1:dashboard"]
+          "claims": ["one-v1", "one-v1:roadmap", "one-v1:dashboard"],
+          "notAttached": 0
         }
       ],
       "sendFileIds": ["one-v1", "one-v1:roadmap", "one-v1:dashboard"]
@@ -65,7 +67,8 @@
           "removed": "Teams transcript removed, with 2 shared files.",
           "detailTitle": "Teams transcript",
           "actions": ["Edit selection"],
-          "claims": ["files-v1", "files-v1:roadmap", "files-v1:dashboard"]
+          "claims": ["files-v1", "files-v1:roadmap", "files-v1:dashboard"],
+          "notAttached": 0
         }
       ],
       "sendFileIds": [
@@ -92,7 +95,8 @@
           "removed": "Teams transcript removed, with 1 shared file.",
           "detailTitle": "Teams transcript",
           "actions": ["Edit selection"],
-          "claims": ["picked-v1", "picked-v1:image"]
+          "claims": ["picked-v1", "picked-v1:image"],
+          "notAttached": 0
         }
       ],
       "sendFileIds": ["picked-v1", "picked-v1:image"]
@@ -112,7 +116,8 @@
           "removed": "Teams transcript removed, with 1 shared file.",
           "detailTitle": "Teams transcript",
           "actions": ["Edit selection"],
-          "claims": ["partial-v1", "partial-v1:roadmap"]
+          "claims": ["partial-v1", "partial-v1:roadmap"],
+          "notAttached": 0
         }
       ],
       "sendFileIds": ["partial-v1", "partial-v1:roadmap"]
@@ -137,7 +142,8 @@
             "three-v1:roadmap",
             "three-v1:dashboard",
             "three-v1:wireframes"
-          ]
+          ],
+          "notAttached": 0
         }
       ],
       "sendFileIds": [
@@ -166,7 +172,8 @@
             "unreadable-v1",
             "unreadable-v1:roadmap",
             "unreadable-v1:dashboard"
-          ]
+          ],
+          "notAttached": 0
         }
       ],
       "sendFileIds": [
@@ -195,7 +202,8 @@
             "first-v1:roadmap",
             "first-v1:dashboard",
             "first-v1:wireframes"
-          ]
+          ],
+          "notAttached": 0
         },
         {
           "kind": "teams.transcript",
@@ -209,7 +217,8 @@
           "removed": "Teams transcript removed, with 1 shared file.",
           "detailTitle": "Teams transcript",
           "actions": ["Edit selection"],
-          "claims": ["second-v1", "second-v1:budget"]
+          "claims": ["second-v1", "second-v1:budget"],
+          "notAttached": 0
         }
       ],
       "sendFileIds": [
@@ -241,7 +250,8 @@
             "three-v1:roadmap",
             "three-v1:dashboard",
             "three-v1:wireframes"
-          ]
+          ],
+          "notAttached": 0
         }
       ],
       "sendFileIds": [
@@ -250,6 +260,27 @@
         "three-v1:dashboard",
         "three-v1:wireframes"
       ]
+    },
+    "file-limit": {
+      "composerLocked": false,
+      "chips": [
+        {
+          "kind": "teams.transcript",
+          "origin": "user",
+          "state": "included",
+          "label": "Product sync +2",
+          "meta": "3 conversations · 240 messages",
+          "spokenLabel": "Teams transcript",
+          "control": "Remove Teams transcript",
+          "removeAction": "Remove transcript",
+          "removed": "Teams transcript removed, with 2 shared files.",
+          "detailTitle": "Teams transcript",
+          "actions": ["Edit selection"],
+          "claims": ["three-v1", "three-v1:roadmap", "three-v1:dashboard"],
+          "notAttached": 1
+        }
+      ],
+      "sendFileIds": ["three-v1", "three-v1:roadmap", "three-v1:dashboard"]
     },
     "no-picker": {
       "composerLocked": false,
@@ -271,7 +302,8 @@
             "three-v1:roadmap",
             "three-v1:dashboard",
             "three-v1:wireframes"
-          ]
+          ],
+          "notAttached": 0
         }
       ],
       "sendFileIds": [
@@ -301,7 +333,8 @@
             "three-v1:roadmap",
             "three-v1:dashboard",
             "three-v1:wireframes"
-          ]
+          ],
+          "notAttached": 0
         }
       ],
       "sendFileIds": [
@@ -329,10 +362,33 @@
           "removed": "Teams transcript removed, with 2 shared files.",
           "detailTitle": "Teams transcript",
           "actions": ["Edit selection"],
-          "claims": ["three-v2", "three-v2:roadmap", "three-v2:dashboard"]
+          "claims": ["three-v2", "three-v2:roadmap", "three-v2:dashboard"],
+          "notAttached": 0
         }
       ],
       "sendFileIds": ["three-v2", "three-v2:roadmap", "three-v2:dashboard"]
+    },
+    "updateAfterRoadmapRemoved": {
+      "story": "interactive",
+      "composerLocked": false,
+      "chips": [
+        {
+          "kind": "teams.transcript",
+          "origin": "user",
+          "state": "included",
+          "label": "Product sync +2",
+          "meta": "3 conversations · 240 messages",
+          "spokenLabel": "Teams transcript",
+          "control": "Remove Teams transcript",
+          "removeAction": "Remove transcript",
+          "removed": "Teams transcript removed, with 2 shared files.",
+          "detailTitle": "Teams transcript",
+          "actions": ["Edit selection"],
+          "claims": ["three-v2", "three-v2:dashboard", "three-v2:wireframes"],
+          "notAttached": 0
+        }
+      ],
+      "sendFileIds": ["three-v2", "three-v2:dashboard", "three-v2:wireframes"]
     },
     "roadmapRemoved": {
       "story": "three",
@@ -350,7 +406,8 @@
           "removed": "Teams transcript removed, with 2 shared files.",
           "detailTitle": "Teams transcript",
           "actions": ["Edit selection"],
-          "claims": ["three-v1", "three-v1:dashboard", "three-v1:wireframes"]
+          "claims": ["three-v1", "three-v1:dashboard", "three-v1:wireframes"],
+          "notAttached": 0
         }
       ],
       "sendFileIds": ["three-v1", "three-v1:dashboard", "three-v1:wireframes"]
@@ -371,7 +428,8 @@
           "removed": "Teams transcript removed, with 2 shared files.",
           "detailTitle": "Teams transcript",
           "actions": ["Edit selection"],
-          "claims": ["files-v1", "files-v1:roadmap", "files-v1:dashboard"]
+          "claims": ["files-v1", "files-v1:roadmap", "files-v1:dashboard"],
+          "notAttached": 0
         }
       ],
       "sendFileIds": ["files-v1", "files-v1:roadmap", "files-v1:dashboard"]

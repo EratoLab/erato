@@ -40,6 +40,7 @@ export const Locked = story(TEAMS_STORIES.Locked);
 export const Unreadable = story(TEAMS_STORIES.Unreadable);
 export const TwoTranscripts = story(TEAMS_STORIES.TwoTranscripts);
 export const Reading = story(TEAMS_STORIES.Reading);
+export const FileLimit = story(TEAMS_STORIES.FileLimit);
 export const NoPicker = story(TEAMS_STORIES.NoPicker);
 export const Interactive = story(TEAMS_STORIES.Interactive, {
   interactive: true,

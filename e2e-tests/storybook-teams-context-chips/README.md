@@ -10,8 +10,8 @@ parity test (`office-addin/src/teams/utils/__tests__/teamsStoryParity.test.ts`)
 runs the add-in's send preview (`previewTeamsSend`) and the chip hook on the
 stories' scenarios (`frontend/src/stories/chat/composerContextTeamsScenarios.ts`)
 and writes `teams-chips.expected.json`: every chip's kind, state, label, meta,
-x name, removal announcement, detail actions and claimed upload ids, and the
-ids the next send carries. The test fails when the add-in no longer gives that
+x name, removal announcement, detail actions, claimed upload ids and files
+the composer did not take, and the ids the next send carries. The test fails when the add-in no longer gives that
 file, and this spec fails when a story no longer draws it. After a deliberate
 change, rewrite the file from `office-addin/`:
 
@@ -41,17 +41,22 @@ The spec checks:
   as Teams named them, each with a preview and a remove that is visible without
   hover and sits inside its row; the body scrolling with "Edit selection" and
   "Remove transcript" in view; partial, skipped, pasted-image and unreadable
-  transcripts;
+  transcripts, focus staying in the detail when the last file goes; a file
+  the composer did not take named under its conversation; "Open conversation"
+  drawn as a link and measured with the detail's text;
 - the conversation view in place, with focus on "All conversations" and back;
   a file preview stacked over the detail that Escape closes alone, returning
   focus to the row; a file removed inside the detail leaving the send while the
   chip stays;
-- a transcript still being read, which names itself in place; "Edit selection"
+- a transcript still being read, whose detail says so and which names itself
+  in place; "Edit selection"
   with "Update" replacing the chip's files in place (the same element, focus
   back on it, no frame without the chip or with a claimed file in the row),
-  "Update" with nothing ticked removing it, Cancel changing nothing; the chip
+  "Update" keeping out a file removed in the detail, "Update" with nothing
+  ticked removing it, Cancel changing nothing; the chip
   following the composer's files across a chat switch;
-- German in the chip, the detail and the conversation view; and the web
+- German in the chip, the detail and the conversation view, its times
+  included; and the web
   composer without a lane.
 
 "Edit selection" opens a stand-in for the add-in's chat picker in edit mode,
