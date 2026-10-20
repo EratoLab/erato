@@ -6430,11 +6430,13 @@ describe("ChatInput", () => {
         ],
       });
 
-      expect(
-        screen.getByPlaceholderText(
-          "Cannot send: thread.eml exceeds the 10 B limit. Remove it to send.",
-        ),
-      ).toBeInTheDocument();
+      const textarea = screen.getByPlaceholderText(
+        "Cannot send: thread.eml exceeds the 10 B limit. Remove it to send.",
+      );
+      expect(textarea).toHaveClass("placeholder:text-[var(--theme-error-fg)]");
+      expect(textarea).not.toHaveClass(
+        "placeholder:text-[var(--theme-fg-muted)]",
+      );
       expect(send()).toBeDisabled();
       expect(send()).toHaveAccessibleName(
         "Cannot send: File size limit exceeded",
@@ -6631,6 +6633,18 @@ describe("ChatInput", () => {
       ).toBeTruthy();
       expect(
         mode.compareDocumentPosition(group) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+    });
+
+    it("leaves the model selector where it was: the tools come after it", async () => {
+      mockUseIsMobile.mockReturnValue(true);
+      await renderTools();
+
+      const model = screen.getByTestId("model-selector");
+      const group = screen.getByRole("group", { name: "Selected tools" });
+      expect(model.parentElement).toBe(group.parentElement);
+      expect(
+        model.compareDocumentPosition(group) & Node.DOCUMENT_POSITION_FOLLOWING,
       ).toBeTruthy();
     });
 

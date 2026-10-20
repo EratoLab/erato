@@ -3175,24 +3175,40 @@ export const ChatInput = ({
                   "w-full resize-none overflow-y-auto",
                   "chat-input-textarea-geometry",
                   "bg-transparent",
-                  "text-[var(--theme-fg-primary)] placeholder:text-[var(--theme-fg-muted)]",
+                  "text-[var(--theme-fg-primary)]",
                   "focus:outline-none",
                   "disabled:cursor-not-allowed disabled:opacity-50",
                   "max-h-[200px]",
                   "text-base",
                   "scrollbar-auto-hide",
-                  isComposerBlocked &&
-                    "border-[var(--theme-error-border)] placeholder:text-[var(--theme-error-fg)]",
+                  // One placeholder colour at a time: with both classes the
+                  // stylesheet order, not the condition, picks the winner.
+                  isComposerBlocked
+                    ? "border-[var(--theme-error-border)] placeholder:text-[var(--theme-error-fg)]"
+                    : "placeholder:text-[var(--theme-fg-muted)]",
                 )}
               />
             </div>
           )}
 
           <div
-            className="flex flex-wrap items-center justify-between gap-[calc(var(--theme-spacing-control-gap)/2)]"
+            className={clsx(
+              "flex justify-between gap-[calc(var(--theme-spacing-control-gap)/2)]",
+              // Mode and tool chips wrap inside the left group in a narrow
+              // pane; Send keeps its corner instead of dropping onto a line
+              // of its own under them.
+              useUnifiedMobileMenu
+                ? "flex-nowrap items-end"
+                : "flex-wrap items-center",
+            )}
             data-ui="chat-input-controls"
           >
-            <div className="chat-input-controls-geometry flex min-w-0 flex-wrap items-center">
+            <div
+              className={clsx(
+                "chat-input-controls-geometry flex min-w-0 flex-wrap items-center",
+                useUnifiedMobileMenu && "flex-1",
+              )}
+            >
               {showControls &&
                 (useUnifiedMobileMenu ? (
                   <ChatInputAddControls
@@ -3312,9 +3328,21 @@ export const ChatInput = ({
                   onFocusComposer={focusInput}
                 />
               )}
+              {useUnifiedMobileMenu && showModelSelector && (
+                <ModelSelector
+                  availableModels={availableModels}
+                  selectedModel={selectedModel}
+                  onModelChange={setSelectedModel}
+                  disabled={!isSelectionReady}
+                  align="left"
+                  className="ms-[var(--theme-spacing-control-gap)]"
+                />
+              )}
               {/* The unified "+" hides the Tools dropdown and its selected
                   buttons, so the selection is drawn here instead. Mounted
-                  while tools exist, so the last chip's announcement is read. */}
+                  while tools exist, so the last chip's announcement is read.
+                  Last in the group, so picking a tool never moves the model
+                  selector. */}
               {showControls && useUnifiedMobileMenu && hasFacets && (
                 <ComposerToolChips
                   facets={selectedFacets}
@@ -3330,16 +3358,6 @@ export const ChatInput = ({
                       : undefined
                   }
                   onFocusAfterLast={focusAddMenuTrigger}
-                />
-              )}
-              {useUnifiedMobileMenu && showModelSelector && (
-                <ModelSelector
-                  availableModels={availableModels}
-                  selectedModel={selectedModel}
-                  onModelChange={setSelectedModel}
-                  disabled={!isSelectionReady}
-                  align="left"
-                  className="ms-[var(--theme-spacing-control-gap)]"
                 />
               )}
             </div>

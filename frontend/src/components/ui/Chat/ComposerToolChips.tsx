@@ -91,7 +91,11 @@ export const ComposerToolChips = ({
             message: "Selected tools",
           })}
           data-ui="composer-tool-chips"
-          className="ms-[var(--theme-spacing-control-gap)] inline-flex min-w-0 max-w-full flex-wrap items-center gap-[var(--theme-spacing-control-gap)]"
+          // Sized by its widest chip, then grown up to its full width: the
+          // first chip can share the line with the controls before it and the
+          // rest wrap under it, rather than the whole group dropping to a
+          // line of its own.
+          className="ms-[var(--theme-spacing-control-gap)] inline-flex min-w-0 max-w-max grow basis-[min-content] flex-wrap items-center gap-[calc(var(--theme-spacing-control-gap)/2)] sm:gap-[var(--theme-spacing-control-gap)]"
         >
           {facets.map((facet, index) => {
             const name = getFacetDisplayName(facet);
@@ -109,7 +113,7 @@ export const ComposerToolChips = ({
                 aria-describedby={describedBy}
                 title={locked && lockReason ? lockReason : label}
                 onClick={() => deselect(facet, index)}
-                className="inline-flex h-7 min-w-0 max-w-[min(180px,100%)] items-center gap-[5px] rounded-[var(--theme-radius-control)] border border-transparent bg-theme-bg-secondary pl-2 pr-1.5 text-xs font-medium text-theme-fg-secondary hover:bg-theme-bg-hover hover:text-theme-fg-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-theme-focus aria-disabled:cursor-not-allowed aria-disabled:opacity-50 aria-disabled:hover:bg-theme-bg-secondary aria-disabled:hover:text-theme-fg-secondary"
+                className="inline-flex h-7 min-w-0 max-w-[180px] items-center gap-[5px] rounded-[var(--theme-radius-control)] border border-transparent bg-theme-bg-secondary pl-2 pr-1.5 text-xs font-medium text-theme-fg-secondary hover:bg-theme-bg-hover hover:text-theme-fg-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-theme-focus aria-disabled:cursor-not-allowed aria-disabled:opacity-50 aria-disabled:hover:bg-theme-bg-secondary aria-disabled:hover:text-theme-fg-secondary"
               >
                 <span aria-hidden="true" className="inline-flex shrink-0">
                   <ResolvedIcon iconId={facet.icon} className="size-[15px]" />

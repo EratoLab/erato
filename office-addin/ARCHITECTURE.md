@@ -243,7 +243,9 @@ its own file tile, in every host; there is no status card above the composer.
 
 Selected tools show as chips next to "+" wherever the unified "+" menu is used
 (every add-in surface): one button per tool that deselects it, after the mode
-chips. The "+" carries no count badge.
+chips and the model selector, so picking a tool never moves the selector. In a
+narrow pane the chips wrap under the controls before them and Send keeps its
+corner. The "+" carries no count badge.
 
 A sent user message names the context its facet carried under its text, in a
 read-only "Sent with" row. Each host registers a descriptor per facet id
