@@ -1,4 +1,7 @@
-import type { ComposerContextItem } from "@erato/frontend/library";
+import type {
+  ComposerContextItem,
+  ComposerNotice,
+} from "@erato/frontend/library";
 import type { ReactNode } from "react";
 
 /**
@@ -64,7 +67,10 @@ export function ContextLaneDouble({
                 <span data-testid="context-detail-title">
                   {item.detail.title}
                 </span>
-                {item.detail.render({ locked: item.locked ?? false })}
+                {item.detail.render({
+                  locked: item.locked ?? false,
+                  runAction: (action) => action.onSelect(),
+                })}
                 {item.detail.actions?.map((action) => (
                   <button
                     key={action.id}
@@ -80,6 +86,49 @@ export function ContextLaneDouble({
           </div>
         );
       })}
+    </div>
+  );
+}
+
+/**
+ * The composer's notice as plain DOM: its tone and role as ComposerNoticeView speaks it (errors
+ * assertive), the text, the unannounced count, one button per action and the dismiss.
+ */
+export function ComposerNoticeDouble({
+  notice,
+}: {
+  notice?: ComposerNotice | null;
+}) {
+  if (!notice) return null;
+  return (
+    <div
+      data-testid="composer-notice"
+      data-notice-id={notice.id}
+      data-tone={notice.tone}
+      data-busy={notice.busy ? "true" : undefined}
+      role={notice.tone === "error" ? "alert" : "status"}
+    >
+      <span data-testid="composer-notice-text">{notice.text}</span>
+      {notice.progressLabel && (
+        <span data-testid="composer-notice-progress" aria-hidden="true">
+          {notice.progressLabel}
+        </span>
+      )}
+      {notice.actions?.map((action) => (
+        <button
+          key={action.id}
+          type="button"
+          data-action-id={action.id}
+          onClick={action.onSelect}
+        >
+          {action.label}
+        </button>
+      ))}
+      {notice.onDismiss && (
+        <button type="button" onClick={notice.onDismiss}>
+          Dismiss
+        </button>
+      )}
     </div>
   );
 }

@@ -1,5 +1,8 @@
+import { action } from "@storybook/addon-actions";
+
 import { Alert } from "../../components/ui/Feedback/Alert";
 import { FileAttachmentsPreview } from "../../components/ui/FileUpload/FileAttachmentsPreview";
+import { recordingFile } from "../helpers/audioRecordingFiles";
 
 import type {
   FileCapability,
@@ -111,5 +114,33 @@ export const CountsFilesShownElsewhere: Story = {
     maxFiles: 5,
     onRemoveFile: () => {},
     onRemoveAllFiles: () => {},
+  },
+};
+
+const recordings = [
+  recordingFile("rec-recording", "recording", "audio-recording-0901.wav"),
+  recordingFile("rec-uploading", "uploading", "audio-recording-0902.wav"),
+  recordingFile("rec-transcribing", "transcribing", "audio-recording-0903.wav"),
+  recordingFile("rec-completed", "completed", "audio-recording-0904.wav"),
+  recordingFile("rec-failed", "failed", "audio-recording-0905.wav"),
+  recordingFile("rec-retrying", "failed", "audio-recording-0906.wav"),
+  recordingFile("rec-canceled", "canceled", "audio-recording-0907.wav"),
+];
+
+/* Every phase a staged recording reports, on its own tile. The composer
+   offers the retry only for recordings it still holds; here every failed one. */
+export const AudioStatuses: Story = {
+  args: {
+    attachedFiles: recordings,
+    maxFiles: 10,
+    onRemoveFile: () => {},
+    onRemoveAllFiles: () => {},
+    onFilePreview: () => {},
+    audioTranscription: {
+      canRetry: (fileId) => fileId.startsWith("rec-"),
+      retryingFileId: "rec-retrying",
+      onRetry: action("retry transcription"),
+      disabled: false,
+    },
   },
 };

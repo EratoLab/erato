@@ -1,6 +1,8 @@
 import { Alert, CopyErrorButton } from "@erato/frontend/library";
 import { t } from "@lingui/core/macro";
 
+import { WordPassageCommentsSection } from "./WordCommentDetails";
+
 import type {
   WordContextNote,
   WordDocumentChipModel,
@@ -49,8 +51,13 @@ function Lifetime({ text }: { text: string }) {
 
 export function WordSelectionDetail({
   model,
+  locked = false,
+  onSetPassageComments,
 }: {
   model: WordSelectionChipModel;
+  locked?: boolean;
+  /** The passage's comments for this message, on or off. */
+  onSetPassageComments?: (on: boolean) => void;
 }) {
   return (
     <div className="flex flex-col gap-3">
@@ -71,6 +78,13 @@ export function WordSelectionDetail({
       {model.notes.map((note) => (
         <DetailNote key={note.text} note={note} />
       ))}
+      {model.comments && onSetPassageComments && (
+        <WordPassageCommentsSection
+          comments={model.comments}
+          locked={locked}
+          onSetPassageComments={onSetPassageComments}
+        />
+      )}
       <Lifetime text={model.lifetime} />
     </div>
   );
@@ -112,7 +126,7 @@ export function WordDocumentDetail({
           ))}
         </DetailSection>
       )}
-      {model.comments.length > 0 && (
+      {(model.comments.length > 0 || model.commentsNote) && (
         <DetailSection
           title={t({
             id: "officeAddin.word.context.document.commentsHeading",
@@ -120,9 +134,15 @@ export function WordDocumentDetail({
           })}
           dataUi="word-context-detail-comments"
         >
-          {model.comments.map((line) => (
-            <p key={line}>{line}</p>
-          ))}
+          {model.commentsNote ? (
+            <p>{model.commentsNote}</p>
+          ) : (
+            <ul className="flex list-disc flex-col gap-1 pl-4 text-xs text-theme-fg-secondary">
+              {model.comments.map((line) => (
+                <li key={line}>{line}</li>
+              ))}
+            </ul>
+          )}
         </DetailSection>
       )}
       {model.readReport && (

@@ -384,4 +384,118 @@ describe("AttachmentTile custom face", () => {
       "image",
     );
   });
+
+  describe("status", () => {
+    it("draws a busy file with a hidden spinner in its icon plate", async () => {
+      await renderWithProviders(
+        <AttachmentTile
+          file={file("audio-recording.wav")}
+          metaLabel="Transcribing · 0:42"
+          status={{ busy: true }}
+          onActivate={vi.fn()}
+          onRemove={vi.fn()}
+        />,
+      );
+      const face = document.querySelector('[data-ui="attachment-tile"]');
+      expect(face).toHaveAttribute("data-status", "busy");
+      const spinner = document.querySelector(
+        '[data-ui="attachment-tile-icon"] [data-ui="spinner"]',
+      );
+      expect(spinner).not.toBeNull();
+      expect(spinner?.closest('[aria-hidden="true"]')).not.toBeNull();
+      expect(
+        screen.getByRole("button", {
+          name: "Preview attachment audio-recording.wav, Transcribing · 0:42",
+        }),
+      ).toBeInTheDocument();
+    });
+
+    it("marks a failed file in the error colours, with its error on hover", async () => {
+      await renderWithProviders(
+        <AttachmentTile
+          file={file("audio-recording.wav")}
+          metaLabel="Couldn't transcribe"
+          status={{ tone: "error", title: "Provider timed out." }}
+          onActivate={vi.fn()}
+        />,
+      );
+      const face = document.querySelector('[data-ui="attachment-tile"]');
+      expect(face).toHaveAttribute("data-status", "error");
+      expect(face).toHaveClass(
+        "border-[var(--theme-error-border)]",
+        "bg-[var(--theme-error-bg)]",
+      );
+      expect(
+        document.querySelector('[data-ui="attachment-tile-meta"]'),
+      ).toHaveClass("text-[var(--theme-error-fg)]");
+      expect(
+        screen.getByRole("button", { name: /^Preview attachment/ }),
+      ).toHaveAttribute("title", "audio-recording.wav\nProvider timed out.");
+    });
+
+    it("draws its action inside the frame, beside the activation, never in it", async () => {
+      const onSelect = vi.fn();
+      const onActivate = vi.fn();
+      const onRemove = vi.fn();
+      const { rerender } = await renderWithProviders(
+        <AttachmentTile
+          file={file("audio-recording.wav")}
+          metaLabel="Couldn't transcribe"
+          status={{
+            tone: "error",
+            action: {
+              label: "Retry transcription",
+              accessibleName: "Retry transcription: audio-recording.wav",
+              onSelect,
+            },
+          }}
+          onActivate={onActivate}
+          onRemove={onRemove}
+        />,
+      );
+      const face = document.querySelector<HTMLElement>(
+        '[data-ui="attachment-tile"]',
+      )!;
+      const action = screen.getByRole("button", {
+        name: "Retry transcription: audio-recording.wav",
+      });
+      const activation = screen.getByRole("button", {
+        name: "Preview attachment audio-recording.wav, Couldn't transcribe",
+      });
+      expect(action).toHaveAttribute("data-ui", "attachment-tile-action");
+      expect(face).toContainElement(action);
+      expect(face).toContainElement(activation);
+      expect(activation).not.toContainElement(action);
+      fireEvent.click(action);
+      expect(onSelect).toHaveBeenCalledTimes(1);
+      expect(onActivate).not.toHaveBeenCalled();
+      fireEvent.click(activation);
+      expect(onActivate).toHaveBeenCalledTimes(1);
+      // The corner badge still removes the file.
+      fireEvent.click(
+        screen.getByRole("button", { name: "Remove audio-recording.wav" }),
+      );
+      expect(onRemove).toHaveBeenCalledTimes(1);
+
+      rerender(
+        <I18nProvider i18n={(await import("@lingui/core")).i18n}>
+          <ThemeProvider
+            enableCustomTheme={false}
+            initialThemeMode="light"
+            persistThemeMode={false}
+          >
+            <AttachmentTile
+              file={file("audio-recording.wav")}
+              status={{
+                tone: "error",
+                action: { label: "Retrying…", onSelect, disabled: true },
+              }}
+              onActivate={onActivate}
+            />
+          </ThemeProvider>
+        </I18nProvider>,
+      );
+      expect(screen.getByRole("button", { name: "Retrying…" })).toBeDisabled();
+    });
+  });
 });

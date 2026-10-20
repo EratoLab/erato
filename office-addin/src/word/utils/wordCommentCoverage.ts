@@ -1,13 +1,10 @@
-import { AnchoredPopover } from "@erato/frontend/library";
 import { WORD_COMMENT_NEAR_LIMIT } from "@erato/frontend/word-review";
 import { plural, t } from "@lingui/core/macro";
-import { useState } from "react";
 
-import { ACTION_BUTTON_CLASS } from "../../core/clientActions/clientActionButtonStyles";
-import { wordCommentMapListed } from "../utils/wordCommentMap";
+import { wordCommentMapListed } from "./wordCommentMap";
 
+import type { WordCommentSendPlan } from "./wordCommentSend";
 import type { WordCommentList } from "../hooks/useWordComments";
-import type { WordCommentSendPlan } from "../utils/wordCommentSend";
 
 /** What one message carries of the document's comments (contract §7–§8). */
 export type WordCommentCoverageSent =
@@ -28,7 +25,7 @@ export interface WordCommentCoverageInfo {
 }
 
 /**
- * The popover's facts for one message's plan, from the live list; null when the message carries no
+ * The "What is sent" facts for one message's plan, from the live list; null when the message carries no
  * comment. The nearby reach mirrors word_read_comments' gestures (contract §7).
  */
 export function wordCommentCoverageInfo(
@@ -133,7 +130,7 @@ function nearbyText(nearby: WordCommentCoverageInfo["nearby"]): string {
       });
 }
 
-/** The coverage popover's lines; the text of no comment and no address. */
+/** A detail's "What is sent" lines; the text of no comment and no address. */
 export function wordCommentCoverageLines(
   info: WordCommentCoverageInfo,
 ): string[] {
@@ -170,46 +167,8 @@ export function wordCommentCoverageLines(
   ];
 }
 
-/** "What is sent": what this message carries, what Erato may read, and the rest. */
-export function WordCommentCoverage({
-  info,
-}: {
-  info: WordCommentCoverageInfo;
-}) {
-  const [open, setOpen] = useState(false);
-  const title = t({
+export const wordCommentWhatIsSentText = () =>
+  t({
     id: "officeAddin.word.comments.coverage.trigger",
     message: "What is sent",
   });
-  return (
-    <AnchoredPopover
-      isOpen={open}
-      onOpenChange={setOpen}
-      role="dialog"
-      ariaHasPopup="dialog"
-      ariaLabel={title}
-      width="wide"
-      preferredOrientation={{ vertical: "top", horizontal: "left" }}
-      panelClassName="p-3"
-      dataUi="word-comment-coverage"
-      trigger={(triggerProps) => (
-        <button
-          {...triggerProps}
-          className={ACTION_BUTTON_CLASS}
-          data-testid="word-comment-coverage-trigger"
-        >
-          {title}
-        </button>
-      )}
-    >
-      <ul
-        className="space-y-1.5 text-xs text-theme-fg-secondary"
-        data-testid="word-comment-coverage"
-      >
-        {wordCommentCoverageLines(info).map((line) => (
-          <li key={line}>{line}</li>
-        ))}
-      </ul>
-    </AnchoredPopover>
-  );
-}

@@ -52,6 +52,7 @@ const componentKit: ComponentKitRegistration = {
       extensionPoint: "ChatInputAttachmentPreview",
       component: ExampleChatInputAttachmentPreview,
       priority: 50,
+      builtAgainstSharedSurfaceMinor: 20,
     },
     {
       extensionPoint: "ComposerContextChipFace",

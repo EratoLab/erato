@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 
 import { AttachmentTileList } from "./AttachmentTileList";
+import { audioTranscriptionTileStatus } from "./audioTranscriptionStatus";
 
 import type {
   AttachmentTileItem,
@@ -8,6 +9,16 @@ import type {
 } from "./AttachmentTileList";
 import type { FileUploadItem } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type React from "react";
+
+/** What the composer lets a staged recording's tile offer. */
+export interface ChatInputAudioTranscriptionControls {
+  /** The recorder still holds this recording, so its transcription can run again. */
+  canRetry: (fileId: string) => boolean;
+  retryingFileId: string | null;
+  onRetry: (fileId: string) => void;
+  /** The composer is locked or a recording is uploading. */
+  disabled: boolean;
+}
 
 /**
  * The staged-attachments contract a component kit implements.
@@ -35,6 +46,14 @@ export interface ChatInputAttachmentPreviewProps {
    * together); do not add a scroll area of your own.
    */
   sharedHeightCap?: boolean;
+  /**
+   * Passed by the composer for its staged files: recordings carry their
+   * status in `audio_transcription`; draw it on the file (see
+   * `audioTranscriptionTileStatus`), and offer the retry for the ids
+   * `canRetry` accepts. Absent elsewhere (an edited message), where the
+   * default preview draws no status.
+   */
+  audioTranscription?: ChatInputAudioTranscriptionControls;
 }
 
 /**
@@ -82,15 +101,46 @@ export const FileAttachmentsPreview: React.FC<FileAttachmentsPreviewProps> = ({
   renderItems,
   stagedCount,
   sharedHeightCap = false,
+  audioTranscription,
 }) => {
   const items = useMemo<AttachmentTileItem[]>(
     () =>
-      attachedFiles.map((file) => ({
-        id: file.id,
-        file,
-        previewUrl: file.preview_url,
-      })),
-    [attachedFiles],
+      attachedFiles.map((file) => {
+        // Only the composer passes the controls; an edited message's files show no status.
+        const audio = audioTranscription
+          ? audioTranscriptionTileStatus(file, {
+              retryable: audioTranscription.canRetry(file.id),
+              retrying: audioTranscription.retryingFileId === file.id,
+              locked: audioTranscription.disabled,
+            })
+          : null;
+        if (!audio) {
+          return { id: file.id, file, previewUrl: file.preview_url };
+        }
+        const retry = audioTranscription?.onRetry;
+        return {
+          id: file.id,
+          file,
+          previewUrl: file.preview_url,
+          metaLabel: audio.metaLabel,
+          status: {
+            busy: audio.busy,
+            ...(audio.tone ? { tone: audio.tone } : {}),
+            ...(audio.title ? { title: audio.title } : {}),
+            ...(audio.action && retry
+              ? {
+                  action: {
+                    label: audio.action.label,
+                    accessibleName: audio.action.name,
+                    disabled: audio.action.disabled,
+                    onSelect: () => retry(file.id),
+                  },
+                }
+              : {}),
+          },
+        };
+      }),
+    [attachedFiles, audioTranscription],
   );
 
   if (attachedFiles.length === 0) {

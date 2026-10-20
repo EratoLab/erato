@@ -56,6 +56,12 @@ export interface ComposerContextDetailRenderContext {
    * included, so a body's controls that change what is sent stay disabled.
    */
   locked: boolean;
+  /**
+   * Runs a choice the body draws itself (a list of comments to pick from)
+   * exactly as the footer runs its actions: announced once the item changes,
+   * then the detail closes and focus returns to the chip.
+   */
+  runAction: (action: ComposerContextDetailAction) => void;
 }
 
 export interface ComposerContextDetail {
@@ -83,6 +89,13 @@ interface ComposerContextItemBase {
   /** State and scope, e.g. "3 of 5 messages" or "Off for this message". */
   meta?: string;
   icon: ComposerContextIconName | (string & {});
+  /**
+   * The group the lane draws the item in, ambient items first; defaults to
+   * its origin. An item whose origin changes as the user acts on it (a
+   * comment chosen in place of the one at the cursor) names one group, so
+   * the chip keeps its place when its state changes.
+   */
+  placement?: "ambient" | "user";
   tone?: ComposerContextTone;
   /**
    * Which glyph a warning or error tone draws: the item's own icon (default),
@@ -177,6 +190,11 @@ export interface ComposerNotice {
   text: string;
   /** Draws a spinner in place of the tone glyph. */
   busy?: boolean;
+  /**
+   * A counter drawn after the text and not announced, e.g. "3 of 12", so a
+   * notice whose count changes every second is spoken once.
+   */
+  progressLabel?: string;
   actions?: { id: string; label: string; onSelect: () => void }[];
   onDismiss?: () => void;
 }

@@ -159,20 +159,32 @@ export const useResolved = (
   );
 };
 
-/** Mirrors the polite live region into the page, for screenshots and review. */
-export const AnnouncementLog = () => {
+const LANE_LIVE = ['[data-ui="composer-context-live"]'];
+
+/**
+ * Mirrors the polite live regions into the page, for screenshots and review:
+ * the lane's, and any a host speaks through beside it.
+ */
+export const AnnouncementLog = ({
+  regions = LANE_LIVE,
+}: {
+  regions?: string[];
+}) => {
   const [entries, setEntries] = useState<string[]>([]);
-  const lastRef = useRef("");
+  const lastRef = useRef(new Map<string, string>());
   useEffect(() => {
     const observer = new MutationObserver(() => {
-      const region = document.querySelector(
-        '[data-ui="composer-context-live"]',
-      );
-      const text = region?.textContent?.replace(/\u200b/g, "").trim() ?? "";
-      if (text && text !== lastRef.current) {
-        setEntries((current) => [text, ...current].slice(0, 5));
+      for (const selector of regions) {
+        const text =
+          document
+            .querySelector(selector)
+            ?.textContent?.replace(/\u200b/g, "")
+            .trim() ?? "";
+        if (text && text !== lastRef.current.get(selector)) {
+          setEntries((current) => [text, ...current].slice(0, 5));
+        }
+        lastRef.current.set(selector, text);
       }
-      lastRef.current = text;
     });
     observer.observe(document.body, {
       subtree: true,
@@ -180,7 +192,7 @@ export const AnnouncementLog = () => {
       characterData: true,
     });
     return () => observer.disconnect();
-  }, []);
+  }, [regions]);
   return (
     <ol
       data-testid="announcement-log"

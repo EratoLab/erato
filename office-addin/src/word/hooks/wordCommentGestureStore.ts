@@ -21,6 +21,11 @@ export interface WordCommentGestures {
   withoutComments: boolean;
   /** Sticky for the chat. */
   includeOpenComments: boolean;
+  /**
+   * The open-comments chip's (x) turned them off, so the chip says "Off in this chat" rather than
+   * "Not included"; it lasts as long as includeOpenComments does.
+   */
+  openCommentsDismissed: boolean;
 }
 
 export const NO_WORD_COMMENT_GESTURES: WordCommentGestures = {
@@ -28,6 +33,7 @@ export const NO_WORD_COMMENT_GESTURES: WordCommentGestures = {
   override: null,
   withoutComments: false,
   includeOpenComments: false,
+  openCommentsDismissed: false,
 };
 
 /** What one Send spent of the gestures that last for one message. */
@@ -46,7 +52,8 @@ function publish(next: WordCommentGestures) {
     next.pick === snapshot.pick &&
     next.override === snapshot.override &&
     next.withoutComments === snapshot.withoutComments &&
-    next.includeOpenComments === snapshot.includeOpenComments
+    next.includeOpenComments === snapshot.includeOpenComments &&
+    next.openCommentsDismissed === snapshot.openCommentsDismissed
   )
     return;
   snapshot = next;
@@ -94,9 +101,11 @@ export const wordCommentGestureStore = {
   /** Another document forgets its refs; another chat also turns "Include open comments" off. */
   leave(scope: "chat" | "document") {
     spent = null;
+    const keep = scope === "document";
     publish({
       ...NO_WORD_COMMENT_GESTURES,
-      includeOpenComments: scope === "document" && snapshot.includeOpenComments,
+      includeOpenComments: keep && snapshot.includeOpenComments,
+      openCommentsDismissed: keep && snapshot.openCommentsDismissed,
     });
   },
   resetForTests() {

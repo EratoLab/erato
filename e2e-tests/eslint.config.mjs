@@ -21,6 +21,7 @@ export default [
       "storybook-word-context-chips/**/*.ts",
       "storybook-outlook-context-chips/**/*.ts",
       "storybook-teams-context-chips/**/*.ts",
+      "storybook-word-comments-notices-audio/**/*.ts",
     ],
     languageOptions: { parser: tsParser },
     plugins: { playwright },

@@ -7,6 +7,10 @@ import {
 } from "./wordAuthoringMessages";
 
 import type { WordDocumentCoverage } from "./buildWordDocumentArgs";
+import type {
+  WordDocumentCommentsModel,
+  WordPassageCommentsModel,
+} from "./wordCommentChips";
 import type { WordSendPreview } from "./wordSendPreview";
 import type { WordDocumentStatus } from "../hooks/useWordDocumentSource";
 import type {
@@ -31,6 +35,8 @@ export interface WordSelectionChipInput {
   dismissed: boolean;
   /** The last Send could not read this very selection. */
   readFailed: boolean;
+  /** The passage's own threads, from the same preview. */
+  comments?: WordPassageCommentsModel | null;
 }
 
 export interface WordDocumentChipInput {
@@ -51,8 +57,8 @@ export interface WordDocumentChipInput {
   lastingIssue: { text: string; readOnly: boolean } | null;
   /** Word for the web handed over the body only. */
   bodyOnly: boolean;
-  /** The comment map's lines, when the message carries the map. */
-  commentLines: string[];
+  /** The comment map, and what "Send without comments" took from it. */
+  comments?: WordDocumentCommentsModel | null;
   /** The copyable report of a failed read. */
   readReport?: string;
 }
@@ -64,6 +70,12 @@ export interface WordContextChipInput {
   selection: WordSelectionChipInput | null;
   document: WordDocumentChipInput;
 }
+
+export type WordSelectionChipAction =
+  | "send-instead"
+  | "comment-instead"
+  | "choose"
+  | "change-default";
 
 export interface WordSelectionChipModel {
   state: ComposerContextState;
@@ -85,9 +97,17 @@ export interface WordSelectionChipModel {
   paragraphs: string;
   notes: WordContextNote[];
   lifetime: string;
+  /** The passage's threads while it goes; null otherwise. */
+  comments: WordPassageCommentsModel | null;
+  actions: WordSelectionChipAction[];
 }
 
-export type WordDocumentChipAction = "send-instead" | "retry";
+export type WordDocumentChipAction =
+  | "send-instead"
+  | "send-instead-of-comment"
+  | "include-comments"
+  | "choose"
+  | "retry";
 
 export interface WordDocumentChipModel {
   state: ComposerContextState;
@@ -101,7 +121,10 @@ export interface WordDocumentChipModel {
   notes: WordContextNote[];
   /** Null before anything is known of the document, or while nothing of it is sent. */
   coverage: { heading: string; lines: string[]; hint?: string } | null;
+  /** The comment map's lines while the map goes. */
   comments: string[];
+  /** Said in their place while "Send without comments" holds. */
+  commentsNote?: string;
   readReport?: string;
   lifetime: string;
 }
@@ -202,6 +225,8 @@ export function wordSelectionChip(
       id: "officeAddin.word.context.selection.lifetime",
       message: "Leaving it out lasts until the selection changes.",
     }),
+    comments: null,
+    actions: [] as WordSelectionChipAction[],
   };
   const eratoNote: WordContextNote = {
     tone: "info",
@@ -272,6 +297,7 @@ export function wordSelectionChip(
       ...base,
       ...included,
       state: "superseded",
+      actions: ["send-instead"],
       meta: t({
         id: "officeAddin.word.context.selection.meta.replacedByComment",
         message: "Replaced by comment",
@@ -307,10 +333,17 @@ export function wordSelectionChip(
         message: "Sent instead of the document.",
       }),
     });
+  const comments = selection.comments ?? null;
+  const actions: WordSelectionChipAction[] = [];
+  if (comments?.switchTo) actions.push("comment-instead");
+  if (comments?.offerChoose) actions.push("choose");
+  if (comments?.canChangeDefault) actions.push("change-default");
   return {
     ...base,
     ...included,
     state: "included",
+    comments,
+    actions,
     ...(selection.truncated
       ? {
           tone: "warning" as const,
@@ -321,12 +354,7 @@ export function wordSelectionChip(
             message: "Too long · beginning only",
           }),
         }
-      : {
-          meta: t({
-            id: "officeAddin.word.context.selection.meta",
-            message: `Selected passage · ${paragraphs} ¶`,
-          }),
-        }),
+      : { meta: selectionMeta(selection.paragraphCount, comments) }),
     // The lane reads this from the chip (+) lands on, so the included selection carries it.
     ...(replacesDocument
       ? {
@@ -338,6 +366,37 @@ export function wordSelectionChip(
       : {}),
     notes,
   };
+}
+
+// The comment fact leads, so the one that changes survives the chip's ellipsis.
+function selectionMeta(
+  paragraphCount: number,
+  comments: WordPassageCommentsModel | null,
+): string {
+  const paragraphs = count(paragraphCount);
+  if (!comments)
+    return t({
+      id: "officeAddin.word.context.selection.meta",
+      message: `Selected passage · ${paragraphs} ¶`,
+    });
+  if (comments.readFailed)
+    return t({
+      id: "officeAddin.word.context.selection.meta.commentsUnread",
+      message: `Couldn't read comments · ${paragraphs} ¶`,
+    });
+  if (!comments.checked)
+    return t({
+      id: "officeAddin.word.context.selection.meta.commentsOff",
+      message: `Comments off · ${paragraphs} ¶`,
+    });
+  const commentCount = comments.count;
+  return t({
+    id: "officeAddin.word.context.selection.meta.withComments",
+    message: plural(commentCount, {
+      one: `# comment · ${paragraphs} ¶`,
+      other: `# comments · ${paragraphs} ¶`,
+    }),
+  });
 }
 
 function coverageMeta(document: WordDocumentChipInput): string | undefined {
@@ -487,6 +546,13 @@ function coverageSection(
   return hint ? { heading, lines, hint } : { heading, lines };
 }
 
+function commentCountText(comments: number): string {
+  return t({
+    id: "officeAddin.word.context.document.meta.comments",
+    message: plural(comments, { one: "# comment", other: "# comments" }),
+  });
+}
+
 /** What lasts about the document, whatever goes in its place this time. */
 function lastingNotes(document: WordDocumentChipInput): WordContextNote[] {
   const notes: WordContextNote[] = [];
@@ -524,10 +590,15 @@ export function wordDocumentChip(
   });
   const restore: WordDocumentChipModel["restore"] =
     document.status === "unreadable" ? "include-and-retry" : "include";
+  const comments = document.comments ?? null;
+  // The picker stays reachable from the document in every state.
+  const choose: WordDocumentChipAction[] = comments?.offerChoose
+    ? ["choose"]
+    : [];
   const base = {
     removeLabel: dontIncludeText(),
     restore,
-    actions: [] as WordDocumentChipAction[],
+    actions: choose,
     coverage: coverageSection(document, { superseded: false }),
     comments: [] as string[],
     lifetime: t({
@@ -558,7 +629,7 @@ export function wordDocumentChip(
         id: "officeAddin.word.context.document.meta.replacedBySelection",
         message: "Replaced by selection",
       }),
-      actions: ["send-instead"],
+      actions: ["send-instead", ...choose],
       notes: [
         {
           tone: "info",
@@ -579,6 +650,7 @@ export function wordDocumentChip(
         id: "officeAddin.word.context.document.meta.replacedByComment",
         message: "Replaced by comment",
       }),
+      actions: ["send-instead-of-comment", ...choose],
       notes: [
         {
           tone: "info",
@@ -611,7 +683,7 @@ export function wordDocumentChip(
         message: "Couldn't read the document",
       }),
       removeLabel: dismissErrorText(),
-      actions: ["retry"],
+      actions: ["retry", ...choose],
       coverage: null,
       notes: [
         {
@@ -665,13 +737,39 @@ export function wordDocumentChip(
         message: "Changed since last send",
       })
     : coverageMeta(document);
-  const meta = [lead?.text, tail].filter(Boolean).join(" · ");
+  // Two facts at most: the comments come third only where nothing leads and nothing changed.
+  const commentFact =
+    lead || document.changed || !comments
+      ? undefined
+      : comments.readFailed
+        ? t({
+            id: "officeAddin.word.context.document.meta.commentsUnread",
+            message: "couldn't read comments",
+          })
+        : comments.count !== null && comments.count > 0
+          ? commentCountText(comments.count)
+          : comments.mapOff
+            ? t({
+                id: "officeAddin.word.context.document.meta.commentsOff",
+                message: "comments off",
+              })
+            : undefined;
+  const meta = [lead?.text, tail, commentFact].filter(Boolean).join(" · ");
   return {
     ...base,
     state: "included",
     ...(lead?.warning ? { tone: "warning" as const } : {}),
     ...(meta ? { meta } : {}),
-    comments: document.commentLines,
+    comments: comments?.lines ?? [],
+    ...(comments?.off
+      ? {
+          commentsNote: t({
+            id: "officeAddin.word.context.document.commentsOffNote",
+            message: "Comments are off for this message.",
+          }),
+        }
+      : {}),
+    actions: comments?.mapOff ? ["include-comments", ...choose] : choose,
     notes: lastingNotes(document),
   };
 }

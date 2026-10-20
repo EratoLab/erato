@@ -6,6 +6,7 @@ import {
   AttachmentTile,
   type AttachmentTileSize,
   type AttachmentTileProps,
+  type AttachmentTileStatus,
 } from "./AttachmentTile";
 import { getFileName, getFileType } from "./FilePreviewBase";
 import { Button } from "../Controls/Button";
@@ -20,6 +21,9 @@ export interface AttachmentTileItem {
   labelOverride?: string;
   /** A sent recording's completed transcript; tiles do not draw it. */
   transcript?: string;
+  /** Replaces the derived meta line, e.g. a staged recording's "Transcribing…". */
+  metaLabel?: string;
+  status?: AttachmentTileStatus;
 }
 
 /** Mirrors the tile's own media test, so banding matches what each tile draws. */
@@ -133,6 +137,8 @@ export const AttachmentTileList: React.FC<AttachmentTileListProps> = ({
       previewUrl: item.previewUrl,
       size,
       labelOverride: item.labelOverride,
+      ...(item.metaLabel !== undefined ? { metaLabel: item.metaLabel } : {}),
+      ...(item.status ? { status: item.status } : {}),
       showCaption: showCaptions,
       expandable,
       disabled,

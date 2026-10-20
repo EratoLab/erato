@@ -24,7 +24,12 @@ import type { ComposerContextItem } from "@erato/frontend/library";
 import type { WordDocumentCapture } from "@erato/frontend/word-review";
 
 const advertised = vi.hoisted(() => ({ ids: [] as string[] }));
-const lane = vi.hoisted(() => ({ items: [] as ComposerContextItem[] }));
+const lane = vi.hoisted(
+  (): { items: ComposerContextItem[]; notice: unknown } => ({
+    items: [],
+    notice: undefined,
+  }),
+);
 const preferences = vi.hoisted(() => ({
   includeByDefault: true,
   setIncludeByDefault: vi.fn(),
@@ -53,11 +58,14 @@ vi.mock("../../../core/AddinChatInputCore", () => ({
   AddinChatInputCore: ({
     onSendMessage,
     contextItems,
+    composerNotice,
   }: {
     onSendMessage: (message: string, inputFileIds?: string[]) => void;
     contextItems?: ComposerContextItem[];
+    composerNotice?: unknown;
   }) => {
     lane.items = contextItems ?? [];
+    lane.notice = composerNotice;
     return (
       <>
         <ContextLaneDouble items={contextItems} />
@@ -178,7 +186,8 @@ describe("WordChatInput", () => {
     expect(screen.queryByTestId("word-include-document-chip")).toBeNull();
     expect(screen.queryByTestId("word-exclude-document")).toBeNull();
     expect(screen.queryByTestId("word-selection-chip")).toBeNull();
-    expect(screen.queryByTestId("word-one-off-rows")).toBeNull();
+    // No prompt, but the slot is passed, so its live regions are in place.
+    expect(lane.notice).toBeNull();
   });
 
   it("hands the lane one document item with the host's words", async () => {

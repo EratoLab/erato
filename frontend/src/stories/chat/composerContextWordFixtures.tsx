@@ -23,6 +23,8 @@ export const WORD_SELECTION_TEXT =
 export const WORD_ERATO_TEXT =
   "The Buyer may audit the Supplier's records once per contract year, with 30 days' notice.";
 export const WORD_LONG_PARAGRAPHS = 14;
+/** The comments in the document, which its comment map lists while the document goes. */
+export const WORD_COMMENT_COUNT = 12;
 /** What Send carries of the long passage: its first whole paragraphs up to the send limit. */
 export const WORD_LONG_SENT_PARAGRAPHS = 9;
 export const WORD_LONG_TEXT = Array.from(
@@ -90,7 +92,7 @@ const DEFAULTS: WordStoryState = {
   partialParagraph: false,
   commentReplaces: false,
   commentLines: [
-    "A list of the 12 comments in the document: each one's author, place, status and how it starts.",
+    `A list of the ${WORD_COMMENT_COUNT} comments in the document: each one's author, place, status and how it starts.`,
     "If your question needs them, Erato may read the other comments in the document.",
   ],
   locked: false,
@@ -318,6 +320,7 @@ export const useWordStoryResolver = (
         ? `${counted} · Shown by Erato after Show in Word`
         : counted;
       const notes: Note[] = [];
+      let selectionActions: ComposerContextDetailAction[] = [];
       let item: Partial<ComposerContextItem> & {
         state: ComposerContextItem["state"];
       };
@@ -356,6 +359,17 @@ export const useWordStoryResolver = (
           text: "A comment is sent instead of this passage.",
         });
         item = { state: "superseded", meta: "Replaced by comment" };
+        selectionActions = [
+          {
+            id: "send-instead",
+            label: "Send this instead",
+            variant: "primary",
+            announcement:
+              "Selection included. The comment is not sent with this message.",
+            onSelect: () =>
+              setState((current) => ({ ...current, commentReplaces: false })),
+          },
+        ];
       } else {
         if (state.long)
           paragraphs = `Erato receives the first ${WORD_LONG_SENT_PARAGRAPHS} of ${WORD_LONG_PARAGRAPHS} paragraphs.`;
@@ -414,6 +428,7 @@ export const useWordStoryResolver = (
               notes={notes}
             />
           ),
+          ...(selectionActions.length > 0 ? { actions: selectionActions } : {}),
         },
         ...item,
       } as ComposerContextItem);
@@ -518,6 +533,26 @@ export const useWordStoryResolver = (
         { tone: "info", text: "A comment is sent instead of the document." },
         ...lasting,
       ];
+      // The thread goes in place of the passage too, so sending the document instead also ends that.
+      const passageReplaced = state.selection === "user" && !state.selectionOff;
+      actions = state.locked
+        ? []
+        : [
+            {
+              id: "send-instead",
+              label: "Send this instead",
+              variant: "primary",
+              announcement: passageReplaced
+                ? "Document included. Your selection is off until it changes."
+                : "Document included. The comment is not sent with this message.",
+              onSelect: () =>
+                setState((current) => ({
+                  ...current,
+                  commentReplaces: false,
+                  ...(passageReplaced ? { selectionOff: true } : {}),
+                })),
+            },
+          ];
     } else if (state.status === "reading") {
       document = { state: "loading", meta: "Reading document…" };
       notes = [];
@@ -588,9 +623,14 @@ export const useWordStoryResolver = (
             : !authoring && truncated
               ? `First ${count(sent)} of ${count(total)} ¶`
               : `${count(total)} ¶`;
+      // Two facts at most: the comments come third only where nothing leads and nothing changed.
+      const commentFact =
+        !lead && !state.changed && !empty && state.commentLines.length > 0
+          ? `${WORD_COMMENT_COUNT} comments`
+          : undefined;
       document = {
         state: "included",
-        meta: [lead, tail].filter(Boolean).join(" · "),
+        meta: [lead, tail, commentFact].filter(Boolean).join(" · "),
         ...(state.track || state.readOnly || state.cannotEdit
           ? { tone: "warning" as ComposerContextTone }
           : {}),
@@ -625,7 +665,9 @@ export const useWordStoryResolver = (
           <DocumentDetail
             notes={notes}
             coverage={shownCoverage}
-            comments={documentGoes ? state.commentLines : []}
+            comments={
+              documentGoes && state.status !== "empty" ? state.commentLines : []
+            }
             readReport={state.status === "error" ? READ_REPORT : undefined}
           />
         ),

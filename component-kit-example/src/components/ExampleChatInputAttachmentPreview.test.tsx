@@ -3,6 +3,8 @@ import { I18nProvider } from "@lingui/react";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 
+import { audioTranscriptionTileStatus } from "@erato/frontend/shared";
+
 import { ExampleChatInputAttachmentPreview } from "./ExampleChatInputAttachmentPreview";
 
 import type { ChatInputAttachmentPreviewProps } from "@erato/frontend/library";
@@ -66,4 +68,64 @@ it("shows a plain name when the host offers no preview", () => {
   expect(
     screen.getByRole("button", { name: "Remove contract-v3.pdf" }),
   ).toBeTruthy();
+});
+
+// The host's words come from the host's catalog, which this test does not
+// load, so the status is held to what the shared helper returns.
+const statusOf = (
+  file: ChatInputAttachmentPreviewProps["attachedFiles"][number],
+) => audioTranscriptionTileStatus(file)?.metaLabel;
+const statusSpans = () => [
+  ...document.querySelectorAll<HTMLElement>(
+    ".erato-component-kit-example-file-status",
+  ),
+];
+
+const recordings = [
+  {
+    id: "r1",
+    filename: "audio-recording-1.wav",
+    audio_transcription: { status: "processing" },
+  },
+  {
+    id: "r2",
+    filename: "audio-recording-2.wav",
+    audio_transcription: { status: "failed", error: "Timed out." },
+  },
+] as unknown as ChatInputAttachmentPreviewProps["attachedFiles"];
+
+it("shows a recording's status and retries it when the host can", () => {
+  const onRetry = vi.fn();
+  renderPreview({
+    attachedFiles: recordings,
+    audioTranscription: {
+      canRetry: (id) => id === "r2",
+      retryingFileId: null,
+      onRetry,
+      disabled: false,
+    },
+  });
+  const [busy, failed] = statusSpans();
+  expect(busy.textContent).toBe(statusOf(recordings[0]));
+  expect(busy.dataset.status).toBe("busy");
+  expect(failed.textContent).toBe(statusOf(recordings[1]));
+  expect(failed.dataset.status).toBe("error");
+  expect(failed.getAttribute("title")).toBe("Timed out.");
+  expect(
+    screen.getAllByRole("button", { name: /^Retry transcription/ }),
+  ).toHaveLength(1);
+  fireEvent.click(
+    screen.getByRole("button", {
+      name: "Retry transcription: audio-recording-2.wav",
+    }),
+  );
+  expect(onRetry).toHaveBeenCalledExactlyOnceWith("r2");
+});
+
+it("offers no retry without the host's controls", () => {
+  renderPreview({ attachedFiles: recordings });
+  expect(statusSpans()).toHaveLength(2);
+  expect(
+    screen.queryByRole("button", { name: /^Retry transcription/ }),
+  ).toBeNull();
 });

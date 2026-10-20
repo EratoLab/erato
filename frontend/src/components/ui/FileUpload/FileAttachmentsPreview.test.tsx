@@ -301,4 +301,129 @@ describe("inside the composer's shared staged area", () => {
     expect(bulkRow()).toHaveClass("sticky", "bottom-0");
     expect(bulkRow()).toHaveAttribute("data-ui", "attachment-bulk-controls");
   });
+
+  describe("staged recordings", () => {
+    const recording = (
+      id: string,
+      audio_transcription: Record<string, unknown>,
+    ): FileUploadItem => ({
+      ...file(id, `audio-recording-${id}.wav`),
+      audio_transcription,
+    });
+
+    const noRetry = {
+      canRetry: () => false,
+      retryingFileId: null,
+      onRetry: vi.fn(),
+      disabled: false,
+    };
+
+    it("draws each recording's status on its tile and leaves other files alone", async () => {
+      await renderWithProviders(
+        <FileAttachmentsPreview
+          attachedFiles={[
+            recording("a", { status: "processing" }),
+            recording("b", { status: "failed", error: "Timed out." }),
+            file("c", "spec.pdf"),
+          ]}
+          maxFiles={5}
+          onRemoveFile={vi.fn()}
+          onRemoveAllFiles={vi.fn()}
+          audioTranscription={noRetry}
+        />,
+      );
+      const tiles = [
+        ...document.querySelectorAll<HTMLElement>(
+          '[data-ui="attachment-tile"]',
+        ),
+      ];
+      const tileOf = (name: string) =>
+        tiles.find((tile) => tile.textContent?.includes(name))!;
+      expect(tileOf("recording-a")).toHaveAttribute("data-status", "busy");
+      expect(tileOf("recording-a")).toHaveTextContent("Transcribing…");
+      expect(tileOf("recording-b")).toHaveAttribute("data-status", "error");
+      expect(tileOf("recording-b")).toHaveTextContent("Couldn't transcribe");
+      expect(tileOf("spec.pdf")).not.toHaveAttribute("data-status");
+      expect(tileOf("spec.pdf")).toHaveTextContent("PDF");
+      expect(
+        screen.queryByRole("button", { name: /Retry transcription/ }),
+      ).toBeNull();
+    });
+
+    it("draws no status where the composer passes no controls, as an edited message's files", async () => {
+      await renderWithProviders(
+        <FileAttachmentsPreview
+          attachedFiles={[recording("a", { status: "completed" })]}
+          maxFiles={5}
+          onRemoveFile={vi.fn()}
+          onRemoveAllFiles={vi.fn()}
+        />,
+      );
+      const tile = document.querySelector<HTMLElement>(
+        '[data-ui="attachment-tile"]',
+      )!;
+      expect(tile).not.toHaveAttribute("data-status");
+      expect(tile).not.toHaveTextContent("Transcript ready");
+    });
+
+    it("offers the retry only for the recordings the composer can retry", async () => {
+      const onRetry = vi.fn();
+      await renderWithProviders(
+        <FileAttachmentsPreview
+          attachedFiles={[
+            recording("a", { status: "failed" }),
+            recording("b", { status: "failed" }),
+          ]}
+          maxFiles={5}
+          onRemoveFile={vi.fn()}
+          onRemoveAllFiles={vi.fn()}
+          audioTranscription={{
+            canRetry: (id) => id === "b",
+            retryingFileId: null,
+            onRetry,
+            disabled: false,
+          }}
+        />,
+      );
+      const retries = screen.getAllByRole("button", {
+        name: /^Retry transcription:/,
+      });
+      expect(retries).toHaveLength(1);
+      expect(retries[0]).toHaveAccessibleName(
+        "Retry transcription: audio-recording-b.wav",
+      );
+      fireEvent.click(retries[0]);
+      expect(onRetry).toHaveBeenCalledWith("b");
+    });
+
+    it("disables the retry while it runs or the composer is locked", async () => {
+      await renderWithProviders(
+        <FileAttachmentsPreview
+          attachedFiles={[
+            recording("a", { status: "failed" }),
+            recording("b", { status: "failed" }),
+          ]}
+          maxFiles={5}
+          onRemoveFile={vi.fn()}
+          onRemoveAllFiles={vi.fn()}
+          audioTranscription={{
+            canRetry: () => true,
+            retryingFileId: "a",
+            onRetry: vi.fn(),
+            disabled: false,
+          }}
+        />,
+      );
+      const retrying = screen.getByRole("button", {
+        name: "Retrying… audio-recording-a.wav",
+      });
+      expect(retrying).toHaveTextContent("Retrying…");
+      expect(retrying).toBeDisabled();
+      expect(
+        screen.getByRole("button", {
+          name: "Retry transcription: audio-recording-b.wav",
+        }),
+      ).toBeEnabled();
+    });
+  });
 });

@@ -5,6 +5,7 @@ import {
   type ChatModel,
   type ComposerContextItem,
   type ComposerMode,
+  type ComposerNotice,
   type ComposerSizeLimit,
   type DelegationRunMode,
   type FileType,
@@ -64,6 +65,11 @@ export interface AddinChatInputCoreProps {
   contextItems?: ComposerContextItem[];
   /** Modes the next send runs in, from the same resolver; drawn next to "+". */
   composerModes?: ComposerMode[];
+  /**
+   * One-off send prompts, from the host's own send flow; pass `null` when
+   * there is none so the notice's live regions stay mounted.
+   */
+  composerNotice?: ComposerNotice | null;
   /**
    * The files the next send carries, after every change and before paint, for
    * a host whose chips stand for some of them. Pass a stable callback.
