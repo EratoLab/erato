@@ -75,4 +75,26 @@ describe("AddinChatInputCore", () => {
 
     expect(chatInput.mock.calls.at(-1)?.[0].composerModes).toBe(composerModes);
   });
+
+  it("hands the host's notice, or its null, to the composer as it is", () => {
+    const composerNotice = {
+      id: "word.send.slowCapture",
+      tone: "info" as const,
+      text: "Word is still handing over the document.",
+    };
+    const { rerender } = render(
+      <AddinChatInputCore
+        onSendMessage={vi.fn()}
+        composerNotice={composerNotice}
+      />,
+    );
+    expect(chatInput.mock.calls.at(-1)?.[0].composerNotice).toBe(
+      composerNotice,
+    );
+
+    rerender(
+      <AddinChatInputCore onSendMessage={vi.fn()} composerNotice={null} />,
+    );
+    expect(chatInput.mock.calls.at(-1)?.[0].composerNotice).toBeNull();
+  });
 });
