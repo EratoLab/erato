@@ -539,9 +539,12 @@ export function wordPlanScopeText(
   return sentences.join(" ");
 }
 
-/** "Replace document" is kept for large whole-file rewrites; smaller plans name the change. */
-export function wordPlanApplyLabel(review: WordPlanReview): string {
-  if (review.scope.wholeFile && review.size === "large")
+/** "Replace document" is kept for large plans that Apply imports as a whole file; others name the change. */
+export function wordPlanApplyLabel(
+  review: WordPlanReview,
+  importsWholeFile: boolean,
+): string {
+  if (importsWholeFile && review.size === "large")
     return t({
       id: "officeAddin.word.planAction.replace",
       message: "Replace document",
