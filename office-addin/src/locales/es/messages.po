@@ -3056,7 +3056,7 @@ msgstr "Insertado en el documento."
 #. js-lingui-explicit-id
 #: src/word/utils/wordContextChips.ts
 msgid "officeAddin.word.chip.commentInstead"
-msgstr "Se envía un comentario en lugar del documento"
+msgstr "Se envía un comentario en lugar del documento."
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordContextChips.ts
@@ -3111,7 +3111,7 @@ msgstr "Leyendo el documento…"
 #. js-lingui-explicit-id
 #: src/word/utils/wordContextChips.ts
 msgid "officeAddin.word.chip.selectionInstead"
-msgstr "Se envía su selección en lugar del documento"
+msgstr "Se envía su selección en lugar del documento."
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordContextChips.ts

@@ -63,7 +63,7 @@ export function WordSelectionDetail({
           message: "Selected text",
         })}
         data-ui="word-context-detail-quote"
-        className="max-h-48 overflow-y-auto whitespace-pre-wrap break-words border-l-2 border-theme-border pl-3 text-sm text-theme-fg-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-theme-focus"
+        className="max-h-48 overflow-y-auto whitespace-pre-wrap break-words rounded-r-[var(--theme-radius-control)] border-l-2 border-theme-border bg-theme-bg-secondary py-2 pl-3 pr-2 text-sm text-theme-fg-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-theme-focus"
       >
         {model.text}
       </blockquote>
@@ -96,7 +96,8 @@ export function WordDocumentDetail({
           })}
           dataUi="word-context-detail-coverage"
         >
-          {model.coverage.lines.map((line) => (
+          {/* The hint explains the first line, so it follows it, before any later line. */}
+          {model.coverage.lines.slice(0, 1).map((line) => (
             <p key={line}>{line}</p>
           ))}
           {model.coverage.hint && (
@@ -107,6 +108,9 @@ export function WordDocumentDetail({
               {model.coverage.hint}
             </p>
           )}
+          {model.coverage.lines.slice(1).map((line) => (
+            <p key={line}>{line}</p>
+          ))}
         </DetailSection>
       )}
       {model.comments.length > 0 && (

@@ -361,6 +361,24 @@ describe("ComposerContextLane", () => {
       expect(chip("A")).toHaveAttribute("data-tone", "neutral");
     });
 
+    it("keeps a short label at its own width instead of padding it to the floor", () => {
+      render(
+        <ComposerContextLane
+          items={[
+            ambient({ id: "short", label: "a.docx", meta: "86 ¶" }),
+            ambient({ id: "long", label: "Supply agreement.docx" }),
+          ]}
+        />,
+      );
+      const label = (text: string) =>
+        screen.getByText(text, {
+          selector: '[data-ui="composer-context-chip-label"]',
+        });
+      expect(label("a.docx")).toHaveClass("shrink-0");
+      expect(label("a.docx")).not.toHaveClass("min-w-[7em]");
+      expect(label("Supply agreement.docx")).toHaveClass("min-w-[7em]");
+    });
+
     it("hides every glyph and draws no text glyphs", () => {
       render(
         <ComposerContextLane

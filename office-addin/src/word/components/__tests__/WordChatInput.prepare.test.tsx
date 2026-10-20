@@ -534,6 +534,33 @@ describe("WordChatInput prepared send", () => {
     );
   });
 
+  it("puts the only-the-beginning hint under the coverage it explains, before the change note", () => {
+    host.advertised = ["word_document_review"];
+    host.preview = {
+      ...host.readyPreview,
+      coverage: {
+        hasContent: true,
+        truncated: true,
+        partialParagraph: false,
+        paragraphsSent: 120,
+        paragraphsTotal: 300,
+      },
+      changedSinceLastSend: true,
+    };
+    renderInput();
+
+    const coverage = detail().querySelector(
+      '[data-ui="word-context-detail-coverage"]',
+    );
+    expect(
+      [...coverage!.querySelectorAll("p")].map((line) => line.textContent),
+    ).toEqual([
+      "Erato receives the first 120 of 300 paragraphs.",
+      "Only the beginning is sent. To work on a later part, select it in Word.",
+      "Changed since last send: Erato reads it again with this message.",
+    ]);
+  });
+
   it("redraws an open detail when the document's facts change", () => {
     host.advertised = ["word_document_review"];
     host.preview = {

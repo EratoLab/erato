@@ -26,6 +26,9 @@ import type {
 
 export type ComposerContextControl = "remove" | "restore" | null;
 
+/** At the chip's 13px label size, 13 characters ("This document") are about 7em wide. */
+const SHORT_LABEL_CODE_POINTS = 13;
+
 /**
  * Which control a chip draws, from its state alone: a suggested item offers
  * (+), every other state offers (x), and an item without the matching handler
@@ -81,7 +84,12 @@ export const DefaultComposerContextChipFace = ({
       data-ui="composer-context-chip-label"
       className={clsx(
         "shrink-[2] truncate text-[0.8125rem] leading-4",
-        meta && "min-w-[7em]",
+        // A label narrower than the 7em floor would be padded out to it,
+        // leaving a gap before the meta; it keeps its own width instead.
+        meta &&
+          ([...item.label].length <= SHORT_LABEL_CODE_POINTS
+            ? "shrink-0"
+            : "min-w-[7em]"),
       )}
     >
       {item.label}

@@ -3056,7 +3056,7 @@ msgstr "Wstawiono do dokumentu."
 #. js-lingui-explicit-id
 #: src/word/utils/wordContextChips.ts
 msgid "officeAddin.word.chip.commentInstead"
-msgstr "Zamiast dokumentu wysyłany jest komentarz"
+msgstr "Zamiast dokumentu wysyłany jest komentarz."
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordContextChips.ts
@@ -3111,7 +3111,7 @@ msgstr "Odczytywanie dokumentu…"
 #. js-lingui-explicit-id
 #: src/word/utils/wordContextChips.ts
 msgid "officeAddin.word.chip.selectionInstead"
-msgstr "Zamiast dokumentu wysyłane jest Twoje zaznaczenie"
+msgstr "Zamiast dokumentu wysyłane jest Twoje zaznaczenie."
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordContextChips.ts
