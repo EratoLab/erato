@@ -46,6 +46,7 @@ const host = vi.hoisted(() => ({
   capture: vi.fn(),
   captureExpectedSlow: vi.fn(() => false),
   items: [] as ComposerContextItem[],
+  lastBuild: null as WordDocumentBuild | null,
 }));
 
 vi.mock("@erato/frontend/library", async () => {
@@ -99,6 +100,7 @@ vi.mock("../../hooks/useWordDocumentSource", () => ({
       changedSinceLastSend: false,
       reading: false,
     },
+    lastBuild: host.lastBuild,
     capture: host.capture,
     captureExpectedSlow: host.captureExpectedSlow,
     previousCapture: () => null,
@@ -198,6 +200,7 @@ describe("WordChatInput with a Word selection", () => {
     i18n.activate("en");
     host.facets = [SELECTION_FACET, REVIEW_FACET];
     host.includeDocument = false;
+    host.lastBuild = null;
     host.capture.mockReset().mockResolvedValue(documentBuild());
     handedOver = [];
     staged = [];
@@ -247,6 +250,63 @@ describe("WordChatInput with a Word selection", () => {
       selection: { selectedText: "lima mike", origin: "user" },
     });
     expect(host.capture).not.toHaveBeenCalled();
+  });
+
+  describe("the token estimate", () => {
+    // FileReader settles on a timer, which the suite fakes.
+    const readText = (file: File) => {
+      vi.useRealTimers();
+      return new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result));
+        reader.onerror = () => reject(reader.error);
+        reader.readAsText(file);
+      });
+    };
+    const estimated = () =>
+      host.items.filter((item) => item.estimate).map((item) => item.id);
+    const estimateOf = (id: string) =>
+      host.items.find((item) => item.id === id)?.estimate;
+
+    it("is the passage's facet, on the selection chip alone", async () => {
+      host.includeDocument = true;
+      host.lastBuild = documentBuild();
+      await renderInput();
+
+      expect(estimated()).toEqual(["word-selection"]);
+      const text = await readText(estimateOf("word-selection")!);
+      expect(text).toContain("selected_text: lima mike");
+      expect(text).toContain("paragraph_count: 1");
+    });
+
+    it("keeps its identity on an unrelated render, and follows the selection", async () => {
+      const view = await renderInput();
+      const first = estimateOf("word-selection");
+
+      view.rerender(element("chat-1"));
+      expect(estimateOf("word-selection")).toBe(first);
+
+      word.select({ p: "PL1", text: "lima" });
+      await settle();
+      const next = estimateOf("word-selection");
+      expect(next).not.toBe(first);
+      expect(await readText(next!)).toContain("selected_text: lima\n");
+    });
+
+    it("moves to the document once the selection is dismissed and a capture has landed", async () => {
+      host.includeDocument = true;
+      const view = await renderInput();
+      press(chip(), "Dismiss selection");
+      expect(chip()).toHaveAttribute("data-state", "suggested");
+      expect(estimated()).toEqual([]);
+
+      host.lastBuild = documentBuild();
+      view.rerender(element("chat-1"));
+      expect(estimated()).toEqual(["word-document"]);
+      expect(await readText(estimateOf("word-document")!)).toContain(
+        "document_text: [1] Text",
+      );
+    });
   });
 
   it("sends exactly as before when word_selection is not advertised", async () => {

@@ -156,6 +156,25 @@ const createStoreStub = <S,>(readState: () => S) =>
     { getState: readState },
   );
 
+// Equal args give the same File, as the host's does, so identity checks on a
+// chip's estimate hold under the mock too.
+const stubEstimates = new Map<string, File>();
+const stubActionFacetEstimate = (facet: {
+  id: string;
+  args?: Readonly<Record<string, string>>;
+}): File => {
+  const content = Object.entries(facet.args ?? {})
+    .map(([name, value]) => `${name}: ${value}`)
+    .join("\n\n");
+  const key = `${facet.id}\u0000${content}`;
+  let file = stubEstimates.get(key);
+  if (!file) {
+    file = new File([content], `${facet.id}.txt`, { type: "text/plain" });
+    stubEstimates.set(key, file);
+  }
+  return file;
+};
+
 export const DEFAULT_STUBS = {
   holdComposeReload: () => () => {},
   installAudioCaptureAccessPolicy: () => () => {},
@@ -183,6 +202,10 @@ export const DEFAULT_STUBS = {
   FileAttachmentsPreview: StubNothing,
   ComposerContextArea: StubNothing,
   ComposerContextLane: StubNothing,
+  MessageSentWith: StubNothing,
+  registerSentWithDescriptors: noop,
+  sentWithChipsFor: () => [],
+  actionFacetEstimate: stubActionFacetEstimate,
   // The declared kit surface. Covered wholesale so a name pinned by
   // `kit-surface.ts` can never be the one missing entry that breaks linking.
   Alert: StubNothing,

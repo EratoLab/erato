@@ -1,5 +1,5 @@
 import {
-  DEFAULT_MAX_FILES_PER_MESSAGE,
+  actionFacetEstimate,
   UploadTooLargeError,
   UploadUnknownError,
   fetchUploadFile,
@@ -7,7 +7,6 @@ import {
   getIdToken,
   isUploadTooLarge,
   useChatInputControls,
-  useChatInputFeature,
   useFileCapabilitiesContext,
   useFileUploadStore,
   useUploadFeature,
@@ -101,7 +100,6 @@ import {
 } from "../utils/outlookScheduleTool";
 import { planOutlookFiles } from "../utils/outlookSendFiles";
 import { restoreComposerDraft } from "../utils/restoreComposerDraft";
-import { findStagedSendLimit } from "../utils/stagedSendLimit";
 import { EmailTrimError } from "../utils/trimRawEmlBytes";
 import {
   isPolicyExcluded,
@@ -179,7 +177,10 @@ interface AddinChatInputProps {
   ) => void;
   uploadFiles?: (files: File[]) => Promise<FileUploadItem[] | undefined>;
   uploadError?: Error | string | null;
-  /** Overrides the limit check this component derives from its staged parts. */
+  /**
+   * Overrides the size and count check the composer runs on its staged files
+   * and the included uploads (the thread, the dropped emails).
+   */
   sizeLimitExceeded?: ComposerSizeLimit | null;
   /**
    * `true` while one or more dropped emails are being expanded or
@@ -489,7 +490,6 @@ export const AddinChatInput = forwardRef<
   } = useOutlookEmailSource();
   const { maxSizeBytes: globalMaxSizeBytes, maxSizeFormatted } =
     useUploadFeature();
-  const { maxFiles: maxFilesPerMessage } = useChatInputFeature();
   const { capabilities, isLoading: isLoadingCapabilities } =
     useFileCapabilitiesContext();
   // A declined send's error and the drops staged at that moment. The composer
@@ -692,34 +692,6 @@ export const AddinChatInput = forwardRef<
     mailItem?.internetMessageId,
     plan.uploadThread,
   ]);
-
-  // The composer's own attachments, mirrored here so the limit check can
-  // count them next to the staged emails it will upload alongside.
-  const [composerFiles, setComposerFiles] = useState<FileUploadItem[]>([]);
-  const handleFileAttachments = useCallback(
-    (files: FileUploadItem[]) => {
-      ownerHandleFileAttachments?.(files);
-      // The composer reports from inside a state updater.
-      void Promise.resolve().then(() => setComposerFiles(files));
-    },
-    [ownerHandleFileAttachments],
-  );
-  // The server caps a message at its own per-message count, whatever the
-  // composer was told.
-  const maxFiles = Math.min(
-    chatInputProps.maxFiles ?? DEFAULT_MAX_FILES_PER_MESSAGE,
-    maxFilesPerMessage,
-  );
-  const stagedLimitExceeded = useMemo<ComposerSizeLimit | null>(
-    () =>
-      findStagedSendLimit(plan.parts, composerFiles, {
-        maxBytes: globalMaxSizeBytes,
-        maxFormatted: maxSizeFormatted,
-        maxFiles,
-      }),
-    [composerFiles, globalMaxSizeBytes, maxFiles, maxSizeFormatted, plan.parts],
-  );
-  const sizeLimitExceeded = ownerSizeLimitExceeded ?? stagedLimitExceeded;
 
   const [hostAnnouncement, announce] = useHostAnnouncer();
   // The lane says nothing of chips that appear, so the drop pipeline's start
@@ -1019,11 +991,18 @@ export const AddinChatInput = forwardRef<
       updatingLabel,
     ],
   );
+  // The facet the chips were built from: the same resolver run as the Send's.
+  const facetEstimate = useMemo(
+    () =>
+      sendPreview.facet ? actionFacetEstimate(sendPreview.facet) : undefined,
+    [sendPreview.facet],
+  );
   const { items: contextItems, modes: composerModes } = useOutlookContextItems({
     models,
     handlers,
     detail,
     sending: isUploadingEmail,
+    facetEstimate,
   });
 
   const menuState = useMemo(() => {
@@ -1464,8 +1443,8 @@ export const AddinChatInput = forwardRef<
           ref={ref}
           chatId={chatId}
           {...chatInputProps}
-          handleFileAttachments={handleFileAttachments}
-          sizeLimitExceeded={sizeLimitExceeded}
+          handleFileAttachments={ownerHandleFileAttachments}
+          sizeLimitExceeded={ownerSizeLimitExceeded}
           uploadError={sendFailure?.error ?? ownerUploadError}
           contextItems={contextItems}
           composerModes={composerModes}

@@ -1,4 +1,5 @@
 import {
+  actionFacetEstimate,
   registerClientToolExecutor,
   useLiveAnnouncement,
   useProfile,
@@ -15,7 +16,13 @@ import {
 import { useConversationKey } from "../../core/selection/useConversationKey";
 import { useWordClientOperations } from "../hooks/useWordClientOperations";
 import { useWordComments } from "../hooks/useWordComments";
-import { useWordContextItems } from "../hooks/useWordContextItems";
+import {
+  useWordContextItems,
+  WORD_COMMENT_CHIP_ID,
+  WORD_DOCUMENT_CHIP_ID,
+  WORD_OPEN_COMMENTS_CHIP_ID,
+  WORD_SELECTION_CHIP_ID,
+} from "../hooks/useWordContextItems";
 import { useWordDocumentSource } from "../hooks/useWordDocumentSource";
 import { useWordSelection } from "../hooks/useWordSelection";
 import { wordCommentGestureStore } from "../hooks/wordCommentGestureStore";
@@ -31,7 +38,8 @@ import {
   WORD_COMPOSE_FACET_ID,
   WORD_AUTHORING_FACET_ID,
   WORD_DOCUMENT_REVIEW_FACET_ID,
-  withWordReviewFallback,
+  wordDocumentFacetInput,
+  wordDocumentSendInput,
   wordReviewFallbackApplies,
   wordSelectionFacetAvailable,
   wordSelectionForFacets,
@@ -104,6 +112,7 @@ import {
   wordSelectionMayRewrite,
 } from "../utils/wordSelectionCapture";
 import { currentWordSelectionSupport } from "../utils/wordSelectionSupport";
+import { wordSendEstimateFacet } from "../utils/wordSendEstimate";
 import { previewWordSend } from "../utils/wordSendPreview";
 import { markWordSend } from "../utils/wordSendTiming";
 import {
@@ -135,6 +144,7 @@ import type {
   WordCommentSendSelection,
 } from "../utils/wordCommentSend";
 import type { WordCaptureNotice } from "../utils/wordComposerNotice";
+import type { WordSendCarrier } from "../utils/wordSendPreview";
 import type { ChatInputControlsHandle } from "@erato/frontend/library";
 import type { WordDocumentCapture } from "@erato/frontend/word-review";
 
@@ -159,6 +169,14 @@ type CaptureOutcome =
 type CaptureNotice = WordCaptureNotice;
 
 const NO_DISMISSED_NOTICES: ReadonlySet<string> = new Set();
+
+/** The chip that carries each facet the Send can build. */
+const WORD_CARRIER_CHIP_IDS: Partial<Record<WordSendCarrier, string>> = {
+  selection: WORD_SELECTION_CHIP_ID,
+  document: WORD_DOCUMENT_CHIP_ID,
+  comment: WORD_COMMENT_CHIP_ID,
+  "open-comments": WORD_OPEN_COMMENTS_CHIP_ID,
+};
 
 function waitForCapture(
   capture: Promise<WordDocumentBuild | null>,
@@ -531,6 +549,7 @@ export function WordChatInput({
   }, [pickerOpen]);
   const {
     preview,
+    lastBuild,
     capture,
     captureExpectedSlow,
     previousCapture,
@@ -1005,9 +1024,9 @@ export function WordChatInput({
           }
           const capturedIssue = build?.authoring?.issue;
           const capturedDetails = build?.authoring?.issueDetails;
-          const trackChanges =
-            !!build?.trackChanges || capturedIssue === "tracking";
-          if (build) build = withWordReviewFallback(build, availableFacetIds);
+          const prepared = wordDocumentSendInput(build, availableFacetIds);
+          const trackChanges = prepared.trackChanges;
+          build = prepared.build;
           // Finalize paging limits before exposing whole-document availability.
           const authoringSnapshot = build?.authoring;
           wordDocumentReadSession.activate(
@@ -1038,25 +1057,24 @@ export function WordChatInput({
             trackChanges,
             readOnly: !!capturedIssue && !build?.authoring,
           });
-          const actionFacet = resolveWordActionFacet({
-            chipEnabled: true,
-            documentName: resolveWordDocumentName(),
-            documentIdentity,
-            documentArgs: build?.args ?? null,
-            hasContent: build?.coverage.hasContent ?? false,
-            authoring: build?.authoring,
-            availableFacetIds,
-            availableFacetArgs,
-            trackChanges,
-            ...(comments && build && decided.plan.carrier.kind === "map"
-              ? {
-                  commentMap: wordCommentMapArg(
-                    comments,
-                    wordCommentHeadingsFromBuild(build.headings),
-                  ),
-                }
-              : {}),
-          });
+          const actionFacet = resolveWordActionFacet(
+            wordDocumentFacetInput({
+              build,
+              trackChanges,
+              documentName: resolveWordDocumentName(),
+              documentIdentity,
+              availableFacetIds,
+              availableFacetArgs,
+              ...(comments && build && decided.plan.carrier.kind === "map"
+                ? {
+                    commentMap: wordCommentMapArg(
+                      comments,
+                      wordCommentHeadingsFromBuild(build.headings),
+                    ),
+                  }
+                : {}),
+            }),
+          );
           if (actionFacet) markSent(build);
           else clearReadSession();
           const staged = actionFacet
@@ -1417,7 +1435,40 @@ export function WordChatInput({
       showComment,
     ],
   );
+  // Keyed on what the facet is built from, not on the preview object, which
+  // is new on every render: an unrelated render keeps the same estimate.
+  const estimateCarrier = sendPreview.carrier;
+  const estimateCommentsKey = JSON.stringify(sendPreview.comments.carrier);
+  const documentName = resolveWordDocumentName();
+  const estimate = useMemo(() => {
+    const facet = wordSendEstimateFacet(sendPreview, {
+      documentName,
+      documentIdentity,
+      availableFacetIds,
+      availableFacetArgs,
+      selection: liveSelection.preview,
+      build: lastBuild,
+      comments: commentList,
+    });
+    const itemId = WORD_CARRIER_CHIP_IDS[estimateCarrier];
+    return facet && itemId
+      ? { itemId, file: actionFacetEstimate(facet) }
+      : undefined;
+    // The preview is new on every render; its carriers are compared by content.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    estimateCarrier,
+    estimateCommentsKey,
+    documentName,
+    documentIdentity,
+    availableFacetIds,
+    availableFacetArgs,
+    liveSelection.preview,
+    lastBuild,
+    commentList,
+  ]);
   const contextItems = useWordContextItems({
+    estimate,
     selection: wordSelectionChip(chipInput),
     document: wordDocumentChip(chipInput),
     comment: commentsShown ? wordCommentChip(commentChipsInput) : null,

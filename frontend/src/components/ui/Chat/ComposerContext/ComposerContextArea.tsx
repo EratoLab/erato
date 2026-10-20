@@ -21,6 +21,8 @@ export interface ComposerContextAreaProps {
   onRemoveClaimedFiles?: (fileIds: string[]) => void;
   /** Wins over `componentRegistry.ComposerContextChipFace`. */
   chipFace?: ComponentType<ComposerContextChipFaceProps>;
+  /** Names the chip list; defaults to "Message context". */
+  label?: string;
 }
 
 const px = (value: string) => {
@@ -41,6 +43,7 @@ export const ComposerContextArea = ({
   onFocusComposer,
   onRemoveClaimedFiles,
   chipFace,
+  label,
 }: ComposerContextAreaProps) => {
   const [announcement, announce] = useLiveAnnouncement();
   const areaRef = useRef<HTMLDivElement>(null);
@@ -125,6 +128,7 @@ export const ComposerContextArea = ({
           onFocusComposer={onFocusComposer}
           onRemoveClaimedFiles={onRemoveClaimedFiles}
           chipFace={chipFace}
+          label={label}
         />
         <div
           ref={filesRef}

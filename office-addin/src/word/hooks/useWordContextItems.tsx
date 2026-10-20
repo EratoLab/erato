@@ -87,6 +87,11 @@ export interface WordContextItemsInput {
   locked: boolean;
   reportOptions: { chatId: string | null };
   handlers: WordContextHandlers;
+  /**
+   * What the Send's facet adds to the token estimate, on the chip that
+   * carries it. Compared by identity, apart from the models.
+   */
+  estimate?: { itemId: string; file: File };
 }
 
 const sendInsteadText = () =>
@@ -121,6 +126,7 @@ export function useWordContextItems({
   locked,
   reportOptions,
   handlers,
+  estimate,
 }: WordContextItemsInput): ComposerContextItem[] {
   const {
     dismissSelection,
@@ -486,11 +492,17 @@ export function useWordContextItems({
         },
       });
     }
-    return items;
-    // The models are compared by content; modelKey stands for them.
+    if (!estimate) return items;
+    return items.map((item) =>
+      item.id === estimate.itemId ? { ...item, estimate: estimate.file } : item,
+    );
+    // The models are compared by content; modelKey stands for them. A File
+    // would stringify to {} there, so the estimate is a dependency of its own.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     modelKey,
+    estimate?.itemId,
+    estimate?.file,
     reportOptions,
     dismissSelection,
     rearmSelection,

@@ -19,6 +19,11 @@ export interface MessageEditContextValue {
   chatId?: string | null;
   assistantId?: string;
   chatProviderId?: string;
+  /**
+   * Whether the server still offers an action facet. An edit re-sends the
+   * stored facet only while it does, so the editor shows its chip only then.
+   */
+  isActionFacetAvailable?: (facetId: string) => boolean;
 }
 
 /**

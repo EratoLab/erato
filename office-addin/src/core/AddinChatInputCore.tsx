@@ -45,7 +45,6 @@ export interface AddinChatInputCoreProps {
   uploadFiles?: (files: File[]) => Promise<FileUploadItem[] | undefined>;
   uploadError?: Error | string | null;
   sizeLimitExceeded?: ComposerSizeLimit | null;
-  virtualFiles?: File[];
   maxFiles?: number;
   controlledAvailableModels?: ChatModel[];
   controlledSelectedModel?: ChatModel | null;

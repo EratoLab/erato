@@ -105,7 +105,7 @@ function cardSections(
  * Uploads by the filename the asset collector stamped into the markers — the
  * same key the backend keys parsed uploads by — each placed at most once.
  */
-class UploadClaims {
+export class UploadClaims {
   readonly claimed = new Set<string>();
   private readonly uploadsByName = new Map<string, FileUploadItem>();
 

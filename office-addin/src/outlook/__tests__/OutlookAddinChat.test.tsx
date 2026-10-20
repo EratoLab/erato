@@ -39,6 +39,7 @@ const {
   dragOptions,
   chatState,
   inputProps,
+  editState,
 } = vi.hoisted(() => {
   function recordedProps(): { current: Record<string, unknown> } {
     return { current: {} };
@@ -49,6 +50,12 @@ const {
       messageOrder: [] as string[],
     },
     inputProps: recordedProps(),
+    editState: {
+      facets: [] as { id: string }[],
+      value: null as null | {
+        isActionFacetAvailable?: (facetId: string) => boolean;
+      },
+    },
     fileUploadState: { error: null, setError: vi.fn() },
     chatHeaderState: { composerLocked: false },
     dragOptions: {
@@ -102,6 +109,17 @@ vi.mock("@erato/frontend/library", async () => {
       composerLocked: chatHeaderState.composerLocked,
     }),
     useConversationDropzone: useConversationDropzoneMock,
+    useFacets: () => ({ data: { action_facets: editState.facets } }),
+    MessageEditProvider: ({
+      value,
+      children,
+    }: {
+      value: typeof editState.value;
+      children?: ReactNode;
+    }) => {
+      editState.value = value;
+      return children;
+    },
     useFileUploadStore: Object.assign(
       (selector?: (state: typeof fileUploadState) => unknown) =>
         selector ? selector(fileUploadState) : fileUploadState,
@@ -259,6 +277,15 @@ describe("AddinChat without any Graph provider mounted (Exchange SE / unsupporte
     fireEvent.click(screen.getByTestId("addin-history-drawer-trigger"));
 
     expect(dismissSessionToastsMock).toHaveBeenCalled();
+  });
+
+  it("lets the edit composer show a stored facet only while the server offers it", () => {
+    editState.facets = [{ id: "outlook_review_draft" }];
+    renderWithoutGraphProvider(<AddinChat />);
+    const isAvailable = editState.value?.isActionFacetAvailable;
+    expect(isAvailable?.("outlook_review_draft")).toBe(true);
+    expect(isAvailable?.("outlook_rewrite_selection")).toBe(false);
+    editState.facets = [];
   });
 
   it("tells the composer whether the chat is fresh, and hands it no virtual files", () => {

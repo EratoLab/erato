@@ -52,26 +52,45 @@ export function formatClockTime(value: string | Date | null | undefined) {
     : "";
 }
 
+/** A zone Intl does not know falls back to the runtime's, rather than throwing. */
+function dateTimeFormat(
+  options: Intl.DateTimeFormatOptions,
+  timeZone: string | undefined,
+): Intl.DateTimeFormat {
+  if (timeZone) {
+    try {
+      return new Intl.DateTimeFormat(locale(), { ...options, timeZone });
+    } catch (error) {
+      if (!(error instanceof RangeError)) throw error;
+    }
+  }
+  return new Intl.DateTimeFormat(locale(), options);
+}
+
 /**
  * An appointment's span: short for the chip ("Thu, Oct 23, 10:00 – 11:00 AM"),
- * with the year for the detail. Without an end it is the start alone.
+ * with the year for the detail. Without an end it is the start alone. A sent
+ * appointment reads in the zone it was sent from (`timeZone`, an IANA name).
  */
 export function formatAppointmentWhen(
   start: string | Date | null | undefined,
   end: string | Date | null | undefined,
-  { long = false }: { long?: boolean } = {},
+  { long = false, timeZone }: { long?: boolean; timeZone?: string } = {},
 ): string {
   const from = toDate(start);
   if (!from) return "";
   const to = toDate(end);
-  const format = new Intl.DateTimeFormat(locale(), {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    ...(long ? { year: "numeric" as const } : {}),
-    hour: "numeric",
-    minute: "2-digit",
-  });
+  const format = dateTimeFormat(
+    {
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+      ...(long ? { year: "numeric" as const } : {}),
+      hour: "numeric",
+      minute: "2-digit",
+    },
+    timeZone,
+  );
   return to && to.getTime() >= from.getTime()
     ? format.formatRange(from, to)
     : format.format(from);

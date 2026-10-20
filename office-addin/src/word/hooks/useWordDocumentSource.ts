@@ -43,6 +43,11 @@ export interface WordDocumentPreview {
 
 export interface WordDocumentSource {
   preview: WordDocumentPreview;
+  /**
+   * The last good capture of this document, for the chips' token estimate
+   * only: never a copy for a send, and never to be changed.
+   */
+  lastBuild: WordDocumentBuild | null;
   /** A send-ready copy: reuses an unchanged capture, joins a running one, or starts one. */
   capture: () => Promise<WordDocumentBuild | null>;
   captureExpectedSlow: () => boolean;
@@ -186,6 +191,7 @@ export function useWordDocumentSource({
   authoringEnabled?: boolean;
 }): WordDocumentSource {
   const [preview, setPreview] = useState<WordDocumentPreview>(INITIAL_PREVIEW);
+  const [lastBuild, setLastBuild] = useState<WordDocumentBuild | null>(null);
   const lastSentHashRef = useRef<string | null>(null);
   const generationRef = useRef(0);
   const cacheRef = useRef<CachedCapture | null>(null);
@@ -262,6 +268,7 @@ export function useWordDocumentSource({
             status: "unreadable",
             readError: error,
           });
+          setLastBuild(null);
           return entry;
         }
         const hash = hashDocument(
@@ -281,6 +288,7 @@ export function useWordDocumentSource({
             lastSentHashRef.current !== hash,
           reading: false,
         });
+        setLastBuild(build);
         return entry;
       });
     flightRef.current = { promise, authoring, generation, startedAt };
@@ -308,6 +316,7 @@ export function useWordDocumentSource({
     flightRef.current = null;
     lastSentHashRef.current = null;
     setPreview(INITIAL_PREVIEW);
+    setLastBuild(null);
   }, [documentIdentity]);
 
   useEffect(
@@ -412,6 +421,7 @@ export function useWordDocumentSource({
 
   return {
     preview,
+    lastBuild,
     capture,
     captureExpectedSlow,
     previousCapture,

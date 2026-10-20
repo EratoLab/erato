@@ -105,6 +105,13 @@ interface ComposerContextItemBase {
   toneIcon?: "item" | "tone";
   /** Counts toward the token estimate while the item is included. */
   estimate?: File;
+  /**
+   * The send uploads `estimate` itself as a file (an email thread, a dropped
+   * email): it counts toward the message's file limit and the per-file upload
+   * limit. Without it the estimate is inline context (an action facet) and
+   * counts only toward tokens.
+   */
+  estimateUpload?: boolean;
   /** Disables (x)/(+) only; the detail stays openable. */
   locked?: boolean;
   /** Ambient: back to suggested. User: removed. */

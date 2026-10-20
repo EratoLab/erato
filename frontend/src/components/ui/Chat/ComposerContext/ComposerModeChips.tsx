@@ -29,7 +29,7 @@ const ModeChip = ({
       data-mode-id={mode.id}
       data-locked={mode.locked ? "true" : undefined}
       title={mode.description}
-      className="ms-[var(--theme-spacing-control-gap)] inline-flex h-7 min-w-0 max-w-full items-center gap-1 rounded-[var(--theme-radius-control)] border border-[var(--theme-border-attachment)] bg-theme-bg-primary pl-2 pr-0.5 text-xs text-theme-fg-secondary"
+      className="my-1 ms-[var(--theme-spacing-control-gap)] inline-flex h-7 min-w-0 max-w-full items-center gap-1 rounded-[var(--theme-radius-control)] border border-[var(--theme-border-attachment)] bg-theme-bg-primary pl-2 pr-0.5 text-xs text-theme-fg-secondary"
     >
       <ComposerContextGlyph icon={mode.icon} state="included" tone="neutral" />
       <span data-ui="composer-mode-chip-label" className="truncate">

@@ -13,7 +13,6 @@ import { useRovingMenuFocus } from "@/hooks/ui/useRovingMenuFocus";
 
 import { AnchoredPopover } from "../Controls/AnchoredPopover";
 import { Button } from "../Controls/Button";
-import { CountBadge } from "../Controls/CountBadge";
 import {
   PopoverChrome,
   PopoverSectionHeader,
@@ -113,11 +112,6 @@ export interface ChatInputAddMenuProps {
   disabled?: boolean;
   /** Show a spinner in the trigger while files are uploading/linking. */
   isProcessing?: boolean;
-  /**
-   * Count badge shown on the "+" trigger (mobile affordance for active
-   * tools when chips are hidden). No badge when 0 or undefined.
-   */
-  selectedCount?: number;
   className?: string;
 }
 
@@ -150,7 +144,6 @@ export function ChatInputAddMenu({
   extraContent,
   disabled = false,
   isProcessing = false,
-  selectedCount = 0,
   className = "",
 }: ChatInputAddMenuProps) {
   const [isOpen, setIsOpen] = useState(false);
@@ -163,7 +156,6 @@ export function ChatInputAddMenu({
   const isBusy = disabled || isProcessing;
   const hasFileSources = fileSources.length > 0;
   const hasTools = tools.length > 0;
-  const showBadge = selectedCount > 0;
 
   // Roving focus across the navigable rows (skips natively-disabled ones;
   // aria-disabled tool rows stay reachable so they remain perceivable).
@@ -412,10 +404,8 @@ export function ChatInputAddMenu({
       initialFocusSelector={ROW_ITEM_SELECTOR}
       width="wide"
       dataUi="chat-input-add-menu"
-      // `relative` is the only styling this needs beyond the shared Button:
-      // it anchors the absolutely-positioned count badge. Size, radius, hover
-      // and disabled states all come from `variant="icon-only"`, which this
-      // previously hand-rolled with the same tokens.
+      // Size, radius, hover and disabled states all come from
+      // `variant="icon-only"`; the selected tools show as chips beside it.
       trigger={(triggerProps) => (
         <Button
           {...triggerProps}
@@ -427,7 +417,7 @@ export function ChatInputAddMenu({
             message: "Add files and tools",
           })}
           data-testid="chat-input-add-menu-trigger"
-          className={clsx("relative", className)}
+          className={className}
           icon={
             isProcessing ? (
               <SpinnerIcon size="md" style={TRIGGER_RING_STYLE} />
@@ -435,20 +425,7 @@ export function ChatInputAddMenu({
               <PlusIcon className="size-5" />
             )
           }
-        >
-          {showBadge && !isProcessing && (
-            <CountBadge
-              variant="attention"
-              // Stays in the accessibility tree: the trigger's label does
-              // not carry the selection count, so the badge must.
-              aria-hidden={false}
-              data-testid="chat-input-add-menu-badge"
-              className="absolute -right-0.5 -top-0.5"
-            >
-              {selectedCount}
-            </CountBadge>
-          )}
-        </Button>
+        />
       )}
     >
       <PopoverChrome dataUi="chat-input-add-menu-content">

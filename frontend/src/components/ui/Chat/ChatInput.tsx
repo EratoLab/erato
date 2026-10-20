@@ -98,7 +98,15 @@ import { ChatUsageAdvisory } from "./ChatUsageAdvisory";
 import { ComposerContextArea } from "./ComposerContext/ComposerContextArea";
 import { ComposerModeChips } from "./ComposerContext/ComposerModeChips";
 import { ComposerNoticeView } from "./ComposerContext/ComposerNoticeView";
+import {
+  claimedFileIdsOf,
+  includedEstimatesOf,
+  includedUploadItemsOf,
+  unclaimedFiles,
+} from "./ComposerContext/composerLaneFiles";
+import { findComposerSendLimit } from "./ComposerContext/composerSendLimit";
 import { useStableFileList } from "./ComposerContext/useStableFileList";
+import { ComposerToolChips } from "./ComposerToolChips";
 import { DelegationRunModePopover } from "./DelegationRunModePopover";
 import { FacetSelector } from "./FacetSelector";
 import { McpToolsBrowserModal } from "./McpToolsBrowserModal";
@@ -219,10 +227,11 @@ interface ChatInputProps {
   initialFiles?: FileUploadItem[];
   /**
    * Inline `File`s that should count toward the token estimate without
-   * being persisted as uploads. The Outlook add-in passes its previewed
-   * email body here. Pass a memoized array — the underlying React Query
-   * cache derives a digest from each file's metadata, so an unstable
+   * being persisted as uploads. Pass a memoized array — the underlying React
+   * Query cache derives a digest from each file's metadata, so an unstable
    * reference will thrash the cache.
+   *
+   * @deprecated Give the context item an `estimate`.
    */
   virtualFiles?: File[];
   /**
@@ -267,8 +276,10 @@ interface ChatInputProps {
   uploadError?: Error | string | null;
   /**
    * Blocks sending (and queuing/draining) the way a token overrun does,
-   * for owners that stage files the composer cannot see. The web passes
-   * nothing.
+   * for owners that stage files the composer cannot see. Wins over the
+   * check the composer runs itself while a host passes `contextItems`: its
+   * staged files plus the included items whose estimate is an upload,
+   * against the upload size and the per-message file count.
    */
   sizeLimitExceeded?: ComposerSizeLimit | null;
   onSelectedChatProviderIdChange?: (chatProviderId: string | null) => void;
@@ -496,7 +507,11 @@ export const ChatInput = ({
   const isLoading = propIsLoading ?? isMessagingLoading;
 
   // Get feature configurations
-  const { enabled: uploadEnabled } = useUploadFeature();
+  const {
+    enabled: uploadEnabled,
+    maxSizeBytes: maxUploadBytes,
+    maxSizeFormatted: maxUploadFormatted,
+  } = useUploadFeature();
   const {
     enabled: audioTranscriptionEnabled,
     maxRecordingDurationSeconds,
@@ -510,7 +525,8 @@ export const ChatInput = ({
     enabled: audioConversationalEnabled,
     maxRecordingDurationSeconds: maxConversationalDurationSeconds,
   } = useAudioConversationalFeature();
-  const { autofocus: shouldAutofocus } = useChatInputFeature();
+  const { autofocus: shouldAutofocus, maxFiles: maxFilesPerMessage } =
+    useChatInputFeature();
   const aiUsageAdvisory = useOptionalTranslation("chat.ai_usage_advisory");
 
   // Use local model selection hook
@@ -547,23 +563,6 @@ export const ChatInput = ({
     resetTokenLimits,
     resetTokenLimitsOnFileRemoval,
   } = useTokenManagement();
-  const isComposerBlocked =
-    isAnyTokenLimitExceeded || sizeLimitExceeded !== null;
-  const sizeLimitPlaceholder = (() => {
-    if (!sizeLimitExceeded) {
-      return null;
-    }
-    const limit = sizeLimitExceeded.formatted;
-    if (sizeLimitExceeded.kind === "count") {
-      return t`Cannot send: a message can carry at most ${limit} files. Remove some to send.`;
-    }
-    const names = sizeLimitExceeded.names.join(", ");
-    return plural(sizeLimitExceeded.names.length, {
-      one: `Cannot send: ${names} exceeds the ${limit} limit. Remove it to send.`,
-      other: `Cannot send: ${names} exceed the ${limit} limit. Remove them to send.`,
-    });
-  })();
-
   // Use the custom hook for chat input handling
 
   const {
@@ -576,6 +575,66 @@ export const ChatInput = ({
     setAttachedFiles,
     createSubmitHandler,
   } = useChatInputHandlers(maxFiles, handleFileAttachments, initialFiles);
+
+  // A host that passes context items may stage uploads the file row does not
+  // show (an email thread, a dropped email); the server checks those with the
+  // staged files, per file against the upload size and together against its
+  // per-message count, so the composer refuses what the server would.
+  const includedUploads = useMemo(
+    () => includedUploadItemsOf(contextItems),
+    [contextItems],
+  );
+  // The verdict names a chip as the lane does, not by its upload's filename.
+  const laneSendLimit = useMemo(
+    () =>
+      contextItems === undefined
+        ? null
+        : findComposerSendLimit(
+            includedUploads.map((item) => ({
+              name: item.label,
+              size: item.estimate.size,
+            })),
+            attachedFiles,
+            {
+              maxBytes: maxUploadBytes,
+              maxFormatted: maxUploadFormatted,
+              maxFiles: Math.min(maxFiles, maxFilesPerMessage),
+            },
+          ),
+    [
+      attachedFiles,
+      contextItems,
+      includedUploads,
+      maxFiles,
+      maxFilesPerMessage,
+      maxUploadBytes,
+      maxUploadFormatted,
+    ],
+  );
+  const effectiveSizeLimit = sizeLimitExceeded ?? laneSendLimit;
+  const isComposerBlocked =
+    isAnyTokenLimitExceeded || effectiveSizeLimit !== null;
+  const sizeLimitPlaceholder = (() => {
+    if (!effectiveSizeLimit) {
+      return null;
+    }
+    const limit = effectiveSizeLimit.formatted;
+    if (effectiveSizeLimit.kind === "count") {
+      return t({
+        id: "chat.input.sendLimit.count",
+        message: `Cannot send: a message can carry at most ${limit} files. Remove some to send.`,
+      });
+    }
+    const names = effectiveSizeLimit.names.join(", ");
+    const count = effectiveSizeLimit.names.length;
+    return t({
+      id: "chat.input.sendLimit.size",
+      message: plural(count, {
+        one: `Cannot send: ${names} exceeds the ${limit} limit. Remove it to send.`,
+        other: `Cannot send: ${names} exceed the ${limit} limit. Remove them to send.`,
+      }),
+    });
+  })();
 
   // Layout, so a host chip built from this list never paints a frame that
   // disagrees with the file row.
@@ -1026,6 +1085,19 @@ export const ChatInput = ({
       selectedFacetIds,
     ],
   );
+
+  const selectedFacets = useMemo(() => {
+    const selected = new Set(selectedFacetIds);
+    return availableFacets.filter((facet) => selected.has(facet.id));
+  }, [availableFacets, selectedFacetIds]);
+
+  const focusAddMenuTrigger = useCallback(() => {
+    formRef.current
+      ?.querySelector<HTMLElement>(
+        '[data-testid="chat-input-add-menu-trigger"]',
+      )
+      ?.focus();
+  }, []);
 
   const setDraftMessage = useCallback(
     (nextMessage: string, options?: { focus?: boolean }) => {
@@ -1688,9 +1760,9 @@ export const ChatInput = ({
     if (disabled) {
       return;
     }
-    // Same hold for an owner-reported size or count overrun: the effect
-    // re-runs when the owner clears it.
-    if (sizeLimitExceeded) {
+    // Same hold for a size or count overrun: the effect re-runs when it
+    // clears.
+    if (effectiveSizeLimit) {
       return;
     }
     // Defer past this commit's post-render effects (a just-completed add-in
@@ -1750,7 +1822,7 @@ export const ChatInput = ({
     messagingError,
     hasPendingConfirmation,
     disabled,
-    sizeLimitExceeded,
+    effectiveSizeLimit,
     getQueuedBySessionId,
     composeSessionId,
     chatId,
@@ -2072,18 +2144,10 @@ export const ChatInput = ({
   // but stay staged: they still count against `maxFiles` and still send. So
   // only a chip that says it sends them (included, or loading) may hide them;
   // under any other state they show in the row, which is what goes out.
-  const claimedFileIds = useMemo(() => {
-    const ids = new Set<string>();
-    for (const item of contextItems ?? []) {
-      if (item.state !== "included" && item.state !== "loading") {
-        continue;
-      }
-      for (const fileId of item.claimsFileIds ?? []) {
-        ids.add(fileId);
-      }
-    }
-    return ids;
-  }, [contextItems]);
+  const claimedFileIds = useMemo(
+    () => claimedFileIdsOf(contextItems),
+    [contextItems],
+  );
 
   const warnedClaimsRef = useRef(new Set<string>());
   useEffect(() => {
@@ -2106,24 +2170,49 @@ export const ChatInput = ({
     }
   }, [contextItems, attachedFiles]);
 
+  const overLimitItemIds = useMemo(
+    () =>
+      new Set(
+        includedUploads
+          .filter((item) => item.estimate.size > maxUploadBytes)
+          .map((item) => item.id),
+      ),
+    [includedUploads, maxUploadBytes],
+  );
+
   // While the composer is locked (an upload, a compaction, a recording) the
   // file row cannot change, so neither can a chip standing for some of it.
-  const laneItems = useMemo(
-    () =>
-      contextItems === undefined || !composeLocked
-        ? contextItems
-        : contextItems.map((item) =>
-            item.claimsFileIds?.length && !item.locked
-              ? { ...item, locked: true }
-              : item,
-          ),
-    [contextItems, composeLocked],
-  );
+  // A chip whose upload is over the size limit shows that it blocks Send.
+  const laneItems = useMemo(() => {
+    if (
+      contextItems === undefined ||
+      (!composeLocked && overLimitItemIds.size === 0)
+    ) {
+      return contextItems;
+    }
+    return contextItems.map((item) => {
+      let next = item;
+      if (overLimitItemIds.has(item.id)) {
+        const limit = maxUploadFormatted;
+        const reason = t({
+          id: "chat.input.sendLimit.chipMeta",
+          message: `Over the ${limit} limit`,
+        });
+        next = {
+          ...next,
+          tone: "error",
+          toneIcon: "tone",
+          meta: next.meta ? `${reason} · ${next.meta}` : reason,
+        };
+      }
+      if (composeLocked && next.claimsFileIds?.length && !next.locked) {
+        next = { ...next, locked: true };
+      }
+      return next;
+    });
+  }, [contextItems, composeLocked, overLimitItemIds, maxUploadFormatted]);
   const slotFiles = useMemo(
-    () =>
-      claimedFileIds.size === 0
-        ? attachedFiles
-        : attachedFiles.filter((file) => !claimedFileIds.has(file.id)),
+    () => unclaimedFiles(attachedFiles, claimedFileIds),
     [attachedFiles, claimedFileIds],
   );
 
@@ -2176,13 +2265,7 @@ export const ChatInput = ({
   );
 
   const includedEstimates = useStableFileList(
-    useMemo(
-      () =>
-        (contextItems ?? []).flatMap((item) =>
-          item.state === "included" && item.estimate ? [item.estimate] : [],
-        ),
-      [contextItems],
-    ),
+    useMemo(() => includedEstimatesOf(contextItems), [contextItems]),
   );
   const effectiveVirtualFiles = useMemo(
     () =>
@@ -3121,24 +3204,41 @@ export const ChatInput = ({
                   "w-full resize-none overflow-y-auto",
                   "chat-input-textarea-geometry",
                   "bg-transparent",
-                  "text-[var(--theme-fg-primary)] placeholder:text-[var(--theme-fg-muted)]",
+                  "text-[var(--theme-fg-primary)]",
                   "focus:outline-none",
                   "disabled:cursor-not-allowed disabled:opacity-50",
                   "max-h-[200px]",
                   "text-base",
                   "scrollbar-auto-hide",
-                  isComposerBlocked &&
-                    "border-[var(--theme-error-border)] placeholder:text-[var(--theme-error-fg)]",
+                  // One placeholder colour at a time: with both classes the
+                  // stylesheet order, not the condition, picks the winner.
+                  isComposerBlocked
+                    ? "border-[var(--theme-error-border)] placeholder:text-[var(--theme-error-fg)]"
+                    : "placeholder:text-[var(--theme-fg-muted)]",
                 )}
               />
             </div>
           )}
 
           <div
-            className="flex flex-wrap items-center justify-between gap-[calc(var(--theme-spacing-control-gap)/2)]"
+            className={clsx(
+              "flex flex-wrap justify-between gap-[calc(var(--theme-spacing-control-gap)/2)]",
+              useUnifiedMobileMenu ? "items-end" : "items-center",
+            )}
             data-ui="chat-input-controls"
           >
-            <div className="chat-input-controls-geometry flex min-w-0 flex-wrap items-center">
+            <div
+              className={clsx(
+                "chat-input-controls-geometry flex flex-wrap",
+                // Never narrower than its widest control: a wide right side
+                // (Exit audio mode) wraps to a line of its own rather than
+                // cutting the tool names. Top-aligned so + stays on the first
+                // chip row.
+                useUnifiedMobileMenu
+                  ? "flex-1 items-start"
+                  : "min-w-0 items-center",
+              )}
+            >
               {showControls &&
                 (useUnifiedMobileMenu ? (
                   <ChatInputAddControls
@@ -3258,6 +3358,26 @@ export const ChatInput = ({
                   onFocusComposer={focusInput}
                 />
               )}
+              {/* The unified "+" hides the Tools dropdown and its selected
+                  buttons, so the selection is drawn here instead. Mounted
+                  while tools exist, so the last chip's announcement is read. */}
+              {showControls && useUnifiedMobileMenu && hasFacets && (
+                <ComposerToolChips
+                  facets={selectedFacets}
+                  onDeselect={toggleFacetId}
+                  locked={enforceSelectedFacetIds || composeLocked}
+                  lockReason={
+                    enforceSelectedFacetIds
+                      ? t({
+                          id: "chat.toolChips.lockReason",
+                          message:
+                            "This assistant sets the tools for its chats.",
+                        })
+                      : undefined
+                  }
+                  onFocusAfterLast={focusAddMenuTrigger}
+                />
+              )}
               {useUnifiedMobileMenu && showModelSelector && (
                 <ModelSelector
                   availableModels={availableModels}
@@ -3265,12 +3385,19 @@ export const ChatInput = ({
                   onModelChange={setSelectedModel}
                   disabled={!isSelectionReady}
                   align="left"
-                  className="ms-[var(--theme-spacing-control-gap)]"
+                  // Beside wrapped tool rows it lines up with Send, not +.
+                  className="ms-[var(--theme-spacing-control-gap)] min-h-9 self-end"
                 />
               )}
             </div>
 
-            <div className="relative flex min-w-0 flex-wrap items-center gap-[var(--theme-spacing-control-gap)]">
+            <div
+              className={clsx(
+                "relative flex min-w-0 flex-wrap items-center gap-[var(--theme-spacing-control-gap)]",
+                // On a line of its own it still ends at the right edge.
+                useUnifiedMobileMenu && "ms-auto",
+              )}
+            >
               {/* Out of flow like the mention popover's anchor: the popover
                   positions off a measurable element, and the right edge of
                   this cluster is where the Send/Queue button that triggered
@@ -3528,10 +3655,16 @@ export const ChatInput = ({
                   aria-label={
                     isAnyTokenLimitExceeded
                       ? t`Cannot send: Token limit exceeded`
-                      : sizeLimitExceeded?.kind === "size"
-                        ? t`Cannot send: File size limit exceeded`
-                        : sizeLimitExceeded?.kind === "count"
-                          ? t`Cannot send: File count limit exceeded`
+                      : effectiveSizeLimit?.kind === "size"
+                        ? t({
+                            id: "chat.input.sendLimit.sizeButton",
+                            message: "Cannot send: File size limit exceeded",
+                          })
+                        : effectiveSizeLimit?.kind === "count"
+                          ? t({
+                              id: "chat.input.sendLimit.countButton",
+                              message: "Cannot send: File count limit exceeded",
+                            })
                           : t`Send message`
                   }
                 />

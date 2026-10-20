@@ -43,6 +43,8 @@ export type { ChatMessageHostComponents } from "@/components/ui/Chat/ChatMessage
 export type { ChatMessageProps } from "@/components/ui/Chat/ChatMessage";
 export type { ChatMessageRendererState } from "@/components/ui/Chat/ChatMessage";
 export type { ChatTopLeftAccessoryProps } from "@/components/ui/Chat/ChatTopLeftAccessory";
+export { ComposerContextGlyph } from "@/components/ui/Chat/ComposerContext/composerContextIcons";
+export { resolveComposerContextTone } from "@/components/ui/Chat/ComposerContext/composerContextIcons";
 export type { ComposerContextChipFaceProps } from "@/components/ui/Chat/ComposerContext/types";
 export type { ComposerContextDetail } from "@/components/ui/Chat/ComposerContext/types";
 export type { ComposerContextDetailAction } from "@/components/ui/Chat/ComposerContext/types";
@@ -368,6 +370,8 @@ export { getContentFilterSeverityLabel } from "@/components/ui/Message/messageEr
 export { getErrorCta } from "@/components/ui/Message/messageErrorCopy";
 export { getErrorDescription } from "@/components/ui/Message/messageErrorCopy";
 export { getErrorTitle } from "@/components/ui/Message/messageErrorCopy";
+export { MessageSentWith } from "@/components/ui/Message/MessageSentWith";
+export type { MessageSentWithProps } from "@/components/ui/Message/MessageSentWith";
 export { MessageTimestamp } from "@/components/ui/Message/MessageTimestamp";
 export { OriginApprovalLink } from "@/components/ui/Message/OriginApprovalLink";
 export { SyntaxHighlightedCode } from "@/components/ui/Message/SyntaxHighlightedCode";

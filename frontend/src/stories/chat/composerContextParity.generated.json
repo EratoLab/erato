@@ -1,0 +1,687 @@
+{
+  "facets": {
+    "wordDocumentPartial": {
+      "facet": {
+        "id": "word_document_review",
+        "args": {
+          "document_name": "Supply agreement.docx",
+          "document_text": "1. The Supplier shall deliver the Goods.\n\n1. The Supplier shall deliver the Goods.\n\n1. The Supplier shall deliver the Goods.\n\n1. The Supplier shall deliver the Goods.\n\n1. The Supplier shall deliver the Goods.\n\n1. The Supplier shall deliver the Goods.\n\n1. The Supplier shall deliver the Goods.\n\n1. The Supplier shall deliver the Goods.\n\n1. The Supplier shall deliver the Goods.\n\n1. The Supplier shall deliver the Goods.\n\n1. The Supplier shall deliver the Goods.\n\n1. The Supplier shall deliver the Goods.\n\n",
+          "heading_outline": "",
+          "paragraphs_sent": "120",
+          "paragraphs_total": "300",
+          "truncation_note": "",
+          "document_identity": "doc-1",
+          "comment_map": "{\"v\":1,\"scope\":\"document\",\"now\":\"2026-10-12T09:30Z\",\"user_tz\":\"Europe/Berlin\",\"coverage\":{\"threads_total\":14,\"open\":13,\"resolved\":1,\"sent_full\":0,\"sent_index_only\":14,\"not_shown\":0,\"cut\":{\"texts\":0,\"replies\":0},\"complete\":true,\"line\":\"Comment map: rows 1–14 of 14, for 14 comment threads in the document (13 open, 1 resolved); 0 not shown.\"},\"threads\":[],\"index\":[{\"id\":\"tiv\",\"para\":2,\"q\":\"alpha bravo\",\"by\":\"Maya Krüger\",\"st\":\"open\",\"r\":null,\"at\":\"2026-09-03T08:15Z\",\"g\":\"T1 root: please check the alpha bravo wording.\"},{\"id\":\"t9u3\",\"para\":3,\"q\":\"delta echo\",\"by\":\"Jonas Weber\",\"st\":\"resolved\",\"r\":null,\"at\":\"2026-09-01T22:45\",\"g\":\"T2 root: delta echo is fine now.\"},{\"id\":\"tiha\",\"para\":5,\"q\":\"foxtrot.…T3C Last span\",\"by\":\"Lena Fischer\",\"st\":\"open\",\"r\":null,\"at\":\"2026-09-05T11:30\",\"g\":\"T3 root: this spans three paragraphs.\"},{\"id\":\"tcie\",\"para\":8,\"q\":\"india juliet\",\"by\":\"Maya Krüger\",\"st\":\"open\",\"r\":null,\"at\":\"2026-09-02T14:00\",\"g\":\"T4 root: cell anchor india juliet.\"},{\"id\":\"tbe5\",\"para\":11,\"by\":\"Jonas Weber\",\"st\":\"open\",\"r\":null,\"at\":\"2026-09-06T08:00\",\"g\":\"T5 root: point comment after kilo.\"},{\"id\":\"t83j\",\"para\":12,\"q\":\"lima mike november oscar\",\"by\":\"Maya Krüger\",\"st\":\"open\",\"r\":null,\"at\":\"2026-09-07T11:11\",\"g\":\"T6 root: outer lima to oscar.\"},{\"id\":\"tmst\",\"para\":12,\"q\":\"mike november\",\"by\":\"Jonas Weber\",\"st\":\"open\",\"r\":null,\"at\":\"2026-09-07T09:03\",\"g\":\"T7 root: nested mike november.\"},{\"id\":\"t6o2\",\"para\":12,\"q\":\"oscar papa quebec\",\"by\":\"Lena Fischer\",\"st\":\"open\",\"r\":null,\"at\":\"2026-09-07T13:20\",\"g\":\"T7b root: overlap oscar papa quebec.\"},{\"id\":\"t1zo\",\"para\":13,\"q\":\"sierra tango\",\"by\":\"Maya Krüger\",\"st\":\"open\",\"r\":null,\"at\":\"2026-08-30T09:30\",\"g\":\"T8 root: the second sierra tango.\"},{\"id\":\"tp6p\",\"para\":14,\"q\":\"uniform victor\",\"by\":\"Jonas Weber\",\"st\":\"open\",\"r\":null,\"at\":\"2026-09-08T18:30\",\"g\":\"T9 root: uniform victor after a deletion.\"},{\"id\":\"tn19\",\"para\":15,\"q\":\"whiskey xray\",\"by\":\"Lena Fischer\",\"st\":\"open\",\"r\":null,\"at\":\"2026-09-08T16:59\",\"g\":\"T10 root: whiskey xray after hidden text.\"},{\"id\":\"tu3y\",\"para\":16,\"q\":\"yankee zulu\",\"by\":\"Maya Krüger\",\"st\":\"open\",\"r\":null,\"at\":\"2026-09-09T12:00\",\"g\":\"T11 root: see this point and the spec.\"},{\"id\":\"toxg\",\"para\":17,\"q\":\"anchor pb\",\"by\":\"Maya Krüger\",\"st\":\"open\",\"r\":null,\"at\":\"2026-09-14T10:00\",\"g\":\"PB1 root: anchor in a paragraph with a page break.\"},{\"id\":\"tbzu\",\"para\":18,\"q\":\"start sigma XC2 Cross cell end\",\"by\":\"Jonas Weber\",\"st\":\"open\",\"r\":null,\"at\":\"2026-09-15T16:00\",\"g\":\"T14 root: anchor across two table cells.\"}]}",
+          "review_status": "available"
+        }
+      },
+      "registered": true,
+      "chips": {
+        "en": [
+          {
+            "id": "word.document",
+            "kind": "word.document",
+            "icon": "document",
+            "label": "Supply agreement.docx",
+            "spokenLabel": "Document",
+            "meta": "First 120 of 300 ¶ · 14 comments"
+          }
+        ],
+        "de": [
+          {
+            "id": "word.document",
+            "kind": "word.document",
+            "icon": "document",
+            "label": "Supply agreement.docx",
+            "spokenLabel": "Dokument",
+            "meta": "Erste 120 von 300 ¶ · 14 Kommentare"
+          }
+        ]
+      },
+      "estimateBytes": 3224
+    },
+    "wordDocumentTrackChanges": {
+      "facet": {
+        "id": "word_document_review",
+        "args": {
+          "document_name": "Supply agreement.docx",
+          "document_text": "1. The Supplier shall deliver the Goods.\n\n1. The Supplier shall deliver the Goods.\n\n1. The Supplier shall deliver the Goods.\n\n1. The Supplier shall deliver the Goods.\n\n1. The Supplier shall deliver the Goods.\n\n1. The Supplier shall deliver the Goods.\n\n1. The Supplier shall deliver the Goods.\n\n1. The Supplier shall deliver the Goods.\n\n1. The Supplier shall deliver the Goods.\n\n1. The Supplier shall deliver the Goods.\n\n1. The Supplier shall deliver the Goods.\n\n1. The Supplier shall deliver the Goods.\n\n",
+          "heading_outline": "",
+          "paragraphs_sent": "86",
+          "paragraphs_total": "86",
+          "truncation_note": "",
+          "document_identity": "doc-1",
+          "comment_map": "",
+          "review_status": "read-only: Track Changes is on. The text is the document with every pending tracked change accepted; it does not show what was changed or by whom. Paragraph edits cannot be applied: give any new wording in plain prose, with no erato-word-edits block and no propose_client_action call."
+        }
+      },
+      "registered": true,
+      "chips": {
+        "en": [
+          {
+            "id": "word.document",
+            "kind": "word.document",
+            "icon": "document",
+            "label": "Supply agreement.docx",
+            "spokenLabel": "Document",
+            "meta": "Track Changes on · 86 ¶"
+          }
+        ],
+        "de": [
+          {
+            "id": "word.document",
+            "kind": "word.document",
+            "icon": "document",
+            "label": "Supply agreement.docx",
+            "spokenLabel": "Dokument",
+            "meta": "Änderungsnachverfolgung aktiv · 86 ¶"
+          }
+        ]
+      },
+      "estimateBytes": 980
+    },
+    "wordDocumentLongName": {
+      "facet": {
+        "id": "word_document_review",
+        "args": {
+          "document_name": "Master supply and logistics framework agreement between Contoso GmbH and Fabrikam Industrial Components AG, revision 14 (clean).docx",
+          "document_text": "1. The Supplier shall deliver the Goods.\n\n1. The Supplier shall deliver the Goods.\n\n1. The Supplier shall deliver the Goods.\n\n1. The Supplier shall deliver the Goods.\n\n1. The Supplier shall deliver the Goods.\n\n1. The Supplier shall deliver the Goods.\n\n1. The Supplier shall deliver the Goods.\n\n1. The Supplier shall deliver the Goods.\n\n1. The Supplier shall deliver the Goods.\n\n1. The Supplier shall deliver the Goods.\n\n1. The Supplier shall deliver the Goods.\n\n1. The Supplier shall deliver the Goods.\n\n",
+          "heading_outline": "",
+          "paragraphs_sent": "86",
+          "paragraphs_total": "86",
+          "truncation_note": "",
+          "document_identity": "doc-1",
+          "comment_map": "",
+          "review_status": "available"
+        }
+      },
+      "registered": true,
+      "chips": {
+        "en": [
+          {
+            "id": "word.document",
+            "kind": "word.document",
+            "icon": "document",
+            "label": "Master supply and logistics framework agreement between Contoso GmbH and Fabrikam Industrial Components AG, revision 14 (clean).docx",
+            "spokenLabel": "Document",
+            "meta": "86 ¶"
+          }
+        ],
+        "de": [
+          {
+            "id": "word.document",
+            "kind": "word.document",
+            "icon": "document",
+            "label": "Master supply and logistics framework agreement between Contoso GmbH and Fabrikam Industrial Components AG, revision 14 (clean).docx",
+            "spokenLabel": "Dokument",
+            "meta": "86 ¶"
+          }
+        ]
+      },
+      "estimateBytes": 816
+    },
+    "wordAuthoring": {
+      "facet": {
+        "id": "word_document_authoring",
+        "args": {
+          "document_name": "Supply agreement.docx",
+          "document_identity": "doc-1",
+          "document_text": "",
+          "heading_outline": "",
+          "paragraphs_sent": "0",
+          "paragraphs_total": "86",
+          "truncation_note": "Document content is available through read_document_blocks; no paragraphs are included in this initial context.",
+          "document_snapshot": "snapshot-1",
+          "authoring_status": "available",
+          "comment_map": ""
+        }
+      },
+      "registered": true,
+      "chips": {
+        "en": [
+          {
+            "id": "word.document",
+            "kind": "word.document",
+            "icon": "document",
+            "label": "Supply agreement.docx",
+            "spokenLabel": "Document",
+            "meta": "86 ¶"
+          }
+        ],
+        "de": [
+          {
+            "id": "word.document",
+            "kind": "word.document",
+            "icon": "document",
+            "label": "Supply agreement.docx",
+            "spokenLabel": "Dokument",
+            "meta": "86 ¶"
+          }
+        ]
+      },
+      "estimateBytes": 345
+    },
+    "wordNewDocument": {
+      "facet": {
+        "id": "word_compose",
+        "args": {
+          "document_name": "Supply agreement.docx",
+          "document_identity": "doc-1"
+        }
+      },
+      "registered": true,
+      "chips": {
+        "en": [
+          {
+            "id": "word.document",
+            "kind": "word.document",
+            "icon": "document",
+            "label": "Supply agreement.docx",
+            "spokenLabel": "Document",
+            "meta": "New document"
+          }
+        ],
+        "de": [
+          {
+            "id": "word.document",
+            "kind": "word.document",
+            "icon": "document",
+            "label": "Supply agreement.docx",
+            "spokenLabel": "Dokument",
+            "meta": "Neues Dokument"
+          }
+        ]
+      },
+      "estimateBytes": 62
+    },
+    "wordSelection": {
+      "facet": {
+        "id": "word_selection",
+        "args": {
+          "document_name": "Supply agreement.docx",
+          "document_identity": "doc-1",
+          "selected_text": "The Supplier shall deliver the Goods no later than the delivery dates set out in Schedule 2. Partial deliveries require the Buyer's prior written consent.",
+          "paragraph_count": "2",
+          "truncated": "false",
+          "anchored_comments": ""
+        }
+      },
+      "registered": true,
+      "chips": {
+        "en": [
+          {
+            "id": "word.selection",
+            "kind": "word.selection",
+            "icon": "selection",
+            "label": "“The Supplier shall deliver the Goods no later than the deliv…”",
+            "spokenLabel": "Selection",
+            "quote": "The Supplier shall deliver the Goods no later than the delivery dates set out in Schedule 2. Partial deliveries require the Buyer's prior written consent.",
+            "labelIsExcerpt": true,
+            "meta": "Selected passage · 2 ¶"
+          }
+        ],
+        "de": [
+          {
+            "id": "word.selection",
+            "kind": "word.selection",
+            "icon": "selection",
+            "label": "„The Supplier shall deliver the Goods no later than the deliv…“",
+            "spokenLabel": "Auswahl",
+            "quote": "The Supplier shall deliver the Goods no later than the delivery dates set out in Schedule 2. Partial deliveries require the Buyer's prior written consent.",
+            "labelIsExcerpt": true,
+            "meta": "Ausgewählte Passage · 2 ¶"
+          }
+        ]
+      },
+      "estimateBytes": 292
+    },
+    "wordSelectionTooLong": {
+      "facet": {
+        "id": "word_selection",
+        "args": {
+          "document_name": "Supply agreement.docx",
+          "document_identity": "doc-1",
+          "selected_text": "Schedule 2 sets out the delivery plan for every site in scope, including the staging of partial deliveries, the acceptance procedure, the documents that must accompany each shipment and the remedies available to the Buyer if a milestone is missed. Schedule 2 sets out the delivery plan for every site in scope, including the staging of partial deliveries, the acceptance procedure, the documents that must accompany each shipment and the remedies available to the Buyer if a milestone is missed. Schedule 2 sets out the delivery plan for every site in scope, including the staging of partial deliveries, the acceptance procedure, the documents that must accompany each shipment and the remedies available to the Buyer if a milestone is missed. Schedule 2 sets out the delivery plan for every site in scope, including the staging of partial deliveries, the acceptance procedure, the documents that must accompany each shipment and the remedies available to the Buyer if a milestone is missed. Schedule 2 sets out the delivery plan for every site in scope, including the staging of partial deliveries, the acceptance procedure, the documents that must accompany each shipment and the remedies available to the Buyer if a milestone is missed. Schedule 2 sets out the delivery plan for every site in scope, including the staging of partial deliveries, the acceptance procedure, the documents that must accompany each shipment and the remedies available to the Buyer if a milestone is missed.",
+          "paragraph_count": "14",
+          "truncated": "true",
+          "anchored_comments": ""
+        }
+      },
+      "registered": true,
+      "chips": {
+        "en": [
+          {
+            "id": "word.selection",
+            "kind": "word.selection",
+            "icon": "selection",
+            "label": "“Schedule 2 sets out the delivery plan for every site in scop…”",
+            "spokenLabel": "Selection",
+            "quote": "Schedule 2 sets out the delivery plan for every site in scope, including the staging of partial deliveries, the acceptance procedure, the documents that must accompany each shipment and the remedies available to the Buyer if a milestone is missed. Schedule 2 sets out the delivery plan for every site in scope, including the staging of partial deliveries, the acceptance procedure, the documents that must accompany each shipment and the remedies available to the Buyer if a milestone is missed. Schedule 2 sets out the delivery plan for every site in scope, including the staging of partial deliveries, the acceptance procedure, the documents that must accompany each shipment and the remedies available to the Buyer if a milestone is missed. Schedule 2 sets out the delivery plan for every site in scope, including the staging of partial deliveries, the acceptance procedure, the documents that must accompany each shipment and the remedies available to the Buyer if a milestone is missed. Schedule 2 sets out the delivery plan for every site in scope, including the staging of partial deliveries, the acceptance procedure, the documents that must accompany each shipment and the remedies available to the Buyer if a milestone is missed. Schedule 2 sets out the delivery plan for every site in scope, including the staging of partial deliveries, the acceptance procedure, the documents that must accompany each shipment and the remedies available to the Buyer if a milestone is missed.",
+            "labelIsExcerpt": true,
+            "meta": "Too long · beginning only"
+          }
+        ],
+        "de": [
+          {
+            "id": "word.selection",
+            "kind": "word.selection",
+            "icon": "selection",
+            "label": "„Schedule 2 sets out the delivery plan for every site in scop…“",
+            "spokenLabel": "Auswahl",
+            "quote": "Schedule 2 sets out the delivery plan for every site in scope, including the staging of partial deliveries, the acceptance procedure, the documents that must accompany each shipment and the remedies available to the Buyer if a milestone is missed. Schedule 2 sets out the delivery plan for every site in scope, including the staging of partial deliveries, the acceptance procedure, the documents that must accompany each shipment and the remedies available to the Buyer if a milestone is missed. Schedule 2 sets out the delivery plan for every site in scope, including the staging of partial deliveries, the acceptance procedure, the documents that must accompany each shipment and the remedies available to the Buyer if a milestone is missed. Schedule 2 sets out the delivery plan for every site in scope, including the staging of partial deliveries, the acceptance procedure, the documents that must accompany each shipment and the remedies available to the Buyer if a milestone is missed. Schedule 2 sets out the delivery plan for every site in scope, including the staging of partial deliveries, the acceptance procedure, the documents that must accompany each shipment and the remedies available to the Buyer if a milestone is missed. Schedule 2 sets out the delivery plan for every site in scope, including the staging of partial deliveries, the acceptance procedure, the documents that must accompany each shipment and the remedies available to the Buyer if a milestone is missed.",
+            "labelIsExcerpt": true,
+            "meta": "Zu lang · nur der Anfang"
+          }
+        ]
+      },
+      "estimateBytes": 1625
+    },
+    "wordSelectionWithComment": {
+      "facet": {
+        "id": "word_selection",
+        "args": {
+          "document_name": "Supply agreement.docx",
+          "document_identity": "doc-1",
+          "selected_text": "Payment is due within 30 days of the invoice date. Late payments bear interest at the statutory rate.",
+          "paragraph_count": "1",
+          "truncated": "false",
+          "anchored_comments": "{\"v\":1,\"scope\":\"selection\",\"now\":\"2026-10-12T09:30Z\",\"user_tz\":\"Europe/Berlin\",\"selection\":{\"para\":[2,2],\"caret\":true},\"coverage\":{\"threads_total\":14,\"open\":13,\"resolved\":1,\"sent_full\":1,\"sent_index_only\":0,\"not_shown\":13,\"cut\":{\"texts\":0,\"replies\":0},\"complete\":false,\"line\":\"14 comment threads in the document (13 open, 1 resolved): 1 sent with their text, 0 listed without text, 13 not shown. Nearest commented paragraph above the selection: none; below: 3.\"},\"threads\":[{\"id\":\"tiv\",\"pos\":1,\"status\":\"open\",\"where\":{\"para\":2,\"quote\":\"alpha bravo\",\"vs\":\"at_caret\",\"away\":0,\"in\":\"body\"},\"first_at\":\"2026-09-03T08:15Z\",\"last_at\":\"2026-09-04T07:00Z\",\"entries\":[{\"n\":0,\"by\":\"Maya Krüger\",\"me\":true,\"at\":\"2026-09-03T08:15Z\",\"age\":4,\"day\":\"2026-09-03\",\"text\":\"T1 root: please check the alpha bravo wording.\"},{\"n\":1,\"by\":\"Jonas Weber\",\"at\":\"2026-09-03T09:20Z\",\"age\":5,\"day\":\"2026-09-03\",\"text\":\"T1 reply A: agreed, alpha bravo is unclear.\"},{\"n\":2,\"by\":\"Maya Krüger\",\"me\":true,\"at\":\"2026-09-04T07:00Z\",\"age\":6,\"day\":\"2026-09-04\",\"same_author_as_root\":true,\"text\":\"T1 reply B: changed my mind, keep it.\"}]}],\"index\":[]}"
+        }
+      },
+      "registered": true,
+      "chips": {
+        "en": [
+          {
+            "id": "word.selection",
+            "kind": "word.selection",
+            "icon": "selection",
+            "label": "“Payment is due within 30 days of the invoice date. Late paym…”",
+            "spokenLabel": "Selection",
+            "quote": "Payment is due within 30 days of the invoice date. Late payments bear interest at the statutory rate.",
+            "labelIsExcerpt": true,
+            "meta": "1 comment · 1 ¶"
+          }
+        ],
+        "de": [
+          {
+            "id": "word.selection",
+            "kind": "word.selection",
+            "icon": "selection",
+            "label": "„Payment is due within 30 days of the invoice date. Late paym…“",
+            "spokenLabel": "Auswahl",
+            "quote": "Payment is due within 30 days of the invoice date. Late payments bear interest at the statutory rate.",
+            "labelIsExcerpt": true,
+            "meta": "1 Kommentar · 1 ¶"
+          }
+        ]
+      },
+      "estimateBytes": 1355
+    },
+    "wordCommentChosen": {
+      "facet": {
+        "id": "word_comment_thread",
+        "args": {
+          "thread_json": "{\"id\":\"tiv\",\"pos\":1,\"status\":\"open\",\"where\":{\"para\":2,\"quote\":\"alpha bravo\",\"position\":\"unknown\",\"vs\":\"before\",\"away\":18,\"in\":\"body\"},\"first_at\":\"2026-09-03T08:15Z\",\"last_at\":\"2026-09-03T08:15Z\",\"entries\":[{\"n\":0,\"by\":\"Maya Krüger\",\"me\":true,\"at\":\"2026-09-03T08:15Z\",\"age\":4,\"day\":\"2026-09-03\",\"text\":\"T1 root: please check the alpha bravo wording.\"}],\"replies_unread\":true}",
+          "comments_json": "{\"v\":1,\"scope\":\"thread\",\"now\":\"2026-10-12T09:30Z\",\"user_tz\":\"Europe/Berlin\",\"selection\":{\"para\":[20,20],\"caret\":true},\"coverage\":{\"threads_total\":14,\"open\":13,\"resolved\":1,\"sent_full\":1,\"sent_index_only\":0,\"not_shown\":13,\"cut\":{\"texts\":0,\"replies\":0},\"complete\":false,\"line\":\"14 comment threads in the document (13 open, 1 resolved): 1 sent with their text, 0 listed without text, 13 not shown. Replies not read for 1 thread sent with their text (replies_unread). Nearest commented paragraph above the selection: 19; below: none.\"},\"threads\":[{\"id\":\"tiv\",\"pos\":1,\"status\":\"open\",\"where\":{\"para\":2,\"quote\":\"alpha bravo\",\"position\":\"unknown\",\"vs\":\"before\",\"away\":18,\"in\":\"body\"},\"first_at\":\"2026-09-03T08:15Z\",\"last_at\":\"2026-09-03T08:15Z\",\"entries\":[{\"n\":0,\"by\":\"Maya Krüger\",\"me\":true,\"at\":\"2026-09-03T08:15Z\",\"age\":4,\"day\":\"2026-09-03\",\"text\":\"T1 root: please check the alpha bravo wording.\"}],\"replies_unread\":true}],\"index\":[],\"why\":\"chosen\"}"
+        }
+      },
+      "registered": true,
+      "chips": {
+        "en": [
+          {
+            "id": "word.comment",
+            "kind": "word.comment",
+            "icon": "comment",
+            "label": "Comment by Maya Krüger",
+            "spokenLabel": "Chosen comment",
+            "quote": "T1 root: please check the alpha bravo wording.",
+            "meta": "Chosen by you"
+          }
+        ],
+        "de": [
+          {
+            "id": "word.comment",
+            "kind": "word.comment",
+            "icon": "comment",
+            "label": "Kommentar von Maya Krüger",
+            "spokenLabel": "Ausgewählter Kommentar",
+            "quote": "T1 root: please check the alpha bravo wording.",
+            "meta": "Von Ihnen gewählt"
+          }
+        ]
+      },
+      "estimateBytes": 1351
+    },
+    "wordOpenComments": {
+      "facet": {
+        "id": "word_comment_thread",
+        "args": {
+          "thread_json": "",
+          "comments_json": "{\"v\":1,\"scope\":\"document\",\"now\":\"2026-10-12T09:30Z\",\"user_tz\":\"Europe/Berlin\",\"selection\":{\"para\":[20,20],\"caret\":true},\"coverage\":{\"threads_total\":14,\"open\":13,\"resolved\":1,\"sent_full\":13,\"sent_index_only\":0,\"not_shown\":1,\"cut\":{\"texts\":0,\"replies\":0},\"complete\":false,\"line\":\"14 comment threads in the document (13 open, 1 resolved): 13 sent with their text, 0 listed without text, 1 not shown. Replies not read for 13 threads sent with their text (replies_unread). Nearest commented paragraph above the selection: 19; below: none.\"},\"threads\":[{\"id\":\"tiv\",\"pos\":1,\"status\":\"open\",\"where\":{\"para\":2,\"quote\":\"alpha bravo\",\"position\":\"unknown\",\"vs\":\"before\",\"away\":18,\"in\":\"body\"},\"first_at\":\"2026-09-03T08:15Z\",\"last_at\":\"2026-09-03T08:15Z\",\"entries\":[{\"n\":0,\"by\":\"Maya Krüger\",\"me\":true,\"at\":\"2026-09-03T08:15Z\",\"age\":4,\"day\":\"2026-09-03\",\"text\":\"T1 root: please check the alpha bravo wording.\"}],\"replies_unread\":true},{\"id\":\"tiha\",\"pos\":3,\"status\":\"open\",\"where\":{\"para\":5,\"through\":7,\"quote\":\"foxtrot.…T3C Last span\",\"position\":\"unknown\",\"vs\":\"before\",\"away\":13,\"in\":\"body\"},\"first_at\":\"2026-09-05T11:30\",\"last_at\":\"2026-09-05T11:30\",\"entries\":[{\"n\":0,\"by\":\"Lena Fischer\",\"at\":\"2026-09-05T11:30\",\"tz\":\"unknown\",\"age\":5,\"day\":\"2026-09-05\",\"text\":\"T3 root: this spans three paragraphs.\"}],\"replies_unread\":true},{\"id\":\"tcie\",\"pos\":4,\"status\":\"open\",\"where\":{\"para\":8,\"quote\":\"india juliet\",\"position\":\"unknown\",\"vs\":\"before\",\"away\":12,\"in\":{\"table\":1,\"row\":1,\"cell\":1}},\"first_at\":\"2026-09-02T14:00\",\"last_at\":\"2026-09-02T14:00\",\"entries\":[{\"n\":0,\"by\":\"Maya Krüger\",\"me\":true,\"at\":\"2026-09-02T14:00\",\"tz\":\"unknown\",\"age\":3,\"day\":\"2026-09-02\",\"text\":\"T4 root: cell anchor india juliet.\"}],\"replies_unread\":true},{\"id\":\"tbe5\",\"pos\":5,\"status\":\"open\",\"where\":{\"para\":11,\"quote\":\"\",\"point\":true,\"vs\":\"before\",\"away\":9,\"in\":\"body\"},\"first_at\":\"2026-09-06T08:00\",\"last_at\":\"2026-09-06T08:00\",\"entries\":[{\"n\":0,\"by\":\"Jonas Weber\",\"at\":\"2026-09-06T08:00\",\"tz\":\"unknown\",\"age\":6,\"day\":\"2026-09-06\",\"text\":\"T5 root: point comment after kilo.\"}],\"replies_unread\":true},{\"id\":\"t83j\",\"pos\":6,\"status\":\"open\",\"where\":{\"para\":12,\"quote\":\"lima mike november oscar\",\"position\":\"unknown\",\"vs\":\"before\",\"away\":8,\"in\":\"body\"},\"first_at\":\"2026-09-07T11:11\",\"last_at\":\"2026-09-07T11:11\",\"entries\":[{\"n\":0,\"by\":\"Maya Krüger\",\"me\":true,\"at\":\"2026-09-07T11:11\",\"tz\":\"unknown\",\"age\":8,\"day\":\"2026-09-07\",\"text\":\"T6 root: outer lima to oscar.\"}],\"replies_unread\":true},{\"id\":\"tmst\",\"pos\":7,\"status\":\"open\",\"where\":{\"para\":12,\"quote\":\"mike november\",\"position\":\"unknown\",\"vs\":\"before\",\"away\":8,\"in\":\"body\"},\"first_at\":\"2026-09-07T09:03\",\"last_at\":\"2026-09-07T09:03\",\"entries\":[{\"n\":0,\"by\":\"Jonas Weber\",\"at\":\"2026-09-07T09:03\",\"tz\":\"unknown\",\"age\":7,\"day\":\"2026-09-07\",\"text\":\"T7 root: nested mike november.\"}],\"replies_unread\":true},{\"id\":\"t6o2\",\"pos\":8,\"status\":\"open\",\"where\":{\"para\":12,\"quote\":\"oscar papa quebec\",\"position\":\"unknown\",\"vs\":\"before\",\"away\":8,\"in\":\"body\"},\"first_at\":\"2026-09-07T13:20\",\"last_at\":\"2026-09-07T13:20\",\"entries\":[{\"n\":0,\"by\":\"Lena Fischer\",\"at\":\"2026-09-07T13:20\",\"tz\":\"unknown\",\"age\":9,\"day\":\"2026-09-07\",\"text\":\"T7b root: overlap oscar papa quebec.\"}],\"replies_unread\":true},{\"id\":\"t1zo\",\"pos\":9,\"status\":\"open\",\"where\":{\"para\":13,\"quote\":\"sierra tango\",\"position\":\"unknown\",\"vs\":\"before\",\"away\":7,\"in\":\"body\"},\"first_at\":\"2026-08-30T09:30\",\"last_at\":\"2026-08-30T09:30\",\"entries\":[{\"n\":0,\"by\":\"Maya Krüger\",\"me\":true,\"at\":\"2026-08-30T09:30\",\"tz\":\"unknown\",\"age\":1,\"day\":\"2026-08-30\",\"text\":\"T8 root: the second sierra tango.\"}],\"replies_unread\":true},{\"id\":\"tp6p\",\"pos\":10,\"status\":\"open\",\"where\":{\"para\":14,\"quote\":\"uniform victor\",\"position\":\"unknown\",\"vs\":\"before\",\"away\":6,\"in\":\"body\"},\"first_at\":\"2026-09-08T18:30\",\"last_at\":\"2026-09-08T18:30\",\"entries\":[{\"n\":0,\"by\":\"Jonas Weber\",\"at\":\"2026-09-08T18:30\",\"tz\":\"unknown\",\"age\":11,\"day\":\"2026-09-08\",\"text\":\"T9 root: uniform victor after a deletion.\"}],\"replies_unread\":true},{\"id\":\"tn19\",\"pos\":11,\"status\":\"open\",\"where\":{\"para\":15,\"quote\":\"whiskey xray\",\"position\":\"unknown\",\"vs\":\"before\",\"away\":5,\"in\":\"body\"},\"first_at\":\"2026-09-08T16:59\",\"last_at\":\"2026-09-08T16:59\",\"entries\":[{\"n\":0,\"by\":\"Lena Fischer\",\"at\":\"2026-09-08T16:59\",\"tz\":\"unknown\",\"age\":10,\"day\":\"2026-09-08\",\"text\":\"T10 root: whiskey xray after hidden text.\"}],\"replies_unread\":true},{\"id\":\"tu3y\",\"pos\":12,\"status\":\"open\",\"where\":{\"para\":16,\"quote\":\"yankee zulu\",\"position\":\"unknown\",\"vs\":\"before\",\"away\":4,\"in\":\"body\"},\"first_at\":\"2026-09-09T12:00\",\"last_at\":\"2026-09-09T12:00\",\"entries\":[{\"n\":0,\"by\":\"Maya Krüger\",\"me\":true,\"at\":\"2026-09-09T12:00\",\"tz\":\"unknown\",\"age\":12,\"day\":\"2026-09-09\",\"text\":\"T11 root: see this point and the spec.\"}],\"replies_unread\":true},{\"id\":\"toxg\",\"pos\":13,\"status\":\"open\",\"where\":{\"para\":17,\"quote\":\"anchor pb\",\"position\":\"unknown\",\"vs\":\"before\",\"away\":3,\"in\":\"body\"},\"first_at\":\"2026-09-14T10:00\",\"last_at\":\"2026-09-14T10:00\",\"entries\":[{\"n\":0,\"by\":\"Maya Krüger\",\"me\":true,\"at\":\"2026-09-14T10:00\",\"tz\":\"unknown\",\"age\":13,\"day\":\"2026-09-14\",\"text\":\"PB1 root: anchor in a paragraph with a page break.\"}],\"replies_unread\":true},{\"id\":\"tbzu\",\"pos\":14,\"status\":\"open\",\"where\":{\"para\":18,\"through\":19,\"quote\":\"start sigma\\tXC2 Cross cell end\",\"position\":\"unknown\",\"vs\":\"before\",\"away\":1,\"in\":{\"table\":2,\"row\":1,\"cell\":1}},\"first_at\":\"2026-09-15T16:00\",\"last_at\":\"2026-09-15T16:00\",\"entries\":[{\"n\":0,\"by\":\"Jonas Weber\",\"at\":\"2026-09-15T16:00\",\"tz\":\"unknown\",\"age\":14,\"day\":\"2026-09-15\",\"text\":\"T14 root: anchor across two table cells.\"}],\"replies_unread\":true}],\"index\":[]}"
+        }
+      },
+      "registered": true,
+      "chips": {
+        "en": [
+          {
+            "id": "word.openComments",
+            "kind": "word.openComments",
+            "icon": "comments",
+            "label": "Open comments (13)",
+            "spokenLabel": "Open comments"
+          }
+        ],
+        "de": [
+          {
+            "id": "word.openComments",
+            "kind": "word.openComments",
+            "icon": "comments",
+            "label": "13 offene Kommentare",
+            "spokenLabel": "Offene Kommentare"
+          }
+        ]
+      },
+      "estimateBytes": 5568
+    },
+    "outlookDraft": {
+      "facet": {
+        "id": "outlook_review_draft",
+        "args": {
+          "recipients": "{\"to\":[{\"displayName\":\"Anna Weber\",\"emailAddress\":\"anna@contoso.test\"},{\"displayName\":\"Tom Fischer\",\"emailAddress\":\"tom@contoso.test\"},{\"displayName\":\"Priya Raman\",\"emailAddress\":\"priya@contoso.test\"}],\"cc\":[]}",
+          "full_body": "Hi Anna,\n\nthanks for the updated contract. Could you confirm the delivery date by Friday? We also need the revised pricing sheet before the steering meeting.\n\nBest regards,\nSam",
+          "body_format": "text"
+        }
+      },
+      "registered": true,
+      "chips": {
+        "en": [
+          {
+            "id": "outlook.draft",
+            "kind": "outlook.draft",
+            "icon": "draft",
+            "label": "Your draft",
+            "spokenLabel": "Draft",
+            "quote": "Hi Anna,\n\nthanks for the updated contract. Could you confirm the delivery date by Friday? We also need the revised pricing sheet before the steering meeting.\n\nBest regards,\nSam",
+            "meta": "To Anna Weber +2"
+          }
+        ],
+        "de": [
+          {
+            "id": "outlook.draft",
+            "kind": "outlook.draft",
+            "icon": "draft",
+            "label": "Ihr Entwurf",
+            "spokenLabel": "Entwurf",
+            "quote": "Hi Anna,\n\nthanks for the updated contract. Could you confirm the delivery date by Friday? We also need the revised pricing sheet before the steering meeting.\n\nBest regards,\nSam",
+            "meta": "An Anna Weber +2"
+          }
+        ]
+      },
+      "estimateBytes": 430
+    },
+    "outlookAppointment": {
+      "facet": {
+        "id": "outlook_review_appointment",
+        "args": {
+          "subject": "Steering committee: vendor renewal",
+          "full_body": "Agenda: renewal terms, delivery dates, pricing sheet.",
+          "required_attendees": "",
+          "optional_attendees": "",
+          "location": "",
+          "start": "2026-10-23T10:00:00+02:00",
+          "end": "2026-10-23T11:00:00+02:00",
+          "body_format": "text",
+          "timezone": "Europe/Berlin"
+        }
+      },
+      "registered": true,
+      "chips": {
+        "en": [
+          {
+            "id": "outlook.appointment",
+            "kind": "outlook.appointment",
+            "icon": "calendar",
+            "label": "Appointment details",
+            "spokenLabel": "Appointment details",
+            "quote": "Agenda: renewal terms, delivery dates, pricing sheet.",
+            "meta": "Fri, Oct 23, 10:00 – 11:00 AM"
+          }
+        ],
+        "de": [
+          {
+            "id": "outlook.appointment",
+            "kind": "outlook.appointment",
+            "icon": "calendar",
+            "label": "Termindetails",
+            "spokenLabel": "Termindetails",
+            "quote": "Agenda: renewal terms, delivery dates, pricing sheet.",
+            "meta": "Fr., 23. Okt., 10:00–11:00 Uhr"
+          }
+        ]
+      },
+      "estimateBytes": 275
+    },
+    "outlookSelection": {
+      "facet": {
+        "id": "outlook_rewrite_selection",
+        "args": {
+          "selected_text": "Could you confirm the delivery date by Friday?",
+          "source_property": "body"
+        }
+      },
+      "registered": true,
+      "chips": {
+        "en": [
+          {
+            "id": "outlook.selection",
+            "kind": "outlook.selection",
+            "icon": "selection",
+            "label": "“Could you confirm the delivery date by Friday?”",
+            "spokenLabel": "Selection",
+            "meta": "Selected text",
+            "quote": "Could you confirm the delivery date by Friday?",
+            "labelIsExcerpt": true
+          }
+        ],
+        "de": [
+          {
+            "id": "outlook.selection",
+            "kind": "outlook.selection",
+            "icon": "selection",
+            "label": "„Could you confirm the delivery date by Friday?“",
+            "spokenLabel": "Auswahl",
+            "meta": "Ausgewählter Text",
+            "quote": "Could you confirm the delivery date by Friday?",
+            "labelIsExcerpt": true
+          }
+        ]
+      },
+      "estimateBytes": 84
+    },
+    "outlookScheduling": {
+      "facet": {
+        "id": "outlook_schedule",
+        "args": {
+          "now_iso": "2026-10-20T09:00:00+02:00",
+          "timezone": "Europe/Berlin"
+        }
+      },
+      "registered": true,
+      "chips": { "en": null, "de": null },
+      "estimateBytes": 59
+    },
+    "unregistered": {
+      "facet": {
+        "id": "sheet_rewrite_selection",
+        "args": { "selected_text": "Q3 revenue: 4.2 M EUR (+8 % year on year)" }
+      },
+      "registered": false,
+      "chips": { "en": null, "de": null },
+      "estimateBytes": 56
+    }
+  },
+  "stories": {
+    "SentWithWordDocument": {
+      "id": "chat-composercontextparity--sent-with-word-document",
+      "kind": "sent",
+      "facet": "wordDocumentPartial",
+      "text": "Summarise the obligations of the Supplier."
+    },
+    "SentWithWordTrackChanges": {
+      "id": "chat-composercontextparity--sent-with-word-track-changes",
+      "kind": "sent",
+      "facet": "wordDocumentTrackChanges",
+      "text": "Which changes are still open?"
+    },
+    "SentWithWordAuthoring": {
+      "id": "chat-composercontextparity--sent-with-word-authoring",
+      "kind": "sent",
+      "facet": "wordAuthoring",
+      "text": "Tighten the wording of clause 4."
+    },
+    "SentWithWordNewDocument": {
+      "id": "chat-composercontextparity--sent-with-word-new-document",
+      "kind": "sent",
+      "facet": "wordNewDocument",
+      "text": "Draft a cover letter for the agreement."
+    },
+    "SentWithWordSelection": {
+      "id": "chat-composercontextparity--sent-with-word-selection",
+      "kind": "sent",
+      "facet": "wordSelection",
+      "text": "Make this passage stricter."
+    },
+    "SentWithWordSelectionTooLong": {
+      "id": "chat-composercontextparity--sent-with-word-selection-too-long",
+      "kind": "sent",
+      "facet": "wordSelectionTooLong",
+      "text": "Shorten this schedule."
+    },
+    "SentWithWordSelectionComment": {
+      "id": "chat-composercontextparity--sent-with-word-selection-comment",
+      "kind": "sent",
+      "facet": "wordSelectionWithComment",
+      "text": "Answer the comment on this passage."
+    },
+    "SentWithWordComment": {
+      "id": "chat-composercontextparity--sent-with-word-comment",
+      "kind": "sent",
+      "facet": "wordCommentChosen",
+      "text": "Suggest a reply to this comment."
+    },
+    "SentWithWordOpenComments": {
+      "id": "chat-composercontextparity--sent-with-word-open-comments",
+      "kind": "sent",
+      "facet": "wordOpenComments",
+      "text": "Which comments still need an answer?"
+    },
+    "SentWithOutlookDraft": {
+      "id": "chat-composercontextparity--sent-with-outlook-draft",
+      "kind": "sent",
+      "facet": "outlookDraft",
+      "text": "Make my draft more polite."
+    },
+    "SentWithOutlookAppointment": {
+      "id": "chat-composercontextparity--sent-with-outlook-appointment",
+      "kind": "sent",
+      "facet": "outlookAppointment",
+      "text": "Write an agenda for this meeting."
+    },
+    "SentWithOutlookSelection": {
+      "id": "chat-composercontextparity--sent-with-outlook-selection",
+      "kind": "sent",
+      "facet": "outlookSelection",
+      "text": "Rephrase this sentence."
+    },
+    "SentWithOutlookScheduling": {
+      "id": "chat-composercontextparity--sent-with-outlook-scheduling",
+      "kind": "sent",
+      "facet": "outlookScheduling",
+      "text": "Find a slot next week."
+    },
+    "SentWithUnregistered": {
+      "id": "chat-composercontextparity--sent-with-unregistered",
+      "kind": "sent",
+      "facet": "unregistered",
+      "text": "Explain this number."
+    },
+    "SentWithLongNames": {
+      "id": "chat-composercontextparity--sent-with-long-names",
+      "kind": "sent",
+      "facet": "wordDocumentLongName",
+      "text": "Summarise the obligations of the Supplier."
+    },
+    "EditTeamsTranscript": {
+      "id": "chat-composercontextparity--edit-teams-transcript",
+      "kind": "edit",
+      "text": "Compare the two supplier quotes with what the team said in Product sync.",
+      "transcript": { "conversations": ["product"] },
+      "files": ["supplier-quote-a.pdf", "supplier-quote-b.pdf"]
+    },
+    "EditTeamsReading": {
+      "id": "chat-composercontextparity--edit-teams-reading",
+      "kind": "edit",
+      "text": "What did the team decide?",
+      "transcript": { "conversations": ["product"], "pending": true },
+      "files": ["supplier-quote-a.pdf"]
+    },
+    "EditTeamsUnreadable": {
+      "id": "chat-composercontextparity--edit-teams-unreadable",
+      "kind": "edit",
+      "text": "What did the team decide?",
+      "transcript": { "conversations": ["product"], "unreadable": true },
+      "files": ["supplier-quote-a.pdf"]
+    },
+    "EditWordSelection": {
+      "id": "chat-composercontextparity--edit-word-selection",
+      "kind": "edit",
+      "text": "Make this passage stricter.",
+      "facet": "wordSelection",
+      "files": ["delivery-terms.pdf"]
+    },
+    "EditWordDocument": {
+      "id": "chat-composercontextparity--edit-word-document",
+      "kind": "edit",
+      "text": "Summarise the obligations of the Supplier.",
+      "facet": "wordDocumentPartial",
+      "files": ["delivery-terms.pdf"]
+    },
+    "EditOutlookDraft": {
+      "id": "chat-composercontextparity--edit-outlook-draft",
+      "kind": "edit",
+      "text": "Make my draft more polite.",
+      "facet": "outlookDraft",
+      "files": ["pricing-sheet.pdf", "contract-v3.pdf"]
+    },
+    "EditFacetUnavailable": {
+      "id": "chat-composercontextparity--edit-facet-unavailable",
+      "kind": "edit",
+      "text": "Make this passage stricter.",
+      "facet": "wordSelection",
+      "files": ["delivery-terms.pdf"],
+      "facetUnavailable": true
+    },
+    "EditKitOverride": {
+      "id": "chat-composercontextparity--edit-kit-override",
+      "kind": "edit",
+      "text": "Compare the two supplier quotes with what the team said in Product sync.",
+      "transcript": { "conversations": ["product"] },
+      "files": ["supplier-quote-a.pdf", "supplier-quote-b.pdf"],
+      "kit": true
+    },
+    "EditManyFiles": {
+      "id": "chat-composercontextparity--edit-many-files",
+      "kind": "edit",
+      "text": "Check every quote against what the team agreed.",
+      "transcript": { "conversations": ["product", "design", "grace"] },
+      "files": [
+        "supplier-quote-a.pdf",
+        "supplier-quote-b.pdf",
+        "supplier-quote-c.pdf",
+        "pricing-sheet.pdf",
+        "contract-v3.pdf",
+        "risk-register.pdf"
+      ]
+    }
+  }
+}

@@ -152,9 +152,15 @@ send path calls (`previewWordSend()`, `previewOutlookSend()`), never from a
 separate UI flag, so a chip cannot say "included" when nothing is sent.
 `onRemove` and `onRestore` change the host's store and the resolver runs
 again; the lane renders the state it gets back and announces that outcome.
-Pass a memoized array, give included items an `estimate` instead of adding
-the same content to `virtualFiles` (both count toward the token estimate),
-and list files a chip stands for in `claimsFileIds` so the file row does not
+Pass a memoized array and give the item that carries content an `estimate`:
+the composer counts included items' estimates toward the token estimate, and
+`virtualFiles` is deprecated. A facet's estimate is `actionFacetEstimate()` of
+the facet the resolver built, so equal args keep one `File`. Mark an estimate
+the send uploads as a file of its own (an email thread, a dropped email)
+`estimateUpload`: the composer then checks it with the staged files against
+the upload size and the per-message file count, and blocks Send as the server
+would. The placeholder names an item over the size limit by its label, and the
+lane draws that chip in the error tone with the limit leading its meta. List files a chip stands for in `claimsFileIds` so the file row does not
 draw them twice. Claimed files hide only while their chip is included or
 loading; a chip that stops being sent must unstage them in the same update,
 or they show in the file row again, because they still send. Give items with
@@ -192,6 +198,14 @@ chip's (x) and the notice's "Send without comments" answer that Send rather
 than the next one, and comments the waiting Send could not read show as an
 error on their chip.
 
+The chip that carries the Send's facet (selection, document, comment or open
+comments) gets that facet's estimate from `wordSendEstimateFacet()`, which runs
+the Send's resolvers and its input preparation (`wordDocumentSendInput()`,
+`wordDocumentFacetInput()`, `wordSelectionForFacets()`) on what render time
+knows: the last capture (`useWordDocumentSource().lastBuild`, never a send's
+copy) and the passage the chip shows. The comment envelopes in it are
+stand-ins built from the listed threads; the Send reads them afresh.
+
 The one-off send prompts (a Send waiting on a choice, a slow capture, comment
 read progress, a failed selection read, the after-send capture and budget
 notes) are `wordComposerNotice()`: one notice at a time by priority, `null`
@@ -206,7 +220,11 @@ into plain models and `useOutlookContextItems` into items. The choices live in
 `outlookContextStore`, in memory only (roaming settings would sync them across
 devices), per conversation, with item-scoped lifetimes; `afterSend` records
 what a send carried and ends the choices that held for one message. Thread and
-drop items carry `estimate`, so the host passes no `virtualFiles`. Sticky
+drop items carry their `.eml` as `estimate` with `estimateUpload`, so the
+composer's own size and count check covers them and the add-in passes no
+`sizeLimitExceeded` of its own; the draft, appointment or selection chip that
+carries the facet gets the estimate of `previewOutlookSend().facet`, the same
+resolver call its state comes from. Sticky
 scheduling is a `composerModes` entry next to "+", not a chip, and shows only
 where ending it changes the facet (`previewOutlookSend().mode`). The "+" menu
 only adds what has no chip.
@@ -223,6 +241,34 @@ follows the staged list across chat switches, queue restores and sends.
 
 A staged recording's transcription status is drawn by the shared composer on
 its own file tile, in every host; there is no status card above the composer.
+
+Selected tools show as chips next to "+" wherever the unified "+" menu is used
+(every add-in surface): one button per tool that deselects it, after "+" and
+the mode chips and before the model selector, as in the prototype. Under an
+assistant that sets the tools, each chip shows a lock in place of its x. In a
+narrow pane the chips wrap beside the controls before them and Send keeps its
+corner; when the right side is wide (Exit audio mode) it moves to a line of its
+own rather than cutting the chips' names. The "+" carries no count badge.
+
+A sent user message names the context its facet carried under its text, in a
+read-only "Sent with" row. Each host registers a descriptor per facet id
+(`registerSentWithDescriptors()` in `installWordComponentRegistrations()` and
+`installOutlookComponentRegistrations()`) that rebuilds the chips from the
+stored `action_facet_args` through the formatters the composer chips use
+(`wordSentWith.ts`, `outlookSentWith.ts`), so the two never read apart. A
+facet that carried no user content (a mode, a reply to the open email, an
+empty compose) returns `null` and shows no row. Teams registers none: its
+context is uploads, which the message shows as conversations.
+
+Editing a message runs the same lane. Its files go through the attachment
+slot, a sent Teams transcript is one chip standing for its files again, and the
+facet the message was sent with is a locked "Sent as before" chip: the server
+sends the stored facet again with the edit, and only while it still offers
+that facet, so `AddinChatCore` passes `isActionFacetAvailable` and an edit
+never claims a facet the server would drop. Until `/me/facets` has loaded that
+check says no, so the chip and its estimate appear once the facets are known.
+A chip whose label is an excerpt (a quoted selection) shows its short name
+there, so "Sent as before" keeps its room; the detail holds the passage.
 
 ## Landmines
 
