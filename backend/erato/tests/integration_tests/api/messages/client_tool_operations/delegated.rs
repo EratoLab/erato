@@ -2,7 +2,7 @@
 //! The host is a test-driven Word pane on an executor stream; the parent turn
 //! runs on that pane's binding with a captured document snapshot.
 use super::attached::serve;
-use super::executor_stream::Pane;
+use super::executor_stream::{Pane, account, rows, wait_released};
 use super::*;
 use crate::test_utils::{
     build_openai_delayed_text_streaming_response, build_openai_paused_tool_calls_streaming_response,
@@ -32,8 +32,13 @@ const RESEARCH_ANSWER: &str = "RESEARCH-ANSWER";
 const PARENT_FINAL: &str = "PARENT-FINAL-ANSWER";
 const PANE_TEXT: &str = "PANE-RESULT-SENTINEL";
 const TIMEOUT_MS: u64 = 60_000;
+const NOT_ENABLED: &str = "client tools are not enabled for tasks";
+const NOT_FROM_HOST: &str = "the turn was not sent from the pane this task needs";
 const NONE_OFFERED: &str = "the turn offered no client tools that tasks may use";
+const ALL_NEVER: &str = "the user does not allow these client tools";
 const PANE_NOT_CONNECTED: &str = "the pane is not connected";
+const PANE_REFUSES_TASKS: &str = "the pane does not take calls from tasks";
+const RETRIED: &str = "a retried task gets no client tools";
 
 fn word_pane() -> ExecutorBinding {
     ExecutorBinding {
@@ -163,21 +168,33 @@ fn research_task(run_mode: Option<&str>) -> (&'static str, Value) {
 
 /// The parent plans `tasks`, then answers once a task result is back.
 fn mock_parent(mocks: &mut MockSet, recorder: &RequestBodyRecorder, tasks: Vec<(&str, Value)>) {
-    let calls: Vec<(String, Value)> = tasks
+    mock_parent_with(
+        mocks,
+        recorder,
+        build_openai_tool_calls_streaming_response(&task_calls(tasks)),
+    );
+}
+
+fn task_calls(tasks: Vec<(&str, Value)>) -> Vec<(&str, &str, Value)> {
+    tasks
         .into_iter()
-        .map(|(id, args)| (id.to_string(), args))
-        .collect();
+        .map(|(id, args)| (id, "delegate_task", args))
+        .collect()
+}
+
+/// [`mock_parent`] whose planning turn answers with `first`.
+fn mock_parent_with(
+    mocks: &mut MockSet,
+    recorder: &RequestBodyRecorder,
+    first: Vec<mocktail::body::BodyAction>,
+) {
     let recorder = recorder.clone();
     mocks.mock(move |when, then| {
         when.post()
             .path("/v1/chat/completions")
             .matcher(BodyContainsMatcher::new(&[USER_MESSAGE], &["child_run_id"]))
             .matcher(recorder);
-        let calls: Vec<(&str, &str, Value)> = calls
-            .iter()
-            .map(|(id, args)| (id.as_str(), "delegate_task", args.clone()))
-            .collect();
-        mock_llm_sse_response(then, build_openai_tool_calls_streaming_response(&calls));
+        mock_llm_sse_response(then, first);
     });
     mocks.mock(|when, then| {
         when.post()
@@ -445,25 +462,27 @@ fn offers(body: &Value, name: &str) -> bool {
         .is_some_and(|tools| tools.iter().any(|tool| tool["function"]["name"] == name))
 }
 
-async fn account(state: &erato::state::AppState) -> Uuid {
-    get_or_create_user(&state.db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
-        .await
-        .unwrap()
-        .id
-}
-
-async fn table_rows(state: &erato::state::AppState, table: &str) -> i64 {
-    state
-        .db
-        .query_one_raw(sea_orm::Statement::from_string(
-            sea_orm::DatabaseBackend::Postgres,
-            format!("SELECT count(*) AS n FROM {table}"),
-        ))
-        .await
-        .unwrap()
-        .unwrap()
-        .try_get("", "n")
-        .unwrap()
+/// The turn's one client task got no grant, its child was not offered the
+/// read tool, and its result says `reason`.
+async fn assert_no_grant(
+    state: &erato::state::AppState,
+    chat_id: Uuid,
+    child: &RequestBodyRecorder,
+    reason: &str,
+) {
+    assert!(!offers(&turn_bodies(child)[0], READ_TOOL));
+    let client_child = child_chat(&state.db, chat_id, CHILD_FACET).await.unwrap();
+    assert!(task_spec(&client_child).get("client_grant").is_none());
+    assert_eq!(
+        task_spec(&client_child)["client_task"]["unavailable"],
+        reason
+    );
+    let slot = part_for(&assistant_row(&state.db, chat_id).await, CLIENT_TASK_CALL);
+    assert_eq!(
+        slot["output"]["client_tools"],
+        json!({ "unavailable": reason }),
+        "{slot}"
+    );
 }
 
 #[sqlx::test(migrator = "crate::MIGRATOR")]
@@ -578,7 +597,7 @@ async fn a_granted_call_reaches_the_pane_with_lineage_and_the_server_context_ref
             .any(|body| body.to_string().contains(SNAPSHOT)),
         "the child's model never sees the context version"
     );
-    assert_eq!(table_rows(&state, "client_executor_calls").await, 0);
+    assert_eq!(rows(&state, "client_executor_calls").await, 0);
     server.abort();
 }
 
@@ -782,18 +801,61 @@ async fn no_pane_at_launch_means_no_grant_and_the_result_says_why(pool: Pool<Pos
     assert!(finish(run).await.contains(PARENT_FINAL));
 
     assert!(offers(&turn_bodies(&parent)[0], READ_TOOL));
-    assert!(!offers(&turn_bodies(&child)[0], READ_TOOL));
-    let client_child = child_chat(&state.db, chat_id, CHILD_FACET).await.unwrap();
-    assert!(task_spec(&client_child).get("client_grant").is_none());
-    assert_eq!(
-        task_spec(&client_child)["client_task"]["unavailable"],
-        PANE_NOT_CONNECTED
-    );
-    let slot = part_for(&assistant_row(&state.db, chat_id).await, CLIENT_TASK_CALL);
-    assert_eq!(
-        slot["output"]["client_tools"],
-        json!({"unavailable": PANE_NOT_CONNECTED})
-    );
+    assert_no_grant(&state, chat_id, &child, PANE_NOT_CONNECTED).await;
+    server.abort();
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_pane_that_takes_no_task_calls_gets_no_grant(pool: Pool<Postgres>) {
+    let (parent, child) = (RequestBodyRecorder::new(), RequestBodyRecorder::new());
+    let mut mocks = MockSet::new();
+    mock_parent(&mut mocks, &parent, vec![client_task(None)]);
+    mock_client_child_answers(&mut mocks, &child);
+    let (state, _llm) = delegated_state(pool, mocks, |_| {}).await;
+    let (base, server) = serve(&state).await;
+    let _pane = Pane::open_serving(&base, &word_pane(), PANE_TOOLS, None).await;
+    let chat_id = seed_origin_chat(&state.db).await;
+    let run = spawn_parent(&base, chat_id, ACTION_FACET, Some(word_pane()));
+    assert!(finish(run).await.contains(PARENT_FINAL));
+
+    assert!(offers(&turn_bodies(&parent)[0], READ_TOOL));
+    assert_no_grant(&state, chat_id, &child, PANE_REFUSES_TASKS).await;
+    server.abort();
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_turn_without_the_hosts_binding_gets_no_grant(pool: Pool<Postgres>) {
+    let (parent, child) = (RequestBodyRecorder::new(), RequestBodyRecorder::new());
+    let mut mocks = MockSet::new();
+    mock_parent(&mut mocks, &parent, vec![client_task(None)]);
+    mock_client_child_answers(&mut mocks, &child);
+    let (state, _llm) = delegated_state(pool, mocks, |_| {}).await;
+    let (base, server) = serve(&state).await;
+    let _pane = open_pane(&base).await;
+    let chat_id = seed_origin_chat(&state.db).await;
+    let run = spawn_parent(&base, chat_id, ACTION_FACET, None);
+    assert!(finish(run).await.contains(PARENT_FINAL));
+
+    assert_no_grant(&state, chat_id, &child, NOT_FROM_HOST).await;
+    server.abort();
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn client_tasks_get_no_grant_while_executor_streams_are_off(pool: Pool<Postgres>) {
+    let (parent, child) = (RequestBodyRecorder::new(), RequestBodyRecorder::new());
+    let mut mocks = MockSet::new();
+    mock_parent(&mut mocks, &parent, vec![client_task(None)]);
+    mock_client_child_answers(&mut mocks, &child);
+    let (state, _llm) = delegated_state(pool, mocks, |config| {
+        config.client_tools.executor_stream_enabled = false;
+    })
+    .await;
+    let (base, server) = serve(&state).await;
+    let chat_id = seed_origin_chat(&state.db).await;
+    let run = spawn_parent(&base, chat_id, ACTION_FACET, Some(word_pane()));
+    assert!(finish(run).await.contains(PARENT_FINAL));
+
+    assert_no_grant(&state, chat_id, &child, NOT_ENABLED).await;
     server.abort();
 }
 
@@ -828,18 +890,7 @@ async fn a_pane_gone_before_dispatch_is_context_unavailable_at_once(pool: Pool<P
     let client_child = wait_child(&state.db, chat_id, CHILD_FACET).await;
     assert!(task_spec(&client_child)["client_grant"].is_object());
     drop(pane);
-    let account = account(&state).await;
-    tokio::time::timeout(Duration::from_secs(5), async {
-        while executor_stream::present(&state.db, account, &word_pane())
-            .await
-            .unwrap()
-            .is_some()
-        {
-            tokio::time::sleep(Duration::from_millis(20)).await;
-        }
-    })
-    .await
-    .expect("a dropped pane releases its binding");
+    wait_released(&state, &word_pane()).await;
     let gone = tokio::time::Instant::now();
     assert!(finish(run).await.contains(PARENT_FINAL));
     assert!(
@@ -855,7 +906,7 @@ async fn a_pane_gone_before_dispatch_is_context_unavailable_at_once(pool: Pool<P
         read["output"],
         json!({"status":"cancelled","reason":"context_unavailable"})
     );
-    assert_eq!(table_rows(&state, "client_executor_calls").await, 0);
+    assert_eq!(rows(&state, "client_executor_calls").await, 0);
     server.abort();
 }
 
@@ -897,7 +948,7 @@ async fn a_child_call_never_waits_for_the_inbox_even_for_a_durable_tool(pool: Po
         json!({"status":"cancelled","reason":"timeout"}),
         "an unanswered granted call times out instead of parking"
     );
-    assert_eq!(table_rows(&state, "client_operation_attempts").await, 0);
+    assert_eq!(rows(&state, "client_operation_attempts").await, 0);
     for chat in [client_child.id, chat_id] {
         assert_ne!(
             reload(&state.db, chat).await.generation_state.as_deref(),
@@ -932,7 +983,7 @@ async fn a_pane_lost_in_flight_is_context_unavailable_after_the_grace(pool: Pool
     let chat_id = seed_origin_chat(&state.db).await;
     let run = spawn_parent(&base, chat_id, ACTION_FACET, Some(word_pane()));
     tokio::time::timeout(Duration::from_secs(15), async {
-        while table_rows(&state, "client_executor_calls").await == 0 {
+        while rows(&state, "client_executor_calls").await == 0 {
             tokio::time::sleep(Duration::from_millis(20)).await;
         }
     })
@@ -961,7 +1012,7 @@ async fn a_pane_lost_in_flight_is_context_unavailable_after_the_grace(pool: Pool
         read["output"],
         json!({"status":"cancelled","reason":"context_unavailable"})
     );
-    assert_eq!(table_rows(&state, "client_executor_calls").await, 0);
+    assert_eq!(rows(&state, "client_executor_calls").await, 0);
     server.abort();
 }
 
@@ -1130,7 +1181,7 @@ async fn never_withholds_the_grant_and_the_offer(pool: Pool<Postgres>) {
 }
 
 #[sqlx::test(migrator = "crate::MIGRATOR")]
-async fn never_before_launch_writes_no_grant(pool: Pool<Postgres>) {
+async fn never_before_the_turn_leaves_nothing_to_grant(pool: Pool<Postgres>) {
     let (parent, child) = (RequestBodyRecorder::new(), RequestBodyRecorder::new());
     let mut mocks = MockSet::new();
     mock_parent(&mut mocks, &parent, vec![client_task(None)]);
@@ -1151,13 +1202,52 @@ async fn never_before_launch_writes_no_grant(pool: Pool<Postgres>) {
     assert!(finish(run).await.contains(PARENT_FINAL));
 
     assert!(!offers(&turn_bodies(&parent)[0], READ_TOOL));
-    assert!(!offers(&turn_bodies(&child)[0], READ_TOOL));
-    let client_child = child_chat(&state.db, chat_id, CHILD_FACET).await.unwrap();
-    assert!(task_spec(&client_child).get("client_grant").is_none());
-    assert_eq!(
-        task_spec(&client_child)["client_task"]["unavailable"],
-        NONE_OFFERED
+    assert_no_grant(&state, chat_id, &child, NONE_OFFERED).await;
+    server.abort();
+}
+
+/// Between the parent's offer and its task call, long enough for the test to
+/// change the user's decision.
+const PLAN_PAUSE: Duration = Duration::from_secs(3);
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn never_after_the_offer_writes_no_grant(pool: Pool<Postgres>) {
+    let (parent, child) = (RequestBodyRecorder::new(), RequestBodyRecorder::new());
+    let mut mocks = MockSet::new();
+    mock_parent_with(
+        &mut mocks,
+        &parent,
+        build_openai_paused_tool_calls_streaming_response(
+            "Planning the reads.",
+            PLAN_PAUSE,
+            &task_calls(vec![client_task(None)]),
+        ),
     );
+    mock_client_child_answers(&mut mocks, &child);
+    let (state, _llm) = delegated_state(pool, mocks, |_| {}).await;
+    let (base, server) = serve(&state).await;
+    let _pane = open_pane(&base).await;
+    let chat_id = seed_origin_chat(&state.db).await;
+    let run = spawn_parent(&base, chat_id, ACTION_FACET, Some(word_pane()));
+    tokio::time::timeout(Duration::from_secs(15), async {
+        while turn_bodies(&parent).is_empty() {
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .expect("the parent's model is asked");
+    erato::models::user_preference::set_client_tool_decision(
+        &state.db,
+        &account(&state).await,
+        READ_QUALIFIED,
+        erato::models::user_preference::ClientToolDecision::NeverAllow,
+    )
+    .await
+    .unwrap();
+    assert!(finish(run).await.contains(PARENT_FINAL));
+
+    assert!(offers(&turn_bodies(&parent)[0], READ_TOOL));
+    assert_no_grant(&state, chat_id, &child, ALL_NEVER).await;
     server.abort();
 }
 
@@ -1171,6 +1261,81 @@ async fn an_adopted_child_is_not_offered_the_granted_tool(pool: Pool<Postgres>) 
     let resumed = approve_and_resume(&parked).await;
     assert!(!offers(&resumed, READ_TOOL), "{resumed}");
     parked.server.abort();
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_regenerate_in_a_finished_client_child_is_not_offered_the_granted_tool(
+    pool: Pool<Postgres>,
+) {
+    let (parent, child) = (RequestBodyRecorder::new(), RequestBodyRecorder::new());
+    let mut mocks = MockSet::new();
+    mock_parent(
+        &mut mocks,
+        &parent,
+        vec![client_task(None), research_task(None)],
+    );
+    mock_client_child_answers(&mut mocks, &child);
+    // Keeps the parent's turn running after the client task has finished.
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(&[RESEARCH_BRIEF], &[USER_MESSAGE]));
+        mock_llm_sse_response(
+            then,
+            build_openai_delayed_text_streaming_response(
+                &[RESEARCH_ANSWER, " and more"],
+                Duration::from_secs(4),
+            ),
+        );
+    });
+    let (state, _llm) = delegated_state(pool, mocks, |_| {}).await;
+    let (base, server) = serve(&state).await;
+    let _pane = open_pane(&base).await;
+    let chat_id = seed_origin_chat(&state.db).await;
+    let run = spawn_parent(&base, chat_id, ACTION_FACET, Some(word_pane()));
+    let client_child = wait_child(&state.db, chat_id, CHILD_FACET).await;
+    tokio::time::timeout(Duration::from_secs(15), async {
+        loop {
+            let local_done = state
+                .background_tasks
+                .get_task(&client_child.id)
+                .await
+                .is_none_or(|task| task.is_completed());
+            let stored_done = reload(&state.db, client_child.id)
+                .await
+                .generation_state
+                .is_some_and(|state| state != "running");
+            if local_done && stored_done {
+                return;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .expect("the client task finishes");
+
+    let answer = assistant_row(&state.db, client_child.id).await;
+    app_server(state.clone())
+        .post("/api/v1beta/me/messages/regeneratestream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .add_header(
+            "X-Erato-Executor",
+            serde_json::to_string(&word_pane()).unwrap(),
+        )
+        .add_header("X-Erato-Client-Tools", PANE_TOOLS)
+        .json(&json!({ "current_message_id": answer.id }))
+        .await
+        .assert_status_ok();
+    assert!(!run.is_finished(), "the owner turn still runs");
+    let child_turns = turn_bodies(&child);
+    assert_eq!(child_turns.len(), 2);
+    assert!(offers(&child_turns[0], READ_TOOL));
+    assert!(
+        !offers(&child_turns[1], READ_TOOL),
+        "the user's own turn adopts the run"
+    );
+    assert!(finish(run).await.contains(PARENT_FINAL));
+    server.abort();
 }
 
 #[sqlx::test(migrator = "crate::MIGRATOR")]
@@ -1236,7 +1401,10 @@ async fn a_retried_client_task_gets_no_grant(pool: Pool<Postgres>) {
         "the replacement is the same client task"
     );
     assert!(task_spec(&replacement).get("client_grant").is_none());
-    assert!(task_spec(&replacement).get("client_task").is_none());
+    assert_eq!(
+        task_spec(&replacement)["client_task"],
+        json!({"host_context": "word_document", "unavailable": RETRIED})
+    );
     server.abort();
 }
 
@@ -1400,7 +1568,7 @@ async fn a_childs_client_tool_ask_shows_one_item_per_child_and_parks_the_parent(
     assert_eq!(request["kind"], "delegated_task");
     let items = request["approvals"].as_array().unwrap();
     assert_eq!(items.len(), 2, "{request}");
-    // In the order the children parked.
+    // Items follow the order the children parked, which varies between runs.
     let mut approval_ids: Vec<&str> = items
         .iter()
         .map(|item| item["approval_id"].as_str().unwrap())
@@ -1608,9 +1776,52 @@ async fn always_allow_on_a_client_tool_child_item_is_accepted_under_a_strict_mcp
         Some(erato::models::user_preference::ClientToolDecision::AlwaysAllow)
     );
     assert_eq!(
-        table_rows(&asked.state, "user_tool_approval_settings").await,
+        rows(&asked.state, "user_tool_approval_settings").await,
         0,
         "no MCP setting is written for a client tool"
+    );
+    asked.server.abort();
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn never_allow_on_a_client_tool_child_item_is_stored_as_the_client_tool_preference(
+    pool: Pool<Postgres>,
+) {
+    let mut asked = ask_in_a_client_task(pool, |_| {}).await;
+    let approval_id = parked_part(&asked.parent_message)["approvals"][0]["approval_id"].clone();
+    let decided = spawn_decision(
+        &asked.base,
+        json!({
+            "message_id": asked.parent_message.id,
+            "decisions": [{ "approval_id": approval_id, "decision": "reject_always" }],
+        }),
+    );
+    assert!(finish(decided).await.contains(PARENT_FINAL));
+    assert_eq!(asked.pane.next(Duration::from_millis(300)).await, None);
+
+    assert_eq!(
+        erato::models::user_preference::find_client_tool_decision(
+            &asked.state.db,
+            &account(&asked.state).await,
+            READ_QUALIFIED,
+        )
+        .await
+        .unwrap(),
+        Some(erato::models::user_preference::ClientToolDecision::NeverAllow)
+    );
+    assert_eq!(
+        rows(&asked.state, "user_tool_approval_settings").await,
+        0,
+        "no MCP setting is written for a client tool"
+    );
+    let slot = part_for(
+        &assistant_row(&asked.state.db, asked.chat_id).await,
+        CLIENT_TASK_CALL,
+    );
+    assert_eq!(
+        slot["output"]["client_tools"],
+        json!({"declined": 1}),
+        "{slot}"
     );
     asked.server.abort();
 }

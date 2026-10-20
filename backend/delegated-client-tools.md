@@ -51,7 +51,8 @@ The grant lists exactly the tools that pass. `context_ref` is the parent turn's
 persisted `action_facet_args[child_context_arg]`, opaque to the backend.
 `TaskSpec.client_task {host_context, run_mode?, unavailable?}` is written for every
 client task, with or without a grant. Retries and the @-mention route never get a
-grant or a note.
+grant. A retried client task still gets the note, with the reason "a retried task
+gets no client tools"; a mention run gets none.
 
 ## Offer predicate
 

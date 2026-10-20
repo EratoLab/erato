@@ -13994,12 +13994,15 @@ pub(crate) fn reject_if_archived(
 ///
 /// The in-memory task only knows about this replica, so the chat's own
 /// generation lease is checked as well.
+///
+/// Returns the chat as stored after the adoption: a caller that prepares the
+/// generation from it must see `adopted_at`, which ends a client grant.
 async fn accept_user_write_into_delegated_run(
     app_state: &AppState,
     chat: &chats::Model,
-) -> Result<(), (axum::http::StatusCode, String)> {
+) -> Result<chats::Model, (axum::http::StatusCode, String)> {
     if !crate::models::chat::chat_is_delegated_run(chat) {
-        return Ok(());
+        return Ok(chat.clone());
     }
 
     let local_task_running = app_state
@@ -14030,7 +14033,20 @@ async fn accept_user_write_into_delegated_run(
     if let Err(error) = crate::models::chat::mark_delegated_run_adopted(&app_state.db, chat).await {
         tracing::warn!(%error, chat_id = %chat.id, "Failed to mark the delegated run as adopted");
     }
-    Ok(())
+    let failed = || {
+        (
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            "Failed to load chat".to_string(),
+        )
+    };
+    chats::Entity::find_by_id(chat.id)
+        .one(&app_state.db)
+        .await
+        .map_err(|error| {
+            tracing::warn!(%error, chat_id = %chat.id, "Failed to reload the adopted delegated run");
+            failed()
+        })?
+        .ok_or_else(failed)
 }
 
 /// A submit whose generation is running in the background: the chat it
@@ -16086,7 +16102,7 @@ pub(crate) async fn start_regeneration(
         }
     })?;
     reject_if_archived(&chat)?;
-    accept_user_write_into_delegated_run(&app_state, &chat).await?;
+    let chat = accept_user_write_into_delegated_run(&app_state, &chat).await?;
 
     // Assistant mentions: an explicit request value is validated hard (400);
     // absent, fall back to the mentions persisted on the turn's user message,
@@ -16611,7 +16627,7 @@ pub(crate) async fn start_edit(
         }
     })?;
     reject_if_archived(&chat)?;
-    accept_user_write_into_delegated_run(&app_state, &chat).await?;
+    let chat = accept_user_write_into_delegated_run(&app_state, &chat).await?;
 
     // Assistant mentions follow the same edit contract as the action facet:
     // an explicit request value is validated hard (400), an absent one falls
