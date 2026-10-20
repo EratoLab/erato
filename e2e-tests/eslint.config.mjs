@@ -19,6 +19,7 @@ export default [
       "storybook-composer-context-fixes/**/*.ts",
       "storybook-composer-context-lane/**/*.ts",
       "storybook-word-context-chips/**/*.ts",
+      "storybook-outlook-context-chips/**/*.ts",
     ],
     languageOptions: { parser: tsParser },
     plugins: { playwright },
