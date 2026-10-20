@@ -610,11 +610,6 @@ fn ask_for_tool_call(
     }))
 }
 
-/// The client-tool counterpart of [`gate_mcp_tool_call`]. There is no policy
-/// default: a tool the user never decided on runs, as it always has.
-///
-/// Asking parks the same durable stop an MCP approval does, so the user's time
-/// to decide never counts against the tool's result timeout.
 /// The model's text for a client call that ended without a result.
 fn cancelled_client_tool_text(reason: &str) -> String {
     let why = match reason {
@@ -625,6 +620,11 @@ fn cancelled_client_tool_text(reason: &str) -> String {
     format!("Client tool was not completed (reason: {reason}); {why}.")
 }
 
+/// The client-tool counterpart of [`gate_mcp_tool_call`]. There is no policy
+/// default: a tool the user never decided on runs, as it always has.
+///
+/// Asking parks the same durable stop an MCP approval does, so the user's time
+/// to decide never counts against the tool's result timeout.
 fn gate_client_tool_call(
     namespace: &str,
     tool_call: &genai::chat::ToolCall,

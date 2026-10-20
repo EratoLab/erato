@@ -52,12 +52,12 @@ pub fn wait_note(host: ClientToolHostContext) -> String {
     .to_string()
 }
 
-pub const NOT_ENABLED: &str = "client tools are not enabled for tasks";
-pub const NOT_FROM_HOST: &str = "the turn was not sent from the pane this task needs";
-pub const NONE_OFFERED: &str = "the turn offered no client tools that tasks may use";
-pub const ALL_NEVER: &str = "the user does not allow these client tools";
-pub const PANE_NOT_CONNECTED: &str = "the pane is not connected";
-pub const PANE_REFUSES_TASKS: &str = "the pane does not take calls from tasks";
+pub(crate) const NOT_ENABLED: &str = "client tools are not enabled for tasks";
+pub(crate) const NOT_FROM_HOST: &str = "the turn was not sent from the pane this task needs";
+pub(crate) const NONE_OFFERED: &str = "the turn offered no client tools that tasks may use";
+pub(crate) const ALL_NEVER: &str = "the user does not allow these client tools";
+pub(crate) const PANE_NOT_CONNECTED: &str = "the pane is not connected";
+pub(crate) const PANE_REFUSES_TASKS: &str = "the pane does not take calls from tasks";
 
 /// Whether a tool may be granted for `host`, by its current configuration.
 fn grantable(config: &ClientToolConfig, host: &str) -> bool {
@@ -193,8 +193,8 @@ pub fn granted_tool_allowed(
 }
 
 /// A delegated run's granted tools as they may be offered now, with the
-/// grant's binding. Empty for any run without a grant, or whose grant no
-/// longer holds; the same answer on a fresh turn and on a continuation.
+/// grant's binding. `None` for a run without a grant or whose grant no longer
+/// holds; the same answer on a fresh turn and on a continuation.
 pub(crate) async fn granted_tools(
     app_state: &AppState,
     chat: &chats::Model,
