@@ -290,6 +290,7 @@ describe("Outlook sent-with descriptors", () => {
           spokenLabel: "Selection",
           meta: "Selected text",
           quote: text,
+          labelIsExcerpt: true,
         },
       ]);
       const composer = composerChips(

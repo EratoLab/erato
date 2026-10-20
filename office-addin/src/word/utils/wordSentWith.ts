@@ -192,7 +192,7 @@ const selectionChips: SentWithDescriptor = (args) => {
       icon: "selection",
       label: text ? quotedSelection(selectionExcerpt(text)) : spokenLabel,
       spokenLabel,
-      ...(text ? { quote: text } : {}),
+      ...(text ? { quote: text, labelIsExcerpt: true } : {}),
       ...joinMeta(
         args.truncated === "true"
           ? wordSelectionTooLongText()

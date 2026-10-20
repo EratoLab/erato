@@ -113,7 +113,7 @@ const selectionChips: SentWithDescriptor = (args) => {
         id: "officeAddin.outlook.context.selection.title",
         message: "Selected text",
       }),
-      ...(text ? { quote: text } : {}),
+      ...(text ? { quote: text, labelIsExcerpt: true } : {}),
     },
   ];
 };

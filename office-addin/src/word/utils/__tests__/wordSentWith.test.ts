@@ -429,6 +429,7 @@ describe("Word sent-with descriptors", () => {
         icon: "selection",
         spokenLabel: "Selection",
         quote: selection.selectedText,
+        labelIsExcerpt: true,
       });
       expect(chip.label).toBe(quotedSelection(selectionExcerpt(composer.text)));
       expect(chip.meta).toBe(composer.meta);

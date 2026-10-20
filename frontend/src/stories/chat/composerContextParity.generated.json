@@ -216,6 +216,7 @@
             "label": "“The Supplier shall deliver the Goods no later than the deliv…”",
             "spokenLabel": "Selection",
             "quote": "The Supplier shall deliver the Goods no later than the delivery dates set out in Schedule 2. Partial deliveries require the Buyer's prior written consent.",
+            "labelIsExcerpt": true,
             "meta": "Selected passage · 2 ¶"
           }
         ],
@@ -227,6 +228,7 @@
             "label": "„The Supplier shall deliver the Goods no later than the deliv…“",
             "spokenLabel": "Auswahl",
             "quote": "The Supplier shall deliver the Goods no later than the delivery dates set out in Schedule 2. Partial deliveries require the Buyer's prior written consent.",
+            "labelIsExcerpt": true,
             "meta": "Ausgewählte Passage · 2 ¶"
           }
         ]
@@ -255,6 +257,7 @@
             "label": "“Schedule 2 sets out the delivery plan for every site in scop…”",
             "spokenLabel": "Selection",
             "quote": "Schedule 2 sets out the delivery plan for every site in scope, including the staging of partial deliveries, the acceptance procedure, the documents that must accompany each shipment and the remedies available to the Buyer if a milestone is missed. Schedule 2 sets out the delivery plan for every site in scope, including the staging of partial deliveries, the acceptance procedure, the documents that must accompany each shipment and the remedies available to the Buyer if a milestone is missed. Schedule 2 sets out the delivery plan for every site in scope, including the staging of partial deliveries, the acceptance procedure, the documents that must accompany each shipment and the remedies available to the Buyer if a milestone is missed. Schedule 2 sets out the delivery plan for every site in scope, including the staging of partial deliveries, the acceptance procedure, the documents that must accompany each shipment and the remedies available to the Buyer if a milestone is missed. Schedule 2 sets out the delivery plan for every site in scope, including the staging of partial deliveries, the acceptance procedure, the documents that must accompany each shipment and the remedies available to the Buyer if a milestone is missed. Schedule 2 sets out the delivery plan for every site in scope, including the staging of partial deliveries, the acceptance procedure, the documents that must accompany each shipment and the remedies available to the Buyer if a milestone is missed.",
+            "labelIsExcerpt": true,
             "meta": "Too long · beginning only"
           }
         ],
@@ -266,6 +269,7 @@
             "label": "„Schedule 2 sets out the delivery plan for every site in scop…“",
             "spokenLabel": "Auswahl",
             "quote": "Schedule 2 sets out the delivery plan for every site in scope, including the staging of partial deliveries, the acceptance procedure, the documents that must accompany each shipment and the remedies available to the Buyer if a milestone is missed. Schedule 2 sets out the delivery plan for every site in scope, including the staging of partial deliveries, the acceptance procedure, the documents that must accompany each shipment and the remedies available to the Buyer if a milestone is missed. Schedule 2 sets out the delivery plan for every site in scope, including the staging of partial deliveries, the acceptance procedure, the documents that must accompany each shipment and the remedies available to the Buyer if a milestone is missed. Schedule 2 sets out the delivery plan for every site in scope, including the staging of partial deliveries, the acceptance procedure, the documents that must accompany each shipment and the remedies available to the Buyer if a milestone is missed. Schedule 2 sets out the delivery plan for every site in scope, including the staging of partial deliveries, the acceptance procedure, the documents that must accompany each shipment and the remedies available to the Buyer if a milestone is missed. Schedule 2 sets out the delivery plan for every site in scope, including the staging of partial deliveries, the acceptance procedure, the documents that must accompany each shipment and the remedies available to the Buyer if a milestone is missed.",
+            "labelIsExcerpt": true,
             "meta": "Zu lang · nur der Anfang"
           }
         ]
@@ -294,6 +298,7 @@
             "label": "“Payment is due within 30 days of the invoice date. Late paym…”",
             "spokenLabel": "Selection",
             "quote": "Payment is due within 30 days of the invoice date. Late payments bear interest at the statutory rate.",
+            "labelIsExcerpt": true,
             "meta": "1 comment · 1 ¶"
           }
         ],
@@ -305,6 +310,7 @@
             "label": "„Payment is due within 30 days of the invoice date. Late paym…“",
             "spokenLabel": "Auswahl",
             "quote": "Payment is due within 30 days of the invoice date. Late payments bear interest at the statutory rate.",
+            "labelIsExcerpt": true,
             "meta": "1 Kommentar · 1 ¶"
           }
         ]
@@ -473,7 +479,8 @@
             "label": "“Could you confirm the delivery date by Friday?”",
             "spokenLabel": "Selection",
             "meta": "Selected text",
-            "quote": "Could you confirm the delivery date by Friday?"
+            "quote": "Could you confirm the delivery date by Friday?",
+            "labelIsExcerpt": true
           }
         ],
         "de": [
@@ -484,7 +491,8 @@
             "label": "„Could you confirm the delivery date by Friday?“",
             "spokenLabel": "Auswahl",
             "meta": "Ausgewählter Text",
-            "quote": "Could you confirm the delivery date by Friday?"
+            "quote": "Could you confirm the delivery date by Friday?",
+            "labelIsExcerpt": true
           }
         ]
       },
