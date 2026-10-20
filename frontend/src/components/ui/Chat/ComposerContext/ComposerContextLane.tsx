@@ -58,6 +58,7 @@ const PENDING_TIMEOUT_MS = 3000;
 interface PendingAction {
   action: "remove" | "restore" | "detail";
   state: ComposerContextState;
+  origin: ComposerContextItem["origin"];
   label: string;
   removedText?: string;
   /** A detail action's own words for a state it asked for. */
@@ -318,9 +319,28 @@ export const ComposerContextLane = memo(function ComposerContextLane({
             onRemoveClaimedFiles?.(pending.claimsFileIds);
           }
           say(pending.removedText ?? announceRemoved(pending.label));
+        } else if (pending.action === "detail" && pending.detailText) {
+          // A choice that ends the item ("Use selected passage instead" on a
+          // pick) still did what it said.
+          say(pending.detailText);
         }
         if (isFocusAvailable(lane)) {
           focusAfterRemoval(id, pending.order);
+        }
+        continue;
+      }
+      // A user item whose (x) hands its id back to ambient context (a pick
+      // that ends into the comment at the caret) was removed all the same,
+      // whatever state the ambient item lands in; focus stays on it.
+      if (pending.action === "remove" && item.origin !== pending.origin) {
+        pendingRef.current.delete(id);
+        handled.add(id);
+        if (pending.claimsFileIds?.length) {
+          onRemoveClaimedFiles?.(pending.claimsFileIds);
+        }
+        say(pending.removedText ?? announceRemoved(pending.label));
+        if (isFocusAvailable(lane)) {
+          focusKey(id);
         }
         continue;
       }
@@ -500,6 +520,7 @@ export const ComposerContextLane = memo(function ComposerContextLane({
       pendingRef.current.set(item.id, {
         action: "remove",
         state: item.state,
+        origin: item.origin,
         label: composerContextSpokenLabel(item),
         removedText: item.announcements?.removed,
         claimsFileIds: item.origin === "user" ? item.claimsFileIds : undefined,
@@ -525,6 +546,7 @@ export const ComposerContextLane = memo(function ComposerContextLane({
       pendingRef.current.set(item.id, {
         action: "restore",
         state: item.state,
+        origin: item.origin,
         label: composerContextSpokenLabel(item),
         at: Date.now(),
         order: prevOrderRef.current,
@@ -544,6 +566,7 @@ export const ComposerContextLane = memo(function ComposerContextLane({
       pendingRef.current.set(item.id, {
         action: "detail",
         state: item.state,
+        origin: item.origin,
         label: composerContextSpokenLabel(item),
         detailText: action.announcement,
         at: Date.now(),

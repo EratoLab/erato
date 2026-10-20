@@ -340,7 +340,7 @@ export const ComposerContextDetail = ({
     return null;
   }
 
-  const renderContext = { locked: Boolean(item.locked) };
+  const renderContext = { locked: Boolean(item.locked), runAction };
   const hasFooter =
     composerContextControl(item) !== null || (detail.actions?.length ?? 0) > 0;
   const footer = (

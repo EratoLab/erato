@@ -56,6 +56,12 @@ export interface ComposerContextDetailRenderContext {
    * included, so a body's controls that change what is sent stay disabled.
    */
   locked: boolean;
+  /**
+   * Runs a choice the body draws itself (a list of comments to pick from)
+   * exactly as the footer runs its actions: announced once the item changes,
+   * then the detail closes and focus returns to the chip.
+   */
+  runAction: (action: ComposerContextDetailAction) => void;
 }
 
 export interface ComposerContextDetail {

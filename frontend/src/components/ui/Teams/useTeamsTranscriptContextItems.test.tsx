@@ -131,7 +131,10 @@ describe("useTeamsTranscriptContextItems", () => {
       meta: "Reading transcript…",
     });
     // The detail says the same while it reads, not that it can't.
-    const reading = result.current[0].detail?.render({ locked: false }) as {
+    const reading = result.current[0].detail?.render({
+      locked: false,
+      runAction: () => {},
+    }) as {
       props: { index: unknown; reading: boolean };
     };
     expect(reading.props).toMatchObject({ index: null, reading: true });
@@ -168,7 +171,10 @@ describe("useTeamsTranscriptContextItems", () => {
     const { result } = renderHook(() =>
       useTeamsTranscriptContextItems([entryFor(transcript)], options),
     );
-    const body = result.current[0].detail?.render({ locked: true }) as {
+    const body = result.current[0].detail?.render({
+      locked: true,
+      runAction: () => {},
+    }) as {
       props: { locked: boolean; assets: FileUploadItem[] };
     };
     expect(body.props.locked).toBe(true);
@@ -186,7 +192,10 @@ describe("useTeamsTranscriptContextItems", () => {
       ({ entries }) => useTeamsTranscriptContextItems(entries, options),
       { initialProps: { entries: [entry] } },
     );
-    const body = result.current[0].detail?.render({ locked: false }) as {
+    const body = result.current[0].detail?.render({
+      locked: false,
+      runAction: () => {},
+    }) as {
       props: { notAttached: readonly string[] };
     };
     expect(body.props.notAttached).toEqual(["teams-file-ffffffff-gone.pdf"]);

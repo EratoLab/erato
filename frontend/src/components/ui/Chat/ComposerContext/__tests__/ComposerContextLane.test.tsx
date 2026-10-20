@@ -19,6 +19,7 @@ import { readLaneGeometry } from "../composerContextLayout";
 import type { LaneGeometry } from "../composerContextLayout";
 import type {
   ComposerContextChipFaceProps,
+  ComposerContextDetailRenderContext,
   ComposerContextItem,
   ComposerContextState,
 } from "../types";
@@ -1127,11 +1128,15 @@ describe("ComposerContextLane", () => {
       });
       const { rerender } = render(<ComposerContextLane items={[item]} />);
       fireEvent.click(openButton("Re: Offsite agenda"));
-      expect(renderBody).toHaveBeenLastCalledWith({ locked: false });
+      expect(renderBody).toHaveBeenLastCalledWith(
+        expect.objectContaining({ locked: false }),
+      );
       expect(screen.getByText("open body")).toBeInTheDocument();
 
       rerender(<ComposerContextLane items={[{ ...item, locked: true }]} />);
-      expect(renderBody).toHaveBeenLastCalledWith({ locked: true });
+      expect(renderBody).toHaveBeenLastCalledWith(
+        expect.objectContaining({ locked: true }),
+      );
       expect(screen.getByText("locked body")).toBeInTheDocument();
     });
 
@@ -1498,6 +1503,160 @@ describe("ComposerContextLane", () => {
           "included",
         );
         expect(live()).toBe("");
+      });
+    });
+
+    describe("a choice the body draws", () => {
+      /**
+       * A comment at the caret that needs a choice; choosing in the body
+       * makes the same id the user's pick, whose (x) hands it back.
+       */
+      function ChoiceHost({
+        commit = "batched",
+        endsItem = false,
+      }: {
+        commit?: "batched" | "deferred";
+        endsItem?: boolean;
+      }) {
+        const [picked, setPicked] = useState<string | null>(null);
+        const [gone, setGone] = useState(false);
+        const [selection, setSelection] = useState("Passage");
+        const [queued, setQueued] = useState<(() => void) | null>(null);
+        const items = useMemo((): ComposerContextItem[] => {
+          const sel = ambient({
+            id: "sel",
+            kind: "word.selection",
+            label: selection,
+            meta: undefined,
+            onRemove: () => {},
+          });
+          if (gone) {
+            return [sel];
+          }
+          const choose = (author: string) => () => {
+            const land = () => (endsItem ? setGone(true) : setPicked(author));
+            if (commit === "deferred") {
+              setQueued(() => land);
+            } else {
+              land();
+            }
+          };
+          const detail = {
+            title: "Your cursor is in 2 comments",
+            render: ({ runAction }: ComposerContextDetailRenderContext) => (
+              <ul>
+                {["Paul Martin", "Lena Fischer"].map((author) => (
+                  <li key={author}>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        runAction({
+                          id: `pick:${author}`,
+                          label: author,
+                          announcement: `Comment by ${author} chosen.`,
+                          onSelect: choose(author),
+                        })
+                      }
+                    >
+                      {author}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ),
+          };
+          const comment: ComposerContextItem = picked
+            ? user({
+                id: "comment",
+                kind: "word.comment",
+                label: `Comment by ${picked}`,
+                spokenLabel: "Chosen comment",
+                meta: "Chosen by you",
+                icon: "comment",
+                announcements: { removed: "Chosen comment removed." },
+                onRemove: () => setPicked(null),
+                detail,
+              })
+            : ambient({
+                id: "comment",
+                kind: "word.comment",
+                state: "attention",
+                tone: "warning",
+                dismissScope: "message",
+                label: "Cursor is in 2 comments",
+                spokenLabel: "Comments",
+                meta: "Choose one",
+                icon: "comments",
+                onRemove: () => {},
+                detail,
+              });
+          return [sel, comment];
+        }, [picked, gone, selection, commit, endsItem]);
+        return (
+          <>
+            <ComposerContextLane items={items} />
+            <button type="button" onClick={() => queued?.()}>
+              resolve
+            </button>
+            <button
+              type="button"
+              onClick={() => setSelection((current) => `${current}!`)}
+            >
+              change selection
+            </button>
+          </>
+        );
+      }
+
+      const choose = (author: string) => {
+        fireEvent.click(openButton("Cursor is in 2 comments"));
+        fireEvent.click(
+          within(screen.getByRole("dialog")).getByRole("button", {
+            name: author,
+          }),
+        );
+      };
+
+      it("runs it as a footer action: closed, announced once the item changes, focus on the chip", () => {
+        render(<ChoiceHost commit="deferred" />);
+        const node = chip("Cursor is in 2 comments");
+        choose("Paul Martin");
+        expect(screen.queryByRole("dialog")).toBeNull();
+        expect(openButton("Cursor is in 2 comments")).toHaveFocus();
+        expect(live()).toBe("");
+
+        fireEvent.click(
+          screen.getByRole("button", { name: "change selection" }),
+        );
+        expect(live()).toBe("");
+
+        fireEvent.click(screen.getByRole("button", { name: "resolve" }));
+        expect(chip("Comment by Paul Martin")).toBe(node);
+        expect(node).toHaveAttribute("data-origin", "user");
+        expect(live()).toBe("Comment by Paul Martin chosen.");
+        expect(openButton("Comment by Paul Martin")).toHaveFocus();
+      });
+
+      it("says a removal when the same id comes back as ambient context, keeping focus", () => {
+        render(<ChoiceHost />);
+        choose("Lena Fischer");
+        const node = chip("Comment by Lena Fischer");
+        fireEvent.keyDown(openButton("Comment by Lena Fischer"), {
+          key: "Delete",
+        });
+        expect(chip("Cursor is in 2 comments")).toBe(node);
+        expect(node).toHaveAttribute("data-origin", "ambient");
+        expect(node).toHaveAttribute("data-state", "attention");
+        expect(live()).toBe("Chosen comment removed.");
+        expect(openButton("Cursor is in 2 comments")).toHaveFocus();
+      });
+
+      it("speaks a choice that ends its item, then moves focus on", () => {
+        render(<ChoiceHost endsItem />);
+        choose("Paul Martin");
+        expect(screen.queryByText("Cursor is in 2 comments")).toBeNull();
+        expect(live()).toBe("Comment by Paul Martin chosen.");
+        expect(openButton("Passage")).toHaveFocus();
       });
     });
 
