@@ -241,44 +241,44 @@ msgstr "Maximale Dateigröße: {maxSizeFormatted}"
 
 #. js-lingui-explicit-id
 #: src/outlook/components/AddinChatInput.tsx
-msgid "officeAddin.chatInput.appointmentContext"
-msgstr "Termindetails werden als Kontext einbezogen"
+#~ msgid "officeAddin.chatInput.appointmentContext"
+#~ msgstr "Termindetails werden als Kontext einbezogen"
 
 #. js-lingui-explicit-id
 #: src/outlook/components/AddinChatInput.tsx
-msgid "officeAddin.chatInput.appointmentContextUnchanged"
-msgstr "Termindetails unverändert, werden nicht erneut gesendet"
+#~ msgid "officeAddin.chatInput.appointmentContextUnchanged"
+#~ msgstr "Termindetails unverändert, werden nicht erneut gesendet"
 
 #. js-lingui-explicit-id
-#: src/outlook/components/AddinChatInput.tsx
+#: src/outlook/utils/outlookContextChips.ts
 msgid "officeAddin.chatInput.dismissAppointmentContext"
 msgstr "Termindetails nicht einbeziehen"
 
 #. js-lingui-explicit-id
-#: src/outlook/components/AddinChatInput.tsx
+#: src/outlook/utils/outlookContextChips.ts
 msgid "officeAddin.chatInput.dismissDraftContext"
 msgstr "Entwurf nicht einbeziehen"
 
 #. js-lingui-explicit-id
-#: src/core/selection/AddinSelectionChip.tsx
+#: src/outlook/utils/outlookContextChips.ts
 #: src/word/utils/wordContextChips.ts
 msgid "officeAddin.chatInput.dismissSelection"
 msgstr "Auswahl verwerfen"
 
 #. js-lingui-explicit-id
 #: src/outlook/components/AddinChatInput.tsx
-msgid "officeAddin.chatInput.draftContext"
-msgstr "Dein Entwurf wird als Kontext einbezogen"
+#~ msgid "officeAddin.chatInput.draftContext"
+#~ msgstr "Dein Entwurf wird als Kontext einbezogen"
 
 #. js-lingui-explicit-id
 #: src/outlook/components/AddinChatInput.tsx
-msgid "officeAddin.chatInput.draftContextScheduling"
-msgstr "Dein Entwurf wird während der Terminplanung nicht gesendet"
+#~ msgid "officeAddin.chatInput.draftContextScheduling"
+#~ msgstr "Dein Entwurf wird während der Terminplanung nicht gesendet"
 
 #. js-lingui-explicit-id
 #: src/outlook/components/AddinChatInput.tsx
-msgid "officeAddin.chatInput.draftContextUnchanged"
-msgstr "Dein Entwurf ist unverändert und wird nicht erneut gesendet"
+#~ msgid "officeAddin.chatInput.draftContextUnchanged"
+#~ msgstr "Dein Entwurf ist unverändert und wird nicht erneut gesendet"
 
 #. js-lingui-explicit-id
 #: src/outlook/components/AddinChatInput.tsx
@@ -316,9 +316,9 @@ msgid "officeAddin.chatInput.emailBody"
 msgstr "E-Mail-Inhalt"
 
 #. js-lingui-explicit-id
-#: src/outlook/components/AddinChatAddMenuExtraContent.tsx
 #: src/outlook/components/AddinChatInput.tsx
 #: src/outlook/utils/buildDropEmailGroup.ts
+#: src/outlook/utils/outlookContextChips.ts
 msgid "officeAddin.chatInput.emailFallback"
 msgstr "E-Mail"
 
@@ -329,16 +329,16 @@ msgstr "E-Mail"
 
 #. js-lingui-explicit-id
 #: src/outlook/components/AddinChatInput.tsx
-msgid "officeAddin.chatInput.emailSourcePreviewRegion"
-msgstr "E-Mail-Kontextvorschau"
+#~ msgid "officeAddin.chatInput.emailSourcePreviewRegion"
+#~ msgstr "E-Mail-Kontextvorschau"
 
 #. js-lingui-explicit-id
-#: src/outlook/components/AddinChatInput.tsx
+#: src/outlook/utils/outlookContextChips.ts
 msgid "officeAddin.chatInput.emailThreadLoadError"
 msgstr "E-Mail-Konversation konnte nicht geladen werden"
 
 #. js-lingui-explicit-id
-#: src/outlook/components/AddinChatInput.tsx
+#: src/outlook/utils/outlookContextChips.ts
 msgid "officeAddin.chatInput.emailThreadLoadErrorDescription"
 msgstr "Sie können weiterhin ohne diesen E-Mail-Kontext senden."
 
@@ -355,51 +355,51 @@ msgstr "Abgelegte E-Mails werden verarbeitet…"
 
 #. js-lingui-explicit-id
 #: src/outlook/components/AddinChatInput.tsx
-msgid "officeAddin.chatInput.loadingEmailThread"
-msgstr "E-Mail-Konversation wird geladen..."
+#~ msgid "officeAddin.chatInput.loadingEmailThread"
+#~ msgstr "E-Mail-Konversation wird geladen..."
 
 #. js-lingui-explicit-id
 #: src/outlook/components/AddinChatInput.tsx
-msgid "officeAddin.chatInput.loadingEmailThreadDescription"
-msgstr "E-Mail-Kontext wird vorbereitet"
+#~ msgid "officeAddin.chatInput.loadingEmailThreadDescription"
+#~ msgstr "E-Mail-Kontext wird vorbereitet"
 
 #. js-lingui-explicit-id
 #: src/outlook/components/AddinChatInput.tsx
-msgid "officeAddin.chatInput.removeDroppedEmail"
-msgstr "Entfernen"
+#~ msgid "officeAddin.chatInput.removeDroppedEmail"
+#~ msgstr "Entfernen"
 
 #. js-lingui-explicit-id
-#: src/outlook/components/AddinChatInput.tsx
+#: src/outlook/utils/outlookContextChips.ts
 msgid "officeAddin.chatInput.removeDroppedEmailNamed"
 msgstr "Entfernen: {subject}"
 
 #. js-lingui-explicit-id
 #: src/outlook/components/AddinChatInput.tsx
-msgid "officeAddin.chatInput.replyContext.groupLabel"
-msgstr "Antwortkontext"
+#~ msgid "officeAddin.chatInput.replyContext.groupLabel"
+#~ msgstr "Antwortkontext"
 
 #. js-lingui-explicit-id
 #: src/outlook/components/AddinChatInput.tsx
-msgid "officeAddin.chatInput.replyContext.label"
-msgstr "Antwortkontext"
+#~ msgid "officeAddin.chatInput.replyContext.label"
+#~ msgstr "Antwortkontext"
 
 #. js-lingui-explicit-id
-#: src/outlook/components/AddinChatInput.tsx
+#: src/outlook/utils/outlookContextChips.ts
 msgid "officeAddin.chatInput.replyContext.untitled"
 msgstr "(kein Betreff)"
 
 #. js-lingui-explicit-id
-#: src/outlook/components/AddinChatInput.tsx
+#: src/outlook/utils/outlookContextChips.ts
 msgid "officeAddin.chatInput.stagedSize"
 msgstr "{used} von {limit}"
 
 #. js-lingui-explicit-id
-#: src/outlook/components/AddinChatInput.tsx
+#: src/outlook/utils/buildThreadGroup.ts
 msgid "officeAddin.chatInput.threadMessageCount"
 msgstr "{count, plural, one {# Nachricht} other {# Nachrichten}}"
 
 #. js-lingui-explicit-id
-#: src/outlook/components/AddinChatInput.tsx
+#: src/outlook/utils/buildThreadGroup.ts
 msgid "officeAddin.chatInput.unknownSender"
 msgstr "Unbekannter Absender"
 
@@ -436,36 +436,42 @@ msgstr "Allen Empfängern antworten"
 
 #. js-lingui-explicit-id
 #: src/outlook/providers/EntraGraphTokenProvider.tsx
+#: src/outlook/utils/outlookContextChips.ts
 msgid "officeAddin.email.allowAccessToLoad.action"
 msgstr "Zugriff erlauben"
 
 #. js-lingui-explicit-id
 #: src/outlook/providers/EntraGraphTokenProvider.tsx
+#: src/outlook/utils/outlookContextChips.ts
 msgid "officeAddin.email.allowAccessToLoad.description"
 msgstr "Diese E-Mail wurde nicht angehängt, da zum Lesen ihres Postfachs eine Berechtigung nötig ist, die du noch nicht erteilt hast."
 
 #. js-lingui-explicit-id
 #: src/outlook/providers/EntraGraphTokenProvider.tsx
+#: src/outlook/utils/outlookContextChips.ts
 msgid "officeAddin.email.allowAccessToLoad.title"
 msgstr "Zugriff erlauben, um die E-Mail zu laden"
 
 #. js-lingui-explicit-id
 #: src/outlook/providers/EntraGraphTokenProvider.tsx
 msgid "officeAddin.email.signedIn.title"
-msgstr "Angemeldet. Füge die E-Mail erneut hinzu, um sie anzuhängen."
+msgstr "Angemeldet. Die E-Mail wird geladen."
 
 #. js-lingui-explicit-id
 #: src/outlook/providers/EntraGraphTokenProvider.tsx
+#: src/outlook/utils/outlookContextChips.ts
 msgid "officeAddin.email.signInToLoad.action"
 msgstr "Anmelden"
 
 #. js-lingui-explicit-id
 #: src/outlook/providers/EntraGraphTokenProvider.tsx
+#: src/outlook/utils/outlookContextChips.ts
 msgid "officeAddin.email.signInToLoad.description"
 msgstr "Diese E-Mail wurde nicht angehängt, da zum Lesen eine kurze Anmeldung nötig ist."
 
 #. js-lingui-explicit-id
 #: src/outlook/providers/EntraGraphTokenProvider.tsx
+#: src/outlook/utils/outlookContextChips.ts
 msgid "officeAddin.email.signInToLoad.title"
 msgstr "Anmelden, um die E-Mail zu laden"
 
@@ -631,8 +637,8 @@ msgstr "E-Mail-Verlauf"
 
 #. js-lingui-explicit-id
 #: src/outlook/components/AddinChatAddMenuExtraContent.tsx
-msgid "officeAddin.fileSource.emailThreadLoadError"
-msgstr "Diese Unterhaltung konnte nicht vom Server geladen werden. Einige Nachrichten oder Anhänge fehlen möglicherweise – versuche, die E-Mail erneut zu öffnen."
+#~ msgid "officeAddin.fileSource.emailThreadLoadError"
+#~ msgstr "Diese Unterhaltung konnte nicht vom Server geladen werden. Einige Nachrichten oder Anhänge fehlen möglicherweise – versuche, die E-Mail erneut zu öffnen."
 
 #. js-lingui-explicit-id
 #: src/components/AddinFileSourceSelector.tsx
@@ -650,6 +656,11 @@ msgstr "Diese Unterhaltung konnte nicht vom Server geladen werden. Einige Nachri
 #~ msgstr "Ausblenden"
 
 #. js-lingui-explicit-id
+#: src/outlook/components/AddinChatAddMenuExtraContent.tsx
+msgid "officeAddin.fileSource.inComposer"
+msgstr "Bereits im Eingabefeld: dort bearbeiten"
+
+#. js-lingui-explicit-id
 #: src/components/AddinFileSourceSelector.tsx
 #~ msgid "officeAddin.fileSource.loading"
 #~ msgstr "..."
@@ -661,8 +672,8 @@ msgstr "Anhänge werden geladen..."
 
 #. js-lingui-explicit-id
 #: src/outlook/components/AddinChatAddMenuExtraContent.tsx
-msgid "officeAddin.fileSource.loadingEmailThread"
-msgstr "E-Mail-Verlauf wird geladen..."
+#~ msgid "officeAddin.fileSource.loadingEmailThread"
+#~ msgstr "E-Mail-Verlauf wird geladen..."
 
 #. js-lingui-explicit-id
 #: src/components/AddinFileSourceSelector.tsx
@@ -670,13 +681,18 @@ msgstr "E-Mail-Verlauf wird geladen..."
 #~ msgstr "Für dieses Element sind keine E-Mail-Inhalte verfügbar."
 
 #. js-lingui-explicit-id
+#: src/outlook/components/AddinChatAddMenuExtraContent.tsx
+msgid "officeAddin.fileSource.sentInChat"
+msgstr "{fileName} · schon in diesem Chat gesendet; erneut hinzufügen"
+
+#. js-lingui-explicit-id
 #: src/components/AddinFileSourceSelector.tsx
 #~ msgid "officeAddin.fileSource.show"
 #~ msgstr "Anzeigen"
 
 #. js-lingui-explicit-id
-#: src/outlook/components/AddinChatAddMenuExtraContent.tsx
 #: src/outlook/components/AddinChatInput.tsx
+#: src/outlook/utils/outlookContextChips.ts
 msgid "officeAddin.fileSource.updatingThread"
 msgstr "Wird aktualisiert…"
 
@@ -746,6 +762,475 @@ msgid "officeAddin.office.loading"
 msgstr "Office-Add-in wird geladen..."
 
 #. js-lingui-explicit-id
+#: src/outlook/hooks/useOutlookContextItems.tsx
+msgid "officeAddin.outlook.context.appointment.announce.sentInstead"
+msgstr "Termindetails einbezogen. Ihre Auswahl bleibt aus, bis sie sich ändert."
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.appointment.detail.replacedBySelection"
+msgstr "Statt Ihrer Termindetails wird Ihre Auswahl gesendet."
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.appointment.include"
+msgstr "Termindetails einbeziehen"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.appointment.label"
+msgstr "Termindetails"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.appointment.meta.replacedBySelection"
+msgstr "Durch Auswahl ersetzt"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.appointment.meta.unchanged"
+msgstr "Unverändert, nicht erneut gesendet"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.attachment.detail.cloud"
+msgstr "Dies ist ein Link auf eine Clouddatei, die Outlook nicht übergeben kann, daher wird sie nicht gesendet."
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.attachment.detail.followUp"
+msgstr "Anhänge werden nur mit der ersten Nachricht gesendet. Beziehen Sie ihn ein, um ihn mit dieser zu senden."
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.attachment.detail.notWithDrops"
+msgstr "Die Anhänge Ihres Entwurfs werden nicht gesendet, solange abgelegte E-Mails angehängt sind."
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.attachment.detail.notWithDropsEmail"
+msgstr "Die Anhänge dieser E-Mail werden nicht gesendet, solange abgelegte E-Mails angehängt sind."
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.attachment.detail.sentEarlier"
+msgstr "Erato hat diese Datei schon aus einer früheren Nachricht, daher wird sie nicht erneut gesendet."
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.attachment.dismiss"
+msgstr "{name} schließen"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.attachment.include"
+msgstr "{name} einbeziehen"
+
+#. js-lingui-explicit-id
+#: src/outlook/hooks/useOutlookContextItems.tsx
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.attachment.meta.cloud"
+msgstr "Clouddatei · nicht sendbar"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.attachment.meta.draft"
+msgstr "Entwurfsanhang · {size}"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.attachment.meta.email"
+msgstr "E-Mail-Anhang · {size}"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.attachment.meta.notWithDrops"
+msgstr "Nicht mit abgelegten E-Mails gesendet"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.attachment.meta.sentEarlier"
+msgstr "Schon gesendet, nicht erneut"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.attachment.remove"
+msgstr "{name} nicht einbeziehen"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.attachments.include.draft"
+msgstr "Entwurfsanhänge einbeziehen"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.attachments.include.email"
+msgstr "E-Mail-Anhänge einbeziehen"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.attachments.label.draft"
+msgstr "Entwurfsanhänge ({count})"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.attachments.label.email"
+msgstr "E-Mail-Anhänge ({count})"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.attachments.meta.some"
+msgstr "{sent} von {total} · {size}"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.attachments.remove.draft"
+msgstr "Entwurfsanhänge nicht einbeziehen"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.attachments.remove.email"
+msgstr "E-Mail-Anhänge nicht einbeziehen"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.attachments.spoken.draft"
+msgstr "Entwurfsanhänge"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.attachments.spoken.email"
+msgstr "E-Mail-Anhänge"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.detail.field.attendees"
+msgstr "Teilnehmende"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.detail.field.cc"
+msgstr "Cc"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.detail.field.replyTo"
+msgstr "Antwort auf"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.detail.field.size"
+msgstr "Größe"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.detail.field.subject"
+msgstr "Betreff"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.detail.field.to"
+msgstr "An"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.detail.field.type"
+msgstr "Typ"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.detail.field.when"
+msgstr "Wann"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.detail.field.where"
+msgstr "Wo"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.detail.lifetimeItem"
+msgstr "Das Weglassen gilt, bis Sie ein anderes Element öffnen."
+
+#. js-lingui-explicit-id
+#: src/outlook/hooks/useOutlookContextItems.tsx
+msgid "officeAddin.outlook.context.draft.announce.sentInstead"
+msgstr "Entwurf einbezogen. Ihre Auswahl bleibt aus, bis sie sich ändert."
+
+#. js-lingui-explicit-id
+#: src/outlook/components/OutlookContextDetails.tsx
+msgid "officeAddin.outlook.context.draft.detail.bodyLabel"
+msgstr "Entwurfstext"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.draft.detail.replacedBySelection"
+msgstr "Statt Ihres Entwurfs wird Ihre Auswahl gesendet."
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.draft.detail.replyContext"
+msgstr "Der Antwortkontext wird nur hier angezeigt. Er erreicht Erato über Ihren Entwurf und wird nie allein gesendet."
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.draft.detail.replyToValue"
+msgstr "{subject} — {sender}"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.draft.detail.scheduling"
+msgstr "Die Terminplanung hat Vorrang, daher enthält diese Nachricht Ihren Entwurf nicht. Beenden Sie die Terminplanung, um ihn wieder zu senden."
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.draft.detail.unchanged"
+msgstr "Erato hat diese Fassung schon aus einer früheren Nachricht, daher wird sie nicht erneut gesendet. Sobald Sie sie ändern, wird sie wieder gesendet."
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.draft.include"
+msgstr "Entwurf einbeziehen"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.draft.label"
+msgstr "Ihr Entwurf"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.draft.meta.replacedBySelection"
+msgstr "Durch Auswahl ersetzt"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.draft.meta.replyTo"
+msgstr "Antwort an {sender}"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.draft.meta.scheduling"
+msgstr "Während der Terminplanung nicht gesendet"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.draft.meta.unchanged"
+msgstr "Unverändert, nicht erneut gesendet"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.draft.spoken"
+msgstr "Entwurf"
+
+#. js-lingui-explicit-id
+#: src/outlook/components/AddinChatInput.tsx
+msgid "officeAddin.outlook.context.drop.announce.added"
+msgstr "{count, plural, one {# E-Mail hinzugefügt.} other {# E-Mails hinzugefügt.}}"
+
+#. js-lingui-explicit-id
+#: src/outlook/components/AddinChatInput.tsx
+msgid "officeAddin.outlook.context.drop.announce.reading"
+msgstr "{count, plural, one {# abgelegte E-Mail wird gelesen.} other {# abgelegte E-Mails werden gelesen.}}"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/buildDropEmailGroup.ts
+msgid "officeAddin.outlook.context.drop.bodyAlwaysSent"
+msgstr "Wird immer gesendet"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.drop.meta.attachments"
+msgstr "{total, plural, one {{kept}/# Anhang} other {{kept}/# Anhänge}}"
+
+#. js-lingui-explicit-id
+#: src/outlook/hooks/useOutlookContextItems.tsx
+msgid "officeAddin.outlook.context.dropProgress.lockReason"
+msgstr "Abgelegte E-Mails lassen sich nicht abbrechen, während Erato sie liest"
+
+#. js-lingui-explicit-id
+#: src/outlook/hooks/useOutlookContextItems.tsx
+msgid "officeAddin.outlook.context.dropProgress.spoken"
+msgstr "Abgelegte E-Mails"
+
+#. js-lingui-explicit-id
+#: src/outlook/hooks/useOutlookContextItems.tsx
+msgid "officeAddin.outlook.context.lock.sending"
+msgstr "Kann nicht geändert werden, während die Nachricht gesendet wird"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.meta.followUp"
+msgstr "Bei Folgenachrichten nicht einbezogen"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.meta.nothingChosen"
+msgstr "Nichts ausgewählt"
+
+#. js-lingui-explicit-id
+#: src/outlook/hooks/useOutlookContextItems.tsx
+msgid "officeAddin.outlook.context.retry"
+msgstr "Erneut versuchen"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.scheduling.announce.ended"
+msgstr "Terminplanung beendet."
+
+#. js-lingui-explicit-id
+#: src/outlook/hooks/useOutlookContextItems.tsx
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.scheduling.announce.endedDraft"
+msgstr "Terminplanung beendet. Ihr Entwurf wird wieder gesendet."
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.scheduling.description"
+msgstr "Die Terminplanung bleibt eine Stunde nach dem letzten Kalenderzugriff von Erato aktiv (bis {time})."
+
+#. js-lingui-explicit-id
+#: src/outlook/hooks/useOutlookContextItems.tsx
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.scheduling.end"
+msgstr "Terminplanung beenden"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.scheduling.label"
+msgstr "Terminplanung"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.selection.detail.insteadOfAppointment"
+msgstr "Wird statt Ihrer Termindetails gesendet, damit Erato nur diesen Text umschreibt."
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.selection.detail.insteadOfDraft"
+msgstr "Wird statt Ihres Entwurfs gesendet, damit Erato nur diesen Text umschreibt."
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.selection.detail.lifetime"
+msgstr "Das Weglassen gilt, bis sich die Auswahl ändert oder Sie ein anderes Element öffnen."
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.selection.include"
+msgstr "Auswahl einbeziehen"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.selection.meta.replacesAppointment"
+msgstr "Ersetzt die Termindetails"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.selection.meta.replacesDraft"
+msgstr "Ersetzt den Entwurf"
+
+#. js-lingui-explicit-id
+#: src/outlook/hooks/useOutlookContextItems.tsx
+msgid "officeAddin.outlook.context.selection.spoken"
+msgstr "Auswahl"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.selection.title"
+msgstr "Ausgewählter Text"
+
+#. js-lingui-explicit-id
+#: src/outlook/hooks/useOutlookContextItems.tsx
+msgid "officeAddin.outlook.context.sendInstead"
+msgstr "Stattdessen dies senden"
+
+#. js-lingui-explicit-id
+#: src/outlook/components/AddinChatAddMenuExtraContent.tsx
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.thread.announce.included"
+msgstr "E-Mail-Verlauf einbezogen."
+
+#. js-lingui-explicit-id
+#: src/outlook/hooks/useOutlookContextItems.tsx
+msgid "officeAddin.outlook.context.thread.announce.loaded"
+msgstr "E-Mail-Verlauf geladen."
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.thread.announce.restoredPartial"
+msgstr "E-Mail-Verlauf einbezogen. Ihre frühere Auswahl gilt wieder."
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.thread.detail.intro"
+msgstr "Entfernen Sie das Häkchen bei allem, was Erato nicht lesen soll. Anhänge zählen zum Limit von {limit}."
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.thread.detail.lifetime"
+msgstr "Das Weglassen gilt, bis Sie ein anderes Element öffnen. Beim erneuten Einbeziehen kehren diese Häkchen zurück."
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.thread.detail.notIncluded"
+msgstr "Die E-Mail ist gerade nicht einbezogen. Ihre Auswahl unten bleibt erhalten und gilt wieder, sobald Sie sie einbeziehen."
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.thread.detail.trimFailedNote"
+msgstr "Einige abgewählte Anhänge stecken in einer weitergeleiteten E-Mail und lassen sich nicht herauslösen, daher wird eine Nachricht mit dieser E-Mail nicht gesendet. Wählen Sie sie wieder aus oder lassen Sie die E-Mail weg."
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.thread.dismiss"
+msgstr "E-Mail-Verlauf schließen"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.thread.include"
+msgstr "E-Mail einbeziehen"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.thread.includeEvery"
+msgstr "Alle Nachrichten einbeziehen"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.thread.meta.loading"
+msgstr "E-Mail-Verlauf wird geladen…"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.thread.meta.signingIn"
+msgstr "Anmeldung läuft…"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.thread.meta.someMessages"
+msgstr "{total, plural, one {{included} von # Nachricht} other {{included} von # Nachrichten}}"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.thread.meta.trimFailed"
+msgstr "Abgewählte Teile nicht entfernbar"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.thread.remove"
+msgstr "E-Mail weglassen"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.thread.retryInclude"
+msgstr "E-Mail erneut laden"
+
+#. js-lingui-explicit-id
+#: src/outlook/hooks/useOutlookContextItems.tsx
+msgid "officeAddin.outlook.context.thread.spoken"
+msgstr "E-Mail-Verlauf"
+
+#. js-lingui-explicit-id
 #: src/outlook/components/AddinPinHintBanner.tsx
 msgid "officeAddin.pinHint.description"
 msgstr "Solange es nicht angeheftet ist, bleibt dieses Add-in bei der E-Mail, aus der du es geöffnet hast. Hefte es über das Stecknadelsymbol an, damit es beim Lesen synchron bleibt."
@@ -767,11 +1252,10 @@ msgstr "„{excerpt}“"
 
 #. js-lingui-explicit-id
 #: src/core/selection/AddinSelectionChip.tsx
-msgid "officeAddin.selection.shownByErato"
-msgstr "Von Erato angezeigt"
+#~ msgid "officeAddin.selection.shownByErato"
+#~ msgstr "Von Erato angezeigt"
 
 #. js-lingui-explicit-id
-#: src/core/selection/AddinSelectionChip.tsx
 #: src/word/utils/wordContextChips.ts
 msgid "officeAddin.selection.useThis"
 msgstr "Diese Auswahl verwenden"
