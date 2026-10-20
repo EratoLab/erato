@@ -349,12 +349,9 @@ export function wordSelectionChip(
           tone: "warning" as const,
           toneIcon: "tone" as const,
           paragraphs: sentParagraphsText(selection),
-          meta: t({
-            id: "officeAddin.word.context.selection.meta.tooLong",
-            message: "Too long · beginning only",
-          }),
+          meta: wordSelectionTooLongText(),
         }
-      : { meta: selectionMeta(selection.paragraphCount, comments) }),
+      : { meta: wordSelectionMetaText(selection.paragraphCount, comments) }),
     // The lane reads this from the chip (+) lands on, so the included selection carries it.
     ...(replacesDocument
       ? {
@@ -368,10 +365,22 @@ export function wordSelectionChip(
   };
 }
 
-// The comment fact leads, so the one that changes survives the chip's ellipsis.
-function selectionMeta(
+export const wordSelectionTooLongText = () =>
+  t({
+    id: "officeAddin.word.context.selection.meta.tooLong",
+    message: "Too long · beginning only",
+  });
+
+/**
+ * The selection chip's meta, on the composer chip and the sent one alike. The comment fact
+ * leads, so the one that changes survives the chip's ellipsis.
+ */
+export function wordSelectionMetaText(
   paragraphCount: number,
-  comments: WordPassageCommentsModel | null,
+  comments: Pick<
+    WordPassageCommentsModel,
+    "count" | "checked" | "readFailed"
+  > | null,
 ): string {
   const paragraphs = count(paragraphCount);
   if (!comments)
@@ -399,7 +408,13 @@ function selectionMeta(
   });
 }
 
-function coverageMeta(document: WordDocumentChipInput): string | undefined {
+/** How much of the document goes, on the composer chip and the sent one alike. */
+export function wordDocumentCoverageText(
+  document: Pick<
+    WordDocumentChipInput,
+    "status" | "coverage" | "authoringRoute"
+  >,
+): string | undefined {
   if (document.status === "empty")
     return t({
       id: "officeAddin.word.chip.newDocument",
@@ -426,8 +441,11 @@ function coverageMeta(document: WordDocumentChipInput): string | undefined {
 }
 
 /** The lasting fact that leads the meta, and whether it warns. */
-function leadFact(
-  document: WordDocumentChipInput,
+export function wordDocumentLeadFact(
+  document: Pick<
+    WordDocumentChipInput,
+    "trackChanges" | "lastingIssue" | "readInParts" | "bodyOnly"
+  >,
 ): { text: string; warning: boolean } | null {
   if (document.trackChanges)
     return {
@@ -546,7 +564,7 @@ function coverageSection(
   return hint ? { heading, lines, hint } : { heading, lines };
 }
 
-function commentCountText(comments: number): string {
+export function wordDocumentCommentsText(comments: number): string {
   return t({
     id: "officeAddin.word.context.document.meta.comments",
     message: plural(comments, { one: "# comment", other: "# comments" }),
@@ -730,13 +748,13 @@ export function wordDocumentChip(
     // Before the first read: Send reads the document first.
     return { ...base, state: "included", notes: [] };
 
-  const lead = leadFact(document);
+  const lead = wordDocumentLeadFact(document);
   const tail = document.changed
     ? t({
         id: "officeAddin.word.context.document.meta.changed",
         message: "Changed since last send",
       })
-    : coverageMeta(document);
+    : wordDocumentCoverageText(document);
   // Two facts at most: the comments come third only where nothing leads and nothing changed.
   const commentFact =
     lead || document.changed || !comments
@@ -747,7 +765,7 @@ export function wordDocumentChip(
             message: "couldn't read comments",
           })
         : comments.count !== null && comments.count > 0
-          ? commentCountText(comments.count)
+          ? wordDocumentCommentsText(comments.count)
           : comments.mapOff
             ? t({
                 id: "officeAddin.word.context.document.meta.commentsOff",

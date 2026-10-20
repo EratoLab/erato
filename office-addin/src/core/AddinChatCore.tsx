@@ -54,6 +54,7 @@ import { useCallback, useMemo, useRef, useState } from "react";
 import { AddinChatInputCore } from "./AddinChatInputCore";
 import { AddinHistoryDrawerCore } from "./AddinHistoryDrawerCore";
 import { AddinSettingsDialogCore } from "./AddinSettingsDialogCore";
+import { useAvailableActionFacetIds } from "./clientActions/useAvailableActionFacets";
 
 import type {
   ComponentProps,
@@ -397,6 +398,13 @@ function useAddinChatController({
     },
     [activeSelectedFacetIds, chat],
   );
+  // An edit sends the stored facet again only while the server still offers
+  // it, so the editor shows its chip only then.
+  const availableActionFacetIds = useAvailableActionFacetIds();
+  const isActionFacetAvailable = useCallback(
+    (facetId: string) => availableActionFacetIds.has(facetId),
+    [availableActionFacetIds],
+  );
   const messageEditValue = useMemo(
     () => ({
       editingMessageId,
@@ -407,6 +415,7 @@ function useAddinChatController({
       chatId: chat.currentChatId,
       assistantId,
       chatProviderId: selectedModel?.chat_provider_id,
+      isActionFacetAvailable,
     }),
     [
       assistantId,
@@ -415,6 +424,7 @@ function useAddinChatController({
       chat.isPendingResponse,
       editingMessageId,
       handleEditSubmit,
+      isActionFacetAvailable,
       selectedModel?.chat_provider_id,
     ],
   );

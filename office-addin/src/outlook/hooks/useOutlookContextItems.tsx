@@ -89,6 +89,11 @@ export interface OutlookContextItemsInput {
   detail: OutlookContextDetailData;
   /** A send is uploading: every chip and the mode keep still. */
   sending: boolean;
+  /**
+   * What the send's facet adds to the token estimate, carried by the
+   * included chip it comes from: the draft, the appointment or the selection.
+   */
+  facetEstimate?: File;
 }
 
 /**
@@ -101,6 +106,7 @@ export function useOutlookContextItems({
   handlers,
   detail,
   sending,
+  facetEstimate,
 }: OutlookContextItemsInput): {
   items: ComposerContextItem[];
   modes: ComposerMode[];
@@ -138,6 +144,9 @@ export function useOutlookContextItems({
         dismissScope: "selection",
         icon: "selection",
         state: selection.state,
+        ...(selection.state === "included" && facetEstimate
+          ? { estimate: facetEstimate }
+          : {}),
         ...(selection.meta ? { meta: selection.meta } : {}),
         label: selection.label,
         spokenLabel: t({
@@ -207,6 +216,9 @@ export function useOutlookContextItems({
         dismissScope: "item",
         icon: appointment ? "calendar" : "draft",
         state: draft.state,
+        ...(draft.state === "included" && facetEstimate
+          ? { estimate: facetEstimate }
+          : {}),
         ...(draft.meta ? { meta: draft.meta } : {}),
         label: draft.label,
         spokenLabel: draft.spokenLabel,
@@ -321,7 +333,7 @@ export function useOutlookContextItems({
           message: "Email thread",
         }),
         ...(thread.state === "included" && detail.threadFile
-          ? { estimate: detail.threadFile }
+          ? { estimate: detail.threadFile, estimateUpload: true }
           : {}),
         ...lock,
         ...(thread.state === "suggested"
@@ -476,7 +488,9 @@ export function useOutlookContextItems({
         ...(drop.tone ? { tone: drop.tone } : {}),
         meta: drop.meta,
         label: drop.label,
-        ...(drop.state === "included" && file ? { estimate: file } : {}),
+        ...(drop.state === "included" && file
+          ? { estimate: file, estimateUpload: true }
+          : {}),
         ...lock,
         onRemove: () => handlers.removeDrop(drop.key),
         removeLabel: drop.removeLabel,
@@ -526,5 +540,5 @@ export function useOutlookContextItems({
     return { items, modes };
     // The models are compared by content; modelKey stands for them.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [modelKey, handlers, detail]);
+  }, [modelKey, handlers, detail, facetEstimate]);
 }

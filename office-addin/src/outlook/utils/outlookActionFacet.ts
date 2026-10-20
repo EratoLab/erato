@@ -414,6 +414,11 @@ export type OutlookSendPreviewInput = Omit<
 
 export interface OutlookSendPreview {
   facetId: string | null;
+  /**
+   * The facet itself, as render time resolves it (`now_iso` and `timezone`
+   * empty): what the chip that carries it adds to the token estimate.
+   */
+  facet: ActionFacetRequest | undefined;
   draft: OutlookDraftDisposition;
   fingerprint: string;
   /**
@@ -473,6 +478,7 @@ export function previewOutlookSend(
     : null;
   return {
     facetId,
+    facet: result.facet,
     draft: result.draft,
     fingerprint,
     mode:

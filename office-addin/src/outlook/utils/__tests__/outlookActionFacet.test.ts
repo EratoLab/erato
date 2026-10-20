@@ -648,6 +648,22 @@ describe("previewOutlookSend", () => {
     expect(send.draft).toBe(state);
   });
 
+  it("hands over the facet it resolved, the one the chips estimate", () => {
+    const result = previewOutlookSend(draft);
+    expect(result.facet).toEqual(
+      resolveOutlookActionFacet({
+        ...draft,
+        lastSentDraftFingerprint: null,
+        nowIso: "",
+        timezone: "",
+      }).facet,
+    );
+    expect(result.facet?.args?.full_body).toBe("Hello");
+    expect(
+      previewOutlookSend({ ...draft, draftContextIncluded: false }).facet,
+    ).toBeUndefined();
+  });
+
   describe("the scheduling mode", () => {
     const sticky = { ...scheduleReady, schedulingThreadActive: true };
 

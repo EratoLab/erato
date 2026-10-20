@@ -27,6 +27,7 @@ const preview = (
   over: Partial<OutlookSendPreview> = {},
 ): OutlookSendPreview => ({
   facetId: null,
+  facet: undefined,
   draft: "none",
   fingerprint: "",
   mode: null,

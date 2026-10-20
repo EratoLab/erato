@@ -314,6 +314,54 @@ describe("useWordDocumentSource", () => {
     expect(build!.authoring?.fullDocument).toBeFalsy();
   });
 
+  it("hands the chips the capture that landed, never a send's copy", async () => {
+    readsText(["Alpha"]);
+    const { result } = renderSource();
+    await waitFor(() => expect(result.current.preview.status).toBe("included"));
+
+    const shown = result.current.lastBuild;
+    expect(shown?.args.document_text).toContain("Alpha");
+    const copy = await result.current.capture();
+    expect(copy).not.toBe(shown);
+    expect(result.current.lastBuild).toBe(shown);
+  });
+
+  it("forgets the capture when the document is another one or cannot be read", async () => {
+    readsText(["Alpha"]);
+    const { result, rerender } = renderSource();
+    await waitFor(() => expect(result.current.lastBuild).not.toBeNull());
+
+    read.mockReturnValue(new Promise(() => {}));
+    rerender({
+      enabled: true,
+      documentIdentity: "doc-2",
+      authoringEnabled: false,
+    });
+    expect(result.current.lastBuild).toBeNull();
+  });
+
+  it("clears the capture when a read fails", async () => {
+    readsText(["Alpha"]);
+    const { result } = renderSource();
+    await waitFor(() => expect(result.current.lastBuild).not.toBeNull());
+
+    read.mockResolvedValue({ ok: false, error: "paragraph read: Error" });
+    act(() => result.current.retry());
+    await waitFor(() =>
+      expect(result.current.preview.status).toBe("unreadable"),
+    );
+    expect(result.current.lastBuild).toBeNull();
+  });
+
+  it("keeps the capture out of Office settings and browser storage", async () => {
+    const setItem = vi.spyOn(Storage.prototype, "setItem");
+    readsText(["Alpha"]);
+    const { result } = renderSource();
+    await waitFor(() => expect(result.current.lastBuild).not.toBeNull());
+    expect(setItem).not.toHaveBeenCalled();
+    setItem.mockRestore();
+  });
+
   it("keeps the earlier capture available after the document changed", async () => {
     readsText(["Alpha"]);
     const { result } = renderSource();

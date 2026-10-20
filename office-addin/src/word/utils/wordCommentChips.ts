@@ -204,6 +204,13 @@ const ifIncludedHeading = () =>
 const spokenComments = () =>
   t({ id: "officeAddin.word.context.comment.spoken", message: "Comments" });
 
+/** "Open comments (9)": the open-comments chip's label, composer and sent alike. */
+export const wordOpenCommentsLabelText = (count: number) =>
+  t({
+    id: "officeAddin.word.context.openComments.label",
+    message: `Open comments (${count})`,
+  });
+
 const readFailedMeta = () =>
   t({
     id: "officeAddin.word.context.comment.meta.readFailed",
@@ -215,6 +222,10 @@ const spokenPicked = () =>
     id: "officeAddin.word.context.comment.spokenPicked",
     message: "Chosen comment",
   });
+
+/** What a comment chip is called aloud: the user's pick, or the comments Erato found. */
+export const wordCommentSpokenText = (picked: boolean) =>
+  picked ? spokenPicked() : spokenComments();
 
 const byRef = (list: WordCommentList) =>
   new Map(list.threads.map((thread) => [thread.ref, thread]));
@@ -446,10 +457,7 @@ export function wordOpenCommentsChip(
     return null;
   const label =
     list.status === "ready"
-      ? t({
-          id: "officeAddin.word.context.openComments.label",
-          message: `Open comments (${count})`,
-        })
+      ? wordOpenCommentsLabelText(count)
       : t({
           id: "officeAddin.word.context.openComments.spoken",
           message: "Open comments",

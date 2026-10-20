@@ -23,6 +23,7 @@ import type {
   ResolvedDrop,
   StagedEmail,
 } from "../../providers/OutlookEmailSourceProvider";
+import type * as OutlookSendFiles from "../../utils/outlookSendFiles";
 import type { ParsedEmail } from "../../utils/parsedEmail";
 import type {
   ComposerContextItem,
@@ -73,6 +74,21 @@ const h = vi.hoisted(() => {
     chatInput,
     source,
     maxSizeBytes: 1000,
+    lastPlan: null as { parts: { name: string; size: number }[] } | null,
+  };
+});
+
+// Pass-through, so a test can hold the composer's upload estimates against
+// the parts the send plans to upload.
+vi.mock("../../utils/outlookSendFiles", async (importOriginal) => {
+  const actual = await importOriginal<typeof OutlookSendFiles>();
+  return {
+    ...actual,
+    planOutlookFiles: (...args: Parameters<typeof actual.planOutlookFiles>) => {
+      const plan = actual.planOutlookFiles(...args);
+      h.lastPlan = plan;
+      return plan;
+    },
   };
 });
 
@@ -529,6 +545,16 @@ function items() {
   return h.chatInput.props.contextItems as ComposerContextItem[];
 }
 
+/** jsdom's File has no text(). */
+function readText(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsText(file);
+  });
+}
+
 function item(id: string) {
   return items().find((entry) => entry.id === id);
 }
@@ -827,25 +853,98 @@ describe("AddinChatInput", () => {
       );
     });
 
-    it("blocks the composer on a resolved part over the upload limit", () => {
+    it("leaves the size check to the composer, through the drop's upload estimate", () => {
       unstageDrops();
       stageDrop(h.maxSizeBytes + 1);
+      const oversized = new File(
+        ["x".repeat(h.maxSizeBytes + 1)],
+        "quarterly.eml",
+      );
       setSource({
         resolvedDrops: [
-          {
-            key: DROP_KEY,
-            file: new File(["x".repeat(h.maxSizeBytes + 1)], "quarterly.eml"),
-            size: h.maxSizeBytes + 1,
-          },
+          { key: DROP_KEY, file: oversized, size: h.maxSizeBytes + 1 },
         ],
       });
 
       renderInput();
 
-      expect(h.chatInput.props.sizeLimitExceeded).toEqual({
-        names: ["quarterly.eml"],
-        formatted: "1 KB",
-        kind: "size",
+      expect(h.chatInput.props.sizeLimitExceeded).toBeNull();
+      expect(item(`outlook-drop:${DROP_KEY}`)).toMatchObject({
+        state: "included",
+        estimate: oversized,
+        estimateUpload: true,
+      });
+    });
+
+    it("passes the owner's own verdict through", () => {
+      const verdict = { names: [], formatted: "3", kind: "count" as const };
+      renderInput({ sizeLimitExceeded: verdict });
+      expect(h.chatInput.props.sizeLimitExceeded).toBe(verdict);
+    });
+
+    describe("the uploads the composer counts are the parts the send uploads", () => {
+      const uploads = () =>
+        items()
+          .filter(
+            (entry) =>
+              entry.state === "included" &&
+              entry.estimateUpload &&
+              entry.estimate,
+          )
+          .map((entry) => ({
+            name: entry.estimate!.name,
+            size: entry.estimate!.size,
+          }))
+          .sort((a, b) => a.name.localeCompare(b.name));
+      const parts = () =>
+        (h.lastPlan?.parts ?? [])
+          .map(({ name, size }) => ({ name, size }))
+          .sort((a, b) => a.name.localeCompare(b.name));
+
+      it("for a fresh thread and two drops", () => {
+        readItem();
+        stageThread();
+        const second = new File(["second drop"], "second.eml");
+        setSource({
+          stagedEmails: [
+            ...(h.source.state.stagedEmails as StagedEmail[]),
+            { ...stagedDrop(), key: "drop-2" },
+          ],
+          resolvedDrops: [
+            { key: DROP_KEY, file: emlFile, size: emlFile.size },
+            { key: "drop-2", file: second, size: second.size },
+          ],
+        });
+        renderInput({ freshChat: true });
+
+        expect(parts()).toHaveLength(3);
+        expect(uploads()).toEqual(parts());
+      });
+
+      it("for a drop whose attachments could not be left out: neither counts it", () => {
+        setSource({
+          resolvedDrops: [
+            {
+              key: DROP_KEY,
+              file: null,
+              size: 0,
+              error: new EmailTrimError("quarterly.eml"),
+            },
+          ],
+        });
+        renderInput();
+
+        expect(parts()).toEqual([]);
+        expect(uploads()).toEqual([]);
+      });
+
+      it("for a drop being re-read after a tick: both count its last file", () => {
+        setSource({ isDropResolutionStale: true });
+        renderInput();
+
+        expect(item(`outlook-drop:${DROP_KEY}`)?.state).toBe("included");
+        expect(parts()).toHaveLength(1);
+        expect(uploads()).toEqual(parts());
       });
     });
 
@@ -963,6 +1062,48 @@ describe("AddinChatInput", () => {
       expect(screen.queryByText("📝")).toBeNull();
     });
 
+    it("counts the draft it carries toward the token estimate", async () => {
+      composeMessage("Dear Anna");
+      renderInput({ chatId: "chat-1" });
+
+      const draft = item("outlook-draft");
+      expect(draft?.state).toBe("included");
+      expect(draft?.estimateUpload).toBeUndefined();
+      expect(await readText(draft!.estimate!)).toContain(
+        "full_body: Dear Anna",
+      );
+    });
+
+    it("carries no estimate once the draft would not go again", async () => {
+      composeMessage("Dear Bob");
+      const { onSendMessage } = renderInput({ chatId: "chat-1" });
+      send();
+      await waitFor(() => expect(onSendMessage).toHaveBeenCalledTimes(1));
+      await waitFor(() =>
+        expect(item("outlook-draft")?.state).toBe("superseded"),
+      );
+      expect(item("outlook-draft")?.estimate).toBeUndefined();
+    });
+
+    it("moves the estimate to the selection that replaces the draft", async () => {
+      h.availableFacetArgs = new Map([
+        ["outlook_review_draft", new Set<string>()],
+        ["outlook_rewrite_selection", new Set<string>()],
+      ]);
+      h.composeSelection = {
+        data: "Could you confirm",
+        sourceProperty: "body",
+      };
+      composeMessage("Dear Anna, could you confirm?");
+      renderInput({ chatId: "chat-1" });
+
+      expect(item("outlook-draft")?.state).toBe("superseded");
+      expect(item("outlook-draft")?.estimate).toBeUndefined();
+      expect(await readText(item("outlook-selection")!.estimate!)).toContain(
+        "selected_text: Could you confirm",
+      );
+    });
+
     it("leaves the draft out after (x), brings it back with (+), and resets on another item", async () => {
       composeMessage("Dear Bob");
       const { onSendMessage, rerender, ui } = renderInput({ chatId: "chat-1" });
@@ -1038,6 +1179,7 @@ describe("AddinChatInput", () => {
           "superseded",
         );
         expect(meta("outlook-draft")).toBe("Not sent while scheduling");
+        expect(item("outlook-draft")?.estimate).toBeUndefined();
         const modes = h.chatInput.props.composerModes as ComposerMode[];
         expect(modes).toHaveLength(1);
         expect(modes[0]).toMatchObject({

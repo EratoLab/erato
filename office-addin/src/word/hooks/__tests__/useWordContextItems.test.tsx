@@ -169,6 +169,39 @@ describe("useWordContextItems", () => {
     expect(result.current).not.toBe(first);
   });
 
+  it("puts the Send's estimate on the chip that carries it, and on no other", () => {
+    const file = new File(["selected_text: Payment"], "word_selection.txt");
+    const given = input({
+      selection: { ...selection, state: "included" },
+      estimate: { itemId: WORD_SELECTION_CHIP_ID, file },
+    });
+    const { result, rerender } = renderHook(
+      (props: WordContextItemsInput) => useWordContextItems(props),
+      { initialProps: given },
+    );
+    expect(
+      result.current.filter((item) => item.estimate).map((item) => item.id),
+    ).toEqual([WORD_SELECTION_CHIP_ID]);
+    expect(result.current[0].estimate).toBe(file);
+
+    const first = result.current;
+    rerender({ ...given, estimate: { itemId: WORD_SELECTION_CHIP_ID, file } });
+    expect(result.current).toBe(first);
+
+    const next = new File(
+      ["selected_text: Payment is due"],
+      "word_selection.txt",
+    );
+    rerender({
+      ...given,
+      estimate: { itemId: WORD_SELECTION_CHIP_ID, file: next },
+    });
+    expect(result.current[0].estimate).toBe(next);
+
+    rerender({ ...given, estimate: undefined });
+    expect(result.current.some((item) => item.estimate)).toBe(false);
+  });
+
   it("gives the comment chip one id across origins, and names its controls as the (x) does", () => {
     const given = input();
     const { result, rerender } = renderHook(
