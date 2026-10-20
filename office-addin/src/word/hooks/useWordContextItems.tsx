@@ -84,6 +84,7 @@ export function useWordContextItems({
         icon: "selection",
         state: selection.state,
         ...(selection.tone ? { tone: selection.tone } : {}),
+        ...(selection.toneIcon ? { toneIcon: selection.toneIcon } : {}),
         ...(selection.meta ? { meta: selection.meta } : {}),
         label: quotedSelection(selectionExcerpt(selection.text)),
         spokenLabel: t({
@@ -112,36 +113,40 @@ export function useWordContextItems({
           id: "officeAddin.word.context.document.unnamed",
           message: "This document",
         });
-      const actions: ComposerContextDetailAction[] = document.actions.map(
-        (action) =>
-          action === "send-instead"
-            ? {
-                id: "send-instead",
-                label: t({
-                  id: "officeAddin.word.context.sendInstead",
-                  message: "Send this instead",
-                }),
-                variant: "primary",
-                announcement: t({
-                  id: "officeAddin.word.context.document.announce.sentInstead",
-                  message:
-                    "Document included. Your selection is off until it changes.",
-                }),
-                onSelect: sendDocumentInstead,
-              }
-            : {
-                id: "retry",
-                label: t({
-                  id: "officeAddin.word.context.retry",
-                  message: "Try again",
-                }),
-                variant: "primary",
-                announcement: t({
-                  id: "officeAddin.word.context.document.announce.read",
-                  message: "Document read.",
-                }),
-                onSelect: retryDocument,
-              },
+      // A locked chat keeps its document choice, and "Send this instead" would include it; a read
+      // changes nothing that is sent, so "Try again" stays.
+      const offered = locked
+        ? document.actions.filter((action) => action !== "send-instead")
+        : document.actions;
+      const actions: ComposerContextDetailAction[] = offered.map((action) =>
+        action === "send-instead"
+          ? {
+              id: "send-instead",
+              label: t({
+                id: "officeAddin.word.context.sendInstead",
+                message: "Send this instead",
+              }),
+              variant: "primary",
+              announcement: t({
+                id: "officeAddin.word.context.document.announce.sentInstead",
+                message:
+                  "Document included. Your selection is off until it changes.",
+              }),
+              onSelect: sendDocumentInstead,
+            }
+          : {
+              id: "retry",
+              label: t({
+                id: "officeAddin.word.context.retry",
+                message: "Try again",
+              }),
+              variant: "primary",
+              announcement: t({
+                id: "officeAddin.word.context.document.announce.read",
+                message: "Document read.",
+              }),
+              onSelect: retryDocument,
+            },
       );
       items.push({
         id: WORD_DOCUMENT_CHIP_ID,

@@ -3935,14 +3935,19 @@ msgid "officeAddin.word.context.document.coverage.whole"
 msgstr "{total, plural, one {Erato reçoit le document entier, # paragraphe.} other {Erato reçoit le document entier, # paragraphes.}}"
 
 #. js-lingui-explicit-id
-#: src/word/components/WordContextDetails.tsx
+#: src/word/utils/wordContextChips.ts
 msgid "officeAddin.word.context.document.coverageHeading"
 msgstr "Couverture"
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordContextChips.ts
+msgid "officeAddin.word.context.document.coverageIfSentHeading"
+msgstr "S’il est envoyé à la place"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordContextChips.ts
 msgid "officeAddin.word.context.document.dismissError"
-msgstr "Ignorer"
+msgstr "Ignorer le document"
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordContextChips.ts
@@ -4103,6 +4108,11 @@ msgstr "Trop long · début seulement"
 #: src/word/utils/wordContextChips.ts
 msgid "officeAddin.word.context.selection.paragraphs"
 msgstr "{count, plural, one {# paragraphe} other {# paragraphes}}"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordContextChips.ts
+msgid "officeAddin.word.context.selection.paragraphsErato"
+msgstr "{count, plural, one {# paragraphe · Affiché par Erato après « Afficher dans Word »} other {# paragraphes · Affiché par Erato après « Afficher dans Word »}}"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordContextDetails.tsx

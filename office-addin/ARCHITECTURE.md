@@ -166,7 +166,8 @@ while the file row is.
 Word feeds the selection and the document this way: `wordContextChips`
 reads `previewWordSend()` and `useWordContextItems` turns the result into
 items. The (x)/(+) choices live in `wordContextStore`, in memory only
-(Office settings would save them into the DOCX). One-off send prompts stay
+(Office settings would save them into the DOCX), one entry per conversation
+key, so two composers never write each other's choices. One-off send prompts stay
 rows above the composer until the notice slot is used.
 
 ## Landmines

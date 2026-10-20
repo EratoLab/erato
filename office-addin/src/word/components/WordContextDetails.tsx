@@ -65,7 +65,7 @@ export function WordSelectionDetail({
         data-ui="word-context-detail-quote"
         className="max-h-48 overflow-y-auto whitespace-pre-wrap break-words rounded-r-[var(--theme-radius-control)] border-l-2 border-theme-border bg-theme-bg-secondary py-2 pl-3 pr-2 text-sm text-theme-fg-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-theme-focus"
       >
-        {model.text}
+        {model.cut ? `${model.text}…` : model.text}
       </blockquote>
       <p className="text-xs text-theme-fg-secondary">{model.paragraphs}</p>
       {model.notes.map((note) => (
@@ -90,10 +90,7 @@ export function WordDocumentDetail({
       ))}
       {model.coverage && (
         <DetailSection
-          title={t({
-            id: "officeAddin.word.context.document.coverageHeading",
-            message: "Coverage",
-          })}
+          title={model.coverage.heading}
           dataUi="word-context-detail-coverage"
         >
           {/* The hint explains the first line, so it follows it, before any later line. */}
@@ -109,7 +106,9 @@ export function WordDocumentDetail({
             </p>
           )}
           {model.coverage.lines.slice(1).map((line) => (
-            <p key={line}>{line}</p>
+            <p key={line} className="text-xs text-theme-fg-secondary">
+              {line}
+            </p>
           ))}
         </DetailSection>
       )}

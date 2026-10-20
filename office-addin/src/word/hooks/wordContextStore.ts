@@ -5,28 +5,39 @@ import { nextSelectionDismissal } from "../../core/selection/selectionDismissal"
 import type { SelectionDismissalState } from "../../core/selection/selectionDismissal";
 
 interface DocumentInclusion {
-  conversationKey: string;
   /** The setting for new chats as it stood when the chat got its ID. */
   chatDefault: boolean | null;
   /** The chip's (x) or (+) in this conversation. */
   override: boolean | null;
 }
 
-interface WordContextState {
+interface ConversationChoices {
   document: DocumentInclusion;
   selection: SelectionDismissalState;
 }
 
-const INITIAL: WordContextState = {
-  document: { conversationKey: "", chatDefault: null, override: null },
-  selection: { contextKey: "", selectionKey: "", dismissed: false },
+/** By conversation key, so composers on different conversations never write each other's entry. */
+type WordContextState = ReadonlyMap<string, ConversationChoices>;
+
+const NO_DOCUMENT_CHOICE: DocumentInclusion = {
+  chatDefault: null,
+  override: null,
 };
 
-let state = INITIAL;
+const freshChoices = (conversationKey: string): ConversationChoices => ({
+  document: NO_DOCUMENT_CHOICE,
+  selection: {
+    contextKey: conversationKey,
+    selectionKey: "",
+    dismissed: false,
+  },
+});
+
+let state: WordContextState = new Map();
+const holders = new Map<string, number>();
 const listeners = new Set<() => void>();
 
 function publish(next: WordContextState) {
-  if (next === state) return;
   state = next;
   for (const listener of listeners) listener();
 }
@@ -40,49 +51,64 @@ function subscribe(listener: () => void) {
 
 const getSnapshot = () => state;
 
-function documentEntry(conversationKey: string): DocumentInclusion {
-  return state.document.conversationKey === conversationKey
-    ? state.document
-    : { conversationKey, chatDefault: null, override: null };
+function write(
+  conversationKey: string,
+  change: (current: ConversationChoices) => ConversationChoices,
+) {
+  const current = state.get(conversationKey) ?? freshChoices(conversationKey);
+  const next = change(current);
+  if (next === current && state.has(conversationKey)) return;
+  const map = new Map(state);
+  map.set(conversationKey, next);
+  publish(map);
 }
 
-function setDocument(next: DocumentInclusion) {
-  const current = state.document;
-  if (
-    next.conversationKey === current.conversationKey &&
-    next.chatDefault === current.chatDefault &&
-    next.override === current.override
-  )
-    return;
-  publish({ ...state, document: next });
+function setDocument(
+  conversationKey: string,
+  change: Partial<DocumentInclusion>,
+) {
+  write(conversationKey, (current) => {
+    const document = { ...current.document, ...change };
+    return document.chatDefault === current.document.chatDefault &&
+      document.override === current.document.override
+      ? current
+      : { ...current, document };
+  });
 }
 
-function setSelection(next: SelectionDismissalState) {
-  if (next === state.selection) return;
-  const current = state.selection;
-  if (
-    next.contextKey === current.contextKey &&
-    next.selectionKey === current.selectionKey &&
-    next.dismissed === current.dismissed
-  )
-    return;
-  publish({ ...state, selection: next });
+function setSelection(
+  conversationKey: string,
+  change: (current: SelectionDismissalState) => SelectionDismissalState,
+) {
+  write(conversationKey, (current) => {
+    const selection = change(current.selection);
+    return selection.selectionKey === current.selection.selectionKey &&
+      selection.dismissed === current.selection.dismissed
+      ? current
+      : { ...current, selection };
+  });
 }
 
 /**
- * Whether the document goes with the chat's messages: the chip's choice, else the setting for new
- * chats, which a chat keeps from the moment it gets its ID.
+ * Marks a conversation as shown by a mounted composer. Choices of a conversation no composer
+ * shows any more are dropped when a composer takes a key, so a chat left and opened again
+ * starts from its defaults, while a composer that mounts again in the same chat keeps them.
  */
-export function wordDocumentIncluded(
-  entry: DocumentInclusion,
-  conversationKey: string,
-  { chatStarted, includeByDefault }: WordDocumentInclusionDefaults,
-): boolean {
-  const own = entry.conversationKey === conversationKey ? entry : null;
-  return (
-    own?.override ??
-    (chatStarted ? (own?.chatDefault ?? includeByDefault) : includeByDefault)
-  );
+function useHeld(conversationKey: string) {
+  useLayoutEffect(() => {
+    holders.set(conversationKey, (holders.get(conversationKey) ?? 0) + 1);
+    const left = [...state.keys()].filter((key) => !holders.has(key));
+    if (left.length > 0) {
+      const map = new Map(state);
+      for (const key of left) map.delete(key);
+      publish(map);
+    }
+    return () => {
+      const remaining = (holders.get(conversationKey) ?? 1) - 1;
+      if (remaining > 0) holders.set(conversationKey, remaining);
+      else holders.delete(conversationKey);
+    };
+  }, [conversationKey]);
 }
 
 export interface WordDocumentInclusionDefaults {
@@ -95,66 +121,72 @@ export interface WordDocumentInclusionDefaults {
 /**
  * The composer's context choices for the conversation it shows: the document's (x)/(+) and the
  * selection's dismissal. Memory only, never Office settings (they would be saved into the DOCX)
- * or browser storage. One slot, keyed by conversation: another conversation starts from its
- * defaults, and a new chat getting its ID keeps its key and so its choices.
+ * or browser storage. Another conversation starts from its defaults, and a new chat getting its
+ * ID keeps its key and so its choices.
  */
 export const wordContextStore = {
   getSnapshot,
+  /**
+   * Whether the document goes with the chat's messages: the chip's choice, else the setting for
+   * new chats, which a chat keeps from the moment it gets its ID.
+   */
   useDocumentIncluded(
     conversationKey: string,
-    defaults: WordDocumentInclusionDefaults,
+    { chatStarted, includeByDefault }: WordDocumentInclusionDefaults,
   ): boolean {
-    const snapshot = useSyncExternalStore(subscribe, getSnapshot);
-    const frozen =
-      snapshot.document.conversationKey === conversationKey
-        ? snapshot.document.chatDefault
-        : null;
-    const { chatStarted, includeByDefault } = defaults;
+    useHeld(conversationKey);
+    const document =
+      useSyncExternalStore(subscribe, getSnapshot).get(conversationKey)
+        ?.document ?? NO_DOCUMENT_CHOICE;
+    const frozen = document.chatDefault;
     useLayoutEffect(() => {
       if (!chatStarted || frozen !== null) return;
-      setDocument({
-        ...documentEntry(conversationKey),
-        chatDefault: includeByDefault,
-      });
+      setDocument(conversationKey, { chatDefault: includeByDefault });
     }, [conversationKey, chatStarted, frozen, includeByDefault]);
-    return wordDocumentIncluded(snapshot.document, conversationKey, defaults);
+    return (
+      document.override ??
+      (chatStarted ? (frozen ?? includeByDefault) : includeByDefault)
+    );
   },
   setDocumentIncluded(conversationKey: string, included: boolean) {
-    setDocument({ ...documentEntry(conversationKey), override: included });
+    setDocument(conversationKey, { override: included });
   },
   useSelectionDismissed(
     conversationKey: string,
     selectionKey: string,
   ): boolean {
-    const stored = useSyncExternalStore(subscribe, getSnapshot).selection;
+    useHeld(conversationKey);
+    const stored = useSyncExternalStore(subscribe, getSnapshot).get(
+      conversationKey,
+    )?.selection;
     // Every key the selection passes through is recorded, so a passage selected again after
     // nothing was selected reads as new.
     useLayoutEffect(() => {
-      setSelection(
-        nextSelectionDismissal(stored, selectionKey, conversationKey),
+      setSelection(conversationKey, (current) =>
+        nextSelectionDismissal(current, selectionKey, conversationKey),
       );
     }, [stored, selectionKey, conversationKey]);
-    return nextSelectionDismissal(stored, selectionKey, conversationKey)
-      .dismissed;
+    return nextSelectionDismissal(
+      stored ?? freshChoices(conversationKey).selection,
+      selectionKey,
+      conversationKey,
+    ).dismissed;
   },
   dismissSelection(conversationKey: string, selectionKey: string) {
-    const current = nextSelectionDismissal(
-      state.selection,
-      selectionKey,
-      conversationKey,
-    );
-    setSelection({ ...current, dismissed: true });
+    setSelection(conversationKey, (current) => ({
+      ...nextSelectionDismissal(current, selectionKey, conversationKey),
+      dismissed: true,
+    }));
   },
   rearmSelection(conversationKey: string, selectionKey: string) {
-    const current = nextSelectionDismissal(
-      state.selection,
-      selectionKey,
-      conversationKey,
-    );
-    setSelection({ ...current, dismissed: false });
+    setSelection(conversationKey, (current) => ({
+      ...nextSelectionDismissal(current, selectionKey, conversationKey),
+      dismissed: false,
+    }));
   },
   resetForTests() {
-    state = INITIAL;
+    state = new Map();
+    holders.clear();
     listeners.clear();
   },
 };

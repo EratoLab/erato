@@ -12,18 +12,22 @@ in the composer's lane (ERMAIN-1023), as the stories under
   cut with an ellipsis, no horizontal page overflow, a quote label of at most
   61 characters; a short file name keeping its own width before the meta,
   a longer one the 7em floor;
-- tones: warning and error borders from their tokens with the item's own
-  glyph, the muted superseded look, dashed suggested chips, and label and
+- tones: warning and error borders from their tokens, the document's own
+  glyph under a warning and the warning mark on a passage cut to its
+  beginning, the muted superseded look, dashed suggested chips, and label and
   meta contrast at 4.5:1 in light and dark;
 - the keyboard flows: Delete and + with the outcome announced, the document
   given back when the selection leaves, Erato's passage taken over, "Send
-  this instead" and "Try again" announcing their outcome, a locked document;
+  this instead" and "Try again" announcing their outcome, a locked document
+  that offers nothing to send instead;
 - the detail as a sheet in the pane and as a popover at 1280 px: coverage
   lines with the hint right under the line it explains, lasting facts as
   notes by tone, what goes instead in full sentences, the error report only
-  for an unreadable document, nothing claimed before the first read, and the
-  selected text in a tinted, token-themed box that scrolls on its own with
-  the actions in view;
+  for an unreadable document, no coverage claimed before the first read or
+  while the document is off, a superseded document's coverage only as what
+  goes if it is sent instead, and the selected text in a tinted, token-themed
+  box that scrolls on its own with the actions in view, marked where the send
+  stops;
 - the lane's own words in German.
 
 Start Storybook from `frontend/`; the providers need an API root to render,

@@ -90,7 +90,7 @@ const STORIES: Story[] = [
       state: "error",
       tone: "error",
       meta: "Couldn't read the document",
-      control: "Dismiss",
+      control: "Dismiss document",
     },
   },
   {
@@ -99,7 +99,7 @@ const STORIES: Story[] = [
       state: "error",
       tone: "error",
       meta: "Couldn't read the document",
-      control: "Dismiss",
+      control: "Dismiss document",
     },
   },
   {
@@ -108,7 +108,7 @@ const STORIES: Story[] = [
       state: "error",
       tone: "error",
       meta: "Can't be sent in this chat",
-      control: "Dismiss",
+      control: "Dismiss document",
     },
   },
   {
@@ -117,7 +117,7 @@ const STORIES: Story[] = [
       state: "error",
       tone: "error",
       meta: "Can't be sent in this chat",
-      control: "Dismiss",
+      control: "Dismiss document",
     },
   },
   { id: "new-document", document: docIncluded("New document") },
@@ -138,6 +138,11 @@ const STORIES: Story[] = [
   },
   { id: "cannot-edit", document: docIncluded("Can't edit · 86 ¶", "warning") },
   { id: "locked", document: { ...docIncluded("86 ¶"), locked: true } },
+  {
+    id: "locked-selection-replaces-document",
+    selection: selIncluded,
+    document: { ...docReplaced("selection"), locked: true },
+  },
   { id: "document-replaced-by-comment", document: docReplaced("comment") },
   {
     id: "selection-replaces-document",
@@ -452,7 +457,7 @@ test.describe("label width", () => {
 
 test.describe("tones", () => {
   for (const theme of ["light", "dark"] as const) {
-    test(`warning keeps the item's glyph, error, superseded and suggested looks, ${theme}`, async ({
+    test(`a warning keeps the document's glyph and marks a cut passage, error, superseded and suggested looks, ${theme}`, async ({
       page,
     }) => {
       const glyph = (name: "word.selection" | "word.document") =>
@@ -464,6 +469,12 @@ test.describe("tones", () => {
         "word.selection": await glyph("word.selection"),
         "word.document": await glyph("word.document"),
       };
+      await openWord(page, "read-error", { theme });
+      const errorGlyph = await glyph("word.document");
+      const failed = kind(page, "word.document");
+      expect(await style(failed, "border-top-color")).toBe(
+        await tokenColor(failed, "--theme-error-border"),
+      );
       for (const [story, name] of [
         ["track-changes", "word.document"],
         ["read-only-fallback", "word.document"],
@@ -476,15 +487,15 @@ test.describe("tones", () => {
         expect(await style(chip, "border-top-color"), story).toBe(
           await tokenColor(chip, "--theme-warning-border"),
         );
-        expect(await glyph(name), story).toBe(ownGlyph[name]);
+        if (name === "word.document") {
+          expect(await glyph(name), story).toBe(ownGlyph[name]);
+        } else {
+          // Only the beginning goes, so the warning mark replaces the quote, as in the prototype.
+          expect(await glyph(name), story).not.toBe(ownGlyph[name]);
+          expect(await glyph(name), story).not.toBe(errorGlyph);
+        }
         await expect(chip.locator(OPEN)).toHaveAccessibleName(/Included\.$/);
       }
-
-      await openWord(page, "read-error", { theme });
-      const failed = kind(page, "word.document");
-      expect(await style(failed, "border-top-color")).toBe(
-        await tokenColor(failed, "--theme-error-border"),
-      );
 
       await openWord(page, "selection-replaces-document", { theme });
       const superseded = kind(page, "word.document");
@@ -694,10 +705,14 @@ test.describe("detail", () => {
       SELECT_LATER_PART,
       "Changed since last send: Erato reads it again with this message.",
     ]);
-    const hint = coverage.locator("p").nth(1);
-    expect(await style(hint, "color")).toBe(
-      await tokenColor(hint, "--theme-fg-secondary"),
-    );
+    await expect(coverage.locator("h3")).toHaveText("Coverage");
+    for (const index of [1, 2]) {
+      const line = coverage.locator("p").nth(index);
+      expect(await style(line, "color")).toBe(
+        await tokenColor(line, "--theme-fg-secondary"),
+      );
+      expect(await style(line, "font-size")).toBe("12px");
+    }
     await expect(
       sheet.locator('[data-ui="word-context-detail-comments"]'),
     ).toContainText("A list of the 12 comments in the document");
@@ -738,6 +753,38 @@ test.describe("detail", () => {
     ).toHaveCount(0);
     await expect(notesIn(sheet)).toHaveCount(0);
     await expect(lifetimeIn(sheet)).toHaveText(DOCUMENT_LIFETIME);
+  });
+
+  test("an off document claims no coverage; a superseded one says what goes if it is sent instead", async ({
+    page,
+  }) => {
+    const off = await openDetail(
+      page,
+      "document-off",
+      "word.document",
+      docName,
+    );
+    await expect(
+      off.locator('[data-ui="word-context-detail-coverage"]'),
+    ).toHaveCount(0);
+
+    await openWord(page, "interactive");
+    const simulate = page.getByRole("group", { name: "Simulate" });
+    await simulate.getByRole("button", { name: "Edit the document" }).click();
+    await expect(
+      kind(page, "word.document").locator(
+        '[data-ui="composer-context-chip-meta"]',
+      ),
+    ).toHaveText("Changed since last send");
+    await simulate.getByRole("button", { name: "Select a passage" }).click();
+    await open(page, "word.document").click();
+    const sheet = page.getByRole("dialog", { name: docName });
+    const coverage = sheet.locator('[data-ui="word-context-detail-coverage"]');
+    await expect(coverage.locator("h3")).toHaveText("If sent instead");
+    await expect(coverage.locator("p")).toHaveText([
+      "Erato receives the whole document, 86 paragraphs.",
+    ]);
+    await expect(sheet).not.toContainText("reads it again");
   });
 
   test("lasting facts are notes in the document's detail, by tone", async ({
@@ -789,6 +836,35 @@ test.describe("detail", () => {
     }
   });
 
+  test("Erato's passage says where it came from", async ({ page }) => {
+    const sheet = await openDetail(
+      page,
+      "erato-passage",
+      "word.selection",
+      "Passage Erato selected",
+    );
+    await expect(sheet).toContainText(
+      "1 paragraph · Shown by Erato after Show in Word",
+    );
+  });
+
+  test("a locked superseded document offers nothing to send instead", async ({
+    page,
+  }) => {
+    const sheet = await openDetail(
+      page,
+      "locked-selection-replaces-document",
+      "word.document",
+      docName,
+    );
+    await expect(notesIn(sheet).first()).toHaveText(
+      "Your selection is sent instead of the document.",
+    );
+    await expect(
+      sheet.getByRole("button", { name: "Send this instead" }),
+    ).toHaveCount(0);
+  });
+
   test("an unreadable document offers its error report; one this chat can't send has none", async ({
     page,
   }) => {
@@ -818,6 +894,7 @@ test.describe("detail", () => {
     await expect(notesIn(other)).toHaveText([
       "This chat can only start new documents, so a document with text is not sent.",
     ]);
+    await expect(notesIn(other)).toHaveAttribute("data-tone", "error");
   });
 
   for (const theme of ["light", "dark"] as const) {
@@ -890,6 +967,10 @@ test.describe("detail", () => {
         '[data-ui="word-context-detail-note"][data-tone="warning"]',
       ),
     ).toContainText("Too long to send in full. Only the beginning is sent.");
+    expect((await quoteBlock.innerText()).endsWith("…")).toBe(true);
+    await expect(sheet).toContainText(
+      "Erato receives the first 9 of 14 paragraphs.",
+    );
     const leaveOut = await boxOf(
       sheet.getByRole("button", { name: "Leave out" }),
     );

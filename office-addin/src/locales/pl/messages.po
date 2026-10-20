@@ -3935,14 +3935,19 @@ msgid "officeAddin.word.context.document.coverage.whole"
 msgstr "{total, plural, one {Erato otrzymuje cały dokument, # akapit.} few {Erato otrzymuje cały dokument, # akapity.} many {Erato otrzymuje cały dokument, # akapitów.} other {Erato otrzymuje cały dokument, # akapitu.}}"
 
 #. js-lingui-explicit-id
-#: src/word/components/WordContextDetails.tsx
+#: src/word/utils/wordContextChips.ts
 msgid "officeAddin.word.context.document.coverageHeading"
 msgstr "Zakres"
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordContextChips.ts
+msgid "officeAddin.word.context.document.coverageIfSentHeading"
+msgstr "Jeśli zostanie wysłany zamiast tego"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordContextChips.ts
 msgid "officeAddin.word.context.document.dismissError"
-msgstr "Odrzuć"
+msgstr "Odrzuć dokument"
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordContextChips.ts
@@ -4105,6 +4110,11 @@ msgid "officeAddin.word.context.selection.paragraphs"
 msgstr "{count, plural, one {# akapit} few {# akapity} many {# akapitów} other {# akapitu}}"
 
 #. js-lingui-explicit-id
+#: src/word/utils/wordContextChips.ts
+msgid "officeAddin.word.context.selection.paragraphsErato"
+msgstr "{count, plural, one {# akapit · Pokazane przez Erato po „Pokaż w Wordzie”} few {# akapity · Pokazane przez Erato po „Pokaż w Wordzie”} many {# akapitów · Pokazane przez Erato po „Pokaż w Wordzie”} other {# akapitu · Pokazane przez Erato po „Pokaż w Wordzie”}}"
+
+#. js-lingui-explicit-id
 #: src/word/components/WordContextDetails.tsx
 msgid "officeAddin.word.context.selection.quoteLabel"
 msgstr "Zaznaczony tekst"
@@ -4127,7 +4137,7 @@ msgstr "Fragment zaznaczony przez Erato"
 #. js-lingui-explicit-id
 #: src/word/hooks/useWordContextItems.tsx
 msgid "officeAddin.word.context.sendInstead"
-msgstr "Wyślij to zamiast"
+msgstr "Wyślij zamiast tego"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordImportConfirm.tsx
