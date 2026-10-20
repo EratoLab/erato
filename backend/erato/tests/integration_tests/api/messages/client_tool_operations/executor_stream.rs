@@ -314,7 +314,7 @@ async fn assert_answered(state: &erato::state::AppState, chat_id: Uuid) {
     assert_eq!(call_output(&message)["status"], "success");
 }
 
-async fn rows(state: &erato::state::AppState, table: &str) -> i64 {
+pub(super) async fn rows(state: &erato::state::AppState, table: &str) -> i64 {
     state
         .db
         .query_one_raw(sea_orm::Statement::from_string(
@@ -328,7 +328,7 @@ async fn rows(state: &erato::state::AppState, table: &str) -> i64 {
         .unwrap()
 }
 
-async fn account(state: &erato::state::AppState) -> Uuid {
+pub(super) async fn account(state: &erato::state::AppState) -> Uuid {
     erato::models::user::get_or_create_user(&state.db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
         .await
         .unwrap()
@@ -368,7 +368,7 @@ async fn wait_handed_over(state: &erato::state::AppState) {
     .expect("the call is handed to the executor stream");
 }
 
-async fn wait_released(state: &erato::state::AppState, binding: &ExecutorBinding) {
+pub(super) async fn wait_released(state: &erato::state::AppState, binding: &ExecutorBinding) {
     tokio::time::timeout(Duration::from_secs(5), async {
         while presence(state, binding).await.is_some() {
             tokio::time::sleep(Duration::from_millis(20)).await;

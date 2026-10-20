@@ -2218,8 +2218,8 @@ pub(crate) struct LaunchRunSpec {
     /// Only an awaited run has one: nothing is waiting on a detached run, so
     /// there is no turn its parked request could be surfaced on.
     pub parent_message_id: Option<Uuid>,
-    /// Set for a client task launched from a turn; never for a retry or a
-    /// mention run.
+    /// Set for a client task; never for a mention run. A retry carries only
+    /// the note.
     pub client_task: Option<ClientTaskLaunchSpec>,
 }
 

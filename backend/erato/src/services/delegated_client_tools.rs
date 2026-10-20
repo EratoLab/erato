@@ -58,6 +58,7 @@ pub(crate) const NONE_OFFERED: &str = "the turn offered no client tools that tas
 pub(crate) const ALL_NEVER: &str = "the user does not allow these client tools";
 pub(crate) const PANE_NOT_CONNECTED: &str = "the pane is not connected";
 pub(crate) const PANE_REFUSES_TASKS: &str = "the pane does not take calls from tasks";
+pub(crate) const RETRIED: &str = "a retried task gets no client tools";
 
 /// Whether a tool may be granted for `host`, by its current configuration.
 fn grantable(config: &ClientToolConfig, host: &str) -> bool {

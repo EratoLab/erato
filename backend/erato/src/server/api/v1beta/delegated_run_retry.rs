@@ -734,7 +734,18 @@ pub async fn retry_delegated_run(
             // A retry is always `async`: no turn is awaiting it, so there is no
             // approval surface to link to.
             parent_message_id: None,
-            client_task: None,
+            client_task: crate::services::delegated_client_tools::client_task_host(
+                &app_state.config.facets,
+                &facet_ids,
+            )
+            .map(|host| crate::services::delegation::ClientTaskLaunchSpec {
+                note: crate::models::chat::ClientTaskNote {
+                    host_context: host,
+                    run_mode: None,
+                    unavailable: Some(crate::services::delegated_client_tools::RETRIED.to_string()),
+                },
+                grant: None,
+            }),
         },
         brief,
     )
