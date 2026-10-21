@@ -6107,7 +6107,9 @@ A facet may override the [`delegation.tasks`](#delegationtasks) runtime keys whi
 ```toml
 [facets.facets.plan]
 display_name = "Plan & delegate"
-tool_call_allowlist = ["erato/delegate_task", "web-search-mcp/*"]
+# Lists every server the child facet needs: a task never gets an MCP tool
+# outside the planning turn's allowlist.
+tool_call_allowlist = ["erato/delegate_task", "web-search-mcp/*", "web-access-mcp/*"]
 
 [facets.facets.plan.delegation]
 max_tasks_per_turn = 3
@@ -6126,7 +6128,7 @@ plan_min_tasks = 3
 - `max_server_tool_calls_per_task` - Overrides `delegation.tasks.max_server_tool_calls_per_task`.
 - `max_client_tool_calls_per_task` - Overrides `delegation.tasks.max_client_tool_calls_per_task`. Raising this while leaving the server budget alone is the usual shape for a planning facet.
 - `persona` - Overrides `delegation.tasks.persona`.
-- `child_facet_ids` - Added to `delegation.tasks.child_facet_ids` (union). Like the global list, it only widens what a task may name, and a child never gets an MCP tool outside the planning turn's allowlist. Each entry must name a configured facet.
+- `child_facet_ids` - Added to `delegation.tasks.child_facet_ids` (union). Like the global list, it only widens what a task may name, and a child never gets an MCP tool outside the planning turn's allowlist. Once you write into a task's chat yourself, that chat is yours and this cap no longer applies. Each entry must name a configured facet.
 - `run_modes` - Overrides `delegation.tasks.run_modes`. Unioned with the global list rather than replacing it, because a run mode is a capability the facet's author meant to grant; `wait` is always kept available.
 - `scheduling` - Overrides `delegation.tasks.scheduling`. The first selected facet that states one wins.
 - `approval.mode` and `approval.plan_min_tasks` - Override `delegation.tasks.approval.mode` and `delegation.tasks.approval.plan_min_tasks`. Merged like a cap rather than replacing: the strictest `mode` (`always` beats `plan` beats `async_only` beats `never`) and the lowest `plan_min_tasks` win, so selecting a second planning facet can only ever make a turn ask more.

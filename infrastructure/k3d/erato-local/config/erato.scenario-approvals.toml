@@ -66,11 +66,11 @@ preset = "restrictive"
 allow_always = true
 
 # No permission rule for either server: with no `mcp_server_permissions.rules`
-# at all, every configured server is readable by any logged-in user. That is
-# what puts the gated server in the CHILD's tool set - a task child names no
-# facet, so its tools are every server it is authorized for, while the parent is
-# narrowed to the planning facet's allowlist below and cannot make the gated
-# call itself.
+# at all, every configured server is readable by any logged-in user. A task
+# child names no facet, so its tools are every server it is authorized for,
+# capped by the planning facet's allowlist below (ERMAIN-999). That allowlist
+# lists the gated server, which is what puts it in the CHILD's tool set; the
+# mock LLM only calls it from a child's turn.
 [mcp_servers.mock_mcp_approval]
 transport_type = "streamable_http"
 url = "http://erato-local-mock-mcp-server:44321/mcp/approval-policy"
