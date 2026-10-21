@@ -2735,6 +2735,11 @@ msgid "officeAddin.word.authoring.partlyWritten"
 msgstr "Word stopped after {applied} of {total} changes. Your original is saved."
 
 #. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.placeholdersUnverified"
+msgstr "This change needs a full-document rewrite, and Erato can't yet check how Word rewrites the placeholder text of this document's content controls. Nothing was applied. Ask for a smaller edit that can be written in place."
+
+#. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts
 #~ msgid "officeAddin.word.authoring.portrait"
 #~ msgstr "Portrait"
@@ -3893,6 +3898,11 @@ msgstr "Word's Undo can't reverse this change. Erato can't verify the result on 
 #: src/word/utils/wordAuthoringMessages.ts
 msgid "officeAddin.word.importRefusal.disabled"
 msgstr "This change needs a full-document rewrite, which your organization has turned off for this version of Word."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.importRefusal.placeholders"
+msgstr "This change needs a full-document rewrite, and Erato can't yet check how Word rewrites the placeholder text of this document's content controls."
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordAuthoringMessages.ts

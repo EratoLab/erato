@@ -3,9 +3,12 @@ import { describe, expect, it } from "vitest";
 import {
   WORD_HOUSEKEEPING,
   normalizeWordPeopleList,
+  normalizeWordPlaceholderEntries,
   normalizeWordRevisionIds,
   wordHousekeepingDifferences,
   wordHousekeepingTokens,
+  wordPackageRoots,
+  wordPlaceholderImportIssue,
 } from "../wordHousekeeping";
 import {
   createWordXmlComparison,
@@ -190,6 +193,278 @@ describe("complete packages", () => {
     ).not.toBe(
       fingerprint(pkg({ body: "<w:p/>", settings: themeLanguage("en-GB") })),
     );
+  });
+});
+
+describe("placeholder-entries", () => {
+  // As Word for Mac 16.114 and Word PC 16.0.20430 export them (ERMAIN-980 dump-p1, dump-p2).
+  const DATE = "63FB08E7FE97794DB32A1946C74B1837";
+  const CLIENT = "0721F0149502C4499FFF6165A451B8A3";
+  const DEFAULT = "DefaultPlaceholder_-1854013440";
+  const BASE_STYLES = `<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/></w:style><w:style w:type="character" w:styleId="PlaceholderText"><w:name w:val="Placeholder Text"/><w:rPr><w:color w:val="666666"/></w:rPr></w:style>`;
+  const macStyle = (name: string) =>
+    `<w:style w:type="paragraph" w:customStyle="1" w:styleId="${name}"><w:name w:val="${name}"/><w:rsid w:val="00A4708B"/></w:style>`;
+  const pcStyle = (name: string) =>
+    `<w:style w:type="paragraph" w:customStyle="1" w:styleId="${name}"><w:name w:val="${name}"/><w:rsid w:val="00CC415A"/><w:rPr><w:lang w:eastAsia="en-DE"/></w:rPr></w:style>`;
+  const control = (name: string, text: string, id: number) =>
+    `<w:p><w:sdt><w:sdtPr><w:id w:val="${id}"/><w:placeholder><w:docPart w:val="${name}"/></w:placeholder><w:showingPlcHdr/></w:sdtPr><w:sdtContent><w:r><w:rPr><w:rStyle w:val="PlaceholderText"/></w:rPr><w:t>${text}</w:t></w:r></w:sdtContent></w:sdt></w:p>`;
+  const entry = (
+    name: string,
+    text: string,
+    {
+      guid = `{${name.slice(0, 8)}-0000-0000-0000-000000000000}`,
+      pStyle = "",
+      type = "bbPlcHdr",
+      run = "",
+    } = {},
+  ) =>
+    `<w:docPart><w:docPartPr><w:name w:val="${name}"/><w:category><w:name w:val="General"/><w:gallery w:val="placeholder"/></w:category><w:types><w:type w:val="${type}"/></w:types><w:behaviors><w:behavior w:val="content"/></w:behaviors><w:guid w:val="${guid}"/></w:docPartPr><w:docPartBody><w:p>${pStyle ? `<w:pPr><w:pStyle w:val="${pStyle}"/></w:pPr>` : ""}<w:r><w:rPr><w:rStyle w:val="PlaceholderText"/>${run}</w:rPr><w:t>${text}</w:t></w:r></w:p></w:docPartBody></w:docPart>`;
+  const glossaryPackage = ({
+    controls,
+    entries,
+    styles = "",
+    header = "",
+  }: {
+    controls: string;
+    entries: string;
+    styles?: string;
+    header?: string;
+  }) =>
+    pkg({ body: controls }).replace(
+      "</pkg:package>",
+      part(
+        "/word/glossary/document.xml",
+        `<w:glossaryDocument xmlns:w="${W}"><w:docParts>${entries}</w:docParts></w:glossaryDocument>`,
+      ) +
+        part(
+          "/word/glossary/styles.xml",
+          `<w:styles xmlns:w="${W}">${BASE_STYLES}${styles}</w:styles>`,
+        ) +
+        (header
+          ? part("/word/header1.xml", `<w:hdr xmlns:w="${W}">${header}</w:hdr>`)
+          : "") +
+        "</pkg:package>",
+    );
+  const exported = glossaryPackage({
+    controls:
+      control(DATE, "Enter the date here.", 1) +
+      control(CLIENT, "Name of the client.", 2) +
+      control(DEFAULT, "Click or tap here to enter text.", 3) +
+      control(DATE, "Enter the date here.", 4),
+    entries:
+      entry(DEFAULT, "Click or tap here to enter text.") +
+      entry(DATE, "Enter the date here.") +
+      entry(CLIENT, "Name of the client."),
+  });
+  /** One import: fresh names and guids, entries in their controls' order, one entry style each. */
+  const imported = (
+    names = [
+      "E28BAED8315E4A0FB8B866031B1F0A57",
+      "C7D2B603EF3D4B19A1C2D3E4F5061728",
+      "8B8B3A61919F4C2D8E7F6A5B4C3D2E1F",
+    ],
+    style = macStyle,
+    texts = [
+      "Enter the date here.",
+      "Name of the client.",
+      "Click or tap here to enter text.",
+    ],
+    extraStyles = "",
+  ) =>
+    glossaryPackage({
+      controls:
+        control(names[0], texts[0], 1) +
+        control(names[1], texts[1], 2) +
+        control(names[2], texts[2], 3) +
+        control(names[0], texts[0], 4),
+      entries: names
+        .map((name, i) => entry(name, texts[i], { pStyle: name }))
+        .join(""),
+      styles: extraStyles + names.map(style).join(""),
+    });
+  const compare = (
+    expected: string,
+    actual: string,
+    replaced?: string,
+  ): { renamed: number; same: boolean } => {
+    const [a, b] = [expected, actual].map(parse);
+    const renamed = normalizeWordPlaceholderEntries(
+      wordPackageRoots(a),
+      wordPackageRoots(b),
+      replaced === undefined ? undefined : wordPackageRoots(parse(replaced)),
+    );
+    const print = (doc: Document) => createWordXmlComparison(doc).fingerprint();
+    return { renamed, same: print(a) === print(b) };
+  };
+
+  it("reads an import alike: renamed entries and controls, new order, Word's entry styles", () => {
+    expect(compare(exported, imported())).toEqual({ renamed: 3, same: true });
+    expect(compare(exported, imported(undefined, pcStyle))).toEqual({
+      renamed: 3,
+      same: true,
+    });
+  });
+
+  it("reads a Revert alike: the entry styles the replaced package already held stay out", () => {
+    const applied = imported();
+    const restoredNames = [
+      "1A8203258796433C9D1E2F3A4B5C6D7E",
+      "C8E03CB2564F4A1B2C3D4E5F60718293",
+      "A72C64F957384B5C6D7E8F90A1B2C3D4",
+    ];
+    const leftovers = [
+      "E28BAED8315E4A0FB8B866031B1F0A57",
+      "C7D2B603EF3D4B19A1C2D3E4F5061728",
+      "8B8B3A61919F4C2D8E7F6A5B4C3D2E1F",
+    ]
+      .map(macStyle)
+      .join("");
+    const restored = imported(restoredNames, macStyle, undefined, leftovers);
+    expect(compare(exported, restored, applied).same).toBe(true);
+    expect(compare(exported, restored).same).toBe(false);
+  });
+
+  it("still sees changed placeholder text, a formatted entry style, a missing entry and swapped entries", () => {
+    const changedText = imported(undefined, macStyle, [
+      "Enter the date here.",
+      "Name of the customer.",
+      "Click or tap here to enter text.",
+    ]);
+    expect(compare(exported, changedText).same).toBe(false);
+    const bold = imported(undefined, (name) =>
+      macStyle(name).replace("</w:style>", "<w:rPr><w:b/></w:rPr></w:style>"),
+    );
+    expect(compare(exported, bold).same).toBe(false);
+    const missing = imported().replace(
+      '<w:docPart w:val="C7D2B603EF3D4B19A1C2D3E4F5061728"/>',
+      '<w:docPart w:val="00000000000000000000000000000000"/>',
+    );
+    expect(compare(exported, missing)).toEqual({ renamed: 0, same: false });
+    const swapped = imported(
+      [
+        "C7D2B603EF3D4B19A1C2D3E4F5061728",
+        "E28BAED8315E4A0FB8B866031B1F0A57",
+        "8B8B3A61919F4C2D8E7F6A5B4C3D2E1F",
+      ],
+      macStyle,
+      [
+        "Name of the client.",
+        "Enter the date here.",
+        "Click or tap here to enter text.",
+      ],
+    );
+    expect(compare(exported, swapped).same).toBe(false);
+  });
+
+  it("still sees a shared entry split in two", () => {
+    const split = imported().replace(
+      '<w:sdtPr><w:id w:val="4"/><w:placeholder><w:docPart w:val="E28BAED8315E4A0FB8B866031B1F0A57"/>',
+      '<w:sdtPr><w:id w:val="4"/><w:placeholder><w:docPart w:val="C7D2B603EF3D4B19A1C2D3E4F5061728"/>',
+    );
+    expect(compare(exported, split)).toEqual({ renamed: 0, same: false });
+  });
+
+  it("names the measured shapes before an import, and what lies outside them", () => {
+    const issue = (xml: string) =>
+      wordPlaceholderImportIssue(wordPackageRoots(parse(xml)));
+    expect(issue(exported)).toBeUndefined();
+    expect(issue(imported())).toBeUndefined();
+    expect(issue(pkg({ body: "<w:p/>" }))).toBeUndefined();
+    expect(
+      issue(pkg({ body: control(DATE, "Enter the date here.", 1) })),
+    ).toBeUndefined();
+    const plain = (controls: string, entries: string, header = "") =>
+      glossaryPackage({ controls, entries, header });
+    expect(
+      issue(
+        plain(
+          control(DATE, "Enter the date here.", 1),
+          entry(DATE, "Enter the date here.") +
+            entry(CLIENT, "Name of the client."),
+        ),
+      ),
+    ).toBe("unreferenced-entry");
+    expect(
+      issue(
+        plain(
+          control(DATE, "Enter the date here.", 1),
+          entry(DATE, "Enter the date here.", { type: "autoTxt" }),
+        ),
+      ),
+    ).toBe("entry-shape");
+    expect(
+      issue(
+        plain(
+          control(DATE, "Enter the date here.", 1) +
+            control(CLIENT, "Name of the client.", 2),
+          entry(DATE, "Enter the date here."),
+        ),
+      ),
+    ).toBe("missing-entry");
+    expect(
+      issue(
+        plain(
+          control(DATE, "Enter the date here.", 1),
+          entry(DATE, "Enter the date here.") +
+            entry(CLIENT, "Name of the client."),
+          control(CLIENT, "Name of the client.", 2),
+        ),
+      ),
+    ).toBe("story");
+    expect(
+      issue(
+        plain(
+          `<w:sdt><w:sdtContent>${control(DATE, "Enter the date here.", 1)}</w:sdtContent></w:sdt>`,
+          entry(DATE, "Enter the date here."),
+        ),
+      ),
+    ).toBe("nested");
+  });
+});
+
+describe("glossary-rsids", () => {
+  // Two exports of one unedited document by Word for Mac (ERMAIN-974 drift-notes).
+  const rsids = (first: string) =>
+    `<w:rsids><w:rsidRoot w:val="00786A3F"/><w:rsid w:val="${first}"/><w:rsid w:val="00786A3F"/><w:rsid w:val="00DB43C7"/><w:rsid w:val="00ED083C"/></w:rsids>`;
+  const glossary = ({
+    body = "<w:p/>",
+    tabStop = "720",
+    revisions = rsids("002C1862"),
+    placeholder = "Enter the date here.",
+  } = {}) =>
+    pkg({ body }).replace(
+      "</pkg:package>",
+      part(
+        "/word/glossary/settings.xml",
+        `<w:settings xmlns:w="${W}"><w:view w:val="normal"/><w:defaultTabStop w:val="${tabStop}"/>${revisions}<w:themeFontLang w:val="en-DE"/><w:decimalSymbol w:val=","/></w:settings>`,
+      ) +
+        part(
+          "/word/glossary/document.xml",
+          `<w:glossaryDocument xmlns:w="${W}"><w:docParts><w:docPart><w:docPartPr><w:name w:val="D3D05F838BB4A54490E3EABEDBBDBC10"/><w:category><w:name w:val="General"/><w:gallery w:val="placeholder"/></w:category><w:types><w:type w:val="bbPlcHdr"/></w:types></w:docPartPr><w:docPartBody><w:p w:rsidR="00ED083C" w:rsidRDefault="00786A3F"><w:r><w:rPr><w:rStyle w:val="PlaceholderText"/></w:rPr><w:t>${placeholder}</w:t></w:r></w:p></w:docPartBody></w:docPart></w:docParts></w:glossaryDocument>`,
+        ) +
+        "</pkg:package>",
+    );
+  const fingerprint = (xml: string) =>
+    createWordXmlComparison(parse(xml)).fingerprint();
+
+  it("reads the glossary's settings alike whatever rsids an export gives them", () => {
+    expect(fingerprint(glossary({ revisions: rsids("00514891") }))).toBe(
+      fingerprint(glossary()),
+    );
+    expect(fingerprint(glossary({ revisions: "" }))).toBe(
+      fingerprint(glossary()),
+    );
+  });
+
+  it("still sees a change to the glossary's settings, its placeholder text or the body", () => {
+    const base = fingerprint(glossary());
+    expect(fingerprint(glossary({ tabStop: "1440" }))).not.toBe(base);
+    expect(fingerprint(glossary({ placeholder: "Pick a date." }))).not.toBe(
+      base,
+    );
+    expect(
+      fingerprint(glossary({ body: "<w:p><w:r><w:t>Later</w:t></w:r></w:p>" })),
+    ).not.toBe(base);
   });
 });
 

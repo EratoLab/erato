@@ -247,7 +247,13 @@ export function WordDocumentPlanCard({
       return {
         route: route.route,
         text: wordRoutePreviewText(route, wordPlanPassages(plan)),
-        write: wordWholeDocumentWrite(route, plan, snapshot, wordApplyPolicy()),
+        write: wordWholeDocumentWrite(
+          route,
+          plan,
+          snapshot,
+          wordApplyPolicy(),
+          xml,
+        ),
         comments: wordPlanCommentConsequences(snapshot, xml, compiled),
       };
     } catch {

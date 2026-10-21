@@ -2735,6 +2735,11 @@ msgid "officeAddin.word.authoring.partlyWritten"
 msgstr "Program Word zatrzymał się po {applied} z {total} zmian. Oryginał został zapisany."
 
 #. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.placeholdersUnverified"
+msgstr "Ta zmiana wymaga przepisania całego dokumentu, a Erato nie może jeszcze sprawdzić, jak Word przepisuje przy tym tekst zastępczy kontrolek zawartości tego dokumentu. Nic nie zostało zastosowane. Poproś o mniejszą zmianę, którą można zapisać bezpośrednio w dokumencie."
+
+#. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts
 #~ msgid "officeAddin.word.authoring.portrait"
 #~ msgstr "Pionowa"
@@ -3893,6 +3898,11 @@ msgstr "Funkcja „Cofnij” w programie Word nie może odwrócić tej zmiany. E
 #: src/word/utils/wordAuthoringMessages.ts
 msgid "officeAddin.word.importRefusal.disabled"
 msgstr "Ta zmiana wymaga przepisania całego dokumentu, co Twoja organizacja wyłączyła w tej wersji programu Word."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.importRefusal.placeholders"
+msgstr "Ta zmiana wymaga przepisania całego dokumentu, a Erato nie może jeszcze sprawdzić, jak Word przepisuje przy tym tekst zastępczy kontrolek zawartości tego dokumentu."
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordAuthoringMessages.ts
