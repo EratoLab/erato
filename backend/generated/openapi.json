@@ -11510,7 +11510,7 @@
           },
           "unavailable_chat_provider_id": {
             "type": "string",
-            "description": "The configured model the user may not use, so the run fell back to\nthe parent turn's model."
+            "description": "The model the run was set up for but the user may not use, so it ran\non `chat_provider_id` instead."
           }
         }
       },

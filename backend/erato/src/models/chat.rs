@@ -160,8 +160,8 @@ pub struct TaskSpec {
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct TaskModel {
     pub chat_provider_id: String,
-    /// The configured model the run should have used but the user may not
-    /// use; `chat_provider_id` is then the parent turn's model.
+    /// The model the run was set up for but the user may not use;
+    /// `chat_provider_id` is then the model it fell back to.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub unavailable_chat_provider_id: Option<String>,
 }

@@ -603,8 +603,9 @@ pub async fn retry_delegated_run(
 
     // 16. The model a fallback lands on: the one the turn that made the call
     //     ran on, as it was for the run being retried, while the owner may
-    //     still use it. A turn that recorded none, or one the owner has lost
-    //     since, falls back to the owner's default model, as a new turn would.
+    //     still use it. A turn that recorded none, one whose record can't be
+    //     read, or one the owner has lost since, falls back to the owner's
+    //     default model, as a new turn would.
     let model_permissions = crate::services::delegation::TaskModelPermissions::for_user(
         &app_state,
         &policy,
@@ -635,13 +636,10 @@ pub async fn retry_delegated_run(
     })?;
     let origin_turn_chat_provider_id =
         crate::models::message::get_generation_chat_provider_id_from_message(&origin_turn)
-            .map_err(|error| {
+            .unwrap_or_else(|error| {
                 tracing::warn!(%error, %child_chat_id, "Unreadable model on the turn that made the delegation call");
-                RetryRouteError::PlainText(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "Failed to load chat".to_string(),
-                )
-            })?;
+                None
+            });
     let parent_chat_provider_id = match origin_turn_chat_provider_id
         .filter(|chat_provider_id| model_permissions.may_use(chat_provider_id))
     {
@@ -702,12 +700,16 @@ pub async fn retry_delegated_run(
         &context,
         DelegationTargetSpec::Task {
             facet_ids: facet_ids.clone(),
-            // Re-checked at launch like a pick: a model the owner has lost
-            // since falls back to the origin turn's model, and says so.
-            model: spec
-                .model
-                .as_ref()
-                .map(|model| model.chat_provider_id.clone()),
+            // The model the run was set up for, not the one a fallback landed
+            // on, so a model the owner may use again is used again. Re-checked
+            // at launch like a pick: one the owner still can't use falls back
+            // to the model from step 16, and says so.
+            model: spec.model.as_ref().map(|model| {
+                model
+                    .unavailable_chat_provider_id
+                    .clone()
+                    .unwrap_or_else(|| model.chat_provider_id.clone())
+            }),
         },
         LaunchRunSpec {
             run_mode: ProvenanceRunMode::Async,

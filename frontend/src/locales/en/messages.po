@@ -3822,7 +3822,7 @@ msgstr "Model: {modelName}"
 #. js-lingui-explicit-id
 #: src/components/ui/Message/TaskResultCard.tsx
 msgid "message.taskResult.model.unavailable"
-msgstr "The model set up for this task is not available to you, so it ran on this conversation's model."
+msgstr "The model set up for this task is not available to you, so it ran on {modelName}."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/TaskResultCard.tsx
@@ -6862,7 +6862,7 @@ msgstr "Model: {modelName}"
 #. js-lingui-explicit-id
 #: src/components/ui/Trace/steps/DelegationStep.tsx
 msgid "trace.delegation.model.unavailable"
-msgstr "The model set up for this task is not available to you, so it ran on this conversation's model."
+msgstr "The model set up for this task is not available to you, so it ran on {modelName}."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Trace/steps/DelegationStep.tsx

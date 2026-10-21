@@ -237,7 +237,7 @@ describe("delegation step", () => {
     const link = screen.getByTestId("delegation-open-run");
     expect(link).toHaveAttribute("href", "/a/asst-1/chat-7");
     expect(link).toHaveAttribute("target", "_blank");
-    // Nothing to unfold: the part will never carry steps or a result.
+    // Nothing to unfold: this part carries no steps, result or model.
     expect(
       screen.queryByRole("button", { name: /Delegated to Research/ }),
     ).toBeNull();
@@ -675,7 +675,7 @@ describe("delegation step", () => {
     );
     expect(
       screen.getByTestId("delegation-model-unavailable"),
-    ).toHaveTextContent("not available to you");
+    ).toHaveTextContent("not available to you, so it ran on Mock model.");
   });
 
   it("shows no model on a part written before the model was recorded", () => {

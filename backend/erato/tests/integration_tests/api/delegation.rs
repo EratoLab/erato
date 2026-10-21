@@ -18203,7 +18203,8 @@ async fn a_task_model_the_user_may_not_use_falls_back_to_the_parent_model(pool: 
     assert_eq!(parent_final.len(), 1);
     assert!(
         parent_final[0].contains(
-            "is not available to the user, so the task ran on this conversation's model instead"
+            "The model set up for this task (model-x-name display) is not available to the \
+             user, so the task ran on model-b-name display instead."
         ),
         "the parent model is told about the fallback: {}",
         parent_final[0]
@@ -18485,13 +18486,14 @@ async fn record_origin_turn_model(
         .expect("the origin turn's model persists");
 }
 
-/// Retry a seeded failed run whose stored model is `stored`, from an origin
-/// turn that ran on `origin_turn`, and wait for the retry to finish. Returns
-/// the new child, and the models its requests were sent for.
+/// Retry a seeded failed run whose stored model is `stored` (the model it ran
+/// on, and the one it was set up for when it fell back), from an origin turn
+/// that ran on `origin_turn`, and wait for the retry to finish. Returns the
+/// new child, and the models its requests were sent for.
 async fn retry_on_models(
     pool: Pool<Postgres>,
     models: &[((&str, &str), bool)],
-    stored: Option<&str>,
+    stored: Option<(&str, Option<&str>)>,
     origin_turn: Option<&str>,
 ) -> (erato::state::AppState, Uuid, Uuid, Vec<String>) {
     let recorder = RequestBodyRecorder::new();
@@ -18533,10 +18535,12 @@ async fn retry_on_models(
         &me.id.to_string(),
         origin_chat_id,
         erato::models::chat::TaskSpec {
-            model: stored.map(|chat_provider_id| erato::models::chat::TaskModel {
-                chat_provider_id: chat_provider_id.to_string(),
-                unavailable_chat_provider_id: None,
-            }),
+            model: stored.map(
+                |(chat_provider_id, unavailable)| erato::models::chat::TaskModel {
+                    chat_provider_id: chat_provider_id.to_string(),
+                    unavailable_chat_provider_id: unavailable.map(str::to_string),
+                },
+            ),
             // Stored without a reaction turn, which would carry the brief too.
             scheduling: erato_config::config::TaskScheduling::Silent,
             ..retry_task_spec()
@@ -18573,8 +18577,13 @@ async fn retry_on_models(
 /// - `uses-mocked-llm`
 #[sqlx::test(migrator = "crate::MIGRATOR")]
 async fn retry_after_the_runs_model_was_revoked_runs_on_the_users_default(pool: Pool<Postgres>) {
-    let (app_state, _origin_chat_id, new_child_id, models) =
-        retry_on_models(pool, &[(MODEL_B, false)], Some(MODEL_B.0), Some(MODEL_B.0)).await;
+    let (app_state, _origin_chat_id, new_child_id, models) = retry_on_models(
+        pool,
+        &[(MODEL_B, false)],
+        Some((MODEL_B.0, None)),
+        Some(MODEL_B.0),
+    )
+    .await;
 
     assert_eq!(models, vec![MODEL_A.1]);
     let configuration = retry_child_configuration(&app_state, new_child_id).await;
@@ -18585,6 +18594,152 @@ async fn retry_after_the_runs_model_was_revoked_runs_on_the_users_default(pool: 
             "unavailable_chat_provider_id": MODEL_B.0,
         })
     );
+}
+
+/// A run that had already fallen back is retried on the model it was set up
+/// for once the user may use that model again, not on the fallback.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn retry_after_a_fallback_asks_for_the_set_up_model_again(pool: Pool<Postgres>) {
+    let (app_state, _origin_chat_id, new_child_id, models) = retry_on_models(
+        pool,
+        &[(MODEL_B, true)],
+        Some((MODEL_A.0, Some(MODEL_B.0))),
+        Some(MODEL_A.0),
+    )
+    .await;
+
+    assert_eq!(models, vec![MODEL_B.1]);
+    let configuration = retry_child_configuration(&app_state, new_child_id).await;
+    assert_eq!(
+        configuration["task"]["model"],
+        json!({ "chat_provider_id": MODEL_B.0 })
+    );
+}
+
+/// While the set-up model is still unavailable, a retry of a run that had
+/// fallen back falls back again and keeps naming the set-up model.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn retry_after_a_fallback_keeps_naming_the_unavailable_set_up_model(pool: Pool<Postgres>) {
+    let (app_state, _origin_chat_id, new_child_id, models) = retry_on_models(
+        pool,
+        &[(MODEL_B, false)],
+        Some((MODEL_A.0, Some(MODEL_B.0))),
+        Some(MODEL_A.0),
+    )
+    .await;
+
+    assert_eq!(models, vec![MODEL_A.1]);
+    let configuration = retry_child_configuration(&app_state, new_child_id).await;
+    assert_eq!(
+        configuration["task"]["model"],
+        json!({
+            "chat_provider_id": MODEL_A.0,
+            "unavailable_chat_provider_id": MODEL_B.0,
+        })
+    );
+}
+
+/// A message in a task chat that names no model skips a stored model the
+/// user has lost since launch and runs on the user's default, instead of
+/// failing on the lost model.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_message_without_a_model_skips_the_task_chats_lost_model(pool: Pool<Postgres>) {
+    let recorder = RequestBodyRecorder::new();
+    let mut mocks = MockSet::new();
+    {
+        let recorder = recorder.clone();
+        mocks.mock(move |when, then| {
+            when.post()
+                .path("/v1/chat/completions")
+                .matcher(BodyContainsMatcher::new(&["LOST-MODEL-FOLLOW-UP"], &[]))
+                .matcher(recorder);
+            mock_llm_sse_response(
+                then,
+                crate::test_utils::build_openai_text_streaming_response(&["FOLLOW-UP-ANSWER"]),
+            );
+        });
+    }
+    let (app_state, _llm) = task_state(pool, mocks, &["erato/delegate_task"], |config| {
+        with_models(config, &[(MODEL_B, false)]);
+    })
+    .await;
+    let me = erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        TEST_USER_SUBJECT,
+        None,
+    )
+    .await
+    .unwrap();
+    let server = app_server(app_state.clone());
+    let origin = create_chat(&server, None).await;
+    let seeded = seed_failed_task_run(
+        &app_state,
+        &me.id.to_string(),
+        Uuid::parse_str(&origin).unwrap(),
+        erato::models::chat::TaskSpec {
+            model: Some(erato::models::chat::TaskModel {
+                chat_provider_id: MODEL_B.0.to_string(),
+                unavailable_chat_provider_id: None,
+            }),
+            ..retry_task_spec()
+        },
+        true,
+    )
+    .await;
+    let brief = erato::db::entity::messages::Entity::find()
+        .filter(erato::db::entity::messages::Column::ChatId.eq(seeded.child_chat_id))
+        .one(&app_state.db)
+        .await
+        .unwrap()
+        .expect("the child's brief row");
+    let policy = rebuilt_policy(&app_state).await;
+    let answer = erato::models::message::submit_message(
+        &app_state.db,
+        &policy,
+        &erato::policy::types::Subject::User(me.id.to_string()),
+        &seeded.child_chat_id,
+        json!({
+            "role": "assistant",
+            "content": [{"content_type": "text", "text": "SEEDED-CHILD-ANSWER"}],
+        }),
+        Some(&brief.id),
+        None,
+        None,
+        &[],
+        None,
+        None,
+        None,
+    )
+    .await
+    .expect("the child's answer row");
+
+    let events = submit_message(
+        &server,
+        &seeded.child_chat_id.to_string(),
+        Some(&answer.id.to_string()),
+        "LOST-MODEL-FOLLOW-UP",
+        vec![],
+    )
+    .await;
+
+    assert!(extract_full_text_answer(&events).contains("FOLLOW-UP-ANSWER"));
+    assert_eq!(recorded_models(&recorder), vec![MODEL_A.1]);
 }
 
 /// A run whose stored model the user has lost is retried on the model of the
@@ -18600,7 +18755,7 @@ async fn retry_of_a_run_on_a_lost_model_falls_back_to_the_origin_turns_model(poo
     let (app_state, origin_chat_id, new_child_id, models) = retry_on_models(
         pool,
         &[(MODEL_B, true), (MODEL_X, false)],
-        Some(MODEL_X.0),
+        Some((MODEL_X.0, None)),
         Some(MODEL_B.0),
     )
     .await;

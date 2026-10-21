@@ -447,8 +447,7 @@ export const DelegationStep = ({
               <p data-testid="delegation-model-unavailable">
                 {t({
                   id: "trace.delegation.model.unavailable",
-                  message:
-                    "The model set up for this task is not available to you, so it ran on this conversation's model.",
+                  message: `The model set up for this task is not available to you, so it ran on ${modelName}.`,
                 })}
               </p>
             )}

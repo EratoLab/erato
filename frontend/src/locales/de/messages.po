@@ -3817,12 +3817,12 @@ msgstr ""
 #. js-lingui-explicit-id
 #: src/components/ui/Message/TaskResultCard.tsx
 msgid "message.taskResult.model"
-msgstr ""
+msgstr "Modell: {modelName}"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/TaskResultCard.tsx
 msgid "message.taskResult.model.unavailable"
-msgstr ""
+msgstr "Das für diese Aufgabe vorgesehene Modell steht Ihnen nicht zur Verfügung, daher wurde sie mit {modelName} ausgeführt."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/TaskResultCard.tsx
@@ -6857,12 +6857,12 @@ msgstr "An einen Assistenten delegiert"
 #. js-lingui-explicit-id
 #: src/components/ui/Trace/steps/DelegationStep.tsx
 msgid "trace.delegation.model"
-msgstr ""
+msgstr "Modell: {modelName}"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Trace/steps/DelegationStep.tsx
 msgid "trace.delegation.model.unavailable"
-msgstr ""
+msgstr "Das für diese Aufgabe vorgesehene Modell steht Ihnen nicht zur Verfügung, daher wurde sie mit {modelName} ausgeführt."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Trace/steps/DelegationStep.tsx
