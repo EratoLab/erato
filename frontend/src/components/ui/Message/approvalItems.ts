@@ -68,10 +68,12 @@ export const isChildItem = (
 
 /**
  * The digits below the millisecond of an RFC 3339 time. `Date.parse` stops at
- * the millisecond, and the server writes microseconds.
+ * the millisecond, and the server writes microseconds. Anchored, so matching
+ * stays linear on any input.
  */
 const subMillisecondOf = (time: string): number => {
-  const fraction = /T[^.]*\.(\d+)/.exec(time)?.[1] ?? "";
+  const fraction =
+    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.(\d+)/.exec(time)?.[1] ?? "";
   return Number(fraction.slice(3, 9).padEnd(6, "0"));
 };
 
