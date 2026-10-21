@@ -3885,17 +3885,27 @@ pub(crate) struct ParentMcpCeiling {
 }
 
 /// A task run's MCP ceiling, read off its own chat row for the same reason
-/// as its budgets. Unrestricted for every other chat.
-pub(crate) fn task_parent_mcp_ceiling_for_chat(chat: &chats::Model) -> ParentMcpCeiling {
-    crate::models::chat::parse_chat_configuration(chat)
-        .ok()
-        .flatten()
-        .and_then(|configuration| configuration.task)
+/// as its budgets. Unrestricted for every other chat, and for a task chat its
+/// owner has taken over: from then on the owner's own facet choices run it.
+/// A row that can't be read is an error, never an unrestricted ceiling.
+pub(crate) fn task_parent_mcp_ceiling_for_chat(
+    chat: &chats::Model,
+) -> Result<ParentMcpCeiling, Report> {
+    let Some(configuration) = crate::models::chat::parse_chat_configuration(chat)? else {
+        return Ok(ParentMcpCeiling::default());
+    };
+    let adopted = configuration
+        .provenance
+        .as_ref()
+        .is_some_and(|provenance| provenance.adopted_at.is_some());
+    Ok(configuration
+        .task
+        .filter(|_| !adopted)
         .map(|task| ParentMcpCeiling {
             allowlist: task.parent_mcp_allowlist,
             server_ids: task.parent_mcp_server_ids,
         })
-        .unwrap_or_default()
+        .unwrap_or_default())
 }
 
 pub(crate) fn resolve_effective_selected_facet_ids(
@@ -4228,7 +4238,7 @@ async fn prepare_chat_request_with_adapters_memory_inner(
         oidc_token: Some(me_profile_input.oidc_token),
         access_token: me_profile_input.access_token,
     };
-    let parent_mcp_ceiling = task_parent_mcp_ceiling_for_chat(chat);
+    let parent_mcp_ceiling = task_parent_mcp_ceiling_for_chat(chat)?;
     let GenerationMcpToolSet {
         tools: generation_mcp_tools,
         mcp_claimed_names,
@@ -18525,7 +18535,7 @@ pub(crate) async fn run_continuation(
         .map(|(facet_id, _)| facet_id.clone())
         .collect();
     effective_selected_facet_ids.sort();
-    let parent_mcp_ceiling = task_parent_mcp_ceiling_for_chat(&chat);
+    let parent_mcp_ceiling = task_parent_mcp_ceiling_for_chat(&chat)?;
     let GenerationMcpToolSet {
         tools: available_mcp_tools,
         mcp_claimed_names,
@@ -19980,7 +19990,7 @@ pub(crate) async fn run_client_operation_continuation(
         .map(|(id, _)| id.clone())
         .collect();
     facets.sort();
-    let parent_mcp_ceiling = task_parent_mcp_ceiling_for_chat(&chat);
+    let parent_mcp_ceiling = task_parent_mcp_ceiling_for_chat(&chat)?;
     let auth = McpRequestAuthContext {
         app_state: Some(app_state),
         user_id: Some(account_id),

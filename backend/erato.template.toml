@@ -815,7 +815,9 @@ chat_provider_ids = ["test-token-limit"]
 # [facets.facets.plan]
 # display_name = "Plan & delegate"
 # icon = "iconoir-task-list"
-# tool_call_allowlist = ["erato/delegate_task", "web-search-mcp/*"]
+# # A task never gets an MCP tool outside this list, so it names every server
+# # the child facets below need.
+# tool_call_allowlist = ["erato/delegate_task", "web-search-mcp/*", "web-access-mcp/*"]
 #
 # # Per-facet overrides of the [delegation.tasks] runtime keys. Every key is
 # # optional and falls back to the global value.

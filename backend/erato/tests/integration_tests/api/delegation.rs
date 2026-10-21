@@ -8459,6 +8459,67 @@ async fn a_task_child_without_facets_stays_within_the_parent_mcp_allowlist(pool:
     );
 }
 
+/// Once the owner writes into a task's chat, it is their chat: their own
+/// facet choices run it, and the planning turn's ceiling no longer applies.
+/// The task's own turn stays capped.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_task_chat_the_owner_took_over_is_not_capped(pool: Pool<Postgres>) {
+    const USER_MESSAGE: &str = "takeover parent question";
+    const BRIEF: &str = "TAKEOVER-BRIEF-SENTINEL: look up the ticket";
+    let parent = RequestBodyRecorder::new();
+    let child = RequestBodyRecorder::new();
+    let mut mocks = MockSet::new();
+    mock_recorded_task_round(&mut mocks, USER_MESSAGE, BRIEF, &[], &parent, &child);
+
+    let (app_state, _llm) = task_state(pool, mocks, &["erato/delegate_task", "jira/*"], |config| {
+        allow_mcp_server(config, "jira", "/mcp/approval-policy");
+        allow_mcp_server(config, "wiki", "/mcp/auth-none");
+        config.facets.tool_call_allowlist.clear();
+    })
+    .await;
+    let server = app_server(app_state.clone());
+    let chat = create_chat(&server, None).await;
+    let events = submit_with_facets(&server, &chat, USER_MESSAGE, &["plan"]).await;
+    let output = find_tool_call_update_output(&events, "delegate_task");
+    assert_eq!(output["status"], "completed", "{output}");
+
+    let child_chat = delegated_child_chat(&app_state.db, Uuid::parse_str(&chat).unwrap()).await;
+    let child_answer = erato::db::entity::messages::Entity::find()
+        .filter(erato::db::entity::messages::Column::ChatId.eq(child_chat.id))
+        .order_by_desc(erato::db::entity::messages::Column::CreatedAt)
+        .one(&app_state.db)
+        .await
+        .unwrap()
+        .expect("the task's answer");
+    let follow_up = submit_message(
+        &server,
+        &child_chat.id.to_string(),
+        Some(&child_answer.id.to_string()),
+        "owner follow-up in the task chat",
+        vec![],
+    )
+    .await;
+    assert!(extract_full_text_answer(&follow_up).contains(CEILING_CHILD_ANSWER));
+
+    let child = generation_bodies(&child);
+    assert_eq!(child.len(), 2, "the task's own turn, then the owner's");
+    assert!(
+        offered_tool(&child[0], "auth_none_probe").is_none(),
+        "the task itself stays within the planning turn's allowlist"
+    );
+    assert!(
+        offered_tool(&child[1], "auth_none_probe").is_some(),
+        "the owner's own turn in the task chat is not capped"
+    );
+}
+
 /// A facet the task names may allow more than the planning turn did, as a
 /// `child_facet_ids` entry is meant to. The child still gets only what both
 /// allow: its facet narrows nothing here, and the stored ceiling holds the

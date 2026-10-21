@@ -572,8 +572,9 @@ pub async fn retry_delegated_run(
     //     the retry fail HARDER than the run it replaces. Only `persona`, the
     //     two budgets and the MCP ceiling are read on this path; the rest is
     //     written to satisfy the type, with the old run's values where it has
-    //     them. The ceiling is the old run's as stored, never re-derived: the
-    //     turn that set it is long gone.
+    //     them. The ceiling is the old run's as stored, never re-derived from
+    //     today's config: what a run may use is fixed when it is launched. A
+    //     run stored before ceilings existed has none and stays unrestricted.
     let tasks = &app_state.config.delegation.tasks;
     let task_scope = TaskOfferScope {
         facet_enum: facet_ids.clone(),
