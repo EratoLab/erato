@@ -1161,8 +1161,8 @@ pub struct TaskModelReport {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false)]
     pub display_name: Option<String>,
-    /// The configured model the user may not use, so the run fell back to
-    /// the parent turn's model.
+    /// The model the run was set up for but the user may not use, so it ran
+    /// on `chat_provider_id` instead.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false)]
     pub unavailable_chat_provider_id: Option<String>,
@@ -1178,20 +1178,24 @@ impl TaskModelReport {
         config: &crate::config::AppConfig,
         model: &crate::models::chat::TaskModel,
     ) -> Self {
+        let display_name = chat_provider_display_name(config, &model.chat_provider_id);
         let note = model
             .unavailable_chat_provider_id
             .as_ref()
             .map(|unavailable| {
                 let unavailable = chat_provider_display_name(config, unavailable)
                     .unwrap_or_else(|| unavailable.clone());
+                let used = display_name
+                    .clone()
+                    .unwrap_or_else(|| model.chat_provider_id.clone());
                 format!(
-                    "The model configured for this task ({unavailable}) is not available to \
-                     the user, so the task ran on this conversation's model instead."
+                    "The model set up for this task ({unavailable}) is not available to the \
+                     user, so the task ran on {used} instead."
                 )
             });
         Self {
             chat_provider_id: model.chat_provider_id.clone(),
-            display_name: chat_provider_display_name(config, &model.chat_provider_id),
+            display_name,
             unavailable_chat_provider_id: model.unavailable_chat_provider_id.clone(),
             note,
         }

@@ -207,8 +207,7 @@ export const TaskResultCard = ({ part }: { part: ContentPartTaskResult }) => {
         >
           {t({
             id: "message.taskResult.model.unavailable",
-            message:
-              "The model set up for this task is not available to you, so it ran on this conversation's model.",
+            message: `The model set up for this task is not available to you, so it ran on ${modelName}.`,
           })}
         </div>
       )}
