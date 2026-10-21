@@ -4258,10 +4258,22 @@ async fn prepare_chat_request_with_adapters_memory_inner(
     // at launch and wins over its assistant's default: an inherited assistant
     // is the origin chat's, and its default is not what the run was given.
     let requested_chat_provider_id = user_input.requested_chat_provider_id.as_deref();
-    let task_chat_provider_id = task_spec
-        .as_ref()
-        .and_then(|task| task.model.as_ref())
-        .map(|model| model.chat_provider_id.as_str());
+    // A model the owner has lost since launch is skipped rather than refused,
+    // so a request that names none still runs on the next default.
+    let task_chat_provider_id = match task_spec.as_ref().and_then(|task| task.model.as_ref()) {
+        Some(model) if requested_chat_provider_id.is_none() => {
+            crate::services::delegation::TaskModelPermissions::for_user(
+                app_state,
+                policy,
+                &me_profile_input.subject,
+                me_profile_input.user_groups,
+            )
+            .await?
+            .may_use(&model.chat_provider_id)
+            .then_some(model.chat_provider_id.as_str())
+        }
+        _ => None,
+    };
     let effective_chat_provider_id = requested_chat_provider_id
         .or(task_chat_provider_id)
         .or_else(|| {

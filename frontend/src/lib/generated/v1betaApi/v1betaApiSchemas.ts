@@ -3776,8 +3776,8 @@ export type TaskModelReport = {
    */
   note?: string;
   /**
-   * The configured model the user may not use, so the run fell back to
-   * the parent turn's model.
+   * The model the run was set up for but the user may not use, so it ran
+   * on `chat_provider_id` instead.
    */
   unavailable_chat_provider_id?: string;
 };

@@ -74,8 +74,8 @@ export interface DelegationModel {
   chatProviderId: string;
   displayName?: string;
   /**
-   * The model the run was configured for but the user may not use; the run
-   * fell back to the conversation's model instead.
+   * The model the run was set up for but the user may not use; the run fell
+   * back to `chatProviderId` instead.
    */
   unavailableChatProviderId?: string;
 }

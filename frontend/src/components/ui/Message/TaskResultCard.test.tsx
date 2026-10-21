@@ -209,7 +209,7 @@ describe("TaskResultCard", () => {
     );
     expect(
       screen.getByTestId("task-result-model-unavailable"),
-    ).toHaveTextContent("not available to you");
+    ).toHaveTextContent("not available to you, so it ran on mock-llm.");
     expect(screen.getByTestId("task-result-card")).not.toHaveTextContent(
       "for the origin model only",
     );
