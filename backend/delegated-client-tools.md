@@ -149,6 +149,23 @@ error, without running the handler, when the executor was not registered with
 `acceptsGrantCalls`. Calls of the user's own turn are unchanged. The host checks
 `hostGrant` against its local context (contract §7).
 
+## Conformance
+
+`erato/tests/integration_tests/api/messages/client_tool_operations/delegated/conformance.rs`
+runs the host-facing cases once for each row in `delegated/rows.rs`, against a
+test-driven pane: a fake host with a context version on `word_document`, the
+same fake host without one on `outlook_mailbox`, and the `word_document` and
+`outlook_mailbox` rows, which stay ignored until ERMAIN-1003 and ERMAIN-1006
+enable them. Four cases of the core alone stay in `delegated.rs` on the fake
+host: Always allow under a strict MCP policy, Never allow stored as the
+client-tool preference, adoption by regenerate, and a turn without the context
+version whose read is dispatched without one. No integration case covers the
+@-mention route, which launches no client task and so never gets a grant.
+
+A host's handlers pass `clientToolHostAdapterConformanceFailures` from
+`@erato/frontend/conformance`. The adapter checklist and templates are in
+`office-addin/ARCHITECTURE.md`, "Client tools in delegated tasks".
+
 ## Not in this record
 
 - ERMAIN-1032: the slow path, where a child's call waits durably for a client
