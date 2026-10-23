@@ -213,12 +213,17 @@ interface OutlookEmailSourceContextValue {
    * are unioned with the user's dismissals; an empty list clears the key.
    */
   setPolicyExcludedAttachmentIds: (key: string, ids: readonly string[]) => void;
+  /** What `setPolicyExcludedAttachmentIds` holds, keyed the same way. */
+  policyExcludedAttachmentIds: ReadonlyMap<string, ReadonlySet<string>>;
   addDroppedEmail: (parsed: ParsedEmail) => string | null;
   removeDroppedEmail: (key: string) => void;
   selectedAttachmentItems: LocalFilePreviewItem[];
   isLoadingAttachments: boolean;
-  removeEmailBody: () => void;
   removeAttachment: (attachmentId: string) => void;
+  /**
+   * Brings back every message of the open thread, keeping per-attachment
+   * choices; without a thread, the body of the first staged drop.
+   */
   restoreEmailBody: () => void;
   restoreAttachment: (attachmentId: string) => void;
   isEmailBodyDismissed: boolean;
@@ -250,11 +255,11 @@ const defaultValue: OutlookEmailSourceContextValue = {
   dismissStagedEmailAttachment: () => {},
   restoreStagedEmailAttachment: () => {},
   setPolicyExcludedAttachmentIds: () => {},
+  policyExcludedAttachmentIds: new Map(),
   addDroppedEmail: () => null,
   removeDroppedEmail: () => {},
   selectedAttachmentItems: [],
   isLoadingAttachments: false,
-  removeEmailBody: () => {},
   removeAttachment: () => {},
   restoreEmailBody: () => {},
   restoreAttachment: () => {},
@@ -756,26 +761,22 @@ export function OutlookEmailSourceProvider({
     });
   }, []);
 
-  // Drop-only back-compat helpers. Their scope is intentionally narrow:
-  //   - `removeEmailBody` / `restoreEmailBody` only affect the most recent
-  //     drop; in thread mode the per-message checkboxes drive dismissal.
-  //   - `removeAttachment` / `restoreAttachment` only affect Office.js
-  //     compose-mode attachments (the fallback group rendered when there
-  //     is neither a thread nor a drop).
-  // Kept under the legacy names to avoid breaking the existing
-  // `handleRemoveEmailSourceFile` wiring inside `AddinChatInput`. If a
-  // future caller wants "remove the current email", reach for
-  // `dismissStagedEmailBody(messageId)` directly — these are silent
-  // no-ops outside their narrow scope.
-  const removeEmailBody = useCallback(() => {
-    if (!currentStagedDrop) return;
-    dismissStagedEmailBody(currentStagedDrop.key);
-  }, [currentStagedDrop, dismissStagedEmailBody]);
-
+  // `removeAttachment` / `restoreAttachment` only touch Office.js compose-mode
+  // attachments, the fallback group shown with neither a thread nor a drop.
   const restoreEmailBody = useCallback(() => {
+    if (currentThread) {
+      const messageIds = currentThread.messages.map((message) => message.id);
+      setEmailDismissals((previous) =>
+        messageIds.reduce(
+          (state, messageId) => applyRestoreBody(state, messageId),
+          previous,
+        ),
+      );
+      return;
+    }
     if (!currentStagedDrop) return;
     restoreStagedEmailBody(currentStagedDrop.key);
-  }, [currentStagedDrop, restoreStagedEmailBody]);
+  }, [currentStagedDrop, currentThread, restoreStagedEmailBody]);
 
   const removeAttachment = useCallback((attachmentId: string) => {
     setDismissedAttachmentIds((previous) =>
@@ -878,11 +879,11 @@ export function OutlookEmailSourceProvider({
       dismissStagedEmailAttachment,
       restoreStagedEmailAttachment,
       setPolicyExcludedAttachmentIds,
+      policyExcludedAttachmentIds: policyExcludedIds,
       addDroppedEmail,
       removeDroppedEmail,
       selectedAttachmentItems,
       isLoadingAttachments: isLoadingEmailAttachments,
-      removeEmailBody,
       removeAttachment,
       restoreEmailBody,
       restoreAttachment,
@@ -921,7 +922,6 @@ export function OutlookEmailSourceProvider({
       parentReplyContext,
       removeAttachment,
       removeDroppedEmail,
-      removeEmailBody,
       resolveSelectedFilesForSend,
       getFileProvenance,
       restoreAttachment,
@@ -930,6 +930,7 @@ export function OutlookEmailSourceProvider({
       restoreStagedEmailBody,
       selectedAttachmentItems,
       setPolicyExcludedAttachmentIds,
+      policyExcludedIds,
       stagedEmails,
     ],
   );

@@ -937,9 +937,15 @@ describe("WordChatInput comment context", () => {
     it("reach only the passage's nearest threads when the passage replaces the document", async () => {
       selectT1();
       renderInput();
-      expect(
-        screen.getByTestId("word-include-document-chip"),
-      ).toHaveTextContent("Your selection is sent instead of the document");
+      const documentRow = screen.getByTestId("word-include-document-chip");
+      expect(documentRow).toHaveTextContent(
+        "Your selection is sent instead of the document",
+      );
+      expect(documentRow).toHaveAttribute("data-state", "superseded");
+      expect(documentRow).toHaveClass(
+        "bg-theme-bg-primary",
+        "text-theme-fg-muted",
+      );
       send();
       expect((await prepared())?.actionFacet?.id).toBe("word_selection");
       expect(host.capture).not.toHaveBeenCalled();
@@ -974,6 +980,48 @@ describe("WordChatInput comment context", () => {
       expect(refusal(await reads()({ status: "all" }))).toBe(
         "document-not-included",
       );
+    });
+
+    it("says a comment goes instead of the document when the caret's thread does", async () => {
+      install({ selection: { tag: "T1P", offset: 25 } });
+      host.capture.mockResolvedValue(documentBuild());
+      renderInput();
+      await waitFor(() =>
+        expect(
+          screen.getByTestId("word-include-document-chip"),
+        ).toHaveTextContent("A comment is sent instead of the document"),
+      );
+      // Wrapped, not cut: the long locales end on the word that matters.
+      expect(
+        screen.getByText("A comment is sent instead of the document"),
+      ).not.toHaveClass("truncate");
+      const documentRow = screen.getByTestId("word-include-document-chip");
+      expect(documentRow).toHaveAttribute("data-state", "superseded");
+      expect(documentRow).toHaveClass(
+        "bg-theme-bg-primary",
+        "text-theme-fg-muted",
+      );
+      expect(screen.queryByTestId("word-document-coverage-hint")).toBeNull();
+
+      send();
+      expect((await prepared())?.actionFacet?.id).toBe("word_comment_thread");
+    });
+
+    it("says a comment goes instead of the document and the passage when the setting picks it", async () => {
+      host.precedence = "comment";
+      selectT1();
+      renderInput();
+      await waitFor(() =>
+        expect(
+          screen.getByTestId("word-include-document-chip"),
+        ).toHaveTextContent("A comment is sent instead of the document"),
+      );
+      expect(
+        screen.getByText("The comment below is sent instead of this passage."),
+      ).toBeVisible();
+
+      send();
+      expect((await prepared())?.actionFacet?.id).toBe("word_comment_thread");
     });
 
     it("reach the whole document when the document goes with its map", async () => {

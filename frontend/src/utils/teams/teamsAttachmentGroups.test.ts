@@ -292,6 +292,38 @@ describe("buildTeamsAttachmentGroups", () => {
     });
   });
 
+  it("keeps an image upload's preview URL and stored name under its display name", () => {
+    const image = {
+      ...upload("teams-img-abc.png", "upload-image"),
+      download_url: "/files/upload-image",
+      preview_url: "/files/upload-image/preview",
+    } as FileUploadItem;
+    const preview = buildTeamsAttachmentGroups(
+      attach(
+        [teamsSection()],
+        [
+          teamsMessage("m1", {
+            assets: [
+              { name: image.filename, displayName: null, kind: "image" },
+            ],
+          }),
+        ],
+      ),
+      [TRANSCRIPT, image],
+    );
+
+    const [group] = groupsOf(preview);
+    expect(group.items[1]).toMatchObject({
+      kind: "attachment",
+      file: {
+        id: image.id,
+        filename: "teams-img-abc.png",
+        displayName: "Image",
+        preview_url: "/files/upload-image/preview",
+      },
+    });
+  });
+
   it("reports how many messages could not be loaded", () => {
     const preview = buildTeamsAttachmentGroups(
       attach(

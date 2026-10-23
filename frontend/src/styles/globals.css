@@ -1340,6 +1340,12 @@ body {
   border-bottom-width: 0;
 }
 
+/* A header carrying pinned actions wraps the disclosure, so it says so
+   itself. */
+.attachment-group-header-geometry[data-collapsed] {
+  border-bottom-width: 0;
+}
+
 .attachment-group-items-geometry {
   padding: 0.5rem var(--card-inset) var(--card-inset);
 }

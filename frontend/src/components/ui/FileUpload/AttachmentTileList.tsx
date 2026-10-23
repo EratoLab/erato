@@ -1,4 +1,4 @@
-import { t } from "@lingui/core/macro";
+import { plural, t } from "@lingui/core/macro";
 import clsx from "clsx";
 import { Fragment } from "react";
 
@@ -55,6 +55,12 @@ export interface AttachmentTileListProps {
   capHeight?: boolean;
   /** Shows the staged count against the host's limit, e.g. "3/50". */
   maxFiles?: number;
+  /**
+   * Files staged in all, when some are shown elsewhere. The count label reads
+   * it against `maxFiles` beside the files shown here, which are all that
+   * "Remove all" removes and names.
+   */
+  stagedCount?: number;
   className?: string;
 }
 
@@ -72,6 +78,7 @@ export const AttachmentTileList: React.FC<AttachmentTileListProps> = ({
   removeAllThreshold = 3,
   capHeight = false,
   maxFiles,
+  stagedCount,
   className,
 }) => {
   if (items.length === 0) {
@@ -81,11 +88,32 @@ export const AttachmentTileList: React.FC<AttachmentTileListProps> = ({
   const showRemoveAll =
     Boolean(onRemoveAll) && items.length >= removeAllThreshold;
   const count = items.length;
+  const staged = stagedCount ?? count;
+  // With files staged elsewhere, "Remove all" takes only the ones shown here,
+  // so both the count and the button's name say how many that is.
+  const someShownElsewhere = staged !== count;
   const countLabel = maxFiles
-    ? `${count}/${maxFiles}`
+    ? someShownElsewhere
+      ? t({
+          id: "chat.attachments.shown_of_staged",
+          message: plural(count, {
+            one: `# file · ${staged}/${maxFiles}`,
+            other: `# files · ${staged}/${maxFiles}`,
+          }),
+        })
+      : `${count}/${maxFiles}`
     : count === 1
       ? t`1 file`
       : t`${count} files`;
+  const removeAllName = someShownElsewhere
+    ? t({
+        id: "chat.attachments.remove_all_shown",
+        message: plural(count, {
+          one: "Remove all: # file",
+          other: "Remove all: # files",
+        }),
+      })
+    : t`Remove all attachments`;
 
   // Thumbnails and pills have different heights, so interleaving them leaves
   // ragged holes wherever the wrap breaks. Banding by kind keeps each row one
@@ -166,7 +194,7 @@ export const AttachmentTileList: React.FC<AttachmentTileListProps> = ({
             variant="ghost"
             size="sm"
             className="px-0 text-xs text-[var(--theme-fg-muted)]"
-            aria-label={t`Remove all attachments`}
+            aria-label={removeAllName}
             disabled={disabled}
           >
             {t`Remove all`}

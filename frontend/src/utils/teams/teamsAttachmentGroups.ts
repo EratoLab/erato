@@ -77,11 +77,9 @@ export function buildTeamsAttachmentGroups(
   ).map((card, position) =>
     buildGroup(card, {
       transcript,
-      rowFile: (file, displayName) => ({
-        id: file.id,
-        filename: file.filename,
-        displayName,
-      }),
+      // The whole upload under its display name, so an image's preview URL
+      // and stored, extensioned filename still draw it as a thumbnail.
+      rowFile: (file, displayName) => ({ ...file, displayName }),
       uploads,
       cardPerMessage: card.section.selection === "messages",
       onOpen: onOpenSection ? () => onOpenSection(position) : undefined,

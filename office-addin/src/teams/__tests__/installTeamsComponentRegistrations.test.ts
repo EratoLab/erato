@@ -25,11 +25,26 @@ describe("installTeamsComponentRegistrations", () => {
   });
 
   it("contributes the add-menu row and the attachments preview, and no Outlook renderers", () => {
+    // The registry's own default for an unset slot.
+    registry.ChatInputAttachmentPreview = null;
+
     installTeamsComponentRegistrations();
 
     expect(registry).toEqual({
       ChatAddMenuExtraContent: addMenu,
       ChatInputAttachmentPreview: attachmentsPreview,
+    });
+  });
+
+  it("keeps a component kit's attachment preview", () => {
+    const kitPreview = () => null;
+    registry.ChatInputAttachmentPreview = kitPreview;
+
+    installTeamsComponentRegistrations();
+
+    expect(registry).toEqual({
+      ChatAddMenuExtraContent: addMenu,
+      ChatInputAttachmentPreview: kitPreview,
     });
   });
 });

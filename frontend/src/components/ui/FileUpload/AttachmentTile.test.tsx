@@ -323,4 +323,65 @@ describe("AttachmentTile custom face", () => {
     expect(onRemove).toHaveBeenCalledTimes(1);
     expect(onActivate).toHaveBeenCalledTimes(1);
   });
+
+  it("gives an extensionless image the image family on a row", async () => {
+    await renderWithProviders(
+      <AttachmentTile
+        file={{
+          id: "1",
+          filename: "teams-img-abc.png",
+          displayName: "Whiteboard",
+        }}
+        isImage
+        variant="row"
+        showType="family"
+        previewUrl="blob:image"
+      />,
+    );
+
+    const wrapper = document.querySelector<HTMLElement>("[data-filetype]");
+    expect(wrapper).toHaveAttribute("data-filetype", "image");
+    expect(wrapper?.style.getPropertyValue("--attachment-tile-icon-tint")).toBe(
+      FILE_TYPES.image.iconColor,
+    );
+    expect(screen.getByText("IMAGE")).toBeVisible();
+    // A row is a list entry, so it stays an icon even with a preview URL.
+    expect(document.querySelector("img")).toBeNull();
+  });
+
+  it("leaves out a type label that repeats the display name", async () => {
+    await renderWithProviders(
+      <AttachmentTile
+        file={{ id: "1", filename: "teams-img-abc.png", displayName: "Image" }}
+        isImage
+        variant="row"
+        showType="family"
+        size="compact"
+      />,
+    );
+
+    expect(screen.getByText("Image")).toBeVisible();
+    expect(screen.queryByText("IMAGE")).toBeNull();
+  });
+
+  it("draws an isImage tile as media only when it has a preview URL", async () => {
+    const image = { id: "1", filename: "teams-img-abc", displayName: "Image" };
+    const { unmount } = await renderWithProviders(
+      <AttachmentTile file={image} isImage />,
+    );
+    expect(document.querySelector("img")).toBeNull();
+    expect(document.querySelector("[data-filetype]")).toHaveAttribute(
+      "data-filetype",
+      "image",
+    );
+    unmount();
+
+    await renderWithProviders(
+      <AttachmentTile file={image} isImage previewUrl="blob:image" />,
+    );
+    expect(screen.getByRole("img", { name: "Image" })).toHaveAttribute(
+      "data-media",
+      "image",
+    );
+  });
 });
