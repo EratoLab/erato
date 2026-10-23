@@ -10,9 +10,10 @@ import { chatIsReadyToChat, gotoAppPage } from "./shared";
  * It needs both halves of the scenario at once, which is why the scenario
  * exists. The mock LLM has to be the only chat provider or a live model answers
  * the child turn instead of the scripted rules; the restrictive approval preset
- * has to be on or the child's call simply runs; and the gated server has to sit
- * outside the planning facet's allowlist, so the call under decision can only
- * have come from the child.
+ * has to be on or the child's call simply runs; and the gated server has to be
+ * in the planning facet's allowlist, because a task child never gets a tool its
+ * planning turn could not reach. The call under decision still comes from the
+ * child: the mock LLM only calls the gated tool from a child's turn.
  */
 
 /**

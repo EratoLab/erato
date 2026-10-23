@@ -569,12 +569,17 @@ pub async fn retry_delegated_run(
     // 15. The synthetic scope. `task_scope: None` is not an option: the launch
     //     reads the per-task budgets off it, and `None` there makes the child's
     //     budgets `None` too, which turns the graceful cap arm off and makes
-    //     the retry fail HARDER than the run it replaces. Only `persona` and
-    //     the two budgets are read on this path; the rest is written to satisfy
-    //     the type, with the old run's values where it has them.
+    //     the retry fail HARDER than the run it replaces. Only `persona`, the
+    //     two budgets and the MCP ceiling are read on this path; the rest is
+    //     written to satisfy the type, with the old run's values where it has
+    //     them. The ceiling is the old run's as stored, never re-derived from
+    //     today's config: what a run may use is fixed when it is launched. A
+    //     run stored before ceilings existed has none and stays unrestricted.
     let tasks = &app_state.config.delegation.tasks;
     let task_scope = TaskOfferScope {
         facet_enum: facet_ids.clone(),
+        mcp_allowlist: spec.parent_mcp_allowlist.clone(),
+        mcp_server_ids: spec.parent_mcp_server_ids.clone(),
         effective: EffectiveTasksConfig {
             max_tasks_per_turn: 1,
             max_parallel: 1,

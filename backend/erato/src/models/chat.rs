@@ -122,6 +122,20 @@ pub struct TaskSpec {
     /// provenance envelope because nothing in SQL reads them.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub facet_ids: Vec<String>,
+    /// The MCP allowlist of the turn that planned the run, `None` meaning
+    /// unrestricted. Every turn of the run is offered only MCP tools that
+    /// both this list and its own facets allow, so a task child never
+    /// reaches further than the turn that planned it. Set only on task runs
+    /// (`DelegateRoute::Task`): a mention run stores `None` and runs with the
+    /// mentioned assistant's own tools.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parent_mcp_allowlist: Option<Vec<String>>,
+    /// The MCP servers the planning turn's assistant was restricted to,
+    /// `None` meaning unrestricted. Kept on the run because a `bare` child
+    /// has no assistant of its own to carry the restriction. Task runs only,
+    /// like `parent_mcp_allowlist`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parent_mcp_server_ids: Option<Vec<String>>,
     /// Server-executed (MCP) tool calls this run may make, resolved from the
     /// config and the planning facets when it was launched. Resolved at
     /// launch rather than read live: the run must be bounded by what was
