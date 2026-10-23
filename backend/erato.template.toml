@@ -253,7 +253,7 @@ chat_provider_ids = ["test-token-limit"]
 # [frontend]
 # # Translation catalog compilation mode: "precompiled" (default) serves existing
 # # messages.json files, "just_in_time" compiles sibling messages.po files on
-# # demand and caches the result for the server lifetime.
+# # demand and caches the result until a messages.po it was built from changes.
 # translation_po_compilation_mode = "precompiled"
 # # Whether to disable file upload functionality in the UI (default: false)
 # disable_upload = true
