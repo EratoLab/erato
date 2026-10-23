@@ -63,6 +63,10 @@ import {
   OpenSelectHandGesture,
   Prohibition,
   Table,
+  Quote,
+  ChatLines,
+  Calendar,
+  Attachment,
 } from "iconoir-react";
 
 // Define our own IconProps interface based on common SVG props
@@ -392,6 +396,22 @@ export const GridXmarkIcon = ({ className, ...props }: IconProps) => (
 
 export const LockIcon = ({ className, ...props }: IconProps) => (
   <Lock className={className} {...props} />
+);
+
+export const QuoteIcon = ({ className, ...props }: IconProps) => (
+  <Quote className={className} {...props} />
+);
+
+export const ChatLinesIcon = ({ className, ...props }: IconProps) => (
+  <ChatLines className={className} {...props} />
+);
+
+export const CalendarIcon = ({ className, ...props }: IconProps) => (
+  <Calendar className={className} {...props} />
+);
+
+export const AttachmentIcon = ({ className, ...props }: IconProps) => (
+  <Attachment className={className} {...props} />
 );
 
 export const PinIcon = ({ className, ...props }: IconProps) => (

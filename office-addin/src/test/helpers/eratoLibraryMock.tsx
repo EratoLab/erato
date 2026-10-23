@@ -181,6 +181,8 @@ export const DEFAULT_STUBS = {
   isImageFileResource: () => false,
   getFilePreviewUrl: () => undefined,
   FileAttachmentsPreview: StubNothing,
+  ComposerContextArea: StubNothing,
+  ComposerContextLane: StubNothing,
   // The declared kit surface. Covered wholesale so a name pinned by
   // `kit-surface.ts` can never be the one missing entry that breaks linking.
   Alert: StubNothing,
@@ -216,6 +218,7 @@ export const DEFAULT_STUBS = {
   CloseIcon: StubNothing,
   CopyErrorButton: StubNothing,
   CountBadge: StubNothing,
+  DefaultComposerContextChipFace: StubNothing,
   DefaultMessageControls: StubNothing,
   DisclosureChevron: StubNothing,
   DocumentIcon: StubNothing,

@@ -142,6 +142,27 @@ feature-specific overrides inline in `SharedAddinShell`.
   (`officeAddin.settings.appearance.system.description.neutral` vs
   `….outlook`) rather than mutating a shared id.
 
+## Composer context
+
+Host context (the Word document or selection, the Outlook draft or thread, a
+Teams transcript) belongs in the composer's context lane: pass
+`contextItems` and, where a host has one-off send prompts, `composerNotice`
+through to `ChatInput`. Build each item's `state` from the same resolver the
+send path calls (`previewWordSend()`, `previewOutlookSend()`), never from a
+separate UI flag, so a chip cannot say "included" when nothing is sent.
+`onRemove` and `onRestore` change the host's store and the resolver runs
+again; the lane renders the state it gets back and announces that outcome.
+Pass a memoized array, give included items an `estimate` instead of adding
+the same content to `virtualFiles` (both count toward the token estimate),
+and list files a chip stands for in `claimsFileIds` so the file row does not
+draw them twice. Claimed files hide only while their chip is included or
+loading; a chip that stops being sent must unstage them in the same update,
+or they show in the file row again, because they still send. Give items with
+a quoted or long label a `spokenLabel` ("Selection", "Email thread") for
+announcements. Locking is per item (`locked`, `lockReason`); the lane does
+not inherit the composer's lock, except that a chip claiming files is locked
+while the file row is.
+
 ## Landmines
 
 - office.js nullifies `history.pushState`/`replaceState` on load (office-js

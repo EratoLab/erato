@@ -223,6 +223,32 @@ describe("TeamsAttachmentsPreview", () => {
       expect(onRemoveFile.mock.calls).toEqual(own.map((file) => [file.id]));
     });
 
+    it("passes the composer's shared cap to both file previews", async () => {
+      const capped = (container: HTMLElement) =>
+        container.querySelector('[style*="attachment-tile-staged-max-height"]');
+      const flat = await renderPreview(null, own, { sharedHeightCap: true });
+      expect(capped(flat.container)).toBeNull();
+      flat.unmount();
+
+      const beside = await renderPreview(
+        transcriptFile(),
+        [transcript, image, ...own],
+        { sharedHeightCap: true },
+      );
+      await screen.findByText("Product sync");
+      expect(screen.getByText("notes.pdf")).toBeInTheDocument();
+      expect(capped(beside.container)).toBeNull();
+      beside.unmount();
+
+      const uncapped = await renderPreview(transcriptFile(), [
+        transcript,
+        image,
+        ...own,
+      ]);
+      await screen.findByText("Product sync");
+      expect(capped(uncapped.container)).not.toBeNull();
+    });
+
     it("hands Remove all through untouched without a transcript", async () => {
       const onRemoveAllFiles = vi.fn();
       await renderPreview(null, own, { maxFiles: 5, onRemoveAllFiles });

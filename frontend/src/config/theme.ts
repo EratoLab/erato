@@ -269,6 +269,11 @@ export type ThemeLayout = {
     /** Height the staged area caps at before it scrolls. */
     stagedMaxHeight: string;
   };
+  /** Context chips in the composer and the popover their detail opens in. */
+  composerContext: {
+    chipHeight: string;
+    detailWidth: string;
+  };
   sidebar: {
     width: string;
     slimWidth: string;
@@ -590,6 +595,10 @@ export const defaultTheme: Theme = {
       mediumMediaSize: "7rem",
       mediumDocMaxWidth: "18rem",
       stagedMaxHeight: "12rem",
+    },
+    composerContext: {
+      chipHeight: "2rem",
+      detailWidth: "24rem",
     },
     sidebar: {
       width: "17.5rem",

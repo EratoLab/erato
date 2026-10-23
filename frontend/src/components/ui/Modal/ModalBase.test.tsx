@@ -140,4 +140,34 @@ describe("ModalBase", () => {
 
     expect(screen.getByRole("dialog")).not.toHaveAttribute("aria-labelledby");
   });
+
+  it("centres by default and docks as a sheet when placed at the bottom", () => {
+    const { rerender } = render(
+      <ModalBase isOpen={true} onClose={vi.fn()} title="Details">
+        <div>body</div>
+      </ModalBase>,
+    );
+    const overlay = () =>
+      document.querySelector('[data-ui="modal-overlay"]') as HTMLElement;
+    expect(overlay().className).toBe(
+      "modal-overlay-skin fixed inset-0 z-50 flex items-center justify-center",
+    );
+    expect(screen.getByRole("dialog")).not.toHaveAttribute("data-placement");
+
+    rerender(
+      <ModalBase
+        isOpen={true}
+        onClose={vi.fn()}
+        title="Details"
+        placement="bottom"
+      >
+        <div>body</div>
+      </ModalBase>,
+    );
+    expect(overlay()).toHaveClass("items-end", "!p-2");
+    expect(overlay()).not.toHaveClass("items-center");
+    const dialog = screen.getByRole("dialog", { name: "Details" });
+    expect(dialog).toHaveAttribute("data-placement", "bottom");
+    expect(dialog).toHaveClass("max-w-full", "max-h-[calc(100%-3.25rem)]");
+  });
 });

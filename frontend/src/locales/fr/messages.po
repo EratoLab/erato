@@ -1567,11 +1567,13 @@ msgid "chat.attachments.remove_all_shown"
 msgstr "{count, plural, one {Tout supprimer : # fichier} other {Tout supprimer : # fichiers}}"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Chat/ComposerContext/composerContextStrings.ts
 #: src/components/ui/FileUpload/GroupedFileAttachmentsPreview.tsx
 msgid "chat.attachments.show_less"
 msgstr "Afficher moins"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Chat/ComposerContext/composerContextStrings.ts
 #: src/components/ui/FileUpload/GroupedFileAttachmentsPreview.tsx
 msgid "chat.attachments.show_more.count"
 msgstr "{count, plural, one {Afficher # élément de plus} other {Afficher # éléments de plus}}"
@@ -3169,6 +3171,7 @@ msgid "common.preview"
 msgstr ""
 
 #. js-lingui-explicit-id
+#: src/components/ui/Chat/ComposerContext/composerContextStrings.ts
 #: src/components/ui/FileUpload/AttachmentTile.tsx
 #: src/components/ui/FileUpload/FilePreviewButton.tsx
 msgid "common.remove"
@@ -3178,6 +3181,171 @@ msgstr "Supprimer"
 #: src/pages/assistantHubUtils.tsx
 msgid "common.yes"
 msgstr "Oui"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ComposerContext/composerContextStrings.ts
+msgid "composer.context.announce.cannotRemove"
+msgstr "Impossible de retirer {label}."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ComposerContext/composerContextStrings.ts
+msgid "composer.context.announce.expanded"
+msgstr "Tous les éléments sont affichés."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ComposerContext/composerContextStrings.ts
+msgid "composer.context.announce.locked"
+msgstr "{label} est verrouillé."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ComposerContext/composerContextStrings.ts
+msgid "composer.context.announce.notIncluded"
+msgstr "{label} n’est pas inclus. Appuyez sur + pour l’inclure."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ComposerContext/composerContextStrings.ts
+msgid "composer.context.announce.outcome"
+msgstr "{label} : {meta}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ComposerContext/composerContextStrings.ts
+msgid "composer.context.announce.removed"
+msgstr "Élément retiré : {label}."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ComposerContext/composerContextStrings.ts
+msgid "composer.context.announce.removedAmbient"
+msgstr "Élément retiré : {label}. Pour l’inclure à nouveau, utilisez +."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ComposerContext/composerContextStrings.ts
+msgid "composer.context.announce.restored"
+msgstr "Élément inclus : {label}."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ComposerContext/composerContextStrings.ts
+msgid "composer.context.detail.close"
+msgstr "Fermer les détails"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ComposerContext/composerContextStrings.ts
+msgid "composer.context.detail.include"
+msgstr "Inclure"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ComposerContext/composerContextStrings.ts
+msgid "composer.context.detail.leaveOut"
+msgstr "Laisser de côté"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ComposerContext/composerContextStrings.ts
+msgid "composer.context.lane.label"
+msgstr "Contexte du message"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ComposerContext/composerContextStrings.ts
+msgid "composer.context.more"
+msgstr "{count, plural, other {+# de plus}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ComposerContext/composerContextStrings.ts
+msgid "composer.context.pill.attention"
+msgstr "Choix requis"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ComposerContext/composerContextStrings.ts
+msgid "composer.context.pill.error"
+msgstr "Erreur"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ComposerContext/composerContextStrings.ts
+msgid "composer.context.pill.included"
+msgstr "Inclus"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ComposerContext/composerContextStrings.ts
+msgid "composer.context.pill.loading"
+msgstr "Chargement"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ComposerContext/composerContextStrings.ts
+msgid "composer.context.pill.locked"
+msgstr "Verrouillé"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ComposerContext/composerContextStrings.ts
+msgid "composer.context.pill.suggested"
+msgstr "Suggéré"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ComposerContext/composerContextStrings.ts
+msgid "composer.context.pill.superseded"
+msgstr "Non envoyé"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ComposerContext/composerContextStrings.ts
+msgid "composer.context.remove"
+msgstr "Retirer {label}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ComposerContext/composerContextStrings.ts
+msgid "composer.context.restore"
+msgstr "Inclure {label}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ComposerContext/composerContextStrings.ts
+msgid "composer.context.scope.chat"
+msgstr "Désactivé dans ce chat"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ComposerContext/composerContextStrings.ts
+msgid "composer.context.scope.item"
+msgstr "Désactivé jusqu’à ce que vous passiez à un autre e-mail"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ComposerContext/composerContextStrings.ts
+msgid "composer.context.scope.message"
+msgstr "Désactivé pour ce message"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ComposerContext/composerContextStrings.ts
+msgid "composer.context.scope.selection"
+msgstr "Désactivé jusqu’à ce que la sélection change"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ComposerContext/composerContextStrings.ts
+msgid "composer.context.state.attention"
+msgstr "Votre choix est requis."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ComposerContext/composerContextStrings.ts
+msgid "composer.context.state.error"
+msgstr "Erreur."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ComposerContext/composerContextStrings.ts
+msgid "composer.context.state.included"
+msgstr "Inclus."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ComposerContext/composerContextStrings.ts
+msgid "composer.context.state.loading"
+msgstr "Chargement en cours."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ComposerContext/composerContextStrings.ts
+msgid "composer.context.state.locked"
+msgstr "Verrouillé."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ComposerContext/composerContextStrings.ts
+msgid "composer.context.state.suggested"
+msgstr "Non inclus."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ComposerContext/composerContextStrings.ts
+msgid "composer.context.state.superseded"
+msgstr "Non envoyé."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/DelegatedTaskApprovalCard.tsx

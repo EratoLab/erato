@@ -219,6 +219,7 @@ components.
 | `AssistantFileSourceSelector`   | Assistant form      | `FileSourceSelectorProps`            | File source selector when adding default files to an assistant                                                     |
 | `ChatFileSourceSelector`        | Chat input          | `FileSourceSelectorProps`            | File source selector when uploading files to a conversation                                                        |
 | `ChatInputAttachmentPreview`    | Chat input          | `ChatInputAttachmentPreviewProps`    | Staged attachments inside the chat composer, above the textarea                                                    |
+| `ComposerContextChipFace`       | Chat input          | `ComposerContextChipFaceProps`       | A context chip's face; the host keeps the lane, (x)/(+), focus, detail and announcements                           |
 | `ChatGroupedAttachmentsPreview` | Attachment groups   | `GroupedFileAttachmentsPreviewProps` | Grouped attachment preview cards or chips                                                                          |
 | `ChatHistoryList`               | Chat sidebar        | `ChatHistoryListProps`               | Chat history list rows and actions                                                                                 |
 | `ChatWelcomeScreen`             | Chat empty state    | `WelcomeScreenProps`                 | Empty state shown when a chat has no messages                                                                      |
@@ -498,6 +499,52 @@ export const componentRegistry: ComponentRegistry = {
 
 ---
 
+## Composer Context Chips
+
+Host context (a Word document or selection, an Outlook draft or thread, a Teams
+transcript) renders as chips inside the composer, in the same capped area as
+staged files and before them. `ChatInput` draws this lane itself, from the
+`contextItems` a host passes, and not through `ChatInputAttachmentPreview`: a
+kit that replaces the files slot cannot hide what is being sent.
+
+`ComposerContextChipFace` is a composed-node point. The kit draws what a chip
+shows; the host keeps the list, the roving focus, the always-visible (x) or +,
+the detail sheet or popover, and the live announcements. The face renders
+inside the chip's open button, so it must contain nothing focusable or
+clickable: a click on the face opens the chip's detail. Wrap
+`DefaultComposerContextChipFace` from `@erato/frontend/shared` to change its
+look without redrawing it, and read the chip's state from
+`ComposerContextChipFaceProps` (`item.state`, the resolved `tone`, the host
+glyph in `icon`, and the `meta` line, which for a suggested chip states how
+long it stays off). Draw the `meta` line: it is how a sighted user learns why
+a chip is not sent.
+
+Themes and kits can reach the lane through these hooks and classes:
+
+- `data-ui="composer-staged-area"` (the shared scroll area), `composer-staged-files`,
+  `composer-context-lane`, `composer-context-live`, `composer-notice[data-tone]`
+  with its `composer-notice-polite` and `composer-notice-assertive` regions;
+- `composer-context-chip[data-kind][data-state][data-tone][data-origin][data-locked][data-has-detail]`,
+  with `composer-context-chip-open`, `composer-context-chip-face`,
+  `composer-context-chip-state`, `composer-context-remove`,
+  `composer-context-restore` and `composer-context-more[data-expanded]` inside;
+- `composer-context-detail[data-placement]` and `composer-context-detail-state`;
+- the classes `composer-context-chip-geometry`, `composer-context-chip-skin` and
+  `composer-context-control-geometry`, and the layout tokens
+  `layout.composerContext.chipHeight` and `layout.composerContext.detailWidth`.
+
+The skin moves variables (`--composer-context-chip-border`, `-bg`, `-label`,
+`-meta`, `-icon`) per state and tone rather than final colours, so a kit face
+can read the same values the default face does.
+
+`@erato/frontend/conformance` exports `composerContextChipFaceConformanceFailures(Face, { render })`.
+It mounts the host lane around the face in all six states, with and without a
+detail and locked, and reports a face that drops the label or the meta, holds
+a control of its own, or breaks the host's control, popup or state word.
+`component-kit-example/src/components/ExampleComposerContextChipFace.test.tsx`
+is a working harness. The point arrived with shared surface 1.19; declare
+`builtAgainstSharedSurfaceMinor: 19` on the registration.
+
 ## Full Registry Example
 
 A complete `componentRegistry.ts` with multiple overrides:
@@ -536,6 +583,12 @@ git checkout --ours src/config/componentRegistry.ts
 git add src/config/componentRegistry.ts
 git commit
 ```
+
+A fork that keeps its own copy and adds a new upstream key as `null` should
+also take upstream's `buildComponentRegistry` body: from 18 keys on, the old
+`registry[registration.extensionPoint] = registration.component as never`
+write no longer type-checks (TS2590), and upstream writes through a widened
+view instead.
 
 ## Directory Structure
 
