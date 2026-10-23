@@ -3,6 +3,7 @@ import type {
   ApprovalItem,
   ChildApprovalRef,
   ToolApprovalDecision,
+  ToolApprovalKind,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
 /**
@@ -54,6 +55,59 @@ export const approvalItemsOf = (
           child: null,
         },
       ];
+
+/**
+ * Whether an item is settled by resuming a parked child rather than by this
+ * turn: any item that names a child, and every item of a `delegated_task` stop,
+ * including one whose child was never recorded.
+ */
+export const isChildItem = (
+  item: { child?: unknown },
+  kind: ToolApprovalKind | undefined,
+): boolean => item.child != null || kind === "delegated_task";
+
+/**
+ * The digits below the millisecond of an RFC 3339 time. `Date.parse` stops at
+ * the millisecond, and the server writes microseconds. Anchored, so matching
+ * stays linear on any input.
+ */
+const subMillisecondOf = (time: string): number => {
+  const fraction =
+    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.(\d+)/.exec(time)?.[1] ?? "";
+  return Number(fraction.slice(3, 9).padEnd(6, "0"));
+};
+
+/**
+ * The open items in the order they were asked: a parked child's by its own
+ * request, the turn's own call by the part's. Ties keep row order, the order
+ * the server settles them in.
+ */
+export const approvalQueueOf = (
+  request: { requested_at: string },
+  open: ApprovalItemPart[],
+): ApprovalItemPart[] => {
+  const askedAt = (item: ApprovalItemPart) => {
+    const time = item.child?.requested_at ?? request.requested_at;
+    const at = Date.parse(time);
+    return Number.isNaN(at)
+      ? { at: Number.POSITIVE_INFINITY, below: 0 }
+      : { at, below: subMillisecondOf(time) };
+  };
+  return open
+    .map((item, index) => ({ item, index, ...askedAt(item) }))
+    .sort((a, b) => a.at - b.at || a.below - b.below || a.index - b.index)
+    .map(({ item }) => item);
+};
+
+/**
+ * Whether "Always allow" may be offered for one item. A child carries its own
+ * policy snapshot: the part's flag describes the part's own call, and on a
+ * `client_tool` part no MCP policy binds that one.
+ */
+export const itemAllowsAlways = (
+  item: ApprovalItemPart,
+  request: { allow_always: boolean },
+): boolean => item.child?.allow_always ?? request.allow_always;
 
 export interface ApprovalStopState {
   /** The items still waiting on the user; a decision must cover exactly these. */

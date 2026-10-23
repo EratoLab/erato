@@ -100,11 +100,11 @@ test("parks a task child on its gated call and finishes the run in the origin ch
 
   const assistantMessage = page.getByTestId("message-assistant").last();
 
-  // The park: one card for the stop, one row for the one child that asked. The
-  // row names the CHILD's call — the `delegate_task` name on the item describes
+  // The park: one queue for the stop, one item for the one child that asked.
+  // The item names the CHILD's call — the `delegate_task` name on the item describes
   // the dispatch, so a row showing that instead would mean the question was
   // copied from the wrong side of the run.
-  const approval = assistantMessage.getByTestId("delegated-task-approval");
+  const approval = assistantMessage.getByTestId("approval-queue");
   await expect(approval).toBeVisible({ timeout: PARK_TIMEOUT_MS });
   await expect(approval).toHaveAttribute("data-item-count", "1");
   const item = approval.getByTestId("delegated-task-approval-item");

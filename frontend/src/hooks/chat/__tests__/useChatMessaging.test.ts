@@ -115,6 +115,7 @@ import { useChatHistoryStore } from "../useChatHistory";
 import { useChatMessaging } from "../useChatMessaging";
 import { resetReactAttemptsForTest } from "../useReactToTaskResult";
 
+import type { ToolApprovalDecision } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { ReactNode } from "react";
 import type { StateCreator } from "zustand";
 
@@ -137,6 +138,7 @@ vi.mock("@/lib/generated/v1betaApi/v1betaApiComponents", () => ({
   listUserToolApprovalSettingsQuery: vi.fn(() => ({
     queryKey: ["userToolApprovalSettings"],
   })),
+  profileQuery: vi.fn(() => ({ queryKey: ["profile"] })),
   recentChatsQuery: vi.fn(() => ({
     queryKey: ["recentChats"],
   })),
@@ -3450,6 +3452,7 @@ describe("useChatMessaging", () => {
       expect(JSON.parse((call![1] as { body: string }).body)).toEqual({
         message_id: parkedMessage.id,
         decision: "approve",
+        shows_child_items: true,
       });
     });
 
@@ -3637,6 +3640,162 @@ describe("useChatMessaging", () => {
       );
     });
 
+    // The turn's own gated call with one of its tasks parked in the same batch:
+    // the task's slot sits on the row, and the stop asks about both.
+    const parkedMixedMessage = (kind: "mcp_tool" | "client_tool") => ({
+      id: "assistant-parked-mixed-1",
+      role: "assistant" as const,
+      createdAt: "2026-02-18T12:00:00.000Z",
+      status: "complete" as const,
+      content: [
+        { content_type: "text" as const, text: "Publishing and asking. " },
+        {
+          content_type: "tool_use" as const,
+          tool_call_id: "task-call-1",
+          tool_name: "delegate_task",
+          input: { task: "one" },
+          output: { status: "input_required", delegate_chat_id: "child-1" },
+          status: "in_progress" as const,
+        },
+        {
+          content_type: "tool_approval_request" as const,
+          tool_call_id: "own-call",
+          tool_name: "publish_approval_probe",
+          mcp_server_id: kind === "mcp_tool" ? "mock_mcp_approval" : "word",
+          input: { channel: "release" },
+          annotations: {},
+          preset: "restrictive",
+          allow_always: kind === "client_tool",
+          requested_at: "2026-02-18T12:00:01.000Z",
+          kind,
+        },
+      ],
+    });
+
+    const mixedItems = [
+      {
+        approval_id: "own-call",
+        tool_call_id: "own-call",
+        tool_name: "publish_approval_probe",
+        input: { channel: "release" },
+        child: null,
+      },
+      {
+        approval_id: "task-call-1",
+        tool_call_id: "task-call-1",
+        tool_name: "delegate_task",
+        input: { task: "one" },
+        child: { child_chat_id: "child-1", mcp_server_id: "mock_mcp_files" },
+      },
+    ];
+
+    const continueMixed = async (
+      kind: "mcp_tool" | "client_tool",
+      decisions: [string, ToolApprovalDecision][],
+    ) => {
+      const message = parkedMixedMessage(kind);
+      const { result } = renderHook(() => useChatMessaging("chat1"), {
+        wrapper: TestWrapper,
+      });
+      act(() => {
+        useMessagingStore
+          .getState()
+          .setApiMessages([message as never], "chat1");
+      });
+      mockInvalidateQueries.mockClear();
+      await act(async () => {
+        const pending = result.current.continueToolApproval({
+          messageId: message.id,
+          decision: decisions[0][1],
+          toolCallId: "own-call",
+          toolName: "publish_approval_probe",
+          toolInput: { channel: "release" },
+          mcpServerId: message.content[2].mcp_server_id as string,
+          kind,
+          approvalIds: mixedItems.map((item) => item.approval_id),
+          itemDecisions: decisions.map(([approvalId, decision]) => ({
+            approvalId,
+            decision,
+          })),
+          items: mixedItems,
+        });
+        sseCallbacks.onOpen?.();
+        await pending;
+      });
+      return useMessagingStore.getState().getStreaming("chat1").content;
+    };
+
+    it("seeds the turn's own call before its parked task on a mixed MCP stop", async () => {
+      const seeded = await continueMixed("mcp_tool", [
+        ["own-call", "approve"],
+        ["task-call-1", "reject"],
+      ]);
+
+      // The server runs the turn's own call first, then settles each task.
+      expect(seeded.map((part) => part.content_type)).toEqual([
+        "text",
+        "tool_use",
+        "tool_approval_request",
+        "tool_approval",
+        "tool_use",
+        "tool_rejection",
+      ]);
+      expect(seeded[4]).toEqual(
+        expect.objectContaining({
+          tool_call_id: "own-call",
+          status: "in_progress",
+        }),
+      );
+      expect(seeded[5]).toEqual(
+        expect.objectContaining({
+          approval_id: "task-call-1",
+          child_chat_id: "child-1",
+        }),
+      );
+    });
+
+    it("dispatches an approved client tool after its parked task's decision", async () => {
+      const seeded = await continueMixed("client_tool", [
+        ["own-call", "approve"],
+        ["task-call-1", "approve"],
+      ]);
+
+      // The approved call runs once the turn resumes, after every decision.
+      expect(seeded.map((part) => part.content_type)).toEqual([
+        "text",
+        "tool_use",
+        "tool_approval_request",
+        "tool_approval",
+        "tool_approval",
+        "tool_use",
+      ]);
+      expect(seeded[5]).toEqual(
+        expect.objectContaining({
+          tool_call_id: "own-call",
+          status: "in_progress",
+        }),
+      );
+    });
+
+    it("saves each standing answer of a mixed client-tool stop where it lives", async () => {
+      await continueMixed("client_tool", [
+        ["own-call", "approve_always"],
+        ["task-call-1", "approve_always"],
+      ]);
+
+      const invalidated = mockInvalidateQueries.mock.calls.map(
+        (call) => (call[0] as { queryKey: unknown[] }).queryKey,
+      );
+      expect(invalidated).toEqual(
+        expect.arrayContaining([
+          ["profile"],
+          ["mcpServerTools", "mock_mcp_files"],
+          ["userToolApprovalSettings"],
+        ]),
+      );
+      expect(invalidated).not.toContainEqual(["mcpServerTools", "word"]);
+    });
+
     it.each(["approve", "reject", "withdraw"] as const)(
       "seeds only the budget decision for %s so delta indices stay aligned",
       async (decision) => {
@@ -3723,6 +3882,7 @@ describe("useChatMessaging", () => {
           { approval_id: "plan:0:0", decision: "approve" },
           { approval_id: "plan:0:1", decision: "reject" },
         ],
+        shows_child_items: true,
       });
     });
 

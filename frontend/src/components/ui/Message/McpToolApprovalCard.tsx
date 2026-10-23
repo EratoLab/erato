@@ -4,7 +4,7 @@ import { useContext, useEffect, useState } from "react";
 
 import { getIdToken } from "@/auth/tokenStore";
 import { archivedNoticeText } from "@/components/ui/Chat/chatArchiveActions";
-import { ToolCallInput } from "@/components/ui/ToolCall";
+import { standingAnswerTargets } from "@/hooks/chat/approvalSeeding";
 import { getClientToolHeaders } from "@/hooks/chat/clientToolExecutors";
 import { readConflictRefusal } from "@/hooks/chat/conflictRefusal";
 import { useConfirmationRegistryStore } from "@/hooks/chat/store/confirmationRegistryStore";
@@ -22,12 +22,11 @@ import {
 import { ChatContext } from "@/providers/ChatProvider";
 import { FrontendRequestError } from "@/utils/errorReport";
 
-import { ComputerIcon, ResolvedIcon } from "../icons";
 import { ActionConfirmationCard } from "./ActionConfirmationCard";
 import { APPROVAL_CARD_SHELL_CLASS } from "./ApprovalDecisionActions";
-import { ApprovalToolHeading } from "./ApprovalToolHeading";
-import { DelegatedTaskApprovalCard } from "./DelegatedTaskApprovalCard";
+import { ApprovalQueueCard } from "./ApprovalQueueCard";
 import { OriginApprovalLink } from "./OriginApprovalLink";
+import { OwnCallApprovalItem } from "./OwnCallApprovalItem";
 import { TaskPlanApprovalCard } from "./TaskPlanApprovalCard";
 import { approvalItemsOf } from "./approvalItems";
 
@@ -232,24 +231,6 @@ export const McpToolApprovalCard = ({
     await chatContext?.refetchMessages();
   };
 
-  /**
-   * The rosters a set of answers is written against. A standing answer on a
-   * parked child lands on the CHILD's server, and a stop can carry children of
-   * several servers — one roster would leave the others serving the pre-grant
-   * state. A kind that names no server at all, a task plan, has none to drop.
-   */
-  const rostersOf = (answers: DecidedApproval[]): string[] =>
-    answers
-      .map(
-        (answer) =>
-          approvalItems.find((item) => item.approval_id === answer.approvalId)
-            ?.child?.mcp_server_id ?? request.mcp_server_id,
-      )
-      .filter(
-        (serverId, index, ids) =>
-          serverId !== "" && ids.indexOf(serverId) === index,
-      );
-
   const decide = async (
     decision: ToolApprovalDecision,
     itemDecisions?: DecidedApproval[],
@@ -270,26 +251,32 @@ export const McpToolApprovalCard = ({
       }
       setLocalResolution(isApprovalDecision(decision) ? "approved" : "denied");
       // Standing wherever it was given, not only on the row that happened to be
-      // clicked last.
-      const standing = answers.filter(
-        (answer) =>
-          answer.decision === "approve_always" ||
-          answer.decision === "reject_always",
+      // clicked last; a parked child's answer lands on the child's own server.
+      const targets = standingAnswerTargets(
+        answers.map((answer) => ({
+          item: approvalItems.find(
+            (item) => item.approval_id === answer.approvalId,
+          ),
+          decision: answer.decision,
+        })),
+        kind,
+        request.mcp_server_id,
       );
 
-      if (standing.length > 0 && kind === "client_tool") {
+      if (targets.clientPreference) {
         // Saved in the user's preferences, which the settings list reads
         // from the profile.
         await queryClient.invalidateQueries({
           queryKey: profileQuery({}).queryKey,
         });
-      } else if (standing.length > 0) {
+      }
+      if (targets.mcpStanding) {
         // A standing decision is account-wide, and the settings roster and
         // the tool browser would otherwise keep serving the old state from
         // their cached listing. (The streamed path drops them itself, once
         // the decision is written.)
         await Promise.all([
-          ...rostersOf(standing).map((serverId) =>
+          ...targets.rosters.map((serverId) =>
             queryClient.invalidateQueries({
               queryKey: listMcpServerToolsQuery({
                 pathParams: { serverId },
@@ -335,13 +322,19 @@ export const McpToolApprovalCard = ({
     }
   };
 
+  /**
+   * Decide every item still open. Allowing or denying all keeps the answers
+   * already given, which a queue no longer shows; withdrawing denies
+   * everything, as its hint says.
+   */
   const decideAll = (decision: ToolApprovalDecision) => {
+    const held = decision === "withdraw" ? {} : staged;
     setStaged({});
     void decide(
       decision,
       approvalItems.map((item) => ({
         approvalId: item.approval_id,
-        decision,
+        decision: held[item.approval_id] ?? decision,
       })),
     );
   };
@@ -367,15 +360,14 @@ export const McpToolApprovalCard = ({
   };
 
   const isClientTool = kind === "client_tool";
-  // A client tool declares no annotations of its own; the defaults it carries
-  // describe nothing about what it does.
-  const openWorldDescription =
-    !isClientTool && request.annotations.openWorldHint
-      ? t({
-          id: "mcpApproval.openWorldWarning",
-          message: "This tool may send data to an external service.",
-        })
-      : null;
+  // The turn's own gated call carries its parked tasks on the same stop, and a
+  // `delegated_task` stop is nothing but them: both are decided one item at a
+  // time. A task plan reviews one plan rather than the turn's approvals, so it
+  // keeps its list.
+  const isQueue =
+    kind === "delegated_task" ||
+    ((kind === "mcp_tool" || isClientTool) &&
+      approvalItems.some((item) => item.child != null));
 
   // Resolved decisions are represented beside the matching tool call in the
   // thinking trace. Keep this card solely for the pending decision UI.
@@ -436,13 +428,13 @@ export const McpToolApprovalCard = ({
     );
   }
 
-  if (kind === "delegated_task") {
+  if (isQueue) {
     return (
       <>
-        <DelegatedTaskApprovalCard
+        <ApprovalQueueCard
+          request={request}
           items={approvalItems}
           staged={staged}
-          allowAlways={request.allow_always}
           isArchived={isArchived === true}
           isBusy={cardIsBusy}
           onDecideItem={decideItem}
@@ -512,67 +504,19 @@ export const McpToolApprovalCard = ({
       data-approval-kind={kind}
       className={APPROVAL_CARD_SHELL_CLASS}
     >
-      <ApprovalToolHeading
+      <OwnCallApprovalItem
         toolName={request.tool_name}
         display={request.display}
-        icon={
-          isClientTool ? (
-            <ComputerIcon className="size-4 shrink-0 text-theme-fg-secondary" />
-          ) : (
-            <ResolvedIcon
-              iconId="simpleicons-modelcontextprotocol"
-              className="size-4 shrink-0 text-theme-fg-secondary"
-            />
-          )
-        }
-        source={
-          isClientTool
-            ? t({
-                id: "clientToolApproval.thisDevice",
-                message: "This device",
-              })
-            : request.mcp_server_id
-        }
-      />
-      <div className="mt-2 max-h-48 overflow-y-auto">
-        <ToolCallInput input={request.input} />
-      </div>
-      <ActionConfirmationCard
-        title={
-          isClientTool
-            ? t({
-                id: "clientToolApproval.title",
-                message: "Allow this tool to run on your device?",
-              })
-            : t({
-                id: "mcpApproval.title",
-                message: "Allow MCP tool call?",
-              })
-        }
-        description={openWorldDescription ?? undefined}
-        onAllowOnce={() => void decide("approve")}
-        // Keep "Always allow" discoverable when the deployment enforces
-        // per-use confirmation: greyed out with the reason, like the add-in's
-        // locked client-action decisions, instead of silently missing.
-        // eslint-disable-next-line lingui/no-unlocalized-strings -- API decision value
-        onAlwaysAllow={() => void decide("approve_always")}
-        alwaysAllowDisabledReason={
-          request.allow_always
-            ? undefined
-            : t({
-                id: "mcpApproval.alwaysAllowDisabled",
-                message:
-                  "Locked: your organization requires confirmation each time this tool runs.",
-              })
-        }
-        onDeny={() => void decide("reject")}
-        // eslint-disable-next-line lingui/no-unlocalized-strings -- API decision value
-        onNeverAllow={() => void decide("reject_always")}
+        input={request.input}
+        serverId={request.mcp_server_id}
+        isClientTool={isClientTool}
+        openWorld={request.annotations.openWorldHint}
+        allowAlways={request.allow_always}
         status={isArchived ? "dismissed" : "pending"}
         resolvedLabel={isArchived ? archivedNoticeText() : undefined}
         isBusy={cardIsBusy}
         scrollIntoViewOnMount
-        data-testid="mcp-tool-approval-card"
+        onDecide={(decision) => void decide(decision)}
       />
       {refusal}
     </div>

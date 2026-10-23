@@ -483,6 +483,7 @@ describe("McpToolApprovalCard", () => {
           body: JSON.stringify({
             message_id: "message-1",
             decision: "reject_always",
+            shows_child_items: true,
           }),
         }),
       );
@@ -937,6 +938,7 @@ describe("McpToolApprovalCard", () => {
               { approval_id: "tool-call-1", decision: "approve" },
               { approval_id: "tool-call-2", decision: "approve" },
             ],
+            shows_child_items: true,
           }),
         }),
       );
@@ -979,6 +981,7 @@ describe("McpToolApprovalCard", () => {
           body: JSON.stringify({
             message_id: "message-1",
             decision: "approve",
+            shows_child_items: true,
           }),
         }),
       );
@@ -1011,7 +1014,7 @@ describe("McpToolApprovalCard", () => {
   });
 
   it.each([
-    ["delegated_task", "delegated-task-approval"],
+    ["delegated_task", "approval-queue"],
     ["task_plan", "task-plan-approval"],
   ] as const)(
     "asks a %s stop written without an approvals array all the same",
@@ -1048,7 +1051,7 @@ describe("McpToolApprovalCard", () => {
       />,
     );
 
-    expect(screen.getByTestId("delegated-task-approval")).toHaveAttribute(
+    expect(screen.getByTestId("approval-queue")).toHaveAttribute(
       "data-item-count",
       "1",
     );
@@ -1105,7 +1108,7 @@ describe("McpToolApprovalCard", () => {
     });
   });
 
-  it("renders one card with a row per parked child", () => {
+  it("shows a stop's parked children one at a time on one card", () => {
     renderCard(
       <McpToolApprovalCard
         messageId="message-1"
@@ -1126,10 +1129,14 @@ describe("McpToolApprovalCard", () => {
       />,
     );
 
-    expect(screen.getAllByTestId("delegated-task-approval-item")).toHaveLength(
-      2,
+    expect(screen.getAllByTestId("approval-queue")).toHaveLength(1);
+    expect(screen.getByTestId("approval-queue")).toHaveAttribute(
+      "data-item-count",
+      "2",
     );
-    expect(screen.getAllByTestId("delegated-task-approval")).toHaveLength(1);
+    expect(screen.getAllByTestId("delegated-task-approval-item")).toHaveLength(
+      1,
+    );
   });
 
   it("holds a per-task answer until the whole plan is decided", async () => {
@@ -1171,6 +1178,7 @@ describe("McpToolApprovalCard", () => {
               { approval_id: "plan:0:0", decision: "approve" },
               { approval_id: "plan:0:1", decision: "reject" },
             ],
+            shows_child_items: true,
           }),
         }),
       );
@@ -1220,6 +1228,7 @@ describe("McpToolApprovalCard", () => {
               { approval_id: "plan:0:0", decision: "withdraw" },
               { approval_id: "plan:0:1", decision: "withdraw" },
             ],
+            shows_child_items: true,
           }),
         }),
       );
@@ -1534,6 +1543,350 @@ describe("client tool approvals", () => {
       queryKey: listMcpServerToolsQuery({
         pathParams: { serverId: "desktop" },
       }).queryKey,
+    });
+  });
+});
+
+describe("approval queue", () => {
+  // The turn's own gated call with two of its tasks parked in the same batch.
+  // Task A asked before the turn's call did, so it leads the queue although the
+  // row lists the turn's call first.
+  const mixedRequest = {
+    ...approvalRequest,
+    kind: "mcp_tool" as const,
+    allow_always: false,
+    requested_at: "2026-08-06T00:00:05Z",
+    approvals: [
+      {
+        approval_id: "tool-call-1",
+        tool_call_id: "tool-call-1",
+        tool_name: "publish_approval_probe",
+        input: approvalRequest.input,
+        child: null,
+      },
+      {
+        approval_id: "task-a",
+        tool_call_id: "task-a",
+        tool_name: "delegate_task",
+        input: { task: "Summarize the release notes" },
+        child: {
+          ...childApprovalRef,
+          child_chat_id: "child-a",
+          requested_at: "2026-08-06T00:00:01Z",
+          allow_always: false,
+        },
+      },
+      {
+        approval_id: "task-b",
+        tool_call_id: "task-b",
+        tool_name: "delegate_task",
+        input: { task: "Check the migration notes" },
+        child: {
+          ...childApprovalRef,
+          child_chat_id: "child-b",
+          child_tool_call_id: "child-2",
+          mcp_server_id: "mock_mcp_file",
+          requested_at: "2026-08-06T00:00:09Z",
+          allow_always: false,
+        },
+      },
+    ],
+  };
+
+  const okResponse = () =>
+    vi
+      .fn()
+      .mockResolvedValue(
+        new Response("event: done\\ndata: {}\\n\\n", { status: 200 }),
+      );
+
+  const sentDecisions = (fetchMock: ReturnType<typeof vi.fn>) =>
+    (
+      JSON.parse((fetchMock.mock.calls[0][1] as { body: string }).body) as {
+        decisions: unknown[];
+      }
+    ).decisions;
+
+  it("shows the oldest open approval first, names its task and counts the rest", () => {
+    renderCard(
+      <McpToolApprovalCard
+        messageId="message-1"
+        request={mixedRequest}
+        resolution={null}
+      />,
+    );
+
+    const queue = screen.getByTestId("approval-queue");
+    expect(queue).toHaveAttribute("data-item-count", "3");
+    expect(queue).toHaveAttribute("data-position", "1");
+    expect(screen.queryByTestId("mcp-tool-approval")).not.toBeInTheDocument();
+    expect(screen.getByText("Summarize the release notes")).toBeInTheDocument();
+    expect(
+      screen.queryByText("Check the migration notes"),
+    ).not.toBeInTheDocument();
+    expect(screen.getByTestId("delegated-task-approval-item")).toHaveAttribute(
+      "data-child-chat-id",
+      "child-a",
+    );
+    const counter = screen.getByTestId("approval-queue-counter");
+    expect(counter).toHaveTextContent("Decision 1 of 3");
+    expect(counter).toHaveTextContent("2 more after this one");
+  });
+
+  it("shows the next approval once one is decided, and sends nothing yet", () => {
+    const fetchMock = okResponse();
+    vi.stubGlobal("fetch", fetchMock);
+    renderCard(
+      <McpToolApprovalCard
+        messageId="message-1"
+        request={mixedRequest}
+        resolution={null}
+      />,
+    );
+
+    fireEvent.click(screen.getByText("Allow once"));
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(screen.getByTestId("approval-queue")).toHaveAttribute(
+      "data-position",
+      "2",
+    );
+    // The turn's own call keeps the MCP layout inside the queue.
+    expect(screen.getByTestId("mcp-tool-approval-item")).toHaveAttribute(
+      "data-approval-id",
+      "tool-call-1",
+    );
+    expect(
+      screen.getByRole("group", { name: "Allow MCP tool call?" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("mock_mcp_approval")).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("delegated-task-approval-item"),
+    ).not.toBeInTheDocument();
+    expect(screen.getByTestId("approval-queue-counter")).toHaveTextContent(
+      "1 more after this one",
+    );
+  });
+
+  it("sends every answer in row order once the last approval is decided", async () => {
+    const fetchMock = okResponse();
+    vi.stubGlobal("fetch", fetchMock);
+    renderCard(
+      <McpToolApprovalCard
+        messageId="message-1"
+        request={mixedRequest}
+        resolution={null}
+      />,
+    );
+
+    fireEvent.click(screen.getByText("Allow once"));
+    fireEvent.click(screen.getByText("Deny once"));
+    expect(fetchMock).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByText("Allow once"));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(sentDecisions(fetchMock)).toEqual([
+      { approval_id: "tool-call-1", decision: "reject" },
+      { approval_id: "task-a", decision: "approve" },
+      { approval_id: "task-b", decision: "approve" },
+    ]);
+  });
+
+  it.each([
+    ["tool-approval-allow-all", "approve"],
+    ["tool-approval-withdraw", "withdraw"],
+  ])(
+    "decides every open approval at once with %s",
+    async (testId, decision) => {
+      const fetchMock = okResponse();
+      vi.stubGlobal("fetch", fetchMock);
+      renderCard(
+        <McpToolApprovalCard
+          messageId="message-1"
+          request={mixedRequest}
+          resolution={null}
+        />,
+      );
+
+      fireEvent.click(screen.getByTestId(testId));
+
+      await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+      expect(sentDecisions(fetchMock)).toEqual([
+        { approval_id: "tool-call-1", decision },
+        { approval_id: "task-a", decision },
+        { approval_id: "task-b", decision },
+      ]);
+    },
+  );
+
+  it("keeps an answer the queue no longer shows when everything else is allowed", async () => {
+    const fetchMock = okResponse();
+    vi.stubGlobal("fetch", fetchMock);
+    renderCard(
+      <McpToolApprovalCard
+        messageId="message-1"
+        request={mixedRequest}
+        resolution={null}
+      />,
+    );
+
+    fireEvent.click(screen.getByText("Deny once"));
+    expect(screen.getByTestId("approval-queue")).toHaveAttribute(
+      "data-position",
+      "2",
+    );
+    fireEvent.click(screen.getByTestId("tool-approval-allow-all"));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(sentDecisions(fetchMock)).toEqual([
+      { approval_id: "tool-call-1", decision: "approve" },
+      { approval_id: "task-a", decision: "reject" },
+      { approval_id: "task-b", decision: "approve" },
+    ]);
+  });
+
+  it("withdraws an answer already given along with the rest", async () => {
+    const fetchMock = okResponse();
+    vi.stubGlobal("fetch", fetchMock);
+    renderCard(
+      <McpToolApprovalCard
+        messageId="message-1"
+        request={mixedRequest}
+        resolution={null}
+      />,
+    );
+
+    fireEvent.click(screen.getByText("Allow once"));
+    fireEvent.click(screen.getByTestId("tool-approval-withdraw"));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(sentDecisions(fetchMock)).toEqual([
+      { approval_id: "tool-call-1", decision: "withdraw" },
+      { approval_id: "task-a", decision: "withdraw" },
+      { approval_id: "task-b", decision: "withdraw" },
+    ]);
+  });
+
+  it("puts the queue back at its first approval when the stop is refused", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response("nope", { status: 409 })),
+    );
+    renderCard(
+      <McpToolApprovalCard
+        messageId="message-1"
+        request={mixedRequest}
+        resolution={null}
+      />,
+    );
+
+    fireEvent.click(screen.getByText("Allow once"));
+    fireEvent.click(screen.getByText("Allow once"));
+    fireEvent.click(screen.getByText("Allow once"));
+
+    await waitFor(() => {
+      expect(screen.getByText(/nope/)).toBeInTheDocument();
+    });
+    expect(screen.getByTestId("approval-queue")).toHaveAttribute(
+      "data-position",
+      "1",
+    );
+    expect(screen.getByText("Summarize the release notes")).toBeInTheDocument();
+  });
+
+  describe("on a client-tool stop", () => {
+    // A client tool's own standing answer is the user's preference, so the part
+    // allows it; its parked task asks about an MCP tool under its own policy.
+    const clientRequest = (childAllowsAlways: boolean) => ({
+      ...approvalRequest,
+      tool_name: "read_document",
+      mcp_server_id: "word",
+      kind: "client_tool" as const,
+      allow_always: true,
+      requested_at: "2026-08-06T00:00:01Z",
+      approvals: [
+        {
+          approval_id: "own-call",
+          tool_call_id: "own-call",
+          tool_name: "read_document",
+          input: { range: "all" },
+          child: null,
+        },
+        {
+          approval_id: "task-a",
+          tool_call_id: "task-a",
+          tool_name: "delegate_task",
+          input: { task: "Summarize the release notes" },
+          child: {
+            ...childApprovalRef,
+            requested_at: "2026-08-06T00:00:02Z",
+            allow_always: childAllowsAlways,
+          },
+        },
+      ],
+    });
+
+    it("locks Always allow on a task whose policy forbids it", () => {
+      renderCard(
+        <McpToolApprovalCard
+          messageId="message-1"
+          request={clientRequest(false)}
+          resolution={null}
+        />,
+      );
+
+      expect(screen.getByText("This device")).toBeInTheDocument();
+      expect(
+        screen.queryByText(/requires confirmation each time/),
+      ).not.toBeInTheDocument();
+
+      fireEvent.click(screen.getByText("Allow once"));
+
+      expect(
+        screen.getByText("Summarize the release notes"),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByText(/requires confirmation each time/),
+      ).toBeInTheDocument();
+    });
+
+    it("saves each standing answer where it lives", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi
+          .fn()
+          .mockImplementation(() =>
+            Promise.resolve(new Response("", { status: 200 })),
+          ),
+      );
+      const { queryClient } = renderCard(
+        <McpToolApprovalCard
+          messageId="message-1"
+          request={clientRequest(true)}
+          resolution={null}
+        />,
+      );
+      const invalidate = vi.spyOn(queryClient, "invalidateQueries");
+
+      fireEvent.click(screen.getByText("Always allow"));
+      fireEvent.click(screen.getByText("Always allow"));
+
+      await waitFor(() => {
+        expect(invalidate).toHaveBeenCalledWith({
+          queryKey: profileQuery({}).queryKey,
+        });
+      });
+      expect(invalidate).toHaveBeenCalledWith({
+        queryKey: listMcpServerToolsQuery({
+          pathParams: { serverId: "mock_mcp_approval" },
+        }).queryKey,
+      });
+      // The client tool's namespace names no MCP roster.
+      expect(invalidate).not.toHaveBeenCalledWith({
+        queryKey: listMcpServerToolsQuery({
+          pathParams: { serverId: "word" },
+        }).queryKey,
+      });
     });
   });
 });

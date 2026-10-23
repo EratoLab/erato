@@ -41,10 +41,7 @@ import {
   useChatMessages,
   useUpdateChat,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
-import {
-  buildContinueStreamBody,
-  isApprovalDecision,
-} from "@/lib/toolApprovalDecisions";
+import { buildContinueStreamBody } from "@/lib/toolApprovalDecisions";
 import { mapApiMessageToUiMessage } from "@/utils/adapters/messageAdapter";
 import { seedDispatchedDelegatedRun } from "@/utils/chat/delegatedRunDispatch";
 import {
@@ -55,6 +52,7 @@ import {
 import { createLogger } from "@/utils/debugLogger";
 import { createSSEConnection, type SSEEvent } from "@/utils/sse/sseClient";
 
+import { seedDecisionParts, standingAnswerTargets } from "./approvalSeeding";
 import {
   abortClientToolCalls,
   getClientToolHeaders,
@@ -91,6 +89,7 @@ import {
 import { useExplicitNavigation } from "./useExplicitNavigation";
 import { useReactToTaskResult } from "./useReactToTaskResult";
 
+import type { SeedableApprovalItem, SettledApproval } from "./approvalSeeding";
 import type { SendMessagePreparation } from "./sendMessagePreparation";
 import type {
   ActionFacetRequest,
@@ -148,20 +147,15 @@ export interface ContinueToolApprovalInput {
   items?: SeedableApprovalItem[];
   /**
    * Which parts the server appends per item: an `mcp_tool` item is a call this
-   * continuation makes, a `task_plan` item one it dispatches after the
-   * decision, and a `delegated_task` item a slot that already exists and is
-   * overwritten in place.
+   * continuation makes, a `task_plan` or `client_tool` item one it dispatches
+   * after the decision, and an item naming a child — every item of a
+   * `delegated_task` stop — a slot that already exists and is overwritten in
+   * place.
    */
   kind?: ToolApprovalKind;
 }
 
-export interface SeedableApprovalItem {
-  approval_id: string;
-  tool_call_id: string;
-  tool_name: string;
-  input: unknown;
-  child?: { child_chat_id: string; mcp_server_id: string } | null;
-}
+export type { SeedableApprovalItem };
 
 const getSSEConnectionError = (
   value: Error | Event | undefined,
@@ -2665,10 +2659,7 @@ export function useChatMessaging(
       // In the row's order, which is the order the server settles them in.
       // Without the items only the flat fields are known, which describes
       // exactly one.
-      const settled: {
-        item: SeedableApprovalItem;
-        decision: ToolApprovalDecision;
-      }[] =
+      const settled: SettledApproval[] =
         items && items.length > 0
           ? items.map((item) => ({
               item,
@@ -2688,57 +2679,7 @@ export function useChatMessaging(
                 decision,
               },
             ];
-      const seededParts: ContentPart[] = settled.flatMap(
-        ({ item, decision: answer }) => {
-          const approved = isApprovalDecision(answer);
-          // The generated schema collapses both `serde_json::Value` and
-          // `Option<String>` to `void`/`null`, which makes a typed literal
-          // impossible for `input`, `approval_id` and `reason`; the shapes are
-          // the parts the server persists.
-          const decisionPart = (approved
-            ? {
-                content_type: "tool_approval",
-                tool_call_id: item.tool_call_id,
-                always_allow: answer === "approve_always",
-                approved_at: now,
-                approval_id: item.approval_id,
-                child_chat_id: item.child?.child_chat_id ?? null,
-              }
-            : {
-                content_type: "tool_rejection",
-                tool_call_id: item.tool_call_id,
-                never_allow: answer === "reject_always",
-                rejected_at: now,
-                approval_id: item.approval_id,
-                child_chat_id: item.child?.child_chat_id ?? null,
-                reason: answer === "withdraw" ? "withdrawn" : null,
-              }) as unknown as ContentPart;
-          // A parked child's slot already exists and is overwritten where it
-          // stands, and an approved plan item is dispatched later in the turn —
-          // only a call this continuation makes itself, or refuses outright, gets
-          // a part here.
-          if (
-            kind === "tool_call_limit" ||
-            kind === "delegated_task" ||
-            (kind === "task_plan" && approved)
-          ) {
-            return [decisionPart];
-          }
-          const toolUsePart = {
-            content_type: "tool_use",
-            tool_call_id: item.tool_call_id,
-            tool_name: item.tool_name,
-            input: item.input ?? null,
-            output: null,
-            progress_message: null,
-            // A denial never calls the tool: the server records the refusal as a
-            // failed call, so show it that way instead of a spinner that can only
-            // ever resolve to an error.
-            status: approved ? "in_progress" : "error",
-          } as ContentPart;
-          return [decisionPart, toolUsePart];
-        },
-      );
+      const seededParts = seedDecisionParts(settled, kind, now);
       const seededContent: ContentPart[] = [
         ...parkedMessage.content,
         ...seededParts,
@@ -2771,38 +2712,27 @@ export function useChatMessaging(
       // after it has rebuilt the tool set — so the rosters are dropped again
       // once the stream is over, not only when the decision was accepted.
       const dropDecidedRosters = () => {
-        // One stop can grant on several servers at once — two children of the
-        // same turn on different MCP servers — so every one of them is dropped,
-        // not just the request's own.
-        const rosters = settled
-          .filter(
-            ({ decision: answer }) =>
-              answer === "approve_always" || answer === "reject_always",
-          )
-          .map(({ item }) => item.child?.mcp_server_id ?? mcpServerId);
-        if (rosters.length === 0) {
-          return;
-        }
+        const targets = standingAnswerTargets(settled, kind, mcpServerId);
         // A client tool's standing answer is saved in the user's preferences,
         // which the settings list reads from the profile.
-        if (kind === "client_tool") {
+        if (targets.clientPreference) {
           void queryClient.invalidateQueries({
             queryKey: profileQuery({}).queryKey,
           });
+        }
+        if (!targets.mcpStanding) {
           return;
         }
-        // A kind that names no MCP server of its own — a task plan — has no
-        // roster to drop, and the empty id would invalidate a listing that does
-        // not exist.
-        new Set(rosters.filter((serverId) => serverId !== "")).forEach(
-          (serverId) => {
-            void queryClient.invalidateQueries({
-              queryKey: listMcpServerToolsQuery({
-                pathParams: { serverId },
-              }).queryKey,
-            });
-          },
-        );
+        // One stop can grant on several servers at once — two children of the
+        // same turn on different MCP servers — so every one of them is dropped,
+        // not just the request's own.
+        targets.rosters.forEach((serverId) => {
+          void queryClient.invalidateQueries({
+            queryKey: listMcpServerToolsQuery({
+              pathParams: { serverId },
+            }).queryKey,
+          });
+        });
         void queryClient.invalidateQueries({
           queryKey: listUserToolApprovalSettingsQuery({}).queryKey,
         });

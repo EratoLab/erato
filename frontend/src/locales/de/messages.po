@@ -57,6 +57,26 @@ msgid "actionConfirmation.title"
 msgstr "Diese Aktion erlauben?"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Message/ApprovalQueueCard.tsx
+msgid "approvalQueue.description"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ApprovalQueueCard.tsx
+msgid "approvalQueue.position"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ApprovalQueueCard.tsx
+msgid "approvalQueue.remaining"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ApprovalQueueCard.tsx
+msgid "approvalQueue.title"
+msgstr ""
+
+#. js-lingui-explicit-id
 #: src/pages/AssistantEditPage.tsx
 msgid "assistant.action.backToAssistants"
 msgstr "Zurück zu Assistenten"
@@ -2861,12 +2881,12 @@ msgid "chatInput.mentions.sectionHeader"
 msgstr "Assistenten"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Message/McpToolApprovalCard.tsx
+#: src/components/ui/Message/OwnCallApprovalItem.tsx
 msgid "clientToolApproval.thisDevice"
 msgstr "Dieses Gerät"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Message/McpToolApprovalCard.tsx
+#: src/components/ui/Message/OwnCallApprovalItem.tsx
 msgid "clientToolApproval.title"
 msgstr "Dieses Tool auf deinem Gerät ausführen lassen?"
 
@@ -3170,27 +3190,27 @@ msgid "common.yes"
 msgstr "Ja"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Message/DelegatedTaskApprovalCard.tsx
+#: src/components/ui/Message/ParkedChildItem.tsx
 msgid "delegatedTaskApproval.childMissing"
 msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/DelegatedTaskApprovalCard.tsx
-msgid "delegatedTaskApproval.description"
-msgstr ""
+#~ msgid "delegatedTaskApproval.description"
+#~ msgstr ""
 
 #. js-lingui-explicit-id
-#: src/components/ui/Message/DelegatedTaskApprovalCard.tsx
+#: src/components/ui/Message/ParkedChildItem.tsx
 msgid "delegatedTaskApproval.itemTitle"
 msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/DelegatedTaskApprovalCard.tsx
-msgid "delegatedTaskApproval.title"
-msgstr ""
+#~ msgid "delegatedTaskApproval.title"
+#~ msgstr ""
 
 #. js-lingui-explicit-id
-#: src/components/ui/Message/DelegatedTaskApprovalCard.tsx
+#: src/components/ui/Message/ParkedChildItem.tsx
 msgid "delegatedTaskApproval.unnamedTask"
 msgstr ""
 
@@ -3768,8 +3788,8 @@ msgid "mcp.callback.openSettings"
 msgstr "Einstellungen öffnen"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Message/DelegatedTaskApprovalCard.tsx
-#: src/components/ui/Message/McpToolApprovalCard.tsx
+#: src/components/ui/Message/OwnCallApprovalItem.tsx
+#: src/components/ui/Message/ParkedChildItem.tsx
 msgid "mcpApproval.alwaysAllowDisabled"
 msgstr "Gesperrt: Ihre Organisation verlangt jedes Mal eine Bestätigung, wenn dieses Tool ausgeführt wird."
 
@@ -3779,13 +3799,13 @@ msgstr "Gesperrt: Ihre Organisation verlangt jedes Mal eine Bestätigung, wenn d
 #~ msgstr ""
 
 #. js-lingui-explicit-id
-#: src/components/ui/Message/DelegatedTaskApprovalCard.tsx
-#: src/components/ui/Message/McpToolApprovalCard.tsx
+#: src/components/ui/Message/OwnCallApprovalItem.tsx
+#: src/components/ui/Message/ParkedChildItem.tsx
 msgid "mcpApproval.openWorldWarning"
 msgstr ""
 
 #. js-lingui-explicit-id
-#: src/components/ui/Message/McpToolApprovalCard.tsx
+#: src/components/ui/Message/OwnCallApprovalItem.tsx
 msgid "mcpApproval.title"
 msgstr ""
 
@@ -4719,6 +4739,16 @@ msgstr "{label} entfernen, Inhalt beibehalten"
 #: src/components/ui/WordReview/WordRichBlockPreview.tsx
 msgid "officeAddin.word.rich.updateObject"
 msgstr "{label} aktualisieren"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ParkedTaskNotice.tsx
+msgid "parkedTaskNotice.open"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ParkedTaskNotice.tsx
+msgid "parkedTaskNotice.text"
+msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
