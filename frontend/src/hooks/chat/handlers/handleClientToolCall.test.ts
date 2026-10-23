@@ -160,9 +160,7 @@ describe("handleClientToolCall", () => {
     }
   });
 
-  it("passes a grant call's lineage and answers with the executor stream's binding", async () => {
-    const execute = vi.fn(async () => ({ ok: true as const, result: null }));
-    registerClientToolExecutor("fetch_availability", execute);
+  describe("a delegated task's call", () => {
     const executor = {
       device_id: "pane-device-000000",
       realm: "office-addin" as const,
@@ -175,28 +173,95 @@ describe("handleClientToolCall", () => {
       requesting_message_id: "msg-1",
       context_ref: "capture-1",
     };
-    const unregister = registerOperationExecutor("fetch_availability", () => ({
-      ...executor,
-      device_id: "other-device-00000",
-    }));
-    fetchMock.mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      json: async () => ({ delivered: true, stored: false }),
-    });
-    try {
-      await handleClientToolCall(makeEvent(), { ...deps, executor, lineage });
-      expect(execute).toHaveBeenCalledWith(
-        { window_start: "x" },
-        expect.objectContaining({ chatId: "chat-1", lineage }),
+
+    it("passes the grant as hostGrant and answers with the executor stream's binding", async () => {
+      const execute = vi.fn(async () => ({ ok: true as const, result: null }));
+      registerClientToolExecutor("fetch_availability", execute, undefined, {
+        acceptsGrantCalls: true,
+      });
+      const unregister = registerOperationExecutor(
+        "fetch_availability",
+        () => ({
+          ...executor,
+          device_id: "other-device-00000",
+        }),
       );
+      fetchMock.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ delivered: true, stored: false }),
+      });
+      try {
+        await handleClientToolCall(makeEvent(), { ...deps, executor, lineage });
+        expect(execute).toHaveBeenCalledWith(
+          { window_start: "x" },
+          expect.objectContaining({
+            chatId: "chat-1",
+            hostGrant: {
+              ownerChatId: "chat-0",
+              ownerMessageId: "msg-0",
+              requestingChatId: "chat-1",
+              requestingMessageId: "msg-1",
+              contextRef: "capture-1",
+            },
+          }),
+        );
+        const init = fetchMock.mock.calls[0][1] as RequestInit;
+        expect(
+          (init.headers as Record<string, string>)["X-Erato-Executor"],
+        ).toBe(JSON.stringify(executor));
+      } finally {
+        unregister();
+      }
+    });
+
+    it("leaves contextRef out when the grant carries no context version", async () => {
+      const execute = vi.fn(async () => ({ ok: true as const, result: null }));
+      registerClientToolExecutor("fetch_availability", execute, undefined, {
+        acceptsGrantCalls: true,
+      });
+      const { context_ref: _unused, ...withoutRef } = lineage;
+      await handleClientToolCall(makeEvent(), {
+        ...deps,
+        executor,
+        lineage: withoutRef,
+      });
+      const context = (execute.mock.calls[0] as unknown[])[1] as {
+        hostGrant: Record<string, string>;
+      };
+      expect(context.hostGrant).not.toHaveProperty("contextRef");
+    });
+
+    it("is refused without running a handler that did not opt in", async () => {
+      const execute = vi.fn(async () => ({ ok: true as const, result: null }));
+      registerClientToolExecutor("fetch_availability", execute);
+      await handleClientToolCall(makeEvent(), { ...deps, executor, lineage });
+
+      expect(execute).not.toHaveBeenCalled();
+      expect(lastPostBody(fetchMock)).toEqual({
+        chat_id: "chat-1",
+        message_id: "msg-1",
+        tool_call_id: "call-1",
+        error:
+          'The client tool "fetch_availability" does not take calls from delegated tasks',
+      });
       const init = fetchMock.mock.calls[0][1] as RequestInit;
       expect((init.headers as Record<string, string>)["X-Erato-Executor"]).toBe(
         JSON.stringify(executor),
       );
-    } finally {
-      unregister();
-    }
+    });
+  });
+
+  it("runs a call of the user's own turn without a grant, opted in or not", async () => {
+    const execute = vi.fn(async () => ({ ok: true as const, result: 1 }));
+    registerClientToolExecutor("fetch_availability", execute);
+    await handleClientToolCall(makeEvent(), deps);
+
+    expect(execute).toHaveBeenCalledTimes(1);
+    const context = (execute.mock.calls[0] as unknown[])[1] as object;
+    expect(context).not.toHaveProperty("hostGrant");
+    expect(context).not.toHaveProperty("lineage");
+    expect(lastPostBody(fetchMock)).toMatchObject({ result: 1 });
   });
 
   describe("with an operation binding", () => {

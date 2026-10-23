@@ -603,11 +603,13 @@ fn requested_run_mode(tool_call: &genai::chat::ToolCall) -> Option<&str> {
 /// Empty means dispatch as usual. The whole batch is inspected rather than one
 /// call at a time because `plan` is a statement about the batch's size, and a
 /// per-call gate would ask about the first task before it knew whether the
-/// second one existed.
+/// second one existed. `is_client_task` names the calls that will run in wait
+/// mode whatever they asked for.
 pub(crate) fn tasks_needing_dispatch_approval(
     effective: &EffectiveTasksConfig,
     batch: &[genai::chat::ToolCall],
     is_task_call: impl Fn(&genai::chat::ToolCall) -> bool,
+    is_client_task: impl Fn(&genai::chat::ToolCall) -> bool,
 ) -> Vec<usize> {
     let task_calls: Vec<usize> = batch
         .iter()
@@ -640,7 +642,10 @@ pub(crate) fn tasks_needing_dispatch_approval(
             }
             task_calls
                 .into_iter()
-                .filter(|index| requested_run_mode(&batch[*index]) == Some("async"))
+                .filter(|index| {
+                    requested_run_mode(&batch[*index]) == Some("async")
+                        && !is_client_task(&batch[*index])
+                })
                 .collect()
         }
     }
@@ -946,8 +951,10 @@ pub fn resolve_delegation_run_mode(
     mode
 }
 
-/// Whether this chat is a delegated run that may park on an approval-gated MCP
-/// call instead of having it refused.
+/// Whether this chat is a delegated run that may park on an approval-gated
+/// call instead of having it refused: an MCP call, or a client call it makes
+/// under its grant. The switch keeps its MCP name because it predates client
+/// tasks; it governs both.
 ///
 /// Every condition is a surface that has to exist. A `task` child is asked
 /// about somewhere — an awaited run on the origin turn's `ToolUse` slot, an
@@ -1119,6 +1126,50 @@ pub struct DelegationResultEnvelope {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub result: Option<String>,
     pub truncated: bool,
+    /// What a client task's result says about its client side; absent for
+    /// every other task.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub client_tools: Option<TaskClientTools>,
+}
+
+/// The client side of a client task's result.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct TaskClientTools {
+    /// Set when the run mode the model asked for was changed.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub run_mode: Option<String>,
+    /// Why the task got no client tools.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub unavailable: Option<String>,
+    /// What the host reported about the context the task's last read saw.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub freshness: Option<serde_json::Value>,
+    /// Granted calls the user declined, so their results are missing.
+    #[serde(skip_serializing_if = "is_zero")]
+    pub declined: u32,
+}
+
+fn is_zero(count: &u32) -> bool {
+    *count == 0
+}
+
+impl TaskClientTools {
+    fn new(
+        note: &crate::models::chat::ClientTaskNote,
+        calls: crate::services::delegated_client_tools::GrantedCallSummary,
+    ) -> Option<Self> {
+        let tools = Self {
+            run_mode: note.run_mode.clone(),
+            unavailable: note.unavailable.clone(),
+            freshness: calls.freshness,
+            declined: calls.declined,
+        };
+        (tools.run_mode.is_some()
+            || tools.unavailable.is_some()
+            || tools.freshness.is_some()
+            || tools.declined > 0)
+            .then_some(tools)
+    }
 }
 
 impl DelegationResultEnvelope {
@@ -1633,14 +1684,13 @@ pub(crate) async fn build_result_envelope<C: sea_orm::ConnectionTrait>(
                 .is_some_and(|role| role == "assistant")
         });
     let assistant_row = assistant_row.as_ref();
+    let content = assistant_row
+        .and_then(|row| row.raw_message.get("content"))
+        .and_then(|content| content.as_array())
+        .cloned()
+        .unwrap_or_default();
 
     if let Some(row) = assistant_row {
-        let content = row
-            .raw_message
-            .get("content")
-            .and_then(|content| content.as_array())
-            .cloned()
-            .unwrap_or_default();
         let stopped_on_approval = crate::models::message::MessageSchema::validate(&row.raw_message)
             .is_ok_and(|message| crate::models::message::is_durable_stop(&message.content));
         if stopped_on_approval && status == DelegationRunStatus::Completed {
@@ -1697,6 +1747,35 @@ pub(crate) async fn build_result_envelope<C: sea_orm::ConnectionTrait>(
         reason = Some(DelegationRunReason::CapExceeded);
     }
 
+    // Read here rather than passed in, so the callers that settle a slot after
+    // a park or from the delivery sweep report it the same way.
+    let client_tools = match crate::db::entity::chats::Entity::find_by_id(child_chat_id)
+        .one(conn)
+        .await
+    {
+        Ok(chat) => chat
+            .as_ref()
+            .and_then(|chat| crate::models::chat::parse_chat_configuration(chat).ok())
+            .flatten()
+            .and_then(|configuration| configuration.task)
+            .and_then(|task| {
+                let calls = task
+                    .client_grant
+                    .as_ref()
+                    .map(|grant| {
+                        crate::services::delegated_client_tools::granted_call_summary(
+                            grant, &content,
+                        )
+                    })
+                    .unwrap_or_default();
+                TaskClientTools::new(task.client_task.as_ref()?, calls)
+            }),
+        Err(error) => {
+            tracing::warn!(%error, %child_chat_id, "Failed to read a task's client note");
+            None
+        }
+    };
+
     DelegationResultEnvelope {
         status,
         reason,
@@ -1707,6 +1786,7 @@ pub(crate) async fn build_result_envelope<C: sea_orm::ConnectionTrait>(
         parent_tool_call_id,
         result: result_text,
         truncated,
+        client_tools,
     }
 }
 
@@ -1855,6 +1935,8 @@ pub(crate) struct LaunchedDelegation {
     /// the batch took and could classify a child the deadline already killed
     /// as a clean completion.
     run_deadline: tokio::time::Instant,
+    /// What the trace reports for the reads the run's grant allows.
+    client_reads: crate::services::delegation_trace::ClientReadFields,
 }
 
 /// What a launch settled into.
@@ -1890,6 +1972,15 @@ pub(crate) struct LaunchRunSpec {
     /// Only an awaited run has one: nothing is waiting on a detached run, so
     /// there is no turn its parked request could be surfaced on.
     pub parent_message_id: Option<Uuid>,
+    /// Set for a client task; never for a mention run. A retry carries only
+    /// the note.
+    pub client_task: Option<ClientTaskLaunchSpec>,
+}
+
+/// A client task's note and, when it got one, its grant.
+pub(crate) struct ClientTaskLaunchSpec {
+    pub note: crate::models::chat::ClientTaskNote,
+    pub grant: Option<crate::models::chat::ClientToolGrant>,
 }
 
 /// Start a delegated child run and return without awaiting it.
@@ -2061,7 +2152,22 @@ pub(crate) async fn launch_delegation(
             DelegationTargetSpec::Assistant(_) => crate::models::chat::DelegateRoute::Assistant,
             DelegationTargetSpec::Task { .. } => crate::models::chat::DelegateRoute::Task,
         },
+        client_grant: run
+            .client_task
+            .as_ref()
+            .and_then(|client_task| client_task.grant.clone()),
+        client_task: run.client_task.map(|client_task| client_task.note),
     };
+    let client_reads = task
+        .client_grant
+        .as_ref()
+        .map(|grant| {
+            crate::services::delegated_client_tools::client_read_fields(
+                &app_state.config.client_tools,
+                grant,
+            )
+        })
+        .unwrap_or_default();
     let child_chat = crate::models::chat::create_delegated_chat(
         &app_state.db,
         policy,
@@ -2125,8 +2231,10 @@ pub(crate) async fn launch_delegation(
         child_task.clone(),
         child_request,
         // Preserve the authenticated caller's routing identity through the
-        // child. This grants no tool: ordinary client tools remain suppressed,
-        // and a synthetic kind must independently authorize this exact scope.
+        // child. This grants no tool by itself: a delegated run is offered
+        // client tools only through the grant written above, which must name
+        // this same binding, and a synthetic kind must independently authorize
+        // this exact scope.
         crate::models::message::GenerationRequestContext {
             executor: context.request_context.executor.clone(),
             registered_client_tools: context.request_context.registered_client_tools.clone(),
@@ -2175,6 +2283,7 @@ pub(crate) async fn launch_delegation(
         spawned_at,
         dispatch_started,
         run_deadline,
+        client_reads,
     }))
 }
 
@@ -2200,12 +2309,13 @@ pub(crate) async fn await_delegation(
         spawned_at,
         dispatch_started,
         run_deadline,
+        client_reads,
     } = launched;
 
     let config = app_state.config.delegation.clone();
     let parent_task = parent.map(|parent| parent.task);
 
-    let mut trace = DelegationTraceCollector::new(dispatch_started);
+    let mut trace = DelegationTraceCollector::new(dispatch_started).with_client_reads(client_reads);
     let mut progress = DelegationProgressEmitter {
         parent,
         tool_call_id: tool_call.call_id.clone(),
@@ -2397,6 +2507,7 @@ pub(crate) async fn dispatch_delegate_tool_call(
             // never park, so a link here would name a turn that can never
             // cover them.
             parent_message_id: None,
+            client_task: None,
         },
         brief,
     )
@@ -2523,36 +2634,58 @@ pub(crate) fn suspended_envelope(
         parent_tool_call_id,
         result: None,
         truncated: false,
+        client_tools: None,
     }
 }
 
 /// The settled output of a slot whose child a continuation resumed.
 ///
-/// The trace is carried over from the part the park left behind rather than
-/// rebuilt: the resumed run's events go to a detached sink, so a fresh trace
-/// would show the user a delegate that did nothing.
+/// The trace is the one the park left behind with the resumed run's steps
+/// folded in, or the parked one as it was when nothing ran.
 pub(crate) fn resumed_slot_output(
     envelope: &DelegationResultEnvelope,
     parked_output: Option<&serde_json::Value>,
+    resumed_trace: Option<&DelegationTrace>,
 ) -> serde_json::Value {
     let mut value =
         serde_json::to_value(envelope).unwrap_or_else(|_| json!({ "status": "failed" }));
-    if let Some(trace) = parked_output.and_then(|output| output.get(DELEGATION_LOCAL_TRACE_KEY))
+    let trace = match resumed_trace {
+        Some(trace) => serde_json::to_value(trace).ok(),
+        None => parked_output
+            .and_then(|output| output.get(DELEGATION_LOCAL_TRACE_KEY))
+            .cloned(),
+    };
+    if let Some(trace) = trace
         && let Some(object) = value.as_object_mut()
     {
-        object.insert(DELEGATION_LOCAL_TRACE_KEY.to_string(), trace.clone());
+        object.insert(DELEGATION_LOCAL_TRACE_KEY.to_string(), trace);
     }
     value
+}
+
+/// The trace a parked slot carries, to go on from when its child resumes.
+pub(crate) fn parked_trace(parked_output: Option<&serde_json::Value>) -> Option<DelegationTrace> {
+    serde_json::from_value(parked_output?.get(DELEGATION_LOCAL_TRACE_KEY)?.clone()).ok()
 }
 
 /// One `delegate_task` call that passed validation and is ready to launch.
 pub(crate) struct PreparedTask {
     pub target: DelegationTargetSpec,
     pub brief: DelegateBrief,
-    /// The mode this call asked for, already checked against the offer.
+    /// The mode this call runs in, already checked against the offer.
     pub run_mode: erato_config::config::TaskRunMode,
     /// Recorded on the child's `TaskSpec`. Only meaningful for `async`.
     pub scheduling: erato_config::config::TaskScheduling,
+    /// Set when the task names a child facet.
+    pub client_task: Option<ClientTaskLaunch>,
+}
+
+/// A client task as validation left it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct ClientTaskLaunch {
+    pub host: erato_config::config::ClientToolHostContext,
+    /// The model asked for `async` and the task runs in wait mode instead.
+    pub coerced: bool,
 }
 
 /// Validate one `delegate_task` call and start its child, without awaiting it.
@@ -2596,10 +2729,31 @@ pub(crate) fn validate_task_tool_call(
     if args.task.trim().is_empty() {
         return Err("The 'task' argument must not be empty.".to_string());
     }
+    // The enum in the schema is advisory — a model can name anything — so
+    // membership is re-checked here against the same list the offer was built
+    // from, which was already authorization-filtered for the chat owner.
+    let mut facet_ids: Vec<String> = Vec::new();
+    for facet_id in args.facet_ids.into_iter().flatten() {
+        if !scope.facet_enum.contains(&facet_id) {
+            return Err(format!(
+                "Capability '{facet_id}' was not offered for tasks on this turn."
+            ));
+        }
+        if !facet_ids.contains(&facet_id) {
+            facet_ids.push(facet_id);
+        }
+    }
+    let client_host = crate::services::delegated_client_tools::client_task_host(
+        &app_state.config.facets,
+        &facet_ids,
+    );
+
     // Re-checked against the effective offer, not against the enum in the
-    // schema: a model can name anything. An explicit unavailable mode is
-    // refused rather than quietly downgraded, so a model cannot believe it
-    // detached work that in fact ran inline.
+    // schema: a model can name anything. A client task runs in wait mode,
+    // because it reads through the pane of the turn that is waiting for it, so
+    // its `async` is coerced and its result says so. Any other unavailable
+    // mode is refused rather than quietly downgraded, so a model cannot
+    // believe it detached work that in fact ran inline.
     let offered = || {
         scope
             .effective
@@ -2609,11 +2763,11 @@ pub(crate) fn validate_task_tool_call(
             .collect::<Vec<_>>()
             .join(", ")
     };
-    let run_mode = match args.run_mode.as_deref() {
-        None => erato_config::config::TaskRunMode::Wait,
-        Some("wait") => erato_config::config::TaskRunMode::Wait,
-        Some("async") => erato_config::config::TaskRunMode::Async,
-        Some(other) => {
+    let (run_mode, coerced) = match (args.run_mode.as_deref(), client_host) {
+        (None | Some("wait"), _) => (erato_config::config::TaskRunMode::Wait, false),
+        (Some("async"), Some(_)) => (erato_config::config::TaskRunMode::Wait, true),
+        (Some("async"), None) => (erato_config::config::TaskRunMode::Async, false),
+        (Some(other), _) => {
             return Err(format!(
                 "Unsupported run_mode '{other}'; available: {}.",
                 offered()
@@ -2648,21 +2802,6 @@ pub(crate) fn validate_task_tool_call(
         erato_config::config::TaskScheduling::default()
     };
 
-    // The enum in the schema is advisory — a model can name anything — so
-    // membership is re-checked here against the same list the offer was built
-    // from, which was already authorization-filtered for the chat owner.
-    let mut facet_ids: Vec<String> = Vec::new();
-    for facet_id in args.facet_ids.into_iter().flatten() {
-        if !scope.facet_enum.contains(&facet_id) {
-            return Err(format!(
-                "Capability '{facet_id}' was not offered for tasks on this turn."
-            ));
-        }
-        if !facet_ids.contains(&facet_id) {
-            facet_ids.push(facet_id);
-        }
-    }
-
     let brief = DelegateBrief {
         task: args.task,
         expected_output: args.expected_output,
@@ -2676,6 +2815,7 @@ pub(crate) fn validate_task_tool_call(
         brief,
         run_mode,
         scheduling,
+        client_task: client_host.map(|host| ClientTaskLaunch { host, coerced }),
     })
 }
 
@@ -3002,6 +3142,7 @@ mod tests {
             parent_tool_call_id: "call-1".to_string(),
             result: result.map(str::to_string),
             truncated: false,
+            client_tools: None,
         }
     }
 
@@ -3141,6 +3282,7 @@ mod tests {
             hidden: false,
             hidden_always_active_for_platform: None,
             delegation: overrides,
+            child_host_context: None,
         }
     }
 
@@ -3400,9 +3542,20 @@ mod tests {
     }
 
     fn gated_ids(effective: &EffectiveTasksConfig, batch: &[genai::chat::ToolCall]) -> Vec<String> {
-        tasks_needing_dispatch_approval(effective, batch, |call| {
-            call.fn_name == erato_config::config::DELEGATE_TASK_TOOL_NAME
-        })
+        gated_ids_with_client_tasks(effective, batch, &[])
+    }
+
+    fn gated_ids_with_client_tasks(
+        effective: &EffectiveTasksConfig,
+        batch: &[genai::chat::ToolCall],
+        client_tasks: &[&str],
+    ) -> Vec<String> {
+        tasks_needing_dispatch_approval(
+            effective,
+            batch,
+            |call| call.fn_name == erato_config::config::DELEGATE_TASK_TOOL_NAME,
+            |call| client_tasks.contains(&call.call_id.as_str()),
+        )
         .into_iter()
         .map(|index| batch[index].call_id.clone())
         .collect()
@@ -3489,6 +3642,34 @@ mod tests {
         assert!(
             gated_ids(&wait_only, &batch).is_empty(),
             "a call that cannot run is not worth a prompt"
+        );
+    }
+
+    /// A client task runs in wait mode whatever it asked for, so `async_only`
+    /// treats it like the awaited calls of its batch.
+    #[test]
+    fn async_only_treats_a_client_task_asking_for_async_as_wait() {
+        let batch = task_batch(&[("client", Some("async")), ("research", Some("async"))]);
+        let offering_async = gate_scope(
+            erato_config::config::TaskApprovalMode::AsyncOnly,
+            2,
+            &[
+                erato_config::config::TaskRunMode::Wait,
+                erato_config::config::TaskRunMode::Async,
+            ],
+        );
+        assert_eq!(
+            gated_ids_with_client_tasks(&offering_async, &batch, &["client"]),
+            vec!["research".to_string()]
+        );
+        let always = gate_scope(
+            erato_config::config::TaskApprovalMode::Always,
+            2,
+            &[erato_config::config::TaskRunMode::Wait],
+        );
+        assert_eq!(
+            gated_ids_with_client_tasks(&always, &batch, &["client"]),
+            vec!["client".to_string(), "research".to_string()]
         );
     }
 

@@ -9,7 +9,6 @@ import { operationExecutorHeaders } from "@/lib/clientOperations/registration";
  */
 
 import type {
-  CallLineage,
   ClientToolSubmissionFeedback,
   ClientToolValidationIssue,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
@@ -44,6 +43,21 @@ export type ClientToolExecutionResult =
     };
 
 /**
+ * The grant a delegated task's call runs under, as the server asserted it.
+ * A handler compares it with its own context before it reads anything.
+ */
+export interface ClientToolHostGrant {
+  /** The turn that owns the client context and granted the task its tools. */
+  ownerChatId: string;
+  ownerMessageId: string;
+  /** The task run that made this call; the same ids as the call's own. */
+  requestingChatId: string;
+  requestingMessageId: string;
+  /** The context version the owner turn captured, when the tool has one. */
+  contextRef?: string;
+}
+
+/**
  * Identifiers of the call being executed. Additive second parameter: existing
  * one-parameter executors stay assignable, and hosts that need to correlate
  * (e.g. keying an on-device trace by tool call, or a consent by chat) opt in.
@@ -61,11 +75,11 @@ export interface ClientToolCallContext {
    */
   signal?: AbortSignal;
   /**
-   * Set only on grant calls pushed over the executor stream: the turn that owns
-   * the client context and the version it granted. A handler checks it against
-   * its local context before reading.
+   * Set only on a delegated task's call, pushed over the executor stream, and
+   * only to an executor registered with `acceptsGrantCalls`. Absent on every
+   * call of the user's own turn.
    */
-  lineage?: CallLineage;
+  hostGrant?: ClientToolHostGrant;
 }
 
 export type ClientToolExecutor = (
@@ -83,7 +97,7 @@ const executors = new Map<
 >();
 
 export interface ClientToolExecutorOptions {
-  /** The handler checks `lineage` and reads without side effects, so a
+  /** The handler checks `hostGrant` and reads without side effects, so a
    * delegated task may call it under a grant. */
   acceptsGrantCalls?: boolean;
 }
@@ -113,6 +127,10 @@ export function getClientToolExecutor(
 ): ClientToolExecutor | undefined {
   const entry = executors.get(name);
   return entry?.isAvailable() ? entry.execute : undefined;
+}
+
+export function clientToolAcceptsGrantCalls(name: string): boolean {
+  return executors.get(name)?.acceptsGrantCalls ?? false;
 }
 
 function availableToolNames(

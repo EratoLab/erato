@@ -40,6 +40,7 @@ async fn test_facets_endpoint(pool: Pool<Postgres>) {
             hidden: false,
             hidden_always_active_for_platform: None,
             delegation: None,
+            child_host_context: None,
         },
     );
     facets.insert(
@@ -56,6 +57,7 @@ async fn test_facets_endpoint(pool: Pool<Postgres>) {
             hidden: false,
             hidden_always_active_for_platform: None,
             delegation: None,
+            child_host_context: None,
         },
     );
 
@@ -286,6 +288,7 @@ async fn test_facets_endpoint_filters_by_policy(pool: Pool<Postgres>) {
             hidden: false,
             hidden_always_active_for_platform: None,
             delegation: None,
+            child_host_context: None,
         },
     );
     facets.insert(
@@ -302,6 +305,7 @@ async fn test_facets_endpoint_filters_by_policy(pool: Pool<Postgres>) {
             hidden: false,
             hidden_always_active_for_platform: None,
             delegation: None,
+            child_host_context: None,
         },
     );
 

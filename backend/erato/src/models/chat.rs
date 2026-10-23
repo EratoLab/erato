@@ -162,6 +162,44 @@ pub struct TaskSpec {
     /// tail never got to write anything.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub parent_tool_call_id: Option<String>,
+    /// The client tools this run may call on its parent's executor, written
+    /// once at launch. The only way a delegated run is ever offered a client
+    /// tool, and never written for a retry or a mention run.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub client_grant: Option<ClientToolGrant>,
+    /// Set on a client task, whether or not it got a grant, so its result can
+    /// say how it ran and why it had no client tools.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub client_task: Option<ClientTaskNote>,
+}
+
+/// A server-asserted grant: the tools a client task may call live on the
+/// executor that served the turn which planned it, for as long as that turn
+/// owns the client context. A grant without a dispatch mode is live-only.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ClientToolGrant {
+    /// Qualified (`namespace/name`) names.
+    pub tools: Vec<String>,
+    pub binding: crate::services::client_operations::ExecutorBinding,
+    pub owner_chat_id: Uuid,
+    /// The parent's assistant row; the grant holds while its generation runs.
+    pub owner_message_id: Uuid,
+    /// Opaque client context version from the owner turn's action-facet
+    /// arguments, written into each call's input in place of the model's.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context_ref: Option<String>,
+}
+
+/// What a client task's result reports about its client side.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ClientTaskNote {
+    pub host_context: erato_config::config::ClientToolHostContext,
+    /// Set when the run mode the model asked for was changed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub run_mode: Option<String>,
+    /// Why the task got no client tools, when it got none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub unavailable: Option<String>,
 }
 
 /// The offer route a delegated run came from.

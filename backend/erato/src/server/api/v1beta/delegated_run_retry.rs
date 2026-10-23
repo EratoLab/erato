@@ -629,6 +629,10 @@ pub async fn retry_delegated_run(
         background_dispatches: std::sync::atomic::AtomicUsize::new(0),
         task_scope: Some(task_scope),
         tasks_this_turn: std::sync::atomic::AtomicUsize::new(0),
+        // A retry is never granted client tools: nothing awaits it, and the
+        // turn that owned the client context is long over.
+        parent_client_tools: Vec::new(),
+        action_facet_args: None,
     };
 
     let launched = crate::services::delegation::launch_delegation(
@@ -652,6 +656,18 @@ pub async fn retry_delegated_run(
             // A retry is always `async`: no turn is awaiting it, so there is no
             // approval surface to link to.
             parent_message_id: None,
+            client_task: crate::services::delegated_client_tools::client_task_host(
+                &app_state.config.facets,
+                &facet_ids,
+            )
+            .map(|host| crate::services::delegation::ClientTaskLaunchSpec {
+                note: crate::models::chat::ClientTaskNote {
+                    host_context: host,
+                    run_mode: None,
+                    unavailable: Some(crate::services::delegated_client_tools::RETRIED.to_string()),
+                },
+                grant: None,
+            }),
         },
         brief,
     )

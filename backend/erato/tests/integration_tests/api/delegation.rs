@@ -1498,6 +1498,10 @@ async fn test_delegation_happy_path_runs_child_and_returns_envelope(pool: Pool<P
             submission: None,
             replay: Default::default(),
             durable: None,
+            child_access: Default::default(),
+            host_context: None,
+            child_context_arg: None,
+            child_context_input: None,
         },
     );
     app_config.facets.tool_call_allowlist = vec!["client/*".to_string()];
@@ -7405,6 +7409,7 @@ async fn task_state(
             hidden: false,
             hidden_always_active_for_platform: None,
             delegation: None,
+            child_host_context: None,
         },
     );
     tweak(&mut app_config);
@@ -7878,6 +7883,7 @@ fn word_task_config(config: &mut erato::config::AppConfig) {
                 hidden: false,
                 hidden_always_active_for_platform: None,
                 delegation: None,
+                child_host_context: None,
             },
         );
     }
@@ -8290,6 +8296,10 @@ async fn a_task_planned_on_a_word_turn_gets_no_word_client_tools(pool: Pool<Post
                 submission: None,
                 replay: Default::default(),
                 durable: None,
+                child_access: Default::default(),
+                host_context: None,
+                child_context_arg: None,
+                child_context_input: None,
             },
         );
         let mut word_tools = config.facets.facets["files"].clone();
@@ -11173,6 +11183,8 @@ async fn seed_child_before_recording(
             scheduling,
             parent_tool_call_id: Some("call_seeded".to_string()),
             route: erato::models::chat::DelegateRoute::Task,
+            client_grant: None,
+            client_task: None,
         }),
         "Seeded async run".to_string(),
         true,
@@ -13242,6 +13254,10 @@ async fn react_offers_optional_client_tools_only_when_registered(pool: Pool<Post
                 submission: None,
                 replay: Default::default(),
                 durable: None,
+                child_access: Default::default(),
+                host_context: None,
+                child_context_arg: None,
+                child_context_input: None,
             },
         );
     }
@@ -13950,6 +13966,8 @@ fn retry_task_spec() -> erato::models::chat::TaskSpec {
         scheduling: erato_config::config::TaskScheduling::WhenIdle,
         parent_tool_call_id: Some(RETRY_CALL_ID.to_string()),
         route: erato::models::chat::DelegateRoute::Task,
+        client_grant: None,
+        client_task: None,
     }
 }
 
@@ -14449,6 +14467,7 @@ async fn retry_reauthorizes_facets_for_the_owner(pool: Pool<Postgres>) {
                         hidden: false,
                         hidden_always_active_for_platform: None,
                         delegation: None,
+                        child_host_context: None,
                     },
                 );
             }

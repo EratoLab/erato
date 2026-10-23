@@ -6465,6 +6465,17 @@
           "input": {
             "$ref": "#/components/schemas/Value"
           },
+          "kind": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ToolApprovalKind",
+                "description": "What the child's gated call is: `mcp_tool` or `client_tool`. Absent on\nitems recorded before client tasks could park, which were all MCP."
+              }
+            ]
+          },
           "mcp_server_id": {
             "type": "string"
           },

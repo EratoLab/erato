@@ -32,6 +32,18 @@ pub struct OfferedClientTool {
     pub inbox_only: bool,
     pub timeout_ms: Option<u64>,
     pub submission: Option<SubmissionPolicy>,
+    /// Set only when a delegated run is offered the tool under its grant.
+    pub grant: Option<GrantedCall>,
+}
+
+/// What a granted call carries to the executor besides the model's input.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct GrantedCall {
+    pub owner_chat_id: sea_orm::prelude::Uuid,
+    pub owner_message_id: sea_orm::prelude::Uuid,
+    pub context_ref: Option<String>,
+    /// The input field that receives `context_ref`.
+    pub context_input: Option<String>,
 }
 
 #[derive(Clone)]
@@ -82,6 +94,7 @@ impl OfferedClientTool {
             inbox_only: false,
             timeout_ms: config.timeout_ms,
             submission,
+            grant: None,
         })
     }
 }
@@ -821,6 +834,10 @@ mod tests {
             submission: None,
             replay: Default::default(),
             durable: None,
+            child_access: Default::default(),
+            host_context: None,
+            child_context_arg: None,
+            child_context_input: None,
         }
     }
 

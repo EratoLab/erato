@@ -2,8 +2,9 @@
 //! events and rendered under the parent chat's delegation tool step.
 
 use crate::services::background_tasks::{StreamingEvent, ToolCallStatus};
-use std::collections::HashMap;
-use std::time::Instant;
+use serde_json::Value;
+use std::collections::{BTreeMap, HashMap};
+use std::time::{Duration, Instant};
 
 /// The frontend sanitizer drops steps past this count.
 const MAX_STEPS: usize = 32;
@@ -14,6 +15,16 @@ const MAX_DETAIL_CHARS: usize = 120;
 /// Step id of the delegate's final answer.
 const ANSWER_STEP_ID: &str = "answer";
 
+/// The schema's bound on a step's `counts`.
+const MAX_COUNTS: usize = 16;
+
+/// Longest freshness token or count key a step repeats from a host.
+const MAX_HOST_TOKEN_CHARS: usize = 32;
+
+/// For each granted client tool, by model-facing name, the input paths that
+/// name the part a call read.
+pub type ClientReadFields = HashMap<String, Vec<Vec<String>>>;
+
 /// One step of a delegated run. Wire shape is `SidecarLocalTraceStep`, whose
 /// canonical schema lives in
 /// `desktop-sidecar-protocol/schemas/outlook/local-trace-step.schema.json` —
@@ -22,7 +33,7 @@ const ANSWER_STEP_ID: &str = "answer";
 /// The optional `parentSequence` is deliberately never emitted: v1 traces are
 /// flat, and the nesting the user sees comes from the trace as a whole hanging
 /// under the parent's delegation step.
-#[derive(Debug, Clone, serde::Serialize)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DelegationTraceStep {
     pub sequence: u32,
@@ -34,9 +45,12 @@ pub struct DelegationTraceStep {
     pub duration_ms: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub detail: Option<String>,
+    /// A granted client read's freshness counts.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub counts: Option<BTreeMap<String, u64>>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum DelegationTraceStepStatus {
     Running,
@@ -47,7 +61,7 @@ pub enum DelegationTraceStepStatus {
 
 /// The cumulative trace carried by every progress frame and by the persisted
 /// tool output.
-#[derive(Debug, Clone, serde::Serialize)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DelegationTrace {
     pub steps: Vec<DelegationTraceStep>,
@@ -69,7 +83,8 @@ pub enum TraceChange {
 /// Only metadata is kept. The trace is rendered in the PARENT's chat, so the
 /// child's text — model output, and everything the delegate's tools returned
 /// into it — must never reach a step: step ids are tool names and `detail`
-/// carries error discriminants.
+/// carries error discriminants. A granted client read adds the part it asked
+/// for and the freshness the host reported, never what it read.
 pub struct DelegationTraceCollector {
     started: Instant,
     steps: Vec<DelegationTraceStep>,
@@ -77,6 +92,7 @@ pub struct DelegationTraceCollector {
     answer_step: Option<usize>,
     total_duration_ms: Option<u64>,
     version: u64,
+    client_reads: ClientReadFields,
 }
 
 impl DelegationTraceCollector {
@@ -88,7 +104,27 @@ impl DelegationTraceCollector {
             answer_step: None,
             total_duration_ms: None,
             version: 0,
+            client_reads: HashMap::new(),
         }
+    }
+
+    /// Goes on from the trace a parked run left behind, so the steps of the
+    /// resumed run follow the ones the user has already seen.
+    pub fn resumed(trace: DelegationTrace) -> Self {
+        let parked_for = Duration::from_millis(trace.total_duration_ms.unwrap_or(0));
+        let mut collector = Self::new(
+            Instant::now()
+                .checked_sub(parked_for)
+                .unwrap_or_else(Instant::now),
+        );
+        collector.steps = trace.steps;
+        collector.steps.truncate(MAX_STEPS);
+        collector
+    }
+
+    pub fn with_client_reads(mut self, client_reads: ClientReadFields) -> Self {
+        self.client_reads = client_reads;
+        self
     }
 
     /// Bumped on every change, so an emitter can tell whether the trace it
@@ -113,17 +149,26 @@ impl DelegationTraceCollector {
                 tool_name,
                 ..
             } => {
-                self.retract_open_answer();
-                let index = self.open_step(tool_name.clone())?;
-                self.step_by_tool_call.insert(tool_call_id.clone(), index);
+                self.step_for_call(tool_call_id, tool_name)?;
                 Some(TraceChange::Structural)
             }
             StreamingEvent::ToolCallUpdate {
                 tool_call_id,
+                tool_name,
                 status,
+                input,
+                output,
                 ..
             } => {
-                let index = *self.step_by_tool_call.get(tool_call_id)?;
+                // A resumed run goes on with the call its park left open
+                // without proposing it again.
+                let index = match self.step_by_tool_call.get(tool_call_id) {
+                    Some(index) => *index,
+                    None => self.step_for_call(tool_call_id, tool_name)?,
+                };
+                if matches!(status, ToolCallStatus::Success) {
+                    self.report_client_read(index, tool_name, input.as_ref(), output.as_ref());
+                }
                 let (status, change) = match status {
                     ToolCallStatus::Preparing | ToolCallStatus::InProgress => {
                         (DelegationTraceStepStatus::Running, TraceChange::Progress)
@@ -202,6 +247,85 @@ impl DelegationTraceCollector {
         self.version += 1;
     }
 
+    /// The step a call reports on: the one its run's park left open, or a
+    /// new one. A park leaves `degraded` exactly the calls it stopped on, and
+    /// nothing else in a running trace is.
+    fn step_for_call(&mut self, tool_call_id: &str, tool_name: &str) -> Option<usize> {
+        self.retract_open_answer();
+        let parked = self.steps.iter().enumerate().rposition(|(index, step)| {
+            step.id == tool_name
+                && step.status == DelegationTraceStepStatus::Degraded
+                && !self.step_by_tool_call.values().any(|taken| *taken == index)
+        });
+        let index = match parked {
+            Some(index) => {
+                let elapsed = self.elapsed_ms();
+                let step = &mut self.steps[index];
+                step.status = DelegationTraceStepStatus::Running;
+                step.started_at_offset_ms = Some(elapsed);
+                step.duration_ms = None;
+                self.version += 1;
+                index
+            }
+            None => self.open_step(tool_name.to_string())?,
+        };
+        self.step_by_tool_call
+            .insert(tool_call_id.to_string(), index);
+        Some(index)
+    }
+
+    /// Writes what a granted client read's step says: the part it asked for
+    /// and the freshness the host reported. Any other tool's step is left be.
+    fn report_client_read(
+        &mut self,
+        index: usize,
+        tool_name: &str,
+        input: Option<&Value>,
+        output: Option<&Value>,
+    ) {
+        let Some(paths) = self.client_reads.get(tool_name) else {
+            return;
+        };
+        let part = paths
+            .iter()
+            .filter_map(|path| {
+                let value = path
+                    .iter()
+                    .try_fold(input?, |value, key| value.get(key.as_str()))?;
+                match value {
+                    Value::String(text) => Some(text.clone()),
+                    Value::Number(number) => Some(number.to_string()),
+                    _ => None,
+                }
+            })
+            .collect::<Vec<_>>()
+            .join(", ");
+        let freshness = output.and_then(|output| output.pointer("/result/freshness"));
+        let changes = freshness
+            .and_then(|freshness| freshness.get("changes"))
+            .and_then(Value::as_str)
+            .filter(|changes| host_token(changes));
+        let counts: BTreeMap<String, u64> = freshness
+            .and_then(|freshness| freshness.get("counts"))
+            .and_then(Value::as_object)
+            .into_iter()
+            .flatten()
+            .filter(|(key, _)| host_token(key))
+            .filter_map(|(key, count)| Some((key.clone(), count.as_u64()?)))
+            .take(MAX_COUNTS)
+            .collect();
+        let detail = match (part.is_empty(), changes) {
+            (false, Some(changes)) => Some(format!("{part} · changes: {changes}")),
+            (false, None) => Some(part),
+            (true, Some(changes)) => Some(format!("changes: {changes}")),
+            (true, None) => None,
+        };
+        if let Some(step) = self.steps.get_mut(index) {
+            step.detail = detail.as_deref().map(bounded_detail);
+            step.counts = (!counts.is_empty()).then_some(counts);
+        }
+    }
+
     fn open_step(&mut self, id: String) -> Option<usize> {
         if self.steps.len() >= MAX_STEPS {
             return None;
@@ -214,6 +338,7 @@ impl DelegationTraceCollector {
             started_at_offset_ms: Some(self.elapsed_ms()),
             duration_ms: None,
             detail: None,
+            counts: None,
         });
         self.version += 1;
         Some(index)
@@ -262,6 +387,15 @@ impl DelegationTraceCollector {
 
 fn bounded_detail(value: &str) -> String {
     value.chars().take(MAX_DETAIL_CHARS).collect()
+}
+
+/// A short vocabulary word such as `in-scope` or `remote`, never prose.
+fn host_token(value: &str) -> bool {
+    !value.is_empty()
+        && value.chars().count() <= MAX_HOST_TOKEN_CHARS
+        && value
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
 }
 
 #[cfg(test)]
@@ -442,6 +576,127 @@ mod tests {
         }
     }
 
+    fn granted_read(tool_call_id: &str, status: ToolCallStatus, output: Value) -> StreamingEvent {
+        StreamingEvent::ToolCallUpdate {
+            message_id: Uuid::nil(),
+            content_index: 0,
+            tool_call_id: tool_call_id.to_string(),
+            tool_name: "read_document_blocks".to_string(),
+            input: Some(json!({"snapshot": "SHOULD-NOT-LEAK", "part": "intro", "limit": 3})),
+            status,
+            progress_message: None,
+            progress: None,
+            total: None,
+            output: Some(output),
+        }
+    }
+
+    fn reads() -> ClientReadFields {
+        HashMap::from([(
+            "read_document_blocks".to_string(),
+            vec![vec!["part".to_string()], vec!["limit".to_string()]],
+        )])
+    }
+
+    #[test]
+    fn a_granted_read_reports_the_part_it_asked_for_and_its_freshness() {
+        let mut collector =
+            DelegationTraceCollector::new(Instant::now()).with_client_reads(reads());
+        collector.apply(&tool_proposed("call_1", "read_document_blocks"));
+        collector.apply(&granted_read(
+            "call_1",
+            ToolCallStatus::Success,
+            json!({"status": "success", "result": {
+                "text": "SHOULD-NOT-LEAK",
+                "freshness": {
+                    "context_ref": "SHOULD-NOT-LEAK",
+                    "changes": "elsewhere",
+                    "counts": {"own": 1, "local": 0, "remote": 2, "unknown": 0,
+                               "SHOULD NOT LEAK": 1, "negative": -1},
+                },
+            }}),
+        ));
+        collector.apply(&tool_proposed("call_2", "search_web"));
+        collector.apply(&tool_update("call_2", ToolCallStatus::Success));
+
+        let trace = collector.snapshot();
+        assert!(!serde_json::to_string(&trace).unwrap().contains("SHOULD"));
+        assert_eq!(trace.steps[0].status, DelegationTraceStepStatus::Ok);
+        assert_eq!(
+            trace.steps[0].detail.as_deref(),
+            Some("intro, 3 · changes: elsewhere")
+        );
+        assert_eq!(
+            trace.steps[0].counts,
+            Some(BTreeMap::from([
+                ("local".to_string(), 0),
+                ("own".to_string(), 1),
+                ("remote".to_string(), 2),
+                ("unknown".to_string(), 0),
+            ]))
+        );
+        assert_eq!(trace.steps[1].detail, None);
+        assert_eq!(trace.steps[1].counts, None);
+
+        let mut without_freshness =
+            DelegationTraceCollector::new(Instant::now()).with_client_reads(reads());
+        without_freshness.apply(&tool_proposed("call_1", "read_document_blocks"));
+        without_freshness.apply(&granted_read(
+            "call_1",
+            ToolCallStatus::Success,
+            json!({"status": "success", "result": {"text": "SHOULD-NOT-LEAK"}}),
+        ));
+        let step = &without_freshness.snapshot().steps[0];
+        assert_eq!(step.detail.as_deref(), Some("intro, 3"));
+        assert_eq!(step.counts, None);
+    }
+
+    #[test]
+    fn a_resumed_run_goes_on_from_the_step_its_park_left_open() {
+        let mut parked = DelegationTraceCollector::new(Instant::now());
+        parked.apply(&tool_proposed("call_1", "search_web"));
+        parked.apply(&tool_update("call_1", ToolCallStatus::Success));
+        parked.apply(&tool_proposed("call_2", "read_document_blocks"));
+        parked.finish();
+        let parked = serde_json::from_value::<DelegationTrace>(
+            serde_json::to_value(parked.snapshot()).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(parked.steps[1].status, DelegationTraceStepStatus::Degraded);
+
+        let mut resumed = DelegationTraceCollector::resumed(parked).with_client_reads(reads());
+        resumed.apply(&granted_read(
+            "call_2",
+            ToolCallStatus::InProgress,
+            json!({"status": "in_progress"}),
+        ));
+        assert_eq!(
+            resumed.snapshot().steps[1].status,
+            DelegationTraceStepStatus::Running
+        );
+        resumed.apply(&granted_read(
+            "call_2",
+            ToolCallStatus::Success,
+            json!({"status": "success", "result": {"freshness": {"changes": "none"}}}),
+        ));
+        resumed.apply(&text_delta("SHOULD-NOT-LEAK"));
+        resumed.apply(&message_completed());
+        resumed.finish();
+
+        let trace = resumed.snapshot();
+        let ids: Vec<&str> = trace.steps.iter().map(|step| step.id.as_str()).collect();
+        assert_eq!(ids, ["search_web", "read_document_blocks", "answer"]);
+        for (index, step) in trace.steps.iter().enumerate() {
+            assert_eq!(step.sequence as usize, index);
+            assert_eq!(step.status, DelegationTraceStepStatus::Ok);
+        }
+        assert_eq!(
+            trace.steps[1].detail.as_deref(),
+            Some("intro, 3 · changes: none")
+        );
+        assert!(trace.total_duration_ms.is_some());
+    }
+
     #[test]
     fn serialized_step_matches_the_sidecar_shape() {
         let mut collector = DelegationTraceCollector::new(Instant::now());
@@ -454,6 +709,7 @@ mod tests {
         assert!(step["startedAtOffsetMs"].is_number());
         assert!(step.get("durationMs").is_none());
         assert!(step.get("detail").is_none());
+        assert!(step.get("counts").is_none());
         assert!(step.get("parentSequence").is_none());
         assert!(value.get("totalDurationMs").is_none());
     }
