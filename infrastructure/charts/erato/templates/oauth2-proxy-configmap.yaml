@@ -7,7 +7,7 @@ metadata:
   labels: {{- include "common.labels.standard" ( dict "customLabels" .Values.commonLabels "context" $ ) | nindent 4 }}
 data:
   oauth2-proxy.cfg: |-
-{{ .Values.oauth2Proxy.config | indent 4 }}
+{{ tpl .Values.oauth2Proxy.config . | indent 4 }}
 {{- if .Values.oauth2Proxy.redis.enabled }}
     session_store_type = "redis"
     redis_connection_url = "redis://{{ .Release.Name }}-oauth2-proxy-redis:6379"

@@ -20,6 +20,7 @@ spec:
       annotations:
         reloader.stakater.com/auto: "true"
     spec:
+      {{- include "erato-local.imagePullSecrets" . | nindent 6 }}
       containers:
         - name: nginx
           image: "{{ .Values.nginxAuth.embeddedHost.image.repository }}:{{ .Values.nginxAuth.embeddedHost.image.tag }}"
