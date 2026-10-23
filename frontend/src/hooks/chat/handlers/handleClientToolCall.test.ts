@@ -160,6 +160,45 @@ describe("handleClientToolCall", () => {
     }
   });
 
+  it("passes a grant call's lineage and answers with the executor stream's binding", async () => {
+    const execute = vi.fn(async () => ({ ok: true as const, result: null }));
+    registerClientToolExecutor("fetch_availability", execute);
+    const executor = {
+      device_id: "pane-device-000000",
+      realm: "office-addin" as const,
+      host_context: { kind: "outlook_mailbox", identity: "a".repeat(64) },
+    };
+    const lineage = {
+      owner_chat_id: "chat-0",
+      owner_message_id: "msg-0",
+      requesting_chat_id: "chat-1",
+      requesting_message_id: "msg-1",
+      context_ref: "capture-1",
+    };
+    const unregister = registerOperationExecutor("fetch_availability", () => ({
+      ...executor,
+      device_id: "other-device-00000",
+    }));
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({ delivered: true, stored: false }),
+    });
+    try {
+      await handleClientToolCall(makeEvent(), { ...deps, executor, lineage });
+      expect(execute).toHaveBeenCalledWith(
+        { window_start: "x" },
+        expect.objectContaining({ chatId: "chat-1", lineage }),
+      );
+      const init = fetchMock.mock.calls[0][1] as RequestInit;
+      expect((init.headers as Record<string, string>)["X-Erato-Executor"]).toBe(
+        JSON.stringify(executor),
+      );
+    } finally {
+      unregister();
+    }
+  });
+
   describe("with an operation binding", () => {
     const sweep = vi.fn<() => void>();
     let unregister: () => void;

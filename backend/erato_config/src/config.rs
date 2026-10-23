@@ -5238,6 +5238,13 @@ pub struct ClientToolsConfig {
     /// `[client_tools.tools.<id>.durable]` table.
     #[serde(default)]
     pub durable_operations_enabled: bool,
+    /// Let a client open one executor stream per binding
+    /// (`GET /me/client-operations/stream`). Live client tool calls from any of
+    /// the account's chats then reach the stream that serves their binding when
+    /// no stream of the calling chat can take them, and new durable operations
+    /// for that binding are announced on it.
+    #[serde(default)]
+    pub executor_stream_enabled: bool,
     /// Client tools keyed by config tool id. The id is the override handle; the
     /// model-facing name is each tool's `name` field.
     #[serde(default)]

@@ -179,11 +179,13 @@ async fn test_app_state_internal(
             .enabled
             .then_some(app_config.delegation.run_timeout_seconds),
     );
-    let background_tasks = background_tasks.with_lease_identity_guard(
-        app_config.delegation.tasks.enabled
-            || app_config.client_tools.durable_operations_enabled
-            || app_config.chat_history_compaction.enabled,
-    );
+    let background_tasks = background_tasks
+        .with_lease_identity_guard(
+            app_config.delegation.tasks.enabled
+                || app_config.client_tools.durable_operations_enabled
+                || app_config.chat_history_compaction.enabled,
+        )
+        .with_executor_stream_cleanup(app_config.client_tools.executor_stream_enabled);
     let distribution = Arc::new(erato::distribution::Distribution::load(&app_config));
     let mcp_servers = McpServers::new(&app_config);
     let reloadable = ReloadableAppState::new(&app_config, mcp_servers);
@@ -207,6 +209,7 @@ async fn test_app_state_internal(
             local_delegation_signer.as_ref(),
         )
         .unwrap(),
+        executor_streams: Default::default(),
         local_delegation_signer,
         ms_teams_bot: None,
         entra_group_overage:

@@ -363,6 +363,7 @@
     "needs_scoped_replacement": true
   },
   "client_tools.durable_operations_enabled": {},
+  "client_tools.executor_stream_enabled": {},
   "client_tools.tools.<key>.description": {},
   "client_tools.tools.<key>.durable.attempt_expiry_secs": {},
   "client_tools.tools.<key>.durable.claim_lease_secs": {},

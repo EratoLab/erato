@@ -300,10 +300,20 @@ fn native_schema_compatible(schema: &Value) -> bool {
 
 /// Bounded availability hints. Config and facet allowlists remain authoritative.
 pub fn registered_client_tools(headers: &axum::http::HeaderMap) -> Vec<String> {
-    let Some(value) = headers
-        .get("X-Erato-Client-Tools")
-        .and_then(|v| v.to_str().ok())
-    else {
+    client_tool_names(headers, "X-Erato-Client-Tools")
+}
+
+/// The registered tools whose handlers accept grant calls. Never part of the
+/// executor binding, which an older backend would drop for an unknown field.
+pub fn child_client_tools(headers: &axum::http::HeaderMap) -> Vec<String> {
+    let registered = registered_client_tools(headers);
+    let mut names = client_tool_names(headers, "X-Erato-Child-Client-Tools");
+    names.retain(|name| registered.contains(name));
+    names
+}
+
+fn client_tool_names(headers: &axum::http::HeaderMap, header: &str) -> Vec<String> {
+    let Some(value) = headers.get(header).and_then(|v| v.to_str().ok()) else {
         return Vec::new();
     };
     if value.len() > 8319 {
@@ -743,6 +753,26 @@ mod tests {
             HeaderValue::from_str(&"x".repeat(8320)).unwrap(),
         );
         assert!(registered_client_tools(&headers).is_empty());
+    }
+
+    #[test]
+    fn child_client_tools_are_a_subset_of_the_registered_tools() {
+        use axum::http::{HeaderMap, HeaderValue};
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            "X-Erato-Child-Client-Tools",
+            HeaderValue::from_static("read_document_blocks"),
+        );
+        assert!(child_client_tools(&headers).is_empty());
+        headers.insert(
+            "X-Erato-Client-Tools",
+            HeaderValue::from_static("read_document_blocks,submit_plan"),
+        );
+        headers.insert(
+            "X-Erato-Child-Client-Tools",
+            HeaderValue::from_static("read_document_blocks, unregistered, bad/name"),
+        );
+        assert_eq!(child_client_tools(&headers), vec!["read_document_blocks"]);
     }
 
     #[test]

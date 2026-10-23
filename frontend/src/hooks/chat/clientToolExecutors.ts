@@ -9,6 +9,7 @@ import { operationExecutorHeaders } from "@/lib/clientOperations/registration";
  */
 
 import type {
+  CallLineage,
   ClientToolSubmissionFeedback,
   ClientToolValidationIssue,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
@@ -59,6 +60,12 @@ export interface ClientToolCallContext {
    * invoke's `signal`) so a stopped turn stops the device too.
    */
   signal?: AbortSignal;
+  /**
+   * Set only on grant calls pushed over the executor stream: the turn that owns
+   * the client context and the version it granted. A handler checks it against
+   * its local context before reading.
+   */
+  lineage?: CallLineage;
 }
 
 export type ClientToolExecutor = (
@@ -68,16 +75,31 @@ export type ClientToolExecutor = (
 
 const executors = new Map<
   string,
-  { execute: ClientToolExecutor; isAvailable: () => boolean }
+  {
+    execute: ClientToolExecutor;
+    isAvailable: () => boolean;
+    acceptsGrantCalls: boolean;
+  }
 >();
+
+export interface ClientToolExecutorOptions {
+  /** The handler checks `lineage` and reads without side effects, so a
+   * delegated task may call it under a grant. */
+  acceptsGrantCalls?: boolean;
+}
 
 /** Register an executor by tool name; returns an unregister function. */
 export function registerClientToolExecutor(
   name: string,
   executor: ClientToolExecutor,
   isAvailable: () => boolean = () => true,
+  options: ClientToolExecutorOptions = {},
 ): () => void {
-  const entry = { execute: executor, isAvailable };
+  const entry = {
+    execute: executor,
+    isAvailable,
+    acceptsGrantCalls: options.acceptsGrantCalls ?? false,
+  };
   executors.set(name, entry);
   return () => {
     if (executors.get(name) === entry) {
@@ -93,16 +115,24 @@ export function getClientToolExecutor(
   return entry?.isAvailable() ? entry.execute : undefined;
 }
 
-/** A capability hint only; server configuration and facet allowlists still decide. */
-export function getClientToolHeaders(): Record<string, string> {
-  const names = [...executors.entries()]
+function availableToolNames(
+  accepts: (entry: { acceptsGrantCalls: boolean }) => boolean,
+): string[] {
+  return [...executors.entries()]
     .filter(
       ([name, entry]) =>
-        /^[a-zA-Z0-9_-]{1,64}$/.test(name) && entry.isAvailable(),
+        /^[a-zA-Z0-9_-]{1,64}$/.test(name) &&
+        accepts(entry) &&
+        entry.isAvailable(),
     )
     .map(([name]) => name)
     .sort()
     .slice(0, 128);
+}
+
+/** A capability hint only; server configuration and facet allowlists still decide. */
+export function getClientToolHeaders(): Record<string, string> {
+  const names = availableToolNames(() => true);
   const operations = operationExecutorHeaders();
   const allNames = [
     ...new Set([
@@ -113,6 +143,12 @@ export function getClientToolHeaders(): Record<string, string> {
     .sort()
     .slice(0, 128);
   return { ...operations, "X-Erato-Client-Tools": allNames.join(",") };
+}
+
+/** The tools whose handlers accept grant calls, for the executor stream only. */
+export function getChildClientToolHeaders(): Record<string, string> {
+  const names = availableToolNames((entry) => entry.acceptsGrantCalls);
+  return names.length ? { "X-Erato-Child-Client-Tools": names.join(",") } : {};
 }
 
 // tool_call_ids handled this session, so a resumestream replay never re-runs a

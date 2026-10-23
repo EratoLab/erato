@@ -943,9 +943,29 @@ pub fn build_openai_narrated_tool_calls_streaming_response(
     actions
 }
 
+/// Like [`build_openai_narrated_tool_calls_streaming_response`], with `pause`
+/// between the preamble and the tool calls.
+pub fn build_openai_paused_tool_calls_streaming_response(
+    preamble: &str,
+    pause: Duration,
+    tool_calls: &[(&str, &str, Value)],
+) -> Vec<BodyAction> {
+    let mut actions = build_openai_narrated_tool_calls_streaming_response(preamble, tool_calls);
+    actions.insert(2, BodyAction::Delay(pause));
+    actions
+}
+
 /// Builds an OpenAI-compatible SSE stream for a plain text assistant turn.
 pub fn build_openai_text_streaming_response(chunks: &[&str]) -> Vec<BodyAction> {
     build_delayed_streaming_response(chunks.to_vec(), 0)
+}
+
+/// Like [`build_openai_text_streaming_response`], with `delay` after each chunk.
+pub fn build_openai_delayed_text_streaming_response(
+    chunks: &[&str],
+    delay: Duration,
+) -> Vec<BodyAction> {
+    build_delayed_streaming_response(chunks.to_vec(), delay.as_millis() as u64)
 }
 
 fn request_body_string(req: &Request) -> String {

@@ -650,6 +650,7 @@ mod tests {
             default_file_storage_provider: None,
             file_storage_providers: Default::default(),
             client_operations: Default::default(),
+            executor_streams: Default::default(),
             prompt_guardrails: Arc::new(
                 crate::services::prompt_guardrails::CompiledPromptGuardrails::new(&config.guardrails)
                     .unwrap(),

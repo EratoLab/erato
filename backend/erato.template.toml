@@ -691,6 +691,10 @@ chat_provider_ids = ["test-token-limit"]
 # # local evidence, and configured tools that opt in with a `durable` table
 # # below. Enabling this alone does not make any other tool durable.
 # durable_operations_enabled = false
+# # Dark by default. Lets a client pane open one executor stream for its
+# # binding. Live calls from chats without a connected stream of their own are
+# # pushed to it, and new durable operations for the binding are announced on it.
+# executor_stream_enabled = false
 #
 # [client_tools.tools.outlook_fetch_availability]
 # # Model-facing name; keep it dot-free (OpenAI/Anthropic reject "." in tool
