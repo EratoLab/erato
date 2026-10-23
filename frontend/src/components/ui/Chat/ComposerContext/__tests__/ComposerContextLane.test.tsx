@@ -375,8 +375,11 @@ describe("ComposerContextLane", () => {
           selector: '[data-ui="composer-context-chip-label"]',
         });
       expect(label("a.docx")).toHaveClass("shrink-0");
+      // shrink-[2] comes later in the stylesheet and would win over shrink-0.
+      expect(label("a.docx")).not.toHaveClass("shrink-[2]");
       expect(label("a.docx")).not.toHaveClass("min-w-[7em]");
       expect(label("Supply agreement.docx")).toHaveClass("min-w-[7em]");
+      expect(label("Supply agreement.docx")).toHaveClass("shrink-[2]");
     });
 
     it("counts wide characters twice, so a short CJK name still truncates", () => {
@@ -399,6 +402,7 @@ describe("ComposerContextLane", () => {
       expect(label("供应协议最终版本文件")).toHaveClass("min-w-[7em]");
       expect(label("供应协议最终版本文件")).not.toHaveClass("shrink-0");
       expect(label("メモ.docx")).toHaveClass("shrink-0");
+      expect(label("メモ.docx")).not.toHaveClass("shrink-[2]");
     });
 
     it("hides every glyph and draws no text glyphs", () => {

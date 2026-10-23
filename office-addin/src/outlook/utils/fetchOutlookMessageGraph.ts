@@ -15,6 +15,7 @@
  * requests elsewhere; see `OutlookAddinChat.tsx` for the wiring.
  */
 
+import { InteractionRequiredError } from "../../core/auth/AuthSource";
 import {
   escapeODataString,
   graphFetch,
@@ -25,6 +26,7 @@ import {
   sleep,
 } from "../../utils/graph/graphClient";
 
+import type { InteractionRequiredReason } from "../../core/auth/AuthSource";
 import type {
   AcquireGraphToken,
   GraphRequestOptions,
@@ -282,6 +284,8 @@ export type ConversationFetchState = "ok" | "partial" | "error";
 export interface FetchConversationResult {
   messages: GraphConversationMessage[];
   state: ConversationFetchState;
+  /** With `error`: the token for the first page needs the user, and why. */
+  interactionRequired?: InteractionRequiredReason;
 }
 
 const ITEM_ATTACHMENT_TYPE = "#microsoft.graph.itemAttachment";
@@ -341,6 +345,7 @@ export async function fetchConversationMessagesViaGraph(
     `${mailboxRoot(options.owner)}/messages?$filter=${encodeURIComponent(filter)}&$top=${CONVERSATION_PAGE_SIZE}&$select=${select}&$expand=${expand}`;
   let pages = 0;
   let state: ConversationFetchState = "ok";
+  let interactionRequired: InteractionRequiredReason | undefined;
 
   while (nextUrl && pages < MAX_CONVERSATION_PAGES) {
     let response: Response;
@@ -358,6 +363,9 @@ export async function fetchConversationMessagesViaGraph(
       }
       console.warn("[fetchConversationMessagesViaGraph] fetch failed:", error);
       state = pages === 0 ? "error" : "partial";
+      if (pages === 0 && error instanceof InteractionRequiredError) {
+        interactionRequired = error.reason;
+      }
       break;
     }
     if (!response.ok) {
@@ -405,7 +413,9 @@ export async function fetchConversationMessagesViaGraph(
     );
   }
 
-  return { messages, state };
+  return interactionRequired
+    ? { messages, state, interactionRequired }
+    : { messages, state };
 }
 
 /**

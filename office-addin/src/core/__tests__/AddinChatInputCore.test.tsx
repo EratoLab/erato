@@ -55,4 +55,24 @@ describe("AddinChatInputCore", () => {
 
     expect(chatInput.mock.calls.at(-1)?.[0].contextItems).toBe(contextItems);
   });
+
+  it("hands the host's modes to the composer as they are", () => {
+    const composerModes = [
+      {
+        id: "outlook.scheduling",
+        label: "Scheduling",
+        icon: "clock",
+        endLabel: "End scheduling",
+        onEnd: vi.fn(),
+      },
+    ];
+    render(
+      <AddinChatInputCore
+        onSendMessage={vi.fn()}
+        composerModes={composerModes}
+      />,
+    );
+
+    expect(chatInput.mock.calls.at(-1)?.[0].composerModes).toBe(composerModes);
+  });
 });

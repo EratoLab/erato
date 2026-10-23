@@ -33,7 +33,8 @@ export type ComposerContextIconName =
   | "calendar"
   | "attachment"
   | "chats"
-  | "file";
+  | "file"
+  | "clock";
 
 export interface ComposerContextDetailAction {
   id: string;
@@ -133,6 +134,27 @@ export interface ComposerContextChipFaceProps {
   icon: ReactNode;
   /** The item's meta, or the dismissal lifetime of a suggested ambient item without one. */
   meta?: string;
+}
+
+/**
+ * A mode the next send runs in, drawn in the controls row next to "+": not
+ * content, and never in the lane. The host's resolver decides when it shows.
+ */
+export interface ComposerMode {
+  /** Namespaced by host, e.g. "outlook.scheduling". */
+  id: string;
+  label: string;
+  icon: ComposerContextIconName | (string & {});
+  /** Why it is on and until when: the chip's title and its end button's description. */
+  description?: string;
+  /** Names the end button, e.g. "End scheduling". */
+  endLabel: string;
+  onEnd: () => void;
+  /** Spoken once the mode has ended, e.g. "Scheduling ended. Your draft is sent again." */
+  endedAnnouncement?: string;
+  /** Disables the end button; the reason becomes its title. */
+  locked?: boolean;
+  lockReason?: string;
 }
 
 /** A one-off send prompt drawn above the lane, never a chip. */

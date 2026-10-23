@@ -250,7 +250,13 @@ export function resolveOutlookActionFacet(
           ...(input.bodyFormat ? { body_format: input.bodyFormat } : {}),
         },
       },
-      draft: draftEligible ? "selection" : "none",
+      // A draft already sent unchanged would not go without the selection
+      // either, so the selection replaces nothing.
+      draft: draftUnchanged
+        ? "unchanged"
+        : draftEligible
+          ? "selection"
+          : "none",
       // A selection send never touches the draft dedup marker.
       sentDraftFingerprint: null,
     };
@@ -280,7 +286,9 @@ export function resolveOutlookActionFacet(
     input.schedulingThreadActive &&
     itemKind !== "appointment"
   ) {
-    return scheduleFacet(draftEligible ? "scheduling" : "none");
+    return scheduleFacet(
+      draftUnchanged ? "unchanged" : draftEligible ? "scheduling" : "none",
+    );
   }
 
   if (draftEligible && !draftUnchanged) {
@@ -408,6 +416,23 @@ export interface OutlookSendPreview {
   facetId: string | null;
   draft: OutlookDraftDisposition;
   fingerprint: string;
+  /**
+   * "scheduling" when sticky scheduling holds the facet slot and ending it
+   * would change what the send carries: the scheduling mode chip reads this.
+   * Never for the neutral surface's ambient schedule facet, nor on an
+   * appointment, where ending changes nothing.
+   */
+  mode: "scheduling" | null;
+  /**
+   * What the draft would do once the active selection is dismissed ("Send
+   * this instead"); null without an active selection.
+   */
+  draftWithoutSelection: OutlookDraftDisposition | null;
+  /**
+   * What the draft would do once sticky scheduling ends; null while it does
+   * not hold the facet slot.
+   */
+  draftWithoutScheduling: OutlookDraftDisposition | null;
 }
 
 /**
@@ -427,16 +452,35 @@ export function previewOutlookSend(
       ? fingerprint
       : lastSentDraft.sent
     : null;
-  const result = resolveOutlookActionFacet({
+  const facetInput = {
     ...rest,
     recipients,
     lastSentDraftFingerprint,
     nowIso: "",
     timezone: "",
-  });
+  };
+  const result = resolveOutlookActionFacet(facetInput);
+  const facetId = result.facet?.id ?? null;
+  const withoutScheduling =
+    facetId === OUTLOOK_SCHEDULE_FACET_ID && rest.schedulingThreadActive
+      ? resolveOutlookActionFacet({
+          ...facetInput,
+          schedulingThreadActive: false,
+        })
+      : null;
+  const withoutSelection = rest.hasActiveSelection
+    ? resolveOutlookActionFacet({ ...facetInput, hasActiveSelection: false })
+    : null;
   return {
-    facetId: result.facet?.id ?? null,
+    facetId,
     draft: result.draft,
     fingerprint,
+    mode:
+      withoutScheduling &&
+      (withoutScheduling.facet?.id ?? null) !== OUTLOOK_SCHEDULE_FACET_ID
+        ? "scheduling"
+        : null,
+    draftWithoutSelection: withoutSelection?.draft ?? null,
+    draftWithoutScheduling: withoutScheduling?.draft ?? null,
   };
 }

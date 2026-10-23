@@ -170,6 +170,19 @@ items. The (x)/(+) choices live in `wordContextStore`, in memory only
 key, so two composers never write each other's choices. One-off send prompts stay
 rows above the composer until the notice slot is used.
 
+Outlook feeds its chips from `previewOutlookSend()` (the facet: selection,
+draft or appointment) and `planOutlookFiles()` (the files: the open thread,
+each Office.js attachment, each drop), and the send uploads exactly that plan
+through `resolveSelectedFilesForSend(plan)`. `outlookContextChips` turns both
+into plain models and `useOutlookContextItems` into items. The choices live in
+`outlookContextStore`, in memory only (roaming settings would sync them across
+devices), per conversation, with item-scoped lifetimes; `afterSend` records
+what a send carried and ends the choices that held for one message. Thread and
+drop items carry `estimate`, so the host passes no `virtualFiles`. Sticky
+scheduling is a `composerModes` entry next to "+", not a chip, and shows only
+where ending it changes the facet (`previewOutlookSend().mode`). The "+" menu
+only adds what has no chip.
+
 ## Landmines
 
 - office.js nullifies `history.pushState`/`replaceState` on load (office-js

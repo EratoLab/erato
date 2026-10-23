@@ -7060,5 +7060,96 @@ describe("ChatInput", () => {
         document.querySelector('[data-ui="composer-context-live"]'),
       ).toHaveTextContent("");
     });
+
+    describe("composer modes (ERMAIN-1024)", () => {
+      const schedulingMode = () => ({
+        id: "outlook.scheduling",
+        label: "Scheduling",
+        icon: "clock",
+        endLabel: "End scheduling",
+        onEnd: vi.fn(),
+      });
+
+      const withFacetAndModel = () => {
+        mockUseFacets.mockReturnValue({
+          data: {
+            facets: [{ id: "facet-1", name: "Tool", default_enabled: false }],
+            global_facet_settings: undefined,
+          },
+          error: null,
+        });
+        const model = { chat_provider_id: "m1", model_display_name: "M1" };
+        mockUseActiveModelSelection.mockReturnValue({
+          availableModels: [model],
+          selectedModel: model,
+          setSelectedModel: vi.fn(),
+          isSelectionReady: true,
+        });
+      };
+
+      const controls = () =>
+        document.querySelector<HTMLElement>('[data-ui="chat-input-controls"]')!;
+
+      const precedes = (first: Element, second: Element) =>
+        Boolean(
+          first.compareDocumentPosition(second) &
+            Node.DOCUMENT_POSITION_FOLLOWING,
+        );
+
+      it("draws a mode after the + menu and before the model selector", async () => {
+        withFacetAndModel();
+        mockUseIsMobile.mockReturnValue(true);
+        await renderComposer({ composerModes: [schedulingMode()] });
+
+        const chip = controls().querySelector(
+          '[data-ui="composer-mode-chip"]',
+        )!;
+        expect(chip).not.toBeNull();
+        expect(
+          precedes(screen.getByTestId("chat-input-add-controls"), chip),
+        ).toBe(true);
+        expect(precedes(chip, screen.getByTestId("model-selector"))).toBe(true);
+      });
+
+      it("draws a mode after the tools in the desktop controls", async () => {
+        withFacetAndModel();
+        await renderComposer({ composerModes: [schedulingMode()] });
+
+        const chip = controls().querySelector(
+          '[data-ui="composer-mode-chip"]',
+        )!;
+        expect(chip).not.toBeNull();
+        expect(precedes(screen.getByTestId("facet-selector"), chip)).toBe(true);
+        expect(precedes(chip, screen.getByTestId("model-selector"))).toBe(true);
+      });
+
+      it("leaves the controls row as it was without modes", async () => {
+        withFacetAndModel();
+        const childOrder = () =>
+          [...controls().querySelectorAll("*")].map(
+            (node) =>
+              node.getAttribute("data-testid") ??
+              node.getAttribute("data-ui") ??
+              node.tagName,
+          );
+        const { rerenderWith, unmount } = await renderComposer();
+        const before = childOrder();
+        expect(
+          controls().querySelector('[data-ui^="composer-mode"]'),
+        ).toBeNull();
+
+        rerenderWith({ composerModes: [] });
+        expect(
+          controls().querySelector('[data-ui="composer-mode-chip"]'),
+        ).toBeNull();
+        expect(
+          controls().querySelector('[data-ui="composer-mode-live"]'),
+        ).not.toBeNull();
+
+        rerenderWith({ composerModes: undefined });
+        expect(childOrder()).toEqual(before);
+        unmount();
+      });
+    });
   });
 });

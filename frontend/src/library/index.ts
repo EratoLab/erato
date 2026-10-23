@@ -654,6 +654,7 @@ export type { ChatInputAttachmentPreviewProps } from "@/components/ui/FileUpload
 export {
   ComposerContextArea,
   ComposerContextLane,
+  ComposerModeChips,
   DefaultComposerContextChipFace,
   type ComposerContextAreaProps,
   type ComposerContextChipFaceProps,
@@ -665,6 +666,8 @@ export {
   type ComposerContextLaneProps,
   type ComposerContextState,
   type ComposerContextTone,
+  type ComposerMode,
+  type ComposerModeChipsProps,
   type ComposerNotice,
 } from "@/components/ui/Chat/ComposerContext";
 export type { FileAttachmentsPreviewProps } from "@/components/ui/FileUpload/FileAttachmentsPreview";

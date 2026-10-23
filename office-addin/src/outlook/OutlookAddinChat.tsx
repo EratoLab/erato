@@ -146,14 +146,10 @@ function OutlookAddinChatHost({ controller }: AddinChatHostProps) {
     !hasItemChangedFired &&
     !pinHintDismissed;
 
-  const {
-    hasSelectedEmailSource,
-    isEmailBodyIncluded,
-    resolvedFiles,
-    stagedEmails,
-    addDroppedEmail,
-    removeDroppedEmail,
-  } = useOutlookEmailSource();
+  const { stagedEmails, addDroppedEmail, removeDroppedEmail } =
+    useOutlookEmailSource();
+  // The open email while its thread goes with the next send; the composer
+  // sets it from the same plan its chips come from.
   const previewEmailMessageIdRef = useRef<string | null>(null);
   const dedup = useEmailDedupSet();
   const tryClaimEmailAttachment = useCallback(
@@ -461,37 +457,22 @@ function OutlookAddinChatHost({ controller }: AddinChatHostProps) {
     isOfficeDragActive;
 
   const currentEmailMessageId = mailItem?.internetMessageId ?? null;
+  // The open email staged as a drop, or being read as one: its drop chip
+  // stands for it, and its thread stays out of the send.
   const currentEmailAlreadyAttached =
     currentEmailMessageId !== null && dedup.ids.has(currentEmailMessageId);
-  const shouldSuggestCurrentEmail =
+  const freshChat =
     controller.currentChatId === null &&
     controller.messageOrder.length === 0 &&
     !controller.isPendingResponse &&
-    controller.editingMessageId === null &&
-    !currentEmailAlreadyAttached;
-  previewEmailMessageIdRef.current =
-    shouldSuggestCurrentEmail && hasSelectedEmailSource && isEmailBodyIncluded
-      ? currentEmailMessageId
-      : null;
-  // Mirrors the send gate in `AddinChatInput`: the suggested email rides on a
-  // fresh chat, drops ride whenever they are staged, and both upload every
-  // resolved `.eml`, so the estimate measures the same Files.
+    controller.editingMessageId === null;
   const hasDroppedStagedEmails = stagedEmails.some(
     (staged) => staged.source === "drop",
   );
-  const isPreviewIncluded =
-    (shouldSuggestCurrentEmail && hasSelectedEmailSource) ||
-    hasDroppedStagedEmails;
   useEffect(() => {
     if (hasDroppedStagedEmails || isExpandingDroppedEmails)
       return holdComposeReload();
   }, [hasDroppedStagedEmails, isExpandingDroppedEmails]);
-
-  const previewVirtualFiles = useMemo(
-    () =>
-      isPreviewIncluded && resolvedFiles.length > 0 ? resolvedFiles : undefined,
-    [isPreviewIncluded, resolvedFiles],
-  );
 
   const pendingSendItemIdentityRef = useRef<string | null>(null);
   const freshTrackerRef = useRef(new FreshCompletionTracker());
@@ -599,11 +580,12 @@ function OutlookAddinChatHost({ controller }: AddinChatHostProps) {
       renderInput={(props) => (
         <AddinChatInput
           {...props}
-          showSuggestedEmailSource={shouldSuggestCurrentEmail}
+          freshChat={freshChat}
+          openEmailStagedAsDrop={currentEmailAlreadyAttached}
+          includedEmailMessageIdRef={previewEmailMessageIdRef}
           onEmailSourceDropsSent={handleEmailSourceDropsSent}
           isExpandingDroppedEmails={isExpandingDroppedEmails}
           dropPipeline={dropPipeline}
-          virtualFiles={previewVirtualFiles}
           lastSchedulingSignalAt={lastSchedulingSignalAt}
         />
       )}

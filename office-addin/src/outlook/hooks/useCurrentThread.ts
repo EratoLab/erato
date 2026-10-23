@@ -1,12 +1,17 @@
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 
 import {
   OUTLOOK_GRAPH_THREAD_TIMEOUT_MS,
   runWithGraphTimeout,
 } from "../utils/graphRequestTimeout";
-import { fetchCurrentThread, type ParsedThread } from "../utils/parsedThread";
+import {
+  ThreadFetchError,
+  fetchCurrentThread,
+  type ParsedThread,
+} from "../utils/parsedThread";
 
+import type { InteractionRequiredReason } from "../../core/auth/AuthSource";
 import type {
   FetchConversationMessages,
   FetchConversationOptions,
@@ -45,6 +50,16 @@ export interface UseCurrentThreadResult {
    * leaves `thread === null` with `error === false`.
    */
   error: boolean;
+  /**
+   * With `error`: this fetch failed because its Graph token needs the user, a
+   * sign-in or a grant. Null for any other failure, so a timeout never asks
+   * for a sign-in.
+   */
+  signInNeeded: InteractionRequiredReason | null;
+  /** Fetches a failed thread again; the result reads loading meanwhile. */
+  retry: () => void;
+  /** Bumps on every failed fetch, so a caller can tell a new failure from the old one. */
+  errorCount: number;
 }
 
 /**
@@ -127,7 +142,10 @@ export function useCurrentThread(
     }
   }, [query.error, query.isError]);
 
-  const { refetch, isError } = query;
+  const { refetch, isError, isFetching, errorUpdateCount } = query;
+  const retry = useCallback(() => {
+    void refetch();
+  }, [refetch]);
   const lastRetryKeyRef = useRef(retryKey);
   useEffect(() => {
     if (lastRetryKeyRef.current === retryKey) return;
@@ -140,12 +158,24 @@ export function useCurrentThread(
       thread: null,
       isLoading: backendPending && itemId !== null && conversationId !== null,
       error: false,
+      signInNeeded: null,
+      retry,
+      errorCount: errorUpdateCount,
     };
   }
 
+  // A refetch of a failed query keeps `status: "error"` until it settles;
+  // reading it as loading keeps a retry from settling on the old failure.
+  const failed = isError && !isFetching;
   return {
     thread: query.data ?? null,
-    isLoading: query.isPending,
-    error: query.isError,
+    isLoading: query.isPending || (isError && isFetching),
+    error: failed,
+    signInNeeded:
+      failed && query.error instanceof ThreadFetchError
+        ? query.error.interactionRequired
+        : null,
+    retry,
+    errorCount: errorUpdateCount,
   };
 }

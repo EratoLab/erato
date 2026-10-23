@@ -13,6 +13,7 @@ import { outlookAppointmentFingerprint } from "../utils/outlookActionFacet";
 import {
   readComposeRecipients,
   serializeComposeRecipients,
+  type ComposeRecipients,
 } from "../utils/outlookComposeRecipients";
 
 export type LiveComposeFieldsWatch = "recipients" | "appointment";
@@ -22,6 +23,10 @@ export interface LiveComposeFields {
   recipients?: string;
   /** The appointment's de-dup key as a send reads it, after the last reported edit. */
   appointmentFingerprint?: string;
+  /** The recipients themselves, for the draft's detail. */
+  recipientList?: ComposeRecipients;
+  /** The appointment as a send reads it, for its detail. */
+  appointment?: AppointmentComposeSnapshot;
 }
 
 // Mailbox 1.7 (recipients, time) and 1.8 (locations); a host without one
@@ -83,10 +88,12 @@ export function useLiveComposeFields({
         ? readAppointmentComposeSnapshot(live, fallbackRef.current).then(
             (snapshot) => ({
               appointmentFingerprint: outlookAppointmentFingerprint(snapshot),
+              appointment: snapshot,
             }),
           )
         : readComposeRecipients(live).then((recipients) => ({
             recipients: serializeComposeRecipients(recipients),
+            recipientList: recipients,
           }));
       void next
         .then((fields) => {

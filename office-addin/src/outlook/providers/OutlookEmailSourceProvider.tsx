@@ -16,6 +16,7 @@ import { useCurrentThread } from "../hooks/useCurrentThread";
 import { useOutlookMessageFetcher } from "../hooks/useOutlookMessageFetcher";
 import { buildThreadEmlFile } from "../utils/buildThreadEmlFile";
 import { collectDismissedPaths } from "../utils/dismissedAttachmentPaths";
+import { graphMailScopes } from "../utils/fetchOutlookMessage";
 import {
   OUTLOOK_GRAPH_MESSAGE_TIMEOUT_MS,
   runWithGraphTimeout,
@@ -29,6 +30,7 @@ import {
 import { EmailTrimError, trimEmlFileSync } from "../utils/trimRawEmlBytes";
 
 import type { ParentMessageMetadata } from "../utils/fetchOutlookMessage";
+import type { OutlookFilePlan } from "../utils/outlookSendFiles";
 import type { ParsedEmail } from "../utils/parsedEmail";
 import type { ParsedThread, ThreadMessage } from "../utils/parsedThread";
 import type {
@@ -94,6 +96,28 @@ export interface ResolvedDrop {
   file: File | null;
   error?: EmailTrimError;
   size: number;
+}
+
+/** An Office.js attachment of the open item, as its chip shows it. */
+export interface OutlookItemAttachment {
+  id: string;
+  name: string;
+  size: number;
+  contentType: string;
+  /** A link to a cloud file: Outlook cannot hand its bytes over. */
+  cloud: boolean;
+}
+
+/** What a send asks of the provider: the thread's fate and the attachments to read. */
+export type OutlookSendFilesRequest = Pick<
+  OutlookFilePlan,
+  "thread" | "uploadThread" | "composeAttachmentIds"
+>;
+
+export interface OutlookSendFiles {
+  files: File[];
+  /** The attachments whose bytes resolved and are in `files`. */
+  sentAttachmentIds: string[];
 }
 
 /** One `.eml` that will be uploaded on send: the thread or a drop. */
@@ -192,8 +216,26 @@ interface OutlookEmailSourceContextValue {
   threadTrimError: EmailTrimError | null;
   /** The `.eml` files a send will upload: the thread first, then each drop that resolved. */
   resolvedFiles: File[];
+  /** The open thread's `.eml` as the send would upload it; null while nothing is ticked or it cannot be built. */
+  threadFile: File | null;
+  /** Where the open item's thread stands; "none" when this item has none. */
+  threadStatus: "none" | "loading" | "error" | "ready";
+  /** Fetches a thread that failed to load again. */
+  retryEmailThread: () => void;
+  /**
+   * Set while the failed thread needs an interactive Graph step: a sign-in,
+   * or a scope grant ("consent").
+   */
+  emailThreadSignIn: "sign-in" | "consent" | null;
+  /** Runs that step, then loads the thread again. Never rejects. */
+  signInForEmail: () => Promise<void>;
+  /** The sign-in popup is open. */
+  signingIn: boolean;
+  /** The open email's or draft's own non-inline attachments. */
+  itemAttachments: OutlookItemAttachment[];
   resolvedParts: ResolvedPart[];
   resolvedTotalBytes: number;
+  /** The thread is loading, or loading again after a retry or a sign-in. */
   isLoadingEmailBody: boolean;
   /**
    * True when the open conversation failed to load entirely (Graph fetch
@@ -220,15 +262,19 @@ interface OutlookEmailSourceContextValue {
   selectedAttachmentItems: LocalFilePreviewItem[];
   isLoadingAttachments: boolean;
   removeAttachment: (attachmentId: string) => void;
-  /**
-   * Brings back every message of the open thread, keeping per-attachment
-   * choices; without a thread, the body of the first staged drop.
-   */
+  /** Brings back every message of the open thread, keeping per-attachment choices. */
   restoreEmailBody: () => void;
   restoreAttachment: (attachmentId: string) => void;
   isEmailBodyDismissed: boolean;
   dismissedAttachmentIds: string[];
-  resolveSelectedFilesForSend: () => Promise<File[]>;
+  /**
+   * The files a send uploads, exactly as the plan says: the thread when it
+   * goes, every drop, and the planned attachments that resolve. Throws when a
+   * file that goes cannot be built without what the user left out.
+   */
+  resolveSelectedFilesForSend: (
+    plan: OutlookSendFilesRequest,
+  ) => Promise<OutlookSendFiles>;
   getFileProvenance: (file: File) => OutlookFileProvenance | undefined;
   hasSelectedEmailSource: boolean;
   parentReplyContext: ParentMessageMetadata | null;
@@ -244,6 +290,13 @@ const defaultValue: OutlookEmailSourceContextValue = {
   resolvedDrops: [],
   threadTrimError: null,
   resolvedFiles: [],
+  threadFile: null,
+  threadStatus: "none",
+  retryEmailThread: () => {},
+  emailThreadSignIn: null,
+  signInForEmail: async () => {},
+  signingIn: false,
+  itemAttachments: [],
   resolvedParts: [],
   resolvedTotalBytes: 0,
   isLoadingEmailBody: false,
@@ -265,7 +318,10 @@ const defaultValue: OutlookEmailSourceContextValue = {
   restoreAttachment: () => {},
   isEmailBodyDismissed: false,
   dismissedAttachmentIds: [],
-  resolveSelectedFilesForSend: async () => [],
+  resolveSelectedFilesForSend: async () => ({
+    files: [],
+    sentAttachmentIds: [],
+  }),
   getFileProvenance: () => undefined,
   hasSelectedEmailSource: false,
   parentReplyContext: null,
@@ -308,7 +364,8 @@ export function OutlookEmailSourceProvider({
   } = useOutlookMessageFetcher();
   // A completed interactive Graph sign-in is the only event that can turn a
   // failed thread fetch into a working one; nothing else retries it.
-  const graphSignInCount = useGraphTokenOptional()?.signInCount ?? 0;
+  const graph = useGraphTokenOptional();
+  const graphSignInCount = graph?.signInCount ?? 0;
   const [dismissedAttachmentIds, setDismissedAttachmentIds] = useState<
     string[]
   >([]);
@@ -348,8 +405,11 @@ export function OutlookEmailSourceProvider({
   // isolation against an injected transport.
   const {
     thread: currentThread,
-    isLoading: isLoadingEmailBody,
-    error: emailThreadLoadError,
+    isLoading: isLoadingThread,
+    error: threadLoadFailed,
+    signInNeeded: threadSignInNeeded,
+    retry: retryThreadFetch,
+    errorCount: threadErrorCount,
   } = useCurrentThread(
     itemId,
     conversationId,
@@ -363,6 +423,60 @@ export function OutlookEmailSourceProvider({
       retryKey: graphSignInCount,
     },
   );
+
+  // A retry or a sign-in reads as loading from the click until the thread
+  // answers: the refetch reports itself a pass later, and the chip must not
+  // settle on the old failure in between.
+  const [threadReload, setThreadReload] = useState<{
+    phase: "popup" | "reloading";
+    errorCount: number;
+  } | null>(null);
+  const threadErrorCountRef = useRef(threadErrorCount);
+  threadErrorCountRef.current = threadErrorCount;
+  useEffect(() => {
+    if (threadReload?.phase !== "reloading") return;
+    if (
+      isLoadingThread ||
+      !threadLoadFailed ||
+      threadErrorCount !== threadReload.errorCount
+    ) {
+      setThreadReload(null);
+    }
+  }, [isLoadingThread, threadErrorCount, threadLoadFailed, threadReload]);
+  const isLoadingEmailBody = isLoadingThread || threadReload !== null;
+  const emailThreadLoadError = threadLoadFailed && threadReload === null;
+  // From the thread's own failure: another Graph surface needing a sign-in
+  // says nothing about why this one failed.
+  const emailThreadSignIn =
+    emailThreadLoadError && graph ? threadSignInNeeded : null;
+  const retryEmailThread = useCallback(() => {
+    setThreadReload({
+      phase: "reloading",
+      errorCount: threadErrorCountRef.current,
+    });
+    retryThreadFetch();
+  }, [retryThreadFetch]);
+  const graphSignIn = graph?.signIn;
+  // The completed sign-in bumps `signInCount`, which refetches the thread.
+  // It asks for the scopes this thread's fetch uses, whichever surface
+  // raised the prompt last.
+  const signInForEmail = useCallback(async () => {
+    if (!graphSignIn) return;
+    setThreadReload({
+      phase: "popup",
+      errorCount: threadErrorCountRef.current,
+    });
+    try {
+      await graphSignIn(graphMailScopes(mailboxRoot));
+    } catch {
+      setThreadReload(null);
+      return;
+    }
+    setThreadReload({
+      phase: "reloading",
+      errorCount: threadErrorCountRef.current,
+    });
+  }, [graphSignIn, mailboxRoot]);
 
   // Reply-context chip for compose mode (drafts have no itemId but do have a
   // conversationId). Display-only — the parent body reaches the LLM via the
@@ -664,6 +778,20 @@ export function OutlookEmailSourceProvider({
       : [];
   }, [attachments, emailItem]);
 
+  const itemAttachments = useMemo<OutlookItemAttachment[]>(
+    () =>
+      selectableAttachments.map((attachment) => ({
+        id: attachment.id,
+        name: attachment.name,
+        size: attachment.size,
+        contentType: attachment.contentType,
+        cloud:
+          String(attachment.attachmentType).toLowerCase() ===
+          OUTLOOK_CLOUD_ATTACHMENT_TYPE,
+      })),
+    [selectableAttachments],
+  );
+
   const selectedAttachmentItems = useMemo<LocalFilePreviewItem[]>(() => {
     return selectableAttachments
       .filter((attachment) => !dismissedAttachmentIds.includes(attachment.id))
@@ -761,22 +889,20 @@ export function OutlookEmailSourceProvider({
     });
   }, []);
 
-  // `removeAttachment` / `restoreAttachment` only touch Office.js compose-mode
-  // attachments, the fallback group shown with neither a thread nor a drop.
+  // A drop's body has no tick of its own any more: its chip's (x) removes it.
   const restoreEmailBody = useCallback(() => {
-    if (currentThread) {
-      const messageIds = currentThread.messages.map((message) => message.id);
-      setEmailDismissals((previous) =>
-        messageIds.reduce(
-          (state, messageId) => applyRestoreBody(state, messageId),
-          previous,
-        ),
-      );
-      return;
-    }
-    if (!currentStagedDrop) return;
-    restoreStagedEmailBody(currentStagedDrop.key);
-  }, [currentStagedDrop, currentThread, restoreStagedEmailBody]);
+    if (!currentThread) return;
+    const messageIds = currentThread.messages.map((message) => message.id);
+    setEmailDismissals((previous) =>
+      messageIds.reduce(
+        (state, messageId) => applyRestoreBody(state, messageId),
+        previous,
+      ),
+    );
+  }, [currentThread]);
+
+  // `removeAttachment` / `restoreAttachment` only touch the item's Office.js
+  // attachments, the draft's own or a read email's without a thread.
 
   const removeAttachment = useCallback((attachmentId: string) => {
     setDismissedAttachmentIds((previous) =>
@@ -790,38 +916,41 @@ export function OutlookEmailSourceProvider({
     );
   }, []);
 
-  const resolveSelectedFilesForSend = useCallback(async (): Promise<File[]> => {
-    // An email whose dismissals could not be cut out is never replaced by its
-    // untrimmed original; the whole send is refused instead.
-    if (threadTrimError) {
-      throw threadTrimError;
-    }
-    const failedDrop = resolvedDrops.find((drop) => drop.error);
-    if (failedDrop?.error) {
-      throw failedDrop.error;
-    }
+  const resolveSelectedFilesForSend = useCallback(
+    async (plan: OutlookSendFilesRequest): Promise<OutlookSendFiles> => {
+      // A file whose dismissals could not be cut out is never replaced by its
+      // untrimmed original; the whole send is refused instead. A thread the
+      // send leaves out cannot refuse it.
+      if (
+        threadTrimError &&
+        plan.thread.kind === "error" &&
+        plan.thread.why === "trim"
+      ) {
+        throw threadTrimError;
+      }
+      const failedDrop = resolvedDrops.find((drop) => drop.error);
+      if (failedDrop?.error) {
+        throw failedDrop.error;
+      }
 
-    // Reuse the exact Files already built for the estimate, so what we upload
-    // is byte-identical to what the token estimate measured. The thread `.eml`
-    // carries every non-dismissed message + their non-dismissed attachments as
-    // nested message/rfc822 parts, preserving version provenance — three files
-    // named "Lastenheft.pdf" land inside three different nested parts. Each
-    // drop is independent of the open thread.
-    const filesToSend: File[] = [...resolvedFiles];
+      // Reuse the exact Files already built for the estimate, so what we
+      // upload is byte-identical to what the token estimate measured. The
+      // thread `.eml` carries every ticked message and its ticked attachments
+      // as nested message/rfc822 parts, preserving version provenance. Each
+      // drop is independent of the open thread.
+      const files: File[] = [];
+      if (plan.uploadThread && threadEmlFile) files.push(threadEmlFile);
+      for (const drop of resolvedDrops) {
+        if (drop.file) files.push(drop.file);
+      }
 
-    // Office.js compose-mode fallback. Only invoked when there is no thread
-    // and no drops — in read mode the thread .eml already carries the
-    // attachments, in drop-only mode the drop .eml does. Cloud attachments
-    // skipped here because their content can't be resolved locally.
-    if (!currentThread && stagedEmails.every((s) => s.source !== "drop")) {
-      const remainingAttachments = selectableAttachments.filter(
-        (attachment) => !dismissedAttachmentIds.includes(attachment.id),
-      );
-      for (const attachment of remainingAttachments) {
-        if (
-          String(attachment.attachmentType).toLowerCase() ===
-          OUTLOOK_CLOUD_ATTACHMENT_TYPE
-        ) {
+      const sentAttachmentIds: string[] = [];
+      for (const id of plan.composeAttachmentIds) {
+        const attachment = itemAttachments.find(
+          (candidate) => candidate.id === id,
+        );
+        if (!attachment) continue;
+        if (attachment.cloud) {
           console.warn(
             "Skipping Outlook cloud attachment because file content cannot be resolved locally:",
             attachment.name,
@@ -835,7 +964,8 @@ export function OutlookEmailSourceProvider({
               version: 1,
               origins: [{ topLevelParent: sourceReference }],
             });
-          filesToSend.push(file);
+          files.push(file);
+          sentAttachmentIds.push(attachment.id);
         } catch (error) {
           console.warn(
             `Failed to resolve Outlook attachment "${attachment.name}" for send:`,
@@ -843,20 +973,27 @@ export function OutlookEmailSourceProvider({
           );
         }
       }
-    }
 
-    return filesToSend;
-  }, [
-    currentThread,
-    dismissedAttachmentIds,
-    getAttachmentFile,
-    resolvedDrops,
-    resolvedFiles,
-    selectableAttachments,
-    stagedEmails,
-    threadTrimError,
-    sourceReference,
-  ]);
+      return { files, sentAttachmentIds };
+    },
+    [
+      getAttachmentFile,
+      itemAttachments,
+      resolvedDrops,
+      threadEmlFile,
+      threadTrimError,
+      sourceReference,
+    ],
+  );
+
+  const threadStatus: OutlookEmailSourceContextValue["threadStatus"] =
+    isLoadingEmailBody
+      ? "loading"
+      : emailThreadLoadError
+        ? "error"
+        : currentThread && currentThread.messages.length > 0
+          ? "ready"
+          : "none";
 
   const value = useMemo<OutlookEmailSourceContextValue>(
     () => ({
@@ -868,6 +1005,13 @@ export function OutlookEmailSourceProvider({
       resolvedDrops,
       threadTrimError,
       resolvedFiles,
+      threadFile: threadEmlFile,
+      threadStatus,
+      retryEmailThread,
+      emailThreadSignIn,
+      signInForEmail,
+      signingIn: threadReload?.phase === "popup",
+      itemAttachments,
       resolvedParts,
       resolvedTotalBytes,
       isLoadingEmailBody,
@@ -910,6 +1054,13 @@ export function OutlookEmailSourceProvider({
       resolvedDrops,
       threadTrimError,
       resolvedFiles,
+      threadEmlFile,
+      threadStatus,
+      retryEmailThread,
+      emailThreadSignIn,
+      signInForEmail,
+      threadReload,
+      itemAttachments,
       resolvedParts,
       resolvedTotalBytes,
       isEmailBodyDismissed,

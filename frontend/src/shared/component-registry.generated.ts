@@ -51,6 +51,7 @@ export type { ComposerContextIconName } from "@/components/ui/Chat/ComposerConte
 export type { ComposerContextItem } from "@/components/ui/Chat/ComposerContext/types";
 export type { ComposerContextState } from "@/components/ui/Chat/ComposerContext/types";
 export type { ComposerContextTone } from "@/components/ui/Chat/ComposerContext/types";
+export type { ComposerMode } from "@/components/ui/Chat/ComposerContext/types";
 export type { ComposerNotice } from "@/components/ui/Chat/ComposerContext/types";
 export { McpDisabledServersNotice } from "@/components/ui/Chat/McpDisabledServersNotice";
 export { McpDisabledToolsNotice } from "@/components/ui/Chat/McpDisabledToolsNotice";

@@ -102,6 +102,14 @@ describe("useLiveComposeFields", () => {
         }),
       ),
     );
+    // The draft's detail lists them as the next send reads them.
+    expect(result.current.recipientList).toEqual({
+      to: [
+        { displayName: "a@x", emailAddress: "a@x" },
+        { displayName: "b@x", emailAddress: "b@x" },
+      ],
+    });
+    expect(result.current.appointment).toBeUndefined();
   });
 
   it("re-reads the appointment on time, attendee and location edits", async () => {
@@ -121,6 +129,7 @@ describe("useLiveComposeFields", () => {
       "olkAppointmentTimeChanged",
       "olkEnhancedLocationsChanged",
     ]);
+    expect(result.current.appointment).toBeUndefined();
     act(() => handlers.get("olkEnhancedLocationsChanged")?.());
 
     await waitFor(() =>
@@ -128,6 +137,7 @@ describe("useLiveComposeFields", () => {
         outlookAppointmentFingerprint(moved),
       ),
     );
+    expect(result.current.appointment).toEqual(moved);
     expect(readSnapshot).toHaveBeenCalledWith(item, fallback);
   });
 
