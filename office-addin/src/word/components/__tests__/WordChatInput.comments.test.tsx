@@ -14,6 +14,7 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { ContextLaneDouble } from "../../../test/helpers/contextLaneDouble";
 import {
   V3C_COMMENT_DOCUMENT,
   installWordCommentHost,
@@ -24,6 +25,7 @@ import {
   v3cVisibleText,
 } from "../../../test/mocks/word/commentPackages";
 import { wordCommentGestureStore } from "../../hooks/wordCommentGestureStore";
+import { wordContextStore } from "../../hooks/wordContextStore";
 import { wordSelectionStore } from "../../hooks/wordSelectionStore";
 import { resolveWordSelectionFacet } from "../../utils/wordActionFacet";
 import { wordCommentReadSession } from "../../utils/wordCommentReadTool";
@@ -49,8 +51,8 @@ import type { WordDocumentBuild } from "../../utils/buildWordDocumentArgs";
 import type { WordCommentReadResultJson } from "../../utils/wordCommentReadTool";
 import type { WordCommentsCapture } from "../../utils/wordCommentSend";
 import type { WordSelectionSnapshot } from "../../utils/wordSelectionAnchor";
+import type { ComposerContextItem } from "@erato/frontend/library";
 import type { WordCommentEnvelope } from "@erato/frontend/word-review";
-import type { ReactNode } from "react";
 
 const host = vi.hoisted(() => ({
   facets: [] as { id: string; allowed_args?: string[] }[],
@@ -64,35 +66,46 @@ const host = vi.hoisted(() => ({
 
 vi.mock("@erato/frontend/library", async () => {
   const mock = await import("../../../test/helpers/eratoLibraryMock");
+  const { AlertMock } = await import("../../../test/helpers/contextLaneDouble");
   return mock.createEratoLibraryMock({
     useFacets: () => ({ data: { action_facets: host.facets } }),
-    Alert: ({ children }: { children: ReactNode }) => (
-      <div role="alert">{children}</div>
-    ),
+    Alert: AlertMock,
   });
 });
 
 vi.mock("../../../core/AddinChatInputCore", () => ({
   AddinChatInputCore: ({
     onSendMessage,
+    contextItems,
   }: {
     onSendMessage: (message: string) => void;
+    contextItems?: ComposerContextItem[];
   }) => (
-    <button
-      type="button"
-      data-testid="send"
-      onClick={() => onSendMessage("What does the comment say?")}
-    >
-      send
-    </button>
+    <div data-testid="composer">
+      <ContextLaneDouble items={contextItems} />
+      <button
+        type="button"
+        data-testid="send"
+        onClick={() => onSendMessage("What does the comment say?")}
+      >
+        send
+      </button>
+    </div>
   ),
 }));
 
 vi.mock("../../hooks/useWordDocumentSource", () => ({
   useWordDocumentSource: () => ({
+    // As a read leaves it: an included document has content.
     preview: {
       status: "included",
-      coverage: null,
+      coverage: {
+        paragraphsSent: 12,
+        paragraphsTotal: 12,
+        truncated: false,
+        partialParagraph: false,
+        hasContent: true,
+      },
       changedSinceLastSend: false,
       reading: false,
     },
@@ -100,8 +113,22 @@ vi.mock("../../hooks/useWordDocumentSource", () => ({
     captureExpectedSlow: () => false,
     previousCapture: () => host.previous,
     markSent: () => {},
+    retry: () => {},
   }),
 }));
+
+const selectionChip = () => screen.getByTestId("context-chip-word.selection");
+const documentChip = () => screen.getByTestId("context-chip-word.document");
+const metaOf = (chip: HTMLElement) =>
+  within(chip).queryByTestId("context-chip-meta")?.textContent;
+const detailOf = (kind: "word.selection" | "word.document") =>
+  screen.getByTestId(`context-detail-${kind}`);
+const excludeDocument = () =>
+  fireEvent.click(
+    within(documentChip()).getByRole("button", {
+      name: "Don't include this document",
+    }),
+  );
 
 vi.mock("../../hooks/useWordSelection", () => ({
   useWordSelection: () => {},
@@ -376,6 +403,7 @@ describe("WordChatInput comment context", () => {
     vi.useRealTimers();
     cleanup();
     uninstallWordCommentHost();
+    wordContextStore.resetForTests();
     wordSelectionStore.resetForTests();
     wordCommentGestureStore.resetForTests();
     forgetWordCommentRefs();
@@ -579,6 +607,23 @@ describe("WordChatInput comment context", () => {
       expect(wordCommentRefsOf(staged.at(-1))?.threads).toHaveLength(14);
     });
 
+    it("lists the comment map in the document's detail while the map goes", async () => {
+      host.facets = [facet("word_document_review", REVIEW_KEYS, "comment_map")];
+      renderInput();
+
+      const comments = await waitFor(() => {
+        const section = detailOf("word.document").querySelector(
+          '[data-ui="word-context-detail-comments"]',
+        );
+        expect(section).not.toBeNull();
+        return section!;
+      });
+      expect(documentChip()).toHaveAttribute("data-state", "included");
+      expect(comments).toHaveTextContent(
+        "A list of the 14 comments in the document: each one's author, place, status and how it starts.",
+      );
+    });
+
     it("carries the comment map on the authoring facet", async () => {
       host.facets = [
         facet("word_document_authoring", AUTHORING_KEYS, "comment_map"),
@@ -769,7 +814,7 @@ describe("WordChatInput comment context", () => {
       fireEvent.click(
         screen.getByRole("button", { name: "Send without comments" }),
       );
-      expect(screen.getByTestId("word-selection-chip")).toBeInTheDocument();
+      expect(selectionChip()).toHaveAttribute("data-state", "included");
       expect(screen.getByTestId("word-comment-chip")).toHaveTextContent(
         "This message is sent without comments.",
       );
@@ -787,10 +832,47 @@ describe("WordChatInput comment context", () => {
       await screen.findByTestId("word-comment-chip");
 
       fireEvent.click(
-        screen.getByRole("button", { name: "Dismiss selection" }),
+        within(selectionChip()).getByRole("button", {
+          name: "Dismiss selection",
+        }),
       );
-      expect(screen.queryByTestId("word-selection-chip")).toBeNull();
+      expect(selectionChip()).toHaveAttribute("data-state", "suggested");
       expect(wordCommentGestureStore.getSnapshot().withoutComments).toBe(false);
+    });
+
+    it("keeps the comment rows above the composer, one-off prompts between them", async () => {
+      host.facets = [
+        facet("word_selection", WORD_SELECTION_ARG_KEYS),
+        THREAD_FACET,
+      ];
+      install({ selection: { tag: "T6P", offset: 20 } });
+      renderInput();
+      await screen.findByTestId("word-comment-chip");
+      send();
+      const run = start();
+      await screen.findByTestId("word-comment-block");
+
+      const order = [
+        "word-comment-chip",
+        "word-one-off-rows",
+        "word-comment-options",
+        "composer",
+      ].map((id) => screen.getByTestId(id));
+      for (let index = 1; index < order.length; index += 1)
+        expect(
+          order[index - 1].compareDocumentPosition(order[index]) &
+            Node.DOCUMENT_POSITION_FOLLOWING,
+        ).toBeTruthy();
+      expect(
+        within(screen.getByTestId("word-one-off-rows")).getByTestId(
+          "word-comment-block",
+        ),
+      ).toBeInTheDocument();
+
+      fireEvent.click(
+        screen.getByRole("button", { name: "Send without comments" }),
+      );
+      await finish(run);
     });
 
     it("opens the Word settings from Change default", async () => {
@@ -810,8 +892,10 @@ describe("WordChatInput comment context", () => {
           name: "Work on Maya Krüger's comment instead",
         }),
       );
-      expect(screen.getByTestId("word-selection-chip")).toHaveTextContent(
-        "The comment below is sent instead of this passage.",
+      expect(selectionChip()).toHaveAttribute("data-state", "superseded");
+      expect(metaOf(selectionChip())).toBe("Replaced by comment");
+      expect(detailOf("word.selection")).toHaveTextContent(
+        "A comment is sent instead of this passage.",
       );
       expect(screen.getByTestId("word-comment-chip")).toHaveTextContent(
         "Comment by Maya Krüger · 2 replies",
@@ -895,7 +979,7 @@ describe("WordChatInput comment context", () => {
       host.facets = [facet("word_selection", DARK_SELECTION_KEYS)];
       selectT1();
       renderInput();
-      await screen.findByTestId("word-selection-chip");
+      await screen.findByTestId("context-chip-word.selection");
       await new Promise((resolve) => setTimeout(resolve, 20));
 
       expect(screen.queryByTestId("word-comment-chip")).toBeNull();
@@ -937,15 +1021,8 @@ describe("WordChatInput comment context", () => {
     it("reach only the passage's nearest threads when the passage replaces the document", async () => {
       selectT1();
       renderInput();
-      const documentRow = screen.getByTestId("word-include-document-chip");
-      expect(documentRow).toHaveTextContent(
-        "Your selection is sent instead of the document",
-      );
-      expect(documentRow).toHaveAttribute("data-state", "superseded");
-      expect(documentRow).toHaveClass(
-        "bg-theme-bg-primary",
-        "text-theme-fg-muted",
-      );
+      expect(documentChip()).toHaveAttribute("data-state", "superseded");
+      expect(metaOf(documentChip())).toBe("Replaced by selection");
       send();
       expect((await prepared())?.actionFacet?.id).toBe("word_selection");
       expect(host.capture).not.toHaveBeenCalled();
@@ -987,19 +1064,11 @@ describe("WordChatInput comment context", () => {
       host.capture.mockResolvedValue(documentBuild());
       renderInput();
       await waitFor(() =>
-        expect(
-          screen.getByTestId("word-include-document-chip"),
-        ).toHaveTextContent("A comment is sent instead of the document"),
+        expect(metaOf(documentChip())).toBe("Replaced by comment"),
       );
-      // Wrapped, not cut: the long locales end on the word that matters.
-      expect(
-        screen.getByText("A comment is sent instead of the document"),
-      ).not.toHaveClass("truncate");
-      const documentRow = screen.getByTestId("word-include-document-chip");
-      expect(documentRow).toHaveAttribute("data-state", "superseded");
-      expect(documentRow).toHaveClass(
-        "bg-theme-bg-primary",
-        "text-theme-fg-muted",
+      expect(documentChip()).toHaveAttribute("data-state", "superseded");
+      expect(detailOf("word.document")).toHaveTextContent(
+        "A comment is sent instead of the document",
       );
       expect(screen.queryByTestId("word-document-coverage-hint")).toBeNull();
 
@@ -1012,13 +1081,10 @@ describe("WordChatInput comment context", () => {
       selectT1();
       renderInput();
       await waitFor(() =>
-        expect(
-          screen.getByTestId("word-include-document-chip"),
-        ).toHaveTextContent("A comment is sent instead of the document"),
+        expect(metaOf(documentChip())).toBe("Replaced by comment"),
       );
-      expect(
-        screen.getByText("The comment below is sent instead of this passage."),
-      ).toBeVisible();
+      expect(selectionChip()).toHaveAttribute("data-state", "superseded");
+      expect(metaOf(selectionChip())).toBe("Replaced by comment");
 
       send();
       expect((await prepared())?.actionFacet?.id).toBe("word_comment_thread");
@@ -1060,7 +1126,7 @@ describe("WordChatInput comment context", () => {
       renderInput();
       send();
       const run = start();
-      fireEvent.click(screen.getByTestId("word-exclude-document"));
+      excludeDocument();
       const result = await finish(run);
 
       expect(result?.actionFacet?.id).toBe("word_comment_thread");
@@ -1090,7 +1156,9 @@ describe("WordChatInput comment context", () => {
       const result = await finish(run);
 
       expect(threadOf(result)).toBe(refOf("T1"));
-      expect(screen.getByRole("alert")).toHaveTextContent(
+      expect(
+        within(screen.getByTestId("word-one-off-rows")).getByRole("alert"),
+      ).toHaveTextContent(
         "Reading the document took too long, so this message was sent without it.",
       );
     });
@@ -1100,7 +1168,7 @@ describe("WordChatInput comment context", () => {
       renderInput();
       send();
       const run = start();
-      fireEvent.click(screen.getByTestId("word-exclude-document"));
+      excludeDocument();
 
       expect(await screen.findByTestId("word-comment-block")).toHaveTextContent(
         "Your cursor is in more than one comment",
@@ -1121,6 +1189,8 @@ describe("WordChatInput comment context", () => {
       await prepared();
       const t1 = refOf("T1");
       first.unmount();
+      // A chat keeps the setting it started with; this one starts over with the document on.
+      wordContextStore.resetForTests();
 
       host.includeDocument = true;
       install({ selection: { tag: "END", offset: 0 } });
@@ -1134,7 +1204,7 @@ describe("WordChatInput comment context", () => {
       );
       send();
       const run = start();
-      fireEvent.click(screen.getByTestId("word-exclude-document"));
+      excludeDocument();
       const result = await finish(run);
 
       expect(threadOf(result)).toBe(t1);
@@ -1163,7 +1233,7 @@ describe("WordChatInput comment context", () => {
       await act(async () => {
         await new Promise((resolve) => setTimeout(resolve, 20));
       });
-      fireEvent.click(screen.getByTestId("word-exclude-document"));
+      excludeDocument();
       settleBudget({ ok: true });
       const result = await finish(run);
 

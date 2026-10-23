@@ -170,6 +170,53 @@ describe("previewWordSend", () => {
     ).toMatchObject({ carrier: "document", document: "sent" });
   });
 
+  describe("the selection's disposition", () => {
+    it("sends an armed passage, with or without the document", () => {
+      for (const documentIncluded of [true, false])
+        expect(
+          previewWordSend(
+            input({
+              documentIncluded,
+              passageGoes: true,
+              commentSelection: passage([]),
+            }),
+          ).selection,
+        ).toBe("sent");
+    });
+
+    it("says a thread goes in the passage's place", () => {
+      expect(
+        previewWordSend(
+          input({
+            passageGoes: true,
+            precedence: "comment",
+            commentSelection: passage(["c1"]),
+          }),
+        ).selection,
+      ).toBe("replaced-by-comment");
+    });
+
+    it("sends no passage that does not go: none, dismissed or still Erato's", () => {
+      // A dismissed or unarmed passage reaches the preview as passageGoes false.
+      expect(previewWordSend(input({ passageGoes: false })).selection).toBe(
+        "not-sent",
+      );
+      expect(
+        previewWordSend(
+          input({ commentSelection: { kind: "caret", threads: ["c1"] } }),
+        ).selection,
+      ).toBe("not-sent");
+      expect(
+        previewWordSend(
+          input({ documentIncluded: false, includeOpenComments: true }),
+        ).selection,
+      ).toBe("not-sent");
+      expect(previewWordSend(input({ unreadable: true })).selection).toBe(
+        "not-sent",
+      );
+    });
+  });
+
   it("does not send a document no facet can carry", () => {
     expect(
       previewWordSend(

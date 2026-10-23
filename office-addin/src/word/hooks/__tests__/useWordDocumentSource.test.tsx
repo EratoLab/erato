@@ -356,6 +356,81 @@ describe("useWordDocumentSource", () => {
     expect(build!.args.document_text).toContain("Alpha");
   });
 
+  describe("retry", () => {
+    const failOnce = async () => {
+      read.mockResolvedValueOnce({ ok: false, error: "paragraph read: Error" });
+      const view = renderSource();
+      await waitFor(() =>
+        expect(view.result.current.preview.status).toBe("unreadable"),
+      );
+      return view;
+    };
+
+    it("reads again at once after a failed read, without waiting for a send", async () => {
+      const { result } = await failOnce();
+      focusPane();
+      expect(read).toHaveBeenCalledTimes(1);
+      const second = deferred<WordDocumentReadResult>();
+      read.mockReturnValueOnce(second.promise);
+
+      act(() => result.current.retry());
+
+      // Loading at once: the error does not stay up for the slow-read delay.
+      expect(result.current.preview).toMatchObject({
+        status: "unreadable",
+        reading: true,
+      });
+      expect(read).toHaveBeenCalledTimes(2);
+
+      await act(async () => {
+        second.resolve({
+          ok: true,
+          tracking: "Off",
+          paragraphs: paragraphs(["Alpha"]),
+        });
+      });
+      expect(result.current.preview).toMatchObject({
+        status: "included",
+        reading: false,
+      });
+    });
+
+    it("settles to unreadable when the read fails again", async () => {
+      const { result } = await failOnce();
+      read.mockResolvedValueOnce({ ok: false, error: "still failing" });
+
+      act(() => result.current.retry());
+      expect(result.current.preview.reading).toBe(true);
+
+      await waitFor(() =>
+        expect(result.current.preview).toMatchObject({
+          status: "unreadable",
+          readError: "still failing",
+          reading: false,
+        }),
+      );
+    });
+
+    it("joins a read that is already running", async () => {
+      const first = deferred<WordDocumentReadResult>();
+      read.mockReturnValueOnce(first.promise);
+      const { result } = renderSource();
+      expect(read).toHaveBeenCalledTimes(1);
+
+      act(() => result.current.retry());
+
+      expect(read).toHaveBeenCalledTimes(1);
+      await act(async () => {
+        first.resolve({
+          ok: true,
+          tracking: "Off",
+          paragraphs: paragraphs(["Alpha"]),
+        });
+      });
+      expect(result.current.preview.reading).toBe(false);
+    });
+  });
+
   it.each([
     ["retries", "package-timeout", "unavailable", 2],
     ["does not retry", "package-too-large", "too-large", 1],

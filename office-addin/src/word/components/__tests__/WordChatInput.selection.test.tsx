@@ -5,16 +5,20 @@ import {
   fireEvent,
   render,
   screen,
+  within,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { ACTION_FACET_ARG_MAX_BYTES } from "../../../core/clientActions/actionFacetArgs";
 import { __resetOfficeSelectionChangedBrokerForTests } from "../../../hooks/officeSelectionChangedBroker";
+import { ContextLaneDouble } from "../../../test/helpers/contextLaneDouble";
 import {
   installWordSelectionHost,
   SV2_MAIN_DOCUMENT,
   uninstallWordSelectionHost,
 } from "../../../test/mocks/word/selectionHost";
 import { WORD_SELECTION_DEBOUNCE_MS } from "../../hooks/useWordSelection";
+import { wordContextStore } from "../../hooks/wordContextStore";
 import { wordSelectionStore } from "../../hooks/wordSelectionStore";
 import {
   markProgrammaticWordSelection,
@@ -28,39 +32,47 @@ import type { AddinChatInputRenderProps } from "../../../core/AddinChatCore";
 import type { WordSelectionHost } from "../../../test/mocks/word/selectionHost";
 import type { WordDocumentBuild } from "../../utils/buildWordDocumentArgs";
 import type { WordSelectionCapture } from "../../utils/wordSelectionAnchor";
-import type { ReactNode } from "react";
+import type { ComposerContextItem } from "@erato/frontend/library";
 
 const host = vi.hoisted(() => ({
   facets: [] as { id: string; allowed_args?: string[] }[],
   includeDocument: false,
   capture: vi.fn(),
   captureExpectedSlow: vi.fn(() => false),
+  items: [] as ComposerContextItem[],
 }));
 
 vi.mock("@erato/frontend/library", async () => {
   const mock = await import("../../../test/helpers/eratoLibraryMock");
+  const { AlertMock } = await import("../../../test/helpers/contextLaneDouble");
   return mock.createEratoLibraryMock({
     useFacets: () => ({ data: { action_facets: host.facets } }),
-    Alert: ({ children }: { children: ReactNode }) => (
-      <div role="alert">{children}</div>
-    ),
+    Alert: AlertMock,
   });
 });
 
 vi.mock("../../../core/AddinChatInputCore", () => ({
   AddinChatInputCore: ({
     onSendMessage,
+    contextItems,
   }: {
     onSendMessage: (message: string) => void;
-  }) => (
-    <button
-      type="button"
-      data-testid="send"
-      onClick={() => onSendMessage("Shorten this")}
-    >
-      send
-    </button>
-  ),
+    contextItems?: ComposerContextItem[];
+  }) => {
+    host.items = contextItems ?? [];
+    return (
+      <>
+        <ContextLaneDouble items={contextItems} />
+        <button
+          type="button"
+          data-testid="send"
+          onClick={() => onSendMessage("Shorten this")}
+        >
+          send
+        </button>
+      </>
+    );
+  },
 }));
 
 vi.mock("../../hooks/useWordDocumentSource", () => ({
@@ -82,6 +94,7 @@ vi.mock("../../hooks/useWordDocumentSource", () => ({
     captureExpectedSlow: host.captureExpectedSlow,
     previousCapture: () => null,
     markSent: () => {},
+    retry: () => {},
   }),
 }));
 
@@ -145,8 +158,16 @@ describe("WordChatInput with a Word selection", () => {
     await settle();
     return view;
   };
-  const chip = () => screen.queryByTestId("word-selection-chip");
-  const documentChip = () => screen.getByTestId("word-include-document-chip");
+  const chip = () => screen.queryByTestId("context-chip-word.selection");
+  const meta = (element: HTMLElement | null) =>
+    element && within(element).queryByTestId("context-chip-meta")?.textContent;
+  const selectionDetail = () =>
+    screen.getByTestId("context-detail-word.selection");
+  const documentChip = () => screen.getByTestId("context-chip-word.document");
+  const documentDetail = () =>
+    screen.getByTestId("context-detail-word.document");
+  const press = (element: HTMLElement | null, name: string) =>
+    fireEvent.click(within(element!).getByRole("button", { name }));
   const send = () => fireEvent.click(screen.getByTestId("send"));
   const lastSend = () => {
     const call = handedOver.at(-1);
@@ -182,12 +203,17 @@ describe("WordChatInput with a Word selection", () => {
     __resetOfficeSelectionChangedBrokerForTests();
     resetProgrammaticWordSelectionForTests();
     wordSelectionStore.resetForTests();
+    wordContextStore.resetForTests();
   });
 
-  it("shows the selection and sends it with the word_selection facet", async () => {
+  it("shows the selection in the lane and sends it with the word_selection facet", async () => {
     await renderInput();
-    expect(chip()?.textContent).toContain("lima mike");
-    expect(chip()?.textContent).toContain("Selected passage · 1 paragraph");
+    expect(chip()).toHaveAttribute("data-state", "included");
+    expect(within(chip()!).getByTestId("context-chip-label")).toHaveTextContent(
+      "“lima mike”",
+    );
+    expect(meta(chip())).toBe("Selected passage · 1 ¶");
+    expect(screen.queryByTestId("word-selection-chip")).toBeNull();
 
     send();
     expect(lastSend()[11]?.label).toBe("Reading selection…");
@@ -235,10 +261,11 @@ describe("WordChatInput with a Word selection", () => {
     host.includeDocument = true;
     word.select({ table: 0, tableWhole: true });
     await renderInput();
-    expect(chip()?.textContent).toContain("Sent instead of the document.");
-    expect(documentChip()).toHaveTextContent(
-      "Your selection is sent instead of the document",
-    );
+    expect(
+      within(selectionDetail()).getByText("Sent instead of the document."),
+    ).toBeInTheDocument();
+    expect(documentChip()).toHaveAttribute("data-state", "superseded");
+    expect(meta(documentChip())).toBe("Replaced by selection");
 
     send();
     expect(lastSend()[11]?.label).toBe("Reading selection…");
@@ -255,7 +282,9 @@ describe("WordChatInput with a Word selection", () => {
     host.includeDocument = true;
     word.select({ p: "PL1" });
     await renderInput();
-    expect(chip()?.textContent).toContain("Sent instead of the document.");
+    expect(selectionDetail()).toHaveTextContent(
+      "Sent instead of the document.",
+    );
     send();
     const result = await prepared();
     expect(result?.actionFacet).toMatchObject({
@@ -268,7 +297,9 @@ describe("WordChatInput with a Word selection", () => {
   it("sends a passage inside a paragraph instead of the included document", async () => {
     host.includeDocument = true;
     await renderInput();
-    expect(chip()?.textContent).toContain("Sent instead of the document.");
+    expect(selectionDetail()).toHaveTextContent(
+      "Sent instead of the document.",
+    );
     send();
     const result = await prepared();
     expect(result?.actionFacet).toMatchObject({
@@ -295,7 +326,9 @@ describe("WordChatInput with a Word selection", () => {
       host.includeDocument = true;
       word.select(target);
       await renderInput();
-      expect(chip()?.textContent).toContain("Sent instead of the document.");
+      expect(selectionDetail()).toHaveTextContent(
+        "Sent instead of the document.",
+      );
       send();
       const result = await prepared();
       expect(result?.actionFacet).toMatchObject({
@@ -319,19 +352,20 @@ describe("WordChatInput with a Word selection", () => {
     expect(host.capture).not.toHaveBeenCalled();
   });
 
-  it("says on the document chip that the selection is sent instead, until the selection is dismissed", async () => {
+  it("supersedes the document while the selection goes, until the selection is dismissed", async () => {
     host.includeDocument = true;
     await renderInput();
-    expect(documentChip()).toHaveTextContent(
+    expect(documentChip()).toHaveAttribute("data-state", "superseded");
+    expect(meta(documentChip())).toBe("Replaced by selection");
+    expect(documentDetail()).toHaveTextContent(
       "Your selection is sent instead of the document",
     );
-    expect(documentChip()).toHaveAttribute("data-state", "superseded");
 
-    fireEvent.click(screen.getByLabelText("Dismiss selection"));
+    press(chip(), "Dismiss selection");
 
-    expect(documentChip()).toHaveTextContent("selection.docx is included");
+    expect(chip()).toHaveAttribute("data-state", "suggested");
     expect(documentChip()).toHaveAttribute("data-state", "included");
-    expect(documentChip()).toHaveClass("bg-theme-bg-secondary");
+    expect(meta(documentChip())).toBe("1 ¶");
     send();
     const result = await prepared();
     expect(result?.actionFacet?.id).toBe("word_document_review");
@@ -344,9 +378,12 @@ describe("WordChatInput with a Word selection", () => {
     markProgrammaticWordSelection();
     act(() => word.select({ p: "MP1", text: "victor" }));
     await settle();
-    expect(chip()?.textContent).toContain("Shown by Erato");
-    expect(chip()?.textContent).not.toContain("Sent instead of the document.");
-    expect(documentChip()).toHaveTextContent("selection.docx is included");
+    expect(chip()).toHaveAttribute("data-state", "suggested");
+    expect(meta(chip())).toBe("Shown by Erato · 1 ¶");
+    expect(selectionDetail()).not.toHaveTextContent(
+      "Sent instead of the document.",
+    );
+    expect(documentChip()).toHaveAttribute("data-state", "included");
 
     send();
     const result = await prepared();
@@ -361,10 +398,15 @@ describe("WordChatInput with a Word selection", () => {
     word.select({ p: "BIG" });
     await renderInput();
 
-    expect(chip()?.textContent).toContain(
+    expect(chip()).toHaveAttribute("data-state", "included");
+    expect(chip()).toHaveAttribute("data-tone", "warning");
+    expect(meta(chip())).toBe("Too long · beginning only");
+    expect(selectionDetail()).toHaveTextContent(
       "Too long to send in full. Only the beginning is sent.",
     );
-    expect(chip()?.textContent).not.toContain("Sent instead of the document.");
+    expect(selectionDetail()).toHaveTextContent(
+      "Sent instead of the document.",
+    );
   });
 
   it("sends a plain message when the selection collapsed before Send", async () => {
@@ -419,9 +461,14 @@ describe("WordChatInput with a Word selection", () => {
       await vi.advanceTimersByTimeAsync(WORD_SELECTION_CAPTURE_TIMEOUT_MS);
     });
     expect(await result).toBeNull();
-    expect(screen.getByRole("alert").textContent).toBe(
+    expect(
+      within(screen.getByTestId("word-one-off-rows")).getByRole("alert")
+        .textContent,
+    ).toBe(
       "Erato could not read your selection in Word, so your message was not sent. Send it again, or dismiss the selection to send without it.",
     );
+    expect(chip()).toHaveAttribute("data-state", "error");
+    expect(meta(chip())).toBe("Couldn't read · send again");
     act(() => prepare.onAbandoned?.());
     expect(staged.at(-1)).toBeNull();
   });
@@ -449,13 +496,17 @@ describe("WordChatInput with a Word selection", () => {
     act(() => word.select({ p: "MP1", text: "victor" }));
     await settle();
     expect(chip()?.textContent).toContain("victor");
-    expect(chip()?.textContent).toContain("Shown by Erato");
+    expect(meta(chip())).toBe("Shown by Erato · 1 ¶");
+    expect(
+      within(chip()!).queryByRole("button", { name: "Dismiss selection" }),
+    ).toBeNull();
 
     send();
     expect(lastSend()[11]).toBeUndefined();
     expect(lastSend()[4]).toBeUndefined();
 
-    fireEvent.click(screen.getByText("Use this selection"));
+    press(chip(), "Use this selection");
+    expect(chip()).toHaveAttribute("data-state", "included");
     send();
     const result = await prepared();
     expect(result?.actionFacet?.args?.selected_text).toBe("victor");
@@ -474,7 +525,7 @@ describe("WordChatInput with a Word selection", () => {
 
   it("reads a new selection at Send while the old one is still dismissed", async () => {
     await renderInput();
-    fireEvent.click(screen.getByLabelText("Dismiss selection"));
+    press(chip(), "Dismiss selection");
     act(() => word.select({ p: "MP2", text: "xray" }));
     send();
     const result = await prepared();
@@ -483,25 +534,275 @@ describe("WordChatInput with a Word selection", () => {
 
   it("keeps a dismissal while a new chat gets its ID, and re-arms in another chat", async () => {
     const view = await renderInput(null);
-    fireEvent.click(screen.getByLabelText("Dismiss selection"));
-    expect(chip()).toBeNull();
+    press(chip(), "Dismiss selection");
+    expect(chip()).toHaveAttribute("data-state", "suggested");
+    expect(chip()).toHaveAttribute("data-dismiss-scope", "selection");
     send();
     expect(lastSend()[11]).toBeUndefined();
 
     view.rerender(element("chat-new"));
-    expect(chip()).toBeNull();
+    expect(chip()).toHaveAttribute("data-state", "suggested");
     send();
     expect(lastSend()[11]).toBeUndefined();
 
     view.rerender(element("chat-other"));
-    expect(chip()).not.toBeNull();
+    expect(chip()).toHaveAttribute("data-state", "included");
   });
 
   it("re-arms a dismissed chip when the user selects again", async () => {
     await renderInput();
-    fireEvent.click(screen.getByLabelText("Dismiss selection"));
+    press(chip(), "Dismiss selection");
     act(() => word.select({ p: "MP3", text: "zulu" }));
     await settle();
     expect(chip()?.textContent).toContain("zulu");
+    expect(chip()).toHaveAttribute("data-state", "included");
+  });
+
+  it("hands the lane the selection with the host's words", async () => {
+    host.includeDocument = true;
+    await renderInput();
+    const [selection, document] = host.items;
+    expect(selection).toMatchObject({
+      id: "word-selection",
+      kind: "word.selection",
+      origin: "ambient",
+      dismissScope: "selection",
+      icon: "selection",
+      label: "“lima mike”",
+      spokenLabel: "Selection",
+      state: "included",
+      removeLabel: "Dismiss selection",
+      // Read by the lane from the chip a + lands on.
+      announcements: {
+        restored: "Selection included. It is sent instead of the document.",
+      },
+      detail: { title: "Selected passage" },
+    });
+    expect(document).toMatchObject({
+      id: "word-document",
+      state: "superseded",
+      detail: {
+        actions: [
+          {
+            id: "send-instead",
+            label: "Send this instead",
+            variant: "primary",
+            announcement:
+              "Document included. Your selection is off until it changes.",
+          },
+        ],
+      },
+    });
+  });
+
+  it("sends the document instead from its detail, and leaves the selection off until it changes", async () => {
+    host.includeDocument = true;
+    await renderInput();
+
+    press(documentDetail(), "Send this instead");
+
+    expect(chip()).toHaveAttribute("data-state", "suggested");
+    expect(documentChip()).toHaveAttribute("data-state", "included");
+    send();
+    const result = await prepared();
+    expect(result?.actionFacet?.id).toBe("word_document_review");
+    expect(host.capture).toHaveBeenCalledTimes(1);
+
+    act(() => word.select({ p: "MP3", text: "zulu" }));
+    await settle();
+    expect(chip()).toHaveAttribute("data-state", "included");
+    expect(documentChip()).toHaveAttribute("data-state", "superseded");
+  });
+
+  it("offers no Send this instead on a locked document, and keeps the selection's (x)", async () => {
+    host.includeDocument = true;
+    render(
+      <WordChatInput
+        chatInputProps={{ ...props("chat-1"), disabled: true }}
+        documentIdentity={IDENTITY}
+        stagePendingCapture={(capture) => staged.push(capture)}
+      />,
+    );
+    await settle();
+
+    expect(documentChip()).toHaveAttribute("data-state", "superseded");
+    expect(documentChip()).toHaveAttribute("data-locked", "true");
+    expect(host.items[1].detail?.actions).toBeUndefined();
+    expect(
+      within(documentDetail()).queryByRole("button", {
+        name: "Send this instead",
+      }),
+    ).toBeNull();
+
+    press(chip(), "Dismiss selection");
+    expect(chip()).toHaveAttribute("data-state", "suggested");
+    expect(documentChip()).toHaveAttribute("data-state", "included");
+  });
+
+  it("marks where a passage over the send limit stops, and says how much of it goes", async () => {
+    const tags = Array.from({ length: 14 }, (_, index) => `CL${index + 1}`);
+    const clause = "lorem ipsum ".repeat(500);
+    word = installWordSelectionHost({
+      body: tags.map((tag) => `${tag} ${clause}`),
+    });
+    word.select({ p: tags[0], to: { p: tags.at(-1)! } });
+    await renderInput();
+
+    const sentLines = Math.floor(
+      ACTION_FACET_ARG_MAX_BYTES / (`${tags[0]} ${clause}`.length + 1),
+    );
+    expect(sentLines).toBeLessThan(tags.length);
+    expect(chip()).toHaveAttribute("data-tone", "warning");
+    expect(host.items[0]).toMatchObject({ toneIcon: "tone" });
+    const quote = selectionDetail().querySelector(
+      '[data-ui="word-context-detail-quote"]',
+    );
+    expect(quote?.textContent?.endsWith("…")).toBe(true);
+    expect(quote?.textContent).not.toContain(tags.at(-1));
+    expect(selectionDetail()).toHaveTextContent(
+      `Erato receives the first ${sentLines} of 14 paragraphs.`,
+    );
+  });
+
+  it("shows the whole passage in the detail, beyond what the label shows", async () => {
+    const long = `LONG ${"word ".repeat(120)}end`;
+    word = installWordSelectionHost({ body: [long] });
+    word.select({ p: "LONG" });
+    await renderInput();
+
+    const label =
+      within(chip()!).getByTestId("context-chip-label").textContent ?? "";
+    expect(Array.from(label.slice(1, -1)).length).toBeLessThanOrEqual(61);
+    expect(label.endsWith("…”")).toBe(true);
+    expect(
+      selectionDetail().querySelector('[data-ui="word-context-detail-quote"]')
+        ?.textContent,
+    ).toBe(long);
+  });
+
+  it("brings a dismissed selection back when the host re-reads it as the user's", async () => {
+    await renderInput();
+    press(chip(), "Dismiss selection");
+    expect(chip()).toHaveAttribute("data-state", "suggested");
+
+    act(() => wordSelectionStore.requestRefresh({ rearm: true }));
+
+    expect(chip()).toHaveAttribute("data-state", "included");
+  });
+
+  describe("a selection Word did not hand over", () => {
+    const failRead = async () => {
+      word.hangSync();
+      send();
+      const prepare = lastSend()[11]!;
+      let result: Promise<Prepared> | undefined;
+      act(() => {
+        result = prepare.run(new AbortController().signal);
+      });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(WORD_SELECTION_CAPTURE_TIMEOUT_MS);
+      });
+      expect(await result).toBeNull();
+      act(() => prepare.onAbandoned?.());
+    };
+
+    it("marks that selection, and reads a new one afresh", async () => {
+      await renderInput();
+      await failRead();
+      expect(chip()).toHaveAttribute("data-state", "error");
+      expect(chip()).toHaveAttribute("data-tone", "error");
+
+      act(() => word.select({ p: "MP3", text: "zulu" }));
+      await settle();
+
+      expect(chip()).toHaveAttribute("data-state", "included");
+      // The row is a one-off prompt for the failed Send: it stays until the next one.
+      expect(screen.getByTestId("word-one-off-rows")).toHaveTextContent(
+        "Erato could not read your selection in Word",
+      );
+    });
+
+    it("forgets the failure once the chip is dismissed", async () => {
+      await renderInput();
+      await failRead();
+
+      press(chip(), "Dismiss selection");
+      expect(chip()).toHaveAttribute("data-state", "suggested");
+      press(chip(), "Include selection");
+
+      expect(chip()).toHaveAttribute("data-state", "included");
+    });
+  });
+
+  describe("agrees with what Send carries", () => {
+    it.each([
+      [
+        "a selection with the document",
+        true,
+        "user",
+        "included",
+        "superseded",
+        "word_selection",
+      ],
+      [
+        "a dismissed selection with the document",
+        true,
+        "dismissed",
+        "suggested",
+        "included",
+        "word_document_review",
+      ],
+      [
+        "Erato's passage with the document",
+        true,
+        "erato",
+        "suggested",
+        "included",
+        "word_document_review",
+      ],
+      [
+        "a selection with the document off",
+        false,
+        "user",
+        "included",
+        "suggested",
+        "word_selection",
+      ],
+      [
+        "a dismissed selection with the document off",
+        false,
+        "dismissed",
+        "suggested",
+        "suggested",
+        undefined,
+      ],
+    ] as const)(
+      "%s",
+      async (
+        _,
+        includeDocument,
+        passage,
+        selectionState,
+        documentState,
+        facet,
+      ) => {
+        host.includeDocument = includeDocument;
+        await renderInput();
+        if (passage === "dismissed") press(chip(), "Dismiss selection");
+        if (passage === "erato") {
+          markProgrammaticWordSelection();
+          act(() => word.select({ p: "MP1", text: "victor" }));
+          await settle();
+        }
+        expect(chip()).toHaveAttribute("data-state", selectionState);
+        expect(documentChip()).toHaveAttribute("data-state", documentState);
+
+        send();
+        const actionFacet = lastSend()[11]
+          ? (await prepared())?.actionFacet
+          : lastSend()[4];
+        expect(actionFacet?.id).toBe(facet);
+      },
+    );
   });
 });

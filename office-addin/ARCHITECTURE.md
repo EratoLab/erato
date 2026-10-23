@@ -163,6 +163,13 @@ announcements. Locking is per item (`locked`, `lockReason`); the lane does
 not inherit the composer's lock, except that a chip claiming files is locked
 while the file row is.
 
+Word feeds the selection and the document this way: `wordContextChips`
+reads `previewWordSend()` and `useWordContextItems` turns the result into
+items. The (x)/(+) choices live in `wordContextStore`, in memory only
+(Office settings would save them into the DOCX), one entry per conversation
+key, so two composers never write each other's choices. One-off send prompts stay
+rows above the composer until the notice slot is used.
+
 ## Landmines
 
 - office.js nullifies `history.pushState`/`replaceState` on load (office-js

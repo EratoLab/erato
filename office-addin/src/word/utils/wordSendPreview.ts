@@ -31,6 +31,12 @@ export type WordDocumentDisposition =
   | "off"
   | "not-sent";
 
+/** What becomes of the user's passage: it goes, or a comment thread goes in its place. */
+export type WordSelectionDisposition =
+  | "sent"
+  | "replaced-by-comment"
+  | "not-sent";
+
 export interface WordSendPreviewInput
   extends Pick<
     WordCommentSendInput,
@@ -60,12 +66,14 @@ export interface WordSendPreview {
   carrier: WordSendCarrier;
   facetId: string | null;
   document: WordDocumentDisposition;
+  /** The selection chip reads this, as the document chip reads `document`. */
+  selection: WordSelectionDisposition;
   comments: WordCommentSendPlan;
 }
 
 /**
  * The Send's order (passage, then document, then comments) on what render
- * time knows, so the document row states what the Send would carry. The Send
+ * time knows, so the context chips state what the Send would carry. The Send
  * reads Word again and decides for itself.
  */
 export function previewWordSend(input: WordSendPreviewInput): WordSendPreview {
@@ -89,6 +97,7 @@ export function previewWordSend(input: WordSendPreviewInput): WordSendPreview {
     carrier: "comment",
     facetId: WORD_COMMENT_THREAD_FACET_ID,
     document,
+    selection: input.passageGoes ? "replaced-by-comment" : "not-sent",
     comments,
   });
 
@@ -104,6 +113,7 @@ export function previewWordSend(input: WordSendPreviewInput): WordSendPreview {
       carrier: "selection",
       facetId: WORD_SELECTION_FACET_ID,
       document: input.documentIncluded ? "replaced-by-selection" : "off",
+      selection: "sent",
       comments,
     };
   }
@@ -120,8 +130,20 @@ export function previewWordSend(input: WordSendPreviewInput): WordSendPreview {
           availableFacetIds: input.availableFacetIds,
         });
     return facetId
-      ? { carrier: "document", facetId, document: "sent", comments }
-      : { carrier: "none", facetId: null, document: "not-sent", comments };
+      ? {
+          carrier: "document",
+          facetId,
+          document: "sent",
+          selection: "not-sent",
+          comments,
+        }
+      : {
+          carrier: "none",
+          facetId: null,
+          document: "not-sent",
+          selection: "not-sent",
+          comments,
+        };
   }
 
   const comments = resolveComments(false);
@@ -131,7 +153,14 @@ export function previewWordSend(input: WordSendPreviewInput): WordSendPreview {
       carrier: "open-comments",
       facetId: WORD_COMMENT_THREAD_FACET_ID,
       document: "off",
+      selection: "not-sent",
       comments,
     };
-  return { carrier: "none", facetId: null, document: "off", comments };
+  return {
+    carrier: "none",
+    facetId: null,
+    document: "off",
+    selection: "not-sent",
+    comments,
+  };
 }

@@ -1,24 +1,30 @@
 import { i18n } from "@lingui/core";
 import {
+  act,
   cleanup,
   fireEvent,
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { ContextLaneDouble } from "../../../test/helpers/contextLaneDouble";
 import {
   installMockWordDocument,
   uninstallMockWordDocument,
 } from "../../../test/mocks/word/document";
+import { wordContextStore } from "../../hooks/wordContextStore";
 import { WordChatInput } from "../WordChatInput";
 
 import type { AddinChatInputRenderProps } from "../../../core/AddinChatCore";
 import type { MockWordHost } from "../../../test/mocks/word/document";
+import type { ComposerContextItem } from "@erato/frontend/library";
 import type { WordDocumentCapture } from "@erato/frontend/word-review";
 
 const advertised = vi.hoisted(() => ({ ids: [] as string[] }));
+const lane = vi.hoisted(() => ({ items: [] as ComposerContextItem[] }));
 const preferences = vi.hoisted(() => ({
   includeByDefault: true,
   setIncludeByDefault: vi.fn(),
@@ -26,10 +32,12 @@ const preferences = vi.hoisted(() => ({
 
 vi.mock("@erato/frontend/library", async () => {
   const mock = await import("../../../test/helpers/eratoLibraryMock");
+  const { AlertMock } = await import("../../../test/helpers/contextLaneDouble");
   return mock.createEratoLibraryMock({
     useFacets: () => ({
       data: { action_facets: advertised.ids.map((id) => ({ id })) },
     }),
+    Alert: AlertMock,
   });
 });
 
@@ -44,17 +52,25 @@ vi.mock("../../wordPreferences", () => ({
 vi.mock("../../../core/AddinChatInputCore", () => ({
   AddinChatInputCore: ({
     onSendMessage,
+    contextItems,
   }: {
     onSendMessage: (message: string, inputFileIds?: string[]) => void;
-  }) => (
-    <button
-      type="button"
-      data-testid="send"
-      onClick={() => onSendMessage("hi")}
-    >
-      send
-    </button>
-  ),
+    contextItems?: ComposerContextItem[];
+  }) => {
+    lane.items = contextItems ?? [];
+    return (
+      <>
+        <ContextLaneDouble items={contextItems} />
+        <button
+          type="button"
+          data-testid="send"
+          onClick={() => onSendMessage("hi")}
+        >
+          send
+        </button>
+      </>
+    );
+  },
 }));
 
 type SendCall = Parameters<AddinChatInputRenderProps["onSendMessage"]>;
@@ -110,12 +126,19 @@ describe("WordChatInput", () => {
     documentIdentity: string = IDENTITY,
   ) => render(element(chatId, documentIdentity));
 
-  const chip = () => screen.getByTestId("word-include-document-chip");
-  const excludeButton = () => screen.queryByTestId("word-exclude-document");
-  const isIncluded = () => excludeButton() !== null;
-  const exclude = () =>
-    fireEvent.click(screen.getByTestId("word-exclude-document"));
-  const include = () => fireEvent.click(chip());
+  const chip = () => screen.getByTestId("context-chip-word.document");
+  const meta = () =>
+    within(chip()).queryByTestId("context-chip-meta")?.textContent;
+  const detail = () => screen.getByTestId("context-detail-word.document");
+  const excludeButton = () =>
+    within(chip()).queryByRole("button", {
+      name: "Don't include this document",
+    });
+  const includeButton = () =>
+    within(chip()).queryByRole("button", { name: "Include this document" });
+  const isIncluded = () => chip().dataset.state !== "suggested";
+  const exclude = () => fireEvent.click(excludeButton()!);
+  const include = () => fireEvent.click(includeButton()!);
   const toggleAwayFromDefault = () =>
     preferences.includeByDefault ? exclude() : include();
   const send = () => fireEvent.click(screen.getByTestId("send"));
@@ -139,48 +162,85 @@ describe("WordChatInput", () => {
   afterEach(() => {
     cleanup();
     uninstallMockWordDocument();
+    wordContextStore.resetForTests();
     vi.clearAllMocks();
   });
 
-  it("includes the document by default and names it in the chip", async () => {
+  it("puts the document in the composer's lane, named by its file, and no row above it", async () => {
     renderInput();
 
-    expect(excludeButton()).toHaveAttribute(
-      "aria-label",
-      "Don't include this document",
-    );
-    await waitFor(() =>
-      expect(chip()).toHaveTextContent("report.docx is included"),
-    );
+    await waitFor(() => expect(meta()).toBe("3 ¶"));
     expect(chip()).toHaveAttribute("data-state", "included");
-    // A long name is cut, so the whole label stays on hover.
-    expect(screen.getByText("report.docx is included")).toHaveAttribute(
-      "title",
-      "report.docx is included",
+    expect(within(chip()).getByTestId("context-chip-label")).toHaveTextContent(
+      "report.docx",
     );
+    expect(excludeButton()).toBeEnabled();
+    expect(screen.queryByTestId("word-include-document-chip")).toBeNull();
+    expect(screen.queryByTestId("word-exclude-document")).toBeNull();
+    expect(screen.queryByTestId("word-selection-chip")).toBeNull();
+    expect(screen.queryByTestId("word-one-off-rows")).toBeNull();
   });
 
-  it("starts without the document when the preference is off, and includes it with one click", async () => {
+  it("hands the lane one document item with the host's words", async () => {
+    renderInput();
+    await waitFor(() => expect(meta()).toBe("3 ¶"));
+
+    expect(lane.items).toHaveLength(1);
+    const [item] = lane.items;
+    expect(item).toMatchObject({
+      id: "word-document",
+      kind: "word.document",
+      origin: "ambient",
+      dismissScope: "chat",
+      icon: "document",
+      label: "report.docx",
+      spokenLabel: "Document",
+      state: "included",
+      removeLabel: "Don't include this document",
+      detail: { title: "report.docx" },
+    });
+    expect(item.onRestore).toBeUndefined();
+    expect(item.locked).toBeUndefined();
+    expect(item.detail?.actions).toBeUndefined();
+  });
+
+  it("keeps the same items across a render that changes nothing", async () => {
+    const { rerender } = renderInput();
+    await waitFor(() => expect(meta()).toBe("3 ¶"));
+    const before = lane.items;
+
+    rerender(element());
+
+    expect(lane.items).toBe(before);
+  });
+
+  it("starts suggested when the preference is off, and includes it with +", async () => {
     preferences.includeByDefault = false;
     renderInput();
 
-    expect(chip()).toHaveTextContent("Include this document");
+    expect(chip()).toHaveAttribute("data-state", "suggested");
     expect(excludeButton()).toBeNull();
+    expect(lane.items[0]).toMatchObject({
+      restoreLabel: "Include this document",
+    });
 
     include();
 
     expect(isIncluded()).toBe(true);
-    await waitFor(() =>
-      expect(chip()).toHaveTextContent("report.docx is included"),
-    );
+    await waitFor(() => expect(meta()).toBe("3 ¶"));
   });
 
-  it("stops including the document for this chat with the ✕", async () => {
+  it("turns the document suggested for this chat with its (x)", async () => {
     renderInput();
 
     exclude();
 
-    expect(chip()).toHaveTextContent("Include this document");
+    expect(chip()).toHaveAttribute("data-state", "suggested");
+    expect(chip()).toHaveAttribute("data-dismiss-scope", "chat");
+    expect(includeButton()).toBeInTheDocument();
+    expect(
+      within(detail()).getByText(/Leaving it out lasts for this chat/),
+    ).toBeInTheDocument();
     send();
     await waitFor(() => expect(sends).toHaveLength(1));
     expect(lastFacet()).toBeUndefined();
@@ -196,9 +256,14 @@ describe("WordChatInput", () => {
       />
     );
     const { rerender } = render(locked(true));
+    const reason =
+      "Can't change this while the chat is archived or a task is running";
 
     expect(excludeButton()).toBeDisabled();
-    exclude();
+    expect(excludeButton()).toHaveAttribute("title", reason);
+    expect(chip()).toHaveAttribute("data-locked", "true");
+    // Called anyway, as a keyboard path might: the composer still holds.
+    act(() => lane.items[0].onRemove?.());
     expect(isIncluded()).toBe(true);
     send();
     await waitFor(() => expect(sends).toHaveLength(1));
@@ -207,15 +272,16 @@ describe("WordChatInput", () => {
     rerender(locked(false));
     expect(excludeButton()).toBeEnabled();
     exclude();
-    expect(chip()).toHaveTextContent("Include this document");
+    expect(chip()).toHaveAttribute("data-state", "suggested");
 
     rerender(locked(true));
-    expect(chip()).toBeDisabled();
-    include();
+    expect(includeButton()).toBeDisabled();
+    expect(includeButton()).toHaveAttribute("title", reason);
+    act(() => lane.items[0].onRestore?.());
     expect(isIncluded()).toBe(false);
 
     rerender(locked(false));
-    expect(chip()).toBeEnabled();
+    expect(includeButton()).toBeEnabled();
     include();
     expect(isIncluded()).toBe(true);
   });
@@ -224,7 +290,8 @@ describe("WordChatInput", () => {
     advertised.ids = [];
     renderInput();
 
-    expect(screen.queryByTestId("word-include-document-chip")).toBeNull();
+    expect(screen.queryByTestId("context-chip-word.document")).toBeNull();
+    expect(lane.items).toEqual([]);
     expect(screen.getByTestId("send")).toBeInTheDocument();
   });
 
@@ -270,7 +337,8 @@ describe("WordChatInput", () => {
     word.word.setParagraphs([{ text: "" }]);
     renderInput();
 
-    await waitFor(() => expect(chip()).toHaveTextContent("New document"));
+    await waitFor(() => expect(meta()).toBe("New document"));
+    expect(chip()).toHaveAttribute("data-state", "included");
     send();
 
     await waitFor(() => expect(sends).toHaveLength(1));
@@ -281,14 +349,21 @@ describe("WordChatInput", () => {
     });
   });
 
-  it("says a document with content is not included when only compose is advertised", async () => {
+  it("says a document with content cannot be sent when only compose is advertised", async () => {
     advertised.ids = ["word_compose"];
     renderInput();
 
-    await waitFor(() =>
-      expect(chip()).toHaveTextContent("Document not included"),
-    );
+    await waitFor(() => expect(meta()).toBe("Can't be sent in this chat"));
     expect(chip()).toHaveAttribute("data-state", "error");
+    expect(chip()).toHaveAttribute("data-tone", "error");
+    expect(
+      within(chip()).getByRole("button", { name: "Dismiss document" }),
+    ).toBeInTheDocument();
+    expect(
+      within(detail()).getByText(
+        "This chat can only start new documents, so a document with text is not sent.",
+      ),
+    ).toBeInTheDocument();
     expect(
       screen.queryByTestId("word-document-coverage-hint"),
     ).not.toBeInTheDocument();
@@ -316,15 +391,58 @@ describe("WordChatInput", () => {
     word.word.run.mockRejectedValue(new Error("GeneralException"));
     renderInput();
 
-    await waitFor(() =>
-      expect(chip()).toHaveTextContent("Document not included"),
-    );
+    await waitFor(() => expect(meta()).toBe("Couldn't read the document"));
+    expect(chip()).toHaveAttribute("data-state", "error");
     send();
 
     await waitFor(() => expect(sends).toHaveLength(1));
     expect(lastFacet()).toBeUndefined();
     expect(lastIdentity()).toBeNull();
     expect(staged.at(-1)).toBeNull();
+  });
+
+  it("reads an unreadable document again with Try again", async () => {
+    word.word.run.mockRejectedValueOnce(new Error("GeneralException"));
+    renderInput();
+    await waitFor(() => expect(meta()).toBe("Couldn't read the document"));
+    expect(
+      within(detail()).getByText(
+        "Word did not hand over this document, so it is not sent. Try again, or leave it out.",
+      ),
+    ).toBeInTheDocument();
+    expect(lane.items[0].detail?.actions).toEqual([
+      expect.objectContaining({
+        id: "retry",
+        label: "Try again",
+        variant: "primary",
+        announcement: "Document read.",
+      }),
+    ]);
+
+    fireEvent.click(
+      within(detail()).getByRole("button", { name: "Try again" }),
+    );
+
+    expect(chip()).toHaveAttribute("data-state", "loading");
+    await waitFor(() => expect(meta()).toBe("3 ¶"));
+    expect(chip()).toHaveAttribute("data-state", "included");
+  });
+
+  it("reads an unreadable document again when it is included with +", async () => {
+    word.word.run.mockRejectedValueOnce(new Error("GeneralException"));
+    renderInput();
+    await waitFor(() => expect(meta()).toBe("Couldn't read the document"));
+    fireEvent.click(
+      within(chip()).getByRole("button", { name: "Dismiss document" }),
+    );
+    expect(chip()).toHaveAttribute("data-state", "suggested");
+    const reads = word.word.run.mock.calls.length;
+
+    include();
+
+    expect(chip()).toHaveAttribute("data-state", "loading");
+    await waitFor(() => expect(meta()).toBe("3 ¶"));
+    expect(word.word.run.mock.calls.length).toBeGreaterThan(reads);
   });
 
   it("carries the document on every send, unchanged document included", async () => {
@@ -348,10 +466,16 @@ describe("WordChatInput", () => {
     );
     renderInput();
 
-    await waitFor(() =>
-      expect(chip()).toHaveTextContent(
-        /Document included \(first \d+ of 200 paragraphs\)/,
+    await waitFor(() => expect(meta()).toMatch(/^First \d+ of 200 ¶$/));
+    expect(
+      within(detail()).getByText(
+        /^Erato receives the first \d+ of 200 paragraphs\.$/,
       ),
+    ).toBeInTheDocument();
+    expect(
+      within(detail()).getByTestId("word-document-coverage-hint"),
+    ).toHaveTextContent(
+      "Only the beginning is sent. To work on a later part, select it in Word.",
     );
   });
 
@@ -436,11 +560,22 @@ describe("WordChatInput", () => {
     const setItem = vi.spyOn(Storage.prototype, "setItem");
     const removeItem = vi.spyOn(Storage.prototype, "removeItem");
 
+    word.word.run.mockRejectedValueOnce(new Error("GeneralException"));
     renderInput();
+    await waitFor(() => expect(meta()).toBe("Couldn't read the document"));
+    fireEvent.click(
+      within(detail()).getByRole("button", { name: "Try again" }),
+    );
+    await waitFor(() => expect(meta()).toBe("3 ¶"));
     send();
     await waitFor(() => expect(sends).toHaveLength(1));
     exclude();
     include();
+    const [key] = wordContextStore.getSnapshot().keys();
+    act(() => {
+      wordContextStore.dismissSelection(key, "passage");
+      wordContextStore.rearmSelection(key, "passage");
+    });
 
     expect(preferences.setIncludeByDefault).not.toHaveBeenCalled();
     expect(setItem).not.toHaveBeenCalled();

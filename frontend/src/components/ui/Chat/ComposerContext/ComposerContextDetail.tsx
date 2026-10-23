@@ -31,7 +31,7 @@ import {
   statePill,
 } from "./composerContextStrings";
 
-import type { ComposerContextItem } from "./types";
+import type { ComposerContextDetailAction, ComposerContextItem } from "./types";
 import type { CSSProperties } from "react";
 
 // eslint-disable-next-line lingui/no-unlocalized-strings -- CSS media query, not user-facing
@@ -90,6 +90,11 @@ interface ComposerContextDetailProps {
   onClose: (options: { restoreFocus: boolean }) => void;
   onRemove: (item: ComposerContextItem) => void;
   onRestore: (item: ComposerContextItem) => void;
+  /** Called before a host action runs, so the lane can wait for its outcome. */
+  onAction?: (
+    item: ComposerContextItem,
+    action: ComposerContextDetailAction,
+  ) => void;
 }
 
 const DetailHeaderMeta = ({ item }: { item: ComposerContextItem }) => {
@@ -121,7 +126,7 @@ const DetailFooter = ({
   item: ComposerContextItem;
   onRemove: (item: ComposerContextItem) => void;
   onRestore: (item: ComposerContextItem) => void;
-  onAction: (onSelect: () => void) => void;
+  onAction: (action: ComposerContextDetailAction) => void;
 }) => {
   const control = composerContextControl(item);
   const actions = item.detail?.actions ?? [];
@@ -138,7 +143,7 @@ const DetailFooter = ({
           key={action.id}
           size="sm"
           variant={action.variant === "primary" ? "primary" : "secondary"}
-          onClick={() => onAction(action.onSelect)}
+          onClick={() => onAction(action)}
         >
           {action.label}
         </Button>
@@ -182,6 +187,7 @@ export const ComposerContextDetail = ({
   onClose,
   onRemove,
   onRestore,
+  onAction,
 }: ComposerContextDetailProps) => {
   const sheet = useComposerContextSheet();
   const detail = item.detail;
@@ -197,11 +203,12 @@ export const ComposerContextDetail = ({
     [onClose],
   );
   const runAction = useCallback(
-    (onSelect: () => void) => {
-      onSelect();
+    (action: ComposerContextDetailAction) => {
+      onAction?.(item, action);
+      action.onSelect();
       onClose({ restoreFocus: true });
     },
-    [onClose],
+    [item, onAction, onClose],
   );
 
   const dialogNode = useCallback(

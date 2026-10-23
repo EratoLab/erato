@@ -3,6 +3,7 @@ import {
   type AssistantMention,
   type ChatInputControlsHandle,
   type ChatModel,
+  type ComposerContextItem,
   type ComposerSizeLimit,
   type DelegationRunMode,
   type FileType,
@@ -54,9 +55,15 @@ export interface AddinChatInputCoreProps {
    * composer leaves it unset: it proposes no actions of its own.
    */
   pausesHostActionsWhenWritesOff?: boolean;
+  /**
+   * The host's context chips, built from its send resolver so a chip never
+   * says "included" when nothing goes out (ARCHITECTURE "Composer context").
+   * Pass a memoized array.
+   */
+  contextItems?: ComposerContextItem[];
 }
 
-/** Generic add-in composer. It has no host context, chips, or action facets. */
+/** Generic add-in composer. Hosts add their context chips and action facets. */
 export const AddinChatInputCore = forwardRef<
   ChatInputControlsHandle,
   AddinChatInputCoreProps

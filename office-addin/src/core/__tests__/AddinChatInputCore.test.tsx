@@ -33,4 +33,26 @@ describe("AddinChatInputCore", () => {
     expect(props).not.toHaveProperty("actionFacet");
     expect(props).not.toHaveProperty("sendItemIdentity");
   });
+
+  it("hands the host's context items to the composer as they are", () => {
+    const contextItems = [
+      {
+        id: "word-document",
+        kind: "word.document",
+        origin: "ambient" as const,
+        dismissScope: "chat" as const,
+        state: "included" as const,
+        label: "report.docx",
+        icon: "document",
+      },
+    ];
+    render(
+      <AddinChatInputCore
+        onSendMessage={vi.fn()}
+        contextItems={contextItems}
+      />,
+    );
+
+    expect(chatInput.mock.calls.at(-1)?.[0].contextItems).toBe(contextItems);
+  });
 });

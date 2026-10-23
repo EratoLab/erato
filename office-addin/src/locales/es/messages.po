@@ -261,6 +261,7 @@ msgstr "No incluir el borrador"
 
 #. js-lingui-explicit-id
 #: src/core/selection/AddinSelectionChip.tsx
+#: src/word/utils/wordContextChips.ts
 msgid "officeAddin.chatInput.dismissSelection"
 msgstr "Descartar selección"
 
@@ -760,12 +761,18 @@ msgid "officeAddin.pinHint.title"
 msgstr "Ánclalo para seguir tu correo"
 
 #. js-lingui-explicit-id
+#: src/core/selection/selectionExcerpt.ts
+msgid "officeAddin.selection.quoted"
+msgstr "«{excerpt}»"
+
+#. js-lingui-explicit-id
 #: src/core/selection/AddinSelectionChip.tsx
 msgid "officeAddin.selection.shownByErato"
 msgstr "Mostrado por Erato"
 
 #. js-lingui-explicit-id
 #: src/core/selection/AddinSelectionChip.tsx
+#: src/word/utils/wordContextChips.ts
 msgid "officeAddin.selection.useThis"
 msgstr "Usar esta selección"
 
@@ -2740,7 +2747,7 @@ msgid "officeAddin.word.authoring.outputUnverified"
 msgstr "Word aplicó cambios, pero no se pudo verificar el resultado. El original está guardado para recuperarlo."
 
 #. js-lingui-explicit-id
-#: src/word/components/WordChatInput.tsx
+#: src/word/utils/wordContextChips.ts
 msgid "officeAddin.word.authoring.packageBlocked"
 msgstr "Word para la web no entregó el archivo completo, por ejemplo porque el documento tiene una etiqueta de confidencialidad. Erato solo leyó el cuerpo del documento, así que no puede cambiar encabezados, pies de página ni el diseño de página, y cualquier cambio reemplaza todo el cuerpo en lugar de editar los pasajes directamente."
 
@@ -2790,27 +2797,27 @@ msgid "officeAddin.word.authoring.readFailed"
 msgstr "Word no pudo leer el documento para esta operación. No se realizó ningún cambio."
 
 #. js-lingui-explicit-id
-#: src/word/components/WordChatInput.tsx
+#: src/word/utils/wordAuthoringMessages.ts
 msgid "officeAddin.word.authoring.readOnlyTooLarge"
 msgstr "Este archivo es demasiado grande para que Erato lo abra por completo. Erato solo recibe el texto incluido y puede reformularlo, pero no cambiar su estructura ni su formato."
 
 #. js-lingui-explicit-id
-#: src/word/components/WordChatInput.tsx
+#: src/word/utils/wordAuthoringMessages.ts
 msgid "officeAddin.word.authoring.readOnlyTooLargeTracking"
 msgstr "Además, el archivo es demasiado grande para que Erato lo abra por completo, así que Erato solo recibe el texto incluido."
 
 #. js-lingui-explicit-id
-#: src/word/components/WordChatInput.tsx
+#: src/word/utils/wordAuthoringMessages.ts
 msgid "officeAddin.word.authoring.readOnlyTracking"
 msgstr "El control de cambios está activado, así que Erato lee este documento como si se hubieran aceptado todos los cambios controlados, sin ver quién cambió qué, y no lo edita."
 
 #. js-lingui-explicit-id
-#: src/word/components/WordChatInput.tsx
+#: src/word/utils/wordAuthoringMessages.ts
 msgid "officeAddin.word.authoring.readOnlyUnavailable"
 msgstr "Word no entregó el documento completo, así que Erato puede leer su texto pero no editarlo. Vuelva a enviar para intentarlo de nuevo."
 
 #. js-lingui-explicit-id
-#: src/word/components/WordChatInput.tsx
+#: src/word/utils/wordAuthoringMessages.ts
 msgid "officeAddin.word.authoring.readOnlyUnsupported"
 msgstr "Erato no puede editar la estructura de archivo de este documento, así que solo puede leer su texto."
 
@@ -3048,73 +3055,71 @@ msgstr "Insertado en el documento."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx
-msgid "officeAddin.word.chip.changed"
-msgstr "Documento incluido: ha cambiado desde el último envío"
+#~ msgid "officeAddin.word.chip.changed"
+#~ msgstr "Documento incluido: ha cambiado desde el último envío"
 
 #. js-lingui-explicit-id
-#: src/word/components/WordChatInput.tsx
+#: src/word/utils/wordContextChips.ts
 msgid "officeAddin.word.chip.commentInstead"
-msgstr "Se envía un comentario en lugar del documento"
+msgstr "Se envía un comentario en lugar del documento."
 
 #. js-lingui-explicit-id
-#: src/word/components/WordChatInput.tsx
+#: src/word/utils/wordContextChips.ts
 msgid "officeAddin.word.chip.dismiss"
 msgstr "No incluir este documento"
 
 #. js-lingui-explicit-id
-#: src/word/components/WordChatInput.tsx
+#: src/word/utils/wordContextChips.ts
 msgid "officeAddin.word.chip.include"
 msgstr "Incluir este documento"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx
-msgid "officeAddin.word.chip.included"
-msgstr "Documento incluido"
+#~ msgid "officeAddin.word.chip.included"
+#~ msgstr "Documento incluido"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx
-msgid "officeAddin.word.chip.includedInParts"
-msgstr "Documento incluido · se lee por partes"
+#~ msgid "officeAddin.word.chip.includedInParts"
+#~ msgstr "Documento incluido · se lee por partes"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx
-msgid "officeAddin.word.chip.includedNamed"
-msgstr "{documentName} está incluido"
+#~ msgid "officeAddin.word.chip.includedNamed"
+#~ msgstr "{documentName} está incluido"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx
-msgid "officeAddin.word.chip.includedPartial"
-msgstr "Documento incluido (parcial)"
-
-#. js-lingui-explicit-id
-#. placeholder {0}: coverage.paragraphsSent
-#. placeholder {1}: coverage.paragraphsTotal
-#: src/word/components/WordChatInput.tsx
-msgid "officeAddin.word.chip.includedTruncated"
-msgstr "Documento incluido (primeros {0} de {1} párrafos)"
+#~ msgid "officeAddin.word.chip.includedPartial"
+#~ msgstr "Documento incluido (parcial)"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx
+#~ msgid "officeAddin.word.chip.includedTruncated"
+#~ msgstr "Documento incluido (primeros {0} de {1} párrafos)"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordContextChips.ts
 msgid "officeAddin.word.chip.newDocument"
 msgstr "Documento nuevo"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx
-msgid "officeAddin.word.chip.notIncluded"
-msgstr "Documento no incluido"
+#~ msgid "officeAddin.word.chip.notIncluded"
+#~ msgstr "Documento no incluido"
 
 #. js-lingui-explicit-id
-#: src/word/components/WordChatInput.tsx
+#: src/word/utils/wordContextChips.ts
 msgid "officeAddin.word.chip.reading"
 msgstr "Leyendo el documento…"
 
 #. js-lingui-explicit-id
-#: src/word/components/WordChatInput.tsx
+#: src/word/utils/wordContextChips.ts
 msgid "officeAddin.word.chip.selectionInstead"
-msgstr "Se envía su selección en lugar del documento"
+msgstr "Se envía su selección en lugar del documento."
 
 #. js-lingui-explicit-id
-#: src/word/components/WordChatInput.tsx
+#: src/word/utils/wordContextChips.ts
 msgid "officeAddin.word.chip.selectLaterPart"
 msgstr "Solo se envía el principio. Para trabajar en una parte posterior, selecciónela en Word."
 
@@ -3878,6 +3883,256 @@ msgstr "Incluir comentarios"
 #: src/word/components/WordCommentChip.tsx
 msgid "officeAddin.word.comments.without"
 msgstr "Este mensaje se envía sin comentarios."
+
+#. js-lingui-explicit-id
+#: src/word/hooks/useWordContextItems.tsx
+msgid "officeAddin.word.context.document.announce.read"
+msgstr "Documento leído."
+
+#. js-lingui-explicit-id
+#: src/word/hooks/useWordContextItems.tsx
+msgid "officeAddin.word.context.document.announce.sentInstead"
+msgstr "Documento incluido. Su selección queda desactivada hasta que cambie."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordContextDetails.tsx
+msgid "officeAddin.word.context.document.commentsHeading"
+msgstr "Comentarios"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordContextChips.ts
+msgid "officeAddin.word.context.document.coverage.authoring"
+msgstr "Erato lee las partes del documento que necesita su solicitud."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordContextChips.ts
+msgid "officeAddin.word.context.document.coverage.changed"
+msgstr "Modificado desde el último envío: Erato lo vuelve a leer con este mensaje."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordContextChips.ts
+msgid "officeAddin.word.context.document.coverage.empty"
+msgstr "El documento está vacío, así que solo se envía su nombre."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordContextChips.ts
+msgid "officeAddin.word.context.document.coverage.first"
+msgstr "{total, plural, one {Erato recibe los primeros {sent} de # párrafo.} other {Erato recibe los primeros {sent} de # párrafos.}}"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordContextChips.ts
+msgid "officeAddin.word.context.document.coverage.partial"
+msgstr "Erato recibe solo el principio del primer párrafo, porque por sí solo supera el límite de envío."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordContextChips.ts
+msgid "officeAddin.word.context.document.coverage.whole"
+msgstr "{total, plural, one {Erato recibe el documento completo, # párrafo.} other {Erato recibe el documento completo, # párrafos.}}"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordContextChips.ts
+msgid "officeAddin.word.context.document.coverageHeading"
+msgstr "Alcance"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordContextChips.ts
+msgid "officeAddin.word.context.document.coverageIfSentHeading"
+msgstr "Si se envía en su lugar"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordContextChips.ts
+msgid "officeAddin.word.context.document.dismissError"
+msgstr "Descartar documento"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordContextChips.ts
+msgid "officeAddin.word.context.document.lifetime"
+msgstr "Dejarlo fuera dura en este chat. Los chats nuevos siguen su ajuste «{setting}»."
+
+#. js-lingui-explicit-id
+#: src/word/hooks/useWordContextItems.tsx
+msgid "officeAddin.word.context.document.lockReason"
+msgstr "No se puede cambiar mientras el chat esté archivado o se ejecute una tarea"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordContextChips.ts
+msgid "officeAddin.word.context.document.meta.beginningOnly"
+msgstr "Solo el principio"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordContextChips.ts
+msgid "officeAddin.word.context.document.meta.bodyOnly"
+msgstr "Solo el cuerpo"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordContextChips.ts
+msgid "officeAddin.word.context.document.meta.cannotEdit"
+msgstr "No se puede editar"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordContextChips.ts
+msgid "officeAddin.word.context.document.meta.changed"
+msgstr "Modificado desde el último envío"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordContextChips.ts
+msgid "officeAddin.word.context.document.meta.firstOf"
+msgstr "Primeros {sent} de {total} ¶"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordContextChips.ts
+msgid "officeAddin.word.context.document.meta.notSentHere"
+msgstr "No se puede enviar en este chat"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordContextChips.ts
+msgid "officeAddin.word.context.document.meta.paragraphs"
+msgstr "{total} ¶"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordContextChips.ts
+msgid "officeAddin.word.context.document.meta.readInParts"
+msgstr "Se lee por partes"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordContextChips.ts
+msgid "officeAddin.word.context.document.meta.readOnly"
+msgstr "Solo lectura"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordContextChips.ts
+msgid "officeAddin.word.context.document.meta.replacedByComment"
+msgstr "Sustituido por un comentario"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordContextChips.ts
+msgid "officeAddin.word.context.document.meta.replacedBySelection"
+msgstr "Sustituido por la selección"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordContextChips.ts
+msgid "officeAddin.word.context.document.meta.trackChanges"
+msgstr "Control de cambios activado"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordContextChips.ts
+msgid "officeAddin.word.context.document.meta.unreadable"
+msgstr "No se pudo leer el documento"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordContextChips.ts
+msgid "officeAddin.word.context.document.notSentHereEmptyNote"
+msgstr "Este chat solo puede trabajar con documentos que tengan texto, así que no se envía un documento vacío."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordContextChips.ts
+msgid "officeAddin.word.context.document.notSentHereNote"
+msgstr "Este chat solo puede empezar documentos nuevos, así que no se envía un documento con texto."
+
+#. js-lingui-explicit-id
+#: src/word/hooks/useWordContextItems.tsx
+msgid "officeAddin.word.context.document.spoken"
+msgstr "Documento"
+
+#. js-lingui-explicit-id
+#: src/word/hooks/useWordContextItems.tsx
+msgid "officeAddin.word.context.document.unnamed"
+msgstr "Este documento"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordContextChips.ts
+msgid "officeAddin.word.context.document.unreadableNote"
+msgstr "Word no entregó este documento, así que no se envía. Vuelva a intentarlo o déjelo fuera."
+
+#. js-lingui-explicit-id
+#: src/word/hooks/useWordContextItems.tsx
+msgid "officeAddin.word.context.retry"
+msgstr "Volver a intentarlo"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordContextChips.ts
+msgid "officeAddin.word.context.selection.announce.usedInstead"
+msgstr "Selección incluida. Se envía en lugar del documento."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordContextChips.ts
+msgid "officeAddin.word.context.selection.commentInstead"
+msgstr "Se envía un comentario en lugar de este pasaje."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordContextChips.ts
+msgid "officeAddin.word.context.selection.eratoNote"
+msgstr "Erato seleccionó este pasaje. Se muestra, pero no se envía hasta que lo use."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordContextChips.ts
+msgid "officeAddin.word.context.selection.include"
+msgstr "Incluir la selección"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordContextChips.ts
+msgid "officeAddin.word.context.selection.lifetime"
+msgstr "Dejarlo fuera dura hasta que cambie la selección."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordContextChips.ts
+msgid "officeAddin.word.context.selection.meta"
+msgstr "Pasaje seleccionado · {paragraphs} ¶"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordContextChips.ts
+msgid "officeAddin.word.context.selection.meta.readFailed"
+msgstr "No se pudo leer · vuelva a enviar"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordContextChips.ts
+msgid "officeAddin.word.context.selection.meta.replacedByComment"
+msgstr "Sustituida por un comentario"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordContextChips.ts
+msgid "officeAddin.word.context.selection.meta.shownByErato"
+msgstr "Mostrado por Erato · {paragraphs} ¶"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordContextChips.ts
+msgid "officeAddin.word.context.selection.meta.tooLong"
+msgstr "Demasiado largo · solo el principio"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordContextChips.ts
+msgid "officeAddin.word.context.selection.paragraphs"
+msgstr "{count, plural, one {# párrafo} other {# párrafos}}"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordContextChips.ts
+msgid "officeAddin.word.context.selection.paragraphsErato"
+msgstr "{count, plural, one {# párrafo · Mostrado por Erato tras «Mostrar en Word»} other {# párrafos · Mostrado por Erato tras «Mostrar en Word»}}"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordContextDetails.tsx
+msgid "officeAddin.word.context.selection.quoteLabel"
+msgstr "Texto seleccionado"
+
+#. js-lingui-explicit-id
+#: src/word/hooks/useWordContextItems.tsx
+msgid "officeAddin.word.context.selection.spoken"
+msgstr "Selección"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordContextChips.ts
+msgid "officeAddin.word.context.selection.title"
+msgstr "Pasaje seleccionado"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordContextChips.ts
+msgid "officeAddin.word.context.selection.titleErato"
+msgstr "Pasaje seleccionado por Erato"
+
+#. js-lingui-explicit-id
+#: src/word/hooks/useWordContextItems.tsx
+msgid "officeAddin.word.context.sendInstead"
+msgstr "Enviar esto en su lugar"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordImportConfirm.tsx
@@ -5200,8 +5455,8 @@ msgstr "Tu solicitud vuelve a estar en el cuadro de mensaje. Selecciona el pasaj
 
 #. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx
-msgid "officeAddin.word.selection.commentInstead"
-msgstr "Se envía el comentario de abajo en lugar de este pasaje."
+#~ msgid "officeAddin.word.selection.commentInstead"
+#~ msgstr "Se envía el comentario de abajo en lugar de este pasaje."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
@@ -5345,8 +5600,8 @@ msgstr "La propuesta ha perdido o movido un campo, vínculo, nota o comentario d
 
 #. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx
-msgid "officeAddin.word.selection.meta"
-msgstr "{paragraphCount, plural, one {Pasaje seleccionado · # párrafo} other {Pasaje seleccionado · # párrafos}}"
+#~ msgid "officeAddin.word.selection.meta"
+#~ msgstr "{paragraphCount, plural, one {Pasaje seleccionado · # párrafo} other {Pasaje seleccionado · # párrafos}}"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
@@ -5400,6 +5655,7 @@ msgstr "Word no pudo localizar el pasaje con exactitud dentro de su párrafo. No
 
 #. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx
+#: src/word/utils/wordContextChips.ts
 msgid "officeAddin.word.selection.readFailed"
 msgstr "Erato no pudo leer tu selección en Word, así que tu mensaje no se envió. Envíalo de nuevo o descarta la selección para enviarlo sin ella."
 
@@ -5554,7 +5810,7 @@ msgid "officeAddin.word.selection.scope"
 msgstr "Reemplazar solo escribe en el pasaje que seleccionaste, y solo si no cambió desde tu solicitud."
 
 #. js-lingui-explicit-id
-#: src/word/components/WordChatInput.tsx
+#: src/word/utils/wordContextChips.ts
 msgid "officeAddin.word.selection.sentInsteadOfDocument"
 msgstr "Se envía en lugar del documento."
 
@@ -5614,7 +5870,7 @@ msgid "officeAddin.word.selection.trackedItems"
 msgstr "El control de cambios está activado y este pasaje contiene campos, vínculos, notas, comentarios o marcadores, así que una reescritura con seguimiento marcaría todo su párrafo como cambiado. Desactiva el control de cambios para reemplazarlo. No se reemplazó nada."
 
 #. js-lingui-explicit-id
-#: src/word/components/WordChatInput.tsx
+#: src/word/utils/wordContextChips.ts
 msgid "officeAddin.word.selection.truncated"
 msgstr "Demasiado largo para enviarlo completo. Solo se envía el principio."
 
@@ -5781,6 +6037,7 @@ msgstr "Comportamiento en Word"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSettingsDialog.tsx
+#: src/word/utils/wordContextChips.ts
 msgid "officeAddin.word.settings.includeDocument"
 msgstr "Incluir el documento abierto en los chats nuevos"
 

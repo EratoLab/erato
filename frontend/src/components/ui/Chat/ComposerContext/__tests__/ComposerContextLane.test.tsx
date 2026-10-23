@@ -7,6 +7,7 @@ import {
   within,
 } from "@testing-library/react";
 import { useMemo, useState } from "react";
+import { flushSync } from "react-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { componentRegistry } from "@/config/componentRegistry";
@@ -18,6 +19,7 @@ import type { LaneGeometry } from "../composerContextLayout";
 import type {
   ComposerContextChipFaceProps,
   ComposerContextItem,
+  ComposerContextState,
 } from "../types";
 
 vi.mock("../composerContextLayout", async (importOriginal) => ({
@@ -359,6 +361,46 @@ describe("ComposerContextLane", () => {
       expect(chip("A")).toHaveAttribute("data-tone", "neutral");
     });
 
+    it("keeps a short label at its own width instead of padding it to the floor", () => {
+      render(
+        <ComposerContextLane
+          items={[
+            ambient({ id: "short", label: "a.docx", meta: "86 ¶" }),
+            ambient({ id: "long", label: "Supply agreement.docx" }),
+          ]}
+        />,
+      );
+      const label = (text: string) =>
+        screen.getByText(text, {
+          selector: '[data-ui="composer-context-chip-label"]',
+        });
+      expect(label("a.docx")).toHaveClass("shrink-0");
+      expect(label("a.docx")).not.toHaveClass("min-w-[7em]");
+      expect(label("Supply agreement.docx")).toHaveClass("min-w-[7em]");
+    });
+
+    it("counts wide characters twice, so a short CJK name still truncates", () => {
+      render(
+        <ComposerContextLane
+          items={[
+            ambient({
+              id: "cjk",
+              label: "供应协议最终版本文件",
+              meta: "Track Changes on · First 453 of 1,590 ¶",
+            }),
+            ambient({ id: "kana", label: "メモ.docx", meta: "86 ¶" }),
+          ]}
+        />,
+      );
+      const label = (text: string) =>
+        screen.getByText(text, {
+          selector: '[data-ui="composer-context-chip-label"]',
+        });
+      expect(label("供应协议最终版本文件")).toHaveClass("min-w-[7em]");
+      expect(label("供应协议最终版本文件")).not.toHaveClass("shrink-0");
+      expect(label("メモ.docx")).toHaveClass("shrink-0");
+    });
+
     it("hides every glyph and draws no text glyphs", () => {
       render(
         <ComposerContextLane
@@ -455,6 +497,29 @@ describe("ComposerContextLane", () => {
       expect(glyph("Choose")).not.toBe(glyph("Plain"));
       expect(glyph("Broken")).not.toBe(glyph("Plain"));
       expect(glyph("Broken")).not.toBe(glyph("Choose"));
+    });
+
+    it("draws the tone's mark when the item asks for it", () => {
+      const glyph = (label: string) =>
+        chip(label).querySelector('[data-ui="composer-context-chip-icon"]')!
+          .innerHTML;
+      render(
+        <ComposerContextLane
+          items={[
+            ambient({ id: "a", label: "Plain" }),
+            ambient({ id: "b", label: "Choose", state: "attention" }),
+            ambient({
+              id: "c",
+              label: "Cut",
+              tone: "warning",
+              toneIcon: "tone",
+            }),
+            ambient({ id: "d", label: "Neutral", toneIcon: "tone" }),
+          ]}
+        />,
+      );
+      expect(glyph("Cut")).toBe(glyph("Choose"));
+      expect(glyph("Neutral")).toBe(glyph("Plain"));
     });
 
     it("prefers the chipFace prop over the registry", () => {
@@ -1167,6 +1232,144 @@ describe("ComposerContextLane", () => {
       expect(screen.getByRole("dialog")).toBeInTheDocument();
       rerender(<ComposerContextLane items={[user()]} />);
       expect(screen.queryByRole("dialog")).toBeNull();
+    });
+
+    describe("a host action's announcement", () => {
+      /** A document a selection replaces; its detail action lands it in `outcome`. */
+      function ActionHost({
+        announcement,
+        outcome = "included",
+        commit = "batched",
+      }: {
+        announcement?: string;
+        outcome?: ComposerContextState;
+        commit?: "batched" | "sync" | "deferred";
+      }) {
+        const [state, setState] = useState<ComposerContextState>("superseded");
+        const [selection, setSelection] = useState("Passage");
+        const [queued, setQueued] = useState<(() => void) | null>(null);
+        const items = useMemo((): ComposerContextItem[] => {
+          const land = () => setState(outcome);
+          return [
+            ambient({
+              id: "sel",
+              kind: "word.selection",
+              label: selection,
+              meta: undefined,
+              onRemove: () => {},
+            }),
+            ambient({
+              state,
+              spokenLabel: "Document",
+              meta:
+                state === "error" ? "Couldn't read the document" : undefined,
+              onRemove: () => {},
+              detail: {
+                title: "Supply agreement",
+                render: () => null,
+                actions: [
+                  {
+                    id: "send-instead",
+                    label: "Send this instead",
+                    announcement,
+                    onSelect: () => {
+                      if (commit === "sync") {
+                        flushSync(land);
+                      } else if (commit === "deferred") {
+                        setQueued(() => land);
+                      } else {
+                        land();
+                      }
+                    },
+                  },
+                ],
+              },
+            }),
+          ];
+        }, [state, selection, announcement, outcome, commit]);
+        return (
+          <>
+            <ComposerContextLane items={items} />
+            <button type="button" onClick={() => queued?.()}>
+              resolve
+            </button>
+            <button
+              type="button"
+              onClick={() => setSelection((current) => `${current}!`)}
+            >
+              change selection
+            </button>
+          </>
+        );
+      }
+
+      const runSendInstead = () => {
+        fireEvent.click(openButton("Supply agreement"));
+        fireEvent.click(
+          within(screen.getByRole("dialog")).getByRole("button", {
+            name: "Send this instead",
+          }),
+        );
+      };
+
+      it("speaks it once the item's state changes", () => {
+        render(
+          <ActionHost
+            commit="deferred"
+            announcement="Document included. Your selection is off until it changes."
+          />,
+        );
+        runSendInstead();
+        expect(live()).toBe("");
+        expect(openButton("Supply agreement")).toHaveFocus();
+        fireEvent.click(screen.getByRole("button", { name: "resolve" }));
+        expect(chip("Supply agreement")).toHaveAttribute(
+          "data-state",
+          "included",
+        );
+        expect(live()).toBe(
+          "Document included. Your selection is off until it changes.",
+        );
+        expect(openButton("Supply agreement")).toHaveFocus();
+      });
+
+      it("is not consumed by another item's change", () => {
+        render(<ActionHost commit="deferred" announcement="Document read." />);
+        runSendInstead();
+        fireEvent.click(
+          screen.getByRole("button", { name: "change selection" }),
+        );
+        expect(live()).toBe("");
+        fireEvent.click(screen.getByRole("button", { name: "resolve" }));
+        expect(live()).toBe("Document read.");
+      });
+
+      it("finds the action when the host commits inside it", () => {
+        render(<ActionHost commit="sync" announcement="Document read." />);
+        runSendInstead();
+        expect(chip("Supply agreement")).toHaveAttribute(
+          "data-state",
+          "included",
+        );
+        expect(live()).toBe("Document read.");
+      });
+
+      it("says where the item landed when it needs the user", () => {
+        render(<ActionHost outcome="error" announcement="Document read." />);
+        runSendInstead();
+        expect(chip("Supply agreement")).toHaveAttribute("data-state", "error");
+        expect(live()).toBe("Document: Couldn't read the document");
+      });
+
+      it("speaks nothing for an action without one", () => {
+        render(<ActionHost />);
+        runSendInstead();
+        expect(chip("Supply agreement")).toHaveAttribute(
+          "data-state",
+          "included",
+        );
+        expect(live()).toBe("");
+      });
     });
 
     describe("in a narrow pane", () => {

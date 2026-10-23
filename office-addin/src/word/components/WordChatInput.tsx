@@ -1,13 +1,10 @@
 import {
   Button,
   Alert,
-  CopyErrorButton,
-  DocumentIcon,
-  SpinnerIcon,
   registerClientToolExecutor,
   useProfile,
 } from "@erato/frontend/library";
-import { plural, t } from "@lingui/core/macro";
+import { t } from "@lingui/core/macro";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
@@ -20,6 +17,7 @@ import {
 import {
   WordCommentCoverage,
   wordCommentCoverageInfo,
+  wordCommentCoverageLines,
 } from "./WordCommentCoverage";
 import { WordCommentPicker, wordCommentReadingText } from "./WordCommentPicker";
 import { AddinChatInputCore } from "../../core/AddinChatInputCore";
@@ -27,14 +25,14 @@ import {
   useAvailableActionFacetArgs,
   useAvailableActionFacetIds,
 } from "../../core/clientActions/useAvailableActionFacets";
-import { AddinSelectionChip } from "../../core/selection/AddinSelectionChip";
 import { useConversationKey } from "../../core/selection/useConversationKey";
-import { useSelectionDismissal } from "../../core/selection/useSelectionDismissal";
 import { useWordClientOperations } from "../hooks/useWordClientOperations";
 import { useWordComments } from "../hooks/useWordComments";
+import { useWordContextItems } from "../hooks/useWordContextItems";
 import { useWordDocumentSource } from "../hooks/useWordDocumentSource";
 import { useWordSelection } from "../hooks/useWordSelection";
 import { wordCommentGestureStore } from "../hooks/wordCommentGestureStore";
+import { wordContextStore } from "../hooks/wordContextStore";
 import {
   armWordSelection,
   wordSelectionStore,
@@ -53,7 +51,10 @@ import {
 } from "../utils/wordActionFacet";
 import { renderWordDiagnosticReport } from "../utils/wordApplyDiagnostics";
 import { checkWordAuthoringBudget } from "../utils/wordAuthoringBudget";
-import { wordAuthoringIssueText } from "../utils/wordAuthoringMessages";
+import {
+  readOnlyText,
+  wordAuthoringIssueText,
+} from "../utils/wordAuthoringMessages";
 import { wordCommentUserTimeZone } from "../utils/wordCommentEnvelope";
 import { wordCommentHeadingsFromBuild } from "../utils/wordCommentMap";
 import { wordCommentDeploymentSettings } from "../utils/wordCommentPolicy";
@@ -89,6 +90,7 @@ import {
   createWordCommentSubmissionExecutor,
   WORD_SUBMIT_COMMENT_CHANGES_TOOL,
 } from "../utils/wordCommentSubmission";
+import { wordDocumentChip, wordSelectionChip } from "../utils/wordContextChips";
 import { resolveWordDocumentName } from "../utils/wordDocumentIdentity";
 import { bindWordDocumentReadRequest } from "../utils/wordDocumentReadRequest";
 import {
@@ -192,7 +194,6 @@ function waitForCapture(
   });
 }
 
-/** Keep the document toggle in memory; Office settings would persist it into the DOCX. */
 export function WordChatInput({
   chatInputProps,
   documentIdentity,
@@ -210,10 +211,11 @@ export function WordChatInput({
     reviewAvailable || composeAvailable || authoringAvailable;
 
   const [includeByDefault] = useWordIncludeDocumentByDefault();
+  const conversationKey = useConversationKey(chatId, documentIdentity);
   // The setting applies to new chats; a chat keeps the default it started with.
-  const [chatDefault, setChatDefault] = useState(includeByDefault);
-  const [inclusionOverride, setInclusionOverride] = useState<boolean | null>(
-    null,
+  const isDocumentIncluded = wordContextStore.useDocumentIncluded(
+    conversationKey,
+    { chatStarted: chatId !== null, includeByDefault },
   );
   const settleCaptureRef = useRef<((outcome: CaptureOutcome) => void) | null>(
     null,
@@ -238,9 +240,7 @@ export function WordChatInput({
     const isNewChatGettingItsId =
       lastChatIdRef.current == null && chatId != null;
     lastChatIdRef.current = chatId;
-    setChatDefault(includeByDefault);
     if (!isNewChatGettingItsId) {
-      setInclusionOverride(null);
       // The send waiting in the chat being left is dropped now, so it cannot hold up this one.
       const settle = settleCaptureRef.current;
       if (settle) globalThis.queueMicrotask(() => settle({ kind: "aborted" }));
@@ -250,8 +250,6 @@ export function WordChatInput({
   const lastIdentityRef = useRef(documentIdentity);
   if (documentIdentity !== lastIdentityRef.current) {
     lastIdentityRef.current = documentIdentity;
-    setChatDefault(includeByDefault);
-    setInclusionOverride(null);
     leftCommentsRef.current ??= "document";
   }
   // The gestures belong to the chat and the document left; a Send waiting on them is dropped.
@@ -263,8 +261,6 @@ export function WordChatInput({
     decideCommentsRef.current?.({ kind: "abort" });
   }, [chatId, documentIdentity]);
 
-  const isDocumentIncluded =
-    inclusionOverride ?? (chatId === null ? includeByDefault : chatDefault);
   const chipEnabled = isDocumentIncluded && chipAvailable;
 
   const availableFacetArgs = useAvailableActionFacetArgs();
@@ -286,11 +282,47 @@ export function WordChatInput({
     wordCommentGestureStore.pick({ kind: "selection", key: armedSelectionKey });
     wordCommentGestureStore.set({ override: null, withoutComments: false });
   }, [armedSelectionKey]);
-  const selectionDismissal = useSelectionDismissal(
-    liveSelection.preview?.key ?? "",
-    useConversationKey(chatId, documentIdentity),
+  const selectionKey = liveSelection.preview?.key ?? "";
+  const selectionDismissed = wordContextStore.useSelectionDismissed(
+    conversationKey,
+    selectionKey,
   );
-  const { rearm: rearmSelection } = selectionDismissal;
+  const contextKeysRef = useRef({ conversationKey, selectionKey });
+  contextKeysRef.current = { conversationKey, selectionKey };
+  const composerLocked = !!chatInputProps.disabled;
+  const lockedRef = useRef(composerLocked);
+  lockedRef.current = composerLocked;
+  const [selectionReadFailed, setSelectionReadFailed] = useState(false);
+  // The chip's error holds for the selection that failed; a new selection is read afresh.
+  const [selectionFailedKey, setSelectionFailedKey] = useState<string | null>(
+    null,
+  );
+  const dismissSelection = useCallback(() => {
+    const keys = contextKeysRef.current;
+    wordContextStore.dismissSelection(keys.conversationKey, keys.selectionKey);
+    setSelectionFailedKey(null);
+  }, []);
+  const rearmSelection = useCallback(() => {
+    const keys = contextKeysRef.current;
+    wordContextStore.rearmSelection(keys.conversationKey, keys.selectionKey);
+  }, []);
+  // An archived chat or a delegated run that is writing locks the composer,
+  // and the document's inclusion with it.
+  const setDocumentIncluded = useCallback((included: boolean) => {
+    if (lockedRef.current) return;
+    wordContextStore.setDocumentIncluded(
+      contextKeysRef.current.conversationKey,
+      included,
+    );
+  }, []);
+  const excludeDocument = useCallback(
+    () => setDocumentIncluded(false),
+    [setDocumentIncluded],
+  );
+  const includeDocument = useCallback(
+    () => setDocumentIncluded(true),
+    [setDocumentIncluded],
+  );
   useEffect(
     () =>
       wordSelectionStore.subscribeRefresh(({ rearm }) => {
@@ -299,16 +331,14 @@ export function WordChatInput({
     [rearmSelection],
   );
   const selectionShown =
-    selectionAvailable &&
-    liveSelection.preview !== null &&
-    !selectionDismissal.dismissed;
+    selectionAvailable && liveSelection.preview !== null && !selectionDismissed;
   // A selection the user made is sent instead of the document, as Outlook sends a selection
   // instead of the draft. A selection still being read is read again at Send.
   const selectionDue =
     selectionAvailable &&
     ((liveSelection.preview !== null &&
       liveSelection.armed &&
-      !selectionDismissal.dismissed) ||
+      !selectionDismissed) ||
       liveSelection.pending);
 
   const commentsShown = wordCommentsAdvertised(commentAdvertised);
@@ -381,13 +411,18 @@ export function WordChatInput({
       decideCommentsRef.current?.({ kind: "pick", ref });
     setPickerOpen(false);
   };
-  const [selectionReadFailed, setSelectionReadFailed] = useState(false);
-  const { preview, capture, captureExpectedSlow, previousCapture, markSent } =
-    useWordDocumentSource({
-      enabled: chipEnabled,
-      documentIdentity,
-      authoringEnabled: authoringAvailable,
-    });
+  const {
+    preview,
+    capture,
+    captureExpectedSlow,
+    previousCapture,
+    markSent,
+    retry: retryDocument,
+  } = useWordDocumentSource({
+    enabled: chipEnabled,
+    documentIdentity,
+    authoringEnabled: authoringAvailable,
+  });
 
   const preparingRef = useRef(false);
   const [slowCapture, setSlowCapture] = useState(false);
@@ -517,6 +552,7 @@ export function WordChatInput({
       clearReadSession();
       clearCommentSession();
       setSelectionReadFailed(false);
+      setSelectionFailedKey(null);
       setCaptureNotice(null);
       const send = (
         actionFacet: ReturnType<typeof resolveWordActionFacet>,
@@ -956,6 +992,7 @@ export function WordChatInput({
         if (signal.aborted || contextChanged()) return null;
         if (read.status === "failed") {
           setSelectionReadFailed(true);
+          setSelectionFailedKey(contextKeysRef.current.selectionKey || null);
           return null;
         }
         const selection =
@@ -1112,7 +1149,7 @@ export function WordChatInput({
       );
   // Authoring reads the document through its tools; the review excerpt's counts do not apply.
   const authoringRoute = authoringAvailable && !readOnly;
-  // The document row states what the Send would carry, in the Send's order.
+  // The chips state what the Send would carry, in the Send's order.
   const sendPreview = previewWordSend({
     advertised: commentAdvertised,
     precedence: commentPrecedence,
@@ -1129,75 +1166,85 @@ export function WordChatInput({
     unreadable: preview.status === "unreadable",
     availableFacetIds,
   });
-  const selectionReplacesDocument =
-    sendPreview.document === "replaced-by-selection";
-  const commentReplacesDocument =
-    sendPreview.document === "replaced-by-comment";
-  const documentSuperseded =
-    selectionReplacesDocument || commentReplacesDocument;
-  // Before the first read nothing is known yet, and the Send reads it first.
-  const documentNotSent =
-    sendPreview.document === "not-sent" && preview.status !== "unknown";
-  // An archived chat or a delegated run that is writing locks the composer,
-  // and the document's inclusion with it.
-  const composerLocked = !!chatInputProps.disabled;
   const readInParts =
     authoringRoute && !!notice.completeReadIssue && !notice.authoringIssue;
-  const documentRowLabel = documentNotSent
-    ? t({
-        id: "officeAddin.word.chip.notIncluded",
-        message: "Document not included",
-      })
-    : chipLabel(
-        preview,
-        resolveWordDocumentName(),
-        authoringRoute,
-        readInParts,
-      );
-  const coverageHint = documentNotSent
-    ? undefined
-    : readInParts
-      ? wordAuthoringIssueText("too-large")
-      : !authoringRoute &&
-          (preview.coverage?.truncated || preview.coverage?.partialParagraph)
-        ? t({
-            id: "officeAddin.word.chip.selectLaterPart",
-            message:
-              "Only the beginning is sent. To work on a later part, select it in Word.",
-          })
-        : undefined;
+  const issue = notice.authoringIssue;
+  // The Send's own budget check, not a fact about the document: it says to send again.
+  const budgetIssue =
+    issue === "model-budget" || issue === "budget-unavailable"
+      ? issue
+      : undefined;
+  const trackChanges =
+    (!!notice.trackChanges || issue === "tracking") && !authoringRoute;
+  const lastingIssue =
+    issue && !budgetIssue && !(readOnly && issue === "tracking")
+      ? {
+          readOnly,
+          text: readOnly
+            ? readOnlyText(issue, notice.authoringDetails, notice.trackChanges)
+            : wordAuthoringIssueText(issue, notice.authoringDetails),
+        }
+      : null;
+  const commentLines =
+    sendPreview.document === "sent" &&
+    livePlan.carrier.kind === "map" &&
+    commentCoverage
+      ? wordCommentCoverageLines(commentCoverage)
+      : [];
+  const chipInput = {
+    preview: sendPreview,
+    selection:
+      selectionAvailable && liveSelection.preview
+        ? {
+            text: liveSelection.preview.text,
+            paragraphCount: liveSelection.preview.paragraphCount,
+            truncated: liveSelection.preview.truncated,
+            armed: liveSelection.armed,
+            dismissed: selectionDismissed,
+            readFailed: selectionFailedKey === liveSelection.preview.key,
+          }
+        : null,
+    document: {
+      available: chipAvailable,
+      included: isDocumentIncluded,
+      status: preview.status,
+      reading: preview.reading,
+      coverage: preview.coverage,
+      changed: preview.changedSinceLastSend,
+      authoringRoute,
+      readInParts,
+      trackChanges,
+      lastingIssue,
+      bodyOnly:
+        authoringRoute && !issue && notice.authoringNote === "package-blocked",
+      commentLines,
+      readReport,
+    },
+  };
+  const contextItems = useWordContextItems({
+    selection: wordSelectionChip(chipInput),
+    document: wordDocumentChip(chipInput),
+    documentName: resolveWordDocumentName(),
+    locked: composerLocked,
+    reportOptions,
+    handlers: {
+      dismissSelection,
+      rearmSelection,
+      armSelection: armWordSelection,
+      excludeDocument,
+      includeDocument,
+      retryDocument,
+      sendDocumentInstead: dismissSelection,
+    },
+  });
+  const oneOffRows =
+    selectionReadFailed ||
+    !!commentBlock ||
+    (chipEnabled && (slowCapture || !!captureNotice || !!budgetIssue)) ||
+    !!commentProgress;
 
   return (
     <>
-      {selectionShown && liveSelection.preview && (
-        <AddinSelectionChip
-          preview={liveSelection.preview.text}
-          metaLabel={selectionMetaLabel(liveSelection.preview.paragraphCount)}
-          note={
-            passageGoes && livePlan.carrier.kind === "thread"
-              ? t({
-                  id: "officeAddin.word.selection.commentInstead",
-                  message: "The comment below is sent instead of this passage.",
-                })
-              : liveSelection.preview.truncated
-                ? t({
-                    id: "officeAddin.word.selection.truncated",
-                    message:
-                      "Too long to send in full. Only the beginning is sent.",
-                  })
-                : chipEnabled && liveSelection.armed
-                  ? t({
-                      id: "officeAddin.word.selection.sentInsteadOfDocument",
-                      message: "Sent instead of the document.",
-                    })
-                  : undefined
-          }
-          armed={liveSelection.armed}
-          onUse={armWordSelection}
-          onDismiss={selectionDismissal.dismiss}
-          testId="word-selection-chip"
-        />
-      )}
       {commentsShown && (
         <WordCommentChip
           view={commentView}
@@ -1218,155 +1265,56 @@ export function WordChatInput({
           onShowInWord={showWordComment}
         />
       )}
-      {selectionReadFailed && (
-        <div className="mx-auto w-full max-w-[var(--theme-layout-chat-input-max-width)] px-2 pb-1 sm:px-4">
-          <Alert type="error">
-            {t({
-              id: "officeAddin.word.selection.readFailed",
-              message:
-                "Erato could not read your selection in Word, so your message was not sent. Send it again, or dismiss the selection to send without it.",
-            })}
-          </Alert>
-        </div>
-      )}
-      {commentBlock && (
+      {oneOffRows && (
+        // One-off send prompts, until they move into the composer's notice slot.
         <div
-          className="mx-auto w-full max-w-[var(--theme-layout-chat-input-max-width)] px-2 pb-1 sm:px-4"
-          data-testid="word-comment-block"
+          className="mx-auto flex w-full max-w-[var(--theme-layout-chat-input-max-width)] flex-col gap-1 px-2 pb-1 sm:px-4"
+          data-testid="word-one-off-rows"
         >
-          <Alert type="warning">
-            <div className="flex items-center gap-2">
-              <span className="min-w-0 flex-1">
-                {commentBlockText(commentBlock)}
-              </span>
-              {commentBlock !== "read-failed" && commentAdvertised.thread && (
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="secondary"
-                  onClick={() => setPickerOpen(true)}
-                >
-                  {wordCommentChooseText()}
-                </Button>
-              )}
-              <Button
-                type="button"
-                size="sm"
-                variant="secondary"
-                onClick={() => decideCommentsRef.current?.({ kind: "without" })}
-              >
-                {wordCommentSendWithoutText()}
-              </Button>
-            </div>
-          </Alert>
-        </div>
-      )}
-      {chipAvailable && (
-        <div className="mx-auto w-full max-w-[var(--theme-layout-chat-input-max-width)] px-2 pb-1 sm:px-4">
-          {chipEnabled ? (
-            <div
-              // Muted text on the secondary fill misses 4.5:1, so a superseded
-              // row sits on the primary fill, as Outlook's draft row does.
-              className={`flex items-center gap-2 rounded-[var(--theme-radius-message)] border border-theme-border px-3 py-1.5 text-xs ${
-                documentSuperseded
-                  ? "bg-theme-bg-primary text-theme-fg-muted"
-                  : "bg-theme-bg-secondary text-theme-fg-secondary"
-              }`}
-              data-testid="word-include-document-chip"
-              data-state={
-                documentSuperseded
-                  ? "superseded"
-                  : documentNotSent
-                    ? "error"
-                    : "included"
-              }
-            >
-              {preview.reading ? (
-                <SpinnerIcon
-                  size="sm"
-                  srText={t({
-                    id: "officeAddin.word.chip.reading",
-                    message: "Reading document…",
-                  })}
-                />
-              ) : (
-                <DocumentIcon
-                  className={`size-4 shrink-0 ${documentSuperseded ? "opacity-60" : ""}`}
-                />
-              )}
-              {documentSuperseded ? (
-                // A sentence, not a name: cut short it can lose "instead".
-                <span className="min-w-0 break-words">
-                  {selectionReplacesDocument
-                    ? t({
-                        id: "officeAddin.word.chip.selectionInstead",
-                        message:
-                          "Your selection is sent instead of the document",
-                      })
-                    : t({
-                        id: "officeAddin.word.chip.commentInstead",
-                        message: "A comment is sent instead of the document",
-                      })}
-                </span>
-              ) : (
-                <span className="min-w-0 truncate" title={documentRowLabel}>
-                  {documentRowLabel}
-                </span>
-              )}
-              <button
-                type="button"
-                onClick={() => {
-                  if (!composerLocked) setInclusionOverride(false);
-                }}
-                disabled={composerLocked}
-                className="ml-auto shrink-0 rounded-[var(--theme-radius-control)] p-0.5 hover:bg-theme-bg-tertiary disabled:cursor-not-allowed disabled:opacity-50"
-                aria-label={t({
-                  id: "officeAddin.word.chip.dismiss",
-                  message: "Don't include this document",
-                })}
-                data-testid="word-exclude-document"
-              >
-                &#x2715;
-              </button>
-            </div>
-          ) : (
-            <Button
-              type="button"
-              onClick={() => {
-                if (!composerLocked) setInclusionOverride(true);
-              }}
-              disabled={composerLocked}
-              data-testid="word-include-document-chip"
-              variant="secondary"
-              className="w-full justify-start text-left"
-              icon={<DocumentIcon className="size-4" />}
-            >
-              <span className="min-w-0 truncate">
-                {t({
-                  id: "officeAddin.word.chip.include",
-                  message: "Include this document",
-                })}
-              </span>
-            </Button>
+          {selectionReadFailed && (
+            <Alert type="error">
+              {t({
+                id: "officeAddin.word.selection.readFailed",
+                message:
+                  "Erato could not read your selection in Word, so your message was not sent. Send it again, or dismiss the selection to send without it.",
+              })}
+            </Alert>
           )}
-          {chipEnabled && !documentSuperseded && coverageHint && (
-            <p
-              className="mt-1 text-xs text-theme-fg-secondary"
-              data-testid="word-document-coverage-hint"
-            >
-              {coverageHint}
-            </p>
-          )}
-          {chipEnabled && readReport && (
-            <CopyErrorButton
-              error={readReport}
-              reportOptions={reportOptions}
-              className="mt-1"
-            />
+          {commentBlock && (
+            <div data-testid="word-comment-block">
+              <Alert type="warning">
+                <div className="flex items-center gap-2">
+                  <span className="min-w-0 flex-1">
+                    {commentBlockText(commentBlock)}
+                  </span>
+                  {commentBlock !== "read-failed" &&
+                    commentAdvertised.thread && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => setPickerOpen(true)}
+                      >
+                        {wordCommentChooseText()}
+                      </Button>
+                    )}
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    onClick={() =>
+                      decideCommentsRef.current?.({ kind: "without" })
+                    }
+                  >
+                    {wordCommentSendWithoutText()}
+                  </Button>
+                </div>
+              </Alert>
+            </div>
           )}
           {chipEnabled && slowCapture && (
             <div
-              className="mt-1 flex items-center gap-2 text-xs text-theme-fg-secondary"
+              className="flex items-center gap-2 text-xs text-theme-fg-secondary"
               data-testid="word-slow-capture"
             >
               <span className="min-w-0 flex-1">
@@ -1403,45 +1351,20 @@ export function WordChatInput({
                   })}
             </Alert>
           )}
-          {chipEnabled &&
-            (notice.trackChanges || notice.authoringIssue === "tracking") &&
-            !authoringRoute && (
-              <Alert type="warning">{trackingReadOnlyText()}</Alert>
-            )}
-          {chipEnabled &&
-            notice.authoringIssue &&
-            !(readOnly && notice.authoringIssue === "tracking") &&
-            (readOnly ? (
-              <Alert type="warning">
-                {readOnlyText(
-                  notice.authoringIssue,
-                  notice.authoringDetails,
-                  notice.trackChanges,
-                )}
-              </Alert>
-            ) : (
-              <Alert type="warning">
-                {wordAuthoringIssueText(
-                  notice.authoringIssue,
-                  notice.authoringDetails,
-                )}
-              </Alert>
-            ))}
-          {chipEnabled &&
-            authoringRoute &&
-            !notice.authoringIssue &&
-            notice.authoringNote === "package-blocked" && (
-              <p
-                className="mt-1 text-xs text-theme-fg-secondary"
-                data-testid="word-document-read-note"
-              >
-                {t({
-                  id: "officeAddin.word.authoring.packageBlocked",
-                  message:
-                    "Word for the web didn't hand over the complete file, for example because the document has a sensitivity label. Erato read the body only, so it can't change headers, footers or page layout, and any change replaces the whole body instead of editing passages in place.",
-                })}
-              </p>
-            )}
+          {chipEnabled && budgetIssue && (
+            <Alert type="warning">
+              {wordAuthoringIssueText(budgetIssue, notice.authoringDetails)}
+            </Alert>
+          )}
+          {commentProgress && (
+            <p
+              className="text-xs text-theme-fg-secondary"
+              role="status"
+              data-testid="word-comment-progress"
+            >
+              {wordCommentReadingText(commentProgress)}
+            </p>
+          )}
         </div>
       )}
 
@@ -1486,15 +1409,6 @@ export function WordChatInput({
             )}
           </div>
         )}
-      {commentProgress && (
-        <p
-          className="mx-auto w-full max-w-[var(--theme-layout-chat-input-max-width)] px-2 pb-1 text-xs text-theme-fg-secondary sm:px-4"
-          role="status"
-          data-testid="word-comment-progress"
-        >
-          {wordCommentReadingText(commentProgress)}
-        </p>
-      )}
       {commentAdvertised.thread && (
         <WordCommentPicker
           isOpen={pickerOpen}
@@ -1510,21 +1424,12 @@ export function WordChatInput({
 
       <AddinChatInputCore
         {...chatInputProps}
+        contextItems={contextItems}
         pausesHostActionsWhenWritesOff
         onSendMessage={handleSendMessage}
       />
     </>
   );
-}
-
-function selectionMetaLabel(paragraphCount: number): string {
-  return t({
-    id: "officeAddin.word.selection.meta",
-    message: plural(paragraphCount, {
-      one: "Selected passage · # paragraph",
-      other: "Selected passage · # paragraphs",
-    }),
-  });
 }
 
 /** Your message waits until you choose; stopping the reply drops it. */
@@ -1543,99 +1448,5 @@ function commentBlockText(block: WordCommentBlock): string {
   return t({
     id: "officeAddin.word.comments.blocked.readFailed",
     message: "Erato could not read the comments in Word.",
-  });
-}
-
-function trackingReadOnlyText(): string {
-  return t({
-    id: "officeAddin.word.authoring.readOnlyTracking",
-    message:
-      "Track Changes is on, so Erato reads this document as if every tracked change were accepted, without seeing who changed what, and doesn't edit it.",
-  });
-}
-
-/** Why the complete file could not be read; with Track Changes on it shows below that notice. */
-function readOnlyText(
-  issue: string,
-  details: string[] = [],
-  trackChanges = false,
-): string {
-  if (issue === "too-large" && trackChanges)
-    return t({
-      id: "officeAddin.word.authoring.readOnlyTooLargeTracking",
-      message:
-        "The file is also too large for Erato to open completely, so Erato receives only the included text.",
-    });
-  if (issue === "too-large")
-    return t({
-      id: "officeAddin.word.authoring.readOnlyTooLarge",
-      message:
-        "This file is too large for Erato to open completely. Erato receives only the included text and can reword it, but not change its structure or formatting.",
-    });
-  if (details.includes("package-unsupported"))
-    return t({
-      id: "officeAddin.word.authoring.readOnlyUnsupported",
-      message:
-        "Erato cannot edit this document's file structure, so it can only read its text.",
-    });
-  return t({
-    id: "officeAddin.word.authoring.readOnlyUnavailable",
-    message:
-      "Word did not hand over the complete document, so Erato can read its text but not edit it. Send again to retry.",
-  });
-}
-
-function chipLabel(
-  preview: WordDocumentPreview,
-  documentName: string,
-  authoringRoute: boolean,
-  readInParts: boolean,
-): string {
-  if (preview.status === "unreadable") {
-    return t({
-      id: "officeAddin.word.chip.notIncluded",
-      message: "Document not included",
-    });
-  }
-  if (preview.status === "empty") {
-    return t({
-      id: "officeAddin.word.chip.newDocument",
-      message: "New document",
-    });
-  }
-  if (preview.changedSinceLastSend) {
-    return t({
-      id: "officeAddin.word.chip.changed",
-      message: "Document included - changed since last send",
-    });
-  }
-  if (readInParts) {
-    return t({
-      id: "officeAddin.word.chip.includedInParts",
-      message: "Document included · read in parts",
-    });
-  }
-  const coverage = authoringRoute ? null : preview.coverage;
-  if (coverage?.partialParagraph) {
-    return t({
-      id: "officeAddin.word.chip.includedPartial",
-      message: "Document included (partial)",
-    });
-  }
-  if (coverage?.truncated) {
-    return t({
-      id: "officeAddin.word.chip.includedTruncated",
-      message: `Document included (first ${coverage.paragraphsSent} of ${coverage.paragraphsTotal} paragraphs)`,
-    });
-  }
-  if (documentName) {
-    return t({
-      id: "officeAddin.word.chip.includedNamed",
-      message: `${documentName} is included`,
-    });
-  }
-  return t({
-    id: "officeAddin.word.chip.included",
-    message: "Document included",
   });
 }
