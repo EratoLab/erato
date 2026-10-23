@@ -575,6 +575,8 @@ pub async fn retry_delegated_run(
     let tasks = &app_state.config.delegation.tasks;
     let task_scope = TaskOfferScope {
         facet_enum: facet_ids.clone(),
+        // The recorded model rides the target below, not a pick from an offer.
+        model_enum: Vec::new(),
         effective: EffectiveTasksConfig {
             max_tasks_per_turn: 1,
             max_parallel: 1,
@@ -590,12 +592,77 @@ pub async fn retry_delegated_run(
             scheduling: spec.scheduling,
             run_modes: vec![erato_config::config::TaskRunMode::Async],
             child_facet_ids: facet_ids.clone(),
+            child_chat_providers: Vec::new(),
             // The user clicking "retry" IS the approval, so this path never
             // asks again. The batch pre-pass is not on it either; the mode is
             // written as the one that matches what already happened.
             approval_mode: erato_config::config::TaskApprovalMode::Never,
             approval_plan_min_tasks: tasks.approval.plan_min_tasks,
         },
+    };
+
+    // 16. The model a fallback lands on: the one the turn that made the call
+    //     ran on, as it was for the run being retried, while the owner may
+    //     still use it. A turn that recorded none, one whose record can't be
+    //     read, or one the owner has lost since, falls back to the owner's
+    //     default model, as a new turn would.
+    let model_permissions = crate::services::delegation::TaskModelPermissions::for_user(
+        &app_state,
+        &policy,
+        &me_user.to_subject(),
+        &me_user.groups,
+    )
+    .await
+    .map_err(|error| {
+        tracing::warn!(%error, %child_chat_id, "Failed to read the model permissions for a retried run");
+        RetryRouteError::PlainText(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Failed to load chat".to_string(),
+        )
+    })?;
+    let origin_turn = crate::models::message::get_message_by_id(
+        &app_state.db,
+        &policy,
+        &me_user.to_subject(),
+        &recovered.message_id,
+    )
+    .await
+    .map_err(|error| {
+        tracing::warn!(%error, %child_chat_id, "Failed to load the turn that made the delegation call");
+        RetryRouteError::PlainText(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Failed to load chat".to_string(),
+        )
+    })?;
+    let origin_turn_chat_provider_id =
+        crate::models::message::get_generation_chat_provider_id_from_message(&origin_turn)
+            .unwrap_or_else(|error| {
+                tracing::warn!(%error, %child_chat_id, "Unreadable model on the turn that made the delegation call");
+                None
+            });
+    let parent_chat_provider_id = match origin_turn_chat_provider_id
+        .filter(|chat_provider_id| model_permissions.may_use(chat_provider_id))
+    {
+        Some(chat_provider_id) => chat_provider_id,
+        None => {
+            app_state
+                .chat_provider_for_chatcompletion(
+                    &policy,
+                    &me_user.to_subject(),
+                    &me_user.groups,
+                    None,
+                )
+                .await
+                .map_err(|error| {
+                    tracing::warn!(%error, %child_chat_id, "No model for a retried run");
+                    not_retryable_with_message(
+                        child_chat_id,
+                        NotRetryableState::LaunchRefused,
+                        "No model this task may run on is available to you.".to_string(),
+                    )
+                })?
+                .chat_provider_id
+        }
     };
 
     let context = crate::server::api::v1beta::message_streaming::DelegationDispatchContext {
@@ -617,6 +684,7 @@ pub async fn retry_delegated_run(
         origin_user_message_id: recovered
             .previous_message_id
             .unwrap_or(recovered.message_id),
+        parent_chat_provider_id: &parent_chat_provider_id,
         // Unread on the task route: `DelegationRunMode` has no `Async` variant
         // and this field is consumed only by the mention route, which a retry
         // never reaches. The run's async-ness lives on `LaunchRunSpec` below.
@@ -632,6 +700,16 @@ pub async fn retry_delegated_run(
         &context,
         DelegationTargetSpec::Task {
             facet_ids: facet_ids.clone(),
+            // The model the run was set up for, not the one a fallback landed
+            // on, so a model the owner may use again is used again. Re-checked
+            // at launch like a pick: one the owner still can't use falls back
+            // to the model from step 16, and says so.
+            model: spec.model.as_ref().map(|model| {
+                model
+                    .unavailable_chat_provider_id
+                    .clone()
+                    .unwrap_or_else(|| model.chat_provider_id.clone())
+            }),
         },
         LaunchRunSpec {
             run_mode: ProvenanceRunMode::Async,

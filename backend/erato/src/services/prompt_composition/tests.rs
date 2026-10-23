@@ -579,6 +579,7 @@ mod test_cases {
                     truncated: false,
                     sequence: 0,
                     redeliveries: 0,
+                    model: None,
                 },
             )],
         );
@@ -642,6 +643,7 @@ mod test_cases {
                     truncated: false,
                     sequence: 0,
                     redeliveries: 0,
+                    model: None,
                 },
             )],
         );

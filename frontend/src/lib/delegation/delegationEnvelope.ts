@@ -69,6 +69,17 @@ const RUN_STATUSES = new Set([
 /** Bound on identifiers rendered in the step title. */
 const MAX_NAME_CHARS = 128;
 
+/** The model a run runs on, as its envelope reports it. */
+export interface DelegationModel {
+  chatProviderId: string;
+  displayName?: string;
+  /**
+   * The model the run was set up for but the user may not use; the run fell
+   * back to `chatProviderId` instead.
+   */
+  unavailableChatProviderId?: string;
+}
+
 export interface DelegationEnvelope {
   /** Absent while the delegate is still running — or forever, when detached. */
   status?: string;
@@ -98,6 +109,8 @@ export interface DelegationEnvelope {
   runMode?: string;
   /** Whether the backend clipped `result` before sending it. */
   truncated: boolean;
+  /** Absent on parts written before the run's model was recorded. */
+  model?: DelegationModel;
 }
 
 function boundedString(value: unknown, maxChars: number): string | undefined {
@@ -109,6 +122,25 @@ function boundedString(value: unknown, maxChars: number): string | undefined {
     return undefined;
   }
   return [...trimmed].slice(0, maxChars).join("");
+}
+
+function parseModel(value: unknown): DelegationModel | undefined {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return undefined;
+  }
+  const record = value as Record<string, unknown>;
+  const chatProviderId = boundedString(record.chat_provider_id, MAX_NAME_CHARS);
+  if (chatProviderId === undefined) {
+    return undefined;
+  }
+  return {
+    chatProviderId,
+    displayName: boundedString(record.display_name, MAX_NAME_CHARS),
+    unavailableChatProviderId: boundedString(
+      record.unavailable_chat_provider_id,
+      MAX_NAME_CHARS,
+    ),
+  };
 }
 
 /**
@@ -158,5 +190,6 @@ export function parseDelegationEnvelope(
       delegateChatId !== undefined,
     runMode: boundedString(record.run_mode, MAX_NAME_CHARS),
     truncated: record.truncated === true,
+    model: parseModel(record.model),
   };
 }

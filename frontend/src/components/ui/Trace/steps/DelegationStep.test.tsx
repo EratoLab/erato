@@ -237,7 +237,7 @@ describe("delegation step", () => {
     const link = screen.getByTestId("delegation-open-run");
     expect(link).toHaveAttribute("href", "/a/asst-1/chat-7");
     expect(link).toHaveAttribute("target", "_blank");
-    // Nothing to unfold: the part will never carry steps or a result.
+    // Nothing to unfold: this part carries no steps, result or model.
     expect(
       screen.queryByRole("button", { name: /Delegated to Research/ }),
     ).toBeNull();
@@ -627,5 +627,59 @@ describe("delegation step", () => {
     expect(screen.getByTestId("delegation-reason")).toHaveTextContent(
       "something_new",
     );
+  });
+
+  it("names the model the task runs on from its first frame", () => {
+    renderStep(
+      {
+        status: "working",
+        child_run_id: "chat-7",
+        delegate_chat_id: "chat-7",
+        model: { chat_provider_id: "model-b", display_name: "Model B" },
+      },
+      "delegate_task",
+    );
+    expect(screen.getByTestId("delegation-model")).toHaveTextContent(
+      "Model: Model B",
+    );
+    expect(screen.queryByTestId("delegation-model-unavailable")).toBeNull();
+  });
+
+  it("names the model by its id when it has no display name", () => {
+    renderStep(
+      { ...IDENTITY, status: "completed", model: { chat_provider_id: "b" } },
+      undefined,
+      false,
+    );
+    expect(screen.getByTestId("delegation-model")).toHaveTextContent(
+      "Model: b",
+    );
+  });
+
+  it("says when the task fell back from a model the user may not use", () => {
+    renderStep(
+      {
+        ...IDENTITY,
+        status: "completed",
+        model: {
+          chat_provider_id: "mock-llm",
+          display_name: "Mock model",
+          unavailable_chat_provider_id: "model-x",
+        },
+      },
+      "delegate_task",
+      false,
+    );
+    expect(screen.getByTestId("delegation-model")).toHaveTextContent(
+      "Model: Mock model",
+    );
+    expect(
+      screen.getByTestId("delegation-model-unavailable"),
+    ).toHaveTextContent("not available to you, so it ran on Mock model.");
+  });
+
+  it("shows no model on a part written before the model was recorded", () => {
+    renderStep({ ...IDENTITY, status: "completed" }, undefined, false);
+    expect(screen.queryByTestId("delegation-model")).toBeNull();
   });
 });

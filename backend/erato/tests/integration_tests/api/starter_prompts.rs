@@ -77,6 +77,7 @@ async fn test_starter_prompts_endpoint(pool: Pool<Postgres>) {
             hidden: false,
             hidden_always_active_for_platform: None,
             delegation: None,
+            child_chat_provider: None,
         },
     );
 

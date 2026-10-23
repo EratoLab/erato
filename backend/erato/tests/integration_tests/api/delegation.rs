@@ -4621,6 +4621,7 @@ async fn stage_in_flight_child(
             redeliveries: 0,
             redelivery_of: None,
             sequence: 0,
+            model: None,
             at: now,
         }),
         retry_of: None,
@@ -7405,6 +7406,7 @@ async fn task_state(
             hidden: false,
             hidden_always_active_for_platform: None,
             delegation: None,
+            child_chat_provider: None,
         },
     );
     tweak(&mut app_config);
@@ -7873,6 +7875,7 @@ fn word_task_config(config: &mut erato::config::AppConfig) {
                 hidden: false,
                 hidden_always_active_for_platform: None,
                 delegation: None,
+                child_chat_provider: None,
             },
         );
     }
@@ -10706,6 +10709,7 @@ async fn seed_child_before_recording(
             max_server_tool_calls_per_task: None,
             max_client_tool_calls_per_task: None,
             persona: Default::default(),
+            model: None,
             scheduling,
             parent_tool_call_id: Some("call_seeded".to_string()),
             route: erato::models::chat::DelegateRoute::Task,
@@ -13481,6 +13485,7 @@ fn retry_task_spec() -> erato::models::chat::TaskSpec {
         max_server_tool_calls_per_task: Some(7),
         max_client_tool_calls_per_task: Some(3),
         persona: erato_config::config::TaskPersona::Bare,
+        model: None,
         scheduling: erato_config::config::TaskScheduling::WhenIdle,
         parent_tool_call_id: Some(RETRY_CALL_ID.to_string()),
         route: erato::models::chat::DelegateRoute::Task,
@@ -13604,6 +13609,7 @@ async fn seed_failed_task_run(
                         "run_mode": "wait",
                         "scheduling": "silent",
                         "facet_ids": ["never-offered"],
+                        "model": "model-c",
                     },
                     "output": {
                         "status": "working",
@@ -13983,6 +13989,7 @@ async fn retry_reauthorizes_facets_for_the_owner(pool: Pool<Postgres>) {
                         hidden: false,
                         hidden_always_active_for_platform: None,
                         delegation: None,
+                        child_chat_provider: None,
                     },
                 );
             }
@@ -17216,6 +17223,7 @@ async fn facet_override_beats_global_policy(pool: Pool<Postgres>) {
             max_parallel: None,
             persona: None,
             child_facet_ids: None,
+            child_chat_providers: None,
             run_modes: None,
             scheduling: None,
             approval: Some(erato_config::config::FacetDelegationApprovalOverrides {
@@ -17718,4 +17726,1240 @@ async fn abort_remains_available_for_archived_chats_without_local_jobs(pool: Poo
     response.assert_status_ok();
     assert_eq!(response.json::<Value>()["abort_requested"], true);
     assert!(task.is_abort_requested());
+}
+
+// ---------------------------------------------------------------------------
+// Child model (ERMAIN-1031)
+// ---------------------------------------------------------------------------
+
+/// The mock provider's own id and model name: the parent's model in the tests
+/// below.
+const MODEL_A: (&str, &str) = ("mock-llm", "gpt-3.5-turbo");
+const MODEL_B: (&str, &str) = ("model-b", "model-b-name");
+const MODEL_C: (&str, &str) = ("model-c", "model-c-name");
+/// Configured, but the user may not use it.
+const MODEL_X: (&str, &str) = ("model-x", "model-x-name");
+
+const MODEL_QUESTION: &str = "MODEL-PARENT-QUESTION";
+const MODEL_BRIEF: &str = "MODEL-TASK-BRIEF";
+const MODEL_CHILD_ANSWER: &str = "MODEL-CHILD-ANSWER";
+const MODEL_PARENT_FINAL: &str = "MODEL-PARENT-FINAL";
+
+/// Register copies of the mock provider under their own ids and model names, so
+/// a recorded request says which model it was sent for. Only a permitted model
+/// gets a permission rule; the mock provider keeps the one it already has.
+fn with_models(config: &mut erato::config::AppConfig, models: &[((&str, &str), bool)]) {
+    let chat_providers = config
+        .chat_providers
+        .as_mut()
+        .expect("Expected chat providers in test config");
+    let base = chat_providers
+        .providers
+        .get(&chat_providers.priority_order[0])
+        .cloned()
+        .expect("Expected the mock provider");
+    for ((id, model_name), permitted) in models {
+        let mut provider = base.clone();
+        provider.model_name = model_name.to_string();
+        provider.model_display_name = Some(format!("{model_name} display"));
+        chat_providers.providers.insert(id.to_string(), provider);
+        chat_providers.priority_order.push(id.to_string());
+        if *permitted {
+            config.model_permissions.rules.insert(
+                format!("allow-{id}"),
+                erato::config::ModelPermissionRule::AllowAll {
+                    chat_provider_ids: vec![id.to_string()],
+                },
+            );
+        }
+    }
+}
+
+fn request_model(body: &str) -> String {
+    serde_json::from_str::<Value>(body).expect("request body")["model"]
+        .as_str()
+        .expect("request model")
+        .to_string()
+}
+
+/// The models of the recorded generation requests, oldest first.
+fn recorded_models(recorder: &RequestBodyRecorder) -> Vec<String> {
+    generation_bodies(recorder)
+        .iter()
+        .map(|body| request_model(body))
+        .collect()
+}
+
+fn task_model_of(chat: &erato::db::entity::chats::Model) -> Value {
+    chat.assistant_configuration
+        .as_ref()
+        .expect("child configuration")["task"]["model"]
+        .clone()
+}
+
+async fn submit_with_facets_on(
+    server: &TestServer,
+    chat_id: &str,
+    text: &str,
+    selected_facet_ids: &[&str],
+    chat_provider_id: &str,
+) -> Vec<Event> {
+    let response = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({
+            "existing_chat_id": chat_id,
+            "user_message": text,
+            "input_files_ids": [],
+            "selected_facet_ids": selected_facet_ids,
+            "chat_provider_id": chat_provider_id,
+        }))
+        .await;
+    response.assert_status_ok();
+    parse_sse_events(&response)
+}
+
+fn mail_facet(child_chat_provider: Option<&str>) -> erato::config::FacetConfig {
+    erato::config::FacetConfig {
+        display_name: "Mail".to_string(),
+        disable_facet_prompt_template: true,
+        child_chat_provider: child_chat_provider.map(str::to_string),
+        ..Default::default()
+    }
+}
+
+/// The coordinator facet `plan` lets a task name `mail`, and offers `models`.
+fn plan_offers(config: &mut erato::config::AppConfig, models: Option<&[&str]>) {
+    config
+        .facets
+        .facets
+        .get_mut("plan")
+        .expect("plan facet")
+        .delegation = Some(erato_config::config::FacetDelegationOverrides {
+        child_facet_ids: Some(vec!["mail".to_string()]),
+        child_chat_providers: models.map(|ids| ids.iter().map(|id| id.to_string()).collect()),
+        ..Default::default()
+    });
+}
+
+/// Recorders for each turn of a single task: the parent's planning turn, the
+/// child's turn, and the parent's answer once the result is in.
+struct OneTaskTurns {
+    plan: RequestBodyRecorder,
+    child: RequestBodyRecorder,
+    parent_final: RequestBodyRecorder,
+}
+
+fn mock_one_task(mocks: &mut MockSet, args: Value) -> OneTaskTurns {
+    let turns = OneTaskTurns {
+        plan: RequestBodyRecorder::new(),
+        child: RequestBodyRecorder::new(),
+        parent_final: RequestBodyRecorder::new(),
+    };
+    {
+        let recorder = turns.child.clone();
+        mocks.mock(move |when, then| {
+            when.post()
+                .path("/v1/chat/completions")
+                .matcher(BodyContainsMatcher::new(&[MODEL_BRIEF], &[MODEL_QUESTION]))
+                .matcher(recorder);
+            mock_llm_sse_response(
+                then,
+                crate::test_utils::build_openai_text_streaming_response(&[MODEL_CHILD_ANSWER]),
+            );
+        });
+    }
+    {
+        let recorder = turns.parent_final.clone();
+        mocks.mock(move |when, then| {
+            when.post()
+                .path("/v1/chat/completions")
+                .matcher(BodyContainsMatcher::new(
+                    &[MODEL_CHILD_ANSWER, MODEL_QUESTION],
+                    &[],
+                ))
+                .matcher(recorder);
+            mock_llm_sse_response(
+                then,
+                crate::test_utils::build_openai_text_streaming_response(&[MODEL_PARENT_FINAL]),
+            );
+        });
+    }
+    {
+        let recorder = turns.plan.clone();
+        mocks.mock(move |when, then| {
+            when.post()
+                .path("/v1/chat/completions")
+                .matcher(BodyContainsMatcher::new(
+                    &[MODEL_QUESTION],
+                    &[MODEL_BRIEF, MODEL_CHILD_ANSWER],
+                ))
+                .matcher(recorder);
+            mock_llm_sse_response(
+                then,
+                crate::test_utils::build_openai_tool_calls_streaming_response(&[(
+                    "call_model_task",
+                    "delegate_task",
+                    args,
+                )]),
+            );
+        });
+    }
+    turns
+}
+
+/// With nothing naming a model, a task runs on the model of the turn that
+/// planned it. That model is neither the deployment's default nor the default
+/// the origin chat's assistant names, the two places a child used to land by
+/// accident: the child inherits the assistant, but not its default model.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_task_runs_on_the_parent_turns_model(pool: Pool<Postgres>) {
+    let mut mocks = MockSet::new();
+    let turns = mock_one_task(&mut mocks, json!({ "task": MODEL_BRIEF }));
+    let (app_state, _llm) = task_state(pool, mocks, &["erato/delegate_task"], |config| {
+        with_models(config, &[(MODEL_B, true), (MODEL_C, true)]);
+    })
+    .await;
+    let server = app_server(app_state.clone());
+    let response = server
+        .post("/api/v1beta/assistants")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({
+            "name": "Defaults to B",
+            "prompt": "You are the assistant.",
+            "file_ids": [],
+            "default_chat_provider": MODEL_B.0,
+        }))
+        .await;
+    response.assert_status(axum::http::StatusCode::CREATED);
+    let assistant_id = response.json::<Value>()["id"].as_str().unwrap().to_string();
+    let chat = create_chat(&server, Some(&assistant_id)).await;
+
+    let events = submit_with_facets_on(&server, &chat, MODEL_QUESTION, &["plan"], MODEL_C.0).await;
+
+    assert!(extract_full_text_answer(&events).contains(MODEL_PARENT_FINAL));
+    assert_eq!(recorded_models(&turns.plan), vec![MODEL_C.1]);
+    assert_eq!(
+        recorded_models(&turns.child),
+        vec![MODEL_C.1],
+        "the child runs on the parent turn's model, not on a default"
+    );
+    let child_chat = delegated_child_chat(&app_state.db, Uuid::parse_str(&chat).unwrap()).await;
+    assert_eq!(
+        child_chat.assistant_id.map(|id| id.to_string()),
+        Some(assistant_id),
+        "the child still speaks as the inherited assistant"
+    );
+    assert_eq!(
+        task_model_of(&child_chat),
+        json!({ "chat_provider_id": MODEL_C.0 })
+    );
+
+    let output = find_tool_call_update_output(&events, "delegate_task");
+    assert_eq!(output["model"]["chat_provider_id"], MODEL_C.0);
+    assert_eq!(output["model"]["display_name"], "model-c-name display");
+    assert!(output["model"]["unavailable_chat_provider_id"].is_null());
+    // The frontend keeps only the latest output, so every frame must say it.
+    let frames: Vec<Value> = events
+        .iter()
+        .filter_map(|event| serde_json::from_str::<Value>(&event.data).ok())
+        .filter(|json| {
+            json["message_type"] == "tool_call_update"
+                && json["tool_name"] == "delegate_task"
+                && json["output"].is_object()
+        })
+        .collect();
+    assert!(
+        frames
+            .iter()
+            .any(|frame| frame["output"]["status"] == "working"),
+        "the placeholder frame is among them: {frames:?}"
+    );
+    for frame in &frames {
+        assert_eq!(
+            frame["output"]["model"]["chat_provider_id"], MODEL_C.0,
+            "{frame}"
+        );
+    }
+
+    let plan_body = generation_bodies(&turns.plan).remove(0);
+    let tool = offered_tool(&plan_body, "delegate_task").expect("the task tool is offered");
+    assert!(
+        tool["function"]["parameters"]["properties"]["model"].is_null(),
+        "no coordinator list, no model argument: {tool}"
+    );
+}
+
+/// A task that names a facet with its own model runs on that model, and the
+/// parent's own turn stays on the model it was on.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_task_runs_on_the_model_its_child_facet_names(pool: Pool<Postgres>) {
+    let mut mocks = MockSet::new();
+    let turns = mock_one_task(
+        &mut mocks,
+        json!({ "task": MODEL_BRIEF, "facet_ids": ["mail"] }),
+    );
+    let (app_state, _llm) = task_state(pool, mocks, &["erato/delegate_task"], |config| {
+        with_models(config, &[(MODEL_B, true)]);
+        config
+            .facets
+            .facets
+            .insert("mail".to_string(), mail_facet(Some(MODEL_B.0)));
+        plan_offers(config, None);
+    })
+    .await;
+    let server = app_server(app_state.clone());
+    let chat = create_chat(&server, None).await;
+
+    let events = submit_with_facets_on(&server, &chat, MODEL_QUESTION, &["plan"], MODEL_A.0).await;
+
+    assert!(extract_full_text_answer(&events).contains(MODEL_PARENT_FINAL));
+    assert_eq!(recorded_models(&turns.child), vec![MODEL_B.1]);
+    assert_eq!(
+        recorded_models(&turns.parent_final),
+        vec![MODEL_A.1],
+        "the parent's continuation stays on its own model"
+    );
+    let child_chat = delegated_child_chat(&app_state.db, Uuid::parse_str(&chat).unwrap()).await;
+    assert_eq!(
+        task_model_of(&child_chat),
+        json!({ "chat_provider_id": MODEL_B.0 })
+    );
+    let output = find_tool_call_update_output(&events, "delegate_task");
+    assert_eq!(output["model"]["chat_provider_id"], MODEL_B.0);
+    assert_eq!(output["model"]["display_name"], "model-b-name display");
+}
+
+/// The coordinator's list becomes a `model` enum of the models the user may
+/// use, described by their display names, and the parent's pick beats the
+/// model the task's facet names.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_parent_picks_a_task_model_from_its_coordinators_list(pool: Pool<Postgres>) {
+    let mut mocks = MockSet::new();
+    let turns = mock_one_task(
+        &mut mocks,
+        json!({ "task": MODEL_BRIEF, "facet_ids": ["mail"], "model": MODEL_C.0 }),
+    );
+    let (app_state, _llm) = task_state(pool, mocks, &["erato/delegate_task"], |config| {
+        with_models(
+            config,
+            &[(MODEL_B, true), (MODEL_C, true), (MODEL_X, false)],
+        );
+        config
+            .facets
+            .facets
+            .insert("mail".to_string(), mail_facet(Some(MODEL_B.0)));
+        plan_offers(config, Some(&[MODEL_B.0, MODEL_C.0, MODEL_X.0]));
+    })
+    .await;
+    let server = app_server(app_state.clone());
+    let chat = create_chat(&server, None).await;
+
+    let events = submit_with_facets_on(&server, &chat, MODEL_QUESTION, &["plan"], MODEL_A.0).await;
+
+    let plan_body = generation_bodies(&turns.plan).remove(0);
+    let tool = offered_tool(&plan_body, "delegate_task").expect("the task tool is offered");
+    assert_eq!(
+        sorted_enum(&tool, &["model"]),
+        vec![MODEL_B.0, MODEL_C.0],
+        "a model the user may not use is not offered"
+    );
+    let description = tool["function"]["parameters"]["properties"]["model"]["description"]
+        .as_str()
+        .expect("model description");
+    assert!(
+        description.contains("model-b-name display"),
+        "{description}"
+    );
+    assert!(
+        description.contains("model-c-name display"),
+        "{description}"
+    );
+    assert!(!description.contains(MODEL_X.0), "{description}");
+
+    assert!(extract_full_text_answer(&events).contains(MODEL_PARENT_FINAL));
+    assert_eq!(recorded_models(&turns.child), vec![MODEL_C.1]);
+    let child_chat = delegated_child_chat(&app_state.db, Uuid::parse_str(&chat).unwrap()).await;
+    assert_eq!(
+        task_model_of(&child_chat),
+        json!({ "chat_provider_id": MODEL_C.0 })
+    );
+}
+
+/// A pick outside the coordinator's list is refused like an unoffered facet:
+/// the call, never the turn, and no child is started.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_task_model_pick_outside_the_list_is_refused(pool: Pool<Postgres>) {
+    let mut mocks = MockSet::new();
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(
+                &[MODEL_QUESTION, "was not offered"],
+                &[],
+            ));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_text_streaming_response(&["MODEL-REFUSAL-RECOVERED"]),
+        );
+    });
+    mock_one_task(
+        &mut mocks,
+        json!({ "task": MODEL_BRIEF, "model": MODEL_A.0 }),
+    );
+    let (app_state, _llm) = task_state(pool, mocks, &["erato/delegate_task"], |config| {
+        with_models(config, &[(MODEL_B, true), (MODEL_C, true)]);
+        config
+            .facets
+            .facets
+            .insert("mail".to_string(), mail_facet(None));
+        plan_offers(config, Some(&[MODEL_B.0, MODEL_C.0]));
+    })
+    .await;
+    let server = app_server(app_state.clone());
+    let chat = create_chat(&server, None).await;
+
+    let events = submit_with_facets_on(&server, &chat, MODEL_QUESTION, &["plan"], MODEL_A.0).await;
+
+    let output = find_tool_call_update_output(&events, "delegate_task");
+    assert_eq!(output["status"], "error");
+    assert!(extract_full_text_answer(&events).contains("MODEL-REFUSAL-RECOVERED"));
+    assert!(
+        delegated_child_chats(&app_state.db, Uuid::parse_str(&chat).unwrap())
+            .await
+            .is_empty(),
+        "a refused call starts no child"
+    );
+}
+
+/// A configured model the user may not use does not refuse the task: it runs
+/// on the parent turn's model, which here is not the deployment's default, and
+/// its result says so to the parent model.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_task_model_the_user_may_not_use_falls_back_to_the_parent_model(pool: Pool<Postgres>) {
+    let mut mocks = MockSet::new();
+    let turns = mock_one_task(
+        &mut mocks,
+        json!({ "task": MODEL_BRIEF, "facet_ids": ["mail"] }),
+    );
+    let (app_state, _llm) = task_state(pool, mocks, &["erato/delegate_task"], |config| {
+        with_models(config, &[(MODEL_B, true), (MODEL_X, false)]);
+        config
+            .facets
+            .facets
+            .insert("mail".to_string(), mail_facet(Some(MODEL_X.0)));
+        plan_offers(config, None);
+    })
+    .await;
+    let server = app_server(app_state.clone());
+    let chat = create_chat(&server, None).await;
+
+    let events = submit_with_facets_on(&server, &chat, MODEL_QUESTION, &["plan"], MODEL_B.0).await;
+
+    assert_eq!(recorded_models(&turns.child), vec![MODEL_B.1]);
+    let output = find_tool_call_update_output(&events, "delegate_task");
+    assert_eq!(output["status"], "completed");
+    assert_eq!(output["model"]["chat_provider_id"], MODEL_B.0);
+    assert_eq!(output["model"]["unavailable_chat_provider_id"], MODEL_X.0);
+    let child_chat = delegated_child_chat(&app_state.db, Uuid::parse_str(&chat).unwrap()).await;
+    assert_eq!(
+        task_model_of(&child_chat),
+        json!({
+            "chat_provider_id": MODEL_B.0,
+            "unavailable_chat_provider_id": MODEL_X.0,
+        })
+    );
+    let parent_final = generation_bodies(&turns.parent_final);
+    assert_eq!(parent_final.len(), 1);
+    assert!(
+        parent_final[0].contains(
+            "The model set up for this task (model-x-name display) is not available to the \
+             user, so the task ran on model-b-name display instead."
+        ),
+        "the parent model is told about the fallback: {}",
+        parent_final[0]
+    );
+}
+
+/// A retry runs on the model the failed run was launched on, not on the
+/// deployment's default.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn retry_keeps_the_runs_model(pool: Pool<Postgres>) {
+    let recorder = RequestBodyRecorder::new();
+    let mut mocks = MockSet::new();
+    {
+        let recorder = recorder.clone();
+        mocks.mock(move |when, then| {
+            when.post()
+                .path("/v1/chat/completions")
+                .matcher(BodyContainsMatcher::new(&[RETRY_BRIEF_SENTINEL], &[]))
+                .matcher(recorder);
+            mock_llm_sse_response(
+                then,
+                crate::test_utils::build_openai_text_streaming_response(&["RETRIED-CHILD-ANSWER"]),
+            );
+        });
+    }
+    let (app_state, _llm) = task_state(pool, mocks, &["erato/delegate_task"], |config| {
+        config.delegation.tasks.run_modes = vec![
+            erato_config::config::TaskRunMode::Wait,
+            erato_config::config::TaskRunMode::Async,
+        ];
+        with_models(config, &[(MODEL_B, true)]);
+    })
+    .await;
+    let me = erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        TEST_USER_SUBJECT,
+        None,
+    )
+    .await
+    .unwrap();
+    let server = app_server(app_state.clone());
+    let origin = create_chat(&server, None).await;
+    let seeded = seed_failed_task_run(
+        &app_state,
+        &me.id.to_string(),
+        Uuid::parse_str(&origin).unwrap(),
+        erato::models::chat::TaskSpec {
+            model: Some(erato::models::chat::TaskModel {
+                chat_provider_id: MODEL_B.0.to_string(),
+                unavailable_chat_provider_id: None,
+            }),
+            // A reaction turn in the origin chat would carry the brief too.
+            scheduling: erato_config::config::TaskScheduling::Silent,
+            ..retry_task_spec()
+        },
+        true,
+    )
+    .await;
+
+    let response = retry_run(
+        &server,
+        &origin,
+        seeded.child_chat_id,
+        json!({"kind": "task"}),
+    )
+    .await;
+    response.assert_status(http::StatusCode::ACCEPTED);
+    let new_child_id =
+        Uuid::parse_str(response.json::<Value>()["child_chat_id"].as_str().unwrap()).unwrap();
+
+    let configuration = retry_child_configuration(&app_state, new_child_id).await;
+    assert_eq!(
+        configuration["task"]["model"],
+        json!({ "chat_provider_id": MODEL_B.0 })
+    );
+    wait_for_generation_state(&app_state.db, new_child_id, "completed").await;
+    assert_eq!(recorded_models(&recorder), vec![MODEL_B.1]);
+}
+
+/// The approval resume of a child continues its parked message, so it keeps
+/// the model that message was generated on, as the parent keeps its own.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_child_resumed_by_the_parents_approval_keeps_its_model(pool: Pool<Postgres>) {
+    let child_resumed = RequestBodyRecorder::new();
+    let parent_resumed = RequestBodyRecorder::new();
+    let mut mocks = MockSet::new();
+    {
+        let recorder = child_resumed.clone();
+        mocks.mock(move |when, then| {
+            when.post()
+                .path("/v1/chat/completions")
+                .matcher(BodyContainsMatcher::new(
+                    &[GATED_BRIEF, PARKED_TOOL_RESULT],
+                    &["child_run_id"],
+                ))
+                .matcher(recorder);
+            mock_llm_sse_response(
+                then,
+                crate::test_utils::build_openai_text_streaming_response(&[
+                    "CHILD-GATED-DONE with the probe",
+                ]),
+            );
+        });
+    }
+    {
+        let recorder = parent_resumed.clone();
+        mocks.mock(move |when, then| {
+            when.post()
+                .path("/v1/chat/completions")
+                .matcher(BodyContainsMatcher::new(
+                    &[PARK_USER_MESSAGE, "child_run_id"],
+                    &[],
+                ))
+                .matcher(recorder);
+            mock_llm_sse_response(
+                then,
+                crate::test_utils::build_openai_text_streaming_response(&["PARENT-GATED-FINAL"]),
+            );
+        });
+    }
+    mock_child_reaches_the_gate(&mut mocks, GATED_BRIEF, "call_child_probe");
+    mock_parent_plans_one_task(&mut mocks, PARK_USER_MESSAGE, GATED_BRIEF, "call_task_one");
+
+    let (app_state, _llm) = task_state(
+        pool,
+        mocks,
+        &["erato/delegate_task", "mock_mcp_approval/*"],
+        |config| {
+            gate_mock_mcp_tools_on_approval(config);
+            with_models(config, &[(MODEL_B, true)]);
+            config
+                .facets
+                .facets
+                .get_mut("plan")
+                .expect("plan facet")
+                .child_chat_provider = Some(MODEL_B.0.to_string());
+        },
+    )
+    .await;
+    let server = app_server(app_state.clone());
+    let chat = create_chat(&server, None).await;
+    let events =
+        submit_with_facets_on(&server, &chat, PARK_USER_MESSAGE, &["plan"], MODEL_A.0).await;
+    let parent_message_id = Uuid::parse_str(&assistant_message_id_from_events(&events)).unwrap();
+    let child_chat = delegated_child_chat(&app_state.db, Uuid::parse_str(&chat).unwrap()).await;
+    assert_eq!(
+        task_model_of(&child_chat),
+        json!({ "chat_provider_id": MODEL_B.0 })
+    );
+
+    let continued = post_continuestream(&server, parent_message_id, "approve").await;
+    continued.assert_status_ok();
+    assert!(extract_full_text_answer(&parse_sse_events(&continued)).contains("PARENT-GATED-FINAL"));
+
+    assert_eq!(recorded_models(&child_resumed), vec![MODEL_B.1]);
+    assert_eq!(recorded_models(&parent_resumed), vec![MODEL_A.1]);
+    let slot = slot_for(
+        &content_of(&message_row(&app_state.db, parent_message_id).await),
+        "call_task_one",
+    );
+    assert_eq!(slot["output"]["model"]["chat_provider_id"], MODEL_B.0);
+}
+
+/// An `async` child decided on its own card continues on the model it was
+/// launched on.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn an_async_child_decided_on_its_own_card_continues_on_its_model(pool: Pool<Postgres>) {
+    let child_resumed = RequestBodyRecorder::new();
+    let mut mocks = MockSet::new();
+    {
+        let recorder = child_resumed.clone();
+        mocks.mock(move |when, then| {
+            when.post()
+                .path("/v1/chat/completions")
+                .matcher(BodyContainsMatcher::new(
+                    &[ASYNC_PARK_BRIEF, PARKED_TOOL_RESULT],
+                    &["child_run_id"],
+                ))
+                .matcher(recorder);
+            mock_llm_sse_response(
+                then,
+                crate::test_utils::build_openai_text_streaming_response(&[ASYNC_CHILD_WITH_PROBE]),
+            );
+        });
+    }
+    mock_async_gated_task(&mut mocks);
+    let (app_state, _llm) = task_state(
+        pool,
+        mocks,
+        &["erato/delegate_task", "mock_mcp_approval/*"],
+        |config| {
+            gate_mock_mcp_tools_on_approval(config);
+            config.delegation.tasks.run_modes = vec![
+                erato_config::config::TaskRunMode::Wait,
+                erato_config::config::TaskRunMode::Async,
+            ];
+            config.delegation.tasks.approval.mode = erato_config::config::TaskApprovalMode::Never;
+            config.delegation.tasks.scheduling = erato_config::config::TaskScheduling::Silent;
+            with_models(config, &[(MODEL_B, true)]);
+            config
+                .facets
+                .facets
+                .get_mut("plan")
+                .expect("plan facet")
+                .child_chat_provider = Some(MODEL_B.0.to_string());
+        },
+    )
+    .await;
+    let server = app_server(app_state.clone());
+
+    let (origin_chat_id, child_chat_id, child_message_id, parent_message_id) =
+        park_one_async_child(&server, &app_state).await;
+    // A detached run's model reaches the parent twice: on the dispatch slot
+    // and on every result it delivers.
+    let slot = slot_for(
+        &content_of(&message_row(&app_state.db, parent_message_id).await),
+        ASYNC_PARK_CALL_ID,
+    );
+    assert_eq!(
+        slot["output"]["model"]["chat_provider_id"], MODEL_B.0,
+        "{slot}"
+    );
+    wait_for_delivered_sequence(&app_state, child_chat_id, 0).await;
+    let delivered = task_result_rows(&app_state.db, origin_chat_id).await;
+    assert_eq!(delivered.len(), 1);
+    assert_eq!(
+        delivered[0].raw_message["content"][0]["model"]["chat_provider_id"], MODEL_B.0,
+        "{:?}",
+        delivered[0].raw_message
+    );
+
+    post_continuestream(&server, child_message_id, "approve")
+        .await
+        .assert_status_ok();
+    wait_for_generation_state(&app_state.db, child_chat_id, "completed").await;
+
+    assert_eq!(recorded_models(&child_resumed), vec![MODEL_B.1]);
+}
+
+/// Record the model the seeded origin turn ran on, the way a live turn does.
+async fn record_origin_turn_model(
+    app_state: &erato::state::AppState,
+    origin_chat_id: Uuid,
+    chat_provider_id: &str,
+) {
+    let row = chat_messages_by_created_at(&app_state.db, origin_chat_id)
+        .await
+        .into_iter()
+        .rfind(|row| row.raw_message["role"] == "assistant")
+        .expect("the seeded origin call row");
+    let mut active: erato::db::entity::messages::ActiveModel = row.into();
+    active.generation_parameters = ActiveValue::Set(Some(json!({
+        "generation_chat_provider_id": chat_provider_id,
+        "selected_facets": {},
+    })));
+    active
+        .update(&app_state.db)
+        .await
+        .expect("the origin turn's model persists");
+}
+
+/// Retry a seeded failed run whose stored model is `stored` (the model it ran
+/// on, and the one it was set up for when it fell back), from an origin turn
+/// that ran on `origin_turn`, and wait for the retry to finish. Returns the
+/// new child, and the models its requests were sent for.
+async fn retry_on_models(
+    pool: Pool<Postgres>,
+    models: &[((&str, &str), bool)],
+    stored: Option<(&str, Option<&str>)>,
+    origin_turn: Option<&str>,
+) -> (erato::state::AppState, Uuid, Uuid, Vec<String>) {
+    let recorder = RequestBodyRecorder::new();
+    let mut mocks = MockSet::new();
+    {
+        let recorder = recorder.clone();
+        mocks.mock(move |when, then| {
+            when.post()
+                .path("/v1/chat/completions")
+                .matcher(BodyContainsMatcher::new(&[RETRY_BRIEF_SENTINEL], &[]))
+                .matcher(recorder);
+            mock_llm_sse_response(
+                then,
+                crate::test_utils::build_openai_text_streaming_response(&["RETRIED-CHILD-ANSWER"]),
+            );
+        });
+    }
+    let (app_state, _llm) = task_state(pool, mocks, &["erato/delegate_task"], |config| {
+        config.delegation.tasks.run_modes = vec![
+            erato_config::config::TaskRunMode::Wait,
+            erato_config::config::TaskRunMode::Async,
+        ];
+        with_models(config, models);
+    })
+    .await;
+    let me = erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        TEST_USER_SUBJECT,
+        None,
+    )
+    .await
+    .unwrap();
+    let server = app_server(app_state.clone());
+    let origin = create_chat(&server, None).await;
+    let origin_chat_id = Uuid::parse_str(&origin).unwrap();
+    let seeded = seed_failed_task_run(
+        &app_state,
+        &me.id.to_string(),
+        origin_chat_id,
+        erato::models::chat::TaskSpec {
+            model: stored.map(
+                |(chat_provider_id, unavailable)| erato::models::chat::TaskModel {
+                    chat_provider_id: chat_provider_id.to_string(),
+                    unavailable_chat_provider_id: unavailable.map(str::to_string),
+                },
+            ),
+            // Stored without a reaction turn, which would carry the brief too.
+            scheduling: erato_config::config::TaskScheduling::Silent,
+            ..retry_task_spec()
+        },
+        true,
+    )
+    .await;
+    if let Some(chat_provider_id) = origin_turn {
+        record_origin_turn_model(&app_state, origin_chat_id, chat_provider_id).await;
+    }
+
+    let response = retry_run(
+        &server,
+        &origin,
+        seeded.child_chat_id,
+        json!({"kind": "task"}),
+    )
+    .await;
+    response.assert_status(http::StatusCode::ACCEPTED);
+    let new_child_id =
+        Uuid::parse_str(response.json::<Value>()["child_chat_id"].as_str().unwrap()).unwrap();
+    wait_for_generation_state(&app_state.db, new_child_id, "completed").await;
+    let models = recorded_models(&recorder);
+    (app_state, origin_chat_id, new_child_id, models)
+}
+
+/// The origin turn's model is only a fallback while the user may still use
+/// it. Once it is revoked, a retry runs on the user's default model, as a turn
+/// started now would, rather than being refused.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn retry_after_the_runs_model_was_revoked_runs_on_the_users_default(pool: Pool<Postgres>) {
+    let (app_state, _origin_chat_id, new_child_id, models) = retry_on_models(
+        pool,
+        &[(MODEL_B, false)],
+        Some((MODEL_B.0, None)),
+        Some(MODEL_B.0),
+    )
+    .await;
+
+    assert_eq!(models, vec![MODEL_A.1]);
+    let configuration = retry_child_configuration(&app_state, new_child_id).await;
+    assert_eq!(
+        configuration["task"]["model"],
+        json!({
+            "chat_provider_id": MODEL_A.0,
+            "unavailable_chat_provider_id": MODEL_B.0,
+        })
+    );
+}
+
+/// A run that had already fallen back is retried on the model it was set up
+/// for once the user may use that model again, not on the fallback.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn retry_after_a_fallback_asks_for_the_set_up_model_again(pool: Pool<Postgres>) {
+    let (app_state, _origin_chat_id, new_child_id, models) = retry_on_models(
+        pool,
+        &[(MODEL_B, true)],
+        Some((MODEL_A.0, Some(MODEL_B.0))),
+        Some(MODEL_A.0),
+    )
+    .await;
+
+    assert_eq!(models, vec![MODEL_B.1]);
+    let configuration = retry_child_configuration(&app_state, new_child_id).await;
+    assert_eq!(
+        configuration["task"]["model"],
+        json!({ "chat_provider_id": MODEL_B.0 })
+    );
+}
+
+/// While the set-up model is still unavailable, a retry of a run that had
+/// fallen back falls back again and keeps naming the set-up model.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn retry_after_a_fallback_keeps_naming_the_unavailable_set_up_model(pool: Pool<Postgres>) {
+    let (app_state, _origin_chat_id, new_child_id, models) = retry_on_models(
+        pool,
+        &[(MODEL_B, false)],
+        Some((MODEL_A.0, Some(MODEL_B.0))),
+        Some(MODEL_A.0),
+    )
+    .await;
+
+    assert_eq!(models, vec![MODEL_A.1]);
+    let configuration = retry_child_configuration(&app_state, new_child_id).await;
+    assert_eq!(
+        configuration["task"]["model"],
+        json!({
+            "chat_provider_id": MODEL_A.0,
+            "unavailable_chat_provider_id": MODEL_B.0,
+        })
+    );
+}
+
+/// A message in a task chat that names no model skips a stored model the
+/// user has lost since launch and runs on the user's default, instead of
+/// failing on the lost model.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_message_without_a_model_skips_the_task_chats_lost_model(pool: Pool<Postgres>) {
+    let recorder = RequestBodyRecorder::new();
+    let mut mocks = MockSet::new();
+    {
+        let recorder = recorder.clone();
+        mocks.mock(move |when, then| {
+            when.post()
+                .path("/v1/chat/completions")
+                .matcher(BodyContainsMatcher::new(&["LOST-MODEL-FOLLOW-UP"], &[]))
+                .matcher(recorder);
+            mock_llm_sse_response(
+                then,
+                crate::test_utils::build_openai_text_streaming_response(&["FOLLOW-UP-ANSWER"]),
+            );
+        });
+    }
+    let (app_state, _llm) = task_state(pool, mocks, &["erato/delegate_task"], |config| {
+        with_models(config, &[(MODEL_B, false)]);
+    })
+    .await;
+    let me = erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        TEST_USER_SUBJECT,
+        None,
+    )
+    .await
+    .unwrap();
+    let server = app_server(app_state.clone());
+    let origin = create_chat(&server, None).await;
+    let seeded = seed_failed_task_run(
+        &app_state,
+        &me.id.to_string(),
+        Uuid::parse_str(&origin).unwrap(),
+        erato::models::chat::TaskSpec {
+            model: Some(erato::models::chat::TaskModel {
+                chat_provider_id: MODEL_B.0.to_string(),
+                unavailable_chat_provider_id: None,
+            }),
+            ..retry_task_spec()
+        },
+        true,
+    )
+    .await;
+    let brief = erato::db::entity::messages::Entity::find()
+        .filter(erato::db::entity::messages::Column::ChatId.eq(seeded.child_chat_id))
+        .one(&app_state.db)
+        .await
+        .unwrap()
+        .expect("the child's brief row");
+    let policy = rebuilt_policy(&app_state).await;
+    let answer = erato::models::message::submit_message(
+        &app_state.db,
+        &policy,
+        &erato::policy::types::Subject::User(me.id.to_string()),
+        &seeded.child_chat_id,
+        json!({
+            "role": "assistant",
+            "content": [{"content_type": "text", "text": "SEEDED-CHILD-ANSWER"}],
+        }),
+        Some(&brief.id),
+        None,
+        None,
+        &[],
+        None,
+        None,
+        None,
+    )
+    .await
+    .expect("the child's answer row");
+
+    let events = submit_message(
+        &server,
+        &seeded.child_chat_id.to_string(),
+        Some(&answer.id.to_string()),
+        "LOST-MODEL-FOLLOW-UP",
+        vec![],
+    )
+    .await;
+
+    assert!(extract_full_text_answer(&events).contains("FOLLOW-UP-ANSWER"));
+    assert_eq!(recorded_models(&recorder), vec![MODEL_A.1]);
+}
+
+/// A run whose stored model the user has lost is retried on the model of the
+/// turn that started it, and the delivered result says so, both to the origin
+/// model and on the result card.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn retry_of_a_run_on_a_lost_model_falls_back_to_the_origin_turns_model(pool: Pool<Postgres>) {
+    let (app_state, origin_chat_id, new_child_id, models) = retry_on_models(
+        pool,
+        &[(MODEL_B, true), (MODEL_X, false)],
+        Some((MODEL_X.0, None)),
+        Some(MODEL_B.0),
+    )
+    .await;
+
+    assert_eq!(models, vec![MODEL_B.1]);
+    let configuration = retry_child_configuration(&app_state, new_child_id).await;
+    assert_eq!(
+        configuration["task"]["model"],
+        json!({
+            "chat_provider_id": MODEL_B.0,
+            "unavailable_chat_provider_id": MODEL_X.0,
+        })
+    );
+
+    wait_for_delivery_state(&app_state.db, new_child_id, &["delivered", "reacted"]).await;
+    let delivered = task_result_rows(&app_state.db, origin_chat_id).await;
+    let part = delivered
+        .iter()
+        .map(|row| row.raw_message["content"][0].clone())
+        .find(|part| part["child_chat_id"] == new_child_id.to_string())
+        .expect("the retry's result is delivered");
+    assert_eq!(part["model"]["chat_provider_id"], MODEL_B.0, "{part}");
+    assert_eq!(part["model"]["display_name"], "model-b-name display");
+    assert_eq!(part["model"]["unavailable_chat_provider_id"], MODEL_X.0);
+    assert!(
+        part["model"]["note"]
+            .as_str()
+            .is_some_and(|note| note.contains("model-x-name display")),
+        "{part}"
+    );
+}
+
+const MENTION_MODEL_QUESTION: &str = "MENTION-MODEL-QUESTION";
+const MENTION_MODEL_BRIEF: &str = "MENTION-MODEL-BRIEF";
+
+/// Delegate to the fixed assistant by @-mention from a parent turn on
+/// `MODEL_C`, with `assistant_default` as that assistant's default model.
+/// Returns the models the child's requests were sent for, the model stored
+/// with the child, and the model on the result.
+async fn mention_child_model(
+    pool: Pool<Postgres>,
+    assistant_default: Option<&str>,
+) -> (Vec<String>, Value, Value) {
+    let child = RequestBodyRecorder::new();
+    let mut mocks = MockSet::new();
+    {
+        let recorder = child.clone();
+        mocks.mock(move |when, then| {
+            when.post()
+                .path("/v1/chat/completions")
+                .matcher(BodyContainsMatcher::new(
+                    &[MENTION_MODEL_BRIEF],
+                    &["delegate_chat_id"],
+                ))
+                .matcher(recorder);
+            mock_llm_sse_response(
+                then,
+                crate::test_utils::build_openai_text_streaming_response(&["MENTION-CHILD-ANSWER"]),
+            );
+        });
+    }
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(&["delegate_chat_id"], &[]));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_text_streaming_response(&["MENTION-PARENT-FINAL"]),
+        );
+    });
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(
+                &[MENTION_MODEL_QUESTION],
+                &[MENTION_MODEL_BRIEF, "delegate_chat_id"],
+            ));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_tool_calls_streaming_response(&[(
+                "call_mention_model",
+                "delegate_to_assistant",
+                json!({
+                    "assistant_id": DELEGATE_ASSISTANT_FIXED_ID,
+                    "task": MENTION_MODEL_BRIEF,
+                }),
+            )]),
+        );
+    });
+
+    let (mut app_config, _llm) = setup_mock_llm_server_with_mocks(mocks).await;
+    app_config.delegation.assistants.enabled = true;
+    with_models(
+        &mut app_config,
+        &[(MODEL_B, true), (MODEL_C, true), (MODEL_X, false)],
+    );
+    let app_state = test_app_state(app_config, pool).await;
+    let me = erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        TEST_USER_SUBJECT,
+        None,
+    )
+    .await
+    .unwrap();
+    let assistant_id =
+        insert_fixed_delegate_assistant(&app_state.db, me.id, &delegate_prompt(), None).await;
+    if let Some(default) = assistant_default {
+        let assistant = erato::db::entity::assistants::Entity::find_by_id(assistant_id)
+            .one(&app_state.db)
+            .await
+            .unwrap()
+            .expect("the fixed delegate assistant");
+        let mut active: erato::db::entity::assistants::ActiveModel = assistant.into();
+        active.default_chat_provider = ActiveValue::Set(Some(default.to_string()));
+        active
+            .update(&app_state.db)
+            .await
+            .expect("the assistant's default model persists");
+    }
+    let server = app_server(app_state.clone());
+    let chat = create_chat(&server, None).await;
+
+    let response = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({
+            "existing_chat_id": chat,
+            "user_message": MENTION_MODEL_QUESTION,
+            "mentioned_assistant_ids": [DELEGATE_ASSISTANT_FIXED_ID],
+            "chat_provider_id": MODEL_C.0,
+        }))
+        .await;
+    response.assert_status_ok();
+    let events = parse_sse_events(&response);
+    assert!(extract_full_text_answer(&events).contains("MENTION-PARENT-FINAL"));
+    let output = find_tool_call_update_output(&events, "delegate_to_assistant");
+    assert_eq!(output["status"], "completed", "{output}");
+    let child_chat = delegated_child_chat(&app_state.db, Uuid::parse_str(&chat).unwrap()).await;
+    (
+        recorded_models(&child),
+        task_model_of(&child_chat),
+        output["model"].clone(),
+    )
+}
+
+/// A run delegated to an @-mentioned assistant runs on that assistant's own
+/// default model rather than the parent turn's.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_mentioned_assistant_runs_on_its_default_model(pool: Pool<Postgres>) {
+    let (models, stored, reported) = mention_child_model(pool, Some(MODEL_B.0)).await;
+
+    assert_eq!(models, vec![MODEL_B.1]);
+    assert_eq!(stored, json!({ "chat_provider_id": MODEL_B.0 }));
+    assert_eq!(reported["chat_provider_id"], MODEL_B.0);
+}
+
+/// Without a default of its own, an @-mentioned assistant runs on the parent
+/// turn's model, not on the deployment's default.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_mentioned_assistant_without_a_default_runs_on_the_parent_turns_model(
+    pool: Pool<Postgres>,
+) {
+    let (models, stored, reported) = mention_child_model(pool, None).await;
+
+    assert_eq!(models, vec![MODEL_C.1]);
+    assert_eq!(stored, json!({ "chat_provider_id": MODEL_C.0 }));
+    assert_eq!(reported["chat_provider_id"], MODEL_C.0);
+}
+
+/// An @-mentioned assistant's default the user may not use falls back to the
+/// parent turn's model, and the result says so.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_mentioned_assistants_unusable_default_falls_back_to_the_parent_turns_model(
+    pool: Pool<Postgres>,
+) {
+    let (models, stored, reported) = mention_child_model(pool, Some(MODEL_X.0)).await;
+
+    assert_eq!(models, vec![MODEL_C.1]);
+    assert_eq!(
+        stored,
+        json!({
+            "chat_provider_id": MODEL_C.0,
+            "unavailable_chat_provider_id": MODEL_X.0,
+        })
+    );
+    assert_eq!(reported["chat_provider_id"], MODEL_C.0);
+    assert_eq!(reported["unavailable_chat_provider_id"], MODEL_X.0);
 }

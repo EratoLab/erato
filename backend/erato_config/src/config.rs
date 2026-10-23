@@ -1481,8 +1481,20 @@ impl AppConfig {
                     let overrides = facet.delegation.as_ref()?;
                     Some((format!("action_facets.facets.{id}.delegation"), overrides))
                 });
+        let task_chat_provider_is_usable =
+            |id: &str| config.determine_chat_provider(None, Some(id)).is_ok();
+        for (facet_id, facet) in &config.facets.facets {
+            if let Some(id) = &facet.child_chat_provider
+                && !task_chat_provider_is_usable(id)
+            {
+                panic!(
+                    "facets.facets.{facet_id}.child_chat_provider references unknown or \
+                     non-chat provider '{id}'."
+                );
+            }
+        }
         for (path, overrides) in facet_overrides.chain(action_facet_overrides) {
-            // Three independent rules over the same overrides. Deliberately not
+            // Independent rules over the same overrides. Deliberately not
             // chained `let ... else { continue }`: an early exit on the first
             // absent field would skip the checks below it.
             if let Some(ids) = &overrides.child_facet_ids {
@@ -1491,6 +1503,16 @@ impl AppConfig {
                         panic!(
                             "{}.child_facet_ids references unknown facet '{}'.",
                             path, id
+                        );
+                    }
+                }
+            }
+            if let Some(ids) = &overrides.child_chat_providers {
+                for id in ids {
+                    if !task_chat_provider_is_usable(id) {
+                        panic!(
+                            "{path}.child_chat_providers references unknown or non-chat \
+                             provider '{id}'."
                         );
                     }
                 }
@@ -4506,7 +4528,8 @@ pub enum MultitaskStrategy {
 }
 
 /// Per-facet overrides of the `[delegation.tasks]` runtime keys. Every field
-/// is optional; `None` inherits the global value.
+/// is optional; `None` inherits the global value. `child_chat_providers` has
+/// no global value: only facets name the models a parent may pick for a task.
 #[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
 pub struct FacetDelegationOverrides {
     #[serde(default)]
@@ -4526,6 +4549,9 @@ pub struct FacetDelegationOverrides {
 
     #[serde(default)]
     pub child_facet_ids: Option<Vec<String>>,
+
+    #[serde(default)]
+    pub child_chat_providers: Option<Vec<String>>,
 
     #[serde(default)]
     pub run_modes: Option<Vec<TaskRunMode>>,
@@ -5157,6 +5183,13 @@ pub struct FacetConfig {
     // optional and falls back to the matching `[delegation.tasks]` value.
     #[serde(default)]
     pub delegation: Option<FacetDelegationOverrides>,
+
+    // Chat provider id that a delegated task naming this facet in its
+    // `facet_ids` runs on, unless the parent picked a model for the task.
+    // Applies only to delegated runs. When the user may not use it, the task
+    // runs on the parent turn's model instead.
+    #[serde(default)]
+    pub child_chat_provider: Option<String>,
 }
 
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default, Facet, HeapSize)]

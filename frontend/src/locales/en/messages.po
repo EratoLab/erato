@@ -3821,6 +3821,16 @@ msgstr "Answer it in the task's own chat:"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/TaskResultCard.tsx
+msgid "message.taskResult.model"
+msgstr "Model: {modelName}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/TaskResultCard.tsx
+msgid "message.taskResult.model.unavailable"
+msgstr "The model set up for this task is not available to you, so it ran on {modelName}."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/TaskResultCard.tsx
 msgid "message.taskResult.openRun"
 msgstr "Open the task's run"
 
@@ -6848,6 +6858,16 @@ msgstr "Delegated to {name}"
 #: src/components/ui/Trace/steps/DelegationStep.tsx
 msgid "trace.delegation.done.unnamed"
 msgstr "Delegated to an assistant"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/DelegationStep.tsx
+msgid "trace.delegation.model"
+msgstr "Model: {modelName}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/DelegationStep.tsx
+msgid "trace.delegation.model.unavailable"
+msgstr "The model set up for this task is not available to you, so it ran on {modelName}."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Trace/steps/DelegationStep.tsx

@@ -401,11 +401,14 @@ export const DelegationStep = ({
     (envelope.status === "failed" || liveStatus === "error")
       ? envelope.delegateChatId
       : undefined;
+  const model = envelope.model;
+  const modelName = model?.displayName ?? model?.chatProviderId;
   const hasSummary =
     preview !== undefined ||
     envelope.truncated ||
     why !== undefined ||
     brief !== undefined ||
+    modelName !== undefined ||
     retryableChildChatId !== undefined;
 
   const body =
@@ -430,6 +433,22 @@ export const DelegationStep = ({
                 data-testid="delegation-brief"
               >
                 {brief}
+              </p>
+            )}
+            {modelName !== undefined && (
+              <p data-testid="delegation-model">
+                {t({
+                  id: "trace.delegation.model",
+                  message: `Model: ${modelName}`,
+                })}
+              </p>
+            )}
+            {model?.unavailableChatProviderId !== undefined && (
+              <p data-testid="delegation-model-unavailable">
+                {t({
+                  id: "trace.delegation.model.unavailable",
+                  message: `The model set up for this task is not available to you, so it ran on ${modelName}.`,
+                })}
               </p>
             )}
             {why !== undefined && <p data-testid="delegation-reason">{why}</p>}
