@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 
 import type * as EratoLibrary from "@erato/frontend/library";
 import type { ReactNode } from "react";
@@ -370,7 +370,7 @@ export const DEFAULT_STUBS = {
   dynamicActivate: async () => {},
   extractTextFromContent: () => "",
   findCapabilityByExtension: () => null,
-  getSupportedFileTypes: () => ({}),
+  getSupportedFileTypes: () => [],
   getSupportedLocale: () => null,
   hasSupportedOperations: () => false,
   mapMessageToUiMessage: (message: unknown) => message,
@@ -390,6 +390,9 @@ export const DEFAULT_STUBS = {
   transformEmailFencesForCopy: (value: string) => value,
   wordShowInWordLabel: () => "Show in Word",
   UploadUnknownError: class extends Error {},
+  UploadTooLargeError: class extends Error {},
+  readTeamsTranscriptIndex: async () => null,
+  validateFileSizes: () => ({ valid: true }),
 
   // Hooks. Shapes match what the host returns; a test that asserts on one
   // supplies its own.
@@ -498,6 +501,28 @@ export const DEFAULT_STUBS = {
   useProfile: () => ({ profile: undefined }),
   useStandardMessageActions: () => noop,
   useUnarchiveChat: () => async () => undefined,
+  useChatInputControls: () => ({
+    setDraftMessage: noop,
+    focusInput: noop,
+    setSelectedFacetIds: noop,
+    setSelectedChatProviderId: noop,
+    toggleFacetId: noop,
+    addUploadedFiles: noop,
+    removeUploadedFiles: noop,
+    clearQueuedMessage: noop,
+  }),
+  useTeamsTranscriptContextItems: () => [],
+  // Keeps the library's one rule a test can see: a repeat still changes the
+  // region's text.
+  useLiveAnnouncement: () => {
+    const [text, setText] = useState("");
+    const announce = useCallback(
+      (next: string) =>
+        setText((current) => (current === next ? `${next}\u200b` : next)),
+      [],
+    );
+    return [text, announce];
+  },
   useUploadFeature: () => ({
     enabled: true,
     maxSizeBytes: 20 * 1024 * 1024,

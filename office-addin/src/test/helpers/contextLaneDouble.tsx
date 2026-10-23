@@ -64,7 +64,7 @@ export function ContextLaneDouble({
                 <span data-testid="context-detail-title">
                   {item.detail.title}
                 </span>
-                {item.detail.render()}
+                {item.detail.render({ locked: item.locked ?? false })}
                 {item.detail.actions?.map((action) => (
                   <button
                     key={action.id}

@@ -1,6 +1,6 @@
 import { t } from "@lingui/core/macro";
 import clsx from "clsx";
-import { useEffect, useId, useRef } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import { isImeComposing } from "@/utils/isImeComposing";
@@ -25,6 +25,12 @@ interface ModalBaseProps {
   footer?: React.ReactNode;
 }
 
+// Open dialogs, newest last. Escape belongs to the newest only, so a preview
+// stacked over another dialog closes alone.
+const openModals: object[] = [];
+
+const isTopModal = (token: object) => openModals.at(-1) === token;
+
 /**
  * Basic reusable modal component with overlay and focus trap (basic).
  */
@@ -42,11 +48,46 @@ export const ModalBase: React.FC<ModalBaseProps> = ({
   // Dialogs stack (a file preview over a conversation), so each names itself.
   const titleId = useId();
   const mouseDownTargetRef = useRef<EventTarget | null>(null);
+  const [token] = useState(() => ({}));
+
+  // Declared before the focus-in effect below, so the opener is read before
+  // focus moves into the dialog.
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+    openModals.push(token);
+    const shell = modalRef.current;
+    const active = document.activeElement;
+    // An autoFocus child has already taken focus; its opener is unknown.
+    const opener =
+      active instanceof HTMLElement && !shell?.contains(active) ? active : null;
+    return () => {
+      const index = openModals.lastIndexOf(token);
+      if (index !== -1) {
+        openModals.splice(index, 1);
+      }
+      // Only when focus would otherwise be lost: a caller that moved focus on
+      // purpose while closing keeps it where it put it.
+      const active = document.activeElement;
+      const focusLost =
+        active === null ||
+        active === document.body ||
+        Boolean(shell?.contains(active));
+      if (focusLost && opener?.isConnected) {
+        opener.focus();
+      }
+    };
+  }, [isOpen, token]);
 
   // Close modal on Escape key press
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !isImeComposing(event)) {
+      if (
+        event.key === "Escape" &&
+        !isImeComposing(event) &&
+        isTopModal(token)
+      ) {
         onClose();
       }
     };
@@ -60,7 +101,7 @@ export const ModalBase: React.FC<ModalBaseProps> = ({
     return () => {
       document.removeEventListener("keydown", handleKeyDown);
     };
-  }, [isOpen, onClose]);
+  }, [isOpen, onClose, token]);
 
   // Keyed on opening alone: callers pass inline onClose closures, and
   // refocusing on each new one pulled focus out of the dialog's fields on

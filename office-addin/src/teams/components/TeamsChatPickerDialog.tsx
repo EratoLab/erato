@@ -128,6 +128,58 @@ function TeamsChatPickerDialogBody({
     teamName: string;
   } | null>(null);
   const debouncedQuery = useDebouncedValue(query, SEARCH_DEBOUNCE_MS);
+  // A reopened selection is visible from the browse level, not only inside
+  // each conversation's drill-in.
+  const pickedByConversation = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const selected of picker.selection.values()) {
+      if (selected.kind !== "message") continue;
+      const key = conversationKey(selected.ref);
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+    return counts;
+  }, [picker.selection]);
+  // Unticking a conversation with picked messages takes them out, as it
+  // would take out the whole chat.
+  const clearPicked = (ref: Parameters<typeof conversationKey>[0]) => {
+    const key = conversationKey(ref);
+    for (const selected of picker.selection.values()) {
+      if (
+        selected.kind === "message" &&
+        conversationKey(selected.ref) === key
+      ) {
+        picker.toggle(selected);
+      }
+    }
+  };
+  const conversationToggle = (selection: {
+    kind: "conversation";
+    ref: Parameters<typeof conversationKey>[0];
+    title: string;
+  }) => {
+    const checked = picker.isSelected(selection);
+    const mixed =
+      !checked &&
+      (pickedByConversation.get(conversationKey(selection.ref)) ?? 0) > 0;
+    return {
+      checked,
+      mixed,
+      onToggle: () =>
+        mixed ? clearPicked(selection.ref) : picker.toggle(selection),
+    };
+  };
+  const pickedSubline = (ref: Parameters<typeof conversationKey>[0]) => {
+    const count = pickedByConversation.get(conversationKey(ref)) ?? 0;
+    return count > 0
+      ? t({
+          id: "officeAddin.teams.picker.pickedCount",
+          message: plural(count, {
+            one: "# picked message",
+            other: "# picked messages",
+          }),
+        })
+      : undefined;
+  };
 
   const trimmed = debouncedQuery.trim();
   const isSearching = trimmed.length >= MIN_SEARCH_QUERY_LENGTH;
@@ -466,14 +518,15 @@ function TeamsChatPickerDialogBody({
     return (
       <TeamsPickerRow
         key={chat.chatId}
-        checked={picker.isSelected(selection)}
-        onToggle={() => picker.toggle(selection)}
+        {...conversationToggle(selection)}
         selectLabel={t({
           id: "officeAddin.teams.picker.selectChat",
           message: `Select ${chatTitle}`,
         })}
         title={chatTitle}
-        subline={chat.previewText || undefined}
+        subline={
+          pickedSubline(selection.ref) ?? (chat.previewText || undefined)
+        }
         onOpen={() => setActiveChatId(chat.chatId)}
         openLabel={t({
           id: "officeAddin.teams.picker.openChat",
@@ -584,8 +637,7 @@ function TeamsChatPickerDialogBody({
       <TeamsPickerRow
         key={`${channel.teamId}/${channel.channelId}`}
         isChannel
-        checked={picker.isSelected(selection)}
-        onToggle={() => picker.toggle(selection)}
+        {...conversationToggle(selection)}
         selectLabel={t({
           id: "officeAddin.teams.picker.selectChannel",
           message: `Select ${channel.name}`,
@@ -608,7 +660,9 @@ function TeamsChatPickerDialogBody({
             )}
           </>
         }
-        subline={channel.teamName || undefined}
+        subline={
+          pickedSubline(selection.ref) ?? (channel.teamName || undefined)
+        }
         onOpen={() =>
           setActiveChannel({
             teamId: channel.teamId,
@@ -939,6 +993,7 @@ function TeamsChatPickerDialogBody({
     const hasWholeSelection = [...picker.selection.values()].some(
       (selection) => selection.kind === "conversation",
     );
+    const editing = picker.editing !== null;
 
     return (
       <div className="shrink-0 space-y-3 border-t border-theme-border pt-3">
@@ -1020,6 +1075,15 @@ function TeamsChatPickerDialogBody({
           )}
         </div>
 
+        {editing && selectedCount === 0 && (
+          <p className="text-xs text-theme-fg-muted" role="status">
+            {t({
+              id: "officeAddin.teams.picker.updateRemovesHint",
+              message: "Nothing selected: Update removes the transcript.",
+            })}
+          </p>
+        )}
+
         {picker.isMessageSelectionFull && (
           <p className="text-xs text-theme-fg-muted" role="status">
             {t({
@@ -1029,7 +1093,9 @@ function TeamsChatPickerDialogBody({
           </p>
         )}
 
-        <div className="flex items-center justify-between gap-2">
+        {/* Wraps so a long "Update" (de "Aktualisieren") moves the buttons
+            to their own row instead of past the dialog's edge. */}
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <span className="text-xs text-theme-fg-muted" role="status">
             {t({
               id: "officeAddin.teams.picker.selectionCount",
@@ -1039,7 +1105,7 @@ function TeamsChatPickerDialogBody({
               }),
             })}
           </span>
-          <div className="flex gap-2">
+          <div className="ml-auto flex gap-2">
             <Button
               variant="secondary"
               onClick={picker.isBuilding ? picker.cancelBuild : picker.close}
@@ -1051,14 +1117,19 @@ function TeamsChatPickerDialogBody({
             </Button>
             <Button
               variant="primary"
-              loading={picker.isBuilding}
-              disabled={selectedCount === 0}
+              loading={picker.isBuilding || picker.isDelivering}
+              disabled={!editing && selectedCount === 0}
               onClick={() => void picker.attach()}
             >
-              {t({
-                id: "officeAddin.teams.picker.attach",
-                message: "Attach",
-              })}
+              {editing
+                ? t({
+                    id: "officeAddin.teams.picker.update",
+                    message: "Update",
+                  })
+                : t({
+                    id: "officeAddin.teams.picker.attach",
+                    message: "Attach",
+                  })}
             </Button>
           </div>
         </div>

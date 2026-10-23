@@ -10,6 +10,8 @@ const CHECKBOX_CLASS =
 
 export interface TeamsPickerRowProps {
   checked: boolean;
+  /** Part of the conversation is selected: drawn as a mixed checkbox. */
+  mixed?: boolean;
   onToggle: () => void;
   /** Accessible name for the checkbox; the row body is not the control. */
   selectLabel: string;
@@ -37,6 +39,7 @@ export interface TeamsPickerRowProps {
  */
 export function TeamsPickerRow({
   checked,
+  mixed = false,
   onToggle,
   selectLabel,
   disabled = false,
@@ -55,6 +58,11 @@ export function TeamsPickerRow({
   return (
     <div className="theme-transition flex items-start gap-3 px-2 py-2 hover:bg-theme-bg-hover">
       <input
+        // A native checkbox has no markup for "mixed"; the property is what
+        // assistive tech reads.
+        ref={(node) => {
+          if (node) node.indeterminate = mixed && !checked;
+        }}
         type="checkbox"
         checked={checked}
         onChange={onToggle}

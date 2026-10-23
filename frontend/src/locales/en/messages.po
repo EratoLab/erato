@@ -1433,6 +1433,8 @@ msgstr "LLM Chat"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatMessage.tsx
+#: src/components/ui/Teams/TeamsConversationView.tsx
+#: src/utils/teams/teamsTranscriptContext.ts
 msgid "branding.user_form_of_address"
 msgstr "You"
 
@@ -3174,6 +3176,7 @@ msgstr "Preview"
 #: src/components/ui/Chat/ComposerContext/composerContextStrings.ts
 #: src/components/ui/FileUpload/AttachmentTile.tsx
 #: src/components/ui/FileUpload/FilePreviewButton.tsx
+#: src/components/ui/Teams/TeamsTranscriptDetail.tsx
 msgid "common.remove"
 msgstr "Remove"
 
@@ -6818,47 +6821,160 @@ msgid "taskPlanApproval.unnamedTask"
 msgstr "Task {position}"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Teams/useTeamsTranscriptContextItems.tsx
+msgid "teams.context.announce.removed"
+msgstr "Teams transcript removed."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Teams/useTeamsTranscriptContextItems.tsx
+msgid "teams.context.announce.removedWithFiles"
+msgstr "{count, plural, one {Teams transcript removed, with # shared file.} other {Teams transcript removed, with # shared files.}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Teams/TeamsTranscriptDetail.tsx
+msgid "teams.context.detail.allConversations"
+msgstr "All conversations"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Teams/useTeamsTranscriptContextItems.tsx
+msgid "teams.context.detail.editSelection"
+msgstr "Edit selection"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Teams/TeamsTranscriptDetail.tsx
+msgid "teams.context.detail.filesLabel"
+msgstr "Shared files in {title}"
+
+#. js-lingui-explicit-id
+#: src/utils/teams/teamsTranscriptContext.ts
+msgid "teams.context.detail.kind.channel"
+msgstr "Channel"
+
+#. js-lingui-explicit-id
+#: src/utils/teams/teamsTranscriptContext.ts
+msgid "teams.context.detail.kind.chat"
+msgstr "Chat"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Teams/TeamsTranscriptDetail.tsx
+msgid "teams.context.detail.notAttached"
+msgstr "{count, plural, one {# shared file not attached} other {# shared files not attached}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Teams/TeamsTranscriptDetail.tsx
+msgid "teams.context.detail.oneFile"
+msgstr "{count, plural, one {One file covers this conversation} other {One file covers all # conversations}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Teams/TeamsTranscriptDetail.tsx
+msgid "teams.context.detail.openConversation"
+msgstr "Open conversation"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Teams/TeamsTranscriptDetail.tsx
+msgid "teams.context.detail.openConversationNamed"
+msgstr "Open conversation: {title}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Teams/TeamsTranscriptDetail.tsx
+msgid "teams.context.detail.otherFiles"
+msgstr "Other shared files"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Teams/TeamsTranscriptDetail.tsx
+msgid "teams.context.detail.unreadable"
+msgstr "This transcript is still sent, but its conversations can't be shown here."
+
+#. js-lingui-explicit-id
+#: src/utils/teams/teamsTranscriptContext.ts
+msgid "teams.context.label.more"
+msgstr "{title} +{count}"
+
+#. js-lingui-explicit-id
+#: src/utils/teams/teamsTranscriptContext.ts
+msgid "teams.context.meta.conversations"
+msgstr "{count, plural, one {# conversation} other {# conversations}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Teams/TeamsTranscriptDetail.tsx
+#: src/utils/teams/teamsTranscriptContext.ts
+msgid "teams.context.meta.reading"
+msgstr "Reading transcript…"
+
+#. js-lingui-explicit-id
+#: src/utils/teams/teamsTranscriptContext.ts
+msgid "teams.context.meta.unreadable"
+msgstr "Conversations can't be shown"
+
+#. js-lingui-explicit-id
+#: src/utils/teams/teamsTranscriptContext.ts
+msgid "teams.context.name"
+msgstr "Teams transcript"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Teams/useTeamsTranscriptContextItems.tsx
+msgid "teams.context.remove"
+msgstr "Remove Teams transcript"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Teams/useTeamsTranscriptContextItems.tsx
+msgid "teams.context.removeAction"
+msgstr "Remove transcript"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Teams/TeamsConversationView.tsx
+msgid "teams.conversation.skipped"
+msgstr "{skipped, plural, one {# message could not be loaded.} other {# messages could not be loaded.}}"
+
+#. js-lingui-explicit-id
 #: src/utils/teams/teamsAttachmentGroups.ts
+#: src/utils/teams/teamsTranscriptContext.ts
 msgid "teams.preview.allMessages"
 msgstr "All messages"
 
 #. js-lingui-explicit-id
 #: src/utils/teams/teamsAttachmentGroups.ts
+#: src/utils/teams/teamsTranscriptContext.ts
 msgid "teams.preview.attachment"
 msgstr "Attachment"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Teams/TeamsAttachmentsPreview.tsx
-msgid "teams.preview.conversationRegion"
-msgstr "Teams conversation preview"
+#~ msgid "teams.preview.conversationRegion"
+#~ msgstr "Teams conversation preview"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Teams/TeamsAttachmentsPreview.tsx
-msgid "teams.preview.conversationTitle"
-msgstr "Teams conversation"
+#~ msgid "teams.preview.conversationTitle"
+#~ msgstr "Teams conversation"
 
 #. js-lingui-explicit-id
 #: src/utils/teams/teamsAttachmentGroups.ts
+#: src/utils/teams/teamsTranscriptContext.ts
 msgid "teams.preview.image"
 msgstr "Image"
 
 #. js-lingui-explicit-id
 #: src/utils/teams/teamsAttachmentGroups.ts
+#: src/utils/teams/teamsTranscriptContext.ts
 msgid "teams.preview.messageCount"
 msgstr "{count, plural, one {# message} other {# messages}}"
 
 #. js-lingui-explicit-id
 #: src/utils/teams/teamsAttachmentGroups.ts
+#: src/utils/teams/teamsTranscriptContext.ts
 msgid "teams.preview.partialConversation"
 msgstr "Part of the conversation"
 
 #. js-lingui-explicit-id
 #: src/utils/teams/teamsAttachmentGroups.ts
+#: src/utils/teams/teamsTranscriptContext.ts
 msgid "teams.preview.selectedMessages"
 msgstr "Selected messages"
 
 #. js-lingui-explicit-id
 #: src/utils/teams/teamsAttachmentGroups.ts
+#: src/utils/teams/teamsTranscriptContext.ts
 msgid "teams.preview.skipped"
 msgstr "{skipped, plural, one {# could not be loaded} other {# could not be loaded}}"
 
@@ -7513,8 +7629,8 @@ msgid "{sharedCount} shared files"
 msgstr "{sharedCount} shared files"
 
 #: src/components/ui/Teams/TeamsConversationView.tsx
-msgid "{skipped} messages could not be loaded."
-msgstr "{skipped} messages could not be loaded."
+#~ msgid "{skipped} messages could not be loaded."
+#~ msgstr "{skipped} messages could not be loaded."
 
 #: src/components/ui/Trace/NestedTraceView.tsx
 msgid "{stepCount, plural, one {# step} other {# steps}}"
@@ -7575,8 +7691,8 @@ msgstr "1 file"
 #~ msgstr "1 item"
 
 #: src/components/ui/Teams/TeamsConversationView.tsx
-msgid "1 message could not be loaded."
-msgstr "1 message could not be loaded."
+#~ msgid "1 message could not be loaded."
+#~ msgstr "1 message could not be loaded."
 
 #: src/utils/teams/teamsSentAttachmentGroups.ts
 msgid "1 shared file"

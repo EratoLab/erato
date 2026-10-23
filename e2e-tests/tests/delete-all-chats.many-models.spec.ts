@@ -77,6 +77,19 @@ test(
         page.getByRole("dialog", { name: "Preferences" }),
       ).toHaveCount(1);
 
+      // Escape closes the confirmation alone and returns focus to its opener.
+      await page.keyboard.press("Escape");
+      await expect(
+        page.getByRole("dialog", { name: "Archive all chats?" }),
+      ).toHaveCount(0);
+      await expect(
+        page.getByRole("dialog", { name: "Preferences" }),
+      ).toBeVisible();
+      await expect(
+        page.getByRole("button", { name: "Archive all chats" }),
+      ).toBeFocused();
+      await page.getByRole("button", { name: "Archive all chats" }).click();
+
       const archiveAllResponsePromise = page.waitForResponse(
         (response) =>
           response.url().includes("/api/v1beta/me/chats/archive_all") &&

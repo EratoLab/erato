@@ -13,6 +13,8 @@ export interface ChatInputControls {
   setSelectedChatProviderId: (chatProviderId: string) => void;
   toggleFacetId: (facetId: string) => void;
   addUploadedFiles: (files: FileUploadItem[]) => void;
+  /** Unstages files by id, for hosts that own some of the staged files. */
+  removeUploadedFiles: (fileIds: string[]) => void;
   /** Drops any queued follow-up, e.g. when an edit supersedes its branch. */
   clearQueuedMessage: () => void;
 }
@@ -28,6 +30,7 @@ const defaultControls: ChatInputControls = {
   setSelectedChatProviderId: noop,
   toggleFacetId: noop,
   addUploadedFiles: noop,
+  removeUploadedFiles: noop,
   clearQueuedMessage: noop,
 };
 

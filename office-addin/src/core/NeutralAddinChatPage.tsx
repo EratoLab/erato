@@ -6,6 +6,7 @@ import {
 import { AddinChatCore } from "./AddinChatCore";
 import { AddinChatProviderCore } from "./AddinChatProviderCore";
 
+import type { AddinChatHostProps } from "./AddinChatCore";
 import type { AddinSessionControllerProps } from "./AddinChatProviderCore";
 import type { ComponentType } from "react";
 
@@ -16,10 +17,13 @@ import type { ComponentType } from "react";
 export function NeutralAddinChatPage({
   platform = "addin-neutral",
   SessionController,
+  Host,
 }: {
   platform?: string;
   /** Host session adapter; defaults to the neutral storage-only controller. */
   SessionController?: ComponentType<AddinSessionControllerProps>;
+  /** Replaces the neutral host, e.g. one built by `createNeutralAddinChatHost`. */
+  Host?: ComponentType<AddinChatHostProps>;
 }) {
   return (
     <ProfileProvider>
@@ -28,7 +32,7 @@ export function NeutralAddinChatPage({
           platform={platform}
           SessionController={SessionController}
         >
-          <AddinChatCore />
+          <AddinChatCore Host={Host} />
         </AddinChatProviderCore>
       </FileCapabilitiesProvider>
     </ProfileProvider>

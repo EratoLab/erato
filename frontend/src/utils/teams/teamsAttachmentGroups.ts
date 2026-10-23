@@ -1,18 +1,16 @@
 /**
- * Turns a Teams transcript back into the conversations it was built from, as
- * attachment groups: one card per conversation, with the transcript demoted to
- * a single summary row inside it.
+ * Turns a sent Teams transcript back into the conversations it was built from,
+ * as attachment groups: one card per conversation, with the transcript demoted
+ * to a single summary row inside it. (The composer shows a transcript as one
+ * context chip instead; see `useTeamsTranscriptContextItems`.)
  *
- * Everything it renders comes out of the transcript's own index block — read
- * from the local `File` in the composer, and from the stored upload on a sent
- * or generated message — so a conversation looks alike wherever it is
- * attached, and every surface describes the file that was actually uploaded.
+ * Everything it renders comes out of the stored upload's own index block, so
+ * every surface describes the file that was actually uploaded.
  *
  * One group per section, never one merged stream — a selection can span chats
- * and channels that share no timeline. A whole conversation stays a summary:
- * the default window is a few hundred messages, and that many cards in a task
- * pane is unusable. In the composer, hand-picked messages get a card each,
- * because verifying them one by one is exactly why the user picked them.
+ * and channels that share no timeline. A conversation stays a summary: the
+ * default window is a few hundred messages, and that many cards in a task pane
+ * is unusable.
  *
  * Pure, and null whenever the structure is not fully available — a
  * half-rendered conversation is worse than the flat chips it replaces.
@@ -36,16 +34,6 @@ import type {
 } from "@/components/ui/FileUpload/GroupedFileAttachmentsPreview";
 import type { FileUploadItem } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
-/**
- * What the composer needs to recognise a transcript it is already holding: the
- * uploaded filename — the same key the message markers name their assets by —
- * and the index read back out of the file.
- */
-export interface TeamsAttachedTranscript {
-  fileName: string;
-  index: TeamsTranscriptIndex;
-}
-
 export interface TeamsAttachmentPreviewGroups {
   groups: FileAttachmentGroup[];
   /** Uploads the groups account for; the rest stay ordinary flat chips. */
@@ -56,39 +44,6 @@ interface CardSection {
   key: string;
   section: TeamsTranscriptIndexSection;
   messages: TeamsTranscriptIndexMessage[];
-}
-
-/** The composer's grouping, from the index block of the transcript it holds. */
-export function buildTeamsAttachmentGroups(
-  attached: TeamsAttachedTranscript | null,
-  attachedFiles: readonly FileUploadItem[],
-  /** Makes the summary row the way into the conversation it stands for. */
-  onOpenSection?: (sectionIndex: number) => void,
-): TeamsAttachmentPreviewGroups | null {
-  if (!attached || attached.index.sections.length === 0) return null;
-
-  const uploads = new UploadClaims(attachedFiles);
-  const transcript = uploads.byName(attached.fileName);
-  if (!transcript) return null;
-  uploads.claimFile(transcript);
-
-  const groups = cardSections(attached.index, (section) =>
-    conversationKey(section.ref),
-  ).map((card, position) =>
-    buildGroup(card, {
-      transcript,
-      // The whole upload under its display name, so an image's preview URL
-      // and stored, extensioned filename still draw it as a thumbnail.
-      rowFile: (file, displayName) => ({ ...file, displayName }),
-      uploads,
-      cardPerMessage: card.section.selection === "messages",
-      onOpen: onOpenSection ? () => onOpenSection(position) : undefined,
-      // The composer stays reachable below a whole conversation's files.
-      defaultCollapsed: card.section.selection !== "messages",
-    }),
-  );
-
-  return { groups, claimedFileIds: uploads.claimed };
 }
 
 /**
@@ -124,10 +79,6 @@ export function buildTeamsMessageAttachmentGroups(
         // The whole upload, so a row can show its thumbnail and open it.
         rowFile: (upload, displayName) => ({ ...upload, displayName }),
         uploads,
-        // Picking is reviewed before sending; afterwards the card summarises.
-        cardPerMessage: false,
-        // Only the transcript row opens the conversation, so it must not hide.
-        defaultCollapsed: false,
       }),
     ),
   );
@@ -166,10 +117,6 @@ class UploadClaims {
     }
   }
 
-  byName(name: string): FileUploadItem | undefined {
-    return this.uploadsByName.get(name);
-  }
-
   claimFile(file: FileUploadItem) {
     this.claimed.add(file.id);
   }
@@ -188,63 +135,37 @@ interface GroupOptions {
   /** What a row shows for an upload, under a name fit for a reader. */
   rowFile: (file: FileUploadItem, displayName: string) => FileResource;
   uploads: UploadClaims;
-  cardPerMessage: boolean;
-  onOpen?: () => void;
-  defaultCollapsed: boolean;
 }
 
 function buildGroup(
   { key, section, messages }: CardSection,
-  {
-    transcript,
-    rowFile,
-    uploads,
-    cardPerMessage,
-    onOpen,
-    defaultCollapsed,
-  }: GroupOptions,
+  { transcript, rowFile, uploads }: GroupOptions,
 ): FileAttachmentGroup {
   const items: FileAttachmentGroupItem[] = [
     {
       kind: "attachment",
       id: `${key}:transcript`,
       // One transcript covers every section, so it is named by what this
-      // section contributes to it rather than by its filename. Removing the
-      // row removes the file, which drops the whole preview back to chips.
+      // section contributes to it rather than by its filename. The preview
+      // shows the file itself, and is titled by it.
       file: rowFile(transcript, includedSummary(section)),
+      previewFile: transcript,
       labelOverride: t({
         id: "teams.preview.transcriptLabel",
         message: "Teams conversation",
       }),
-      onOpen,
     },
   ];
 
-  if (cardPerMessage) {
-    for (const message of messages) {
-      items.push({
-        kind: "threadMessageGroup",
-        id: `${key}:${message.ref.messageId}`,
-        label: message.sender,
-        sublabel: messageSublabel(message),
-        defaultCollapsed: false,
-        attachments: claimAssets(message.assets, uploads).map((claimed) => ({
-          id: claimed.file.id,
-          file: rowFile(claimed.file, assetDisplayName(claimed.asset)),
-        })),
-      });
-    }
-  } else {
-    // The summary row stands for the messages; the files that rode along
-    // with them still get a row each, so nothing is attached invisibly.
-    const assets = messages.flatMap((message) => message.assets);
-    for (const claimed of claimAssets(assets, uploads)) {
-      items.push({
-        kind: "attachment",
-        id: claimed.file.id,
-        file: rowFile(claimed.file, assetDisplayName(claimed.asset)),
-      });
-    }
+  // The summary row stands for the messages; the files that rode along with
+  // them still get a row each, so nothing is attached invisibly.
+  const assets = messages.flatMap((message) => message.assets);
+  for (const claimed of claimAssets(assets, uploads)) {
+    items.push({
+      kind: "attachment",
+      id: claimed.file.id,
+      file: rowFile(claimed.file, assetDisplayName(claimed.asset)),
+    });
   }
 
   return {
@@ -255,7 +176,8 @@ function buildGroup(
     metaLabel: sectionMeta(section, messages.length),
     items,
     collapsible: true,
-    defaultCollapsed,
+    // Only the transcript row opens the conversation, so it must not hide.
+    defaultCollapsed: false,
   };
 }
 
@@ -325,33 +247,6 @@ function includedSummary(section: TeamsTranscriptIndexSection): string {
     );
   }
   return parts.join(" · ");
-}
-
-/** Enough of a message to tell two from the same sender apart, no more. */
-const EXCERPT_LENGTH = 100;
-
-function messageSublabel(message: TeamsTranscriptIndexMessage): string {
-  const when = toDate(message.createdAt);
-  return [
-    when ? when.toLocaleString() : "",
-    message.subject ?? "",
-    excerpt(message.text),
-  ]
-    .filter((part) => part.length > 0)
-    .join(" · ");
-}
-
-/**
- * A card carrying only sender and timestamp is unreviewable: chat messages
- * rarely have a subject, so two messages from one person minutes apart read
- * identically — and reviewing the picked messages is the whole point of
- * showing them individually.
- */
-function excerpt(text: string): string {
-  const flat = text.replace(/\s+/g, " ").trim();
-  return flat.length > EXCERPT_LENGTH
-    ? `${flat.slice(0, EXCERPT_LENGTH).trimEnd()}…`
-    : flat;
 }
 
 interface ClaimedAsset {

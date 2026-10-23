@@ -362,6 +362,18 @@ test("stacked dialogs are each named by their own title", async ({ page }) => {
   expect(duplicateIds).toEqual([]);
 });
 
+test("Escape closes the newest stacked dialog only", async ({ page }) => {
+  await openStory(page, "ui-modal-modalbase--stacked", '[role="dialog"]');
+  const conversation = page.getByRole("dialog", { name: "Teams conversation" });
+  const preview = page.getByRole("dialog", { name: "Preview: dashboard.png" });
+  await expect(preview).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(preview).toHaveCount(0);
+  await expect(conversation).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(conversation).toHaveCount(0);
+});
+
 test("a confirmation over Preferences is named by its own title", async ({
   page,
 }) => {
@@ -384,4 +396,13 @@ test("a confirmation over Preferences is named by its own title", async ({
   await confirm.getByRole("button", { name: "Cancel action" }).click();
   await expect(confirm).toHaveCount(0);
   await expect(preferences).toBeVisible();
+
+  // Escape takes the confirmation alone, and focus goes back to its opener.
+  const archive = page.getByRole("button", { name: "Archive all chats" });
+  await archive.click();
+  await expect(confirm).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(confirm).toHaveCount(0);
+  await expect(preferences).toBeVisible();
+  await expect(archive).toBeFocused();
 });

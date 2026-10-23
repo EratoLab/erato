@@ -7,6 +7,7 @@ import {
   resolvePreviewKind,
 } from "@/components/ui/FilePreview/FilePreviewContent";
 import { OutlookSourceAction } from "@/components/ui/FilePreview/OutlookSourceAction";
+import { getFileName } from "@/components/ui/FileUpload/FilePreviewBase";
 
 import { ModalBase } from "./ModalBase";
 
@@ -138,7 +139,7 @@ export const FilePreviewModal: React.FC<FilePreviewModalProps> = ({
     <ModalBase
       isOpen={isOpen}
       onClose={onClose}
-      title={`${t`Preview:`} ${file.filename}`}
+      title={`${t`Preview:`} ${getFileName(file)}`}
       contentClassName={canPreview ? "max-w-4xl" : "max-w-md"}
     >
       {renderPreview()}

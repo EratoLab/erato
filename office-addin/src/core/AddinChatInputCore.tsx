@@ -64,6 +64,11 @@ export interface AddinChatInputCoreProps {
   contextItems?: ComposerContextItem[];
   /** Modes the next send runs in, from the same resolver; drawn next to "+". */
   composerModes?: ComposerMode[];
+  /**
+   * The files the next send carries, after every change and before paint, for
+   * a host whose chips stand for some of them. Pass a stable callback.
+   */
+  onStagedFilesChange?: (files: FileUploadItem[]) => void;
 }
 
 /** Generic add-in composer. Hosts add their context chips and action facets. */

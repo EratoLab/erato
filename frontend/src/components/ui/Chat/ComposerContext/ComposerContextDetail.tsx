@@ -21,8 +21,10 @@ import { isImeComposing } from "@/utils/isImeComposing";
 import {
   composerContextControl,
   composerContextMeta,
+  composerContextSpokenLabel,
 } from "./ComposerContextChip";
 import {
+  announceLocked,
   closeDetailLabel,
   includeLabel,
   leaveOutLabel,
@@ -133,6 +135,14 @@ const DetailFooter = ({
   if (actions.length === 0 && control === null) {
     return null;
   }
+  // The lane locks an item that stands for staged files while the composer
+  // is locked; a host choice on it would change those files all the same.
+  const actionsLocked =
+    Boolean(item.locked) && (item.claimsFileIds?.length ?? 0) > 0;
+  // The lane's own lock carries no reason; say what Delete on the chip says.
+  const lockTitle = item.locked
+    ? (item.lockReason ?? announceLocked(composerContextSpokenLabel(item)))
+    : undefined;
   return (
     <div
       className="flex flex-wrap items-center justify-end gap-2"
@@ -143,6 +153,8 @@ const DetailFooter = ({
           key={action.id}
           size="sm"
           variant={action.variant === "primary" ? "primary" : "secondary"}
+          disabled={actionsLocked}
+          title={actionsLocked ? lockTitle : undefined}
           onClick={() => onAction(action)}
         >
           {action.label}
@@ -153,7 +165,7 @@ const DetailFooter = ({
           size="sm"
           variant="secondary"
           disabled={item.locked}
-          title={item.locked ? item.lockReason : undefined}
+          title={lockTitle}
           onClick={() => onRemove(item)}
         >
           {item.removeActionLabel ??
@@ -165,7 +177,7 @@ const DetailFooter = ({
           size="sm"
           variant="primary"
           disabled={item.locked}
-          title={item.locked ? item.lockReason : undefined}
+          title={lockTitle}
           onClick={() => onRestore(item)}
         >
           {item.restoreLabel ?? includeLabel()}
@@ -252,7 +264,10 @@ export const ComposerContextDetail = ({
       if (
         !target ||
         panelRef.current?.contains(target) ||
-        trigger?.contains(target)
+        trigger?.contains(target) ||
+        // A dialog the detail opened over itself, e.g. a file preview.
+        (target instanceof Element &&
+          target.closest('[data-ui="modal-overlay"]'))
       ) {
         return;
       }
@@ -325,6 +340,7 @@ export const ComposerContextDetail = ({
     return null;
   }
 
+  const renderContext = { locked: Boolean(item.locked) };
   const hasFooter =
     composerContextControl(item) !== null || (detail.actions?.length ?? 0) > 0;
   const footer = (
@@ -352,7 +368,9 @@ export const ComposerContextDetail = ({
           className="flex flex-col gap-3"
         >
           <DetailHeaderMeta item={item} />
-          <div className="text-sm text-theme-fg-primary">{detail.render()}</div>
+          <div className="text-sm text-theme-fg-primary">
+            {detail.render(renderContext)}
+          </div>
         </div>
       </ModalBase>
     );
@@ -390,7 +408,7 @@ export const ComposerContextDetail = ({
         />
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto px-3.5 py-3 text-sm text-theme-fg-primary">
-        {detail.render()}
+        {detail.render(renderContext)}
       </div>
       {hasFooter ? (
         <div className="shrink-0 border-t border-theme-border px-3.5 py-2.5">

@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TeamsChatAddMenuExtraContent } from "../TeamsChatAddMenuExtraContent";
 
 import type { TeamsChatFetcherUnavailableReason } from "../../hooks/useTeamsChatFetcher";
+import type { TeamsComposerContextValue } from "../TeamsComposerContext";
 import type { useFileCapabilitiesContext } from "@erato/frontend/library";
 
 type TestCapability = ReturnType<
@@ -17,6 +18,7 @@ const state = vi.hoisted(() => ({
   isLoading: false,
   error: null as Error | null,
   open: vi.fn(),
+  composer: null as TeamsComposerContextValue | null,
 }));
 
 // Mock the provider lookup, retaining the real capability conversion.
@@ -40,6 +42,29 @@ vi.mock("../../hooks/useTeamsChatFetcher", () => ({
 vi.mock("../../providers/TeamsChatPickerProvider", () => ({
   useTeamsChatPicker: () => ({ open: state.open }),
 }));
+vi.mock("../TeamsComposerContext", () => ({
+  useTeamsComposer: () => state.composer,
+}));
+
+const bridge = {
+  upload: vi.fn(),
+  add: vi.fn(),
+  replace: vi.fn(),
+  remove: vi.fn(),
+  claimedIds: vi.fn(() => []),
+  announce: vi.fn(),
+  focusComposer: vi.fn(),
+};
+const record = {
+  lineage: "lineage-1",
+  transcriptUploadId: "u-transcript",
+  assetUploadIds: [],
+  assetNames: [],
+  excludedAssetNames: [],
+  file: new File(["#"], "teams-Product_sync.md"),
+  selections: [],
+  messageLimit: 200,
+};
 
 const textCapability: TestCapability = {
   id: "text",
@@ -64,12 +89,13 @@ describe("TeamsChatAddMenuExtraContent", () => {
     state.isLoading = false;
     state.error = null;
     state.open.mockReset();
+    state.composer = { bridge, stagedTranscript: null };
   });
   afterEach(cleanup);
 
   const onSelectFiles = () => Promise.resolve();
 
-  it("renders one menu item that hands the upload callback to the picker", () => {
+  it("renders one menu item that hands the composer to the picker", () => {
     const onClose = vi.fn();
     render(
       <TeamsChatAddMenuExtraContent
@@ -81,7 +107,7 @@ describe("TeamsChatAddMenuExtraContent", () => {
     const row = screen.getByRole("menuitem", { name: /Teams chats…/ });
     fireEvent.click(row);
 
-    expect(state.open).toHaveBeenCalledWith(onSelectFiles);
+    expect(state.open).toHaveBeenCalledWith(bridge, undefined);
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
@@ -167,7 +193,7 @@ describe("TeamsChatAddMenuExtraContent", () => {
         screen.queryByText("This workspace can't accept text files"),
       ).not.toBeInTheDocument();
       fireEvent.click(row);
-      expect(state.open).toHaveBeenCalledWith(onSelectFiles);
+      expect(state.open).toHaveBeenCalledWith(bridge, undefined);
       expect(onClose).toHaveBeenCalledTimes(1);
     },
   );
@@ -228,4 +254,40 @@ describe("TeamsChatAddMenuExtraContent", () => {
       ).toBeInTheDocument();
     },
   );
+
+  it("edits the staged transcript, even when the composer is full", () => {
+    state.composer = { bridge, stagedTranscript: record };
+    const onClose = vi.fn();
+    render(
+      <TeamsChatAddMenuExtraContent
+        onSelectFiles={onSelectFiles}
+        onClose={onClose}
+        uploadDisabled
+      />,
+    );
+
+    expect(
+      screen.getByText("Edit the conversations in your transcript"),
+    ).toBeInTheDocument();
+    const row = screen.getByRole("menuitem");
+    expect(row).toBeEnabled();
+    fireEvent.click(row);
+    expect(state.open).toHaveBeenCalledWith(bridge, { edit: record });
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("stays disabled outside a Teams composer", () => {
+    state.composer = null;
+    render(
+      <TeamsChatAddMenuExtraContent
+        onSelectFiles={onSelectFiles}
+        onClose={() => {}}
+      />,
+    );
+
+    const row = screen.getByRole("menuitem");
+    expect(row).toBeDisabled();
+    fireEvent.click(row);
+    expect(state.open).not.toHaveBeenCalled();
+  });
 });

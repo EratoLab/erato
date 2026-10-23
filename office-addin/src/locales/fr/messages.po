@@ -2497,9 +2497,29 @@ msgid "officeAddin.teams.bot.setup.viewScript"
 msgstr ""
 
 #. js-lingui-explicit-id
+#: src/teams/providers/TeamsChatPickerProvider.tsx
+msgid "officeAddin.teams.composer.announce.attached"
+msgstr "Transcription Teams jointe."
+
+#. js-lingui-explicit-id
+#: src/teams/providers/TeamsChatPickerProvider.tsx
+msgid "officeAddin.teams.composer.announce.removed"
+msgstr "Transcription Teams retirée."
+
+#. js-lingui-explicit-id
+#: src/teams/providers/TeamsChatPickerProvider.tsx
+msgid "officeAddin.teams.composer.announce.updated"
+msgstr "Transcription Teams mise à jour."
+
+#. js-lingui-explicit-id
 #: src/teams/components/TeamsChatAddMenuExtraContent.tsx
 msgid "officeAddin.teams.fileSource.chats"
 msgstr "Conversations Teams…"
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatAddMenuExtraContent.tsx
+msgid "officeAddin.teams.fileSource.chatsEditHint"
+msgstr "Modifiez les conversations de votre transcription"
 
 #. js-lingui-explicit-id
 #: src/teams/components/TeamsChatAddMenuExtraContent.tsx
@@ -2705,6 +2725,11 @@ msgstr "Résultats partiels — Teams limite actuellement les requêtes."
 
 #. js-lingui-explicit-id
 #: src/teams/components/TeamsChatPickerDialog.tsx
+msgid "officeAddin.teams.picker.pickedCount"
+msgstr "{count, plural, one {# message choisi} other {# messages choisis}}"
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatPickerDialog.tsx
 msgid "officeAddin.teams.picker.privateChannel"
 msgstr "Privé"
 
@@ -2798,6 +2823,16 @@ msgstr "Conversations Teams"
 #: src/teams/components/TeamsChatPickerDialog.tsx
 msgid "officeAddin.teams.picker.unknownSender"
 msgstr "Expéditeur inconnu"
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatPickerDialog.tsx
+msgid "officeAddin.teams.picker.update"
+msgstr "Mettre à jour"
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatPickerDialog.tsx
+msgid "officeAddin.teams.picker.updateRemovesHint"
+msgstr "Rien n’est sélectionné : « Mettre à jour » retire la transcription."
 
 #. js-lingui-explicit-id
 #: src/teams/components/TeamsChatPickerDialog.tsx

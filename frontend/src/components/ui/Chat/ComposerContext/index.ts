@@ -6,10 +6,12 @@ export type { ComposerContextLaneProps } from "./ComposerContextLane";
 export { ComposerModeChips } from "./ComposerModeChips";
 export type { ComposerModeChipsProps } from "./ComposerModeChips";
 export { ComposerNoticeView } from "./ComposerNoticeView";
+export { useLiveAnnouncement } from "./useLiveAnnouncement";
 export type {
   ComposerContextChipFaceProps,
   ComposerContextDetail,
   ComposerContextDetailAction,
+  ComposerContextDetailRenderContext,
   ComposerContextDismissScope,
   ComposerContextIconName,
   ComposerContextItem,

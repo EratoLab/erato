@@ -15,7 +15,8 @@ pieces the add-in's composer context fixes rely on:
 - the staged count reading files shown elsewhere against the limit, beside
   the files shown here, which are all that "Remove all" removes and names;
 - stacked dialogs each named by their own title, including the web app's
-  Archive all chats confirmation over Preferences.
+  Archive all chats confirmation over Preferences; Escape closes the newest
+  one only, and focus goes back to what opened it.
 
 The Outlook draft row and the compose selection chip are now chips in the
 composer's lane, measured by `../storybook-outlook-context-chips`; the "+"

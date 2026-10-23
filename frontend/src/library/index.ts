@@ -199,11 +199,20 @@ export {
   type TeamsConversationViewProps,
 } from "@/components/ui/Teams/TeamsConversationView";
 export {
-  TeamsAttachmentsPreview,
-  type TeamsAttachmentsPreviewProps,
-} from "@/components/ui/Teams/TeamsAttachmentsPreview";
+  TeamsTranscriptDetail,
+  type TeamsTranscriptDetailProps,
+  type TeamsTranscriptNamedUpload,
+} from "@/components/ui/Teams/TeamsTranscriptDetail";
 export {
+  teamsTranscriptItemId,
+  useTeamsTranscriptContextItems,
+  type TeamsTranscriptContextEntry,
+  type TeamsTranscriptContextOptions,
+} from "@/components/ui/Teams/useTeamsTranscriptContextItems";
+export {
+  readTeamsTranscriptIndex,
   useTeamsTranscriptIndex,
+  useTeamsTranscriptIndexes,
   type TeamsTranscriptIndexRead,
 } from "@/hooks/teams/useTeamsTranscriptIndex";
 export {
@@ -585,11 +594,13 @@ export {
   type TeamsMessageRef,
 } from "@/utils/teams/teamsConversationRef";
 export {
-  buildTeamsAttachmentGroups,
   buildTeamsMessageAttachmentGroups,
-  type TeamsAttachedTranscript,
   type TeamsAttachmentPreviewGroups,
 } from "@/utils/teams/teamsAttachmentGroups";
+export {
+  teamsTranscriptChipText,
+  type TeamsTranscriptChipText,
+} from "@/utils/teams/teamsTranscriptContext";
 export {
   TEAMS_TRANSCRIPT_INDEX_MARKER,
   TEAMS_TRANSCRIPT_INDEX_VERSION,
@@ -656,10 +667,12 @@ export {
   ComposerContextLane,
   ComposerModeChips,
   DefaultComposerContextChipFace,
+  useLiveAnnouncement,
   type ComposerContextAreaProps,
   type ComposerContextChipFaceProps,
   type ComposerContextDetail,
   type ComposerContextDetailAction,
+  type ComposerContextDetailRenderContext,
   type ComposerContextDismissScope,
   type ComposerContextIconName,
   type ComposerContextItem,

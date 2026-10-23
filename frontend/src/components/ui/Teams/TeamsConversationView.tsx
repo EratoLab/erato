@@ -1,4 +1,4 @@
-import { t } from "@lingui/core/macro";
+import { plural, t } from "@lingui/core/macro";
 import clsx from "clsx";
 import { useCallback } from "react";
 
@@ -6,9 +6,12 @@ import {
   componentRegistry,
   resolveComponentOverride,
 } from "@/config/componentRegistry";
+import {
+  formatTeamsDay,
+  formatTeamsTime,
+} from "@/utils/teams/teamsTranscriptContext";
 
 import { AttachmentTile } from "../FileUpload/AttachmentTile";
-import { MessageTimestamp } from "../Message/MessageTimestamp";
 import { OpenNewWindowIcon } from "../icons";
 
 import type {
@@ -145,7 +148,9 @@ const ConversationSection: React.FC<
     ? `${section.title} · ${section.teamName}`
     : section.title;
   const window = dateRange(section.window.from, section.window.to);
-  const participants = section.participants.join(", ");
+  const participants = section.participants
+    .map((name) => (name === section.viewer ? viewerLabel() : name))
+    .join(", ");
   const skipped = section.skippedCount;
 
   return (
@@ -174,9 +179,13 @@ const ConversationSection: React.FC<
         )}
         {skipped > 0 && (
           <p className="text-xs text-theme-fg-muted">
-            {skipped === 1
-              ? t`1 message could not be loaded.`
-              : t`${skipped} messages could not be loaded.`}
+            {t({
+              id: "teams.conversation.skipped",
+              message: plural(skipped, {
+                one: "# message could not be loaded.",
+                other: "# messages could not be loaded.",
+              }),
+            })}
           </p>
         )}
       </header>
@@ -283,11 +292,12 @@ const MessageBlock: React.FC<
         </div>
         <div className="flex shrink-0 items-center gap-1">
           {createdAt && (
-            <MessageTimestamp
-              createdAt={createdAt}
-              displayStyle="time"
-              className="shrink-0 text-xs tabular-nums text-theme-fg-muted"
-            />
+            <time
+              dateTime={createdAt.toISOString()}
+              className="block shrink-0 text-xs tabular-nums text-theme-fg-muted"
+            >
+              {formatTeamsTime(message.createdAt)}
+            </time>
           )}
           {onOpenInTeams && message.deepLink && (
             <button
@@ -400,14 +410,17 @@ function groupByDay(
     if (day !== previous) days.push(day);
 
     const run = day.runs.at(-1);
-    const continuesRun = run?.sender === message.sender;
+    const continuesRun = run?.messages.at(-1)?.sender === message.sender;
     if (run !== undefined && continuesRun) {
       run.messages.push(message);
       continue;
     }
     day.runs.push({
       key: `${message.ordinal}`,
-      sender: message.sender,
+      sender:
+        viewer !== null && message.sender === viewer
+          ? viewerLabel()
+          : message.sender,
       isViewer: viewer !== null && message.sender === viewer,
       messages: [message],
     });
@@ -415,15 +428,16 @@ function groupByDay(
   return days;
 }
 
-/** Local, not the transcript's zone: the prose is for the model, this is not. */
+/** As chat messages address the user, so a deployment's branding applies. */
+const viewerLabel = () =>
+  t({ id: "branding.user_form_of_address", message: "You" });
+
+/**
+ * Local, not the transcript's zone: the prose is for the model, this is not.
+ * The app's language, not the browser's, so the date reads like the labels.
+ */
 function dayLabel(iso: string | null): string {
-  const date = toDate(iso);
-  if (!date) return t`Unknown date`;
-  return date.toLocaleDateString(undefined, {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
+  return formatTeamsDay(iso) ?? t`Unknown date`;
 }
 
 function dateRange(from: string | null, to: string | null): string {
