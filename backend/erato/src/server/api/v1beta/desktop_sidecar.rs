@@ -133,9 +133,7 @@ pub async fn organization_configuration(
     Ok(Json(
         app_state
             .config
-            .desktop_sidecar
-            .organization_configuration
-            .clone(),
+            .desktop_sidecar_organization_configuration(),
     ))
 }
 
