@@ -178,6 +178,24 @@ describe("Teams bot setup info", () => {
     });
   });
 
+  it("preserves gateway prefixes in setup info and the Cloud Shell command", () => {
+    const messagingEndpoint =
+      "https://your-api-gateway.example.com/prodtest/rest/hugo-erato-teams-test/api/integrations/ms_teams/messages";
+    const parsed = readTeamsBotSetupInfo({ ...info, messagingEndpoint });
+    expect(parsed?.messagingEndpoint).toBe(messagingEndpoint);
+    const generated = createTeamsSetupCommand(
+      bot,
+      origin,
+      tenant,
+      subscription,
+      "graph",
+      "graph-sso",
+      "apply",
+      { messagingEndpoint: parsed!.messagingEndpoint },
+    );
+    expect(generated).toContain(`MessagingEndpoint = '${messagingEndpoint}'`);
+  });
+
   it("ignores missing or unsafe setup info", () => {
     expect(readTeamsBotSetupInfo("<OfficeApp />")).toBeNull();
     expect(readTeamsBotSetupInfo({ ...info, tenantId: "" })).toBeNull();
