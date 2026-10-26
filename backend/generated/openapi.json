@@ -7806,6 +7806,27 @@
       "DesktopSidecarOrganizationConfiguration": {
         "type": "object",
         "properties": {
+          "outlook_addin_autopin": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Whether the desktop sidecar pins the Erato Outlook add-in in Outlook, so\nusers find its buttons without pinning them themselves.\n\nWhen unset, the sidecar uses its user configuration or built-in default,\nwhich is off, so a deployment opts in. Turning it off again stops further\npinning and leaves existing pins in place."
+          },
+          "outlook_addin_autopin_panes": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Whether `outlook_addin_autopin` also pins the add-in's task panes in\nclassic Outlook for Windows, which then open by themselves.\n\nWhen unset, the sidecar uses its user configuration or built-in default."
+          },
+          "outlook_addin_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The Erato Outlook add-in's manifest id, which the sidecar needs to find\nthe add-in in classic Outlook for Windows.\n\nNormally left unset: the organization configuration endpoint then sends\n`integrations.ms_office.addin.addin_id` while the Office add-in is enabled."
+          },
           "show_tray_icon": {
             "type": [
               "boolean",

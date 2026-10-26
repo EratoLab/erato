@@ -1013,6 +1013,70 @@ in the platform-default per-user configuration directory.
 show_tray_icon = false
 ```
 
+#### `desktop_sidecar.organization_configuration.outlook_addin_autopin`
+
+{/* erato_toml_config_key: desktop_sidecar.organization_configuration.outlook_addin_autopin */}
+
+Controls whether the desktop sidecar pins the Erato Outlook add-in in Outlook
+on macOS and Windows, so users find its buttons without pinning them
+themselves. The sidecar pins while Outlook is closed, and never pins again
+what a user unpinned.
+
+When this value is omitted, a user-specific sidecar setting may take
+precedence; if neither layer provides a value, the sidecar does not pin, so a
+deployment opts in. Setting it to `false` or removing it stops further pinning
+and leaves existing pins in place. In classic Outlook for Windows, the sidecar
+needs the add-in's id; see
+[`outlook_addin_id`](#desktop_sidecarorganization_configurationoutlook_addin_id).
+
+**Default value:** `None`
+
+**Type:** `boolean | None`
+
+**Example**
+
+```toml
+[desktop_sidecar.organization_configuration]
+outlook_addin_autopin = true
+```
+
+#### `desktop_sidecar.organization_configuration.outlook_addin_autopin_panes`
+
+{/* erato_toml_config_key: desktop_sidecar.organization_configuration.outlook_addin_autopin_panes */}
+
+Controls whether `outlook_addin_autopin` also pins the add-in's task panes in
+classic Outlook for Windows, which then open by themselves when an item is
+selected. Set it to `false` to pin only the add-in's buttons. When this value
+is omitted, a user-specific sidecar setting may take precedence; if neither
+layer provides a value, the sidecar pins the task panes too.
+
+**Default value:** `None`
+
+**Type:** `boolean | None`
+
+**Example**
+
+```toml
+[desktop_sidecar.organization_configuration]
+outlook_addin_autopin = true
+outlook_addin_autopin_panes = false
+```
+
+#### `desktop_sidecar.organization_configuration.outlook_addin_id`
+
+{/* erato_toml_config_key: desktop_sidecar.organization_configuration.outlook_addin_id */}
+
+The manifest id of the Erato Outlook add-in, which the desktop sidecar needs to
+find the add-in in classic Outlook for Windows. Normally left unset: while
+[`integrations.ms_office.addin.enabled`](#integrationsms_officeaddinenabled) is
+`true`, the backend sends
+[`integrations.ms_office.addin.addin_id`](#integrationsms_officeaddinaddin_id).
+Set it only if the add-in deployed to Outlook uses a different id.
+
+**Default value:** `None`
+
+**Type:** `string | None`
+
 ### `i18n`
 
 {/* erato_toml_config_key: i18n */}

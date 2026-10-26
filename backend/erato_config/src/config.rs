@@ -1033,6 +1033,33 @@ pub struct DesktopSidecarOrganizationConfiguration {
     #[serde(default)]
     #[schema(nullable = true)]
     pub show_tray_icon: Option<bool>,
+
+    /// Whether the desktop sidecar pins the Erato Outlook add-in in Outlook, so
+    /// users find its buttons without pinning them themselves.
+    ///
+    /// When unset, the sidecar uses its user configuration or built-in default,
+    /// which is off, so a deployment opts in. Turning it off again stops further
+    /// pinning and leaves existing pins in place.
+    #[serde(default)]
+    #[schema(nullable = true)]
+    pub outlook_addin_autopin: Option<bool>,
+
+    /// Whether `outlook_addin_autopin` also pins the add-in's task panes in
+    /// classic Outlook for Windows, which then open by themselves.
+    ///
+    /// When unset, the sidecar uses its user configuration or built-in default.
+    #[serde(default)]
+    #[schema(nullable = true)]
+    pub outlook_addin_autopin_panes: Option<bool>,
+
+    /// The Erato Outlook add-in's manifest id, which the sidecar needs to find
+    /// the add-in in classic Outlook for Windows.
+    ///
+    /// Normally left unset: the organization configuration endpoint then sends
+    /// `integrations.ms_office.addin.addin_id` while the Office add-in is enabled.
+    #[serde(default)]
+    #[schema(nullable = true)]
+    pub outlook_addin_id: Option<String>,
 }
 
 impl AppConfig {
@@ -2084,6 +2111,20 @@ impl AppConfig {
 
     pub fn additional_frontend_environment(&self) -> HashMap<String, serde_json::Value> {
         self.frontend.additional_environment.clone()
+    }
+
+    /// Returns the organization configuration sent to the desktop sidecar, with
+    /// `outlook_addin_id` filled from the Office add-in when it is enabled and
+    /// the value is unset.
+    pub fn desktop_sidecar_organization_configuration(
+        &self,
+    ) -> DesktopSidecarOrganizationConfiguration {
+        let mut configuration = self.desktop_sidecar.organization_configuration.clone();
+        let addin = &self.integrations.ms_office.addin;
+        if configuration.outlook_addin_id.is_none() && addin.enabled {
+            configuration.outlook_addin_id = Some(addin.addin_id.trim().to_owned());
+        }
+        configuration
     }
 
     /// Returns the list of available chat providers, filtered by the optional allowlist.

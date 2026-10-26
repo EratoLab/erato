@@ -1739,6 +1739,30 @@ export type DesktopSidecarDistributionTargetResponse = {
 
 export type DesktopSidecarOrganizationConfiguration = {
   /**
+   * Whether the desktop sidecar pins the Erato Outlook add-in in Outlook, so
+   * users find its buttons without pinning them themselves.
+   *
+   * When unset, the sidecar uses its user configuration or built-in default,
+   * which is off, so a deployment opts in. Turning it off again stops further
+   * pinning and leaves existing pins in place.
+   */
+  outlook_addin_autopin?: boolean | null | undefined;
+  /**
+   * Whether `outlook_addin_autopin` also pins the add-in's task panes in
+   * classic Outlook for Windows, which then open by themselves.
+   *
+   * When unset, the sidecar uses its user configuration or built-in default.
+   */
+  outlook_addin_autopin_panes?: boolean | null | undefined;
+  /**
+   * The Erato Outlook add-in's manifest id, which the sidecar needs to find
+   * the add-in in classic Outlook for Windows.
+   *
+   * Normally left unset: the organization configuration endpoint then sends
+   * `integrations.ms_office.addin.addin_id` while the Office add-in is enabled.
+   */
+  outlook_addin_id?: string | null | undefined;
+  /**
    * Whether the desktop sidecar should show its system tray icon.
    *
    * When unset, the sidecar uses its user configuration or built-in default.
