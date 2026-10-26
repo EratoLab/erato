@@ -6311,8 +6311,8 @@ pub struct TeamsBotConfig {
     // URL the Azure Bot sends messages to, when it differs from the address the
     // setup page is opened at, for example a public hostname in front of an
     // internal-only deployment. Either an HTTPS origin or the full
-    // `https://<host>/api/integrations/ms_teams/messages` URL. Only used by the
-    // setup page and its Cloud Shell helper.
+    // URL ending in `/api/integrations/ms_teams/messages`, optionally with a
+    // gateway path prefix. Only used by the setup page and its Cloud Shell helper.
     #[serde(default)]
     pub messaging_endpoint: Option<String>,
     // Optional assistant ID that new Teams chats are bound to.
@@ -6475,7 +6475,7 @@ impl TeamsBotConfig {
         let origin = url.origin().ascii_serialization();
         match url.path().trim_end_matches('/') {
             "" => Some(format!("{origin}{TEAMS_BOT_MESSAGES_PATH}")),
-            TEAMS_BOT_MESSAGES_PATH => Some(format!("{origin}{TEAMS_BOT_MESSAGES_PATH}")),
+            path if path.ends_with(TEAMS_BOT_MESSAGES_PATH) => Some(format!("{origin}{path}")),
             _ => None,
         }
     }
@@ -6737,6 +6737,21 @@ mod teams_bot_config_tests {
             );
         }
         assert!(TeamsBotConfig::default().messaging_endpoint_url().is_none());
+    }
+
+    #[test]
+    fn preserves_gateway_prefix_in_the_messaging_endpoint() {
+        let full = "https://your-api-gateway.example.com/prodtest/rest/hugo-erato-teams-test/api/integrations/ms_teams/messages";
+        for value in [full.to_string(), format!("{full}/")] {
+            let mut config = office(&format!("https://login.microsoftonline.com/{TENANT_ID}"));
+            config.teams.bot.messaging_endpoint = Some(value);
+            config.apply_defaults();
+            config.teams.bot.validate().expect("valid gateway endpoint");
+            assert_eq!(
+                config.teams.bot.messaging_endpoint_url().as_deref(),
+                Some(full)
+            );
+        }
     }
 
     #[test]
