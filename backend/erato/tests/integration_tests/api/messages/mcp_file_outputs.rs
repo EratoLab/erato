@@ -4,7 +4,7 @@ use axum::{
     Json,
     body::Bytes,
     extract::State,
-    http::{Method, Uri},
+    http::{HeaderMap, Method, Uri},
     response::{IntoResponse, Response},
     routing::post,
 };
@@ -27,7 +27,9 @@ struct Fixture {
     is_error: bool,
     storage_failure: bool,
     calls: Arc<AtomicUsize>,
+    reads: Arc<AtomicUsize>,
     files: Arc<Mutex<HashMap<String, Vec<u8>>>>,
+    mime_types: Arc<Mutex<HashMap<String, String>>>,
 }
 
 async fn mcp(State(fixture): State<Fixture>, Json(request): Json<Value>) -> Response {
@@ -87,6 +89,7 @@ async fn storage(
     State(fixture): State<Fixture>,
     method: Method,
     uri: Uri,
+    headers: HeaderMap,
     body: Bytes,
 ) -> Response {
     if fixture.storage_failure {
@@ -95,16 +98,28 @@ async fn storage(
     let mut files = fixture.files.lock().unwrap();
     if method == Method::PUT {
         files.insert(uri.path().to_string(), body.to_vec());
+        if let Some(mime) = headers.get("content-type") {
+            fixture
+                .mime_types
+                .lock()
+                .unwrap()
+                .insert(uri.path().to_string(), mime.to_str().unwrap().to_string());
+        }
         return ([("etag", "\"fixture\"")], "").into_response();
     }
     let Some(bytes) = files.get(uri.path()) else {
         return http::StatusCode::NOT_FOUND.into_response();
     };
-    let mime = if uri.path().ends_with(".png") {
-        "image/png"
-    } else {
-        "text/csv"
-    };
+    let mime = fixture
+        .mime_types
+        .lock()
+        .unwrap()
+        .get(uri.path())
+        .cloned()
+        .unwrap_or_else(|| "application/octet-stream".to_string());
+    if method == Method::GET {
+        fixture.reads.fetch_add(1, Ordering::SeqCst);
+    }
     let mut response = if method == Method::HEAD {
         Bytes::new().into_response()
     } else {
@@ -178,7 +193,9 @@ async fn check_output_for_protocol(
         is_error,
         storage_failure,
         calls: Arc::default(),
+        reads: Arc::default(),
         files: Arc::default(),
+        mime_types: Arc::default(),
     };
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let url = format!("http://{}", listener.local_addr().unwrap());
@@ -382,11 +399,14 @@ async fn check_output_for_protocol(
             .await
             .unwrap()
             .unwrap();
-        let expected = if pointer["content_type"] == "image_file_pointer" {
-            PNG
-        } else {
-            CSV
-        };
+        let expected = fixture.output["files"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|file| file["path"] == upload.filename)
+            .unwrap()["content_base64"]
+            .as_str()
+            .unwrap();
         assert_eq!(
             state
                 .default_file_storage_provider()
@@ -403,11 +423,17 @@ async fn check_output_for_protocol(
     }
     if expected_files > 0 {
         assert_eq!(fixture.files.lock().unwrap().len(), expected_files);
+        let reads_before_replay = fixture.reads.load(Ordering::SeqCst);
         // Exercise historical replay as well as the immediate continuation.
         server.post("/api/v1beta/me/messages/submitstream").with_bearer_token(TEST_JWT_TOKEN)
             .json(&json!({"existing_chat_id": chat_id, "previous_message_id": message_id, "user_message": "List those files again"}))
             .await.assert_status_ok();
         assert_eq!(recorder.bodies().len(), 2);
+        assert_eq!(
+            fixture.reads.load(Ordering::SeqCst),
+            reads_before_replay,
+            "replay must reuse cached bytes and parsed content"
+        );
         for value in [
             row.raw_message.to_string(),
             tool["output"].to_string(),
@@ -419,8 +445,21 @@ async fn check_output_for_protocol(
             );
             assert!(!value.contains("structuredContent"));
         }
-        for body in recorder.bodies() {
+        for (turn, body) in recorder.bodies().into_iter().enumerate() {
             let body: Value = serde_json::from_str(&body).unwrap();
+            if fixture.output["files"][0]["path"] == "png" {
+                let serialized = body.to_string();
+                // Immediate continuation sends images as user content. Historical
+                // replay uses the assistant role, whose images the OpenAI adapter
+                // currently drops independently of filename/MIME detection.
+                if turn == 0 {
+                    assert!(serialized.contains("data:image/png;base64,"), "{body}");
+                }
+                assert!(
+                    serialized.contains("Unsupported extension text marker"),
+                    "{body}"
+                );
+            }
             let outputs = body["messages"]
                 .as_array()
                 .unwrap()
@@ -602,6 +641,11 @@ async fn integrated_file_retrieval_full_text_and_replay(pool: Pool<Postgres>) {
         is_error: false,
         storage_failure: false,
         calls: Arc::default(),
+        reads: Arc::default(),
+        mime_types: Arc::new(Mutex::new(HashMap::from([(
+            "/files/document.csv".into(),
+            "text/csv".into(),
+        )]))),
         files: Arc::new(Mutex::new(HashMap::from([(
             "/files/document.csv".into(),
             contents.as_bytes().to_vec(),
@@ -794,4 +838,23 @@ async fn integrated_file_retrieval_full_text_and_replay(pool: Pool<Postgres>) {
                 && body.contains("RETRIEVED-DOCUMENT-END"))
     );
     storage_task.abort();
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn extensionless_image_and_unsupported_text_reach_model(pool: Pool<Postgres>) {
+    check_output(
+        pool,
+        json!({"stdout": MARKER, "files": [
+            {"path": "png", "mime_type": "image/png", "content_base64": PNG},
+            {"path": "data.ldt", "mime_type": "application/octet-stream",
+             "content_base64": STANDARD.encode(b"Unsupported extension text marker")}
+        ]}),
+        None,
+        true,
+        false,
+        false,
+        "success",
+        2,
+    )
+    .await;
 }

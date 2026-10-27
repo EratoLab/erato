@@ -30,9 +30,43 @@ pub(crate) fn shared_tokenizer() -> &'static tiktoken_rs::CoreBPE {
     &TOKENIZER
 }
 
+fn file_extension(filename: &str) -> Option<&str> {
+    std::path::Path::new(filename)
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .filter(|extension| !extension.is_empty())
+}
+
+/// Only the prefix is inspected; a character crossing the boundary must still be complete.
+fn has_text_prefix(bytes: &[u8]) -> bool {
+    const PREFIX_LEN: usize = 8192;
+    let prefix = &bytes[..bytes.len().min(PREFIX_LEN)];
+    if prefix.contains(&0) {
+        return false;
+    }
+    match std::str::from_utf8(prefix) {
+        Ok(_) => true,
+        Err(error) if error.error_len().is_none() && bytes.len() > PREFIX_LEN => {
+            let start = error.valid_up_to();
+            (PREFIX_LEN + 1..=bytes.len().min(start + 4))
+                .any(|end| std::str::from_utf8(&bytes[start..end]).is_ok())
+        }
+        Err(_) => false,
+    }
+}
+
+fn supported_extensionless_mime_type(filename: &str, mime_type: &str) -> bool {
+    file_extension(filename).is_none()
+        && crate::models::file_capability::get_file_capabilities(true, true)
+            .iter()
+            .any(|capability| {
+                !capability.operations.is_empty() && capability.matches_mime_type(mime_type)
+            })
+}
+
 /// Helper function to determine if a file is an image based on extension
 fn is_image_file(filename: &str) -> bool {
-    if let Some(extension) = filename.rsplit('.').next() {
+    if let Some(extension) = file_extension(filename) {
         matches!(
             extension.to_lowercase().as_str(),
             "jpg" | "jpeg" | "png" | "gif" | "webp" | "bmp" | "svg" | "tiff" | "tif" | "ico"
@@ -44,7 +78,7 @@ fn is_image_file(filename: &str) -> bool {
 
 /// Helper function to get MIME type from file extension
 fn get_mime_type_from_extension(filename: &str) -> String {
-    if let Some(extension) = filename.rsplit('.').next() {
+    if let Some(extension) = file_extension(filename) {
         match extension.to_lowercase().as_str() {
             "jpg" | "jpeg" => "image/jpeg".to_string(),
             "png" => "image/png".to_string(),
@@ -62,10 +96,7 @@ fn get_mime_type_from_extension(filename: &str) -> String {
 }
 
 fn is_eml_file(filename: &str) -> bool {
-    filename
-        .rsplit('.')
-        .next()
-        .is_some_and(|ext| ext.eq_ignore_ascii_case("eml"))
+    file_extension(filename).is_some_and(|ext| ext.eq_ignore_ascii_case("eml"))
 }
 
 fn content_type_essence(content_type: &str) -> &str {
@@ -340,17 +371,74 @@ async fn get_file_cached_naive<'a>(
     let capabilities = crate::models::file_capability::get_file_capabilities(true, true);
     let capability =
         crate::models::file_capability::find_file_capability_by_filename(&capabilities, filename);
-    if !is_image && capability.operations.is_empty() {
-        tracing::debug!(
-            file_id = %file_id,
-            filename,
-            detection_mode = "naive",
-            "Keeping unsupported file as a reference for file tools"
+    if !is_image && (file_extension(filename).is_none() || capability.operations.is_empty()) {
+        let mime_type = file_storage
+            .get_file_content_type_with_context(file_storage_path, sharepoint_ctx)
+            .await?
+            .map(|mime| content_type_essence(&mime).to_ascii_lowercase());
+        let supported_mime = mime_type
+            .as_deref()
+            .filter(|mime| supported_extensionless_mime_type(filename, mime));
+        // Reuse the full-file cache: range reads currently also download the full file,
+        // and are unavailable for SharePoint. Parsing then reuses these cached bytes.
+        let bytes = get_file_bytes_cached(
+            app_state,
+            cache_key,
+            file_storage,
+            file_storage_path,
+            sharepoint_ctx,
+        )
+        .await?;
+        let content = if let Some(mime) = supported_mime.filter(|mime| mime.starts_with("image/")) {
+            FileContent::Image {
+                raw_bytes: bytes,
+                mime_type: mime.to_string(),
+            }
+        } else {
+            let extraction_mime = supported_mime.or_else(|| {
+                (mime_type
+                    .as_deref()
+                    .is_some_and(|mime| mime.starts_with("text/"))
+                    || has_text_prefix(&bytes))
+                .then_some("text/plain")
+            });
+            // Parsing obtains its own copy from the byte cache.
+            drop(bytes);
+            if let Some(mime) = extraction_mime {
+                match get_file_contents_cached_with_mime_type(
+                    app_state,
+                    cache_key,
+                    file_storage,
+                    file_storage_path,
+                    filename,
+                    sharepoint_ctx,
+                    Some(mime),
+                )
+                .await
+                {
+                    Ok(text) => FileContent::Text(text),
+                    Err(error) => {
+                        tracing::debug!(%file_id, filename, %error,
+                            "Extraction failed; retaining unsupported filename as a tool reference");
+                        FileContent::ReferenceOnly
+                    }
+                }
+            } else {
+                FileContent::ReferenceOnly
+            }
+        };
+        span.record(
+            "file_type",
+            match &content {
+                FileContent::Image { .. } => "image",
+                FileContent::Text(_) => "text",
+                FileContent::ReferenceOnly => "reference_only",
+            },
         );
         return Ok(FileContentsForGeneration {
             id: *file_id,
             filename: filename.to_string(),
-            content: FileContent::ReferenceOnly,
+            content,
         });
     }
 
@@ -882,6 +970,119 @@ pub fn process_files_parallel_cached<'a>(
 mod tests {
     use super::{effective_detected_mime_type, effective_text_mime_type, parse_text_file_bytes};
     use crate::services::file_processor::XbergProcessor;
+
+    #[tokio::test]
+    async fn extensionless_documents_extract_with_explicit_mime() {
+        let cases = [
+            (
+                "html",
+                " Text/HTML ; charset=utf-8 ",
+                b"<p>HTML marker</p>".to_vec(),
+                "HTML marker",
+            ),
+            (
+                "json",
+                "application/json",
+                br#"{"value":"JSON marker"}"#.to_vec(),
+                "JSON marker",
+            ),
+            (
+                "pdf",
+                "application/pdf",
+                include_bytes!(
+                    "../../tests/integration_tests/test_files/sample-report-compressed.pdf"
+                )
+                .to_vec(),
+                "Multi-Page Report",
+            ),
+            (
+                "document",
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                include_bytes!("../../../../e2e-tests/test-files/minimal_libreoffice.docx")
+                    .to_vec(),
+                "Foo bar",
+            ),
+        ];
+        for (filename, mime, bytes, expected) in cases {
+            let mime = super::content_type_essence(mime).to_ascii_lowercase();
+            assert!(super::supported_extensionless_mime_type(filename, &mime));
+            let text = parse_text_file_bytes(&XbergProcessor, bytes, filename, Some(&mime))
+                .await
+                .unwrap();
+            assert!(text.contains(expected), "{filename}: {text}");
+            if filename == "html" {
+                assert!(!text.contains("<p>"));
+            }
+        }
+        assert!(
+            parse_text_file_bytes(
+                &XbergProcessor,
+                b"%PDF-1.7\nInvalid PDF with ASCII prefix".to_vec(),
+                "pdf",
+                Some("application/pdf")
+            )
+            .await
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn text_prefix_handles_boundaries_and_binary_data() {
+        use super::has_text_prefix;
+        for bytes in [b"".as_slice(), b"a", "Grüße".as_bytes()] {
+            assert!(has_text_prefix(bytes));
+        }
+        for bytes in [b"a\0b".as_slice(), b"a\xff", b"a\xe2\x82"] {
+            assert!(!has_text_prefix(bytes));
+        }
+        for character in ["é", "€", "🦀"] {
+            for offset in 1..character.len() {
+                let mut bytes = vec![b'a'; 8192 - offset];
+                bytes.extend_from_slice(character.as_bytes());
+                assert!(has_text_prefix(&bytes));
+                bytes.pop();
+                assert!(!has_text_prefix(&bytes));
+            }
+        }
+        let mut bytes = vec![b'a'; 8192];
+        bytes.extend_from_slice(b"\0\xff");
+        assert!(has_text_prefix(&bytes), "only the prefix is inspected");
+        let mut bytes = vec![b'a'; 8191];
+        bytes.extend_from_slice(b"\xe2x\x82");
+        assert!(!has_text_prefix(&bytes));
+    }
+
+    #[test]
+    fn extensionless_names_use_supported_mime_capabilities() {
+        use super::{is_eml_file, is_image_file, supported_extensionless_mime_type};
+        for name in ["png", "pdf", "eml", "report", ".hidden", "report."] {
+            assert!(!is_image_file(name));
+            assert!(!is_eml_file(name));
+            for mime in [
+                "application/pdf",
+                "image/png",
+                "text/html",
+                "application/json",
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            ] {
+                assert!(supported_extensionless_mime_type(name, mime));
+            }
+            assert!(!supported_extensionless_mime_type(
+                name,
+                "application/octet-stream"
+            ));
+            assert!(!supported_extensionless_mime_type(
+                name,
+                "application/unknown"
+            ));
+        }
+        assert!(!supported_extensionless_mime_type(
+            "report.ldt",
+            "application/pdf"
+        ));
+        assert!(is_image_file("photo.PNG"));
+        assert!(is_eml_file("message.EML"));
+    }
 
     #[test]
     fn shared_tokenizer_preserves_both_encoding_modes_across_threads() {
