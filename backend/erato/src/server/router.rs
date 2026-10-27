@@ -65,11 +65,56 @@ const OFFICE_ADDIN_MANIFEST_LAUNCH_EVENT_PLACEHOLDERS: [&str; 3] = [
 const OFFICE_ADDIN_MANIFEST_LAUNCH_EVENT_EXTENSION_POINT_TAG: &str =
     r#"<ExtensionPoint xsi:type="LaunchEvent">"#;
 
+#[derive(Debug, Default, Deserialize, PartialEq, Eq, utoipa::ToSchema)]
+#[serde(rename_all = "kebab-case")]
+enum OfficeAddinDistribution {
+    #[default]
+    IntegratedApps,
+    Sharepoint,
+}
+
+const DOCUMENT_COMMANDS_START: &str = "<!-- OFFICE_ADDIN_DOCUMENT_COMMANDS_START -->";
+const DOCUMENT_COMMANDS_END: &str = "<!-- OFFICE_ADDIN_DOCUMENT_COMMANDS_END -->";
+
+/// Keep the template schema-valid for local tooling, but omit command markup
+/// unsupported by SharePoint catalogs in the served SharePoint variant.
+fn prepare_document_manifest(
+    template: &str,
+    distribution: &OfficeAddinDistribution,
+) -> Result<String, &'static str> {
+    if *distribution == OfficeAddinDistribution::IntegratedApps {
+        return Ok(template
+            .replace(DOCUMENT_COMMANDS_START, "")
+            .replace(DOCUMENT_COMMANDS_END, ""));
+    }
+    let (before, rest) = template
+        .split_once(DOCUMENT_COMMANDS_START)
+        .ok_or("Word manifest is missing its command section start marker")?;
+    let (_, after) = rest
+        .split_once(DOCUMENT_COMMANDS_END)
+        .ok_or("Word manifest is missing its command section end marker")?;
+    let rendered = format!("{before}{after}");
+    if rendered.contains("VersionOverrides") {
+        return Err("SharePoint manifest still contains VersionOverrides");
+    }
+    Ok(rendered)
+}
+
 #[derive(Debug, Deserialize, IntoParams)]
 struct OfficeAddinManifestQuery {
     /// Optional externally reachable deployment base URL used to rewrite the manifest.
     /// Example: https://app.example.com
     base_url: Option<String>,
+}
+
+#[derive(Debug, Deserialize, IntoParams)]
+struct WordAddinManifestQuery {
+    /// Optional externally reachable deployment base URL used to rewrite the manifest.
+    /// Example: https://app.example.com
+    base_url: Option<String>,
+    /// integrated-apps (default) or sharepoint, which omits ribbon commands.
+    #[param(inline)]
+    distribution: Option<OfficeAddinDistribution>,
 }
 
 fn normalize_manifest_base_url(base_url: &str) -> Result<String, String> {
@@ -530,6 +575,7 @@ async fn office_addin_manifest_response(
     headers: HeaderMap,
     query: OfficeAddinManifestQuery,
     manifest_name: &'static str,
+    distribution: OfficeAddinDistribution,
 ) -> Response {
     if !app_state
         .distribution
@@ -579,6 +625,17 @@ async fn office_addin_manifest_response(
         }
     };
 
+    let manifest_template = if manifest_name == OFFICE_ADDIN_DOCUMENT_MANIFEST_FILE_NAME {
+        match prepare_document_manifest(&manifest_template, &distribution) {
+            Ok(template) => template,
+            Err(message) => {
+                return (StatusCode::INTERNAL_SERVER_ERROR, message).into_response();
+            }
+        }
+    } else {
+        manifest_template
+    };
+
     let rendered_manifest = render_office_addin_manifest(
         &manifest_template,
         &base_url,
@@ -620,6 +677,7 @@ async fn office_addin_manifest(
         headers,
         query,
         OFFICE_ADDIN_MANIFEST_FILE_NAME,
+        OfficeAddinDistribution::IntegratedApps,
     )
     .await
 }
@@ -648,6 +706,7 @@ async fn office_addin_exchange_server_manifest(
         headers,
         query,
         OFFICE_ADDIN_EXCHANGE_SERVER_MANIFEST_FILE_NAME,
+        OfficeAddinDistribution::IntegratedApps,
     )
     .await
 }
@@ -656,11 +715,11 @@ async fn office_addin_exchange_server_manifest(
 #[utoipa::path(
     get,
     path = "office-addin/manifest-document.xml",
-    params(OfficeAddinManifestQuery),
+    params(WordAddinManifestQuery),
     responses(
         (status = OK, description = "Rendered document task-pane Office add-in manifest", body = str, content_type = "application/xml"),
         (status = NOT_FOUND, description = "Office add-in is disabled or manifest is unavailable", body = str),
-        (status = BAD_REQUEST, description = "Invalid base_url query parameter", body = str),
+        (status = BAD_REQUEST, description = "Invalid base_url or distribution query parameter", body = str),
         (status = INTERNAL_SERVER_ERROR, description = "Failed to render manifest", body = str)
     )
 )]
@@ -668,14 +727,17 @@ async fn office_addin_document_manifest(
     State(app_state): State<AppState>,
     Extension(deployment_version): Extension<DeploymentVersion>,
     headers: HeaderMap,
-    Query(query): Query<OfficeAddinManifestQuery>,
+    Query(query): Query<WordAddinManifestQuery>,
 ) -> Response {
     office_addin_manifest_response(
         app_state,
         deployment_version,
         headers,
-        query,
+        OfficeAddinManifestQuery {
+            base_url: query.base_url,
+        },
         OFFICE_ADDIN_DOCUMENT_MANIFEST_FILE_NAME,
+        query.distribution.unwrap_or_default(),
     )
     .await
 }
@@ -1212,6 +1274,71 @@ mod tests {
     }
 
     #[test]
+    fn word_distribution_preserves_identity_and_taskpane_but_omits_sharepoint_commands() {
+        let template = stock_manifest_template(OFFICE_ADDIN_DOCUMENT_MANIFEST_FILE_NAME);
+        let config = addin_config(MsOfficeAddinManifestConfig::default());
+        let render = |distribution| {
+            render_office_addin_manifest(
+                &prepare_document_manifest(&template, &distribution).unwrap(),
+                "https://app.example.com/base",
+                &config,
+                OFFICE_ADDIN_DOCUMENT_MANIFEST_FILE_NAME,
+                Some("42"),
+            )
+        };
+        let standard = render(OfficeAddinDistribution::IntegratedApps);
+        let sharepoint = render(OfficeAddinDistribution::Sharepoint);
+        assert!(standard.contains("<VersionOverrides"));
+        assert!(standard.contains("PrimaryCommandSurface"));
+        assert!(!sharepoint.contains("VersionOverrides"));
+        assert!(!sharepoint.contains("PrimaryCommandSurface"));
+        for xml in [&standard, &sharepoint] {
+            assert!(!xml.contains("OFFICE_ADDIN_DOCUMENT_COMMANDS_"));
+            assert!(xml.contains(&format!("<Id>{}</Id>", config.document.addin_id)));
+            assert!(xml.contains("<Permissions>ReadWriteDocument</Permissions>"));
+            assert!(xml.contains(r#"<Set Name="WordApi" MinVersion="1.7" />"#));
+            assert!(xml.contains(r#"<SourceLocation DefaultValue="https://app.example.com/base/office-addin/word" />"#));
+            assert!(xml.contains(&format!(
+                "<Version>{}</Version>",
+                office_addin_manifest_version(Some("42"))
+            )));
+        }
+    }
+
+    #[test]
+    fn sharepoint_manifest_rejects_incompatible_templates_and_unknown_distribution() {
+        assert!(
+            prepare_document_manifest("<VersionOverrides />", &OfficeAddinDistribution::Sharepoint)
+                .is_err()
+        );
+        let missing_end = format!("{DOCUMENT_COMMANDS_START}<VersionOverrides />");
+        assert!(
+            prepare_document_manifest(&missing_end, &OfficeAddinDistribution::Sharepoint).is_err()
+        );
+        let outside =
+            format!("{DOCUMENT_COMMANDS_START}{DOCUMENT_COMMANDS_END}<VersionOverrides />");
+        assert!(prepare_document_manifest(&outside, &OfficeAddinDistribution::Sharepoint).is_err());
+        let invalid = "/office-addin/manifest-document.xml?distribution=network-share"
+            .parse()
+            .unwrap();
+        assert!(Query::<WordAddinManifestQuery>::try_from_uri(&invalid).is_err());
+        let default = "/office-addin/manifest-document.xml".parse().unwrap();
+        let Query(default) = Query::<WordAddinManifestQuery>::try_from_uri(&default).unwrap();
+        assert_eq!(
+            default.distribution.unwrap_or_default(),
+            OfficeAddinDistribution::IntegratedApps
+        );
+        let sharepoint = "/office-addin/manifest-document.xml?distribution=sharepoint"
+            .parse()
+            .unwrap();
+        let Query(sharepoint) = Query::<WordAddinManifestQuery>::try_from_uri(&sharepoint).unwrap();
+        assert_eq!(
+            sharepoint.distribution,
+            Some(OfficeAddinDistribution::Sharepoint)
+        );
+    }
+
+    #[test]
     fn office_addin_document_manifest_template_declares_the_word_task_pane_shape() {
         let template = stock_manifest_template(OFFICE_ADDIN_DOCUMENT_MANIFEST_FILE_NAME);
 
@@ -1221,7 +1348,7 @@ mod tests {
         assert!(template.contains(r#"<Set Name="WordApi" MinVersion="1.7" />"#));
         assert!(template.contains("<Permissions>ReadWriteDocument</Permissions>"));
 
-        // Command-specific requirements can exclude the SharePoint catalog route.
+        // Requirements belong to the base manifest in both distribution variants.
         assert_eq!(template.matches("<Requirements>").count(), 1);
         let version_overrides = template
             .split_once("<VersionOverrides")

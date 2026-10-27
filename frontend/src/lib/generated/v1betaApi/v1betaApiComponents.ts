@@ -7940,6 +7940,10 @@ export type OfficeAddinDocumentManifestQueryParams = {
    * Example: https://app.example.com
    */
   base_url?: null | undefined;
+  /**
+   * integrated-apps (default) or sharepoint, which omits ribbon commands.
+   */
+  distribution?: null | ("integrated-apps" | "sharepoint");
 };
 
 export type OfficeAddinDocumentManifestError = Fetcher.ErrorWrapper<undefined>;
