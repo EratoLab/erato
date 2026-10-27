@@ -5766,13 +5766,23 @@ msgstr "Word"
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
-msgid "officeAddin.word.setup.catalogRoute"
-msgstr ""
+msgid "officeAddin.word.setup.authenticationPrerequisites"
+msgstr "Wymagania dotyczące uwierzytelniania"
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
-msgid "officeAddin.word.setup.copy"
-msgstr ""
+#~ msgid "officeAddin.word.setup.catalogRoute"
+#~ msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.word.setup.chooseDistribution"
+msgstr "Wybierz sposób dystrybucji dodatku do programu Word, aby uzyskać jego manifest i instrukcje instalacji."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+#~ msgid "officeAddin.word.setup.copy"
+#~ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
@@ -5781,23 +5791,58 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
-msgid "officeAddin.word.setup.downloadButton"
-msgstr ""
+msgid "officeAddin.word.setup.distributionGuidance"
+msgstr "Wybierz centrum administracyjne Microsoft 365 dla użytkowników ze skrzynkami pocztowymi Exchange Online i odpowiednimi licencjami subskrypcyjnymi Microsoft 365. Wybierz katalog aplikacji SharePoint dla środowisk z lokalnymi skrzynkami Exchange lub bez scentralizowanego wdrażania. Dystrybucja przez katalog SharePoint wymaga administratora katalogu i nie obsługuje programu Word na komputerach Mac."
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
-msgid "officeAddin.word.setup.downloadManifest"
-msgstr ""
+msgid "officeAddin.word.setup.distributionLabel"
+msgstr "Metoda dystrybucji"
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
-msgid "officeAddin.word.setup.integratedAppsRoute"
-msgstr ""
+#~ msgid "officeAddin.word.setup.downloadButton"
+#~ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
-msgid "officeAddin.word.setup.macUnsupported"
-msgstr ""
+#~ msgid "officeAddin.word.setup.downloadManifest"
+#~ msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.word.setup.downloadSelectedManifest"
+msgstr "Pobierz manifest programu Word"
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.word.setup.downloadVariant"
+msgstr "Pobierz poniżej plik <0>{filename}</0>."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.word.setup.integratedAppsOption"
+msgstr "Centrum administracyjne Microsoft 365"
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+#~ msgid "officeAddin.word.setup.integratedAppsRoute"
+#~ msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.word.setup.integratedOpen"
+msgstr "Gdy wdrożenie będzie dostępne dla użytkowników, uruchom ponownie program Word i otwórz Erato za pomocą przycisku na wstążce."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.word.setup.integratedUpload"
+msgstr "W centrum administracyjnym Microsoft 365 otwórz Zintegrowane aplikacje i prześlij plik XML jako dodatek pakietu Office. Przypisz go wybranym użytkownikom lub grupom."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+#~ msgid "officeAddin.word.setup.macUnsupported"
+#~ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
@@ -5811,8 +5856,28 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
-msgid "officeAddin.word.setup.reviewManifest"
-msgstr ""
+#~ msgid "officeAddin.word.setup.reviewManifest"
+#~ msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.word.setup.sharepointOpen"
+msgstr "Otwórz okno dialogowe dodatków pakietu Office w programie Word i wybierz Moja organizacja, aby dodać Erato. Ta metoda dystrybucji nie udostępnia przycisku Erato na wstążce; otwieraj go z listy dodatków. Word w przeglądarce może korzystać z katalogu SharePoint Online."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.word.setup.sharepointOption"
+msgstr "Katalog aplikacji SharePoint"
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.word.setup.sharepointTrust"
+msgstr "W programie Word dla systemu Windows otwórz Plik → Opcje → Centrum zaufania → Ustawienia Centrum zaufania → Zaufane katalogi dodatków. Dodaj adres URL witryny katalogu, zaznacz Pokaż w menu i uruchom ponownie program Word."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.word.setup.sharepointUpload"
+msgstr "Prześlij plik XML do biblioteki Aplikacje dla pakietu Office w katalogu aplikacji SharePoint. Przyznaj wybranym użytkownikom dostęp do odczytu katalogu."
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx

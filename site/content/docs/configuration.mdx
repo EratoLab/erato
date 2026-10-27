@@ -3158,6 +3158,12 @@ Override this ID to install multiple add-in instances in the same tenant.
 {/* erato_toml_config_key: integrations.ms_office.addin.document.addin_id */}
 
 The Word add-in manifest ID, served by `/office-addin/manifest-document.xml`.
+For SharePoint app catalogs, use `/office-addin/manifest-document.xml?distribution=sharepoint`.
+This variant omits `VersionOverrides`, including ribbon commands, to avoid Office's unsupported-catalog-features warning.
+The default endpoint (or `?distribution=integrated-apps`) retains ribbon commands for Microsoft 365 admin center distribution.
+Both variants use the same configured Word add-in ID and authentication settings.
+The setup page at `/office-addin/` provides a distribution-method selector, matching downloads and installation instructions.
+When updating an existing SharePoint installation, retain its configured ID and upload the corrected manifest from a newer deployment version.
 It must be nonempty and differ from the Outlook ID in `integrations.ms_office.addin.addin_id` so both add-ins can be installed in the same catalog.
 
 **Default value:** `"15a5d0e8-e96a-4e26-b6a1-bd8f429468c2"`

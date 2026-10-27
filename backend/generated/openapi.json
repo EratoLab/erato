@@ -4436,6 +4436,26 @@
                 "null"
               ]
             }
+          },
+          {
+            "name": "distribution",
+            "in": "query",
+            "description": "integrated-apps (default) or sharepoint, which omits ribbon commands.",
+            "required": false,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "string",
+                  "enum": [
+                    "integrated-apps",
+                    "sharepoint"
+                  ]
+                }
+              ]
+            }
           }
         ],
         "responses": {
@@ -4450,7 +4470,7 @@
             }
           },
           "400": {
-            "description": "Invalid base_url query parameter",
+            "description": "Invalid base_url or distribution query parameter",
             "content": {
               "text/plain": {
                 "schema": {
