@@ -3013,19 +3013,85 @@ msgid "cloudFilePicker.error.selectFiles"
 msgstr "Nie udało się wybrać plików. Spróbuj ponownie."
 
 #. js-lingui-explicit-id
+#: src/components/ui/CloudFilePicker/CloudSearchResults.tsx
+#~ msgid "cloudFilePicker.fileBytes"
+#~ msgstr "{size} bajtów"
+
+#. js-lingui-explicit-id
+#: src/components/ui/CloudFilePicker/CloudFilePicker.tsx
+msgid "cloudFilePicker.loadError"
+msgstr "Nie udało się wczytać plików. Spróbuj ponownie."
+
+#. js-lingui-explicit-id
 #: src/components/ui/CloudFilePicker/CloudFilePicker.tsx
 msgid "cloudFilePicker.navigation.goBack"
 msgstr "Wstecz"
 
 #. js-lingui-explicit-id
+#: src/components/ui/CloudFilePicker/CloudSearchResults.tsx
+msgid "cloudFilePicker.noResults"
+msgstr "Nie znaleziono pasujących dysków ani plików."
+
+#. js-lingui-explicit-id
+#: src/components/ui/CloudFilePicker/CloudSearchResults.tsx
+#~ msgid "cloudFilePicker.pathUnavailable"
+#~ msgstr "Ścieżka folderu niedostępna"
+
+#. js-lingui-explicit-id
 #: src/components/ui/CloudFilePicker/CloudFilePicker.tsx
-msgid "cloudFilePicker.searchDrives"
-msgstr "Wyszukaj dyski..."
+msgid "cloudFilePicker.removeFile"
+msgstr "Usuń {fileName}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/CloudFilePicker/CloudFilePicker.tsx
+#: src/components/ui/CloudFilePicker/CloudSearchResults.tsx
+msgid "cloudFilePicker.retry"
+msgstr "Spróbuj ponownie"
+
+#. js-lingui-explicit-id
+#: src/components/ui/CloudFilePicker/CloudFilePicker.tsx
+msgid "cloudFilePicker.search"
+msgstr "Szukaj dysków i plików…"
+
+#. js-lingui-explicit-id
+#: src/components/ui/CloudFilePicker/CloudFilePicker.tsx
+#~ msgid "cloudFilePicker.searchDrives"
+#~ msgstr "Wyszukaj dyski..."
+
+#. js-lingui-explicit-id
+#: src/components/ui/CloudFilePicker/CloudSearchResults.tsx
+msgid "cloudFilePicker.searchError"
+msgstr "Wyszukiwanie nie powiodło się. Spróbuj ponownie."
+
+#. js-lingui-explicit-id
+#: src/components/ui/CloudFilePicker/CloudSearchResults.tsx
+msgid "cloudFilePicker.searching"
+msgstr "Wyszukiwanie dysków i plików…"
+
+#. js-lingui-explicit-id
+#: src/components/ui/CloudFilePicker/CloudSearchResults.tsx
+#~ msgid "cloudFilePicker.searchPartial"
+#~ msgstr "Nie udało się przeszukać niektórych lokalizacji. Wyniki mogą być niepełne."
+
+#. js-lingui-explicit-id
+#: src/components/ui/CloudFilePicker/CloudSearchResults.tsx
+msgid "cloudFilePicker.searchTruncated"
+msgstr "Osiągnięto limit wyszukiwania. Zawęź wyszukiwanie, aby znaleźć więcej plików."
+
+#. js-lingui-explicit-id
+#: src/components/ui/CloudFilePicker/CloudFilePicker.tsx
+msgid "cloudFilePicker.selectedFiles"
+msgstr "Wybrane pliki"
 
 #. js-lingui-explicit-id
 #: src/components/ui/CloudFilePicker/CloudFilePicker.tsx
 msgid "cloudFilePicker.selection.filesSelected"
 msgstr "plików wybranych"
+
+#. js-lingui-explicit-id
+#: src/hooks/cloud/useCloudSelection.ts
+msgid "cloudFilePicker.selection.limit"
+msgstr "Można wybrać maksymalnie {maxFiles} plików"
 
 #. js-lingui-explicit-id
 #: src/components/ui/CloudFilePicker/CloudFilePicker.tsx
@@ -3046,6 +3112,11 @@ msgstr "z"
 #: src/components/ui/CloudFilePicker/CloudFilePicker.tsx
 msgid "cloudFilePicker.selection.oneFile"
 msgstr "1 plik wybrany"
+
+#. js-lingui-explicit-id
+#: src/hooks/cloud/useCloudSelection.ts
+msgid "cloudFilePicker.selection.unsupported"
+msgstr "Ten typ pliku nie jest obecnie obsługiwany"
 
 #. js-lingui-explicit-id
 #: src/components/ui/CloudFilePicker/CloudFilePicker.tsx

@@ -35,6 +35,7 @@ export type CloudDrive = Drive & {
 export type CloudItem = DriveItem & {
   provider: CloudProvider;
   drive_id: string;
+  location?: string;
 };
 
 /**
@@ -43,6 +44,7 @@ export type CloudItem = DriveItem & {
 export interface SelectedCloudFile {
   drive_id: string;
   item_id: string;
+  location?: string;
   name: string;
   mime_type?: string;
   size?: number;
@@ -56,4 +58,13 @@ export interface BreadcrumbSegment {
   id: string;
   name: string;
   type: "drive" | "folder";
+}
+
+/** Graph item IDs are only unique within a drive. */
+export function cloudFileKey(file: CloudItem | SelectedCloudFile): string {
+  return JSON.stringify([
+    file.provider,
+    file.drive_id,
+    "item_id" in file ? file.item_id : file.id,
+  ]);
 }

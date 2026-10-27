@@ -3029,6 +3029,122 @@ export const useGetDriveItemChildren = <TData = Schemas.DriveItemsResponse,>(
   });
 };
 
+export type SearchSharepointQueryParams = {
+  /**
+   * Filename or drive/site name (1–200 characters)
+   */
+  query: string;
+};
+
+export type SearchSharepointError = Fetcher.ErrorWrapper<undefined>;
+
+export type SearchSharepointVariables = {
+  queryParams: SearchSharepointQueryParams;
+} & V1betaApiContext["fetcherOptions"];
+
+export const fetchSearchSharepoint = (
+  variables: SearchSharepointVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    Schemas.SharepointSearchResponse,
+    SearchSharepointError,
+    undefined,
+    {},
+    SearchSharepointQueryParams,
+    {}
+  >({
+    url: "/api/v1beta/integrations/sharepoint/search",
+    method: "get",
+    ...variables,
+    signal,
+  });
+
+export function searchSharepointQuery(variables: SearchSharepointVariables): {
+  queryKey: reactQuery.QueryKey;
+  queryFn: (
+    options: QueryFnOptions,
+  ) => Promise<Schemas.SharepointSearchResponse>;
+};
+
+export function searchSharepointQuery(
+  variables: SearchSharepointVariables | reactQuery.SkipToken,
+): {
+  queryKey: reactQuery.QueryKey;
+  queryFn:
+    | ((options: QueryFnOptions) => Promise<Schemas.SharepointSearchResponse>)
+    | reactQuery.SkipToken;
+};
+
+export function searchSharepointQuery(
+  variables: SearchSharepointVariables | reactQuery.SkipToken,
+) {
+  return {
+    queryKey: queryKeyFn({
+      path: "/api/v1beta/integrations/sharepoint/search",
+      operationId: "searchSharepoint",
+      variables,
+    }),
+    queryFn:
+      variables === reactQuery.skipToken
+        ? reactQuery.skipToken
+        : ({ signal }: QueryFnOptions) =>
+            fetchSearchSharepoint(variables, signal),
+  };
+}
+
+export const useSuspenseSearchSharepoint = <
+  TData = Schemas.SharepointSearchResponse,
+>(
+  variables: SearchSharepointVariables,
+  options?: Omit<
+    reactQuery.UseQueryOptions<
+      Schemas.SharepointSearchResponse,
+      SearchSharepointError,
+      TData
+    >,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useSuspenseQuery<
+    Schemas.SharepointSearchResponse,
+    SearchSharepointError,
+    TData
+  >({
+    ...searchSharepointQuery(deepMerge(fetcherOptions, variables)),
+    ...options,
+    ...queryOptions,
+  });
+};
+
+export const useSearchSharepoint = <TData = Schemas.SharepointSearchResponse,>(
+  variables: SearchSharepointVariables | reactQuery.SkipToken,
+  options?: Omit<
+    reactQuery.UseQueryOptions<
+      Schemas.SharepointSearchResponse,
+      SearchSharepointError,
+      TData
+    >,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useQuery<
+    Schemas.SharepointSearchResponse,
+    SearchSharepointError,
+    TData
+  >({
+    ...searchSharepointQuery(
+      variables === reactQuery.skipToken
+        ? variables
+        : deepMerge(fetcherOptions, variables),
+    ),
+    ...options,
+    ...queryOptions,
+  });
+};
+
 export type BudgetStatusError = Fetcher.ErrorWrapper<undefined>;
 
 export type BudgetStatusVariables = V1betaApiContext["fetcherOptions"];
@@ -8367,6 +8483,11 @@ export type QueryOperation =
       path: "/api/v1beta/integrations/sharepoint/drives/{driveId}/items/{itemId}/children";
       operationId: "getDriveItemChildren";
       variables: GetDriveItemChildrenVariables | reactQuery.SkipToken;
+    }
+  | {
+      path: "/api/v1beta/integrations/sharepoint/search";
+      operationId: "searchSharepoint";
+      variables: SearchSharepointVariables | reactQuery.SkipToken;
     }
   | {
       path: "/api/v1beta/me/budget";

@@ -1616,6 +1616,60 @@
         ]
       }
     },
+    "/api/v1beta/integrations/sharepoint/search": {
+      "get": {
+        "tags": [
+          "sharepoint"
+        ],
+        "operationId": "search_sharepoint",
+        "parameters": [
+          {
+            "name": "query",
+            "in": "query",
+            "description": "Filename or drive/site name (1–200 characters)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SharepointSearchResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid query"
+          },
+          "401": {
+            "description": "Missing or expired Graph token"
+          },
+          "403": {
+            "description": "Search is not authorized"
+          },
+          "404": {
+            "description": "Integration disabled"
+          },
+          "502": {
+            "description": "Graph search failed"
+          },
+          "504": {
+            "description": "Drive discovery timed out"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
     "/api/v1beta/me/budget": {
       "get": {
         "tags": [
@@ -11122,6 +11176,35 @@
           "task"
         ]
       },
+      "SearchFileHit": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/DriveItem"
+          },
+          {
+            "type": "object",
+            "required": [
+              "drive_id",
+              "drive_name"
+            ],
+            "properties": {
+              "drive_id": {
+                "type": "string"
+              },
+              "drive_name": {
+                "type": "string"
+              },
+              "parent_path": {
+                "type": "string",
+                "description": "Parent folder path relative to the drive. None means Graph did not supply a usable path."
+              },
+              "site_name": {
+                "type": "string"
+              }
+            }
+          }
+        ]
+      },
       "SetShareLinkRequest": {
         "type": "object",
         "required": [
@@ -11335,6 +11418,37 @@
           "item_id": {
             "type": "string",
             "description": "The ID of the file item"
+          }
+        }
+      },
+      "SharepointSearchResponse": {
+        "type": "object",
+        "required": [
+          "drives",
+          "files",
+          "partial",
+          "truncated"
+        ],
+        "properties": {
+          "drives": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Drive"
+            }
+          },
+          "files": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SearchFileHit"
+            }
+          },
+          "partial": {
+            "type": "boolean",
+            "description": "Some discovery/search calls failed or timed out; successful hits are still usable."
+          },
+          "truncated": {
+            "type": "boolean",
+            "description": "A discovery, pagination, or result budget was reached. Refine the query."
           }
         }
       },
