@@ -12,6 +12,7 @@ import { beforeAll, describe, expect, it, vi } from "vitest";
 
 import { ThemeProvider } from "@/components/providers/ThemeProvider";
 import { MessageContent } from "@/components/ui/Message/MessageContent";
+import { useWordHistoryMessage } from "@/components/ui/WordReview/useWordHistoryMessage";
 import { server } from "@/lib/mocks/server";
 import { messages as enMessages } from "@/locales/en/messages.json";
 import { StaticFeatureConfigProvider } from "@/providers/FeatureConfigProvider";
@@ -20,8 +21,9 @@ import { MessageList } from "./MessageList";
 import { useConversationMessage } from "../Message/ConversationMessages";
 
 import type { ChatMessageProps } from "../Chat/ChatMessage";
+import type { MessageAction } from "@/types/message-controls";
 import type { Messages } from "@lingui/core";
-import type { ReactElement } from "react";
+import type { ReactElement, ReactNode } from "react";
 
 const render = (ui: ReactElement) =>
   testingRender(
@@ -40,6 +42,66 @@ beforeAll(() => {
   i18n.load("en", enMessages as unknown as Messages);
   i18n.activate("en");
 });
+
+const userContent = [{ content_type: "text" as const, text: "Question" }];
+
+// Shaped the way the chat providers rebuild them on every streamed update:
+// new message and loading objects, the unchanged message's content kept.
+const streamedMessages = (streamedText: string) => ({
+  user1: {
+    id: "user1",
+    role: "user" as const,
+    content: userContent,
+    createdAt: "2026-01-01T00:00:00.000Z",
+    sender: "user",
+    authorId: "author-1",
+  },
+  assistant1: {
+    id: "assistant1",
+    role: "assistant" as const,
+    content: [{ content_type: "text" as const, text: streamedText }],
+    createdAt: "2026-01-01T00:01:00.000Z",
+    sender: "assistant",
+    authorId: "assistant",
+    previous_message_id: "user1",
+    loading: { state: "typing" as const },
+  },
+});
+
+const streamingListWrapper = () => {
+  const queryClient = new QueryClient();
+  return function Wrapper({ children }: { children: ReactNode }) {
+    return (
+      <QueryClientProvider client={queryClient}>
+        <StaticFeatureConfigProvider>
+          <ThemeProvider enableCustomTheme={false}>
+            <I18nProvider i18n={i18n}>{children}</I18nProvider>
+          </ThemeProvider>
+        </StaticFeatureConfigProvider>
+      </QueryClientProvider>
+    );
+  };
+};
+
+const streamingList = (
+  streamedText: string,
+  messageRenderer: (props: ChatMessageProps) => ReactElement,
+  onMessageAction: (action: MessageAction) => Promise<boolean> = vi.fn(
+    async () => true,
+  ),
+) => (
+  <MessageList
+    messages={streamedMessages(streamedText)}
+    messageOrder={["user1", "assistant1"]}
+    loadOlderMessages={vi.fn()}
+    hasOlderMessages={false}
+    isPending={false}
+    currentSessionId="chat-1"
+    controlsContext={{ canEdit: true }}
+    onMessageAction={onMessageAction}
+    messageRenderer={messageRenderer}
+  />
+);
 
 describe("MessageList", () => {
   it.each([false, true])(
@@ -324,6 +386,58 @@ describe("MessageList", () => {
 
     expect(screen.getByText("assistant1:word_document_review")).toBeTruthy();
     expect(screen.getByText("user1:none")).toBeTruthy();
+  });
+
+  it("re-renders only the streamed message when the host rebuilds every message", () => {
+    const rendered: string[] = [];
+    function Renderer({ message, onMessageAction }: ChatMessageProps) {
+      rendered.push(message.id);
+      return (
+        <button
+          type="button"
+          onClick={() =>
+            void onMessageAction({ type: "copy", messageId: message.id })
+          }
+        >
+          {message.id}
+        </button>
+      );
+    }
+    const firstAction = vi.fn(async () => true);
+    const latestAction = vi.fn(async () => true);
+    const { rerender } = testingRender(
+      streamingList("Hel", Renderer, firstAction),
+      { wrapper: streamingListWrapper() },
+    );
+
+    rendered.length = 0;
+    rerender(streamingList("Hello", Renderer, latestAction));
+
+    expect(rendered).toContain("assistant1");
+    expect(rendered).not.toContain("user1");
+    fireEvent.click(screen.getByText("user1"));
+    expect(latestAction).toHaveBeenCalledWith({
+      type: "copy",
+      messageId: "user1",
+    });
+    expect(firstAction).not.toHaveBeenCalled();
+  });
+
+  it("renders a streamed message once per update while it looks up its Word request", () => {
+    let renders = 0;
+    function Renderer({ message }: ChatMessageProps) {
+      useWordHistoryMessage(message.id, undefined);
+      if (message.id === "assistant1") renders += 1;
+      return <div>{message.id}</div>;
+    }
+    const { rerender } = testingRender(streamingList("Hel", Renderer), {
+      wrapper: streamingListWrapper(),
+    });
+
+    renders = 0;
+    rerender(streamingList("Hello", Renderer));
+
+    expect(renders).toBe(1);
   });
 
   it("preserves an explicit numeric width override when provided", () => {

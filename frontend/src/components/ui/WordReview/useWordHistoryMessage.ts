@@ -39,12 +39,24 @@ export function useWordHistoryMessage(
   messageId: string | undefined,
   hostArtifact: HostArtifact | undefined,
 ): WordHistoryMessage | null {
-  const message = useConversationMessage(messageId);
-  const previous = useConversationMessage(message?.previous_message_id);
+  // Fields rather than the message, so tokens streamed into it pass by.
+  const isAssistant = useConversationSelector(
+    (messages) =>
+      messageId !== undefined && messages[messageId]?.role === "assistant",
+    Object.is,
+  );
+  const previousMessageId = useConversationSelector(
+    (messages) =>
+      messageId === undefined
+        ? undefined
+        : messages[messageId]?.previous_message_id,
+    Object.is,
+  );
+  const previous = useConversationMessage(previousMessageId);
   const request =
     !hostArtifact &&
     !wordLiveCards &&
-    message?.role === "assistant" &&
+    isAssistant &&
     previous?.action_facet_id &&
     WORD_ACTION_FACET_IDS.has(previous.action_facet_id)
       ? previous

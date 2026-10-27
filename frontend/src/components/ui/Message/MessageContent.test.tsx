@@ -363,6 +363,34 @@ describe("MessageContent", () => {
     }
   });
 
+  it("keeps its markdown elements while a streamed message re-renders", () => {
+    const tree = (text: string) => (
+      <I18nProvider i18n={i18n}>
+        <StaticFeatureConfigProvider>
+          <ThemeProvider enableCustomTheme={false}>
+            <MessageContent
+              content={[{ content_type: "text", text }]}
+              messageId="m1"
+              filesById={{}}
+              isStreaming
+            />
+          </ThemeProvider>
+        </StaticFeatureConfigProvider>
+      </I18nProvider>
+    );
+    const text = "A [link](https://example.com) and **bold**\n\n- item";
+    const { container, rerender } = render(tree(text));
+    const tags = ["p", "a", "strong", "li"];
+    const before = tags.map((tag) => container.querySelector(tag));
+
+    rerender(tree(`${text} more`));
+
+    expect(before.every(Boolean)).toBe(true);
+    tags.forEach((tag, index) => {
+      expect(container.querySelector(tag)).toBe(before[index]);
+    });
+  });
+
   it("adopts the theme typography hooks for headings and inline code", () => {
     const { container } = renderWithTheme(
       <MessageContent
