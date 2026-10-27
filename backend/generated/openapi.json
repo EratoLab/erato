@@ -5763,6 +5763,52 @@
           "completed"
         ]
       },
+      "AudioSynthesisMetadata": {
+        "type": "object",
+        "required": [
+          "input_text",
+          "segments",
+          "provider_id",
+          "model",
+          "voice",
+          "sample_rate",
+          "channels",
+          "encoding"
+        ],
+        "properties": {
+          "channels": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "encoding": {
+            "type": "string"
+          },
+          "input_text": {
+            "type": "string"
+          },
+          "model": {
+            "type": "string"
+          },
+          "provider_id": {
+            "type": "string"
+          },
+          "sample_rate": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "segments": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "voice": {
+            "type": "string"
+          }
+        }
+      },
       "AudioTranscriptSegment": {
         "type": "object",
         "properties": {
@@ -6960,6 +7006,27 @@
           {
             "allOf": [
               {
+                "$ref": "#/components/schemas/ContentPartAudioFilePointer"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "content_type"
+                ],
+                "properties": {
+                  "content_type": {
+                    "type": "string",
+                    "enum": [
+                      "audio_file_pointer"
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "allOf": [
+              {
                 "$ref": "#/components/schemas/ContentPartImage"
               },
               {
@@ -7069,6 +7136,24 @@
           "facet_id": {
             "type": "string",
             "description": "Identifier of the action facet whose template should be rendered."
+          }
+        }
+      },
+      "ContentPartAudioFilePointer": {
+        "type": "object",
+        "required": [
+          "file_upload_id"
+        ],
+        "properties": {
+          "download_url": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "file_upload_id": {
+            "type": "string",
+            "format": "uuid"
           }
         }
       },
@@ -8398,6 +8483,9 @@
           "file_capability"
         ],
         "properties": {
+          "audio_synthesis": {
+            "$ref": "#/components/schemas/AudioSynthesisMetadata"
+          },
           "audio_transcription": {
             "$ref": "#/components/schemas/AudioTranscriptionMetadata",
             "description": "Optional audio transcription metadata for supported audio uploads."
@@ -9217,6 +9305,10 @@
             "description": "The ID of the chat provider to use for generation. If not provided, will use the highest priority model for the user.",
             "example": "primary"
           },
+          "conversational_audio_back": {
+            "type": "boolean",
+            "description": "Generate speech only for a conversational request with audio-back enabled."
+          },
           "delegation_run_mode": {
             "$ref": "#/components/schemas/DelegationRunMode",
             "description": "How delegated runs spawned by this message are awaited. Defaults to\n`wait`; `background` requires `delegation.allow_background`\nand is downgraded to `wait` server-side when the gate is off."
@@ -9375,6 +9467,60 @@
       },
       "MessageSubmitStreamingResponseMessage": {
         "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "message_id",
+              "sequence",
+              "audio",
+              "sample_rate",
+              "message_type"
+            ],
+            "properties": {
+              "audio": {
+                "type": "string"
+              },
+              "message_id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "message_type": {
+                "type": "string",
+                "enum": [
+                  "audio_delta"
+                ]
+              },
+              "sample_rate": {
+                "type": "integer",
+                "format": "int32",
+                "minimum": 0
+              },
+              "sequence": {
+                "type": "integer",
+                "format": "int64",
+                "minimum": 0
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "message_id",
+              "message_type"
+            ],
+            "properties": {
+              "message_id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "message_type": {
+                "type": "string",
+                "enum": [
+                  "audio_error"
+                ]
+              }
+            }
+          },
           {
             "allOf": [
               {

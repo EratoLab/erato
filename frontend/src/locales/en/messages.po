@@ -1578,6 +1578,31 @@ msgstr "Toggle attachments"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatInput.tsx
+msgid "chat.audio_back"
+msgstr "Audio-back"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "chat.audio_blocked"
+msgstr "Autoplay blocked. Replay the completed response below."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "chat.audio_failed"
+msgstr "Audio unavailable. Your text response is still available."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/MessageContent.tsx
+msgid "chat.audio_replay"
+msgstr "Replay audio response"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "chat.audio_stop"
+msgstr "Stop playback"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatInput.tsx
 #: src/components/ui/Chat/CompactionSuggestion.tsx
 msgid "chat.compaction.action"
 msgstr "Compact chat history"

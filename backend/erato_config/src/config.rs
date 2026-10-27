@@ -679,7 +679,11 @@ pub struct AppConfig {
 
     // Audio conversational feature configuration.
     #[serde(default)]
-    pub audio_conversational: AudioTranscriptionConfig,
+    pub audio_conversational: AudioConversationalConfig,
+
+    /// Named text-to-speech providers, independent of chat/transcription providers.
+    #[serde(default)]
+    pub speech_providers: SpeechProvidersConfig,
 
     // If true, enables the data-retention half of the cleanup worker's tick,
     // which archives quiet delegated runs and deletes old archived chats.
@@ -1816,12 +1820,52 @@ impl AppConfig {
             }
         }
 
+        for (id, provider) in &config.speech_providers.provider {
+            assert!(
+                matches!(
+                    provider.provider_kind.as_str(),
+                    "openai" | "audio_cpp" | "gemini"
+                ),
+                "Unknown speech provider kind for {id}"
+            );
+            assert!(
+                !provider.model_name.trim().is_empty() && !provider.voice.trim().is_empty(),
+                "Speech provider {id} requires model_name and voice"
+            );
+            assert!(
+                (8000..=192000).contains(&provider.sample_rate),
+                "Invalid speech sample_rate for {id}"
+            );
+            if provider.provider_kind == "audio_cpp" {
+                assert!(
+                    provider.base_url.is_some(),
+                    "audio_cpp speech provider {id} requires base_url"
+                );
+            }
+            if provider.provider_kind == "gemini" {
+                assert!(
+                    provider.api_key.is_some() || provider.access_token.is_some(),
+                    "Gemini speech provider {id} requires api_key or access_token"
+                );
+                assert!(
+                    provider.project_id.is_some()
+                        || (provider.api_key.is_some() && provider.access_token.is_none()),
+                    "Gemini speech provider {id} requires project_id when using OAuth credentials"
+                );
+            }
+        }
+        if let Some(id) = &config.audio_conversational.speech_provider {
+            assert!(
+                config.speech_providers.provider.contains_key(id),
+                "Unknown audio_conversational.speech_provider: {id}"
+            );
+        }
         validate_audio_feature_config(&config, "audio_transcription", &config.audio_transcription);
         validate_audio_feature_config(&config, "audio_dictation", &config.audio_dictation);
         validate_audio_feature_config(
             &config,
             "audio_conversational",
-            &config.audio_conversational,
+            &config.audio_conversational.transcription,
         );
 
         // Validate that Langfuse is configured if any chat provider uses it
@@ -2395,6 +2439,40 @@ fn audio_provider_kind_supports_binary_audio(provider_kind: &str) -> bool {
 #[cfg(test)]
 mod audio_config_tests {
     use super::*;
+
+    #[test]
+    fn conversational_config_flattens_shared_settings_and_preserves_defaults() {
+        let settings = config::Config::builder()
+            .add_source(config::File::from_str(
+                r#"
+                enabled = true
+                chat_provider_id = "transcriber"
+                chunk_duration_seconds = 15
+                speech_provider = "voice"
+                "#,
+                config::FileFormat::Toml,
+            ))
+            .build()
+            .unwrap()
+            .try_deserialize::<AudioConversationalConfig>()
+            .unwrap();
+        assert_eq!(settings.speech_provider.as_deref(), Some("voice"));
+        assert!(settings.transcription.enabled);
+        assert_eq!(
+            settings.transcription.chat_provider_id.as_deref(),
+            Some("transcriber")
+        );
+        assert_eq!(settings.transcription.chunk_duration_seconds, 15);
+        assert_eq!(settings.transcription.max_recording_duration_seconds, 1200);
+        assert_eq!(settings.transcription.max_attempts, 3);
+
+        let empty = serde_json::json!({});
+        let conversational: AudioConversationalConfig =
+            serde_json::from_value(empty.clone()).unwrap();
+        let shared: AudioTranscriptionConfig = serde_json::from_value(empty).unwrap();
+        assert_eq!(conversational.transcription, shared);
+        assert_eq!(conversational.speech_provider, None);
+    }
 
     #[test]
     fn transcription_providers_work_for_all_audio_modes_but_are_not_chat_models() {
@@ -5798,6 +5876,46 @@ impl Default for FileProcessorConfig {
             limits: FileExtractionLimits::default(),
         }
     }
+}
+
+#[derive(Debug, Default, Deserialize, PartialEq, Clone, Facet, HeapSize)]
+pub struct SpeechProvidersConfig {
+    #[serde(default)]
+    pub provider: HashMap<String, SpeechProviderConfig>,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Clone, Facet, HeapSize)]
+pub struct SpeechProviderConfig {
+    /// openai, audio_cpp, or gemini.
+    pub provider_kind: String,
+    pub model_name: String,
+    pub voice: String,
+    pub base_url: Option<String>,
+    #[facet(sensitive)]
+    pub api_key: Option<SecretConfigString>,
+    /// Optional OAuth bearer token for Gemini, as an alternative to api_key.
+    #[facet(sensitive)]
+    pub access_token: Option<SecretConfigString>,
+    pub project_id: Option<String>,
+    /// Gemini deployment location, default global.
+    pub location: Option<String>,
+    pub instructions: Option<String>,
+    /// Native audio.cpp PCM sample rate. OpenAI and Gemini use 24000 Hz.
+    #[serde(default = "default_speech_sample_rate")]
+    pub sample_rate: u32,
+}
+fn default_speech_sample_rate() -> u32 {
+    24000
+}
+
+#[derive(Debug, Default, Deserialize, PartialEq, Clone, Facet, HeapSize)]
+pub struct AudioConversationalConfig {
+    #[serde(flatten)]
+    #[facet(flatten)]
+    pub transcription: AudioTranscriptionConfig,
+    /// Speech provider used for audio-back in conversational mode only.
+    #[serde(default)]
+    pub speech_provider: Option<String>,
 }
 
 #[derive(Debug, Default, Deserialize, PartialEq, Clone, Facet, HeapSize)]

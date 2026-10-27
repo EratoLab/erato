@@ -2278,6 +2278,64 @@ cd e2e-tests
 
 This creates a PDF with 20 pages, each containing unique identifiers like `PAGE-001`, `PAGE-002`, etc.
 
+### Speech providers
+
+{/* erato_toml_config_key: speech_providers */}
+{/* erato_toml_config_key: speech_providers.provider */}
+{/* erato_toml_config_key: speech_providers.provider.<provider-id>.provider_kind */}
+{/* erato_toml_config_key: speech_providers.provider.<provider-id>.model_name */}
+{/* erato_toml_config_key: speech_providers.provider.<provider-id>.voice */}
+{/* erato_toml_config_key: speech_providers.provider.<provider-id>.base_url */}
+{/* erato_toml_config_key: speech_providers.provider.<provider-id>.api_key */}
+{/* erato_toml_config_key: speech_providers.provider.<provider-id>.access_token */}
+{/* erato_toml_config_key: speech_providers.provider.<provider-id>.project_id */}
+{/* erato_toml_config_key: speech_providers.provider.<provider-id>.location */}
+{/* erato_toml_config_key: speech_providers.provider.<provider-id>.instructions */}
+{/* erato_toml_config_key: speech_providers.provider.<provider-id>.sample_rate */}
+{/* erato_toml_config_key: audio_conversational.speech_provider */}
+
+Configure speech output separately from chat and transcription. The registry uses
+`[speech_providers.provider.<id>]`. Set `audio_conversational.speech_provider` to
+that ID, select conversational mode, and enable **Audio-back** to hear responses.
+The `speech_provider` setting is available only in `audio_conversational`.
+Other input modes do not generate speech. Audio-back starts sentence by sentence
+while text is generated. Completed audio is saved as a WAV file on the assistant
+message, with the exact spoken input and sentence segments in file metadata.
+Replay after reload does not invoke the provider again.
+
+```toml
+[speech_providers.provider.voice]
+provider_kind = "openai"
+model_name = "gpt-4o-mini-tts"
+voice = "alloy"
+api_key = "your-key"
+
+[audio_conversational]
+enabled = true
+speech_provider = "voice"
+# Configure the transcription chat_provider_id as usual.
+```
+
+Supported kinds are `openai`, `audio_cpp`, and `gemini`. Each requires `model_name`
+and `voice`. OpenAI uses `api_key` and an optional `/v1` `base_url`. audio.cpp
+requires `base_url`, a model configured in streaming mode, and `sample_rate`
+matching its native mono PCM output (default 24000). Its authentication key is
+optional. Gemini requires `project_id` for OAuth authentication; with an `api_key`,
+omitting `project_id` uses the projectless Express endpoint. `location` defaults
+to `global`. Gemini requires an explicit `access_token` (OAuth bearer) or
+`api_key` where supported by the deployment. Credentials are not discovered
+automatically.
+An optional `instructions` string controls delivery on models that support it.
+Credentials are backend-only. Provider/model-specific options must be supported
+by the selected model; streamed output uses 16-bit little-endian mono PCM.
+
+The frontend pauses conversational microphone restart until speech playback ends.
+Stopping playback does not discard the text or prevent the backend from finishing
+the replay file. Cancelling generation discards incomplete speech. A speech
+failure leaves the text response available. Code blocks and image descriptions
+are omitted from spoken output; Markdown links are read by their visible text.
+The synthesis response is limited to 64 MiB of PCM per assistant message.
+
 ### Audio modes
 
 Erato has three independently configurable audio modes:

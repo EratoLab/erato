@@ -1940,6 +1940,9 @@ pub struct FileUploadItem {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false)]
     audio_transcription: Option<crate::models::file_upload::AudioTranscriptionMetadata>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    audio_synthesis: Option<crate::services::speech::session::AudioSynthesisMetadata>,
 }
 
 /// Minimal file reference containing only the file ID
@@ -2290,6 +2293,7 @@ async fn upload_file_memory_inner(
             file_contents_unavailable_missing_permissions: false,
             is_sharepoint_file: false,
             file_capability,
+            audio_synthesis: None,
             audio_transcription,
         });
     }
@@ -2580,6 +2584,7 @@ async fn link_sharepoint_file_impl(
             file_contents_unavailable_missing_permissions: false,
             is_sharepoint_file: true,
             file_capability,
+            audio_synthesis: None,
             audio_transcription,
         }],
         rejected_files: Vec::new(),
@@ -3158,6 +3163,7 @@ async fn assemble_chat_messages_response(
                         == SHAREPOINT_PROVIDER_ID,
                     file_capability,
                     audio_transcription: file_upload.audio_transcription,
+                    audio_synthesis: file_upload.audio_synthesis,
                     external_id_ews_id: file_upload.external_id_ews_id,
                     outlook_provenance: file_upload.outlook_provenance,
                 },
@@ -4189,6 +4195,7 @@ pub async fn get_file(
         is_sharepoint_file: file_upload.file_storage_provider_id == SHAREPOINT_PROVIDER_ID,
         file_capability,
         audio_transcription: file_upload.audio_transcription,
+        audio_synthesis: file_upload.audio_synthesis,
         external_id_ews_id: file_upload.external_id_ews_id,
         outlook_provenance: file_upload.outlook_provenance,
     }))

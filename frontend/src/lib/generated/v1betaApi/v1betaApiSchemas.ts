@@ -607,6 +607,25 @@ export type AttemptState =
   | "continuing"
   | "completed";
 
+export type AudioSynthesisMetadata = {
+  /**
+   * @format int32
+   * @minimum 0
+   */
+  channels: number;
+  encoding: string;
+  input_text: string;
+  model: string;
+  provider_id: string;
+  /**
+   * @format int32
+   * @minimum 0
+   */
+  sample_rate: number;
+  segments: string[];
+  voice: string;
+};
+
 export type AudioTranscriptSegment = {
   /**
    * Zero-based chunk index for this segment.
@@ -1297,6 +1316,9 @@ export type ContentPart =
   | (ContentPartImageFilePointer & {
       content_type: "image_file_pointer";
     })
+  | (ContentPartAudioFilePointer & {
+      content_type: "audio_file_pointer";
+    })
   | {
       base64_data: string;
       content_type: "image";
@@ -1324,6 +1346,14 @@ export type ContentPartActionFacetMarker = {
    * Identifier of the action facet whose template should be rendered.
    */
   facet_id: string;
+};
+
+export type ContentPartAudioFilePointer = {
+  download_url?: string | null | undefined;
+  /**
+   * @format uuid
+   */
+  file_upload_id: string;
 };
 
 /**
@@ -1998,6 +2028,7 @@ export type FileReference = {
  * Response for file upload
  */
 export type FileUploadItem = {
+  audio_synthesis?: AudioSynthesisMetadata;
   audio_transcription?: AudioTranscriptionMetadata;
   /**
    * Pre-signed URL for downloading the file directly from storage
@@ -2464,6 +2495,10 @@ export type MessageSubmitRequest = {
    * @example primary
    */
   chat_provider_id?: string;
+  /**
+   * Generate speech only for a conversational request with audio-back enabled.
+   */
+  conversational_audio_back?: boolean;
   delegation_run_mode?: DelegationRunMode;
   /**
    * MCP servers a newly created chat starts with switched off; their tools
@@ -2576,6 +2611,31 @@ export type MessageSubmitStreamingResponseError = GenerationErrorType & {
 };
 
 export type MessageSubmitStreamingResponseMessage =
+  | {
+      audio: string;
+      /**
+       * @format uuid
+       */
+      message_id: string;
+      message_type: "audio_delta";
+      /**
+       * @format int32
+       * @minimum 0
+       */
+      sample_rate: number;
+      /**
+       * @format int64
+       * @minimum 0
+       */
+      sequence: number;
+    }
+  | {
+      /**
+       * @format uuid
+       */
+      message_id: string;
+      message_type: "audio_error";
+    }
   | (MessageSubmitStreamingResponseChatCreated & {
       message_type: "chat_created";
     })

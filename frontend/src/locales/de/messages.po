@@ -1578,6 +1578,31 @@ msgstr "Anhänge umschalten"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatInput.tsx
+msgid "chat.audio_back"
+msgstr "Sprachausgabe"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "chat.audio_blocked"
+msgstr "Automatische Wiedergabe blockiert. Spielen Sie die fertige Antwort unten ab."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "chat.audio_failed"
+msgstr "Audio nicht verfügbar. Ihre Textantwort ist weiterhin verfügbar."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/MessageContent.tsx
+msgid "chat.audio_replay"
+msgstr "Audioantwort erneut abspielen"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "chat.audio_stop"
+msgstr "Wiedergabe stoppen"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatInput.tsx
 #: src/components/ui/Chat/CompactionSuggestion.tsx
 msgid "chat.compaction.action"
 msgstr "Chatverlauf komprimieren"
