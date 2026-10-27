@@ -5,6 +5,7 @@ import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { AssistantForm } from "@/components/ui/Assistant/AssistantForm";
+import { ASSISTANT_SAVE_TOAST_KEY } from "@/components/ui/Assistant/assistantSaveToast";
 import { Card } from "@/components/ui/Container/Card";
 import { PageHeader } from "@/components/ui/Container/PageHeader";
 import { toast } from "@/components/ui/Toast";
@@ -35,6 +36,7 @@ export default function AssistantCreatePage() {
   }, []);
 
   const handleSubmit = async (formData: AssistantFormData) => {
+    toast.dismissKey(ASSISTANT_SAVE_TOAST_KEY);
     try {
       // Build the request body with proper typing
       // Note: Generated types are incomplete, so we use type assertion
@@ -66,6 +68,7 @@ export default function AssistantCreatePage() {
       });
 
       toast.success({
+        dedupeKey: ASSISTANT_SAVE_TOAST_KEY,
         title: t({
           id: "assistant.create.success",
           message: "Assistant created successfully!",
@@ -75,6 +78,7 @@ export default function AssistantCreatePage() {
     } catch (error) {
       console.error("Failed to create assistant:", error);
       toast.error({
+        dedupeKey: ASSISTANT_SAVE_TOAST_KEY,
         title: t({
           id: "assistant.create.error",
           message: "Failed to create assistant. Please try again.",
@@ -84,6 +88,7 @@ export default function AssistantCreatePage() {
   };
 
   const handleCancel = () => {
+    toast.dismissKey(ASSISTANT_SAVE_TOAST_KEY);
     navigate("/assistants/created");
   };
 

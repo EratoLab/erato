@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
 import { AssistantForm } from "@/components/ui/Assistant/AssistantForm";
+import { ASSISTANT_SAVE_TOAST_KEY } from "@/components/ui/Assistant/assistantSaveToast";
 import { Card } from "@/components/ui/Container/Card";
 import { PageHeader } from "@/components/ui/Container/PageHeader";
 import { Button } from "@/components/ui/Controls/Button";
@@ -92,6 +93,7 @@ export default function AssistantEditPage() {
   const handleSubmit = async (formData: AssistantFormData) => {
     if (!id) return;
 
+    toast.dismissKey(ASSISTANT_SAVE_TOAST_KEY);
     try {
       // Build the request body with proper typing
       // Note: Generated types are incomplete, so we use type assertion
@@ -109,24 +111,24 @@ export default function AssistantEditPage() {
         mcp_server_ids: formData.mcpServerIds,
       } as unknown as Parameters<typeof updateAssistant>[0]["body"];
 
-      await updateAssistant({
+      const savedAssistant = await updateAssistant({
         pathParams: { assistantId: id },
         body: requestBody,
       });
 
-      // Not awaited: this page's own assistant query is active, so waiting
-      // would hold the redirect for a refetch of data the user is leaving.
-      void Promise.all([
-        queryClient.invalidateQueries({
-          queryKey: listAssistantsQuery({}).queryKey,
-        }),
-        queryClient.invalidateQueries({
-          queryKey: getAssistantQuery({ pathParams: { assistantId: id } })
-            .queryKey,
-        }),
-      ]);
+      // Leaving aborts a refetch of this page's assistant and restores the
+      // pre-save copy, so it is seeded; the list key prefixes it, hence "none".
+      queryClient.setQueryData(
+        getAssistantQuery({ pathParams: { assistantId: id } }).queryKey,
+        savedAssistant,
+      );
+      void queryClient.invalidateQueries({
+        queryKey: listAssistantsQuery({}).queryKey,
+        refetchType: "none",
+      });
 
       toast.success({
+        dedupeKey: ASSISTANT_SAVE_TOAST_KEY,
         title: t({
           id: "assistant.edit.success",
           message: "Assistant updated successfully!",
@@ -136,6 +138,7 @@ export default function AssistantEditPage() {
     } catch (error) {
       console.error("Failed to update assistant:", error);
       toast.error({
+        dedupeKey: ASSISTANT_SAVE_TOAST_KEY,
         title: t({
           id: "assistant.edit.error",
           message: "Failed to update assistant. Please try again.",
@@ -145,6 +148,7 @@ export default function AssistantEditPage() {
   };
 
   const handleCancel = () => {
+    toast.dismissKey(ASSISTANT_SAVE_TOAST_KEY);
     navigate("/assistants/created");
   };
 

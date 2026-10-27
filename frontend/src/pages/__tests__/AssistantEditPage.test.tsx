@@ -1,12 +1,17 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useToastStore } from "@/components/ui/Toast/toastStore";
 
 import AssistantEditPage from "../AssistantEditPage";
-
 
 import type { AssistantFormProps } from "@/components/ui/Assistant/AssistantForm";
 import type { Assistant } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
@@ -34,22 +39,25 @@ vi.mock("@/components/ui/Sharing", () => ({
 // The form itself is exercised in its own tests; the stub hands the hydrated
 // draft straight back so this suite pins only the page's request building.
 vi.mock("@/components/ui/Assistant/AssistantForm", () => ({
-  AssistantForm: ({ initialData, onSubmit }: AssistantFormProps) => (
-    <button
-      data-testid="submit-form-stub"
-      onClick={() => {
-        void onSubmit({
-          name: initialData?.name ?? "",
-          description: initialData?.description ?? "",
-          prompt: initialData?.prompt ?? "",
-          defaultModel: initialData?.defaultModel ?? null,
-          facetIds: initialData?.facetIds ?? [],
-          enforceFacetSettings: initialData?.enforceFacetSettings ?? false,
-          files: initialData?.files ?? [],
-          mcpServerIds: initialData?.mcpServerIds ?? [],
-        });
-      }}
-    />
+  AssistantForm: ({ initialData, onSubmit, onCancel }: AssistantFormProps) => (
+    <>
+      <button
+        data-testid="submit-form-stub"
+        onClick={() => {
+          void onSubmit({
+            name: initialData?.name ?? "",
+            description: initialData?.description ?? "",
+            prompt: initialData?.prompt ?? "",
+            defaultModel: initialData?.defaultModel ?? null,
+            facetIds: initialData?.facetIds ?? [],
+            enforceFacetSettings: initialData?.enforceFacetSettings ?? false,
+            files: initialData?.files ?? [],
+            mcpServerIds: initialData?.mcpServerIds ?? [],
+          });
+        }}
+      />
+      <button data-testid="cancel-form-stub" onClick={onCancel} />
+    </>
   ),
 }));
 
@@ -69,9 +77,9 @@ vi.mock("@/lib/generated/v1betaApi/v1betaApiComponents", () => ({
   getAssistantQuery: () => ({ queryKey: ["assistant"] }),
 }));
 
-function renderPage() {
+function renderPage(queryClient = new QueryClient()) {
   return render(
-    <QueryClientProvider client={new QueryClient()}>
+    <QueryClientProvider client={queryClient}>
       <MemoryRouter initialEntries={["/assistants/edit/assistant-1"]}>
         <Routes>
           <Route
@@ -87,6 +95,11 @@ function renderPage() {
     </QueryClientProvider>,
   );
 }
+
+// One macrotask lets the save's promise chain settle; a redirect held behind
+// a timer or a refetch would still be pending.
+const settle = () =>
+  act(() => new Promise<void>((resolve) => setTimeout(resolve, 0)));
 
 describe("AssistantEditPage", () => {
   beforeEach(() => {
@@ -105,6 +118,10 @@ describe("AssistantEditPage", () => {
       mcp_server_ids: null,
       can_edit: true,
     } as unknown as Assistant;
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   it("always sends mcp_server_ids, spelling an empty selection as []", async () => {
@@ -143,31 +160,48 @@ describe("AssistantEditPage", () => {
     expect(body.mcp_server_ids).toEqual(["search-server"]);
   });
 
-  it("returns to the list as soon as the save lands, confirming it in a toast", async () => {
-    renderPage();
+  it("returns to the list as soon as the save lands, with the saved assistant cached", async () => {
+    const savedAssistant = { ...assistant, name: "Renamed assistant" };
+    updateAssistantMock.mockResolvedValueOnce(savedAssistant);
+    const queryClient = new QueryClient();
+    vi.spyOn(queryClient, "invalidateQueries").mockReturnValue(
+      new Promise(() => {}),
+    );
+
+    renderPage(queryClient);
 
     fireEvent.click(screen.getByTestId("submit-form-stub"));
+    await settle();
 
-    expect(await screen.findByTestId("assistants-list")).toBeInTheDocument();
+    expect(screen.getByTestId("assistants-list")).toBeInTheDocument();
+    // A refetch would be aborted by the page unmounting, restoring the
+    // pre-save copy, so the response itself has to land in the cache.
+    expect(queryClient.getQueryData(["assistant"])).toEqual(savedAssistant);
     expect(useToastStore.getState().toasts).toMatchObject([
       { variant: "success", title: "Assistant updated successfully!" },
     ]);
   });
 
-  it("stays on the form and reports a failed save in a toast", async () => {
+  it("stays on the form after a failed save, and a successful retry replaces the error toast", async () => {
     updateAssistantMock.mockRejectedValueOnce(new Error("boom"));
     vi.spyOn(console, "error").mockImplementation(() => {});
 
     renderPage();
 
     fireEvent.click(screen.getByTestId("submit-form-stub"));
+    await settle();
 
-    await waitFor(() => {
-      expect(useToastStore.getState().toasts).toMatchObject([
-        { variant: "error" },
-      ]);
-    });
-    expect(screen.getByTestId("submit-form-stub")).toBeInTheDocument();
     expect(screen.queryByTestId("assistants-list")).not.toBeInTheDocument();
+    expect(useToastStore.getState().toasts).toMatchObject([
+      { variant: "error" },
+    ]);
+
+    fireEvent.click(screen.getByTestId("submit-form-stub"));
+    await settle();
+
+    expect(screen.getByTestId("assistants-list")).toBeInTheDocument();
+    expect(useToastStore.getState().toasts).toMatchObject([
+      { variant: "success" },
+    ]);
   });
 });
