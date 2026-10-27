@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/Controls/Button";
 import { Alert } from "@/components/ui/Feedback/Alert";
 import { SpinnerIcon } from "@/components/ui/Feedback/SpinnerIcon";
 import { SharingDialog, SharingErrorBoundary } from "@/components/ui/Sharing";
+import { toast } from "@/components/ui/Toast";
 import { CheckCircleIcon, ShareIcon } from "@/components/ui/icons";
 import { usePageAlignment } from "@/hooks/ui";
 import {
@@ -64,8 +65,6 @@ export default function AssistantEditPage() {
   const { id } = useParams<{ id: string }>();
   const { containerClasses, horizontalPadding } =
     usePageAlignment("assistants");
-  const [successMessage, setSuccessMessage] = useState("");
-  const [errorMessage, setErrorMessage] = useState("");
   const [isSharingDialogOpen, setIsSharingDialogOpen] = useState(false);
 
   // Fetch assistant data
@@ -94,9 +93,6 @@ export default function AssistantEditPage() {
     if (!id) return;
 
     try {
-      setErrorMessage("");
-      setSuccessMessage("");
-
       // Build the request body with proper typing
       // Note: Generated types are incomplete, so we use type assertion
       const requestBody = {
@@ -118,15 +114,9 @@ export default function AssistantEditPage() {
         body: requestBody,
       });
 
-      setSuccessMessage(
-        t({
-          id: "assistant.edit.success",
-          message: "Assistant updated successfully!",
-        }),
-      );
-
-      // Invalidate queries
-      await Promise.all([
+      // Not awaited: this page's own assistant query is active, so waiting
+      // would hold the redirect for a refetch of data the user is leaving.
+      void Promise.all([
         queryClient.invalidateQueries({
           queryKey: listAssistantsQuery({}).queryKey,
         }),
@@ -136,18 +126,21 @@ export default function AssistantEditPage() {
         }),
       ]);
 
-      // Navigate back to assistants list after a short delay
-      setTimeout(() => {
-        navigate("/assistants/created");
-      }, 1500);
+      toast.success({
+        title: t({
+          id: "assistant.edit.success",
+          message: "Assistant updated successfully!",
+        }),
+      });
+      navigate("/assistants/created");
     } catch (error) {
       console.error("Failed to update assistant:", error);
-      setErrorMessage(
-        t({
+      toast.error({
+        title: t({
           id: "assistant.edit.error",
           message: "Failed to update assistant. Please try again.",
         }),
-      );
+      });
     }
   };
 
@@ -315,8 +308,6 @@ export default function AssistantEditPage() {
               initialData={initialData}
               availableModels={availableModels}
               isSubmitting={isPending}
-              successMessage={successMessage}
-              errorMessage={errorMessage}
               onSubmit={handleSubmit}
               onCancel={handleCancel}
             />

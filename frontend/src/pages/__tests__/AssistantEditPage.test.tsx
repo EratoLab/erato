@@ -3,7 +3,10 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { useToastStore } from "@/components/ui/Toast/toastStore";
+
 import AssistantEditPage from "../AssistantEditPage";
+
 
 import type { AssistantFormProps } from "@/components/ui/Assistant/AssistantForm";
 import type { Assistant } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
@@ -75,6 +78,10 @@ function renderPage() {
             path="/assistants/edit/:id"
             element={<AssistantEditPage />}
           ></Route>
+          <Route
+            path="/assistants/created"
+            element={<div data-testid="assistants-list" />}
+          />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>,
@@ -83,7 +90,9 @@ function renderPage() {
 
 describe("AssistantEditPage", () => {
   beforeEach(() => {
-    updateAssistantMock.mockClear();
+    updateAssistantMock.mockReset();
+    updateAssistantMock.mockResolvedValue({});
+    useToastStore.setState({ toasts: [] });
     assistant = {
       id: "assistant-1",
       name: "Unrestricted assistant",
@@ -132,5 +141,33 @@ describe("AssistantEditPage", () => {
       body: Record<string, unknown>;
     };
     expect(body.mcp_server_ids).toEqual(["search-server"]);
+  });
+
+  it("returns to the list as soon as the save lands, confirming it in a toast", async () => {
+    renderPage();
+
+    fireEvent.click(screen.getByTestId("submit-form-stub"));
+
+    expect(await screen.findByTestId("assistants-list")).toBeInTheDocument();
+    expect(useToastStore.getState().toasts).toMatchObject([
+      { variant: "success", title: "Assistant updated successfully!" },
+    ]);
+  });
+
+  it("stays on the form and reports a failed save in a toast", async () => {
+    updateAssistantMock.mockRejectedValueOnce(new Error("boom"));
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    renderPage();
+
+    fireEvent.click(screen.getByTestId("submit-form-stub"));
+
+    await waitFor(() => {
+      expect(useToastStore.getState().toasts).toMatchObject([
+        { variant: "error" },
+      ]);
+    });
+    expect(screen.getByTestId("submit-form-stub")).toBeInTheDocument();
+    expect(screen.queryByTestId("assistants-list")).not.toBeInTheDocument();
   });
 });
