@@ -2077,8 +2077,14 @@ Controls how Erato decides whether an uploaded file is an image or should be sen
 
 **Supported values:**
 
-- `"naive"` preserves the existing behavior: known image filename extensions are routed as images; other files use the storage-provided MIME type, with byte-signature inference in the file processor when no MIME type is available. `.eml` files remain explicitly treated as `message/rfc822`.
+- `"naive"` uses filename extensions first: known image filename extensions are routed as images; known extractable extensions use the storage-provided MIME type, with byte-signature inference in the file processor when no MIME type is available. `.eml` files remain explicitly treated as `message/rfc822`.
 - `"magika"` loads Magika at startup, detects the type from the file bytes, and uses its MIME type for image routing and text extraction. Detection failures fall back to `naive`.
+
+In naive mode, extensionless files first use a supported storage MIME type for image routing or extraction (including PDF, DOCX, HTML, and JSON). MIME matching ignores case, surrounding whitespace, and parameters. Failed extraction retains a file reference; it does not retry a document as plain text. Filenames such as `png` or `pdf` without a dot are extensionless.
+
+For extensionless files without a supported MIME route, and files with unsupported extensions, processing falls back to `text/plain` if either the stored MIME is `text/*` or the first up to 8 KiB are valid UTF-8 without NUL bytes. Characters crossing that boundary are checked for completeness. This is only a prefix heuristic, and text MIME metadata is trusted even when the bytes fail it. Rejected binaries and failed fallback extraction remain available as file references. Known-extension/MIME conflicts are unchanged.
+
+The prefix heuristic reads and caches the **entire file**, including previously reference-only binaries. The storage range helper currently also reads the whole file and does not support SharePoint, so processing uses the existing authenticated byte cache to avoid an additional download for extraction. Existing upload size limits, cache limits, and processing concurrency controls still apply; the 8 KiB inspection is not a download or memory limit. This applies to MCP outputs and already-admitted uploads and does not broaden upload admission: the default `supported_operations` policy still rejects unsupported extensions.
 
 Magika inference runs on a blocking worker, uses one ONNX inter-op and intra-op thread, and caches results for unchanged files. This limits impact on async request handling and avoids repeating inference for cache hits.
 
