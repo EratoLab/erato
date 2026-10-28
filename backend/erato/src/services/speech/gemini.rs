@@ -7,6 +7,15 @@ pub struct Gemini(pub SpeechProviderConfig);
 impl SpeechProvider for Gemini {
     async fn stream(&self, text: &str) -> Result<SpeechAudio, Report> {
         let c = &self.0;
+        if c.model_name
+            .rsplit('/')
+            .next()
+            .is_some_and(|name| name == "gemini-3.8-live")
+        {
+            return Err(eyre!(
+                "gemini-3.8-live requires the gemini_live speech provider"
+            ));
+        }
         let location = c.location.as_deref().unwrap_or("global");
         let host = if location == "global" {
             "https://aiplatform.googleapis.com".to_owned()

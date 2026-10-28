@@ -223,6 +223,31 @@ mod tests {
     use axum::{Router, body::Body, response::Response, routing::post};
 
     #[tokio::test]
+    async fn gemini_live_sentence_audio_is_collected_for_replay() {
+        let (url, _, server) = super::super::gemini_live::tests::mock("complete", "Hello. ").await;
+        let config = super::super::gemini_live::tests::config(url);
+        let manager = BackgroundTaskManager::new(None, Default::default(), None);
+        let message_id = Uuid::new_v4();
+        let (mut events, task) = manager.start_task(Uuid::new_v4(), message_id).await;
+        let (tx, _rx) = mpsc::channel(8);
+        let mut session = SpeechSession::start(config, "live".into(), task, tx, message_id);
+        session.push("Hello.").await;
+        if let Some(tail) = session.sentences.finish() {
+            session.sender.as_ref().unwrap().send(tail).await.unwrap();
+        }
+        session.sender.take();
+        let (pcm, segments, rate) = (&mut session.worker).await.unwrap().unwrap();
+        assert_eq!(segments, ["Hello. "]);
+        assert_eq!(rate, 24000);
+        assert_eq!(&wav(&pcm, rate).unwrap()[44..], &[1, 2, 3, 4]);
+        assert!(matches!(
+            events.recv().await,
+            Ok(StreamingEvent::AudioDelta { .. })
+        ));
+        server.abort();
+    }
+
+    #[tokio::test]
     async fn emits_audio_before_text_finishes_and_aborts_without_finalizing() {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let address = listener.local_addr().unwrap();

@@ -1862,7 +1862,7 @@ impl AppConfig {
             assert!(
                 matches!(
                     provider.provider_kind.as_str(),
-                    "openai" | "openai_realtime" | "audio_cpp" | "gemini"
+                    "openai" | "openai_realtime" | "audio_cpp" | "gemini" | "gemini_live"
                 ),
                 "Unknown speech provider kind for {id}"
             );
@@ -1889,6 +1889,26 @@ impl AppConfig {
                     provider.project_id.is_some()
                         || (provider.api_key.is_some() && provider.access_token.is_none()),
                     "Gemini speech provider {id} requires project_id when using OAuth credentials"
+                );
+            }
+            if provider.provider_kind == "gemini_live" {
+                assert!(
+                    provider.access_token.is_some() && provider.api_key.is_none(),
+                    "Gemini Live speech provider {id} requires access_token and does not support api_key"
+                );
+                assert!(
+                    provider
+                        .project_id
+                        .as_ref()
+                        .is_some_and(|s| !s.trim().is_empty()),
+                    "Gemini Live speech provider {id} requires project_id"
+                );
+                assert!(
+                    provider
+                        .location
+                        .as_ref()
+                        .is_some_and(|s| !s.trim().is_empty()),
+                    "Gemini Live speech provider {id} requires an explicit location"
                 );
             }
         }
@@ -6070,7 +6090,7 @@ pub struct SpeechProvidersConfig {
 pub struct SpeechProviderConfig {
     #[serde(default)]
     pub archived: bool,
-    /// openai, openai_realtime, audio_cpp, or gemini.
+    /// openai, openai_realtime, audio_cpp, gemini, or gemini_live.
     #[serde(default)]
     pub provider_kind: String,
     #[serde(default)]
