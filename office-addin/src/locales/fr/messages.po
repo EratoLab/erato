@@ -590,6 +590,11 @@ msgstr "Pièce jointe"
 
 #. js-lingui-explicit-id
 #: src/outlook/components/AddinChatAddMenuExtraContent.tsx
+msgid "officeAddin.fileSource.attachmentLoadFailed"
+msgstr "Impossible de charger cette pièce jointe depuis Outlook. Réessayez."
+
+#. js-lingui-explicit-id
+#: src/outlook/components/AddinChatAddMenuExtraContent.tsx
 msgid "officeAddin.fileSource.cloudAttachmentUnsupported"
 msgstr "Les pièces jointes cloud ne peuvent pas être téléversées depuis Outlook"
 

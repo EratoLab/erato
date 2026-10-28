@@ -811,6 +811,11 @@ msgid "assistantHub.my.withdrawConfirmTitle"
 msgstr "Einreichung zurückziehen"
 
 #. js-lingui-explicit-id
+#: src/pages/AssistantHubMyPage.tsx
+msgid "assistantHub.my.withdrawSuccess"
+msgstr "Einreichung zurückgezogen."
+
+#. js-lingui-explicit-id
 #: src/pages/assistantHubUtils.tsx
 msgid "assistantHub.rating.none"
 msgstr "Keine Bewertungen"
@@ -829,6 +834,11 @@ msgstr "{formattedScore} / 10 (1 Bewertung)"
 #: src/pages/AssistantHubReviewPage.tsx
 msgid "assistantHub.review.accept"
 msgstr "Akzeptieren"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubReviewPage.tsx
+msgid "assistantHub.review.acceptSuccess"
+msgstr "Version akzeptiert."
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubReviewPage.tsx
@@ -854,6 +864,11 @@ msgstr "Notiz des Erstellers"
 #: src/pages/AssistantHubReviewPage.tsx
 msgid "assistantHub.review.decline"
 msgstr "Ablehnen"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubReviewPage.tsx
+msgid "assistantHub.review.declineSuccess"
+msgstr "Version abgelehnt."
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubReviewPage.tsx
@@ -1004,6 +1019,11 @@ msgstr "{0} / 10"
 #: src/pages/AssistantHubDetailPage.tsx
 msgid "assistantHub.reviews.submit"
 msgstr "Review senden"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubDetailPage.tsx
+msgid "assistantHub.reviews.success"
+msgstr "Review gespeichert."
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubDetailPage.tsx
@@ -1177,6 +1197,11 @@ msgstr "Eine unveränderliche geprüfte Version aus dem aktuellen Assistant-Draf
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubSubmitPage.tsx
+msgid "assistantHub.submit.success"
+msgstr "Version zur Prüfung eingereicht."
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubSubmitPage.tsx
 msgid "assistantHub.submit.title"
 msgstr "Im Hub einreichen"
 
@@ -1262,6 +1287,11 @@ msgstr "Möchten Sie diesen Assistenten wirklich archivieren?"
 #: src/pages/AssistantsPage.tsx
 msgid "assistants.archive.confirmTitle"
 msgstr "Archivierung bestätigen"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantsPage.tsx
+msgid "assistants.archive.error"
+msgstr "Assistent konnte nicht archiviert werden. Bitte versuchen Sie es erneut."
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantsPage.tsx
@@ -1748,6 +1778,11 @@ msgstr "Zum Hochladen ablegen"
 #~ msgstr "Nur Referenz — Dateiinhalte wurden ausgelassen"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Chat/chatActionFeedback.ts
+msgid "chat.history.archiveFailed"
+msgstr "Chat konnte nicht archiviert werden"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Chat/DelegatedRunsSection.tsx
 msgid "chat.history.delegatedRuns"
 msgstr "Delegierte Läufe"
@@ -2067,6 +2102,11 @@ msgid "chat.history.menu.unpin"
 msgstr "Lösen"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Chat/chatActionFeedback.ts
+msgid "chat.history.pinFailed"
+msgstr "Chat konnte nicht angeheftet werden"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatHistorySidebar.tsx
 msgid "chat.history.pinned"
 msgstr "Angepinnt"
@@ -2114,9 +2154,19 @@ msgid "chat.history.rename.userProvided.placeholder"
 msgstr "Leer lassen, um den generierten Titel zu verwenden"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/unarchiveFeedback.ts
+#: src/components/ui/Chat/chatActionFeedback.ts
+msgid "chat.history.renameFailed"
+msgstr "Chat konnte nicht umbenannt werden"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/chatActionFeedback.ts
 msgid "chat.history.unarchiveFailed"
 msgstr "Archivierung des Chats konnte nicht aufgehoben werden"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/chatActionFeedback.ts
+msgid "chat.history.unpinFailed"
+msgstr "Chat konnte nicht gelöst werden"
 
 #. js-lingui-explicit-id
 #: src/hooks/audio/useAudioTranscriptionRecorder.ts
@@ -2677,6 +2727,11 @@ msgstr "Chat-Freigabe umschalten"
 #: src/components/ui/Chat/ChatShareDialog.tsx
 msgid "chat.share.toggle.description"
 msgstr "Jede angemeldete Person in dieser Organisation kann ihn ansehen."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatShareDialog.tsx
+msgid "chat.share.toggle.error"
+msgstr "Der Freigabelink konnte nicht aktualisiert werden. Bitte versuchen Sie es erneut."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatShareDialog.tsx
@@ -3569,6 +3624,11 @@ msgstr "Das Feedback konnte nicht entfernt werden. Bitte versuchen Sie es erneut
 
 #. js-lingui-explicit-id
 #: src/hooks/chat/useMessageFeedback.ts
+msgid "feedback.error.submit_failed"
+msgstr "Das Feedback konnte nicht gesendet werden. Bitte versuchen Sie es erneut."
+
+#. js-lingui-explicit-id
+#: src/hooks/chat/useMessageFeedback.ts
 msgid "feedback.error.time_limit_exceeded"
 msgstr "Das Bearbeitungsfenster ist abgelaufen. Das Feedback kann nicht mehr geändert werden."
 
@@ -3587,6 +3647,11 @@ msgstr "Nachricht gefällt mir"
 #: src/components/ui/Feedback/FeedbackViewDialog.tsx
 msgid "feedback.remove"
 msgstr "Entfernen"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Feedback/FeedbackViewDialog.tsx
+msgid "feedback.removing"
+msgstr "Wird entfernt..."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Feedback/FeedbackViewDialog.tsx
@@ -5169,6 +5234,7 @@ msgstr "Test beenden"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
+#: src/pages/AssistantsPage.tsx
 msgid "preferences.dialog.dataTab.archiveAll.archiving"
 msgstr "Archiviere..."
 

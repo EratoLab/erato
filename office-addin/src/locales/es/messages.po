@@ -590,6 +590,11 @@ msgstr "Adjunto"
 
 #. js-lingui-explicit-id
 #: src/outlook/components/AddinChatAddMenuExtraContent.tsx
+msgid "officeAddin.fileSource.attachmentLoadFailed"
+msgstr "No se pudo cargar este archivo adjunto desde Outlook. Inténtalo de nuevo."
+
+#. js-lingui-explicit-id
+#: src/outlook/components/AddinChatAddMenuExtraContent.tsx
 msgid "officeAddin.fileSource.cloudAttachmentUnsupported"
 msgstr "Los adjuntos en la nube no se pueden cargar desde Outlook"
 

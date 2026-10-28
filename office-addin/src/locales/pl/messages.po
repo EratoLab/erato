@@ -590,6 +590,11 @@ msgstr "Załącznik"
 
 #. js-lingui-explicit-id
 #: src/outlook/components/AddinChatAddMenuExtraContent.tsx
+msgid "officeAddin.fileSource.attachmentLoadFailed"
+msgstr "Nie udało się załadować tego załącznika z Outlooka. Spróbuj ponownie."
+
+#. js-lingui-explicit-id
+#: src/outlook/components/AddinChatAddMenuExtraContent.tsx
 msgid "officeAddin.fileSource.cloudAttachmentUnsupported"
 msgstr "Załącznika w chmurze nie można przesłać z Outlooka"
 

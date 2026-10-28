@@ -590,6 +590,11 @@ msgstr "Anhang"
 
 #. js-lingui-explicit-id
 #: src/outlook/components/AddinChatAddMenuExtraContent.tsx
+msgid "officeAddin.fileSource.attachmentLoadFailed"
+msgstr "Dieser Anhang konnte nicht aus Outlook geladen werden. Versuche es erneut."
+
+#. js-lingui-explicit-id
+#: src/outlook/components/AddinChatAddMenuExtraContent.tsx
 msgid "officeAddin.fileSource.cloudAttachmentUnsupported"
 msgstr "Cloud-Anhänge können aus Outlook nicht hochgeladen werden"
 
