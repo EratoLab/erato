@@ -1592,6 +1592,11 @@ msgstr "Przełącz załączniki"
 
 #. js-lingui-explicit-id
 #: src/components/ui/FileUpload/audioTranscriptionStatus.ts
+msgid "chat.audio.announce.canceled"
+msgstr "{filename}: transkrypcję anulowano."
+
+#. js-lingui-explicit-id
+#: src/components/ui/FileUpload/audioTranscriptionStatus.ts
 msgid "chat.audio.announce.failed"
 msgstr "{filename}: nie udało się transkrybować."
 
@@ -1599,6 +1604,16 @@ msgstr "{filename}: nie udało się transkrybować."
 #: src/components/ui/FileUpload/audioTranscriptionStatus.ts
 msgid "chat.audio.announce.ready"
 msgstr "{filename}: transkrypcja gotowa."
+
+#. js-lingui-explicit-id
+#: src/components/ui/FileUpload/audioTranscriptionStatus.ts
+msgid "chat.audio.cancel"
+msgstr "Anuluj transkrypcję"
+
+#. js-lingui-explicit-id
+#: src/components/ui/FileUpload/audioTranscriptionStatus.ts
+msgid "chat.audio.cancelNamed"
+msgstr "Anuluj transkrypcję: {filename}"
 
 #. js-lingui-explicit-id
 #: src/components/ui/FileUpload/audioTranscriptionStatus.ts

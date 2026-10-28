@@ -21,12 +21,15 @@ const SEND = '[data-testid="chat-input-send-message"]';
 const RECORDING = "audio-recording-20261020-0942.wav";
 const TRANSCRIPT =
   "Quick summary of the sales call: the customer wants delivery in two batches";
+const LIVE = '[data-ui="chat-audio-status-live"]';
 
 interface Phase {
   story: string;
   meta: string;
   status: "busy" | "error" | null;
   sendable: boolean;
+  /** The tile's (x) cancels the transcription rather than removing a transcript. */
+  cancels: boolean;
 }
 const PHASES: Phase[] = [
   {
@@ -34,18 +37,21 @@ const PHASES: Phase[] = [
     meta: "Recording · 0:42",
     status: "busy",
     sendable: false,
+    cancels: true,
   },
   {
     story: "audio-transcribing",
     meta: "Transcribing · 0:42",
     status: "busy",
     sendable: false,
+    cancels: true,
   },
   {
     story: "audio-transcript-ready",
     meta: "Transcript ready · 0:42",
     status: null,
     sendable: true,
+    cancels: false,
   },
   // A failed recording keeps Send off: its tile is the only place that says why.
   {
@@ -53,6 +59,7 @@ const PHASES: Phase[] = [
     meta: "Couldn't transcribe",
     status: "error",
     sendable: false,
+    cancels: false,
   },
 ];
 
@@ -116,6 +123,13 @@ test.describe("the composer's recording", () => {
       await expect(activation(shellOf(page))).toHaveAccessibleName(
         `Preview attachment ${RECORDING}, ${phase.meta}`,
       );
+      const remove = shellOf(page).locator('[data-ui="attachment-remove"]');
+      await expect(remove).toHaveAccessibleName(
+        phase.cancels
+          ? `Cancel transcription: ${RECORDING}`
+          : `Remove ${RECORDING}`,
+      );
+      await expect(remove).toBeEnabled();
 
       await textarea(page).fill("Summarise the recording.");
       const send = page.locator(SEND);
@@ -186,11 +200,75 @@ test.describe("the composer's recording", () => {
     ).toHaveText("The transcription service did not answer in time.");
   });
 
+  test("a stopped recording reads the length it was recorded at, and its preview the transcript so far", async ({
+    page,
+  }) => {
+    await openComposer(page, "audio-stopped", { width: 340 });
+    const tile = page.locator(`${SHELL} ${TILE}`);
+    // The server has taken up only the first 30 s, and still says "recording".
+    await expect(tile.locator(META)).toHaveText("Transcribing · 0:38");
+    await expect(tile).toHaveAttribute("data-status", "busy");
+    await textarea(page).fill("Summarise the recording.");
+    await expect(page.locator(SEND)).toBeDisabled();
+
+    await activation(shellOf(page)).click();
+    const section = page
+      .getByRole("dialog", { name: `Preview: ${RECORDING}` })
+      .locator('[data-ui="file-preview-audio-transcription"]');
+    await expect(section).toHaveAttribute("data-status", "transcribing");
+    await expect(section).toContainText("Transcribing · 0:38");
+    await expect(section).toContainText(
+      "Quick summary of the sales call: the customer wants delivery in two batches.",
+    );
+  });
+
+  test("(x) cancels the transcription: the recording goes, Send stops waiting, the cancel is said", async ({
+    page,
+  }) => {
+    const dialogs: string[] = [];
+    page.on("dialog", (dialog) => {
+      dialogs.push(dialog.message());
+      void dialog.dismiss();
+    });
+    await openComposer(page, "audio-transcribing", { width: 340 });
+    await textarea(page).fill("Summarise the recording.");
+    await expect(page.locator(SEND)).toBeDisabled();
+
+    await page.locator(`${SHELL} ${TILE}`).hover();
+    await page
+      .getByRole("button", { name: `Cancel transcription: ${RECORDING}` })
+      .click();
+
+    await expect(page.locator(`${SHELL} ${TILE}`)).toHaveCount(0);
+    expect(dialogs).toEqual([]);
+    await expect(page.locator(LIVE)).toHaveText(
+      `${RECORDING}: transcription canceled.`,
+    );
+    await expect(textarea(page)).toBeEnabled();
+    await expect(page.locator(SEND)).toBeEnabled();
+  });
+
+  test("still asks before removing a transcript", async ({ page }) => {
+    const dialogs: string[] = [];
+    page.on("dialog", (dialog) => {
+      dialogs.push(dialog.message());
+      void dialog.dismiss();
+    });
+    await openComposer(page, "audio-transcript-ready");
+    await page.locator(`${SHELL} ${TILE}`).hover();
+    await page.getByRole("button", { name: `Remove ${RECORDING}` }).click();
+    expect(dialogs).toHaveLength(1);
+    await expect(page.locator(`${SHELL} ${TILE}`)).toHaveCount(1);
+  });
+
   test("speaks German", async ({ page }) => {
     await openComposer(page, "audio-transcribing", { locale: "de" });
     await expect(page.locator(`${SHELL} ${TILE} ${META}`)).toHaveText(
       "Wird transkribiert · 0:42",
     );
+    await expect(
+      page.locator(`${SHELL} [data-ui="attachment-remove"]`),
+    ).toHaveAccessibleName(`Transkription abbrechen: ${RECORDING}`);
   });
 });
 
@@ -221,6 +299,16 @@ test.describe("every phase on its tile", () => {
       else await expect(tile).not.toHaveAttribute("data-status");
       const retry = tile.locator('[data-ui="attachment-tile-action"]');
       await expect(retry, filename).toHaveCount(status === "error" ? 1 : 0);
+      await expect(
+        page.getByRole("button", {
+          name:
+            status === "busy"
+              ? `Cancel transcription: ${filename}`
+              : `Remove ${filename}`,
+          exact: true,
+        }),
+        filename,
+      ).toBeEnabled();
     }
 
     const failed = tileNamed(page, "audio-recording-0905.wav");

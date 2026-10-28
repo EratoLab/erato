@@ -18,6 +18,9 @@ const chunks = (status: string, transcript?: string) => [
 export const AUDIO_STORY_TRANSCRIPT =
   "Quick summary of the sales call: the customer wants delivery in two batches, the first before the end of the quarter, and asks for 45 days payment terms instead of 30.";
 
+export const AUDIO_STORY_PARTIAL_TRANSCRIPT =
+  "Quick summary of the sales call: the customer wants delivery in two batches.";
+
 /** What the API reports for a staged recording, one per phase. */
 export const AUDIO_STORY_TRANSCRIPTIONS = {
   recording: { status: "recording", chunks: chunks("recording") },
@@ -34,6 +37,23 @@ export const AUDIO_STORY_TRANSCRIPTIONS = {
     chunks: chunks("failed"),
   },
   canceled: { status: "canceled", chunks: chunks("canceled") },
+  /**
+   * Stopped at 0:38 while the server has only taken up the first 30 s: the
+   * composer adds the length the recorder measured.
+   */
+  stopped: {
+    status: "recording",
+    transcript: AUDIO_STORY_PARTIAL_TRANSCRIPT,
+    chunks: [
+      {
+        index: 0,
+        status: "completed",
+        end_ms: 30_000,
+        transcript: AUDIO_STORY_PARTIAL_TRANSCRIPT,
+      },
+    ],
+    recorded_duration_ms: 38_000,
+  },
 } as const;
 
 export type AudioStoryPhase = keyof typeof AUDIO_STORY_TRANSCRIPTIONS;

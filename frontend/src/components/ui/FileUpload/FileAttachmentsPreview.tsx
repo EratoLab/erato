@@ -18,6 +18,11 @@ export interface ChatInputAudioTranscriptionControls {
   onRetry: (fileId: string) => void;
   /** The composer is locked or a recording is uploading. */
   disabled: boolean;
+  /**
+   * `onRemoveFile` cancels a recording that is still being worked on, so its
+   * remove control is named for that and stays enabled while `disabled`.
+   */
+  cancelable?: boolean;
 }
 
 /**
@@ -112,6 +117,7 @@ export const FileAttachmentsPreview: React.FC<FileAttachmentsPreviewProps> = ({
               retryable: audioTranscription.canRetry(file.id),
               retrying: audioTranscription.retryingFileId === file.id,
               locked: audioTranscription.disabled,
+              cancelable: audioTranscription.cancelable,
             })
           : null;
         if (!audio) {
@@ -123,10 +129,19 @@ export const FileAttachmentsPreview: React.FC<FileAttachmentsPreviewProps> = ({
           file,
           previewUrl: file.preview_url,
           metaLabel: audio.metaLabel,
+          ...(audio.cancel ? { disabled: false } : {}),
           status: {
             busy: audio.busy,
             ...(audio.tone ? { tone: audio.tone } : {}),
             ...(audio.title ? { title: audio.title } : {}),
+            ...(audio.cancel
+              ? {
+                  remove: {
+                    label: audio.cancel.label,
+                    accessibleName: audio.cancel.name,
+                  },
+                }
+              : {}),
             ...(audio.action && retry
               ? {
                   action: {

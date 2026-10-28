@@ -411,7 +411,13 @@ export const StatusBusyAndError: Story = {
       {
         ...item("s1", "audio-recording-0942.wav"),
         metaLabel: "Transcribing · 0:42",
-        status: { busy: true },
+        status: {
+          busy: true,
+          remove: {
+            label: "Cancel transcription",
+            accessibleName: "Cancel transcription: audio-recording-0942.wav",
+          },
+        },
       },
       {
         ...item("s2", "audio-recording-0951.wav"),

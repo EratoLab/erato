@@ -24,6 +24,8 @@ export interface AttachmentTileItem {
   /** Replaces the derived meta line, e.g. a staged recording's "Transcribing…". */
   metaLabel?: string;
   status?: AttachmentTileStatus;
+  /** Overrides the list's `disabled` for this tile, e.g. a recording that can still be canceled. */
+  disabled?: boolean;
 }
 
 /** Mirrors the tile's own media test, so banding matches what each tile draws. */
@@ -141,7 +143,7 @@ export const AttachmentTileList: React.FC<AttachmentTileListProps> = ({
       ...(item.status ? { status: item.status } : {}),
       showCaption: showCaptions,
       expandable,
-      disabled,
+      disabled: item.disabled ?? disabled,
       onRemove: onRemove ? () => onRemove(item.id) : undefined,
       onActivate: onActivate ? () => onActivate(item) : undefined,
     };

@@ -60,6 +60,8 @@ export interface AttachmentTileStatus {
     onSelect: () => void;
     disabled?: boolean;
   };
+  /** What the remove control does instead, e.g. canceling a transcription. */
+  remove?: { label: string; accessibleName: string };
 }
 
 /** Sizes are tokens so a theme can retune them; the plate stays proportional chrome. */
@@ -135,7 +137,8 @@ const RemoveButton: React.FC<{
   filename: string;
   disabled: boolean;
   className?: string;
-}> = ({ onRemove, filename, disabled, className }) => (
+  label?: AttachmentTileStatus["remove"];
+}> = ({ onRemove, filename, disabled, className, label }) => (
   <button
     type="button"
     onClick={(event) => {
@@ -144,7 +147,11 @@ const RemoveButton: React.FC<{
     }}
     disabled={disabled}
     data-ui="attachment-remove"
-    aria-label={`${t({ id: "common.remove", message: "Remove" })} ${filename}`}
+    aria-label={
+      label?.accessibleName ??
+      `${t({ id: "common.remove", message: "Remove" })} ${filename}`
+    }
+    title={label?.label}
     className={
       className ??
       clsx(
@@ -526,6 +533,7 @@ export const AttachmentTile: React.FC<AttachmentTileProps> = ({
           filename={filename}
           disabled={disabled}
           className={removeButtonClassName}
+          label={status?.remove}
         />
       )}
 

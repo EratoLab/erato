@@ -66,6 +66,68 @@ describe("audioTranscriptionTileStatus", () => {
     });
   });
 
+  it("shows the recorded length once the recording stopped, as transcribing", () => {
+    const chunks = [chunk("completed", 30_000)];
+    expect(
+      audioTranscriptionTileStatus(
+        rec({ status: "recording", chunks, recorded_duration_ms: 38_290 }),
+      ),
+    ).toMatchObject({
+      phase: "transcribing",
+      busy: true,
+      metaLabel: "Transcribing · 0:38",
+    });
+    expect(
+      audioTranscriptionTileStatus(
+        rec({ status: "completed", chunks, recorded_duration_ms: 38_290 }),
+      )?.metaLabel,
+    ).toBe("Transcript ready · 0:38");
+    expect(
+      audioTranscriptionTileStatus(rec({ status: "recording", chunks }))
+        ?.metaLabel,
+    ).toBe("Recording · 0:30");
+  });
+
+  it("offers the cancel only on a busy recording the composer can cancel", () => {
+    const cancelable = { retryable: false, retrying: false, cancelable: true };
+    expect(
+      audioTranscriptionTileStatus(rec({ status: "transcribing" }), cancelable)
+        ?.cancel,
+    ).toEqual({
+      label: "Cancel transcription",
+      name: "Cancel transcription: audio-recording-20261020-1200.wav",
+    });
+    expect(
+      audioTranscriptionTileStatus(rec({ status: "transcribing" }))?.cancel,
+    ).toBeUndefined();
+    for (const status of ["completed", "failed", "canceled"]) {
+      expect(
+        audioTranscriptionTileStatus(rec({ status }), cancelable)?.cancel,
+      ).toBeUndefined();
+    }
+  });
+
+  it("calls a recording failed once nothing is left to work on and a chunk failed", () => {
+    expect(
+      audioTranscriptionPhase({
+        status: "transcribing",
+        chunks: [chunk("failed", 30_000), chunk("completed", 38_000)],
+      }),
+    ).toBe("failed");
+    expect(
+      audioTranscriptionPhase({
+        status: "transcribing",
+        chunks: [chunk("failed", 30_000), chunk("transcribing", 38_000)],
+      }),
+    ).toBe("transcribing");
+    expect(
+      audioTranscriptionPhase({
+        status: "recording",
+        chunks: [chunk("failed", 30_000), chunk("completed", 38_000)],
+      }),
+    ).toBe("recording");
+  });
+
   it("reads the phase from the chunks when the status is missing", () => {
     expect(
       audioTranscriptionPhase({ chunks: [chunk("completed", 1000)] }),
@@ -159,6 +221,9 @@ describe("transcript and completion", () => {
     expect(audioTranscriptionOutcomeText("a.wav", "failed")).toBe(
       "a.wav: couldn't transcribe.",
     );
-    expect(audioTranscriptionOutcomeText("a.wav", "canceled")).toBeNull();
+    expect(audioTranscriptionOutcomeText("a.wav", "canceled")).toBe(
+      "a.wav: transcription canceled.",
+    );
+    expect(audioTranscriptionOutcomeText("a.wav", "transcribing")).toBeNull();
   });
 });

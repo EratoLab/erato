@@ -334,11 +334,15 @@ const recordingStory = (phase: AudioStoryPhase, story: string): Story => ({
  */
 export const AudioRecording = recordingStory(
   "recording",
-  "Still recording: the tile spins and counts the length; Send waits.",
+  "Still recording: the tile spins and counts the length; Send waits. Its × cancels the transcription and stays usable while the rest of the composer is locked.",
 );
 export const AudioTranscribing = recordingStory(
   "transcribing",
-  "Transcribing: the tile spins; Send waits until the transcript is ready.",
+  "Transcribing: the tile spins; Send waits until the transcript is ready, and the tile's × cancels the transcription.",
+);
+export const AudioStopped = recordingStory(
+  "stopped",
+  "Stopped while the server still works through it: the tile reads the length the recorder measured, not the chunks the server has taken up, and the preview shows the transcript so far.",
 );
 export const AudioTranscriptReady = recordingStory(
   "completed",

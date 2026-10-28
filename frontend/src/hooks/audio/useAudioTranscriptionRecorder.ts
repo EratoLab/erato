@@ -49,6 +49,8 @@ import type {
 import type { VoiceVadEngine } from "@/lib/voice-runtime";
 
 const DEFAULT_AUDIO_TRANSCRIPTION_CHUNK_DURATION_MS = 30_000;
+const CANONICAL_PCM_BYTES_PER_MS =
+  (CANONICAL_AUDIO_SAMPLE_RATE_HZ * CANONICAL_AUDIO_BYTES_PER_SAMPLE) / 1000;
 const VAD_DEBUG_FRAME_LOG_INTERVAL_MS = 2_000;
 
 /**
@@ -139,6 +141,8 @@ type LiveAudioTranscriptionSession = {
    *  synchronously at enqueue time), used to clamp the recording to the
    *  configured maximum duration the backend enforces strictly. */
   queuedPcmBytes: number;
+  /** Set once the user canceled: late failures stay silent. */
+  canceled: boolean;
 };
 
 export type AudioRecordingDiagnostics = {
@@ -337,6 +341,9 @@ function waitForAudioTranscriptionFrame(
   });
 }
 
+/** Read through a call: a cancel lands between awaits, where a plain read stays narrowed. */
+const isCanceled = (state: { canceled: boolean }) => state.canceled;
+
 function concatUint8Arrays(parts: Uint8Array[]): Uint8Array {
   const totalLength = parts.reduce((total, part) => total + part.length, 0);
   const bytes = new Uint8Array(totalLength);
@@ -413,6 +420,9 @@ export function useAudioTranscriptionRecorder({
   const [retryingAudioFileId, setRetryingAudioFileId] = useState<string | null>(
     null,
   );
+  const [recordedDurationsMs, setRecordedDurationsMs] = useState<
+    Readonly<Record<string, number>>
+  >({});
   const [recordingBars, setRecordingBars] = useState<number[]>(
     Array.from({ length: AUDIO_BARS_COUNT }, () => 2),
   );
@@ -429,6 +439,9 @@ export function useAudioTranscriptionRecorder({
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const liveSessionRef = useRef<LiveAudioTranscriptionSession | null>(null);
   const recordedAudioFilesRef = useRef(new Map<string, File>());
+  /** Stops the socket (and the capture, while recording) of each recording
+   *  whose transcription is still running, by file upload id. */
+  const transcriptionAbortersRef = useRef(new Map<string, () => void>());
   const attachedFilesRef = useRef(attachedFiles);
   /**
    * Pre-session sample buffer: holds Float32 samples captured between
@@ -549,6 +562,23 @@ export function useAudioTranscriptionRecorder({
       setAttachedFiles([...nextAttachedFiles]);
     },
     [setAttachedFiles],
+  );
+
+  const setRecordedDuration = useCallback(
+    (fileUploadId: string, durationMs: number | null) => {
+      setRecordedDurationsMs((current) => {
+        if (durationMs !== null) {
+          return { ...current, [fileUploadId]: durationMs };
+        }
+        if (!(fileUploadId in current)) {
+          return current;
+        }
+        return Object.fromEntries(
+          Object.entries(current).filter(([id]) => id !== fileUploadId),
+        );
+      });
+    },
+    [],
   );
 
   const stopRecordingVisualizer = useCallback(() => {
@@ -796,6 +826,7 @@ export function useAudioTranscriptionRecorder({
           pendingSourceSamples: [],
           sourceSampleRate,
           queuedPcmBytes: 0,
+          canceled: false,
         };
         setIsRecordingUpload(false);
         return session;
@@ -954,6 +985,8 @@ export function useAudioTranscriptionRecorder({
       setRetryingAudioFileId(retryForFileId ?? null);
 
       let socket: WebSocket | null = null;
+      let fileUploadId: string | null = null;
+      const cancellation = { canceled: false };
       const queuedFrames: AudioTranscriptionSocketFrame[] = [];
       const frameWaiters: {
         predicate: (frame: AudioTranscriptionSocketFrame) => boolean;
@@ -1073,19 +1106,34 @@ export function useAudioTranscriptionRecorder({
         if (sessionFrame.type !== "session_state") {
           throw new Error(t`Audio transcription did not start.`);
         }
+        fileUploadId = sessionFrame.file_upload_id;
+        const activeSocket = socket;
+        transcriptionAbortersRef.current.set(fileUploadId, () => {
+          cancellation.canceled = true;
+          activeSocket.close();
+        });
 
         const initialFile = await fetchGetFile({
           ...fileFetchOptionsRef.current,
           pathParams: { fileId: sessionFrame.file_upload_id },
         });
-        recordedAudioFilesRef.current.set(initialFile.id, audioFile);
-        upsertAudioTranscriptionAttachment(initialFile, retryForFileId);
-
+        if (isCanceled(cancellation)) {
+          return undefined;
+        }
         const chunks = await splitCanonicalWavForTranscription(
           audioFile,
           sessionFrame.chunk_duration_ms ??
             DEFAULT_AUDIO_TRANSCRIPTION_CHUNK_DURATION_MS,
         );
+        recordedAudioFilesRef.current.set(initialFile.id, audioFile);
+        setRecordedDuration(
+          initialFile.id,
+          chunks[chunks.length - 1]?.endMs ?? null,
+        );
+        upsertAudioTranscriptionAttachment(initialFile, retryForFileId);
+        // From here the recording's own tile carries the wait (and its
+        // cancel); Send stays off until the transcript is ready.
+        setIsRecordingUpload(false);
 
         for (const chunk of chunks) {
           const chunkAck = waitForFrame(
@@ -1108,8 +1156,10 @@ export function useAudioTranscriptionRecorder({
           });
           socket.send(chunk.bytes);
 
-          await chunkAck;
-          const completedChunkFrame = await chunkCompletion;
+          const [, completedChunkFrame] = await Promise.all([
+            chunkAck,
+            chunkCompletion,
+          ]);
           if (completedChunkFrame.type === "chunk_failed") {
             throw new Error(
               completedChunkFrame.error ?? t`Audio transcription chunk failed.`,
@@ -1120,6 +1170,9 @@ export function useAudioTranscriptionRecorder({
             ...fileFetchOptionsRef.current,
             pathParams: { fileId: sessionFrame.file_upload_id },
           });
+          if (isCanceled(cancellation)) {
+            return undefined;
+          }
           upsertAudioTranscriptionAttachment(refreshedFile, retryForFileId);
         }
 
@@ -1135,6 +1188,9 @@ export function useAudioTranscriptionRecorder({
           ...fileFetchOptionsRef.current,
           pathParams: { fileId: sessionFrame.file_upload_id },
         });
+        if (isCanceled(cancellation)) {
+          return undefined;
+        }
         if (retryForFileId) {
           recordedAudioFilesRef.current.delete(retryForFileId);
         }
@@ -1143,6 +1199,9 @@ export function useAudioTranscriptionRecorder({
 
         return [uploadedFile];
       } catch (error) {
+        if (isCanceled(cancellation)) {
+          return undefined;
+        }
         setRecordingError(
           error instanceof Error
             ? error.message
@@ -1151,6 +1210,9 @@ export function useAudioTranscriptionRecorder({
         return undefined;
       } finally {
         socket?.close();
+        if (fileUploadId) {
+          transcriptionAbortersRef.current.delete(fileUploadId);
+        }
         setIsRecordingUpload(false);
         setRetryingAudioFileId(null);
       }
@@ -1161,6 +1223,7 @@ export function useAudioTranscriptionRecorder({
       chatId,
       createChatMutation,
       selectedModel?.chat_provider_id,
+      setRecordedDuration,
       setSilentChatId,
       silentChatId,
       upsertAudioTranscriptionAttachment,
@@ -1200,7 +1263,16 @@ export function useAudioTranscriptionRecorder({
         }
 
         flushLiveAudioSamples(session, true);
+        if (session.queuedPcmBytes > 0) {
+          setRecordedDuration(
+            session.fileUploadId,
+            Math.round(session.queuedPcmBytes / CANONICAL_PCM_BYTES_PER_MS),
+          );
+        }
         await session.sendQueue;
+        if (isCanceled(session)) {
+          return;
+        }
 
         if (session.pcmParts.length === 0) {
           removeAudioTranscriptionAttachment(session.fileUploadId);
@@ -1220,6 +1292,9 @@ export function useAudioTranscriptionRecorder({
           type: "finish",
         });
         await completedFramePromise;
+        if (isCanceled(session)) {
+          return;
+        }
 
         const audioFile = new File(
           [createCanonicalWavBytesFromPcm(concatUint8Arrays(session.pcmParts))],
@@ -1228,7 +1303,7 @@ export function useAudioTranscriptionRecorder({
         );
         recordedAudioFilesRef.current.set(session.fileUploadId, audioFile);
       } catch (error) {
-        if (isMounted()) {
+        if (isMounted() && !(session && isCanceled(session))) {
           setRecordingError(
             error instanceof Error
               ? error.message
@@ -1237,9 +1312,17 @@ export function useAudioTranscriptionRecorder({
         }
       } finally {
         session?.socket.close();
+        if (session) {
+          transcriptionAbortersRef.current.delete(session.fileUploadId);
+        }
       }
     },
-    [flushLiveAudioSamples, isMounted, removeAudioTranscriptionAttachment],
+    [
+      flushLiveAudioSamples,
+      isMounted,
+      removeAudioTranscriptionAttachment,
+      setRecordedDuration,
+    ],
   );
 
   const stopAudioRecording = useCallback(() => {
@@ -1592,6 +1675,15 @@ export function useAudioTranscriptionRecorder({
         preSessionSamplesRef.current = [];
       }
       liveSessionRef.current = liveSession;
+      transcriptionAbortersRef.current.set(liveSession.fileUploadId, () => {
+        liveSession.canceled = true;
+        if (liveSessionRef.current === liveSession) {
+          liveSessionRef.current = null;
+          setIsRecording(false);
+          stopMediaRecordingStream();
+        }
+        liveSession.socket.close();
+      });
       flushLiveAudioSamples(liveSession, false);
 
       clearRecordingDurationTimer();
@@ -1681,12 +1773,25 @@ export function useAudioTranscriptionRecorder({
     stopAudioRecording,
   ]);
 
-  const removeRecordedAudioFile = useCallback((fileId: string) => {
-    recordedAudioFilesRef.current.delete(fileId);
-  }, []);
+  // A recording leaves the composer only by being removed, and removing one
+  // that is still recording or transcribing cancels it.
+  const removeRecordedAudioFile = useCallback(
+    (fileId: string) => {
+      const abort = transcriptionAbortersRef.current.get(fileId);
+      transcriptionAbortersRef.current.delete(fileId);
+      abort?.();
+      recordedAudioFilesRef.current.delete(fileId);
+      setRecordedDuration(fileId, null);
+    },
+    [setRecordedDuration],
+  );
 
   const clearRecordedAudioFiles = useCallback(() => {
+    const aborters = [...transcriptionAbortersRef.current.values()];
+    transcriptionAbortersRef.current.clear();
+    aborters.forEach((abort) => abort());
     recordedAudioFilesRef.current.clear();
+    setRecordedDurationsMs({});
   }, []);
 
   const hasRecordedAudioFile = useCallback(
@@ -1701,6 +1806,7 @@ export function useAudioTranscriptionRecorder({
     recordingError,
     setRecordingError,
     retryingAudioFileId,
+    recordedDurationsMs,
     recordingBars,
     recordingDiagnostics,
     isVadListening,

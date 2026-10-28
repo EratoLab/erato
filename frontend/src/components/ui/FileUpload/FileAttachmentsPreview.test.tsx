@@ -425,5 +425,72 @@ describe("inside the composer's shared staged area", () => {
         }),
       ).toBeEnabled();
     });
+
+    it("makes a busy recording's remove control its cancel, usable while the composer is locked", async () => {
+      const onRemoveFile = vi.fn();
+      await renderWithProviders(
+        <FileAttachmentsPreview
+          attachedFiles={[
+            recording("a", { status: "recording" }),
+            recording("b", { status: "failed" }),
+            file("c", "spec.pdf"),
+          ]}
+          maxFiles={5}
+          onRemoveFile={onRemoveFile}
+          onRemoveAllFiles={vi.fn()}
+          disabled
+          audioTranscription={{ ...noRetry, disabled: true, cancelable: true }}
+        />,
+      );
+      const cancel = screen.getByRole("button", {
+        name: "Cancel transcription: audio-recording-a.wav",
+      });
+      expect(cancel).toBeEnabled();
+      expect(cancel).toHaveAttribute("title", "Cancel transcription");
+      fireEvent.click(cancel);
+      expect(onRemoveFile).toHaveBeenCalledWith("a");
+      expect(
+        screen.getByRole("button", { name: "Remove audio-recording-b.wav" }),
+      ).toBeDisabled();
+      expect(
+        screen.getByRole("button", { name: "Remove spec.pdf" }),
+      ).toBeDisabled();
+    });
+
+    it("keeps the remove control where the composer cannot cancel", async () => {
+      await renderWithProviders(
+        <FileAttachmentsPreview
+          attachedFiles={[recording("a", { status: "transcribing" })]}
+          maxFiles={5}
+          onRemoveFile={vi.fn()}
+          onRemoveAllFiles={vi.fn()}
+          audioTranscription={noRetry}
+        />,
+      );
+      expect(
+        screen.getByRole("button", { name: "Remove audio-recording-a.wav" }),
+      ).toBeEnabled();
+    });
+
+    it("reads a stopped recording's length from the recorder, not from the chunks the server took up", async () => {
+      await renderWithProviders(
+        <FileAttachmentsPreview
+          attachedFiles={[
+            recording("a", {
+              status: "recording",
+              chunks: [{ status: "completed", end_ms: 30_000 }],
+              recorded_duration_ms: 38_290,
+            }),
+          ]}
+          maxFiles={5}
+          onRemoveFile={vi.fn()}
+          onRemoveAllFiles={vi.fn()}
+          audioTranscription={noRetry}
+        />,
+      );
+      expect(
+        document.querySelector('[data-ui="attachment-tile-meta"]'),
+      ).toHaveTextContent("Transcribing · 0:38");
+    });
   });
 });

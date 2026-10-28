@@ -12,7 +12,10 @@ import {
 
 import { FileAttachmentsPreview } from "@/components/ui/FileUpload";
 import { FileUploadWithTokenCheck } from "@/components/ui/FileUpload/FileUploadWithTokenCheck";
-import { isAudioTranscriptionComplete } from "@/components/ui/FileUpload/audioTranscriptionStatus";
+import {
+  audioTranscriptionTileStatus,
+  isAudioTranscriptionComplete,
+} from "@/components/ui/FileUpload/audioTranscriptionStatus";
 import { ConfirmationDialog } from "@/components/ui/Modal/ConfirmationDialog";
 import { componentRegistry } from "@/config/componentRegistry";
 import { useAudioDictationRecorder } from "@/hooks/audio/useAudioDictationRecorder";
@@ -124,6 +127,7 @@ import { toast } from "../Toast/toast";
 import type { AssistantMentionPopoverHandle } from "./AssistantMentionPopover";
 import type { ChatInputControlsHandle } from "./ChatInputControlsContext";
 import type { ChatInputAudioTranscriptionControls } from "../FileUpload/FileAttachmentsPreview";
+import type { AudioTranscriptionState } from "../FileUpload/audioTranscriptionStatus";
 import type {
   ComposerContextItem,
   ComposerMode,
@@ -657,6 +661,7 @@ export const ChatInput = ({
     setRecordingError,
     recordingBars,
     retryingAudioFileId,
+    recordedDurationsMs,
     retryAudioTranscription,
     removeRecordedAudioFile,
     clearRecordedAudioFiles,
@@ -1866,6 +1871,7 @@ export const ChatInput = ({
       retryingFileId: retryingAudioFileId,
       onRetry: (fileId) => void retryAudioTranscription(fileId),
       disabled: isDisabled || isRecordingUpload,
+      cancelable: true,
     }),
     [
       hasRecordedAudioFile,
@@ -2098,9 +2104,15 @@ export const ChatInput = ({
   const handleRemoveFileById = useCallback(
     (fileId: string) => {
       const fileToRemove = attachedFiles.find((file) => file.id === fileId);
+      // A recording still being worked on has no transcript to lose: its
+      // remove control is "Cancel transcription".
+      const cancelsTranscription = Boolean(
+        fileToRemove && audioTranscriptionTileStatus(fileToRemove)?.busy,
+      );
       if (
         fileToRemove &&
         isAudioTranscriptionAttachment(fileToRemove) &&
+        !cancelsTranscription &&
         !window.confirm(
           t`Removing this audio attachment will also clear its transcription. Continue?`,
         )
@@ -2211,9 +2223,27 @@ export const ChatInput = ({
       return next;
     });
   }, [contextItems, composeLocked, overLimitItemIds, maxUploadFormatted]);
+  const stagedFiles = useMemo(
+    () =>
+      attachedFiles.map((file) => {
+        if (!(file.id in recordedDurationsMs) || !file.audio_transcription) {
+          return file;
+        }
+        const recordedMs = recordedDurationsMs[file.id];
+        const audioTranscription: NonNullable<
+          FileUploadItem["audio_transcription"]
+        > &
+          AudioTranscriptionState = {
+          ...file.audio_transcription,
+          recorded_duration_ms: recordedMs,
+        };
+        return { ...file, audio_transcription: audioTranscription };
+      }),
+    [attachedFiles, recordedDurationsMs],
+  );
   const slotFiles = useMemo(
-    () => unclaimedFiles(attachedFiles, claimedFileIds),
-    [attachedFiles, claimedFileIds],
+    () => unclaimedFiles(stagedFiles, claimedFileIds),
+    [stagedFiles, claimedFileIds],
   );
 
   // One token reset for the batch: per-file removal would read a stale count
@@ -3097,7 +3127,7 @@ export const ChatInput = ({
             if (contextItems === undefined) {
               return (
                 <StagedAttachments
-                  attachedFiles={attachedFiles}
+                  attachedFiles={stagedFiles}
                   maxFiles={maxFiles}
                   onRemoveFile={handleRemoveFileById}
                   onRemoveAllFiles={handleRemoveAllFilesWithTokenReset}

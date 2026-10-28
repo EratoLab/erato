@@ -141,6 +141,7 @@ export const AudioStatuses: Story = {
       retryingFileId: "rec-retrying",
       onRetry: action("retry transcription"),
       disabled: false,
+      cancelable: true,
     },
   },
 };

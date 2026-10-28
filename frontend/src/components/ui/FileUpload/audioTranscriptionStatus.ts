@@ -12,6 +12,11 @@ export interface AudioTranscriptionState {
   transcript?: string | null;
   error?: string | null;
   chunks?: readonly AudioTranscriptionChunkState[] | null;
+  /**
+   * Set by the composer once the recording stopped: its length as recorded.
+   * The chunks reach it only as the server takes them up, one at a time.
+   */
+  recorded_duration_ms?: number | null;
 }
 
 export type AudioTranscriptionPhase =
@@ -32,6 +37,8 @@ export interface AudioTranscriptionTileAction {
 export interface AudioTranscriptionTileStatus {
   phase: AudioTranscriptionPhase;
   busy: boolean;
+  /** The tile's remove control while it is busy, offered only when the recording can be canceled. */
+  cancel?: { label: string; name: string };
   tone?: "error";
   /** The tile's meta line, e.g. "Transcribing · 0:42". */
   metaLabel: string;
@@ -85,6 +92,16 @@ export function getDisplayTranscript(
   return getCompletedChunkTranscript(chunks);
 }
 
+function formatDuration(ms: number): string | null {
+  if (ms <= 0) {
+    return null;
+  }
+  const totalSeconds = Math.round(ms / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${String(seconds).padStart(2, "0")}`;
+}
+
 /** The recording's length so far, from its chunks' largest end, as "m:ss". */
 export function audioTranscriptionDuration(
   chunks?: readonly AudioTranscriptionChunkState[] | null,
@@ -95,13 +112,27 @@ export function audioTranscriptionDuration(
       endMs = chunk.end_ms;
     }
   }
-  if (endMs <= 0) {
-    return null;
+  return formatDuration(endMs);
+}
+
+const SETTLED_CHUNK_STATUSES = new Set(["completed", "failed"]);
+
+/**
+ * The server can end a recording on "transcribing" after one of its chunks
+ * failed for good (a later chunk's success overwrites the failure), and nothing
+ * is then left to work on.
+ */
+function hasSettledWithFailure(
+  chunks?: readonly AudioTranscriptionChunkState[] | null,
+): boolean {
+  if (!chunks || chunks.length === 0) {
+    return false;
   }
-  const totalSeconds = Math.round(endMs / 1000);
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  return `${minutes}:${String(seconds).padStart(2, "0")}`;
+  const statuses = chunks.map((chunk) => chunk.status?.toLowerCase() ?? "");
+  return (
+    statuses.every((status) => SETTLED_CHUNK_STATUSES.has(status)) &&
+    statuses.includes("failed")
+  );
 }
 
 /** Anything the backend reports that is not an end state is still being worked on. */
@@ -120,9 +151,11 @@ export function audioTranscriptionPhase(
     case "":
       return isAudioTranscriptionComplete(undefined, state.chunks)
         ? "completed"
-        : "transcribing";
+        : hasSettledWithFailure(state.chunks)
+          ? "failed"
+          : "transcribing";
     default:
-      return "transcribing";
+      return hasSettledWithFailure(state.chunks) ? "failed" : "transcribing";
   }
 }
 
@@ -181,7 +214,12 @@ function phaseText(
  */
 export function audioTranscriptionTileStatus(
   file: { filename: string; audio_transcription?: AudioTranscriptionState },
-  options: { retryable: boolean; retrying: boolean; locked?: boolean } = {
+  options: {
+    retryable: boolean;
+    retrying: boolean;
+    locked?: boolean;
+    cancelable?: boolean;
+  } = {
     retryable: false,
     retrying: false,
   },
@@ -190,14 +228,22 @@ export function audioTranscriptionTileStatus(
   if (!state) {
     return null;
   }
-  const phase = audioTranscriptionPhase(state);
+  const recordedMs = state.recorded_duration_ms ?? null;
+  const serverPhase = audioTranscriptionPhase(state);
+  // The server reports "recording" until it takes up the last chunk.
+  const phase =
+    serverPhase === "recording" && recordedMs !== null
+      ? "transcribing"
+      : serverPhase;
   const busy =
     phase === "recording" || phase === "uploading" || phase === "transcribing";
   const metaLabel = phaseText(
     phase,
     phase === "failed" || phase === "canceled"
       ? null
-      : audioTranscriptionDuration(state.chunks),
+      : recordedMs !== null
+        ? formatDuration(recordedMs)
+        : audioTranscriptionDuration(state.chunks),
   );
   const error = state.error?.trim();
   const { filename } = file;
@@ -205,6 +251,20 @@ export function audioTranscriptionTileStatus(
     phase,
     busy,
     metaLabel,
+    ...(busy && options.cancelable
+      ? {
+          cancel: {
+            label: t({
+              id: "chat.audio.cancel",
+              message: "Cancel transcription",
+            }),
+            name: t({
+              id: "chat.audio.cancelNamed",
+              message: `Cancel transcription: ${filename}`,
+            }),
+          },
+        }
+      : {}),
     ...(phase === "failed" ? { tone: "error" as const } : {}),
     ...(phase === "failed" && error ? { title: error } : {}),
     ...(phase === "failed" && options.retryable
@@ -245,6 +305,12 @@ export function audioTranscriptionOutcomeText(
     return t({
       id: "chat.audio.announce.failed",
       message: `${filename}: couldn't transcribe.`,
+    });
+  }
+  if (phase === "canceled") {
+    return t({
+      id: "chat.audio.announce.canceled",
+      message: `${filename}: transcription canceled.`,
     });
   }
   return null;
