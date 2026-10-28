@@ -79,6 +79,7 @@ export type Env = {
   audioDictationEnabled: boolean;
   audioDictationMaxRecordingDurationSeconds: number;
   audioConversationalEnabled: boolean;
+  speechEnabled?: boolean;
   audioConversationalMaxRecordingDurationSeconds: number;
   maxUploadSizeBytes: number;
   sidebarCollapsedMode: "hidden" | "slim";
@@ -164,6 +165,7 @@ declare global {
     AUDIO_DICTATION_ENABLED?: boolean;
     AUDIO_DICTATION_MAX_RECORDING_DURATION_SECONDS?: number;
     AUDIO_CONVERSATIONAL_ENABLED?: boolean;
+    SPEECH_ENABLED?: boolean;
     AUDIO_CONVERSATIONAL_MAX_RECORDING_DURATION_SECONDS?: number;
     SIDEBAR_LOGO_PATH?: string;
     SIDEBAR_LOGO_DARK_PATH?: string;
@@ -584,6 +586,7 @@ export const env = (): Env => {
     audioDictationEnabled,
     audioDictationMaxRecordingDurationSeconds,
     audioConversationalEnabled,
+    speechEnabled: window.SPEECH_ENABLED ?? false,
     audioConversationalMaxRecordingDurationSeconds,
     maxUploadSizeBytes,
     sidebarCollapsedMode: sidebarCollapsedMode as "hidden" | "slim",

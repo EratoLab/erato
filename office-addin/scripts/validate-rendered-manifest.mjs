@@ -12,6 +12,7 @@ const root = fileURLToPath(new URL("..", import.meta.url));
 const MANIFESTS = [
   { name: "manifest.xml", launchEvents: true },
   { name: "manifest-document.xml", launchEvents: false },
+  { name: "manifest-document.xml", launchEvents: false, sharepoint: true },
 ];
 
 // Synthetic values in the shape the backend renders. The version is the one
@@ -58,6 +59,20 @@ function render({ manifest, template, withLaunchEvents }) {
     "https://localhost:3002",
     "https://example.com",
   );
+  const start = "<!-- OFFICE_ADDIN_DOCUMENT_COMMANDS_START -->";
+  const end = "<!-- OFFICE_ADDIN_DOCUMENT_COMMANDS_END -->";
+  if (manifest.sharepoint) {
+    if (!rendered.includes(start) || !rendered.includes(end)) {
+      throw new Error("Word template is missing its command section markers");
+    }
+    rendered =
+      rendered.slice(0, rendered.indexOf(start)) +
+      rendered.slice(rendered.indexOf(end) + end.length);
+    if (rendered.includes("VersionOverrides"))
+      throw new Error("SharePoint variant still contains VersionOverrides");
+  } else {
+    rendered = rendered.replace(start, "").replace(end, "");
+  }
   for (const [name, block] of Object.entries(LAUNCH_EVENT_BLOCKS)) {
     const line = new RegExp(
       `^([ \\t]*)<!--\\{\\{${name}\\}\\}-->[ \\t]*\\n`,
@@ -105,12 +120,14 @@ for (const manifest of MANIFESTS) {
   for (const withLaunchEvents of variants) {
     const file = join(
       outDir,
-      `${manifest.name.replace(/\.xml$/, "")}${withLaunchEvents ? "-launch-events" : ""}.xml`,
+      `${manifest.name.replace(/\.xml$/, "")}${withLaunchEvents ? "-launch-events" : ""}${manifest.sharepoint ? "-sharepoint" : ""}.xml`,
     );
     writeFileSync(file, render({ manifest, template, withLaunchEvents }));
     const variantLabel = manifest.launchEvents
       ? ` ${withLaunchEvents ? "with" : "without"} launch events`
-      : "";
+      : manifest.sharepoint
+        ? " for SharePoint"
+        : "";
     console.log(
       `Validating the served ${manifest.name}${variantLabel}: ${file}`,
     );

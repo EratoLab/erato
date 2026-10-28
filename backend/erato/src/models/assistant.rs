@@ -639,6 +639,7 @@ pub async fn create_standalone_file_upload(
         file_storage_provider_id: Set(file_storage_provider_id),
         file_storage_path: Set(file_storage_path),
         audio_transcription: Set(None),
+        audio_synthesis: Set(None),
         external_id_ews_id: Set(external_id_ews_id),
         outlook_provenance: Set(outlook_provenance),
         created_at: Set(Utc::now().into()),

@@ -25,7 +25,7 @@ Exactly one manifest exists at `<artifact-root>/manifest.json`. There are no
 per-target manifests. The root manifest describes every target and every file
 that the backend may distribute from the deployed set.
 
-The initial layout is:
+The current layout is:
 
 ```text
 /app/desktop-sidecar-artifacts/
@@ -34,8 +34,6 @@ The initial layout is:
     ├── windows-x86_64/
     │   ├── erato-desktop-sidecar.exe
     │   └── erato-desktop-sidecar.msi
-    ├── windows-aarch64/
-    │   └── erato-desktop-sidecar.exe
     ├── macos-x86_64/
     │   └── erato-desktop-sidecar.app.zip
     ├── macos-aarch64/
@@ -60,12 +58,11 @@ root layout.
 
 ## 2. Canonical target vocabulary
 
-The initial target IDs and platform values are:
+The current target IDs and platform values are:
 
 | Target ID           | OS        | Architecture | ABI      |
 | ------------------- | --------- | ------------ | -------- |
 | `windows-x86_64`    | `windows` | `x86_64`     | `msvc`   |
-| `windows-aarch64`   | `windows` | `aarch64`    | `msvc`   |
 | `macos-x86_64`      | `macos`   | `x86_64`     | `darwin` |
 | `macos-aarch64`     | `macos`   | `aarch64`    | `darwin` |
 | `linux-x86_64-gnu`  | `linux`   | `x86_64`     | `gnu`    |
@@ -78,7 +75,7 @@ and manifest platform values MUST use the canonical vocabulary above.
 ## 3. Root manifest
 
 `manifest.json` is a JSON object with one `targets` array. The following
-manifest completely describes the six-target filesystem example in Section 1:
+manifest completely describes the five-target filesystem example in Section 1:
 
 ```json
 {
@@ -105,24 +102,6 @@ manifest completely describes the six-target filesystem example in Section 1:
           "path": "targets/windows-x86_64/erato-desktop-sidecar.msi",
           "download_filename": "erato-desktop-sidecar-windows-x86_64.msi",
           "media_type": "application/x-msi"
-        }
-      ]
-    },
-    {
-      "id": "windows-aarch64",
-      "platform": {
-        "os": "windows",
-        "architecture": "aarch64",
-        "abi": "msvc"
-      },
-      "default_file": "executable",
-      "files": [
-        {
-          "id": "executable",
-          "kind": "executable",
-          "path": "targets/windows-aarch64/erato-desktop-sidecar.exe",
-          "download_filename": "erato-desktop-sidecar-windows-aarch64.exe",
-          "media_type": "application/vnd.microsoft.portable-executable"
         }
       ]
     },

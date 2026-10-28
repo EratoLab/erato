@@ -70,6 +70,8 @@ pub enum ResourceKind {
     ChatSingleton,
     #[serde(rename = "prompt_optimizer_singleton")]
     PromptOptimizerSingleton,
+    #[serde(rename = "sharepoint_search_singleton")]
+    SharepointSearchSingleton,
     #[serde(rename = "desktop_sidecar_configuration_singleton")]
     DesktopSidecarConfigurationSingleton,
     #[serde(rename = "message")]
@@ -107,6 +109,7 @@ pub enum Resource {
     ChatSingleton,
     PromptOptimizerSingleton,
     DesktopSidecarConfigurationSingleton,
+    SharepointSearchSingleton,
     Message(String),
     MessageFeedback(String),
     Assistant(String),
@@ -135,6 +138,10 @@ impl Resource {
             ),
             Resource::DesktopSidecarConfigurationSingleton => (
                 ResourceKind::DesktopSidecarConfigurationSingleton,
+                ResourceId::singleton(),
+            ),
+            Resource::SharepointSearchSingleton => (
+                ResourceKind::SharepointSearchSingleton,
                 ResourceId::singleton(),
             ),
             Resource::Message(id) => (ResourceKind::Message, ResourceId(id)),

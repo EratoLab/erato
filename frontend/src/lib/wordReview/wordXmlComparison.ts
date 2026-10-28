@@ -1,6 +1,7 @@
 import {
   createWordConditionalTableStyles,
   isWordDetectedLanguage,
+  isWordGlossaryRsids,
   isWordInertTableLook,
   isWordListInstanceId,
   wordThemeFontLanguage,
@@ -450,6 +451,7 @@ export function createWordXmlComparison(
       (owner === "/word/settings.xml" &&
         ns === W &&
         ["rsids", "proofState"].includes(local)) ||
+      isWordGlossaryRsids(element, owner) ||
       (owner === "/docProps/app.xml" &&
         ns ===
           "http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" &&

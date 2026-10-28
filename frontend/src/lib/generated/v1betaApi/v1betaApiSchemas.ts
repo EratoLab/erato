@@ -607,6 +607,25 @@ export type AttemptState =
   | "continuing"
   | "completed";
 
+export type AudioSynthesisMetadata = {
+  /**
+   * @format int32
+   * @minimum 0
+   */
+  channels: number;
+  encoding: string;
+  input_text: string;
+  model: string;
+  provider_id: string;
+  /**
+   * @format int32
+   * @minimum 0
+   */
+  sample_rate: number;
+  segments: string[];
+  voice: string;
+};
+
 export type AudioTranscriptSegment = {
   /**
    * Zero-based chunk index for this segment.
@@ -912,6 +931,10 @@ export type ChatMessage = {
    * The ID of the chat this message belongs to
    */
   chat_id: string;
+  /**
+   * Historical display name for the provider that generated this message.
+   */
+  chat_provider_display_name?: string;
   /**
    * The chat provider used to generate this message, if available.
    */
@@ -1297,6 +1320,9 @@ export type ContentPart =
   | (ContentPartImageFilePointer & {
       content_type: "image_file_pointer";
     })
+  | (ContentPartAudioFilePointer & {
+      content_type: "audio_file_pointer";
+    })
   | {
       base64_data: string;
       content_type: "image";
@@ -1324,6 +1350,14 @@ export type ContentPartActionFacetMarker = {
    * Identifier of the action facet whose template should be rendered.
    */
   facet_id: string;
+};
+
+export type ContentPartAudioFilePointer = {
+  download_url?: string | null | undefined;
+  /**
+   * @format uuid
+   */
+  file_upload_id: string;
 };
 
 /**
@@ -1739,6 +1773,30 @@ export type DesktopSidecarDistributionTargetResponse = {
 
 export type DesktopSidecarOrganizationConfiguration = {
   /**
+   * Whether the desktop sidecar pins the Erato Outlook add-in in Outlook, so
+   * users find its buttons without pinning them themselves.
+   *
+   * When unset, the sidecar uses its user configuration or built-in default,
+   * which is off, so a deployment opts in. Turning it off again stops further
+   * pinning and leaves existing pins in place.
+   */
+  outlook_addin_autopin?: boolean | null | undefined;
+  /**
+   * Whether `outlook_addin_autopin` also pins the add-in's task panes in
+   * classic Outlook for Windows, which then open by themselves.
+   *
+   * When unset, the sidecar uses its user configuration or built-in default.
+   */
+  outlook_addin_autopin_panes?: boolean | null | undefined;
+  /**
+   * The Erato Outlook add-in's manifest id, which the sidecar needs to find
+   * the add-in in classic Outlook for Windows.
+   *
+   * Normally left unset: the organization configuration endpoint then sends
+   * `integrations.ms_office.addin.addin_id` while the Office add-in is enabled.
+   */
+  outlook_addin_id?: string | null | undefined;
+  /**
    * Whether the desktop sidecar should show its system tray icon.
    *
    * When unset, the sidecar uses its user configuration or built-in default.
@@ -1998,6 +2056,7 @@ export type FileReference = {
  * Response for file upload
  */
 export type FileUploadItem = {
+  audio_synthesis?: AudioSynthesisMetadata;
   audio_transcription?: AudioTranscriptionMetadata;
   /**
    * Pre-signed URL for downloading the file directly from storage
@@ -2464,6 +2523,10 @@ export type MessageSubmitRequest = {
    * @example primary
    */
   chat_provider_id?: string;
+  /**
+   * Generate speech only for a conversational request with audio-back enabled.
+   */
+  conversational_audio_back?: boolean;
   delegation_run_mode?: DelegationRunMode;
   /**
    * MCP servers a newly created chat starts with switched off; their tools
@@ -2576,6 +2639,31 @@ export type MessageSubmitStreamingResponseError = GenerationErrorType & {
 };
 
 export type MessageSubmitStreamingResponseMessage =
+  | {
+      audio: string;
+      /**
+       * @format uuid
+       */
+      message_id: string;
+      message_type: "audio_delta";
+      /**
+       * @format int32
+       * @minimum 0
+       */
+      sample_rate: number;
+      /**
+       * @format int64
+       * @minimum 0
+       */
+      sequence: number;
+    }
+  | {
+      /**
+       * @format uuid
+       */
+      message_id: string;
+      message_type: "audio_error";
+    }
   | (MessageSubmitStreamingResponseChatCreated & {
       message_type: "chat_created";
     })
@@ -3430,6 +3518,19 @@ export type RetryDelegatedRunResponse = {
  */
 export type RetryKind = "task";
 
+/**
+ * A drive item (file or folder)
+ */
+export type SearchFileHit = DriveItem & {
+  drive_id: string;
+  drive_name: string;
+  /**
+   * Parent folder path relative to the drive. None means Graph did not supply a usable path.
+   */
+  parent_path?: string;
+  site_name?: string;
+};
+
 export type SetShareLinkRequest = {
   enabled: boolean;
   resource_id: string;
@@ -3546,6 +3647,19 @@ export type SharepointProviderMetadata = {
    * The ID of the file item
    */
   item_id: string;
+};
+
+export type SharepointSearchResponse = {
+  drives: Drive[];
+  files: SearchFileHit[];
+  /**
+   * Some discovery/search calls failed or timed out; successful hits are still usable.
+   */
+  partial: boolean;
+  /**
+   * A discovery, pagination, or result budget was reached. Refine the query.
+   */
+  truncated: boolean;
 };
 
 export type StartMcpServerOauthResponse = {

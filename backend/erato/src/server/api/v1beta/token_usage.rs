@@ -444,18 +444,25 @@ pub async fn token_usage_estimate(
             .as_ref()
             .and_then(|a| a.default_chat_provider.as_deref())
     });
+    let provider_result = app_state
+        .chat_provider_for_chatcompletion(&policy, &subject, &me_user.groups, effective_provider)
+        .await;
+    let provider_result = if request.chat_provider_id.is_none() && provider_result.is_err() {
+        app_state
+            .chat_provider_for_chatcompletion(&policy, &subject, &me_user.groups, None)
+            .await
+    } else {
+        provider_result
+    };
     let ChatProviderConfigWithId {
         chat_provider_config,
         chat_provider_id,
-    } = app_state
-        .chat_provider_for_chatcompletion(&policy, &subject, &me_user.groups, effective_provider)
-        .await
-        .map_err(|err| {
-            (
-                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-                err.to_string(),
-            )
-        })?;
+    } = provider_result.map_err(|err| {
+        (
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            err.to_string(),
+        )
+    })?;
     let max_context_tokens = chat_provider_config.model_capabilities.context_size_tokens as u32;
     let attachment_plans;
 

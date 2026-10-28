@@ -69,7 +69,8 @@ vi.mock("@erato/frontend/library", () => ({
   }) => (
     <button
       type="button"
-      disabled={disabled ?? loading ?? false}
+      disabled={Boolean(disabled) || Boolean(loading)}
+      aria-busy={loading || undefined}
       onClick={onClick}
       {...omitStyleProps(rest)}
     >
@@ -191,6 +192,8 @@ const hooks = vi.hoisted(() => ({
   search: null as UseTeamsChatSearchResult | null,
   /** Stands in for the composer's shared upload store. */
   uploadStore: { isUploading: false, error: null as Error | null },
+  /** The composer's upload behind the handoff; resolves at once when unset. */
+  handoff: null as ((files: File[]) => Promise<void>) | null,
 }));
 
 vi.mock("../../providers/TeamsProvider", () => ({
@@ -436,7 +439,7 @@ function Opener() {
       onClick={() =>
         open((files) => {
           uploads.push(files);
-          return Promise.resolve();
+          return hooks.handoff?.(files) ?? Promise.resolve();
         })
       }
     >
@@ -477,6 +480,7 @@ describe("TeamsChatPickerDialog", () => {
     i18n.activate("en");
     uploads.length = 0;
     hooks.uploadStore = { isUploading: false, error: null };
+    hooks.handoff = null;
     hooks.fetcher = fakeFetcher();
     hooks.channelFetcher = null;
     hooks.fileFetcher = null;
@@ -983,6 +987,96 @@ describe("TeamsChatPickerDialog", () => {
     await waitFor(() => expect(uploads).toHaveLength(2));
     // The transcript already fetched is re-offered rather than walked again.
     expect(pageChatBackwards).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  /** Parks the composer's upload, flagging the shared store as it does. */
+  function parkUpload(): { finish: () => void } {
+    const parked = { finish: () => {} };
+    hooks.handoff = () =>
+      new Promise<void>((resolve) => {
+        hooks.uploadStore.isUploading = true;
+        parked.finish = () => {
+          hooks.uploadStore.isUploading = false;
+          resolve();
+        };
+      });
+    return parked;
+  }
+
+  it("stays busy while the composer uploads the transcript", async () => {
+    const upload = parkUpload();
+    renderPicker();
+    fireEvent.click(selectChat());
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Attach" }));
+    });
+    await waitFor(() => expect(uploads).toHaveLength(1));
+
+    const attach = screen.getByRole("button", { name: "Attach" });
+    expect(attach).toBeDisabled();
+    expect(attach).toHaveAttribute("aria-busy", "true");
+    // The upload cannot be called back, so Cancel must not promise it.
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeDisabled();
+
+    await act(async () => {
+      upload.finish();
+    });
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(uploads).toHaveLength(1);
+  });
+
+  it("does not fail a second Attach while a re-offered transcript uploads", async () => {
+    hooks.uploadStore.error = new Error("413");
+    renderPicker();
+    fireEvent.click(selectChat());
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Attach" }));
+    });
+    await screen.findByText("Couldn't attach the transcript. Try again.");
+
+    hooks.uploadStore.error = null;
+    const upload = parkUpload();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Attach" }));
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Attach" }));
+    });
+
+    expect(
+      screen.queryByText("Couldn't attach the transcript. Try again."),
+    ).toBeNull();
+    expect(screen.getByRole("button", { name: "Attach" })).toBeDisabled();
+    expect(uploads).toHaveLength(2);
+
+    await act(async () => {
+      upload.finish();
+    });
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("shows the accepted partial transcript uploading", async () => {
+    hooks.fetcher = fakeFetcher({ state: "partial" });
+    const upload = parkUpload();
+    renderPicker();
+    fireEvent.click(selectChat());
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Attach" }));
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Attach anyway" }));
+    });
+
+    expect(screen.getByRole("button", { name: "Attach" })).toHaveAttribute(
+      "aria-busy",
+      "true",
+    );
+    await act(async () => {
+      upload.finish();
+    });
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 

@@ -616,6 +616,11 @@ msgstr "Attachment"
 
 #. js-lingui-explicit-id
 #: src/outlook/components/AddinChatAddMenuExtraContent.tsx
+msgid "officeAddin.fileSource.attachmentLoadFailed"
+msgstr "Couldn't load this attachment from Outlook. Try again."
+
+#. js-lingui-explicit-id
+#: src/outlook/components/AddinChatAddMenuExtraContent.tsx
 msgid "officeAddin.fileSource.cloudAttachmentUnsupported"
 msgstr "Cloud attachment cannot be uploaded from Outlook"
 
@@ -687,8 +692,8 @@ msgstr "Settings"
 
 #. js-lingui-explicit-id
 #: src/core/AddinHistoryDrawerCore.tsx
-msgid "officeAddin.historyDrawer.archiveFailed"
-msgstr "Couldn't archive the chat"
+#~ msgid "officeAddin.historyDrawer.archiveFailed"
+#~ msgstr "Couldn't archive the chat"
 
 #. js-lingui-explicit-id
 #: src/core/AddinHistoryDrawerCore.tsx
@@ -727,8 +732,8 @@ msgstr "{attentionCount, plural, one {Open menu, # chat needs attention} other {
 
 #. js-lingui-explicit-id
 #: src/core/AddinHistoryDrawerCore.tsx
-msgid "officeAddin.historyDrawer.renameFailed"
-msgstr "Couldn't rename the chat"
+#~ msgid "officeAddin.historyDrawer.renameFailed"
+#~ msgstr "Couldn't rename the chat"
 
 #. js-lingui-explicit-id
 #: src/core/AddinHistoryDrawerCore.tsx
@@ -737,8 +742,8 @@ msgstr "Menu"
 
 #. js-lingui-explicit-id
 #: src/core/AddinHistoryDrawerCore.tsx
-msgid "officeAddin.historyDrawer.unarchiveFailed"
-msgstr "Couldn't unarchive the chat"
+#~ msgid "officeAddin.historyDrawer.unarchiveFailed"
+#~ msgstr "Couldn't unarchive the chat"
 
 #. js-lingui-explicit-id
 #: src/providers/OfficeProvider.tsx
@@ -2767,6 +2772,11 @@ msgid "officeAddin.word.authoring.partlyWritten"
 msgstr "Word stopped after {applied} of {total} changes. Your original is saved."
 
 #. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.placeholdersUnverified"
+msgstr "This change needs a full-document rewrite, and Erato can't yet check how Word rewrites the placeholder text of this document's content controls. Nothing was applied. Ask for a smaller edit that can be written in place."
+
+#. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts
 #~ msgid "officeAddin.word.authoring.portrait"
 #~ msgstr "Portrait"
@@ -4178,6 +4188,11 @@ msgstr "Word's Undo can't reverse this change. Erato can't verify the result on 
 #: src/word/utils/wordAuthoringMessages.ts
 msgid "officeAddin.word.importRefusal.disabled"
 msgstr "This change needs a full-document rewrite, which your organization has turned off for this version of Word."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.importRefusal.placeholders"
+msgstr "This change needs a full-document rewrite, and Erato can't yet check how Word rewrites the placeholder text of this document's content controls."
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordAuthoringMessages.ts
@@ -6043,13 +6058,23 @@ msgstr "Word"
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
-msgid "officeAddin.word.setup.catalogRoute"
-msgstr "For every other combination, upload it to a <0>SharePoint app catalog</0>. Add-ins deployed that way have no ribbon button, so users open Erato from the add-ins list; everything is reachable inside the pane."
+msgid "officeAddin.word.setup.authenticationPrerequisites"
+msgstr "Authentication prerequisites"
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
-msgid "officeAddin.word.setup.copy"
-msgstr "Download the XML below as <0>manifest-document.xml</0>, then deploy it through the Integrated apps portal or a SharePoint app catalog. This is a second add-in, separate from the Outlook one."
+#~ msgid "officeAddin.word.setup.catalogRoute"
+#~ msgstr "For every other combination, upload it to a <0>SharePoint app catalog</0>. Add-ins deployed that way have no ribbon button, so users open Erato from the add-ins list; everything is reachable inside the pane."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.word.setup.chooseDistribution"
+msgstr "Choose how to distribute the Word add-in to generate its manifest and installation instructions."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+#~ msgid "officeAddin.word.setup.copy"
+#~ msgstr "Download the XML below as <0>manifest-document.xml</0>, then deploy it through the Integrated apps portal or a SharePoint app catalog. This is a second add-in, separate from the Outlook one."
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
@@ -6058,23 +6083,58 @@ msgstr "In the Entra ID app registration, add the SPA redirect URI. Word on Wind
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
-msgid "officeAddin.word.setup.downloadButton"
-msgstr "Download manifest-document.xml"
+msgid "officeAddin.word.setup.distributionGuidance"
+msgstr "Choose Microsoft 365 admin center for users with Exchange Online mailboxes and eligible Microsoft 365 subscription licences. Choose SharePoint app catalog for environments with on-premises Exchange mailboxes or without centralized deployment. SharePoint catalog distribution requires a catalog administrator and does not support Word on Mac."
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
-msgid "officeAddin.word.setup.downloadManifest"
-msgstr "Download it as <0>manifest-document.xml</0>."
+msgid "officeAddin.word.setup.distributionLabel"
+msgstr "Distribution method"
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
-msgid "officeAddin.word.setup.integratedAppsRoute"
-msgstr "If your users have Exchange Online mailboxes <0>and</0> a subscription Office licence, upload it in <1>Integrated Apps</1>."
+#~ msgid "officeAddin.word.setup.downloadButton"
+#~ msgstr "Download manifest-document.xml"
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
-msgid "officeAddin.word.setup.macUnsupported"
-msgstr "Word on Mac is not supported for on-premises mailboxes: the SharePoint app catalog does not cover the Mac desktop client. Point those users at Word for the web through a SharePoint Online catalog instead."
+#~ msgid "officeAddin.word.setup.downloadManifest"
+#~ msgstr "Download it as <0>manifest-document.xml</0>."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.word.setup.downloadSelectedManifest"
+msgstr "Download Word manifest"
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.word.setup.downloadVariant"
+msgstr "Download <0>{filename}</0> below."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.word.setup.integratedAppsOption"
+msgstr "Microsoft 365 admin center"
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+#~ msgid "officeAddin.word.setup.integratedAppsRoute"
+#~ msgstr "If your users have Exchange Online mailboxes <0>and</0> a subscription Office licence, upload it in <1>Integrated Apps</1>."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.word.setup.integratedOpen"
+msgstr "After deployment reaches the users, restart Word and open Erato from its ribbon button."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.word.setup.integratedUpload"
+msgstr "In Microsoft 365 admin center, open Integrated Apps and upload the XML as an Office add-in. Assign it to the intended users or groups."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+#~ msgid "officeAddin.word.setup.macUnsupported"
+#~ msgstr "Word on Mac is not supported for on-premises mailboxes: the SharePoint app catalog does not cover the Mac desktop client. Point those users at Word for the web through a SharePoint Online catalog instead."
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
@@ -6088,8 +6148,28 @@ msgstr "Open app catalog docs"
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
-msgid "officeAddin.word.setup.reviewManifest"
-msgstr "Review the generated document manifest XML below. It is a separate add-in from the Outlook one and carries its own id."
+#~ msgid "officeAddin.word.setup.reviewManifest"
+#~ msgstr "Review the generated document manifest XML below. It is a separate add-in from the Outlook one and carries its own id."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.word.setup.sharepointOpen"
+msgstr "Open the Office add-ins dialog in Word and select My Organization to add Erato. This distribution method has no Erato ribbon button; open it from the add-ins list. Word on the web can use a SharePoint Online catalog."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.word.setup.sharepointOption"
+msgstr "SharePoint app catalog"
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.word.setup.sharepointTrust"
+msgstr "In Word on Windows, open File → Options → Trust Center → Trust Center Settings → Trusted Add-in Catalogs. Add the catalog site URL, select Show in Menu, and restart Word."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.word.setup.sharepointUpload"
+msgstr "Upload the XML to the Apps for Office library in your SharePoint app catalog. Give the intended users read access to the catalog."
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx

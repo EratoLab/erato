@@ -33,7 +33,10 @@ import {
 } from "./store/chatHistoryFilterStore";
 import { useGenerationStatusStore } from "./store/generationStatusStore";
 
-import type { RecentChat } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type {
+  ChatDetail,
+  RecentChat,
+} from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { InfiniteData, QueryClient } from "@tanstack/react-query";
 
 const logger = createLogger("HOOK", "useInfiniteRecentChats");
@@ -300,6 +303,12 @@ export function useUnarchiveChat() {
         logger.log(`Failed to unarchive chat ${chatId}:`, error);
         throw error;
       }
+
+      // Unlocks the open chat now rather than after the detail refetch below.
+      queryClient.setQueryData<ChatDetail>(
+        chatDetailQuery({ pathParams: { chatId } }).queryKey,
+        (detail) => detail && { ...detail, archived_at: undefined },
+      );
 
       // Deleted rather than tombstoned: a tombstone keeps the old startedAt,
       // which the returning generation's own seed would then lose against.

@@ -257,6 +257,25 @@ describe("useMessageFeedback", () => {
     });
   });
 
+  it("keeps the comment dialog open with an error when the submit fails for another reason", async () => {
+    mockMutateAsync.mockRejectedValue({ status: 500 });
+
+    const { result } = renderHook(() => useMessageFeedback());
+
+    act(() => {
+      result.current.openFeedbackDialog("message-123", "negative");
+    });
+
+    await act(async () => {
+      await result.current.handleFeedbackDialogSubmit("Needs improvement");
+    });
+
+    expect(result.current.feedbackDialogState.isOpen).toBe(true);
+    expect(result.current.feedbackDialogState.error).toBe(
+      "Failed to submit feedback. Please try again.",
+    );
+  });
+
   it("should not submit if dialog state is invalid", async () => {
     const { result } = renderHook(() => useMessageFeedback());
 
@@ -362,6 +381,118 @@ describe("useMessageFeedback", () => {
     expect(result.current.feedbackViewDialogState.isOpen).toBe(false);
   });
 
+  it("sends one DELETE when Remove is clicked again while the first is pending", async () => {
+    let resolveDelete: (value: undefined) => void = () => {};
+    mockDeleteMutateAsync.mockReturnValue(
+      new Promise((resolve) => {
+        resolveDelete = resolve;
+      }),
+    );
+
+    const { result } = renderHook(() => useMessageFeedback());
+
+    act(() => {
+      result.current.openFeedbackViewDialog("message-123", {
+        id: "feedback-id",
+        sentiment: "positive",
+        comment: null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      });
+    });
+
+    let first: Promise<void> | undefined;
+    let second: Promise<void> | undefined;
+    act(() => {
+      first = result.current.handleFeedbackViewDialogRemove();
+      second = result.current.handleFeedbackViewDialogRemove();
+    });
+
+    expect(mockDeleteMutateAsync).toHaveBeenCalledTimes(1);
+    expect(result.current.feedbackViewDialogState.isRemoving).toBe(true);
+
+    await act(async () => {
+      resolveDelete(undefined);
+      await Promise.all([first, second]);
+    });
+
+    expect(result.current.feedbackViewDialogState.isOpen).toBe(false);
+    expect(result.current.feedbackViewDialogState.isRemoving).toBe(false);
+  });
+
+  it("leaves another message's view dialog alone when a removal lands late", async () => {
+    let rejectDelete: (reason: unknown) => void = () => {};
+    mockDeleteMutateAsync.mockReturnValue(
+      new Promise((_, reject) => {
+        rejectDelete = reject;
+      }),
+    );
+    const feedback = {
+      id: "feedback-id",
+      sentiment: "positive" as const,
+      comment: null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    const { result } = renderHook(() => useMessageFeedback());
+
+    act(() => {
+      result.current.openFeedbackViewDialog("message-123", feedback);
+    });
+    let removal: Promise<void> | undefined;
+    act(() => {
+      removal = result.current.handleFeedbackViewDialogRemove();
+    });
+    act(() => {
+      result.current.closeFeedbackViewDialog();
+      result.current.openFeedbackViewDialog("message-456", feedback);
+    });
+
+    await act(async () => {
+      rejectDelete({ status: 500 });
+      await removal;
+    });
+
+    expect(result.current.feedbackViewDialogState).toMatchObject({
+      isOpen: true,
+      messageId: "message-456",
+      error: null,
+      isRemoving: false,
+    });
+  });
+
+  it("leaves another message's comment dialog open when a submit lands late", async () => {
+    let resolveSubmit: (value: undefined) => void = () => {};
+    mockMutateAsync.mockReturnValue(
+      new Promise((resolve) => {
+        resolveSubmit = resolve;
+      }),
+    );
+    const { result } = renderHook(() => useMessageFeedback());
+
+    act(() => {
+      result.current.openFeedbackDialog("message-123", "negative");
+    });
+    let submit: Promise<void> | undefined;
+    act(() => {
+      submit = result.current.handleFeedbackDialogSubmit("Needs work");
+    });
+    act(() => {
+      result.current.closeFeedbackDialog();
+      result.current.openFeedbackDialog("message-456", "positive");
+    });
+
+    await act(async () => {
+      resolveSubmit(undefined);
+      await submit;
+    });
+
+    expect(result.current.feedbackDialogState).toMatchObject({
+      isOpen: true,
+      messageId: "message-456",
+    });
+  });
+
   it("should show an error in the view dialog when removal fails", async () => {
     mockDeleteMutateAsync.mockRejectedValue({ status: 403 });
 
@@ -383,5 +514,6 @@ describe("useMessageFeedback", () => {
 
     expect(result.current.feedbackViewDialogState.isOpen).toBe(true);
     expect(result.current.feedbackViewDialogState.error).toBeTruthy();
+    expect(result.current.feedbackViewDialogState.isRemoving).toBe(false);
   });
 });

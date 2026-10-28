@@ -130,11 +130,12 @@ function renderDialog({
   assistantsEnabled?: boolean;
   queryClient?: QueryClient;
   onClose?: () => void;
-  profile?: UserProfile;
+  /** `null` opens the dialog before the profile has loaded. */
+  profile?: UserProfile | null;
   themeMode?: ThemeMode;
   userPreferencesEnabled?: boolean;
 } = {}) {
-  return render(
+  const tree = (shownProfile: UserProfile | null, isOpen: boolean) => (
     <MemoryRouter initialEntries={initialEntries}>
       <StaticFeatureConfigProvider
         config={{
@@ -158,18 +159,28 @@ function renderDialog({
         >
           <QueryClientProvider client={queryClient}>
             <UserPreferencesDialog
-              isOpen={true}
+              isOpen={isOpen}
               initialTab={initialTab}
               onClose={onClose}
-              userProfile={profile}
+              userProfile={shownProfile ?? undefined}
             />
             {/* Connection outcomes are toasts, as they are in the app. */}
             <Toaster />
           </QueryClientProvider>
         </ThemeProvider>
       </StaticFeatureConfigProvider>
-    </MemoryRouter>,
+    </MemoryRouter>
   );
+  const view = render(tree(profile, true));
+  return Object.assign(view, {
+    update: (next: { profile?: UserProfile | null; isOpen?: boolean }) =>
+      view.rerender(
+        tree(
+          "profile" in next ? (next.profile ?? null) : profile,
+          next.isOpen ?? true,
+        ),
+      ),
+  });
 }
 
 beforeEach(() => {
@@ -848,7 +859,7 @@ describe("UserPreferencesDialog", () => {
           "Prefer concise bullet points and highlight risks first.",
         preference_assistant_additional_information:
           "I work with enterprise customers in regulated industries.",
-        preference_default_chat_provider: null,
+        // An unchanged model is omitted so a resolved archived ID is not rewritten.
         // Always sent explicitly, even while the start-screen section is
         // hidden: omitting any of them would let a save wipe the stored state.
         preference_starting_hub_assistant_id: null,
@@ -1137,6 +1148,86 @@ describe("UserPreferencesDialog", () => {
         );
       });
     });
+  });
+
+  it("can be closed while saving, and a save that fails afterwards still reports in a toast", async () => {
+    let respond!: (response: Response) => void;
+    vi.spyOn(globalThis, "fetch").mockImplementation((input) =>
+      String(input) === "/api/v1beta/me/profile/preferences"
+        ? new Promise<Response>((resolve) => {
+            respond = resolve;
+          })
+        : Promise.resolve(createJsonResponse([])),
+    );
+    const onClose = vi.fn();
+    renderDialog({ onClose });
+
+    fireEvent.change(screen.getByLabelText("Nickname"), {
+      target: { value: "Maximilian" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await screen.findByRole("button", { name: "Saving..." });
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(onClose).toHaveBeenCalledTimes(1);
+
+    respond(createJsonResponse({ message: "boom" }, 500));
+
+    expect(
+      await within(screen.getByLabelText("Notifications")).findByText(
+        "Could not save preferences. Please try again.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("stays on the open tab and keeps unsaved edits when the profile refreshes", () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(createJsonResponse([]));
+    const dialog = renderDialog();
+
+    fireEvent.change(screen.getByLabelText("Nickname"), {
+      target: { value: "Unsaved edit" },
+    });
+    fireEvent.click(screen.getByRole("tab", { name: "MCP & Apps" }));
+    dialog.update({
+      profile: { ...userProfile, client_tool_file_approval: "always_allow" },
+    });
+
+    expect(screen.getByRole("tab", { name: "MCP & Apps" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    fireEvent.click(screen.getByRole("tab", { name: "Personalization" }));
+    expect(screen.getByLabelText("Nickname")).toHaveValue("Unsaved edit");
+  });
+
+  it("fills the fields from a profile that arrives after the dialog opened", () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(createJsonResponse([]));
+    const dialog = renderDialog({ profile: null });
+    expect(screen.getByLabelText("Nickname")).toHaveValue("");
+
+    dialog.update({ profile: userProfile });
+
+    expect(screen.getByLabelText("Nickname")).toHaveValue("Max");
+  });
+
+  it("reads the profile again, on the default tab, when reopened", () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(createJsonResponse([]));
+    const dialog = renderDialog();
+    fireEvent.change(screen.getByLabelText("Nickname"), {
+      target: { value: "Unsaved edit" },
+    });
+    fireEvent.click(screen.getByRole("tab", { name: "MCP & Apps" }));
+
+    dialog.update({ isOpen: false });
+    dialog.update({
+      isOpen: true,
+      profile: { ...userProfile, preference_nickname: "Maximilian" },
+    });
+
+    expect(
+      screen.getByRole("tab", { name: "Personalization" }),
+    ).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByLabelText("Nickname")).toHaveValue("Maximilian");
   });
 
   it("shows a save error when updating preferences fails", async () => {

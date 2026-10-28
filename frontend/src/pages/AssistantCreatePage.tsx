@@ -1,12 +1,15 @@
 import { t } from "@lingui/core/macro";
 import { useQueryClient } from "@tanstack/react-query";
 import clsx from "clsx";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { AssistantForm } from "@/components/ui/Assistant/AssistantForm";
+import { ASSISTANT_SAVE_TOAST_KEY } from "@/components/ui/Assistant/assistantSaveToast";
 import { Card } from "@/components/ui/Container/Card";
 import { PageHeader } from "@/components/ui/Container/PageHeader";
+import { toast } from "@/components/ui/Toast";
+import { usePageErrorToast } from "@/components/ui/Toast/usePageErrorToast";
 import { usePageAlignment } from "@/hooks/ui";
 import {
   useAvailableModels,
@@ -17,12 +20,11 @@ import {
 import type { AssistantFormData } from "@/components/ui/Assistant/AssistantForm";
 
 export default function AssistantCreatePage() {
+  const showError = usePageErrorToast();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { containerClasses, horizontalPadding } =
     usePageAlignment("assistants");
-  const [successMessage, setSuccessMessage] = useState("");
-  const [errorMessage, setErrorMessage] = useState("");
 
   // Fetch available models
   const { data: modelsData } = useAvailableModels({});
@@ -36,10 +38,8 @@ export default function AssistantCreatePage() {
   }, []);
 
   const handleSubmit = async (formData: AssistantFormData) => {
+    toast.dismissKey(ASSISTANT_SAVE_TOAST_KEY);
     try {
-      setErrorMessage("");
-      setSuccessMessage("");
-
       // Build the request body with proper typing
       // Note: Generated types are incomplete, so we use type assertion
       const requestBody = {
@@ -63,34 +63,34 @@ export default function AssistantCreatePage() {
         body: requestBody,
       });
 
-      setSuccessMessage(
-        t({
-          id: "assistant.create.success",
-          message: "Assistant created successfully!",
-        }),
-      );
-
-      // Invalidate assistants list query
-      await queryClient.invalidateQueries({
+      // The list page refetches the invalidated query when it mounts, so
+      // there is nothing to wait for before leaving.
+      void queryClient.invalidateQueries({
         queryKey: listAssistantsQuery({}).queryKey,
       });
 
-      // Navigate to assistants list after a short delay
-      setTimeout(() => {
-        navigate("/assistants/created");
-      }, 1500);
+      toast.success({
+        dedupeKey: ASSISTANT_SAVE_TOAST_KEY,
+        title: t({
+          id: "assistant.create.success",
+          message: "Assistant created successfully!",
+        }),
+      });
+      navigate("/assistants/created");
     } catch (error) {
       console.error("Failed to create assistant:", error);
-      setErrorMessage(
-        t({
+      showError({
+        dedupeKey: ASSISTANT_SAVE_TOAST_KEY,
+        title: t({
           id: "assistant.create.error",
           message: "Failed to create assistant. Please try again.",
         }),
-      );
+      });
     }
   };
 
   const handleCancel = () => {
+    toast.dismissKey(ASSISTANT_SAVE_TOAST_KEY);
     navigate("/assistants/created");
   };
 
@@ -115,8 +115,6 @@ export default function AssistantCreatePage() {
               mode="create"
               availableModels={availableModels}
               isSubmitting={isPending}
-              successMessage={successMessage}
-              errorMessage={errorMessage}
               onSubmit={handleSubmit}
               onCancel={handleCancel}
             />

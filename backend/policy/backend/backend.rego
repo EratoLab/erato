@@ -83,12 +83,15 @@ else := {
 legacy_resource_attributes := value if value := data.resource_attributes
 
 else := {}
+
 legacy_share_grants := value if value := data.share_grants
 
 else := []
+
 legacy_share_links := value if value := data.share_links
 
 else := []
+
 legacy_assistant_hub_versions := value if value := data.assistant_hub_versions
 
 else := []
@@ -630,4 +633,12 @@ allow if {
 	input.resource_kind == resource_kind_message_feedback
 	input.action == action_submit_feedback
 	# The authorization logic for checking message/chat ownership is handled in the model layer
+}
+
+# Search uses the user's delegated Graph token; Graph enforces file permissions.
+allow if {
+	input.subject_kind == subject_kind_user
+	input.subject_id != not_logged_in
+	input.resource_kind == "sharepoint_search_singleton"
+	input.action == action_read
 }

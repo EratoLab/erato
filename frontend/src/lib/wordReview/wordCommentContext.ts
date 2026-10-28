@@ -68,7 +68,10 @@ export interface WordCommentWhere {
   /** The review facet's 1-based paragraph number of the anchor start. */
   para: number;
   through?: number;
-  /** Visible anchor text; "" for a point comment. */
+  /**
+   * Visible anchor text; "" for a point comment and for an anchor whose text the read did not get
+   * (position "unknown"), so tell a point comment by `point`.
+   */
   quote: string;
   occurrence?: number;
   point?: true;
@@ -80,7 +83,7 @@ export interface WordCommentWhere {
   in: WordCommentContainer;
   overlaps?: string[];
   multi_cell?: true;
-  /** The quote could not be placed in the paragraph's text. */
+  /** The quote could not be placed in the paragraph's text, or the read gave no quote. */
   position?: "unknown";
   /** The v2 kept-item marker number the selection shows for this comment. */
   marker?: number;

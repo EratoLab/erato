@@ -3,6 +3,7 @@ import {
   ChatHistoryList,
   ChatHistoryListSkeleton,
   ChatShareDialog,
+  dismissChatActionFailure,
   EditChatTitleDialog,
   NewChatItem,
   NoFilterMatchesRow,
@@ -14,8 +15,8 @@ import {
   SidebarToggle,
   hasActiveFilters,
   mapRecentChatToSession,
+  runChatAction,
   sidebarNavigationIconClassName,
-  toast,
   useAssistantsFeature,
   useChatContext,
   useChatSharingFeature,
@@ -221,22 +222,19 @@ export function AddinHistoryDrawerCore({
     onClose();
   }, [createNewChat, onClose]);
 
+  // The library's per-chat slots, shared with the archived-chat notice, so a
+  // failure retried from either surface shows once.
   const handleSubmitTitle = useCallback(
     async (title: string) => {
-      if (!titleDialogSessionId) return;
+      const sessionId = titleDialogSessionId;
+      if (!sessionId) return;
       setIsUpdatingTitle(true);
       try {
-        await updateChatTitle(titleDialogSessionId, title);
-        setTitleDialogSessionId(null);
-      } catch {
-        // The dialog stays open on purpose: the typed title survives for a
-        // retry.
-        toast.error({
-          title: t({
-            id: "officeAddin.historyDrawer.renameFailed",
-            message: "Couldn't rename the chat",
-          }),
-        });
+        // A failure keeps the dialog open, so the typed title survives a retry.
+        const renamed = await runChatAction("rename", sessionId, () =>
+          updateChatTitle(sessionId, title),
+        );
+        if (renamed) setTitleDialogSessionId(null);
       } finally {
         setIsUpdatingTitle(false);
       }
@@ -246,30 +244,16 @@ export function AddinHistoryDrawerCore({
 
   const handleArchive = useCallback(
     (sessionId: string) => {
-      // A failed archive rolls the row back silently (the mutation's
-      // rollback), so the toast is the only signal anything happened.
-      archiveChat(sessionId).catch(() => {
-        toast.error({
-          title: t({
-            id: "officeAddin.historyDrawer.archiveFailed",
-            message: "Couldn't archive the chat",
-          }),
-        });
-      });
+      void runChatAction("archive", sessionId, () => archiveChat(sessionId));
     },
     [archiveChat],
   );
 
   const handleUnarchive = useCallback(
     (sessionId: string) => {
-      unarchiveChat(sessionId).catch(() => {
-        toast.error({
-          title: t({
-            id: "officeAddin.historyDrawer.unarchiveFailed",
-            message: "Couldn't unarchive the chat",
-          }),
-        });
-      });
+      void runChatAction("unarchive", sessionId, () =>
+        unarchiveChat(sessionId),
+      );
     },
     [unarchiveChat],
   );
@@ -532,7 +516,12 @@ export function AddinHistoryDrawerCore({
         generatedTitle={activeTitleSession?.titleBySummary ?? ""}
         initialUserProvidedTitle={activeTitleSession?.titleByUserProvided}
         isSubmitting={isUpdatingTitle}
-        onClose={() => setTitleDialogSessionId(null)}
+        onClose={() => {
+          if (titleDialogSessionId) {
+            dismissChatActionFailure("rename", titleDialogSessionId);
+          }
+          setTitleDialogSessionId(null);
+        }}
         onSubmit={handleSubmitTitle}
       />
       <ChatShareDialog

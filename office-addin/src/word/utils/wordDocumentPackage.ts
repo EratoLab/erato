@@ -313,8 +313,10 @@ export function wordWrittenPackageFingerprint(
   };
 }
 
-/** Word for Mac writes w:proofState spelling="clean" once its proofing pass, language detection
- * included, has been through the whole document; opening or importing a document clears it. */
+/** Word for Mac and Word PC write w:proofState spelling="clean" once their proofing pass, language
+ * detection included, has been through the whole document, and never with spell checking off. Word
+ * for Mac clears it when it opens or imports a document, Word PC when it opens its first document
+ * after starting. */
 export function wordProofingComplete(ooxml: string): boolean {
   // Parses only the main settings part of wordDocumentFileToOoxml's serialization. A glossary
   // document (placeholder text of content controls) has a settings part of its own, and Word for

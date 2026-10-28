@@ -5,7 +5,10 @@ import { useLocation } from "react-router-dom";
 import { ChatHistorySidebar } from "@/components/ui/Chat/ChatHistorySidebar";
 import { ChatShareDialog } from "@/components/ui/Chat/ChatShareDialog";
 import { EditChatTitleDialog } from "@/components/ui/Chat/EditChatTitleDialog";
-import { notifyUnarchiveFailed } from "@/components/ui/Chat/unarchiveFeedback";
+import {
+  dismissChatActionFailure,
+  runChatAction,
+} from "@/components/ui/Chat/chatActionFeedback";
 import { useSidebar } from "@/hooks/ui";
 import { useProfile } from "@/hooks/useProfile";
 import { useChatContext } from "@/providers/ChatProvider";
@@ -88,16 +91,18 @@ export default function AssistantsPageStructure({
 
   // Handle archiving a session
   const handleArchiveSession = (sessionId: string) => {
-    void archiveChat(sessionId);
+    void runChatAction("archive", sessionId, () => archiveChat(sessionId));
   };
 
   const handleUnarchiveSession = (sessionId: string) => {
-    void unarchiveChat(sessionId).catch(notifyUnarchiveFailed);
+    void runChatAction("unarchive", sessionId, () => unarchiveChat(sessionId));
   };
 
   const handlePinSession = useCallback(
     (sessionId: string, isPinned: boolean) => {
-      void pinChat(sessionId, isPinned);
+      void runChatAction(isPinned ? "pin" : "unpin", sessionId, () =>
+        pinChat(sessionId, isPinned),
+      );
     },
     [pinChat],
   );
@@ -124,8 +129,11 @@ export default function AssistantsPageStructure({
 
   const handleCloseEditTitleDialog = useCallback(() => {
     if (isUpdatingChatTitle) return;
+    if (titleDialogChatId) {
+      dismissChatActionFailure("rename", titleDialogChatId);
+    }
     setTitleDialogChatId(null);
-  }, [isUpdatingChatTitle]);
+  }, [isUpdatingChatTitle, titleDialogChatId]);
 
   const activeTitleDialogSession = useMemo(
     () =>
@@ -145,8 +153,13 @@ export default function AssistantsPageStructure({
         setIsUpdatingChatTitle(true);
         // updateChatTitle already invalidates the recent-chats query, which
         // refetches every loaded page — no extra refetch needed here.
-        await updateChatTitle(titleDialogChatId, title);
-        setTitleDialogChatId(null);
+        if (
+          await runChatAction("rename", titleDialogChatId, () =>
+            updateChatTitle(titleDialogChatId, title),
+          )
+        ) {
+          setTitleDialogChatId(null);
+        }
       } finally {
         setIsUpdatingChatTitle(false);
       }

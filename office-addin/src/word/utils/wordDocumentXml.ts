@@ -423,7 +423,14 @@ export function captureWordAuthoringSnapshot(
 }
 
 function ensurePart(doc: Document, name: "styles" | "numbering"): Element {
-  const existing = all(doc, name)[0];
+  // By the part's exact name: a glossary has styles of its own, and Word for Mac often lists it first.
+  const parts = Array.from(doc.getElementsByTagNameNS(PKG, "part"));
+  const named = parts.find(
+    (p) => p.getAttributeNS(PKG, "name") === `/word/${name}.xml`,
+  );
+  const existing = parts.length
+    ? named && all(named, name)[0]
+    : all(doc, name)[0];
   if (existing) return existing;
   const pkg = doc.getElementsByTagNameNS(PKG, "package")[0];
   if (!pkg)

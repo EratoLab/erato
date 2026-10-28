@@ -41,7 +41,11 @@ import {
   useUpdateChatTitle,
 } from "./useInfiniteRecentChats";
 
-import type { RecentChat } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type {
+  ChatDetail,
+  RecentChat,
+} from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type { QueryClient } from "@tanstack/react-query";
 
 // Moved to their router-free home; re-exported for existing import sites.
 export {
@@ -206,6 +210,19 @@ export function deriveTitleHint(text: string): string | null {
   const stem =
     lastSpace > TITLE_HINT_MAX_LENGTH / 2 ? cut.slice(0, lastSpace) : cut;
   return `${stem.trimEnd()}…`;
+}
+
+// Leaving the chat aborts its detail refetch and restores the pre-archive copy,
+// which reopening it would show, so the archive is written in directly.
+function writeArchivedAt(
+  queryClient: QueryClient,
+  chatId: string,
+  archivedAt: string,
+) {
+  queryClient.setQueryData<ChatDetail>(
+    chatDetailQuery({ pathParams: { chatId } }).queryKey,
+    (detail) => detail && { ...detail, archived_at: archivedAt },
+  );
 }
 
 export interface ChatHistoryOptions {
@@ -494,7 +511,11 @@ export function useChatHistory({
       // safe here precisely because the include_archived result set does not
       // shrink, which is what makes removal-driven offset skew impossible.
       if (statusFilter === "all") {
-        await archiveChatMutation({ pathParams: { chatId }, body: {} });
+        const { archived_at } = await archiveChatMutation({
+          pathParams: { chatId },
+          body: {},
+        });
+        writeArchivedAt(queryClient, chatId, archived_at);
         clearPendingChat(chatId);
         useGenerationStatusStore.getState().clearStatus(chatId);
         useChatHistoryStore.getState().clearTitleHint(chatId);
@@ -520,10 +541,11 @@ export function useChatHistory({
 
       try {
         // Call the mutation
-        await archiveChatMutation({
+        const { archived_at } = await archiveChatMutation({
           pathParams: { chatId },
           body: {}, // Send empty object as body
         });
+        writeArchivedAt(queryClient, chatId, archived_at);
 
         // An archived chat carries no marker; cleared only on success so a
         // failed archive keeps the row's marker.
