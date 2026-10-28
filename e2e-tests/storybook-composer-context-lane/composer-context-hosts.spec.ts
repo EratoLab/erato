@@ -456,7 +456,7 @@ const expectFits = async (page: Page, width: number, story: string) => {
   const lane = await boxOf(page.locator(LANE));
   for (const item of await page.locator(CHIP).all()) {
     const box = await boxOf(item);
-    expect(box.height, story).toBeCloseTo(32, 0);
+    expect(box.height, story).toBeCloseTo(54, 0);
     expect(box.x + box.width, story).toBeLessThanOrEqual(
       lane.x + lane.width + 0.5,
     );

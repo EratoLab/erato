@@ -5,8 +5,9 @@ library (ERMAIN-1022):
 
 - the lane's semantics: one named list, one tab stop, each open button's name
   ending with the chip's state;
-- geometry at the Office task-pane width (340 px): 32 px chips, 54 px file
-  tiles, always-visible 24 px (x)/(+) controls beside the open button, no
+- geometry at the Office task-pane width (340 px): chips drawn as a file
+  tile (its plate, the label on line one, the meta on line two) at the 54 px
+  file tile height, always-visible 24 px (x)/(+) controls beside the open button, no
   horizontal overflow, no extra space from a host that has nothing to show;
 - state looks against their tokens (dashed suggested, muted superseded,
   warning and error tones, a spinner without a second status region) and

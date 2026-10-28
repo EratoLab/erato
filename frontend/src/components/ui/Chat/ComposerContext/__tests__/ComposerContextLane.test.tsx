@@ -402,48 +402,47 @@ describe("ComposerContextLane", () => {
       expect(chip("A")).toHaveAttribute("data-tone", "neutral");
     });
 
-    it("keeps a short label at its own width instead of padding it to the floor", () => {
-      render(
-        <ComposerContextLane
-          items={[
-            ambient({ id: "short", label: "a.docx", meta: "86 ¶" }),
-            ambient({ id: "long", label: "Supply agreement.docx" }),
-          ]}
-        />,
-      );
-      const label = (text: string) =>
-        screen.getByText(text, {
-          selector: '[data-ui="composer-context-chip-label"]',
-        });
-      expect(label("a.docx")).toHaveClass("shrink-0");
-      // shrink-[2] comes later in the stylesheet and would win over shrink-0.
-      expect(label("a.docx")).not.toHaveClass("shrink-[2]");
-      expect(label("a.docx")).not.toHaveClass("min-w-[7em]");
-      expect(label("Supply agreement.docx")).toHaveClass("min-w-[7em]");
-      expect(label("Supply agreement.docx")).toHaveClass("shrink-[2]");
-    });
-
-    it("counts wide characters twice, so a short CJK name still truncates", () => {
+    it("draws a file tile's anatomy: plate, label on line one, meta on line two", () => {
       render(
         <ComposerContextLane
           items={[
             ambient({
-              id: "cjk",
-              label: "供应协议最终版本文件",
+              label: "Supply agreement.docx",
               meta: "Track Changes on · First 453 of 1,590 ¶",
+              locked: true,
             }),
-            ambient({ id: "kana", label: "メモ.docx", meta: "86 ¶" }),
           ]}
         />,
       );
-      const label = (text: string) =>
-        screen.getByText(text, {
-          selector: '[data-ui="composer-context-chip-label"]',
-        });
-      expect(label("供应协议最终版本文件")).toHaveClass("min-w-[7em]");
-      expect(label("供应协议最终版本文件")).not.toHaveClass("shrink-0");
-      expect(label("メモ.docx")).toHaveClass("shrink-0");
-      expect(label("メモ.docx")).not.toHaveClass("shrink-[2]");
+      const face = chip("Supply agreement.docx").querySelector(
+        '[data-ui="composer-context-chip-face"]',
+      )!;
+      const plate = face.querySelector(
+        '[data-ui="composer-context-chip-icon"]',
+      );
+      expect(plate).toHaveClass(
+        "attachment-tile-icon-geometry",
+        "attachment-tile-icon-skin",
+      );
+      const label = screen.getByText("Supply agreement.docx", {
+        selector: '[data-ui="composer-context-chip-label"]',
+      });
+      const meta = face.querySelector(
+        '[data-ui="composer-context-chip-meta"]',
+      )!;
+      expect(meta).toHaveTextContent("Track Changes on · First 453 of 1,590 ¶");
+      expect(meta).toHaveClass("block", "truncate");
+      // Two lines: the meta is not on the label's line, and the lock stays
+      // on line one with the label.
+      expect(label.parentElement!.contains(meta)).toBe(false);
+      expect(
+        label.parentElement!.querySelector(
+          '[data-ui="composer-context-chip-lock"]',
+        ),
+      ).not.toBeNull();
+      expect(
+        face.querySelector('[data-ui="composer-context-chip-separator"]'),
+      ).toBeNull();
     });
 
     it("hides every glyph and draws no text glyphs", () => {

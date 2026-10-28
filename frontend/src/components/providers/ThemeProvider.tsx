@@ -407,6 +407,10 @@ const getThemeVariableEntries = (theme: Theme): Array<[string, string]> => {
       theme.layout.composerContext.chipHeight,
     ],
     [
+      "--theme-layout-composer-context-area-max-height",
+      theme.layout.composerContext.areaMaxHeight,
+    ],
+    [
       "--theme-layout-composer-context-detail-width",
       theme.layout.composerContext.detailWidth,
     ],

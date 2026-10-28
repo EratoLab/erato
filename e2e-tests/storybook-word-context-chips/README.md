@@ -8,10 +8,10 @@ in the composer's lane (ERMAIN-1023), as the stories under
   open button's name ending with the chip's state, the (x)/(+) named as the
   add-in names them;
 - geometry at the task pane (340 px) and the 480 px breakpoint for every
-  story: 32 px chips inside the lane, controls inside their chip, long metas
+  story: 54 px chips inside the lane, controls inside their chip, long metas
   cut with an ellipsis, no horizontal page overflow, a quote label of at most
-  61 characters; a short file name keeping its own width before the meta,
-  a longer one the 7em floor;
+  61 characters; the name on line one with its meta under it, as on a file
+  tile, so a name that fits is never cut;
 - tones: warning and error borders from their tokens, the document's own
   glyph under a warning and the warning mark on a passage cut to its
   beginning, the muted superseded look, dashed suggested chips, and label and

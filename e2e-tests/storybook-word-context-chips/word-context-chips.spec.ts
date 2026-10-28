@@ -276,7 +276,7 @@ const expectFits = async (page: Page, width: number, story: string) => {
   const lane = await boxOf(page.locator(LANE));
   for (const item of await page.locator(CHIP).all()) {
     const box = await boxOf(item);
-    expect(box.height, story).toBeCloseTo(32, 0);
+    expect(box.height, story).toBeCloseTo(54, 0);
     expect(box.x, story).toBeGreaterThanOrEqual(lane.x - 0.5);
     expect(box.x + box.width, story).toBeLessThanOrEqual(
       lane.x + lane.width + 0.5,
@@ -417,48 +417,32 @@ test.describe("every story", () => {
   });
 });
 
-test.describe("label width", () => {
-  test("a short name keeps its own width, so the meta follows it closely", async ({
+test.describe("two lines", () => {
+  test("the name stands on line one and its meta under it, as on a file tile", async ({
     page,
   }) => {
-    await openWord(page, "short-document-name");
-    const chip = kind(page, "word.document");
-    const name = labelOf(chip);
-    expect(await style(name, "min-width")).toBe("auto");
-    const box = await boxOf(name);
-    const textWidth = await name.evaluate((element) => {
-      const range = document.createRange();
-      range.selectNodeContents(element);
-      return range.getBoundingClientRect().width;
-    });
-    expect(box.width - textWidth).toBeLessThanOrEqual(1);
-    expect(
-      await name.evaluate(
-        (element) => element.scrollWidth > element.clientWidth,
-      ),
-    ).toBe(false);
-    const gap = parseFloat(
-      await style(
-        chip.locator('[data-ui="composer-context-chip-face"]'),
-        "column-gap",
-      ),
-    );
-    const separator = await boxOf(
-      chip.locator('[data-ui="composer-context-chip-separator"]'),
-    );
-    expect(separator.x - (box.x + box.width)).toBeCloseTo(gap, 0);
-  });
-
-  test("a longer name keeps the 7em floor before its meta", async ({
-    page,
-  }) => {
-    await openWord(page, "included");
-    const name = labelOf(kind(page, "word.document"));
-    const fontSize = parseFloat(await style(name, "font-size"));
-    expect(parseFloat(await style(name, "min-width"))).toBeCloseTo(
-      7 * fontSize,
-      0,
-    );
+    for (const story of ["short-document-name", "included", "track-changes"]) {
+      await openWord(page, story);
+      const chip = kind(page, "word.document");
+      const name = labelOf(chip);
+      const meta = chip.locator('[data-ui="composer-context-chip-meta"]');
+      const nameBox = await boxOf(name);
+      const metaBox = await boxOf(meta);
+      expect(metaBox.y, story).toBeGreaterThanOrEqual(
+        nameBox.y + nameBox.height - 0.5,
+      );
+      expect(Math.abs(metaBox.x - nameBox.x), story).toBeLessThanOrEqual(0.5);
+      await expect(
+        chip.locator('[data-ui="composer-context-chip-separator"]'),
+      ).toHaveCount(0);
+      // Neither line gives way to the other, so a name that fits is whole.
+      expect(
+        await name.evaluate(
+          (element) => element.scrollWidth > element.clientWidth,
+        ),
+        story,
+      ).toBe(false);
+    }
   });
 });
 

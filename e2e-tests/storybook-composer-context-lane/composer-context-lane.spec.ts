@@ -52,7 +52,7 @@ test.describe("semantics", () => {
 });
 
 test.describe("geometry", () => {
-  test("32px chips with always-visible 24px controls beside the open button", async ({
+  test("54px chips with always-visible 24px controls beside the open button", async ({
     page,
   }) => {
     await openStory(page, `${STORY}--all-states`, LANE);
@@ -65,7 +65,7 @@ test.describe("geometry", () => {
       probe.remove();
       return height;
     });
-    expect(token).toBe(32);
+    expect(token).toBe(54);
     const laneBox = await boxOf(lane);
 
     for (const item of await lane.locator(CHIP).all()) {
@@ -107,14 +107,35 @@ test.describe("geometry", () => {
     ).toBeLessThanOrEqual(340);
   });
 
-  test("files keep their 54px tile beside 32px chips", async ({ page }) => {
+  test("chips draw a file tile's anatomy at its height", async ({ page }) => {
     await openStory(page, `${STORY}--in-chat-input`, LANE);
     const tiles = page.locator(`${AREA} [data-ui="attachment-tile"]`);
     await expect(tiles).toHaveCount(2);
-    for (const tile of await tiles.all()) {
-      expect((await boxOf(tile)).height).toBeCloseTo(54, 0);
+    const tile = tiles.first();
+    const tileBox = await boxOf(tile);
+    expect(tileBox.height).toBeCloseTo(54, 0);
+    const tilePlate = await boxOf(
+      tile.locator('[data-ui="attachment-tile-icon"]'),
+    );
+
+    for (const item of await page.locator(CHIP).all()) {
+      expect((await boxOf(item)).height).toBeCloseTo(tileBox.height, 0);
+      const plate = await boxOf(
+        item.locator('[data-ui="composer-context-chip-icon"]'),
+      );
+      expect(plate.width).toBeCloseTo(tilePlate.width, 0);
+      expect(plate.height).toBeCloseTo(tilePlate.height, 0);
+      // The label on line one, the meta under it, both beside the plate.
+      const label = await boxOf(
+        item.locator('[data-ui="composer-context-chip-label"]'),
+      );
+      const meta = await boxOf(
+        item.locator('[data-ui="composer-context-chip-meta"]'),
+      );
+      expect(meta.y).toBeGreaterThanOrEqual(label.y + label.height - 0.5);
+      expect(Math.abs(meta.x - label.x)).toBeLessThanOrEqual(0.5);
+      expect(label.x).toBeGreaterThan(plate.x + plate.width);
     }
-    expect((await boxOf(page.locator(CHIP).first())).height).toBeCloseTo(32, 0);
   });
 
   for (const [story, width] of [
@@ -460,7 +481,7 @@ test.describe("overflow", () => {
     const cap = await area.evaluate((element) =>
       Number.parseFloat(getComputedStyle(element).maxHeight),
     );
-    expect(cap).toBe(192);
+    expect(cap).toBe(264);
     expect((await boxOf(area)).height).toBeLessThanOrEqual(cap + 1);
 
     const more = page.locator(

@@ -26,7 +26,7 @@ The spec checks:
   with the state, its always-visible x named "Remove Teams transcript", and
   none of the files it claims in the file row; then a real send whose file ids
   are exactly the chips' claims plus the file row, with no chip left after it;
-- geometry at 340, 480 and 1280 px: 32 px chips inside the composer box above
+- geometry at 340, 480 and 1280 px: 54 px chips inside the composer box above
   the message field, the x inside its chip, label and meta cut with an
   ellipsis, two transcripts side by side or wrapped without overlap, no
   horizontal page overflow; label and meta contrast at 4.5:1 in light and dark;

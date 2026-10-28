@@ -91,6 +91,114 @@ const TILE_GEOMETRY = {
   },
 } as const satisfies Record<AttachmentTileSize, Record<string, string>>;
 
+const TITLE_TYPE = "text-sm font-medium text-[var(--theme-fg-primary)]";
+
+export interface AttachmentTileTitleProps {
+  children: React.ReactNode;
+  /** Kept in view after the truncating text, e.g. a lock mark. */
+  end?: React.ReactNode;
+  /** Names the element that carries the text. */
+  "data-ui"?: string;
+}
+
+/** Line one of a tile: the name, cut with an ellipsis. */
+export const AttachmentTileTitle = ({
+  children,
+  end,
+  "data-ui": hook,
+}: AttachmentTileTitleProps) =>
+  end ? (
+    <span className={clsx("flex min-w-0 items-center gap-1", TITLE_TYPE)}>
+      <span data-ui={hook} className="min-w-0 truncate">
+        {children}
+      </span>
+      {end}
+    </span>
+  ) : (
+    <span data-ui={hook} className={clsx("block truncate", TITLE_TYPE)}>
+      {children}
+    </span>
+  );
+
+export interface AttachmentTileFaceProps {
+  size?: AttachmentTileSize;
+  /** The plate's glyph, hidden from assistive tech; omitted, no plate is drawn. */
+  icon?: React.ReactNode;
+  /** A spinner in the plate instead of the glyph. */
+  busy?: boolean;
+  /** Line one, usually an `AttachmentTileTitle`. */
+  title: React.ReactNode;
+  /** Line two: the type and size, or what the item is doing. */
+  meta?: React.ReactNode;
+  /** Kept in view at the end of line two, e.g. a "More". */
+  metaEnd?: React.ReactNode;
+  /** Error colours on line two. */
+  tone?: "error";
+  /** Below line two, e.g. why the file cannot be sent. */
+  note?: React.ReactNode;
+  /** Hook names for the plate and line two, so a host keeps its own. */
+  parts?: { icon?: string; meta?: string };
+}
+
+/**
+ * The anatomy every tile in an attachment row shares: a tinted plate, the
+ * name on line one, the meta on line two. Spans only, so a host can draw it
+ * inside its own button; the caller lays the two parts out in a row.
+ */
+export const AttachmentTileFace = ({
+  size = "compact",
+  icon,
+  busy = false,
+  title,
+  meta,
+  metaEnd,
+  tone,
+  note,
+  parts,
+}: AttachmentTileFaceProps) => {
+  const geometry = TILE_GEOMETRY[size];
+  return (
+    <>
+      {icon !== undefined && (
+        <span
+          data-ui={parts?.icon ?? "attachment-tile-icon"}
+          className={clsx(
+            geometry.iconBox,
+            "attachment-tile-icon-geometry attachment-tile-icon-skin flex shrink-0 items-center justify-center",
+          )}
+        >
+          {busy ? <SpinnerIcon size="md" aria-hidden="true" /> : icon}
+        </span>
+      )}
+      <span className="min-w-0 flex-1">
+        {title}
+        {(Boolean(meta) || Boolean(metaEnd)) && (
+          <span
+            data-ui={parts?.meta ?? "attachment-tile-meta"}
+            className={clsx(
+              "text-xs",
+              metaEnd ? "flex items-baseline gap-2" : "block truncate",
+              tone === "error"
+                ? "text-[var(--theme-error-fg)]"
+                : "text-[var(--theme-fg-muted)]",
+            )}
+          >
+            {metaEnd ? (
+              <>
+                <span className="min-w-0 truncate">{meta}</span>
+                {metaEnd}
+              </>
+            ) : (
+              meta
+            )}
+          </span>
+        )}
+        {note}
+      </span>
+    </>
+  );
+};
+
 /** A custom face uses host metadata and image failure handling. */
 export interface AttachmentTilePresentation {
   filename: string;
@@ -294,16 +402,16 @@ export const AttachmentTile: React.FC<AttachmentTileProps> = ({
   );
   const nameNode =
     showType !== "extension" ? (
-      <span className="flex min-w-0 max-w-full items-baseline text-sm font-medium text-[var(--theme-fg-primary)]">
+      <span
+        className={clsx("flex min-w-0 max-w-full items-baseline", TITLE_TYPE)}
+      >
         <span className="min-w-0 truncate">{nameParts.stem}</span>
         {nameParts.extension && (
           <span className="shrink-0">{nameParts.extension}</span>
         )}
       </span>
     ) : (
-      <span className="block truncate text-sm font-medium text-[var(--theme-fg-primary)]">
-        {filename}
-      </span>
+      <AttachmentTileTitle>{filename}</AttachmentTileTitle>
     );
 
   const imageProps: React.ImgHTMLAttributes<HTMLImageElement> = {
@@ -317,28 +425,16 @@ export const AttachmentTile: React.FC<AttachmentTileProps> = ({
   });
 
   const body = customContent ?? (
-    <>
-      {!hideIcon && (
-        <span
-          data-ui="attachment-tile-icon"
-          className={clsx(
-            geometry.iconBox,
-            "attachment-tile-icon-geometry attachment-tile-icon-skin flex shrink-0 items-center justify-center",
-          )}
-        >
-          {busy ? (
-            <SpinnerIcon size="md" aria-hidden="true" />
-          ) : (
-            <ResolvedIcon
-              iconId={iconId}
-              className={geometry.icon}
-              aria-hidden
-            />
-          )}
-        </span>
-      )}
-      <span className="min-w-0 flex-1">
-        {transcriptFace
+    <AttachmentTileFace
+      size={size}
+      icon={
+        hideIcon ? undefined : (
+          <ResolvedIcon iconId={iconId} className={geometry.icon} aria-hidden />
+        )
+      }
+      busy={busy}
+      title={
+        transcriptFace
           ? excerpt && (
               // Bottom-aligned and clipped at two lines, so the latest words
               // stay in view, which line-clamp (it cuts the end) cannot do.
@@ -349,40 +445,29 @@ export const AttachmentTile: React.FC<AttachmentTileProps> = ({
                 <span>{excerpt}</span>
               </span>
             )
-          : nameNode}
-        {(Boolean(meta) || Boolean(more)) && (
+          : nameNode
+      }
+      meta={meta}
+      metaEnd={
+        more && (
           <span
-            data-ui="attachment-tile-meta"
-            className={clsx(
-              "text-xs",
-              more ? "flex items-baseline gap-2" : "block truncate",
-              failed
-                ? "text-[var(--theme-error-fg)]"
-                : "text-[var(--theme-fg-muted)]",
-            )}
+            data-ui="attachment-tile-more"
+            className="ml-auto shrink-0 font-medium text-[var(--theme-fg-accent)] underline underline-offset-2"
           >
-            {more ? (
-              <>
-                <span className="min-w-0 truncate">{meta}</span>
-                <span
-                  data-ui="attachment-tile-more"
-                  className="ml-auto shrink-0 font-medium text-[var(--theme-fg-accent)] underline underline-offset-2"
-                >
-                  {more.label}
-                </span>
-              </>
-            ) : (
-              meta
-            )}
+            {more.label}
           </span>
-        )}
-        {invalid && validation.reason && (
+        )
+      }
+      tone={failed ? "error" : undefined}
+      note={
+        invalid &&
+        validation.reason && (
           <span className="mt-0.5 block text-xs text-[var(--theme-error-fg)]">
             {validation.reason}
           </span>
-        )}
-      </span>
-    </>
+        )
+      }
+    />
   );
 
   const documentFaceProps = {

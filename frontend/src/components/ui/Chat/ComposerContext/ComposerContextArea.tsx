@@ -118,7 +118,12 @@ export const ComposerContextArea = ({
           empty ? "hidden" : "flex",
         )}
         style={{
-          maxHeight: "var(--theme-layout-attachment-tile-staged-max-height)",
+          // Chips are tiles too, so the area makes room for them; files alone
+          // keep the web composer's cap.
+          maxHeight:
+            items.length > 0
+              ? "var(--theme-layout-composer-context-area-max-height)"
+              : "var(--theme-layout-attachment-tile-staged-max-height)",
         }}
       >
         <ComposerContextLane
