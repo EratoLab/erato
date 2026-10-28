@@ -53,6 +53,8 @@ zip = { version = "8.6.0", default-features = false, features = ["deflate"] }
 reqwest = { version = "0.13.1", default-features = false, features = ["rustls", "charset", "http2", "system-proxy", "multipart", "stream", "json"] }
 reqwest-middleware = "0.5.1"
 reqwest-tracing = { version = "0.7.1", features = ["opentelemetry_0_32"] }
+tokio-tungstenite = { version = "0.28.0", features = ["rustls-tls-webpki-roots"] }
+webpki-roots = "1.0.10"
 
 # Dependencies: Security
 rcgen = { version = "0.14.8", default-features = false, features = ["ring", "pem", "x509-parser"] }

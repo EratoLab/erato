@@ -2386,8 +2386,12 @@ speech_provider = "voice"
 # Configure the transcription chat_provider_id as usual.
 ```
 
-Supported kinds are `openai`, `audio_cpp`, and `gemini`. Each requires `model_name`
-and `voice`. OpenAI uses `api_key` and an optional `/v1` `base_url`. audio.cpp
+Supported kinds are `openai`, `openai_realtime`, `audio_cpp`, and `gemini`. Each requires `model_name`
+and `voice`. OpenAI uses `api_key` and an optional `/v1` `base_url`. Use
+`openai_realtime` with a Realtime model such as `gpt-realtime-2`; its base URL
+may use HTTP(S) or WS(S) and defaults to `https://api.openai.com/v1`. Realtime
+models are instructed to read the supplied text verbatim, but their output is
+generative and may differ from the input. audio.cpp
 requires `base_url`, a model configured in streaming mode, and `sample_rate`
 matching its native mono PCM output (default 24000). Its authentication key is
 optional. Gemini requires `project_id` for OAuth authentication; with an `api_key`,
