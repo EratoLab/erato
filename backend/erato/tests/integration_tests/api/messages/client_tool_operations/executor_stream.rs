@@ -927,7 +927,7 @@ async fn a_newer_pane_without_the_tool_leaves_its_calls_to_one_with_it(pool: Poo
     let (base, server) = serve(&setup.state).await;
     let mut serving = Pane::open_as(&base, &mailbox(), Uuid::now_v7()).await;
     tokio::time::sleep(Duration::from_millis(5)).await;
-    let mut other_tools = Pane::connect(
+    let mut other_tools = Pane::open_request(
         reqwest::Client::new()
             .get(format!("{base}/me/client-operations/stream"))
             .bearer_auth(TEST_JWT_TOKEN)

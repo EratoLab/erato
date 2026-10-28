@@ -864,7 +864,7 @@ async fn client_tasks_get_no_grant_while_executor_streams_are_off(pool: Pool<Pos
 const DISPATCH_PAUSE: Duration = Duration::from_secs(6);
 
 #[sqlx::test(migrator = "crate::MIGRATOR")]
-async fn a_pane_gone_before_dispatch_is_context_unavailable_at_once(pool: Pool<Postgres>) {
+async fn a_pane_gone_before_dispatch_is_context_unavailable_after_the_grace(pool: Pool<Postgres>) {
     let (parent, child) = (RequestBodyRecorder::new(), RequestBodyRecorder::new());
     let mut mocks = MockSet::new();
     mock_parent(&mut mocks, &parent, vec![client_task(None)]);
@@ -893,10 +893,12 @@ async fn a_pane_gone_before_dispatch_is_context_unavailable_at_once(pool: Pool<P
     wait_released(&state, &word_pane()).await;
     let gone = tokio::time::Instant::now();
     assert!(finish(run).await.contains(PARENT_FINAL));
+    let waited = gone.elapsed();
     assert!(
-        gone.elapsed() < DISPATCH_PAUSE + Duration::from_secs(5),
-        "the call fails at dispatch, not after the presence grace or the timeout: {:?}",
-        gone.elapsed()
+        waited >= executor_stream::PRESENCE_LOSS_GRACE
+            && waited
+                < DISPATCH_PAUSE + executor_stream::PRESENCE_LOSS_GRACE + Duration::from_secs(10),
+        "the call waits the presence grace for a pane, not the tool's timeout: {waited:?}"
     );
     let read = part_for(
         &assistant_row(&state.db, client_child.id).await,
@@ -967,19 +969,17 @@ async fn a_pane_lost_in_flight_is_context_unavailable_after_the_grace(pool: Pool
     let (state, _llm) = delegated_state(pool, mocks, |_| {}).await;
     let (base, server) = serve(&state).await;
     // Held by a replica that died: nothing renews or releases it.
-    let tools = vec![READ_TOOL.to_string(), WRITE_TOOL.to_string()];
-    assert!(
-        executor_stream::acquire(
-            &state.db,
-            account(&state).await,
-            &word_pane(),
-            Uuid::new_v4(),
-            &tools,
-            &[READ_TOOL.to_string()],
-        )
+    let claim = executor_stream::PresenceClaim {
+        account_id: account(&state).await,
+        binding: word_pane(),
+        instance_id: None,
+        connected_at: chrono::Utc::now(),
+        client_tools: vec![READ_TOOL.to_string(), WRITE_TOOL.to_string()],
+        child_client_tools: vec![READ_TOOL.to_string()],
+    };
+    executor_stream::announce(&state.db, &claim, Uuid::new_v4())
         .await
-        .unwrap()
-    );
+        .unwrap();
     let chat_id = seed_origin_chat(&state.db).await;
     let run = spawn_parent(&base, chat_id, ACTION_FACET, Some(word_pane()));
     tokio::time::timeout(Duration::from_secs(15), async {

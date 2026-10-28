@@ -7968,8 +7968,13 @@ async fn stream_generate_chat_completion<'a>(
                         _ => None,
                     };
                     match (route, binding, Uuid::parse_str(&user_id)) {
+                        // Without a pane that takes the call yet, it waits for
+                        // one, as a call of the user's own turn does.
                         (
-                            Some(executor_stream::LiveCallRoute::Executor(_)),
+                            Some(
+                                executor_stream::LiveCallRoute::Executor(_)
+                                | executor_stream::LiveCallRoute::Unavailable,
+                            ),
                             Some(binding),
                             Ok(account_id),
                         ) => executor_target = Some((binding.clone(), account_id)),

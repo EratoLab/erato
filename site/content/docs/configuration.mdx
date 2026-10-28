@@ -6090,9 +6090,8 @@ why. The task is offered only the granted tools, and only while the planning tur
 is still running and the task runs on the grant's binding. A task the user took
 over and a retried task get none. Its calls go live to the executor stream with
 the grant's lineage and never park durably, even for a tool with a `durable`
-table. Without a stream at the time of the call, the call ends as
-`context_unavailable` at once; if the stream goes away during the call, after 15
-seconds.
+table. Without a stream that takes the call, or once its stream goes away, the
+call ends as `context_unavailable` after 15 seconds.
 
 #### `client_tools.tools.<key>.requires_client_registration`
 

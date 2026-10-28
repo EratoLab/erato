@@ -86,8 +86,8 @@ context version.
 
 | Situation | Stored output |
 | -- | -- |
-| Executor streams off, no stream, or the hand-over fails | `{"status":"cancelled","reason":"context_unavailable"}`, at once |
-| The stream went away during the call | `context_unavailable` after the 15 s grace |
+| Executor streams off, no binding, or the hand-over fails | `{"status":"cancelled","reason":"context_unavailable"}`, at once |
+| No pane takes the call, or its pane went away | `context_unavailable` after the 15 s grace; a pane that connects in time gets it |
 | No answer | `timeout`, after the tool's own timeout |
 | Not granted, not offered, or set to Never | refused per call |
 | The user declined an Ask (Reject, Never allow or Withdraw) | `{"status":"cancelled","reason":"declined","error":…}` |
