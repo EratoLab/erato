@@ -10,9 +10,13 @@ import { PageHeader } from "@/components/ui/Container/PageHeader";
 import { Button } from "@/components/ui/Controls/Button";
 import { Alert } from "@/components/ui/Feedback/Alert";
 import { SpinnerIcon } from "@/components/ui/Feedback/SpinnerIcon";
+import { toast } from "@/components/ui/Toast";
 import { ArrowLeftIcon, EditIcon, PlusIcon } from "@/components/ui/icons";
 import { usePageAlignment } from "@/hooks/ui";
 import {
+  assistantHubConfigQuery,
+  getAssistantQuery,
+  startingAssistantQuery,
   useAssistantHubConfig,
   useGetAssistant,
   useListAssistantHubReviews,
@@ -39,6 +43,32 @@ import type {
   AssistantHubUserReview,
   AssistantHubVersion,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type { QueryClient } from "@tanstack/react-query";
+
+/** Error toasts stay until dismissed, so the next attempt has to replace them. */
+const MY_SUBMISSIONS_TOAST_KEY = "assistant-hub-my";
+
+type VersionAction = "withdraw" | "publish" | "current";
+
+// Publishing also decides the start screen and who may open the version's
+// assistant, so those refresh alongside the hub views.
+const refreshAfterVersionChange = (
+  queryClient: QueryClient,
+  version: AssistantHubVersion,
+) =>
+  Promise.all([
+    queryClient.invalidateQueries({
+      queryKey: assistantHubConfigQuery({}).queryKey.slice(0, -1),
+    }),
+    queryClient.invalidateQueries({
+      queryKey: startingAssistantQuery({}).queryKey,
+    }),
+    queryClient.invalidateQueries({
+      queryKey: getAssistantQuery({
+        pathParams: { assistantId: version.assistant_id },
+      }).queryKey,
+    }),
+  ]);
 
 type AssistantSubmissionGroup = {
   hubAssistantId: string;
@@ -229,6 +259,10 @@ export default function AssistantHubMyPage() {
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(
     () => new Set(),
   );
+  const [pendingAction, setPendingAction] = useState<{
+    versionId: string;
+    action: VersionAction;
+  } | null>(null);
 
   useEffect(() => {
     document.title = `${t({
@@ -237,33 +271,79 @@ export default function AssistantHubMyPage() {
     })} - ${t({ id: "branding.page_title_suffix" })}`;
   }, []);
 
-  const refresh = async () => {
-    await queryClient.invalidateQueries();
+  // The busy state lasts until the refreshed list shows the outcome, so a
+  // second click cannot act on the stale version.
+  const runVersionAction = async (
+    version: AssistantHubVersion,
+    action: VersionAction,
+    mutate: () => Promise<unknown>,
+    successTitle?: string,
+  ) => {
+    if (pendingAction) return;
+    toast.dismissKey(MY_SUBMISSIONS_TOAST_KEY);
+    setPendingAction({ versionId: version.version_id, action });
+    try {
+      await mutate();
+      await refreshAfterVersionChange(queryClient, version);
+      if (successTitle) {
+        toast.success({
+          dedupeKey: MY_SUBMISSIONS_TOAST_KEY,
+          title: successTitle,
+        });
+      }
+    } catch {
+      toast.error({
+        dedupeKey: MY_SUBMISSIONS_TOAST_KEY,
+        title: t({
+          id: "assistantHub.my.error",
+          message: "Failed to update hub submissions.",
+        }),
+      });
+    } finally {
+      setPendingAction(null);
+    }
   };
 
+  const isPendingAction = (
+    version: AssistantHubVersion,
+    action: VersionAction,
+  ) =>
+    pendingAction?.versionId === version.version_id &&
+    pendingAction.action === action;
+
   const handleWithdraw = async (version: AssistantHubVersion) => {
-    await withdrawVersion.mutateAsync({
-      pathParams: { versionId: version.version_id },
-    });
-    await refresh();
+    await runVersionAction(
+      version,
+      "withdraw",
+      () =>
+        withdrawVersion.mutateAsync({
+          pathParams: { versionId: version.version_id },
+        }),
+      t({
+        id: "assistantHub.my.withdrawSuccess",
+        message: "Submission withdrawn.",
+      }),
+    );
   };
 
   const handleSetPublished = async (
     version: AssistantHubVersion,
     isPublished: boolean,
   ) => {
-    await setPublished.mutateAsync({
-      pathParams: { versionId: version.version_id },
-      body: { is_published: isPublished },
-    });
-    await refresh();
+    await runVersionAction(version, "publish", () =>
+      setPublished.mutateAsync({
+        pathParams: { versionId: version.version_id },
+        body: { is_published: isPublished },
+      }),
+    );
   };
 
   const handleSetCurrent = async (version: AssistantHubVersion) => {
-    await setCurrent.mutateAsync({
-      pathParams: { versionId: version.version_id },
-    });
-    await refresh();
+    await runVersionAction(version, "current", () =>
+      setCurrent.mutateAsync({
+        pathParams: { versionId: version.version_id },
+      }),
+    );
   };
 
   const versions = useMemo(() => data?.versions ?? [], [data?.versions]);
@@ -319,7 +399,8 @@ export default function AssistantHubMyPage() {
         <Button
           variant="secondary"
           size="sm"
-          loading={withdrawVersion.isPending}
+          loading={isPendingAction(version, "withdraw")}
+          disabled={pendingAction !== null}
           confirmAction
           confirmTitle={t({
             id: "assistantHub.my.withdrawConfirmTitle",
@@ -344,7 +425,8 @@ export default function AssistantHubMyPage() {
           <Button
             variant="secondary"
             size="sm"
-            loading={setPublished.isPending}
+            loading={isPendingAction(version, "publish")}
+            disabled={pendingAction !== null}
             onClick={() => {
               void handleSetPublished(version, !version.is_published);
             }}
@@ -363,7 +445,8 @@ export default function AssistantHubMyPage() {
             <Button
               variant="secondary"
               size="sm"
-              loading={setCurrent.isPending}
+              loading={isPendingAction(version, "current")}
+              disabled={pendingAction !== null}
               onClick={() => {
                 void handleSetCurrent(version);
               }}
@@ -426,12 +509,7 @@ export default function AssistantHubMyPage() {
             </div>
           )}
 
-          {[
-            error,
-            withdrawVersion.error,
-            setPublished.error,
-            setCurrent.error,
-          ].some(Boolean) && (
+          {error && (
             <Alert type="error">
               {t({
                 id: "assistantHub.my.error",
