@@ -271,7 +271,13 @@ export type ThemeLayout = {
   };
   /** Context chips in the composer and the popover their detail opens in. */
   composerContext: {
+    /** A chip shares a document tile's anatomy, so it defaults to its height. */
     chipHeight: string;
+    /**
+     * Height the staged area caps at while it holds chips; with files alone
+     * it keeps `attachmentTile.stagedMaxHeight`.
+     */
+    areaMaxHeight: string;
     detailWidth: string;
   };
   sidebar: {
@@ -597,7 +603,10 @@ export const defaultTheme: Theme = {
       stagedMaxHeight: "12rem",
     },
     composerContext: {
-      chipHeight: "2rem",
+      chipHeight: "calc(3.25rem + 2px)",
+      // Fits every host state at 340 px without folding: the tallest is
+      // Word's three chips over five files, half a tile and "Remove all".
+      areaMaxHeight: "16.5rem",
       detailWidth: "24rem",
     },
     sidebar: {

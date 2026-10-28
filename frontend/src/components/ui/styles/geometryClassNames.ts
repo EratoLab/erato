@@ -52,6 +52,7 @@ export const ERATO_GEOMETRY_CLASS = Object.freeze({
   composerContextChipGeometry: "composer-context-chip-geometry",
   composerContextChipSkin: "composer-context-chip-skin",
   composerContextControlGeometry: "composer-context-control-geometry",
+  composerContextMoreGeometry: "composer-context-more-geometry",
   dropdownItemGeometry: "dropdown-item-geometry",
   dropdownPanelChromeGeometry: "dropdown-panel-chrome-geometry",
   floatingControlSkin: "floating-control-skin",

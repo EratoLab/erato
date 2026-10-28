@@ -27,7 +27,7 @@ pnpm exec vitest run src/word/utils/__tests__/wordCommentStoryParity.test.ts -u
   origin, label, meta, the open button's name ending with the state word, the
   (x) or (+) name, a locked chip's disabled control and reason, the notice's
   text, and the carrier of the next Send;
-- 32 px chips inside the lane at 340, 480 and 1280 px, controls inside their
+- 54 px chips inside the lane at 340, 480 and 1280 px, controls inside their
   chip, label and meta cut with an ellipsis, no horizontal page overflow;
   label and meta at 4.5:1 in light and dark; the lane inside the composer box
   above the message field;

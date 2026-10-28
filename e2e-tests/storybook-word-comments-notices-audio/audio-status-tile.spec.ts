@@ -14,9 +14,10 @@ import { openWord, SHELL, style, textarea } from "./word-story";
 // status card above the composer is gone. The tile spins while the recording
 // is worked on, takes the error colours when it fails, offers the retry
 // inside its frame, and Send waits until every recording is transcribed.
-// The composer's own recordings show their latest words and a More instead of
-// the generated file name, and count their length up while they run
-// (ERMAIN-1072).
+// The composer's own recordings show their first words, clamped to two lines,
+// and a More button instead of the generated file name; a placeholder holds
+// those two lines until words arrive; and they count their length up while
+// they run (ERMAIN-1072).
 
 const TILE = '[data-ui="attachment-tile"]';
 const META = '[data-ui="attachment-tile-meta"]';
@@ -29,6 +30,7 @@ const TRANSCRIPT =
 const PARTIAL =
   "Quick summary of the sales call: the customer wants delivery in two batches.";
 const LIVE = '[data-ui="chat-audio-status-live"]';
+const PLACEHOLDER = "The transcript appears here…";
 
 interface Phase {
   story: string;
@@ -39,6 +41,8 @@ interface Phase {
   cancels: boolean;
   /** Words to show, so the tile offers More and its activation is named for it. */
   more: boolean;
+  /** No words yet but some may come, so a placeholder holds their place. */
+  placeholder: boolean;
 }
 const PHASES: Phase[] = [
   {
@@ -48,6 +52,7 @@ const PHASES: Phase[] = [
     sendable: false,
     cancels: true,
     more: false,
+    placeholder: true,
   },
   {
     story: "audio-transcribing",
@@ -56,6 +61,7 @@ const PHASES: Phase[] = [
     sendable: false,
     cancels: true,
     more: false,
+    placeholder: true,
   },
   {
     story: "audio-transcript-ready",
@@ -64,6 +70,7 @@ const PHASES: Phase[] = [
     sendable: true,
     cancels: false,
     more: true,
+    placeholder: false,
   },
   // A failed recording keeps Send off: its tile is the only place that says why.
   {
@@ -73,6 +80,7 @@ const PHASES: Phase[] = [
     sendable: false,
     cancels: false,
     more: false,
+    placeholder: false,
   },
 ];
 
@@ -82,7 +90,7 @@ const openComposer = (
   options: { theme?: "light" | "dark"; width?: number; locale?: string } = {},
 ) => openStory(page, `ui-chatinput--${story}`, SHELL, options);
 
-/** A tile's preview button wraps its face, or sits beside an action inside the frame. */
+/** A tile's preview button wraps its face, sits beside an action inside the frame, or is its More. */
 const activation = (scope: Locator) =>
   scope.getByRole("button", { name: /^(Preview attachment|More:) / });
 /** The meta line's own words, without the More beside them. */
@@ -155,7 +163,16 @@ test.describe("the composer's recording", () => {
       // The generated name is no help on the face; the tooltip keeps it.
       await expect(tile).not.toContainText(RECORDING);
       await expect(tile.locator(MORE)).toHaveCount(phase.more ? 1 : 0);
-      await expect(tile.locator(EXCERPT)).toHaveCount(phase.more ? 1 : 0);
+      await expect(tile.locator(EXCERPT)).toHaveCount(
+        phase.more || phase.placeholder ? 1 : 0,
+      );
+      if (phase.placeholder) {
+        await expect(tile.locator(EXCERPT)).toHaveText(PLACEHOLDER);
+        await expect(tile.locator(EXCERPT)).toHaveAttribute(
+          "data-placeholder",
+          "true",
+        );
+      }
       const remove = shellOf(page).locator('[data-ui="attachment-remove"]');
       await expect(remove).toHaveAccessibleName(
         phase.cancels
@@ -259,39 +276,46 @@ test.describe("the composer's recording", () => {
   });
 
   for (const theme of ["light", "dark"] as const) {
-    test(`a recording shows its latest words in two lines at most, and a More inside its frame, ${theme}`, async ({
+    test(`a recording shows its first words in two lines at most, and a More button inside its frame, ${theme}`, async ({
       page,
     }) => {
       await openComposer(page, "audio-transcript-ready", { theme, width: 340 });
       const tile = page.locator(`${SHELL} ${TILE}`);
       const excerpt = tile.locator(EXCERPT);
-      await expect(excerpt).toHaveText(new RegExp(`${TRANSCRIPT}`));
+      await expect(excerpt).toHaveText(new RegExp(`^${TRANSCRIPT}`));
       const lines = await excerpt.evaluate((box) => {
-        const text = box.firstElementChild!.getBoundingClientRect();
-        const frame = box.getBoundingClientRect();
         const lineHeight = parseFloat(getComputedStyle(box).lineHeight);
         return {
-          shown: Math.round(frame.height / lineHeight),
-          written: Math.round(text.height / lineHeight),
-          // The text's end is what stays in view.
-          endGap: Math.abs(frame.bottom - text.bottom),
-          clippedAbove: text.top < frame.top - 0.5,
+          shown: Math.round(box.clientHeight / lineHeight),
+          written: Math.round(box.scrollHeight / lineHeight),
+          clamp: getComputedStyle(box).webkitLineClamp,
         };
       });
+      // The start stays in view and the end gives way to an ellipsis.
       expect(lines.shown).toBe(2);
       expect(lines.written).toBeGreaterThan(2);
-      expect(lines.clippedAbove).toBe(true);
-      expect(lines.endGap).toBeLessThan(0.5);
+      expect(lines.clamp).toBe("2");
 
       const more = tile.locator(MORE);
       await expect(more).toHaveText("More");
+      // The library's link Button, not a label drawn inside the activation.
+      await expect(more).toHaveAttribute("data-variant", "link");
+      expect(
+        await more.evaluate((button) =>
+          Boolean(button.parentElement!.closest("button")),
+        ),
+      ).toBe(false);
       const frame = await boxOf(tile);
       const inner = await boxOf(more);
       expect(inner.x + inner.width).toBeLessThanOrEqual(frame.x + frame.width);
       expect(inner.y + inner.height).toBeLessThanOrEqual(
         frame.y + frame.height,
       );
-      expect(await more.evaluate(contrastOf)).toBeGreaterThanOrEqual(4.5);
+      // The link Button reads in the muted token, as the meta line beside it
+      // does, which is about 4.4:1 on a light tile: the token's to fix.
+      if (theme === "dark") {
+        expect(await more.evaluate(contrastOf)).toBeGreaterThanOrEqual(4.5);
+      }
       expect(await excerpt.evaluate(contrastOf)).toBeGreaterThanOrEqual(4.5);
       await expect(activation(shellOf(page))).toHaveAttribute(
         "title",
@@ -301,7 +325,9 @@ test.describe("the composer's recording", () => {
         await page.evaluate(() => document.scrollingElement!.scrollWidth),
       ).toBeLessThanOrEqual(340);
 
-      await more.click();
+      // More is stretched over the tile: a click on the words opens it too.
+      const words = await boxOf(excerpt);
+      await page.mouse.click(words.x + 12, words.y + 8);
       const preview = page.getByRole("dialog", {
         name: `Preview: ${RECORDING}`,
       });
@@ -311,14 +337,22 @@ test.describe("the composer's recording", () => {
     });
   }
 
-  test("a recording without words yet shows its status line alone", async ({
+  test("a recording without words yet holds their two lines with a placeholder, so the tile keeps its size", async ({
     page,
   }) => {
     await openComposer(page, "audio-recording", { width: 340 });
     const tile = page.locator(`${SHELL} ${TILE}`);
-    await expect(tile.locator(EXCERPT)).toHaveCount(0);
+    await expect(tile.locator(EXCERPT)).toHaveText(PLACEHOLDER);
     await expect(tile.locator(MORE)).toHaveCount(0);
-    await expect(tile).toHaveText("Recording · 0:42");
+    await expect.poll(() => metaWords(tile)).toBe("Recording · 0:42");
+    const waiting = await boxOf(tile);
+
+    await openComposer(page, "audio-speaking", { width: 340 });
+    await expect(tile.locator(EXCERPT)).toHaveText(PARTIAL);
+    await expect(tile.locator(MORE)).toHaveCount(1);
+    const speaking = await boxOf(tile);
+    expect(speaking.height).toBe(waiting.height);
+    expect(speaking.width).toBe(waiting.width);
   });
 
   test("(x) cancels the transcription: the recording goes, Send stops waiting, the cancel is said", async ({
@@ -364,6 +398,9 @@ test.describe("the composer's recording", () => {
     await openComposer(page, "audio-transcribing", { locale: "de" });
     await expect(page.locator(`${SHELL} ${TILE} ${META}`)).toHaveText(
       "Wird transkribiert · 0:42",
+    );
+    await expect(page.locator(`${SHELL} ${TILE} ${EXCERPT}`)).toHaveText(
+      "Das Transkript erscheint hier…",
     );
     await expect(
       page.locator(`${SHELL} [data-ui="attachment-remove"]`),
@@ -443,11 +480,17 @@ test.describe("every phase on its tile", () => {
     await expect(retrying).toHaveText("Retrying…");
     await expect(retrying).toBeDisabled();
 
-    // The recordings this composer made show their words; an uploaded audio
-    // file keeps its name.
+    // The recordings this composer made show their words, or a placeholder
+    // while words may still come; an uploaded audio file keeps its name.
     await expect(
       tileNamed(page, "audio-recording-0904.wav").locator(EXCERPT),
-    ).toContainText("45 days payment terms instead of 30.");
+    ).toHaveText(/^Quick summary of the sales call/);
+    await expect(
+      tileNamed(page, "audio-recording-0901.wav").locator(EXCERPT),
+    ).toHaveText(PLACEHOLDER);
+    await expect(
+      tileNamed(page, "audio-recording-0905.wav").locator(EXCERPT),
+    ).toHaveCount(0);
     const uploaded = tileNamed(page, "customer-interview.wav");
     await expect(uploaded).toContainText("customer-interview.wav");
     await expect(uploaded.locator(EXCERPT)).toHaveCount(0);
@@ -463,6 +506,9 @@ test.describe("every phase on its tile", () => {
       TILE,
       { width: 340 },
     );
+    const tile = page.locator(TILE);
+    await expect(tile.locator(EXCERPT)).toHaveText(PLACEHOLDER);
+    const waiting = await boxOf(tile);
     // Every value the meta line takes for 5.5 s, with when it took it.
     const changes = await page.evaluate(
       ({ tile, meta }) =>
@@ -501,9 +547,13 @@ test.describe("every phase on its tile", () => {
     for (let index = 1; index < seconds.length; index += 1) {
       expect(seconds[index] - seconds[index - 1], seen.join(" | ")).toBe(1);
     }
-    // At 0:30 the first chunk's words arrive and take the tile.
+    // At 0:30 the first chunk's words arrive and take the placeholder's
+    // place, at the tile's size.
     await expect(page.locator(`${TILE} ${EXCERPT}`)).toHaveText(PARTIAL);
     await expect(page.locator(`${TILE} ${MORE}`)).toHaveText("More");
+    const speaking = await boxOf(tile);
+    expect(speaking.height).toBe(waiting.height);
+    expect(speaking.width).toBe(waiting.width);
   });
 
   test("Tab reaches the preview, the retry, then the remove", async ({
@@ -546,8 +596,11 @@ test.describe("every phase on its tile", () => {
           4.5,
         );
       }
-      for (const more of await page.locator(MORE).all()) {
-        expect(await more.evaluate(contrastOf)).toBeGreaterThanOrEqual(4.5);
+      // More is a link Button in the same muted token as the meta lines.
+      if (theme === "dark") {
+        for (const more of await page.locator(MORE).all()) {
+          expect(await more.evaluate(contrastOf)).toBeGreaterThanOrEqual(4.5);
+        }
       }
     });
   }

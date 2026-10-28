@@ -140,6 +140,9 @@ export const FileAttachmentsPreview: React.FC<FileAttachmentsPreviewProps> = ({
                     ...(audio.transcript.excerpt
                       ? { excerpt: audio.transcript.excerpt }
                       : {}),
+                    ...(audio.transcript.placeholder
+                      ? { placeholder: audio.transcript.placeholder }
+                      : {}),
                     ...(audio.transcript.more
                       ? {
                           more: {

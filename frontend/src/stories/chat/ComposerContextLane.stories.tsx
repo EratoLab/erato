@@ -174,7 +174,7 @@ const meta: Meta = {
     docs: {
       description: {
         component:
-          "Host context as chips inside the composer, before staged files. Each chip renders the state its host resolved from the send; (x) and + are always visible, and Enter opens a chip's detail.",
+          "Host context as chips inside the composer, before staged files. A chip is drawn as a file tile, at its height: the glyph on a plate, the label on line one and the meta on line two. Each chip renders the state its host resolved from the send; (x) and + are always visible, and Enter opens a chip's detail.",
       },
     },
   },

@@ -1766,6 +1766,11 @@ msgid "chat.audio.status.uploadingDuration"
 msgstr "Téléversement · {duration}"
 
 #. js-lingui-explicit-id
+#: src/components/ui/FileUpload/audioTranscriptionStatus.ts
+msgid "chat.audio.transcriptPlaceholder"
+msgstr "La transcription s’affichera ici…"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatInput.tsx
 #: src/components/ui/Chat/CompactionSuggestion.tsx
 msgid "chat.compaction.action"

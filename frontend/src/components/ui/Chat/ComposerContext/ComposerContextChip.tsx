@@ -1,5 +1,9 @@
 import clsx from "clsx";
 
+import {
+  AttachmentTileFace,
+  AttachmentTileTitle,
+} from "@/components/ui/FileUpload/AttachmentTile";
 import { CloseIcon, LockIcon, PlusIcon } from "@/components/ui/icons";
 
 import {
@@ -26,21 +30,8 @@ import type {
 
 export type ComposerContextControl = "remove" | "restore" | null;
 
-/** At the chip's 13px label size, 13 Latin characters ("This document") are about 7em wide. */
-const SHORT_LABEL_WIDTH = 13;
-
-// East Asian wide and fullwidth characters take about twice a Latin letter's width.
-const WIDE_CHARACTER =
-  /[\u1100-\u115F\u2E80-\u303E\u3041-\u33FF\u3400-\u4DBF\u4E00-\u9FFF\uA000-\uA4CF\uAC00-\uD7A3\uF900-\uFAFF\uFE30-\uFE4F\uFF00-\uFF60\uFFE0-\uFFE6\u{20000}-\u{3FFFD}]/u;
-
-const isShortLabel = (label: string) => {
-  let width = 0;
-  for (const character of label) {
-    width += WIDE_CHARACTER.test(character) ? 2 : 1;
-    if (width > SHORT_LABEL_WIDTH) return false;
-  }
-  return true;
-};
+const CHIP_MAX_WIDTH =
+  "min(100%, calc(var(--theme-layout-attachment-tile-compact-doc-max-width) * 1.5))";
 
 /**
  * Which control a chip draws, from its state alone: a suggested item offers
@@ -77,7 +68,10 @@ export const composerContextControlLabel = (
     ? (item.removeLabel ?? removeLabelFor(composerContextSpokenLabel(item)))
     : (item.restoreLabel ?? restoreLabelFor(composerContextSpokenLabel(item)));
 
-/** The host's own face: glyph, label, meta and a lock mark. Kits may wrap it. */
+/**
+ * The host's own face: the file tile's anatomy, with the item's glyph in the
+ * plate, its label on line one and its meta on line two. Kits may wrap it.
+ */
 export const DefaultComposerContextChipFace = ({
   item,
   icon,
@@ -85,50 +79,34 @@ export const DefaultComposerContextChipFace = ({
 }: ComposerContextChipFaceProps) => (
   <span
     data-ui="composer-context-chip-face"
-    className="flex min-w-0 flex-1 items-center gap-1.5"
+    className="flex min-w-0 flex-1 items-center gap-2"
   >
-    <span
-      data-ui="composer-context-chip-icon"
-      className="inline-flex size-4 shrink-0 items-center justify-center"
-    >
-      {icon}
-    </span>
-    <span
-      data-ui="composer-context-chip-label"
-      className={clsx(
-        "truncate text-[0.8125rem] leading-4",
-        // A label narrower than the 7em floor would be padded out to it,
-        // leaving a gap before the meta; it keeps its own width instead.
-        // Never both shrink classes: the stylesheet order would let
-        // shrink-[2] win and cut the short label after all.
-        meta && isShortLabel(item.label) ? "shrink-0" : "shrink-[2]",
-        meta && !isShortLabel(item.label) && "min-w-[7em]",
-      )}
-    >
-      {item.label}
-    </span>
-    {meta ? (
-      <>
-        <span aria-hidden="true" data-ui="composer-context-chip-separator">
-          ·
-        </span>
-        <span
-          data-ui="composer-context-chip-meta"
-          className="min-w-[6em] shrink truncate text-xs leading-4"
+    <AttachmentTileFace
+      icon={icon}
+      parts={{
+        icon: "composer-context-chip-icon",
+        meta: "composer-context-chip-meta",
+      }}
+      title={
+        <AttachmentTileTitle
+          data-ui="composer-context-chip-label"
+          end={
+            item.locked ? (
+              <span
+                aria-hidden="true"
+                data-ui="composer-context-chip-lock"
+                className="inline-flex shrink-0"
+              >
+                <LockIcon className="size-3.5" />
+              </span>
+            ) : undefined
+          }
         >
-          {meta}
-        </span>
-      </>
-    ) : null}
-    {item.locked ? (
-      <span
-        aria-hidden="true"
-        data-ui="composer-context-chip-lock"
-        className="inline-flex shrink-0"
-      >
-        <LockIcon className="size-3.5" />
-      </span>
-    ) : null}
+          {item.label}
+        </AttachmentTileTitle>
+      }
+      meta={meta}
+    />
   </span>
 );
 
@@ -177,7 +155,10 @@ export const ComposerContextChip = ({
       data-origin={item.origin}
       data-locked={item.locked ? "true" : undefined}
       data-has-detail={item.detail ? "true" : undefined}
-      className="composer-context-chip-geometry composer-context-chip-skin flex min-w-0 max-w-full items-center"
+      className="composer-context-chip-geometry composer-context-chip-skin flex min-w-0 items-center"
+      // As wide as a recording's tile: a label is words more often than a
+      // file name.
+      style={{ maxWidth: CHIP_MAX_WIDTH }}
     >
       <button
         ref={openRef}
@@ -192,7 +173,7 @@ export const ComposerContextChip = ({
         onKeyDown={(event) => onKeyDown(event, item)}
         className={clsx(
           "flex h-full min-w-0 flex-1 items-center pl-2 text-left focus:outline-none",
-          control ? "pr-0.5" : "pr-2",
+          control ? "pr-1" : "pr-2",
           !item.detail && "cursor-default",
         )}
       >
@@ -232,7 +213,7 @@ export const ComposerContextChip = ({
             control === "remove" ? onRemove(item) : onRestore(item)
           }
           className={clsx(
-            "composer-context-control-geometry mr-1 inline-flex shrink-0 items-center justify-center",
+            "composer-context-control-geometry mr-2 inline-flex shrink-0 items-center justify-center",
             "text-theme-fg-muted hover:bg-theme-bg-hover hover:text-theme-fg-primary",
             "focus-ring-inset disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent",
           )}

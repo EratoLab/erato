@@ -137,8 +137,9 @@ const recordings = [
 
 /* Every phase a staged recording reports, on its own tile. The composer
    offers the retry only for recordings it still holds; here every failed one.
-   The composer's recordings show their latest words instead of their generated
-   name; the uploaded interview keeps its name. */
+   The composer's recordings show their first words instead of their generated
+   name, or a placeholder until words arrive; the uploaded interview keeps its
+   name. */
 export const AudioStatuses: Story = {
   args: {
     attachedFiles: recordings,
@@ -209,7 +210,9 @@ const LiveRecording = () => {
 };
 
 /* The running recording counts up every second by the composer's own clock,
-   not in the 30-second steps of the chunks the server has taken up. */
+   not in the 30-second steps of the chunks the server has taken up. Its
+   placeholder holds the words' two lines, so the tile keeps its size when the
+   first chunk's words arrive at 0:30. */
 export const AudioRecordingLive: Story = {
   args: {
     attachedFiles: [],

@@ -139,6 +139,8 @@ export interface ThreadMessageAttachmentItem {
   selected?: boolean;
   /** Omit to render the attachment read-only, without a checkbox. */
   onToggle?: () => void;
+  /** Overrides the type derived from the filename, as on the flat rows. */
+  labelOverride?: string;
   validation?: { ok: boolean; reason?: string };
 }
 
@@ -477,6 +479,7 @@ export function useGroupedFileAttachmentsPreview(
                       }
                     : undefined,
                   validation: attachment.validation,
+                  labelOverride: attachment.labelOverride,
                   disabled,
                   showType: rowTypeLabel,
                   showSize: showFileSizes,

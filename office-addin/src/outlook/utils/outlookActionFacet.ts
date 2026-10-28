@@ -390,16 +390,13 @@ export function resolveOutlookActionFacet(
 
 /**
  * What the last send of a draft left behind for the chip to compare against.
- * `sent` is the fingerprint the send attached. `seen` is the same draft as
- * render time saw it: for an appointment the provider's bind-time fields, or
- * the form as last re-read after an edit event, either of which can lag the
- * live form the send read; for a message, `sent` again. `recipients` are the
- * live recipients that send read; they stand in until the host reports a
- * recipient edit.
+ * `sent` is the fingerprint the send attached, from the draft it read off the
+ * live item; render time keeps that read as well, so both compare the same
+ * draft. `recipients` are the live recipients that send read; they stand in
+ * until render time reads them itself.
  */
 export interface OutlookSentDraft {
   sent: string;
-  seen: string;
   recipients?: string;
 }
 
@@ -408,7 +405,7 @@ export type OutlookSendPreviewInput = Omit<
   "lastSentDraftFingerprint" | "recipients" | "nowIso" | "timezone"
 > & {
   lastSentDraft: OutlookSentDraft | null;
-  /** Recipients re-read after the host reported an edit, if it has. */
+  /** Recipients as render time last read them, if it has. */
   liveRecipients?: string;
 };
 
@@ -442,9 +439,10 @@ export interface OutlookSendPreview {
 
 /**
  * The send resolver run on what render time knows, so the draft chip states
- * what a send would do instead of re-deriving the rules. Recipient and
- * appointment edits are seen once the host reports them; a body edit never
- * is, so this can under-claim a change, never invent one.
+ * what a send would do instead of re-deriving the rules. Render time knows
+ * the draft as last read: at bind, on an edit event the host reports, when
+ * the pane gains focus, while the draft's detail is open, and at each send,
+ * which reads it again before it decides.
  */
 export function previewOutlookSend(
   input: OutlookSendPreviewInput,
@@ -452,11 +450,7 @@ export function previewOutlookSend(
   const { lastSentDraft, liveRecipients, ...rest } = input;
   const recipients = liveRecipients ?? lastSentDraft?.recipients;
   const fingerprint = outlookDraftFingerprint({ ...rest, recipients });
-  const lastSentDraftFingerprint = lastSentDraft
-    ? fingerprint === lastSentDraft.seen
-      ? fingerprint
-      : lastSentDraft.sent
-    : null;
+  const lastSentDraftFingerprint = lastSentDraft?.sent ?? null;
   const facetInput = {
     ...rest,
     recipients,

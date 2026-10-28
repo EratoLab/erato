@@ -39,7 +39,7 @@ pnpm exec vitest run src/test/__tests__/sentWithStoryParity.test.ts -u
 `edit-composer.spec.ts` checks the real `MessageEditor`:
 
 - the lane above the message field, named "Attachments of this message";
-- a Teams transcript read from its stored file as one 32 px chip whose (x) is
+- a Teams transcript read from its stored file as one 54 px chip whose (x) is
   drawn without hover inside the chip and takes the transcript and its shared
   files out of the edit (announced with the count, focus back on the message);
   Delete does the same; an unchanged edit sends every file;

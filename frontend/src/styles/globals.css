@@ -294,7 +294,8 @@
   --theme-layout-attachment-tile-medium-media-size: 7rem;
   --theme-layout-attachment-tile-medium-doc-max-width: 18rem;
   --theme-layout-attachment-tile-staged-max-height: 12rem;
-  --theme-layout-composer-context-chip-height: 2rem;
+  --theme-layout-composer-context-chip-height: calc(3.25rem + 2px);
+  --theme-layout-composer-context-area-max-height: 16.5rem;
   --theme-layout-composer-context-detail-width: 24rem;
   --theme-layout-sidebar-width: 17.5rem;
   --theme-layout-sidebar-slim-width: 4rem;
@@ -846,10 +847,18 @@ body {
     border-radius: var(--attachment-tile-radius, var(--theme-radius-base));
   }
 
-  /* Composer context chips stand in the same row as file tiles, so they read
-     the tile corner too; one line high where a file tile takes two. */
+  /* Composer context chips stand in the same rows as file tiles and share
+     their anatomy, so they read the tile corner and default to a document
+     tile's height: two lines, its padding and its border. */
   .composer-context-chip-geometry {
     height: var(--theme-layout-composer-context-chip-height);
+    border-radius: var(--attachment-tile-radius, var(--theme-radius-base));
+  }
+
+  /* "+N more" and "Show less" are controls rather than items, so they stay
+     one line high and wear the chip corner. */
+  .composer-context-more-geometry {
+    height: 2rem;
     border-radius: var(--attachment-tile-radius, var(--theme-radius-base));
   }
 
@@ -1133,6 +1142,12 @@ body {
    fill, the border and the glyph, never by text below 4.5:1: the label and
    meta stay on --theme-fg-secondary or stronger. */
 .composer-context-chip-skin {
+  /* The plate under the glyph takes the glyph's colour, as a file tile's
+     takes its type's. */
+  --attachment-tile-icon-tint: var(
+    --composer-context-chip-icon,
+    var(--theme-fg-secondary)
+  );
   border-width: 1px;
   border-style: var(--composer-context-chip-border-style, solid);
   border-color: var(
@@ -1262,12 +1277,8 @@ body {
   font-weight: var(--composer-context-chip-label-weight, 500);
 }
 
-.composer-context-chip-skin [data-ui="composer-context-chip-separator"],
 .composer-context-chip-skin [data-ui="composer-context-chip-meta"] {
   color: var(--composer-context-chip-meta, var(--theme-fg-secondary));
-}
-
-.composer-context-chip-skin [data-ui="composer-context-chip-meta"] {
   font-style: var(--composer-context-chip-meta-style, normal);
 }
 

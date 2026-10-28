@@ -1106,9 +1106,49 @@ msgid "officeAddin.outlook.context.drop.bodyAlwaysSent"
 msgstr "Siempre se envía"
 
 #. js-lingui-explicit-id
+#: src/outlook/utils/buildDropEmailGroup.ts
+msgid "officeAddin.outlook.context.drop.bodyWithPictures"
+msgstr "{bodyPictures, plural, one {Cuerpo del correo con # imagen} other {Cuerpo del correo con # imágenes}}"
+
+#. js-lingui-explicit-id
 #: src/outlook/utils/outlookContextChips.ts
 msgid "officeAddin.outlook.context.drop.meta.attachments"
 msgstr "{total, plural, one {{kept}/# adjunto} other {{kept}/# adjuntos}}"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/buildDropEmailGroup.ts
+msgid "officeAddin.outlook.context.drop.partType.audio"
+msgstr "Audio {format}"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/buildDropEmailGroup.ts
+msgid "officeAddin.outlook.context.drop.partType.image"
+msgstr "Imagen {format}"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/buildDropEmailGroup.ts
+msgid "officeAddin.outlook.context.drop.partType.pdf"
+msgstr "Documento PDF"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/buildDropEmailGroup.ts
+msgid "officeAddin.outlook.context.drop.partType.video"
+msgstr "Vídeo {format}"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/buildDropEmailGroup.ts
+msgid "officeAddin.outlook.context.drop.unnamedAttachment"
+msgstr "Adjunto {n}"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/buildDropEmailGroup.ts
+msgid "officeAddin.outlook.context.drop.unnamedImage"
+msgstr "Imagen {n}"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/buildDropEmailGroup.ts
+msgid "officeAddin.outlook.context.drop.unnamedInlineImage"
+msgstr "Imagen insertada {n}"
 
 #. js-lingui-explicit-id
 #: src/outlook/hooks/useOutlookContextItems.tsx
@@ -4181,13 +4221,18 @@ msgstr "Buscar por autor o texto"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordCommentPicker.tsx
-msgid "officeAddin.word.comments.picker.sort"
-msgstr "Ordenar"
+#~ msgid "officeAddin.word.comments.picker.sort"
+#~ msgstr "Ordenar"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordCommentPicker.tsx
 msgid "officeAddin.word.comments.picker.sortActivity"
 msgstr "Actividad más reciente"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentPicker.tsx
+msgid "officeAddin.word.comments.picker.sortBy"
+msgstr "Orden: {current}"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordCommentPicker.tsx

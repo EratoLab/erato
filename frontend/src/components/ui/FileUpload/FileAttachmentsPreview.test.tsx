@@ -493,7 +493,7 @@ describe("inside the composer's shared staged area", () => {
       ).toHaveTextContent("Transcribing · 0:38");
     });
 
-    it("shows the composer's recording by its latest words with a More that opens the preview, and an uploaded audio file by its name", async () => {
+    it("shows the composer's recording by its first words with a More that opens the preview, a wordless one by a placeholder, and an uploaded audio file by its name", async () => {
       const onFilePreview = vi.fn();
       await renderWithProviders(
         <FileAttachmentsPreview
@@ -513,6 +513,11 @@ describe("inside the composer's shared staged area", () => {
               ...recording("b", { status: "completed", transcript: "Hi." }),
               filename: "interview.wav",
             },
+            recording("c", {
+              status: "recording",
+              chunks: [],
+              recording_elapsed_ms: 3_000,
+            }),
           ]}
           maxFiles={5}
           onRemoveFile={vi.fn()}
@@ -522,9 +527,12 @@ describe("inside the composer's shared staged area", () => {
         />,
       );
       expect(screen.queryByText("audio-recording-a.wav")).toBeNull();
-      expect(
-        document.querySelector('[data-ui="attachment-tile-excerpt"]'),
-      ).toHaveTextContent("This is what I said first.");
+      const [words, placeholder] = document.querySelectorAll(
+        '[data-ui="attachment-tile-excerpt"]',
+      );
+      expect(words).toHaveTextContent("This is what I said first.");
+      expect(placeholder).toHaveTextContent("The transcript appears here…");
+      expect(placeholder).toHaveAttribute("data-placeholder", "true");
       const more = screen.getByRole("button", {
         name: "More: audio-recording-a.wav, Recording · 0:41",
       });
@@ -536,6 +544,9 @@ describe("inside the composer's shared staged area", () => {
       expect(screen.getByText("interview.wav")).toBeInTheDocument();
       expect(
         document.querySelectorAll('[data-ui="attachment-tile-excerpt"]'),
+      ).toHaveLength(2);
+      expect(
+        document.querySelectorAll('[data-ui="attachment-tile-more"]'),
       ).toHaveLength(1);
     });
   });

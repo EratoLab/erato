@@ -31,7 +31,7 @@ The spec checks:
   names them, including "Dismiss email thread" and "Dismiss {name}" on error
   chips; no chip at all for a thread already sent in the chat or dropped as an
   email;
-- geometry at the task pane (340 px) and the 480 px breakpoint: 32 px chips
+- geometry at the task pane (340 px) and the 480 px breakpoint: 54 px chips
   inside the lane, controls inside their chip, long metas such as
   "3 of 5 messages · 1.2 MB of 25 MB" cut with an ellipsis, no horizontal
   page overflow, a quote label of at most 61 characters;
