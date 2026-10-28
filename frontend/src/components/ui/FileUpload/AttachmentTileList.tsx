@@ -170,9 +170,10 @@ export const AttachmentTileList: React.FC<AttachmentTileListProps> = ({
             // `auto` per spec, which clips the remove button's overhang and can
             // raise a phantom horizontal scrollbar. So the cap pays for the
             // overhang in padding, takes it back in margin to leave the tiles
-            // where they were, and pins `overflow-x` explicitly.
+            // where they were, and pins `overflow-x` explicitly. The left side
+            // pays for a tile's focus ring, which sits outside its frame.
             capHeight &&
-              "-mr-1 -mt-1 overflow-y-auto overflow-x-hidden pr-1 pt-1",
+              "-mx-1 -mt-1 overflow-y-auto overflow-x-hidden px-1 pt-1",
           )}
           style={
             capHeight
