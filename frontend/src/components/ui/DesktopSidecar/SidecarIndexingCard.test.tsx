@@ -326,6 +326,23 @@ it("retains drafts across polls and failed saves, then clears them after success
   ).toHaveValue(5);
 });
 
+it("shows a failed save directly after the save button", () => {
+  vi.mocked(useSidecarIndexing).mockReturnValue({
+    ...vi.mocked(useSidecarIndexing)(),
+    saveError: new Error("offline"),
+  });
+  renderControls();
+
+  const alert = screen.getByRole("alert");
+  expect(alert).toHaveTextContent(
+    "Could not save indexing settings. Please try again.",
+  );
+  expect(
+    screen.getByRole("button", { name: "Save indexing settings" })
+      .nextElementSibling,
+  ).toBe(alert);
+});
+
 it("resets only after confirmation and hides reset on older sidecars", () => {
   const reset = vi.fn();
   vi.mocked(useSidecarIndexing).mockReturnValue({

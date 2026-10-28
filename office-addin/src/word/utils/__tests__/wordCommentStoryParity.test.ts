@@ -831,7 +831,7 @@ function threadData(thread: WordCommentListThread) {
     ),
     ...optional("replies", wordCommentRepliesText(thread.replies)),
     text: thread.text,
-    quote: wordCommentQuoteText(thread.quote),
+    quote: thread.quote === null ? "" : wordCommentQuoteText(thread.quote),
     chosen: chosenText(thread.ref)!,
   };
 }

@@ -352,68 +352,6 @@ export const Submitting: Story = {
   ),
 };
 
-// With success message
-export const WithSuccessMessage: Story = {
-  args: {
-    mode: "create",
-    availableModels: mockModels,
-    successMessage: "Assistant created successfully!",
-    initialData: {
-      name: "Research Assistant",
-      description: "Helps with research and data analysis",
-      prompt: "You are a research assistant...",
-      defaultModel: mockModels[2],
-      files: [],
-      mcpServerIds: [],
-    },
-    onSubmit: (data) => {
-      console.log("Form submitted:", data);
-    },
-    onCancel: () => {
-      console.log("Form cancelled");
-    },
-  },
-  render: (args) => (
-    <div className="w-[700px] rounded-lg border border-theme-border bg-theme-bg-primary p-8">
-      <h2 className="mb-6 text-2xl font-semibold text-theme-fg-primary">
-        Success State
-      </h2>
-      <AssistantForm {...args} />
-    </div>
-  ),
-};
-
-// With error message
-export const WithErrorMessage: Story = {
-  args: {
-    mode: "create",
-    availableModels: mockModels,
-    errorMessage: "Failed to create assistant. Please try again.",
-    initialData: {
-      name: "My Assistant",
-      description: "",
-      prompt: "You are a helpful assistant.",
-      defaultModel: null,
-      files: [],
-      mcpServerIds: [],
-    },
-    onSubmit: (data) => {
-      console.log("Form submitted:", data);
-    },
-    onCancel: () => {
-      console.log("Form cancelled");
-    },
-  },
-  render: (args) => (
-    <div className="w-[700px] rounded-lg border border-theme-border bg-theme-bg-primary p-8">
-      <h2 className="mb-6 text-2xl font-semibold text-theme-fg-primary">
-        Error State
-      </h2>
-      <AssistantForm {...args} />
-    </div>
-  ),
-};
-
 // With file attachments
 export const WithFileAttachments: Story = {
   args: {
@@ -546,33 +484,18 @@ export const ContextUsageErrorAbove100Percent: Story = {
 const InteractiveDemoComponent = () => {
   const [formData, setFormData] = useState<AssistantFormData | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [successMessage, setSuccessMessage] = useState("");
-  const [errorMessage, setErrorMessage] = useState("");
 
   const handleSubmit = async (data: AssistantFormData) => {
     setIsSubmitting(true);
-    setSuccessMessage("");
-    setErrorMessage("");
 
     // Simulate API call
     await new Promise((resolve) => setTimeout(resolve, 2000));
 
-    // Randomly succeed or fail for demo
-    const success = Math.random() > 0.3;
-
-    if (success) {
-      setSuccessMessage("Assistant created successfully!");
-      setFormData(data);
-    } else {
-      setErrorMessage("Failed to create assistant. Please try again.");
-    }
-
+    setFormData(data);
     setIsSubmitting(false);
   };
 
   const handleCancel = () => {
-    setSuccessMessage("");
-    setErrorMessage("");
     setFormData(null);
   };
 
@@ -586,8 +509,6 @@ const InteractiveDemoComponent = () => {
           mode="create"
           availableModels={mockModels}
           isSubmitting={isSubmitting}
-          successMessage={successMessage}
-          errorMessage={errorMessage}
           onSubmit={handleSubmit}
           onCancel={handleCancel}
         />

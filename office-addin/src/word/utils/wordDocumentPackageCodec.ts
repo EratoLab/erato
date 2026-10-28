@@ -75,8 +75,47 @@ export function readWordPackage(bytes: Uint8Array): WordDocumentParts {
       );
     parts.set(path, data);
   });
+  dropWordTaskPanesWithoutPart(parts);
   validateWordPackage(parts);
   return parts;
+}
+
+const TASK_PANE_RELATIONSHIPS = new Set(
+  ["webextension", "webextensiontaskpanes"].map(
+    (type) => `http://schemas.microsoft.com/office/2011/relationships/${type}`,
+  ),
+);
+
+/** Word for Mac 16.114 hands over a document that auto-opens a task pane without word/webextensions/*
+ * but keeps the relationship to them, with Target="NULL". Task panes are host state, not content. */
+function dropWordTaskPanesWithoutPart(parts: Map<string, Uint8Array>): void {
+  for (const [path, data] of parts) {
+    if (!path.endsWith(".rels")) continue;
+    try {
+      const owner = wordRelationshipOwner(path);
+      const doc = parseWordXml(wordXmlText(data));
+      const dangling = Array.from(doc.documentElement.children).filter(
+        (rel) => {
+          const target = rel.getAttribute("Target");
+          return (
+            rel.namespaceURI === PACKAGE_REL_NS &&
+            TASK_PANE_RELATIONSHIPS.has(rel.getAttribute("Type") ?? "") &&
+            rel.getAttribute("TargetMode") !== "External" &&
+            !!target &&
+            !parts.has(wordRelationshipTarget(owner, target))
+          );
+        },
+      );
+      if (!dangling.length) continue;
+      for (const rel of dangling) rel.remove();
+      parts.set(
+        path,
+        encodeWordXml(new XMLSerializer().serializeToString(doc)),
+      );
+    } catch {
+      // validateWordPackage reports a malformed relationship part.
+    }
+  }
 }
 
 export function writeWordPackage(parts: WordDocumentParts): Uint8Array {

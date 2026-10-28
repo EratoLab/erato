@@ -1,10 +1,11 @@
 import { i18n, type Messages } from "@lingui/core";
 import { I18nProvider } from "@lingui/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { useToastStore } from "@/components/ui/Toast/toastStore";
 import { useGenerationStatusStore } from "@/hooks/chat/store/generationStatusStore";
 import {
   useGetAssistant,
@@ -19,6 +20,7 @@ import AssistantChatSpacePage from "../AssistantChatSpacePage";
 import type { RecentChat } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { ChatSession } from "@/types/chat";
 import type React from "react";
+import type { ComponentProps } from "react";
 import type { Mock } from "vitest";
 
 import "@testing-library/jest-dom";
@@ -71,12 +73,14 @@ vi.mock("@/components/ui/Chat/ChatEmptyState", () => ({
     delegatedRuns,
     delegationEnabled,
     isLoadingChats,
+    onChatPin,
   }: {
     variant: "assistant" | "chat";
     pastChats?: ChatSession[];
     delegatedRuns?: ChatSession[];
     delegationEnabled?: boolean;
     isLoadingChats?: boolean;
+    onChatPin?: (chatId: string, isPinned: boolean) => void;
   }) => (
     <div data-testid={`empty-state-${variant}`}>
       <div data-testid="past-chats">
@@ -87,6 +91,13 @@ vi.mock("@/components/ui/Chat/ChatEmptyState", () => ({
       </div>
       <div data-testid="delegation-enabled">{String(delegationEnabled)}</div>
       <div data-testid="is-loading-chats">{String(isLoadingChats)}</div>
+      {onChatPin ? (
+        <button
+          type="button"
+          data-testid="pin-chat"
+          onClick={() => onChatPin("own-1", true)}
+        />
+      ) : null}
     </div>
   ),
 }));
@@ -138,7 +149,7 @@ const mockRecentChats = (chats: RecentChat[], isLoading = false) => {
 
 const renderPage = (
   initialEntry: string,
-  featureConfig?: { assistants?: { delegationEnabled?: boolean } },
+  featureConfig?: ComponentProps<typeof StaticFeatureConfigProvider>["config"],
 ) => {
   const queryClient = new QueryClient({
     defaultOptions: {
@@ -169,6 +180,7 @@ describe("AssistantChatSpacePage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     useGenerationStatusStore.getState().reset();
+    useToastStore.setState({ toasts: [] });
 
     (useRecentChats as Mock).mockReturnValue({
       data: undefined,
@@ -254,6 +266,35 @@ describe("AssistantChatSpacePage", () => {
     expect(screen.getByTestId("assistant-file-downloads")).toHaveTextContent(
       "",
     );
+  });
+
+  it("reports a failed pin from the assistant landing page in a toast", async () => {
+    const pinChat = vi.fn().mockRejectedValue(new Error("boom"));
+    (useChatContext as Mock).mockReturnValue({
+      messages: {},
+      messageOrder: [],
+      currentChatId: "chat-1",
+      mountKey: "mount-key",
+      pinnedChats: [],
+      pinChat,
+    });
+    (useGetAssistant as Mock).mockReturnValue({
+      data: assistant,
+      isLoading: false,
+      error: null,
+    });
+
+    renderPage("/a/assistant-1", {
+      pinnedChats: { enabled: true, maxItems: 5 },
+    });
+    fireEvent.click(screen.getByTestId("pin-chat"));
+
+    await waitFor(() => {
+      expect(useToastStore.getState().toasts).toMatchObject([
+        { variant: "error", title: "Couldn't pin the chat" },
+      ]);
+    });
+    expect(pinChat).toHaveBeenCalledWith("own-1", true);
   });
 
   describe("delegated runs", () => {

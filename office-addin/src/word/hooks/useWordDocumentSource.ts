@@ -74,8 +74,8 @@ interface CachedCapture {
   generation: number;
   durationMs: number;
   startedAt: number;
-  /** A failed read or package transfer, or a capture Word for Mac was still tagging, is retried at
-   * the next send; a file that can never be edited is not. */
+  /** A failed read or package transfer, or a capture Word was still tagging, is retried at the
+   * next send; a file that can never be edited is not. */
   retry: boolean;
 }
 

@@ -83,7 +83,7 @@ const mapStandIn = (threads: readonly WordCommentListThread[]) =>
     : JSON.stringify(
         threads.slice(0, WORD_COMMENT_MAP_PAGE_ROWS).map((thread) => ({
           by: thread.author,
-          q: thread.quote.slice(0, WORD_COMMENT_MAP_QUOTE_CHARS),
+          q: (thread.quote ?? "").slice(0, WORD_COMMENT_MAP_QUOTE_CHARS),
           g: wordCommentGist(thread.text),
         })),
       );

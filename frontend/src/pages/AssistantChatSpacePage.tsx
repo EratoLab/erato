@@ -5,6 +5,7 @@ import { useParams } from "react-router-dom";
 
 import { Chat } from "@/components/ui/Chat/Chat";
 import { ChatEmptyState } from "@/components/ui/Chat/ChatEmptyState";
+import { runChatAction } from "@/components/ui/Chat/chatActionFeedback";
 import { Alert } from "@/components/ui/Feedback/Alert";
 import { SpinnerIcon } from "@/components/ui/Feedback/SpinnerIcon";
 import { seedGenerationStatusFromListing } from "@/hooks/chat/store/generationStatusStore";
@@ -250,7 +251,9 @@ export default function AssistantChatSpacePage() {
         onChatPin={
           pinnedChatsEnabled
             ? (chatId, isPinned) => {
-                void pinChat(chatId, isPinned);
+                void runChatAction(isPinned ? "pin" : "unpin", chatId, () =>
+                  pinChat(chatId, isPinned),
+                );
               }
             : undefined
         }

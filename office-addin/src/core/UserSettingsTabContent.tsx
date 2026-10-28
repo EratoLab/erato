@@ -85,8 +85,6 @@ export function UserSettingsTabContent({
   return (
     <div className="flex h-full flex-col">
       <div className="flex-1 space-y-4 overflow-y-auto">
-        {saveError ? <Alert type="error">{saveError}</Alert> : null}
-
         <FormField
           label={t({
             id: "officeAddin.settings.user.nickname.label",
@@ -167,36 +165,41 @@ export function UserSettingsTabContent({
         </FormField>
       </div>
 
-      <div className="mt-4 flex shrink-0 justify-end gap-2 border-t border-theme-border pt-3">
-        <Button
-          variant="secondary"
-          onClick={onClose}
-          disabled={isSaving}
-          type="button"
-        >
-          {t({
-            id: "officeAddin.settings.user.actions.cancel",
-            message: "Cancel",
-          })}
-        </Button>
-        <Button
-          variant="primary"
-          onClick={() => {
-            void handleSave();
-          }}
-          disabled={isSaving || !hasChanges}
-          type="button"
-        >
-          {isSaving
-            ? t({
-                id: "officeAddin.settings.user.actions.saving",
-                message: "Saving...",
-              })
-            : t({
-                id: "officeAddin.settings.user.actions.save",
-                message: "Save",
-              })}
-        </Button>
+      {/* Pinned with Save: at the top of the scroll area, long instructions
+          scrolled the error out of view. */}
+      <div className="mt-4 shrink-0 space-y-3 border-t border-theme-border pt-3">
+        {saveError ? <Alert type="error">{saveError}</Alert> : null}
+        <div className="flex justify-end gap-2">
+          <Button
+            variant="secondary"
+            onClick={onClose}
+            disabled={isSaving}
+            type="button"
+          >
+            {t({
+              id: "officeAddin.settings.user.actions.cancel",
+              message: "Cancel",
+            })}
+          </Button>
+          <Button
+            variant="primary"
+            onClick={() => {
+              void handleSave();
+            }}
+            disabled={isSaving || !hasChanges}
+            type="button"
+          >
+            {isSaving
+              ? t({
+                  id: "officeAddin.settings.user.actions.saving",
+                  message: "Saving...",
+                })
+              : t({
+                  id: "officeAddin.settings.user.actions.save",
+                  message: "Save",
+                })}
+          </Button>
+        </div>
       </div>
     </div>
   );

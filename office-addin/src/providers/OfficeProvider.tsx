@@ -140,7 +140,9 @@ export function OfficeProvider({ children }: { children: React.ReactNode }) {
                 try {
                   saveComposeReloadState(window.sessionStorage, draftKey);
                 } catch (error) {
+                  // Sticky, and every microphone click retries the reload.
                   toast.error({
+                    dedupeKey: "office-audio-reload",
                     title:
                       error instanceof Error &&
                       error.name === "ComposeReloadBlockedError"

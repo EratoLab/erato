@@ -186,6 +186,34 @@ describe("times (F-4)", () => {
     });
   });
 
+  it("leaves an undated reply out of the ranks and the thread's times", () => {
+    const built = model(
+      [
+        source("t2i", 1, {
+          creationDate: new Date("2026-10-01T07:12:00Z"),
+          replies: [
+            entry("11", { creationDate: null }),
+            entry("12", { creationDate: null }),
+          ],
+        }),
+        source("t4c", 2, { creationDate: new Date("2026-10-02T09:00:00Z") }),
+      ],
+      { clock: { dateUtc: { byId: new Map(), otherwise: false } } },
+    );
+    const [root, ...replies] = entriesOf(built, "t2i");
+    expect(root).toMatchObject({ at: "2026-10-01T09:12", age: 1 });
+    for (const reply of replies) {
+      expect(reply).toMatchObject({ at: null, age: null, day: null });
+      expect(reply).not.toHaveProperty("tie");
+      expect(reply).not.toHaveProperty("day_uncertain");
+    }
+    expect(built.threads[0].thread).toMatchObject({
+      first_at: root.at,
+      last_at: root.at,
+    });
+    expect(entriesOf(built, "t4c")[0].age).toBe(2);
+  });
+
   it("ranks ages densely over every timed entry, ties at the minute on every host", () => {
     const at = (iso: string) => ({ creationDate: new Date(iso) });
     const sources = [
@@ -639,6 +667,30 @@ describe("the ERMAIN-947 fixture end to end", () => {
       expect(parseWordCommentEnvelope(json)).toEqual(sent);
     },
   );
+
+  it("leaves the replies of a file without dateUtc untimed on pc, where Word dates them 1899", async () => {
+    const host = installWordCommentHost({ host: "pc", legacy: true });
+    const result = await readWordComments({ now: host.now });
+    if (!result.ok) throw new Error(result.error);
+    const { refs, model: built } = wordCommentModelOf(result, {
+      registry: createWordCommentRefRegistry("doc"),
+      selection: null,
+      people,
+      now: NOW,
+      userTz: BERLIN,
+    });
+    const ref = refs.threads.find(
+      (t) => t.commentId === host.commentId("T1"),
+    )!.ref;
+    const { thread } = built.threads.find((t) => t.thread.id === ref)!;
+    const [root, ...replies] = thread.entries;
+    expect(root).toMatchObject({ at: "2026-09-03T10:15", tz: "unknown" });
+    expect(replies.map((e) => [e.at, e.age, e.day])).toEqual([
+      [null, null, null],
+      [null, null, null],
+    ]);
+    expect([thread.first_at, thread.last_at]).toEqual([root.at, root.at]);
+  });
 
   it.each(HOSTS)(
     "times T5, which has no dateUtc, honestly on %s",

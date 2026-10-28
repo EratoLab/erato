@@ -679,7 +679,15 @@ pub struct AppConfig {
 
     // Audio conversational feature configuration.
     #[serde(default)]
-    pub audio_conversational: AudioTranscriptionConfig,
+    pub audio_conversational: AudioConversationalConfig,
+
+    /// Named text-to-speech providers, independent of chat/transcription providers.
+    #[serde(default)]
+    pub speech_providers: SpeechProvidersConfig,
+
+    /// Named decision providers; consumers select a provider explicitly.
+    #[serde(default)]
+    pub decision_providers: DecisionProvidersConfig,
 
     // If true, enables the data-retention half of the cleanup worker's tick,
     // which archives quiet delegated runs and deletes old archived chats.
@@ -782,6 +790,20 @@ pub struct DesktopSidecarConfig {
     /// At most 64 ASCII letters, digits, hyphens or underscores; empty by default.
     pub directory_suffix: Option<String>,
 
+    /// Appended literally to the Windows launch URI scheme; empty by default.
+    /// At most 64 ASCII letters, digits, hyphens, dots or plus signs.
+    pub launch_suffix: Option<String>,
+
+    /// Windows MSI ProductCode override. A non-nil UUID, with optional braces.
+    /// When omitted, derived from the template product code and directory suffix.
+    /// Keep stable for repeated downloads; change for a major upgrade.
+    pub product_code: Option<String>,
+
+    /// Windows MSI UpgradeCode override. A non-nil UUID, with optional braces.
+    /// When omitted, derived from the template upgrade code and directory suffix.
+    /// Keep stable across releases within one environment.
+    pub upgrade_code: Option<String>,
+
     /// Base64-encoded PNG tray icon, up to 256x256 pixels (no data URL prefix).
     /// The complete bootstrap must fit the artifact's embedded capacity.
     pub icon: Option<String>,
@@ -841,6 +863,17 @@ pub struct LocalDelegationConfig {
 }
 
 impl DesktopSidecarConfig {
+    /// URI schemes are case-insensitive; normalize the plain configured suffix.
+    pub fn windows_launch_scheme(&self) -> String {
+        format!(
+            "erato-launch{}",
+            self.launch_suffix
+                .as_deref()
+                .unwrap_or("")
+                .to_ascii_lowercase()
+        )
+    }
+
     /// Public loopback endpoint matching the personalized artifact.
     pub fn endpoint(&self) -> Option<String> {
         if self.port.is_none() && !self.distribution.enabled {
@@ -856,6 +889,19 @@ impl DesktopSidecarConfig {
     }
 
     pub fn bootstrap_fields(&self) -> eyre::Result<serde_json::Map<String, serde_json::Value>> {
+        for (name, value) in [
+            ("product_code", &self.product_code),
+            ("upgrade_code", &self.upgrade_code),
+        ] {
+            if let Some(value) = value {
+                let code = uuid::Uuid::parse_str(value)
+                    .map_err(|_| eyre::eyre!("desktop_sidecar.{name} must be a UUID"))?;
+                eyre::ensure!(
+                    !code.is_nil(),
+                    "desktop_sidecar.{name} must not be a nil UUID"
+                );
+            }
+        }
         let mut fields = serde_json::Map::new();
         if self.local_delegation.enabled {
             let policy = &self.local_delegation;
@@ -897,6 +943,16 @@ impl DesktopSidecarConfig {
                 "Invalid desktop_sidecar.directory_suffix"
             );
             fields.insert("directory_suffix".into(), suffix.clone().into());
+        }
+        if let Some(suffix) = &self.launch_suffix {
+            eyre::ensure!(
+                suffix.len() <= 64
+                    && suffix
+                        .bytes()
+                        .all(|c| c.is_ascii_alphanumeric() || matches!(c, b'-' | b'.' | b'+')),
+                "Invalid desktop_sidecar.launch_suffix"
+            );
+            fields.insert("launch_suffix".into(), suffix.clone().into());
         }
         if let Some(name) = &self.display_name {
             eyre::ensure!(
@@ -985,6 +1041,33 @@ pub struct DesktopSidecarOrganizationConfiguration {
     #[serde(default)]
     #[schema(nullable = true)]
     pub show_tray_icon: Option<bool>,
+
+    /// Whether the desktop sidecar pins the Erato Outlook add-in in Outlook, so
+    /// users find its buttons without pinning them themselves.
+    ///
+    /// When unset, the sidecar uses its user configuration or built-in default,
+    /// which is off, so a deployment opts in. Turning it off again stops further
+    /// pinning and leaves existing pins in place.
+    #[serde(default)]
+    #[schema(nullable = true)]
+    pub outlook_addin_autopin: Option<bool>,
+
+    /// Whether `outlook_addin_autopin` also pins the add-in's task panes in
+    /// classic Outlook for Windows, which then open by themselves.
+    ///
+    /// When unset, the sidecar uses its user configuration or built-in default.
+    #[serde(default)]
+    #[schema(nullable = true)]
+    pub outlook_addin_autopin_panes: Option<bool>,
+
+    /// The Erato Outlook add-in's manifest id, which the sidecar needs to find
+    /// the add-in in classic Outlook for Windows.
+    ///
+    /// Normally left unset: the organization configuration endpoint then sends
+    /// `integrations.ms_office.addin.addin_id` while the Office add-in is enabled.
+    #[serde(default)]
+    #[schema(nullable = true)]
+    pub outlook_addin_id: Option<String>,
 }
 
 impl AppConfig {
@@ -1768,12 +1851,66 @@ impl AppConfig {
             }
         }
 
+        config
+            .validate_decision_providers()
+            .unwrap_or_else(|error| panic!("Invalid decision provider configuration: {error}"));
+        validate_provider_replacements(&config.speech_providers.replacement_providers, |id| {
+            config
+                .speech_providers
+                .provider
+                .get(id)
+                .map(|provider| provider.archived)
+        })
+        .unwrap_or_else(|error| panic!("Invalid speech provider replacements: {error}"));
+        for (id, provider) in &config.speech_providers.provider {
+            if provider.archived {
+                continue;
+            }
+            assert!(
+                matches!(
+                    provider.provider_kind.as_str(),
+                    "openai" | "openai_realtime" | "audio_cpp" | "gemini"
+                ),
+                "Unknown speech provider kind for {id}"
+            );
+            assert!(
+                !provider.model_name.trim().is_empty() && !provider.voice.trim().is_empty(),
+                "Speech provider {id} requires model_name and voice"
+            );
+            assert!(
+                (8000..=192000).contains(&provider.sample_rate),
+                "Invalid speech sample_rate for {id}"
+            );
+            if provider.provider_kind == "audio_cpp" {
+                assert!(
+                    provider.base_url.is_some(),
+                    "audio_cpp speech provider {id} requires base_url"
+                );
+            }
+            if provider.provider_kind == "gemini" {
+                assert!(
+                    provider.api_key.is_some() || provider.access_token.is_some(),
+                    "Gemini speech provider {id} requires api_key or access_token"
+                );
+                assert!(
+                    provider.project_id.is_some()
+                        || (provider.api_key.is_some() && provider.access_token.is_none()),
+                    "Gemini speech provider {id} requires project_id when using OAuth credentials"
+                );
+            }
+        }
+        if let Some(id) = &config.audio_conversational.speech_provider {
+            assert!(
+                config.resolve_speech_provider_id(id).is_ok(),
+                "Unknown audio_conversational.speech_provider: {id}"
+            );
+        }
         validate_audio_feature_config(&config, "audio_transcription", &config.audio_transcription);
         validate_audio_feature_config(&config, "audio_dictation", &config.audio_dictation);
         validate_audio_feature_config(
             &config,
             "audio_conversational",
-            &config.audio_conversational,
+            &config.audio_conversational.transcription,
         );
 
         // Validate that Langfuse is configured if any chat provider uses it
@@ -1804,6 +1941,7 @@ impl AppConfig {
 
                 self.chat_providers = Some(ChatProvidersConfig {
                     priority_order: vec!["default".to_string()],
+                    replacement_providers: Vec::new(),
                     all_providers: AllChatProvidersConfig::default(),
                     providers,
                     summary: SummaryConfig::default(),
@@ -1823,6 +1961,9 @@ impl AppConfig {
         // and apply default model capabilities
         if let Some(chat_providers) = &mut self.chat_providers {
             for (provider_id, provider_config) in &mut chat_providers.providers {
+                if provider_config.archived {
+                    continue;
+                }
                 if provider_config.system_prompt_langfuse.is_some() {
                     tracing::warn!(
                         "Config key `system_prompt_langfuse` is deprecated. Please use `system_prompt` with a prompt source specification instead."
@@ -1856,6 +1997,31 @@ impl AppConfig {
     /// Validates the chat providers configuration.
     pub fn validate_chat_providers(&self) -> Result<(), eyre::Report> {
         if let Some(chat_providers) = &self.chat_providers {
+            validate_provider_replacements(&chat_providers.replacement_providers, |id| {
+                chat_providers
+                    .providers
+                    .get(id)
+                    .map(|provider| provider.archived)
+            })?;
+            for replacement in &chat_providers.replacement_providers {
+                if let Some(old) = chat_providers.providers.get(&replacement.old)
+                    && !old.provider_kind.is_empty()
+                {
+                    let target = self.resolve_chat_provider_id(&replacement.old)?;
+                    let new = &chat_providers.providers[target];
+                    if (old.is_audio_transcription_provider()
+                        && !new.model_capabilities.supports_audio_input)
+                        || (!old.is_audio_transcription_provider()
+                            && new.is_audio_transcription_provider())
+                    {
+                        return Err(eyre!(
+                            "Provider replacement '{}' -> '{}' has an incompatible purpose",
+                            replacement.old,
+                            target
+                        ));
+                    }
+                }
+            }
             // Validate priority order is not empty
             if chat_providers.priority_order.is_empty() {
                 return Err(eyre!(
@@ -1866,6 +2032,13 @@ impl AppConfig {
             // Validate that at least one provider is configured
             if chat_providers.providers.is_empty() {
                 return Err(eyre!("At least one chat provider must be configured"));
+            }
+            if !chat_providers.priority_order.iter().any(|id| {
+                chat_providers.providers.get(id).is_some_and(|provider| {
+                    !provider.archived && !provider.is_audio_transcription_provider()
+                })
+            }) {
+                return Err(eyre!("Priority order must include an active chat provider"));
             }
 
             // Warn if a provider_id in priority order is not configured
@@ -1890,6 +2063,9 @@ impl AppConfig {
 
             // Validate individual provider configurations
             for (provider_id, provider_config) in &chat_providers.providers {
+                if provider_config.archived {
+                    continue;
+                }
                 if let Err(e) = provider_config.validate() {
                     return Err(eyre!(
                         "Invalid configuration for provider '{}': {}",
@@ -1908,6 +2084,9 @@ impl AppConfig {
                 &self.guardrails.prompt_patterns,
             )?;
             for (provider_id, provider_config) in &chat_providers.providers {
+                if provider_config.archived {
+                    continue;
+                }
                 if let Some(provider_guardrails) = &provider_config.guardrails {
                     validate_prompt_injection_filter_config(
                         &format!(
@@ -1981,18 +2160,7 @@ impl AppConfig {
                 eyre!("Prompt optimizer enabled but `prompt_optimizer.chat_provider_id` is not set")
             })?;
 
-        if let Some(chat_providers) = &self.chat_providers {
-            if !chat_providers.providers.contains_key(chat_provider_id) {
-                return Err(eyre!(
-                    "Prompt optimizer chat provider '{}' not found in configured chat_providers",
-                    chat_provider_id
-                ));
-            }
-        } else if self.chat_provider.is_none() {
-            return Err(eyre!(
-                "Prompt optimizer enabled but no chat provider configuration found"
-            ));
-        }
+        self.resolve_chat_provider_id(chat_provider_id)?;
 
         Ok(())
     }
@@ -2014,13 +2182,7 @@ impl AppConfig {
                 .ok_or_else(|| {
                     eyre!("chat_history_compaction.chat_provider_id is required when enabled")
                 })?;
-            if let Some(providers) = &self.chat_providers {
-                if !providers.providers.contains_key(id) {
-                    return Err(eyre!("Compaction chat provider '{}' not found", id));
-                }
-            } else if self.chat_provider.is_none() {
-                return Err(eyre!("No compaction chat provider configured"));
-            }
+            self.resolve_chat_provider_id(id)?;
         }
         Ok(())
     }
@@ -2036,6 +2198,20 @@ impl AppConfig {
 
     pub fn additional_frontend_environment(&self) -> HashMap<String, serde_json::Value> {
         self.frontend.additional_environment.clone()
+    }
+
+    /// Returns the organization configuration sent to the desktop sidecar, with
+    /// `outlook_addin_id` filled from the Office add-in when it is enabled and
+    /// the value is unset.
+    pub fn desktop_sidecar_organization_configuration(
+        &self,
+    ) -> DesktopSidecarOrganizationConfiguration {
+        let mut configuration = self.desktop_sidecar.organization_configuration.clone();
+        let addin = &self.integrations.ms_office.addin;
+        if configuration.outlook_addin_id.is_none() && addin.enabled {
+            configuration.outlook_addin_id = Some(addin.addin_id.trim().to_owned());
+        }
+        configuration
     }
 
     /// Returns the list of available chat providers, filtered by the optional allowlist.
@@ -2083,7 +2259,10 @@ impl AppConfig {
         };
         let filtered: Vec<&str> = filtered
             .into_iter()
-            .filter(|id| !self.get_chat_provider(id).is_audio_transcription_provider())
+            .filter(|id| {
+                let provider = self.get_chat_provider(id);
+                !provider.archived && !provider.is_audio_transcription_provider()
+            })
             .collect();
         tracing::debug!(?filtered, "Available chat providers after allowlist filter");
         filtered
@@ -2137,11 +2316,15 @@ impl AppConfig {
         };
         let allowed: Vec<&str> = allowed
             .into_iter()
-            .filter(|id| !self.get_chat_provider(id).is_audio_transcription_provider())
+            .filter(|id| {
+                let provider = self.get_chat_provider(id);
+                !provider.archived && !provider.is_audio_transcription_provider()
+            })
             .collect();
         tracing::debug!(?allowed, "Allowed chat providers after allowlist filter");
 
         if let Some(requested) = requested_chat_provider {
+            let requested = self.resolve_chat_provider_id(requested)?;
             tracing::debug!(requested, "Requested chat provider");
             // Return the matching &str from allowed (which is from self), not the input reference
             if let Some(&matching) = allowed.iter().find(|&&p| p == requested) {
@@ -2193,13 +2376,99 @@ impl AppConfig {
         }
     }
 
+    /// Resolve a provider for a new operation, retaining exact lookup for historical data.
+    pub fn resolve_chat_provider_id<'a>(&'a self, id: &'a str) -> Result<&'a str, Report> {
+        if let Some(providers) = &self.chat_providers {
+            resolve_provider_id(id, &providers.replacement_providers, |id| {
+                providers
+                    .providers
+                    .get(id)
+                    .map(|provider| provider.archived)
+            })
+        } else if self.chat_provider.is_some() && id == "default" {
+            Ok("default")
+        } else {
+            Err(eyre!("Chat provider '{}' is unavailable", id))
+        }
+    }
+
+    pub fn resolve_speech_provider_id<'a>(&'a self, id: &'a str) -> Result<&'a str, Report> {
+        resolve_provider_id(id, &self.speech_providers.replacement_providers, |id| {
+            self.speech_providers
+                .provider
+                .get(id)
+                .map(|provider| provider.archived)
+        })
+    }
+
+    /// Resolve an archived or removed decision provider to an active provider for a new request.
+    pub fn resolve_decision_provider_id<'a>(&'a self, id: &'a str) -> Result<&'a str, Report> {
+        resolve_provider_id(id, &self.decision_providers.replacement_providers, |id| {
+            self.decision_providers
+                .provider
+                .get(id)
+                .map(|provider| provider.archived)
+        })
+    }
+
+    pub fn validate_decision_providers(&self) -> Result<(), Report> {
+        validate_provider_replacements(&self.decision_providers.replacement_providers, |id| {
+            self.decision_providers
+                .provider
+                .get(id)
+                .map(|provider| provider.archived)
+        })?;
+        for (id, provider) in &self.decision_providers.provider {
+            eyre::ensure!(
+                !id.trim().is_empty(),
+                "Decision provider ID must not be empty"
+            );
+            if provider.archived {
+                continue;
+            }
+            eyre::ensure!(
+                matches!(provider.provider_kind.as_str(), "openai" | "llama_cpp"),
+                "Unknown decision provider kind for {id}"
+            );
+            if provider.provider_kind == "openai" {
+                eyre::ensure!(
+                    provider
+                        .model_name
+                        .as_ref()
+                        .is_some_and(|s| !s.trim().is_empty()),
+                    "OpenAI decision provider {id} requires model_name"
+                );
+            }
+            if provider.provider_kind == "llama_cpp" {
+                eyre::ensure!(
+                    provider.base_url.is_some(),
+                    "llama_cpp decision provider {id} requires base_url"
+                );
+            }
+            if let Some(base) = &provider.base_url {
+                let url = url::Url::parse(base)
+                    .map_err(|_| eyre!("Invalid decision provider base_url for {id}"))?;
+                eyre::ensure!(
+                    matches!(url.scheme(), "http" | "https")
+                        && url.host_str().is_some()
+                        && url.username().is_empty()
+                        && url.password().is_none()
+                        && url.query().is_none()
+                        && url.fragment().is_none(),
+                    "Invalid decision provider base_url for {id}"
+                );
+            }
+        }
+        Ok(())
+    }
+
     /// Returns true if any chat provider uses Langfuse for system prompts.
     pub fn any_chat_provider_uses_langfuse(&self) -> bool {
         if let Some(chat_providers) = &self.chat_providers {
             chat_providers
                 .providers
                 .values()
-                .any(|p| p.uses_langfuse_system_prompt())
+                .any(|p| !p.archived && p.uses_langfuse_system_prompt())
                 || chat_providers.summary.uses_langfuse_system_prompt()
         } else if let Some(chat_provider) = &self.chat_provider {
             // Fallback to single provider for backward compatibility
@@ -2302,7 +2571,10 @@ fn validate_audio_feature_config(
     let configured_audio_provider = if let Some(provider_id) =
         audio_config.chat_provider_id.as_deref()
     {
-        let provider = app_config.get_chat_provider(provider_id);
+        let resolved_id = app_config
+            .resolve_chat_provider_id(provider_id)
+            .unwrap_or_else(|error| panic!("Invalid {config_key} provider: {error}"));
+        let provider = app_config.get_chat_provider(resolved_id);
         if !provider.model_capabilities.supports_audio_input {
             panic!(
                 "{config_key}.chat_provider_id '{}' does not have `model_capabilities.supports_audio_input = true`.",
@@ -2322,7 +2594,8 @@ fn validate_audio_feature_config(
             .iter()
             .filter_map(|provider_id| chat_providers.providers.get(provider_id))
             .find(|provider| {
-                provider.model_capabilities.supports_audio_input
+                !provider.archived
+                    && provider.model_capabilities.supports_audio_input
                     && audio_provider_kind_supports_binary_audio(&provider.provider_kind)
             })
     } else {
@@ -2349,6 +2622,40 @@ mod audio_config_tests {
     use super::*;
 
     #[test]
+    fn conversational_config_flattens_shared_settings_and_preserves_defaults() {
+        let settings = config::Config::builder()
+            .add_source(config::File::from_str(
+                r#"
+                enabled = true
+                chat_provider_id = "transcriber"
+                chunk_duration_seconds = 15
+                speech_provider = "voice"
+                "#,
+                config::FileFormat::Toml,
+            ))
+            .build()
+            .unwrap()
+            .try_deserialize::<AudioConversationalConfig>()
+            .unwrap();
+        assert_eq!(settings.speech_provider.as_deref(), Some("voice"));
+        assert!(settings.transcription.enabled);
+        assert_eq!(
+            settings.transcription.chat_provider_id.as_deref(),
+            Some("transcriber")
+        );
+        assert_eq!(settings.transcription.chunk_duration_seconds, 15);
+        assert_eq!(settings.transcription.max_recording_duration_seconds, 1200);
+        assert_eq!(settings.transcription.max_attempts, 3);
+
+        let empty = serde_json::json!({});
+        let conversational: AudioConversationalConfig =
+            serde_json::from_value(empty.clone()).unwrap();
+        let shared: AudioTranscriptionConfig = serde_json::from_value(empty).unwrap();
+        assert_eq!(conversational.transcription, shared);
+        assert_eq!(conversational.speech_provider, None);
+    }
+
+    #[test]
     fn transcription_providers_work_for_all_audio_modes_but_are_not_chat_models() {
         let audio_provider: ChatProviderConfig = serde_json::from_value(serde_json::json!({
             "provider_kind": "openai_audio_transcriptions",
@@ -2363,6 +2670,7 @@ mod audio_config_tests {
         };
         let config = AppConfig {
             chat_providers: Some(ChatProvidersConfig {
+                replacement_providers: Vec::new(),
                 priority_order: vec!["audio".into(), "chat".into()],
                 providers: HashMap::from([
                     ("audio".into(), audio_provider),
@@ -2516,11 +2824,67 @@ pub struct LoggingConfig {
     pub format: LoggingFormat,
 }
 
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
+pub struct ProviderReplacement {
+    pub old: String,
+    pub new: String,
+}
+
+fn resolve_provider_id<'a>(
+    id: &'a str,
+    replacements: &'a [ProviderReplacement],
+    archived: impl Fn(&str) -> Option<bool>,
+) -> Result<&'a str, Report> {
+    let mut current = id;
+    let mut visited = std::collections::HashSet::new();
+    loop {
+        if !visited.insert(current) {
+            return Err(eyre!("Provider replacement cycle involving '{}'", current));
+        }
+        if let Some(replacement) = replacements.iter().find(|entry| entry.old == current) {
+            current = &replacement.new;
+            continue;
+        }
+        return match archived(current) {
+            Some(false) => Ok(current),
+            _ => Err(eyre!("Provider '{}' is unavailable", current)),
+        };
+    }
+}
+
+fn validate_provider_replacements(
+    replacements: &[ProviderReplacement],
+    archived: impl Fn(&str) -> Option<bool>,
+) -> Result<(), Report> {
+    let mut sources = std::collections::HashSet::new();
+    for replacement in replacements {
+        if replacement.old.is_empty()
+            || replacement.new.is_empty()
+            || !sources.insert(&replacement.old)
+        {
+            return Err(eyre!(
+                "Invalid or duplicate provider replacement source '{}'",
+                replacement.old
+            ));
+        }
+        if archived(&replacement.old) == Some(false) {
+            return Err(eyre!(
+                "Replacement source '{}' must be archived or absent",
+                replacement.old
+            ));
+        }
+        resolve_provider_id(&replacement.old, replacements, &archived)?;
+    }
+    Ok(())
+}
+
 #[derive(Debug, Deserialize, PartialEq, Clone, Facet, HeapSize)]
 pub struct ChatProvidersConfig {
     // Priority order of chat providers to use.
     // Each string should match a key in the providers map.
     pub priority_order: Vec<String>,
+    #[serde(default)]
+    pub replacement_providers: Vec<ProviderReplacement>,
     // Defaults that apply to all chat providers unless a provider-level setting overrides them.
     #[serde(default)]
     pub all_providers: AllChatProvidersConfig,
@@ -2668,6 +3032,8 @@ pub struct PromptOptimizerConfig {
 
 #[derive(Debug, Default, Deserialize, PartialEq, Clone, Facet, HeapSize)]
 pub struct ChatProviderConfig {
+    #[serde(default)]
+    pub archived: bool,
     // Overrides the all_providers setting when specified. Defaults to false.
     pub enable_embedded_image_retrieval_tool: Option<bool>,
     // May be one of:
@@ -2679,10 +3045,12 @@ pub struct ChatProviderConfig {
     // - "ollama"
     // - "gemini"
     // - "vertex_ai" (will be automatically converted to "gemini" during config loading)
+    #[serde(default)]
     pub provider_kind: String,
     // The model name to use for the chat provider.
     //
     // E.g. `gpt-4o`
+    #[serde(default)]
     pub model_name: String,
     // Whether to query the provider's model listing endpoint before exposing
     // this model to users. Defaults to `false`.
@@ -2854,6 +3222,7 @@ impl ChatProviderConfig {
         }
 
         Ok(ChatProviderConfig {
+            archived: self.archived,
             enable_embedded_image_retrieval_tool: self.enable_embedded_image_retrieval_tool,
             provider_kind: provider_kind.to_string(),
             model_name: self.model_name,
@@ -2909,6 +3278,11 @@ impl ChatProviderConfig {
 
     /// Validates that system_prompt and system_prompt_langfuse are mutually exclusive.
     pub fn validate(&self) -> Result<(), Report> {
+        if self.provider_kind.trim().is_empty() || self.model_name.trim().is_empty() {
+            return Err(eyre!(
+                "Active chat providers require provider_kind and model_name"
+            ));
+        }
         if self.system_prompt.is_some() && self.system_prompt_langfuse.is_some() {
             return Err(eyre!(
                 "Cannot specify both system_prompt and system_prompt_langfuse. They are mutually exclusive."
@@ -5753,6 +6127,167 @@ impl Default for FileProcessorConfig {
 }
 
 #[derive(Debug, Default, Deserialize, PartialEq, Clone, Facet, HeapSize)]
+pub struct DecisionProvidersConfig {
+    #[serde(default)]
+    pub provider: HashMap<String, DecisionProviderConfig>,
+    #[serde(default)]
+    pub replacement_providers: Vec<ProviderReplacement>,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Clone, Facet, HeapSize)]
+pub struct DecisionProviderConfig {
+    #[serde(default)]
+    pub archived: bool,
+    /// openai or llama_cpp.
+    #[serde(default)]
+    pub provider_kind: String,
+    /// Required for OpenAI; llama.cpp selects the model served at the endpoint.
+    pub model_name: Option<String>,
+    /// Base URL including /v1; required for llama.cpp.
+    pub base_url: Option<String>,
+    #[facet(sensitive)]
+    pub api_key: Option<SecretConfigString>,
+}
+
+#[cfg(test)]
+mod decision_config_tests {
+    use super::*;
+
+    #[test]
+    fn registry_defaults_empty_and_parses_named_providers() {
+        let empty: DecisionProvidersConfig = serde_json::from_value(serde_json::json!({})).unwrap();
+        assert!(empty.provider.is_empty());
+        let registry: DecisionProvidersConfig = serde_json::from_value(serde_json::json!({
+            "provider": {
+                "cloud": {"provider_kind": "openai", "model_name": "model", "api_key": "secret"},
+                "local": {"provider_kind": "llama_cpp", "base_url": "http://localhost:8080/v1"}
+            }
+        }))
+        .unwrap();
+        assert_eq!(
+            registry.provider["cloud"].model_name.as_deref(),
+            Some("model")
+        );
+        assert!(registry.provider["local"].api_key.is_none());
+        assert!(!format!("{:?}", registry.provider["cloud"]).contains("secret"));
+    }
+
+    #[test]
+    fn decision_replacements_resolve_and_validate() {
+        let registry = serde_json::json!({
+            "provider": {
+                "old": {"archived": true},
+                "active": {"provider_kind": "openai", "model_name": "model"}
+            },
+            "replacement_providers": [
+                {"old": "removed", "new": "old"}, {"old": "old", "new": "active"}
+            ]
+        });
+        let config = AppConfig {
+            decision_providers: serde_json::from_value(registry).unwrap(),
+            ..Default::default()
+        };
+        config.validate_decision_providers().unwrap();
+        assert_eq!(
+            config.resolve_decision_provider_id("removed").unwrap(),
+            "active"
+        );
+        assert_eq!(
+            config.resolve_decision_provider_id("old").unwrap(),
+            "active"
+        );
+        assert!(config.decision_providers.provider["old"].archived);
+        assert!(config.resolve_decision_provider_id("unknown").is_err());
+
+        for replacement in [
+            ProviderReplacement {
+                old: "active".into(),
+                new: "old".into(),
+            },
+            ProviderReplacement {
+                old: "old".into(),
+                new: "active".into(),
+            },
+            ProviderReplacement {
+                old: "missing".into(),
+                new: "unknown".into(),
+            },
+        ] {
+            let mut invalid = config.clone();
+            invalid
+                .decision_providers
+                .replacement_providers
+                .push(replacement);
+            assert!(invalid.validate_decision_providers().is_err());
+        }
+        let mut cycle = config.clone();
+        cycle.decision_providers.replacement_providers[1].new = "removed".into();
+        assert!(cycle.validate_decision_providers().is_err());
+        let mut unavailable = config.clone();
+        unavailable
+            .decision_providers
+            .provider
+            .get_mut("active")
+            .unwrap()
+            .archived = true;
+        assert!(unavailable.validate_decision_providers().is_err());
+        let mut no_replacement = config;
+        no_replacement
+            .decision_providers
+            .replacement_providers
+            .clear();
+        assert!(no_replacement.resolve_decision_provider_id("old").is_err());
+    }
+}
+
+#[derive(Debug, Default, Deserialize, PartialEq, Clone, Facet, HeapSize)]
+pub struct SpeechProvidersConfig {
+    #[serde(default)]
+    pub provider: HashMap<String, SpeechProviderConfig>,
+    #[serde(default)]
+    pub replacement_providers: Vec<ProviderReplacement>,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Clone, Facet, HeapSize)]
+pub struct SpeechProviderConfig {
+    #[serde(default)]
+    pub archived: bool,
+    /// openai, openai_realtime, audio_cpp, or gemini.
+    #[serde(default)]
+    pub provider_kind: String,
+    #[serde(default)]
+    pub model_name: String,
+    #[serde(default)]
+    pub voice: String,
+    pub base_url: Option<String>,
+    #[facet(sensitive)]
+    pub api_key: Option<SecretConfigString>,
+    /// Optional OAuth bearer token for Gemini, as an alternative to api_key.
+    #[facet(sensitive)]
+    pub access_token: Option<SecretConfigString>,
+    pub project_id: Option<String>,
+    /// Gemini deployment location, default global.
+    pub location: Option<String>,
+    pub instructions: Option<String>,
+    /// Native audio.cpp PCM sample rate. OpenAI and Gemini use 24000 Hz.
+    #[serde(default = "default_speech_sample_rate")]
+    pub sample_rate: u32,
+}
+fn default_speech_sample_rate() -> u32 {
+    24000
+}
+
+#[derive(Debug, Default, Deserialize, PartialEq, Clone, Facet, HeapSize)]
+pub struct AudioConversationalConfig {
+    #[serde(flatten)]
+    #[facet(flatten)]
+    pub transcription: AudioTranscriptionConfig,
+    /// Speech provider used for audio-back in conversational mode only.
+    #[serde(default)]
+    pub speech_provider: Option<String>,
+}
+
+#[derive(Debug, Default, Deserialize, PartialEq, Clone, Facet, HeapSize)]
 pub struct AudioTranscriptionConfig {
     // Whether to enable audio transcription workflow metadata for uploaded audio files.
     // Defaults to `false`.
@@ -6263,8 +6798,8 @@ pub struct TeamsBotConfig {
     // URL the Azure Bot sends messages to, when it differs from the address the
     // setup page is opened at, for example a public hostname in front of an
     // internal-only deployment. Either an HTTPS origin or the full
-    // `https://<host>/api/integrations/ms_teams/messages` URL. Only used by the
-    // setup page and its Cloud Shell helper.
+    // URL ending in `/api/integrations/ms_teams/messages`, optionally with a
+    // gateway path prefix. Only used by the setup page and its Cloud Shell helper.
     #[serde(default)]
     pub messaging_endpoint: Option<String>,
     // Optional assistant ID that new Teams chats are bound to.
@@ -6427,7 +6962,7 @@ impl TeamsBotConfig {
         let origin = url.origin().ascii_serialization();
         match url.path().trim_end_matches('/') {
             "" => Some(format!("{origin}{TEAMS_BOT_MESSAGES_PATH}")),
-            TEAMS_BOT_MESSAGES_PATH => Some(format!("{origin}{TEAMS_BOT_MESSAGES_PATH}")),
+            path if path.ends_with(TEAMS_BOT_MESSAGES_PATH) => Some(format!("{origin}{path}")),
             _ => None,
         }
     }
@@ -6689,6 +7224,21 @@ mod teams_bot_config_tests {
             );
         }
         assert!(TeamsBotConfig::default().messaging_endpoint_url().is_none());
+    }
+
+    #[test]
+    fn preserves_gateway_prefix_in_the_messaging_endpoint() {
+        let full = "https://your-api-gateway.example.com/prodtest/rest/hugo-erato-teams-test/api/integrations/ms_teams/messages";
+        for value in [full.to_string(), format!("{full}/")] {
+            let mut config = office(&format!("https://login.microsoftonline.com/{TENANT_ID}"));
+            config.teams.bot.messaging_endpoint = Some(value);
+            config.apply_defaults();
+            config.teams.bot.validate().expect("valid gateway endpoint");
+            assert_eq!(
+                config.teams.bot.messaging_endpoint_url().as_deref(),
+                Some(full)
+            );
+        }
     }
 
     #[test]
@@ -8488,12 +9038,17 @@ mod desktop_sidecar_installation_tests {
         let mut config = DesktopSidecarConfig::default();
         assert!(config.bootstrap_fields().unwrap().is_empty());
         assert_eq!(config.endpoint(), None);
+        assert_eq!(config.windows_launch_scheme(), "erato-launch");
         config.port = Some(23124);
-        config.directory_suffix = Some("-staging".into());
+        config.directory_suffix = Some("_staging".into());
+        assert_eq!(config.windows_launch_scheme(), "erato-launch");
+        config.launch_suffix = Some("-STAGING".into());
         config.display_name = Some("Erato Staging".into());
         let fields = config.bootstrap_fields().unwrap();
         assert_eq!(fields["port"], 23124);
-        assert_eq!(fields["directory_suffix"], "-staging");
+        assert_eq!(fields["directory_suffix"], "_staging");
+        assert_eq!(config.windows_launch_scheme(), "erato-launch-staging");
+        assert_eq!(fields["launch_suffix"], "-STAGING");
         assert_eq!(fields["display_name"], "Erato Staging");
         assert_eq!(
             config.endpoint().unwrap(),
@@ -8526,15 +9081,30 @@ mod desktop_sidecar_installation_tests {
     fn rejects_invalid_installation_configuration() {
         for value in [
             serde_json::json!({"port": 0}),
+            serde_json::json!({"launch_suffix": "_staging"}),
+            serde_json::json!({"launch_suffix": "a".repeat(65)}),
+            serde_json::json!({"launch_suffix": "://bad"}),
             serde_json::json!({"directory_suffix": "../other"}),
             serde_json::json!({"directory_suffix": "a".repeat(65)}),
             serde_json::json!({"display_name": "  "}),
             serde_json::json!({"display_name": "bad\nname"}),
             serde_json::json!({"icon": "not base64"}),
+            serde_json::json!({"product_code": "invalid"}),
+            serde_json::json!({"upgrade_code": "00000000-0000-0000-0000-000000000000"}),
         ] {
             let config: DesktopSidecarConfig = serde_json::from_value(value).unwrap();
             assert!(config.bootstrap_fields().is_err());
         }
+    }
+
+    #[test]
+    fn msi_codes_are_validated_but_not_exposed_in_bootstrap() {
+        let config: DesktopSidecarConfig = serde_json::from_value(serde_json::json!({
+            "product_code": "{0E35A9BE-8AED-4C67-9356-72A84A6AFB74}",
+            "upgrade_code": "e448c4d6-cb15-4d8a-8d1d-94c28d41f286"
+        }))
+        .unwrap();
+        assert!(config.bootstrap_fields().unwrap().is_empty());
     }
 }
 

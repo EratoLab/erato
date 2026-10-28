@@ -60,7 +60,20 @@ vi.mock("@/components/ui/Chat/ChatShareDialog", () => ({
 }));
 
 vi.mock("@/components/ui/Chat/EditChatTitleDialog", () => ({
-  EditChatTitleDialog: () => null,
+  EditChatTitleDialog: ({
+    isOpen,
+    onSubmit,
+  }: {
+    isOpen: boolean;
+    onSubmit: (title: string) => Promise<void> | void;
+  }) =>
+    isOpen ? (
+      <div role="dialog" aria-label="Rename chat">
+        <button type="button" onClick={() => void onSubmit("Renamed")}>
+          Save title
+        </button>
+      </div>
+    ) : null,
 }));
 
 vi.mock("@/components/ui/Controls/DropdownMenu", () => ({
@@ -396,5 +409,81 @@ describe("SearchPage", () => {
     expect(useToastStore.getState().toasts[0]).toMatchObject({
       variant: "error",
     });
+  });
+
+  const errorToastTitles = () =>
+    useToastStore
+      .getState()
+      .toasts.filter((toast) => toast.variant === "error")
+      .map((toast) => toast.title);
+
+  it("toasts a failed archive and a failed pin instead of refreshing", async () => {
+    const refetchHistory = vi.fn();
+    vi.mocked(useChatContext).mockReturnValue({
+      archiveChat: vi.fn(() => Promise.reject(new Error("nope"))),
+      unarchiveChat: vi.fn(),
+      updateChatTitle: vi.fn(),
+      refetchHistory,
+      pinChat: vi.fn(() => Promise.reject(new Error("nope"))),
+      pinnedChats: [],
+    } as unknown as ReturnType<typeof useChatContext>);
+    const page = pageOf([recentChat({ id: "active-1" })]);
+    mockUseInfiniteQuery.mockReturnValue(page);
+
+    renderPage(allFeaturesOn);
+    fireEvent.click(screen.getByRole("button", { name: "Archive" }));
+    fireEvent.click(screen.getByRole("button", { name: "Pin" }));
+
+    await waitFor(() =>
+      expect(errorToastTitles()).toEqual([
+        "Couldn't archive the chat",
+        "Couldn't pin the chat",
+      ]),
+    );
+    expect(refetchHistory).not.toHaveBeenCalled();
+    expect(page.refetch).not.toHaveBeenCalled();
+  });
+
+  it("keeps the rename dialog open with one failure toast until a retry lands", async () => {
+    const updateChatTitle = vi.fn<() => Promise<void>>(() =>
+      Promise.reject(new Error("nope")),
+    );
+    vi.mocked(useChatContext).mockReturnValue({
+      archiveChat: vi.fn(),
+      unarchiveChat: vi.fn(),
+      updateChatTitle,
+      refetchHistory: vi.fn(),
+      pinChat: vi.fn(),
+      pinnedChats: [],
+    } as unknown as ReturnType<typeof useChatContext>);
+    mockUseInfiniteQuery.mockReturnValue(
+      pageOf([recentChat({ id: "active-1" })]),
+    );
+
+    renderPage(allFeaturesOn);
+    fireEvent.click(screen.getByRole("button", { name: "Rename" }));
+    for (const attempt of [1, 2]) {
+      fireEvent.click(screen.getByRole("button", { name: "Save title" }));
+      await waitFor(() =>
+        expect(updateChatTitle).toHaveBeenCalledTimes(attempt),
+      );
+    }
+
+    await waitFor(() =>
+      expect(errorToastTitles()).toEqual(["Couldn't rename the chat"]),
+    );
+    expect(
+      screen.getByRole("dialog", { name: "Rename chat" }),
+    ).toBeInTheDocument();
+
+    updateChatTitle.mockImplementation(() => Promise.resolve());
+    fireEvent.click(screen.getByRole("button", { name: "Save title" }));
+
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("dialog", { name: "Rename chat" }),
+      ).not.toBeInTheDocument(),
+    );
+    expect(errorToastTitles()).toEqual([]);
   });
 });

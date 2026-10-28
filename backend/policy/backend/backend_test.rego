@@ -1220,3 +1220,15 @@ test_batch_group_editor_grant_is_resource_scoped if {
 	}
 		with data.config as {"assistants": {"enable_edit_sharing": true}}
 }
+
+test_logged_in_user_can_search_sharepoint if {
+	backend.allow with input as {"subject_kind": "user", "subject_id": user_1_id, "resource_kind": "sharepoint_search_singleton", "resource_id": "__singleton__", "action": "read"}
+}
+
+test_anonymous_user_cannot_search_sharepoint if {
+	not backend.allow with input as {"subject_kind": "user", "subject_id": "__not_logged_in__", "resource_kind": "sharepoint_search_singleton", "resource_id": "__singleton__", "action": "read"}
+}
+
+test_sharepoint_search_does_not_authorize_writes if {
+	not backend.allow with input as {"subject_kind": "user", "subject_id": user_1_id, "resource_kind": "sharepoint_search_singleton", "resource_id": "__singleton__", "action": "update"}
+}

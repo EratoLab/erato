@@ -186,6 +186,7 @@ export interface Message {
   role: "user" | "assistant" | "system";
   /** Chat provider used for the generation associated with this message. */
   chatProviderId?: string;
+  chatProviderDisplayName?: string;
   createdAt: string;
   /**
    * Last-modified timestamp from the backend (ISO-8601). Set on persisted

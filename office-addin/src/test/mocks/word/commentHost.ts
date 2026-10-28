@@ -22,7 +22,8 @@ import type { Mock } from "vitest";
  *
  * Per host (probe report, Tier 2):
  * - pc, mac: Comment.id is a string; items come in end-mark order; creationDate is dateUtc cut to
- *   the minute, or w:date read in the host's zone (UTC+2) without one.
+ *   the minute, or w:date read in the host's zone (UTC+2) without one; on pc a reply without one
+ *   gives Word's empty date, 1899-11-30T00:00:00Z (ERMAIN-951 smoke test; unmeasured on mac).
  * - web: Comment.id is a number; items come in start order; creationDate keeps seconds, and is
  *   null without dateUtc; paragraph.text shows U+0005 at references, hidden text and U+000C at a
  *   page break, which getText() leaves out but for hidden text, which it keeps whatever its options
@@ -189,6 +190,8 @@ export interface CommentHostOptions {
   bareParagraphPackages?: readonly string[];
   /** The selection's own getComments() throws. */
   failSelectionComments?: boolean;
+  /** What creationDate gives for a reply without dateUtc on Word PC; Word's empty date by default. */
+  replyDateWithoutUtc?: unknown;
   /** The message of injected Office errors, which may quote the document as hosts sometimes do. */
   errorMessage?: string;
   /**
@@ -256,6 +259,7 @@ const PLATFORM: Record<CommentHostFlavour, string> = {
   web: "OfficeOnline",
 };
 const HOST_ZONE = "+02:00";
+const EMPTY_WORD_DATE = "1899-11-30T00:00:00Z";
 
 function officeError(code: string, message: string) {
   return Object.assign(new Error(message), {
@@ -521,13 +525,16 @@ export function installWordCommentHost(
         )
       : String(parseInt(document.comments[key].durableId, 16));
   const officeId = (key: string) => (web ? Number(idOf(key)) : idOf(key));
-  const dateOf = (comment: V3cComment): Date | null => {
+  const dateOf = (comment: V3cComment): unknown => {
     if (comment.dateUtc && !options.legacy) {
       const date = new Date(comment.dateUtc);
       if (!web) date.setUTCSeconds(0, 0);
       return date;
     }
-    return web ? null : new Date(comment.date.replace(/Z$/, HOST_ZONE));
+    if (web) return null;
+    if (comment.parent && flavour === "pc")
+      return options.replyDateWithoutUtc ?? new Date(EMPTY_WORD_DATE);
+    return new Date(comment.date.replace(/Z$/, HOST_ZONE));
   };
   const emailOf = (author: string) =>
     document.emails?.[author] ?? defaultEmail(author);

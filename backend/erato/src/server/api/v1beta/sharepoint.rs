@@ -3,6 +3,9 @@
 //! These routes allow users to browse their OneDrive and Sharepoint files
 //! and attach them to chats.
 
+pub mod search;
+pub use search::{SearchFileHit, SharepointSearchResponse, search_sharepoint};
+
 use crate::config::SharepointAllDrivesSource;
 use crate::server::api::v1beta::me_profile_middleware::MeProfile;
 use crate::state::AppState;
@@ -10,7 +13,7 @@ use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::{Extension, Json};
 use chrono::{DateTime, FixedOffset};
-use futures::future::join_all;
+use futures::{StreamExt, stream};
 use graph_rs_sdk::{GraphClient, GraphClientConfiguration};
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
 use reqwest_tracing::{SpanBackendWithUrl, TracingMiddleware};
@@ -220,6 +223,8 @@ struct SiteMetadata {
 
 #[derive(Debug, Default)]
 struct DriveDiscoveryResult {
+    partial: bool,
+    truncated: bool,
     drives: Vec<serde_json::Value>,
     discovered_drive_ids: HashSet<String>,
     discovered_group_ids: HashSet<String>,
@@ -655,6 +660,34 @@ async fn fetch_graph_collection(
     Ok(values)
 }
 
+/// Page broad discovery during explicit file searches, with a finite work budget.
+async fn fetch_discovery_pages(
+    client: &ClientWithMiddleware,
+    token: &str,
+    path: &str,
+) -> reqwest_middleware::Result<(Vec<serde_json::Value>, bool)> {
+    let mut url = format!("{GRAPH_API_BASE_URL}{path}");
+    let mut values = Vec::new();
+    for _ in 0..10 {
+        let body = fetch_graph_json(client, token, &url).await?;
+        values.extend(
+            body.get("value")
+                .and_then(|v| v.as_array())
+                .into_iter()
+                .flatten()
+                .cloned(),
+        );
+        match body.get("@odata.nextLink").and_then(|v| v.as_str()) {
+            Some(next) if next.starts_with("https://graph.microsoft.com/v1.0/") => {
+                url = next.to_string()
+            }
+            Some(_) => return Ok((values, true)),
+            None => return Ok((values, false)),
+        }
+    }
+    Ok((values, true))
+}
+
 async fn fetch_graph_drive(
     http_client: &ClientWithMiddleware,
     access_token: &str,
@@ -784,9 +817,12 @@ async fn fetch_me_drive(client: &GraphClient) -> DriveDiscoveryResult {
             if let Ok(drive_json) = response.json::<serde_json::Value>().await {
                 collect_discovered_drive_site_id(&mut result, &drive_json);
                 result.drives.push(drive_json);
+            } else {
+                result.partial = true;
             }
         }
         Err(e) => {
+            result.partial = true;
             tracing::warn!(discovery_source = "me/drive", error = ?e, "Failed to get personal OneDrive");
         }
     }
@@ -830,6 +866,7 @@ async fn fetch_me_drives(
             }
         }
         Err(e) => {
+            result.partial = true;
             tracing::warn!(discovery_source = "me/drives", error = ?e, "Failed to list /me/drives");
         }
     }
@@ -869,23 +906,33 @@ async fn fetch_joined_teams(
     access_token: &str,
     limit: usize,
     include_public_groups: bool,
+    paginate: bool,
 ) -> DriveDiscoveryResult {
     let mut result = DriveDiscoveryResult::default();
     let path = format!("/me/joinedTeams?$select=id&$top={limit}");
 
-    match fetch_graph_json(
-        http_client,
-        access_token,
-        &format!("{GRAPH_API_BASE_URL}{path}"),
-    )
-    .await
-    {
-        Ok(body) => {
-            let joined_teams = body
-                .get("value")
-                .and_then(|value| value.as_array())
-                .cloned()
-                .unwrap_or_default();
+    let teams = if paginate {
+        fetch_discovery_pages(http_client, access_token, &path).await
+    } else {
+        fetch_graph_json(
+            http_client,
+            access_token,
+            &format!("{GRAPH_API_BASE_URL}{path}"),
+        )
+        .await
+        .map(|body| {
+            (
+                body.get("value")
+                    .and_then(|v| v.as_array())
+                    .cloned()
+                    .unwrap_or_default(),
+                false,
+            )
+        })
+    };
+    match teams {
+        Ok((joined_teams, truncated)) => {
+            result.truncated = truncated;
             let group_metadata_futures = joined_teams
                 .iter()
                 .filter_map(|team| team.get("id").and_then(|value| value.as_str()))
@@ -895,7 +942,12 @@ async fn fetch_joined_teams(
                     (group_id.to_string(), group_metadata)
                 });
 
-            for (group_id, group_metadata) in join_all(group_metadata_futures).await {
+            for (group_id, group_metadata) in
+                stream::iter(group_metadata_futures.collect::<Vec<_>>())
+                    .buffered(5)
+                    .collect::<Vec<_>>()
+                    .await
+            {
                 if let Some(group_metadata) = group_metadata {
                     let is_public_group = group_metadata.visibility.as_deref() == Some("Public");
                     if include_public_groups || !is_public_group {
@@ -908,6 +960,7 @@ async fn fetch_joined_teams(
             }
         }
         Err(e) => {
+            result.partial = true;
             tracing::warn!(discovery_source = "joined_teams", error = ?e, "Failed to list /me/joinedTeams");
         }
     }
@@ -980,6 +1033,7 @@ async fn fetch_group_search(
     .await
     {
         Ok(body) => {
+            result.truncated = body.get("@odata.nextLink").is_some();
             if let Some(groups) = body.get("value").and_then(|value| value.as_array()) {
                 for group in groups {
                     if let Some(group_id) = group.get("id").and_then(|value| value.as_str()) {
@@ -1021,6 +1075,7 @@ async fn fetch_group_search(
             }
         }
         Err(e) => {
+            result.partial = true;
             tracing::warn!(
                 discovery_source = "group_search",
                 error = ?e,
@@ -1075,7 +1130,11 @@ async fn fetch_group_drives(
             (group_id, drives)
         });
 
-    for (group_id, group_drives) in join_all(group_drive_futures).await {
+    for (group_id, group_drives) in stream::iter(group_drive_futures.collect::<Vec<_>>())
+        .buffered(5)
+        .collect::<Vec<_>>()
+        .await
+    {
         match group_drives {
             Ok(group_drives) => {
                 for drive in group_drives {
@@ -1084,6 +1143,7 @@ async fn fetch_group_drives(
                 }
             }
             Err(e) => {
+                result.partial = true;
                 tracing::warn!(
                     discovery_source = "group_drives",
                     error = ?e,
@@ -1123,6 +1183,7 @@ async fn fetch_site_search(
     http_client: &ClientWithMiddleware,
     access_token: &str,
     query: &str,
+    paginate: bool,
 ) -> DriveDiscoveryResult {
     let mut result = DriveDiscoveryResult::default();
     let trimmed_query = query.trim();
@@ -1135,7 +1196,14 @@ async fn fetch_site_search(
         url::form_urlencoded::byte_serialize(sanitized_query.as_bytes()).collect::<String>();
     let search_path = format!("/sites?search={encoded_query}&$top=20");
 
-    let sites_result = if sanitized_query == "*" {
+    let sites_result = if paginate {
+        fetch_discovery_pages(http_client, access_token, &search_path)
+            .await
+            .map(|(sites, truncated)| {
+                result.truncated = truncated;
+                sites
+            })
+    } else if sanitized_query == "*" {
         fetch_graph_json(
             http_client,
             access_token,
@@ -1176,6 +1244,7 @@ async fn fetch_site_search(
             }
         }
         Err(e) => {
+            result.partial = true;
             tracing::warn!(
                 discovery_source = "site_search",
                 error = ?e,
@@ -1231,6 +1300,7 @@ async fn fetch_shared_with_me(
             }
         }
         Err(e) => {
+            result.partial = true;
             tracing::warn!(discovery_source = "shared_with_me", error = ?e, "Failed to list /me/drive/sharedWithMe()");
         }
     }
@@ -1296,7 +1366,12 @@ async fn fetch_site_drives(
         }
     });
 
-    for (site_id, site_metadata, site_drives) in join_all(site_drive_futures).await {
+    for (site_id, site_metadata, site_drives) in
+        stream::iter(site_drive_futures.collect::<Vec<_>>())
+            .buffered(5)
+            .collect::<Vec<_>>()
+            .await
+    {
         if let Some(site_metadata) = site_metadata {
             result
                 .site_metadata_by_id
@@ -1315,6 +1390,7 @@ async fn fetch_site_drives(
                 }
             }
             Err(e) => {
+                result.partial = true;
                 tracing::warn!(
                     discovery_source = "site_drives",
                     error = ?e,
@@ -1369,13 +1445,18 @@ async fn fetch_shared_drive_details(
             (drive_id, drive)
         });
 
-    for (drive_id, drive) in join_all(drive_detail_futures).await {
+    for (drive_id, drive) in stream::iter(drive_detail_futures.collect::<Vec<_>>())
+        .buffered(5)
+        .collect::<Vec<_>>()
+        .await
+    {
         match drive {
             Ok(drive) => {
                 collect_discovered_drive_site_id(&mut result, &drive);
                 result.drives.push(drive);
             }
             Err(e) => {
+                result.partial = true;
                 tracing::warn!(
                     discovery_source = "shared_drive_details",
                     error = ?e,
@@ -1436,6 +1517,25 @@ pub async fn all_drives(
     Query(query): Query<AllDrivesQuery>,
 ) -> Result<Json<AllDrivesResponse>, StatusCode> {
     check_sharepoint_enabled(&app_state)?;
+    let access_token = get_access_token(&me_user)?;
+    let discovered = discover_drives(&app_state, access_token, query.query.as_deref(), false).await;
+    Ok(Json(AllDrivesResponse {
+        drives: discovered.drives,
+    }))
+}
+
+pub(super) struct DiscoveredDrives {
+    pub drives: Vec<Drive>,
+    pub partial: bool,
+    pub truncated: bool,
+}
+
+async fn discover_drives(
+    app_state: &AppState,
+    access_token: &str,
+    query: Option<&str>,
+    file_search: bool,
+) -> DiscoveredDrives {
     let enabled_sources: Vec<_> = app_state
         .config
         .integrations
@@ -1443,21 +1543,21 @@ pub async fn all_drives(
         .resolved_all_drives_sources()
         .into_iter()
         .collect();
-    let access_token = get_access_token(&me_user)?;
     let client = create_graph_client(access_token);
-    let reqwest_client = reqwest::Client::new();
+    let reqwest_client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+        .expect("valid Graph client configuration");
     let http_client = ClientBuilder::new(reqwest_client)
         .with(TracingMiddleware::<SpanBackendWithUrl>::new())
         .build();
     let normalized_query = query
-        .query
-        .as_deref()
         .map(str::trim)
         .filter(|query| !query.is_empty())
         .map(str::to_string)
         .unwrap_or_default();
     let has_search_query = !normalized_query.is_empty();
-    let site_search_query = if has_search_query {
+    let site_search_query = if has_search_query && !file_search {
         normalized_query.clone()
     } else {
         "*".to_string()
@@ -1496,7 +1596,8 @@ pub async fn all_drives(
                     &http_client,
                     access_token,
                     DEFAULT_GROUP_DISCOVERY_LIMIT,
-                    has_search_query,
+                    has_search_query || file_search,
+                    file_search,
                 )
                 .await
             } else {
@@ -1505,7 +1606,22 @@ pub async fn all_drives(
         },
         async {
             if enabled_sources.contains(&SharepointAllDrivesSource::SiteSearch) {
-                fetch_site_search(&http_client, access_token, &site_search_query).await
+                if file_search && has_search_query {
+                    // Filename matches must also be found in sites whose names do
+                    // not match. Named discovery supplements bounded wildcard discovery.
+                    let (mut broad, named) = tokio::join!(
+                        fetch_site_search(&http_client, access_token, "*", true),
+                        fetch_site_search(&http_client, access_token, &normalized_query, true),
+                    );
+                    broad.discovered_site_ids.extend(named.discovered_site_ids);
+                    broad.site_metadata_by_id.extend(named.site_metadata_by_id);
+                    broad.partial |= named.partial;
+                    broad.truncated |= named.truncated;
+                    broad
+                } else {
+                    fetch_site_search(&http_client, access_token, &site_search_query, file_search)
+                        .await
+                }
             } else {
                 DriveDiscoveryResult::default()
             }
@@ -1611,8 +1727,12 @@ pub async fn all_drives(
         shared_drive_details_result,
     );
 
+    let mut partial = group_search_result.partial;
+    let mut truncated = group_search_result.truncated;
     for (discovery_order, source) in enabled_sources.iter().enumerate() {
         if let Some(result) = discovery_results.remove(source) {
+            partial |= result.partial;
+            truncated |= result.truncated;
             apply_drive_discovery_result(
                 &mut drive_candidates_by_id,
                 &mut enrichment,
@@ -1642,7 +1762,11 @@ pub async fn all_drives(
         }
     });
 
-    for (group_id, group_metadata) in join_all(group_metadata_futures).await {
+    for (group_id, group_metadata) in stream::iter(group_metadata_futures.collect::<Vec<_>>())
+        .buffered(5)
+        .collect::<Vec<_>>()
+        .await
+    {
         if let Some(group_metadata) = group_metadata {
             enrichment
                 .group_metadata_by_id
@@ -1656,9 +1780,9 @@ pub async fn all_drives(
             parse_drive(&candidate.raw_drive, &enrichment).map(|drive| (drive, candidate))
         })
         .collect();
-    if has_search_query {
+    if has_search_query && !file_search {
         drives.retain(|(drive, _)| drive_matches_search_query(drive, &normalized_query));
-    } else {
+    } else if !file_search {
         drives.retain(|(drive, candidate)| {
             !should_filter_public_site_search_drive(has_search_query, drive, candidate)
         });
@@ -1688,7 +1812,11 @@ pub async fn all_drives(
         "Returning deduplicated SharePoint drives"
     );
 
-    Ok(Json(AllDrivesResponse { drives }))
+    DiscoveredDrives {
+        drives,
+        partial,
+        truncated,
+    }
 }
 
 /// Get the root items of a specific drive.
