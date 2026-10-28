@@ -2502,7 +2502,7 @@ as `gemini-3.8-live` require `gemini_live` and the Live API WebSocket transport:
 provider_kind = "gemini_live"
 model_name = "gemini-3.8-live"
 voice = "Kore"
-access_token = "your-oauth-access-token"
+api_key = "your-api-key" # Alternatively set access_token for OAuth
 project_id = "your-project"
 location = "eu"
 
@@ -2510,9 +2510,11 @@ location = "eu"
 speech_provider = "live_voice"
 ```
 
-Live requires an explicit OAuth `access_token`, `project_id`, and `location`;
-API keys and automatic credential discovery are not supported by this adapter.
-The access token must be refreshed externally. The model may also be a full
+Live requires exactly one of `api_key` or OAuth `access_token`, plus `project_id`
+and `location`. API keys are sent in the `x-goog-api-key` WebSocket header;
+whether a key is accepted depends on the Google deployment and key configuration.
+Express mode does not support Gemini Live models. Automatic credential discovery
+is not supported, and access tokens must be refreshed externally. The model may also be a full
 `projects/<project>/locations/<location>/publishers/google/models/<model>`
 identifier matching those settings. `location = "eu"` routes to the EU
 multi-region endpoint. A custom `base_url` overrides that endpoint and must

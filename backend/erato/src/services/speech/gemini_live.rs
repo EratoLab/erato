@@ -10,16 +10,22 @@ use tokio_tungstenite::{
 
 pub struct GeminiLive(pub SpeechProviderConfig);
 
+fn endpoint_host(location: &str) -> String {
+    match location {
+        "global" => "aiplatform.googleapis.com".to_string(),
+        "eu" | "us" => format!("aiplatform.{location}.rep.googleapis.com"),
+        _ => format!("{location}-aiplatform.googleapis.com"),
+    }
+}
+
 #[async_trait]
 impl SpeechProvider for GeminiLive {
     async fn stream(&self, text: &str) -> Result<SpeechAudio, Report> {
         let c = &self.0;
-        let token = c
-            .access_token
-            .as_ref()
-            .ok_or_else(|| eyre!("Gemini Live requires access_token"))?;
-        if c.api_key.is_some() {
-            return Err(eyre!("Gemini Live does not support api_key"));
+        if c.access_token.is_some() == c.api_key.is_some() {
+            return Err(eyre!(
+                "Gemini Live requires exactly one of api_key or access_token"
+            ));
         }
         let project = c
             .project_id
@@ -54,11 +60,7 @@ impl SpeechProvider for GeminiLive {
             }
             format!("{prefix}{}", c.model_name)
         };
-        let host = if location == "global" {
-            "aiplatform.googleapis.com".to_string()
-        } else {
-            format!("{location}-aiplatform.googleapis.com")
-        };
+        let host = endpoint_host(location);
         let default_url = format!("wss://{host}");
         let mut url = url::Url::parse(c.base_url.as_deref().unwrap_or(&default_url))?;
         let scheme = match url.scheme() {
@@ -73,10 +75,16 @@ impl SpeechProvider for GeminiLive {
             url.path().trim_end_matches('/')
         ));
         let mut request = url.as_str().into_client_request()?;
-        request.headers_mut().insert(
-            "Authorization",
-            format!("Bearer {}", token.expose_secret()).parse()?,
-        );
+        if let Some(token) = &c.access_token {
+            request.headers_mut().insert(
+                "Authorization",
+                format!("Bearer {}", token.expose_secret()).parse()?,
+            );
+        } else if let Some(key) = &c.api_key {
+            request
+                .headers_mut()
+                .insert("x-goog-api-key", key.expose_secret().parse()?);
+        }
         let roots =
             rustls::RootCertStore::from_iter(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
         let tls = rustls::ClientConfig::builder_with_provider(Arc::new(
@@ -210,6 +218,17 @@ pub(crate) mod tests {
         serde_json::from_value(json!({"provider_kind":"gemini_live", "base_url":url, "model_name":"gemini-3.8-live", "voice":"Kore", "project_id":"test", "location":"eu", "access_token":"secret"})).unwrap()
     }
 
+    #[test]
+    fn endpoint_routes_multi_regions_and_regions() {
+        assert_eq!(endpoint_host("eu"), "aiplatform.eu.rep.googleapis.com");
+        assert_eq!(endpoint_host("us"), "aiplatform.us.rep.googleapis.com");
+        assert_eq!(endpoint_host("global"), "aiplatform.googleapis.com");
+        assert_eq!(
+            endpoint_host("europe-west4"),
+            "europe-west4-aiplatform.googleapis.com"
+        );
+    }
+
     pub(crate) async fn mock(
         mode: &'static str,
         expected_text: &'static str,
@@ -217,7 +236,13 @@ pub(crate) mod tests {
         let (tx, rx) = oneshot::channel();
         let state = Arc::new(tokio::sync::Mutex::new(Some(tx)));
         let app = Router::new().route("/ws/google.cloud.aiplatform.v1.LlmBidiService/BidiGenerateContent", get(move |ws: WebSocketUpgrade, headers: HeaderMap, State(state): State<Arc<tokio::sync::Mutex<Option<oneshot::Sender<()>>>>>| async move {
-            assert_eq!(headers["authorization"], "Bearer secret");
+            if mode == "key_complete" {
+                assert_eq!(headers["x-goog-api-key"], "secret-key");
+                assert!(!headers.contains_key("authorization"));
+            } else {
+                assert_eq!(headers["authorization"], "Bearer secret");
+                assert!(!headers.contains_key("x-goog-api-key"));
+            }
             ws.on_upgrade(move |mut socket| async move {
                 let WsMessage::Text(setup) = socket.recv().await.unwrap().unwrap() else { panic!("expected setup") };
                 let setup: Value = serde_json::from_str(&setup).unwrap();
@@ -227,7 +252,7 @@ pub(crate) mod tests {
                 let WsMessage::Text(text) = socket.recv().await.unwrap().unwrap() else { panic!("expected text") };
                 let text: Value = serde_json::from_str(&text).unwrap();
                 assert_eq!(text["clientContent"]["turns"][0]["parts"][0]["text"], expected_text);
-                let response = if mode == "error" { json!({"error":{"message":"provider failure"}}) } else { json!({"serverContent":{"modelTurn":{"parts":[{"inlineData":{"mimeType":"audio/pcm;rate=24000","data":"AQIDBA=="}}]},"turnComplete":mode == "complete"}}) };
+                let response = if mode == "error" { json!({"error":{"message":"provider failure"}}) } else { json!({"serverContent":{"modelTurn":{"parts":[{"inlineData":{"mimeType":"audio/pcm;rate=24000","data":"AQIDBA=="}}]},"turnComplete":mode == "complete" || mode == "key_complete"}}) };
                 socket.send(WsMessage::Text(response.to_string().into())).await.unwrap();
                 if mode == "cancel" { let _ = socket.recv().await; }
                 if let Some(tx) = state.lock().await.take() { let _ = tx.send(()); }
@@ -251,6 +276,21 @@ pub(crate) mod tests {
         assert_eq!(audio.pcm, [1, 2, 3, 4]);
         let replay = wav(&audio.pcm, audio.sample_rate).unwrap();
         assert_eq!(&replay[44..], &audio.pcm);
+        task.abort();
+    }
+
+    #[tokio::test]
+    async fn api_key_is_sent_in_websocket_header() {
+        let (url, _, task) = mock("key_complete", "Hello.").await;
+        let mut settings = config(url);
+        settings.access_token = None;
+        settings.api_key = serde_json::from_value(json!("secret-key")).unwrap();
+        let audio = provider(&settings)
+            .unwrap()
+            .synthesize("Hello.")
+            .await
+            .unwrap();
+        assert_eq!(audio.pcm, [1, 2, 3, 4]);
         task.abort();
     }
 
@@ -287,7 +327,7 @@ pub(crate) mod tests {
     }
 
     #[tokio::test]
-    async fn rejects_mismatched_model_scope_and_api_keys() {
+    async fn rejects_mismatched_model_scope_and_multiple_credentials() {
         let mut c = config("http://localhost".into());
         c.model_name = "projects/test/locations/us/publishers/google/models/gemini-3.8-live".into();
         assert!(GeminiLive(c.clone()).stream("Hello.").await.is_err());
