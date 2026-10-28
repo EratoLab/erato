@@ -356,6 +356,15 @@ describe("buildDropEmailGroup", () => {
       expect(body.kind === "selectableAttachment" && body.metaLabel).toBe(
         "Email · 3 KB · Always sent",
       );
+      // Read-only like a part policy leaves out, so it says that it is sent.
+      const inline = group.items[1];
+      expect(inline.kind === "selectableAttachment" && inline.metaLabel).toBe(
+        "PNG image · 70 B · Always sent",
+      );
+      const pdfRow = group.items[2];
+      expect(
+        pdfRow.kind === "selectableAttachment" && pdfRow.metaLabel,
+      ).toBeUndefined();
       expect(JSON.stringify(group)).not.toMatch(/696debbf|0ce1705a|373014b8/);
     });
 
@@ -377,6 +386,12 @@ describe("buildDropEmailGroup", () => {
       expect(sent!.attachments.map((part) => part.mimeType)).not.toContain(
         "application/pdf",
       );
+      // The inline picture nothing links to goes as well, as its row says.
+      expect(
+        sent!.attachments.filter(
+          (part) => isEmailBodyPart(part) && !isBodyPicture(part, bodyIds),
+        ),
+      ).toHaveLength(1);
       // The chip counts what the reader would call attachments: the PDF.
       expect(dropAttachmentCounts(stagedDrop(parsed), undefined)).toEqual({
         kept: 1,

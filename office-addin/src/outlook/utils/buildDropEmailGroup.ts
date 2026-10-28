@@ -1,3 +1,4 @@
+import { formatFileSize } from "@erato/frontend/library";
 import { plural, t } from "@lingui/core/macro";
 
 import { formatShortDate } from "./outlookContextFormat";
@@ -265,6 +266,10 @@ export function buildDropEmailGroup(
     id: "officeAddin.chatInput.emailLabel",
     message: "Email",
   });
+  const alwaysSent = t({
+    id: "officeAddin.outlook.context.drop.bodyAlwaysSent",
+    message: "Always sent",
+  });
   const bodyIds = bodyContentIds(parsed.html);
   const bodyPictures = parsed.attachments.filter((attachment) =>
     isBodyPicture(attachment, bodyIds),
@@ -292,14 +297,7 @@ export function buildDropEmailGroup(
             }),
       size: parsed.rawEmlFile.size,
     },
-    metaLabel: [
-      emailLabel,
-      options.bodySizeLabel,
-      t({
-        id: "officeAddin.outlook.context.drop.bodyAlwaysSent",
-        message: "Always sent",
-      }),
-    ]
+    metaLabel: [emailLabel, options.bodySizeLabel, alwaysSent]
       .filter((part): part is string => Boolean(part))
       .join(" · "),
     selected: true,
@@ -324,6 +322,15 @@ export function buildDropEmailGroup(
         file,
         selected: true,
         labelOverride,
+        // A part policy leaves out is read-only too, so the missing checkbox
+        // alone does not say this one goes with the body.
+        metaLabel: [
+          labelOverride ?? partTypeLabel(attachment.mimeType),
+          formatFileSize(attachment.size),
+          alwaysSent,
+        ]
+          .filter((part): part is string => Boolean(part))
+          .join(" · "),
       });
       continue;
     }
