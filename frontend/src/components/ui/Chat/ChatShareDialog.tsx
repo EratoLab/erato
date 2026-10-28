@@ -1,6 +1,6 @@
 import { t } from "@lingui/core/macro";
 import clsx from "clsx";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Card } from "@/components/ui/Container/Card";
 import { InteractiveContainer } from "@/components/ui/Container/InteractiveContainer";
@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/Controls/Button";
 import { Alert } from "@/components/ui/Feedback/Alert";
 import { Input } from "@/components/ui/Input/Input";
 import { ModalBase } from "@/components/ui/Modal/ModalBase";
+import { toast } from "@/components/ui/Toast";
 import { useChatShareLink } from "@/hooks/useChatShareLink";
 
 import { CheckIcon, CopyIcon } from "../icons";
@@ -26,10 +27,20 @@ export function ChatShareDialog({
   chatId,
   onClose,
 }: ChatShareDialogProps) {
-  const { shareLink, setEnabled, isUpdating } = useChatShareLink(
-    isOpen ? chatId : null,
-  );
+  const activeChatId = isOpen ? chatId : null;
+  const { shareLink, setEnabled, isUpdating } = useChatShareLink(activeChatId);
   const [isCopied, setIsCopied] = useState(false);
+  const [toggleError, setToggleError] = useState<{
+    chatId: string;
+    message: string;
+  } | null>(null);
+  const activeChatIdRef = useRef(activeChatId);
+
+  // Callers keep the dialog mounted and close it by clearing chatId.
+  useEffect(() => {
+    activeChatIdRef.current = activeChatId;
+    setToggleError(null);
+  }, [activeChatId]);
 
   const shareUrl = useMemo(() => {
     if (!shareLink?.enabled) {
@@ -43,11 +54,30 @@ export function ChatShareDialog({
   }, [shareLink]);
 
   const handleToggle = async (enabled: boolean) => {
-    if (!chatId) {
+    const requestChatId = activeChatId;
+    if (!requestChatId) {
       return;
     }
 
-    await setEnabled(enabled);
+    setToggleError(null);
+    try {
+      await setEnabled(enabled);
+    } catch {
+      const message = t({
+        id: "chat.share.toggle.error",
+        message: "Could not update the share link. Please try again.",
+      });
+      // Closed, or reopened for another chat, while the request ran.
+      if (activeChatIdRef.current === requestChatId) {
+        setToggleError({ chatId: requestChatId, message });
+      } else {
+        toast.error({
+          dedupeKey: `chat-share:${requestChatId}`,
+          title: message,
+        });
+      }
+      return;
+    }
     if (!enabled) {
       setIsCopied(false);
     }
@@ -130,6 +160,10 @@ export function ChatShareDialog({
             })}
           />
         </Card>
+
+        {toggleError?.chatId === activeChatId ? (
+          <Alert type="error">{toggleError.message}</Alert>
+        ) : null}
 
         {shareLink?.enabled ? (
           <InteractiveContainer

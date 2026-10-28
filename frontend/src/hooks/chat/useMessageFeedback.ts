@@ -1,6 +1,6 @@
 import { msg } from "@lingui/core/macro";
 import { useLingui } from "@lingui/react";
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 
 import {
   useDeleteMessageFeedback,
@@ -33,7 +33,25 @@ interface FeedbackViewDialogState {
   messageId: string | null;
   feedback: MessageFeedback | null;
   error: string | null;
+  isRemoving: boolean;
 }
+
+const CLOSED_FEEDBACK_DIALOG: FeedbackDialogState = {
+  isOpen: false,
+  messageId: null,
+  sentiment: null,
+  mode: "create",
+  initialComment: "",
+  error: null,
+};
+
+const CLOSED_FEEDBACK_VIEW_DIALOG: FeedbackViewDialogState = {
+  isOpen: false,
+  messageId: null,
+  feedback: null,
+  error: null,
+  isRemoving: false,
+};
 
 /**
  * Custom hook to manage message feedback functionality.
@@ -85,23 +103,13 @@ export function useMessageFeedback(options: UseMessageFeedbackOptions = {}) {
 
   // State for feedback comment dialog (create or edit)
   const [feedbackDialogState, setFeedbackDialogState] =
-    useState<FeedbackDialogState>({
-      isOpen: false,
-      messageId: null,
-      sentiment: null,
-      mode: "create",
-      initialComment: "",
-      error: null,
-    });
+    useState<FeedbackDialogState>(CLOSED_FEEDBACK_DIALOG);
 
   // State for feedback view dialog (read-only)
   const [feedbackViewDialogState, setFeedbackViewDialogState] =
-    useState<FeedbackViewDialogState>({
-      isOpen: false,
-      messageId: null,
-      feedback: null,
-      error: null,
-    });
+    useState<FeedbackViewDialogState>(CLOSED_FEEDBACK_VIEW_DIALOG);
+
+  const removingMessageIdRef = useRef<string | null>(null);
 
   /**
    * Submits feedback for a message.
@@ -196,26 +204,14 @@ export function useMessageFeedback(options: UseMessageFeedbackOptions = {}) {
    * Closes the feedback comment dialog and resets state.
    */
   const closeFeedbackDialog = useCallback(() => {
-    setFeedbackDialogState({
-      isOpen: false,
-      messageId: null,
-      sentiment: null,
-      mode: "create",
-      initialComment: "",
-      error: null,
-    });
+    setFeedbackDialogState(CLOSED_FEEDBACK_DIALOG);
   }, []);
 
   /**
    * Closes the feedback view dialog and resets state.
    */
   const closeFeedbackViewDialog = useCallback(() => {
-    setFeedbackViewDialogState({
-      isOpen: false,
-      messageId: null,
-      feedback: null,
-      error: null,
-    });
+    setFeedbackViewDialogState(CLOSED_FEEDBACK_VIEW_DIALOG);
   }, []);
 
   /**
@@ -223,23 +219,65 @@ export function useMessageFeedback(options: UseMessageFeedbackOptions = {}) {
    * Closes the dialog on success, shows an error inside it otherwise.
    */
   const handleFeedbackViewDialogRemove = useCallback(async () => {
-    if (!feedbackViewDialogState.messageId) {
+    const messageId = feedbackViewDialogState.messageId;
+    // A ref, so a second click is ignored even where isRemoving never
+    // reaches the button.
+    if (!messageId || removingMessageIdRef.current === messageId) {
       return;
     }
 
-    const result = await handleFeedbackRemove(
-      feedbackViewDialogState.messageId,
-    );
-
-    if (result.success) {
-      closeFeedbackViewDialog();
-      return;
-    }
-
+    removingMessageIdRef.current = messageId;
     setFeedbackViewDialogState((prev) => ({
       ...prev,
-      error:
-        result.errorType === "time_limit_exceeded"
+      error: null,
+      isRemoving: true,
+    }));
+    const result = await handleFeedbackRemove(messageId);
+    if (removingMessageIdRef.current === messageId) {
+      removingMessageIdRef.current = null;
+    }
+
+    const error = result.success
+      ? null
+      : result.errorType === "time_limit_exceeded"
+        ? _(
+            msg({
+              id: "feedback.error.time_limit_exceeded",
+              message:
+                "The editing window has expired. Feedback can no longer be modified.",
+            }),
+          )
+        : _(
+            msg({
+              id: "feedback.error.remove_failed",
+              message: "Failed to remove feedback. Please try again.",
+            }),
+          );
+    // The dialog may have been closed, or reopened for another message, meanwhile.
+    setFeedbackViewDialogState((prev) => {
+      if (prev.messageId !== messageId) return prev;
+      return result.success
+        ? CLOSED_FEEDBACK_VIEW_DIALOG
+        : { ...prev, isRemoving: false, error };
+    });
+  }, [feedbackViewDialogState.messageId, handleFeedbackRemove, _]);
+
+  /**
+   * Handles feedback dialog submission with an optional comment.
+   *
+   * @param comment - The comment text to submit
+   */
+  const handleFeedbackDialogSubmit = useCallback(
+    async (comment: string) => {
+      const { messageId, sentiment } = feedbackDialogState;
+      if (!messageId || !sentiment) return;
+
+      setFeedbackDialogState((prev) => ({ ...prev, error: null }));
+      const result = await handleFeedbackSubmit(messageId, sentiment, comment);
+
+      const error = result.success
+        ? null
+        : result.errorType === "time_limit_exceeded"
           ? _(
               msg({
                 id: "feedback.error.time_limit_exceeded",
@@ -249,53 +287,16 @@ export function useMessageFeedback(options: UseMessageFeedbackOptions = {}) {
             )
           : _(
               msg({
-                id: "feedback.error.remove_failed",
-                message: "Failed to remove feedback. Please try again.",
+                id: "feedback.error.submit_failed",
+                message: "Failed to submit feedback. Please try again.",
               }),
-            ),
-    }));
-  }, [
-    feedbackViewDialogState.messageId,
-    handleFeedbackRemove,
-    closeFeedbackViewDialog,
-    _,
-  ]);
-
-  /**
-   * Handles feedback dialog submission with an optional comment.
-   *
-   * @param comment - The comment text to submit
-   */
-  const handleFeedbackDialogSubmit = useCallback(
-    async (comment: string) => {
-      if (feedbackDialogState.messageId && feedbackDialogState.sentiment) {
-        const result = await handleFeedbackSubmit(
-          feedbackDialogState.messageId,
-          feedbackDialogState.sentiment,
-          comment,
-        );
-
-        if (!result.success && result.errorType === "time_limit_exceeded") {
-          // Show error in dialog instead of closing
-          setFeedbackDialogState((prev) => ({
-            ...prev,
-            error: _(
-              msg({
-                id: "feedback.error.time_limit_exceeded",
-                message:
-                  "The editing window has expired. Feedback can no longer be modified.",
-              }),
-            ),
-          }));
-          return;
-        }
-
-        if (result.success) {
-          closeFeedbackDialog();
-        }
-      }
+            );
+      setFeedbackDialogState((prev) => {
+        if (prev.messageId !== messageId) return prev;
+        return result.success ? CLOSED_FEEDBACK_DIALOG : { ...prev, error };
+      });
     },
-    [feedbackDialogState, handleFeedbackSubmit, closeFeedbackDialog, _],
+    [feedbackDialogState, handleFeedbackSubmit, _],
   );
 
   /**
@@ -331,6 +332,7 @@ export function useMessageFeedback(options: UseMessageFeedbackOptions = {}) {
         messageId,
         feedback,
         error: null,
+        isRemoving: false,
       });
     },
     [],

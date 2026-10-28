@@ -60,3 +60,26 @@ it("keeps the saved decision and reports a failed update", async () => {
     screen.getByRole("radio", { name: "Ask each time (policy default)" }),
   ).toHaveAttribute("aria-checked", "true");
 });
+it("shows the choice being saved at once while the save runs", async () => {
+  let resolve!: () => void;
+  vi.mocked(fetchUpdateProfilePreferences).mockReturnValue(
+    new Promise<never>((res) => {
+      resolve = res as () => void;
+    }),
+  );
+  setup();
+  const control = screen.getByRole("radiogroup", {
+    name: "How to handle uploads for files retrieved by sidecar?",
+  });
+
+  fireEvent.click(screen.getByRole("radio", { name: "Never allow" }));
+
+  expect(screen.getByRole("radio", { name: "Never allow" })).toHaveAttribute(
+    "aria-checked",
+    "true",
+  );
+  expect(control).toHaveAttribute("aria-busy", "true");
+
+  resolve();
+  await waitFor(() => expect(control).not.toHaveAttribute("aria-busy"));
+});

@@ -4,8 +4,10 @@
  * Manages selected files state with validation and type filtering
  */
 
+import { t } from "@lingui/core/macro";
 import { useCallback, useState } from "react";
 
+import { cloudFileKey } from "@/lib/api/cloudProviders/types";
 import { FileTypeUtil } from "@/utils/fileTypes";
 import { DEFAULT_MAX_FILES_PER_MESSAGE } from "@/utils/fileUploadLimits";
 
@@ -29,13 +31,14 @@ interface UseCloudSelectionResult {
   /** Toggle selection of a file */
   toggleFile: (item: CloudItem) => void;
   /** Check if a file is selected */
-  isSelected: (itemId: string) => boolean;
+  isSelected: (item: CloudItem) => boolean;
   /** Check if a file can be selected (not disabled) */
   canSelect: (item: CloudItem) => boolean;
   /** Get reason why a file cannot be selected */
   getDisabledReason: (item: CloudItem) => string | null;
   /** Clear all selections */
   clearSelection: () => void;
+  removeFile: (file: SelectedCloudFile) => void;
   /** Check if max files limit is reached */
   isMaxReached: boolean;
 }
@@ -84,8 +87,10 @@ export function useCloudSelection({
   );
 
   const isSelected = useCallback(
-    (itemId: string): boolean => {
-      return selectedFiles.some((file) => file.item_id === itemId);
+    (item: CloudItem): boolean => {
+      return selectedFiles.some(
+        (file) => cloudFileKey(file) === cloudFileKey(item),
+      );
     },
     [selectedFiles],
   );
@@ -97,17 +102,17 @@ export function useCloudSelection({
       }
 
       if (!isFileTypeAccepted(item)) {
-        // eslint-disable-next-line lingui/no-unlocalized-strings
-        return "File type not supported at the moment";
+        return t({
+          id: "cloudFilePicker.selection.unsupported",
+          message: "File type not supported at the moment",
+        });
       }
 
-      if (
-        !isSelected(item.id) &&
-        selectedFiles.length >= maxFiles &&
-        multiple
-      ) {
-        // eslint-disable-next-line lingui/no-unlocalized-strings
-        return `Maximum ${maxFiles} files can be selected`;
+      if (!isSelected(item) && selectedFiles.length >= maxFiles && multiple) {
+        return t({
+          id: "cloudFilePicker.selection.limit",
+          message: `Maximum ${maxFiles} files can be selected`,
+        });
       }
 
       return null;
@@ -130,18 +135,20 @@ export function useCloudSelection({
       }
 
       // Check if file can be selected
-      if (!canSelect(item) && !isSelected(item.id)) {
+      if (!canSelect(item) && !isSelected(item)) {
         return;
       }
 
       setSelectedFiles((prev) => {
         const isCurrentlySelected = prev.some(
-          (file) => file.item_id === item.id,
+          (file) => cloudFileKey(file) === cloudFileKey(item),
         );
 
         if (isCurrentlySelected) {
           // Deselect
-          return prev.filter((file) => file.item_id !== item.id);
+          return prev.filter(
+            (file) => cloudFileKey(file) !== cloudFileKey(item),
+          );
         }
 
         // Select
@@ -149,6 +156,7 @@ export function useCloudSelection({
           drive_id: item.drive_id,
           item_id: item.id,
           name: item.name,
+          location: item.location,
           mime_type: item.mime_type,
           size: item.size,
           provider: item.provider,
@@ -173,6 +181,12 @@ export function useCloudSelection({
     setSelectedFiles([]);
   }, []);
 
+  const removeFile = useCallback((file: SelectedCloudFile) => {
+    setSelectedFiles((prev) =>
+      prev.filter((selected) => cloudFileKey(selected) !== cloudFileKey(file)),
+    );
+  }, []);
+
   const isMaxReached = selectedFiles.length >= maxFiles && multiple;
 
   return {
@@ -182,6 +196,7 @@ export function useCloudSelection({
     canSelect,
     getDisabledReason,
     clearSelection,
+    removeFile,
     isMaxReached,
   };
 }

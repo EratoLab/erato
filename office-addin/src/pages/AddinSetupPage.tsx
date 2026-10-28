@@ -34,6 +34,8 @@ const TEAMS_ADMIN_SETUP_POLICIES_URL =
   "https://admin.teams.microsoft.com/policies/app-setup";
 
 type OfficeProduct = "outlook" | "teams" | "word" | "excel" | "powerpoint";
+type WordDistribution = "integrated-apps" | "sharepoint";
+
 type ExchangeSetup = "exchange-online" | "exchange-server";
 
 type ProductOption = {
@@ -96,8 +98,14 @@ function getManifestPath(
 }
 
 /** Both Exchange variants are sideloaded with the filename shown in the instructions. */
-function getDownloadFilename(product: OfficeProduct): string {
-  if (product === "word") return DOCUMENT_MANIFEST_PATH;
+function getDownloadFilename(
+  product: OfficeProduct,
+  distribution: WordDistribution | null,
+): string {
+  if (product === "word")
+    return distribution === "sharepoint"
+      ? "manifest-document-sharepoint.xml"
+      : DOCUMENT_MANIFEST_PATH;
   if (product === "teams") return "erato-teams-app.zip";
   return "manifest.xml";
 }
@@ -105,11 +113,15 @@ function getDownloadFilename(product: OfficeProduct): string {
 function getManifestUrl(
   product: OfficeProduct,
   exchangeSetup: ExchangeSetup,
+  distribution: WordDistribution | null,
 ): string {
-  return new URL(
+  const url = new URL(
     getManifestPath(product, exchangeSetup),
     window.location.href,
-  ).toString();
+  );
+  if (product === "word" && distribution)
+    url.searchParams.set("distribution", distribution);
+  return url.toString();
 }
 
 function getSpaRedirectUri(): string {
@@ -121,6 +133,21 @@ export function AddinSetupPage() {
     useState<OfficeProduct>("outlook");
   const [selectedExchangeSetup, setSelectedExchangeSetup] =
     useState<ExchangeSetup>("exchange-online");
+  const [wordDistribution, setWordDistribution] =
+    useState<WordDistribution | null>(null);
+  const [loadedManifestUrl, setLoadedManifestUrl] = useState<string | null>(
+    null,
+  );
+  const manifestUrl =
+    selectedProduct === "word" && !wordDistribution
+      ? null
+      : getManifestUrl(
+          selectedProduct,
+          selectedExchangeSetup,
+          wordDistribution,
+        );
+  const manifestReady =
+    manifestUrl !== null && loadedManifestUrl === manifestUrl;
   const [manifestXml, setManifestXml] = useState("");
   const [manifestJson, setManifestJson] = useState("");
   const [teamsBot, setTeamsBot] = useState<TeamsBotSetup | null>(null);
@@ -132,26 +159,32 @@ export function AddinSetupPage() {
   useEffect(() => {
     const abortController = new AbortController();
 
-    async function loadManifest() {
+    if (!manifestUrl) {
+      setIsLoading(false);
+      setError(null);
+      setLoadedManifestUrl(null);
+      setManifestXml("");
+      return;
+    }
+    async function loadManifest(url: string) {
       try {
         setIsLoading(true);
+        setLoadedManifestUrl(null);
         setError(null);
         setManifestXml("");
         setManifestJson("");
         setTeamsBot(null);
 
-        const response = await window.fetch(
-          getManifestUrl(selectedProduct, selectedExchangeSetup),
-          {
-            signal: abortController.signal,
-          },
-        );
+        const response = await window.fetch(url, {
+          signal: abortController.signal,
+        });
 
         if (!response.ok) {
           throw new Error(`Failed to load manifest (${response.status})`);
         }
 
         const manifest = await response.text();
+        if (abortController.signal.aborted) return;
         if (selectedProduct === "teams") {
           const parsed: unknown = JSON.parse(manifest);
           setManifestJson(JSON.stringify(parsed, null, 2));
@@ -159,6 +192,7 @@ export function AddinSetupPage() {
         } else {
           setManifestXml(manifest);
         }
+        setLoadedManifestUrl(url);
       } catch (loadError) {
         if (abortController.signal.aborted) {
           return;
@@ -179,14 +213,15 @@ export function AddinSetupPage() {
       }
     }
 
-    void loadManifest();
+    void loadManifest(manifestUrl);
 
     return () => {
       abortController.abort();
     };
-  }, [selectedProduct, selectedExchangeSetup]);
+  }, [selectedProduct, manifestUrl]);
 
   async function handleDownload() {
+    if (!manifestReady || isLoading) return;
     if (selectedProduct === "teams") {
       try {
         setIsDownloading(true);
@@ -202,7 +237,7 @@ export function AddinSetupPage() {
         const url = window.URL.createObjectURL(await response.blob());
         const link = document.createElement("a");
         link.href = url;
-        link.download = getDownloadFilename(selectedProduct);
+        link.download = getDownloadFilename(selectedProduct, wordDistribution);
         link.click();
         window.URL.revokeObjectURL(url);
       } catch (downloadError) {
@@ -224,10 +259,23 @@ export function AddinSetupPage() {
     const link = document.createElement("a");
 
     link.href = url;
-    link.download = getDownloadFilename(selectedProduct);
+    link.download = getDownloadFilename(selectedProduct, wordDistribution);
     link.click();
 
     window.URL.revokeObjectURL(url);
+  }
+
+  let manifestPreview = "";
+  if (manifestUrl) {
+    if ((!manifestReady && !error) || isLoading) {
+      manifestPreview = t({
+        id: "officeAddin.setup.loadingManifest",
+        message: "Loading manifest...",
+      });
+    } else if (manifestReady) {
+      manifestPreview =
+        selectedProduct === "teams" ? manifestJson : manifestXml;
+    }
   }
 
   return (
@@ -250,11 +298,9 @@ export function AddinSetupPage() {
                 review; upload the ZIP package.
               </Trans>
             ) : selectedProduct === "word" ? (
-              <Trans id="officeAddin.word.setup.copy">
-                Download the XML below as <code>manifest-document.xml</code>,
-                then deploy it through the Integrated apps portal or a
-                SharePoint app catalog. This is a second add-in, separate from
-                the Outlook one.
+              <Trans id="officeAddin.word.setup.chooseDistribution">
+                Choose how to distribute the Word add-in to generate its
+                manifest and installation instructions.
               </Trans>
             ) : selectedExchangeSetup === "exchange-online" ? (
               <Trans id="officeAddin.setup.exchangeOnline.copy">
@@ -278,10 +324,22 @@ export function AddinSetupPage() {
           onSelectProduct={setSelectedProduct}
         />
 
+        {selectedProduct === "word" && (
+          <WordDistributionSelector
+            value={wordDistribution}
+            onChange={setWordDistribution}
+          />
+        )}
+
         {selectedProduct === "teams" ? (
           <TeamsInstructions bot={teamsBot} />
         ) : selectedProduct === "word" ? (
-          <WordInstructions spaRedirectUri={spaRedirectUri} />
+          <>
+            {wordDistribution && (
+              <WordInstructions distribution={wordDistribution} />
+            )}
+            <WordAuthenticationInstructions spaRedirectUri={spaRedirectUri} />
+          </>
         ) : selectedExchangeSetup === "exchange-online" ? (
           <ExchangeOnlineInstructions spaRedirectUri={spaRedirectUri} />
         ) : (
@@ -293,6 +351,7 @@ export function AddinSetupPage() {
             type="button"
             onClick={() => void handleDownload()}
             disabled={
+              !manifestReady ||
               isLoading ||
               isDownloading ||
               (selectedProduct === "teams" ? !manifestJson : !manifestXml)
@@ -304,8 +363,8 @@ export function AddinSetupPage() {
                 Download Teams app package
               </Trans>
             ) : selectedProduct === "word" ? (
-              <Trans id="officeAddin.word.setup.downloadButton">
-                Download manifest-document.xml
+              <Trans id="officeAddin.word.setup.downloadSelectedManifest">
+                Download Word manifest
               </Trans>
             ) : (
               <Trans id="officeAddin.setup.downloadButton">
@@ -325,28 +384,28 @@ export function AddinSetupPage() {
               </Trans>
             </a>
           ) : selectedProduct === "word" ? (
-            <>
+            wordDistribution ? (
               <a
-                href={INTEGRATED_APPS_URL}
+                href={
+                  wordDistribution === "sharepoint"
+                    ? SHAREPOINT_CATALOG_DOCS_URL
+                    : INTEGRATED_APPS_URL
+                }
                 target="_blank"
                 rel="noreferrer"
                 className="office-setup-button office-setup-button--secondary"
               >
-                <Trans id="officeAddin.setup.openIntegratedApps">
-                  Open Integrated Apps
-                </Trans>
+                {wordDistribution === "sharepoint" ? (
+                  <Trans id="officeAddin.word.setup.openCatalogDocs">
+                    Open app catalog docs
+                  </Trans>
+                ) : (
+                  <Trans id="officeAddin.setup.openIntegratedApps">
+                    Open Integrated Apps
+                  </Trans>
+                )}
               </a>
-              <a
-                href={SHAREPOINT_CATALOG_DOCS_URL}
-                target="_blank"
-                rel="noreferrer"
-                className="office-setup-button office-setup-button--secondary"
-              >
-                <Trans id="officeAddin.word.setup.openCatalogDocs">
-                  Open app catalog docs
-                </Trans>
-              </a>
-            </>
+            ) : null
           ) : selectedExchangeSetup === "exchange-online" ? (
             <a
               href={INTEGRATED_APPS_URL}
@@ -409,16 +468,7 @@ export function AddinSetupPage() {
           onCopy={(event) => {
             if (selectedProduct === "teams") event.preventDefault();
           }}
-          value={
-            isLoading
-              ? t({
-                  id: "officeAddin.setup.loadingManifest",
-                  message: "Loading manifest...",
-                })
-              : selectedProduct === "teams"
-                ? manifestJson
-                : manifestXml
-          }
+          value={manifestPreview}
           spellCheck={false}
         />
       </div>
@@ -495,77 +545,150 @@ function SetupSelectors({
   );
 }
 
-function WordInstructions({ spaRedirectUri }: { spaRedirectUri: string }) {
-  const proxyCallbackUri = `${window.location.origin}/oauth2/callback`;
+function WordDistributionSelector({
+  value,
+  onChange,
+}: {
+  value: WordDistribution | null;
+  onChange: (value: WordDistribution) => void;
+}) {
+  return (
+    <div className="office-setup-selectors">
+      <div className="office-setup-selector-row">
+        <div className="office-setup-selector-label">
+          <Trans id="officeAddin.word.setup.distributionLabel">
+            Distribution method
+          </Trans>
+        </div>
+        <div className="office-setup-selector-options">
+          <button
+            type="button"
+            className="office-setup-selector-option"
+            aria-pressed={value === "integrated-apps"}
+            onClick={() => onChange("integrated-apps")}
+          >
+            <Trans id="officeAddin.word.setup.integratedAppsOption">
+              Microsoft 365 admin center
+            </Trans>
+          </button>
+          <button
+            type="button"
+            className="office-setup-selector-option"
+            aria-pressed={value === "sharepoint"}
+            onClick={() => onChange("sharepoint")}
+          >
+            <Trans id="officeAddin.word.setup.sharepointOption">
+              SharePoint app catalog
+            </Trans>
+          </button>
+        </div>
+      </div>
+      <p className="office-setup-copy">
+        <Trans id="officeAddin.word.setup.distributionGuidance">
+          Choose Microsoft 365 admin center for users with Exchange Online
+          mailboxes and eligible Microsoft 365 subscription licences. Choose
+          SharePoint app catalog for environments with on-premises Exchange
+          mailboxes or without centralized deployment. SharePoint catalog
+          distribution requires a catalog administrator and does not support
+          Word on Mac.
+        </Trans>
+      </p>
+    </div>
+  );
+}
+
+function WordInstructions({
+  distribution,
+}: {
+  distribution: WordDistribution;
+}) {
+  const filename = getDownloadFilename("word", distribution);
   return (
     <ol className="office-setup-steps">
       <li>
-        <Trans id="officeAddin.word.setup.desktopRedirectUriInstruction">
-          In the Entra ID app registration, add the SPA redirect URI. Word on
-          Windows and Mac sign in through it:
-        </Trans>
-        <CopyableCodeField content={spaRedirectUri} />
-      </li>
-      <li>
-        <Trans id="officeAddin.word.setup.webSignInInstruction">
-          Word on the web has no Office sign-in for add-ins, so users sign in
-          through this deployment&apos;s oauth2-proxy login in a popup. That
-          login uses the proxy&apos;s web redirect URI, which every deployment
-          already registers for the Erato web app. The proxy must set{" "}
-          <code>cookie_samesite = &quot;none&quot;</code> so the session cookie
-          reaches the add-in inside Word:
-        </Trans>
-        <CopyableCodeField content={proxyCallbackUri} />
-      </li>
-      <li>
-        <Trans id="officeAddin.word.setup.reviewManifest">
-          Review the generated document manifest XML below. It is a separate
-          add-in from the Outlook one and carries its own id.
+        <Trans id="officeAddin.word.setup.downloadVariant">
+          Download <code>{filename}</code> below.
         </Trans>
       </li>
-      <li>
-        <Trans id="officeAddin.word.setup.downloadManifest">
-          Download it as <code>manifest-document.xml</code>.
-        </Trans>
-      </li>
-      <li>
-        <Trans id="officeAddin.word.setup.integratedAppsRoute">
-          If your users have Exchange Online mailboxes <em>and</em> a
-          subscription Office licence, upload it in{" "}
-          <a
-            href={INTEGRATED_APPS_URL}
-            target="_blank"
-            rel="noreferrer"
-            className="office-setup-link"
-          >
-            Integrated Apps
-          </a>
-          .
-        </Trans>
-      </li>
-      <li>
-        <Trans id="officeAddin.word.setup.catalogRoute">
-          For every other combination, upload it to a{" "}
-          <a
-            href={SHAREPOINT_CATALOG_DOCS_URL}
-            target="_blank"
-            rel="noreferrer"
-            className="office-setup-link"
-          >
-            SharePoint app catalog
-          </a>
-          . Add-ins deployed that way have no ribbon button, so users open Erato
-          from the add-ins list; everything is reachable inside the pane.
-        </Trans>
-      </li>
-      <li>
-        <Trans id="officeAddin.word.setup.macUnsupported">
-          Word on Mac is not supported for on-premises mailboxes: the SharePoint
-          app catalog does not cover the Mac desktop client. Point those users
-          at Word for the web through a SharePoint Online catalog instead.
-        </Trans>
-      </li>
+      {distribution === "sharepoint" ? (
+        <>
+          <li>
+            <Trans id="officeAddin.word.setup.sharepointUpload">
+              Upload the XML to the Apps for Office library in your SharePoint
+              app catalog. Give the intended users read access to the catalog.
+            </Trans>
+          </li>
+          <li>
+            <Trans id="officeAddin.word.setup.sharepointTrust">
+              In Word on Windows, open File → Options → Trust Center → Trust
+              Center Settings → Trusted Add-in Catalogs. Add the catalog site
+              URL, select Show in Menu, and restart Word.
+            </Trans>
+          </li>
+          <li>
+            <Trans id="officeAddin.word.setup.sharepointOpen">
+              Open the Office add-ins dialog in Word and select My Organization
+              to add Erato. This distribution method has no Erato ribbon button;
+              open it from the add-ins list. Word on the web can use a
+              SharePoint Online catalog.
+            </Trans>
+          </li>
+        </>
+      ) : (
+        <>
+          <li>
+            <Trans id="officeAddin.word.setup.integratedUpload">
+              In Microsoft 365 admin center, open Integrated Apps and upload the
+              XML as an Office add-in. Assign it to the intended users or
+              groups.
+            </Trans>
+          </li>
+          <li>
+            <Trans id="officeAddin.word.setup.integratedOpen">
+              After deployment reaches the users, restart Word and open Erato
+              from its ribbon button.
+            </Trans>
+          </li>
+        </>
+      )}
     </ol>
+  );
+}
+
+function WordAuthenticationInstructions({
+  spaRedirectUri,
+}: {
+  spaRedirectUri: string;
+}) {
+  const proxyCallbackUri = `${window.location.origin}/oauth2/callback`;
+  return (
+    <details>
+      <summary>
+        <Trans id="officeAddin.word.setup.authenticationPrerequisites">
+          Authentication prerequisites
+        </Trans>
+      </summary>
+      <ol className="office-setup-steps">
+        <li>
+          <Trans id="officeAddin.word.setup.desktopRedirectUriInstruction">
+            In the Entra ID app registration, add the SPA redirect URI. Word on
+            Windows and Mac sign in through it:
+          </Trans>
+          <CopyableCodeField content={spaRedirectUri} />
+        </li>
+        <li>
+          <Trans id="officeAddin.word.setup.webSignInInstruction">
+            Word on the web has no Office sign-in for add-ins, so users sign in
+            through this deployment&apos;s oauth2-proxy login in a popup. That
+            login uses the proxy&apos;s web redirect URI, which every deployment
+            already registers for the Erato web app. The proxy must set{" "}
+            <code>cookie_samesite = &quot;none&quot;</code> so the session
+            cookie reaches the add-in inside Word:
+          </Trans>
+          <CopyableCodeField content={proxyCallbackUri} />
+        </li>
+      </ol>
+    </details>
   );
 }
 

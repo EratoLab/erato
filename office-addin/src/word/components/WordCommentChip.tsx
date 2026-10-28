@@ -456,9 +456,11 @@ export function WordCommentChip({
           </div>
           {thread && (
             <div className="mt-0.5 flex flex-wrap items-center gap-x-2">
-              <span className="min-w-0 truncate">
-                {wordCommentQuoteText(thread.quote)}
-              </span>
+              {thread.quote !== null && (
+                <span className="min-w-0 truncate">
+                  {wordCommentQuoteText(thread.quote)}
+                </span>
+              )}
               <WordShowInWordButton
                 onShow={() => onShowInWord(thread.commentId, thread.para)}
                 disabled={false}

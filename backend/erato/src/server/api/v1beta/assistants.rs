@@ -356,6 +356,10 @@ async fn validate_assistant_config_permissions(
     let subject = me_user.to_subject();
 
     if let Some(provider_id) = default_chat_provider {
+        let provider_id = app_state
+            .config
+            .resolve_chat_provider_id(provider_id)
+            .map_err(|_| StatusCode::BAD_REQUEST)?;
         let allowed = policy
             .filter_authorized_chat_provider_ids(
                 &subject,
@@ -548,8 +552,7 @@ pub async fn create_assistant(
     .map_err(log_internal_server_error)?;
 
     // Determine if any available model supports image understanding
-    let available_models = app_state
-        .available_models(&policy, &me_user.to_subject(), &me_user.groups)
+    let available_models = super::available_models_for_me(&app_state, &policy, &me_user)
         .await
         .map_err(log_internal_server_error)?;
     let (supports_image_understanding, supports_audio_input) =
@@ -596,7 +599,10 @@ pub async fn create_assistant(
                     prompt: assistant_with_files.prompt,
                     mcp_server_ids: assistant_with_files.mcp_server_ids,
                     facet_ids: assistant_with_files.facet_ids,
-                    default_chat_provider: assistant_with_files.default_chat_provider,
+                    default_chat_provider: app_state.effective_saved_model_id(
+                        assistant_with_files.default_chat_provider.as_deref(),
+                        &available_models,
+                    ),
                     enforce_facet_settings: assistant_with_files.enforce_facet_settings,
                     created_at: assistant_with_files.created_at,
                     updated_at: assistant_with_files.updated_at,
@@ -670,6 +676,9 @@ pub async fn list_assistants(
         .map_err(log_internal_server_error)?
         .into_iter()
         .collect();
+    let available_models = super::available_models_for_me(&app_state, &policy, &me_user)
+        .await
+        .map_err(log_internal_server_error)?;
 
     // Convert to API format
     let mut api_assistants = Vec::with_capacity(assistants.len());
@@ -683,7 +692,10 @@ pub async fn list_assistants(
             prompt: assistant.prompt,
             mcp_server_ids: assistant.mcp_server_ids,
             facet_ids: assistant.facet_ids,
-            default_chat_provider: assistant.default_chat_provider,
+            default_chat_provider: app_state.effective_saved_model_id(
+                assistant.default_chat_provider.as_deref(),
+                &available_models,
+            ),
             enforce_facet_settings: assistant.enforce_facet_settings,
             created_at: assistant.created_at,
             updated_at: assistant.updated_at,
@@ -742,8 +754,7 @@ pub async fn get_assistant(
     })?;
 
     // Determine if any available model supports image understanding
-    let available_models = app_state
-        .available_models(&policy, &me_user.to_subject(), &me_user.groups)
+    let available_models = super::available_models_for_me(&app_state, &policy, &me_user)
         .await
         .map_err(log_internal_server_error)?;
     let (supports_image_understanding, supports_audio_input) =
@@ -787,7 +798,10 @@ pub async fn get_assistant(
             prompt: assistant_with_files.prompt,
             mcp_server_ids: assistant_with_files.mcp_server_ids,
             facet_ids: assistant_with_files.facet_ids,
-            default_chat_provider: assistant_with_files.default_chat_provider,
+            default_chat_provider: app_state.effective_saved_model_id(
+                assistant_with_files.default_chat_provider.as_deref(),
+                &available_models,
+            ),
             enforce_facet_settings: assistant_with_files.enforce_facet_settings,
             created_at: assistant_with_files.created_at,
             updated_at: assistant_with_files.updated_at,
@@ -985,8 +999,7 @@ pub async fn update_assistant(
     .map_err(log_internal_server_error)?;
 
     // Determine if any available model supports image understanding
-    let available_models = app_state
-        .available_models(&policy, &me_user.to_subject(), &me_user.groups)
+    let available_models = super::available_models_for_me(&app_state, &policy, &me_user)
         .await
         .map_err(log_internal_server_error)?;
     let (supports_image_understanding, supports_audio_input) =
@@ -1031,7 +1044,10 @@ pub async fn update_assistant(
                 prompt: assistant_with_files.prompt,
                 mcp_server_ids: assistant_with_files.mcp_server_ids,
                 facet_ids: assistant_with_files.facet_ids,
-                default_chat_provider: assistant_with_files.default_chat_provider,
+                default_chat_provider: app_state.effective_saved_model_id(
+                    assistant_with_files.default_chat_provider.as_deref(),
+                    &available_models,
+                ),
                 enforce_facet_settings: assistant_with_files.enforce_facet_settings,
                 created_at: assistant_with_files.created_at,
                 updated_at: assistant_with_files.updated_at,

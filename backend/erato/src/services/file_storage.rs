@@ -320,6 +320,16 @@ impl FileStorage {
         }
     }
 
+    /// Remove a generated file after failed persistence.
+    pub async fn delete_generated_file(&self, path: &str) -> Result<(), Report> {
+        match self {
+            Self::OpenDal(storage) => Ok(storage.opendal_operator.delete(path).await?),
+            Self::Sharepoint(_) => {
+                Err(eyre::eyre!("Generated files cannot use Sharepoint storage"))
+            }
+        }
+    }
+
     pub async fn finalize_resumable_upload(&self, path: &str) -> Result<(), Report> {
         match self {
             Self::OpenDal(storage) => storage.finalize_resumable_upload(path).await,

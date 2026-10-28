@@ -118,6 +118,7 @@ export function mergeDisplayMessages(
 }
 
 export interface SubmitStreamRequestBody {
+  conversational_audio_back?: boolean;
   mcp_write_tools_enabled?: boolean;
   disabled_mcp_server_ids?: string[];
   disabled_mcp_tools?: string[];

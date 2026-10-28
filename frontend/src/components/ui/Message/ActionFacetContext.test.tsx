@@ -236,6 +236,35 @@ describe("ActionFacetContext with Word comments", () => {
     expect(screen.queryByTestId("word-comment-thread")).toBeNull();
   });
 
+  it("names no place for a thread whose anchored text Word did not give", () => {
+    render(
+      <ActionFacetContext
+        actionFacetArgs={{
+          selected_text: "Lieferung binnen 14 Tagen.",
+          anchored_comments: json(
+            envelope({
+              threads: [
+                {
+                  ...inPassage,
+                  where: {
+                    para: 12,
+                    quote: "",
+                    position: "unknown",
+                    in: "body",
+                  },
+                },
+              ],
+            }),
+          ),
+        }}
+      />,
+    );
+    showComments();
+
+    const thread = screen.getByTestId("word-comment-thread");
+    expect(thread.firstChild).toHaveTextContent(/^Open$/);
+  });
+
   it("says when a sent thread's replies were not read", () => {
     render(
       <ActionFacetContext

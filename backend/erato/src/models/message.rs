@@ -577,6 +577,7 @@ pub enum ContentPart {
     ToolRejection(ContentPartToolRejection),
     TextFilePointer(ContentPartTextFilePointer),
     ImageFilePointer(ContentPartImageFilePointer),
+    AudioFilePointer(ContentPartAudioFilePointer),
     Image(ContentPartImage),
     /// Reference to an action-facet directive that will be rendered fresh
     /// at request-build time. Persisted in `generation_input_messages` as a
@@ -715,6 +716,13 @@ impl From<String> for ContentPartText {
     fn from(text: String) -> Self {
         ContentPartText { text }
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema, erato_memory::HeapSize)]
+pub struct ContentPartAudioFilePointer {
+    pub file_upload_id: Uuid,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub download_url: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema, erato_memory::HeapSize)]
@@ -897,7 +905,7 @@ impl MessageSchema {
                 ContentPart::ToolApproval(_) => None,
                 ContentPart::ToolRejection(_) => None,
                 ContentPart::TextFilePointer(_) => None,
-                ContentPart::ImageFilePointer(_) => None,
+                ContentPart::ImageFilePointer(_) | ContentPart::AudioFilePointer(_) => None,
                 ContentPart::Image(_) => None,
                 // Markers are placeholders for the directive resolver and do
                 // not contribute to a message's full text representation.
@@ -1765,7 +1773,7 @@ impl InputMessage {
             ContentPart::ToolApproval(_) => String::new(),
             ContentPart::ToolRejection(_) => String::new(),
             ContentPart::TextFilePointer(_) => String::new(),
-            ContentPart::ImageFilePointer(_) => String::new(),
+            ContentPart::ImageFilePointer(_) | ContentPart::AudioFilePointer(_) => String::new(),
             ContentPart::Image(_) => String::new(),
             // Markers are metadata-only; rendering happens in the resolver.
             // A task result renders there too, through the configured result
@@ -1950,6 +1958,10 @@ pub fn strip_image_urls_from_content(content: Vec<ContentPart>) -> Vec<ContentPa
     content
         .into_iter()
         .map(|part| match part {
+            ContentPart::AudioFilePointer(mut pointer) => {
+                pointer.download_url = None;
+                ContentPart::AudioFilePointer(pointer)
+            }
             ContentPart::ImageFilePointer(pointer) => {
                 ContentPart::ImageFilePointer(ContentPartImageFilePointer {
                     file_upload_id: pointer.file_upload_id,
@@ -1980,6 +1992,26 @@ pub async fn regenerate_image_urls_in_content(
 
     for part in content {
         let updated_part = match part {
+            ContentPart::AudioFilePointer(mut pointer) => {
+                pointer.download_url = None;
+                if let Some(file) = file_uploads::Entity::find_by_id(pointer.file_upload_id)
+                    .one(conn)
+                    .await?
+                    && let Some(storage) =
+                        file_storage_providers.get(&file.file_storage_provider_id)
+                {
+                    pointer.download_url = storage
+                        .generate_presigned_download_url_with_context(
+                            &file.file_storage_path,
+                            None,
+                            Some(&file.filename),
+                            None,
+                        )
+                        .await
+                        .ok();
+                }
+                ContentPart::AudioFilePointer(pointer)
+            }
             ContentPart::ImageFilePointer(ref pointer) => {
                 // Fetch the file upload record to get storage path and provider
                 let file_upload = file_uploads::Entity::find_by_id(pointer.file_upload_id)

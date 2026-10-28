@@ -38,7 +38,7 @@ it("PowerShell passes deployment data literally and refuses tampered downloads",
       "check",
       {
         messagingEndpoint:
-          "https://bot.example.com/api/integrations/ms_teams/messages",
+          "https://bot.example.com/prodtest/rest/hugo-erato-teams-test/api/integrations/ms_teams/messages",
         resourceGroup: "rg-(customer)",
         botName: "erato.teams-bot",
       },
@@ -65,7 +65,7 @@ it("PowerShell passes deployment data literally and refuses tampered downloads",
       AuthAppId: authAppId,
       SsoResource: maliciousResource,
       MessagingEndpoint:
-        "https://bot.example.com/api/integrations/ms_teams/messages",
+        "https://bot.example.com/prodtest/rest/hugo-erato-teams-test/api/integrations/ms_teams/messages",
       ResourceGroup: "rg-(customer)",
       BotName: "erato.teams-bot",
     });

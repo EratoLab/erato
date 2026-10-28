@@ -1,5 +1,10 @@
+import { useChatContext } from "@erato/frontend/library";
 import { i18n } from "@lingui/core";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import {
+  QueryClient,
+  QueryClientProvider,
+  useQuery,
+} from "@tanstack/react-query";
 import {
   act,
   cleanup,
@@ -428,6 +433,51 @@ describe("NeutralAddinChatPage host boundary", () => {
 
     expect(invalidateQueries).toHaveBeenCalledWith({
       queryKey: ["chat-detail"],
+    });
+  });
+
+  it("keeps the archive in the cached detail of the chat it leaves", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    queryClient.setQueryData(["chat-detail"], { id: "chat-1" });
+    function OpenChatDetail() {
+      useQuery({
+        queryKey: ["chat-detail"],
+        // Reads the signal like the generated fetcher, which is what makes
+        // query-core abort and revert the refetch once this unmounts.
+        queryFn: ({ signal }) =>
+          new Promise((_, reject) => {
+            signal.addEventListener("abort", () => reject(signal.reason));
+          }),
+        staleTime: Infinity,
+      });
+      return null;
+    }
+    function OpenChat() {
+      const { currentChatId } = useChatContext();
+      return currentChatId === "chat-1" ? <OpenChatDetail /> : null;
+    }
+    render(
+      <QueryClientProvider client={queryClient}>
+        <AddinChatProviderCore platform="addin-neutral">
+          <OpenChat />
+        </AddinChatProviderCore>
+      </QueryClientProvider>,
+    );
+    act(() => {
+      spies.chatContextValue.current?.navigateToChat("chat-1");
+    });
+
+    await act(async () => {
+      await spies.chatContextValue.current?.archiveChat("chat-1");
+    });
+
+    expect(spies.chatContextValue.current?.currentChatId).toBeNull();
+    expect(queryClient.getQueryState(["chat-detail"])).toMatchObject({
+      data: { id: "chat-1", archived_at: "2026-01-01T00:00:00Z" },
+      fetchStatus: "idle",
+      isInvalidated: true,
     });
   });
 

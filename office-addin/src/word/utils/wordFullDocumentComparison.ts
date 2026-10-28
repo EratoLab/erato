@@ -6,9 +6,11 @@ import {
   normalizeWordInlineForComparison,
   normalizeWordMediaForComparison,
   normalizeWordPeopleList,
+  normalizeWordPlaceholderEntries,
   normalizeWordRevisionIds,
   removeWordNumberingIdentity,
   removeWordRedetectedLanguage,
+  wordPackageRoots,
   wordXmlElements as all,
 } from "@erato/frontend/word-review";
 
@@ -1556,7 +1558,8 @@ export function wordFullDocumentDifferingParts(
 /** With `locate`, also names where each differing content part first diverges (structure only, no text or values).
  * The content tier adds the normalizations named by WORD_APPLY_ADJUSTMENTS; it is only for write and
  * restore verification after strict comparison failed. With `replaced`, the package the write wrote
- * over, both sides leave out what WORD_HOUSEKEEPING's "proofing-language" names. */
+ * over, both sides leave out what WORD_HOUSEKEEPING's "proofing-language" names, and Word's entry
+ * styles that package already held ("placeholder-entries"). */
 export function wordFullDocumentDifferences(
   expectedXml: string,
   actualXml: string,
@@ -1573,10 +1576,21 @@ export function wordFullDocumentDifferences(
 } {
   const expected = view(expectedXml),
     actual = view(actualXml);
+  let original: Document | undefined;
+  const parsed =
+    replaced === undefined
+      ? undefined
+      : () => (original ??= parseWordXml(replaced));
+  // First, so a control's paragraph Word re-pointed is no written paragraph to proofing-language.
+  const placeholders = normalizeWordPlaceholderEntries(
+    expected.roots,
+    actual.roots,
+    parsed && expected.roots.has("/word/glossary/document.xml")
+      ? wordPackageRoots(parsed())
+      : undefined,
+  );
   let redetected = 0;
-  if (replaced !== undefined) {
-    let original: Document | undefined;
-    const parsed = () => (original ??= parseWordXml(replaced));
+  if (parsed) {
     redetected = Math.abs(
       removeWordRedetectedLanguage(actual.doc, parsed) -
         removeWordRedetectedLanguage(expected.doc, parsed),
@@ -1585,6 +1599,7 @@ export function wordFullDocumentDifferences(
   const counts: WordHousekeepingCounts = redetected
     ? { "proofing-language": redetected }
     : {};
+  if (placeholders) counts["placeholder-entries"] = placeholders;
   const [expectedIds, actualIds] = [expected, actual].map((v) =>
     normalizeWordRevisionIds(
       [...v.roots.keys()].sort().map((path) => v.roots.get(path)!),

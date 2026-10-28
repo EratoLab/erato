@@ -778,15 +778,19 @@ allowed_origins = ["https://app.example.com"]
 
 {/* erato_toml_config_key: desktop_sidecar.port */}
 {/* erato_toml_config_key: desktop_sidecar.directory_suffix */}
+{/* erato_toml_config_key: desktop_sidecar.launch_suffix */}
 {/* erato_toml_config_key: desktop_sidecar.icon */}
 {/* erato_toml_config_key: desktop_sidecar.display_name */}
+{/* erato_toml_config_key: desktop_sidecar.product_code */}
+{/* erato_toml_config_key: desktop_sidecar.upgrade_code */}
 
-Configure a distinct port and directory suffix for each installation:
+Configure a distinct port, directory suffix and launch suffix for each installation:
 
 ```toml
 [desktop_sidecar]
 port = 23124
 directory_suffix = "-staging"
+launch_suffix = "-staging"
 display_name = "Erato Staging"
 # icon = "<base64 PNG bytes, without a data URL prefix>"
 ```
@@ -798,7 +802,9 @@ port takes precedence over `frontend.additional_environment.DESKTOP_SIDECAR_URL`
 local `VITE_DESKTOP_SIDECAR_URL` remains a development override.
 
 The suffix is appended literally to sidecar configuration directories and autorun
-identities, with no separator added. It allows up to 64 ASCII letters, digits,
+identities, and to the Windows MSI installation directory (for example,
+`C:\Program Files\Erato Desktop Sidecar-staging`), with no separator added.
+It allows up to 64 ASCII letters, digits,
 hyphens and underscores. Omitted or empty suffixes retain existing paths.
 The display name defaults to `Erato Desktop Sidecar` and allows up to 128 bytes,
 without control characters. The optional tray icon is a base64 PNG with dimensions
@@ -806,6 +812,54 @@ between 1 and 256 pixels. Omit it to use the bundled icon. Windows executable
 bootstrap data, including TLS and icon, must fit the 524262-byte payload capacity
 of the 512 KiB slot; use a small, optimized PNG or an installer when more space
 is needed.
+
+Windows MSI and Intune downloads also isolate the Windows Installer product,
+upgrade family, and component GUIDs by directory suffix.
+Suffix comparisons for Windows identities are case-insensitive, matching Windows
+paths. Each environment must use a distinct directory suffix, launch suffix, and port.
+Keep the suffixes stable across upgrades. The default, empty directory suffix preserves the template's product
+and upgrade codes and installation path.
+
+`desktop_sidecar.product_code` and `desktop_sidecar.upgrade_code` optionally
+override the MSI's ProductCode and UpgradeCode. Each accepts a non-nil UUID,
+with or without braces; MSI output uses uppercase, braced GUIDs. These settings
+affect both MSI and `.intunewin` downloads.
+
+```toml
+[desktop_sidecar]
+directory_suffix = "-staging"
+launch_suffix = "-staging"
+port = 23124
+display_name = "Erato Staging"
+# Optional explicit MSI identities:
+product_code = "{11111111-2222-4333-8444-555555555555}"
+upgrade_code = "{AAAAAAAA-BBBB-4CCC-8DDD-EEEEEEEEEEEE}"
+```
+
+When omitted, each code is derived deterministically from the corresponding
+template code and the directory suffix. Repeated downloads therefore retain the
+same ProductCode, while a new template ProductCode yields a new environment-specific
+ProductCode. The UpgradeCode remains stable across releases as long as the template
+upgrade family and suffix remain unchanged.
+
+When setting codes explicitly, use a distinct ProductCode for each environment
+and major upgrade, and keep each environment's UpgradeCode stable across its
+releases. Changing an UpgradeCode breaks that environment's existing upgrade
+chain. Do not reuse these example GUIDs for production deployments.
+Every personalized MSI receives a fresh PackageCode because its contents differ
+from the template. Intune detection metadata is read from the finalized MSI,
+including all overridden or derived codes.
+
+`desktop_sidecar.launch_suffix` independently controls the Windows launch URI scheme.
+It is appended as plain text, with no separator added: `"-staging"` produces
+`erato-launch-staging://launch`. URI schemes are case-insensitive and normalized to
+lowercase. Up to 64 ASCII letters, digits, hyphens, dots and plus signs are allowed;
+underscores are not valid in URI schemes. Omitted or empty values keep `erato-launch`,
+regardless of `directory_suffix`. Keep each environment's launch suffix stable.
+
+Deploy a sidecar build
+with environment-specific protocol registration support together with this backend;
+older sidecar executables still register the shared `erato-launch` handler at startup.
 
 #### `desktop_sidecar.tls`
 
@@ -816,7 +870,7 @@ is needed.
 {/* erato_toml_config_key: desktop_sidecar.tls.validity_days */}
 
 TLS identity added to the immutable bootstrap data of personalized Windows
-EXE/MSI and macOS `.app.zip` downloads. With all PEM fields unset, bootstrap TLS
+EXE/MSI/`.intunewin` and macOS `.app.zip` downloads. With all PEM fields unset, bootstrap TLS
 is disabled. Configure one complete pair: fixed `certificate_pem` / `private_key_pem`, or
 `intermediate_certificate_pem` / `intermediate_private_key_pem`. Values are inline
 PEM strings, not file paths. Incomplete, mixed, invalid, or mismatched pairs make
@@ -913,6 +967,30 @@ enabled = true
 directory = "/app/desktop-sidecar-artifacts"
 ```
 
+For each Windows MSI installer, Erato also offers a **Microsoft Intune package**
+(`.intunewin`) on the desktop-sidecar download page. This package is generated
+on demand from the MSI **after** injecting the organization bootstrap, including
+configured origins, installation identity, and TLS settings. No extra file is
+required in the distribution directory. The derived artifact's API file ID is
+the MSI file ID followed by `.intunewin` (for example, `installer.intunewin`);
+this ID must not already be used in the manifest. The default download remains
+the manifest's default file.
+
+Upload the downloaded `.intunewin` as a Windows app (Win32) in Microsoft Intune.
+The package contains MSI metadata for automatic product-code detection and
+install/uninstall command setup. For an MSI named
+`erato-desktop-sidecar-windows-x86_64.msi`, the silent install command is:
+
+```powershell
+msiexec /i "erato-desktop-sidecar-windows-x86_64.msi" /qn
+```
+
+Use `msiexec /x "{ProductCode}" /qn` for uninstall, replacing `{ProductCode}`
+with the code detected from the uploaded MSI. Product codes belong to the
+packaged MSI; do not reuse a code from an older release. The download response
+reports the actual package size; sizes in the artifact listing are template
+estimates.
+
 #### `desktop_sidecar.organization_configuration.show_tray_icon`
 
 {/* erato_toml_config_key: desktop_sidecar.organization_configuration.show_tray_icon */}
@@ -934,6 +1012,70 @@ in the platform-default per-user configuration directory.
 [desktop_sidecar.organization_configuration]
 show_tray_icon = false
 ```
+
+#### `desktop_sidecar.organization_configuration.outlook_addin_autopin`
+
+{/* erato_toml_config_key: desktop_sidecar.organization_configuration.outlook_addin_autopin */}
+
+Controls whether the desktop sidecar pins the Erato Outlook add-in in Outlook
+on macOS and Windows, so users find its buttons without pinning them
+themselves. The sidecar pins while Outlook is closed, and never pins again
+what a user unpinned.
+
+When this value is omitted, a user-specific sidecar setting may take
+precedence; if neither layer provides a value, the sidecar does not pin, so a
+deployment opts in. Setting it to `false` or removing it stops further pinning
+and leaves existing pins in place. In classic Outlook for Windows, the sidecar
+needs the add-in's id; see
+[`outlook_addin_id`](#desktop_sidecarorganization_configurationoutlook_addin_id).
+
+**Default value:** `None`
+
+**Type:** `boolean | None`
+
+**Example**
+
+```toml
+[desktop_sidecar.organization_configuration]
+outlook_addin_autopin = true
+```
+
+#### `desktop_sidecar.organization_configuration.outlook_addin_autopin_panes`
+
+{/* erato_toml_config_key: desktop_sidecar.organization_configuration.outlook_addin_autopin_panes */}
+
+Controls whether `outlook_addin_autopin` also pins the add-in's task panes in
+classic Outlook for Windows, which then open by themselves when an item is
+selected. Set it to `false` to pin only the add-in's buttons. When this value
+is omitted, a user-specific sidecar setting may take precedence; if neither
+layer provides a value, the sidecar pins the task panes too.
+
+**Default value:** `None`
+
+**Type:** `boolean | None`
+
+**Example**
+
+```toml
+[desktop_sidecar.organization_configuration]
+outlook_addin_autopin = true
+outlook_addin_autopin_panes = false
+```
+
+#### `desktop_sidecar.organization_configuration.outlook_addin_id`
+
+{/* erato_toml_config_key: desktop_sidecar.organization_configuration.outlook_addin_id */}
+
+The manifest id of the Erato Outlook add-in, which the desktop sidecar needs to
+find the add-in in classic Outlook for Windows. Normally left unset: while
+[`integrations.ms_office.addin.enabled`](#integrationsms_officeaddinenabled) is
+`true`, the backend sends
+[`integrations.ms_office.addin.addin_id`](#integrationsms_officeaddinaddin_id).
+Set it only if the add-in deployed to Outlook uses a different id.
+
+**Default value:** `None`
+
+**Type:** `string | None`
 
 ### `i18n`
 
@@ -1046,6 +1188,57 @@ An ordered list of provider IDs that defines the priority for provider selection
 **Required:** Yes
 
 **Example:** `["primary", "backup", "local"]`
+
+#### Provider replacements and archives
+
+{/* erato_toml_config_key: chat_providers.replacement_providers.[] */}
+{/* erato_toml_config_key: chat_providers.replacement_providers.[].old */}
+{/* erato_toml_config_key: chat_providers.replacement_providers.[].new */}
+{/* erato_toml_config_key: chat_providers.providers.<provider-id>.archived */}
+{/* erato_toml_config_key: speech_providers.replacement_providers.[] */}
+{/* erato_toml_config_key: speech_providers.replacement_providers.[].old */}
+{/* erato_toml_config_key: speech_providers.replacement_providers.[].new */}
+{/* erato_toml_config_key: speech_providers.provider.<provider-id>.archived */}
+{/* erato_toml_config_key: decision_providers.replacement_providers.[] */}
+{/* erato_toml_config_key: decision_providers.replacement_providers.[].old */}
+{/* erato_toml_config_key: decision_providers.replacement_providers.[].new */}
+{/* erato_toml_config_key: decision_providers.provider.<provider-id>.archived */}
+
+Set `archived = true` to retain a provider's historical metadata without making it selectable or requiring inference credentials. Configure `replacement_providers` as a list of `{ old, new }` ID pairs under `chat_providers`, `speech_providers`, or `decision_providers`. An old ID can be archived or absent from the configuration; chains must end at an active provider. Chat model permission rules for an old ID also grant access to its replacement. Keep archived chat entries and their original token prices to calculate historical spending correctly; an absent old entry cannot supply its historical price or display name. File storage providers are not replaced by this mechanism.
+
+```toml
+[chat_providers]
+priority_order = ["new"]
+replacement_providers = [{ old = "old", new = "new" }]
+
+[chat_providers.providers.old]
+archived = true
+model_name = "old-model"
+
+[chat_providers.providers.old.model_capabilities]
+cost_input_tokens_per_1m = 1.0
+cost_output_tokens_per_1m = 2.0
+
+[chat_providers.providers.new]
+provider_kind = "openai"
+model_name = "new-model"
+```
+
+For speech synthesis, use the same mapping under `speech_providers` and update
+the configured `audio_conversational.speech_provider` only if desired:
+
+```toml
+[speech_providers]
+replacement_providers = [{ old = "old-voice", new = "new-voice" }]
+
+[speech_providers.provider.old-voice]
+archived = true
+
+[speech_providers.provider.new-voice]
+provider_kind = "openai"
+model_name = "tts-model"
+voice = "alloy"
+```
 
 #### Embedded PDF image retrieval
 
@@ -1935,8 +2128,14 @@ Controls how Erato decides whether an uploaded file is an image or should be sen
 
 **Supported values:**
 
-- `"naive"` preserves the existing behavior: known image filename extensions are routed as images; other files use the storage-provided MIME type, with byte-signature inference in the file processor when no MIME type is available. `.eml` files remain explicitly treated as `message/rfc822`.
+- `"naive"` uses filename extensions first: known image filename extensions are routed as images; known extractable extensions use the storage-provided MIME type, with byte-signature inference in the file processor when no MIME type is available. `.eml` files remain explicitly treated as `message/rfc822`.
 - `"magika"` loads Magika at startup, detects the type from the file bytes, and uses its MIME type for image routing and text extraction. Detection failures fall back to `naive`.
+
+In naive mode, extensionless files first use a supported storage MIME type for image routing or extraction (including PDF, DOCX, HTML, and JSON). MIME matching ignores case, surrounding whitespace, and parameters. Failed extraction retains a file reference; it does not retry a document as plain text. Filenames such as `png` or `pdf` without a dot are extensionless.
+
+For extensionless files without a supported MIME route, and files with unsupported extensions, processing falls back to `text/plain` if either the stored MIME is `text/*` or the first up to 8 KiB are valid UTF-8 without NUL bytes. Characters crossing that boundary are checked for completeness. This is only a prefix heuristic, and text MIME metadata is trusted even when the bytes fail it. Rejected binaries and failed fallback extraction remain available as file references. Known-extension/MIME conflicts are unchanged.
+
+The prefix heuristic reads and caches the **entire file**, including previously reference-only binaries. The storage range helper currently also reads the whole file and does not support SharePoint, so processing uses the existing authenticated byte cache to avoid an additional download for extraction. Existing upload size limits, cache limits, and processing concurrency controls still apply; the 8 KiB inspection is not a download or memory limit. This applies to MCP outputs and already-admitted uploads and does not broaden upload admission: the default `supported_operations` policy still rejects unsupported extensions.
 
 Magika inference runs on a blocking worker, uses one ONNX inter-op and intra-op thread, and caches results for unchanged files. This limits impact on async request handling and avoids repeating inference for cache hits.
 
@@ -2199,6 +2398,137 @@ cd e2e-tests
 ```
 
 This creates a PDF with 20 pages, each containing unique identifiers like `PAGE-001`, `PAGE-002`, etc.
+
+### Decision providers
+
+{/* erato_toml_config_key: decision_providers */}
+{/* erato_toml_config_key: decision_providers.provider */}
+{/* erato_toml_config_key: decision_providers.provider.<provider-id>.provider_kind */}
+{/* erato_toml_config_key: decision_providers.provider.<provider-id>.model_name */}
+{/* erato_toml_config_key: decision_providers.provider.<provider-id>.base_url */}
+{/* erato_toml_config_key: decision_providers.provider.<provider-id>.api_key */}
+
+Configure named decision providers independently of chat and speech providers.
+The registry does not enable a feature by itself; a future backend consumer must
+select a provider ID explicitly and resolve it through the replacement registry.
+Archived entries may omit provider settings; a replacement chain must end at an
+active provider. For example:
+
+```toml
+[decision_providers]
+replacement_providers = [{ old = "previous", new = "classifier" }]
+
+[decision_providers.provider.previous]
+archived = true
+
+[decision_providers.provider.classifier]
+provider_kind = "openai"
+model_name = "gpt-6-luna"
+api_key = "your-key"
+# base_url = "https://api.openai.com/v1"
+
+[decision_providers.provider.local_classifier]
+provider_kind = "llama_cpp"
+base_url = "http://localhost:8080/v1"
+# api_key = "optional-server-key"
+```
+
+OpenAI requires `model_name` and defaults to `https://api.openai.com/v1`;
+the Decisions API currently supports `gpt-6-luna`. llama.cpp requires the
+server's `/v1` base URL and a native decision model; its optional API key is a
+bearer token. Choice limits and input limits depend on the loaded model.
+The shared interface accepts text or JSON, passing JSON as serialized text to
+OpenAI and structured state to llama.cpp (JSON scalars are serialized as text).
+It returns estimated probabilities,
+which are not necessarily calibrated; consumers determine their own thresholds.
+Credentials stay on the backend.
+
+### Speech providers
+
+{/* erato_toml_config_key: speech_providers */}
+{/* erato_toml_config_key: speech_providers.provider */}
+{/* erato_toml_config_key: speech_providers.provider.<provider-id>.provider_kind */}
+{/* erato_toml_config_key: speech_providers.provider.<provider-id>.model_name */}
+{/* erato_toml_config_key: speech_providers.provider.<provider-id>.voice */}
+{/* erato_toml_config_key: speech_providers.provider.<provider-id>.base_url */}
+{/* erato_toml_config_key: speech_providers.provider.<provider-id>.api_key */}
+{/* erato_toml_config_key: speech_providers.provider.<provider-id>.access_token */}
+{/* erato_toml_config_key: speech_providers.provider.<provider-id>.project_id */}
+{/* erato_toml_config_key: speech_providers.provider.<provider-id>.location */}
+{/* erato_toml_config_key: speech_providers.provider.<provider-id>.instructions */}
+{/* erato_toml_config_key: speech_providers.provider.<provider-id>.sample_rate */}
+{/* erato_toml_config_key: audio_conversational.speech_provider */}
+
+Configure speech output separately from chat and transcription. The registry uses
+`[speech_providers.provider.<id>]`. Set `audio_conversational.speech_provider` to
+that ID, select conversational mode, and enable **Audio-back** to hear responses.
+The `speech_provider` setting is available only in `audio_conversational`.
+Other input modes do not generate speech. Audio-back starts sentence by sentence
+while text is generated. Completed audio is saved as a WAV file on the assistant
+message, with the exact spoken input and sentence segments in file metadata.
+Replay after reload does not invoke the provider again.
+
+```toml
+[speech_providers.provider.voice]
+provider_kind = "openai"
+model_name = "gpt-4o-mini-tts"
+voice = "alloy"
+api_key = "your-key"
+
+[audio_conversational]
+enabled = true
+speech_provider = "voice"
+# Configure the transcription chat_provider_id as usual.
+```
+
+Supported kinds are `openai`, `openai_realtime`, `audio_cpp`, `gemini`, and `gemini_live`. Each requires `model_name`
+and `voice`. OpenAI uses `api_key` and an optional `/v1` `base_url`. Use
+`openai_realtime` with a Realtime model such as `gpt-realtime-2`; its base URL
+may use HTTP(S) or WS(S) and defaults to `https://api.openai.com/v1`. Realtime
+models are instructed to read the supplied text verbatim, but their output is
+generative and may differ from the input. audio.cpp
+requires `base_url`, a model configured in streaming mode, and `sample_rate`
+matching its native mono PCM output (default 24000). Its authentication key is
+optional. Gemini requires `project_id` for OAuth authentication; with an `api_key`,
+omitting `project_id` uses the projectless Express endpoint. `location` defaults
+to `global`. Gemini requires an explicit `access_token` (OAuth bearer) or
+`api_key` where supported by the deployment. Credentials are not discovered
+automatically.
+Use `gemini` for Gemini TTS models via `streamGenerateContent`. Live models such
+as `gemini-3.8-live` require `gemini_live` and the Live API WebSocket transport:
+
+```toml
+[speech_providers.provider.live_voice]
+provider_kind = "gemini_live"
+model_name = "gemini-3.8-live"
+voice = "Kore"
+access_token = "your-oauth-access-token"
+project_id = "your-project"
+location = "eu"
+
+[audio_conversational]
+speech_provider = "live_voice"
+```
+
+Live requires an explicit OAuth `access_token`, `project_id`, and `location`;
+API keys and automatic credential discovery are not supported by this adapter.
+The access token must be refreshed externally. The model may also be a full
+`projects/<project>/locations/<location>/publishers/google/models/<model>`
+identifier matching those settings. `location = "eu"` routes to the EU
+multi-region endpoint. A custom `base_url` overrides that endpoint and must
+itself point to the intended deployment. Choose a voice and location supported
+by the model. Like other generative speech models, Live is instructed to read
+the text exactly but may deviate from it.
+An optional `instructions` string controls delivery on models that support it.
+Credentials are backend-only. Provider/model-specific options must be supported
+by the selected model; streamed output uses 16-bit little-endian mono PCM.
+
+The frontend pauses conversational microphone restart until speech playback ends.
+Stopping playback does not discard the text or prevent the backend from finishing
+the replay file. Cancelling generation discards incomplete speech. A speech
+failure leaves the text response available. Code blocks and image descriptions
+are omitted from spoken output; Markdown links are read by their visible text.
+The synthesis response is limited to 64 MiB of PCM per assistant message.
 
 ### Audio modes
 
@@ -3016,6 +3346,12 @@ Override this ID to install multiple add-in instances in the same tenant.
 {/* erato_toml_config_key: integrations.ms_office.addin.document.addin_id */}
 
 The Word add-in manifest ID, served by `/office-addin/manifest-document.xml`.
+For SharePoint app catalogs, use `/office-addin/manifest-document.xml?distribution=sharepoint`.
+This variant omits `VersionOverrides`, including ribbon commands, to avoid Office's unsupported-catalog-features warning.
+The default endpoint (or `?distribution=integrated-apps`) retains ribbon commands for Microsoft 365 admin center distribution.
+Both variants use the same configured Word add-in ID and authentication settings.
+The setup page at `/office-addin/` provides a distribution-method selector, matching downloads and installation instructions.
+When updating an existing SharePoint installation, retain its configured ID and upload the corrected manifest from a newer deployment version.
 It must be nonempty and differ from the Outlook ID in `integrations.ms_office.addin.addin_id` so both add-ins can be installed in the same catalog.
 
 **Default value:** `"15a5d0e8-e96a-4e26-b6a1-bd8f429468c2"`

@@ -111,4 +111,43 @@ describe("DesktopSidecarSetupPage on a Mac", () => {
       screen.queryByText(/Not sure which Mac you have\?/),
     ).not.toBeInTheDocument();
   });
+
+  it("offers the derived Intune package with its own download URL", () => {
+    vi.mocked(useDistribution).mockReturnValue({
+      data: {
+        targets: [
+          {
+            id: "windows-x86_64",
+            platform: { os: "windows", architecture: "x86_64", abi: "msvc" },
+            default_file: "installer",
+            files: [
+              {
+                id: "installer",
+                kind: "installer",
+                size: 1024,
+                download_filename: "sidecar.msi",
+              },
+              {
+                id: "installer.intunewin",
+                kind: "intunewin",
+                size: 1024,
+                download_filename: "sidecar.intunewin",
+              },
+            ],
+          },
+        ],
+      },
+      error: null,
+      isLoading: false,
+    } as unknown as ReturnType<typeof useDistribution>);
+    renderOnMac();
+    const card = screen
+      .getByText("Microsoft Intune package")
+      .closest("article")!;
+    expect(within(card).getByText("sidecar.intunewin")).toBeInTheDocument();
+    expect(within(card).getByRole("link")).toHaveAttribute(
+      "href",
+      "/api/v1beta/desktop-sidecar/distribution/download?target=windows-x86_64&file=installer.intunewin",
+    );
+  });
 });
