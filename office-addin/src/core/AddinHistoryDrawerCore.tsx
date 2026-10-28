@@ -3,6 +3,7 @@ import {
   ChatHistoryList,
   ChatHistoryListSkeleton,
   ChatShareDialog,
+  dismissChatActionFailure,
   EditChatTitleDialog,
   NewChatItem,
   NoFilterMatchesRow,
@@ -14,8 +15,8 @@ import {
   SidebarToggle,
   hasActiveFilters,
   mapRecentChatToSession,
+  runChatAction,
   sidebarNavigationIconClassName,
-  toast,
   useAssistantsFeature,
   useChatContext,
   useChatSharingFeature,
@@ -38,14 +39,6 @@ const FOCUSABLE_SELECTOR =
  * `transitionend`, and reduced motion never fires one — an invisible drawer
  * must not stay mounted eating clicks. Just past the 150ms transition. */
 const EXIT_FALLBACK_MS = 250;
-
-// Error toasts stay until dismissed; one slot per action lets a retry's
-// outcome replace the last failure instead of stacking in the narrow pane.
-const RENAME_TOAST_KEY = "addin-history-rename";
-const archiveToastKey = (sessionId: string) =>
-  `addin-history-archive:${sessionId}`;
-const unarchiveToastKey = (sessionId: string) =>
-  `addin-history-unarchive:${sessionId}`;
 
 export interface AddinHistoryDrawerCoreProps {
   isOpen: boolean;
@@ -229,24 +222,19 @@ export function AddinHistoryDrawerCore({
     onClose();
   }, [createNewChat, onClose]);
 
+  // The library's per-chat slots, shared with the archived-chat notice, so a
+  // failure retried from either surface shows once.
   const handleSubmitTitle = useCallback(
     async (title: string) => {
-      if (!titleDialogSessionId) return;
-      toast.dismissKey(RENAME_TOAST_KEY);
+      const sessionId = titleDialogSessionId;
+      if (!sessionId) return;
       setIsUpdatingTitle(true);
       try {
-        await updateChatTitle(titleDialogSessionId, title);
-        setTitleDialogSessionId(null);
-      } catch {
-        // The dialog stays open on purpose: the typed title survives for a
-        // retry.
-        toast.error({
-          dedupeKey: RENAME_TOAST_KEY,
-          title: t({
-            id: "officeAddin.historyDrawer.renameFailed",
-            message: "Couldn't rename the chat",
-          }),
-        });
+        // A failure keeps the dialog open, so the typed title survives a retry.
+        const renamed = await runChatAction("rename", sessionId, () =>
+          updateChatTitle(sessionId, title),
+        );
+        if (renamed) setTitleDialogSessionId(null);
       } finally {
         setIsUpdatingTitle(false);
       }
@@ -256,34 +244,16 @@ export function AddinHistoryDrawerCore({
 
   const handleArchive = useCallback(
     (sessionId: string) => {
-      // A failed archive rolls the row back silently (the mutation's
-      // rollback), so the toast is the only signal anything happened.
-      toast.dismissKey(archiveToastKey(sessionId));
-      archiveChat(sessionId).catch(() => {
-        toast.error({
-          dedupeKey: archiveToastKey(sessionId),
-          title: t({
-            id: "officeAddin.historyDrawer.archiveFailed",
-            message: "Couldn't archive the chat",
-          }),
-        });
-      });
+      void runChatAction("archive", sessionId, () => archiveChat(sessionId));
     },
     [archiveChat],
   );
 
   const handleUnarchive = useCallback(
     (sessionId: string) => {
-      toast.dismissKey(unarchiveToastKey(sessionId));
-      unarchiveChat(sessionId).catch(() => {
-        toast.error({
-          dedupeKey: unarchiveToastKey(sessionId),
-          title: t({
-            id: "officeAddin.historyDrawer.unarchiveFailed",
-            message: "Couldn't unarchive the chat",
-          }),
-        });
-      });
+      void runChatAction("unarchive", sessionId, () =>
+        unarchiveChat(sessionId),
+      );
     },
     [unarchiveChat],
   );
@@ -547,7 +517,9 @@ export function AddinHistoryDrawerCore({
         initialUserProvidedTitle={activeTitleSession?.titleByUserProvided}
         isSubmitting={isUpdatingTitle}
         onClose={() => {
-          toast.dismissKey(RENAME_TOAST_KEY);
+          if (titleDialogSessionId) {
+            dismissChatActionFailure("rename", titleDialogSessionId);
+          }
           setTitleDialogSessionId(null);
         }}
         onSubmit={handleSubmitTitle}

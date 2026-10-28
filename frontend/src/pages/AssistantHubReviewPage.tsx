@@ -11,10 +11,12 @@ import { SpinnerIcon } from "@/components/ui/Feedback/SpinnerIcon";
 import { Textarea } from "@/components/ui/Input";
 import { ShareGrantsList } from "@/components/ui/Sharing/ShareGrantsList";
 import { toast } from "@/components/ui/Toast";
+import { usePageErrorToast } from "@/components/ui/Toast/usePageErrorToast";
 import { ArrowLeftIcon } from "@/components/ui/icons";
 import { usePageAlignment } from "@/hooks/ui";
 import {
   assistantHubConfigQuery,
+  frequentAssistantsQuery,
   getAssistantQuery,
   startingAssistantQuery,
   useAssistantHubConfig,
@@ -46,12 +48,16 @@ const REVIEW_TOAST_KEY = "assistant-hub-review";
 type VersionAction = "accept" | "decline" | "publish" | "current" | "feature";
 
 // Publishing also decides the start screen and who may open the version's
-// assistant, so those refresh alongside the hub views.
+// assistant, so those refresh alongside the hub views; the sidebar's frequent
+// list too, without holding the row busy.
 const refreshAfterVersionChange = (
   queryClient: QueryClient,
   version: AssistantHubVersion,
-) =>
-  Promise.all([
+) => {
+  void queryClient.invalidateQueries({
+    queryKey: frequentAssistantsQuery({}).queryKey,
+  });
+  return Promise.all([
     queryClient.invalidateQueries({
       queryKey: assistantHubConfigQuery({}).queryKey.slice(0, -1),
     }),
@@ -64,8 +70,10 @@ const refreshAfterVersionChange = (
       }).queryKey,
     }),
   ]);
+};
 
 export default function AssistantHubReviewPage() {
+  const showError = usePageErrorToast();
   const navigate = useNavigate();
   const { versionId } = useParams<{ versionId?: string }>();
   const queryClient = useQueryClient();
@@ -112,7 +120,7 @@ export default function AssistantHubReviewPage() {
         toast.success({ dedupeKey: REVIEW_TOAST_KEY, title: successTitle });
       }
     } catch {
-      toast.error({
+      showError({
         dedupeKey: REVIEW_TOAST_KEY,
         title: t({
           id: "assistantHub.review.error",
@@ -329,8 +337,8 @@ export default function AssistantHubReviewPage() {
           {error && (
             <Alert type="error">
               {t({
-                id: "assistantHub.review.error",
-                message: "Failed to update assistant hub review state.",
+                id: "assistantHub.review.loadError",
+                message: "Could not load the submissions to review.",
               })}
             </Alert>
           )}

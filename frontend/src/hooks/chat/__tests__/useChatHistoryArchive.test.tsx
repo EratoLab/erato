@@ -392,6 +392,24 @@ describe("useChatHistory unarchiveChat", () => {
     });
   });
 
+  it("unlocks the cached detail as soon as the unarchive lands", async () => {
+    const detailKey = ["chatDetail", { chatId: "chat5" }];
+    queryClient.setQueryData(detailKey, {
+      id: "chat5",
+      archived_at: ARCHIVED_AT,
+    });
+    const { result } = renderHook(() => useChatHistory(), { wrapper });
+
+    await act(async () => {
+      await result.current.unarchiveChat("chat5");
+    });
+
+    expect(queryClient.getQueryData(detailKey)).toEqual({
+      id: "chat5",
+      archived_at: undefined,
+    });
+  });
+
   it("deletes the generation status entry instead of tombstoning it", async () => {
     useGenerationStatusStore.setState({
       statusByChatId: {

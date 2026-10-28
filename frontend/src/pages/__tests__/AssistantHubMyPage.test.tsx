@@ -74,6 +74,7 @@ const makeVersion = (
 });
 
 let myVersions: AssistantHubVersion[];
+let listError: Error | null;
 const withdrawVersion = vi.fn();
 const setPublished = vi.fn();
 const setCurrent = vi.fn();
@@ -98,7 +99,7 @@ vi.mock("@/lib/generated/v1betaApi/v1betaApiComponents", () => ({
   useListMyAssistantHubVersions: () => ({
     data: { versions: myVersions },
     isLoading: false,
-    error: null,
+    error: listError,
   }),
   useGetAssistant: () => ({ data: undefined }),
   useListAssistantHubReviews: () => ({ data: undefined, isLoading: false }),
@@ -183,6 +184,7 @@ describe("groupVersionsByAssistant", () => {
 describe("AssistantHubMyPage", () => {
   beforeEach(() => {
     myVersions = [makeVersion("first"), makeVersion("second")];
+    listError = null;
     for (const mutation of [withdrawVersion, setPublished, setCurrent]) {
       mutation.mockReset();
       mutation.mockResolvedValue({});
@@ -256,5 +258,15 @@ describe("AssistantHubMyPage", () => {
     expect(useToastStore.getState().toasts).toMatchObject([
       { variant: "error", title: "Failed to update hub submissions." },
     ]);
+  });
+
+  it("says the submissions could not be loaded when the list fails", () => {
+    listError = new Error("500");
+
+    renderPage();
+
+    expect(
+      screen.getByText("Could not load your hub submissions."),
+    ).toBeInTheDocument();
   });
 });

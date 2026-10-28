@@ -376,7 +376,20 @@ export const DEFAULT_STUBS = {
   registerClientToolExecutor: () => noop,
   registerOperationExecutor: () => noop,
   removeArchivedChatFromLists: async () => noop,
+  runChatAction: async (
+    _action: string,
+    _chatId: string,
+    perform: () => Promise<unknown>,
+  ) => {
+    try {
+      await perform();
+      return true;
+    } catch {
+      return false;
+    }
+  },
   requestClientOperationSweep: noop,
+  dismissChatActionFailure: noop,
   resolveComponentOverride: (override: unknown, fallback: unknown) =>
     override ?? fallback,
   seedGenerationStatusFromListing: noop,

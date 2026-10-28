@@ -16,8 +16,10 @@ import { SubjectSelector } from "./SubjectSelector";
 import type { SubjectTypeFilter } from "./SubjectSelector";
 import type { OrganizationMember } from "@/types/sharing";
 
-/** Error toasts stay until dismissed, so the next add or removal replaces them. */
-const SHARING_TOAST_KEY = "sharing-grants";
+// Error toasts stay until dismissed: a retry of the same add or removal replaces
+// its own, without retracting another grant's failure.
+const ADD_TOAST_KEY = "sharing-grants:add";
+const removeToastKey = (grantId: string) => `sharing-grants:remove:${grantId}`;
 
 interface SharingDialogProps {
   isOpen: boolean;
@@ -53,6 +55,7 @@ export function SharingDialog({
   // A row's Remove button has no busy state of its own, so a second
   // confirmation while the first is in flight is dropped here.
   const removingGrantIds = useRef(new Set<string>());
+  const toastKeys = useRef(new Set<string>());
   // State for subject type toggle (users vs groups)
   const [subjectTypeFilter, setSubjectTypeFilter] =
     useState<SubjectTypeFilter>("user");
@@ -102,7 +105,8 @@ export function SharingDialog({
 
     isAddingRef.current = true;
     setIsAdding(true);
-    toast.dismissKey(SHARING_TOAST_KEY);
+    toast.dismissKey(ADD_TOAST_KEY);
+    toastKeys.current.add(ADD_TOAST_KEY);
 
     try {
       const subjects = selectedSubjects;
@@ -138,7 +142,7 @@ export function SharingDialog({
       if (failure) {
         console.error("Failed to create share grants:", failure.reason);
         toast.error({
-          dedupeKey: SHARING_TOAST_KEY,
+          dedupeKey: ADD_TOAST_KEY,
           title: t({
             id: "sharing.addPeople.error",
             message: "Failed to grant access",
@@ -146,7 +150,7 @@ export function SharingDialog({
         });
       } else {
         toast.success({
-          dedupeKey: SHARING_TOAST_KEY,
+          dedupeKey: ADD_TOAST_KEY,
           title: t({
             id: "sharing.addPeople.success",
             message: "Access granted successfully",
@@ -167,12 +171,14 @@ export function SharingDialog({
       if (removingGrantIds.current.has(grantId)) return;
 
       removingGrantIds.current.add(grantId);
-      toast.dismissKey(SHARING_TOAST_KEY);
+      const toastKey = removeToastKey(grantId);
+      toast.dismissKey(toastKey);
+      toastKeys.current.add(toastKey);
 
       try {
         await deleteGrant(grantId);
         toast.success({
-          dedupeKey: SHARING_TOAST_KEY,
+          dedupeKey: toastKey,
           title: t({
             id: "sharing.remove.success",
             message: "Access removed successfully",
@@ -181,7 +187,7 @@ export function SharingDialog({
       } catch (error) {
         console.error("Failed to delete share grant:", error);
         toast.error({
-          dedupeKey: SHARING_TOAST_KEY,
+          dedupeKey: toastKey,
           title: t({
             id: "sharing.remove.error",
             message: "Failed to remove access",
@@ -198,7 +204,8 @@ export function SharingDialog({
   // Not memoized: ModalBase is not memoized, and onClose likely changes on parent re-renders
   const handleClose = () => {
     setSelectedSubjects([]);
-    toast.dismissKey(SHARING_TOAST_KEY);
+    toastKeys.current.forEach((key) => toast.dismissKey(key));
+    toastKeys.current.clear();
     setSubjectTypeFilter("user"); // Reset to default
     setAccessRole("viewer");
     onClose();

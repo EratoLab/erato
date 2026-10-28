@@ -204,4 +204,21 @@ describe("AssistantEditPage", () => {
       { variant: "success" },
     ]);
   });
+
+  it("drops a failed save's error toast once the user leaves the page", async () => {
+    updateAssistantMock.mockRejectedValueOnce(new Error("boom"));
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const { unmount } = renderPage();
+
+    fireEvent.click(screen.getByTestId("submit-form-stub"));
+    await settle();
+    expect(useToastStore.getState().toasts).toMatchObject([
+      { variant: "error" },
+    ]);
+
+    unmount();
+
+    expect(useToastStore.getState().toasts).toEqual([]);
+  });
 });

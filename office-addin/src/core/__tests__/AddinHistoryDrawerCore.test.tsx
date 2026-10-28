@@ -25,6 +25,7 @@ const spies = vi.hoisted(() => {
     updateChatTitle: vi.fn(async () => undefined),
     fetchNextHistoryPage: vi.fn(async () => undefined),
     toastError: vi.fn(),
+    runChatAction: vi.fn(),
     /** What the Toaster would show, with the store's dedupe-slot rules. */
     toasts: [] as Array<{ title?: string; dedupeKey?: string }>,
     chatContext: {
@@ -182,21 +183,37 @@ vi.mock("@erato/frontend/library", async () => {
       spies.renameDialogProps.current = props;
       return props.isOpen ? <div data-testid="rename-dialog" /> : null;
     },
-    toast: {
-      error: (input: { title?: string; dedupeKey?: string }) => {
-        spies.toastError(input);
-        spies.toasts = [
-          ...spies.toasts.filter(
-            (toast) => !input.dedupeKey || toast.dedupeKey !== input.dedupeKey,
-          ),
-          input,
-        ];
-      },
-      dismissKey: (dedupeKey: string) => {
+    // Mirrors the library helper over a toast fake with the store's slot rules.
+    runChatAction: async (
+      action: string,
+      chatId: string,
+      perform: () => Promise<unknown>,
+    ) => {
+      spies.runChatAction(action, chatId);
+      const dedupeKey = `chat-${action}:${chatId}`;
+      const dismiss = () => {
         spies.toasts = spies.toasts.filter(
           (toast) => toast.dedupeKey !== dedupeKey,
         );
-      },
+      };
+      dismiss();
+      try {
+        await perform();
+      } catch {
+        spies.toastError({ dedupeKey });
+        spies.toasts = [
+          ...spies.toasts.filter((toast) => toast.dedupeKey !== dedupeKey),
+          { dedupeKey },
+        ];
+        return false;
+      }
+      dismiss();
+      return true;
+    },
+    dismissChatActionFailure: (action: string, chatId: string) => {
+      spies.toasts = spies.toasts.filter(
+        (toast) => toast.dedupeKey !== `chat-${action}:${chatId}`,
+      );
     },
     hasActiveFilters: (values: { typeFilter: string; statusFilter: string }) =>
       values.typeFilter !== "all" || values.statusFilter !== "active",
@@ -675,7 +692,7 @@ describe("AddinHistoryDrawerCore", () => {
     expect(spies.toastError).toHaveBeenCalledTimes(1);
   });
 
-  it("toasts when unarchiving fails", async () => {
+  it("toasts when unarchiving fails, in the slot the archived-chat notice uses", async () => {
     spies.unarchiveChat.mockRejectedValueOnce(new Error("unarchive failed"));
     renderDrawer();
 
@@ -683,6 +700,7 @@ describe("AddinHistoryDrawerCore", () => {
       spies.historyListProps[0]?.onSessionUnarchive?.("c1");
     });
 
+    expect(spies.runChatAction).toHaveBeenCalledWith("unarchive", "c1");
     expect(spies.toastError).toHaveBeenCalledTimes(1);
   });
 

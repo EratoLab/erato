@@ -9,6 +9,7 @@ import { ASSISTANT_SAVE_TOAST_KEY } from "@/components/ui/Assistant/assistantSav
 import { Card } from "@/components/ui/Container/Card";
 import { PageHeader } from "@/components/ui/Container/PageHeader";
 import { toast } from "@/components/ui/Toast";
+import { usePageErrorToast } from "@/components/ui/Toast/usePageErrorToast";
 import { usePageAlignment } from "@/hooks/ui";
 import {
   useAvailableModels,
@@ -19,6 +20,7 @@ import {
 import type { AssistantFormData } from "@/components/ui/Assistant/AssistantForm";
 
 export default function AssistantCreatePage() {
+  const showError = usePageErrorToast();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { containerClasses, horizontalPadding } =
@@ -77,7 +79,7 @@ export default function AssistantCreatePage() {
       navigate("/assistants/created");
     } catch (error) {
       console.error("Failed to create assistant:", error);
-      toast.error({
+      showError({
         dedupeKey: ASSISTANT_SAVE_TOAST_KEY,
         title: t({
           id: "assistant.create.error",

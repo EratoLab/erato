@@ -14,6 +14,7 @@ import { Alert } from "@/components/ui/Feedback/Alert";
 import { SpinnerIcon } from "@/components/ui/Feedback/SpinnerIcon";
 import { SharingDialog, SharingErrorBoundary } from "@/components/ui/Sharing";
 import { toast } from "@/components/ui/Toast";
+import { usePageErrorToast } from "@/components/ui/Toast/usePageErrorToast";
 import { CheckCircleIcon, ShareIcon } from "@/components/ui/icons";
 import { usePageAlignment } from "@/hooks/ui";
 import {
@@ -60,6 +61,7 @@ const toFileUploadItems = (files: AssistantFile[]): FileUploadItem[] =>
   });
 
 export default function AssistantEditPage() {
+  const showError = usePageErrorToast();
   const navigate = useNavigate();
   const { enabled, usageViewEnabled } = useAssistantsFeature();
   const queryClient = useQueryClient();
@@ -137,7 +139,7 @@ export default function AssistantEditPage() {
       navigate("/assistants/created");
     } catch (error) {
       console.error("Failed to update assistant:", error);
-      toast.error({
+      showError({
         dedupeKey: ASSISTANT_SAVE_TOAST_KEY,
         title: t({
           id: "assistant.edit.error",

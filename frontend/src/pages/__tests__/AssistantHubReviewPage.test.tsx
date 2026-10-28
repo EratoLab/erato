@@ -50,6 +50,7 @@ const makeVersion = (
 });
 
 let versions: AssistantHubVersion[];
+let listError: Error | null;
 const reviewVersion = vi.fn();
 const setPublished = vi.fn();
 const setCurrent = vi.fn();
@@ -91,7 +92,7 @@ vi.mock("@/lib/generated/v1betaApi/v1betaApiComponents", () => ({
   useListReviewAssistantHubVersions: () => ({
     data: { versions },
     isLoading: false,
-    error: null,
+    error: listError,
   }),
   useGetAssistant: () => ({ data: undefined }),
   useReviewAssistantHubVersion: () =>
@@ -107,6 +108,9 @@ vi.mock("@/lib/generated/v1betaApi/v1betaApiComponents", () => ({
   }),
   startingAssistantQuery: () => ({
     queryKey: ["api", "v1beta", "me", "starting-assistant"],
+  }),
+  frequentAssistantsQuery: () => ({
+    queryKey: ["api", "v1beta", "me", "frequent_assistants"],
   }),
   getAssistantQuery: ({
     pathParams,
@@ -147,6 +151,7 @@ const deferred = () => {
 
 describe("AssistantHubReviewPage", () => {
   beforeEach(() => {
+    listError = null;
     versions = [makeVersion("first"), makeVersion("second")];
     for (const mutation of [
       reviewVersion,
@@ -199,7 +204,7 @@ describe("AssistantHubReviewPage", () => {
     expect(firstPublish).not.toHaveAttribute("aria-busy");
   });
 
-  it("refreshes the hub views, the start screen and the version's assistant, not every query", async () => {
+  it("refreshes the hub views, the start screen, the frequent list and the version's assistant, not every query", async () => {
     const queryClient = new QueryClient();
     const invalidateQueries = vi.spyOn(queryClient, "invalidateQueries");
 
@@ -209,6 +214,7 @@ describe("AssistantHubReviewPage", () => {
     await settle();
 
     expect(invalidateQueries.mock.calls.map(([filters]) => filters)).toEqual([
+      { queryKey: ["api", "v1beta", "me", "frequent_assistants"] },
       { queryKey: ["api", "v1beta", "assistant-hub"] },
       { queryKey: ["api", "v1beta", "me", "starting-assistant"] },
       { queryKey: ["api", "v1beta", "assistants", "first-assistant"] },
@@ -264,5 +270,15 @@ describe("AssistantHubReviewPage", () => {
 
     expect(setPublished).toHaveBeenCalledTimes(2);
     expect(useToastStore.getState().toasts).toEqual([]);
+  });
+
+  it("says the queue could not be loaded when the list fails", () => {
+    listError = new Error("500");
+
+    renderPage("/assistant-hub/review");
+
+    expect(
+      screen.getByText("Could not load the submissions to review."),
+    ).toBeInTheDocument();
   });
 });

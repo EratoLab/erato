@@ -15,6 +15,7 @@ import { SpinnerIcon } from "@/components/ui/Feedback/SpinnerIcon";
 import { Input } from "@/components/ui/Input";
 import { SharingDialog, SharingErrorBoundary } from "@/components/ui/Sharing";
 import { toast } from "@/components/ui/Toast";
+import { usePageErrorToast } from "@/components/ui/Toast/usePageErrorToast";
 import {
   ArrowLeftIcon,
   CheckCircleIcon,
@@ -828,6 +829,7 @@ function AssistantListView({
   searchQuery: string;
   view: Exclude<AssistantsLandingView, "hub">;
 }) {
+  const showError = usePageErrorToast();
   const navigate = useNavigate();
   const isCreatedView = view === "owned_by_user";
   const [statusFilter, setStatusFilter] =
@@ -927,7 +929,7 @@ function AssistantListView({
       });
     } catch (archiveError) {
       logger.error("Failed to archive assistant:", archiveError);
-      toast.error({
+      showError({
         dedupeKey: assistantArchiveToastKey(assistantId),
         title: t({
           id: "assistants.archive.error",

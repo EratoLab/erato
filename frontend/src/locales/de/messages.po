@@ -707,6 +707,11 @@ msgstr "Hub-Einreichungen konnten nicht aktualisiert werden."
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubMyPage.tsx
+msgid "assistantHub.my.loadError"
+msgstr "Ihre Hub-Einreichungen konnten nicht geladen werden."
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubMyPage.tsx
 msgid "assistantHub.my.loading"
 msgstr "Einreichungen werden geladen..."
 
@@ -894,6 +899,11 @@ msgstr "Review-Status des Assistant Hubs konnte nicht aktualisiert werden."
 #: src/pages/AssistantHubReviewPage.tsx
 msgid "assistantHub.review.feature"
 msgstr "Assistant hervorheben"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubReviewPage.tsx
+msgid "assistantHub.review.loadError"
+msgstr "Die Einreichungen für das Review konnten nicht geladen werden."
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubReviewPage.tsx

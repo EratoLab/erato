@@ -666,8 +666,8 @@ msgstr "Paramètres"
 
 #. js-lingui-explicit-id
 #: src/core/AddinHistoryDrawerCore.tsx
-msgid "officeAddin.historyDrawer.archiveFailed"
-msgstr "Impossible d'archiver la discussion"
+#~ msgid "officeAddin.historyDrawer.archiveFailed"
+#~ msgstr "Impossible d'archiver la discussion"
 
 #. js-lingui-explicit-id
 #: src/core/AddinHistoryDrawerCore.tsx
@@ -706,8 +706,8 @@ msgstr "{attentionCount, plural, one {Ouvrir le menu, # conversation requiert vo
 
 #. js-lingui-explicit-id
 #: src/core/AddinHistoryDrawerCore.tsx
-msgid "officeAddin.historyDrawer.renameFailed"
-msgstr "Impossible de renommer la discussion"
+#~ msgid "officeAddin.historyDrawer.renameFailed"
+#~ msgstr "Impossible de renommer la discussion"
 
 #. js-lingui-explicit-id
 #: src/core/AddinHistoryDrawerCore.tsx
@@ -716,8 +716,8 @@ msgstr "Menu"
 
 #. js-lingui-explicit-id
 #: src/core/AddinHistoryDrawerCore.tsx
-msgid "officeAddin.historyDrawer.unarchiveFailed"
-msgstr "Impossible de désarchiver la discussion"
+#~ msgid "officeAddin.historyDrawer.unarchiveFailed"
+#~ msgstr "Impossible de désarchiver la discussion"
 
 #. js-lingui-explicit-id
 #: src/providers/OfficeProvider.tsx

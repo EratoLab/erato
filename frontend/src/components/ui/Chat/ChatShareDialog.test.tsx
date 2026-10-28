@@ -10,6 +10,7 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ChatShareDialog } from "./ChatShareDialog";
+import { useToastStore } from "../Toast/toastStore";
 
 const setEnabled = vi.fn();
 const ERROR_TEXT = "Could not update the share link. Please try again.";
@@ -38,7 +39,18 @@ const renderDialog = (chatId: string | null) => (
 
 beforeEach(() => {
   setEnabled.mockReset();
+  useToastStore.setState({ toasts: [] });
 });
+
+function rejectLater() {
+  let reject!: (reason: unknown) => void;
+  setEnabled.mockReturnValue(
+    new Promise((_, rej) => {
+      reject = rej;
+    }),
+  );
+  return (reason: unknown) => reject(reason);
+}
 
 afterEach(() => {
   cleanup();
@@ -74,5 +86,41 @@ describe("ChatShareDialog", () => {
     rerender(renderDialog("chat-1"));
 
     await waitFor(() => expect(screen.queryByText(ERROR_TEXT)).toBeNull());
+  });
+
+  it("toasts a failure that lands after the dialog was reopened for another chat", async () => {
+    const reject = rejectLater();
+    const { rerender } = render(renderDialog("chat-1"));
+    fireEvent.click(
+      screen.getByRole("checkbox", { name: "Toggle chat sharing" }),
+    );
+
+    rerender(renderDialog(null));
+    rerender(renderDialog("chat-2"));
+    reject({ status: 500 });
+
+    await waitFor(() =>
+      expect(useToastStore.getState().toasts).toMatchObject([
+        { variant: "error", title: ERROR_TEXT, dedupeKey: "chat-share:chat-1" },
+      ]),
+    );
+    expect(screen.queryByText(ERROR_TEXT)).toBeNull();
+  });
+
+  it("toasts a failure that lands after the dialog closed", async () => {
+    const reject = rejectLater();
+    const { rerender } = render(renderDialog("chat-1"));
+    fireEvent.click(
+      screen.getByRole("checkbox", { name: "Toggle chat sharing" }),
+    );
+
+    rerender(renderDialog(null));
+    reject({ status: 500 });
+
+    await waitFor(() =>
+      expect(useToastStore.getState().toasts).toMatchObject([
+        { variant: "error", title: ERROR_TEXT },
+      ]),
+    );
   });
 });

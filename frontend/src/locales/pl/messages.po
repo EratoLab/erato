@@ -707,6 +707,11 @@ msgstr "Nie udalo sie zaktualizowac zgloszen sklepowych."
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubMyPage.tsx
+msgid "assistantHub.my.loadError"
+msgstr "Nie udało się załadować Twoich zgłoszeń do sklepu."
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubMyPage.tsx
 msgid "assistantHub.my.loading"
 msgstr "Wczytywanie zgloszen..."
 
@@ -894,6 +899,11 @@ msgstr "Nie udalo sie zaktualizowac stanu recenzji sklepu asystentow."
 #: src/pages/AssistantHubReviewPage.tsx
 msgid "assistantHub.review.feature"
 msgstr "Wyroznij asystenta"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubReviewPage.tsx
+msgid "assistantHub.review.loadError"
+msgstr "Nie udało się załadować zgłoszeń do recenzji."
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubReviewPage.tsx

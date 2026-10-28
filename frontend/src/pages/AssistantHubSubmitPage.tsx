@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/Input";
 import { SubjectSelector } from "@/components/ui/Sharing/SubjectSelector";
 import { toast } from "@/components/ui/Toast";
+import { usePageErrorToast } from "@/components/ui/Toast/usePageErrorToast";
 import { usePageAlignment } from "@/hooks/ui";
 import {
   listMyAssistantHubVersionsQuery,
@@ -141,6 +142,7 @@ const suggestNextVersionNumber = (
 };
 
 export default function AssistantHubSubmitPage() {
+  const showError = usePageErrorToast();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { sourceAssistantId } = useParams<{ sourceAssistantId: string }>();
@@ -413,7 +415,7 @@ export default function AssistantHubSubmitPage() {
     toast.dismissKey(SUBMIT_TOAST_KEY);
     const validationError = validate();
     if (validationError) {
-      toast.error({ dedupeKey: SUBMIT_TOAST_KEY, title: validationError });
+      showError({ dedupeKey: SUBMIT_TOAST_KEY, title: validationError });
       return;
     }
     try {
@@ -422,7 +424,7 @@ export default function AssistantHubSubmitPage() {
         body: requestBody,
       });
     } catch {
-      toast.error({
+      showError({
         dedupeKey: SUBMIT_TOAST_KEY,
         title: t({
           id: "assistantHub.submit.error.preview",
@@ -437,7 +439,7 @@ export default function AssistantHubSubmitPage() {
     toast.dismissKey(SUBMIT_TOAST_KEY);
     const validationError = validate();
     if (validationError) {
-      toast.error({ dedupeKey: SUBMIT_TOAST_KEY, title: validationError });
+      showError({ dedupeKey: SUBMIT_TOAST_KEY, title: validationError });
       return;
     }
     try {
@@ -470,7 +472,7 @@ export default function AssistantHubSubmitPage() {
       });
       navigate("/assistant-hub/my");
     } catch {
-      toast.error({
+      showError({
         dedupeKey: SUBMIT_TOAST_KEY,
         title: t({
           id: "assistantHub.submit.error.submit",

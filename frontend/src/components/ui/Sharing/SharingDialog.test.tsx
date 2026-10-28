@@ -174,4 +174,38 @@ describe("SharingDialog", () => {
 
     expect(toastTitles("success")).toEqual(["Access removed successfully"]);
   });
+
+  it("keeps one grant's failed removal on screen while another grant is removed", async () => {
+    const grant = (id: string, subject: string): ShareGrant => ({
+      id,
+      resource_type: "assistant",
+      resource_id: "assistant-1",
+      subject_type: "user",
+      subject_id_type: "id",
+      subject_id: subject,
+      role: "viewer",
+      created_at: "2026-01-01T00:00:00Z",
+      updated_at: "2026-01-01T00:00:00Z",
+    });
+    grants = [grant("grant-1", "carol"), grant("grant-2", "dave")];
+    deleteGrant.mockImplementation((grantId) =>
+      grantId === "grant-1"
+        ? Promise.reject(new Error("boom"))
+        : Promise.resolve(),
+    );
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    renderDialog();
+
+    const confirmRemoval = (index: number) => {
+      fireEvent.click(screen.getAllByRole("button", { name: "Remove" })[index]);
+      fireEvent.click(screen.getByRole("button", { name: "Confirm action" }));
+    };
+    confirmRemoval(0);
+    await settle();
+    confirmRemoval(1);
+    await settle();
+
+    expect(toastTitles("error")).toEqual(["Failed to remove access"]);
+    expect(toastTitles("success")).toEqual(["Access removed successfully"]);
+  });
 });

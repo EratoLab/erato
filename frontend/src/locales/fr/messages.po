@@ -707,6 +707,11 @@ msgstr "Impossible de mettre a jour les soumissions du hub."
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubMyPage.tsx
+msgid "assistantHub.my.loadError"
+msgstr "Impossible de charger vos soumissions au hub."
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubMyPage.tsx
 msgid "assistantHub.my.loading"
 msgstr "Chargement des soumissions..."
 
@@ -894,6 +899,11 @@ msgstr "Impossible de mettre a jour l'etat de revue du hub des assistants."
 #: src/pages/AssistantHubReviewPage.tsx
 msgid "assistantHub.review.feature"
 msgstr "Mettre l'assistant en avant"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubReviewPage.tsx
+msgid "assistantHub.review.loadError"
+msgstr "Impossible de charger les soumissions à revoir."
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubReviewPage.tsx

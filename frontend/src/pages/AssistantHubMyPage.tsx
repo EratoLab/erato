@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/Controls/Button";
 import { Alert } from "@/components/ui/Feedback/Alert";
 import { SpinnerIcon } from "@/components/ui/Feedback/SpinnerIcon";
 import { toast } from "@/components/ui/Toast";
+import { usePageErrorToast } from "@/components/ui/Toast/usePageErrorToast";
 import { ArrowLeftIcon, EditIcon, PlusIcon } from "@/components/ui/icons";
 import { usePageAlignment } from "@/hooks/ui";
 import {
@@ -246,6 +247,7 @@ function AssistantHubSubmittedReviewsSection({
 }
 
 export default function AssistantHubMyPage() {
+  const showError = usePageErrorToast();
   const navigate = useNavigate();
   const { versionId } = useParams<{ versionId?: string }>();
   const queryClient = useQueryClient();
@@ -292,7 +294,7 @@ export default function AssistantHubMyPage() {
         });
       }
     } catch {
-      toast.error({
+      showError({
         dedupeKey: MY_SUBMISSIONS_TOAST_KEY,
         title: t({
           id: "assistantHub.my.error",
@@ -512,8 +514,8 @@ export default function AssistantHubMyPage() {
           {error && (
             <Alert type="error">
               {t({
-                id: "assistantHub.my.error",
-                message: "Failed to update hub submissions.",
+                id: "assistantHub.my.loadError",
+                message: "Could not load your hub submissions.",
               })}
             </Alert>
           )}
