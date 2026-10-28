@@ -49,6 +49,12 @@ export interface FileAttachmentsPreviewProps
   filenameTruncateLength?: number;
   /** Optional surface variant for chat message geometry */
   surfaceVariant?: "default" | "message";
+  /**
+   * Files staged in all, when some of them are shown elsewhere (a Teams
+   * transcript's files). The count reads it against `maxFiles`, and "Remove
+   * all" is named by the files shown here.
+   */
+  stagedCount?: number;
 }
 
 /**
@@ -69,6 +75,7 @@ export const FileAttachmentsPreview: React.FC<FileAttachmentsPreviewProps> = ({
   className = "",
   renderAttachment,
   renderItems,
+  stagedCount,
 }) => {
   const items = useMemo<AttachmentTileItem[]>(
     () =>
@@ -100,6 +107,7 @@ export const FileAttachmentsPreview: React.FC<FileAttachmentsPreviewProps> = ({
       disabled={disabled}
       capHeight
       maxFiles={maxFiles}
+      stagedCount={stagedCount}
       className={className}
     />
   );

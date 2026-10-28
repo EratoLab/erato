@@ -82,10 +82,12 @@ implement the seams listed below, and never modify the core itself.
    renders. The registry is a mutable global, so exactly one host per loaded
    document — contributions stay route-local because only the matched lazy
    route module is evaluated. `src/teams/TeamsApp.tsx` mirrors this with
-   `installTeamsComponentRegistrations()`, which contributes only
-   `ChatAddMenuExtraContent`. Word registers its renderer in `HostCardCodeBlock`.
-   Component-kit registrations are re-applied at the
-   entry point via `applyComponentKitRegistrations()` in `src/main.tsx`.
+   `installTeamsComponentRegistrations()`, which contributes
+   `ChatAddMenuExtraContent`, and `ChatInputAttachmentPreview` only when no
+   component kit registered one. Word registers its renderer in
+   `HostCardCodeBlock`. Component-kit registrations are applied at the entry
+   point via `applyComponentKitRegistrations()` in `src/main.tsx`, before any
+   host route module is evaluated.
 6. **Platform identifier** — stamped explicitly per host, never inferred from
    a host SDK: the `platform` prop on `AddinChatProviderCore` flows into
    messaging and is sent as the `X-Erato-Platform` request header. Values:

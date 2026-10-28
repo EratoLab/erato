@@ -246,6 +246,11 @@ msgstr "Les détails du rendez-vous sont inclus comme contexte"
 
 #. js-lingui-explicit-id
 #: src/outlook/components/AddinChatInput.tsx
+msgid "officeAddin.chatInput.appointmentContextUnchanged"
+msgstr "Détails du rendez-vous inchangés, non renvoyés"
+
+#. js-lingui-explicit-id
+#: src/outlook/components/AddinChatInput.tsx
 msgid "officeAddin.chatInput.dismissAppointmentContext"
 msgstr "Ne pas inclure les détails du rendez-vous"
 
@@ -256,7 +261,6 @@ msgstr "Ne pas inclure le brouillon"
 
 #. js-lingui-explicit-id
 #: src/core/selection/AddinSelectionChip.tsx
-#: src/outlook/components/AddinChatInput.tsx
 msgid "officeAddin.chatInput.dismissSelection"
 msgstr "Ignorer la sélection"
 
@@ -264,6 +268,16 @@ msgstr "Ignorer la sélection"
 #: src/outlook/components/AddinChatInput.tsx
 msgid "officeAddin.chatInput.draftContext"
 msgstr "Votre brouillon est inclus comme contexte"
+
+#. js-lingui-explicit-id
+#: src/outlook/components/AddinChatInput.tsx
+msgid "officeAddin.chatInput.draftContextScheduling"
+msgstr "Votre brouillon n'est pas envoyé pendant la planification"
+
+#. js-lingui-explicit-id
+#: src/outlook/components/AddinChatInput.tsx
+msgid "officeAddin.chatInput.draftContextUnchanged"
+msgstr "Votre brouillon n'a pas changé et n'est pas renvoyé"
 
 #. js-lingui-explicit-id
 #: src/outlook/components/AddinChatInput.tsx
@@ -301,13 +315,13 @@ msgid "officeAddin.chatInput.emailBody"
 msgstr "Corps de l'e-mail"
 
 #. js-lingui-explicit-id
+#: src/outlook/components/AddinChatAddMenuExtraContent.tsx
 #: src/outlook/components/AddinChatInput.tsx
 #: src/outlook/utils/buildDropEmailGroup.ts
 msgid "officeAddin.chatInput.emailFallback"
 msgstr "E-mail"
 
 #. js-lingui-explicit-id
-#: src/outlook/components/AddinChatInput.tsx
 #: src/outlook/utils/buildDropEmailGroup.ts
 msgid "officeAddin.chatInput.emailLabel"
 msgstr "E-mail"
@@ -355,6 +369,11 @@ msgstr "Retirer"
 
 #. js-lingui-explicit-id
 #: src/outlook/components/AddinChatInput.tsx
+msgid "officeAddin.chatInput.removeDroppedEmailNamed"
+msgstr "Retirer {subject}"
+
+#. js-lingui-explicit-id
+#: src/outlook/components/AddinChatInput.tsx
 msgid "officeAddin.chatInput.replyContext.groupLabel"
 msgstr "Contexte de réponse"
 
@@ -375,6 +394,11 @@ msgstr "{used} sur {limit}"
 
 #. js-lingui-explicit-id
 #: src/outlook/components/AddinChatInput.tsx
+msgid "officeAddin.chatInput.threadMessageCount"
+msgstr "{count, plural, one {# message} other {# messages}}"
+
+#. js-lingui-explicit-id
+#: src/outlook/components/AddinChatInput.tsx
 msgid "officeAddin.chatInput.unknownSender"
 msgstr "Expéditeur inconnu"
 
@@ -389,6 +413,7 @@ msgid "officeAddin.chatInput.validation.tooLarge"
 msgstr "Le fichier dépasse la limite du serveur de {globalMaxFormatted}"
 
 #. js-lingui-explicit-id
+#: src/outlook/components/AddinChatAddMenuExtraContent.tsx
 #: src/outlook/utils/validateStagedPart.ts
 msgid "officeAddin.chatInput.validation.unsupported"
 msgstr "Ne sera pas lu par l'IA"
@@ -3030,6 +3055,11 @@ msgstr "Inséré dans le document."
 #: src/word/components/WordChatInput.tsx
 msgid "officeAddin.word.chip.changed"
 msgstr "Document inclus – modifié depuis le dernier envoi"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordChatInput.tsx
+msgid "officeAddin.word.chip.commentInstead"
+msgstr "Un commentaire est envoyé à la place du document"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx
@@ -5893,9 +5923,9 @@ msgstr ""
 # Unstable IDs
 # ==============================
 #: src/outlook/components/AddinChatInput.tsx
-msgid "{messageCount} messages"
-msgstr "{messageCount} messages"
+#~ msgid "{messageCount} messages"
+#~ msgstr "{messageCount} messages"
 
 #: src/outlook/components/AddinChatInput.tsx
-msgid "1 message"
-msgstr "1 message"
+#~ msgid "1 message"
+#~ msgstr "1 message"

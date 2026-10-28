@@ -193,4 +193,44 @@ describe("TeamsAttachmentsPreview", () => {
     expect(screen.getByText("teams-Product_sync.md")).toBeVisible();
     expect(screen.queryByRole("button", { name: /product sync/i })).toBeNull();
   });
+
+  describe("the files beside a transcript", () => {
+    const removeAll = (count: string) =>
+      within(screen.getByText(count).parentElement!).getByRole("button");
+    const own = [
+      upload("notes.pdf", "upload-notes"),
+      upload("budget.xlsx", "upload-budget"),
+      upload("plan.docx", "upload-plan"),
+    ];
+
+    it("counts every staged file and removes only its own with Remove all", async () => {
+      const onRemoveFile = vi.fn();
+      const onRemoveAllFiles = vi.fn();
+      await renderPreview(transcriptFile(), [transcript, image, ...own], {
+        maxFiles: 5,
+        onRemoveFile,
+        onRemoveAllFiles,
+      });
+
+      await screen.findByText("Product sync");
+      // The transcript stays, so the button is named by what it removes.
+      const button = removeAll("3 files · 5/5");
+      expect(button).toHaveAccessibleName("Remove all: 3 files");
+      expect(button).toHaveTextContent("Remove all");
+      fireEvent.click(button);
+
+      expect(onRemoveAllFiles).not.toHaveBeenCalled();
+      expect(onRemoveFile.mock.calls).toEqual(own.map((file) => [file.id]));
+    });
+
+    it("hands Remove all through untouched without a transcript", async () => {
+      const onRemoveAllFiles = vi.fn();
+      await renderPreview(null, own, { maxFiles: 5, onRemoveAllFiles });
+
+      const button = removeAll("3/5");
+      expect(button).toHaveAccessibleName("Remove all attachments");
+      fireEvent.click(button);
+      expect(onRemoveAllFiles).toHaveBeenCalledTimes(1);
+    });
+  });
 });

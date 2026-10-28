@@ -5,11 +5,18 @@ import {
   useChatContext,
 } from "@erato/frontend/library";
 import { t } from "@lingui/core/macro";
-import { Fragment, useCallback, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 
 import { useOffice } from "../../providers/OfficeProvider";
-import { useOutlookEmailSource } from "../providers/OutlookEmailSourceProvider";
+import {
+  useOutlookEmailSource,
+  type StagedEmail,
+} from "../providers/OutlookEmailSourceProvider";
 import { useOutlookMailItem } from "../providers/OutlookMailItemProvider";
+import {
+  matchThreadAttachments,
+  type ThreadAttachmentMatch,
+} from "../utils/threadAttachmentMatch";
 
 import type { ChatAddMenuExtraContentProps } from "@erato/frontend/library";
 
@@ -21,6 +28,8 @@ import type { ChatAddMenuExtraContentProps } from "@erato/frontend/library";
  * shared menu owns the file sources (Computer / SharePoint) and tools, and this
  * component only injects the Outlook-specific rows. On a fresh chat the items
  * are auto-suggested, so selecting one *restores* it rather than re-uploading.
+ * Where the open conversation is staged, the rows read and restore the
+ * thread card's own ticks.
  */
 export function AddinChatAddMenuExtraContent({
   onSelectFiles,
@@ -30,7 +39,7 @@ export function AddinChatAddMenuExtraContent({
   isProcessing = false,
 }: ChatAddMenuExtraContentProps) {
   const { host } = useOffice();
-  const { attachments, isLoadingAttachments, getAttachmentFile } =
+  const { mailItem, attachments, isLoadingAttachments, getAttachmentFile } =
     useOutlookMailItem();
   const {
     emailBodyFile,
@@ -38,15 +47,40 @@ export function AddinChatAddMenuExtraContent({
     isDropResolutionStale,
     isLoadingEmailBody,
     emailThreadLoadError,
+    threadTrimError,
     isEmailBodyDismissed,
     dismissedAttachmentIds,
+    currentThread,
+    stagedEmails,
     restoreEmailBody,
     restoreAttachment,
+    restoreStagedEmailBody,
+    restoreStagedEmailAttachment,
+    dismissStagedEmailAttachment,
+    policyExcludedAttachmentIds,
   } = useOutlookEmailSource();
   const { currentChatId, messageOrder } = useChatContext();
   const [isUploadingEmailContent, setIsUploadingEmailContent] = useState(false);
   const [failedAttachmentId, setFailedAttachmentId] = useState<string | null>(
     null,
+  );
+  // A follow-up chat uploads the thread file, which a fully unticked thread
+  // only has again once the deferred rebuild after the restore has settled.
+  const [pendingThreadUpload, setPendingThreadUpload] = useState(false);
+  const threadStaged = stagedEmails.find(
+    (staged): staged is Extract<StagedEmail, { source: "current-thread" }> =>
+      staged.source === "current-thread",
+  );
+  const isDropStaged = stagedEmails.some((staged) => staged.source === "drop");
+  const isThreadUnticked =
+    !!threadStaged &&
+    threadStaged.thread.messages.every((message) =>
+      threadStaged.dismissedMessageIds.has(message.id),
+    );
+  const isPolicyExcluded = useCallback(
+    (messageId: string, attachmentId: string) =>
+      policyExcludedAttachmentIds.get(messageId)?.has(attachmentId) ?? false,
+    [policyExcludedAttachmentIds],
   );
 
   const isSuggestionEligible =
@@ -61,6 +95,22 @@ export function AddinChatAddMenuExtraContent({
   const selectableAttachments = useMemo(
     () => attachments.filter((attachment) => !attachment.isInline),
     [attachments],
+  );
+  const threadMatches = useMemo(
+    () =>
+      threadStaged
+        ? matchThreadAttachments(
+            currentThread,
+            mailItem?.internetMessageId,
+            selectableAttachments,
+          )
+        : new Map<string, ThreadAttachmentMatch>(),
+    [
+      currentThread,
+      mailItem?.internetMessageId,
+      selectableAttachments,
+      threadStaged,
+    ],
   );
 
   const handleUploadResolvedFiles = useCallback(
@@ -82,30 +132,107 @@ export function AddinChatAddMenuExtraContent({
     [onClose, onSelectFiles],
   );
 
-  const handleSelectEmailBody = useCallback(() => {
-    if (!emailBodyFile) {
+  useEffect(() => {
+    if (!pendingThreadUpload) return;
+    if (!threadStaged || threadTrimError) {
+      setPendingThreadUpload(false);
       return;
     }
+    // Wait for the restore to land, then for the rebuild it starts.
+    if (isEmailBodyDismissed || isThreadEmlStale) return;
+    setPendingThreadUpload(false);
+    if (emailBodyFile) {
+      void handleUploadResolvedFiles([emailBodyFile]);
+    }
+  }, [
+    emailBodyFile,
+    handleUploadResolvedFiles,
+    isEmailBodyDismissed,
+    isThreadEmlStale,
+    pendingThreadUpload,
+    threadStaged,
+    threadTrimError,
+  ]);
 
+  const handleSelectEmailBody = useCallback(() => {
     if (isSuggestionEligible) {
       restoreEmailBody();
       onClose();
       return;
     }
 
+    if (isThreadUnticked) {
+      restoreEmailBody();
+      // With a drop staged the thread card is on screen and goes with the
+      // send already; uploading it as well would send it twice.
+      if (isDropStaged) {
+        onClose();
+      } else {
+        setPendingThreadUpload(true);
+      }
+      return;
+    }
+
+    if (!emailBodyFile) {
+      return;
+    }
     void handleUploadResolvedFiles([emailBodyFile]);
   }, [
     emailBodyFile,
     handleUploadResolvedFiles,
+    isDropStaged,
     isSuggestionEligible,
+    isThreadUnticked,
     onClose,
     restoreEmailBody,
   ]);
 
+  // An attachment cannot go without its message, and restoring a message
+  // brings back every attachment not dismissed one by one; those are
+  // dismissed here so only the chosen one is added. Policy-excluded ones
+  // never go, so they are left alone, as the card does.
+  const restoreThreadAttachment = useCallback(
+    (match: ThreadAttachmentMatch) => {
+      if (!threadStaged) return;
+      if (threadStaged.dismissedMessageIds.has(match.messageId)) {
+        const message = threadStaged.thread.messages.find(
+          (candidate) => candidate.id === match.messageId,
+        );
+        for (const sibling of message?.attachments ?? []) {
+          if (
+            sibling.isInline ||
+            sibling.id === match.attachmentId ||
+            threadStaged.dismissedAttachmentIds.has(sibling.id) ||
+            isPolicyExcluded(match.messageId, sibling.id)
+          ) {
+            continue;
+          }
+          dismissStagedEmailAttachment(match.messageId, sibling.id);
+        }
+        restoreStagedEmailBody(match.messageId);
+      }
+      if (threadStaged.dismissedAttachmentIds.has(match.attachmentId)) {
+        restoreStagedEmailAttachment(match.messageId, match.attachmentId);
+      }
+    },
+    [
+      dismissStagedEmailAttachment,
+      isPolicyExcluded,
+      restoreStagedEmailAttachment,
+      restoreStagedEmailBody,
+      threadStaged,
+    ],
+  );
+
   const handleSelectAttachment = useCallback(
     (attachmentId: string) => {
       if (isSuggestionEligible) {
-        restoreAttachment(attachmentId);
+        const match = threadMatches.get(attachmentId);
+        if (match) {
+          restoreThreadAttachment(match);
+        } else {
+          restoreAttachment(attachmentId);
+        }
         onClose();
         return;
       }
@@ -141,13 +268,21 @@ export function AddinChatAddMenuExtraContent({
       onClose,
       onSelectFiles,
       restoreAttachment,
+      restoreThreadAttachment,
+      threadMatches,
     ],
   );
 
+  // A thread with every message unticked has no file, but still has a row
+  // to bring it back from. A partly ticked one without a file (a rebuild in
+  // flight, or a trim error the send refuses) has nothing to add or restore,
+  // unless it is the restore this menu is waiting on.
+  const hasThreadRow =
+    !!emailBodyFile || isThreadUnticked || pendingThreadUpload;
   // Only Outlook surfaces email content; render nothing for other hosts or when
   // there is genuinely nothing to show (no body, no attachments, no error).
   const hasAnyEmailContent =
-    !!emailBodyFile ||
+    hasThreadRow ||
     selectableAttachments.length > 0 ||
     isLoadingAttachments ||
     isLoadingEmailBody;
@@ -196,9 +331,17 @@ export function AddinChatAddMenuExtraContent({
         </Row>
       )}
 
-      {emailBodyFile &&
+      {hasThreadRow &&
         (() => {
           const isAlreadyAdded = isSuggestionEligible && !isEmailBodyDismissed;
+          const threadSubject =
+            threadStaged?.thread.subject ||
+            t({
+              id: "officeAddin.chatInput.emailFallback",
+              message: "Email",
+            });
+          const isUpdating =
+            pendingThreadUpload || isThreadEmlStale || isDropResolutionStale;
           return (
             <Row
               variant="menu"
@@ -208,21 +351,24 @@ export function AddinChatAddMenuExtraContent({
               onClick={handleSelectEmailBody}
               disabled={
                 isBusy ||
+                pendingThreadUpload ||
                 isUploadBlocked ||
                 !canUploadEmailContent ||
                 isAlreadyAdded
               }
-              title={emailBodyFile.name}
+              title={emailBodyFile?.name ?? threadSubject}
               data-testid="addin-add-menu-email-thread"
               trailing={
-                <span className="shrink-0 text-xs text-theme-fg-muted">
-                  {isThreadEmlStale || isDropResolutionStale
-                    ? t({
-                        id: "officeAddin.fileSource.updatingThread",
-                        message: "Updating…",
-                      })
-                    : formatFileSize(emailBodyFile.size)}
-                </span>
+                isUpdating || emailBodyFile ? (
+                  <span className="shrink-0 text-xs text-theme-fg-muted">
+                    {isUpdating
+                      ? t({
+                          id: "officeAddin.fileSource.updatingThread",
+                          message: "Updating…",
+                        })
+                      : formatFileSize(emailBodyFile?.size ?? 0)}
+                  </span>
+                ) : undefined
               }
             >
               {/* The body takes the row's free space so a long name truncates
@@ -240,7 +386,7 @@ export function AddinChatAddMenuExtraContent({
                         id: "officeAddin.fileSource.alreadyAdded",
                         message: "Already added",
                       })
-                    : emailBodyFile.name}
+                    : (emailBodyFile?.name ?? threadSubject)}
                 </div>
               </div>
             </Row>
@@ -265,9 +411,19 @@ export function AddinChatAddMenuExtraContent({
       {selectableAttachments.map((attachment) => {
         const isCloudAttachment =
           String(attachment.attachmentType).toLowerCase() === "cloud";
+        const match = threadMatches.get(attachment.id);
+        // Restoring a part the policy keeps out would change nothing sent.
+        const isExcluded =
+          isSuggestionEligible &&
+          !!match &&
+          isPolicyExcluded(match.messageId, match.attachmentId);
         const isAlreadyAdded =
           isSuggestionEligible &&
-          !dismissedAttachmentIds.includes(attachment.id);
+          !isExcluded &&
+          (match && threadStaged
+            ? !threadStaged.dismissedMessageIds.has(match.messageId) &&
+              !threadStaged.dismissedAttachmentIds.has(match.attachmentId)
+            : !dismissedAttachmentIds.includes(attachment.id));
 
         return (
           <Fragment key={attachment.id}>
@@ -282,6 +438,7 @@ export function AddinChatAddMenuExtraContent({
                 isUploadBlocked ||
                 !canUploadEmailContent ||
                 isCloudAttachment ||
+                isExcluded ||
                 isAlreadyAdded
               }
               title={attachment.name}
@@ -303,16 +460,21 @@ export function AddinChatAddMenuExtraContent({
                         message:
                           "Cloud attachment cannot be uploaded from Outlook",
                       })
-                    : isAlreadyAdded
+                    : isExcluded
                       ? t({
-                          id: "officeAddin.fileSource.alreadyAdded",
-                          message: "Already added",
+                          id: "officeAddin.chatInput.validation.unsupported",
+                          message: "Won't be read by the AI",
                         })
-                      : attachment.contentType ||
-                        t({
-                          id: "officeAddin.fileSource.attachmentFallback",
-                          message: "Attachment",
-                        })}
+                      : isAlreadyAdded
+                        ? t({
+                            id: "officeAddin.fileSource.alreadyAdded",
+                            message: "Already added",
+                          })
+                        : attachment.contentType ||
+                          t({
+                            id: "officeAddin.fileSource.attachmentFallback",
+                            message: "Attachment",
+                          })}
                 </div>
               </div>
             </Row>

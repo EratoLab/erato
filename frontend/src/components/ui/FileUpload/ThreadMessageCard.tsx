@@ -145,15 +145,16 @@ export const ThreadMessageCard: React.FC<ThreadMessageCardProps> = ({
       // The inset is painted on the frame, not on the body: the body's left
       // gutter is a column the header's controls stand in rather than an
       // inset, so the body cannot carry both.
-      className={clsx(
-        "thread-message-card-geometry p-[var(--card-inset)]",
-        !selected && "opacity-60",
-      )}
+      className="thread-message-card-geometry p-[var(--card-inset)]"
       // pl-6 is the column the header's disclosure and selection controls
       // stand in, so the rows line up under the message label.
       bodyClassName="mt-2 flex flex-col gap-1 p-0 pl-6"
       header={
-        <div className="flex items-center gap-2">
+        // Only the header dims: the attachment rows carry their own unticked
+        // look, and dimming both would fade their checkboxes out of reach.
+        <div
+          className={clsx("flex items-center gap-2", !selected && "opacity-60")}
+        >
           {/* Fixed columns across tree levels: disclosure, selection, text. */}
           {hasAttachments ? (
             // Only render the chevron when there's something to expand —

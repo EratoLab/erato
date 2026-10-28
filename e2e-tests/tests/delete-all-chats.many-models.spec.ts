@@ -69,6 +69,14 @@ test(
       await page.getByRole("tab", { name: "Data" }).click();
       await page.getByRole("button", { name: "Archive all chats" }).click();
 
+      // The confirmation stacks over Preferences; each keeps its own name.
+      await expect(
+        page.getByRole("dialog", { name: "Archive all chats?" }),
+      ).toBeVisible();
+      await expect(
+        page.getByRole("dialog", { name: "Preferences" }),
+      ).toHaveCount(1);
+
       const archiveAllResponsePromise = page.waitForResponse(
         (response) =>
           response.url().includes("/api/v1beta/me/chats/archive_all") &&

@@ -10,6 +10,7 @@ import {
   WORD_SELECTION_FACET_ID,
   WORD_AUTHORING_FACET_ID,
   withWordReviewFallback,
+  wordDocumentFacetChoice,
   wordSelectionFacetAvailable,
 } from "../wordActionFacet";
 import { WORD_SELECTION_ARG_KEYS } from "../wordSelectionArgs";
@@ -456,4 +457,47 @@ describe("authoring arguments", () => {
       })?.authoring_status,
     ).toBe("unsupported (unbalanced-fields)");
   });
+});
+
+describe("wordDocumentFacetChoice", () => {
+  const all = new Set([
+    WORD_AUTHORING_FACET_ID,
+    WORD_DOCUMENT_REVIEW_FACET_ID,
+    WORD_COMPOSE_FACET_ID,
+  ]);
+  const authoring = { token: "snapshot-1" } as WordAuthoringSnapshot;
+
+  it.each([
+    [true, true, all, WORD_AUTHORING_FACET_ID],
+    [false, true, all, WORD_DOCUMENT_REVIEW_FACET_ID],
+    [false, false, all, WORD_COMPOSE_FACET_ID],
+    [
+      true,
+      true,
+      new Set([WORD_DOCUMENT_REVIEW_FACET_ID]),
+      WORD_DOCUMENT_REVIEW_FACET_ID,
+    ],
+    [false, true, new Set([WORD_COMPOSE_FACET_ID]), null],
+    [false, false, new Set([WORD_DOCUMENT_REVIEW_FACET_ID]), null],
+  ])(
+    "authoring %s, content %s picks what the resolver sends",
+    (withAuthoring, hasContent, availableFacetIds, expected) => {
+      expect(
+        wordDocumentFacetChoice({
+          authoring: withAuthoring,
+          hasContent,
+          availableFacetIds,
+        }),
+      ).toBe(expected);
+      expect(
+        resolveWordActionFacet(
+          input({
+            hasContent,
+            availableFacetIds,
+            authoring: withAuthoring ? authoring : undefined,
+          }),
+        )?.id ?? null,
+      ).toBe(expected);
+    },
+  );
 });

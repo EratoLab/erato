@@ -134,7 +134,16 @@ export function TeamsAttachmentsPreview(props: TeamsAttachmentsPreviewProps) {
           stickyGroupHeaders={true}
         />
       </div>
-      <FileAttachmentsPreview {...chipProps} attachedFiles={rest} />
+      <FileAttachmentsPreview
+        {...chipProps}
+        attachedFiles={rest}
+        // The transcript and its files count against the limit too, and
+        // "Remove all" takes only the files shown here.
+        stagedCount={attachedFiles.length}
+        onRemoveAllFiles={() => {
+          for (const file of rest) chipProps.onRemoveFile(file.id);
+        }}
+      />
       {index && openSection !== null && (
         <ModalBase isOpen={true} onClose={closeConversation} title={openTitle}>
           <TeamsConversationView

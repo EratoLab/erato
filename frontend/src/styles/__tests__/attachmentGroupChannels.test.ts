@@ -85,6 +85,12 @@ describe("attachment group and thread card channels", () => {
       "border-bottom-width",
       "0",
     );
+    // A header with pinned actions is a wrapper, not the disclosure itself.
+    declares(
+      ".attachment-group-header-geometry[data-collapsed]",
+      "border-bottom-width",
+      "0",
+    );
   });
 
   it("lets the sticky group header travel the whole frame", () => {

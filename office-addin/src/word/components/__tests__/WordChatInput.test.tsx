@@ -152,6 +152,12 @@ describe("WordChatInput", () => {
     await waitFor(() =>
       expect(chip()).toHaveTextContent("report.docx is included"),
     );
+    expect(chip()).toHaveAttribute("data-state", "included");
+    // A long name is cut, so the whole label stays on hover.
+    expect(screen.getByText("report.docx is included")).toHaveAttribute(
+      "title",
+      "report.docx is included",
+    );
   });
 
   it("starts without the document when the preference is off, and includes it with one click", async () => {
@@ -179,6 +185,39 @@ describe("WordChatInput", () => {
     await waitFor(() => expect(sends).toHaveLength(1));
     expect(lastFacet()).toBeUndefined();
     expect(lastIdentity()).toBeNull();
+  });
+
+  it("holds the document's inclusion while the composer is locked", async () => {
+    const locked = (disabled: boolean) => (
+      <WordChatInput
+        chatInputProps={{ ...chatInputProps("chat-1"), disabled }}
+        documentIdentity={IDENTITY}
+        stagePendingCapture={(capture) => staged.push(capture)}
+      />
+    );
+    const { rerender } = render(locked(true));
+
+    expect(excludeButton()).toBeDisabled();
+    exclude();
+    expect(isIncluded()).toBe(true);
+    send();
+    await waitFor(() => expect(sends).toHaveLength(1));
+    expect(lastFacet()?.id).toBe("word_document_review");
+
+    rerender(locked(false));
+    expect(excludeButton()).toBeEnabled();
+    exclude();
+    expect(chip()).toHaveTextContent("Include this document");
+
+    rerender(locked(true));
+    expect(chip()).toBeDisabled();
+    include();
+    expect(isIncluded()).toBe(false);
+
+    rerender(locked(false));
+    expect(chip()).toBeEnabled();
+    include();
+    expect(isIncluded()).toBe(true);
   });
 
   it("is not rendered at all when neither facet is advertised", () => {
@@ -240,6 +279,23 @@ describe("WordChatInput", () => {
       document_name: "report.docx",
       document_identity: IDENTITY,
     });
+  });
+
+  it("says a document with content is not included when only compose is advertised", async () => {
+    advertised.ids = ["word_compose"];
+    renderInput();
+
+    await waitFor(() =>
+      expect(chip()).toHaveTextContent("Document not included"),
+    );
+    expect(chip()).toHaveAttribute("data-state", "error");
+    expect(
+      screen.queryByTestId("word-document-coverage-hint"),
+    ).not.toBeInTheDocument();
+
+    send();
+    await waitFor(() => expect(sends).toHaveLength(1));
+    expect(lastFacet()).toBeUndefined();
   });
 
   it("hands the message over, unlabelled, before a quick capture finishes", async () => {

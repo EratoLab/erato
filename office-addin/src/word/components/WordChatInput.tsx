@@ -107,6 +107,7 @@ import {
   wordSelectionMayRewrite,
 } from "../utils/wordSelectionCapture";
 import { currentWordSelectionSupport } from "../utils/wordSelectionSupport";
+import { previewWordSend } from "../utils/wordSendPreview";
 import { markWordSend } from "../utils/wordSendTiming";
 import {
   useWordCommentPrecedence,
@@ -309,8 +310,6 @@ export function WordChatInput({
       liveSelection.armed &&
       !selectionDismissal.dismissed) ||
       liveSelection.pending);
-  const selectionReplacesDocument =
-    chipEnabled && selectionShown && liveSelection.armed;
 
   const commentsShown = wordCommentsAdvertised(commentAdvertised);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -338,16 +337,17 @@ export function WordChatInput({
     : commentList.selection.kind === "caret"
       ? { kind: "caret", threads: commentList.selection.threads }
       : { kind: "none" };
+  const livePickFound =
+    pickRef === null ||
+    commentList.status !== "ready" ||
+    commentList.threads.some((thread) => thread.ref === pickRef);
   // What Send would resolve now; Send reads Word again and decides for itself.
   const livePlan = resolveWordCommentSend({
     advertised: commentAdvertised,
     selection: liveCommentSelection,
     precedence: commentPrecedence,
     pick: pickRef,
-    pickFound:
-      pickRef === null ||
-      commentList.status !== "ready" ||
-      commentList.threads.some((thread) => thread.ref === pickRef),
+    pickFound: livePickFound,
     override: commentOverride,
     withoutComments: false,
     documentIncluded: chipEnabled,
@@ -1112,18 +1112,60 @@ export function WordChatInput({
       );
   // Authoring reads the document through its tools; the review excerpt's counts do not apply.
   const authoringRoute = authoringAvailable && !readOnly;
+  // The document row states what the Send would carry, in the Send's order.
+  const sendPreview = previewWordSend({
+    advertised: commentAdvertised,
+    precedence: commentPrecedence,
+    pick: pickRef,
+    pickFound: livePickFound,
+    override: commentOverride,
+    withoutComments,
+    includeOpenComments,
+    documentIncluded: chipEnabled,
+    passageGoes,
+    commentSelection: liveCommentSelection,
+    authoring: authoringRoute,
+    hasContent: preview.coverage?.hasContent ?? false,
+    unreadable: preview.status === "unreadable",
+    availableFacetIds,
+  });
+  const selectionReplacesDocument =
+    sendPreview.document === "replaced-by-selection";
+  const commentReplacesDocument =
+    sendPreview.document === "replaced-by-comment";
+  const documentSuperseded =
+    selectionReplacesDocument || commentReplacesDocument;
+  // Before the first read nothing is known yet, and the Send reads it first.
+  const documentNotSent =
+    sendPreview.document === "not-sent" && preview.status !== "unknown";
+  // An archived chat or a delegated run that is writing locks the composer,
+  // and the document's inclusion with it.
+  const composerLocked = !!chatInputProps.disabled;
   const readInParts =
     authoringRoute && !!notice.completeReadIssue && !notice.authoringIssue;
-  const coverageHint = readInParts
-    ? wordAuthoringIssueText("too-large")
-    : !authoringRoute &&
-        (preview.coverage?.truncated || preview.coverage?.partialParagraph)
-      ? t({
-          id: "officeAddin.word.chip.selectLaterPart",
-          message:
-            "Only the beginning is sent. To work on a later part, select it in Word.",
-        })
-      : undefined;
+  const documentRowLabel = documentNotSent
+    ? t({
+        id: "officeAddin.word.chip.notIncluded",
+        message: "Document not included",
+      })
+    : chipLabel(
+        preview,
+        resolveWordDocumentName(),
+        authoringRoute,
+        readInParts,
+      );
+  const coverageHint = documentNotSent
+    ? undefined
+    : readInParts
+      ? wordAuthoringIssueText("too-large")
+      : !authoringRoute &&
+          (preview.coverage?.truncated || preview.coverage?.partialParagraph)
+        ? t({
+            id: "officeAddin.word.chip.selectLaterPart",
+            message:
+              "Only the beginning is sent. To work on a later part, select it in Word.",
+          })
+        : undefined;
 
   return (
     <>
@@ -1223,8 +1265,21 @@ export function WordChatInput({
         <div className="mx-auto w-full max-w-[var(--theme-layout-chat-input-max-width)] px-2 pb-1 sm:px-4">
           {chipEnabled ? (
             <div
-              className="flex items-center gap-2 rounded-[var(--theme-radius-message)] border border-theme-border bg-theme-bg-secondary px-3 py-1.5 text-xs text-theme-fg-secondary"
+              // Muted text on the secondary fill misses 4.5:1, so a superseded
+              // row sits on the primary fill, as Outlook's draft row does.
+              className={`flex items-center gap-2 rounded-[var(--theme-radius-message)] border border-theme-border px-3 py-1.5 text-xs ${
+                documentSuperseded
+                  ? "bg-theme-bg-primary text-theme-fg-muted"
+                  : "bg-theme-bg-secondary text-theme-fg-secondary"
+              }`}
               data-testid="word-include-document-chip"
+              data-state={
+                documentSuperseded
+                  ? "superseded"
+                  : documentNotSent
+                    ? "error"
+                    : "included"
+              }
             >
               {preview.reading ? (
                 <SpinnerIcon
@@ -1235,25 +1290,36 @@ export function WordChatInput({
                   })}
                 />
               ) : (
-                <DocumentIcon className="size-4 shrink-0" />
+                <DocumentIcon
+                  className={`size-4 shrink-0 ${documentSuperseded ? "opacity-60" : ""}`}
+                />
               )}
-              <span className="min-w-0 truncate">
-                {selectionReplacesDocument
-                  ? t({
-                      id: "officeAddin.word.chip.selectionInstead",
-                      message: "Your selection is sent instead of the document",
-                    })
-                  : chipLabel(
-                      preview,
-                      resolveWordDocumentName(),
-                      authoringRoute,
-                      readInParts,
-                    )}
-              </span>
+              {documentSuperseded ? (
+                // A sentence, not a name: cut short it can lose "instead".
+                <span className="min-w-0 break-words">
+                  {selectionReplacesDocument
+                    ? t({
+                        id: "officeAddin.word.chip.selectionInstead",
+                        message:
+                          "Your selection is sent instead of the document",
+                      })
+                    : t({
+                        id: "officeAddin.word.chip.commentInstead",
+                        message: "A comment is sent instead of the document",
+                      })}
+                </span>
+              ) : (
+                <span className="min-w-0 truncate" title={documentRowLabel}>
+                  {documentRowLabel}
+                </span>
+              )}
               <button
                 type="button"
-                onClick={() => setInclusionOverride(false)}
-                className="ml-auto shrink-0 rounded-[var(--theme-radius-control)] p-0.5 hover:bg-theme-bg-tertiary"
+                onClick={() => {
+                  if (!composerLocked) setInclusionOverride(false);
+                }}
+                disabled={composerLocked}
+                className="ml-auto shrink-0 rounded-[var(--theme-radius-control)] p-0.5 hover:bg-theme-bg-tertiary disabled:cursor-not-allowed disabled:opacity-50"
                 aria-label={t({
                   id: "officeAddin.word.chip.dismiss",
                   message: "Don't include this document",
@@ -1266,7 +1332,10 @@ export function WordChatInput({
           ) : (
             <Button
               type="button"
-              onClick={() => setInclusionOverride(true)}
+              onClick={() => {
+                if (!composerLocked) setInclusionOverride(true);
+              }}
+              disabled={composerLocked}
               data-testid="word-include-document-chip"
               variant="secondary"
               className="w-full justify-start text-left"
@@ -1280,7 +1349,7 @@ export function WordChatInput({
               </span>
             </Button>
           )}
-          {chipEnabled && !selectionReplacesDocument && coverageHint && (
+          {chipEnabled && !documentSuperseded && coverageHint && (
             <p
               className="mt-1 text-xs text-theme-fg-secondary"
               data-testid="word-document-coverage-hint"

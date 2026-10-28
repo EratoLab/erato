@@ -65,9 +65,16 @@ vi.mock("../../../core/AddinChatInputCore", () => ({
 
 vi.mock("../../hooks/useWordDocumentSource", () => ({
   useWordDocumentSource: () => ({
+    // As a read leaves it: an included document has content.
     preview: {
       status: "included",
-      coverage: null,
+      coverage: {
+        paragraphsSent: 1,
+        paragraphsTotal: 1,
+        truncated: false,
+        partialParagraph: false,
+        hasContent: true,
+      },
       changedSinceLastSend: false,
       reading: false,
     },
@@ -318,10 +325,13 @@ describe("WordChatInput with a Word selection", () => {
     expect(documentChip()).toHaveTextContent(
       "Your selection is sent instead of the document",
     );
+    expect(documentChip()).toHaveAttribute("data-state", "superseded");
 
     fireEvent.click(screen.getByLabelText("Dismiss selection"));
 
     expect(documentChip()).toHaveTextContent("selection.docx is included");
+    expect(documentChip()).toHaveAttribute("data-state", "included");
+    expect(documentChip()).toHaveClass("bg-theme-bg-secondary");
     send();
     const result = await prepared();
     expect(result?.actionFacet?.id).toBe("word_document_review");

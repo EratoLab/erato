@@ -1602,6 +1602,11 @@ msgid "chat.attachments.loading"
 msgstr "Wczytywanie załącznika..."
 
 #. js-lingui-explicit-id
+#: src/components/ui/FileUpload/AttachmentTileList.tsx
+msgid "chat.attachments.remove_all_shown"
+msgstr "{count, plural, one {Usuń wszystko: # plik} few {Usuń wszystko: # pliki} many {Usuń wszystko: # plików} other {Usuń wszystko: # pliku}}"
+
+#. js-lingui-explicit-id
 #: src/components/ui/FileUpload/GroupedFileAttachmentsPreview.tsx
 msgid "chat.attachments.show_less"
 msgstr "Pokaż mniej"
@@ -1610,6 +1615,11 @@ msgstr "Pokaż mniej"
 #: src/components/ui/FileUpload/GroupedFileAttachmentsPreview.tsx
 msgid "chat.attachments.show_more.count"
 msgstr "{count, plural, one {Pokaż jeszcze # element} few {Pokaż jeszcze # elementy} other {Pokaż jeszcze # elementów}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/FileUpload/AttachmentTileList.tsx
+msgid "chat.attachments.shown_of_staged"
+msgstr "{count, plural, one {# plik · {staged}/{maxFiles}} few {# pliki · {staged}/{maxFiles}} many {# plików · {staged}/{maxFiles}} other {# pliku · {staged}/{maxFiles}}}"
 
 #. js-lingui-explicit-id
 #: src/components/ui/FileUpload/ThreadMessageCard.tsx

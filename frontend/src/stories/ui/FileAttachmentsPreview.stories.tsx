@@ -91,3 +91,25 @@ export const LongFilenameWithWarning: Story = {
     showFileTypes: true,
   },
 };
+
+/* Teams shows a transcript's files in its own card; the count still reads
+   every staged file against the limit. */
+export const CountsFilesShownElsewhere: Story = {
+  args: {
+    attachedFiles: [
+      ...attachedFiles,
+      {
+        id: "file-3",
+        filename: "roadmap.docx",
+        download_url: "https://example.com/file-3",
+        file_contents_unavailable_missing_permissions: false,
+        is_sharepoint_file: false,
+        file_capability: documentCapability,
+      },
+    ],
+    stagedCount: 5,
+    maxFiles: 5,
+    onRemoveFile: () => {},
+    onRemoveAllFiles: () => {},
+  },
+};

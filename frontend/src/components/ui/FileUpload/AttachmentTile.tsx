@@ -3,7 +3,7 @@ import clsx from "clsx";
 import { useMemo, useState } from "react";
 
 import { useTheme } from "@/components/providers/ThemeProvider";
-import { FILE_TYPES, getFileTypeIcon } from "@/utils/fileTypes";
+import { FILE_TYPES, getFileTypeIcon, type FileType } from "@/utils/fileTypes";
 
 import {
   getFileName,
@@ -67,7 +67,11 @@ export interface AttachmentTileProps {
   file: FileResource;
   /** Without it every file renders as a document tile. */
   previewUrl?: string | null;
-  /** Overrides extension-based media detection, e.g. an API image capability. */
+  /**
+   * Overrides extension-based media detection, e.g. an API image capability.
+   * `true` also gives the tile the image icon and family label, for a file
+   * whose display name carries no extension.
+   */
   isImage?: boolean;
   /** Replaces the face and its chrome, retaining activation/removal/selection. */
   renderContent?: (presentation: AttachmentTilePresentation) => React.ReactNode;
@@ -166,7 +170,10 @@ export const AttachmentTile: React.FC<AttachmentTileProps> = ({
   const [expanded, setExpanded] = useState(false);
 
   const filename = useMemo(() => getFileName(file), [file]);
-  const fileType = useMemo(() => getFileType(filename), [filename]);
+  const fileType = useMemo<FileType>(
+    () => (isImage === true ? "image" : getFileType(filename)),
+    [isImage, filename],
+  );
   const iconId = useMemo(
     () => icon ?? getFileTypeIcon(fileType, iconMappings?.fileTypes),
     [icon, fileType, iconMappings],
@@ -183,11 +190,15 @@ export const AttachmentTile: React.FC<AttachmentTileProps> = ({
       return labelOverride;
     }
     const familyName = FILE_TYPES[fileType].displayName || t`File`;
-    if (showType === "family") {
-      return familyName.toUpperCase();
-    }
     const { extension } = splitFilenameForDisplay(filename);
-    return extension ? extension.slice(1).toUpperCase() : familyName;
+    const label =
+      showType === "family"
+        ? familyName.toUpperCase()
+        : extension
+          ? extension.slice(1).toUpperCase()
+          : familyName;
+    // A display name such as "Image" already says it.
+    return label.toLowerCase() === filename.trim().toLowerCase() ? null : label;
   }, [showType, labelOverride, filename, fileType]);
   // The API type carries no size, so the separator has to survive its absence.
   const meta = useMemo(() => {
