@@ -1,6 +1,7 @@
 pub mod audio_cpp;
 pub mod gemini;
 pub mod openai;
+pub mod openai_realtime;
 pub mod sentences;
 pub mod session;
 
@@ -41,6 +42,7 @@ pub trait SpeechProvider: Send + Sync {
 pub fn provider(config: &SpeechProviderConfig) -> Result<Box<dyn SpeechProvider>, Report> {
     Ok(match config.provider_kind.as_str() {
         "openai" => Box::new(openai::OpenAi(config.clone())),
+        "openai_realtime" => Box::new(openai_realtime::OpenAiRealtime(config.clone())),
         "audio_cpp" => Box::new(audio_cpp::AudioCpp(config.clone())),
         "gemini" => Box::new(gemini::Gemini(config.clone())),
         _ => return Err(eyre!("Unknown speech provider")),
@@ -150,6 +152,45 @@ mod tests {
                 .is_err()
         );
         task.abort();
+    }
+    #[tokio::test]
+    async fn realtime_streams_audio_and_requires_successful_completion() {
+        use axum::{
+            extract::ws::{Message, WebSocketUpgrade},
+            routing::get,
+        };
+        for status in ["completed", "failed", "closed"] {
+            let app = Router::new().route("/v1/realtime", get(move |ws: WebSocketUpgrade, uri: axum::http::Uri| async move {
+                assert_eq!(uri.query(), Some("model=gemini-3.8-flash-lite-tts"));
+                ws.on_upgrade(move |mut socket| async move {
+                    let Message::Text(request) = socket.recv().await.unwrap().unwrap() else { panic!("expected text") };
+                    let request: Value = serde_json::from_str(&request).unwrap();
+                    assert_eq!(request["type"], "response.create");
+                    assert_eq!(request["response"]["input"][0]["content"][0]["text"], "Hello.");
+                    assert_eq!(request["response"]["audio"]["output"]["voice"], "Kore");
+                    assert_eq!(request["response"]["audio"]["output"]["format"]["type"], "audio/pcm");
+                    socket.send(Message::Text(json!({"type":"response.output_audio.delta", "delta":"AQIDBA=="}).to_string().into())).await.unwrap();
+                    if status != "closed" {
+                        socket.send(Message::Text(json!({"type":"response.done", "response":{"status":status}}).to_string().into())).await.unwrap();
+                    }
+                })
+            }));
+            let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let address = listener.local_addr().unwrap();
+            let task = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+            let result = provider(&config("openai_realtime", format!("http://{address}/v1")))
+                .unwrap()
+                .synthesize("Hello.")
+                .await;
+            if status == "completed" {
+                let audio = result.unwrap();
+                assert_eq!(audio.pcm, [1, 2, 3, 4]);
+                assert_eq!(audio.sample_rate, 24000);
+            } else {
+                assert!(result.is_err());
+            }
+            task.abort();
+        }
     }
     #[test]
     fn wav_header_matches_pcm_and_rejects_incomplete_sample() {

@@ -1851,7 +1851,7 @@ impl AppConfig {
             assert!(
                 matches!(
                     provider.provider_kind.as_str(),
-                    "openai" | "audio_cpp" | "gemini"
+                    "openai" | "openai_realtime" | "audio_cpp" | "gemini"
                 ),
                 "Unknown speech provider kind for {id}"
             );
@@ -5927,7 +5927,7 @@ pub struct SpeechProvidersConfig {
 
 #[derive(Debug, Deserialize, PartialEq, Clone, Facet, HeapSize)]
 pub struct SpeechProviderConfig {
-    /// openai, audio_cpp, or gemini.
+    /// openai, openai_realtime, audio_cpp, or gemini.
     pub provider_kind: String,
     pub model_name: String,
     pub voice: String,

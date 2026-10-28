@@ -855,13 +855,16 @@ bounded_text_preview = true
 # Speech output is independent of the chat/transcription provider.
 # Select this ID with audio_conversational.speech_provider, then enable Audio-back in the UI.
 # [speech_providers.provider.assistant_voice]
-# provider_kind = "openai" # openai, audio_cpp, gemini
+# provider_kind = "openai" # openai, openai_realtime, audio_cpp, gemini
 # model_name = "gpt-4o-mini-tts"
 # voice = "alloy"
 # api_key = "your-api-key"
 # base_url = "https://api.openai.com/v1" # audio_cpp requires its server's /v1 base URL
 # sample_rate = 24000 # audio_cpp native PCM rate; configure the model in streaming mode
 # instructions = "Speak clearly."
+#
+# For Realtime models, use provider_kind = "openai_realtime" and
+# model_name = "gpt-realtime-2" with a supported Realtime voice.
 #
 # Gemini requires an explicit api_key or access_token.
 # [speech_providers.provider.google_voice]
