@@ -173,6 +173,15 @@ describe("wordCommentPickerRows", () => {
     expect(search("ANCHOR 11")).toBe(1);
     expect(search("comment 1")).toBe(3);
   });
+
+  it("searches a thread whose anchored text the read left out", () => {
+    const rows = wordCommentPickerRows([thread(0, { quote: null })], {
+      filter: "all",
+      sort: "document",
+      query: "comment 0",
+    });
+    expect(rows).toHaveLength(1);
+  });
 });
 
 describe("WordCommentPicker", () => {
@@ -277,9 +286,10 @@ describe("WordCommentPicker", () => {
     const list = listOf([
       thread(0, { replies: 3, inSelection: true }),
       thread(1, { replies: null, lastActivity: null, quote: "" }),
+      thread(2, { quote: null }),
     ]);
     render(<WordCommentPicker {...props({ list })} />);
-    const [first, second] = rows();
+    const [first, second, third] = rows();
 
     expect(first).toHaveTextContent("Maya Krüger");
     expect(first).toHaveTextContent("3 replies");
@@ -290,6 +300,11 @@ describe("WordCommentPicker", () => {
     ).toHaveTextContent("In your selection");
     expect(second).toHaveTextContent("time unknown");
     expect(second).toHaveTextContent("on a spot without highlighted text");
+    expect(third).not.toHaveTextContent("on a spot without highlighted text");
+    expect(third).not.toHaveTextContent("on “");
+    expect(
+      within(third).getByRole("button", { name: "Show in Word" }),
+    ).toBeEnabled();
     expect(second).not.toHaveTextContent("replies");
     expect(
       within(second).queryByTestId("word-comment-picker-in-selection"),

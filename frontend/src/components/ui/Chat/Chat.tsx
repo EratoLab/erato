@@ -50,7 +50,7 @@ import { ChatShareDialog } from "./ChatShareDialog";
 import { ChatUsageAdvisory } from "./ChatUsageAdvisory";
 import { DelegatedRunsSection } from "./DelegatedRunsSection";
 import { EditChatTitleDialog } from "./EditChatTitleDialog";
-import { notifyUnarchiveFailed } from "./unarchiveFeedback";
+import { dismissChatActionFailure, runChatAction } from "./chatActionFeedback";
 import { Button } from "../Controls/Button";
 import { ChatErrorBoundary } from "../Feedback/ChatErrorBoundary";
 import { FeedbackCommentDialog } from "../Feedback/FeedbackCommentDialog";
@@ -500,12 +500,11 @@ export const Chat = ({
 
   // Handle archiving a session
   const handleArchiveSession = (sessionId: string) => {
-    // Use void to explicitly ignore the promise returned by archiveChat
-    void archiveChat(sessionId);
+    void runChatAction("archive", sessionId, () => archiveChat(sessionId));
   };
 
   const handleUnarchiveSession = (sessionId: string) => {
-    void unarchiveChat(sessionId).catch(notifyUnarchiveFailed);
+    void runChatAction("unarchive", sessionId, () => unarchiveChat(sessionId));
   };
 
   const [titleDialogChatId, setTitleDialogChatId] = useState<string | null>(
@@ -523,8 +522,11 @@ export const Chat = ({
 
   const handleCloseEditTitleDialog = useCallback(() => {
     if (isUpdatingChatTitle) return;
+    if (titleDialogChatId) {
+      dismissChatActionFailure("rename", titleDialogChatId);
+    }
     setTitleDialogChatId(null);
-  }, [isUpdatingChatTitle]);
+  }, [isUpdatingChatTitle, titleDialogChatId]);
   const handleOpenShareDialog = useCallback((chatId: string) => {
     setShareDialogChatId(chatId);
   }, []);
@@ -550,8 +552,13 @@ export const Chat = ({
         setIsUpdatingChatTitle(true);
         // updateChatTitle already invalidates the recent-chats query, which
         // refetches every loaded page — no extra refetch needed here.
-        await updateChatTitle(titleDialogChatId, title);
-        setTitleDialogChatId(null);
+        if (
+          await runChatAction("rename", titleDialogChatId, () =>
+            updateChatTitle(titleDialogChatId, title),
+          )
+        ) {
+          setTitleDialogChatId(null);
+        }
       } finally {
         setIsUpdatingChatTitle(false);
       }
@@ -829,7 +836,11 @@ export const Chat = ({
           onSessionPin={
             pinnedChatsEnabled
               ? (sessionId, isPinned) => {
-                  void pinChat(sessionId, isPinned);
+                  void runChatAction(
+                    isPinned ? "pin" : "unpin",
+                    sessionId,
+                    () => pinChat(sessionId, isPinned),
+                  );
                 }
               : undefined
           }
@@ -976,6 +987,7 @@ export const Chat = ({
               : false
           }
           error={feedbackViewDialogState.error}
+          isRemoving={feedbackViewDialogState.isRemoving}
         />
 
         {/* Render the Feedback Comment Dialog */}

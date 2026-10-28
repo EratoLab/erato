@@ -622,6 +622,11 @@ msgstr "Anhang"
 
 #. js-lingui-explicit-id
 #: src/outlook/components/AddinChatAddMenuExtraContent.tsx
+msgid "officeAddin.fileSource.attachmentLoadFailed"
+msgstr "Dieser Anhang konnte nicht aus Outlook geladen werden. Versuche es erneut."
+
+#. js-lingui-explicit-id
+#: src/outlook/components/AddinChatAddMenuExtraContent.tsx
 msgid "officeAddin.fileSource.cloudAttachmentUnsupported"
 msgstr "Cloud-Anhänge können aus Outlook nicht hochgeladen werden"
 
@@ -703,8 +708,8 @@ msgstr "Einstellungen"
 
 #. js-lingui-explicit-id
 #: src/core/AddinHistoryDrawerCore.tsx
-msgid "officeAddin.historyDrawer.archiveFailed"
-msgstr "Chat konnte nicht archiviert werden"
+#~ msgid "officeAddin.historyDrawer.archiveFailed"
+#~ msgstr "Chat konnte nicht archiviert werden"
 
 #. js-lingui-explicit-id
 #: src/core/AddinHistoryDrawerCore.tsx
@@ -743,8 +748,8 @@ msgstr "{attentionCount, plural, one {Menü öffnen, # Chat erfordert Aufmerksam
 
 #. js-lingui-explicit-id
 #: src/core/AddinHistoryDrawerCore.tsx
-msgid "officeAddin.historyDrawer.renameFailed"
-msgstr "Chat konnte nicht umbenannt werden"
+#~ msgid "officeAddin.historyDrawer.renameFailed"
+#~ msgstr "Chat konnte nicht umbenannt werden"
 
 #. js-lingui-explicit-id
 #: src/core/AddinHistoryDrawerCore.tsx
@@ -753,8 +758,8 @@ msgstr "Menü"
 
 #. js-lingui-explicit-id
 #: src/core/AddinHistoryDrawerCore.tsx
-msgid "officeAddin.historyDrawer.unarchiveFailed"
-msgstr "Archivierung des Chats konnte nicht aufgehoben werden"
+#~ msgid "officeAddin.historyDrawer.unarchiveFailed"
+#~ msgstr "Archivierung des Chats konnte nicht aufgehoben werden"
 
 #. js-lingui-explicit-id
 #: src/providers/OfficeProvider.tsx
@@ -3406,6 +3411,11 @@ msgid "officeAddin.word.authoring.partlyWritten"
 msgstr "Word hat nach {applied} von {total} Änderungen angehalten. Ihr Original ist gespeichert."
 
 #. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.authoring.placeholdersUnverified"
+msgstr "Diese Änderung erfordert eine Neufassung des gesamten Dokuments, und Erato kann noch nicht prüfen, wie Word dabei den Platzhaltertext der Inhaltssteuerelemente dieses Dokuments neu schreibt. Es wurde nichts angewendet. Bitten Sie um eine kleinere Änderung, die direkt im Dokument geschrieben werden kann."
+
+#. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts
 #~ msgid "officeAddin.word.authoring.portrait"
 #~ msgstr "Hochformat"
@@ -5042,6 +5052,11 @@ msgstr "„Rückgängig“ in Word kann diese Änderung nicht zurücknehmen. Era
 #: src/word/utils/wordAuthoringMessages.ts
 msgid "officeAddin.word.importRefusal.disabled"
 msgstr "Diese Änderung erfordert eine Neufassung des gesamten Dokuments, die Ihre Organisation für diese Word-Version ausgeschaltet hat."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordAuthoringMessages.ts
+msgid "officeAddin.word.importRefusal.placeholders"
+msgstr "Diese Änderung erfordert eine Neufassung des gesamten Dokuments, und Erato kann noch nicht prüfen, wie Word dabei den Platzhaltertext der Inhaltssteuerelemente dieses Dokuments neu schreibt."
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordAuthoringMessages.ts
@@ -6902,13 +6917,23 @@ msgstr "Word"
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
-msgid "officeAddin.word.setup.catalogRoute"
-msgstr ""
+msgid "officeAddin.word.setup.authenticationPrerequisites"
+msgstr "Voraussetzungen für die Anmeldung"
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
-msgid "officeAddin.word.setup.copy"
-msgstr ""
+#~ msgid "officeAddin.word.setup.catalogRoute"
+#~ msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.word.setup.chooseDistribution"
+msgstr "Wähle die Verteilungsmethode für das Word-Add-in, um das passende Manifest und die Installationsanleitung zu erhalten."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+#~ msgid "officeAddin.word.setup.copy"
+#~ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
@@ -6917,23 +6942,58 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
-msgid "officeAddin.word.setup.downloadButton"
-msgstr ""
+msgid "officeAddin.word.setup.distributionGuidance"
+msgstr "Wähle das Microsoft 365 Admin Center für Benutzer mit Exchange Online-Postfächern und geeigneten Microsoft 365-Abonnementlizenzen. Wähle den SharePoint-App-Katalog für Umgebungen mit lokalen Exchange-Postfächern oder ohne zentrale Bereitstellung. Die Verteilung über einen SharePoint-Katalog erfordert einen Katalogadministrator und unterstützt Word auf dem Mac nicht."
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
-msgid "officeAddin.word.setup.downloadManifest"
-msgstr ""
+msgid "officeAddin.word.setup.distributionLabel"
+msgstr "Verteilungsmethode"
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
-msgid "officeAddin.word.setup.integratedAppsRoute"
-msgstr ""
+#~ msgid "officeAddin.word.setup.downloadButton"
+#~ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
-msgid "officeAddin.word.setup.macUnsupported"
-msgstr ""
+#~ msgid "officeAddin.word.setup.downloadManifest"
+#~ msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.word.setup.downloadSelectedManifest"
+msgstr "Word-Manifest herunterladen"
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.word.setup.downloadVariant"
+msgstr "Lade unten <0>{filename}</0> herunter."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.word.setup.integratedAppsOption"
+msgstr "Microsoft 365 Admin Center"
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+#~ msgid "officeAddin.word.setup.integratedAppsRoute"
+#~ msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.word.setup.integratedOpen"
+msgstr "Starte Word neu, sobald die Bereitstellung die Benutzer erreicht hat, und öffne Erato über die Schaltfläche im Menüband."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.word.setup.integratedUpload"
+msgstr "Öffne im Microsoft 365 Admin Center „Integrierte Apps“ und lade die XML-Datei als Office-Add-in hoch. Weise es den gewünschten Benutzern oder Gruppen zu."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+#~ msgid "officeAddin.word.setup.macUnsupported"
+#~ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
@@ -6947,8 +7007,28 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
-msgid "officeAddin.word.setup.reviewManifest"
-msgstr ""
+#~ msgid "officeAddin.word.setup.reviewManifest"
+#~ msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.word.setup.sharepointOpen"
+msgstr "Öffne in Word den Dialog für Office-Add-ins und wähle „Meine Organisation“, um Erato hinzuzufügen. Bei dieser Verteilungsmethode gibt es keine Erato-Schaltfläche im Menüband; öffne Erato über die Add-in-Liste. Word im Web kann einen SharePoint Online-Katalog verwenden."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.word.setup.sharepointOption"
+msgstr "SharePoint-App-Katalog"
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.word.setup.sharepointTrust"
+msgstr "Öffne in Word unter Windows Datei → Optionen → Trust Center → Einstellungen für das Trust Center → Kataloge vertrauenswürdiger Add-Ins. Füge die URL der Katalogwebsite hinzu, aktiviere „Im Menü anzeigen“ und starte Word neu."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.word.setup.sharepointUpload"
+msgstr "Lade die XML-Datei in die Bibliothek „Apps für Office“ deines SharePoint-App-Katalogs hoch. Gib den gewünschten Benutzern Lesezugriff auf den Katalog."
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx

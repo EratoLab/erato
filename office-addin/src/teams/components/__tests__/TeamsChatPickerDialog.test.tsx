@@ -75,6 +75,7 @@ vi.mock("@erato/frontend/library", () => ({
       type="button"
       // As the library's Button: loading disables whatever `disabled` says.
       disabled={Boolean(disabled) || Boolean(loading)}
+      aria-busy={loading || undefined}
       onClick={onClick}
       {...omitStyleProps(rest)}
     >
@@ -1097,6 +1098,83 @@ describe("TeamsChatPickerDialog", () => {
     await waitFor(() => expect(uploads).toHaveLength(2));
     // The transcript already fetched is re-offered rather than walked again.
     expect(pageChatBackwards).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("stays busy while the composer uploads the transcript", async () => {
+    const upload = holdUpload();
+    renderPicker();
+    fireEvent.click(selectChat());
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Attach" }));
+    });
+    await waitFor(() => expect(bridge.upload).toHaveBeenCalledTimes(1));
+
+    const attach = screen.getByRole("button", { name: "Attach" });
+    expect(attach).toBeDisabled();
+    expect(attach).toHaveAttribute("aria-busy", "true");
+    // Closing drops the transcript (see the Update case), so Cancel stays.
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeEnabled();
+
+    await act(async () => {
+      upload.finish();
+    });
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(uploads).toHaveLength(1);
+  });
+
+  it("does not fail a second Attach while a re-offered transcript uploads", async () => {
+    hooks.uploadStore.error = new Error("413");
+    renderPicker();
+    fireEvent.click(selectChat());
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Attach" }));
+    });
+    await screen.findByText("Couldn't attach the transcript. Try again.");
+
+    hooks.uploadStore.error = null;
+    const upload = holdUpload();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Attach" }));
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Attach" }));
+    });
+
+    expect(
+      screen.queryByText("Couldn't attach the transcript. Try again."),
+    ).toBeNull();
+    expect(screen.getByRole("button", { name: "Attach" })).toBeDisabled();
+    expect(bridge.upload).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      upload.finish();
+    });
+    expect(uploads).toHaveLength(2);
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("shows the accepted partial transcript uploading", async () => {
+    hooks.fetcher = fakeFetcher({ state: "partial" });
+    const upload = holdUpload();
+    renderPicker();
+    fireEvent.click(selectChat());
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Attach" }));
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Attach anyway" }));
+    });
+
+    expect(screen.getByRole("button", { name: "Attach" })).toHaveAttribute(
+      "aria-busy",
+      "true",
+    );
+    await act(async () => {
+      upload.finish();
+    });
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 

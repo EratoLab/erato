@@ -317,7 +317,7 @@ fn map_key_placeholder(path: &[String]) -> String {
         Some("tools") if path.len() == 3 && path[0] == "mcp_servers" => "<tool-name>".to_string(),
         Some("prompt_patterns") => "<pattern-id>".to_string(),
         Some("prompts") => "<prompt-id>".to_string(),
-        Some("providers") => "<provider-id>".to_string(),
+        Some("providers" | "provider") => "<provider-id>".to_string(),
         Some("rules") => "<rule-name>".to_string(),
         _ => "<key>".to_string(),
     }
@@ -326,6 +326,27 @@ fn map_key_placeholder(path: &[String]) -> String {
 #[cfg(test)]
 mod tests {
     use super::{generate_config_reference, validate_config_reference};
+
+    #[test]
+    fn only_conversational_audio_exposes_speech_provider() {
+        let reference = generate_config_reference();
+        let keys = reference.as_object().unwrap();
+        assert!(keys.contains_key("audio_conversational.speech_provider"));
+        assert!(!keys.contains_key("audio_dictation.speech_provider"));
+        assert!(!keys.contains_key("audio_transcription.speech_provider"));
+        for key in keys
+            .keys()
+            .filter_map(|key| key.strip_prefix("audio_transcription."))
+        {
+            assert!(keys.contains_key(&format!("audio_conversational.{key}")));
+            assert!(keys.contains_key(&format!("audio_dictation.{key}")));
+        }
+        assert!(
+            !keys
+                .keys()
+                .any(|key| key.starts_with("audio_conversational.transcription."))
+        );
+    }
 
     #[test]
     fn emits_expected_example_paths() {

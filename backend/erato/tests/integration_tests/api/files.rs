@@ -1674,3 +1674,121 @@ async fn test_client_tool_files_use_audio_transcripts_and_report_pending(pool: P
     assert_eq!(result["files"][0]["text"], "é".repeat(80_000));
     assert_eq!(result["files"][0]["truncated"], true);
 }
+
+/// Upload admission is explicitly relaxed; processing must not change the default policy.
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_admitted_unsupported_files_use_mime_and_text_fallback(pool: Pool<Postgres>) {
+    use crate::test_utils::{RequestBodyRecorder, build_openai_text_streaming_response};
+
+    let recorder = RequestBodyRecorder::new();
+    let request_recorder = recorder.clone();
+    let mut mocks = MockSet::new();
+    mocks.mock(move |when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(request_recorder);
+        then.status(StatusCode::OK)
+            .headers([("Content-Type", "text/event-stream")])
+            .bytes_stream_with_delays(build_openai_text_streaming_response(&["Read the file."]));
+    });
+    let (mut config, _mock_server) = setup_mock_llm_server_with_mocks(mocks).await;
+    config.file_uploads.upload_allowed_if_supports =
+        vec![erato::config::FileUploadOperationSelector::Any];
+    let state = test_app_state(config, pool).await;
+    let app = router(state.clone())
+        .split_for_parts()
+        .0
+        .with_state(state.clone());
+    let server = TestServer::new(app.into_make_service()).unwrap();
+    let cases = [
+        (
+            "document",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            include_bytes!("../../../../../e2e-tests/test-files/minimal_libreoffice.docx").to_vec(),
+            Some("Foo bar"),
+        ),
+        (
+            "report",
+            "application/pdf",
+            read_integration_test_file_bytes("sample-report-compressed.pdf"),
+            Some("Multi-Page Report"),
+        ),
+        (
+            "html",
+            "Text/HTML; charset=utf-8",
+            b"<p>HTML marker</p>".to_vec(),
+            Some("HTML marker"),
+        ),
+        (
+            "json",
+            "application/json",
+            br#"{"value":"JSON marker"}"#.to_vec(),
+            Some("JSON marker"),
+        ),
+        (
+            "report.ldt",
+            "application/octet-stream",
+            b"LDT marker".to_vec(),
+            Some("LDT marker"),
+        ),
+        (
+            "report.ies",
+            "text/custom",
+            b"IES marker\0".to_vec(),
+            Some("IES marker"),
+        ),
+        (
+            "report.log",
+            "application/octet-stream",
+            b"Log marker".to_vec(),
+            Some("Log marker"),
+        ),
+        (
+            "report.yaml",
+            "application/yaml",
+            b"value: YAML marker".to_vec(),
+            Some("YAML marker"),
+        ),
+        (
+            "unknown",
+            "application/x-unknown",
+            b"Unknown marker".to_vec(),
+            Some("Unknown marker"),
+        ),
+        ("binary", "application/octet-stream", vec![0, 255, 0], None),
+        (
+            "pdf",
+            "application/pdf",
+            b"%PDF-1.7\nInvalid PDF with ASCII prefix".to_vec(),
+            None,
+        ),
+    ];
+    for (filename, mime, bytes, expected) in cases {
+        let chat_id = create_chat(&server).await;
+        let uploaded = upload_file_to_chat(&server, &chat_id, bytes, filename, mime).await;
+        let id = uploaded["files"][0]["id"].as_str().unwrap();
+        server
+            .post("/api/v1beta/me/messages/submitstream")
+            .with_bearer_token(TEST_JWT_TOKEN)
+            .json(
+                &json!({"existing_chat_id": chat_id, "user_message": "Read this file",
+                "input_files_ids": [id]}),
+            )
+            .await
+            .assert_status_ok();
+        let bodies = recorder.bodies();
+        let body = bodies.last().expect("file content must reach the model");
+        if let Some(marker) = expected {
+            assert!(body.contains(marker), "{filename}: {body}");
+            if filename == "html" {
+                assert!(!body.contains("<p>"));
+            }
+        } else {
+            assert!(
+                body.contains(id),
+                "reference must remain model-visible: {body}"
+            );
+            assert!(!body.contains("Invalid PDF with ASCII prefix"), "{body}");
+        }
+    }
+}

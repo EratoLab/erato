@@ -119,6 +119,9 @@ pub fn convert_content_parts_to_json(content_parts: &[ContentPart]) -> Result<Js
 
     for part in content_parts {
         match part {
+            ContentPart::AudioFilePointer(pointer) => output_parts.push(
+                json!({"type":"audio_file_pointer", "file_upload_id":pointer.file_upload_id}),
+            ),
             ContentPart::Text(text_part) => {
                 output_parts.push(json!({
                     "type": "text",

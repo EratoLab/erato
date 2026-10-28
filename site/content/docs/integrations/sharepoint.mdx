@@ -7,6 +7,8 @@ Erato provides support for [Microsoft SharePoint and OneDrive](https://www.micro
 When enabled, users can:
 
 - Browse their OneDrive and SharePoint drives
+- Search drive/site names and filenames across accessible libraries
+- Keep selected files while changing searches or browsing other folders
 - Attach files from SharePoint/OneDrive to chats
 - Use SharePoint files with assistants
 - Reference SharePoint files in messages for AI processing
@@ -65,6 +67,14 @@ all_drives_sources = ["me_drive", "me_drives", "shared_with_me", "shared_drive_d
 - `shared_drive_details`
 
 If you do not set `all_drives_sources`, Erato queries the full set of sources to preserve the existing behavior. This can be useful for tenants where some discovery paths return very large numbers of drives or where only a subset of drive types should be exposed.
+
+## File Search
+
+The picker’s “Search drives and files…” field searches filenames across the drives discovered through `all_drives_sources`, including accessible public libraries hidden from the initial browsing view. File results show their library and folder path when available. Selections persist across searches and navigation and can be removed individually before attaching.
+
+Search uses the signed-in user’s Microsoft Graph access token. Only filename matches are displayed; matches in file contents alone are excluded. Results depend on Microsoft’s search index, so newly changed files and some partial filename queries may not appear immediately.
+
+Search displays up to 100 files and bounds discovery, pagination, and request time. The picker indicates when search limits are reached. Unavailable locations are skipped without showing a retry warning. Narrow the query or browse a library directly when needed.
 
 ## Authentication Flow
 

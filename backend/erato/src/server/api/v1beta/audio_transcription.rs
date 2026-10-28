@@ -46,7 +46,7 @@ impl AudioFeature {
         match self {
             Self::Transcription => &config.audio_transcription,
             Self::Dictation => &config.audio_dictation,
-            Self::Conversational => &config.audio_conversational,
+            Self::Conversational => &config.audio_conversational.transcription,
         }
     }
 
@@ -1500,6 +1500,7 @@ fn audio_provider(
     let config = audio_feature.config(app_state);
     let config_key = audio_feature.config_key();
     if let Some(provider_id) = config.chat_provider_id.as_deref() {
+        let provider_id = app_state.config.resolve_chat_provider_id(provider_id)?;
         let provider = app_state.config.get_chat_provider(provider_id);
         if !provider.model_capabilities.supports_audio_input {
             return Err(eyre::eyre!(
@@ -1531,7 +1532,8 @@ fn audio_provider(
                     .providers
                     .get(*provider_id)
                     .is_some_and(|provider| {
-                        provider.model_capabilities.supports_audio_input
+                        !provider.archived
+                            && provider.model_capabilities.supports_audio_input
                             && audio_provider_kind_supports_binary_audio(&provider.provider_kind)
                     })
             })
@@ -1934,11 +1936,14 @@ mod tests {
                 max_recording_duration_seconds: 5,
                 ..Default::default()
             },
-            audio_conversational: crate::config::AudioTranscriptionConfig {
-                enabled: true,
-                chunk_duration_seconds: 30,
-                max_attempts: 4,
-                max_recording_duration_seconds: 20,
+            audio_conversational: crate::config::AudioConversationalConfig {
+                transcription: crate::config::AudioTranscriptionConfig {
+                    enabled: true,
+                    chunk_duration_seconds: 30,
+                    max_attempts: 4,
+                    max_recording_duration_seconds: 20,
+                    ..Default::default()
+                },
                 ..Default::default()
             },
             ..Default::default()

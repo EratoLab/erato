@@ -453,6 +453,11 @@ export {
 export { EditChatTitleDialog } from "@/components/ui/Chat/EditChatTitleDialog";
 export { ChatShareDialog } from "@/components/ui/Chat/ChatShareDialog";
 export {
+  dismissChatActionFailure,
+  runChatAction,
+  type ChatAction,
+} from "@/components/ui/Chat/chatActionFeedback";
+export {
   CHAT_HISTORY_FILTER_DEFAULTS,
   CHAT_HISTORY_SOURCE_VALUES,
   chatHistorySourcesFromCreatedVia,

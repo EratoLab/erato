@@ -236,6 +236,8 @@ export function TeamsChatPickerProvider({ children }: { children: ReactNode }) {
   // in (an upload still running after Cancel) must not stage anything.
   const sessionRef = useRef(0);
   const [isDelivering, setIsDelivering] = useState(false);
+  // Read by a second click before the state above re-renders.
+  const deliveringRef = useRef(false);
 
   // The object id is the reliable match; the login hint can differ from a
   // member's primary SMTP address, which would leave the viewer in their own
@@ -294,6 +296,7 @@ export function TeamsChatPickerProvider({ children }: { children: ReactNode }) {
     cancelBuild();
     reset();
     sessionRef.current += 1;
+    deliveringRef.current = false;
     setIsDelivering(false);
     composerRef.current = null;
     editingRef.current = null;
@@ -410,6 +413,7 @@ export function TeamsChatPickerProvider({ children }: { children: ReactNode }) {
       const files = [file, ...assets];
       const ended = () => sessionRef.current !== session;
 
+      deliveringRef.current = true;
       setIsDelivering(true);
       let uploaded: Awaited<ReturnType<TeamsComposerBridge["upload"]>>;
       try {
@@ -419,7 +423,10 @@ export function TeamsChatPickerProvider({ children }: { children: ReactNode }) {
         if (ended()) return "abandoned";
         uploaded = await composer.upload(files);
       } finally {
-        if (!ended()) setIsDelivering(false);
+        if (!ended()) {
+          deliveringRef.current = false;
+          setIsDelivering(false);
+        }
       }
       if (ended()) return "abandoned";
       if (!uploaded) return fail();
@@ -472,7 +479,7 @@ export function TeamsChatPickerProvider({ children }: { children: ReactNode }) {
 
   const attach = useCallback(async () => {
     // A second click while the first transcript uploads would build again.
-    if (isDelivering) return;
+    if (deliveringRef.current) return;
     const selections = [...selection.values()];
     const previous = editingRef.current;
     const composer = composerRef.current;
@@ -537,7 +544,6 @@ export function TeamsChatPickerProvider({ children }: { children: ReactNode }) {
     close,
     deliver,
     forget,
-    isDelivering,
     maxFileBytes,
     messageLimit,
     selection,
@@ -546,7 +552,7 @@ export function TeamsChatPickerProvider({ children }: { children: ReactNode }) {
 
   const attachPartial = useCallback(async () => {
     const outcome = partialOutcome;
-    if (!outcome?.file) return;
+    if (!outcome?.file || deliveringRef.current) return;
     setPartialOutcome(null);
     // Put the offer back if the composer never took it — the partial
     // transcript is the only copy of a walk that already ran.

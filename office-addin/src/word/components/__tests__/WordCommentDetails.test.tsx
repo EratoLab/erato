@@ -195,6 +195,27 @@ describe("WordCommentDetail", () => {
     ).toHaveTextContent("on a spot without highlighted text");
   });
 
+  it.each(["", null])(
+    "calls only a real point comment one (quote %j)",
+    (quote) => {
+      renderDetail(
+        threadModel({
+          detail: { ...threadModel().detail, thread: { ...MAYA, quote } },
+        }),
+      );
+      const where = document.querySelector(
+        '[data-ui="word-comment-detail-quote"]',
+      )!;
+      expect(
+        where.textContent.includes("on a spot without highlighted text"),
+      ).toBe(quote === "");
+      expect(where).not.toHaveTextContent("on “");
+      expect(
+        screen.getByRole("button", { name: "Show in Word" }),
+      ).toBeEnabled();
+    },
+  );
+
   it("chooses at the caret through the lane, with what to say once chosen", () => {
     const given = context();
     const { onPick, onOpenPicker } = renderDetail(

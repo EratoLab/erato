@@ -13,6 +13,7 @@ import {
   type Mock,
 } from "vitest";
 
+import { useToastStore } from "@/components/ui/Toast/toastStore";
 import { componentRegistry } from "@/config/componentRegistry";
 import { useGenerationStatusStore } from "@/hooks/chat/store/generationStatusStore";
 import { useRecentChats } from "@/lib/generated/v1betaApi/v1betaApiComponents";
@@ -30,6 +31,7 @@ import type {
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { MessageControlsContext } from "@/types/message-controls";
 import type { Messages } from "@lingui/core";
+import type { ReactNode } from "react";
 
 const chatLists = vi.hoisted(() => ({
   chats: [] as RecentChat[],
@@ -44,15 +46,22 @@ vi.mock("./ChatHistorySidebar", () => ({
     sessions,
     pinnedSessions = [],
     onSessionEditTitle,
+    onSessionArchive,
+    onSessionPin,
   }: ChatHistorySidebarProps) => (
     <div data-testid="sidebar-stub">
       {[...sessions, ...pinnedSessions].map((session) => (
-        <button
-          key={session.id}
-          onClick={() => onSessionEditTitle?.(session.id)}
-        >
-          Rename {session.id}
-        </button>
+        <div key={session.id}>
+          <button onClick={() => onSessionEditTitle?.(session.id)}>
+            Rename {session.id}
+          </button>
+          <button onClick={() => onSessionArchive(session.id)}>
+            Archive {session.id}
+          </button>
+          <button onClick={() => onSessionPin?.(session.id, !session.isPinned)}>
+            Pin {session.id}
+          </button>
+        </div>
       ))}
     </div>
   ),
@@ -449,6 +458,106 @@ describe("Chat surface composition", () => {
           screen.queryByRole("dialog", { name: "Rename chat" }),
         ).not.toBeInTheDocument();
       });
+    },
+  );
+
+  const sidebarPages = [
+    {
+      name: "chat",
+      renderPage: () => (
+        <Chat messages={{}} messageOrder={[]} controlsContext={{}} />
+      ),
+    },
+    {
+      name: "search",
+      renderPage: () => <SearchPageStructure>{null}</SearchPageStructure>,
+    },
+    {
+      name: "assistants",
+      renderPage: () => (
+        <AssistantsPageStructure>{null}</AssistantsPageStructure>
+      ),
+    },
+  ];
+
+  const renderSidebarPage = (renderPage: () => ReactNode) =>
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <I18nProvider i18n={i18n}>
+          <MemoryRouter>{renderPage()}</MemoryRouter>
+        </I18nProvider>
+      </QueryClientProvider>,
+    );
+
+  const errorToastTitles = () =>
+    useToastStore
+      .getState()
+      .toasts.filter((toast) => toast.variant === "error")
+      .map((toast) => toast.title);
+
+  it.each(sidebarPages)(
+    "keeps the rename dialog open with one failure toast across retries on $name",
+    async ({ renderPage }) => {
+      useToastStore.getState().clear();
+      const updateChatTitle = vi.fn().mockRejectedValue(new Error("nope"));
+      testState.chatContext = { updateChatTitle };
+      chatLists.chats = [{ ...backgroundRun("rename-target"), can_edit: true }];
+      renderSidebarPage(renderPage);
+
+      fireEvent.click(
+        screen.getByRole("button", { name: "Rename rename-target" }),
+      );
+      fireEvent.change(screen.getByLabelText("Custom title"), {
+        target: { value: "Renamed chat" },
+      });
+      for (const attempt of [1, 2]) {
+        fireEvent.click(screen.getByRole("button", { name: "Rename" }));
+        await waitFor(() =>
+          expect(updateChatTitle).toHaveBeenCalledTimes(attempt),
+        );
+        await waitFor(() =>
+          expect(screen.getByRole("button", { name: "Rename" })).toBeEnabled(),
+        );
+      }
+
+      expect(
+        screen.getByRole("dialog", { name: "Rename chat" }),
+      ).toBeInTheDocument();
+      expect(screen.getByLabelText("Custom title")).toHaveValue("Renamed chat");
+      expect(errorToastTitles()).toEqual(["Couldn't rename the chat"]);
+
+      updateChatTitle.mockResolvedValue(undefined);
+      fireEvent.click(screen.getByRole("button", { name: "Rename" }));
+
+      await waitFor(() =>
+        expect(
+          screen.queryByRole("dialog", { name: "Rename chat" }),
+        ).not.toBeInTheDocument(),
+      );
+      expect(errorToastTitles()).toEqual([]);
+    },
+  );
+
+  it.each(sidebarPages)(
+    "toasts a failed archive and a failed pin on $name",
+    async ({ renderPage }) => {
+      useToastStore.getState().clear();
+      testState.chatContext = {
+        archiveChat: vi.fn().mockRejectedValue(new Error("nope")),
+        pinChat: vi.fn().mockRejectedValue(new Error("nope")),
+      };
+      chatLists.chats = [backgroundRun("row-1")];
+      renderSidebarPage(renderPage);
+
+      fireEvent.click(screen.getByRole("button", { name: "Archive row-1" }));
+      fireEvent.click(screen.getByRole("button", { name: "Pin row-1" }));
+
+      await waitFor(() =>
+        expect(errorToastTitles()).toEqual([
+          "Couldn't archive the chat",
+          "Couldn't pin the chat",
+        ]),
+      );
     },
   );
 

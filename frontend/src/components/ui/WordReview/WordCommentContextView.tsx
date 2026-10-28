@@ -138,12 +138,14 @@ const statusText = (status: WordCommentStatus) =>
         message: "Open",
       });
 
-function quoteText(quote: string): string {
-  if (!quote)
+/** Null when the read had no anchored text, as Word for the web without packages. */
+function quoteText(quote: string, point = false): string | null {
+  if (point)
     return t({
       id: "chat.message.action_facet.comments.point",
       message: "on a spot without highlighted text",
     });
+  if (!quote) return null;
   return t({
     id: "chat.message.action_facet.comments.on",
     message: `on “${quote}”`,
@@ -170,12 +172,17 @@ function EntryView({ entry }: { entry: WordCommentEntry }) {
 function ThreadView({ thread }: { thread: WordCommentThread }) {
   const [root, ...replies] = thread.entries;
   const omitted = thread.omitted_replies ?? 0;
+  const where = quoteText(thread.where.quote, thread.where.point);
   return (
     <li className="flex flex-col gap-1" data-testid="word-comment-thread">
       <div className={META_CLASS}>
         <span className={AUTHOR_CLASS}>{statusText(thread.status)}</span>
-        {" · "}
-        <span className="line-clamp-2">{quoteText(thread.where.quote)}</span>
+        {where && (
+          <>
+            {" · "}
+            <span className="line-clamp-2">{where}</span>
+          </>
+        )}
         {thread.matched_by_content &&
           ` · ${t({
             id: "chat.message.action_facet.comments.matchedByContent",
@@ -224,7 +231,7 @@ function MapRowView({ row }: { row: WordCommentMapRow }) {
         {timeText(row.at)}
       </div>
       {row.sec && <div className={META_CLASS}>{row.sec}</div>}
-      {row.q !== undefined && (
+      {row.q && (
         <div className={`line-clamp-2 ${META_CLASS}`}>{quoteText(row.q)}</div>
       )}
       {row.g && <p className={TEXT_CLASS}>{row.g}</p>}

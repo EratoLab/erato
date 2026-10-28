@@ -47,7 +47,7 @@ export function wordCommentPickerRows(
     (thread) =>
       (options.filter === "all" || thread.status === options.filter) &&
       (!query ||
-        [thread.author, thread.quote, thread.text].some((field) =>
+        [thread.author, thread.quote ?? "", thread.text].some((field) =>
           field.toLocaleLowerCase().includes(query),
         )),
   );
@@ -415,9 +415,11 @@ function WordCommentPickerRow({
         <span className="block truncate text-theme-fg-primary">
           {thread.text}
         </span>
-        <span className="block truncate text-xs text-theme-fg-secondary">
-          {wordCommentQuoteText(thread.quote)}
-        </span>
+        {thread.quote !== null && (
+          <span className="block truncate text-xs text-theme-fg-secondary">
+            {wordCommentQuoteText(thread.quote)}
+          </span>
+        )}
       </button>
       <WordShowInWordButton onShow={onShowInWord} disabled={false} />
     </li>
