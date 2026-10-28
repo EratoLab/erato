@@ -125,6 +125,26 @@ export async function handleClientToolCall(
   else await run();
 }
 
+// The executor stream sends a call again only when another stream takes the
+// binding, so a pushed call's result is retried here instead of by a replay.
+const EXECUTOR_RESULT_RETRY_MS = [1_000, 2_000, 4_000, 8_000];
+
+const wait = (ms: number) =>
+  new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+/** Sends again after a network error or a 5xx, once per delay. */
+async function sendWithRetries(
+  send: () => Promise<Response>,
+  delays: readonly number[],
+): Promise<Response> {
+  for (const delay of delays) {
+    const response = await send().catch(() => undefined);
+    if (response && response.status < 500) return response;
+    await wait(delay);
+  }
+  return send();
+}
+
 async function postClientToolResult(
   body: ClientToolResultRequest,
   toolName: string,
@@ -136,16 +156,20 @@ async function postClientToolResult(
   // a call from the executor stream only accepts the stream's binding.
   const binding = deps.executor ?? operationExecutorBinding(toolName);
   try {
-    const response = await fetch("/api/v1beta/me/messages/clienttoolresult", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...deps.getAuthHeaders(),
-        ...(deps.extraHeaders ?? {}),
-        ...(binding ? { "X-Erato-Executor": JSON.stringify(binding) } : {}),
-      },
-      body: JSON.stringify(body),
-    });
+    const response = await sendWithRetries(
+      () =>
+        fetch("/api/v1beta/me/messages/clienttoolresult", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...deps.getAuthHeaders(),
+            ...(deps.extraHeaders ?? {}),
+            ...(binding ? { "X-Erato-Executor": JSON.stringify(binding) } : {}),
+          },
+          body: JSON.stringify(body),
+        }),
+      deps.executor ? EXECUTOR_RESULT_RETRY_MS : [],
+    );
     if (response.ok) {
       if (binding) {
         const settled = (await response

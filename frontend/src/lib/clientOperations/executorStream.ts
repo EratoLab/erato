@@ -30,7 +30,9 @@ export function executorStreamHeaders(): Record<string, string> | undefined {
  * The pane's executor stream. It runs live calls pushed from any of the
  * account's chats through the client tool executors, and reports new durable
  * operations for its binding. It reconnects with backoff, and ends on abort or
- * when the server has executor streams disabled (404).
+ * when the server has executor streams disabled (404). Every reconnect sends
+ * the same `X-Erato-Executor-Instance`, so the server hands the binding over
+ * at once even while it still holds a connection that dropped silently.
  */
 export function openExecutorStream(
   headers: Record<string, string>,
@@ -38,6 +40,7 @@ export function openExecutorStream(
   signal: AbortSignal,
 ): Promise<void> {
   const executor = JSON.parse(headers["X-Erato-Executor"]) as ExecutorBinding;
+  const instance = globalThis.crypto.randomUUID();
   return new Promise((resolve) => {
     let cleanup: (() => void) | undefined;
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -55,7 +58,9 @@ export function openExecutorStream(
       const end = (error?: Error | Event) => {
         if (ended) return;
         ended = true;
+        const close = cleanup;
         cleanup = undefined;
+        close?.();
         if (
           signal.aborted ||
           (error instanceof FrontendRequestError &&
@@ -69,7 +74,11 @@ export function openExecutorStream(
       };
       cleanup = createSSEConnection(EXECUTOR_STREAM_URL, {
         method: "GET",
-        headers: { ...headers, Accept: "text/event-stream" },
+        headers: {
+          ...headers,
+          "X-Erato-Executor-Instance": instance,
+          Accept: "text/event-stream",
+        },
         onOpen: () => {
           delay = FIRST_RETRY_MS;
         },

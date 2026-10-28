@@ -5910,7 +5910,8 @@ operation inbox.
 Default: `false`. Lets a client open an executor stream,
 `GET /api/v1beta/me/client-operations/stream`, for its `X-Erato-Executor`
 binding. The first stream of a binding serves it; a second stream for the same
-binding waits until the first one closes.
+binding waits until the first one closes, unless it is a reconnect of the same
+pane (the same `X-Erato-Executor-Instance`), which takes over at once.
 
 A live client tool call normally runs over the calling chat's own stream, and
 it still does while that stream is connected. When the calling chat has no

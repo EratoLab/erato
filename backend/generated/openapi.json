@@ -2135,7 +2135,7 @@
     "/api/v1beta/me/client-operations/stream": {
       "get": {
         "tags": [],
-        "summary": "One stream per executor binding. It receives live client tool calls from any\nof the account's chats that no stream of the calling chat can take, and\nannounces new durable operations for the binding. The first stream of a\nbinding serves it; a later one waits until the first closes.",
+        "summary": "One stream per executor binding. It receives live client tool calls from any\nof the account's chats that no stream of the calling chat can take, and\nannounces new durable operations for the binding. The first stream of a\nbinding serves it; a later one waits until the first closes. A pane sends\nthe same `X-Erato-Executor-Instance` on every reconnect of its stream: a\nlater stream of the holder's instance takes the binding over at once, and\nthe older one ends.",
         "operationId": "clientOperationStream",
         "responses": {
           "200": {

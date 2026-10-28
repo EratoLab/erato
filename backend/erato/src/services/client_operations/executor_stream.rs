@@ -4,6 +4,7 @@
 //! UNLOGGED rows, so any replica can hand a call to a stream held on another.
 use super::{ExecutorBinding, OperationRequest};
 use crate::query_metrics::named_statement_from_sql_and_values;
+use chrono::{DateTime, Utc};
 use eyre::Report;
 use sea_orm::prelude::Uuid;
 use sea_orm::{ConnectionTrait, DatabaseBackend, DatabaseConnection};
@@ -19,7 +20,6 @@ use utoipa::ToSchema;
 
 /// Presence heartbeat; the lease in SQL is 20 seconds, as for chat transports.
 pub use super::transport::HEARTBEAT;
-const STANDBY_RETRY: Duration = Duration::from_secs(1);
 const POLL_INTERVAL: Duration = Duration::from_millis(200);
 const PRESENCE_POLL_INTERVAL: Duration = Duration::from_secs(1);
 /// A call whose binding has no stream for this long settles as `context_unavailable`.
@@ -143,37 +143,130 @@ pub enum LiveCallRoute {
     Unavailable,
 }
 
+/// What a stream claims its binding with.
+#[derive(Debug, Clone)]
+pub struct PresenceClaim {
+    pub account_id: Uuid,
+    pub binding: ExecutorBinding,
+    /// `X-Erato-Executor-Instance`: the same for every reconnect of one pane's
+    /// stream, so the latest of them can take the binding over at once.
+    pub instance_id: Option<Uuid>,
+    /// Orders the streams of one instance. Reconnects are at least a second
+    /// apart, far more than the clock skew between replicas.
+    pub connected_at: DateTime<Utc>,
+    pub client_tools: Vec<String>,
+    pub child_client_tools: Vec<String>,
+}
+
 /// Compare-and-set: the first stream of a binding wins; another takes over
-/// only once the holder's lease has expired.
+/// once the holder's lease has expired, or at once when it is a later stream
+/// of the holder's instance.
 pub async fn acquire(
     db: &DatabaseConnection,
-    account_id: Uuid,
-    binding: &ExecutorBinding,
+    claim: &PresenceClaim,
     stream_id: Uuid,
-    client_tools: &[String],
-    child_client_tools: &[String],
 ) -> Result<bool, Report> {
     Ok(db
         .execute_raw(statement(
             r#"INSERT INTO client_executor_presence AS p
-               (account_id, binding, stream_id, client_tools, child_client_tools, expires_at)
-             VALUES ($1, $2, $3, $4, $5, now() + interval '20 seconds')
+               (account_id, binding, stream_id, instance_id, connected_at, client_tools,
+                child_client_tools, expires_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, now() + interval '20 seconds')
              ON CONFLICT (account_id, binding) DO UPDATE SET stream_id = EXCLUDED.stream_id,
+               instance_id = EXCLUDED.instance_id,
+               connected_at = EXCLUDED.connected_at,
                client_tools = EXCLUDED.client_tools,
                child_client_tools = EXCLUDED.child_client_tools,
                expires_at = EXCLUDED.expires_at
-             WHERE p.expires_at <= now() OR p.stream_id = EXCLUDED.stream_id"#,
+             WHERE p.expires_at <= now() OR p.stream_id = EXCLUDED.stream_id
+               OR (p.instance_id = EXCLUDED.instance_id
+                   AND p.connected_at < EXCLUDED.connected_at)"#,
             vec![
-                account_id.into(),
-                serde_json::to_value(binding)?.into(),
+                claim.account_id.into(),
+                serde_json::to_value(&claim.binding)?.into(),
                 stream_id.into(),
-                serde_json::to_value(client_tools)?.into(),
-                serde_json::to_value(child_client_tools)?.into(),
+                claim.instance_id.into(),
+                claim.connected_at.into(),
+                serde_json::to_value(&claim.client_tools)?.into(),
+                serde_json::to_value(&claim.child_client_tools)?.into(),
             ],
         ))
         .await?
         .rows_affected()
         == 1)
+}
+
+/// The row a waiting stream compares itself with, read without a lock.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct Holder {
+    stream_id: Uuid,
+    instance_id: Option<Uuid>,
+    connected_at: DateTime<Utc>,
+    live: bool,
+}
+
+async fn holder(db: &DatabaseConnection, claim: &PresenceClaim) -> Result<Option<Holder>, Report> {
+    db.query_one_raw(statement(
+        r#"SELECT stream_id, instance_id, connected_at, expires_at > now() AS live
+           FROM client_executor_presence WHERE account_id = $1 AND binding = $2"#,
+        vec![
+            claim.account_id.into(),
+            serde_json::to_value(&claim.binding)?.into(),
+        ],
+    ))
+    .await?
+    .map(|row| -> Result<Holder, Report> {
+        Ok(Holder {
+            stream_id: row.try_get("", "stream_id")?,
+            instance_id: row.try_get("", "instance_id")?,
+            connected_at: row.try_get("", "connected_at")?,
+            live: row.try_get("", "live")?,
+        })
+    })
+    .transpose()
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Standby {
+    Acquire,
+    Wait,
+    /// A later stream of this stream's instance holds the binding.
+    Superseded,
+}
+
+impl PresenceClaim {
+    /// Mirrors `acquire`'s condition, so a waiting stream writes only when it
+    /// can win: a rejected upsert still locks the row and uses a transaction id.
+    fn standby(&self, stream_id: Uuid, holder: Option<&Holder>) -> Standby {
+        let Some(holder) = holder else {
+            return Standby::Acquire;
+        };
+        if !holder.live || holder.stream_id == stream_id {
+            return Standby::Acquire;
+        }
+        match (self.instance_id, holder.instance_id) {
+            (Some(mine), Some(theirs)) if mine == theirs => {
+                if holder.connected_at < self.connected_at {
+                    Standby::Acquire
+                } else {
+                    Standby::Superseded
+                }
+            }
+            _ => Standby::Wait,
+        }
+    }
+
+    async fn acquire(&self, db: &DatabaseConnection, stream_id: Uuid) -> bool {
+        acquire(db, self, stream_id).await.unwrap_or_else(|error| {
+            tracing::warn!(%error, "Executor stream presence acquisition failed; will retry");
+            false
+        })
+    }
+}
+
+/// Spread out, so the waiting streams of many panes don't poll in step.
+fn standby_retry() -> Duration {
+    Duration::from_millis(rand::random_range(1_000..2_000))
 }
 
 pub async fn renew(db: &DatabaseConnection, stream_id: Uuid) -> Result<bool, Report> {
@@ -521,8 +614,10 @@ async fn claim(
 }
 
 /// A stream's claim on its binding. It holds presence from connect, renews it
-/// every heartbeat and, while another stream holds it, retries every second.
-/// Only a holder receives calls. Dropping the guard releases the binding.
+/// every heartbeat and, while another stream holds it, checks again every one
+/// to two seconds. Only a holder receives calls. A stream that a later stream
+/// of its own instance took the binding from ends. Dropping the guard releases
+/// the binding.
 pub struct PresenceGuard {
     db: DatabaseConnection,
     hub: ExecutorStreamHub,
@@ -530,47 +625,13 @@ pub struct PresenceGuard {
     heartbeat: JoinHandle<()>,
 }
 
-struct PresenceClaim {
-    account_id: Uuid,
-    binding: ExecutorBinding,
-    client_tools: Vec<String>,
-    child_client_tools: Vec<String>,
-}
-
-impl PresenceClaim {
-    async fn acquire(&self, db: &DatabaseConnection, stream_id: Uuid) -> bool {
-        acquire(
-            db,
-            self.account_id,
-            &self.binding,
-            stream_id,
-            &self.client_tools,
-            &self.child_client_tools,
-        )
-        .await
-        .unwrap_or_else(|error| {
-            tracing::warn!(%error, "Executor stream presence acquisition failed; will retry");
-            false
-        })
-    }
-}
-
 impl PresenceGuard {
     pub async fn start(
         db: DatabaseConnection,
         hub: ExecutorStreamHub,
-        account_id: Uuid,
-        binding: ExecutorBinding,
-        client_tools: Vec<String>,
-        child_client_tools: Vec<String>,
+        claim: PresenceClaim,
         sender: StreamSender,
     ) -> Self {
-        let claim = PresenceClaim {
-            account_id,
-            binding,
-            client_tools,
-            child_client_tools,
-        };
         let stream_id = Uuid::new_v4();
         let held = claim.acquire(&db, stream_id).await;
         if held {
@@ -606,7 +667,7 @@ async fn heartbeat(
     mut held: bool,
 ) {
     loop {
-        tokio::time::sleep(if held { HEARTBEAT } else { STANDBY_RETRY }).await;
+        tokio::time::sleep(if held { HEARTBEAT } else { standby_retry() }).await;
         if sender.is_closed() {
             return;
         }
@@ -623,9 +684,23 @@ async fn heartbeat(
                 }
             }
         }
-        if claim.acquire(&db, stream_id).await {
-            held = true;
-            hub.register(&db, stream_id, sender.clone());
+        let current = match holder(&db, &claim).await {
+            Ok(current) => current,
+            Err(error) => {
+                tracing::warn!(%error, "Executor stream presence lookup failed; will retry");
+                continue;
+            }
+        };
+        match claim.standby(stream_id, current.as_ref()) {
+            Standby::Acquire => {
+                if claim.acquire(&db, stream_id).await {
+                    held = true;
+                    hub.register(&db, stream_id, sender.clone());
+                }
+            }
+            Standby::Wait => {}
+            // Dropping the last sender ends the response.
+            Standby::Superseded => return,
         }
     }
 }
@@ -675,6 +750,64 @@ mod tests {
         assert_eq!(
             serde_json::from_value::<ExecutorStreamEvent>(value).unwrap(),
             event
+        );
+    }
+
+    #[test]
+    fn a_waiting_stream_writes_only_when_it_can_win() {
+        let now = Utc::now();
+        let (earlier, later) = (
+            now - chrono::Duration::seconds(30),
+            now + chrono::Duration::seconds(30),
+        );
+        let instance = Some(Uuid::new_v4());
+        let claim = |instance_id| PresenceClaim {
+            account_id: Uuid::nil(),
+            binding: ExecutorBinding {
+                device_id: "device".into(),
+                realm: super::super::ExecutionRealm::OfficeAddin,
+                host_context: None,
+            },
+            instance_id,
+            connected_at: now,
+            client_tools: Vec::new(),
+            child_client_tools: Vec::new(),
+        };
+        let held = |instance_id, connected_at, live| Holder {
+            stream_id: Uuid::new_v4(),
+            instance_id,
+            connected_at,
+            live,
+        };
+        let me = Uuid::new_v4();
+        let standby = |claim: &PresenceClaim, holder: Holder| claim.standby(me, Some(&holder));
+        let mine = claim(instance);
+
+        assert_eq!(mine.standby(me, None), Standby::Acquire);
+        assert_eq!(standby(&mine, held(None, earlier, false)), Standby::Acquire);
+        let own = Holder {
+            stream_id: me,
+            ..held(instance, now, true)
+        };
+        assert_eq!(standby(&mine, own), Standby::Acquire);
+        assert_eq!(
+            standby(&mine, held(instance, earlier, true)),
+            Standby::Acquire
+        );
+        assert_eq!(
+            standby(&mine, held(instance, later, true)),
+            Standby::Superseded
+        );
+        assert_eq!(
+            standby(&mine, held(instance, now, true)),
+            Standby::Superseded
+        );
+        let other = Some(Uuid::new_v4());
+        assert_eq!(standby(&mine, held(other, earlier, true)), Standby::Wait);
+        assert_eq!(standby(&mine, held(None, earlier, true)), Standby::Wait);
+        assert_eq!(
+            standby(&claim(None), held(None, earlier, true)),
+            Standby::Wait
         );
     }
 }

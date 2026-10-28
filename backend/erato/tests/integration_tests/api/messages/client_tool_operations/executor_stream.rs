@@ -6,7 +6,7 @@ use crate::test_utils::{
     build_openai_delayed_text_streaming_response, build_openai_paused_tool_calls_streaming_response,
 };
 use erato::services::client_operations::executor_stream::{
-    self, LiveCallRoute, PRESENCE_LOSS_GRACE,
+    self, LiveCallRoute, PRESENCE_LOSS_GRACE, PresenceClaim,
 };
 use futures::StreamExt;
 use sea_orm::ConnectionTrait;
@@ -112,7 +112,19 @@ fn stream_request(base: &str, binding: &ExecutorBinding) -> reqwest::RequestBuil
 
 impl Pane {
     async fn open(base: &str, binding: &ExecutorBinding) -> Self {
-        let response = stream_request(base, binding).send().await.unwrap();
+        Self::connect(stream_request(base, binding)).await
+    }
+
+    /// A stream sent with the pane's `X-Erato-Executor-Instance`.
+    async fn open_as(base: &str, binding: &ExecutorBinding, instance: Uuid) -> Self {
+        Self::connect(
+            stream_request(base, binding).header("X-Erato-Executor-Instance", instance.to_string()),
+        )
+        .await
+    }
+
+    async fn connect(request: reqwest::RequestBuilder) -> Self {
+        let response = request.send().await.unwrap();
         assert_eq!(response.status(), 200);
         assert_eq!(response.headers()["content-type"], "text/event-stream");
         Self {
@@ -142,6 +154,15 @@ impl Pane {
         })
         .await
         .ok()
+    }
+
+    /// Whether the server ends the stream in time; events before the end are skipped.
+    async fn ends_within(&mut self, within: Duration) -> bool {
+        tokio::time::timeout(within, async {
+            while let Some(Ok(_)) = self.body.next().await {}
+        })
+        .await
+        .is_ok()
     }
 
     async fn call(&mut self) -> Value {
@@ -298,6 +319,22 @@ async fn presence(state: &erato::state::AppState, binding: &ExecutorBinding) -> 
         .await
         .unwrap()
         .map(|presence| presence.stream_id)
+}
+
+/// A stream's claim without an instance, as from a client that sends none.
+fn presence_claim(
+    account_id: Uuid,
+    binding: &ExecutorBinding,
+    child_client_tools: &[String],
+) -> PresenceClaim {
+    PresenceClaim {
+        account_id,
+        binding: binding.clone(),
+        instance_id: None,
+        connected_at: chrono::Utc::now(),
+        client_tools: vec![TOOL.to_string()],
+        child_client_tools: child_client_tools.to_vec(),
+    }
 }
 
 async fn wait_released(state: &erato::state::AppState, binding: &ExecutorBinding) {
@@ -610,11 +647,8 @@ async fn expired_presence_settles_as_context_unavailable_after_grace(pool: Pool<
     assert!(
         executor_stream::acquire(
             &setup.state.db,
-            account(&setup.state).await,
-            &mailbox(),
+            &presence_claim(account(&setup.state).await, &mailbox(), &[]),
             Uuid::new_v4(),
-            &[TOOL.to_string()],
-            &[],
         )
         .await
         .unwrap()
@@ -780,6 +814,50 @@ async fn presence_is_first_come_and_released_on_drop(pool: Pool<Postgres>) {
     server.abort();
 }
 
+/// The server may not see a silently dropped connection die for minutes, and
+/// keeps renewing its presence. The pane's reconnect takes the binding over at
+/// once and gets the call again; the old stream ends; other panes still wait.
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_reconnect_takes_the_binding_from_its_own_older_stream(pool: Pool<Postgres>) {
+    let setup = setup_stream(pool, TIMEOUT_MS, true, false).await;
+    let (base, server) = serve(&setup.state).await;
+    let instance = Uuid::new_v4();
+    let mut silent = Pane::open_as(&base, &mailbox(), instance).await;
+    let old = presence(&setup.state, &mailbox()).await.expect("presence");
+    submit_detached(&setup.state, &base, setup.chat_id, &mailbox()).await;
+    let call = call_of(&silent.call().await);
+
+    let mut other_pane = Pane::open_as(&base, &mailbox(), Uuid::new_v4()).await;
+    let mut without_instance = Pane::open(&base, &mailbox()).await;
+    assert_eq!(presence(&setup.state, &mailbox()).await, Some(old));
+
+    let mut reconnected = Pane::open_as(&base, &mailbox(), instance).await;
+    let new = presence(&setup.state, &mailbox()).await.expect("presence");
+    assert_ne!(new, old);
+    assert_eq!(call_of(&reconnected.call().await), call);
+    assert!(
+        silent
+            .ends_within(executor_stream::HEARTBEAT + Duration::from_secs(3))
+            .await,
+        "the superseded stream ends"
+    );
+    assert_eq!(other_pane.next(Duration::from_secs(1)).await, None);
+    assert_eq!(without_instance.next(Duration::from_secs(1)).await, None);
+    assert_eq!(presence(&setup.state, &mailbox()).await, Some(new));
+
+    post_live(
+        &setup.state,
+        setup.chat_id,
+        &call,
+        json!({"result":availability()}),
+        Some(&mailbox()),
+    )
+    .await
+    .assert_status_ok();
+    assert_answered(&setup.state, setup.chat_id).await;
+    server.abort();
+}
+
 #[sqlx::test(migrator = "crate::MIGRATOR")]
 async fn grant_call_without_presence_is_unavailable(pool: Pool<Postgres>) {
     let state = test_app_state(hermetic_app_config(None, None), pool).await;
@@ -803,12 +881,12 @@ async fn grant_call_without_presence_is_unavailable(pool: Pool<Postgres>) {
     let (first, second) = (Uuid::new_v4(), Uuid::new_v4());
     let tools = vec![TOOL.to_string()];
     assert!(
-        executor_stream::acquire(db, account, &binding, first, &tools, &[])
+        executor_stream::acquire(db, &presence_claim(account, &binding, &[]), first)
             .await
             .unwrap()
     );
     assert!(
-        !executor_stream::acquire(db, account, &binding, second, &tools, &tools)
+        !executor_stream::acquire(db, &presence_claim(account, &binding, &tools), second)
             .await
             .unwrap()
     );
@@ -824,7 +902,7 @@ async fn grant_call_without_presence_is_unavailable(pool: Pool<Postgres>) {
 
     executor_stream::release(db, first).await.unwrap();
     assert!(
-        executor_stream::acquire(db, account, &binding, second, &tools, &tools)
+        executor_stream::acquire(db, &presence_claim(account, &binding, &tools), second)
             .await
             .unwrap()
     );
@@ -843,15 +921,14 @@ async fn cleanup_removes_only_rows_that_no_run_or_stream_can_use(pool: Pool<Post
     let chat_id = seed_origin_chat(db).await;
     let binding = mailbox();
     let held = Uuid::new_v4();
-    let tools = vec![TOOL.to_string()];
     assert!(
-        executor_stream::acquire(db, account, &binding, held, &tools, &[])
+        executor_stream::acquire(db, &presence_claim(account, &binding, &[]), held)
             .await
             .unwrap()
     );
     let stale = mailbox_binding("device-two", 'a');
     assert!(
-        executor_stream::acquire(db, account, &stale, Uuid::new_v4(), &tools, &[])
+        executor_stream::acquire(db, &presence_claim(account, &stale, &[]), Uuid::new_v4())
             .await
             .unwrap()
     );

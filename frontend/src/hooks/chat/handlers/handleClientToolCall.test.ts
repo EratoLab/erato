@@ -435,6 +435,61 @@ describe("handleClientToolCall", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
+  describe("a call pushed over the executor stream", () => {
+    const executor = {
+      device_id: "pane-device-000000",
+      realm: "office-addin" as const,
+      host_context: { kind: "outlook_mailbox", identity: "a".repeat(64) },
+    };
+    const execute = vi.fn(async () => ({ ok: true as const, result: 1 }));
+
+    beforeEach(() => {
+      vi.useFakeTimers();
+      execute.mockClear();
+      registerClientToolExecutor("fetch_availability", execute);
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("retries its result POST after a network error or a 5xx", async () => {
+      fetchMock
+        .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+        .mockResolvedValueOnce({ ok: false, status: 502 })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => ({ delivered: true, stored: false }),
+        });
+      const done = handleClientToolCall(makeEvent(), { ...deps, executor });
+      await vi.advanceTimersByTimeAsync(999);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      await vi.advanceTimersByTimeAsync(2_000);
+      await done;
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+      expect(execute).toHaveBeenCalledOnce();
+      expect(hasClientToolCallBeenAnswered("call-1")).toBe(true);
+    });
+
+    it("gives up on a 4xx at once, and on a 5xx after its retries", async () => {
+      fetchMock.mockResolvedValueOnce({ ok: false, status: 404 });
+      await handleClientToolCall(makeEvent(), { ...deps, executor });
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+
+      fetchMock.mockResolvedValue({ ok: false, status: 503 });
+      const done = handleClientToolCall(makeEvent({ tool_call_id: "call-2" }), {
+        ...deps,
+        executor,
+      });
+      await vi.advanceTimersByTimeAsync(60_000);
+      await done;
+      expect(fetchMock).toHaveBeenCalledTimes(1 + 5);
+    });
+  });
+
   it("un-marks on a failed POST so a later replay retries", async () => {
     const executor = vi.fn(async () => ({ ok: true as const, result: 1 }));
     registerClientToolExecutor("fetch_availability", executor);

@@ -401,8 +401,11 @@ calls. With it off, the stream endpoint answers 404 and no row is written.
   binding: the stream id, the advertised and child-capable tool names, and a
   20 s lease renewed every 5 s, as for chat transports. Acquisition is
   compare-and-set, so the first stream wins; a later stream for the binding
-  retries every second and takes over once the holder's row is gone. Dropping the
-  response body deletes the row.
+  checks the row without a lock every 1–2 s and takes over once the holder's
+  lease is gone. A pane sends the same `X-Erato-Executor-Instance` on every
+  reconnect of its stream: the server may not see a silently dropped connection
+  die for minutes, so a later stream of the holder's instance takes over at once
+  and the older stream ends. Dropping the response body deletes the row.
 - **Queue.** UNLOGGED `client_executor_calls`, addressed to the account and
   binding, not to a stream. Each replica runs one poll loop (200 ms) for the
   streams it holds presence for; it marks a due row delivered to that stream in

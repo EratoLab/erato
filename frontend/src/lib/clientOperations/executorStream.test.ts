@@ -103,7 +103,11 @@ describe("openExecutorStream", () => {
         EXECUTOR_STREAM_URL,
         expect.objectContaining({
           method: "GET",
-          headers: { ...headers, Accept: "text/event-stream" },
+          headers: {
+            ...headers,
+            "X-Erato-Executor-Instance": expect.any(String),
+            Accept: "text/event-stream",
+          },
         }),
       );
       options?.onMessage?.({
@@ -155,12 +159,15 @@ describe("openExecutorStream", () => {
     }
   });
 
-  it("reconnects with backoff and stops when the server has streams disabled", async () => {
+  it("reconnects as one instance with backoff and stops when the server has streams disabled", async () => {
     vi.useFakeTimers();
     const connections: SSEOptions[] = [];
+    const cleanups: (() => void)[] = [];
     vi.mocked(createSSEConnection).mockImplementation((_url, options) => {
       connections.push(options ?? {});
-      return vi.fn();
+      const cleanup = vi.fn();
+      cleanups.push(cleanup);
+      return cleanup;
     });
     const done = openExecutorStream(
       headers,
@@ -168,11 +175,13 @@ describe("openExecutorStream", () => {
       new AbortController().signal,
     );
     connections[0]?.onClose?.();
+    expect(cleanups[0]).toHaveBeenCalledOnce();
     await vi.advanceTimersByTimeAsync(999);
     expect(connections).toHaveLength(1);
     await vi.advanceTimersByTimeAsync(1);
     expect(connections).toHaveLength(2);
     connections[1]?.onError?.(new Error("network"));
+    expect(cleanups[1]).toHaveBeenCalledOnce();
     await vi.advanceTimersByTimeAsync(1_999);
     expect(connections).toHaveLength(2);
     await vi.advanceTimersByTimeAsync(1);
@@ -192,5 +201,20 @@ describe("openExecutorStream", () => {
     await done;
     await vi.advanceTimersByTimeAsync(60_000);
     expect(connections).toHaveLength(4);
+    const instances = new Set(
+      connections.map(
+        (options) => options.headers?.["X-Erato-Executor-Instance"],
+      ),
+    );
+    expect(instances.size).toBe(1);
+
+    const controller = new AbortController();
+    const other = openExecutorStream(headers, vi.fn(), controller.signal);
+    const otherInstance =
+      connections[4]?.headers?.["X-Erato-Executor-Instance"];
+    expect(otherInstance).toBeTruthy();
+    expect(instances.has(otherInstance)).toBe(false);
+    controller.abort();
+    await other;
   });
 });

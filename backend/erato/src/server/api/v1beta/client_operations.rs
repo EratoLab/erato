@@ -2,7 +2,9 @@
 //! executor content telemetry, or stored authentication credentials.
 use super::me_profile_middleware::MeProfile;
 use crate::services::background_tasks::Takeover;
-use crate::services::client_operations::executor_stream::{ExecutorStreamEvent, PresenceGuard};
+use crate::services::client_operations::executor_stream::{
+    ExecutorStreamEvent, PresenceClaim, PresenceGuard,
+};
 use crate::services::client_operations::{
     ExecutorBinding, OperationRequest, OperationResult, store,
 };
@@ -470,7 +472,10 @@ pub async fn continue_client_operation(
 /// One stream per executor binding. It receives live client tool calls from any
 /// of the account's chats that no stream of the calling chat can take, and
 /// announces new durable operations for the binding. The first stream of a
-/// binding serves it; a later one waits until the first closes.
+/// binding serves it; a later one waits until the first closes. A pane sends
+/// the same `X-Erato-Executor-Instance` on every reconnect of its stream: a
+/// later stream of the holder's instance takes the binding over at once, and
+/// the older one ends.
 #[utoipa::path(get, path = "/me/client-operations/stream", operation_id = "clientOperationStream",
     responses((status = OK, content_type = "text/event-stream", body = ExecutorStreamEvent),
         (status = BAD_REQUEST, description = "No valid X-Erato-Executor binding or no X-Erato-Client-Tools"),
@@ -499,14 +504,22 @@ pub async fn executor_stream(
             "X-Erato-Client-Tools must name at least one tool".into(),
         ));
     }
+    let claim = PresenceClaim {
+        account_id,
+        binding,
+        instance_id: headers
+            .get("X-Erato-Executor-Instance")
+            .and_then(|value| value.to_str().ok())
+            .and_then(|value| Uuid::parse_str(value).ok()),
+        connected_at: chrono::Utc::now(),
+        client_tools,
+        child_client_tools: crate::services::client_tools::child_client_tools(&headers),
+    };
     let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
     let guard = PresenceGuard::start(
         state.db.clone(),
         state.executor_streams.clone(),
-        account_id,
-        binding,
-        client_tools,
-        crate::services::client_tools::child_client_tools(&headers),
+        claim,
         sender,
     )
     .await;
