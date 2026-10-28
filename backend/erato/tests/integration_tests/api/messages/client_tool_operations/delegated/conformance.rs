@@ -761,18 +761,18 @@ async fn a_pane_lost_in_flight_is_context_unavailable_after_the_grace(
     let (state, _llm) = delegated_state(row, pool, mocks, |_| {}).await;
     let (base, server) = serve(&state).await;
     // Held by a replica that died: nothing renews or releases it.
-    let tools = vec![row.read_tool.to_string(), WRITE_TOOL.to_string()];
+    let claim = executor_stream::PresenceClaim {
+        account_id: account(&state).await,
+        binding: row.binding(),
+        instance_id: None,
+        connected_at: chrono::Utc::now(),
+        client_tools: vec![row.read_tool.to_string(), WRITE_TOOL.to_string()],
+        child_client_tools: vec![row.child_pane_tools().to_string()],
+    };
     assert!(
-        executor_stream::acquire(
-            &state.db,
-            account(&state).await,
-            &row.binding(),
-            Uuid::new_v4(),
-            &tools,
-            &[row.child_pane_tools().to_string()],
-        )
-        .await
-        .unwrap()
+        executor_stream::acquire(&state.db, &claim, Uuid::new_v4())
+            .await
+            .unwrap()
     );
     let chat_id = seed_origin_chat(&state.db).await;
     let run = spawn_parent(row, &base, chat_id, ACTION_FACET, Some(row.binding()));
