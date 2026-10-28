@@ -590,6 +590,11 @@ msgstr "Attachment"
 
 #. js-lingui-explicit-id
 #: src/outlook/components/AddinChatAddMenuExtraContent.tsx
+msgid "officeAddin.fileSource.attachmentLoadFailed"
+msgstr "Couldn't load this attachment from Outlook. Try again."
+
+#. js-lingui-explicit-id
+#: src/outlook/components/AddinChatAddMenuExtraContent.tsx
 msgid "officeAddin.fileSource.cloudAttachmentUnsupported"
 msgstr "Cloud attachment cannot be uploaded from Outlook"
 
@@ -661,8 +666,8 @@ msgstr "Settings"
 
 #. js-lingui-explicit-id
 #: src/core/AddinHistoryDrawerCore.tsx
-msgid "officeAddin.historyDrawer.archiveFailed"
-msgstr "Couldn't archive the chat"
+#~ msgid "officeAddin.historyDrawer.archiveFailed"
+#~ msgstr "Couldn't archive the chat"
 
 #. js-lingui-explicit-id
 #: src/core/AddinHistoryDrawerCore.tsx
@@ -701,8 +706,8 @@ msgstr "{attentionCount, plural, one {Open menu, # chat needs attention} other {
 
 #. js-lingui-explicit-id
 #: src/core/AddinHistoryDrawerCore.tsx
-msgid "officeAddin.historyDrawer.renameFailed"
-msgstr "Couldn't rename the chat"
+#~ msgid "officeAddin.historyDrawer.renameFailed"
+#~ msgstr "Couldn't rename the chat"
 
 #. js-lingui-explicit-id
 #: src/core/AddinHistoryDrawerCore.tsx
@@ -711,8 +716,8 @@ msgstr "Menu"
 
 #. js-lingui-explicit-id
 #: src/core/AddinHistoryDrawerCore.tsx
-msgid "officeAddin.historyDrawer.unarchiveFailed"
-msgstr "Couldn't unarchive the chat"
+#~ msgid "officeAddin.historyDrawer.unarchiveFailed"
+#~ msgstr "Couldn't unarchive the chat"
 
 #. js-lingui-explicit-id
 #: src/providers/OfficeProvider.tsx

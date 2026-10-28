@@ -6,12 +6,15 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
 import { AssistantForm } from "@/components/ui/Assistant/AssistantForm";
+import { ASSISTANT_SAVE_TOAST_KEY } from "@/components/ui/Assistant/assistantSaveToast";
 import { Card } from "@/components/ui/Container/Card";
 import { PageHeader } from "@/components/ui/Container/PageHeader";
 import { Button } from "@/components/ui/Controls/Button";
 import { Alert } from "@/components/ui/Feedback/Alert";
 import { SpinnerIcon } from "@/components/ui/Feedback/SpinnerIcon";
 import { SharingDialog, SharingErrorBoundary } from "@/components/ui/Sharing";
+import { toast } from "@/components/ui/Toast";
+import { usePageErrorToast } from "@/components/ui/Toast/usePageErrorToast";
 import { CheckCircleIcon, ShareIcon } from "@/components/ui/icons";
 import { usePageAlignment } from "@/hooks/ui";
 import {
@@ -58,14 +61,13 @@ const toFileUploadItems = (files: AssistantFile[]): FileUploadItem[] =>
   });
 
 export default function AssistantEditPage() {
+  const showError = usePageErrorToast();
   const navigate = useNavigate();
   const { enabled, usageViewEnabled } = useAssistantsFeature();
   const queryClient = useQueryClient();
   const { id } = useParams<{ id: string }>();
   const { containerClasses, horizontalPadding } =
     usePageAlignment("assistants");
-  const [successMessage, setSuccessMessage] = useState("");
-  const [errorMessage, setErrorMessage] = useState("");
   const [isSharingDialogOpen, setIsSharingDialogOpen] = useState(false);
 
   // Fetch assistant data
@@ -93,10 +95,8 @@ export default function AssistantEditPage() {
   const handleSubmit = async (formData: AssistantFormData) => {
     if (!id) return;
 
+    toast.dismissKey(ASSISTANT_SAVE_TOAST_KEY);
     try {
-      setErrorMessage("");
-      setSuccessMessage("");
-
       // Build the request body with proper typing
       // Note: Generated types are incomplete, so we use type assertion
       const requestBody = {
@@ -113,45 +113,44 @@ export default function AssistantEditPage() {
         mcp_server_ids: formData.mcpServerIds,
       } as unknown as Parameters<typeof updateAssistant>[0]["body"];
 
-      await updateAssistant({
+      const savedAssistant = await updateAssistant({
         pathParams: { assistantId: id },
         body: requestBody,
       });
 
-      setSuccessMessage(
-        t({
+      // Leaving aborts a refetch of this page's assistant and restores the
+      // pre-save copy, so it is seeded; the list key prefixes it, hence "none".
+      queryClient.setQueryData(
+        getAssistantQuery({ pathParams: { assistantId: id } }).queryKey,
+        savedAssistant,
+      );
+      void queryClient.invalidateQueries({
+        queryKey: listAssistantsQuery({}).queryKey,
+        refetchType: "none",
+      });
+
+      toast.success({
+        dedupeKey: ASSISTANT_SAVE_TOAST_KEY,
+        title: t({
           id: "assistant.edit.success",
           message: "Assistant updated successfully!",
         }),
-      );
-
-      // Invalidate queries
-      await Promise.all([
-        queryClient.invalidateQueries({
-          queryKey: listAssistantsQuery({}).queryKey,
-        }),
-        queryClient.invalidateQueries({
-          queryKey: getAssistantQuery({ pathParams: { assistantId: id } })
-            .queryKey,
-        }),
-      ]);
-
-      // Navigate back to assistants list after a short delay
-      setTimeout(() => {
-        navigate("/assistants/created");
-      }, 1500);
+      });
+      navigate("/assistants/created");
     } catch (error) {
       console.error("Failed to update assistant:", error);
-      setErrorMessage(
-        t({
+      showError({
+        dedupeKey: ASSISTANT_SAVE_TOAST_KEY,
+        title: t({
           id: "assistant.edit.error",
           message: "Failed to update assistant. Please try again.",
         }),
-      );
+      });
     }
   };
 
   const handleCancel = () => {
+    toast.dismissKey(ASSISTANT_SAVE_TOAST_KEY);
     navigate("/assistants/created");
   };
 
@@ -315,8 +314,6 @@ export default function AssistantEditPage() {
               initialData={initialData}
               availableModels={availableModels}
               isSubmitting={isPending}
-              successMessage={successMessage}
-              errorMessage={errorMessage}
               onSubmit={handleSubmit}
               onCancel={handleCancel}
             />

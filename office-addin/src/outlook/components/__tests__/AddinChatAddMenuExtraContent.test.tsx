@@ -1,5 +1,11 @@
 import { i18n } from "@lingui/core";
-import { cleanup, render, screen } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AddinChatAddMenuExtraContent } from "../AddinChatAddMenuExtraContent";
@@ -84,8 +90,12 @@ describe("AddinChatAddMenuExtraContent", () => {
     state.isThreadEmlStale = false;
     state.isEmailBodyDismissed = false;
     state.dismissedAttachmentIds = [];
+    state.getAttachmentFile.mockReset();
   });
-  afterEach(cleanup);
+  afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
+  });
 
   it("offers the thread and each attachment as a menu row", () => {
     render(
@@ -187,6 +197,60 @@ describe("AddinChatAddMenuExtraContent", () => {
     expect(errorRow).toHaveClass("text-theme-error-fg");
     expect(errorRow).toHaveAttribute("data-tone", "error");
     expect(errorRow.className).not.toContain("hover:");
+  });
+
+  it("holds the attachment rows from the click until Outlook hands the file over", async () => {
+    let handOver: (file: File) => void = () => {};
+    state.getAttachmentFile.mockImplementation(
+      () =>
+        new Promise<File>((resolve) => {
+          handOver = resolve;
+        }),
+    );
+    const upload = vi.fn(() => Promise.resolve());
+    const onClose = vi.fn();
+    render(
+      <AddinChatAddMenuExtraContent onSelectFiles={upload} onClose={onClose} />,
+    );
+
+    const row = screen.getByTestId("addin-add-menu-attachment-att-1");
+    fireEvent.click(row);
+    expect(row).toBeDisabled();
+    expect(screen.getByTestId("addin-add-menu-email-thread")).toBeDisabled();
+    fireEvent.click(row);
+    expect(state.getAttachmentFile).toHaveBeenCalledTimes(1);
+
+    const file = new File(["report"], "quarterly-report.pdf");
+    await act(async () => {
+      handOver(file);
+    });
+    expect(upload).toHaveBeenCalledTimes(1);
+    expect(upload).toHaveBeenCalledWith([file]);
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("says so in the menu when Outlook can't hand the attachment over", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    state.getAttachmentFile.mockRejectedValue(new Error("InternalError"));
+    const upload = vi.fn(() => Promise.resolve());
+    const onClose = vi.fn();
+    render(
+      <AddinChatAddMenuExtraContent onSelectFiles={upload} onClose={onClose} />,
+    );
+
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("addin-add-menu-attachment-att-1"));
+    });
+
+    const alert = screen.getByRole("alert");
+    expect(alert).toHaveTextContent(
+      "Couldn't load this attachment from Outlook. Try again.",
+    );
+    expect(alert).toHaveAttribute("data-tone", "error");
+    expect(alert).not.toHaveAttribute("data-row-item");
+    expect(upload).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
+    expect(screen.getByTestId("addin-add-menu-attachment-att-1")).toBeEnabled();
   });
 
   it("renders nothing outside Outlook", () => {

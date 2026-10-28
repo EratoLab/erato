@@ -1,6 +1,6 @@
 import { t } from "@lingui/core/macro";
 import { skipToken, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useId, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import {
@@ -62,6 +62,9 @@ import type {
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { ReactNode } from "react";
 
+/** Error toasts stay until dismissed, so a retry's outcome has to replace them. */
+const PREFERENCES_SAVE_TOAST_KEY = "preferences-save";
+
 type PreferencesTab =
   | "personalization"
   | "appearance"
@@ -112,13 +115,11 @@ export function UserPreferencesDialog({
     useState<StartScreenChoice>("inherit");
   const [startingAssistantPick, setStartingAssistantPick] =
     useState<StartingAssistantPick | null>(null);
-  const [saveError, setSaveError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [disconnectingServerId, setDisconnectingServerId] = useState<
     string | null
   >(null);
   const [archiveError, setArchiveError] = useState<string | null>(null);
-  const [archiveSuccess, setArchiveSuccess] = useState<string | null>(null);
   const [isArchiving, setIsArchiving] = useState(false);
   const { mutateAsync: archiveAllChatsMutation } = useArchiveAllChatsEndpoint();
   const { mutateAsync: disconnectMcpServerOauthMutation } =
@@ -227,14 +228,25 @@ export function UserPreferencesDialog({
     initialTab && visibleTabs.includes(initialTab) ? initialTab : defaultTab;
 
   useEffect(() => {
+    if (isOpen) {
+      setActiveTab(requestedDefaultTab);
+    }
+  }, [isOpen, requestedDefaultTab]);
+
+  // Read once per opening: saving a tool decision refetches the profile while
+  // the dialog stays open, which must neither move the user nor drop edits.
+  const hydratedProfileRef = useRef(false);
+  useEffect(() => {
     if (!isOpen) {
+      hydratedProfileRef.current = false;
       return;
     }
+    if (hydratedProfileRef.current) {
+      return;
+    }
+    hydratedProfileRef.current = userProfile !== undefined;
 
-    setActiveTab(requestedDefaultTab);
-    setSaveError(null);
     setArchiveError(null);
-    setArchiveSuccess(null);
     setNickname(userProfile?.preference_nickname ?? "");
     setJobTitle(userProfile?.preference_job_title ?? "");
     setCustomInstructions(
@@ -263,21 +275,31 @@ export function UserPreferencesDialog({
           : "inherit",
     );
     setStartingAssistantPick(storedPick);
-  }, [isOpen, requestedDefaultTab, userProfile]);
+  }, [isOpen, userProfile]);
 
+  const hydratedModelRef = useRef(false);
   useEffect(() => {
     if (!isOpen) {
+      hydratedModelRef.current = false;
       return;
     }
+    if (
+      hydratedModelRef.current ||
+      availableModels.length === 0 ||
+      userProfile === undefined
+    ) {
+      return;
+    }
+    hydratedModelRef.current = true;
 
     setDefaultModel(
       availableModels.find(
         (model) =>
           model.chat_provider_id ===
-          userProfile?.preference_default_chat_provider,
+          userProfile.preference_default_chat_provider,
       ) ?? null,
     );
-  }, [availableModels, isOpen, userProfile?.preference_default_chat_provider]);
+  }, [availableModels, isOpen, userProfile]);
 
   useEffect(() => {
     if (!visibleTabs.includes(activeTab)) {
@@ -380,8 +402,13 @@ export function UserPreferencesDialog({
   } satisfies Record<PreferencesTab, string>;
   /* eslint-enable lingui/no-unlocalized-strings */
 
+  const handleClose = () => {
+    toast.dismissKey(PREFERENCES_SAVE_TOAST_KEY);
+    onClose();
+  };
+
   const handleSave = async () => {
-    setSaveError(null);
+    toast.dismissKey(PREFERENCES_SAVE_TOAST_KEY);
     setIsSaving(true);
     try {
       const requestBody: UpdateProfilePreferencesRequest = {
@@ -416,12 +443,13 @@ export function UserPreferencesDialog({
       });
       onClose();
     } catch {
-      setSaveError(
-        t({
+      toast.error({
+        dedupeKey: PREFERENCES_SAVE_TOAST_KEY,
+        title: t({
           id: "preferences.dialog.save.error",
           message: "Could not save preferences. Please try again.",
         }),
-      );
+      });
     } finally {
       setIsSaving(false);
     }
@@ -429,7 +457,6 @@ export function UserPreferencesDialog({
 
   const handleArchiveAllChats = async () => {
     setArchiveError(null);
-    setArchiveSuccess(null);
     setIsArchiving(true);
     try {
       const recentChatsQueryKey = recentChatsQuery({}).queryKey;
@@ -502,7 +529,7 @@ export function UserPreferencesDialog({
   return (
     <ModalBase
       isOpen={isOpen}
-      onClose={onClose}
+      onClose={handleClose}
       title={t({ id: "preferences.dialog.title", message: "Preferences" })}
       contentClassName="h-[80vh] max-h-[700px] max-w-4xl"
     >
@@ -537,8 +564,6 @@ export function UserPreferencesDialog({
           data-testid="user-preferences-dialog"
         >
           <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-1">
-            {saveError ? <Alert type="error">{saveError}</Alert> : null}
-
             {personalizationEnabled ? (
               <section
                 id={panelIds.personalization}
@@ -773,9 +798,6 @@ export function UserPreferencesDialog({
               hidden={activeTab !== "data"}
               className="space-y-4"
             >
-              {archiveSuccess ? (
-                <Alert type="success">{archiveSuccess}</Alert>
-              ) : null}
               {archiveError ? <Alert type="error">{archiveError}</Alert> : null}
               <Alert type="info">
                 {t({
@@ -819,7 +841,7 @@ export function UserPreferencesDialog({
             <div className="mt-3 flex justify-end gap-2 border-t border-theme-border pt-3">
               <Button
                 variant="secondary"
-                onClick={onClose}
+                onClick={handleClose}
                 disabled={isSaving}
                 type="button"
               >

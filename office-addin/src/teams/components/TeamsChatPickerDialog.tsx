@@ -1043,6 +1043,7 @@ function TeamsChatPickerDialogBody({
             <Button
               variant="secondary"
               onClick={picker.isBuilding ? picker.cancelBuild : picker.close}
+              disabled={picker.isDelivering}
             >
               {t({
                 id: "officeAddin.teams.picker.cancel",
@@ -1051,7 +1052,7 @@ function TeamsChatPickerDialogBody({
             </Button>
             <Button
               variant="primary"
-              loading={picker.isBuilding}
+              loading={picker.isBuilding || picker.isDelivering}
               disabled={selectedCount === 0}
               onClick={() => void picker.attach()}
             >

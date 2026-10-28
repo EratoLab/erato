@@ -590,6 +590,11 @@ msgstr "Załącznik"
 
 #. js-lingui-explicit-id
 #: src/outlook/components/AddinChatAddMenuExtraContent.tsx
+msgid "officeAddin.fileSource.attachmentLoadFailed"
+msgstr "Nie udało się załadować tego załącznika z Outlooka. Spróbuj ponownie."
+
+#. js-lingui-explicit-id
+#: src/outlook/components/AddinChatAddMenuExtraContent.tsx
 msgid "officeAddin.fileSource.cloudAttachmentUnsupported"
 msgstr "Załącznika w chmurze nie można przesłać z Outlooka"
 
@@ -661,8 +666,8 @@ msgstr "Ustawienia"
 
 #. js-lingui-explicit-id
 #: src/core/AddinHistoryDrawerCore.tsx
-msgid "officeAddin.historyDrawer.archiveFailed"
-msgstr "Nie udało się zarchiwizować czatu"
+#~ msgid "officeAddin.historyDrawer.archiveFailed"
+#~ msgstr "Nie udało się zarchiwizować czatu"
 
 #. js-lingui-explicit-id
 #: src/core/AddinHistoryDrawerCore.tsx
@@ -701,8 +706,8 @@ msgstr "{attentionCount, plural, one {Otwórz menu, # czat wymaga uwagi} few {Ot
 
 #. js-lingui-explicit-id
 #: src/core/AddinHistoryDrawerCore.tsx
-msgid "officeAddin.historyDrawer.renameFailed"
-msgstr "Nie udało się zmienić nazwy czatu"
+#~ msgid "officeAddin.historyDrawer.renameFailed"
+#~ msgstr "Nie udało się zmienić nazwy czatu"
 
 #. js-lingui-explicit-id
 #: src/core/AddinHistoryDrawerCore.tsx
@@ -711,8 +716,8 @@ msgstr "Menu"
 
 #. js-lingui-explicit-id
 #: src/core/AddinHistoryDrawerCore.tsx
-msgid "officeAddin.historyDrawer.unarchiveFailed"
-msgstr "Nie udało się cofnąć archiwizacji czatu"
+#~ msgid "officeAddin.historyDrawer.unarchiveFailed"
+#~ msgstr "Nie udało się cofnąć archiwizacji czatu"
 
 #. js-lingui-explicit-id
 #: src/providers/OfficeProvider.tsx
