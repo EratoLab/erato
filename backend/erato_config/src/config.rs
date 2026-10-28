@@ -685,6 +685,10 @@ pub struct AppConfig {
     #[serde(default)]
     pub speech_providers: SpeechProvidersConfig,
 
+    /// Named decision providers; consumers select a provider explicitly.
+    #[serde(default)]
+    pub decision_providers: DecisionProvidersConfig,
+
     // If true, enables the data-retention half of the cleanup worker's tick,
     // which archives quiet delegated runs and deletes old archived chats.
     //
@@ -1847,6 +1851,9 @@ impl AppConfig {
             }
         }
 
+        config
+            .validate_decision_providers()
+            .unwrap_or_else(|error| panic!("Invalid decision provider configuration: {error}"));
         validate_provider_replacements(&config.speech_providers.replacement_providers, |id| {
             config
                 .speech_providers
@@ -2392,6 +2399,67 @@ impl AppConfig {
                 .get(id)
                 .map(|provider| provider.archived)
         })
+    }
+
+    /// Resolve an archived or removed decision provider to an active provider for a new request.
+    pub fn resolve_decision_provider_id<'a>(&'a self, id: &'a str) -> Result<&'a str, Report> {
+        resolve_provider_id(id, &self.decision_providers.replacement_providers, |id| {
+            self.decision_providers
+                .provider
+                .get(id)
+                .map(|provider| provider.archived)
+        })
+    }
+
+    pub fn validate_decision_providers(&self) -> Result<(), Report> {
+        validate_provider_replacements(&self.decision_providers.replacement_providers, |id| {
+            self.decision_providers
+                .provider
+                .get(id)
+                .map(|provider| provider.archived)
+        })?;
+        for (id, provider) in &self.decision_providers.provider {
+            eyre::ensure!(
+                !id.trim().is_empty(),
+                "Decision provider ID must not be empty"
+            );
+            if provider.archived {
+                continue;
+            }
+            eyre::ensure!(
+                matches!(provider.provider_kind.as_str(), "openai" | "llama_cpp"),
+                "Unknown decision provider kind for {id}"
+            );
+            if provider.provider_kind == "openai" {
+                eyre::ensure!(
+                    provider
+                        .model_name
+                        .as_ref()
+                        .is_some_and(|s| !s.trim().is_empty()),
+                    "OpenAI decision provider {id} requires model_name"
+                );
+            }
+            if provider.provider_kind == "llama_cpp" {
+                eyre::ensure!(
+                    provider.base_url.is_some(),
+                    "llama_cpp decision provider {id} requires base_url"
+                );
+            }
+            if let Some(base) = &provider.base_url {
+                let url = url::Url::parse(base)
+                    .map_err(|_| eyre!("Invalid decision provider base_url for {id}"))?;
+                eyre::ensure!(
+                    matches!(url.scheme(), "http" | "https")
+                        && url.host_str().is_some()
+                        && url.username().is_empty()
+                        && url.password().is_none()
+                        && url.query().is_none()
+                        && url.fragment().is_none(),
+                    "Invalid decision provider base_url for {id}"
+                );
+            }
+        }
+        Ok(())
     }
 
     /// Returns true if any chat provider uses Langfuse for system prompts.
@@ -6055,6 +6123,120 @@ impl Default for FileProcessorConfig {
             processor: default_processor(),
             limits: FileExtractionLimits::default(),
         }
+    }
+}
+
+#[derive(Debug, Default, Deserialize, PartialEq, Clone, Facet, HeapSize)]
+pub struct DecisionProvidersConfig {
+    #[serde(default)]
+    pub provider: HashMap<String, DecisionProviderConfig>,
+    #[serde(default)]
+    pub replacement_providers: Vec<ProviderReplacement>,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Clone, Facet, HeapSize)]
+pub struct DecisionProviderConfig {
+    #[serde(default)]
+    pub archived: bool,
+    /// openai or llama_cpp.
+    #[serde(default)]
+    pub provider_kind: String,
+    /// Required for OpenAI; llama.cpp selects the model served at the endpoint.
+    pub model_name: Option<String>,
+    /// Base URL including /v1; required for llama.cpp.
+    pub base_url: Option<String>,
+    #[facet(sensitive)]
+    pub api_key: Option<SecretConfigString>,
+}
+
+#[cfg(test)]
+mod decision_config_tests {
+    use super::*;
+
+    #[test]
+    fn registry_defaults_empty_and_parses_named_providers() {
+        let empty: DecisionProvidersConfig = serde_json::from_value(serde_json::json!({})).unwrap();
+        assert!(empty.provider.is_empty());
+        let registry: DecisionProvidersConfig = serde_json::from_value(serde_json::json!({
+            "provider": {
+                "cloud": {"provider_kind": "openai", "model_name": "model", "api_key": "secret"},
+                "local": {"provider_kind": "llama_cpp", "base_url": "http://localhost:8080/v1"}
+            }
+        }))
+        .unwrap();
+        assert_eq!(
+            registry.provider["cloud"].model_name.as_deref(),
+            Some("model")
+        );
+        assert!(registry.provider["local"].api_key.is_none());
+        assert!(!format!("{:?}", registry.provider["cloud"]).contains("secret"));
+    }
+
+    #[test]
+    fn decision_replacements_resolve_and_validate() {
+        let registry = serde_json::json!({
+            "provider": {
+                "old": {"archived": true},
+                "active": {"provider_kind": "openai", "model_name": "model"}
+            },
+            "replacement_providers": [
+                {"old": "removed", "new": "old"}, {"old": "old", "new": "active"}
+            ]
+        });
+        let config = AppConfig {
+            decision_providers: serde_json::from_value(registry).unwrap(),
+            ..Default::default()
+        };
+        config.validate_decision_providers().unwrap();
+        assert_eq!(
+            config.resolve_decision_provider_id("removed").unwrap(),
+            "active"
+        );
+        assert_eq!(
+            config.resolve_decision_provider_id("old").unwrap(),
+            "active"
+        );
+        assert!(config.decision_providers.provider["old"].archived);
+        assert!(config.resolve_decision_provider_id("unknown").is_err());
+
+        for replacement in [
+            ProviderReplacement {
+                old: "active".into(),
+                new: "old".into(),
+            },
+            ProviderReplacement {
+                old: "old".into(),
+                new: "active".into(),
+            },
+            ProviderReplacement {
+                old: "missing".into(),
+                new: "unknown".into(),
+            },
+        ] {
+            let mut invalid = config.clone();
+            invalid
+                .decision_providers
+                .replacement_providers
+                .push(replacement);
+            assert!(invalid.validate_decision_providers().is_err());
+        }
+        let mut cycle = config.clone();
+        cycle.decision_providers.replacement_providers[1].new = "removed".into();
+        assert!(cycle.validate_decision_providers().is_err());
+        let mut unavailable = config.clone();
+        unavailable
+            .decision_providers
+            .provider
+            .get_mut("active")
+            .unwrap()
+            .archived = true;
+        assert!(unavailable.validate_decision_providers().is_err());
+        let mut no_replacement = config;
+        no_replacement
+            .decision_providers
+            .replacement_providers
+            .clear();
+        assert!(no_replacement.resolve_decision_provider_id("old").is_err());
     }
 }
 

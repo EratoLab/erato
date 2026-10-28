@@ -852,6 +852,23 @@ max_extracted_chars = 0
 timeout_ms = 0
 bounded_text_preview = true
 
+# Decision providers are independent of chat and speech providers. A future
+# consumer must explicitly select an ID; defining one does not activate it.
+# [decision_providers]
+# replacement_providers = [{ old = "old_decisions", new = "decisions" }]
+# [decision_providers.provider.old_decisions]
+# archived = true
+# [decision_providers.provider.decisions]
+# provider_kind = "openai"
+# model_name = "gpt-6-luna"
+# api_key = "your-api-key"
+# base_url = "https://api.openai.com/v1"
+#
+# [decision_providers.provider.local_decisions]
+# provider_kind = "llama_cpp"
+# base_url = "http://localhost:8080/v1"
+# api_key = "optional-server-key"
+
 # Speech output is independent of the chat/transcription provider.
 # Select this ID with audio_conversational.speech_provider, then enable Audio-back in the UI.
 # [speech_providers.provider.assistant_voice]

@@ -1199,8 +1199,12 @@ An ordered list of provider IDs that defines the priority for provider selection
 {/* erato_toml_config_key: speech_providers.replacement_providers.[].old */}
 {/* erato_toml_config_key: speech_providers.replacement_providers.[].new */}
 {/* erato_toml_config_key: speech_providers.provider.<provider-id>.archived */}
+{/* erato_toml_config_key: decision_providers.replacement_providers.[] */}
+{/* erato_toml_config_key: decision_providers.replacement_providers.[].old */}
+{/* erato_toml_config_key: decision_providers.replacement_providers.[].new */}
+{/* erato_toml_config_key: decision_providers.provider.<provider-id>.archived */}
 
-Set `archived = true` to retain a provider's historical metadata without making it selectable or requiring inference credentials. Configure `replacement_providers` as a list of `{ old, new }` ID pairs under `chat_providers` or `speech_providers`. An old ID can be archived or absent from the configuration; chains must end at an active provider. Chat model permission rules for an old ID also grant access to its replacement. Keep archived chat entries and their original token prices to calculate historical spending correctly; an absent old entry cannot supply its historical price or display name. File storage providers are not replaced by this mechanism.
+Set `archived = true` to retain a provider's historical metadata without making it selectable or requiring inference credentials. Configure `replacement_providers` as a list of `{ old, new }` ID pairs under `chat_providers`, `speech_providers`, or `decision_providers`. An old ID can be archived or absent from the configuration; chains must end at an active provider. Chat model permission rules for an old ID also grant access to its replacement. Keep archived chat entries and their original token prices to calculate historical spending correctly; an absent old entry cannot supply its historical price or display name. File storage providers are not replaced by this mechanism.
 
 ```toml
 [chat_providers]
@@ -2394,6 +2398,50 @@ cd e2e-tests
 ```
 
 This creates a PDF with 20 pages, each containing unique identifiers like `PAGE-001`, `PAGE-002`, etc.
+
+### Decision providers
+
+{/* erato_toml_config_key: decision_providers */}
+{/* erato_toml_config_key: decision_providers.provider */}
+{/* erato_toml_config_key: decision_providers.provider.<provider-id>.provider_kind */}
+{/* erato_toml_config_key: decision_providers.provider.<provider-id>.model_name */}
+{/* erato_toml_config_key: decision_providers.provider.<provider-id>.base_url */}
+{/* erato_toml_config_key: decision_providers.provider.<provider-id>.api_key */}
+
+Configure named decision providers independently of chat and speech providers.
+The registry does not enable a feature by itself; a future backend consumer must
+select a provider ID explicitly and resolve it through the replacement registry.
+Archived entries may omit provider settings; a replacement chain must end at an
+active provider. For example:
+
+```toml
+[decision_providers]
+replacement_providers = [{ old = "previous", new = "classifier" }]
+
+[decision_providers.provider.previous]
+archived = true
+
+[decision_providers.provider.classifier]
+provider_kind = "openai"
+model_name = "gpt-6-luna"
+api_key = "your-key"
+# base_url = "https://api.openai.com/v1"
+
+[decision_providers.provider.local_classifier]
+provider_kind = "llama_cpp"
+base_url = "http://localhost:8080/v1"
+# api_key = "optional-server-key"
+```
+
+OpenAI requires `model_name` and defaults to `https://api.openai.com/v1`;
+the Decisions API currently supports `gpt-6-luna`. llama.cpp requires the
+server's `/v1` base URL and a native decision model; its optional API key is a
+bearer token. Choice limits and input limits depend on the loaded model.
+The shared interface accepts text or JSON, passing JSON as serialized text to
+OpenAI and structured state to llama.cpp (JSON scalars are serialized as text).
+It returns estimated probabilities,
+which are not necessarily calibrated; consumers determine their own thresholds.
+Credentials stay on the backend.
 
 ### Speech providers
 
