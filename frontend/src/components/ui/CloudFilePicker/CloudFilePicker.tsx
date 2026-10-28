@@ -12,13 +12,16 @@ import { useDebounce } from "use-debounce";
 
 import { useCloudData } from "@/hooks/cloud/useCloudData";
 import { useCloudNavigation } from "@/hooks/cloud/useCloudNavigation";
+import { useCloudSearch } from "@/hooks/cloud/useCloudSearch";
 import { useCloudSelection } from "@/hooks/cloud/useCloudSelection";
+import { cloudFileKey } from "@/lib/api/cloudProviders/types";
 import { useCloudProvidersFeature } from "@/providers/FeatureConfigProvider";
 import { DEFAULT_MAX_FILES_PER_MESSAGE } from "@/utils/fileUploadLimits";
 
 import { CloudDriveList } from "./CloudDriveList";
 import { CloudItemBrowser } from "./CloudItemBrowser";
 import { CloudNavigationBreadcrumb } from "./CloudNavigationBreadcrumb";
+import { CloudSearchResults } from "./CloudSearchResults";
 import { Button } from "../Controls/Button";
 import { Alert } from "../Feedback/Alert";
 import { Input } from "../Input/Input";
@@ -58,7 +61,6 @@ export const CloudFilePicker = memo<CloudFilePickerProps>(
     multiple = false,
     maxFiles = DEFAULT_MAX_FILES_PER_MESSAGE,
     acceptedFileTypes = [],
-    chatId,
   }) => {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -83,6 +85,8 @@ export const CloudFilePicker = memo<CloudFilePickerProps>(
     const {
       selectedFiles,
       toggleFile,
+      isSelected,
+      removeFile,
       canSelect,
       getDisabledReason,
       clearSelection,
@@ -90,11 +94,26 @@ export const CloudFilePicker = memo<CloudFilePickerProps>(
     } = useCloudSelection({ multiple, maxFiles, acceptedFileTypes });
 
     // Data fetching using generated hooks
-    const { drives, items, isLoading } = useCloudData({
+    const searching = driveId === null && driveSearchQuery.trim().length > 0;
+    const search = useCloudSearch({
+      provider,
+      query: debouncedDriveSearchQuery,
+      enabled: isOpen && searching,
+    });
+    const waitingForDebounce =
+      driveSearchQuery.trim() !== debouncedDriveSearchQuery.trim();
+    const {
+      drives,
+      items,
+      isLoading,
+      error: browseError,
+      refetchDrives,
+      refetchItems,
+    } = useCloudData({
       provider,
       driveId,
       itemId,
-      searchQuery: debouncedDriveSearchQuery,
+      enabled: isOpen && !searching,
     });
 
     // Handle drive selection
@@ -102,9 +121,8 @@ export const CloudFilePicker = memo<CloudFilePickerProps>(
       (drive: { id: string; name: string }) => {
         setDriveSearchQuery("");
         goToDrive(drive.id, drive.name);
-        clearSelection();
       },
-      [goToDrive, clearSelection],
+      [goToDrive],
     );
 
     // Handle folder navigation
@@ -112,17 +130,15 @@ export const CloudFilePicker = memo<CloudFilePickerProps>(
       (item: { id: string; name: string; is_folder: boolean }) => {
         if (item.is_folder) {
           navigateToFolder(item.id, item.name);
-          clearSelection();
         }
       },
-      [navigateToFolder, clearSelection],
+      [navigateToFolder],
     );
 
     // Handle back button
     const handleGoBack = useCallback(() => {
       goBack();
-      clearSelection();
-    }, [goBack, clearSelection]);
+    }, [goBack]);
 
     // Handle cancel
     const handleCancel = useCallback(() => {
@@ -260,7 +276,7 @@ export const CloudFilePicker = memo<CloudFilePickerProps>(
           )}
 
           {/* Content */}
-          <div className="flex-1 overflow-y-auto px-4 py-3 sm:px-6 sm:py-4">
+          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3 sm:px-6 sm:py-4">
             {error && (
               <div className="mb-4 rounded border border-theme-error-border bg-theme-error-bg p-3 text-sm text-theme-error-fg">
                 {error}
@@ -281,27 +297,75 @@ export const CloudFilePicker = memo<CloudFilePickerProps>(
                 <div className="mb-3">
                   <Input
                     type="search"
+                    maxLength={200}
+                    aria-label={t({
+                      id: "cloudFilePicker.search",
+                      message: "Search drives and files…",
+                    })}
                     value={driveSearchQuery}
                     onChange={handleDriveSearchChange}
                     placeholder={t({
-                      id: "cloudFilePicker.searchDrives",
-                      message: "Search drives...",
+                      id: "cloudFilePicker.search",
+                      message: "Search drives and files…",
                     })}
                   />
                 </div>
-                <CloudDriveList
-                  drives={drives}
-                  onSelectDrive={handleSelectDrive}
-                  isLoading={isLoading}
-                />
+                {searching ? (
+                  <CloudSearchResults
+                    drives={search.drives}
+                    files={search.files}
+                    isLoading={waitingForDebounce || search.isLoading}
+                    error={!waitingForDebounce && !!search.error}
+                    truncated={search.truncated}
+                    onRetry={search.refetch}
+                    onSelectDrive={handleSelectDrive}
+                    onToggleFile={toggleFile}
+                    isSelected={isSelected}
+                    getDisabledReason={getDisabledReason}
+                    multiple={multiple}
+                  />
+                ) : (
+                  !browseError && (
+                    <CloudDriveList
+                      drives={drives}
+                      onSelectDrive={handleSelectDrive}
+                      isLoading={isLoading}
+                    />
+                  )
+                )}
               </>
             )}
 
-            {showItemBrowser && (
+            {!searching && browseError && (
+              <Alert type="error">
+                {t({
+                  id: "cloudFilePicker.loadError",
+                  message: "Could not load files. Please try again.",
+                })}
+                <Button
+                  variant="secondary"
+                  onClick={driveId ? refetchItems : refetchDrives}
+                >
+                  {t({ id: "cloudFilePicker.retry", message: "Retry" })}
+                </Button>
+              </Alert>
+            )}
+            {showItemBrowser && !browseError && (
               <CloudItemBrowser
                 items={items}
-                selectedIds={selectedFiles.map((f) => f.item_id)}
-                onToggleItem={toggleFile}
+                selectedIds={selectedFiles
+                  .filter(
+                    (f) => f.provider === provider && f.drive_id === driveId,
+                  )
+                  .map((f) => f.item_id)}
+                onToggleItem={(item) =>
+                  toggleFile({
+                    ...item,
+                    location: breadcrumbs
+                      .map((segment) => segment.name)
+                      .join(" / "),
+                  })
+                }
                 onOpenFolder={handleOpenFolder}
                 canSelect={canSelect}
                 getDisabledReason={getDisabledReason}
@@ -311,6 +375,50 @@ export const CloudFilePicker = memo<CloudFilePickerProps>(
             )}
           </div>
 
+          {selectedFiles.length > 0 && (
+            <ul
+              className="max-h-28 shrink-0 overflow-y-auto border-t border-theme-border px-4 py-2"
+              aria-label={t({
+                id: "cloudFilePicker.selectedFiles",
+                message: "Selected files",
+              })}
+            >
+              {selectedFiles.map((file) => {
+                const fileName = file.name;
+                return (
+                  <li
+                    key={cloudFileKey(file)}
+                    className="flex items-center justify-between gap-2 text-sm"
+                  >
+                    <span
+                      className="min-w-0 truncate"
+                      title={[file.location, file.name]
+                        .filter(Boolean)
+                        .join(" / ")}
+                    >
+                      {file.name}
+                      {file.location && (
+                        <span className="ml-2 text-xs text-theme-fg-muted">
+                          {file.location}
+                        </span>
+                      )}
+                    </span>
+                    <button
+                      type="button"
+                      className="shrink-0 p-1 text-theme-fg-muted hover:text-theme-fg-primary"
+                      onClick={() => removeFile(file)}
+                      aria-label={t({
+                        id: "cloudFilePicker.removeFile",
+                        message: `Remove ${fileName}`,
+                      })}
+                    >
+                      <CloseIcon className="size-4" />
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
           {/* Footer */}
           <div className="flex flex-col items-stretch justify-between gap-3 border-t border-theme-border px-4 py-3 sm:flex-row sm:items-center sm:px-6 sm:py-4">
             <div className="text-center text-xs text-theme-fg-muted sm:text-left sm:text-sm">

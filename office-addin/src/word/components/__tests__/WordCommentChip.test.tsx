@@ -368,6 +368,31 @@ describe("WordCommentChip", () => {
     );
   });
 
+  it.each(["", null])(
+    "calls only a real point comment one (quote %j)",
+    (quote) => {
+      const { container } = render(
+        <WordCommentChip
+          {...props({
+            kind: "thread",
+            thread: { ...MAYA, quote },
+            why: "chosen",
+            picked: true,
+            backToPassage: false,
+          })}
+        />,
+      );
+
+      expect(
+        container.textContent.includes("on a spot without highlighted text"),
+      ).toBe(quote === "");
+      expect(container).not.toHaveTextContent("on “");
+      expect(
+        screen.getByRole("button", { name: "Show in Word" }),
+      ).toBeEnabled();
+    },
+  );
+
   it.each([
     ["chosen", "Chosen by you"],
     ["cursor", "At your cursor"],

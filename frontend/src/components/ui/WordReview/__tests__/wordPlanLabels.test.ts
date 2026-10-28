@@ -56,9 +56,15 @@ describe("whole-file plans", () => {
     expect(wordPlanScopeText(wholeFile("small"), body)).toBe("");
   });
 
-  it("names the change on the button and keeps Replace document for large rewrites", () => {
-    expect(wordPlanApplyLabel(wholeFile("small"))).toBe("Apply change");
-    expect(wordPlanApplyLabel(wholeFile("large"))).toBe("Replace document");
+  it("names the change on the button and keeps Replace document for large imports", () => {
+    expect(wordPlanApplyLabel(wholeFile("small"), true)).toBe("Apply change");
+    expect(wordPlanApplyLabel(wholeFile("large"), true)).toBe(
+      "Replace document",
+    );
+  });
+
+  it("names the change for a large plan that is not imported", () => {
+    expect(wordPlanApplyLabel(wholeFile("large"), false)).toBe("Apply change");
   });
 });
 

@@ -1,9 +1,11 @@
+import { useState } from "react";
+
 import { useChatContext } from "@/providers/ChatProvider";
 
 import { Button } from "../Controls/Button";
 import { UndoIcon } from "../icons";
+import { runChatAction } from "./chatActionFeedback";
 import { archivedNoticeText, unarchiveActionLabel } from "./chatArchiveActions";
-import { notifyUnarchiveFailed } from "./unarchiveFeedback";
 
 export interface ArchivedChatNoticeProps {
   chatId: string;
@@ -16,6 +18,11 @@ export const ArchivedChatNotice = ({
   variant = "chat",
 }: ArchivedChatNoticeProps) => {
   const { unarchiveChat } = useChatContext();
+  // Keyed by chat: the notice can be reused for another archived chat while a
+  // restore is still under way.
+  const [unarchivingChatId, setUnarchivingChatId] = useState<string | null>(
+    null,
+  );
 
   return (
     <div
@@ -30,8 +37,16 @@ export const ArchivedChatNotice = ({
           type="button"
           variant="secondary"
           icon={<UndoIcon className="size-4" />}
+          loading={unarchivingChatId === chatId}
           onClick={() => {
-            void unarchiveChat(chatId).catch(notifyUnarchiveFailed);
+            setUnarchivingChatId(chatId);
+            void runChatAction("unarchive", chatId, () =>
+              unarchiveChat(chatId),
+            ).finally(() =>
+              setUnarchivingChatId((current) =>
+                current === chatId ? null : current,
+              ),
+            );
           }}
           data-testid="archived-chat-unarchive"
         >

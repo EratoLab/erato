@@ -4,7 +4,7 @@ import {
   formatFileSize,
 } from "@erato/frontend/library";
 import { t } from "@lingui/core/macro";
-import { useCallback, useMemo, useState } from "react";
+import { Fragment, useCallback, useMemo, useState } from "react";
 
 import { useOutlookComposerMenu } from "./OutlookComposerMenuContext";
 import { useOffice } from "../../providers/OfficeProvider";
@@ -48,6 +48,9 @@ export function AddinChatAddMenuExtraContent({
   const { currentThread, stagedEmails, policyExcludedAttachmentIds } =
     useOutlookEmailSource();
   const [isUploadingEmailContent, setIsUploadingEmailContent] = useState(false);
+  const [failedAttachmentId, setFailedAttachmentId] = useState<string | null>(
+    null,
+  );
   const threadStaged = stagedEmails.find(
     (staged): staged is Extract<StagedEmail, { source: "current-thread" }> =>
       staged.source === "current-thread",
@@ -77,9 +80,22 @@ export function AddinChatAddMenuExtraContent({
   const uploadAttachment = useCallback(
     async (attachmentId: string) => {
       if (!onSelectFiles) return;
+      // Busy from the click: the attachment is a full Office download before
+      // the upload starts, and the row must not take a second click meanwhile.
+      setFailedAttachmentId(null);
       setIsUploadingEmailContent(true);
       try {
-        const file = await getAttachmentFile(attachmentId);
+        let file: File;
+        try {
+          file = await getAttachmentFile(attachmentId);
+        } catch (error) {
+          console.warn(
+            "Failed to resolve Outlook attachment for upload:",
+            error,
+          );
+          setFailedAttachmentId(attachmentId);
+          return;
+        }
         await onSelectFiles([file]);
         onClose();
       } catch (error) {
@@ -194,55 +210,72 @@ export function AddinChatAddMenuExtraContent({
             false);
         const isInComposer = menu.attachments === "in-composer";
         return (
-          <Row
-            key={attachment.id}
-            variant="menu"
-            align="start"
-            role="menuitem"
-            tabIndex={-1}
-            onClick={() => void uploadAttachment(attachment.id)}
-            disabled={
-              isBusy ||
-              uploadDisabled ||
-              !onSelectFiles ||
-              isCloudAttachment ||
-              isExcluded ||
-              isInComposer
-            }
-            title={attachment.name}
-            data-testid={`addin-add-menu-attachment-${attachment.id}`}
-            trailing={
-              <span className="shrink-0 text-xs text-theme-fg-muted">
-                {formatFileSize(attachment.size)}
-              </span>
-            }
-          >
-            <div className="min-w-0 flex-1">
-              <div className="truncate text-sm font-medium">
-                {attachment.name}
-              </div>
-              <div className="truncate text-xs text-theme-fg-muted">
-                {isCloudAttachment
-                  ? t({
-                      id: "officeAddin.fileSource.cloudAttachmentUnsupported",
-                      message:
-                        "Cloud attachment cannot be uploaded from Outlook",
-                    })
-                  : isExcluded
+          <Fragment key={attachment.id}>
+            <Row
+              variant="menu"
+              align="start"
+              role="menuitem"
+              tabIndex={-1}
+              onClick={() => void uploadAttachment(attachment.id)}
+              disabled={
+                isBusy ||
+                uploadDisabled ||
+                !onSelectFiles ||
+                isCloudAttachment ||
+                isExcluded ||
+                isInComposer
+              }
+              title={attachment.name}
+              data-testid={`addin-add-menu-attachment-${attachment.id}`}
+              trailing={
+                <span className="shrink-0 text-xs text-theme-fg-muted">
+                  {formatFileSize(attachment.size)}
+                </span>
+              }
+            >
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-sm font-medium">
+                  {attachment.name}
+                </div>
+                <div className="truncate text-xs text-theme-fg-muted">
+                  {isCloudAttachment
                     ? t({
-                        id: "officeAddin.chatInput.validation.unsupported",
-                        message: "Won't be read by the AI",
+                        id: "officeAddin.fileSource.cloudAttachmentUnsupported",
+                        message:
+                          "Cloud attachment cannot be uploaded from Outlook",
                       })
-                    : isInComposer
-                      ? inComposerText()
-                      : attachment.contentType ||
-                        t({
-                          id: "officeAddin.fileSource.attachmentFallback",
-                          message: "Attachment",
-                        })}
+                    : isExcluded
+                      ? t({
+                          id: "officeAddin.chatInput.validation.unsupported",
+                          message: "Won't be read by the AI",
+                        })
+                      : isInComposer
+                        ? inComposerText()
+                        : attachment.contentType ||
+                          t({
+                            id: "officeAddin.fileSource.attachmentFallback",
+                            message: "Attachment",
+                          })}
+                </div>
               </div>
-            </div>
-          </Row>
+            </Row>
+            {failedAttachmentId === attachment.id && (
+              <Row
+                variant="menu"
+                as="div"
+                interactive={false}
+                tone="error"
+                role="alert"
+                className="text-xs"
+              >
+                {t({
+                  id: "officeAddin.fileSource.attachmentLoadFailed",
+                  message:
+                    "Couldn't load this attachment from Outlook. Try again.",
+                })}
+              </Row>
+            )}
+          </Fragment>
         );
       })}
     </>

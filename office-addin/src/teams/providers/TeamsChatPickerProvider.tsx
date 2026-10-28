@@ -86,6 +86,8 @@ export interface TeamsChatPickerContextValue {
   /** Abort an in-flight build, keeping the dialog and the selection. */
   cancelBuild: () => void;
   isBuilding: boolean;
+  /** The composer is uploading a built transcript; that upload has no cancel. */
+  isDelivering: boolean;
   progress: TeamsTranscriptProgress | null;
   partialOutcome: TeamsTranscriptBuildOutcome | null;
   attachError: TeamsAttachFailure | null;
@@ -142,6 +144,7 @@ const CLOSED_PICKER: TeamsChatPickerContextValue = {
   attachPartial: () => Promise.resolve(),
   cancelBuild: () => {},
   isBuilding: false,
+  isDelivering: false,
   progress: null,
   partialOutcome: null,
   attachError: null,
@@ -189,6 +192,8 @@ export function TeamsChatPickerProvider({ children }: { children: ReactNode }) {
   const [attachedTranscript, setAttachedTranscript] = useState<File | null>(
     null,
   );
+  const [isDelivering, setIsDelivering] = useState(false);
+  const deliveringRef = useRef(false);
 
   const handoffRef = useRef<((files: File[]) => Promise<void>) | null>(null);
   const cancelledRef = useRef(false);
@@ -290,6 +295,8 @@ export function TeamsChatPickerProvider({ children }: { children: ReactNode }) {
       if (!handoff || useFileUploadStore.getState().isUploading) {
         return fail();
       }
+      deliveringRef.current = true;
+      setIsDelivering(true);
       try {
         await handoff(files);
       } catch (error) {
@@ -298,6 +305,9 @@ export function TeamsChatPickerProvider({ children }: { children: ReactNode }) {
           error,
         );
         return fail();
+      } finally {
+        deliveringRef.current = false;
+        setIsDelivering(false);
       }
       if (useFileUploadStore.getState().error) {
         return fail();
@@ -314,7 +324,7 @@ export function TeamsChatPickerProvider({ children }: { children: ReactNode }) {
 
   const attach = useCallback(async () => {
     const selections = [...selection.values()];
-    if (selections.length === 0) return;
+    if (selections.length === 0 || deliveringRef.current) return;
     cancelledRef.current = false;
     setAttachError(null);
     setPartialOutcome(null);
@@ -358,7 +368,7 @@ export function TeamsChatPickerProvider({ children }: { children: ReactNode }) {
 
   const attachPartial = useCallback(async () => {
     const outcome = partialOutcome;
-    if (!outcome?.file) return;
+    if (!outcome?.file || deliveringRef.current) return;
     setPartialOutcome(null);
     // Put the offer back if the composer never took it — the partial
     // transcript is the only copy of a walk that already ran.
@@ -391,6 +401,7 @@ export function TeamsChatPickerProvider({ children }: { children: ReactNode }) {
       attachPartial,
       cancelBuild,
       isBuilding,
+      isDelivering,
       progress,
       partialOutcome,
       attachError,
@@ -409,6 +420,7 @@ export function TeamsChatPickerProvider({ children }: { children: ReactNode }) {
       fetcher,
       fileFetcher,
       isBuilding,
+      isDelivering,
       isMessageSelectionFull,
       isOpen,
       isSelected,

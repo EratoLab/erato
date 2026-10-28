@@ -24,7 +24,9 @@ import {
   usePersistedState,
   useUnarchiveChat,
   useUpdateChatTitle,
+  type ArchiveChatResponse,
   type ChatContextValue,
+  type ChatDetail,
   type Message,
   type PersistedStateOptions,
   type RecentChatsListFilters,
@@ -247,25 +249,37 @@ function AddinChatDataProvider({
   );
   const archiveChat = useCallback(
     async (chatId: string) => {
+      let archived: ArchiveChatResponse;
       if (filters.statusFilter === "all") {
         // The archived-inclusive result set does not shrink, which is what
         // makes refetch-driven offset skew impossible — plain invalidate.
-        await archiveChatMutation({ pathParams: { chatId }, body: {} });
+        archived = await archiveChatMutation({
+          pathParams: { chatId },
+          body: {},
+        });
         void queryClient.invalidateQueries({
           queryKey: recentChatsQuery({}).queryKey,
         });
       } else {
         const rollback = await removeArchivedChatFromLists(queryClient, chatId);
         try {
-          await archiveChatMutation({ pathParams: { chatId }, body: {} });
+          archived = await archiveChatMutation({
+            pathParams: { chatId },
+            body: {},
+          });
         } catch (error) {
           rollback();
           throw error;
         }
       }
-      void queryClient.invalidateQueries({
-        queryKey: chatDetailQuery({ pathParams: { chatId } }).queryKey,
-      });
+      const detailKey = chatDetailQuery({ pathParams: { chatId } }).queryKey;
+      // Seeded before the refetch starts: leaving the open chat aborts it, and
+      // query-core then restores what the cache held when it began.
+      queryClient.setQueryData<ChatDetail>(
+        detailKey,
+        (detail) => detail && { ...detail, archived_at: archived.archived_at },
+      );
+      void queryClient.invalidateQueries({ queryKey: detailKey });
       // An archived chat carries no marker; cleared only on success so a
       // failed archive keeps the row's marker.
       useGenerationStatusStore.getState().clearStatus(chatId);

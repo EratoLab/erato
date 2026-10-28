@@ -1238,6 +1238,7 @@ pub struct StreamingTask {
     /// Identity of this generation attempt, distinguishing it from other
     /// generations of the same chat in the map and the chats-row lease.
     pub generation_id: Uuid,
+    pub speech_enabled: AtomicBool,
     chat_id: Uuid,
     db: Option<DatabaseConnection>,
     /// The id of the assistant message being generated. Set to a placeholder at
@@ -1305,6 +1306,7 @@ impl StreamingTask {
 
         Self {
             generation_id,
+            speech_enabled: AtomicBool::new(false),
             chat_id: Uuid::nil(),
             db: None,
             message_id: std::sync::RwLock::new(message_id),
@@ -1680,9 +1682,20 @@ fn is_false(value: &bool) -> bool {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "message_type", rename_all = "snake_case")]
 pub enum StreamingEvent {
+    AudioDelta {
+        message_id: Uuid,
+        sequence: u64,
+        audio: String,
+        sample_rate: u32,
+    },
+    AudioError {
+        message_id: Uuid,
+    },
     /// A new chat was created
     #[serde(rename = "chat_created")]
-    ChatCreated { chat_id: Uuid },
+    ChatCreated {
+        chat_id: Uuid,
+    },
     /// User message was saved
     #[serde(rename = "user_message_saved")]
     UserMessageSaved {
@@ -1691,7 +1704,9 @@ pub enum StreamingEvent {
     },
     /// Assistant message generation started
     #[serde(rename = "assistant_message_started")]
-    AssistantMessageStarted { message_id: Uuid },
+    AssistantMessageStarted {
+        message_id: Uuid,
+    },
     /// A text delta was generated
     #[serde(rename = "text_delta")]
     TextDelta {

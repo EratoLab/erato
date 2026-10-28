@@ -12,10 +12,14 @@ use serde::Deserialize;
 use serde_json::json;
 use url::{Host, Origin, Url};
 
+#[path = "desktop_sidecar_intunewin.rs"]
+mod intunewin;
 #[path = "desktop_sidecar_macos.rs"]
 mod macos;
 #[path = "desktop_sidecar_tls.rs"]
 mod tls;
+#[path = "desktop_sidecar_msi.rs"]
+mod windows_msi;
 
 use erato_config::config::{DesktopSidecarConfig, DesktopSidecarTlsConfig};
 use tls::BootstrapTls;
@@ -61,6 +65,9 @@ pub struct DistributionArtifact {
     source: Arc<File>,
     bootstrap_transport: BootstrapTransport,
     macos_template: Option<macos::Template>,
+    msi_template: Option<Arc<[u8]>>,
+    intunewin_template: Option<intunewin::Template>,
+    msi_identity: windows_msi::Identity,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -68,6 +75,7 @@ pub enum BootstrapTransport {
     None,
     WindowsExecutable { slot_offset: u64 },
     WindowsMsi,
+    WindowsIntunewin,
     MacosApplication,
 }
 
@@ -115,6 +123,13 @@ impl DesktopSidecarDistribution {
             .expect("bootstrap object")
             .extend(fields);
         distribution.bootstrap = serde_json::to_vec(&document)?.into();
+        for artifact in distribution
+            .targets
+            .iter_mut()
+            .flat_map(|target| &mut target.files)
+        {
+            artifact.msi_identity = windows_msi::Identity::from_config(config);
+        }
         // Check the final document including TLS and icon before exposing downloads.
         let bootstrap = distribution.bootstrap_for_download()?;
         if distribution
@@ -222,6 +237,15 @@ impl DesktopSidecarDistribution {
                     )
                 })?;
 
+                let msi_template = if bootstrap_transport == BootstrapTransport::WindowsMsi {
+                    let mut reader = source.try_clone()?;
+                    reader.seek(SeekFrom::Start(0))?;
+                    let mut bytes = Vec::new();
+                    reader.read_to_end(&mut bytes)?;
+                    Some(Arc::<[u8]>::from(bytes))
+                } else {
+                    None
+                };
                 files.push(DistributionArtifact {
                     id: artifact.id,
                     kind: artifact.kind,
@@ -231,8 +255,40 @@ impl DesktopSidecarDistribution {
                     source: Arc::new(source),
                     bootstrap_transport,
                     macos_template,
+                    msi_template,
+                    intunewin_template: None,
+                    msi_identity: windows_msi::Identity::default(),
                 });
             }
+
+            // Derived downloads wrap the personalized MSI; no additional release
+            // artifact or Windows process is needed on the backend.
+            let mut intunewin_files = Vec::new();
+            for file in &files {
+                if let Some(msi) = &file.msi_template {
+                    let mut derived = file.clone();
+                    derived.id = format!("{}.intunewin", file.id);
+                    ensure!(
+                        file_ids.insert(derived.id.clone()),
+                        "Derived Intune file ID '{}' conflicts in target '{}'",
+                        derived.id,
+                        target.id
+                    );
+                    derived.kind = "intunewin".into();
+                    let stem = file.download_filename.strip_suffix(".msi").ok_or_else(|| {
+                        eyre::eyre!("Windows MSI download filename must end in .msi")
+                    })?;
+                    derived.download_filename = format!("{stem}.intunewin");
+                    derived.media_type = "application/octet-stream".into();
+                    derived.bootstrap_transport = BootstrapTransport::WindowsIntunewin;
+                    derived.intunewin_template =
+                        Some(intunewin::Template::load(msi, &file.download_filename)?);
+                    // Like the MSI size, this is a template estimate; the download
+                    // response supplies the actual personalized Content-Length.
+                    intunewin_files.push(derived);
+                }
+            }
+            files.extend(intunewin_files);
 
             ensure!(
                 file_ids.contains(&target.default_file),
@@ -313,20 +369,28 @@ impl DistributionArtifact {
 
     pub fn personalized_msi(&self, bootstrap: &[u8]) -> Result<Vec<u8>> {
         ensure!(
-            self.bootstrap_transport == BootstrapTransport::WindowsMsi,
+            matches!(
+                self.bootstrap_transport,
+                BootstrapTransport::WindowsMsi | BootstrapTransport::WindowsIntunewin
+            ),
             "artifact does not use the Windows MSI bootstrap transport"
         );
-        let mut template = Vec::new();
-        let mut source = self
-            .try_clone_source()
-            .wrap_err("Failed to clone MSI template")?;
-        source
-            .seek(SeekFrom::Start(0))
-            .wrap_err("Failed to seek MSI template")?;
-        source
-            .read_to_end(&mut template)
-            .wrap_err("Failed to read MSI template")?;
-        inject_msi(&template, bootstrap)
+        inject_msi_with_identity(
+            self.msi_template
+                .as_deref()
+                .expect("validated MSI template"),
+            bootstrap,
+            &self.msi_identity,
+        )
+    }
+
+    pub fn personalized_intunewin(&self, bootstrap: &[u8]) -> Result<Vec<u8>> {
+        let template = self
+            .intunewin_template
+            .as_ref()
+            .ok_or_else(|| eyre::eyre!("artifact is not an Intune package"))?;
+        let personalized = self.personalized_msi(bootstrap)?;
+        template.package(&personalized)
     }
 }
 
@@ -493,10 +557,20 @@ fn read_u32(bytes: &[u8], offset: usize) -> Result<u32> {
     ))
 }
 
+#[cfg(test)]
 fn inject_msi(template: &[u8], bootstrap: &[u8]) -> Result<Vec<u8>> {
+    inject_msi_with_identity(template, bootstrap, &windows_msi::Identity::default())
+}
+
+fn inject_msi_with_identity(
+    template: &[u8],
+    bootstrap: &[u8],
+    identity: &windows_msi::Identity,
+) -> Result<Vec<u8>> {
     let cabinet = build_bootstrap_cabinet(bootstrap)?;
     let mut package = msi::Package::open(Cursor::new(template.to_vec()))
         .wrap_err("Failed to open MSI template")?;
+    windows_msi::personalize(&mut package, bootstrap, identity)?;
     verify_msi_file_size(&mut package, None)?;
     let existing_cabinet = read_msi_stream(&mut package, MSI_BOOTSTRAP_CABINET_STREAM)?;
     read_bootstrap_cabinet(&existing_cabinet)?;
@@ -763,7 +837,7 @@ fn open_regular_file(path: &Path, description: &str) -> Result<File> {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use std::io::Write;
 
     use serde_json::json;
@@ -778,6 +852,7 @@ mod tests {
         let mut config = DesktopSidecarConfig {
             port: Some(23124),
             directory_suffix: Some("-staging".into()),
+            launch_suffix: Some("-launch-test".into()),
             display_name: Some("Erato Staging".into()),
             ..Default::default()
         };
@@ -787,6 +862,7 @@ mod tests {
         let document: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
         assert_eq!(document["port"], 23124);
         assert_eq!(document["directory_suffix"], "-staging");
+        assert_eq!(document["launch_suffix"], "-launch-test");
         assert_eq!(document["display_name"], "Erato Staging");
         assert!(encode_executable_bootstrap_slot(&bytes).is_ok());
         config.allowed_origins = (0..100)
@@ -979,9 +1055,89 @@ mod tests {
 
     #[test]
     fn personalizes_only_the_msi_bootstrap_cabinet() {
+        let template = windows_msi_template();
+        let bootstrap = br#"{"version":1,"organization_configuration":{"allowed_origins":["https://app.example.test"]}}"#;
+        let personalized = inject_msi(&template, bootstrap).unwrap();
+        validate_personalized_msi(&personalized, bootstrap).unwrap();
+    }
+
+    pub(crate) fn windows_msi_template() -> Vec<u8> {
         use msi::{Column, Insert, Package, PackageType};
 
         let mut package = Package::create(PackageType::Installer, Cursor::new(Vec::new())).unwrap();
+        package
+            .summary_info_mut()
+            .set_uuid("B3217770-F221-466F-91FE-0E27D5355807".parse().unwrap());
+        package
+            .create_table(
+                "Property",
+                vec![
+                    Column::build("Property").primary_key().id_string(72),
+                    Column::build("Value").string(0),
+                ],
+            )
+            .unwrap();
+        for (name, value) in [
+            ("ProductName", "Erato & <Sidecar>"),
+            ("ProductCode", "{0E35A9BE-8AED-4C67-9356-72A84A6AFB74}"),
+            ("ProductVersion", "0.1.0"),
+            ("UpgradeCode", "{E448C4D6-CB15-4D8A-8D1D-94C28D41F286}"),
+            ("Manufacturer", "Erato Labs"),
+            ("ALLUSERS", "1"),
+        ] {
+            package
+                .insert_rows(
+                    Insert::into("Property").row(vec![MsiValue::from(name), MsiValue::from(value)]),
+                )
+                .unwrap();
+        }
+        for (table, columns, values) in [
+            (
+                "Directory",
+                vec![
+                    Column::build("Directory").primary_key().id_string(72),
+                    Column::build("DefaultDir").string(255),
+                ],
+                vec![
+                    MsiValue::from("INSTALLFOLDER"),
+                    MsiValue::from("ERATO~1|Erato Desktop Sidecar"),
+                ],
+            ),
+            (
+                "Component",
+                vec![
+                    Column::build("Component").primary_key().id_string(72),
+                    Column::build("ComponentId").string(38),
+                ],
+                vec![
+                    MsiValue::from("SidecarExecutable"),
+                    MsiValue::from("{D4889EB5-D9E3-4E71-831C-1FBB0DC0BDB1}"),
+                ],
+            ),
+            (
+                "Upgrade",
+                vec![Column::build("UpgradeCode").primary_key().string(38)],
+                vec![MsiValue::from("{E448C4D6-CB15-4D8A-8D1D-94C28D41F286}")],
+            ),
+            (
+                "Registry",
+                vec![
+                    Column::build("Registry").primary_key().id_string(72),
+                    Column::build("Key").string(255),
+                    Column::build("Root").int16(),
+                ],
+                vec![
+                    MsiValue::from("Launch"),
+                    MsiValue::from("Software\\Classes\\erato-launch\\shell\\open\\command"),
+                    MsiValue::Int(2),
+                ],
+            ),
+        ] {
+            package.create_table(table, columns).unwrap();
+            package
+                .insert_rows(Insert::into(table).row(values))
+                .unwrap();
+        }
         package
             .create_table(
                 "File",
@@ -1008,11 +1164,7 @@ mod tests {
             )
             .unwrap();
         package.flush().unwrap();
-        let template = package.into_inner().unwrap().into_inner();
-
-        let bootstrap = br#"{"version":1,"organization_configuration":{"allowed_origins":["https://app.example.test"]}}"#;
-        let personalized = inject_msi(&template, bootstrap).unwrap();
-        validate_personalized_msi(&personalized, bootstrap).unwrap();
+        package.into_inner().unwrap().into_inner()
     }
 
     fn windows_executable_template() -> Vec<u8> {

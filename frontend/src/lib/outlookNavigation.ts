@@ -1,11 +1,12 @@
 /* eslint-disable lingui/no-unlocalized-strings -- Outlook identifiers and protocol constants. */
+import { windowsDesktopSidecarLaunchScheme } from "./desktopSidecarLaunch";
+
 import type {
   OutlookFileProvenance,
   OutlookMessageReference,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { SidecarSnapshot } from "@erato/desktop-sidecar-protocol";
 
-const LAUNCH_PREFIX = "erato-launch://outlook/open?reference=";
 const MAX_REFERENCE_BYTES = 16_384;
 
 export function uniqueOutlookId(
@@ -56,6 +57,7 @@ export function outlookSidecarUri(
   clientOs?: string,
 ): string | null {
   if (clientOs !== "windows" || snapshot.state !== "ready") return null;
+  const launchPrefix = `${windowsDesktopSidecarLaunchScheme()}://outlook/open?reference=`;
   const extension =
     snapshot.discoveryExtensions?.["x-erato-outlook-navigation"];
   if (!extension || typeof extension !== "object") return null;
@@ -63,7 +65,7 @@ export function outlookSidecarUri(
   if (
     descriptor.version !== 1 ||
     descriptor.target !== "classicOutlook" ||
-    descriptor.launchUriPrefix !== LAUNCH_PREFIX ||
+    descriptor.launchUriPrefix !== launchPrefix ||
     typeof descriptor.maxReferenceBytes !== "number" ||
     !Number.isInteger(descriptor.maxReferenceBytes) ||
     descriptor.maxReferenceBytes <= 0
@@ -122,7 +124,7 @@ export function outlookSidecarUri(
   )
     return null;
   return (
-    LAUNCH_PREFIX +
+    launchPrefix +
     globalThis
       .btoa(String.fromCharCode(...bytes))
       .replaceAll("+", "-")
