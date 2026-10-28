@@ -1,6 +1,6 @@
 import { msg } from "@lingui/core/macro";
 import { useLingui } from "@lingui/react";
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 
 import {
   useDeleteMessageFeedback,
@@ -33,6 +33,7 @@ interface FeedbackViewDialogState {
   messageId: string | null;
   feedback: MessageFeedback | null;
   error: string | null;
+  isRemoving: boolean;
 }
 
 /**
@@ -101,7 +102,10 @@ export function useMessageFeedback(options: UseMessageFeedbackOptions = {}) {
       messageId: null,
       feedback: null,
       error: null,
+      isRemoving: false,
     });
+
+  const removingMessageIdRef = useRef<string | null>(null);
 
   /**
    * Submits feedback for a message.
@@ -215,6 +219,7 @@ export function useMessageFeedback(options: UseMessageFeedbackOptions = {}) {
       messageId: null,
       feedback: null,
       error: null,
+      isRemoving: false,
     });
   }, []);
 
@@ -223,13 +228,23 @@ export function useMessageFeedback(options: UseMessageFeedbackOptions = {}) {
    * Closes the dialog on success, shows an error inside it otherwise.
    */
   const handleFeedbackViewDialogRemove = useCallback(async () => {
-    if (!feedbackViewDialogState.messageId) {
+    const messageId = feedbackViewDialogState.messageId;
+    // A ref, so a second click is ignored even where isRemoving never
+    // reaches the button.
+    if (!messageId || removingMessageIdRef.current === messageId) {
       return;
     }
 
-    const result = await handleFeedbackRemove(
-      feedbackViewDialogState.messageId,
-    );
+    removingMessageIdRef.current = messageId;
+    setFeedbackViewDialogState((prev) => ({
+      ...prev,
+      error: null,
+      isRemoving: true,
+    }));
+    const result = await handleFeedbackRemove(messageId);
+    if (removingMessageIdRef.current === messageId) {
+      removingMessageIdRef.current = null;
+    }
 
     if (result.success) {
       closeFeedbackViewDialog();
@@ -238,6 +253,7 @@ export function useMessageFeedback(options: UseMessageFeedbackOptions = {}) {
 
     setFeedbackViewDialogState((prev) => ({
       ...prev,
+      isRemoving: false,
       error:
         result.errorType === "time_limit_exceeded"
           ? _(
@@ -269,30 +285,36 @@ export function useMessageFeedback(options: UseMessageFeedbackOptions = {}) {
   const handleFeedbackDialogSubmit = useCallback(
     async (comment: string) => {
       if (feedbackDialogState.messageId && feedbackDialogState.sentiment) {
+        setFeedbackDialogState((prev) => ({ ...prev, error: null }));
         const result = await handleFeedbackSubmit(
           feedbackDialogState.messageId,
           feedbackDialogState.sentiment,
           comment,
         );
 
-        if (!result.success && result.errorType === "time_limit_exceeded") {
-          // Show error in dialog instead of closing
-          setFeedbackDialogState((prev) => ({
-            ...prev,
-            error: _(
-              msg({
-                id: "feedback.error.time_limit_exceeded",
-                message:
-                  "The editing window has expired. Feedback can no longer be modified.",
-              }),
-            ),
-          }));
+        if (result.success) {
+          closeFeedbackDialog();
           return;
         }
 
-        if (result.success) {
-          closeFeedbackDialog();
-        }
+        setFeedbackDialogState((prev) => ({
+          ...prev,
+          error:
+            result.errorType === "time_limit_exceeded"
+              ? _(
+                  msg({
+                    id: "feedback.error.time_limit_exceeded",
+                    message:
+                      "The editing window has expired. Feedback can no longer be modified.",
+                  }),
+                )
+              : _(
+                  msg({
+                    id: "feedback.error.submit_failed",
+                    message: "Failed to submit feedback. Please try again.",
+                  }),
+                ),
+        }));
       }
     },
     [feedbackDialogState, handleFeedbackSubmit, closeFeedbackDialog, _],
@@ -331,6 +353,7 @@ export function useMessageFeedback(options: UseMessageFeedbackOptions = {}) {
         messageId,
         feedback,
         error: null,
+        isRemoving: false,
       });
     },
     [],

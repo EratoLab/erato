@@ -1,6 +1,6 @@
 import { t } from "@lingui/core/macro";
 import clsx from "clsx";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { Card } from "@/components/ui/Container/Card";
 import { InteractiveContainer } from "@/components/ui/Container/InteractiveContainer";
@@ -30,6 +30,12 @@ export function ChatShareDialog({
     isOpen ? chatId : null,
   );
   const [isCopied, setIsCopied] = useState(false);
+  const [toggleError, setToggleError] = useState<string | null>(null);
+
+  // Callers keep the dialog mounted and close it by clearing chatId.
+  useEffect(() => {
+    setToggleError(null);
+  }, [chatId]);
 
   const shareUrl = useMemo(() => {
     if (!shareLink?.enabled) {
@@ -47,7 +53,18 @@ export function ChatShareDialog({
       return;
     }
 
-    await setEnabled(enabled);
+    setToggleError(null);
+    try {
+      await setEnabled(enabled);
+    } catch {
+      setToggleError(
+        t({
+          id: "chat.share.toggle.error",
+          message: "Could not update the share link. Please try again.",
+        }),
+      );
+      return;
+    }
     if (!enabled) {
       setIsCopied(false);
     }
@@ -130,6 +147,8 @@ export function ChatShareDialog({
             })}
           />
         </Card>
+
+        {toggleError ? <Alert type="error">{toggleError}</Alert> : null}
 
         {shareLink?.enabled ? (
           <InteractiveContainer
