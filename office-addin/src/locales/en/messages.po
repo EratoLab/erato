@@ -4171,13 +4171,18 @@ msgstr "Search by author or text"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordCommentPicker.tsx
-msgid "officeAddin.word.comments.picker.sort"
-msgstr "Sort"
+#~ msgid "officeAddin.word.comments.picker.sort"
+#~ msgstr "Sort"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordCommentPicker.tsx
 msgid "officeAddin.word.comments.picker.sortActivity"
 msgstr "Latest activity"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentPicker.tsx
+msgid "officeAddin.word.comments.picker.sortBy"
+msgstr "Sort: {current}"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordCommentPicker.tsx

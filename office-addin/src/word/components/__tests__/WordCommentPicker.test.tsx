@@ -26,8 +26,56 @@ import type { ReactNode } from "react";
 
 vi.mock("@erato/frontend/library", async () => {
   const mock = await import("../../../test/helpers/eratoLibraryMock");
+  const { useState } = await import("react");
   return mock.createEratoLibraryMock({
     SpinnerIcon: () => <span>spinner</span>,
+    DropdownMenu: ({
+      items,
+      triggerAriaLabel,
+      triggerIcon,
+    }: {
+      items: {
+        id: string;
+        label: string;
+        checked?: boolean;
+        onClick: () => void;
+      }[];
+      triggerAriaLabel: string;
+      triggerIcon: ReactNode;
+    }) => {
+      const [open, setOpen] = useState(false);
+      return (
+        <>
+          <button
+            type="button"
+            aria-label={triggerAriaLabel}
+            aria-haspopup="menu"
+            aria-expanded={open}
+            onClick={() => setOpen(!open)}
+          >
+            {triggerIcon}
+          </button>
+          {open && (
+            <div role="menu">
+              {items.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  role="menuitem"
+                  data-checked={item.checked || undefined}
+                  onClick={() => {
+                    item.onClick();
+                    setOpen(false);
+                  }}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
+          )}
+        </>
+      );
+    },
     ModalBase: ({
       isOpen,
       title,
@@ -179,9 +227,17 @@ describe("WordCommentPicker", () => {
     fireEvent.click(screen.getByRole("button", { name: "All (12)" }));
     expect(rowRefs()).toEqual(TWELVE.map((t) => t.ref));
 
-    fireEvent.change(screen.getByRole("combobox", { name: "Sort" }), {
-      target: { value: "activity" },
-    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Sort: Document order" }),
+    );
+    expect(
+      screen.getByRole("menuitem", { name: "Document order" }),
+    ).toHaveAttribute("data-checked", "true");
+    fireEvent.click(screen.getByRole("menuitem", { name: "Latest activity" }));
+    expect(screen.queryByRole("menu")).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Sort: Latest activity" }),
+    ).toBeInTheDocument();
     expect(rowRefs()).toEqual(
       wordCommentPickerRows(TWELVE, {
         filter: "all",

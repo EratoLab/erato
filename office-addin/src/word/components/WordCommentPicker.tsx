@@ -1,8 +1,9 @@
 import {
   Button,
+  ChevronDownIcon,
+  DropdownMenu,
   Input,
   ModalBase,
-  Select,
   SpinnerIcon,
 } from "@erato/frontend/library";
 import { plural, t } from "@lingui/core/macro";
@@ -23,6 +24,7 @@ import type {
   WordCommentListThread,
 } from "../hooks/useWordComments";
 import type { WordSelectionShowResult } from "../utils/wordSelectionTarget";
+import type { DropdownMenuItem } from "@erato/frontend/library";
 import type { WordCommentStatus } from "@erato/frontend/word-review";
 
 /** Above this many threads the picker offers a search. */
@@ -172,29 +174,7 @@ export function WordCommentPicker({
             ))}
           </div>
           <div className="ml-auto">
-            <Select
-              aria-label={t({
-                id: "officeAddin.word.comments.picker.sort",
-                message: "Sort",
-              })}
-              value={sort}
-              onChange={(event) =>
-                setSort(event.target.value as WordCommentPickerSort)
-              }
-            >
-              <option value="document">
-                {t({
-                  id: "officeAddin.word.comments.picker.sortDocument",
-                  message: "Document order",
-                })}
-              </option>
-              <option value="activity">
-                {t({
-                  id: "officeAddin.word.comments.picker.sortActivity",
-                  message: "Latest activity",
-                })}
-              </option>
-            </Select>
+            <WordCommentPickerSortMenu sort={sort} onSort={setSort} />
           </div>
           <Button
             type="button"
@@ -286,6 +266,52 @@ export function WordCommentPicker({
         </ul>
       </div>
     </ModalBase>
+  );
+}
+
+function WordCommentPickerSortMenu({
+  sort,
+  onSort,
+}: {
+  sort: WordCommentPickerSort;
+  onSort: (sort: WordCommentPickerSort) => void;
+}) {
+  const labels: Record<WordCommentPickerSort, string> = {
+    document: t({
+      id: "officeAddin.word.comments.picker.sortDocument",
+      message: "Document order",
+    }),
+    activity: t({
+      id: "officeAddin.word.comments.picker.sortActivity",
+      message: "Latest activity",
+    }),
+  };
+  const current = labels[sort];
+  const items: DropdownMenuItem[] = (["document", "activity"] as const).map(
+    (value) => ({
+      id: value,
+      label: labels[value],
+      checked: value === sort,
+      onClick: () => onSort(value),
+    }),
+  );
+  return (
+    <DropdownMenu
+      items={items}
+      align="right"
+      triggerButtonVariant="secondary"
+      triggerButtonClassName="gap-1.5"
+      triggerAriaLabel={t({
+        id: "officeAddin.word.comments.picker.sortBy",
+        message: `Sort: ${current}`,
+      })}
+      triggerIcon={
+        <>
+          <span>{current}</span>
+          <ChevronDownIcon className="size-3.5 shrink-0" aria-hidden="true" />
+        </>
+      }
+    />
   );
 }
 
