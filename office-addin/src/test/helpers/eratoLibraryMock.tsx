@@ -383,7 +383,13 @@ export const DEFAULT_STUBS = {
   setAuthRecoveryHandler: noop,
   setClientPlatform: noop,
   setWordLiveCards: noop,
-  toast: { info: noop, success: noop, warning: noop, error: noop },
+  toast: {
+    info: noop,
+    success: noop,
+    warning: noop,
+    error: noop,
+    dismissKey: noop,
+  },
   transformEmailFencesForCopy: (value: string) => value,
   wordShowInWordLabel: () => "Show in Word",
   UploadUnknownError: class extends Error {},
@@ -396,7 +402,12 @@ export const DEFAULT_STUBS = {
     setSelectedModel: noop,
     isSelectionReady: true,
   }),
-  useArchiveChatEndpoint: () => ({ mutateAsync: async () => undefined }),
+  useArchiveChatEndpoint: () => ({
+    mutateAsync: async () => ({
+      archived_at: "2026-01-01T00:00:00Z",
+      chat_id: "chat",
+    }),
+  }),
   useAssistantsFeature: () => ({
     enabled: false,
     delegationEnabled: false,

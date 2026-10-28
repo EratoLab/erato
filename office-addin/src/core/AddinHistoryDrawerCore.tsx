@@ -39,6 +39,14 @@ const FOCUSABLE_SELECTOR =
  * must not stay mounted eating clicks. Just past the 150ms transition. */
 const EXIT_FALLBACK_MS = 250;
 
+// Error toasts stay until dismissed; one slot per action lets a retry's
+// outcome replace the last failure instead of stacking in the narrow pane.
+const RENAME_TOAST_KEY = "addin-history-rename";
+const archiveToastKey = (sessionId: string) =>
+  `addin-history-archive:${sessionId}`;
+const unarchiveToastKey = (sessionId: string) =>
+  `addin-history-unarchive:${sessionId}`;
+
 export interface AddinHistoryDrawerCoreProps {
   isOpen: boolean;
   onClose: () => void;
@@ -224,6 +232,7 @@ export function AddinHistoryDrawerCore({
   const handleSubmitTitle = useCallback(
     async (title: string) => {
       if (!titleDialogSessionId) return;
+      toast.dismissKey(RENAME_TOAST_KEY);
       setIsUpdatingTitle(true);
       try {
         await updateChatTitle(titleDialogSessionId, title);
@@ -232,6 +241,7 @@ export function AddinHistoryDrawerCore({
         // The dialog stays open on purpose: the typed title survives for a
         // retry.
         toast.error({
+          dedupeKey: RENAME_TOAST_KEY,
           title: t({
             id: "officeAddin.historyDrawer.renameFailed",
             message: "Couldn't rename the chat",
@@ -248,8 +258,10 @@ export function AddinHistoryDrawerCore({
     (sessionId: string) => {
       // A failed archive rolls the row back silently (the mutation's
       // rollback), so the toast is the only signal anything happened.
+      toast.dismissKey(archiveToastKey(sessionId));
       archiveChat(sessionId).catch(() => {
         toast.error({
+          dedupeKey: archiveToastKey(sessionId),
           title: t({
             id: "officeAddin.historyDrawer.archiveFailed",
             message: "Couldn't archive the chat",
@@ -262,8 +274,10 @@ export function AddinHistoryDrawerCore({
 
   const handleUnarchive = useCallback(
     (sessionId: string) => {
+      toast.dismissKey(unarchiveToastKey(sessionId));
       unarchiveChat(sessionId).catch(() => {
         toast.error({
+          dedupeKey: unarchiveToastKey(sessionId),
           title: t({
             id: "officeAddin.historyDrawer.unarchiveFailed",
             message: "Couldn't unarchive the chat",
@@ -532,7 +546,10 @@ export function AddinHistoryDrawerCore({
         generatedTitle={activeTitleSession?.titleBySummary ?? ""}
         initialUserProvidedTitle={activeTitleSession?.titleByUserProvided}
         isSubmitting={isUpdatingTitle}
-        onClose={() => setTitleDialogSessionId(null)}
+        onClose={() => {
+          toast.dismissKey(RENAME_TOAST_KEY);
+          setTitleDialogSessionId(null);
+        }}
         onSubmit={handleSubmitTitle}
       />
       <ChatShareDialog

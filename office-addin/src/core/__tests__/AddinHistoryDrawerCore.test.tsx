@@ -25,6 +25,8 @@ const spies = vi.hoisted(() => {
     updateChatTitle: vi.fn(async () => undefined),
     fetchNextHistoryPage: vi.fn(async () => undefined),
     toastError: vi.fn(),
+    /** What the Toaster would show, with the store's dedupe-slot rules. */
+    toasts: [] as Array<{ title?: string; dedupeKey?: string }>,
     chatContext: {
       chats: [] as { id: string }[],
       isLoading: false,
@@ -54,6 +56,7 @@ const spies = vi.hoisted(() => {
       current: null as {
         isOpen: boolean;
         generatedTitle: string;
+        onClose?: () => void;
         onSubmit?: (title: string) => Promise<void> | void;
       } | null,
     },
@@ -173,12 +176,28 @@ vi.mock("@erato/frontend/library", async () => {
     EditChatTitleDialog: (props: {
       isOpen: boolean;
       generatedTitle: string;
+      onClose?: () => void;
       onSubmit?: (title: string) => Promise<void> | void;
     }) => {
       spies.renameDialogProps.current = props;
       return props.isOpen ? <div data-testid="rename-dialog" /> : null;
     },
-    toast: { error: spies.toastError },
+    toast: {
+      error: (input: { title?: string; dedupeKey?: string }) => {
+        spies.toastError(input);
+        spies.toasts = [
+          ...spies.toasts.filter(
+            (toast) => !input.dedupeKey || toast.dedupeKey !== input.dedupeKey,
+          ),
+          input,
+        ];
+      },
+      dismissKey: (dedupeKey: string) => {
+        spies.toasts = spies.toasts.filter(
+          (toast) => toast.dedupeKey !== dedupeKey,
+        );
+      },
+    },
     hasActiveFilters: (values: { typeFilter: string; statusFilter: string }) =>
       values.typeFilter !== "all" || values.statusFilter !== "active",
     mapRecentChatToSession: (chat: { id: string }) => ({ id: chat.id }),
@@ -252,6 +271,7 @@ describe("AddinHistoryDrawerCore", () => {
     vi.clearAllMocks();
     spies.historyListProps.length = 0;
     spies.renameDialogProps.current = null;
+    spies.toasts = [];
     spies.filterMenuStore.current = null;
     spies.sharingEnabled.current = true;
     spies.showMetadata.current = true;
@@ -677,5 +697,64 @@ describe("AddinHistoryDrawerCore", () => {
 
     expect(spies.toastError).toHaveBeenCalledTimes(1);
     expect(screen.getByTestId("rename-dialog")).toBeInTheDocument();
+  });
+
+  it.each([
+    ["archive", "onSessionArchive", spies.archiveChat],
+    ["unarchive", "onSessionUnarchive", spies.unarchiveChat],
+  ] as const)(
+    "keeps one %s error on screen and clears it when a retry lands",
+    async (_action, handler, mutation) => {
+      mutation
+        .mockRejectedValueOnce(new Error("failed"))
+        .mockRejectedValueOnce(new Error("failed again"));
+      renderDrawer();
+      const run = () => spies.historyListProps[0]?.[handler]?.("c1");
+
+      await act(async () => run());
+      await act(async () => run());
+      expect(spies.toasts).toHaveLength(1);
+
+      await act(async () => run());
+      expect(spies.toasts).toHaveLength(0);
+    },
+  );
+
+  it("replaces a rename error on retry and drops it once the rename lands", async () => {
+    spies.updateChatTitle
+      .mockRejectedValueOnce(new Error("rename failed"))
+      .mockRejectedValueOnce(new Error("rename failed again"));
+    renderDrawer();
+    fireEvent.click(screen.getByTestId("rename-c1"));
+    const submit = () => spies.renameDialogProps.current?.onSubmit?.("New");
+
+    await act(async () => {
+      await submit();
+    });
+    await act(async () => {
+      await submit();
+    });
+    expect(spies.toasts).toHaveLength(1);
+
+    await act(async () => {
+      await submit();
+    });
+    expect(spies.toasts).toHaveLength(0);
+    expect(screen.queryByTestId("rename-dialog")).toBeNull();
+  });
+
+  it("drops the rename error when the rename is abandoned", async () => {
+    spies.updateChatTitle.mockRejectedValueOnce(new Error("rename failed"));
+    renderDrawer();
+    fireEvent.click(screen.getByTestId("rename-c1"));
+    await act(async () => {
+      await spies.renameDialogProps.current?.onSubmit?.("New");
+    });
+    expect(spies.toasts).toHaveLength(1);
+
+    act(() => spies.renameDialogProps.current?.onClose?.());
+
+    expect(spies.toasts).toHaveLength(0);
+    expect(screen.queryByTestId("rename-dialog")).toBeNull();
   });
 });
