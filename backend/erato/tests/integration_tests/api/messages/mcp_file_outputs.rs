@@ -721,6 +721,7 @@ async fn integrated_file_retrieval_full_text_and_replay(pool: Pool<Postgres>) {
         audio_transcription: ActiveValue::Set(None),
         external_id_ews_id: ActiveValue::Set(None),
         outlook_provenance: ActiveValue::Set(None),
+        audio_synthesis: ActiveValue::Set(None),
         created_at: ActiveValue::Set(Utc::now().into()),
         updated_at: ActiveValue::Set(Utc::now().into()),
     }

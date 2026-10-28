@@ -50,3 +50,5 @@ pub mod sentry_stub;
 pub use sentry_stub as sentry;
 
 pub mod client_operations;
+
+pub mod speech;

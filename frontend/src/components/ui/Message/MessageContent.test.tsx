@@ -2095,3 +2095,21 @@ it("shows a durable app wait in persisted history and hides a consumed marker", 
   );
   expect(screen.queryByRole("status")).toBeNull();
 });
+
+it("renders persisted speech for explicit replay without autoplay", () => {
+  renderWithTheme(
+    <MessageContent
+      content={[
+        {
+          content_type: "audio_file_pointer",
+          file_upload_id: "saved-speech",
+          download_url: "https://storage.example/speech.wav",
+        },
+      ]}
+    />,
+  );
+  const audio = screen.getByLabelText("Replay audio response");
+  expect(audio).toHaveAttribute("src", "https://storage.example/speech.wav");
+  expect(audio).toHaveAttribute("controls");
+  expect(audio).not.toHaveAttribute("autoplay");
+});

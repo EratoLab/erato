@@ -591,15 +591,27 @@ fn build_frontend_environment(
     );
     env.additional_environment.insert(
         FRONTEND_ENV_KEY_AUDIO_CONVERSATIONAL_ENABLED.to_string(),
-        Value::Bool(config.audio_conversational.enabled),
+        Value::Bool(config.audio_conversational.transcription.enabled),
     );
     env.additional_environment.insert(
         FRONTEND_ENV_KEY_AUDIO_CONVERSATIONAL_MAX_RECORDING_DURATION_SECONDS.to_string(),
         Value::Number(
             config
                 .audio_conversational
+                .transcription
                 .max_recording_duration_seconds
                 .into(),
+        ),
+    );
+    env.additional_environment.insert(
+        "SPEECH_ENABLED".to_string(),
+        Value::Bool(
+            config.audio_conversational.transcription.enabled
+                && config
+                    .audio_conversational
+                    .speech_provider
+                    .as_ref()
+                    .is_some_and(|id| config.speech_providers.provider.contains_key(id)),
         ),
     );
     // Always inject max upload size (use configured value or default)

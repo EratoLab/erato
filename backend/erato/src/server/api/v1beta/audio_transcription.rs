@@ -46,7 +46,7 @@ impl AudioFeature {
         match self {
             Self::Transcription => &config.audio_transcription,
             Self::Dictation => &config.audio_dictation,
-            Self::Conversational => &config.audio_conversational,
+            Self::Conversational => &config.audio_conversational.transcription,
         }
     }
 
@@ -1934,11 +1934,14 @@ mod tests {
                 max_recording_duration_seconds: 5,
                 ..Default::default()
             },
-            audio_conversational: crate::config::AudioTranscriptionConfig {
-                enabled: true,
-                chunk_duration_seconds: 30,
-                max_attempts: 4,
-                max_recording_duration_seconds: 20,
+            audio_conversational: crate::config::AudioConversationalConfig {
+                transcription: crate::config::AudioTranscriptionConfig {
+                    enabled: true,
+                    chunk_duration_seconds: 30,
+                    max_attempts: 4,
+                    max_recording_duration_seconds: 20,
+                    ..Default::default()
+                },
                 ..Default::default()
             },
             ..Default::default()

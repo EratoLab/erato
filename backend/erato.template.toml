@@ -372,6 +372,7 @@ chat_provider_ids = ["test-token-limit"]
 # sections when you want classic dictation and conversational audio mode.
 # [audio_conversational]
 # enabled = false
+# speech_provider = "assistant_voice" # Optional ID from speech_providers.provider; enables Audio-back
 # chat_provider_id = "mock-llm-openai" # Optional: defaults to first audio-capable provider by priority
 # max_recording_duration_seconds = 1200
 # chunk_duration_seconds = 30
@@ -850,3 +851,23 @@ max_input_bytes = 0
 max_extracted_chars = 0
 timeout_ms = 0
 bounded_text_preview = true
+
+# Speech output is independent of the chat/transcription provider.
+# Select this ID with audio_conversational.speech_provider, then enable Audio-back in the UI.
+# [speech_providers.provider.assistant_voice]
+# provider_kind = "openai" # openai, audio_cpp, gemini
+# model_name = "gpt-4o-mini-tts"
+# voice = "alloy"
+# api_key = "your-api-key"
+# base_url = "https://api.openai.com/v1" # audio_cpp requires its server's /v1 base URL
+# sample_rate = 24000 # audio_cpp native PCM rate; configure the model in streaming mode
+# instructions = "Speak clearly."
+#
+# Gemini requires an explicit api_key or access_token.
+# [speech_providers.provider.google_voice]
+# provider_kind = "gemini"
+# model_name = "<gemini-tts-model>"
+# api_key = "your-api-key" # Alternatively set access_token for OAuth
+# voice = "Kore"
+# project_id = "your-project" # Omit when using an Express-mode api_key
+# location = "global"

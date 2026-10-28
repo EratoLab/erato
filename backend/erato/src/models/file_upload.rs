@@ -463,6 +463,7 @@ pub struct FileUploadWithUrl {
     pub preview_url: Option<String>,
     pub file_contents_unavailable_missing_permissions: bool,
     pub audio_transcription: Option<AudioTranscriptionMetadata>,
+    pub audio_synthesis: Option<crate::services::speech::session::AudioSynthesisMetadata>,
     pub external_id_ews_id: Option<String>,
     pub outlook_provenance: Option<serde_json::Value>,
 }
@@ -551,6 +552,9 @@ pub async fn get_file_upload_with_url_and_token(
     Ok(FileUploadWithUrl {
         id: file_upload.id,
         external_id_ews_id: file_upload.external_id_ews_id,
+        audio_synthesis: file_upload
+            .audio_synthesis
+            .and_then(|v| serde_json::from_value(v).ok()),
         outlook_provenance: file_upload.outlook_provenance,
         filename,
         file_storage_provider_id,
@@ -675,6 +679,9 @@ pub async fn get_chat_file_uploads_with_urls_and_token(
         result.push(FileUploadWithUrl {
             id: upload.id,
             external_id_ews_id: upload.external_id_ews_id,
+            audio_synthesis: upload
+                .audio_synthesis
+                .and_then(|v| serde_json::from_value(v).ok()),
             outlook_provenance: upload.outlook_provenance,
             filename,
             file_storage_provider_id,

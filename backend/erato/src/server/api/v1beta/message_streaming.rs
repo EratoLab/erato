@@ -1215,6 +1215,9 @@ pub(crate) async fn send_background_event(
 #[derive(Clone, serde::Deserialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub struct MessageSubmitRequest {
+    /// Generate speech only for a conversational request with audio-back enabled.
+    #[serde(default)]
+    conversational_audio_back: bool,
     #[schema(example = "00000000-0000-0000-0000-000000000000")]
     /// The ID of the message that this message is a response to. If this is the first message in the chat, this should be empty.
     previous_message_id: Option<Uuid>,
@@ -1282,6 +1285,15 @@ pub struct MessageSubmitRequest {
 #[derive(Serialize, ToSchema)]
 #[serde(tag = "message_type")]
 pub enum MessageSubmitStreamingResponseMessage {
+    #[serde(rename = "audio_delta")]
+    AudioDelta {
+        message_id: Uuid,
+        sequence: u64,
+        audio: String,
+        sample_rate: u32,
+    },
+    #[serde(rename = "audio_error")]
+    AudioError { message_id: Uuid },
     #[serde(rename = "chat_created")]
     /// May optionally be sent at the start of the stream to indicate that a new chat has been created.
     ChatCreated(MessageSubmitStreamingResponseChatCreated),
@@ -1318,6 +1330,8 @@ pub enum MessageSubmitStreamingResponseMessage {
 impl SendAsSseEvent for MessageSubmitStreamingResponseMessage {
     fn tag(&self) -> &'static str {
         match self {
+            Self::AudioDelta { .. } => "audio_delta",
+            Self::AudioError { .. } => "audio_error",
             Self::ChatCreated(_) => "chat_created",
             Self::UserMessageSaved(_) => "user_message_saved",
             Self::AssistantMessageStarted(_) => "assistant_message_started",
@@ -1755,6 +1769,26 @@ async fn fetch_non_streaming_error(
 /// Convert a StreamingEvent to an SSE Event for message submission
 fn streaming_event_to_sse(event: &StreamingEvent) -> Result<Event, Report> {
     let (event_name, data) = match event {
+        StreamingEvent::AudioDelta {
+            message_id,
+            sequence,
+            audio,
+            sample_rate,
+        } => (
+            "audio_delta",
+            serde_json::to_string(&MessageSubmitStreamingResponseMessage::AudioDelta {
+                message_id: *message_id,
+                sequence: *sequence,
+                audio: audio.clone(),
+                sample_rate: *sample_rate,
+            })?,
+        ),
+        StreamingEvent::AudioError { message_id } => (
+            "audio_error",
+            serde_json::to_string(&MessageSubmitStreamingResponseMessage::AudioError {
+                message_id: *message_id,
+            })?,
+        ),
         StreamingEvent::ChatCreated { chat_id } => {
             let data = serde_json::to_string(&serde_json::json!({
                 "message_type": "chat_created",
@@ -3428,6 +3462,7 @@ impl MessageSubmitRequest {
         previous_message_id: Option<Uuid>,
     ) -> Self {
         Self {
+            conversational_audio_back: false,
             previous_message_id,
             existing_chat_id: Some(chat_id),
             user_message,
@@ -3462,6 +3497,7 @@ impl MessageSubmitRequest {
         input_files_ids: Vec<Uuid>,
     ) -> Self {
         Self {
+            conversational_audio_back: false,
             previous_message_id,
             existing_chat_id: Some(chat_id),
             user_message,
@@ -3486,6 +3522,7 @@ impl MessageSubmitRequest {
         previous_message_id: Option<Uuid>,
     ) -> Self {
         Self {
+            conversational_audio_back: false,
             previous_message_id,
             existing_chat_id: Some(chat_id),
             user_message: String::new(),
@@ -5876,6 +5913,34 @@ async fn stream_generate_chat_completion<'a>(
     // the model. `None` for a generation that starts from a user message.
     resume: Option<ParkedTurnResume>,
 ) -> Result<(Vec<ContentPart>, Option<GenerationMetadata>), Report> {
+    let mut speech = streaming_task
+        .filter(|task| {
+            task.speech_enabled
+                .load(std::sync::atomic::Ordering::Relaxed)
+        })
+        .and_then(|task| {
+            app_state
+                .config
+                .audio_conversational
+                .speech_provider
+                .as_ref()
+                .and_then(|id| {
+                    app_state
+                        .config
+                        .speech_providers
+                        .provider
+                        .get(id)
+                        .map(|config| {
+                            crate::services::speech::session::SpeechSession::start(
+                                config.clone(),
+                                id.clone(),
+                                (*task).clone(),
+                                tx.clone(),
+                                assistant_message_id,
+                            )
+                        })
+                })
+        });
     let mcp = app_state.mcp_state().await;
     // Record the real assistant message id on the streaming task. `start_task`
     // only had a placeholder id; client-tool results are routed to a task by
@@ -9515,6 +9580,9 @@ async fn stream_generate_chat_completion<'a>(
                                 generation_metadata,
                             ));
                         }
+                        if let Some(speech) = &mut speech {
+                            speech.push(&content).await;
+                        }
                         current_turn_streamed_text.push_str(&content);
                         let content_index =
                             append_text_delta_part(&mut current_message_content, content.clone());
@@ -10263,6 +10331,31 @@ async fn stream_generate_chat_completion<'a>(
         );
     }
     persist_correction!();
+    let mut completion = completion;
+    if let Some(speech) = speech.take()
+        && let Ok((content, metadata)) = &mut completion
+    {
+        let failed = metadata.as_ref().is_some_and(|m| m.error.is_some());
+        if !failed && !streaming_task.is_some_and(|t| t.is_abort_requested()) {
+            match speech
+                .finish(app_state, policy, subject, chat_id, assistant_message_id)
+                .await
+            {
+                Ok(Some(pointer)) => content.push(pointer),
+                Ok(None) => {}
+                Err(error) => {
+                    tracing::warn!(%error, "Speech synthesis failed; keeping text response");
+                    let event = StreamingEvent::AudioError {
+                        message_id: assistant_message_id,
+                    };
+                    if let Some(task) = streaming_task {
+                        let _ = task.send_event(event.clone()).await;
+                    }
+                    let _ = tx.send(Ok(streaming_event_to_sse(&event)?)).await;
+                }
+            }
+        }
+    }
     completion.map(|(content, mut metadata)| {
         if let Some(correction) = submission_correction {
             metadata
@@ -10713,6 +10806,7 @@ fn summary_user_message_text_from_generation_input(
                 | ContentPart::ToolRejection(_)
                 | ContentPart::TextFilePointer(_)
                 | ContentPart::ImageFilePointer(_)
+                | ContentPart::AudioFilePointer(_)
                 | ContentPart::Image(_)
                 | ContentPart::ActionFacetMarker(_)
                 | ContentPart::DelegationPreambleMarker(_)
@@ -14224,6 +14318,7 @@ mod summary_generation_tests {
             file_storage_provider_id: "local".to_string(),
             file_storage_path: format!("/fixtures/{filename}"),
             audio_transcription: audio_transcription.map(str::to_string),
+            audio_synthesis: None,
             external_id_ews_id: None,
             outlook_provenance: None,
             created_at: chrono::Utc::now().into(),
@@ -14717,6 +14812,16 @@ async fn run_generation_after_user_message_memory_inner(
     saved_user_message: &messages::Model,
     origin: GenerationOrigin,
 ) -> Result<(), Report> {
+    task.speech_enabled.store(
+        request.conversational_audio_back
+            && app_state.config.audio_conversational.transcription.enabled
+            && app_state
+                .config
+                .audio_conversational
+                .speech_provider
+                .is_some(),
+        std::sync::atomic::Ordering::Relaxed,
+    );
     // Prepare chat request
     let me_profile_input = MeProfileChatRequestInput::from_me_profile(me_user);
     // No persisted fallback: this request just persisted its own value, so
@@ -17270,6 +17375,7 @@ fn parked_approval_state(content: &[ContentPart]) -> Option<ParkedApprovalState>
                 // A tool's file output, which answers nothing on its own.
                 | ContentPart::TextFilePointer(_)
                 | ContentPart::ImageFilePointer(_)
+                | ContentPart::AudioFilePointer(_)
         )
     });
     Some(ParkedApprovalState {
