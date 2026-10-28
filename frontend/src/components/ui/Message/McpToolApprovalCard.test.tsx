@@ -1185,6 +1185,49 @@ describe("McpToolApprovalCard", () => {
     });
   });
 
+  it.each([
+    {
+      row: "Allow once",
+      bulk: "tool-approval-deny-all",
+      sent: ["reject", "reject"],
+    },
+    {
+      row: "Deny once",
+      bulk: "tool-approval-allow-all",
+      sent: ["reject", "approve"],
+    },
+  ])(
+    "lets a denial win when a row's $row meets the plan's $bulk",
+    async ({ row, bulk, sent }) => {
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValue(
+          new Response("event: done\\ndata: {}\\n\\n", { status: 200 }),
+        );
+      vi.stubGlobal("fetch", fetchMock);
+      renderCard(
+        <McpToolApprovalCard
+          messageId="message-1"
+          request={taskPlanRequest}
+          resolution={null}
+        />,
+      );
+
+      fireEvent.click(screen.getAllByText(row)[0]);
+      fireEvent.click(screen.getByTestId(bulk));
+
+      await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+      expect(
+        JSON.parse((fetchMock.mock.calls[0][1] as { body: string }).body),
+      ).toMatchObject({
+        decisions: [
+          { approval_id: "plan:0:0", decision: sent[0] },
+          { approval_id: "plan:0:1", decision: sent[1] },
+        ],
+      });
+    },
+  );
+
   it("offers no standing answer on a task plan", () => {
     renderCard(
       <McpToolApprovalCard
@@ -1742,6 +1785,28 @@ describe("approval queue", () => {
       { approval_id: "tool-call-1", decision: "approve" },
       { approval_id: "task-a", decision: "reject" },
       { approval_id: "task-b", decision: "approve" },
+    ]);
+  });
+
+  it("denies an answer already given when everything is denied", async () => {
+    const fetchMock = okResponse();
+    vi.stubGlobal("fetch", fetchMock);
+    renderCard(
+      <McpToolApprovalCard
+        messageId="message-1"
+        request={mixedRequest}
+        resolution={null}
+      />,
+    );
+
+    fireEvent.click(screen.getByText("Allow once"));
+    fireEvent.click(screen.getByTestId("tool-approval-deny-all"));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(sentDecisions(fetchMock)).toEqual([
+      { approval_id: "tool-call-1", decision: "reject" },
+      { approval_id: "task-a", decision: "reject" },
+      { approval_id: "task-b", decision: "reject" },
     ]);
   });
 

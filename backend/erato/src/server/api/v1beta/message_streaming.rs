@@ -9065,6 +9065,23 @@ async fn stream_generate_chat_completion<'a>(
         // the question; the tool-call limit and a durable client operation are
         // stops that no item of a child can share. There the child keeps its
         // `input_required` slot and stays answerable from its own chat.
+        let aborted = streaming_task.is_some_and(|task| task.is_abort_requested());
+        // A Stop while the batch settled withdraws the turn's own question as
+        // well: the turn ends stopped, not on a card nobody asked to see.
+        if aborted && exit_error.is_none() && pending_approval_part.take().is_some() {
+            exit_metadata = build_generation_metadata(
+                total_prompt_tokens,
+                total_completion_tokens,
+                total_total_tokens,
+                total_reasoning_tokens,
+                langfuse_trace_id.clone(),
+                true,
+                None,
+                non_empty_string(&captured_reasoning_summary),
+                non_empty_vec(&captured_reasoning_items),
+                non_empty_vec(&captured_reasoning_item_encrypted_content),
+            );
+        }
         if !parked_children.is_empty() {
             let own_gated_call = pending_approval_part.as_ref().is_some_and(|part| {
                 matches!(
@@ -9072,7 +9089,6 @@ async fn stream_generate_chat_completion<'a>(
                     ToolApprovalKind::McpTool | ToolApprovalKind::ClientTool
                 )
             });
-            let aborted = streaming_task.is_some_and(|task| task.is_abort_requested());
             if own_gated_call && exit_error.is_none() && !aborted {
                 if let Some(part) = pending_approval_part.as_mut() {
                     fold_parked_children(part, &parked_children);
@@ -18328,11 +18344,7 @@ fn approve_always_refused(
     }
     decisions.iter().any(|(approval_id, decision)| {
         matches!(decision, ToolApprovalDecision::ApproveAlways)
-            && (request.kind != ToolApprovalKind::ClientTool
-                || open
-                    .iter()
-                    .find(|item| &item.approval_id == approval_id)
-                    .is_some_and(|item| item.child.is_some()))
+            && (request.kind != ToolApprovalKind::ClientTool || names_child(open, approval_id))
     })
 }
 
@@ -19174,28 +19186,24 @@ fn split_decisions_by_lane(
     let mut mcp = Vec::new();
     let mut child = Vec::new();
     let mut plan = Vec::new();
-    if kind == ToolApprovalKind::ToolCallLimit {
-        return (mcp, child, plan);
-    }
     for (approval_id, decision) in submitted {
-        let names_child = open
-            .iter()
-            .find(|item| item.approval_id == approval_id)
-            .is_some_and(|item| item.child.is_some());
-        let lane = if names_child {
-            &mut child
-        } else {
-            match kind {
-                ToolApprovalKind::McpTool => &mut mcp,
-                // An item that lost its child still settles there, as a failure.
-                ToolApprovalKind::DelegatedTask => &mut child,
-                ToolApprovalKind::TaskPlan | ToolApprovalKind::ClientTool => &mut plan,
-                ToolApprovalKind::ToolCallLimit => continue,
-            }
+        let lane = match kind {
+            ToolApprovalKind::ToolCallLimit => continue,
+            _ if names_child(open, &approval_id) => &mut child,
+            ToolApprovalKind::McpTool => &mut mcp,
+            // An item that lost its child still settles there, as a failure.
+            ToolApprovalKind::DelegatedTask => &mut child,
+            ToolApprovalKind::TaskPlan | ToolApprovalKind::ClientTool => &mut plan,
         };
         lane.push((approval_id, decision));
     }
     (mcp, child, plan)
+}
+
+/// Whether the open item `approval_id` is a parked child's.
+fn names_child(open: &[ApprovalItem], approval_id: &str) -> bool {
+    open.iter()
+        .any(|item| item.approval_id == approval_id && item.child.is_some())
 }
 
 /// Apply a user's approval decisions to a parked turn and finish it.

@@ -17473,6 +17473,158 @@ async fn a_child_parked_before_an_abort_stays_answerable_in_its_own_chat(pool: P
     assert_eq!(settled["status"], "success");
 }
 
+/// Stopping the turn while its own gated call waits for a task that still runs
+/// withdraws that question too: the turn ends stopped, with no card left.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_stop_while_tasks_run_withdraws_the_turns_own_question(pool: Pool<Postgres>) {
+    const OWN_STOP_USER_MESSAGE: &str = "publish the probe yourself and plan a slow sub-task";
+    const SLOW_BRIEF: &str = "OWN-STOP-SLOW-BRIEF: take your time";
+
+    let mut mocks = MockSet::new();
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(&[SLOW_BRIEF], &["child_run_id"]));
+        mock_llm_sse_response(
+            then,
+            vec![
+                BodyAction::Delay(std::time::Duration::from_secs(30)),
+                BodyAction::Bytes("data: [DONE]\n\n".into()),
+            ],
+        );
+    });
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(
+                &[OWN_STOP_USER_MESSAGE],
+                &[SLOW_BRIEF],
+            ));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_tool_calls_streaming_response(&[
+                (
+                    "call_task_slow",
+                    "delegate_task",
+                    json!({ "task": SLOW_BRIEF, "facet_ids": ["plan"] }),
+                ),
+                (MIXED_OWN_CALL, PARKED_TOOL, json!({})),
+            ]),
+        );
+    });
+
+    let (app_state, _llm) = task_state(
+        pool,
+        mocks,
+        &["erato/delegate_task", "mock_mcp_approval/*"],
+        gate_mock_mcp_tools_on_approval,
+    )
+    .await;
+
+    // A real server, so the abort can land while the turn is still joining.
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let server_addr = listener.local_addr().unwrap();
+    let app: Router = erato::server::router::router(app_state.clone())
+        .split_for_parts()
+        .0
+        .with_state(app_state.clone());
+    tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    let client = reqwest::Client::new();
+    let base_url = format!("http://{server_addr}");
+
+    let created = client
+        .post(format!("{base_url}/api/v1beta/me/chats"))
+        .header("Authorization", format!("Bearer {TEST_JWT_TOKEN}"))
+        .json(&json!({}))
+        .send()
+        .await
+        .unwrap();
+    assert!(created.status().is_success());
+    let parent_chat = created.json::<Value>().await.unwrap()["chat_id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let parent_chat_id = Uuid::parse_str(&parent_chat).unwrap();
+
+    let submit = tokio::spawn({
+        let client = client.clone();
+        let base_url = base_url.clone();
+        let parent_chat = parent_chat.clone();
+        async move {
+            client
+                .post(format!("{base_url}/api/v1beta/me/messages/submitstream"))
+                .header("Authorization", format!("Bearer {TEST_JWT_TOKEN}"))
+                .json(&json!({
+                    "existing_chat_id": parent_chat,
+                    "user_message": OWN_STOP_USER_MESSAGE,
+                    "input_files_ids": [],
+                    "selected_facet_ids": ["plan"],
+                }))
+                .send()
+                .await
+                .unwrap()
+                .text()
+                .await
+                .unwrap()
+        }
+    });
+
+    let mut slow_child_running = false;
+    for _ in 0..150 {
+        slow_child_running = delegated_child_chats(&app_state.db, parent_chat_id)
+            .await
+            .iter()
+            .any(|child| child.generation_state.as_deref() == Some("running"));
+        if slow_child_running {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+    assert!(slow_child_running, "the slow task never started");
+    // The turn's own call is gated right after the task launches.
+    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+
+    let aborted = client
+        .post(format!("{base_url}/api/v1beta/me/messages/abortstream"))
+        .header("Authorization", format!("Bearer {TEST_JWT_TOKEN}"))
+        .json(&json!({ "chat_id": parent_chat }))
+        .send()
+        .await
+        .unwrap();
+    assert!(aborted.status().is_success());
+    tokio::time::timeout(std::time::Duration::from_secs(20), submit)
+        .await
+        .expect("the parent stream closes after the abort")
+        .unwrap();
+
+    let parent_row = chat_messages_by_created_at(&app_state.db, parent_chat_id)
+        .await
+        .into_iter()
+        .rfind(|row| row.raw_message["role"] == "assistant")
+        .expect("the parent's assistant row");
+    let content = content_of(&parent_row);
+    assert!(
+        !content
+            .iter()
+            .any(|part| part["content_type"] == "tool_approval_request"),
+        "the stopped turn keeps no card: {content:?}"
+    );
+    assert_eq!(
+        parent_row.generation_metadata.expect("generation metadata")["was_aborted"],
+        json!(true)
+    );
+}
+
 // The same stop when the turn's own gated call is a client tool, as on the Word
 // and Outlook panes.
 
