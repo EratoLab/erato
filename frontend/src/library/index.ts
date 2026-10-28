@@ -489,7 +489,10 @@ export {
   useUpdateChatTitle,
   type RecentChatsListFilters,
 } from "@/hooks/chat/useInfiniteRecentChats";
-export { useGroupedChatSessions } from "@/hooks/chat/useGroupedChatSessions";
+export {
+  useGroupedChatSessions,
+  useGroupedLoadMorePaused,
+} from "@/hooks/chat/useGroupedChatSessions";
 export {
   groupChatSessions,
   resolveChatAttentionStatus,

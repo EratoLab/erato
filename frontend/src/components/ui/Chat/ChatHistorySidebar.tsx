@@ -21,7 +21,10 @@ import {
 import { useGenerationStatusStore } from "@/hooks/chat/store/generationStatusStore";
 import { useChatHistoryStore } from "@/hooks/chat/useChatHistory";
 import { useGenerationIndicatorCount } from "@/hooks/chat/useGenerationIndicatorCount";
-import { useGroupedChatSessions } from "@/hooks/chat/useGroupedChatSessions";
+import {
+  useGroupedChatSessions,
+  useGroupedLoadMorePaused,
+} from "@/hooks/chat/useGroupedChatSessions";
 import { useResponsiveCollapsedMode, useThemedIcon } from "@/hooks/ui";
 import { usePersistedState } from "@/hooks/usePersistedState";
 import {
@@ -553,6 +556,12 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
       [recentChatGroups, collapsedGroupKeys],
     );
 
+    const isLoadMorePaused = useGroupedLoadMorePaused(
+      recentChatGroups,
+      collapsedGroupKeys,
+      isLoadingMoreSessions,
+    );
+
     // Tab title is owned here rather than by ChatHistoryList: several list
     // instances render at once (pinned + one per group), and an instance not
     // containing the current chat cannot tell "not mine" from "no title yet".
@@ -922,7 +931,8 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
                     ) : (
                       recentChatGroups.map((group, index) => {
                         const carriesLoadMore =
-                          group.key === lastExpandedGroupKey;
+                          group.key === lastExpandedGroupKey &&
+                          !isLoadMorePaused;
                         return (
                           <div key={group.key} data-ui="chat-history-group">
                             <CollapsibleSection

@@ -22,6 +22,7 @@ import {
   useChatSharingFeature,
   useFeatureConfig,
   useGroupedChatSessions,
+  useGroupedLoadMorePaused,
   useSanitizedChatHistoryFilters,
 } from "@erato/frontend/library";
 import { t } from "@lingui/core/macro";
@@ -192,6 +193,11 @@ export function AddinHistoryDrawerCore({
       groups.findLast((group) => !collapsedGroupKeys.has(group.key))?.key ??
       null,
     [groups, collapsedGroupKeys],
+  );
+  const isLoadMorePaused = useGroupedLoadMorePaused(
+    groups,
+    collapsedGroupKeys,
+    chat.isFetchingNextHistoryPage,
   );
 
   // Focus moves into the panel on open and back to where it came from on
@@ -473,7 +479,8 @@ export function AddinHistoryDrawerCore({
               </>
             ) : (
               groups.map((group, index) => {
-                const carriesLoadMore = group.key === lastExpandedGroupKey;
+                const carriesLoadMore =
+                  group.key === lastExpandedGroupKey && !isLoadMorePaused;
                 return (
                   <div key={group.key} data-ui="chat-history-group">
                     <SidebarCollapsibleSection
