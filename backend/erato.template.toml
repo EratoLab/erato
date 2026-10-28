@@ -729,6 +729,9 @@ chat_provider_ids = ["test-token-limit"]
 # # with it on every call a task makes (Word: "document_snapshot", "snapshot").
 # # child_context_arg = "document_snapshot"
 # # child_context_input = "snapshot"
+# # Input fields the host fills on a task's call from the context it holds; the
+# # task's model is not asked for them (Word: "documentIdentity").
+# # child_host_inputs = ["documentIdentity"]
 #
 # # Optional: replay this tool's calls from EARLIER user turns as bounded
 # # receipts instead of full arguments/results (default mode = "full"). The

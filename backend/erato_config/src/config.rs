@@ -1949,6 +1949,24 @@ impl AppConfig {
                     qualified
                 ),
             }
+            if !tool.child_host_inputs.is_empty() && !child_read {
+                panic!(
+                    "Client tool '{}' sets child_host_inputs, which require child_access = \"read\".",
+                    qualified
+                );
+            }
+            for (index, input) in tool.child_host_inputs.iter().enumerate() {
+                if input.is_empty()
+                    || input != input.trim()
+                    || tool.child_host_inputs[..index].contains(input)
+                    || tool.child_context_input.as_ref() == Some(input)
+                {
+                    panic!(
+                        "Client tool '{}' has an empty, untrimmed or repeated child_host_inputs entry '{}', or one the server fills as child_context_input.",
+                        qualified, input
+                    );
+                }
+            }
         }
 
         config
@@ -5850,6 +5868,13 @@ pub struct ClientToolConfig {
     /// `snapshot`). Set together with `child_context_arg`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub child_context_input: Option<String>,
+
+    /// Input fields the host fills on a delegated task's call from the client
+    /// context it holds (Word: `documentIdentity`). The task's model is not
+    /// asked for them, and what it sends anyway is dropped. Requires
+    /// `child_access = "read"`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub child_host_inputs: Vec<String>,
 }
 
 /// `client_tools.tools.<id>.child_access`.

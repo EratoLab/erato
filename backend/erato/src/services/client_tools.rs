@@ -44,6 +44,8 @@ pub struct GrantedCall {
     pub context_ref: Option<String>,
     /// The input field that receives `context_ref`.
     pub context_input: Option<String>,
+    /// Input fields the host fills from its own context; dropped from the call.
+    pub host_inputs: Vec<String>,
 }
 
 #[derive(Clone)]
@@ -838,6 +840,7 @@ mod tests {
             host_context: None,
             child_context_arg: None,
             child_context_input: None,
+            child_host_inputs: Vec::new(),
         }
     }
 

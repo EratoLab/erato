@@ -1985,8 +1985,10 @@ pub(crate) async fn build_result_envelope<C: sea_orm::ConnectionTrait>(
         reason = Some(DelegationRunReason::CapExceeded);
     }
 
-    // Read here rather than passed in, so the callers that settle a slot after
-    // a park or from the delivery sweep report it the same way.
+    // Read here rather than passed in, so every caller that settles a client
+    // task's slot (the join, a resumed park, an orphaned slot) reports it the
+    // same way. Client tasks always wait, so the async delivery sweep finds no
+    // client note.
     let client_tools = match crate::db::entity::chats::Entity::find_by_id(child_chat_id)
         .one(conn)
         .await

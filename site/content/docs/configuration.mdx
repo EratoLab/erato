@@ -6052,6 +6052,7 @@ the same `durable` tables.
 {/* erato_toml_config_key: client_tools.tools.<key>.host_context */}
 {/* erato_toml_config_key: client_tools.tools.<key>.child_context_arg */}
 {/* erato_toml_config_key: client_tools.tools.<key>.child_context_input */}
+{/* erato_toml_config_key: client_tools.tools.<key>.child_host_inputs */}
 
 Lets delegated tasks read through a client tool on the device of the turn that
 planned them. Off by default.
@@ -6063,6 +6064,7 @@ child_access = "read"
 host_context = "word_document"
 child_context_arg = "document_snapshot"
 child_context_input = "snapshot"
+child_host_inputs = ["documentIdentity"]
 ```
 
 - **`child_access`** _(default: `"none"`)_ - `read` lets a delegated task call
@@ -6079,6 +6081,13 @@ child_context_input = "snapshot"
   `child_context_input` of every call a task makes, replacing what the model
   sent. All `read` tools of one host that set them must name the same
   `child_context_arg`.
+- **`child_host_inputs`** _(optional, requires `read`)_ - Input fields the host
+  fills from the client context it holds, for example Word's
+  `documentIdentity`. The server drops them from every call a task makes.
+
+A task's model sees the tool's `parameters` without `child_context_input` and
+`child_host_inputs`, in every alternative the schema offers, so it is never
+asked for values it cannot know.
 
 When a client task starts, the server writes a grant onto it. The grant lists the
 tools the planning turn was offered with `child_access = "read"` and the task's

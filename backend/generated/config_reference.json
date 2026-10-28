@@ -375,6 +375,7 @@
   "client_tools.tools.<key>.child_access": {},
   "client_tools.tools.<key>.child_context_arg": {},
   "client_tools.tools.<key>.child_context_input": {},
+  "client_tools.tools.<key>.child_host_inputs.[]": {},
   "client_tools.tools.<key>.description": {},
   "client_tools.tools.<key>.durable.attempt_expiry_secs": {},
   "client_tools.tools.<key>.durable.claim_lease_secs": {},

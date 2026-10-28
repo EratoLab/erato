@@ -64,6 +64,7 @@ fn read_tool(durable: bool) -> ClientToolConfig {
         host_context: Some(erato::config::ClientToolHostContext::WordDocument),
         child_context_arg: Some("document_snapshot".into()),
         child_context_input: Some("snapshot".into()),
+        child_host_inputs: Vec::new(),
         durable: durable.then_some(erato::config::ClientToolDurableConfig {
             host_context: erato::config::ClientToolHostContext::WordDocument,
             result_schema: None,
@@ -590,6 +591,19 @@ async fn a_granted_call_reaches_the_pane_with_lineage_and_the_server_context_ref
         "the stored call keeps what the model sent"
     );
     let child_turns = turn_bodies(&child);
+    let offered = &child_turns[0]["tools"]
+        .as_array()
+        .and_then(|tools| {
+            tools
+                .iter()
+                .find(|tool| tool["function"]["name"] == READ_TOOL)
+        })
+        .expect("the granted read tool")["function"]["parameters"];
+    assert!(
+        offered["properties"].get("snapshot").is_none()
+            && offered["properties"]["part"].is_object(),
+        "the task's model is not asked for the context version the server fills: {offered}"
+    );
     assert!(child_turns[1].to_string().contains(PANE_TEXT));
     assert!(
         !child_turns

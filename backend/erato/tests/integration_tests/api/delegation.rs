@@ -1508,6 +1508,7 @@ async fn test_delegation_happy_path_runs_child_and_returns_envelope(pool: Pool<P
             host_context: None,
             child_context_arg: None,
             child_context_input: None,
+            child_host_inputs: Vec::new(),
         },
     );
     app_config.facets.tool_call_allowlist = vec!["client/*".to_string()];
@@ -6776,6 +6777,104 @@ async fn test_submit_into_live_delegated_run_conflicts(pool: Pool<Postgres>) {
     );
 }
 
+/// Taking a task chat over ends its client grant (ERMAIN-1001), so a write that
+/// cannot record the adoption is refused rather than run as the task.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_write_that_cannot_record_the_adoption_is_refused(pool: Pool<Postgres>) {
+    use sea_orm::ConnectionTrait;
+    let (app_state, _llm) = delegation_enabled_state_with_llm(pool).await;
+    let server = app_server(app_state.clone());
+    let me = erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        TEST_USER_SUBJECT,
+        None,
+    )
+    .await
+    .unwrap();
+    let assistant = create_assistant(&server, "Adopted Run Assistant", "prompt").await;
+    let origin = create_chat(&server, Some(&assistant)).await;
+    let child = erato::models::chat::create_delegated_chat(
+        &app_state.db,
+        &rebuilt_policy(&app_state).await,
+        &erato::policy::types::Subject::User(me.id.to_string()),
+        &me.id.to_string(),
+        Some(Uuid::parse_str(&assistant).unwrap()),
+        ChatProvenance {
+            kind: ChatProvenanceKind::Delegation,
+            origin_chat_id: Some(Uuid::parse_str(&origin).unwrap()),
+            origin_message_id: None,
+            parent_message_id: None,
+            origin_assistant_id: None,
+            rebase_cutoff: Some(sqlx::types::chrono::Utc::now().into()),
+            depth: 1,
+            adopted_at: None,
+            legacy_expected_output: None,
+            legacy_constraints: None,
+            run_mode: None,
+            result_delivery: None,
+            retry_of: None,
+        },
+        None,
+        "Finished run".to_string(),
+        true,
+        Vec::new(),
+        Vec::new(),
+    )
+    .await
+    .unwrap();
+    app_state.global_policy_engine.invalidate_data().await;
+    let child_chat = child.id.to_string();
+
+    app_state
+        .db
+        .execute_unprepared(
+            r#"CREATE FUNCTION refuse_adoption() RETURNS trigger LANGUAGE plpgsql AS $$
+               BEGIN RAISE EXCEPTION 'adoption refused by the test'; END $$;
+               CREATE TRIGGER refuse_adoption BEFORE UPDATE ON chats FOR EACH ROW
+               WHEN (NEW.assistant_configuration #> '{provenance,adopted_at}' IS NOT NULL
+                     AND OLD.assistant_configuration #> '{provenance,adopted_at}' IS NULL)
+               EXECUTE FUNCTION refuse_adoption();"#,
+        )
+        .await
+        .unwrap();
+    let refused = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "existing_chat_id": child_chat, "user_message": "take it over" }))
+        .await;
+    refused.assert_status(axum::http::StatusCode::INTERNAL_SERVER_ERROR);
+    assert!(
+        !chat_messages_by_created_at(&app_state.db, child.id)
+            .await
+            .iter()
+            .any(|row| row.raw_message["role"] == "assistant"),
+        "nothing ran in the task chat"
+    );
+
+    app_state
+        .db
+        .execute_unprepared("DROP TRIGGER refuse_adoption ON chats")
+        .await
+        .unwrap();
+    submit_message(&server, &child_chat, None, "take it over", vec![]).await;
+    let adopted_at = erato::db::entity::chats::Entity::find_by_id(child.id)
+        .one(&app_state.db)
+        .await
+        .unwrap()
+        .expect("child chat")
+        .assistant_configuration
+        .expect("assistant configuration")["provenance"]["adopted_at"]
+        .clone();
+    assert!(adopted_at.is_string());
+}
+
 /// A mention-carrying turn that parks on an MCP approval loses the delegation
 /// offer when it is continued: `continuestream` rebuilds the tool set from MCP
 /// discovery alone. A delegate call the model makes anyway is refused per-CALL
@@ -8310,6 +8409,7 @@ async fn a_task_planned_on_a_word_turn_gets_no_word_client_tools(pool: Pool<Post
                 host_context: None,
                 child_context_arg: None,
                 child_context_input: None,
+                child_host_inputs: Vec::new(),
             },
         );
         let mut word_tools = config.facets.facets["files"].clone();
@@ -13269,6 +13369,7 @@ async fn react_offers_optional_client_tools_only_when_registered(pool: Pool<Post
                 host_context: None,
                 child_context_arg: None,
                 child_context_input: None,
+                child_host_inputs: Vec::new(),
             },
         );
     }

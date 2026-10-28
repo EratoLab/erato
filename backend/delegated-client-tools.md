@@ -18,7 +18,9 @@ sets `child_access` or `child_host_context`.
   - `child_context_arg` without `child_context_input` or the reverse, either one
     without `read`, and an empty or untrimmed value;
   - two `read` tools of one host that name different `child_context_arg` values,
-    because a grant carries one context version.
+    because a grant carries one context version;
+  - `child_host_inputs` without `read`, or with an empty, untrimmed or repeated
+    entry, or one that is the `child_context_input`.
 - `facets.facets.<key>.child_host_context` marks a child facet. It is refused on
   a `hidden` facet and on one with a `tool_call_allowlist`. It restricts no tools;
   it carries the read instructions.
@@ -80,9 +82,11 @@ with `durable_operations_enabled` on and a tool that has a `durable` table. It i
 routed with `route_executor_call(grant_call = true)` and handed over with lineage
 `{owner_chat_id, owner_message_id, requesting_chat_id, requesting_message_id,
 context_ref}`. Before the hand-over the backend writes `context_ref` into the
-tool's `child_context_input` field, or removes the field when the grant has none.
-The stored call keeps the model's input, so the child's model never sees the
-context version.
+tool's `child_context_input` field, or removes the field when the grant has none,
+and drops the `child_host_inputs` fields, which the host fills from its own
+context. The stored call keeps the model's input, so the child's model never sees
+the context version. The schema offered to the task leaves both out, in every
+`anyOf`/`oneOf`/`allOf` alternative, so the model is never asked for them.
 
 | Situation | Stored output |
 | -- | -- |
@@ -129,7 +133,11 @@ over gets no granted tools: the approved call is refused as not offered.
 `client_tools` to the task result, left out when empty:
 
 - `run_mode` and `unavailable` from the note;
-- `freshness`: the last `result.freshness` a successful granted call reported;
+- `freshness`: the last `result.freshness` a successful granted call reported,
+  cut to the contract's keys (`context_ref`, `capturedAt`, `readAt`, `changes`
+  from its four values, integer `counts`, `sections`), each string at most 256
+  characters and at most 64 sections, because the task result reaches the parent's
+  model outside the untrusted framing;
 - `declined`: the number of granted calls the user declined.
 
 The parent's trace steps (`localTrace`) for granted reads carry the part read and

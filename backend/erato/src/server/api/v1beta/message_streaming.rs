@@ -14225,15 +14225,20 @@ async fn accept_user_write_into_delegated_run(
         ));
     }
 
-    if let Err(error) = crate::models::chat::mark_delegated_run_adopted(&app_state.db, chat).await {
-        tracing::warn!(%error, chat_id = %chat.id, "Failed to mark the delegated run as adopted");
-    }
     let failed = || {
         (
             axum::http::StatusCode::INTERNAL_SERVER_ERROR,
             "Failed to load chat".to_string(),
         )
     };
+    // Adoption ends a client grant, so a write that cannot record it must not
+    // run as the task.
+    crate::models::chat::mark_delegated_run_adopted(&app_state.db, chat)
+        .await
+        .map_err(|error| {
+            tracing::warn!(%error, chat_id = %chat.id, "Failed to mark the delegated run as adopted");
+            failed()
+        })?;
     chats::Entity::find_by_id(chat.id)
         .one(&app_state.db)
         .await
@@ -20499,6 +20504,10 @@ async fn append_granted_client_tools(
             .iter()
             .find(|(granted, _)| granted.qualified_name() == config.qualified_name())
             .map(|(_, call)| call.clone());
+        let schema = match &policy.grant {
+            Some(call) => crate::services::delegated_client_tools::task_schema(&schema, call),
+            None => schema,
+        };
         tools.push(crate::services::client_tools::build_client_tool(
             &config.name,
             &config.description,
