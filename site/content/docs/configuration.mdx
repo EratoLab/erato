@@ -5909,17 +5909,17 @@ operation inbox.
 
 Default: `false`. Lets a client open an executor stream,
 `GET /api/v1beta/me/client-operations/stream`, for its `X-Erato-Executor`
-binding. The first stream of a binding serves it; a second stream for the same
-binding waits until the first one closes, unless it is a reconnect of the same
-pane (the same `X-Erato-Executor-Instance`), which takes over at once.
+binding. A device can have several panes for one binding, such as two Outlook
+tabs on one mailbox: a new call goes to the newest pane that advertises its
+tool, and a call one pane received never moves to another.
 
 A live client tool call normally runs over the calling chat's own stream, and
 it still does while that stream is connected. When the calling chat has no
 connected stream, the call goes to the stream that serves the call's binding and
 advertises the tool, whichever chat of the account made it. Without such a
-stream, the call ends as `context_unavailable` at once. If that stream goes
-away while the call runs, the call ends as `context_unavailable` after 15
-seconds without a stream for the binding. The tool's own `timeout_ms` still
+stream, or once the pane that received the call is gone, the call ends as
+`context_unavailable` after 15 seconds; a pane that connects or reconnects in
+that time still gets it. The tool's own `timeout_ms` still
 applies. Calls with a durable operation and submission tools keep their usual
 path.
 

@@ -397,48 +397,47 @@ calls. With it off, the stream endpoint answers 404 and no row is written.
   (else 400). `X-Erato-Child-Client-Tools` names the tools whose handlers accept
   grant calls; it is intersected with `X-Erato-Client-Tools` and never part of the
   binding, so older backends that refuse unknown binding fields are unaffected.
-- **Presence.** UNLOGGED `client_executor_presence`, one row per account and
-  binding: the stream id, the advertised and child-capable tool names, and a
-  20 s lease renewed every 5 s, as for chat transports. Acquisition is
-  compare-and-set, so the first stream wins; a later stream for the binding
-  checks the row without a lock every 1–2 s and takes over once the holder's
-  lease is gone. A pane sends the same `X-Erato-Executor-Instance` on every
-  reconnect of its stream: the server may not see a silently dropped connection
-  die for minutes, so a later stream of the holder's instance takes over at once
-  and the older stream ends. Dropping the response body deletes the row.
+- **Presence.** UNLOGGED `client_executor_presence`, one row per stream: the
+  account and binding, the pane's `X-Erato-Executor-Instance` (a UUIDv7 made
+  when the pane opened, the same for all its streams), the advertised and
+  child-capable tool names, and a 20 s lease renewed every 5 s, as for chat
+  transports. No stream waits for another. Dropping the response body deletes
+  the row.
 - **Queue.** UNLOGGED `client_executor_calls`, addressed to the account and
-  binding, not to a stream. Each replica runs one poll loop (200 ms) for the
-  streams it holds presence for; it marks a due row delivered to that stream in
-  the same statement, so exactly one stream gets it. A live call row belongs to
-  the generation that handed it over and is due only while that generation is
-  the chat's running one. It is due again once a stream other than the one it
-  went to holds the binding, because a reloaded or reconnected pane may have
-  lost it; the frontend runs a `tool_call_id` once per page. A nudge is
-  delivered once.
+  binding, not to a stream. Each replica runs one poll loop (200 ms) for its
+  streams; it marks a due row delivered to the answering stream in the same
+  statement, so exactly one stream gets it. A new call goes to the newest pane
+  that serves its tool (for a grant call: takes grant calls for it), so a pane
+  left open elsewhere never keeps calls from one opened since. A live call row
+  belongs to the generation that handed it over and is due only while that
+  generation is the chat's running one. Once delivered, it goes again only to a
+  later stream of the same pane, which may have lost it while reconnecting;
+  never to another pane, where it would run twice or unseen. The frontend runs
+  a `tool_call_id` once per page. A nudge goes to the newest pane, once.
 - **Hand-over.** Where the run emits `ClientToolCall`, a live-only call (no
   durable operation, not a submission, not inbox-only) with a binding is routed
   once, at dispatch:
   1. a stream of the calling chat can take it (the original stream, a resumed
      stream on the same replica, or the shared transport owner): the chat
      stream, unchanged;
-  2. else the binding's present stream lists the tool: the executor stream;
-  3. else no stream can take it: it settles as `context_unavailable` at once,
-     without waiting for the tool's timeout. A chat resumed on another replica
-     without a shared transport row is not seen in step 1, so its call takes
-     this path or the executor stream.
+  2. else the binding's executor streams: the newest pane that serves the tool
+     gets it, at once or when one connects (see Outcomes). A chat resumed on
+     another replica without a shared transport row is not seen in step 1, so
+     its call takes this path.
 
   A handed-over call is neither broadcast nor written to the shared event log, so
   no chat stream runs it twice; proposal and status updates still are. The event
   is `client_tool_call {chat_id, message_id, tool_call_id, tool_name, input,
   lineage?}`. `lineage` is set only for grant calls (ERMAIN-1001), which always use
-  the executor stream and settle as `context_unavailable` at once without a
-  stream that accepts them.
+  the executor stream.
 - **Results** use `clienttoolresult` with the calling chat and message ids. A
   handed-over call accepts only the binding it was sent to (409 otherwise), on the
   run's replica from memory and on another replica from the queue row.
-- **Outcomes.** If the binding has no stream for 15 s while the call runs, it
-  settles as `context_unavailable`; a reconnect within that grace resets it. The
-  tool's own timeout still applies. Every exit deletes the queue row.
+- **Outcomes.** If no stream could answer the call for 15 s from the hand-over
+  on (none serves its tool, or none of the pane it went to is left), it settles
+  as `context_unavailable`. A pane that connects or reconnects within that grace
+  resets it, so a network blip at dispatch no longer fails the call. The tool's
+  own timeout still applies. Every exit deletes the queue row.
 - **Nudge.** After a durable park commits, a `client_operation_available
   {attempt_id}` row for the binding is released once the attempt is claimable
   (pending, its chat no longer running). The frontend coordinator then sweeps the

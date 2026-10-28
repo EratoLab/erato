@@ -17,6 +17,26 @@ export const EXECUTOR_STREAM_URL = "/api/v1beta/me/client-operations/stream";
 const FIRST_RETRY_MS = 1_000;
 const MAX_RETRY_MS = 30_000;
 
+/** A UUIDv7: its first 48 bits are the creation time in milliseconds. */
+function uuidV7(): string {
+  const bytes = globalThis.crypto.getRandomValues(new Uint8Array(16));
+  let time = Date.now();
+  for (let index = 5; index >= 0; index -= 1) {
+    bytes[index] = time % 256;
+    time = Math.floor(time / 256);
+  }
+  bytes[6] = (bytes[6] & 0x0f) | 0x70;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0"));
+  return [0, 4, 6, 8, 10]
+    .map((start, part, starts) => hex.slice(start, starts[part + 1]).join(""))
+    .join("-");
+}
+
+/** This pane, for every stream it opens: the server sends a delivered call
+ * again only to the same pane, and new calls to the newest pane. */
+const PANE_INSTANCE = uuidV7();
+
 /** The headers this pane would open its stream with, or `undefined` while it
  * has no binding or no tools. A change means the stream must reopen. */
 export function executorStreamHeaders(): Record<string, string> | undefined {
@@ -30,9 +50,7 @@ export function executorStreamHeaders(): Record<string, string> | undefined {
  * The pane's executor stream. It runs live calls pushed from any of the
  * account's chats through the client tool executors, and reports new durable
  * operations for its binding. It reconnects with backoff, and ends on abort or
- * when the server has executor streams disabled (404). Every reconnect sends
- * the same `X-Erato-Executor-Instance`, so the server hands the binding over
- * at once even while it still holds a connection that dropped silently.
+ * when the server has executor streams disabled (404).
  */
 export function openExecutorStream(
   headers: Record<string, string>,
@@ -40,7 +58,6 @@ export function openExecutorStream(
   signal: AbortSignal,
 ): Promise<void> {
   const executor = JSON.parse(headers["X-Erato-Executor"]) as ExecutorBinding;
-  const instance = globalThis.crypto.randomUUID();
   return new Promise((resolve) => {
     let cleanup: (() => void) | undefined;
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -76,7 +93,7 @@ export function openExecutorStream(
         method: "GET",
         headers: {
           ...headers,
-          "X-Erato-Executor-Instance": instance,
+          "X-Erato-Executor-Instance": PANE_INSTANCE,
           Accept: "text/event-stream",
         },
         onOpen: () => {

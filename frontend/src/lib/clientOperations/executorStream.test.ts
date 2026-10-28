@@ -159,7 +159,7 @@ describe("openExecutorStream", () => {
     }
   });
 
-  it("reconnects as one instance with backoff and stops when the server has streams disabled", async () => {
+  it("reconnects as its pane with backoff and stops when the server has streams disabled", async () => {
     vi.useFakeTimers();
     const connections: SSEOptions[] = [];
     const cleanups: (() => void)[] = [];
@@ -207,13 +207,16 @@ describe("openExecutorStream", () => {
       ),
     );
     expect(instances.size).toBe(1);
+    const [instance] = [...instances];
+    expect(instance).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+    );
 
     const controller = new AbortController();
     const other = openExecutorStream(headers, vi.fn(), controller.signal);
-    const otherInstance =
-      connections[4]?.headers?.["X-Erato-Executor-Instance"];
-    expect(otherInstance).toBeTruthy();
-    expect(instances.has(otherInstance)).toBe(false);
+    expect(connections[4]?.headers?.["X-Erato-Executor-Instance"]).toBe(
+      instance,
+    );
     controller.abort();
     await other;
   });

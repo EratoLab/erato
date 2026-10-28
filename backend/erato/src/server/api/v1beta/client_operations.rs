@@ -469,13 +469,12 @@ pub async fn continue_client_operation(
     }
 }
 
-/// One stream per executor binding. It receives live client tool calls from any
-/// of the account's chats that no stream of the calling chat can take, and
-/// announces new durable operations for the binding. The first stream of a
-/// binding serves it; a later one waits until the first closes. A pane sends
-/// the same `X-Erato-Executor-Instance` on every reconnect of its stream: a
-/// later stream of the holder's instance takes the binding over at once, and
-/// the older one ends.
+/// A pane's stream for its executor binding. It receives live client tool calls
+/// from any of the account's chats that no stream of the calling chat can take,
+/// and announces new durable operations for the binding. Of a binding's panes,
+/// the newest that serves a call's tool gets it. A pane sends one
+/// `X-Erato-Executor-Instance`, a UUIDv7 made when it opened, on all its
+/// streams: a delivered call is sent again only to a later stream of that pane.
 #[utoipa::path(get, path = "/me/client-operations/stream", operation_id = "clientOperationStream",
     responses((status = OK, content_type = "text/event-stream", body = ExecutorStreamEvent),
         (status = BAD_REQUEST, description = "No valid X-Erato-Executor binding or no X-Erato-Client-Tools"),

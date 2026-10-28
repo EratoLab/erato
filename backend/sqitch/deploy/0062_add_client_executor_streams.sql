@@ -6,14 +6,21 @@ BEGIN;
 -- command queue: a database restart drops presence and undelivered calls, and
 -- running calls then settle through their presence-loss grace or timeout.
 CREATE UNLOGGED TABLE public.client_executor_presence (
+    stream_id uuid PRIMARY KEY,
     account_id uuid NOT NULL,
     binding jsonb NOT NULL,
-    stream_id uuid NOT NULL UNIQUE,
+    -- X-Erato-Executor-Instance: the pane, the same for all its streams.
+    instance_id uuid DEFAULT NULL,
+    -- New calls go to the newest pane that serves their tool.
+    opened_at timestamptz NOT NULL,
+    connected_at timestamptz NOT NULL,
     client_tools jsonb NOT NULL DEFAULT '[]'::jsonb,
     child_client_tools jsonb NOT NULL DEFAULT '[]'::jsonb,
-    expires_at timestamptz NOT NULL,
-    PRIMARY KEY (account_id, binding)
+    expires_at timestamptz NOT NULL
 );
+
+CREATE INDEX client_executor_presence_binding_idx
+    ON public.client_executor_presence (account_id, binding);
 
 CREATE UNLOGGED TABLE public.client_executor_calls (
     call_id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -25,10 +32,14 @@ CREATE UNLOGGED TABLE public.client_executor_calls (
     -- A live call belongs to the run that handed it over; a nudge to its attempt.
     generation_id uuid DEFAULT NULL,
     attempt_id uuid DEFAULT NULL,
+    tool_name text DEFAULT NULL,
+    grant_call boolean NOT NULL DEFAULT false,
     event jsonb NOT NULL,
     created_at timestamptz NOT NULL DEFAULT now(),
     delivered_at timestamptz DEFAULT NULL,
     delivered_to uuid DEFAULT NULL,
+    -- The pane a live call went to; only a later stream of it gets the call again.
+    delivered_instance uuid DEFAULT NULL,
     CHECK ((generation_id IS NULL) <> (attempt_id IS NULL))
 );
 

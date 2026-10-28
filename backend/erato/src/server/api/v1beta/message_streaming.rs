@@ -7855,15 +7855,15 @@ async fn stream_generate_chat_completion<'a>(
                     )
                     .await
                     {
-                        Some(executor_stream::LiveCallRoute::Executor(_)) => {
+                        // Without a stream that serves the tool yet, the call waits
+                        // for one, as for a pane that reconnects mid-call.
+                        Some(
+                            executor_stream::LiveCallRoute::Executor(_)
+                            | executor_stream::LiveCallRoute::Unavailable,
+                        ) => {
                             executor_target = Uuid::parse_str(&user_id)
                                 .ok()
                                 .map(|account_id| (binding.clone(), account_id));
-                        }
-                        Some(executor_stream::LiveCallRoute::Unavailable) => {
-                            validation_failure = Some(ClientToolOutcome::Cancelled {
-                                reason: "context_unavailable".into(),
-                            });
                         }
                         Some(executor_stream::LiveCallRoute::ChatStream) | None => {}
                     }
@@ -7969,7 +7969,7 @@ async fn stream_generate_chat_completion<'a>(
                             _ = async {
                                 match &handed_over {
                                     Some(call) => executor_stream::wait_for_presence_loss(
-                                        &app_state.db, call.account_id, &call.binding,
+                                        &app_state.db, call,
                                     ).await,
                                     None => std::future::pending().await,
                                 }

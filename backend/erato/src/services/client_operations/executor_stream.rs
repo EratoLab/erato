@@ -22,7 +22,7 @@ use utoipa::ToSchema;
 pub use super::transport::HEARTBEAT;
 const POLL_INTERVAL: Duration = Duration::from_millis(200);
 const PRESENCE_POLL_INTERVAL: Duration = Duration::from_secs(1);
-/// A call whose binding has no stream for this long settles as `context_unavailable`.
+/// A call that no stream could answer for this long settles as `context_unavailable`.
 pub const PRESENCE_LOSS_GRACE: Duration = Duration::from_secs(15);
 
 fn statement(sql: &str, values: Vec<sea_orm::Value>) -> sea_orm::Statement {
@@ -34,12 +34,14 @@ fn statement(sql: &str, values: Vec<sea_orm::Value>) -> sea_orm::Statement {
     )
 }
 
-/// The stream currently serving a binding, with the tool names it advertised.
+/// A binding's live streams together: the stream of its newest pane, and the
+/// tool names any of them advertised. A call goes to the newest pane that
+/// serves its tool.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ExecutorPresence {
     pub stream_id: Uuid,
     pub client_tools: Vec<String>,
-    /// The subset of `client_tools` whose handlers accept grant calls.
+    /// The tool names whose handlers accept grant calls on some stream.
     pub child_client_tools: Vec<String>,
 }
 
@@ -143,142 +145,65 @@ pub enum LiveCallRoute {
     Unavailable,
 }
 
-/// What a stream claims its binding with.
+/// One stream of a pane for its binding.
 #[derive(Debug, Clone)]
 pub struct PresenceClaim {
     pub account_id: Uuid,
     pub binding: ExecutorBinding,
-    /// `X-Erato-Executor-Instance`: the same for every reconnect of one pane's
-    /// stream, so the latest of them can take the binding over at once.
+    /// `X-Erato-Executor-Instance`: the pane, the same for all its streams. A
+    /// call is sent again only to a later stream of the pane it went to.
     pub instance_id: Option<Uuid>,
-    /// Orders the streams of one instance. Reconnects are at least a second
-    /// apart, far more than the clock skew between replicas.
     pub connected_at: DateTime<Utc>,
     pub client_tools: Vec<String>,
     pub child_client_tools: Vec<String>,
 }
 
-/// Compare-and-set: the first stream of a binding wins; another takes over
-/// once the holder's lease has expired, or at once when it is a later stream
-/// of the holder's instance.
-pub async fn acquire(
+impl PresenceClaim {
+    /// When the pane opened: the time in its UUIDv7 instance id, else this
+    /// stream's. The panes of a binding share a device, so their clocks agree.
+    fn opened_at(&self) -> DateTime<Utc> {
+        self.instance_id
+            .and_then(uuid_v7_time)
+            .unwrap_or(self.connected_at)
+    }
+}
+
+fn uuid_v7_time(id: Uuid) -> Option<DateTime<Utc>> {
+    if id.get_version_num() != 7 {
+        return None;
+    }
+    let millis = id.as_bytes()[..6]
+        .iter()
+        .fold(0_i64, |millis, byte| millis << 8 | i64::from(*byte));
+    DateTime::from_timestamp_millis(millis)
+}
+
+/// Writes or renews the stream's presence. Every stream of a binding has its
+/// own row, so no stream waits for another.
+pub async fn announce(
     db: &DatabaseConnection,
     claim: &PresenceClaim,
     stream_id: Uuid,
-) -> Result<bool, Report> {
-    Ok(db
-        .execute_raw(statement(
-            r#"INSERT INTO client_executor_presence AS p
-               (account_id, binding, stream_id, instance_id, connected_at, client_tools,
-                child_client_tools, expires_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, now() + interval '20 seconds')
-             ON CONFLICT (account_id, binding) DO UPDATE SET stream_id = EXCLUDED.stream_id,
-               instance_id = EXCLUDED.instance_id,
-               connected_at = EXCLUDED.connected_at,
-               client_tools = EXCLUDED.client_tools,
-               child_client_tools = EXCLUDED.child_client_tools,
-               expires_at = EXCLUDED.expires_at
-             WHERE p.expires_at <= now() OR p.stream_id = EXCLUDED.stream_id
-               OR (p.instance_id = EXCLUDED.instance_id
-                   AND p.connected_at < EXCLUDED.connected_at)"#,
-            vec![
-                claim.account_id.into(),
-                serde_json::to_value(&claim.binding)?.into(),
-                stream_id.into(),
-                claim.instance_id.into(),
-                claim.connected_at.into(),
-                serde_json::to_value(&claim.client_tools)?.into(),
-                serde_json::to_value(&claim.child_client_tools)?.into(),
-            ],
-        ))
-        .await?
-        .rows_affected()
-        == 1)
-}
-
-/// The row a waiting stream compares itself with, read without a lock.
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct Holder {
-    stream_id: Uuid,
-    instance_id: Option<Uuid>,
-    connected_at: DateTime<Utc>,
-    live: bool,
-}
-
-async fn holder(db: &DatabaseConnection, claim: &PresenceClaim) -> Result<Option<Holder>, Report> {
-    db.query_one_raw(statement(
-        r#"SELECT stream_id, instance_id, connected_at, expires_at > now() AS live
-           FROM client_executor_presence WHERE account_id = $1 AND binding = $2"#,
+) -> Result<(), Report> {
+    db.execute_raw(statement(
+        r#"INSERT INTO client_executor_presence
+             (stream_id, account_id, binding, instance_id, opened_at, connected_at, client_tools,
+              child_client_tools, expires_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now() + interval '20 seconds')
+           ON CONFLICT (stream_id) DO UPDATE SET expires_at = EXCLUDED.expires_at"#,
         vec![
+            stream_id.into(),
             claim.account_id.into(),
             serde_json::to_value(&claim.binding)?.into(),
+            claim.instance_id.into(),
+            claim.opened_at().into(),
+            claim.connected_at.into(),
+            serde_json::to_value(&claim.client_tools)?.into(),
+            serde_json::to_value(&claim.child_client_tools)?.into(),
         ],
     ))
-    .await?
-    .map(|row| -> Result<Holder, Report> {
-        Ok(Holder {
-            stream_id: row.try_get("", "stream_id")?,
-            instance_id: row.try_get("", "instance_id")?,
-            connected_at: row.try_get("", "connected_at")?,
-            live: row.try_get("", "live")?,
-        })
-    })
-    .transpose()
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Standby {
-    Acquire,
-    Wait,
-    /// A later stream of this stream's instance holds the binding.
-    Superseded,
-}
-
-impl PresenceClaim {
-    /// Mirrors `acquire`'s condition, so a waiting stream writes only when it
-    /// can win: a rejected upsert still locks the row and uses a transaction id.
-    fn standby(&self, stream_id: Uuid, holder: Option<&Holder>) -> Standby {
-        let Some(holder) = holder else {
-            return Standby::Acquire;
-        };
-        if !holder.live || holder.stream_id == stream_id {
-            return Standby::Acquire;
-        }
-        match (self.instance_id, holder.instance_id) {
-            (Some(mine), Some(theirs)) if mine == theirs => {
-                if holder.connected_at < self.connected_at {
-                    Standby::Acquire
-                } else {
-                    Standby::Superseded
-                }
-            }
-            _ => Standby::Wait,
-        }
-    }
-
-    async fn acquire(&self, db: &DatabaseConnection, stream_id: Uuid) -> bool {
-        acquire(db, self, stream_id).await.unwrap_or_else(|error| {
-            tracing::warn!(%error, "Executor stream presence acquisition failed; will retry");
-            false
-        })
-    }
-}
-
-/// Spread out, so the waiting streams of many panes don't poll in step.
-fn standby_retry() -> Duration {
-    Duration::from_millis(rand::random_range(1_000..2_000))
-}
-
-pub async fn renew(db: &DatabaseConnection, stream_id: Uuid) -> Result<bool, Report> {
-    Ok(db
-        .execute_raw(statement(
-            r#"UPDATE client_executor_presence SET expires_at = now() + interval '20 seconds'
-             WHERE stream_id = $1 AND expires_at > now()"#,
-            vec![stream_id.into()],
-        ))
-        .await?
-        .rows_affected()
-        == 1)
+    .await?;
+    Ok(())
 }
 
 pub async fn release(db: &DatabaseConnection, stream_id: Uuid) -> Result<(), Report> {
@@ -290,28 +215,44 @@ pub async fn release(db: &DatabaseConnection, stream_id: Uuid) -> Result<(), Rep
     Ok(())
 }
 
-/// The stream serving the binding, with the tool names (including the
-/// child-capable ones) it advertised.
 pub async fn present(
     db: &DatabaseConnection,
     account_id: Uuid,
     binding: &ExecutorBinding,
 ) -> Result<Option<ExecutorPresence>, Report> {
-    let Some(row) = db
-        .query_one_raw(statement(
+    let rows = db
+        .query_all_raw(statement(
             r#"SELECT stream_id, client_tools, child_client_tools FROM client_executor_presence
-             WHERE account_id = $1 AND binding = $2 AND expires_at > now()"#,
+             WHERE account_id = $1 AND binding = $2 AND expires_at > now()
+             ORDER BY opened_at DESC, connected_at DESC"#,
             vec![account_id.into(), serde_json::to_value(binding)?.into()],
         ))
-        .await?
-    else {
-        return Ok(None);
-    };
-    Ok(Some(ExecutorPresence {
-        stream_id: row.try_get("", "stream_id")?,
-        client_tools: serde_json::from_value(row.try_get("", "client_tools")?)?,
-        child_client_tools: serde_json::from_value(row.try_get("", "child_client_tools")?)?,
-    }))
+        .await?;
+    let mut presence: Option<ExecutorPresence> = None;
+    for row in rows {
+        let client_tools: Vec<String> = serde_json::from_value(row.try_get("", "client_tools")?)?;
+        let child_client_tools: Vec<String> =
+            serde_json::from_value(row.try_get("", "child_client_tools")?)?;
+        let Some(presence) = presence.as_mut() else {
+            presence = Some(ExecutorPresence {
+                stream_id: row.try_get("", "stream_id")?,
+                client_tools,
+                child_client_tools,
+            });
+            continue;
+        };
+        for (names, more) in [
+            (&mut presence.client_tools, client_tools),
+            (&mut presence.child_client_tools, child_client_tools),
+        ] {
+            for name in more {
+                if !names.contains(&name) {
+                    names.push(name);
+                }
+            }
+        }
+    }
+    Ok(presence)
 }
 
 /// Precedence: a grant call always needs a stream that accepts grant calls for
@@ -346,12 +287,15 @@ pub async fn route_live_call(
 pub async fn hand_over(db: &DatabaseConnection, call: &ExecutorCall) -> Result<(), Report> {
     db.execute_raw(statement(
         r#"INSERT INTO client_executor_calls
-             (account_id, binding, chat_id, message_id, tool_call_id, generation_id, event)
-           VALUES ($1, $2, $3, $4, $5, $6, $7)
+             (account_id, binding, chat_id, message_id, tool_call_id, generation_id, tool_name,
+              grant_call, event)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
            ON CONFLICT (message_id, tool_call_id) WHERE attempt_id IS NULL
            DO UPDATE SET account_id = EXCLUDED.account_id, binding = EXCLUDED.binding,
              chat_id = EXCLUDED.chat_id, generation_id = EXCLUDED.generation_id,
-             event = EXCLUDED.event, created_at = now(), delivered_at = NULL, delivered_to = NULL"#,
+             tool_name = EXCLUDED.tool_name, grant_call = EXCLUDED.grant_call,
+             event = EXCLUDED.event, created_at = now(), delivered_at = NULL, delivered_to = NULL,
+             delivered_instance = NULL"#,
         vec![
             call.account_id.into(),
             serde_json::to_value(&call.binding)?.into(),
@@ -359,6 +303,8 @@ pub async fn hand_over(db: &DatabaseConnection, call: &ExecutorCall) -> Result<(
             call.message_id.into(),
             call.tool_call_id.clone().into(),
             call.generation_id.into(),
+            call.tool_name.clone().into(),
+            call.lineage.is_some().into(),
             serde_json::to_value(ExecutorStreamEvent::from(call))?.into(),
         ],
     ))
@@ -453,18 +399,45 @@ pub async fn cleanup(db: &DatabaseConnection) -> Result<(), Report> {
     Ok(())
 }
 
-/// Returns once the binding has had no stream for [`PRESENCE_LOSS_GRACE`]. A
-/// reconnecting stream resets the grace; a failed lookup counts as present.
-pub async fn wait_for_presence_loss(
-    db: &DatabaseConnection,
-    account_id: Uuid,
-    binding: &ExecutorBinding,
-) {
+/// The streams `p` that may answer call `q`, the newest pane first: a nudge any
+/// stream of its binding; a delivered call only a stream of the pane it went
+/// to, so it never runs twice or in a pane the user left open elsewhere; any
+/// other call a stream that serves its tool.
+const ANSWERING_STREAMS: &str = r#"p.account_id = q.account_id AND p.binding = q.binding
+      AND p.expires_at > now()
+      AND CASE WHEN q.attempt_id IS NOT NULL THEN true
+            WHEN q.delivered_instance IS NOT NULL THEN p.instance_id = q.delivered_instance
+            WHEN q.delivered_to IS NOT NULL THEN p.stream_id = q.delivered_to
+            WHEN q.grant_call THEN p.child_client_tools @> jsonb_build_array(q.tool_name)
+            ELSE p.client_tools @> jsonb_build_array(q.tool_name) END"#;
+
+async fn answerable(db: &DatabaseConnection, call: &ExecutorCall) -> Result<bool, Report> {
+    let row = db
+        .query_one_raw(statement(
+            &format!(
+                r#"SELECT EXISTS (
+                     SELECT 1 FROM client_executor_calls q
+                     JOIN client_executor_presence p ON {ANSWERING_STREAMS}
+                     WHERE q.message_id = $1 AND q.tool_call_id = $2 AND q.attempt_id IS NULL
+                   ) AS answerable"#
+            ),
+            vec![call.message_id.into(), call.tool_call_id.clone().into()],
+        ))
+        .await?
+        .ok_or_else(|| eyre::eyre!("EXISTS returned no row"))?;
+    Ok(row.try_get("", "answerable")?)
+}
+
+/// Returns once no stream could answer the call for [`PRESENCE_LOSS_GRACE`],
+/// from the hand-over on: none serves its tool, or none of the pane it went to
+/// is left. A stream that appears resets the grace, so a pane that reconnects
+/// in time still gets the call; a failed lookup counts as answerable.
+pub async fn wait_for_presence_loss(db: &DatabaseConnection, call: &ExecutorCall) {
     let mut absent_since = None;
     loop {
-        match present(db, account_id, binding).await {
-            Ok(Some(_)) => absent_since = None,
-            Ok(None) => {
+        match answerable(db, call).await {
+            Ok(true) => absent_since = None,
+            Ok(false) => {
                 if absent_since
                     .get_or_insert_with(tokio::time::Instant::now)
                     .elapsed()
@@ -557,7 +530,8 @@ async fn poll(db: DatabaseConnection, hub: Weak<HubInner>) {
         if !undelivered.is_empty()
             && let Err(error) = db
                 .execute_raw(statement(
-                    r#"UPDATE client_executor_calls SET delivered_at = NULL, delivered_to = NULL
+                    r#"UPDATE client_executor_calls
+                       SET delivered_at = NULL, delivered_to = NULL, delivered_instance = NULL
                        WHERE call_id = ANY($1::bigint[])"#,
                     vec![undelivered.into()],
                 ))
@@ -568,37 +542,43 @@ async fn poll(db: DatabaseConnection, hub: Weak<HubInner>) {
     }
 }
 
-/// Marks every due row for a presence held here as delivered to that stream.
-/// A live call is due while its run is running, until the stream that now
-/// holds its binding has had it: a pane that reloads or reconnects gets it
-/// again, since the event may have died with the old stream. A nudge is due
-/// once, when its attempt is claimable: pending, its chat not running.
+/// Marks every due row whose answering stream is held here as delivered to it.
+/// A live call is due while its run is running, until the newest stream of its
+/// pane has had it: a pane that reconnects gets it again, since the event may
+/// have died with the old stream. A nudge is due once, when its attempt is
+/// claimable: pending, its chat not running.
 async fn claim(
     db: &DatabaseConnection,
     streams: &[Uuid],
 ) -> Result<Vec<(i64, Uuid, ExecutorStreamEvent)>, Report> {
     db.query_all_raw(statement(
-        r#"WITH due AS (
-             SELECT q.call_id, p.stream_id FROM client_executor_calls q
-             JOIN client_executor_presence p
-               ON p.account_id = q.account_id AND p.binding = q.binding
-             WHERE p.stream_id = ANY($1::uuid[]) AND p.expires_at > now()
-               AND CASE WHEN q.attempt_id IS NULL THEN q.delivered_to IS DISTINCT FROM p.stream_id
-                     AND EXISTS (
-                       SELECT 1 FROM chats c
-                       WHERE c.id = q.chat_id AND c.active_generation_id = q.generation_id
-                         AND c.generation_state = 'running')
-                   ELSE q.delivered_at IS NULL AND EXISTS (
-                     SELECT 1 FROM client_operation_attempts a JOIN chats c ON c.id = a.chat_id
-                     WHERE a.attempt_id = q.attempt_id AND a.state = 'pending'
-                       AND a.expires_at > now() AND c.archived_at IS NULL
-                       AND c.generation_state IS DISTINCT FROM 'running')
-                   END
-             FOR UPDATE OF q SKIP LOCKED
-           )
-           UPDATE client_executor_calls q SET delivered_at = now(), delivered_to = due.stream_id
-           FROM due WHERE q.call_id = due.call_id
-           RETURNING q.call_id, due.stream_id, q.event"#,
+        &format!(
+            r#"WITH due AS (
+                 SELECT q.call_id, t.stream_id, t.instance_id FROM client_executor_calls q
+                 CROSS JOIN LATERAL (
+                   SELECT p.stream_id, p.instance_id FROM client_executor_presence p
+                   WHERE {ANSWERING_STREAMS}
+                   ORDER BY p.opened_at DESC, p.connected_at DESC LIMIT 1
+                 ) t
+                 WHERE t.stream_id = ANY($1::uuid[])
+                   AND CASE WHEN q.attempt_id IS NULL THEN q.delivered_to IS DISTINCT FROM t.stream_id
+                         AND EXISTS (
+                           SELECT 1 FROM chats c
+                           WHERE c.id = q.chat_id AND c.active_generation_id = q.generation_id
+                             AND c.generation_state = 'running')
+                       ELSE q.delivered_at IS NULL AND EXISTS (
+                         SELECT 1 FROM client_operation_attempts a JOIN chats c ON c.id = a.chat_id
+                         WHERE a.attempt_id = q.attempt_id AND a.state = 'pending'
+                           AND a.expires_at > now() AND c.archived_at IS NULL
+                           AND c.generation_state IS DISTINCT FROM 'running')
+                       END
+                 FOR UPDATE OF q SKIP LOCKED
+               )
+               UPDATE client_executor_calls q SET delivered_at = now(), delivered_to = due.stream_id,
+                 delivered_instance = due.instance_id
+               FROM due WHERE q.call_id = due.call_id
+               RETURNING q.call_id, due.stream_id, q.event"#
+        ),
         vec![streams.to_vec().into()],
     ))
     .await?
@@ -613,11 +593,8 @@ async fn claim(
     .collect()
 }
 
-/// A stream's claim on its binding. It holds presence from connect, renews it
-/// every heartbeat and, while another stream holds it, checks again every one
-/// to two seconds. Only a holder receives calls. A stream that a later stream
-/// of its own instance took the binding from ends. Dropping the guard releases
-/// the binding.
+/// A stream's presence for its binding, from connect until the guard drops.
+/// It renews every heartbeat and receives the calls routed to it.
 pub struct PresenceGuard {
     db: DatabaseConnection,
     hub: ExecutorStreamHub,
@@ -633,18 +610,21 @@ impl PresenceGuard {
         sender: StreamSender,
     ) -> Self {
         let stream_id = Uuid::new_v4();
-        let held = claim.acquire(&db, stream_id).await;
-        if held {
-            hub.register(&db, stream_id, sender.clone());
+        if let Err(error) = announce(&db, &claim, stream_id).await {
+            tracing::warn!(%error, "Executor stream presence failed; the heartbeat retries");
         }
-        let heartbeat = tokio::spawn(heartbeat(
-            db.clone(),
-            hub.clone(),
-            claim,
-            stream_id,
-            sender,
-            held,
-        ));
+        hub.register(&db, stream_id, sender);
+        let heartbeat = tokio::spawn({
+            let db = db.clone();
+            async move {
+                loop {
+                    tokio::time::sleep(HEARTBEAT).await;
+                    if let Err(error) = announce(&db, &claim, stream_id).await {
+                        tracing::warn!(%error, "Executor stream heartbeat failed");
+                    }
+                }
+            }
+        });
         Self {
             db,
             hub,
@@ -655,53 +635,6 @@ impl PresenceGuard {
 
     pub fn stream_id(&self) -> Uuid {
         self.stream_id
-    }
-}
-
-async fn heartbeat(
-    db: DatabaseConnection,
-    hub: ExecutorStreamHub,
-    claim: PresenceClaim,
-    stream_id: Uuid,
-    sender: StreamSender,
-    mut held: bool,
-) {
-    loop {
-        tokio::time::sleep(if held { HEARTBEAT } else { standby_retry() }).await;
-        if sender.is_closed() {
-            return;
-        }
-        if held {
-            match renew(&db, stream_id).await {
-                Ok(true) => continue,
-                Ok(false) => {
-                    held = false;
-                    hub.unregister(stream_id);
-                }
-                Err(error) => {
-                    tracing::warn!(%error, "Executor stream heartbeat failed");
-                    continue;
-                }
-            }
-        }
-        let current = match holder(&db, &claim).await {
-            Ok(current) => current,
-            Err(error) => {
-                tracing::warn!(%error, "Executor stream presence lookup failed; will retry");
-                continue;
-            }
-        };
-        match claim.standby(stream_id, current.as_ref()) {
-            Standby::Acquire => {
-                if claim.acquire(&db, stream_id).await {
-                    held = true;
-                    hub.register(&db, stream_id, sender.clone());
-                }
-            }
-            Standby::Wait => {}
-            // Dropping the last sender ends the response.
-            Standby::Superseded => return,
-        }
     }
 }
 
@@ -754,13 +687,8 @@ mod tests {
     }
 
     #[test]
-    fn a_waiting_stream_writes_only_when_it_can_win() {
-        let now = Utc::now();
-        let (earlier, later) = (
-            now - chrono::Duration::seconds(30),
-            now + chrono::Duration::seconds(30),
-        );
-        let instance = Some(Uuid::new_v4());
+    fn a_pane_opened_when_its_v7_instance_was_made() {
+        let connected_at = Utc::now();
         let claim = |instance_id| PresenceClaim {
             account_id: Uuid::nil(),
             binding: ExecutorBinding {
@@ -769,45 +697,16 @@ mod tests {
                 host_context: None,
             },
             instance_id,
-            connected_at: now,
+            connected_at,
             client_tools: Vec::new(),
             child_client_tools: Vec::new(),
         };
-        let held = |instance_id, connected_at, live| Holder {
-            stream_id: Uuid::new_v4(),
-            instance_id,
-            connected_at,
-            live,
-        };
-        let me = Uuid::new_v4();
-        let standby = |claim: &PresenceClaim, holder: Holder| claim.standby(me, Some(&holder));
-        let mine = claim(instance);
-
-        assert_eq!(mine.standby(me, None), Standby::Acquire);
-        assert_eq!(standby(&mine, held(None, earlier, false)), Standby::Acquire);
-        let own = Holder {
-            stream_id: me,
-            ..held(instance, now, true)
-        };
-        assert_eq!(standby(&mine, own), Standby::Acquire);
+        let v7 = Uuid::parse_str("019a2b3c-4d5e-7f00-8000-000000000000").unwrap();
         assert_eq!(
-            standby(&mine, held(instance, earlier, true)),
-            Standby::Acquire
+            claim(Some(v7)).opened_at().timestamp_millis(),
+            0x019a_2b3c_4d5e
         );
-        assert_eq!(
-            standby(&mine, held(instance, later, true)),
-            Standby::Superseded
-        );
-        assert_eq!(
-            standby(&mine, held(instance, now, true)),
-            Standby::Superseded
-        );
-        let other = Some(Uuid::new_v4());
-        assert_eq!(standby(&mine, held(other, earlier, true)), Standby::Wait);
-        assert_eq!(standby(&mine, held(None, earlier, true)), Standby::Wait);
-        assert_eq!(
-            standby(&claim(None), held(None, earlier, true)),
-            Standby::Wait
-        );
+        assert_eq!(claim(Some(Uuid::new_v4())).opened_at(), connected_at);
+        assert_eq!(claim(None).opened_at(), connected_at);
     }
 }
