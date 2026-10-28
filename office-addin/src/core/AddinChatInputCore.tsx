@@ -3,6 +3,9 @@ import {
   type AssistantMention,
   type ChatInputControlsHandle,
   type ChatModel,
+  type ComposerContextItem,
+  type ComposerMode,
+  type ComposerNotice,
   type ComposerSizeLimit,
   type DelegationRunMode,
   type FileType,
@@ -42,7 +45,6 @@ export interface AddinChatInputCoreProps {
   uploadFiles?: (files: File[]) => Promise<FileUploadItem[] | undefined>;
   uploadError?: Error | string | null;
   sizeLimitExceeded?: ComposerSizeLimit | null;
-  virtualFiles?: File[];
   maxFiles?: number;
   controlledAvailableModels?: ChatModel[];
   controlledSelectedModel?: ChatModel | null;
@@ -54,9 +56,27 @@ export interface AddinChatInputCoreProps {
    * composer leaves it unset: it proposes no actions of its own.
    */
   pausesHostActionsWhenWritesOff?: boolean;
+  /**
+   * The host's context chips, built from its send resolver so a chip never
+   * says "included" when nothing goes out (ARCHITECTURE "Composer context").
+   * Pass a memoized array.
+   */
+  contextItems?: ComposerContextItem[];
+  /** Modes the next send runs in, from the same resolver; drawn next to "+". */
+  composerModes?: ComposerMode[];
+  /**
+   * One-off send prompts, from the host's own send flow; pass `null` when
+   * there is none so the notice's live regions stay mounted.
+   */
+  composerNotice?: ComposerNotice | null;
+  /**
+   * The files the next send carries, after every change and before paint, for
+   * a host whose chips stand for some of them. Pass a stable callback.
+   */
+  onStagedFilesChange?: (files: FileUploadItem[]) => void;
 }
 
-/** Generic add-in composer. It has no host context, chips, or action facets. */
+/** Generic add-in composer. Hosts add their context chips and action facets. */
 export const AddinChatInputCore = forwardRef<
   ChatInputControlsHandle,
   AddinChatInputCoreProps

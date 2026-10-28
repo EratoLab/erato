@@ -1,6 +1,12 @@
 import { i18n } from "@lingui/core";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { OutlookAddinChat as AddinChat } from "../OutlookAddinChat";
@@ -8,7 +14,7 @@ import { OutlookEmailSourceProvider } from "../providers/OutlookEmailSourceProvi
 
 import type * as OfficeDragAndDropModule from "../../hooks/useOfficeDragAndDrop";
 import type * as OutlookMailListDragModule from "../hooks/useOutlookMailListDrag";
-import type { ReactNode } from "react";
+import type { MutableRefObject, ReactNode } from "react";
 
 // The SE crash regression test for ERMAIN-353: AddinChat used to call the
 // THROWING useGraphToken() at render time, while EntraGraphTokenProvider only
@@ -31,27 +37,47 @@ const {
   fileUploadState,
   chatHeaderState,
   dragOptions,
-} = vi.hoisted(() => ({
-  fileUploadState: { error: null, setError: vi.fn() },
-  chatHeaderState: { composerLocked: false },
-  dragOptions: {
-    mailList: [] as { disabled?: boolean }[],
-    office: [] as { disabled?: boolean }[],
-  },
-  useConversationDropzoneMock: vi.fn(
-    (_options: {
-      extraAcceptMimeTypes?: Record<string, string[]>;
-      onReceive?: (count: number) => unknown;
-      disabled?: boolean;
-    }) => ({
-      getRootProps: () => ({}),
-      getInputProps: () => ({}),
-      isDragActive: false,
-      isDragAccept: false,
-    }),
-  ),
-  dismissSessionToastsMock: vi.fn(),
-}));
+  chatState,
+  inputProps,
+  editState,
+} = vi.hoisted(() => {
+  function recordedProps(): { current: Record<string, unknown> } {
+    return { current: {} };
+  }
+  return {
+    chatState: {
+      currentChatId: null as string | null,
+      messageOrder: [] as string[],
+    },
+    inputProps: recordedProps(),
+    editState: {
+      facets: [] as { id: string }[],
+      value: null as null | {
+        isActionFacetAvailable?: (facetId: string) => boolean;
+      },
+    },
+    fileUploadState: { error: null, setError: vi.fn() },
+    chatHeaderState: { composerLocked: false },
+    dragOptions: {
+      mailList: [] as { disabled?: boolean }[],
+      office: [] as { disabled?: boolean }[],
+    },
+    useConversationDropzoneMock: vi.fn(
+      (_options: {
+        extraAcceptMimeTypes?: Record<string, string[]>;
+        onReceive?: (count: number) => unknown;
+        disabled?: boolean;
+        uploadFiles?: (files: File[]) => Promise<unknown>;
+      }) => ({
+        getRootProps: () => ({}),
+        getInputProps: () => ({}),
+        isDragActive: false,
+        isDragAccept: false,
+      }),
+    ),
+    dismissSessionToastsMock: vi.fn(),
+  };
+});
 
 vi.mock("../components/sessionAskToast", () => ({
   dismissSessionToasts: dismissSessionToastsMock,
@@ -64,14 +90,14 @@ vi.mock("@erato/frontend/library", async () => {
   return mock.createEratoLibraryMock({
     useChatContext: () => ({
       messages: {},
-      messageOrder: [],
+      messageOrder: chatState.messageOrder,
       sendMessage: vi.fn(async () => {}),
       editMessage: vi.fn(async () => {}),
       regenerateMessage: vi.fn(async () => {}),
       isMessagingLoading: false,
       isPendingResponse: false,
       chats: [],
-      currentChatId: null,
+      currentChatId: chatState.currentChatId,
       createNewChat: vi.fn(async () => {}),
       refetchHistory: vi.fn(async () => {}),
       currentChatLastModel: undefined,
@@ -83,6 +109,17 @@ vi.mock("@erato/frontend/library", async () => {
       composerLocked: chatHeaderState.composerLocked,
     }),
     useConversationDropzone: useConversationDropzoneMock,
+    useFacets: () => ({ data: { action_facets: editState.facets } }),
+    MessageEditProvider: ({
+      value,
+      children,
+    }: {
+      value: typeof editState.value;
+      children?: ReactNode;
+    }) => {
+      editState.value = value;
+      return children;
+    },
     useFileUploadStore: Object.assign(
       (selector?: (state: typeof fileUploadState) => unknown) =>
         selector ? selector(fileUploadState) : fileUploadState,
@@ -91,11 +128,27 @@ vi.mock("@erato/frontend/library", async () => {
   });
 });
 
-// Both chat-input children pull large library surfaces of their own; they are
-// not part of the regression under test.
-vi.mock("../components/AddinChatInput", () => ({
-  AddinChatInput: () => <div data-testid="addin-chat-input" />,
-}));
+// Both chat-input children pull large library surfaces of their own; the
+// composer double records what the host hands it and counts the drops staged.
+vi.mock("../components/AddinChatInput", async () => {
+  const { useOutlookEmailSource } = await import(
+    "../providers/OutlookEmailSourceProvider"
+  );
+  return {
+    AddinChatInput: (props: Record<string, unknown>) => {
+      inputProps.current = props;
+      const { stagedEmails } = useOutlookEmailSource();
+      return (
+        <div
+          data-testid="addin-chat-input"
+          data-drops={
+            stagedEmails.filter((staged) => staged.source === "drop").length
+          }
+        />
+      );
+    },
+  };
+});
 vi.mock("../components/AddinSettingsDialog", () => ({
   AddinSettingsDialog: () => null,
 }));
@@ -139,6 +192,8 @@ describe("AddinChat without any Graph provider mounted (Exchange SE / unsupporte
   beforeEach(() => {
     i18n.activate("en");
     chatHeaderState.composerLocked = false;
+    chatState.currentChatId = null;
+    chatState.messageOrder = [];
     dragOptions.mailList.length = 0;
     dragOptions.office.length = 0;
   });
@@ -222,5 +277,68 @@ describe("AddinChat without any Graph provider mounted (Exchange SE / unsupporte
     fireEvent.click(screen.getByTestId("addin-history-drawer-trigger"));
 
     expect(dismissSessionToastsMock).toHaveBeenCalled();
+  });
+
+  it("lets the edit composer show a stored facet only while the server offers it", () => {
+    editState.facets = [{ id: "outlook_review_draft" }];
+    renderWithoutGraphProvider(<AddinChat />);
+    const isAvailable = editState.value?.isActionFacetAvailable;
+    expect(isAvailable?.("outlook_review_draft")).toBe(true);
+    expect(isAvailable?.("outlook_rewrite_selection")).toBe(false);
+    editState.facets = [];
+  });
+
+  it("tells the composer whether the chat is fresh, and hands it no virtual files", () => {
+    renderWithoutGraphProvider(<AddinChat />);
+    expect(inputProps.current.freshChat).toBe(true);
+    expect(inputProps.current.openEmailStagedAsDrop).toBe(false);
+    expect(inputProps.current).not.toHaveProperty("virtualFiles");
+    expect(inputProps.current).not.toHaveProperty("showSuggestedEmailSource");
+    cleanup();
+
+    chatState.currentChatId = "chat-1";
+    chatState.messageOrder = ["m1"];
+    renderWithoutGraphProvider(<AddinChat />);
+    expect(inputProps.current.freshChat).toBe(false);
+  });
+
+  it("refuses a drop of the email the next send already carries", async () => {
+    const eml = new File(
+      [
+        "Message-ID: <open@x>\r\nSubject: Open email\r\nContent-Type: text/plain\r\n\r\nhi\r\n",
+      ],
+      "open.eml",
+      { type: "message/rfc822" },
+    );
+    const drop = async () => {
+      const { uploadFiles } =
+        useConversationDropzoneMock.mock.calls.at(-1)?.[0] ?? {};
+      await act(async () => {
+        await uploadFiles?.([eml]);
+      });
+    };
+    renderWithoutGraphProvider(
+      <OutlookEmailSourceProvider>
+        <AddinChat />
+      </OutlookEmailSourceProvider>,
+    );
+    const ref = inputProps.current.includedEmailMessageIdRef as
+      | MutableRefObject<string | null>
+      | undefined;
+    expect(ref).toBeDefined();
+
+    ref!.current = "<open@x>";
+    await drop();
+    expect(screen.getByTestId("addin-chat-input")).toHaveAttribute(
+      "data-drops",
+      "0",
+    );
+
+    ref!.current = null;
+    await drop();
+    expect(screen.getByTestId("addin-chat-input")).toHaveAttribute(
+      "data-drops",
+      "1",
+    );
   });
 });

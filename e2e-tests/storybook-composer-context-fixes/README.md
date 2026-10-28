@@ -15,11 +15,14 @@ pieces the add-in's composer context fixes rely on:
 - the staged count reading files shown elsewhere against the limit, beside
   the files shown here, which are all that "Remove all" removes and names;
 - stacked dialogs each named by their own title, including the web app's
-  Archive all chats confirmation over Preferences.
+  Archive all chats confirmation over Preferences; Escape closes the newest
+  one only, and focus goes back to what opened it.
 
-The Outlook draft row, the compose selection chip, the Word document row and
-the "+" menu rows are add-in markup with no Storybook; their states are pinned
-by the office-addin unit tests.
+The Outlook draft row and the compose selection chip are now chips in the
+composer's lane, measured by `../storybook-outlook-context-chips`; the "+"
+menu rows are add-in markup with no Storybook, pinned by the office-addin
+unit tests. The Word document row is now the document chip in the composer's
+lane, measured by `../storybook-word-context-chips`.
 
 No theme pack is needed. Start Storybook from `frontend/`; the providers need
 an API root to render, though nothing is fetched:

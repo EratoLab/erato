@@ -6,6 +6,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -15,12 +16,17 @@ import {
 } from "../../../test/mocks/word/authoringFixtures";
 import { mixedAuthoringXml } from "../../../test/mocks/word/mixedAuthoringFixtures";
 import { createWordReadRequestStore } from "../../../test/mocks/word/readRequestStore";
+import { wordContextStore } from "../../hooks/wordContextStore";
 import { markWordDocumentChanged } from "../../utils/wordDocumentChangeSignal";
 import { wordDocumentReadSession } from "../../utils/wordDocumentReadTool";
 import { WordChatInput } from "../WordChatInput";
 
 import type { AddinChatInputRenderProps } from "../../../core/AddinChatCore";
-import type { ClientToolExecutor } from "@erato/frontend/library";
+import type {
+  ClientToolExecutor,
+  ComposerContextItem,
+  ComposerNotice,
+} from "@erato/frontend/library";
 import type { WordDocumentCapture } from "@erato/frontend/word-review";
 
 const mocks = vi.hoisted(() => ({
@@ -37,10 +43,9 @@ vi.mock("@erato/frontend/library", async () => {
   const { createEratoLibraryMock } = await import(
     "../../../test/helpers/eratoLibraryMock"
   );
+  const { AlertMock } = await import("../../../test/helpers/contextLaneDouble");
   return createEratoLibraryMock({
-    Alert: ({ children }: { children: React.ReactNode }) => (
-      <div role="alert">{children}</div>
-    ),
+    Alert: AlertMock,
     useFacets: () => ({
       data: {
         action_facets: [
@@ -76,17 +81,37 @@ vi.mock("@erato/frontend/library", async () => {
 vi.mock("../../utils/readWordDocument", () => ({
   readWordDocument: mocks.read,
 }));
-vi.mock("../../../core/AddinChatInputCore", () => ({
-  AddinChatInputCore: ({
-    onSendMessage,
-  }: {
-    onSendMessage: (message: string) => void;
-  }) => (
-    <button onClick={() => onSendMessage("Reorganize this document")}>
-      Send
-    </button>
-  ),
-}));
+vi.mock("../../../core/AddinChatInputCore", async () => {
+  const { ComposerNoticeDouble, ContextLaneDouble } = await import(
+    "../../../test/helpers/contextLaneDouble"
+  );
+  return {
+    AddinChatInputCore: ({
+      onSendMessage,
+      contextItems,
+      composerNotice,
+    }: {
+      onSendMessage: (message: string) => void;
+      contextItems?: ComposerContextItem[];
+      composerNotice?: ComposerNotice | null;
+    }) => (
+      <>
+        <ComposerNoticeDouble notice={composerNotice} />
+        <ContextLaneDouble items={contextItems} />
+        <button onClick={() => onSendMessage("Reorganize this document")}>
+          Send
+        </button>
+      </>
+    ),
+  };
+});
+const excludeDocument = () =>
+  fireEvent.click(
+    within(screen.getByTestId("context-chip-word.document")).getByRole(
+      "button",
+      { name: "Don't include this document" },
+    ),
+  );
 beforeEach(() => {
   mocks.streamStore = createWordReadRequestStore();
   mocks.advertiseParkedOoxml = false;
@@ -113,6 +138,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   wordDocumentReadSession.clear();
+  wordContextStore.resetForTests();
   vi.clearAllMocks();
 });
 function setup() {
@@ -315,8 +341,15 @@ describe("authoring send integration", () => {
     expect(send.mock.calls[0][4].args.authoring_status).toBe(
       "unsupported (unbalanced-anchors)",
     );
+    const document = screen.getByTestId("context-chip-word.document");
+    expect(document).toHaveAttribute("data-tone", "warning");
+    expect(within(document).getByTestId("context-chip-meta")).toHaveTextContent(
+      /^Can't edit/,
+    );
     expect(
-      screen.getByText(/bookmark or annotation extends beyond/),
+      within(screen.getByTestId("context-detail-word.document")).getByText(
+        /bookmark or annotation extends beyond/,
+      ),
     ).toBeVisible();
   });
   it("sends a structured-capable facet for non-empty documents and registers its exact read snapshot", async () => {
@@ -340,7 +373,7 @@ describe("authoring send integration", () => {
     expect(result?.ok).toBe(true);
     expect(capture.authoring?.readToken).toBeTruthy();
     expect(capture.authoring?.read.size).toBe(6);
-    fireEvent.click(screen.getByTestId("word-exclude-document"));
+    excludeDocument();
     expect(capture.authoring?.revoked).toBe(true);
   });
   it("reports a model-context limit instead of presenting an incomplete rewrite as available", async () => {
@@ -351,7 +384,9 @@ describe("authoring send integration", () => {
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
     await waitFor(() => expect(send).toHaveBeenCalledOnce());
     expect(send.mock.calls[0][4].args.authoring_status).toBe("model-budget");
-    expect(screen.getByText(/complete rewrite cannot fit/)).toBeVisible();
+    expect(screen.getByTestId("composer-notice")).toHaveTextContent(
+      /complete rewrite cannot fit/,
+    );
     expect(
       (stage.mock.calls.at(-1)?.[0] as WordDocumentCapture).authoring?.issue,
     ).toBe("model-budget");
@@ -367,7 +402,9 @@ describe("authoring send integration", () => {
     expect(send.mock.calls[0][4].args.authoring_status).toBe(
       "budget-unavailable (estimate-http-500)",
     );
-    expect(screen.getByText(/model context check failed/)).toBeVisible();
+    expect(screen.getByTestId("composer-notice")).toHaveTextContent(
+      /model context check failed/,
+    );
     expect(screen.queryByText(/choose a model with more context/)).toBeNull();
     const capture = stage.mock.calls.at(-1)?.[0] as WordDocumentCapture;
     expect(capture.authoring).toMatchObject({
@@ -404,7 +441,7 @@ describe("authoring send integration", () => {
     const { send, stage } = setup();
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
     await waitFor(() => expect(mocks.estimate).toHaveBeenCalled());
-    fireEvent.click(screen.getByTestId("word-exclude-document"));
+    excludeDocument();
     await act(async () => {
       resolveBudget?.({ stats: { total_tokens: 5000, max_tokens: 128000 } });
     });

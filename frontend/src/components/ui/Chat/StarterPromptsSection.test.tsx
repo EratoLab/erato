@@ -60,6 +60,7 @@ describe("StarterPromptsSection", () => {
     clearQueuedMessage: vi.fn(),
     toggleFacetId: vi.fn(),
     addUploadedFiles: vi.fn(),
+    removeUploadedFiles: vi.fn(),
   };
 
   function renderComponent() {

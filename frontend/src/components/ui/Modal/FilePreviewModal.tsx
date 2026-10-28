@@ -7,6 +7,13 @@ import {
   resolvePreviewKind,
 } from "@/components/ui/FilePreview/FilePreviewContent";
 import { OutlookSourceAction } from "@/components/ui/FilePreview/OutlookSourceAction";
+import { AudioTranscriptExcerpt } from "@/components/ui/FileUpload/AudioTranscriptExcerpt";
+import { getFileName } from "@/components/ui/FileUpload/FilePreviewBase";
+import {
+  audioTranscriptionPendingText,
+  audioTranscriptionTileStatus,
+  getDisplayTranscript,
+} from "@/components/ui/FileUpload/audioTranscriptionStatus";
 
 import { ModalBase } from "./ModalBase";
 
@@ -55,6 +62,50 @@ interface FilePreviewModalProps {
    */
   relatedFiles?: readonly FileUploadItem[];
 }
+
+/**
+ * A staged recording's status and transcript as of opening; the tile only
+ * carries the status.
+ */
+const AudioTranscriptionSection = ({ file }: { file: FileUploadItem }) => {
+  const status = audioTranscriptionTileStatus(file);
+  if (!status) {
+    return null;
+  }
+  const transcript = getDisplayTranscript(
+    file.audio_transcription?.transcript,
+    file.audio_transcription?.chunks,
+  );
+  return (
+    <section
+      className="mb-4 flex flex-col gap-2 text-left"
+      data-ui="file-preview-audio-transcription"
+      data-status={status.phase}
+    >
+      <p
+        className={
+          status.tone === "error"
+            ? "text-sm font-medium text-theme-error-fg"
+            : "text-sm font-medium text-theme-fg-secondary"
+        }
+      >
+        {status.metaLabel}
+      </p>
+      {status.tone === "error" && status.title ? (
+        <Alert type="error" role="none">
+          {status.title}
+        </Alert>
+      ) : null}
+      {transcript ? (
+        <AudioTranscriptExcerpt transcript={transcript} />
+      ) : status.busy ? (
+        <p className="text-sm text-theme-fg-secondary">
+          {audioTranscriptionPendingText()}
+        </p>
+      ) : null}
+    </section>
+  );
+};
 
 /**
  * Modal specifically for displaying file previews.
@@ -112,6 +163,7 @@ export const FilePreviewModal: React.FC<FilePreviewModalProps> = ({
     if (canPreview) {
       return (
         <>
+          <AudioTranscriptionSection file={file} />
           <FilePreviewContent
             filename={file.filename}
             url={url}
@@ -125,6 +177,7 @@ export const FilePreviewModal: React.FC<FilePreviewModalProps> = ({
 
     return (
       <div className="text-center">
+        <AudioTranscriptionSection file={file} />
         <Alert type="info" className="mb-4">
           {notPreviewableReason ??
             t`Preview is not available for this file type.`}
@@ -138,7 +191,7 @@ export const FilePreviewModal: React.FC<FilePreviewModalProps> = ({
     <ModalBase
       isOpen={isOpen}
       onClose={onClose}
-      title={`${t`Preview:`} ${file.filename}`}
+      title={`${t`Preview:`} ${getFileName(file)}`}
       contentClassName={canPreview ? "max-w-4xl" : "max-w-md"}
     >
       {renderPreview()}

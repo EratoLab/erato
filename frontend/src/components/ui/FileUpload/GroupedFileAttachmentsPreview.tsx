@@ -51,6 +51,11 @@ export type FileAttachmentGroupItem =
        * can only ever offer the raw file.
        */
       onOpen?: () => void;
+      /**
+       * What `onFilePreview` receives, when the row shows `file` under a name
+       * that describes something other than the file.
+       */
+      previewFile?: FileResource;
     }
   | {
       kind: "selectableAttachment";
@@ -507,9 +512,13 @@ export function useGroupedFileAttachmentsPreview(
         }
 
         const onOpen = item.kind === "attachment" ? item.onOpen : undefined;
+        const previewed =
+          item.kind === "attachment"
+            ? (item.previewFile ?? item.file)
+            : item.file;
         const activate =
           onOpen ??
-          (onFilePreview ? () => onFilePreview(item.file) : undefined);
+          (onFilePreview ? () => onFilePreview(previewed) : undefined);
 
         // `context` chips are read-only by contract — no remove
         // affordance (there is nothing staged to remove).

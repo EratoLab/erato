@@ -322,4 +322,105 @@ describe("FilePreviewModal", () => {
     ).not.toBeInTheDocument();
     expect(screen.queryByTestId("file-preview-pdf")).not.toBeInTheDocument();
   });
+
+  it("titles a file by the name its caller supplies, else its filename", () => {
+    const { rerender } = renderWithTheme(
+      <FilePreviewModal isOpen onClose={vi.fn()} file={makeFile()} />,
+    );
+    expect(
+      screen.getByRole("dialog", { name: "Preview: shared-report.pdf" }),
+    ).toBeInTheDocument();
+
+    rerender(
+      <ThemeProvider enableCustomTheme={false}>
+        <FilePreviewModal
+          isOpen
+          onClose={vi.fn()}
+          file={
+            {
+              ...makeFile({ filename: "teams-file-1a2b3c4d-roadmap-q1.pdf" }),
+              displayName: "roadmap-q1.pdf",
+            } as FileUploadItem
+          }
+        />
+      </ThemeProvider>,
+    );
+    expect(
+      screen.getByRole("dialog", { name: "Preview: roadmap-q1.pdf" }),
+    ).toBeInTheDocument();
+  });
+
+  describe("a staged recording", () => {
+    const recording = (audio_transcription: Record<string, unknown>) =>
+      makeFile({
+        filename: "audio-recording-20261020-1200.wav",
+        preview_url: undefined,
+        file_capability: FileTypeUtil.createMockFileCapability(
+          "audio-recording-20261020-1200.wav",
+        ),
+        audio_transcription,
+      });
+
+    const section = () =>
+      document.querySelector<HTMLElement>(
+        '[data-ui="file-preview-audio-transcription"]',
+      );
+
+    it("shows its status and the transcript so far", () => {
+      renderWithTheme(
+        <FilePreviewModal
+          isOpen
+          onClose={vi.fn()}
+          file={recording({
+            status: "processing",
+            chunks: [
+              { status: "completed", end_ms: 20_000, transcript: "Hello" },
+              { status: "pending", end_ms: 42_000 },
+            ],
+          })}
+        />,
+      );
+      expect(section()).toHaveAttribute("data-status", "transcribing");
+      expect(section()).toHaveTextContent("Transcribing · 0:42");
+      expect(screen.getByTestId("message-audio-transcript")).toHaveTextContent(
+        "Hello",
+      );
+    });
+
+    it("says where the transcript will appear while there is none", () => {
+      renderWithTheme(
+        <FilePreviewModal
+          isOpen
+          onClose={vi.fn()}
+          file={recording({ status: "uploading" })}
+        />,
+      );
+      expect(section()).toHaveTextContent(
+        "The transcript appears here once it is ready.",
+      );
+      expect(screen.queryByTestId("message-audio-transcript")).toBeNull();
+    });
+
+    it("shows the error of a failed one", () => {
+      renderWithTheme(
+        <FilePreviewModal
+          isOpen
+          onClose={vi.fn()}
+          file={recording({ status: "failed", error: "Provider timed out." })}
+        />,
+      );
+      expect(section()).toHaveTextContent("Couldn't transcribe");
+      expect(section()).toHaveTextContent("Provider timed out.");
+      expect(section()).not.toHaveTextContent(
+        "The transcript appears here once it is ready.",
+      );
+    });
+
+    it("adds nothing for any other file", () => {
+      renderWithTheme(
+        <FilePreviewModal isOpen onClose={vi.fn()} file={makeFile()} />,
+      );
+      expect(section()).toBeNull();
+    });
+  });
 });

@@ -33,6 +33,7 @@ import type { AssistantWelcomeScreenProps } from "@/components/ui/Assistant/Assi
 import type { ChatHistoryListProps } from "@/components/ui/Chat/ChatHistoryList";
 import type { ChatMessageProps } from "@/components/ui/Chat/ChatMessage";
 import type { ChatTopLeftAccessoryProps } from "@/components/ui/Chat/ChatTopLeftAccessory";
+import type { ComposerContextChipFaceProps } from "@/components/ui/Chat/ComposerContext/types";
 import type { StarterPromptsRendererProps } from "@/components/ui/Chat/StarterPromptsSection";
 import type { ChatInputAttachmentPreviewProps } from "@/components/ui/FileUpload/FileAttachmentsPreview";
 import type { FileSourceSelectorProps } from "@/components/ui/FileUpload/FileSourceSelector";
@@ -163,6 +164,20 @@ export interface ComponentRegistry {
    * When null, the default `FileAttachmentsPreview` renders.
    */
   ChatInputAttachmentPreview: ComponentType<ChatInputAttachmentPreviewProps> | null;
+
+  /**
+   * Face of a composer context chip (a Word document, an Outlook draft, a
+   * Teams transcript). The face draws the chip's content only; the host keeps
+   * the lane, roving focus, the always-visible (x)/(+), the detail and the
+   * announcements, and renders the face inside the chip's open button, so a
+   * face must hold nothing focusable or clickable of its own. Context is
+   * drawn by `ChatInput` itself rather than through
+   * `ChatInputAttachmentPreview`, so overriding that slot cannot hide what is
+   * being sent.
+   *
+   * When null, `DefaultComposerContextChipFace` renders.
+   */
+  ComposerContextChipFace: ComponentType<ComposerContextChipFaceProps> | null;
 
   /**
    * Override for the renderer that shows an attached Teams transcript as a
@@ -344,6 +359,7 @@ const emptyComponentRegistry = (): ComponentRegistry => ({
   ChatFileSourceSelector: null,
   ChatAddMenuExtraContent: null,
   ChatInputAttachmentPreview: null,
+  ComposerContextChipFace: null,
   TeamsConversationView: null,
   ChatGroupedAttachmentsPreview: null,
   ChatHistoryList: null,
@@ -415,7 +431,12 @@ const buildComponentRegistry = (
         currentPriority === undefined ||
         registration.priority <= currentPriority
       ) {
-        registry[registration.extensionPoint] = registration.component as never;
+        // Written through a widened view: indexing the registry by the key
+        // union makes TypeScript intersect every slot's component type, which
+        // grows past its union limit as slots are added.
+        (registry as Record<keyof ComponentRegistry, unknown>)[
+          registration.extensionPoint
+        ] = registration.component;
         selectedPriorities[registration.extensionPoint] = registration.priority;
       }
     }

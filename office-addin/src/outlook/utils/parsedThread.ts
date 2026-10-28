@@ -22,6 +22,7 @@ import type {
   GraphRecipient,
 } from "./fetchOutlookMessageGraph";
 import type { ParsedEmail, ParsedEmailAddress } from "./parsedEmail";
+import type { InteractionRequiredReason } from "../../core/auth/AuthSource";
 
 const FILE_ATTACHMENT_TYPE = "#microsoft.graph.fileAttachment";
 const ITEM_ATTACHMENT_TYPE = "#microsoft.graph.itemAttachment";
@@ -91,9 +92,16 @@ export interface ParsedThread {
  * surface this loudly rather than rendering "no thread".
  */
 export class ThreadFetchError extends Error {
-  constructor(conversationId: string) {
+  /** The fetch failed because its token needs the user: a sign-in or a grant. */
+  readonly interactionRequired: InteractionRequiredReason | null;
+
+  constructor(
+    conversationId: string,
+    interactionRequired: InteractionRequiredReason | null = null,
+  ) {
     super(`Failed to load Outlook conversation ${conversationId}`);
     this.name = "ThreadFetchError";
+    this.interactionRequired = interactionRequired;
   }
 }
 
@@ -102,14 +110,15 @@ export async function fetchCurrentThread(
   fetchConversationMessages: FetchConversationMessages,
   options: FetchConversationOptions = {},
 ): Promise<ParsedThread | null> {
-  const { messages: raw, state } = await fetchConversationMessages(
-    conversationId,
-    options,
-  );
+  const {
+    messages: raw,
+    state,
+    interactionRequired,
+  } = await fetchConversationMessages(conversationId, options);
   // Total failure (first page errored → nothing fetched) must be loud, not a
   // silent null that looks identical to "this conversation has no messages".
   if (state === "error") {
-    throw new ThreadFetchError(conversationId);
+    throw new ThreadFetchError(conversationId, interactionRequired ?? null);
   }
   if (raw.length === 0) return null;
 

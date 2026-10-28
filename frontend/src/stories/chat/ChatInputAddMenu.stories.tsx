@@ -91,14 +91,7 @@ function InteractiveMenu({
     },
   }));
 
-  return (
-    <ChatInputAddMenu
-      fileSources={fileSources}
-      tools={tools}
-      selectedCount={checked.length}
-      {...rest}
-    />
-  );
+  return <ChatInputAddMenu fileSources={fileSources} tools={tools} {...rest} />;
 }
 
 export const Default: Story = {
@@ -106,7 +99,7 @@ export const Default: Story = {
 };
 
 export const WithToolsSelected: Story = {
-  name: "With tools selected (badge)",
+  name: "With tools selected",
   render: () => <InteractiveMenu initialChecked={["web", "research"]} />,
 };
 
@@ -135,7 +128,6 @@ export const ManyTools: Story = {
         checked: i % 3 === 0,
         onToggle: action(`toggle: tool-${i}`),
       }))}
-      selectedCount={5}
     />
   ),
 };

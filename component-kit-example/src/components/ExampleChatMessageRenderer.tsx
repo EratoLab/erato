@@ -1,9 +1,10 @@
 // Resolved via the host's import map to the app-bundle module — the host's
 // theme/feature-config providers apply directly, so no local provider
 // wrappers (the old workaround for bundled duplicate contexts) are needed.
-import { MessageContent } from "@erato/frontend/shared";
+import { MessageContent, useChatMessageRenderer } from "@erato/frontend/shared";
 
 import type {
+  ChatMessageRendererState,
   ComponentRegistry,
   ContentPart,
   FileUploadItem,
@@ -30,15 +31,23 @@ const contentPartsFromMessage = (
 
 export const ExampleChatMessageRenderer: NonNullable<
   ComponentRegistry["ChatMessageRenderer"]
-> = ({
-  message,
-  controls: Controls,
-  controlsContext,
-  onMessageAction,
-  onFilePreview,
-  allFilesById,
-  userDisplayNameOverride,
-}) => {
+> = (props) => {
+  const {
+    message,
+    controls: Controls,
+    controlsContext,
+    onMessageAction,
+    onFilePreview,
+    allFilesById,
+    userDisplayNameOverride,
+    hostComponents,
+  } = props;
+  // A host before shared surface 1.21 hands over neither the chips nor the
+  // component that draws them, so both are checked before drawing.
+  const { sentWith } = useChatMessageRenderer(props) as Partial<
+    Pick<ChatMessageRendererState, "sentWith">
+  >;
+  const MessageSentWith = hostComponents?.MessageSentWith;
   const isUser = message.role === "user";
   const senderLabel =
     userDisplayNameOverride ?? message.sender ?? (isUser ? "You" : "Assistant");
@@ -74,6 +83,10 @@ export const ExampleChatMessageRenderer: NonNullable<
           hasError={!!message.error}
           hostArtifact={message.hostArtifact}
         />
+
+        {isUser && MessageSentWith && sentWith && sentWith.length > 0 ? (
+          <MessageSentWith chips={sentWith} />
+        ) : null}
 
         {Controls ? (
           <div className="erato-component-kit-example-message-controls">

@@ -13,7 +13,9 @@ import {
   type FileResource,
 } from "./FilePreviewBase";
 import { InteractiveContainer } from "../Container/InteractiveContainer";
+import { Button } from "../Controls/Button";
 import { ExpandMediaButton } from "../Controls/ExpandMediaButton";
+import { SpinnerIcon } from "../Feedback/SpinnerIcon";
 import { CloseIcon, ResolvedIcon } from "../icons";
 
 import type React from "react";
@@ -39,6 +41,25 @@ export interface AttachmentTileSelection {
 export interface AttachmentTileValidation {
   ok: boolean;
   reason?: string;
+}
+
+/**
+ * A file still being worked on (a recording that transcribes) or one that
+ * failed: a spinner in the icon plate, error colours, and one action drawn
+ * inside the frame beside the activation, never inside it.
+ */
+export interface AttachmentTileStatus {
+  busy?: boolean;
+  tone?: "error";
+  /** Shown on hover under the file name, e.g. the error. */
+  title?: string;
+  action?: {
+    label: string;
+    /** Names the button when the label alone does not say which file. */
+    accessibleName?: string;
+    onSelect: () => void;
+    disabled?: boolean;
+  };
 }
 
 /** Sizes are tokens so a theme can retune them; the plate stays proportional chrome. */
@@ -92,6 +113,8 @@ export interface AttachmentTileProps {
   hideIcon?: boolean;
   /** Replaces the derived meta line. An empty string removes it. */
   metaLabel?: string;
+  /** Document tiles only; a thumbnail draws no status. */
+  status?: AttachmentTileStatus;
   showType?: AttachmentTileTypeLabel;
   showSize?: boolean;
   /** Filename under a media tile; document tiles carry it inline. */
@@ -157,6 +180,7 @@ export const AttachmentTile: React.FC<AttachmentTileProps> = ({
   icon,
   hideIcon = false,
   metaLabel,
+  status,
   showType = "extension",
   showSize = true,
   showCaption = false,
@@ -224,6 +248,13 @@ export const AttachmentTile: React.FC<AttachmentTileProps> = ({
   // A tile has no room inside it for a control, so the badge overhangs a
   // corner; a row draws the caller's inline, where a disabled one stays visible.
   const inlineRemoveControl = isMedia ? null : removeControl;
+  const failed = !isMedia && status?.tone === "error";
+  const busy = !isMedia && Boolean(status?.busy);
+  const statusAttr = failed ? "error" : busy ? "busy" : undefined;
+  const tileAction =
+    !isMedia && !selection && !renderContent ? status?.action : undefined;
+  const hoverTitle =
+    !isMedia && status?.title ? `${filename}\n${status.title}` : filename;
   const activationName = meta
     ? `${activateLabel ?? t({ id: "chat.file.preview_attachment", message: "Preview attachment" })} ${filename}, ${meta}`
     : `${activateLabel ?? t({ id: "chat.file.preview_attachment", message: "Preview attachment" })} ${filename}`;
@@ -269,13 +300,29 @@ export const AttachmentTile: React.FC<AttachmentTileProps> = ({
             "attachment-tile-icon-geometry attachment-tile-icon-skin flex shrink-0 items-center justify-center",
           )}
         >
-          <ResolvedIcon iconId={iconId} className={geometry.icon} aria-hidden />
+          {busy ? (
+            <SpinnerIcon size="md" aria-hidden="true" />
+          ) : (
+            <ResolvedIcon
+              iconId={iconId}
+              className={geometry.icon}
+              aria-hidden
+            />
+          )}
         </span>
       )}
       <span className="min-w-0 flex-1">
         {nameNode}
         {meta && (
-          <span className="block truncate text-xs text-[var(--theme-fg-muted)]">
+          <span
+            data-ui="attachment-tile-meta"
+            className={clsx(
+              "block truncate text-xs",
+              failed
+                ? "text-[var(--theme-error-fg)]"
+                : "text-[var(--theme-fg-muted)]",
+            )}
+          >
             {meta}
           </span>
         )}
@@ -294,16 +341,21 @@ export const AttachmentTile: React.FC<AttachmentTileProps> = ({
     "data-media": "document",
     "data-selected": selection ? selection.selected || undefined : undefined,
     "data-invalid": invalid || undefined,
+    "data-status": statusAttr,
     title: selection ? filename : undefined,
     className: renderContent
       ? undefined
       : clsx(
-          "attachment-tile-geometry flex w-full items-center gap-2 text-left",
+          "attachment-tile-geometry flex w-full gap-2 text-left",
+          tileAction ? "flex-col items-stretch" : "items-center",
           variant !== "bare" &&
-            "border border-[var(--theme-border-attachment)] bg-[var(--theme-bg-secondary)] p-2",
+            (failed
+              ? "border border-[var(--theme-error-border)] bg-[var(--theme-error-bg)] p-2"
+              : "border border-[var(--theme-border-attachment)] bg-[var(--theme-bg-secondary)] p-2"),
           variant !== "bare" &&
             onActivate &&
             !selection &&
+            !failed &&
             "transition-colors group-hover:border-[var(--theme-border-focus)] group-hover:bg-[var(--theme-bg-accent)]",
           selection && !selection.selected && "opacity-50",
         ),
@@ -370,7 +422,44 @@ export const AttachmentTile: React.FC<AttachmentTileProps> = ({
   );
 
   let content: React.ReactNode;
-  if (selection) {
+  if (tileAction) {
+    // The frame wraps both buttons, so the action is never nested in the
+    // activation (a control inside a button is unreachable).
+    const actionButton = (
+      <Button
+        size="sm"
+        variant="secondary"
+        data-ui="attachment-tile-action"
+        aria-label={tileAction.accessibleName}
+        disabled={tileAction.disabled}
+        onClick={tileAction.onSelect}
+        className="self-start"
+      >
+        {tileAction.label}
+      </Button>
+    );
+    content = (
+      <div {...documentFaceProps}>
+        {onActivate ? (
+          <button
+            type="button"
+            onClick={onActivate}
+            title={hoverTitle}
+            aria-label={activationName}
+            className="attachment-tile-geometry flex w-full min-w-0 cursor-pointer items-center gap-2 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-theme-focus focus-visible:ring-offset-2"
+          >
+            {body}
+          </button>
+        ) : (
+          <div title={hoverTitle} className="flex min-w-0 items-center gap-2">
+            {body}
+          </div>
+        )}
+        {inlineRemoveControl}
+        {actionButton}
+      </div>
+    );
+  } else if (selection) {
     // Activation lives inside the frame, beside the checkbox, not wrapping both.
     content = face;
   } else if (onActivate) {
@@ -379,7 +468,7 @@ export const AttachmentTile: React.FC<AttachmentTileProps> = ({
       <button
         type="button"
         onClick={onActivate}
-        title={filename}
+        title={hoverTitle}
         aria-label={activationName}
         className={clsx(
           "attachment-tile-geometry block w-full cursor-pointer text-left",
@@ -396,7 +485,7 @@ export const AttachmentTile: React.FC<AttachmentTileProps> = ({
     );
   } else {
     // Not interactive: the title serves hover, the alt text assistive tech.
-    content = <div title={filename}>{face}</div>;
+    content = <div title={hoverTitle}>{face}</div>;
   }
 
   return (

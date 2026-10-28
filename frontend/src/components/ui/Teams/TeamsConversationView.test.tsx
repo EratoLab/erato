@@ -97,7 +97,8 @@ describe("TeamsConversationView", () => {
     expect(screen.getByRole("heading", { level: 2 })).toHaveTextContent(
       "Product sync",
     );
-    expect(screen.getByText("Ada Lovelace, Grace Hopper")).toBeVisible();
+    // The viewer is addressed as chat messages address the user.
+    expect(screen.getByText("Ada Lovelace, You")).toBeVisible();
   });
 
   it("collapses a run of messages from one speaker under a single name", async () => {
@@ -114,7 +115,7 @@ describe("TeamsConversationView", () => {
 
     // Ada speaks twice, then again after Grace: two runs, not three headers.
     expect(screen.getAllByText("Ada Lovelace")).toHaveLength(2);
-    expect(screen.getAllByText("Grace Hopper")).toHaveLength(1);
+    expect(screen.getAllByText("You")).toHaveLength(1);
     expect(screen.getByText("Message 1")).toBeVisible();
     expect(screen.getByText("Message 2")).toBeVisible();
   });
@@ -272,6 +273,77 @@ describe("TeamsConversationView", () => {
     ).toBeVisible();
   });
 
+  it("counts lost messages and dates its days in the app's language", async () => {
+    const { i18n } = await import("@lingui/core");
+    const { messages: deMessages } = await import("@/locales/de/messages.json");
+    const { messages: plMessages } = await import("@/locales/pl/messages.json");
+    const view = await renderView(
+      <TeamsConversationView
+        index={index([message(1, { createdAt: "2026-10-02T12:00:00Z" })], {
+          skippedCount: 1,
+          window: { from: "2026-10-02T12:00:00Z", to: "2026-10-02T12:00:00Z" },
+        })}
+      />,
+    );
+    try {
+      i18n.load("de", deMessages as unknown as Messages);
+      i18n.activate("de");
+      view.rerender(
+        <I18nProvider i18n={i18n}>
+          <ThemeProvider
+            enableCustomTheme={false}
+            initialThemeMode="light"
+            persistThemeMode={false}
+          >
+            <TeamsConversationView
+              index={index(
+                [message(1, { createdAt: "2026-10-02T12:00:00Z" })],
+                {
+                  skippedCount: 1,
+                  window: {
+                    from: "2026-10-02T12:00:00Z",
+                    to: "2026-10-02T12:00:00Z",
+                  },
+                },
+              )}
+            />
+          </ThemeProvider>
+        </I18nProvider>,
+      );
+      expect(
+        screen.getByText("1 Nachricht konnte nicht geladen werden."),
+      ).toBeVisible();
+      expect(screen.getAllByText("2. Okt. 2026").length).toBeGreaterThan(0);
+      // The bubble's time too, whatever the browser's own language.
+      expect(screen.getByText(/^\d{2}:\d{2}$/)).toBeVisible();
+      expect(screen.queryByText(/[AP]M$/)).toBeNull();
+
+      i18n.load("pl", plMessages as unknown as Messages);
+      i18n.activate("pl");
+      for (const [skipped, text] of [
+        [3, "Nie udało się wczytać 3 wiadomości."],
+        [5, "Nie udało się wczytać 5 wiadomości."],
+      ] as const) {
+        view.rerender(
+          <I18nProvider i18n={i18n}>
+            <ThemeProvider
+              enableCustomTheme={false}
+              initialThemeMode="light"
+              persistThemeMode={false}
+            >
+              <TeamsConversationView
+                index={index([message(1)], { skippedCount: skipped })}
+              />
+            </ThemeProvider>
+          </I18nProvider>,
+        );
+        expect(screen.getByText(text)).toBeVisible();
+      }
+    } finally {
+      i18n.activate("en");
+    }
+  });
+
   it("labels a file whose Teams name was lost, never with its upload name", async () => {
     // A hash-deduped upload can carry a name minted from another message's ref,
     // so the index honestly says nothing. Falling through to the filename would
@@ -304,10 +376,10 @@ describe("TeamsConversationView", () => {
       />,
     );
 
-    // `viewer` is Grace, so her run header carries the accent and Ada's does not.
-    expect(screen.getByText("Grace Hopper")).toHaveClass(
-      "text-theme-fg-accent",
-    );
+    // `viewer` is Grace, so her run header reads "You" with the accent, and
+    // Ada's carries neither.
+    expect(screen.getByText("You")).toHaveClass("text-theme-fg-accent");
+    expect(screen.queryByText("Grace Hopper")).toBeNull();
     expect(screen.getByText("Ada Lovelace")).not.toHaveClass(
       "text-theme-fg-accent",
     );
@@ -347,6 +419,6 @@ describe("TeamsConversationView", () => {
 
     expect(screen.queryByRole("heading")).toBeNull();
     // The window and participants still carry, only the name goes.
-    expect(screen.getByText("Ada Lovelace, Grace Hopper")).toBeVisible();
+    expect(screen.getByText("Ada Lovelace, You")).toBeVisible();
   });
 });

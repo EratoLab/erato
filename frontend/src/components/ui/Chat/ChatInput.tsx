@@ -12,6 +12,7 @@ import {
 
 import { FileAttachmentsPreview } from "@/components/ui/FileUpload";
 import { FileUploadWithTokenCheck } from "@/components/ui/FileUpload/FileUploadWithTokenCheck";
+import { isAudioTranscriptionComplete } from "@/components/ui/FileUpload/audioTranscriptionStatus";
 import { ConfirmationDialog } from "@/components/ui/Modal/ConfirmationDialog";
 import { componentRegistry } from "@/config/componentRegistry";
 import {
@@ -99,6 +100,18 @@ import { ChatInputAudioModeButton } from "./ChatInputAudioModeButton";
 import { ChatInputTokenUsage } from "./ChatInputTokenUsage";
 import { ChatTaskPlanAdvisory } from "./ChatTaskPlanAdvisory";
 import { ChatUsageAdvisory } from "./ChatUsageAdvisory";
+import { ComposerContextArea } from "./ComposerContext/ComposerContextArea";
+import { ComposerModeChips } from "./ComposerContext/ComposerModeChips";
+import { ComposerNoticeView } from "./ComposerContext/ComposerNoticeView";
+import {
+  claimedFileIdsOf,
+  includedEstimatesOf,
+  includedUploadItemsOf,
+  unclaimedFiles,
+} from "./ComposerContext/composerLaneFiles";
+import { findComposerSendLimit } from "./ComposerContext/composerSendLimit";
+import { useStableFileList } from "./ComposerContext/useStableFileList";
+import { ComposerToolChips } from "./ComposerToolChips";
 import { DelegationRunModePopover } from "./DelegationRunModePopover";
 import { FacetSelector } from "./FacetSelector";
 import { McpToolsBrowserModal } from "./McpToolsBrowserModal";
@@ -106,6 +119,7 @@ import { ModelSelector } from "./ModelSelector";
 import { WaveformButton } from "./WaveformButton";
 import { buildAssistantMentionSection } from "./assistantMentionSection";
 import { buildMcpToolsSection } from "./mcpToolsSection";
+import { useAudioTranscriptionAnnouncements } from "./useAudioTranscriptionAnnouncements";
 import { Button } from "../Controls/Button";
 import { Alert } from "../Feedback/Alert";
 import { BudgetWarning } from "../Feedback/ChatWarnings/BudgetWarning";
@@ -114,6 +128,12 @@ import { toast } from "../Toast/toast";
 
 import type { AssistantMentionPopoverHandle } from "./AssistantMentionPopover";
 import type { ChatInputControlsHandle } from "./ChatInputControlsContext";
+import type { ChatInputAudioTranscriptionControls } from "../FileUpload/FileAttachmentsPreview";
+import type {
+  ComposerContextItem,
+  ComposerMode,
+  ComposerNotice,
+} from "./ComposerContext/types";
 import type { ToastAction } from "../Toast/types";
 import type { AudioDictationTranscriptChunk } from "@/hooks/audio/useAudioDictationRecorder";
 import type { MentionableAssistant } from "@/hooks/chat/useMentionableAssistants";
@@ -139,101 +159,8 @@ const AUDIO_MODE_SELECTOR_TOAST_ID = "chat-input-audio-mode-selector-toast";
 const AUDIO_MODE_SELECTOR_DEDUPE_KEY = "chat-input-audio-mode-selector";
 const CONVERSATIONAL_AUTO_SEND_EMPTY_TRANSCRIPT_TIMEOUT_MS = 8000;
 
-type AudioTranscriptionAttachment = {
-  fileId: string;
-  filename: string;
-  status: string;
-  transcript?: string | null;
-  error?: string | null;
-  progress?: number | null;
-  chunks?:
-    | {
-        index: number;
-        start_ms: number | null;
-        end_ms: number | null;
-        byte_start: number | null;
-        byte_end: number | null;
-        status: string;
-        transcript?: string | null;
-        attempts: number;
-        error?: string | null;
-      }[]
-    | null;
-};
-
-function getCompletedChunkTranscript(
-  chunks?: AudioTranscriptionAttachment["chunks"],
-): string | undefined {
-  if (!chunks || chunks.length === 0) {
-    return undefined;
-  }
-
-  const completedChunkText = chunks
-    .filter((chunk) => chunk.status.toLowerCase() === "completed")
-    .map((chunk) => chunk.transcript?.trim())
-    .filter((transcript): transcript is string => Boolean(transcript))
-    .join(" ");
-
-  return completedChunkText.length > 0 ? completedChunkText : undefined;
-}
-
-function isAudioTranscriptionComplete(
-  status?: string,
-  chunks?: AudioTranscriptionAttachment["chunks"],
-): boolean {
-  const normalizedStatus = status?.toLowerCase();
-
-  if (normalizedStatus) {
-    return normalizedStatus === "completed";
-  }
-
-  if (!chunks || chunks.length === 0) {
-    return false;
-  }
-
-  return chunks.every((chunk) => chunk.status.toLowerCase() === "completed");
-}
-
-function getDisplayTranscript(
-  transcript?: string | null,
-  chunks?: AudioTranscriptionAttachment["chunks"],
-): string | undefined {
-  if (transcript?.trim()) {
-    return transcript;
-  }
-
-  return getCompletedChunkTranscript(chunks);
-}
-
-function getDisplayAudioTranscriptionStatus(status: string) {
-  const normalizedStatus = status.toLowerCase();
-
-  switch (normalizedStatus) {
-    case "completed":
-      return t`Completed`;
-    case "failed":
-      return t`Failed`;
-    case "recording":
-      return t`Recording`;
-    case "uploading":
-      return t`Uploading`;
-    case "transcribing":
-      return t`Transcribing`;
-    case "canceled":
-      return t`Canceled`;
-    default:
-      return status;
-  }
-}
-
 function isAudioTranscriptionAttachment(file: FileUploadItem): boolean {
   return Boolean(file.audio_transcription);
-}
-
-function isAudioTranscriptionInProgress(status: string) {
-  const normalizedStatus = status.toLowerCase();
-
-  return !["completed", "failed", "canceled"].includes(normalizedStatus);
 }
 
 function areFacetIdListsEqual(a: string[], b: string[]) {
@@ -286,6 +213,12 @@ interface ChatInputProps {
   ) => void;
   onRegenerate?: () => void;
   handleFileAttachments?: (files: FileUploadItem[]) => void;
+  /**
+   * Called with the files the next send would carry after every change, a
+   * draft switch or a queue restore included, before the browser paints.
+   * Pass a stable callback.
+   */
+  onStagedFilesChange?: (files: FileUploadItem[]) => void;
   isLoading?: boolean;
   disabled?: boolean;
   className?: string;
@@ -299,12 +232,33 @@ interface ChatInputProps {
   initialFiles?: FileUploadItem[];
   /**
    * Inline `File`s that should count toward the token estimate without
-   * being persisted as uploads. The Outlook add-in passes its previewed
-   * email body here. Pass a memoized array — the underlying React Query
-   * cache derives a digest from each file's metadata, so an unstable
+   * being persisted as uploads. Pass a memoized array — the underlying React
+   * Query cache derives a digest from each file's metadata, so an unstable
    * reference will thrash the cache.
+   *
+   * @deprecated Give the context item an `estimate`.
    */
   virtualFiles?: File[];
+  /**
+   * Host context shown as chips inside the composer, before staged files.
+   * Rendered as given: hosts derive each state from the resolver that builds
+   * the send. Ambient items come in the design's fixed order (selection,
+   * draft, document or thread, comment, open comments), user items in the
+   * order added. Pass a memoized array. Omitted, the composer renders exactly
+   * as before.
+   */
+  contextItems?: ComposerContextItem[];
+  /**
+   * A one-off send prompt above the chips. Pass `null` while there is none,
+   * so its live region is already in place when one arrives; omitted, nothing
+   * renders.
+   */
+  composerNotice?: ComposerNotice | null;
+  /**
+   * Modes the next send runs in (the host's resolver decides), drawn after
+   * the add controls. Omitted, nothing renders.
+   */
+  composerModes?: ComposerMode[];
   /** Show file type in previews */
   showFileTypes?: boolean;
   // Add prop for preview callback
@@ -327,8 +281,10 @@ interface ChatInputProps {
   uploadError?: Error | string | null;
   /**
    * Blocks sending (and queuing/draining) the way a token overrun does,
-   * for owners that stage files the composer cannot see. The web passes
-   * nothing.
+   * for owners that stage files the composer cannot see. Wins over the
+   * check the composer runs itself while a host passes `contextItems`: its
+   * staged files plus the included items whose estimate is an upload,
+   * against the upload size and the per-message file count.
    */
   sizeLimitExceeded?: ComposerSizeLimit | null;
   onSelectedChatProviderIdChange?: (chatProviderId: string | null) => void;
@@ -425,6 +381,7 @@ export const ChatInput = ({
   onSendMessage,
   onRegenerate: _onRegenerate,
   handleFileAttachments,
+  onStagedFilesChange,
   isLoading: propIsLoading,
   disabled = false,
   className = "",
@@ -434,6 +391,9 @@ export const ChatInput = ({
   acceptedFileTypes = [],
   initialFiles = [],
   virtualFiles,
+  contextItems,
+  composerNotice,
+  composerModes,
   showFileTypes = false,
   // Destructure the new props
   onFilePreview,
@@ -552,7 +512,11 @@ export const ChatInput = ({
   const isLoading = propIsLoading ?? isMessagingLoading;
 
   // Get feature configurations
-  const { enabled: uploadEnabled } = useUploadFeature();
+  const {
+    enabled: uploadEnabled,
+    maxSizeBytes: maxUploadBytes,
+    maxSizeFormatted: maxUploadFormatted,
+  } = useUploadFeature();
   const {
     enabled: audioTranscriptionEnabled,
     maxRecordingDurationSeconds,
@@ -581,7 +545,8 @@ export const ChatInput = ({
     },
     [],
   );
-  const { autofocus: shouldAutofocus } = useChatInputFeature();
+  const { autofocus: shouldAutofocus, maxFiles: maxFilesPerMessage } =
+    useChatInputFeature();
   const aiUsageAdvisory = useOptionalTranslation("chat.ai_usage_advisory");
 
   // Use local model selection hook
@@ -618,23 +583,6 @@ export const ChatInput = ({
     resetTokenLimits,
     resetTokenLimitsOnFileRemoval,
   } = useTokenManagement();
-  const isComposerBlocked =
-    isAnyTokenLimitExceeded || sizeLimitExceeded !== null;
-  const sizeLimitPlaceholder = (() => {
-    if (!sizeLimitExceeded) {
-      return null;
-    }
-    const limit = sizeLimitExceeded.formatted;
-    if (sizeLimitExceeded.kind === "count") {
-      return t`Cannot send: a message can carry at most ${limit} files. Remove some to send.`;
-    }
-    const names = sizeLimitExceeded.names.join(", ");
-    return plural(sizeLimitExceeded.names.length, {
-      one: `Cannot send: ${names} exceeds the ${limit} limit. Remove it to send.`,
-      other: `Cannot send: ${names} exceed the ${limit} limit. Remove them to send.`,
-    });
-  })();
-
   // Use the custom hook for chat input handling
 
   const {
@@ -647,6 +595,76 @@ export const ChatInput = ({
     setAttachedFiles,
     createSubmitHandler,
   } = useChatInputHandlers(maxFiles, handleFileAttachments, initialFiles);
+
+  // A host that passes context items may stage uploads the file row does not
+  // show (an email thread, a dropped email); the server checks those with the
+  // staged files, per file against the upload size and together against its
+  // per-message count, so the composer refuses what the server would.
+  const includedUploads = useMemo(
+    () => includedUploadItemsOf(contextItems),
+    [contextItems],
+  );
+  // The verdict names a chip as the lane does, not by its upload's filename.
+  const laneSendLimit = useMemo(
+    () =>
+      contextItems === undefined
+        ? null
+        : findComposerSendLimit(
+            includedUploads.map((item) => ({
+              name: item.label,
+              size: item.estimate.size,
+            })),
+            attachedFiles,
+            {
+              maxBytes: maxUploadBytes,
+              maxFormatted: maxUploadFormatted,
+              maxFiles: Math.min(maxFiles, maxFilesPerMessage),
+            },
+          ),
+    [
+      attachedFiles,
+      contextItems,
+      includedUploads,
+      maxFiles,
+      maxFilesPerMessage,
+      maxUploadBytes,
+      maxUploadFormatted,
+    ],
+  );
+  const effectiveSizeLimit = sizeLimitExceeded ?? laneSendLimit;
+  const isComposerBlocked =
+    isAnyTokenLimitExceeded || effectiveSizeLimit !== null;
+  const sizeLimitPlaceholder = (() => {
+    if (!effectiveSizeLimit) {
+      return null;
+    }
+    const limit = effectiveSizeLimit.formatted;
+    if (effectiveSizeLimit.kind === "count") {
+      return t({
+        id: "chat.input.sendLimit.count",
+        message: `Cannot send: a message can carry at most ${limit} files. Remove some to send.`,
+      });
+    }
+    const names = effectiveSizeLimit.names.join(", ");
+    const count = effectiveSizeLimit.names.length;
+    return t({
+      id: "chat.input.sendLimit.size",
+      message: plural(count, {
+        one: `Cannot send: ${names} exceeds the ${limit} limit. Remove it to send.`,
+        other: `Cannot send: ${names} exceed the ${limit} limit. Remove them to send.`,
+      }),
+    });
+  })();
+
+  // Layout, so a host chip built from this list never paints a frame that
+  // disagrees with the file row.
+  useLayoutEffect(() => {
+    onStagedFilesChange?.(attachedFiles);
+  }, [attachedFiles, onStagedFilesChange]);
+  const attachedFilesRef = useRef(attachedFiles);
+  useLayoutEffect(() => {
+    attachedFilesRef.current = attachedFiles;
+  }, [attachedFiles]);
 
   const hasComposeContent =
     message.trim().length > 0 || attachedFiles.length > 0;
@@ -1088,6 +1106,19 @@ export const ChatInput = ({
     ],
   );
 
+  const selectedFacets = useMemo(() => {
+    const selected = new Set(selectedFacetIds);
+    return availableFacets.filter((facet) => selected.has(facet.id));
+  }, [availableFacets, selectedFacetIds]);
+
+  const focusAddMenuTrigger = useCallback(() => {
+    formRef.current
+      ?.querySelector<HTMLElement>(
+        '[data-testid="chat-input-add-menu-trigger"]',
+      )
+      ?.focus();
+  }, []);
+
   const setDraftMessage = useCallback(
     (nextMessage: string, options?: { focus?: boolean }) => {
       setMessage(nextMessage);
@@ -1122,6 +1153,32 @@ export const ChatInput = ({
     [availableModels, setSelectedModel],
   );
 
+  // A host call, so not gated by the compose lock: a host replacing files
+  // calls it in the same tick its upload resolves, while this closure can
+  // still read `isUploading`. The user's own paths keep their lock.
+  const removeUploadedFiles = useCallback(
+    (fileIds: string[]) => {
+      const ids = new Set(fileIds);
+      if (ids.size === 0) {
+        return;
+      }
+      for (const fileId of ids) {
+        removeRecordedAudioFile(fileId);
+        handleRemoveFile(fileId);
+      }
+      resetTokenLimitsOnFileRemoval(
+        attachedFilesRef.current.filter((file) => !ids.has(file.id)).length,
+        message.trim().length,
+      );
+    },
+    [
+      handleRemoveFile,
+      message,
+      removeRecordedAudioFile,
+      resetTokenLimitsOnFileRemoval,
+    ],
+  );
+
   useImperativeHandle(
     ref,
     () => ({
@@ -1131,12 +1188,14 @@ export const ChatInput = ({
       setSelectedChatProviderId: applySelectedChatProviderId,
       toggleFacetId,
       addUploadedFiles: handleFilesUploaded,
+      removeUploadedFiles,
       clearQueuedMessage: () => clearQueuedBySessionId(composeSessionId),
     }),
     [
       clearQueuedBySessionId,
       composeSessionId,
       handleFilesUploaded,
+      removeUploadedFiles,
       applySelectedChatProviderId,
       applySelectedFacetIds,
       focusInput,
@@ -1500,32 +1559,6 @@ export const ChatInput = ({
     };
   }, [attachedFiles, incompleteAudioTranscriptionFileIds, setAttachedFiles]);
 
-  const audioTranscriptionAttachments = useMemo(
-    (): AudioTranscriptionAttachment[] =>
-      attachedFiles.flatMap((file) => {
-        const audioTranscription = file.audio_transcription;
-        if (!audioTranscription) {
-          return [];
-        }
-
-        return [
-          {
-            fileId: file.id,
-            filename: file.filename,
-            status: audioTranscription.status ?? "unknown",
-            transcript: getDisplayTranscript(
-              audioTranscription.transcript,
-              audioTranscription.chunks,
-            ),
-            progress: audioTranscription.progress,
-            chunks: audioTranscription.chunks,
-            error: audioTranscription.error,
-          },
-        ];
-      }),
-    [attachedFiles],
-  );
-
   // Create the submit handler
   // Use isPendingResponse instead of isStreaming to block submission immediately when send is clicked
   //
@@ -1689,6 +1722,10 @@ export const ChatInput = ({
       // meanwhile keeps focus.
       requestAnimationFrame(() => {
         const active = document.activeElement;
+        // A keyboard user walking the context chips keeps their place.
+        if (active?.closest('[data-ui="composer-context-lane"]')) {
+          return;
+        }
         if (
           active === null ||
           active === document.body ||
@@ -1743,9 +1780,9 @@ export const ChatInput = ({
     if (disabled) {
       return;
     }
-    // Same hold for an owner-reported size or count overrun: the effect
-    // re-runs when the owner clears it.
-    if (sizeLimitExceeded) {
+    // Same hold for a size or count overrun: the effect re-runs when it
+    // clears.
+    if (effectiveSizeLimit) {
       return;
     }
     // Defer past this commit's post-render effects (a just-completed add-in
@@ -1805,7 +1842,7 @@ export const ChatInput = ({
     messagingError,
     hasPendingConfirmation,
     disabled,
-    sizeLimitExceeded,
+    effectiveSizeLimit,
     getQueuedBySessionId,
     composeSessionId,
     chatId,
@@ -1843,6 +1880,28 @@ export const ChatInput = ({
     isRecording ||
     isRecordingUpload;
   const isDisabled = composeLocked || sendLocked;
+  const audioTranscriptionControls = useMemo(
+    (): ChatInputAudioTranscriptionControls => ({
+      canRetry: hasRecordedAudioFile,
+      retryingFileId: retryingAudioFileId,
+      onRetry: (fileId) => void retryAudioTranscription(fileId),
+      disabled: isDisabled || isRecordingUpload,
+    }),
+    [
+      hasRecordedAudioFile,
+      retryingAudioFileId,
+      retryAudioTranscription,
+      isDisabled,
+      isRecordingUpload,
+    ],
+  );
+  const audioStatusAnnouncement = useAudioTranscriptionAnnouncements(
+    attachedFiles,
+    chatId,
+  );
+  const showAudioStatusLive =
+    audioTranscriptionEnabled ||
+    attachedFiles.some(isAudioTranscriptionAttachment);
 
   const handleTextareaPaste = useCallback(
     (event: ReactClipboardEvent<HTMLTextAreaElement>) => {
@@ -2100,6 +2159,141 @@ export const ChatInput = ({
     resetTokenLimits,
     message,
   ]);
+
+  // Files a context chip stands for are drawn by that chip, not the file row,
+  // but stay staged: they still count against `maxFiles` and still send. So
+  // only a chip that says it sends them (included, or loading) may hide them;
+  // under any other state they show in the row, which is what goes out.
+  const claimedFileIds = useMemo(
+    () => claimedFileIdsOf(contextItems),
+    [contextItems],
+  );
+
+  const warnedClaimsRef = useRef(new Set<string>());
+  useEffect(() => {
+    if (!import.meta.env.DEV || !contextItems) {
+      return;
+    }
+    const staged = new Set(attachedFiles.map((file) => file.id));
+    for (const item of contextItems) {
+      if (
+        item.state !== "included" &&
+        item.state !== "loading" &&
+        item.claimsFileIds?.some((fileId) => staged.has(fileId)) &&
+        !warnedClaimsRef.current.has(item.id)
+      ) {
+        warnedClaimsRef.current.add(item.id);
+        console.warn(
+          `[ChatInput] "${item.id}" is ${item.state} but its claimed files are still staged, so they send and show in the file row. Unstage them when the item stops being sent.`,
+        );
+      }
+    }
+  }, [contextItems, attachedFiles]);
+
+  const overLimitItemIds = useMemo(
+    () =>
+      new Set(
+        includedUploads
+          .filter((item) => item.estimate.size > maxUploadBytes)
+          .map((item) => item.id),
+      ),
+    [includedUploads, maxUploadBytes],
+  );
+
+  // While the composer is locked (an upload, a compaction, a recording) the
+  // file row cannot change, so neither can a chip standing for some of it.
+  // A chip whose upload is over the size limit shows that it blocks Send.
+  const laneItems = useMemo(() => {
+    if (
+      contextItems === undefined ||
+      (!composeLocked && overLimitItemIds.size === 0)
+    ) {
+      return contextItems;
+    }
+    return contextItems.map((item) => {
+      let next = item;
+      if (overLimitItemIds.has(item.id)) {
+        const limit = maxUploadFormatted;
+        const reason = t({
+          id: "chat.input.sendLimit.chipMeta",
+          message: `Over the ${limit} limit`,
+        });
+        next = {
+          ...next,
+          tone: "error",
+          toneIcon: "tone",
+          meta: next.meta ? `${reason} · ${next.meta}` : reason,
+        };
+      }
+      if (composeLocked && next.claimsFileIds?.length && !next.locked) {
+        next = { ...next, locked: true };
+      }
+      return next;
+    });
+  }, [contextItems, composeLocked, overLimitItemIds, maxUploadFormatted]);
+  const slotFiles = useMemo(
+    () => unclaimedFiles(attachedFiles, claimedFileIds),
+    [attachedFiles, claimedFileIds],
+  );
+
+  // One token reset for the batch: per-file removal would read a stale count
+  // on every call and ask the audio confirmation once per file.
+  const handleRemoveFilesByIds = useCallback(
+    (fileIds: string[]) => {
+      if (composeLocked) {
+        return;
+      }
+      const ids = new Set(fileIds);
+      const removing = attachedFiles.filter((file) => ids.has(file.id));
+      if (removing.length === 0) {
+        return;
+      }
+      for (const file of removing) {
+        removeRecordedAudioFile(file.id);
+        handleRemoveFile(file.id);
+      }
+      resetTokenLimitsOnFileRemoval(
+        attachedFiles.length - removing.length,
+        message.trim().length,
+      );
+    },
+    [
+      attachedFiles,
+      composeLocked,
+      handleRemoveFile,
+      message,
+      removeRecordedAudioFile,
+      resetTokenLimitsOnFileRemoval,
+    ],
+  );
+
+  // The lane is memoized; a handler that changed with every keystroke would
+  // re-render every chip on every keystroke.
+  const removeClaimedFilesRef = useRef(handleRemoveFilesByIds);
+  useLayoutEffect(() => {
+    removeClaimedFilesRef.current = handleRemoveFilesByIds;
+  }, [handleRemoveFilesByIds]);
+  const removeClaimedFiles = useCallback(
+    (fileIds: string[]) => removeClaimedFilesRef.current(fileIds),
+    [],
+  );
+
+  // "Remove all" only touches the files the row shows.
+  const handleRemoveUnclaimedFiles = useCallback(
+    () => handleRemoveFilesByIds(slotFiles.map((file) => file.id)),
+    [handleRemoveFilesByIds, slotFiles],
+  );
+
+  const includedEstimates = useStableFileList(
+    useMemo(() => includedEstimatesOf(contextItems), [contextItems]),
+  );
+  const effectiveVirtualFiles = useMemo(
+    () =>
+      includedEstimates.length === 0
+        ? virtualFiles
+        : [...(virtualFiles ?? []), ...includedEstimates],
+    [virtualFiles, includedEstimates],
+  );
 
   // Callback for file button processing state change
   const handleFileButtonProcessingChange = useCallback(
@@ -2687,7 +2881,7 @@ export const ChatInput = ({
         <ChatInputTokenUsage
           message={message}
           attachedFiles={attachedFiles}
-          virtualFiles={virtualFiles}
+          virtualFiles={effectiveVirtualFiles}
           chatId={chatId}
           assistantId={assistantId}
           previousMessageId={previousMessageId}
@@ -2718,75 +2912,6 @@ export const ChatInput = ({
 
         {/* Budget warning - shows when user approaches spending limit */}
         <BudgetWarning />
-
-        {audioTranscriptionAttachments.length > 0 && (
-          <div className="mb-2 space-y-2">
-            {audioTranscriptionAttachments.map((attachment) =>
-              (() => {
-                const displayStatus = getDisplayAudioTranscriptionStatus(
-                  attachment.status,
-                );
-
-                return (
-                  <div
-                    key={attachment.fileId}
-                    className="message-frame-geometry mb-0 border bg-theme-bg-primary text-theme-fg-primary [border-color:var(--theme-border-attachment)]"
-                    role="status"
-                    data-testid={`chat-audio-transcription-${attachment.fileId}`}
-                  >
-                    <p
-                      className={clsx(
-                        "flex items-center gap-2 text-sm font-medium",
-                        isAudioTranscriptionInProgress(attachment.status) &&
-                          "animate-pulse",
-                      )}
-                    >
-                      <VoiceIcon
-                        className="size-4 shrink-0"
-                        aria-hidden="true"
-                      />
-                      <span>
-                        {t`Audio recording - Status: ${displayStatus}`}
-                      </span>
-                    </p>
-                    {attachment.transcript?.trim() && (
-                      <p className="mt-2 whitespace-pre-wrap rounded-md border border-theme-border bg-theme-bg-secondary p-2 text-sm">
-                        {attachment.transcript}
-                      </p>
-                    )}
-                    {attachment.error?.trim() && (
-                      <p className="mt-1 text-sm text-theme-error-fg">
-                        {attachment.error}
-                      </p>
-                    )}
-                    {attachment.status.toLowerCase() === "failed" &&
-                      hasRecordedAudioFile(attachment.fileId) && (
-                        <Button
-                          type="button"
-                          variant="secondary"
-                          size="sm"
-                          onClick={() =>
-                            retryAudioTranscription(attachment.fileId)
-                          }
-                          disabled={
-                            retryingAudioFileId === attachment.fileId ||
-                            isDisabled ||
-                            isRecordingUpload
-                          }
-                          className="mt-2"
-                          data-testid={`chat-input-retry-audio-${attachment.fileId}`}
-                        >
-                          {retryingAudioFileId === attachment.fileId
-                            ? t`Retrying...`
-                            : t`Retry transcription`}
-                        </Button>
-                      )}
-                  </div>
-                );
-              })(),
-            )}
-          </div>
-        )}
 
         {/* File error message */}
         {fileError && (
@@ -2980,21 +3105,67 @@ export const ChatInput = ({
             </div>
           )}
 
+          {composerNotice !== undefined && (
+            <ComposerNoticeView
+              notice={composerNotice}
+              onFocusLost={focusInput}
+            />
+          )}
+
           {/* Staged attachments belong inside the shell, above the textarea:
               they are part of what is about to be sent, not a separate card
-              floating over the composer. The shell's own gap spaces them. */}
+              floating over the composer. The shell's own gap spaces them.
+              Context chips are drawn here rather than through the slot, so a
+              kit replacing the slot cannot hide what is being sent. */}
           {(() => {
             const StagedAttachments =
               ChatInputAttachmentPreview ?? FileAttachmentsPreview;
+            if (contextItems === undefined) {
+              return (
+                <StagedAttachments
+                  attachedFiles={attachedFiles}
+                  maxFiles={maxFiles}
+                  onRemoveFile={handleRemoveFileById}
+                  onRemoveAllFiles={handleRemoveAllFilesWithTokenReset}
+                  onFilePreview={onFilePreview}
+                  disabled={composeLocked}
+                  showFileTypes={showFileTypes}
+                  audioTranscription={audioTranscriptionControls}
+                />
+              );
+            }
+            const someClaimed = claimedFileIds.size > 0;
+            const slotProps = {
+              attachedFiles: slotFiles,
+              maxFiles,
+              onRemoveFile: handleRemoveFileById,
+              onRemoveAllFiles: someClaimed
+                ? handleRemoveUnclaimedFiles
+                : handleRemoveAllFilesWithTokenReset,
+              onFilePreview,
+              disabled: composeLocked,
+              showFileTypes,
+              sharedHeightCap: true,
+              audioTranscription: audioTranscriptionControls,
+            };
             return (
-              <StagedAttachments
-                attachedFiles={attachedFiles}
-                maxFiles={maxFiles}
-                onRemoveFile={handleRemoveFileById}
-                onRemoveAllFiles={handleRemoveAllFilesWithTokenReset}
-                onFilePreview={onFilePreview}
-                disabled={composeLocked}
-                showFileTypes={showFileTypes}
+              <ComposerContextArea
+                items={laneItems ?? contextItems}
+                hasFiles={slotFiles.length > 0}
+                onFocusComposer={focusInput}
+                onRemoveClaimedFiles={removeClaimedFiles}
+                files={
+                  ChatInputAttachmentPreview ? (
+                    <ChatInputAttachmentPreview {...slotProps} />
+                  ) : (
+                    <FileAttachmentsPreview
+                      {...slotProps}
+                      stagedCount={
+                        someClaimed ? attachedFiles.length : undefined
+                      }
+                    />
+                  )
+                }
               />
             );
           })()}
@@ -3059,24 +3230,41 @@ export const ChatInput = ({
                   "w-full resize-none overflow-y-auto",
                   "chat-input-textarea-geometry",
                   "bg-transparent",
-                  "text-[var(--theme-fg-primary)] placeholder:text-[var(--theme-fg-muted)]",
+                  "text-[var(--theme-fg-primary)]",
                   "focus:outline-none",
                   "disabled:cursor-not-allowed disabled:opacity-50",
                   "max-h-[200px]",
                   "text-base",
                   "scrollbar-auto-hide",
-                  isComposerBlocked &&
-                    "border-[var(--theme-error-border)] placeholder:text-[var(--theme-error-fg)]",
+                  // One placeholder colour at a time: with both classes the
+                  // stylesheet order, not the condition, picks the winner.
+                  isComposerBlocked
+                    ? "border-[var(--theme-error-border)] placeholder:text-[var(--theme-error-fg)]"
+                    : "placeholder:text-[var(--theme-fg-muted)]",
                 )}
               />
             </div>
           )}
 
           <div
-            className="flex flex-wrap items-center justify-between gap-[calc(var(--theme-spacing-control-gap)/2)]"
+            className={clsx(
+              "flex flex-wrap justify-between gap-[calc(var(--theme-spacing-control-gap)/2)]",
+              useUnifiedMobileMenu ? "items-end" : "items-center",
+            )}
             data-ui="chat-input-controls"
           >
-            <div className="chat-input-controls-geometry flex min-w-0 flex-wrap items-center">
+            <div
+              className={clsx(
+                "chat-input-controls-geometry flex flex-wrap",
+                // Never narrower than its widest control: a wide right side
+                // (Exit audio mode) wraps to a line of its own rather than
+                // cutting the tool names. Top-aligned so + stays on the first
+                // chip row.
+                useUnifiedMobileMenu
+                  ? "flex-1 items-start"
+                  : "min-w-0 items-center",
+              )}
+            >
               {showControls &&
                 (useUnifiedMobileMenu ? (
                   <ChatInputAddControls
@@ -3190,6 +3378,32 @@ export const ChatInput = ({
                     )}
                   </>
                 ))}
+              {composerModes !== undefined && (
+                <ComposerModeChips
+                  modes={composerModes}
+                  onFocusComposer={focusInput}
+                />
+              )}
+              {/* The unified "+" hides the Tools dropdown and its selected
+                  buttons, so the selection is drawn here instead. Mounted
+                  while tools exist, so the last chip's announcement is read. */}
+              {showControls && useUnifiedMobileMenu && hasFacets && (
+                <ComposerToolChips
+                  facets={selectedFacets}
+                  onDeselect={toggleFacetId}
+                  locked={enforceSelectedFacetIds || composeLocked}
+                  lockReason={
+                    enforceSelectedFacetIds
+                      ? t({
+                          id: "chat.toolChips.lockReason",
+                          message:
+                            "This assistant sets the tools for its chats.",
+                        })
+                      : undefined
+                  }
+                  onFocusAfterLast={focusAddMenuTrigger}
+                />
+              )}
               {useUnifiedMobileMenu && showModelSelector && (
                 <ModelSelector
                   availableModels={availableModels}
@@ -3197,12 +3411,19 @@ export const ChatInput = ({
                   onModelChange={setSelectedModel}
                   disabled={!isSelectionReady}
                   align="left"
-                  className="ms-[var(--theme-spacing-control-gap)]"
+                  // Beside wrapped tool rows it lines up with Send, not +.
+                  className="ms-[var(--theme-spacing-control-gap)] min-h-9 self-end"
                 />
               )}
             </div>
 
-            <div className="relative flex min-w-0 flex-wrap items-center gap-[var(--theme-spacing-control-gap)]">
+            <div
+              className={clsx(
+                "relative flex min-w-0 flex-wrap items-center gap-[var(--theme-spacing-control-gap)]",
+                // On a line of its own it still ends at the right edge.
+                useUnifiedMobileMenu && "ms-auto",
+              )}
+            >
               {/* Out of flow like the mention popover's anchor: the popover
                   positions off a measurable element, and the right edge of
                   this cluster is where the Send/Queue button that triggered
@@ -3501,10 +3722,16 @@ export const ChatInput = ({
                   aria-label={
                     isAnyTokenLimitExceeded
                       ? t`Cannot send: Token limit exceeded`
-                      : sizeLimitExceeded?.kind === "size"
-                        ? t`Cannot send: File size limit exceeded`
-                        : sizeLimitExceeded?.kind === "count"
-                          ? t`Cannot send: File count limit exceeded`
+                      : effectiveSizeLimit?.kind === "size"
+                        ? t({
+                            id: "chat.input.sendLimit.sizeButton",
+                            message: "Cannot send: File size limit exceeded",
+                          })
+                        : effectiveSizeLimit?.kind === "count"
+                          ? t({
+                              id: "chat.input.sendLimit.countButton",
+                              message: "Cannot send: File count limit exceeded",
+                            })
                           : t`Send message`
                   }
                 />
@@ -3521,6 +3748,16 @@ export const ChatInput = ({
           )}
         </div>
       </form>
+      {showAudioStatusLive && (
+        <div
+          className="sr-only"
+          aria-live="polite"
+          aria-atomic="true"
+          data-ui="chat-audio-status-live"
+        >
+          {audioStatusAnnouncement}
+        </div>
+      )}
       {/* Above the AI advisory: this one is about what happens to THIS
           message, which is the more immediate of the two. */}
       <ChatTaskPlanAdvisory />

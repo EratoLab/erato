@@ -8,6 +8,9 @@ import type { Preview } from "@storybook/react";
 import React, { createElement as h } from "react";
 import { createPortal } from "react-dom";
 
+// Host panels (the composer context lane) render host components, which
+// need the host's stylesheet as they have in the app.
+import "@erato/frontend/library.css";
 import "./storybook.css";
 
 import type { ReactNode } from "react";
@@ -20,6 +23,11 @@ const componentKitMode = import.meta.env.STORYBOOK_COMPONENT_KIT_MODE as
 
 const liveCatalogs = import.meta.glob("../src/locales/*/messages.json");
 const builtCatalogs = import.meta.glob("../dist/locales/*/messages.json");
+// The host's own strings, for host components shown beside the kit's; empty
+// until the frontend catalog is compiled.
+const hostCatalogs = import.meta.glob(
+  "../../frontend/src/locales/*/messages.json",
+);
 
 type CatalogModule = {
   messages?: Record<string, string>;
@@ -51,6 +59,15 @@ window.ERATO_LINGUI_REACT = {
 const messagesFromCatalog = (catalogModule: CatalogModule) =>
   catalogModule.messages ?? catalogModule.default?.messages ?? {};
 
+const loadHostMessages = async (locale: string) => {
+  const loadHostCatalog =
+    hostCatalogs[`../../frontend/src/locales/${locale}/messages.json`] ??
+    hostCatalogs["../../frontend/src/locales/en/messages.json"];
+  return loadHostCatalog
+    ? messagesFromCatalog((await loadHostCatalog()) as CatalogModule)
+    : {};
+};
+
 const activateLocale = async (
   locale: string,
   mode: ComponentKitMode = componentKitMode ?? "live",
@@ -59,16 +76,17 @@ const activateLocale = async (
   const catalogPath = `../${mode === "built" ? "dist" : "src"}/locales/${locale}/messages.json`;
   const loadCatalog =
     catalogs[catalogPath] ?? catalogs["../src/locales/en/messages.json"];
+  const hostMessages = await loadHostMessages(locale);
 
   if (!loadCatalog) {
-    i18n.loadAndActivate({ locale: "en", messages: {} });
+    i18n.loadAndActivate({ locale: "en", messages: hostMessages });
     return;
   }
 
   const catalogModule = (await loadCatalog()) as CatalogModule;
   i18n.loadAndActivate({
     locale,
-    messages: messagesFromCatalog(catalogModule),
+    messages: { ...hostMessages, ...messagesFromCatalog(catalogModule) },
   });
 };
 
@@ -78,6 +96,9 @@ if (!i18n.locale) {
 
 const withHostI18n = (Story: () => ReactNode) => {
   const [locale, setLocale] = React.useState(i18n.locale || "en");
+  // Host components translate at render through the macro, not through the
+  // provider, so the tree remounts once the catalogs are in.
+  const [catalogsLoaded, setCatalogsLoaded] = React.useState(false);
 
   React.useEffect(() => {
     let isCurrent = true;
@@ -85,6 +106,7 @@ const withHostI18n = (Story: () => ReactNode) => {
     void activateLocale("en").then(() => {
       if (isCurrent) {
         setLocale("en");
+        setCatalogsLoaded(true);
       }
     });
 
@@ -94,7 +116,7 @@ const withHostI18n = (Story: () => ReactNode) => {
   }, []);
 
   return (
-    <I18nProvider i18n={i18n} key={locale}>
+    <I18nProvider i18n={i18n} key={`${locale}:${String(catalogsLoaded)}`}>
       <StaticFeatureConfigProvider>
         <ThemeProvider
           enableCustomTheme={false}

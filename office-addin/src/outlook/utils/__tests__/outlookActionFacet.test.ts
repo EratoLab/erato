@@ -613,6 +613,26 @@ describe("previewOutlookSend", () => {
       "outlook_rewrite_selection",
     ],
     ["none", { ...draft, draftContextIncluded: false }, null],
+    [
+      "unchanged",
+      {
+        ...draft,
+        hasActiveSelection: true,
+        selectionData: "Hel",
+        lastSentDraft: { sent: "Hello", seen: "Hello" },
+      },
+      "outlook_rewrite_selection",
+    ],
+    [
+      "unchanged",
+      {
+        ...draft,
+        ...scheduleReady,
+        schedulingThreadActive: true,
+        lastSentDraft: { sent: "Hello", seen: "Hello" },
+      },
+      "outlook_schedule",
+    ],
   ] as const)("reports %s together with the facet", (state, input, facetId) => {
     const result = previewOutlookSend(input);
     expect(result.draft).toBe(state);
@@ -626,6 +646,112 @@ describe("previewOutlookSend", () => {
     });
     expect(send.facet?.id ?? null).toBe(facetId);
     expect(send.draft).toBe(state);
+  });
+
+  it("hands over the facet it resolved, the one the chips estimate", () => {
+    const result = previewOutlookSend(draft);
+    expect(result.facet).toEqual(
+      resolveOutlookActionFacet({
+        ...draft,
+        lastSentDraftFingerprint: null,
+        nowIso: "",
+        timezone: "",
+      }).facet,
+    );
+    expect(result.facet?.args?.full_body).toBe("Hello");
+    expect(
+      previewOutlookSend({ ...draft, draftContextIncluded: false }).facet,
+    ).toBeUndefined();
+  });
+
+  describe("the scheduling mode", () => {
+    const sticky = { ...scheduleReady, schedulingThreadActive: true };
+
+    it("holds the review facet's slot, so ending it sends the draft again", () => {
+      const result = previewOutlookSend({ ...draft, ...sticky });
+      expect(result.facetId).toBe("outlook_schedule");
+      expect(result.mode).toBe("scheduling");
+      expect(previewOutlookSend({ ...draft, ...scheduleReady }).facetId).toBe(
+        "outlook_review_draft",
+      );
+    });
+
+    it("holds reply-from-read's slot in read mode", () => {
+      const read = {
+        ...preview,
+        isComposeMode: false,
+        isReadMode: true,
+        replyFromReadAvailable: true,
+      };
+      expect(previewOutlookSend({ ...read, ...sticky }).mode).toBe(
+        "scheduling",
+      );
+    });
+
+    it("never shows for the neutral surface's own schedule facet", () => {
+      const neutral = { ...preview, itemKind: null, isComposeMode: false };
+      const result = previewOutlookSend({ ...neutral, ...sticky });
+      expect(result.facetId).toBe("outlook_schedule");
+      expect(result.mode).toBeNull();
+    });
+
+    it("never shows on an appointment, nor without stickiness", () => {
+      expect(
+        previewOutlookSend({
+          ...draft,
+          ...sticky,
+          itemKind: "appointment",
+          appointmentContextAvailable: true,
+        }).mode,
+      ).toBeNull();
+      expect(
+        previewOutlookSend({ ...draft, ...scheduleReady }).mode,
+      ).toBeNull();
+      expect(previewOutlookSend(draft).mode).toBeNull();
+    });
+
+    it("shows where ending it drops the facet altogether", () => {
+      const unchanged = {
+        ...draft,
+        ...sticky,
+        lastSentDraft: { sent: "Hello", seen: "Hello" },
+      };
+      expect(previewOutlookSend(unchanged).mode).toBe("scheduling");
+    });
+
+    it("says what the draft does once scheduling ends", () => {
+      expect(
+        previewOutlookSend({ ...draft, ...sticky }).draftWithoutScheduling,
+      ).toBe("sent");
+      expect(
+        previewOutlookSend({
+          ...draft,
+          ...sticky,
+          lastSentDraft: { sent: "Hello", seen: "Hello" },
+        }).draftWithoutScheduling,
+      ).toBe("unchanged");
+      expect(previewOutlookSend(draft).draftWithoutScheduling).toBeNull();
+    });
+  });
+
+  it("says what the draft does once the selection is dismissed", () => {
+    const selected = { ...draft, hasActiveSelection: true, selectionData: "H" };
+    expect(previewOutlookSend(selected).draftWithoutSelection).toBe("sent");
+    // Sticky scheduling would still hold the draft back.
+    expect(
+      previewOutlookSend({
+        ...selected,
+        ...scheduleReady,
+        schedulingThreadActive: true,
+      }).draftWithoutSelection,
+    ).toBe("scheduling");
+    expect(
+      previewOutlookSend({
+        ...selected,
+        lastSentDraft: { sent: "Hello", seen: "Hello" },
+      }).draftWithoutSelection,
+    ).toBe("unchanged");
+    expect(previewOutlookSend(draft).draftWithoutSelection).toBeNull();
   });
 
   it("re-includes a draft whose body changed since the send", () => {

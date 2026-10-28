@@ -3,8 +3,10 @@ import { beforeAll, describe, expect, it, vi } from "vitest";
 
 import {
   buildDropEmailGroup,
+  dropAttachmentCounts,
   isEmailBodyPart,
   judgeDropEmailParts,
+  senderAndDate,
 } from "../buildDropEmailGroup";
 import { parseEmlBytes } from "../parsedEmail";
 
@@ -96,14 +98,12 @@ function stagedDrop(
 
 type FixedOptions = Pick<
   DropEmailGroupOptions,
-  "resolvedSize" | "bodyMetaLabel" | "verdicts" | "fallbackSubject"
+  "bodySizeLabel" | "verdicts" | "fallbackSubject"
 >;
 
 function makeOptions(overrides: Partial<FixedOptions> = {}) {
   return {
     fallbackSubject: "",
-    dismissBody: vi.fn<() => void>(),
-    restoreBody: vi.fn<() => void>(),
     dismissAttachment: vi.fn<(attachmentId: string) => void>(),
     restoreAttachment: vi.fn<(attachmentId: string) => void>(),
     ...overrides,
@@ -139,25 +139,36 @@ beforeAll(() => {
 });
 
 describe("buildDropEmailGroup", () => {
-  it("renders the body row, the flat attachment rows, and the forward as a nested card", async () => {
+  it("renders the read-only body row, the flat attachment rows, and the forward as a nested card", async () => {
     const parsed = await parseFixture();
     const group = buildDropEmailGroup(
       stagedDrop(parsed),
-      makeOptions({ resolvedSize: 123, bodyMetaLabel: "Updating…" }),
+      makeOptions({ bodySizeLabel: "41 KB" }),
     );
 
     expect(group.id).toBe("staged-email:drop-1");
-    expect(group.label).toBe("Cover note");
-    expect(group.metaLabel).toBe("Anna");
+    // The detail's header names the sender; the sheet's title is the subject.
+    expect(group.label).toBe("Anna");
+    expect(group.metaLabel).toBe("");
+    expect(group).not.toHaveProperty("collapsible");
     expect(group.items.map((item) => [item.kind, item.id])).toEqual([
       ["selectableAttachment", "drop-1:body"],
       ["selectableAttachment", "drop-1:att-0"],
       ["threadMessageGroup", "drop-1:att-1"],
     ]);
     const body = group.items[0];
-    expect(body.kind === "selectableAttachment" && fileOf(body).size).toBe(123);
-    expect(body.kind === "selectableAttachment" && body.metaLabel).toBe(
-      "Updating…",
+    if (body.kind !== "selectableAttachment") throw new Error("no body row");
+    // The chip's (x) removes the email; the body has no tick of its own.
+    expect(body.selected).toBe(true);
+    expect(body.onToggle).toBeUndefined();
+    expect(body.metaLabel).toBe("Email · 41 KB · Always sent");
+
+    const updating = buildDropEmailGroup(
+      stagedDrop(parsed),
+      makeOptions({ bodySizeLabel: "Updating…" }),
+    ).items[0];
+    expect(updating.kind === "selectableAttachment" && updating.metaLabel).toBe(
+      "Email · Updating… · Always sent",
     );
 
     const card = forwardCard(group.items);
@@ -262,16 +273,53 @@ describe("buildDropEmailGroup", () => {
     expect(excludedRow.attachments[0].validation).toBe(UNSUPPORTED);
   });
 
-  it("toggles the body and falls back to the host subject for a subject-less email", async () => {
-    const parsed = { ...(await parseFixture()), subject: null };
-    const options = makeOptions({ fallbackSubject: "From the host" });
+  it("names the email by its subject, then the host's, when it has no sender", async () => {
+    const parsed = { ...(await parseFixture()), from: null, date: null };
 
-    const group = buildDropEmailGroup(stagedDrop(parsed, [], true), options);
-    expect(group.label).toBe("From the host");
-    const body = group.items[0];
-    expect(body.kind === "selectableAttachment" && body.selected).toBe(false);
-    if (body.kind === "selectableAttachment") body.onToggle?.();
-    expect(options.restoreBody).toHaveBeenCalled();
+    expect(buildDropEmailGroup(stagedDrop(parsed), makeOptions()).label).toBe(
+      "Cover note",
+    );
+    expect(
+      buildDropEmailGroup(
+        stagedDrop({ ...parsed, subject: null }),
+        makeOptions({ fallbackSubject: "From the host" }),
+      ).label,
+    ).toBe("From the host");
+  });
+
+  it("dates the sender line in the app's language, with the year", async () => {
+    const parsed = {
+      ...(await parseFixture()),
+      date: new Date(2026, 9, 7, 12).toISOString(),
+    };
+    expect(senderAndDate(parsed)).toBe("Anna • 10/7/2026");
+
+    i18n.loadAndActivate({ locale: "de", messages: {} });
+    try {
+      expect(senderAndDate(parsed)).toBe("Anna • 7.10.2026");
+    } finally {
+      i18n.loadAndActivate({ locale: "en", messages: {} });
+    }
+  });
+
+  describe("dropAttachmentCounts", () => {
+    it("counts attachments and forwards, not body parts, and what the user or policy leaves out", async () => {
+      const parsed = await parseFixture();
+
+      expect(dropAttachmentCounts(stagedDrop(parsed), undefined)).toEqual({
+        kept: 2,
+        total: 2,
+      });
+      expect(
+        dropAttachmentCounts(stagedDrop(parsed, ["att-1"]), undefined),
+      ).toEqual({ kept: 1, total: 2 });
+      expect(
+        dropAttachmentCounts(
+          stagedDrop(parsed),
+          new Map([["att-0", UNSUPPORTED]]),
+        ),
+      ).toEqual({ kept: 1, total: 2 });
+    });
   });
 
   describe("judgeDropEmailParts", () => {

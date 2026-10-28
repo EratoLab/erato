@@ -29,6 +29,7 @@ const stubControls: ChatInputControls = {
   setSelectedChatProviderId: action("setSelectedChatProviderId"),
   toggleFacetId: action("toggleFacetId"),
   addUploadedFiles: action("addUploadedFiles"),
+  removeUploadedFiles: action("removeUploadedFiles"),
   clearQueuedMessage: action("clearQueuedMessage"),
 };
 

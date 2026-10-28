@@ -18,5 +18,25 @@ msgstr ""
 # ==============================
 #. js-lingui-explicit-id
 #: src/i18n/messages.ts
+msgid "componentKit.example.attachment.remove"
+msgstr "Retirer {filename}"
+
+#. js-lingui-explicit-id
+#: src/i18n/messages.ts
+msgid "componentKit.example.attachment.removeAll"
+msgstr "Tout retirer"
+
+#. js-lingui-explicit-id
+#: src/i18n/messages.ts
+msgid "componentKit.example.attachment.retry"
+msgstr "Relancer la transcription"
+
+#. js-lingui-explicit-id
+#: src/i18n/messages.ts
+msgid "componentKit.example.attachment.retryNamed"
+msgstr "Relancer la transcription : {filename}"
+
+#. js-lingui-explicit-id
+#: src/i18n/messages.ts
 msgid "componentKit.example.welcome"
 msgstr "Kit de composants d'exemple"

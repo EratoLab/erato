@@ -84,3 +84,33 @@ describe("leaving the chat or the document", () => {
     },
   );
 });
+
+describe("open comments the chip's (x) turned off", () => {
+  it("stays with includeOpenComments: through a Send and a document switch, not a chat switch", () => {
+    store.set({ includeOpenComments: true });
+    store.set({ includeOpenComments: false, openCommentsDismissed: true });
+    expect(store.getSnapshot()).toMatchObject({
+      includeOpenComments: false,
+      openCommentsDismissed: true,
+    });
+
+    const spent = store.sent();
+    expect(store.getSnapshot().openCommentsDismissed).toBe(true);
+    store.unspend(spent);
+    expect(store.getSnapshot().openCommentsDismissed).toBe(true);
+
+    store.leave("document");
+    expect(store.getSnapshot().openCommentsDismissed).toBe(true);
+    store.leave("chat");
+    expect(store.getSnapshot().openCommentsDismissed).toBe(false);
+  });
+
+  it("clears when + includes them again", () => {
+    store.set({ includeOpenComments: false, openCommentsDismissed: true });
+    store.set({ includeOpenComments: true, openCommentsDismissed: false });
+    expect(store.getSnapshot()).toMatchObject({
+      includeOpenComments: true,
+      openCommentsDismissed: false,
+    });
+  });
+});

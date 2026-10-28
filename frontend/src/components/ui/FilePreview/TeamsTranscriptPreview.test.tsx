@@ -122,7 +122,8 @@ describe("TeamsTranscriptPreview", () => {
     expect(await screen.findByText("Product sync")).toBeVisible();
     expect(screen.getByText("Ada Lovelace")).toBeVisible();
     expect(screen.getByText("Can we move the sync?")).toBeVisible();
-    expect(screen.getByText("Ada Lovelace, Grace Hopper")).toBeVisible();
+    // The viewer reads as "You", as chat messages address the user.
+    expect(screen.getByText("Ada Lovelace, You")).toBeVisible();
   });
 
   it("names the uploads a message carried, never by their stored name", async () => {

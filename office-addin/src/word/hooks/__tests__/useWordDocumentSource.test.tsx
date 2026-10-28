@@ -314,6 +314,54 @@ describe("useWordDocumentSource", () => {
     expect(build!.authoring?.fullDocument).toBeFalsy();
   });
 
+  it("hands the chips the capture that landed, never a send's copy", async () => {
+    readsText(["Alpha"]);
+    const { result } = renderSource();
+    await waitFor(() => expect(result.current.preview.status).toBe("included"));
+
+    const shown = result.current.lastBuild;
+    expect(shown?.args.document_text).toContain("Alpha");
+    const copy = await result.current.capture();
+    expect(copy).not.toBe(shown);
+    expect(result.current.lastBuild).toBe(shown);
+  });
+
+  it("forgets the capture when the document is another one or cannot be read", async () => {
+    readsText(["Alpha"]);
+    const { result, rerender } = renderSource();
+    await waitFor(() => expect(result.current.lastBuild).not.toBeNull());
+
+    read.mockReturnValue(new Promise(() => {}));
+    rerender({
+      enabled: true,
+      documentIdentity: "doc-2",
+      authoringEnabled: false,
+    });
+    expect(result.current.lastBuild).toBeNull();
+  });
+
+  it("clears the capture when a read fails", async () => {
+    readsText(["Alpha"]);
+    const { result } = renderSource();
+    await waitFor(() => expect(result.current.lastBuild).not.toBeNull());
+
+    read.mockResolvedValue({ ok: false, error: "paragraph read: Error" });
+    act(() => result.current.retry());
+    await waitFor(() =>
+      expect(result.current.preview.status).toBe("unreadable"),
+    );
+    expect(result.current.lastBuild).toBeNull();
+  });
+
+  it("keeps the capture out of Office settings and browser storage", async () => {
+    const setItem = vi.spyOn(Storage.prototype, "setItem");
+    readsText(["Alpha"]);
+    const { result } = renderSource();
+    await waitFor(() => expect(result.current.lastBuild).not.toBeNull());
+    expect(setItem).not.toHaveBeenCalled();
+    setItem.mockRestore();
+  });
+
   it("keeps the earlier capture available after the document changed", async () => {
     readsText(["Alpha"]);
     const { result } = renderSource();
@@ -354,6 +402,81 @@ describe("useWordDocumentSource", () => {
 
     expect(read).toHaveBeenCalledTimes(2);
     expect(build!.args.document_text).toContain("Alpha");
+  });
+
+  describe("retry", () => {
+    const failOnce = async () => {
+      read.mockResolvedValueOnce({ ok: false, error: "paragraph read: Error" });
+      const view = renderSource();
+      await waitFor(() =>
+        expect(view.result.current.preview.status).toBe("unreadable"),
+      );
+      return view;
+    };
+
+    it("reads again at once after a failed read, without waiting for a send", async () => {
+      const { result } = await failOnce();
+      focusPane();
+      expect(read).toHaveBeenCalledTimes(1);
+      const second = deferred<WordDocumentReadResult>();
+      read.mockReturnValueOnce(second.promise);
+
+      act(() => result.current.retry());
+
+      // Loading at once: the error does not stay up for the slow-read delay.
+      expect(result.current.preview).toMatchObject({
+        status: "unreadable",
+        reading: true,
+      });
+      expect(read).toHaveBeenCalledTimes(2);
+
+      await act(async () => {
+        second.resolve({
+          ok: true,
+          tracking: "Off",
+          paragraphs: paragraphs(["Alpha"]),
+        });
+      });
+      expect(result.current.preview).toMatchObject({
+        status: "included",
+        reading: false,
+      });
+    });
+
+    it("settles to unreadable when the read fails again", async () => {
+      const { result } = await failOnce();
+      read.mockResolvedValueOnce({ ok: false, error: "still failing" });
+
+      act(() => result.current.retry());
+      expect(result.current.preview.reading).toBe(true);
+
+      await waitFor(() =>
+        expect(result.current.preview).toMatchObject({
+          status: "unreadable",
+          readError: "still failing",
+          reading: false,
+        }),
+      );
+    });
+
+    it("joins a read that is already running", async () => {
+      const first = deferred<WordDocumentReadResult>();
+      read.mockReturnValueOnce(first.promise);
+      const { result } = renderSource();
+      expect(read).toHaveBeenCalledTimes(1);
+
+      act(() => result.current.retry());
+
+      expect(read).toHaveBeenCalledTimes(1);
+      await act(async () => {
+        first.resolve({
+          ok: true,
+          tracking: "Off",
+          paragraphs: paragraphs(["Alpha"]),
+        });
+      });
+      expect(result.current.preview.reading).toBe(false);
+    });
   });
 
   it.each([

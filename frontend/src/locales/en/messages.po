@@ -1473,6 +1473,8 @@ msgstr "LLM Chat"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatMessage.tsx
+#: src/components/ui/Teams/TeamsConversationView.tsx
+#: src/utils/teams/teamsTranscriptContext.ts
 msgid "branding.user_form_of_address"
 msgstr "You"
 
@@ -1607,11 +1609,13 @@ msgid "chat.attachments.remove_all_shown"
 msgstr "{count, plural, one {Remove all: # file} other {Remove all: # files}}"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Chat/ComposerContext/composerContextStrings.ts
 #: src/components/ui/FileUpload/GroupedFileAttachmentsPreview.tsx
 msgid "chat.attachments.show_less"
 msgstr "Show less"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Chat/ComposerContext/composerContextStrings.ts
 #: src/components/ui/FileUpload/GroupedFileAttachmentsPreview.tsx
 msgid "chat.attachments.show_more.count"
 msgstr "{count, plural, one {Show # more item} other {Show # more items}}"
@@ -1650,6 +1654,91 @@ msgstr "Replay audio response"
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "chat.audio_stop"
 msgstr "Stop playback"
+
+#. js-lingui-explicit-id
+#: src/components/ui/FileUpload/audioTranscriptionStatus.ts
+msgid "chat.audio.announce.failed"
+msgstr "{filename}: couldn't transcribe."
+
+#. js-lingui-explicit-id
+#: src/components/ui/FileUpload/audioTranscriptionStatus.ts
+msgid "chat.audio.announce.ready"
+msgstr "{filename}: transcript ready."
+
+#. js-lingui-explicit-id
+#: src/components/ui/FileUpload/audioTranscriptionStatus.ts
+msgid "chat.audio.preview.pending"
+msgstr "The transcript appears here once it is ready."
+
+#. js-lingui-explicit-id
+#: src/components/ui/FileUpload/audioTranscriptionStatus.ts
+msgid "chat.audio.retry"
+msgstr "Retry transcription"
+
+#. js-lingui-explicit-id
+#: src/components/ui/FileUpload/audioTranscriptionStatus.ts
+msgid "chat.audio.retrying"
+msgstr "Retrying…"
+
+#. js-lingui-explicit-id
+#: src/components/ui/FileUpload/audioTranscriptionStatus.ts
+msgid "chat.audio.retryingNamed"
+msgstr "Retrying… {filename}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/FileUpload/audioTranscriptionStatus.ts
+msgid "chat.audio.retryNamed"
+msgstr "Retry transcription: {filename}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/FileUpload/audioTranscriptionStatus.ts
+msgid "chat.audio.status.canceled"
+msgstr "Transcription canceled"
+
+#. js-lingui-explicit-id
+#: src/components/ui/FileUpload/audioTranscriptionStatus.ts
+msgid "chat.audio.status.failed"
+msgstr "Couldn't transcribe"
+
+#. js-lingui-explicit-id
+#: src/components/ui/FileUpload/audioTranscriptionStatus.ts
+msgid "chat.audio.status.ready"
+msgstr "Transcript ready"
+
+#. js-lingui-explicit-id
+#: src/components/ui/FileUpload/audioTranscriptionStatus.ts
+msgid "chat.audio.status.readyDuration"
+msgstr "Transcript ready · {duration}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/FileUpload/audioTranscriptionStatus.ts
+msgid "chat.audio.status.recording"
+msgstr "Recording…"
+
+#. js-lingui-explicit-id
+#: src/components/ui/FileUpload/audioTranscriptionStatus.ts
+msgid "chat.audio.status.recordingDuration"
+msgstr "Recording · {duration}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/FileUpload/audioTranscriptionStatus.ts
+msgid "chat.audio.status.transcribing"
+msgstr "Transcribing…"
+
+#. js-lingui-explicit-id
+#: src/components/ui/FileUpload/audioTranscriptionStatus.ts
+msgid "chat.audio.status.transcribingDuration"
+msgstr "Transcribing · {duration}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/FileUpload/audioTranscriptionStatus.ts
+msgid "chat.audio.status.uploading"
+msgstr "Uploading…"
+
+#. js-lingui-explicit-id
+#: src/components/ui/FileUpload/audioTranscriptionStatus.ts
+msgid "chat.audio.status.uploadingDuration"
+msgstr "Uploading · {duration}"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatInput.tsx
@@ -1733,6 +1822,7 @@ msgid "chat.facets.loadError"
 msgstr "Failed to load tools for this workspace."
 
 #. js-lingui-explicit-id
+#: src/components/ui/Chat/ComposerToolChips.tsx
 #: src/components/ui/Chat/FacetSelector.tsx
 msgid "chat.facetSelector.deselectFacet.title"
 msgstr "Deselect {facetDisplayName}"
@@ -2224,6 +2314,31 @@ msgstr "Couldn't unpin the chat"
 #~ msgstr "Audio file: {filename} · Status: {status}"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "chat.input.sendLimit.chipMeta"
+msgstr "Over the {limit} limit"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "chat.input.sendLimit.count"
+msgstr "Cannot send: a message can carry at most {limit} files. Remove some to send."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "chat.input.sendLimit.countButton"
+msgstr "Cannot send: File count limit exceeded"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "chat.input.sendLimit.size"
+msgstr "{count, plural, one {Cannot send: {names} exceeds the {limit} limit. Remove it to send.} other {Cannot send: {names} exceed the {limit} limit. Remove them to send.}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "chat.input.sendLimit.sizeButton"
+msgstr "Cannot send: File size limit exceeded"
+
+#. js-lingui-explicit-id
 #: src/components/ui/WordReview/WordCommentContextView.tsx
 msgid "chat.message.action_facet.comments.count"
 msgstr "{count, plural, one {# comment} other {# comments}}"
@@ -2626,6 +2741,11 @@ msgstr "Model changed from {fromModel} to {toModel}"
 #~ msgstr "The model was switched. Continuing this conversation with a different model may affect its context."
 
 #. js-lingui-explicit-id
+#: src/components/ui/Message/MessageSentWith.tsx
+msgid "chat.message.sentWith.label"
+msgstr "Sent with"
+
+#. js-lingui-explicit-id
 #: src/components/ui/WordReview/WordCommentReadNotice.tsx
 msgid "chat.message.wordCommentRead.all"
 msgstr "{count, plural, one {Read # comment} other {Read # comments}}"
@@ -2674,6 +2794,21 @@ msgstr "Edit your message"
 #: src/components/ui/MessageList/MessageEditor.tsx
 msgid "chat.messageEditor.cancel"
 msgstr "Cancel"
+
+#. js-lingui-explicit-id
+#: src/components/ui/MessageList/useEditComposerContext.tsx
+msgid "chat.messageEditor.context.lockReason"
+msgstr "An edited message keeps the context it was sent with. To leave it out, write a new message."
+
+#. js-lingui-explicit-id
+#: src/components/ui/MessageList/useEditComposerContext.tsx
+msgid "chat.messageEditor.context.meta"
+msgstr "Sent as before"
+
+#. js-lingui-explicit-id
+#: src/components/ui/MessageList/MessageEditor.tsx
+msgid "chat.messageEditor.laneLabel"
+msgstr "Attachments of this message"
 
 #. js-lingui-explicit-id
 #: src/components/ui/MessageList/MessageEditor.tsx
@@ -2787,6 +2922,21 @@ msgstr "If any of this runs as a background task, you will be asked to approve i
 #: src/components/ui/Chat/ChatTaskPlanAdvisory.tsx
 msgid "chat.task_approval.plan"
 msgstr "If this is split into separate tasks, you will be asked to approve the plan before any of it runs."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ComposerToolChips.tsx
+msgid "chat.toolChips.announce.deselected"
+msgstr "{name} deselected."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ComposerToolChips.tsx
+msgid "chat.toolChips.label"
+msgstr "Selected tools"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "chat.toolChips.lockReason"
+msgstr "This assistant sets the tools for its chats."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Feedback/ChatWarnings/BudgetWarning.tsx
@@ -3330,8 +3480,10 @@ msgid "common.preview"
 msgstr "Preview"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Chat/ComposerContext/composerContextStrings.ts
 #: src/components/ui/FileUpload/AttachmentTile.tsx
 #: src/components/ui/FileUpload/FilePreviewButton.tsx
+#: src/components/ui/Teams/TeamsTranscriptDetail.tsx
 msgid "common.remove"
 msgstr "Remove"
 
@@ -3339,6 +3491,171 @@ msgstr "Remove"
 #: src/pages/assistantHubUtils.tsx
 msgid "common.yes"
 msgstr "Yes"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ComposerContext/composerContextStrings.ts
+msgid "composer.context.announce.cannotRemove"
+msgstr "{label} can't be removed."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ComposerContext/composerContextStrings.ts
+msgid "composer.context.announce.expanded"
+msgstr "Showing every item."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ComposerContext/composerContextStrings.ts
+msgid "composer.context.announce.locked"
+msgstr "{label} is locked."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ComposerContext/composerContextStrings.ts
+msgid "composer.context.announce.notIncluded"
+msgstr "{label} is not included. Press + to include it."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ComposerContext/composerContextStrings.ts
+msgid "composer.context.announce.outcome"
+msgstr "{label}: {meta}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ComposerContext/composerContextStrings.ts
+msgid "composer.context.announce.removed"
+msgstr "{label} removed."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ComposerContext/composerContextStrings.ts
+msgid "composer.context.announce.removedAmbient"
+msgstr "{label} removed. Include again with +"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ComposerContext/composerContextStrings.ts
+msgid "composer.context.announce.restored"
+msgstr "{label} included."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ComposerContext/composerContextStrings.ts
+msgid "composer.context.detail.close"
+msgstr "Close details"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ComposerContext/composerContextStrings.ts
+msgid "composer.context.detail.include"
+msgstr "Include"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ComposerContext/composerContextStrings.ts
+msgid "composer.context.detail.leaveOut"
+msgstr "Leave out"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ComposerContext/composerContextStrings.ts
+msgid "composer.context.lane.label"
+msgstr "Message context"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ComposerContext/composerContextStrings.ts
+msgid "composer.context.more"
+msgstr "{count, plural, other {+# more}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ComposerContext/composerContextStrings.ts
+msgid "composer.context.pill.attention"
+msgstr "Needs a choice"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ComposerContext/composerContextStrings.ts
+msgid "composer.context.pill.error"
+msgstr "Error"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ComposerContext/composerContextStrings.ts
+msgid "composer.context.pill.included"
+msgstr "Included"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ComposerContext/composerContextStrings.ts
+msgid "composer.context.pill.loading"
+msgstr "Loading"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ComposerContext/composerContextStrings.ts
+msgid "composer.context.pill.locked"
+msgstr "Locked"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ComposerContext/composerContextStrings.ts
+msgid "composer.context.pill.suggested"
+msgstr "Suggested"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ComposerContext/composerContextStrings.ts
+msgid "composer.context.pill.superseded"
+msgstr "Not sent"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ComposerContext/composerContextStrings.ts
+msgid "composer.context.remove"
+msgstr "Remove {label}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ComposerContext/composerContextStrings.ts
+msgid "composer.context.restore"
+msgstr "Include {label}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ComposerContext/composerContextStrings.ts
+msgid "composer.context.scope.chat"
+msgstr "Off in this chat"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ComposerContext/composerContextStrings.ts
+msgid "composer.context.scope.item"
+msgstr "Off until you switch mail items"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ComposerContext/composerContextStrings.ts
+msgid "composer.context.scope.message"
+msgstr "Off for this message"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ComposerContext/composerContextStrings.ts
+msgid "composer.context.scope.selection"
+msgstr "Off until the selection changes"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ComposerContext/composerContextStrings.ts
+msgid "composer.context.state.attention"
+msgstr "Needs your choice."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ComposerContext/composerContextStrings.ts
+msgid "composer.context.state.error"
+msgstr "Error."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ComposerContext/composerContextStrings.ts
+msgid "composer.context.state.included"
+msgstr "Included."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ComposerContext/composerContextStrings.ts
+msgid "composer.context.state.loading"
+msgstr "Loading."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ComposerContext/composerContextStrings.ts
+msgid "composer.context.state.locked"
+msgstr "Locked."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ComposerContext/composerContextStrings.ts
+msgid "composer.context.state.suggested"
+msgstr "Not included."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ComposerContext/composerContextStrings.ts
+msgid "composer.context.state.superseded"
+msgstr "Not sent."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/DelegatedTaskApprovalCard.tsx
@@ -6822,47 +7139,160 @@ msgid "taskPlanApproval.unnamedTask"
 msgstr "Task {position}"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Teams/teamsTranscriptContextItem.tsx
+msgid "teams.context.announce.removed"
+msgstr "Teams transcript removed."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Teams/teamsTranscriptContextItem.tsx
+msgid "teams.context.announce.removedWithFiles"
+msgstr "{count, plural, one {Teams transcript removed, with # shared file.} other {Teams transcript removed, with # shared files.}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Teams/TeamsTranscriptDetail.tsx
+msgid "teams.context.detail.allConversations"
+msgstr "All conversations"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Teams/teamsTranscriptContextItem.tsx
+msgid "teams.context.detail.editSelection"
+msgstr "Edit selection"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Teams/TeamsTranscriptDetail.tsx
+msgid "teams.context.detail.filesLabel"
+msgstr "Shared files in {title}"
+
+#. js-lingui-explicit-id
+#: src/utils/teams/teamsTranscriptContext.ts
+msgid "teams.context.detail.kind.channel"
+msgstr "Channel"
+
+#. js-lingui-explicit-id
+#: src/utils/teams/teamsTranscriptContext.ts
+msgid "teams.context.detail.kind.chat"
+msgstr "Chat"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Teams/TeamsTranscriptDetail.tsx
+msgid "teams.context.detail.notAttached"
+msgstr "{count, plural, one {# shared file not attached} other {# shared files not attached}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Teams/TeamsTranscriptDetail.tsx
+msgid "teams.context.detail.oneFile"
+msgstr "{count, plural, one {One file covers this conversation} other {One file covers all # conversations}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Teams/TeamsTranscriptDetail.tsx
+msgid "teams.context.detail.openConversation"
+msgstr "Open conversation"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Teams/TeamsTranscriptDetail.tsx
+msgid "teams.context.detail.openConversationNamed"
+msgstr "Open conversation: {title}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Teams/TeamsTranscriptDetail.tsx
+msgid "teams.context.detail.otherFiles"
+msgstr "Other shared files"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Teams/TeamsTranscriptDetail.tsx
+msgid "teams.context.detail.unreadable"
+msgstr "This transcript is still sent, but its conversations can't be shown here."
+
+#. js-lingui-explicit-id
+#: src/utils/teams/teamsTranscriptContext.ts
+msgid "teams.context.label.more"
+msgstr "{title} +{count}"
+
+#. js-lingui-explicit-id
+#: src/utils/teams/teamsTranscriptContext.ts
+msgid "teams.context.meta.conversations"
+msgstr "{count, plural, one {# conversation} other {# conversations}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Teams/TeamsTranscriptDetail.tsx
+#: src/utils/teams/teamsTranscriptContext.ts
+msgid "teams.context.meta.reading"
+msgstr "Reading transcript…"
+
+#. js-lingui-explicit-id
+#: src/utils/teams/teamsTranscriptContext.ts
+msgid "teams.context.meta.unreadable"
+msgstr "Conversations can't be shown"
+
+#. js-lingui-explicit-id
+#: src/utils/teams/teamsTranscriptContext.ts
+msgid "teams.context.name"
+msgstr "Teams transcript"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Teams/teamsTranscriptContextItem.tsx
+msgid "teams.context.remove"
+msgstr "Remove Teams transcript"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Teams/teamsTranscriptContextItem.tsx
+msgid "teams.context.removeAction"
+msgstr "Remove transcript"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Teams/TeamsConversationView.tsx
+msgid "teams.conversation.skipped"
+msgstr "{skipped, plural, one {# message could not be loaded.} other {# messages could not be loaded.}}"
+
+#. js-lingui-explicit-id
 #: src/utils/teams/teamsAttachmentGroups.ts
+#: src/utils/teams/teamsTranscriptContext.ts
 msgid "teams.preview.allMessages"
 msgstr "All messages"
 
 #. js-lingui-explicit-id
 #: src/utils/teams/teamsAttachmentGroups.ts
+#: src/utils/teams/teamsTranscriptContext.ts
 msgid "teams.preview.attachment"
 msgstr "Attachment"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Teams/TeamsAttachmentsPreview.tsx
-msgid "teams.preview.conversationRegion"
-msgstr "Teams conversation preview"
+#~ msgid "teams.preview.conversationRegion"
+#~ msgstr "Teams conversation preview"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Teams/TeamsAttachmentsPreview.tsx
-msgid "teams.preview.conversationTitle"
-msgstr "Teams conversation"
+#~ msgid "teams.preview.conversationTitle"
+#~ msgstr "Teams conversation"
 
 #. js-lingui-explicit-id
 #: src/utils/teams/teamsAttachmentGroups.ts
+#: src/utils/teams/teamsTranscriptContext.ts
 msgid "teams.preview.image"
 msgstr "Image"
 
 #. js-lingui-explicit-id
 #: src/utils/teams/teamsAttachmentGroups.ts
+#: src/utils/teams/teamsTranscriptContext.ts
 msgid "teams.preview.messageCount"
 msgstr "{count, plural, one {# message} other {# messages}}"
 
 #. js-lingui-explicit-id
 #: src/utils/teams/teamsAttachmentGroups.ts
+#: src/utils/teams/teamsTranscriptContext.ts
 msgid "teams.preview.partialConversation"
 msgstr "Part of the conversation"
 
 #. js-lingui-explicit-id
 #: src/utils/teams/teamsAttachmentGroups.ts
+#: src/utils/teams/teamsTranscriptContext.ts
 msgid "teams.preview.selectedMessages"
 msgstr "Selected messages"
 
 #. js-lingui-explicit-id
 #: src/utils/teams/teamsAttachmentGroups.ts
+#: src/utils/teams/teamsTranscriptContext.ts
 msgid "teams.preview.skipped"
 msgstr "{skipped, plural, one {# could not be loaded} other {# could not be loaded}}"
 
@@ -7482,10 +7912,9 @@ msgstr "(no body)"
 msgid "{0, plural, one {# attachment ready to send} other {# attachments ready to send}}"
 msgstr "{0, plural, one {# attachment ready to send} other {# attachments ready to send}}"
 
-#. placeholder {0}: sizeLimitExceeded.names.length
 #: src/components/ui/Chat/ChatInput.tsx
-msgid "{0, plural, one {Cannot send: {names} exceeds the {limit} limit. Remove it to send.} other {Cannot send: {names} exceed the {limit} limit. Remove them to send.}}"
-msgstr "{0, plural, one {Cannot send: {names} exceeds the {limit} limit. Remove it to send.} other {Cannot send: {names} exceed the {limit} limit. Remove them to send.}}"
+#~ msgid "{0, plural, one {Cannot send: {names} exceeds the {limit} limit. Remove it to send.} other {Cannot send: {names} exceed the {limit} limit. Remove them to send.}}"
+#~ msgstr "{0, plural, one {Cannot send: {names} exceeds the {limit} limit. Remove it to send.} other {Cannot send: {names} exceed the {limit} limit. Remove them to send.}}"
 
 #: src/components/ui/FileUpload/GroupedFileAttachmentsPreview.tsx
 #~ msgid "{0} items"
@@ -7517,8 +7946,8 @@ msgid "{sharedCount} shared files"
 msgstr "{sharedCount} shared files"
 
 #: src/components/ui/Teams/TeamsConversationView.tsx
-msgid "{skipped} messages could not be loaded."
-msgstr "{skipped} messages could not be loaded."
+#~ msgid "{skipped} messages could not be loaded."
+#~ msgstr "{skipped} messages could not be loaded."
 
 #: src/components/ui/Trace/NestedTraceView.tsx
 msgid "{stepCount, plural, one {# step} other {# steps}}"
@@ -7579,8 +8008,8 @@ msgstr "1 file"
 #~ msgstr "1 item"
 
 #: src/components/ui/Teams/TeamsConversationView.tsx
-msgid "1 message could not be loaded."
-msgstr "1 message could not be loaded."
+#~ msgid "1 message could not be loaded."
+#~ msgstr "1 message could not be loaded."
 
 #: src/utils/teams/teamsSentAttachmentGroups.ts
 msgid "1 shared file"
@@ -7748,8 +8177,8 @@ msgstr "Audio input device selection is not supported in this browser."
 #~ msgstr "Audio recording - Status: {0}"
 
 #: src/components/ui/Chat/ChatInput.tsx
-msgid "Audio recording - Status: {displayStatus}"
-msgstr "Audio recording - Status: {displayStatus}"
+#~ msgid "Audio recording - Status: {displayStatus}"
+#~ msgstr "Audio recording - Status: {displayStatus}"
 
 #: src/hooks/audio/useAudioDictationRecorder.ts
 #: src/hooks/audio/useAudioInputLevelPreview.ts
@@ -7858,28 +8287,28 @@ msgid "Cancel task"
 msgstr "Cancel task"
 
 #: src/components/ui/Chat/ChatInput.tsx
-msgid "Canceled"
-msgstr "Canceled"
+#~ msgid "Canceled"
+#~ msgstr "Canceled"
 
 #: src/components/ui/Trace/SidecarLocalTraceView.tsx
 msgid "Cancelled"
 msgstr "Cancelled"
 
 #: src/components/ui/Chat/ChatInput.tsx
-msgid "Cannot send: a message can carry at most {limit} files. Remove some to send."
-msgstr "Cannot send: a message can carry at most {limit} files. Remove some to send."
+#~ msgid "Cannot send: a message can carry at most {limit} files. Remove some to send."
+#~ msgstr "Cannot send: a message can carry at most {limit} files. Remove some to send."
 
 #: src/components/ui/Chat/ChatInput.tsx
 #~ msgid "Cannot send: Audio transcription in progress"
 #~ msgstr "Cannot send: Audio transcription in progress"
 
 #: src/components/ui/Chat/ChatInput.tsx
-msgid "Cannot send: File count limit exceeded"
-msgstr "Cannot send: File count limit exceeded"
+#~ msgid "Cannot send: File count limit exceeded"
+#~ msgstr "Cannot send: File count limit exceeded"
 
 #: src/components/ui/Chat/ChatInput.tsx
-msgid "Cannot send: File size limit exceeded"
-msgstr "Cannot send: File size limit exceeded"
+#~ msgid "Cannot send: File size limit exceeded"
+#~ msgstr "Cannot send: File size limit exceeded"
 
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Cannot send: Token limit exceeded"
@@ -7954,8 +8383,8 @@ msgid "Collecting evidence on this device"
 msgstr "Collecting evidence on this device"
 
 #: src/components/ui/Chat/ChatInput.tsx
-msgid "Completed"
-msgstr "Completed"
+#~ msgid "Completed"
+#~ msgstr "Completed"
 
 #: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
 #~ msgid "Configuration"
@@ -8282,8 +8711,8 @@ msgstr "facets.<facet-id>.displayName"
 #~ msgstr "failed"
 
 #: src/components/ui/Chat/ChatInput.tsx
-msgid "Failed"
-msgstr "Failed"
+#~ msgid "Failed"
+#~ msgstr "Failed"
 
 #: src/hooks/audio/useAudioDictationRecorder.ts
 msgid "Failed to complete audio dictation."
@@ -8734,8 +9163,8 @@ msgstr "Recent Chats"
 #~ msgstr "Record audio"
 
 #: src/components/ui/Chat/ChatInput.tsx
-msgid "Recording"
-msgstr "Recording"
+#~ msgid "Recording"
+#~ msgstr "Recording"
 
 #: src/components/ui/Chat/ChatInputAudioModeButton.tsx
 #~ msgid "Recording audio"
@@ -8798,12 +9227,12 @@ msgid "Resize sidebar"
 msgstr "Resize sidebar"
 
 #: src/components/ui/Chat/ChatInput.tsx
-msgid "Retry transcription"
-msgstr "Retry transcription"
+#~ msgid "Retry transcription"
+#~ msgstr "Retry transcription"
 
 #: src/components/ui/Chat/ChatInput.tsx
-msgid "Retrying..."
-msgstr "Retrying..."
+#~ msgid "Retrying..."
+#~ msgstr "Retrying..."
 
 #: src/providers/LocalTaskCoordinator.tsx
 msgid "Review and choose evidence in the desktop app. Collection continues if this pane closes; uploading and cloud continuation wait until you return signed in."
@@ -9216,8 +9645,8 @@ msgstr "Tools"
 #~ msgstr "total"
 
 #: src/components/ui/Chat/ChatInput.tsx
-msgid "Transcribing"
-msgstr "Transcribing"
+#~ msgid "Transcribing"
+#~ msgstr "Transcribing"
 
 #: src/components/ui/Chat/ChatInput.tsx
 #: src/components/ui/FileUpload/AudioTranscriptExcerpt.tsx
@@ -9269,8 +9698,8 @@ msgstr "Unknown sender"
 #~ msgstr "Uploaded Files"
 
 #: src/components/ui/Chat/ChatInput.tsx
-msgid "Uploading"
-msgstr "Uploading"
+#~ msgid "Uploading"
+#~ msgstr "Uploading"
 
 #: src/components/ui/FileUpload/FileUploadStates.tsx
 msgid "Uploading file"

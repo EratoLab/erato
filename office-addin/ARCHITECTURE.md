@@ -82,9 +82,9 @@ implement the seams listed below, and never modify the core itself.
    renders. The registry is a mutable global, so exactly one host per loaded
    document — contributions stay route-local because only the matched lazy
    route module is evaluated. `src/teams/TeamsApp.tsx` mirrors this with
-   `installTeamsComponentRegistrations()`, which contributes
-   `ChatAddMenuExtraContent`, and `ChatInputAttachmentPreview` only when no
-   component kit registered one. Word registers its renderer in
+   `installTeamsComponentRegistrations()`, which contributes only
+   `ChatAddMenuExtraContent`: a transcript is a context chip, so a kit's
+   `ChatInputAttachmentPreview` renders the tab's other files. Word registers its renderer in
    `HostCardCodeBlock`. Component-kit registrations are applied at the entry
    point via `applyComponentKitRegistrations()` in `src/main.tsx`, before any
    host route module is evaluated.
@@ -141,6 +141,134 @@ feature-specific overrides inline in `SharedAddinShell`.
   on them). When host copy diverges, split ids per host
   (`officeAddin.settings.appearance.system.description.neutral` vs
   `….outlook`) rather than mutating a shared id.
+
+## Composer context
+
+Host context (the Word document or selection, the Outlook draft or thread, a
+Teams transcript) belongs in the composer's context lane: pass
+`contextItems` and, where a host has one-off send prompts, `composerNotice`
+through to `ChatInput`. Build each item's `state` from the same resolver the
+send path calls (`previewWordSend()`, `previewOutlookSend()`), never from a
+separate UI flag, so a chip cannot say "included" when nothing is sent.
+`onRemove` and `onRestore` change the host's store and the resolver runs
+again; the lane renders the state it gets back and announces that outcome.
+Pass a memoized array and give the item that carries content an `estimate`:
+the composer counts included items' estimates toward the token estimate, and
+`virtualFiles` is deprecated. A facet's estimate is `actionFacetEstimate()` of
+the facet the resolver built, so equal args keep one `File`. Mark an estimate
+the send uploads as a file of its own (an email thread, a dropped email)
+`estimateUpload`: the composer then checks it with the staged files against
+the upload size and the per-message file count, and blocks Send as the server
+would. The placeholder names an item over the size limit by its label, and the
+lane draws that chip in the error tone with the limit leading its meta. List files a chip stands for in `claimsFileIds` so the file row does not
+draw them twice. Claimed files hide only while their chip is included or
+loading; a chip that stops being sent must unstage them in the same update,
+or they show in the file row again, because they still send. Give items with
+a quoted or long label a `spokenLabel` ("Selection", "Email thread") for
+announcements. Locking is per item (`locked`, `lockReason`); the lane does
+not inherit the composer's lock, except that a chip claiming files is locked
+while the file row is.
+
+Word feeds the selection and the document this way: `wordContextChips`
+reads `previewWordSend()` and `useWordContextItems` turns the result into
+items. The (x)/(+) choices live in `wordContextStore`, in memory only
+(Office settings would save them into the DOCX), one entry per conversation
+key, so two composers never write each other's choices.
+
+Word's comments are one more chip, `word-comment`, from `previewWordSend()`
+and its as-if twin (the same input with this message's "Send without
+comments" and switch to the passage undone): `wordCommentChip` names the
+thread that goes (at the cursor, the pick, the passage's under the setting),
+the caret in several threads as a choice, or a pick that is gone, and turns
+suggested when only the as-if preview carries it, so (+) brings back exactly
+that. The id stays across variants and origins, and its `placement` stays
+ambient, so a choice in the detail keeps focus on the chip and its place in
+the lane. Passage threads and the comment map are no chip of their own:
+`wordPassageComments` and `wordDocumentComments` put them on the selection and
+the document; the map counts only where the facet the Send uses takes
+comment_map (`wordCommentMapFacet`). "Open comments (N)"
+(`wordOpenCommentsChip`) shows only while the document is off: included
+whenever the Send carries them, even none, and without a document chip it is
+the way to the picker when every comment is resolved. Quote, Show in Word, the
+switches, "What is sent" and the picker live in the details; Show in Word
+picks only a thread that goes because of the caret, and otherwise changes
+nothing that is sent. The gestures stay in `wordCommentGestureStore`; while a
+Send waits (a choice, a gone pick, comments Word did not hand over), the
+chip's (x) and the notice's "Send without comments" answer that Send rather
+than the next one, and comments the waiting Send could not read show as an
+error on their chip.
+
+The chip that carries the Send's facet (selection, document, comment or open
+comments) gets that facet's estimate from `wordSendEstimateFacet()`, which runs
+the Send's resolvers and its input preparation (`wordDocumentSendInput()`,
+`wordDocumentFacetInput()`, `wordSelectionForFacets()`) on what render time
+knows: the last capture (`useWordDocumentSource().lastBuild`, never a send's
+copy) and the passage the chip shows. The comment envelopes in it are
+stand-ins built from the listed threads; the Send reads them afresh.
+
+The one-off send prompts (a Send waiting on a choice, a slow capture, comment
+read progress, a failed selection read, the after-send capture and budget
+notes) are `wordComposerNotice()`: one notice at a time by priority, `null`
+when there is none, so the notice's live regions stay mounted. Nothing in the
+Word composer renders above `AddinChatInputCore`.
+
+Outlook feeds its chips from `previewOutlookSend()` (the facet: selection,
+draft or appointment) and `planOutlookFiles()` (the files: the open thread,
+each Office.js attachment, each drop), and the send uploads exactly that plan
+through `resolveSelectedFilesForSend(plan)`. `outlookContextChips` turns both
+into plain models and `useOutlookContextItems` into items. The choices live in
+`outlookContextStore`, in memory only (roaming settings would sync them across
+devices), per conversation, with item-scoped lifetimes; `afterSend` records
+what a send carried and ends the choices that held for one message. Thread and
+drop items carry their `.eml` as `estimate` with `estimateUpload`, so the
+composer's own size and count check covers them and the add-in passes no
+`sizeLimitExceeded` of its own; the draft, appointment or selection chip that
+carries the facet gets the estimate of `previewOutlookSend().facet`, the same
+resolver call its state comes from. Sticky
+scheduling is a `composerModes` entry next to "+", not a chip, and shows only
+where ending it changes the facet (`previewOutlookSend().mode`). The "+" menu
+only adds what has no chip.
+
+Teams has no resolver of its own: a transcript is nothing but uploads in the
+composer's staged list, which is what the send carries. `TeamsChatInput`
+mirrors that list through `ChatInput`'s `onStagedFilesChange` and
+`previewTeamsSend()` keeps the picker's records whose transcript upload is
+staged, keyed by upload id because transcript filenames repeat. Each becomes
+one item (`useTeamsTranscriptContextItems`) whose `claimsFileIds` are the
+record's staged uploads, so (x) removes the transcript and every file it
+brought. The uploads are already counted, so there is no `estimate`. The chip
+follows the staged list across chat switches, queue restores and sends.
+
+A staged recording's transcription status is drawn by the shared composer on
+its own file tile, in every host; there is no status card above the composer.
+
+Selected tools show as chips next to "+" wherever the unified "+" menu is used
+(every add-in surface): one button per tool that deselects it, after "+" and
+the mode chips and before the model selector, as in the prototype. Under an
+assistant that sets the tools, each chip shows a lock in place of its x. In a
+narrow pane the chips wrap beside the controls before them and Send keeps its
+corner; when the right side is wide (Exit audio mode) it moves to a line of its
+own rather than cutting the chips' names. The "+" carries no count badge.
+
+A sent user message names the context its facet carried under its text, in a
+read-only "Sent with" row. Each host registers a descriptor per facet id
+(`registerSentWithDescriptors()` in `installWordComponentRegistrations()` and
+`installOutlookComponentRegistrations()`) that rebuilds the chips from the
+stored `action_facet_args` through the formatters the composer chips use
+(`wordSentWith.ts`, `outlookSentWith.ts`), so the two never read apart. A
+facet that carried no user content (a mode, a reply to the open email, an
+empty compose) returns `null` and shows no row. Teams registers none: its
+context is uploads, which the message shows as conversations.
+
+Editing a message runs the same lane. Its files go through the attachment
+slot, a sent Teams transcript is one chip standing for its files again, and the
+facet the message was sent with is a locked "Sent as before" chip: the server
+sends the stored facet again with the edit, and only while it still offers
+that facet, so `AddinChatCore` passes `isActionFacetAvailable` and an edit
+never claims a facet the server would drop. Until `/me/facets` has loaded that
+check says no, so the chip and its estimate appear once the facets are known.
+A chip whose label is an excerpt (a quoted selection) shows its short name
+there, so "Sent as before" keeps its room; the detail holds the passage.
 
 ## Landmines
 
@@ -223,9 +351,24 @@ use the router.
   owns the picker dialog plus the in-flight transcript build. It cannot live
   under the composer's "+" popover — `AnchoredPopover` dismisses on any
   `pointerdown` outside its panel, and a portalled dialog is a DOM sibling of
-  that panel, so it would close itself on first click. The menu row only hands
-  over the composer's `onSelectFiles` and closes the menu; the selection is
-  serialized to one markdown `File` and goes through the ordinary upload path.
+  that panel, so it would close itself on first click. `open()` takes the
+  composer's `TeamsComposerBridge`, which uploads through the composer's own
+  path (size check, `uploadFiles`) without staging, so the provider learns the
+  upload ids and records `{ lineage, transcriptUploadId, assetUploadIds }` per
+  transcript. The bridge then stages the uploads, mirroring them into the
+  composer's staged list in the same batch so a chip never drops for a render.
+  "Edit selection" (the chip's detail, or "+" with a transcript staged)
+  reopens the dialog with that record's selection and an "Update" button:
+  Update rebuilds, unstages the old uploads before staging the new ones (the
+  composer trims to `maxFiles` as it adds), and keeps the lineage, so the chip
+  updates in place; Update with nothing ticked removes it; a failed upload
+  leaves the old transcript as it was, and so does closing the dialog while the
+  upload runs (each opening is a session; an upload that outlives its session
+  stages nothing). A file removed in the chip's detail is noted on the record
+  (`excludedAssetNames`), so an Update leaves it out. The record also keeps the
+  names of every asset it handed over (`assetNames`); those the composer did
+  not take, past `maxFiles` or of a refused type, are named in the detail
+  rather than dropped silently. Records live in memory for the session.
 - The standalone Teams manifest is staged as `manifest-teams.json` and served
   with its package from `/office-addin/teams`. Teams distribution is configured
   separately from the Outlook and Word XML add-ins.

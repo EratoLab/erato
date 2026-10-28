@@ -54,6 +54,7 @@ import { useCallback, useMemo, useRef, useState } from "react";
 import { AddinChatInputCore } from "./AddinChatInputCore";
 import { AddinHistoryDrawerCore } from "./AddinHistoryDrawerCore";
 import { AddinSettingsDialogCore } from "./AddinSettingsDialogCore";
+import { useAvailableActionFacetIds } from "./clientActions/useAvailableActionFacets";
 
 import type {
   ComponentProps,
@@ -130,6 +131,7 @@ export interface AddinChatController {
     toggleFacetId: (facetId: string) => void;
     setSelectedChatProviderId: (chatProviderId: string) => void;
     addUploadedFiles: (files: FileUploadItem[]) => void;
+    removeUploadedFiles: (fileIds: string[]) => void;
     clearQueuedMessage: () => void;
   };
   hostCallbacksRef: MutableRefObject<AddinChatHostCallbacks>;
@@ -234,6 +236,8 @@ function useAddinChatController({
         chatInputControlsRef.current?.setSelectedChatProviderId(chatProviderId),
       addUploadedFiles: (files: FileUploadItem[]) =>
         chatInputControlsRef.current?.addUploadedFiles(files),
+      removeUploadedFiles: (fileIds: string[]) =>
+        chatInputControlsRef.current?.removeUploadedFiles(fileIds),
       clearQueuedMessage: () =>
         chatInputControlsRef.current?.clearQueuedMessage(),
     }),
@@ -394,6 +398,13 @@ function useAddinChatController({
     },
     [activeSelectedFacetIds, chat],
   );
+  // An edit sends the stored facet again only while the server still offers
+  // it, so the editor shows its chip only then.
+  const availableActionFacetIds = useAvailableActionFacetIds();
+  const isActionFacetAvailable = useCallback(
+    (facetId: string) => availableActionFacetIds.has(facetId),
+    [availableActionFacetIds],
+  );
   const messageEditValue = useMemo(
     () => ({
       editingMessageId,
@@ -404,6 +415,7 @@ function useAddinChatController({
       chatId: chat.currentChatId,
       assistantId,
       chatProviderId: selectedModel?.chat_provider_id,
+      isActionFacetAvailable,
     }),
     [
       assistantId,
@@ -412,6 +424,7 @@ function useAddinChatController({
       chat.isPendingResponse,
       editingMessageId,
       handleEditSubmit,
+      isActionFacetAvailable,
       selectedModel?.chat_provider_id,
     ],
   );
@@ -553,7 +566,25 @@ function useAddinChatController({
 
 type ConversationDropzone = ReturnType<typeof useConversationDropzone>;
 
-function NeutralAddinChatHost({ controller }: AddinChatHostProps) {
+/**
+ * The neutral host around a composer of the caller's choosing, so a host that
+ * only adds context chips (Teams) keeps the neutral dropzone and send mapping.
+ * Call it at module scope: each call is a new component type.
+ */
+export function createNeutralAddinChatHost(
+  Input: typeof AddinChatInputCore = AddinChatInputCore,
+): ComponentType<AddinChatHostProps> {
+  return function NeutralHost({ controller }: AddinChatHostProps) {
+    return <NeutralAddinChatHostView controller={controller} Input={Input} />;
+  };
+}
+
+const NeutralAddinChatHost = createNeutralAddinChatHost();
+
+function NeutralAddinChatHostView({
+  controller,
+  Input,
+}: AddinChatHostProps & { Input: typeof AddinChatInputCore }) {
   const { maxSizeBytes, maxSizeFormatted } = useUploadFeature();
   const dropzone = useConversationDropzone({
     uploadFiles: controller.uploadFiles,
@@ -571,7 +602,7 @@ function NeutralAddinChatHost({ controller }: AddinChatHostProps) {
       dropzone={dropzone}
       showDropOverlay={dropzone.isDragActive && dropzone.isDragAccept}
       renderInput={(props) => (
-        <AddinChatInputCore
+        <Input
           {...props}
           onSendMessage={(
             message,

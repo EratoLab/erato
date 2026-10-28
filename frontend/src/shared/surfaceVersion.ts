@@ -10,7 +10,7 @@ export const ERATO_SHARED_SURFACE_VERSION = 1;
 
 // Bump on purely additive growth of the surface, so a kit can require a name
 // that exists without demanding a new major.
-export const ERATO_SHARED_SURFACE_MINOR = 18;
+export const ERATO_SHARED_SURFACE_MINOR = 21;
 
 /**
  * Per extension point, the minor at which that point's contract last grew a
@@ -25,6 +25,9 @@ export const EXTENSION_POINT_REQUIRED_SURFACE_MINOR: Partial<
   Record<keyof ComponentRegistry, number>
 > = {
   ChatHistoryList: 8,
+  // A staged recording's status moved from a card above the composer onto its
+  // file; an older override hides why Send is disabled.
+  ChatInputAttachmentPreview: 20,
 };
 
 export type ComponentKitVersionStance = "warn" | "enforce";

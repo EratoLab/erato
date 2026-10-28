@@ -46,6 +46,16 @@ export {
   type ChatMessageHostComponents,
   type ChatMessageProps,
 } from "@/components/ui/Chat/ChatMessage";
+export {
+  MessageSentWith,
+  type MessageSentWithProps,
+} from "@/components/ui/Message/MessageSentWith";
+export {
+  registerSentWithDescriptors,
+  sentWithChipsFor,
+  type SentWithChip,
+  type SentWithDescriptor,
+} from "@/utils/chat/sentWith";
 export * from "@/components/ui/MessageList";
 // Named explicitly: the library build drops re-exported bindings from the
 // `export *` above unless something in the bundle references them directly.
@@ -57,6 +67,7 @@ export {
 export {
   MessageEditor,
   type MessageEditorProps,
+  type MessageEditorTokenContext,
 } from "@/components/ui/MessageList/MessageEditor";
 export {
   MessageContent,
@@ -199,11 +210,20 @@ export {
   type TeamsConversationViewProps,
 } from "@/components/ui/Teams/TeamsConversationView";
 export {
-  TeamsAttachmentsPreview,
-  type TeamsAttachmentsPreviewProps,
-} from "@/components/ui/Teams/TeamsAttachmentsPreview";
+  TeamsTranscriptDetail,
+  type TeamsTranscriptDetailProps,
+  type TeamsTranscriptNamedUpload,
+} from "@/components/ui/Teams/TeamsTranscriptDetail";
 export {
+  teamsTranscriptItemId,
+  useTeamsTranscriptContextItems,
+  type TeamsTranscriptContextEntry,
+  type TeamsTranscriptContextOptions,
+} from "@/components/ui/Teams/useTeamsTranscriptContextItems";
+export {
+  readTeamsTranscriptIndex,
   useTeamsTranscriptIndex,
+  useTeamsTranscriptIndexes,
   type TeamsTranscriptIndexRead,
 } from "@/hooks/teams/useTeamsTranscriptIndex";
 export {
@@ -590,11 +610,13 @@ export {
   type TeamsMessageRef,
 } from "@/utils/teams/teamsConversationRef";
 export {
-  buildTeamsAttachmentGroups,
   buildTeamsMessageAttachmentGroups,
-  type TeamsAttachedTranscript,
   type TeamsAttachmentPreviewGroups,
 } from "@/utils/teams/teamsAttachmentGroups";
+export {
+  teamsTranscriptChipText,
+  type TeamsTranscriptChipText,
+} from "@/utils/teams/teamsTranscriptContext";
 export {
   TEAMS_TRANSCRIPT_INDEX_MARKER,
   TEAMS_TRANSCRIPT_INDEX_VERSION,
@@ -655,7 +677,38 @@ export type {
 export { DEFAULT_MAX_FILES_PER_MESSAGE } from "@/utils/fileUploadLimits";
 export { formatFileSize } from "@/components/ui/FileUpload/FilePreviewBase";
 export { FileAttachmentsPreview } from "@/components/ui/FileUpload/FileAttachmentsPreview";
-export type { ChatInputAttachmentPreviewProps } from "@/components/ui/FileUpload/FileAttachmentsPreview";
+export type {
+  ChatInputAttachmentPreviewProps,
+  ChatInputAudioTranscriptionControls,
+} from "@/components/ui/FileUpload/FileAttachmentsPreview";
+export type { AttachmentTileStatus } from "@/components/ui/FileUpload/AttachmentTile";
+export {
+  audioTranscriptionTileStatus,
+  type AudioTranscriptionTileStatus,
+} from "@/components/ui/FileUpload/audioTranscriptionStatus";
+export {
+  actionFacetEstimate,
+  ComposerContextArea,
+  ComposerContextLane,
+  ComposerModeChips,
+  DefaultComposerContextChipFace,
+  useLiveAnnouncement,
+  type ActionFacetForEstimate,
+  type ComposerContextAreaProps,
+  type ComposerContextChipFaceProps,
+  type ComposerContextDetail,
+  type ComposerContextDetailAction,
+  type ComposerContextDetailRenderContext,
+  type ComposerContextDismissScope,
+  type ComposerContextIconName,
+  type ComposerContextItem,
+  type ComposerContextLaneProps,
+  type ComposerContextState,
+  type ComposerContextTone,
+  type ComposerMode,
+  type ComposerModeChipsProps,
+  type ComposerNotice,
+} from "@/components/ui/Chat/ComposerContext";
 export type { FileAttachmentsPreviewProps } from "@/components/ui/FileUpload/FileAttachmentsPreview";
 export type {
   FileAttachmentGroup,

@@ -401,6 +401,40 @@ export const Notices: Story = {
 };
 
 /**
+ * A file still being worked on and one that failed: the spinner takes the
+ * icon plate, the error colours take frame and meta, and the one action sits
+ * inside the frame beside the activation, never inside it.
+ */
+export const StatusBusyAndError: Story = {
+  args: {
+    items: [
+      {
+        ...item("s1", "audio-recording-0942.wav"),
+        metaLabel: "Transcribing · 0:42",
+        status: { busy: true },
+      },
+      {
+        ...item("s2", "audio-recording-0951.wav"),
+        metaLabel: "Couldn't transcribe",
+        status: {
+          tone: "error",
+          title: "The transcription service did not answer in time.",
+          action: {
+            label: "Retry transcription",
+            accessibleName: "Retry transcription: audio-recording-0951.wav",
+            onSelect: action("retry"),
+          },
+        },
+      },
+      item("s3", "Acme_Inc_Organizational_Data.docx"),
+    ],
+    size: "compact",
+    onRemove: () => {},
+    onActivate: () => {},
+  },
+};
+
+/**
  * Recipe: the tile inside the real composer, not a stand-in for it. `ChatInput`
  * renders `FileAttachmentsPreview`, which is what draws these tiles — so this
  * story breaks if the composer's own wiring regresses.

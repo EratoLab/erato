@@ -6,6 +6,7 @@ import {
   AttachmentTile,
   type AttachmentTileSize,
   type AttachmentTileProps,
+  type AttachmentTileStatus,
 } from "./AttachmentTile";
 import { getFileName, getFileType } from "./FilePreviewBase";
 import { Button } from "../Controls/Button";
@@ -20,6 +21,9 @@ export interface AttachmentTileItem {
   labelOverride?: string;
   /** A sent recording's completed transcript; tiles do not draw it. */
   transcript?: string;
+  /** Replaces the derived meta line, e.g. a staged recording's "Transcribing…". */
+  metaLabel?: string;
+  status?: AttachmentTileStatus;
 }
 
 /** Mirrors the tile's own media test, so banding matches what each tile draws. */
@@ -53,6 +57,11 @@ export interface AttachmentTileListProps {
    * worse than a tall message.
    */
   capHeight?: boolean;
+  /**
+   * Keeps the count and "Remove all" in view at the foot of a scroll area the
+   * list does not own (the composer's shared staged area).
+   */
+  stickyBulkControls?: boolean;
   /** Shows the staged count against the host's limit, e.g. "3/50". */
   maxFiles?: number;
   /**
@@ -77,6 +86,7 @@ export const AttachmentTileList: React.FC<AttachmentTileListProps> = ({
   disabled = false,
   removeAllThreshold = 3,
   capHeight = false,
+  stickyBulkControls = false,
   maxFiles,
   stagedCount,
   className,
@@ -127,6 +137,8 @@ export const AttachmentTileList: React.FC<AttachmentTileListProps> = ({
       previewUrl: item.previewUrl,
       size,
       labelOverride: item.labelOverride,
+      ...(item.metaLabel !== undefined ? { metaLabel: item.metaLabel } : {}),
+      ...(item.status ? { status: item.status } : {}),
       showCaption: showCaptions,
       expandable,
       disabled,
@@ -185,7 +197,14 @@ export const AttachmentTileList: React.FC<AttachmentTileListProps> = ({
           on its own: a list short enough not to need one is also too short to
           overflow the cap, so there is nothing the count would warn about. */}
       {showRemoveAll && (
-        <div className="flex items-center justify-between gap-2">
+        <div
+          className={clsx(
+            "flex items-center justify-between gap-2",
+            stickyBulkControls &&
+              "sticky bottom-0 z-[1] bg-[var(--theme-shell-chat-input)]",
+          )}
+          data-ui={stickyBulkControls ? "attachment-bulk-controls" : undefined}
+        >
           <span className="text-xs text-[var(--theme-fg-muted)]">
             {countLabel}
           </span>

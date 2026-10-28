@@ -258,6 +258,23 @@ describe("WordCommentPicker", () => {
     );
   });
 
+  it("dates each row in the app's language, not the browser's", () => {
+    i18n.load("de", {});
+    i18n.activate("de");
+    const at = new Date(Date.UTC(2026, 8, 4, 7, 0));
+    render(
+      <WordCommentPicker
+        {...props({ list: listOf([thread(0, { lastActivity: at })]) })}
+      />,
+    );
+    expect(rows()[0]).toHaveTextContent(
+      new Intl.DateTimeFormat("de", {
+        dateStyle: "medium",
+        timeStyle: "short",
+      }).format(at),
+    );
+  });
+
   it("picks a thread and shows one in Word", async () => {
     const picker = props();
     render(<WordCommentPicker {...picker} />);

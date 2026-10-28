@@ -110,6 +110,48 @@ export function withWordReviewFallback(
     : build;
 }
 
+/**
+ * The capture as the Send resolves it: Track Changes read off the capture before the review
+ * fallback drops an authoring snapshot that cannot be used. The Send and the chips' estimate both
+ * prepare it here, so the estimate is of what goes.
+ */
+export function wordDocumentSendInput(
+  build: WordDocumentBuild | null,
+  availableFacetIds: ReadonlySet<string>,
+): { build: WordDocumentBuild | null; trackChanges: boolean } {
+  if (!build) return { build: null, trackChanges: false };
+  return {
+    build: withWordReviewFallback(build, availableFacetIds),
+    trackChanges: !!build.trackChanges || build.authoring?.issue === "tracking",
+  };
+}
+
+/** The document facet's input from a capture prepared by wordDocumentSendInput. */
+export function wordDocumentFacetInput(input: {
+  build: WordDocumentBuild | null;
+  trackChanges: boolean;
+  documentName: string;
+  documentIdentity: string;
+  availableFacetIds: ReadonlySet<string>;
+  availableFacetArgs: ReadonlyMap<string, ReadonlySet<string>>;
+  /** Only while the comment plan carries the map. */
+  commentMap?: string;
+}): WordActionFacetInput {
+  const { build } = input;
+  return {
+    chipEnabled: true,
+    documentName: input.documentName,
+    documentIdentity: input.documentIdentity,
+    documentArgs: build?.args ?? null,
+    hasContent: build?.coverage.hasContent ?? false,
+    authoring: build?.authoring,
+    availableFacetIds: input.availableFacetIds,
+    availableFacetArgs: input.availableFacetArgs,
+    trackChanges: input.trackChanges,
+    ...(input.commentMap !== undefined ? { commentMap: input.commentMap } : {}),
+  };
+}
+
 export interface WordActionFacetInput {
   chipEnabled: boolean;
   documentName: string;

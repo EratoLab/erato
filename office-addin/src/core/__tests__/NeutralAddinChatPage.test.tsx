@@ -12,15 +12,18 @@ import {
   render,
   screen,
 } from "@testing-library/react";
+import { forwardRef } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { AddinChatCore } from "../AddinChatCore";
+import { AddinChatCore, createNeutralAddinChatHost } from "../AddinChatCore";
 import { AddinChatProviderCore } from "../AddinChatProviderCore";
 import { NeutralAddinChatPage } from "../NeutralAddinChatPage";
 
 import type { AddinChatController, AddinChatHostProps } from "../AddinChatCore";
+import type { AddinChatInputCoreProps } from "../AddinChatInputCore";
 import type {
   ChatContextValue,
+  ChatInputControlsHandle,
   SendMessagePreparation,
 } from "@erato/frontend/library";
 import type { ReactNode } from "react";
@@ -540,6 +543,74 @@ describe("NeutralAddinChatPage host boundary", () => {
     );
   });
 
+  it("renders a host's own Host in place of the neutral one", () => {
+    const CaptureHost = ({ controller }: AddinChatHostProps) => {
+      spies.controller.current = controller;
+      return <div data-testid="custom-host" />;
+    };
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <NeutralAddinChatPage Host={CaptureHost} />
+      </QueryClientProvider>,
+    );
+
+    expect(screen.getByTestId("custom-host")).toBeInTheDocument();
+    expect(screen.queryByTestId("neutral-chat-input")).toBeNull();
+    expect(spies.controller.current?.chatInputControls).toHaveProperty(
+      "removeUploadedFiles",
+    );
+  });
+
+  it("maps a custom composer's send exactly as the neutral host does", () => {
+    let customInput: (typeof spies.inputProps)["current"] = null;
+    const CustomInput = forwardRef<
+      ChatInputControlsHandle,
+      AddinChatInputCoreProps
+    >(function CustomInput(props, _ref) {
+      customInput = props;
+      return <div data-testid="custom-chat-input" />;
+    });
+    const args: Parameters<
+      NonNullable<(typeof spies.inputProps)["current"]>["onSendMessage"]
+    > = [
+      "look into this",
+      ["file-1"],
+      "model-1",
+      ["facet-1"],
+      [{ id: "assistant-9", name: "Research" }],
+      "background",
+      false,
+      ["server-1"],
+      ["server-1/tool"],
+    ];
+    const sendThrough = (
+      host?: ReturnType<typeof createNeutralAddinChatHost>,
+    ) => {
+      const queryClient = new QueryClient({
+        defaultOptions: { queries: { retry: false } },
+      });
+      const view = render(
+        <QueryClientProvider client={queryClient}>
+          <NeutralAddinChatPage Host={host} />
+        </QueryClientProvider>,
+      );
+      spies.sendMessage.mockClear();
+      const input = host ? customInput : spies.inputProps.current;
+      input!.onSendMessage(...args);
+      const call = spies.sendMessage.mock.calls[0] as unknown[];
+      view.unmount();
+      return call;
+    };
+
+    const neutral = sendThrough();
+    const custom = sendThrough(createNeutralAddinChatHost(CustomInput));
+    expect(custom).toEqual(neutral);
+    expect(custom).toContain("background");
+  });
+
   it("carries a new chat's writes-off seed through to the send", () => {
     renderPage();
 
@@ -815,6 +886,7 @@ describe("AddinChatCore prepared sends", () => {
   const controls = {
     setDraftMessage: vi.fn(),
     addUploadedFiles: vi.fn(),
+    removeUploadedFiles: vi.fn(),
     focusInput: vi.fn(),
     setSelectedFacetIds: vi.fn(),
     toggleFacetId: vi.fn(),

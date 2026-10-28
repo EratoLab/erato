@@ -1,5 +1,6 @@
 import { createBrowserClientInfo } from "@erato/frontend/library";
 
+import { TeamsAddinChatHost } from "./TeamsAddinChatHost";
 import { installTeamsComponentRegistrations } from "./installTeamsComponentRegistrations";
 import { TeamsAuthProvider } from "./providers/TeamsAuthProvider";
 import { TeamsChatPickerProvider } from "./providers/TeamsChatPickerProvider";
@@ -34,6 +35,7 @@ export default function TeamsApp() {
                   <NeutralAddinChatPage
                     platform="teams"
                     SessionController={TeamsAddinSessionController}
+                    Host={TeamsAddinChatHost}
                   />
                 </div>
               </TeamsChatPickerProvider>

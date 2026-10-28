@@ -11,21 +11,37 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
-import { act } from "react";
+import { act, createRef, useCallback, useMemo, useRef, useState } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { ThemeProvider } from "@/components/providers/ThemeProvider";
+import { useTeamsTranscriptContextItems } from "@/components/ui/Teams/useTeamsTranscriptContextItems";
 import { componentRegistry } from "@/config/componentRegistry";
 import { useComposeSessionStore } from "@/hooks/chat/store/composeSessionStore";
 import { useConfirmationRegistryStore } from "@/hooks/chat/store/confirmationRegistryStore";
 import { useMessageQueueStore } from "@/hooks/chat/store/messageQueueStore";
 import { UploadTooLargeError } from "@/hooks/files/errors";
 import { useFileUploadStore } from "@/hooks/files/useFileUploadStore";
+import { readTeamsTranscriptIndex } from "@/hooks/teams/useTeamsTranscriptIndex";
 import { messages as enMessages } from "@/locales/en/messages.json";
+import {
+  teamsIndex,
+  teamsMessage,
+  teamsSection,
+  teamsTranscriptFile,
+} from "@/test/teamsTranscriptFixtures";
 
 import { ChatInput, type ComposerSizeLimit } from "./ChatInput";
 import { useToastStore } from "../Toast/toastStore";
 
 import type { AddMenuActionItem, AddMenuSection } from "./ChatInputAddMenu";
+import type { ChatInputControlsHandle } from "./ChatInputControlsContext";
+import type {
+  ComposerContextChipFaceProps,
+  ComposerContextItem,
+} from "./ComposerContext/types";
+import type { ChatInputAttachmentPreviewProps } from "@/components/ui/FileUpload/FileAttachmentsPreview";
+import type { TeamsTranscriptContextEntry } from "@/components/ui/Teams/useTeamsTranscriptContextItems";
 import type { FileUploadItem } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { ChatContextValue } from "@/providers/ChatProvider";
 import type { I18n, Messages } from "@lingui/core";
@@ -90,6 +106,7 @@ vi.mock("@/providers/FeatureConfigProvider", () => ({
 
 vi.mock("@/hooks/i18n", () => ({
   useOptionalTranslation: (id: string) => mockUseOptionalTranslation(id),
+  getOptionalTranslation: () => undefined,
 }));
 
 vi.mock("@/hooks/chat", () => ({
@@ -136,16 +153,42 @@ vi.mock("@/lib/generated/v1betaApi/v1betaApiComponents", () => ({
   recentChatsQuery: () => ({ queryKey: ["me", "recent_chats"] }),
 }));
 
-vi.mock("@/components/ui/FileUpload", () => ({
-  FileAttachmentsPreview: ({
-    attachedFiles,
-    onRemoveFile,
-    onRemoveAllFiles,
-  }: {
-    attachedFiles: FileUploadItem[];
-    onRemoveFile: (id: string) => void;
-    onRemoveAllFiles: () => void;
-  }) => (
+// Staged recordings are checked on the real tiles; everything else counts files.
+const stagedPreview = vi.hoisted(() => ({ real: false }));
+
+vi.mock("@/components/ui/FileUpload", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@/components/ui/FileUpload")>();
+  const { ThemeProvider: Themed } = await import(
+    "@/components/providers/ThemeProvider"
+  );
+  const Real = actual.FileAttachmentsPreview;
+  return {
+    FileAttachmentsPreview: (props: Parameters<typeof Real>[0]) =>
+      stagedPreview.real ? (
+        <Themed
+          enableCustomTheme={false}
+          initialThemeMode="light"
+          persistThemeMode={false}
+        >
+          <Real {...props} />
+        </Themed>
+      ) : (
+        <CountingPreview {...props} />
+      ),
+  };
+});
+
+function CountingPreview({
+  attachedFiles,
+  onRemoveFile,
+  onRemoveAllFiles,
+}: {
+  attachedFiles: FileUploadItem[];
+  onRemoveFile: (id: string) => void;
+  onRemoveAllFiles: () => void;
+}) {
+  return (
     <div>
       <div data-testid="attachments-preview">{attachedFiles.length}</div>
       {attachedFiles.map((file) => (
@@ -166,8 +209,8 @@ vi.mock("@/components/ui/FileUpload", () => ({
         remove-all
       </button>
     </div>
-  ),
-}));
+  );
+}
 
 vi.mock("@/components/ui/FileUpload/FileUploadWithTokenCheck", () => ({
   FileUploadWithTokenCheck: (props: { disabled?: boolean }) => {
@@ -300,7 +343,8 @@ vi.mock("./McpToolsBrowserModal", () => ({
   ),
 }));
 
-vi.mock("../icons", () => ({
+vi.mock("../icons", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../icons")>()),
   ArrowUpIcon: () => <span>send</span>,
   CloseIcon: () => <span>close</span>,
   EditIcon: () => <span>edit</span>,
@@ -314,6 +358,7 @@ vi.mock("../icons", () => ({
 describe("ChatInput", () => {
   beforeEach(async () => {
     vi.clearAllMocks();
+    stagedPreview.real = false;
     mockUseChatCompaction.mockReturnValue({
       available: false,
       isPending: false,
@@ -1284,6 +1329,7 @@ describe("ChatInput", () => {
   });
 
   it("blocks compose send when attached audio transcription is incomplete", async () => {
+    stagedPreview.real = true;
     const queryClient = new QueryClient({
       defaultOptions: {
         queries: { retry: false },
@@ -1333,9 +1379,24 @@ describe("ChatInput", () => {
       screen.queryByTestId("chat-audio-transcription-blocker"),
     ).not.toBeInTheDocument();
     expect(screen.getByTestId("chat-input-send-message")).toBeDisabled();
+    // The status rides on the file's own tile; no card above the composer.
+    expect(
+      document.querySelector('[data-testid^="chat-audio-transcription-"]'),
+    ).toBeNull();
+    const tile = document.querySelector<HTMLElement>(
+      '[data-ui="attachment-tile"]',
+    )!;
+    expect(tile).toHaveAttribute("data-status", "busy");
+    expect(tile).toHaveTextContent("Transcribing…");
+    expect(
+      tile.querySelector(
+        '[data-ui="attachment-tile-icon"] [data-ui="spinner"]',
+      ),
+    ).not.toBeNull();
   });
 
-  it("shows the live transcript section for attached audio files", async () => {
+  it("shows a ready recording's status on its tile, with no card above the composer", async () => {
+    stagedPreview.real = true;
     const queryClient = new QueryClient({
       defaultOptions: {
         queries: { retry: false },
@@ -1382,13 +1443,16 @@ describe("ChatInput", () => {
       </QueryClientProvider>,
     );
 
-    const transcriptSection = screen.getByTestId(
-      "chat-audio-transcription-audio-file-1",
-    );
-    expect(transcriptSection).toBeInTheDocument();
-    expect(transcriptSection).toHaveTextContent(
-      "Hello team, this is the transcribed text for testing.",
-    );
+    expect(
+      document.querySelector('[data-testid^="chat-audio-transcription-"]'),
+    ).toBeNull();
+    const tile = document.querySelector<HTMLElement>(
+      '[data-ui="attachment-tile"]',
+    )!;
+    expect(tile).not.toHaveAttribute("data-status");
+    expect(tile).toHaveTextContent("Transcript ready");
+    // The transcript itself opens with the file's preview.
+    expect(tile).not.toHaveTextContent("Hello team");
   });
 
   it("refreshes incomplete audio transcription attachment metadata", async () => {
@@ -1458,6 +1522,7 @@ describe("ChatInput", () => {
   });
 
   it("shows transcript section error details when transcription fails", async () => {
+    stagedPreview.real = true;
     const queryClient = new QueryClient({
       defaultOptions: {
         queries: { retry: false },
@@ -1504,14 +1569,167 @@ describe("ChatInput", () => {
       </QueryClientProvider>,
     );
 
-    const transcriptSection = screen.getByTestId(
-      "chat-audio-transcription-audio-file-2",
-    );
-    expect(transcriptSection).toBeInTheDocument();
-    expect(transcriptSection).toHaveTextContent("Chunk transcription failed");
     expect(
-      screen.queryByTestId("chat-audio-transcription-blocker"),
-    ).not.toBeInTheDocument();
+      document.querySelector('[data-testid^="chat-audio-transcription-"]'),
+    ).toBeNull();
+    const tile = document.querySelector<HTMLElement>(
+      '[data-ui="attachment-tile"]',
+    )!;
+    expect(tile).toHaveAttribute("data-status", "error");
+    expect(tile).toHaveTextContent("Couldn't transcribe");
+    expect(tile.closest("[title]")?.getAttribute("title")).toContain(
+      "Chunk transcription failed after all retries.",
+    );
+    // Today's gate: a failed recording blocks the send until it is removed.
+    expect(screen.getByTestId("chat-input-send-message")).toBeDisabled();
+    // Not held by the recorder, so nothing to retry.
+    expect(
+      screen.queryByRole("button", { name: /Retry transcription/ }),
+    ).toBeNull();
+  });
+
+  describe("staged recordings", () => {
+    beforeEach(() => {
+      stagedPreview.real = true;
+    });
+
+    const recording = (
+      status: string,
+      over: Record<string, unknown> = {},
+    ): FileUploadItem =>
+      ({
+        id: "audio-rec-1",
+        filename: "audio-recording-20261020-1200.wav",
+        download_url: "/files/rec.wav",
+        preview_url: undefined,
+        file_contents_unavailable_missing_permissions: false,
+        file_capability: {
+          extensions: ["wav"],
+          id: "audio",
+          mime_types: ["audio/wav"],
+          operations: ["extract_text"],
+        },
+        audio_transcription: { status, ...over },
+      }) as unknown as FileUploadItem;
+
+    const stage = (files: FileUploadItem[]) =>
+      mockUseChatInputHandlers.mockReturnValue({
+        attachedFiles: files,
+        fileError: null,
+        setFileError: vi.fn(),
+        handleFilesUploaded: vi.fn(),
+        handleRemoveFile: vi.fn(),
+        handleRemoveAllFiles: vi.fn(),
+        setAttachedFiles: vi.fn(),
+        createSubmitHandler: () => (event: FormEvent) => event.preventDefault(),
+      });
+
+    const renderComposer = async (
+      props: Partial<Parameters<typeof ChatInput>[0]> = {},
+    ) => {
+      const queryClient = new QueryClient({
+        defaultOptions: { queries: { retry: false } },
+      });
+      const { i18n } = await import("@lingui/core");
+      const ui = (next: Partial<Parameters<typeof ChatInput>[0]> = {}) => (
+        <QueryClientProvider client={queryClient}>
+          <I18nProvider i18n={i18n}>
+            <ChatInput onSendMessage={vi.fn()} {...props} {...next} />
+          </I18nProvider>
+        </QueryClientProvider>
+      );
+      const view = render(ui());
+      return { ...view, rerenderComposer: () => view.rerender(ui()) };
+    };
+
+    const audioLive = () =>
+      document.querySelector('[data-ui="chat-audio-status-live"]');
+
+    it("retries a recording the recorder still holds from inside its tile", async () => {
+      const retryAudioTranscription = vi.fn();
+      mockUseAudioTranscriptionRecorder.mockReturnValue({
+        ...mockUseAudioTranscriptionRecorder(),
+        retryAudioTranscription,
+        hasRecordedAudioFile: (id: string) => id === "audio-rec-1",
+      });
+      stage([recording("failed", { error: "Provider timed out." })]);
+      await renderComposer({ onFilePreview: vi.fn() });
+
+      const tile = document.querySelector<HTMLElement>(
+        '[data-ui="attachment-tile"]',
+      )!;
+      const retry = within(tile).getByRole("button", {
+        name: "Retry transcription: audio-recording-20261020-1200.wav",
+      });
+      expect(retry).toHaveAttribute("data-ui", "attachment-tile-action");
+      expect(retry).toHaveTextContent("Retry transcription");
+      const activation = within(tile).getByRole("button", {
+        name: /^Preview attachment audio-recording-20261020-1200\.wav, Couldn't transcribe$/,
+      });
+      expect(activation.contains(retry)).toBe(false);
+      fireEvent.click(retry);
+      expect(retryAudioTranscription).toHaveBeenCalledWith("audio-rec-1");
+    });
+
+    it("says what a transcription ended in, never on mount", async () => {
+      mockUseAudioTranscriptionFeature.mockReturnValue({ enabled: true });
+      stage([recording("completed")]);
+      const view = await renderComposer({ chatId: "chat-1" });
+      expect(audioLive()).toBeEmptyDOMElement();
+
+      stage([recording("transcribing")]);
+      view.rerenderComposer();
+      expect(audioLive()).toBeEmptyDOMElement();
+
+      stage([recording("completed", { transcript: "Hello." })]);
+      view.rerenderComposer();
+      expect(audioLive()).toHaveTextContent(
+        "audio-recording-20261020-1200.wav: transcript ready.",
+      );
+
+      stage([recording("processing")]);
+      view.rerenderComposer();
+      stage([recording("failed")]);
+      view.rerenderComposer();
+      expect(audioLive()).toHaveTextContent(
+        "audio-recording-20261020-1200.wav: couldn't transcribe.",
+      );
+    });
+
+    it("hands a kit's attachment slot the retry controls, with or without the lane", async () => {
+      const slotProps = vi.fn();
+      componentRegistry.ChatInputAttachmentPreview = function KitFiles(
+        props: ChatInputAttachmentPreviewProps,
+      ) {
+        slotProps(props);
+        return <div data-testid="kit-files" />;
+      };
+      mockUseAudioTranscriptionRecorder.mockReturnValue({
+        ...mockUseAudioTranscriptionRecorder(),
+        retryingAudioFileId: "audio-rec-1",
+        hasRecordedAudioFile: (id: string) => id === "audio-rec-1",
+      });
+      try {
+        stage([recording("failed")]);
+        const view = await renderComposer();
+        const legacy = slotProps.mock.calls.at(-1)?.[0] as
+          | ChatInputAttachmentPreviewProps
+          | undefined;
+        expect(legacy?.audioTranscription?.canRetry("audio-rec-1")).toBe(true);
+        expect(legacy?.audioTranscription?.canRetry("other")).toBe(false);
+        expect(legacy?.audioTranscription?.retryingFileId).toBe("audio-rec-1");
+        view.unmount();
+
+        await renderComposer({ contextItems: [] });
+        const lane = slotProps.mock.calls.at(-1)?.[0] as
+          | ChatInputAttachmentPreviewProps
+          | undefined;
+        expect(lane?.sharedHeightCap).toBe(true);
+        expect(lane?.audioTranscription?.canRetry("audio-rec-1")).toBe(true);
+      } finally {
+        componentRegistry.ChatInputAttachmentPreview = null;
+      }
+    });
   });
 
   it("shows the dictation button when audio dictation is enabled", async () => {
@@ -6129,6 +6347,394 @@ describe("ChatInput", () => {
     });
   });
 
+  describe("lane send gate (ERMAIN-1027)", () => {
+    const staged = (id: string, size?: number): FileUploadItem =>
+      ({
+        id,
+        filename: `${id}.pdf`,
+        download_url: `https://example.com/${id}`,
+        file_contents_unavailable_missing_permissions: false,
+        is_sharepoint_file: false,
+        ...(size === undefined ? {} : { size }),
+      }) as FileUploadItem;
+
+    const bytes = (name: string, length: number) =>
+      new File(["x".repeat(length)], name, { type: "message/rfc822" });
+
+    const chip = (
+      id: string,
+      over: Partial<Extract<ComposerContextItem, { origin: "ambient" }>> = {},
+    ): ComposerContextItem => ({
+      id,
+      kind: "outlook.thread",
+      origin: "ambient",
+      dismissScope: "item",
+      state: "included",
+      label: id,
+      icon: "mail",
+      onRemove: vi.fn(),
+      ...over,
+    });
+
+    const renderLane = async (
+      files: FileUploadItem[],
+      props: Partial<Parameters<typeof ChatInput>[0]>,
+    ) => {
+      mockUseUploadFeature.mockReturnValue({
+        enabled: true,
+        maxSizeBytes: 10,
+        maxSizeFormatted: "10 B",
+      });
+      mockUseChatInputFeature.mockReturnValue({
+        autofocus: false,
+        showUsageAdvisory: true,
+        maxFiles: 3,
+      });
+      mockUseChatInputHandlers.mockReturnValue({
+        attachedFiles: files,
+        fileError: null,
+        setFileError: vi.fn(),
+        handleFilesUploaded: vi.fn(),
+        handleRemoveFile: vi.fn(),
+        handleRemoveAllFiles: vi.fn(),
+        setAttachedFiles: vi.fn(),
+        createSubmitHandler: () => (event: FormEvent) => event.preventDefault(),
+      });
+      const queryClient = new QueryClient({
+        defaultOptions: { queries: { retry: false } },
+      });
+      const { i18n } = await import("@lingui/core");
+      const ui = (next: Partial<Parameters<typeof ChatInput>[0]>) => (
+        <QueryClientProvider client={queryClient}>
+          <I18nProvider i18n={i18n}>
+            <ChatInput onSendMessage={vi.fn()} {...props} {...next} />
+          </I18nProvider>
+        </QueryClientProvider>
+      );
+      const view = render(ui({}));
+      return {
+        rerenderWith: (next: Partial<Parameters<typeof ChatInput>[0]>) =>
+          view.rerender(ui(next)),
+      };
+    };
+
+    const send = () => screen.getByTestId("chat-input-send-message");
+
+    it("blocks an included upload over the per-file limit, naming its chip and marking it", async () => {
+      await renderLane([], {
+        contextItems: [
+          chip("drop", {
+            label: "Re: Offsite agenda",
+            meta: "Lena Hoffmann",
+            estimate: bytes("Re_ Offsite agenda.eml", 20),
+            estimateUpload: true,
+          }),
+          chip("thread", {
+            estimate: bytes("thread.eml", 5),
+            estimateUpload: true,
+          }),
+        ],
+      });
+
+      const textarea = screen.getByPlaceholderText(
+        "Cannot send: Re: Offsite agenda exceeds the 10 B limit. Remove it to send.",
+      );
+      const chips = document.querySelectorAll<HTMLElement>(
+        '[data-ui="composer-context-chip"]',
+      );
+      const [over, fits] = Array.from(chips);
+      expect(over).toHaveAttribute("data-tone", "error");
+      expect(
+        over.querySelector('[data-ui="composer-context-chip-meta"]'),
+      ).toHaveTextContent("Over the 10 B limit · Lena Hoffmann");
+      expect(fits).toHaveAttribute("data-tone", "neutral");
+      expect(textarea).toHaveClass("placeholder:text-[var(--theme-error-fg)]");
+      expect(textarea).not.toHaveClass(
+        "placeholder:text-[var(--theme-fg-muted)]",
+      );
+      expect(send()).toBeDisabled();
+      expect(send()).toHaveAccessibleName(
+        "Cannot send: File size limit exceeded",
+      );
+    });
+
+    it("counts included uploads with the staged files against the message's cap", async () => {
+      await renderLane([staged("a"), staged("b")], {
+        contextItems: [
+          chip("thread", {
+            estimate: bytes("thread.eml", 1),
+            estimateUpload: true,
+          }),
+          chip("drop", {
+            estimate: bytes("drop.eml", 1),
+            estimateUpload: true,
+          }),
+        ],
+      });
+
+      expect(
+        screen.getByPlaceholderText(
+          "Cannot send: a message can carry at most 3 files. Remove some to send.",
+        ),
+      ).toBeInTheDocument();
+      expect(send()).toHaveAccessibleName(
+        "Cannot send: File count limit exceeded",
+      );
+    });
+
+    it("blocks staged files alone over the cap while a host passes items", async () => {
+      await renderLane([staged("a"), staged("b"), staged("c"), staged("d")], {
+        contextItems: [],
+      });
+
+      expect(
+        screen.getByPlaceholderText(
+          "Cannot send: a message can carry at most 3 files. Remove some to send.",
+        ),
+      ).toBeInTheDocument();
+    });
+
+    it("never counts a facet estimate, nor an item that is not included", async () => {
+      await renderLane([staged("a")], {
+        contextItems: [
+          chip("selection", { estimate: bytes("word_selection.txt", 50) }),
+          chip("off", {
+            state: "suggested",
+            onRestore: vi.fn(),
+            estimate: bytes("off.eml", 50),
+            estimateUpload: true,
+          }),
+        ],
+      });
+
+      expect(
+        screen.getByPlaceholderText("Type a message..."),
+      ).toBeInTheDocument();
+      expect(send()).toHaveAccessibleName("Send message");
+    });
+
+    it("lets the owner's verdict win", async () => {
+      await renderLane([], {
+        contextItems: [
+          chip("thread", {
+            estimate: bytes("thread.eml", 20),
+            estimateUpload: true,
+          }),
+        ],
+        sizeLimitExceeded: { names: [], formatted: "7", kind: "count" },
+      });
+
+      expect(
+        screen.getByPlaceholderText(
+          "Cannot send: a message can carry at most 7 files. Remove some to send.",
+        ),
+      ).toBeInTheDocument();
+    });
+
+    it("leaves a composer without items ungated", async () => {
+      await renderLane(
+        [staged("a", 50), staged("b"), staged("c"), staged("d")],
+        {},
+      );
+
+      expect(
+        screen.getByPlaceholderText("Type a message..."),
+      ).toBeInTheDocument();
+    });
+
+    it("hands included estimates to the token check with a stable identity", async () => {
+      const facet = bytes("word_selection.txt", 5);
+      const items = [chip("selection", { estimate: facet })];
+      const { rerenderWith } = await renderLane([], { contextItems: items });
+      const first = (
+        mockChatInputTokenUsage.mock.calls.at(-1)?.[0] as {
+          virtualFiles?: File[];
+        }
+      ).virtualFiles;
+      expect(first).toEqual([facet]);
+
+      rerenderWith({ contextItems: [chip("selection", { estimate: facet })] });
+      expect(
+        (
+          mockChatInputTokenUsage.mock.calls.at(-1)?.[0] as {
+            virtualFiles?: File[];
+          }
+        ).virtualFiles,
+      ).toBe(first);
+    });
+  });
+
+  describe("tool chips next to + (ERMAIN-1027)", () => {
+    const facets = [
+      {
+        id: "web_search",
+        display_name: "Web search",
+        icon: "iconoir-globe",
+        default_enabled: false,
+      },
+      {
+        id: "thinking",
+        display_name: "Extended thinking",
+        icon: "iconoir-brain",
+        default_enabled: false,
+      },
+      {
+        id: "code",
+        display_name: "Code",
+        icon: "iconoir-code",
+        default_enabled: false,
+      },
+    ];
+
+    beforeEach(() => {
+      mockUseUploadFeature.mockReturnValue({ enabled: true });
+      mockUseFacets.mockReturnValue({
+        data: { facets, global_facet_settings: undefined },
+        error: null,
+      });
+    });
+
+    const renderTools = async (
+      props: Partial<Parameters<typeof ChatInput>[0]> = {},
+    ) => {
+      const queryClient = new QueryClient({
+        defaultOptions: { queries: { retry: false } },
+      });
+      const { i18n } = await import("@lingui/core");
+      render(
+        <QueryClientProvider client={queryClient}>
+          <I18nProvider i18n={i18n}>
+            <ChatInput
+              onSendMessage={vi.fn()}
+              handleFileAttachments={vi.fn()}
+              chatId="chat-1"
+              initialSelectedFacetIds={["code", "web_search"]}
+              {...props}
+            />
+          </I18nProvider>
+        </QueryClientProvider>,
+      );
+    };
+
+    const chipNames = () =>
+      Array.from(
+        document.querySelectorAll('[data-ui="composer-tool-chip"]'),
+      ).map((chip) => chip.getAttribute("aria-label"));
+
+    it("draws the selected tools after + and the modes, in the server's order", async () => {
+      mockUseIsMobile.mockReturnValue(true);
+      await renderTools({
+        composerModes: [
+          {
+            id: "outlook.scheduling",
+            label: "Scheduling",
+            icon: "calendar",
+            endLabel: "End scheduling",
+            onEnd: vi.fn(),
+          },
+        ],
+      });
+
+      expect(chipNames()).toEqual(["Deselect Web search", "Deselect Code"]);
+      const controls = document.querySelector(
+        '[data-ui="chat-input-controls"]',
+      )!;
+      const plus = screen.getByTestId("chat-input-add-controls");
+      const mode = controls.querySelector('[data-ui="composer-mode-chip"]')!;
+      const group = screen.getByRole("group", { name: "Selected tools" });
+      expect(controls.contains(group)).toBe(true);
+      expect(
+        plus.compareDocumentPosition(mode) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+      expect(
+        mode.compareDocumentPosition(group) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+    });
+
+    it("puts the tools next to +, before the model selector", async () => {
+      mockUseIsMobile.mockReturnValue(true);
+      await renderTools();
+
+      const model = screen.getByTestId("model-selector");
+      const group = screen.getByRole("group", { name: "Selected tools" });
+      const add = screen.getByTestId("chat-input-add-controls");
+      expect(model.parentElement).toBe(group.parentElement);
+      expect(
+        add.compareDocumentPosition(group) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+      expect(
+        group.compareDocumentPosition(model) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+    });
+
+    it("deselects through the same path as the menu, then hands focus to +", async () => {
+      mockUseIsMobile.mockReturnValue(true);
+      const onFacetSelectionChange = vi.fn();
+      await renderTools({ onFacetSelectionChange });
+      const trigger = document.createElement("button");
+      trigger.dataset.testid = "chat-input-add-menu-trigger";
+      screen.getByTestId("chat-input-add-controls").appendChild(trigger);
+
+      fireEvent.click(
+        screen.getByRole("button", { name: "Deselect Web search" }),
+      );
+      expect(onFacetSelectionChange).toHaveBeenLastCalledWith(["code"]);
+      expect(
+        screen.getByRole("button", { name: "Deselect Code" }),
+      ).toHaveFocus();
+      expect(
+        document.querySelector('[data-ui="composer-tool-live"]'),
+      ).toHaveTextContent("Web search deselected.");
+      expect(
+        (
+          mockChatInputAddControls.mock.calls.at(-1)?.[0] as {
+            selectedFacetIds: string[];
+          }
+        ).selectedFacetIds,
+      ).toEqual(["code"]);
+
+      fireEvent.click(screen.getByRole("button", { name: "Deselect Code" }));
+      expect(onFacetSelectionChange).toHaveBeenLastCalledWith([]);
+      expect(trigger).toHaveFocus();
+      expect(
+        document.querySelector('[data-ui="composer-tool-live"]'),
+      ).toHaveTextContent("Code deselected.");
+    });
+
+    it("locks the chips an assistant enforces, and says why", async () => {
+      mockUseIsMobile.mockReturnValue(true);
+      const onFacetSelectionChange = vi.fn();
+      await renderTools({
+        enforceSelectedFacetIds: true,
+        onFacetSelectionChange,
+      });
+      onFacetSelectionChange.mockClear();
+
+      const chip = screen.getByRole("button", { name: "Deselect Web search" });
+      expect(chip).toHaveAttribute("aria-disabled", "true");
+      expect(chip).toHaveAttribute(
+        "title",
+        "This assistant sets the tools for its chats.",
+      );
+      fireEvent.click(chip);
+      expect(onFacetSelectionChange).not.toHaveBeenCalled();
+      expect(chipNames()).toHaveLength(2);
+    });
+
+    it("keeps the desktop Tools dropdown and draws no chips there", async () => {
+      mockUseIsMobile.mockReturnValue(false);
+      await renderTools();
+
+      expect(screen.getByTestId("facet-selector")).toBeInTheDocument();
+      expect(
+        document.querySelector('[data-ui="composer-tool-chip"]'),
+      ).toBeNull();
+      expect(
+        document.querySelector('[data-ui="composer-tool-live"]'),
+      ).toBeNull();
+    });
+  });
+
   describe("connectors", () => {
     const CONNECTED = {
       id: "linear",
@@ -6629,6 +7235,944 @@ describe("ChatInput", () => {
         "data-open",
         "true",
       );
+    });
+  });
+
+  describe("context lane (ERMAIN-1022)", () => {
+    const fileItem = (id: string): FileUploadItem =>
+      ({
+        id,
+        filename: `${id}.pdf`,
+        download_url: `https://example.com/${id}`,
+        file_contents_unavailable_missing_permissions: false,
+        is_sharepoint_file: false,
+      }) as FileUploadItem;
+
+    const documentChip = (
+      over: Partial<Extract<ComposerContextItem, { origin: "ambient" }>> = {},
+    ): ComposerContextItem => ({
+      id: "doc",
+      kind: "word.document",
+      origin: "ambient",
+      dismissScope: "chat",
+      state: "included",
+      label: "Supply agreement",
+      icon: "document",
+      onRemove: vi.fn(),
+      ...over,
+    });
+
+    const stageFiles = (
+      files: FileUploadItem[],
+      handlers: Partial<{
+        handleRemoveFile: (id: string) => void;
+        handleRemoveAllFiles: () => void;
+      }> = {},
+    ) =>
+      mockUseChatInputHandlers.mockReturnValue({
+        attachedFiles: files,
+        fileError: null,
+        setFileError: vi.fn(),
+        handleFilesUploaded: vi.fn(),
+        handleRemoveFile: handlers.handleRemoveFile ?? vi.fn(),
+        handleRemoveAllFiles: handlers.handleRemoveAllFiles ?? vi.fn(),
+        setAttachedFiles: vi.fn(),
+        createSubmitHandler: () => (event: FormEvent) => event.preventDefault(),
+      });
+
+    const renderComposer = async (
+      props: Partial<Parameters<typeof ChatInput>[0]> = {},
+    ) => {
+      const queryClient = new QueryClient({
+        defaultOptions: { queries: { retry: false } },
+      });
+      const { i18n } = await import("@lingui/core");
+      const ui = (next: Partial<Parameters<typeof ChatInput>[0]>) => (
+        <QueryClientProvider client={queryClient}>
+          <I18nProvider i18n={i18n}>
+            <ChatInput onSendMessage={vi.fn()} {...props} {...next} />
+          </I18nProvider>
+        </QueryClientProvider>
+      );
+      const view = render(ui({}));
+      return {
+        ...view,
+        rerenderWith: (next: Partial<Parameters<typeof ChatInput>[0]>) =>
+          view.rerender(ui(next)),
+      };
+    };
+
+    const shell = () =>
+      document.querySelector<HTMLElement>('[data-ui="chat-input-shell"]')!;
+
+    const lastTokenUsageFiles = () =>
+      (
+        mockChatInputTokenUsage.mock.calls.at(-1)?.[0] as {
+          virtualFiles?: File[];
+        }
+      ).virtualFiles;
+
+    it("leaves today's composer alone when no host passes items", async () => {
+      stageFiles([fileItem("f1")]);
+      await renderComposer();
+
+      expect(shell().querySelector('[data-ui^="composer-"]')).toBeNull();
+      // The slot is still a direct child of the shell, as before the lane.
+      expect(
+        screen.getByTestId("attachments-preview").parentElement?.parentElement,
+      ).toBe(shell());
+    });
+
+    it("keeps an empty area out of the flow but mounted", async () => {
+      stageFiles([]);
+      await renderComposer({ contextItems: [] });
+
+      const area = shell().querySelector('[data-ui="composer-staged-area"]');
+      expect(area).toHaveClass("hidden");
+      expect(area?.querySelector('[role="list"]')).toBeNull();
+      expect(
+        shell().querySelector('[data-ui="composer-staged-files"]'),
+      ).toHaveClass("empty:hidden");
+      // The live region is out of flow (sr-only) and already in place.
+      expect(
+        shell().querySelector('[data-ui="composer-context-live"]'),
+      ).toHaveClass("sr-only");
+    });
+
+    it("draws the notice, then the chips before the files, then the textarea", async () => {
+      stageFiles([fileItem("f1")]);
+      await renderComposer({
+        contextItems: [documentChip()],
+        composerNotice: {
+          id: "n",
+          tone: "info",
+          text: "Reading the document…",
+        },
+      });
+
+      const children = [...shell().children];
+      const notice = shell().querySelector('[data-ui="composer-notice"]')!;
+      const area = shell().querySelector<HTMLElement>(
+        '[data-ui="composer-staged-area"]',
+      )!;
+      const textarea = screen.getByPlaceholderText("Type a message...");
+      expect(children.indexOf(notice)).toBeLessThan(children.indexOf(area));
+      expect(children.indexOf(area)).toBeLessThan(
+        children.indexOf(textarea.parentElement!),
+      );
+      expect(area).toHaveClass("flex");
+      const lane = within(area).getByRole("list", { name: "Message context" });
+      const files = area.querySelector<HTMLElement>(
+        '[data-ui="composer-staged-files"]',
+      )!;
+      expect(
+        lane.compareDocumentPosition(files) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+      expect(
+        within(files).getByTestId("attachments-preview"),
+      ).toHaveTextContent("1");
+    });
+
+    it("puts focus back in the textarea when a notice action settles the notice", async () => {
+      stageFiles([]);
+      const view = await renderComposer({
+        contextItems: [],
+        composerNotice: {
+          id: "slow",
+          tone: "info",
+          text: "Word is still handing over the document.",
+          actions: [
+            { id: "skip", label: "Send without document", onSelect: vi.fn() },
+          ],
+        },
+      });
+      const action = screen.getByRole("button", {
+        name: "Send without document",
+      });
+      action.focus();
+      view.rerenderWith({ contextItems: [], composerNotice: null });
+      expect(screen.getByPlaceholderText("Type a message...")).toHaveFocus();
+    });
+
+    it("renders the lane even when a kit replaces the files slot", async () => {
+      const slotProps = vi.fn();
+      componentRegistry.ChatInputAttachmentPreview = function KitFiles(
+        props: ChatInputAttachmentPreviewProps,
+      ) {
+        slotProps(props);
+        return <div data-testid="kit-files" />;
+      };
+      try {
+        stageFiles([fileItem("f1"), fileItem("f2")]);
+        await renderComposer({
+          contextItems: [
+            {
+              id: "transcript",
+              kind: "teams.transcript",
+              origin: "user",
+              state: "included",
+              label: "Weekly sync",
+              icon: "chats",
+              claimsFileIds: ["f2"],
+              onRemove: vi.fn(),
+            },
+          ],
+        });
+        expect(screen.getByTestId("kit-files")).toBeInTheDocument();
+        expect(
+          screen.getByRole("list", { name: "Message context" }),
+        ).toBeInTheDocument();
+        const props = slotProps.mock.calls.at(
+          -1,
+        )?.[0] as ChatInputAttachmentPreviewProps & Record<string, unknown>;
+        expect(props.sharedHeightCap).toBe(true);
+        expect(props.attachedFiles.map((file) => file.id)).toEqual(["f1"]);
+        // The default preview's extra prop never reaches a kit.
+        expect(props).not.toHaveProperty("stagedCount");
+      } finally {
+        componentRegistry.ChatInputAttachmentPreview = null;
+      }
+    });
+
+    it("estimates tokens from included items only, with a stable array", async () => {
+      const hostBody = new File(["body"], "email-body.txt");
+      const docEstimate = new File(["doc"], "document.txt");
+      const hostFiles = [hostBody];
+      const items = [
+        documentChip({ estimate: docEstimate }),
+        documentChip({
+          id: "sel",
+          label: "Passage",
+          state: "suggested",
+          onRestore: vi.fn(),
+          estimate: new File(["sel"], "selection.txt"),
+        }),
+      ];
+      const { rerenderWith } = await renderComposer({
+        virtualFiles: hostFiles,
+        contextItems: items,
+      });
+      const first = lastTokenUsageFiles();
+      expect(first).toEqual([hostBody, docEstimate]);
+
+      fireEvent.change(screen.getByPlaceholderText("Type a message..."), {
+        target: { value: "typing" },
+      });
+      expect(lastTokenUsageFiles()).toBe(first);
+
+      // A new but equal items array keeps the same estimate array.
+      rerenderWith({ virtualFiles: hostFiles, contextItems: [...items] });
+      expect(lastTokenUsageFiles()).toBe(first);
+
+      rerenderWith({
+        virtualFiles: hostFiles,
+        contextItems: [
+          documentChip({
+            state: "suggested",
+            onRestore: vi.fn(),
+            estimate: docEstimate,
+          }),
+        ],
+      });
+      expect(lastTokenUsageFiles()).toBe(hostFiles);
+    });
+
+    const transcript = (
+      over: Partial<Extract<ComposerContextItem, { origin: "user" }>> = {},
+    ): ComposerContextItem => ({
+      id: "transcript",
+      kind: "teams.transcript",
+      origin: "user",
+      state: "included",
+      label: "Weekly sync",
+      icon: "chats",
+      claimsFileIds: ["f2", "f3"],
+      onRemove: vi.fn(),
+      ...over,
+    });
+
+    it("hides claimed files from the row, still counts them, and unstages them once the host drops their chip", async () => {
+      const handleRemoveFile = vi.fn();
+      const handleRemoveAllFiles = vi.fn();
+      const onRemove = vi.fn();
+      mockUseUploadFeature.mockReturnValue({ enabled: true });
+      stageFiles([fileItem("f1"), fileItem("f2"), fileItem("f3")], {
+        handleRemoveFile,
+        handleRemoveAllFiles,
+      });
+      const { rerenderWith } = await renderComposer({
+        maxFiles: 3,
+        handleFileAttachments: vi.fn(),
+        contextItems: [transcript({ onRemove })],
+      });
+
+      expect(screen.getByTestId("attachments-preview")).toHaveTextContent("1");
+      expect(screen.getByTestId("file-upload-control")).toHaveAttribute(
+        "data-disabled",
+        "true",
+      );
+
+      fireEvent.click(screen.getByTestId("remove-all-files"));
+      expect(handleRemoveAllFiles).not.toHaveBeenCalled();
+      expect(handleRemoveFile.mock.calls).toEqual([["f1"]]);
+
+      handleRemoveFile.mockClear();
+      fireEvent.click(
+        screen.getByRole("button", { name: "Remove Weekly sync" }),
+      );
+      expect(onRemove).toHaveBeenCalledTimes(1);
+      // A host that keeps the chip keeps its files staged.
+      expect(handleRemoveFile).not.toHaveBeenCalled();
+
+      rerenderWith({
+        maxFiles: 3,
+        handleFileAttachments: vi.fn(),
+        contextItems: [],
+      });
+      expect(handleRemoveFile.mock.calls).toEqual([["f2"], ["f3"]]);
+    });
+
+    it("shows a claimed file in the row while its chip says it is not sent", async () => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const handleRemoveFile = vi.fn();
+      const onRemove = vi.fn();
+      stageFiles([fileItem("f1")], { handleRemoveFile });
+      const draftAttachments = (
+        over: Partial<Extract<ComposerContextItem, { origin: "ambient" }>>,
+      ) =>
+        documentChip({
+          id: "atts",
+          claimsFileIds: ["f1"],
+          label: "Draft attachments",
+          ...over,
+        });
+      try {
+        const { rerenderWith } = await renderComposer({
+          contextItems: [draftAttachments({ onRemove })],
+        });
+        expect(screen.queryByTestId("attachments-preview")).toHaveTextContent(
+          "0",
+        );
+        fireEvent.click(
+          screen.getByRole("button", { name: "Remove Draft attachments" }),
+        );
+        expect(onRemove).toHaveBeenCalledTimes(1);
+
+        for (const state of ["suggested", "superseded", "error"] as const) {
+          rerenderWith({
+            contextItems: [
+              draftAttachments({ state, onRestore: vi.fn(), onRemove }),
+            ],
+          });
+          // Still staged, so still sent: the row says so, not the chip.
+          expect(screen.getByTestId("attachments-preview")).toHaveTextContent(
+            "1",
+          );
+        }
+        expect(handleRemoveFile).not.toHaveBeenCalled();
+        expect(warn).toHaveBeenCalledTimes(1);
+        expect(warn.mock.calls[0][0]).toContain('"atts" is suggested');
+      } finally {
+        warn.mockRestore();
+      }
+    });
+
+    it("locks a chip standing for staged files while the composer is locked", async () => {
+      const handleRemoveFile = vi.fn();
+      const onRemove = vi.fn();
+      stageFiles([fileItem("f1"), fileItem("f2"), fileItem("f3")], {
+        handleRemoveFile,
+      });
+      mockUseChatContext.mockReturnValue({
+        isPendingResponse: false,
+        isMessagingLoading: false,
+        isUploading: true,
+        cancelMessage: vi.fn(),
+      });
+      await renderComposer({
+        contextItems: [transcript({ onRemove }), documentChip()],
+      });
+      const remove = screen.getByRole("button", {
+        name: "Remove Weekly sync",
+      });
+      expect(remove).toBeDisabled();
+      fireEvent.click(remove);
+      fireEvent.keyDown(screen.getByRole("button", { name: /^Weekly sync/ }), {
+        key: "Delete",
+      });
+      expect(onRemove).not.toHaveBeenCalled();
+      expect(handleRemoveFile).not.toHaveBeenCalled();
+      // A chip without files keeps its own lock.
+      expect(
+        screen.getByRole("button", { name: "Remove Supply agreement" }),
+      ).toBeEnabled();
+    });
+
+    it("tells a claim-holding item's detail about the composer's lock", async () => {
+      const renderBody = vi.fn(() => null);
+      stageFiles([fileItem("f1"), fileItem("f2"), fileItem("f3")]);
+      mockUseChatContext.mockReturnValue({
+        isPendingResponse: false,
+        isMessagingLoading: false,
+        isUploading: true,
+        cancelMessage: vi.fn(),
+      });
+      const { rerenderWith } = await renderComposer({
+        contextItems: [
+          transcript({
+            detail: { title: "Teams transcript", render: renderBody },
+          }),
+        ],
+      });
+      fireEvent.click(screen.getByRole("button", { name: /^Weekly sync/ }));
+      expect(renderBody).toHaveBeenLastCalledWith(
+        expect.objectContaining({ locked: true }),
+      );
+
+      mockUseChatContext.mockReturnValue({
+        isPendingResponse: false,
+        isMessagingLoading: false,
+        isUploading: false,
+        cancelMessage: vi.fn(),
+      });
+      rerenderWith({
+        contextItems: [
+          transcript({
+            detail: { title: "Teams transcript", render: renderBody },
+          }),
+        ],
+      });
+      expect(renderBody).toHaveBeenLastCalledWith(
+        expect.objectContaining({ locked: false }),
+      );
+    });
+
+    it("does not re-render the chips on a keystroke", async () => {
+      let faceRenders = 0;
+      componentRegistry.ComposerContextChipFace = function CountingFace({
+        item,
+      }: ComposerContextChipFaceProps) {
+        faceRenders += 1;
+        return <span>{item.label}</span>;
+      };
+      try {
+        const contextItems = [transcript()];
+        stageFiles([fileItem("f1"), fileItem("f2"), fileItem("f3")]);
+        await renderComposer({ contextItems });
+        const before = faceRenders;
+        const textarea = screen.getByPlaceholderText("Type a message...");
+        fireEvent.change(textarea, { target: { value: "a" } });
+        fireEvent.change(textarea, { target: { value: "ab" } });
+        expect(faceRenders).toBe(before);
+      } finally {
+        componentRegistry.ComposerContextChipFace = null;
+      }
+    });
+
+    it("leaves a keyboard user on their chip when the turn ends", async () => {
+      const contextItems = [documentChip()];
+      const { rerenderWith } = await renderComposer({ contextItems });
+      mockUseChatContext.mockReturnValue({
+        isPendingResponse: true,
+        isMessagingLoading: false,
+        isUploading: false,
+        cancelMessage: vi.fn(),
+      });
+      rerenderWith({ contextItems });
+
+      const chipButton = screen.getByRole("button", {
+        name: /^Supply agreement/,
+      });
+      chipButton.focus();
+
+      mockUseChatContext.mockReturnValue({
+        isPendingResponse: false,
+        isMessagingLoading: false,
+        isUploading: false,
+        cancelMessage: vi.fn(),
+      });
+      rerenderWith({ contextItems });
+      await act(async () => {
+        await new Promise((resolve) =>
+          requestAnimationFrame(() => resolve(undefined)),
+        );
+      });
+      expect(chipButton).toHaveFocus();
+    });
+
+    it("does not move focus or the caret when ambient context changes", async () => {
+      const { rerenderWith } = await renderComposer({
+        contextItems: [documentChip({ id: "sel", label: "Passage" })],
+      });
+      const textarea =
+        screen.getByPlaceholderText<HTMLTextAreaElement>("Type a message...");
+      fireEvent.change(textarea, { target: { value: "Check this passage" } });
+      textarea.focus();
+      textarea.setSelectionRange(5, 5);
+
+      rerenderWith({
+        contextItems: [documentChip({ id: "sel", label: "Another passage" })],
+      });
+
+      expect(textarea).toHaveFocus();
+      expect(textarea.selectionStart).toBe(5);
+      expect(
+        document.querySelector('[data-ui="composer-context-live"]'),
+      ).toHaveTextContent("");
+    });
+
+    describe("composer modes (ERMAIN-1024)", () => {
+      const schedulingMode = () => ({
+        id: "outlook.scheduling",
+        label: "Scheduling",
+        icon: "clock",
+        endLabel: "End scheduling",
+        onEnd: vi.fn(),
+      });
+
+      const withFacetAndModel = () => {
+        mockUseFacets.mockReturnValue({
+          data: {
+            facets: [{ id: "facet-1", name: "Tool", default_enabled: false }],
+            global_facet_settings: undefined,
+          },
+          error: null,
+        });
+        const model = { chat_provider_id: "m1", model_display_name: "M1" };
+        mockUseActiveModelSelection.mockReturnValue({
+          availableModels: [model],
+          selectedModel: model,
+          setSelectedModel: vi.fn(),
+          isSelectionReady: true,
+        });
+      };
+
+      const controls = () =>
+        document.querySelector<HTMLElement>('[data-ui="chat-input-controls"]')!;
+
+      const precedes = (first: Element, second: Element) =>
+        Boolean(
+          first.compareDocumentPosition(second) &
+            Node.DOCUMENT_POSITION_FOLLOWING,
+        );
+
+      it("draws a mode after the + menu and before the model selector", async () => {
+        withFacetAndModel();
+        mockUseIsMobile.mockReturnValue(true);
+        await renderComposer({ composerModes: [schedulingMode()] });
+
+        const chip = controls().querySelector(
+          '[data-ui="composer-mode-chip"]',
+        )!;
+        expect(chip).not.toBeNull();
+        expect(
+          precedes(screen.getByTestId("chat-input-add-controls"), chip),
+        ).toBe(true);
+        expect(precedes(chip, screen.getByTestId("model-selector"))).toBe(true);
+      });
+
+      it("draws a mode after the tools in the desktop controls", async () => {
+        withFacetAndModel();
+        await renderComposer({ composerModes: [schedulingMode()] });
+
+        const chip = controls().querySelector(
+          '[data-ui="composer-mode-chip"]',
+        )!;
+        expect(chip).not.toBeNull();
+        expect(precedes(screen.getByTestId("facet-selector"), chip)).toBe(true);
+        expect(precedes(chip, screen.getByTestId("model-selector"))).toBe(true);
+      });
+
+      it("leaves the controls row as it was without modes", async () => {
+        withFacetAndModel();
+        const childOrder = () =>
+          [...controls().querySelectorAll("*")].map(
+            (node) =>
+              node.getAttribute("data-testid") ??
+              node.getAttribute("data-ui") ??
+              node.tagName,
+          );
+        const { rerenderWith, unmount } = await renderComposer();
+        const before = childOrder();
+        expect(
+          controls().querySelector('[data-ui^="composer-mode"]'),
+        ).toBeNull();
+
+        rerenderWith({ composerModes: [] });
+        expect(
+          controls().querySelector('[data-ui="composer-mode-chip"]'),
+        ).toBeNull();
+        expect(
+          controls().querySelector('[data-ui="composer-mode-live"]'),
+        ).not.toBeNull();
+
+        rerenderWith({ composerModes: undefined });
+        expect(childOrder()).toEqual(before);
+        unmount();
+      });
+    });
+  });
+
+  describe("staged files for hosts (ERMAIN-1025)", () => {
+    const upload = (id: string): FileUploadItem =>
+      ({
+        id,
+        filename: `${id}.pdf`,
+        download_url: `https://example.com/${id}`,
+        file_contents_unavailable_missing_permissions: false,
+        is_sharepoint_file: false,
+      }) as FileUploadItem;
+
+    const useRealHandlers = async () => {
+      const actual = await vi.importActual<
+        typeof import("@/hooks/ui/useChatInputHandlers")
+      >("@/hooks/ui/useChatInputHandlers");
+      mockUseChatInputHandlers.mockImplementation((...args: unknown[]) =>
+        actual.useChatInputHandlers(
+          ...(args as Parameters<typeof actual.useChatInputHandlers>),
+        ),
+      );
+    };
+
+    const renderStaged = async (
+      props: Partial<Parameters<typeof ChatInput>[0]> = {},
+    ) => {
+      const queryClient = new QueryClient({
+        defaultOptions: { queries: { retry: false } },
+      });
+      const { i18n } = await import("@lingui/core");
+      const ref = createRef<ChatInputControlsHandle>();
+      const onSendMessage = vi.fn();
+      const ui = (next: Partial<Parameters<typeof ChatInput>[0]>) => (
+        <QueryClientProvider client={queryClient}>
+          <I18nProvider i18n={i18n}>
+            <ChatInput
+              ref={ref}
+              onSendMessage={onSendMessage}
+              {...props}
+              {...next}
+            />
+          </I18nProvider>
+        </QueryClientProvider>
+      );
+      const view = render(ui({}));
+      return {
+        ...view,
+        ref,
+        onSendMessage,
+        rerenderWith: (next: Partial<Parameters<typeof ChatInput>[0]>) =>
+          view.rerender(ui(next)),
+      };
+    };
+
+    const stagedIds = (onStagedFilesChange: ReturnType<typeof vi.fn>) =>
+      (onStagedFilesChange.mock.calls.at(-1)?.[0] as FileUploadItem[]).map(
+        (file) => file.id,
+      );
+
+    it("reports the staged files on mount, add, remove and send", async () => {
+      await useRealHandlers();
+      const onStagedFilesChange = vi.fn();
+      const { ref, onSendMessage } = await renderStaged({
+        onStagedFilesChange,
+        initialFiles: [upload("f1")],
+      });
+      expect(stagedIds(onStagedFilesChange)).toEqual(["f1"]);
+
+      act(() => ref.current!.addUploadedFiles([upload("f2"), upload("f3")]));
+      expect(stagedIds(onStagedFilesChange)).toEqual(["f1", "f2", "f3"]);
+
+      act(() => ref.current!.removeUploadedFiles(["f2"]));
+      expect(stagedIds(onStagedFilesChange)).toEqual(["f1", "f3"]);
+
+      fireEvent.change(screen.getByPlaceholderText("Type a message..."), {
+        target: { value: "hello" },
+      });
+      fireEvent.keyDown(screen.getByPlaceholderText("Type a message..."), {
+        key: "Enter",
+        shiftKey: false,
+      });
+      expect(onSendMessage.mock.calls[0][1]).toEqual(["f1", "f3"]);
+      expect(stagedIds(onStagedFilesChange)).toEqual([]);
+    });
+
+    it("reports each chat's own files across a draft switch", async () => {
+      await useRealHandlers();
+      const onStagedFilesChange = vi.fn();
+      const { ref, rerenderWith } = await renderStaged({
+        onStagedFilesChange,
+        chatId: "chat-a",
+      });
+      act(() => ref.current!.addUploadedFiles([upload("a1")]));
+      expect(stagedIds(onStagedFilesChange)).toEqual(["a1"]);
+
+      rerenderWith({ chatId: "chat-b" });
+      await waitFor(() => expect(stagedIds(onStagedFilesChange)).toEqual([]));
+
+      rerenderWith({ chatId: "chat-a" });
+      await waitFor(() =>
+        expect(stagedIds(onStagedFilesChange)).toEqual(["a1"]),
+      );
+    });
+
+    it("reports the files a queued message brings back", async () => {
+      await useRealHandlers();
+      mockUseChatContext.mockReturnValue({
+        isPendingResponse: true,
+        isMessagingLoading: false,
+        isUploading: false,
+        cancelMessage: vi.fn(),
+        messagingError: null,
+      });
+      useMessageQueueStore.setState({ queuedBySessionId: {} });
+      const onStagedFilesChange = vi.fn();
+      const { ref } = await renderStaged({
+        onStagedFilesChange,
+        chatId: "chat-q",
+      });
+      act(() => ref.current!.addUploadedFiles([upload("q1")]));
+      const textarea = screen.getByPlaceholderText("Type a message...");
+      fireEvent.change(textarea, { target: { value: "later" } });
+      fireEvent.keyDown(textarea, { key: "Enter", shiftKey: false });
+      expect(stagedIds(onStagedFilesChange)).toEqual([]);
+
+      fireEvent.click(screen.getByTestId("chat-input-queued-message-edit"));
+      expect(stagedIds(onStagedFilesChange)).toEqual(["q1"]);
+    });
+
+    it("removes files by id while the composer is uploading, and resets limits for the rest", async () => {
+      await useRealHandlers();
+      const resetTokenLimitsOnFileRemoval = vi.fn();
+      mockUseTokenManagement.mockReturnValue({
+        isAnyTokenLimitExceeded: false,
+        handleMessageTokenLimitExceeded: vi.fn(),
+        handleFileTokenLimitExceeded: vi.fn(),
+        resetTokenLimits: vi.fn(),
+        resetTokenLimitsOnFileRemoval,
+      });
+      mockUseChatContext.mockReturnValue({
+        isPendingResponse: false,
+        isMessagingLoading: false,
+        isUploading: true,
+        cancelMessage: vi.fn(),
+      });
+      const onStagedFilesChange = vi.fn();
+      const { ref } = await renderStaged({
+        onStagedFilesChange,
+        initialFiles: [upload("f1"), upload("f2"), upload("f3")],
+      });
+
+      act(() => {
+        ref.current!.removeUploadedFiles(["f1", "f3", "missing"]);
+        ref.current!.addUploadedFiles([upload("f4")]);
+      });
+      expect(stagedIds(onStagedFilesChange)).toEqual(["f2", "f4"]);
+      expect(resetTokenLimitsOnFileRemoval).toHaveBeenCalledWith(1, 0);
+      expect(
+        mockUseAudioTranscriptionRecorder.mock.results.at(-1)?.value
+          .removeRecordedAudioFile,
+      ).toHaveBeenCalledWith("f1");
+
+      act(() => ref.current!.removeUploadedFiles(["f2", "f4"]));
+      expect(stagedIds(onStagedFilesChange)).toEqual([]);
+      expect(resetTokenLimitsOnFileRemoval).toHaveBeenLastCalledWith(0, 0);
+    });
+
+    it("keeps the web composer's file row as it was without the callback", async () => {
+      await useRealHandlers();
+      mockUseUploadFeature.mockReturnValue({ enabled: true });
+      const { ref } = await renderStaged({ initialFiles: [upload("f1")] });
+      expect(screen.getByTestId("attachments-preview")).toHaveTextContent("1");
+      act(() => ref.current!.removeUploadedFiles(["f1"]));
+      expect(screen.getByTestId("attachments-preview")).toHaveTextContent("0");
+    });
+  });
+
+  describe("a Teams transcript chip agrees with the send (ERMAIN-1025)", () => {
+    const upload = (filename: string, id: string): FileUploadItem =>
+      ({
+        id,
+        filename,
+        download_url: `https://example.com/${id}`,
+        file_contents_unavailable_missing_permissions: false,
+        is_sharepoint_file: false,
+      }) as FileUploadItem;
+    const transcriptUpload = upload("teams-chats-2.md", "t");
+    const roadmap = upload("teams-file-1a2b3c4d-roadmap-q1.pdf", "a1");
+    const shot = upload("teams-img-0123456789abcdef.png", "a2");
+    const holiday = upload("holiday.pdf", "u");
+    const transcriptFile = teamsTranscriptFile(
+      teamsIndex(
+        [teamsSection(), teamsSection({ title: "Design review" })],
+        [
+          teamsMessage("m1", {
+            assets: [
+              {
+                name: roadmap.filename,
+                displayName: "roadmap-q1.pdf",
+                kind: "file",
+              },
+              { name: shot.filename, displayName: null, kind: "image" },
+            ],
+          }),
+        ],
+      ),
+      transcriptUpload.filename,
+    );
+
+    /** The add-in's part: entries from the staged list, keyed by upload id. */
+    function TeamsHost({
+      onSendMessage,
+      initialFiles,
+    }: {
+      onSendMessage: Parameters<typeof ChatInput>[0]["onSendMessage"];
+      initialFiles: FileUploadItem[];
+    }) {
+      const ref = useRef<ChatInputControlsHandle>(null);
+      const [staged, setStaged] = useState<FileUploadItem[]>([]);
+      const [forgotten, setForgotten] = useState(false);
+      const entries = useMemo((): TeamsTranscriptContextEntry[] => {
+        const ids = new Set(staged.map((file) => file.id));
+        if (forgotten || !ids.has(transcriptUpload.id)) {
+          return [];
+        }
+        return [
+          {
+            id: "lineage",
+            transcript: transcriptFile,
+            uploads: {
+              transcript: transcriptUpload,
+              assets: [roadmap, shot].filter((file) => ids.has(file.id)),
+            },
+            onRemove: () => setForgotten(true),
+          },
+        ];
+      }, [staged, forgotten]);
+      const onRemoveFile = useCallback(
+        (fileId: string) => ref.current?.removeUploadedFiles([fileId]),
+        [],
+      );
+      const contextItems = useTeamsTranscriptContextItems(entries, {
+        onRemoveFile,
+      });
+      return (
+        <ChatInput
+          ref={ref}
+          onSendMessage={onSendMessage}
+          initialFiles={initialFiles}
+          onStagedFilesChange={setStaged}
+          contextItems={contextItems}
+        />
+      );
+    }
+
+    const renderHost = async (initialFiles: FileUploadItem[]) => {
+      await readTeamsTranscriptIndex(transcriptFile);
+      const actual = await vi.importActual<
+        typeof import("@/hooks/ui/useChatInputHandlers")
+      >("@/hooks/ui/useChatInputHandlers");
+      mockUseChatInputHandlers.mockImplementation((...args: unknown[]) =>
+        actual.useChatInputHandlers(
+          ...(args as Parameters<typeof actual.useChatInputHandlers>),
+        ),
+      );
+      mockUseUploadFeature.mockReturnValue({ enabled: true });
+      const { i18n } = await import("@lingui/core");
+      const onSendMessage = vi.fn();
+      render(
+        <QueryClientProvider client={new QueryClient()}>
+          <I18nProvider i18n={i18n}>
+            <ThemeProvider
+              enableCustomTheme={false}
+              initialThemeMode="light"
+              persistThemeMode={false}
+            >
+              <TeamsHost
+                onSendMessage={onSendMessage}
+                initialFiles={initialFiles}
+              />
+            </ThemeProvider>
+          </I18nProvider>
+        </QueryClientProvider>,
+      );
+      return onSendMessage;
+    };
+
+    const send = (text: string) => {
+      const textarea = screen.getByPlaceholderText("Type a message...");
+      fireEvent.change(textarea, { target: { value: text } });
+      fireEvent.keyDown(textarea, { key: "Enter", shiftKey: false });
+    };
+    const sentIds = (onSendMessage: ReturnType<typeof vi.fn>) =>
+      onSendMessage.mock.calls.at(-1)?.[1] as string[] | undefined;
+    const chipCount = () =>
+      [...document.querySelectorAll('[data-ui="composer-context-chip"]')]
+        .length;
+
+    it("shows one chip for the transcript and its files, and sends them all", async () => {
+      const onSendMessage = await renderHost([
+        transcriptUpload,
+        roadmap,
+        shot,
+        holiday,
+      ]);
+      expect(chipCount()).toBe(1);
+      expect(
+        screen.getByRole("button", { name: /^Product sync \+1/ }),
+      ).toBeInTheDocument();
+      expect(screen.getByTestId("attachments-preview")).toHaveTextContent("1");
+      expect(screen.getByTestId("remove-file-u")).toBeInTheDocument();
+
+      fireEvent.click(screen.getByTestId("remove-all-files"));
+      expect(chipCount()).toBe(1);
+
+      send("summarise");
+      expect(sentIds(onSendMessage)).toEqual(["t", "a1", "a2"]);
+      expect(chipCount()).toBe(0);
+    });
+
+    it("sends none of the transcript's files once its chip is removed", async () => {
+      const onSendMessage = await renderHost([
+        transcriptUpload,
+        roadmap,
+        shot,
+        holiday,
+      ]);
+      fireEvent.click(
+        screen.getByRole("button", { name: "Remove Teams transcript" }),
+      );
+      expect(chipCount()).toBe(0);
+      expect(
+        document.querySelector('[data-ui="composer-context-live"]'),
+      ).toHaveTextContent("Teams transcript removed, with 2 shared files.");
+      send("only the holiday");
+      expect(sentIds(onSendMessage)).toEqual(["u"]);
+    });
+
+    it("drops a file removed in the detail from the send, and keeps the chip", async () => {
+      const onSendMessage = await renderHost([
+        transcriptUpload,
+        roadmap,
+        shot,
+        holiday,
+      ]);
+      fireEvent.click(
+        screen.getByRole("button", { name: /^Product sync \+1/ }),
+      );
+      fireEvent.click(
+        screen.getByRole("button", { name: "Remove roadmap-q1.pdf" }),
+      );
+      expect(chipCount()).toBe(1);
+      send("without the roadmap");
+      expect(sentIds(onSendMessage)).toEqual(["t", "a2", "u"]);
+    });
+
+    it("claims only what is staged when the composer took fewer files", async () => {
+      const onSendMessage = await renderHost([transcriptUpload, roadmap]);
+      expect(chipCount()).toBe(1);
+      expect(screen.getByTestId("attachments-preview")).toHaveTextContent("0");
+      send("short");
+      expect(sentIds(onSendMessage)).toEqual(["t", "a1"]);
     });
   });
 });

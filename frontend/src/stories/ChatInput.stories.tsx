@@ -1,13 +1,18 @@
 import { action } from "@storybook/addon-actions";
+import { useState } from "react";
 
+import { recordingFile } from "./helpers/audioRecordingFiles";
 import { ChatInput } from "../components/ui/Chat/ChatInput";
+import { FilePreviewModal } from "../components/ui/Modal/FilePreviewModal";
 import { StaticFeatureConfigProvider } from "../providers/FeatureConfigProvider";
 
+import type { AudioStoryPhase } from "./helpers/audioRecordingFiles";
 import type {
   FileCapability,
   FileUploadItem,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { Meta, StoryObj } from "@storybook/react";
+import type { ReactNode } from "react";
 
 // export const WithCustomTheme: Story = {
 //   parameters: {
@@ -280,3 +285,66 @@ export const AudioModeAndDictationEnabled: Story = {
     ),
   ],
 };
+
+const audioTranscriptionConfig = (Story: () => ReactNode) => (
+  <StaticFeatureConfigProvider
+    config={{
+      upload: { enabled: true },
+      chatInput: { autofocus: false, showUsageAdvisory: false },
+      audioTranscription: { enabled: true, maxRecordingDurationSeconds: 1200 },
+      audioDictation: { enabled: false, maxRecordingDurationSeconds: 1200 },
+    }}
+  >
+    <Story />
+  </StaticFeatureConfigProvider>
+);
+
+/** The composer with one staged recording; activating its tile opens the preview with the transcript. */
+const RecordingComposer = ({ phase }: { phase: AudioStoryPhase }) => {
+  const [preview, setPreview] = useState<FileUploadItem | null>(null);
+  return (
+    <>
+      <ChatInput
+        onSendMessage={action("message sent")}
+        handleFileAttachments={action("handle file attachments")}
+        showControls
+        showFileTypes
+        initialFiles={[recordingFile(`recording-${phase}`, phase)]}
+        onFilePreview={setPreview}
+      />
+      <FilePreviewModal
+        isOpen={preview !== null}
+        onClose={() => setPreview(null)}
+        file={preview}
+      />
+    </>
+  );
+};
+
+const recordingStory = (phase: AudioStoryPhase, story: string): Story => ({
+  render: () => <RecordingComposer phase={phase} />,
+  decorators: [audioTranscriptionConfig],
+  parameters: { docs: { description: { story } } },
+});
+
+/**
+ * A recording's transcription status lives on its own file tile: a spinner
+ * and "Transcribing · 0:42" while it runs, the error colours and "Couldn't
+ * transcribe" when it fails. Send waits for every recording to finish.
+ */
+export const AudioRecording = recordingStory(
+  "recording",
+  "Still recording: the tile spins and counts the length; Send waits.",
+);
+export const AudioTranscribing = recordingStory(
+  "transcribing",
+  "Transcribing: the tile spins; Send waits until the transcript is ready.",
+);
+export const AudioTranscriptReady = recordingStory(
+  "completed",
+  "Transcript ready: Send is free, and the tile opens the transcript.",
+);
+export const AudioFailed = recordingStory(
+  "failed",
+  "Couldn't transcribe: the tile takes the error colours and names the error on hover and in the preview. Retry is offered only for a recording this composer made, which a story cannot hold; see UI/FileAttachmentsPreview AudioStatuses.",
+);

@@ -8,9 +8,15 @@ import {
 import { plural, t } from "@lingui/core/macro";
 import { useEffect, useMemo, useState } from "react";
 
-import { wordCommentQuoteText } from "./WordCommentChip";
 import { WordShowInWordButton } from "./WordShowInWordButton";
 import { ACTION_BUTTON_CLASS } from "../../core/clientActions/clientActionButtonStyles";
+import {
+  wordCommentActivityText,
+  wordCommentQuoteText,
+  wordCommentReadingText,
+  wordCommentRepliesText,
+  wordCommentStatusText,
+} from "../utils/wordCommentText";
 
 import type {
   WordCommentList,
@@ -50,30 +56,6 @@ export function wordCommentPickerRows(
           (b.lastActivity?.getTime() ?? -Infinity) -
             (a.lastActivity?.getTime() ?? -Infinity) || a.pos - b.pos,
       );
-}
-
-function activityText(date: Date | null): string {
-  if (!date)
-    return t({
-      id: "officeAddin.word.comments.picker.timeUnknown",
-      message: "time unknown",
-    });
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(date);
-}
-
-function repliesText(replies: number | null): string | null {
-  if (replies === null) return null;
-  return t({
-    id: "officeAddin.word.comments.picker.replies",
-    message: plural(replies, {
-      0: "no replies",
-      one: "# reply",
-      other: "# replies",
-    }),
-  });
 }
 
 export interface WordCommentPickerProps {
@@ -307,21 +289,6 @@ export function WordCommentPicker({
   );
 }
 
-export function wordCommentReadingText(
-  progress: WordCommentList["progress"],
-): string {
-  if (!progress)
-    return t({
-      id: "officeAddin.word.send.readingComments",
-      message: "Reading comments…",
-    });
-  const { done, total } = progress;
-  return t({
-    id: "officeAddin.word.comments.readingProgress",
-    message: `Reading comments… ${done} of ${total}`,
-  });
-}
-
 function pickerCoverageText(list: WordCommentList): string {
   const total = list.threads.length;
   const { open, resolved } = list.counts;
@@ -382,7 +349,7 @@ function WordCommentPickerRow({
   onPick: () => void;
   onShowInWord: () => Promise<WordSelectionShowResult>;
 }) {
-  const replies = repliesText(thread.replies);
+  const replies = wordCommentRepliesText(thread.replies);
   return (
     <li
       className="space-y-1 py-2"
@@ -400,20 +367,12 @@ function WordCommentPickerRow({
             {thread.author}
           </span>
           {replies && <span>{replies}</span>}
-          <span>{activityText(thread.lastActivity)}</span>
+          <span>{wordCommentActivityText(thread.lastActivity)}</span>
           <span
             className="rounded-[var(--theme-radius-control)] bg-theme-bg-tertiary px-1.5"
             data-testid="word-comment-picker-status"
           >
-            {thread.status === "open"
-              ? t({
-                  id: "officeAddin.word.comments.picker.statusOpen",
-                  message: "Open",
-                })
-              : t({
-                  id: "officeAddin.word.comments.picker.statusResolved",
-                  message: "Resolved",
-                })}
+            {wordCommentStatusText(thread.status)}
           </span>
           {thread.inSelection && (
             <span

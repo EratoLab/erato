@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 
 import type * as EratoLibrary from "@erato/frontend/library";
 import type { ReactNode } from "react";
@@ -156,6 +156,25 @@ const createStoreStub = <S,>(readState: () => S) =>
     { getState: readState },
   );
 
+// Equal args give the same File, as the host's does, so identity checks on a
+// chip's estimate hold under the mock too.
+const stubEstimates = new Map<string, File>();
+const stubActionFacetEstimate = (facet: {
+  id: string;
+  args?: Readonly<Record<string, string>>;
+}): File => {
+  const content = Object.entries(facet.args ?? {})
+    .map(([name, value]) => `${name}: ${value}`)
+    .join("\n\n");
+  const key = `${facet.id}\u0000${content}`;
+  let file = stubEstimates.get(key);
+  if (!file) {
+    file = new File([content], `${facet.id}.txt`, { type: "text/plain" });
+    stubEstimates.set(key, file);
+  }
+  return file;
+};
+
 export const DEFAULT_STUBS = {
   holdComposeReload: () => () => {},
   installAudioCaptureAccessPolicy: () => () => {},
@@ -181,6 +200,12 @@ export const DEFAULT_STUBS = {
   isImageFileResource: () => false,
   getFilePreviewUrl: () => undefined,
   FileAttachmentsPreview: StubNothing,
+  ComposerContextArea: StubNothing,
+  ComposerContextLane: StubNothing,
+  MessageSentWith: StubNothing,
+  registerSentWithDescriptors: noop,
+  sentWithChipsFor: () => [],
+  actionFacetEstimate: stubActionFacetEstimate,
   // The declared kit surface. Covered wholesale so a name pinned by
   // `kit-surface.ts` can never be the one missing entry that breaks linking.
   Alert: StubNothing,
@@ -190,6 +215,7 @@ export const DEFAULT_STUBS = {
   AttachmentNotice: StubNothing,
   AttachmentTile: StubNothing,
   AttachmentTileList: StubNothing,
+  audioTranscriptionTileStatus: () => null,
   Avatar: StubNothing,
   Button: StubButton,
   Card: StubPassthrough,
@@ -216,6 +242,7 @@ export const DEFAULT_STUBS = {
   CloseIcon: StubNothing,
   CopyErrorButton: StubNothing,
   CountBadge: StubNothing,
+  DefaultComposerContextChipFace: StubNothing,
   DefaultMessageControls: StubNothing,
   DisclosureChevron: StubNothing,
   DocumentIcon: StubNothing,
@@ -367,7 +394,7 @@ export const DEFAULT_STUBS = {
   dynamicActivate: async () => {},
   extractTextFromContent: () => "",
   findCapabilityByExtension: () => null,
-  getSupportedFileTypes: () => ({}),
+  getSupportedFileTypes: () => [],
   getSupportedLocale: () => null,
   hasSupportedOperations: () => false,
   mapMessageToUiMessage: (message: unknown) => message,
@@ -406,6 +433,9 @@ export const DEFAULT_STUBS = {
   transformEmailFencesForCopy: (value: string) => value,
   wordShowInWordLabel: () => "Show in Word",
   UploadUnknownError: class extends Error {},
+  UploadTooLargeError: class extends Error {},
+  readTeamsTranscriptIndex: async () => null,
+  validateFileSizes: () => ({ valid: true }),
 
   // Hooks. Shapes match what the host returns; a test that asserts on one
   // supplies its own.
@@ -519,6 +549,28 @@ export const DEFAULT_STUBS = {
   useProfile: () => ({ profile: undefined }),
   useStandardMessageActions: () => noop,
   useUnarchiveChat: () => async () => undefined,
+  useChatInputControls: () => ({
+    setDraftMessage: noop,
+    focusInput: noop,
+    setSelectedFacetIds: noop,
+    setSelectedChatProviderId: noop,
+    toggleFacetId: noop,
+    addUploadedFiles: noop,
+    removeUploadedFiles: noop,
+    clearQueuedMessage: noop,
+  }),
+  useTeamsTranscriptContextItems: () => [],
+  // Keeps the library's one rule a test can see: a repeat still changes the
+  // region's text.
+  useLiveAnnouncement: () => {
+    const [text, setText] = useState("");
+    const announce = useCallback(
+      (next: string) =>
+        setText((current) => (current === next ? `${next}\u200b` : next)),
+      [],
+    );
+    return [text, announce];
+  },
   useUploadFeature: () => ({
     enabled: true,
     maxSizeBytes: 20 * 1024 * 1024,

@@ -218,6 +218,9 @@ export const Chat = ({
       addUploadedFiles: (files: FileUploadItem[]) => {
         chatInputControlsRef.current?.addUploadedFiles(files);
       },
+      removeUploadedFiles: (fileIds: string[]) => {
+        chatInputControlsRef.current?.removeUploadedFiles(fileIds);
+      },
       clearQueuedMessage: () => {
         chatInputControlsRef.current?.clearQueuedMessage();
       },

@@ -1,20 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { registry, addMenu, attachmentsPreview } = vi.hoisted(() => {
+const { registry, addMenu } = vi.hoisted(() => {
   const registry: Record<string, unknown> = {};
-  return {
-    registry,
-    addMenu: () => null,
-    attachmentsPreview: () => null,
-  };
+  return { registry, addMenu: () => null };
 });
 
 vi.mock("@erato/frontend/library", () => ({ componentRegistry: registry }));
 vi.mock("../components/TeamsChatAddMenuExtraContent", () => ({
   TeamsChatAddMenuExtraContent: addMenu,
-}));
-vi.mock("../components/TeamsAttachmentsPreview", () => ({
-  TeamsAttachmentsPreview: attachmentsPreview,
 }));
 
 import { installTeamsComponentRegistrations } from "../installTeamsComponentRegistrations";
@@ -24,7 +17,7 @@ describe("installTeamsComponentRegistrations", () => {
     for (const key of Object.keys(registry)) delete registry[key];
   });
 
-  it("contributes the add-menu row and the attachments preview, and no Outlook renderers", () => {
+  it("contributes only the add-menu row, no attachment preview and no Outlook renderers", () => {
     // The registry's own default for an unset slot.
     registry.ChatInputAttachmentPreview = null;
 
@@ -32,11 +25,11 @@ describe("installTeamsComponentRegistrations", () => {
 
     expect(registry).toEqual({
       ChatAddMenuExtraContent: addMenu,
-      ChatInputAttachmentPreview: attachmentsPreview,
+      ChatInputAttachmentPreview: null,
     });
   });
 
-  it("keeps a component kit's attachment preview", () => {
+  it("leaves a component kit's attachment preview as the kit set it", () => {
     const kitPreview = () => null;
     registry.ChatInputAttachmentPreview = kitPreview;
 

@@ -241,43 +241,44 @@ msgstr "Maksymalny rozmiar pliku: {maxSizeFormatted}"
 
 #. js-lingui-explicit-id
 #: src/outlook/components/AddinChatInput.tsx
-msgid "officeAddin.chatInput.appointmentContext"
-msgstr "Szczegóły terminu są dołączone jako kontekst"
+#~ msgid "officeAddin.chatInput.appointmentContext"
+#~ msgstr "Szczegóły terminu są dołączone jako kontekst"
 
 #. js-lingui-explicit-id
 #: src/outlook/components/AddinChatInput.tsx
-msgid "officeAddin.chatInput.appointmentContextUnchanged"
-msgstr "Szczegóły terminu bez zmian, nie zostaną wysłane ponownie"
+#~ msgid "officeAddin.chatInput.appointmentContextUnchanged"
+#~ msgstr "Szczegóły terminu bez zmian, nie zostaną wysłane ponownie"
 
 #. js-lingui-explicit-id
-#: src/outlook/components/AddinChatInput.tsx
+#: src/outlook/utils/outlookContextChips.ts
 msgid "officeAddin.chatInput.dismissAppointmentContext"
 msgstr "Nie dołączaj szczegółów terminu"
 
 #. js-lingui-explicit-id
-#: src/outlook/components/AddinChatInput.tsx
+#: src/outlook/utils/outlookContextChips.ts
 msgid "officeAddin.chatInput.dismissDraftContext"
 msgstr "Nie dołączaj wersji roboczej"
 
 #. js-lingui-explicit-id
-#: src/core/selection/AddinSelectionChip.tsx
+#: src/outlook/utils/outlookContextChips.ts
+#: src/word/utils/wordContextChips.ts
 msgid "officeAddin.chatInput.dismissSelection"
 msgstr "Odrzuć zaznaczenie"
 
 #. js-lingui-explicit-id
 #: src/outlook/components/AddinChatInput.tsx
-msgid "officeAddin.chatInput.draftContext"
-msgstr "Twoja wersja robocza jest dołączona jako kontekst"
+#~ msgid "officeAddin.chatInput.draftContext"
+#~ msgstr "Twoja wersja robocza jest dołączona jako kontekst"
 
 #. js-lingui-explicit-id
 #: src/outlook/components/AddinChatInput.tsx
-msgid "officeAddin.chatInput.draftContextScheduling"
-msgstr "Twoja wersja robocza nie jest wysyłana podczas planowania terminu"
+#~ msgid "officeAddin.chatInput.draftContextScheduling"
+#~ msgstr "Twoja wersja robocza nie jest wysyłana podczas planowania terminu"
 
 #. js-lingui-explicit-id
 #: src/outlook/components/AddinChatInput.tsx
-msgid "officeAddin.chatInput.draftContextUnchanged"
-msgstr "Twoja wersja robocza się nie zmieniła i nie zostanie wysłana ponownie"
+#~ msgid "officeAddin.chatInput.draftContextUnchanged"
+#~ msgstr "Twoja wersja robocza się nie zmieniła i nie zostanie wysłana ponownie"
 
 #. js-lingui-explicit-id
 #: src/outlook/components/AddinChatInput.tsx
@@ -315,9 +316,9 @@ msgid "officeAddin.chatInput.emailBody"
 msgstr "Treść e-maila"
 
 #. js-lingui-explicit-id
-#: src/outlook/components/AddinChatAddMenuExtraContent.tsx
 #: src/outlook/components/AddinChatInput.tsx
 #: src/outlook/utils/buildDropEmailGroup.ts
+#: src/outlook/utils/outlookContextChips.ts
 msgid "officeAddin.chatInput.emailFallback"
 msgstr "E-mail"
 
@@ -328,16 +329,16 @@ msgstr "E-mail"
 
 #. js-lingui-explicit-id
 #: src/outlook/components/AddinChatInput.tsx
-msgid "officeAddin.chatInput.emailSourcePreviewRegion"
-msgstr "Podgląd kontekstu e-maila"
+#~ msgid "officeAddin.chatInput.emailSourcePreviewRegion"
+#~ msgstr "Podgląd kontekstu e-maila"
 
 #. js-lingui-explicit-id
-#: src/outlook/components/AddinChatInput.tsx
+#: src/outlook/utils/outlookContextChips.ts
 msgid "officeAddin.chatInput.emailThreadLoadError"
 msgstr "Nie udało się wczytać wątku e-maili"
 
 #. js-lingui-explicit-id
-#: src/outlook/components/AddinChatInput.tsx
+#: src/outlook/utils/outlookContextChips.ts
 msgid "officeAddin.chatInput.emailThreadLoadErrorDescription"
 msgstr "Nadal możesz wysłać wiadomość bez tego kontekstu e-maila."
 
@@ -354,51 +355,51 @@ msgstr "Przetwarzanie upuszczonych e-maili…"
 
 #. js-lingui-explicit-id
 #: src/outlook/components/AddinChatInput.tsx
-msgid "officeAddin.chatInput.loadingEmailThread"
-msgstr "Wczytywanie wątku e-maili..."
+#~ msgid "officeAddin.chatInput.loadingEmailThread"
+#~ msgstr "Wczytywanie wątku e-maili..."
 
 #. js-lingui-explicit-id
-#: src/outlook/components/AddinChatInput.tsx
+#: src/outlook/utils/outlookContextChips.ts
 msgid "officeAddin.chatInput.loadingEmailThreadDescription"
 msgstr "Przygotowywanie kontekstu e-maila"
 
 #. js-lingui-explicit-id
 #: src/outlook/components/AddinChatInput.tsx
-msgid "officeAddin.chatInput.removeDroppedEmail"
-msgstr "Usuń"
+#~ msgid "officeAddin.chatInput.removeDroppedEmail"
+#~ msgstr "Usuń"
 
 #. js-lingui-explicit-id
-#: src/outlook/components/AddinChatInput.tsx
+#: src/outlook/utils/outlookContextChips.ts
 msgid "officeAddin.chatInput.removeDroppedEmailNamed"
 msgstr "Usuń {subject}"
 
 #. js-lingui-explicit-id
 #: src/outlook/components/AddinChatInput.tsx
-msgid "officeAddin.chatInput.replyContext.groupLabel"
-msgstr "Kontekst odpowiedzi"
+#~ msgid "officeAddin.chatInput.replyContext.groupLabel"
+#~ msgstr "Kontekst odpowiedzi"
 
 #. js-lingui-explicit-id
 #: src/outlook/components/AddinChatInput.tsx
-msgid "officeAddin.chatInput.replyContext.label"
-msgstr "Kontekst odpowiedzi"
+#~ msgid "officeAddin.chatInput.replyContext.label"
+#~ msgstr "Kontekst odpowiedzi"
 
 #. js-lingui-explicit-id
-#: src/outlook/components/AddinChatInput.tsx
+#: src/outlook/utils/outlookContextChips.ts
 msgid "officeAddin.chatInput.replyContext.untitled"
 msgstr "(brak tematu)"
 
 #. js-lingui-explicit-id
-#: src/outlook/components/AddinChatInput.tsx
+#: src/outlook/utils/outlookContextChips.ts
 msgid "officeAddin.chatInput.stagedSize"
 msgstr "{used} z {limit}"
 
 #. js-lingui-explicit-id
-#: src/outlook/components/AddinChatInput.tsx
+#: src/outlook/utils/buildThreadGroup.ts
 msgid "officeAddin.chatInput.threadMessageCount"
 msgstr "{count, plural, one {# wiadomość} few {# wiadomości} many {# wiadomości} other {# wiadomości}}"
 
 #. js-lingui-explicit-id
-#: src/outlook/components/AddinChatInput.tsx
+#: src/outlook/utils/buildThreadGroup.ts
 msgid "officeAddin.chatInput.unknownSender"
 msgstr "Nieznany nadawca"
 
@@ -435,36 +436,42 @@ msgstr "Odpowiedz wszystkim odbiorcom"
 
 #. js-lingui-explicit-id
 #: src/outlook/providers/EntraGraphTokenProvider.tsx
+#: src/outlook/utils/outlookContextChips.ts
 msgid "officeAddin.email.allowAccessToLoad.action"
 msgstr "Zezwól na dostęp"
 
 #. js-lingui-explicit-id
 #: src/outlook/providers/EntraGraphTokenProvider.tsx
+#: src/outlook/utils/outlookContextChips.ts
 msgid "officeAddin.email.allowAccessToLoad.description"
 msgstr "Ten e-mail nie został załączony, ponieważ odczytanie jego skrzynki wymaga uprawnienia, które nie zostało jeszcze przyznane."
 
 #. js-lingui-explicit-id
 #: src/outlook/providers/EntraGraphTokenProvider.tsx
+#: src/outlook/utils/outlookContextChips.ts
 msgid "officeAddin.email.allowAccessToLoad.title"
 msgstr "Zezwól na dostęp, aby załadować e-mail"
 
 #. js-lingui-explicit-id
 #: src/outlook/providers/EntraGraphTokenProvider.tsx
 msgid "officeAddin.email.signedIn.title"
-msgstr "Zalogowano. Dodaj e-mail ponownie, aby go załączyć."
+msgstr "Zalogowano."
 
 #. js-lingui-explicit-id
 #: src/outlook/providers/EntraGraphTokenProvider.tsx
+#: src/outlook/utils/outlookContextChips.ts
 msgid "officeAddin.email.signInToLoad.action"
 msgstr "Zaloguj się"
 
 #. js-lingui-explicit-id
 #: src/outlook/providers/EntraGraphTokenProvider.tsx
+#: src/outlook/utils/outlookContextChips.ts
 msgid "officeAddin.email.signInToLoad.description"
 msgstr "Ten e-mail nie został załączony, ponieważ jego odczytanie wymaga szybkiego zalogowania."
 
 #. js-lingui-explicit-id
 #: src/outlook/providers/EntraGraphTokenProvider.tsx
+#: src/outlook/utils/outlookContextChips.ts
 msgid "officeAddin.email.signInToLoad.title"
 msgstr "Zaloguj się, aby załadować e-mail"
 
@@ -635,8 +642,8 @@ msgstr "Wątek wiadomości"
 
 #. js-lingui-explicit-id
 #: src/outlook/components/AddinChatAddMenuExtraContent.tsx
-msgid "officeAddin.fileSource.emailThreadLoadError"
-msgstr "Nie udało się załadować tej konwersacji z serwera. Niektóre wiadomości lub załączniki mogą być niedostępne — spróbuj ponownie otworzyć wiadomość."
+#~ msgid "officeAddin.fileSource.emailThreadLoadError"
+#~ msgstr "Nie udało się załadować tej konwersacji z serwera. Niektóre wiadomości lub załączniki mogą być niedostępne — spróbuj ponownie otworzyć wiadomość."
 
 #. js-lingui-explicit-id
 #: src/components/AddinFileSourceSelector.tsx
@@ -654,6 +661,11 @@ msgstr "Nie udało się załadować tej konwersacji z serwera. Niektóre wiadomo
 #~ msgstr "Ukryj"
 
 #. js-lingui-explicit-id
+#: src/outlook/components/AddinChatAddMenuExtraContent.tsx
+msgid "officeAddin.fileSource.inComposer"
+msgstr "Już w polu wiadomości: zmień to tam"
+
+#. js-lingui-explicit-id
 #: src/components/AddinFileSourceSelector.tsx
 #~ msgid "officeAddin.fileSource.loading"
 #~ msgstr "..."
@@ -665,8 +677,8 @@ msgstr "Ładowanie załączników..."
 
 #. js-lingui-explicit-id
 #: src/outlook/components/AddinChatAddMenuExtraContent.tsx
-msgid "officeAddin.fileSource.loadingEmailThread"
-msgstr "Ładowanie wątku wiadomości..."
+#~ msgid "officeAddin.fileSource.loadingEmailThread"
+#~ msgstr "Ładowanie wątku wiadomości..."
 
 #. js-lingui-explicit-id
 #: src/components/AddinFileSourceSelector.tsx
@@ -674,13 +686,18 @@ msgstr "Ładowanie wątku wiadomości..."
 #~ msgstr "Dla tego elementu nie jest dostępna treść wiadomości."
 
 #. js-lingui-explicit-id
+#: src/outlook/components/AddinChatAddMenuExtraContent.tsx
+msgid "officeAddin.fileSource.sentInChat"
+msgstr "{fileName} · już wysłano w tym czacie; dodaj ponownie"
+
+#. js-lingui-explicit-id
 #: src/components/AddinFileSourceSelector.tsx
 #~ msgid "officeAddin.fileSource.show"
 #~ msgstr "Pokaż"
 
 #. js-lingui-explicit-id
-#: src/outlook/components/AddinChatAddMenuExtraContent.tsx
 #: src/outlook/components/AddinChatInput.tsx
+#: src/outlook/utils/outlookContextChips.ts
 msgid "officeAddin.fileSource.updatingThread"
 msgstr "Aktualizowanie…"
 
@@ -750,6 +767,555 @@ msgid "officeAddin.office.loading"
 msgstr "Ładowanie dodatku Office..."
 
 #. js-lingui-explicit-id
+#: src/outlook/hooks/useOutlookContextItems.tsx
+msgid "officeAddin.outlook.context.appointment.announce.sentInstead"
+msgstr "Szczegóły terminu dołączone. Zaznaczenie pozostaje wyłączone do czasu jego zmiany."
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.appointment.detail.replacedBySelection"
+msgstr "Zamiast szczegółów terminu wysyłane jest zaznaczenie."
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.appointment.include"
+msgstr "Dołącz szczegóły terminu"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+#: src/outlook/utils/outlookSentWith.ts
+msgid "officeAddin.outlook.context.appointment.label"
+msgstr "Szczegóły terminu"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.appointment.meta.replacedBySelection"
+msgstr "Zastąpione zaznaczeniem"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.appointment.meta.unchanged"
+msgstr "Bez zmian, nie wysłano ponownie"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.attachment.detail.cloud"
+msgstr "To link do pliku w chmurze, którego Outlook nie może przekazać, więc nie zostanie wysłany."
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.attachment.detail.followUp"
+msgstr "Załączniki są wysyłane tylko z pierwszą wiadomością. Dołącz go, aby wysłać go z tą."
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.attachment.detail.notWithDrops"
+msgstr "Załączniki wersji roboczej nie są wysyłane, gdy dołączone są upuszczone wiadomości."
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.attachment.detail.notWithDropsEmail"
+msgstr "Załączniki tej wiadomości nie są wysyłane, gdy dołączone są upuszczone wiadomości."
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.attachment.detail.sentEarlier"
+msgstr "Erato ma już ten plik z wcześniejszej wiadomości, więc nie zostanie wysłany ponownie."
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.attachment.dismiss"
+msgstr "Odrzuć {name}"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.attachment.include"
+msgstr "Dołącz {name}"
+
+#. js-lingui-explicit-id
+#: src/outlook/hooks/useOutlookContextItems.tsx
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.attachment.meta.cloud"
+msgstr "Plik w chmurze · nie można wysłać"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.attachment.meta.draft"
+msgstr "Załącznik wersji roboczej · {size}"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.attachment.meta.email"
+msgstr "Załącznik wiadomości · {size}"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.attachment.meta.followUp"
+msgstr "Nie jest dołączany do kolejnych wiadomości"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.attachment.meta.notWithDrops"
+msgstr "Nie jest wysyłany z upuszczonymi wiadomościami"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.attachment.meta.sentEarlier"
+msgstr "Wysłano wcześniej, nie ponownie"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.attachment.remove"
+msgstr "Nie dołączaj {name}"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.attachments.detail.cloud"
+msgstr "To linki do plików w chmurze, których Outlook nie może przekazać, więc nie zostaną wysłane."
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.attachments.detail.followUp"
+msgstr "Załączniki są wysyłane tylko z pierwszą wiadomością. Dołącz je, aby wysłać je z tą."
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.attachments.detail.notIncluded"
+msgstr "Załączniki nie są teraz dołączone. Twoje zaznaczenia poniżej zostają zachowane i wrócą, gdy je dołączysz."
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.attachments.detail.sentEarlier"
+msgstr "Erato ma już te pliki z wcześniejszej wiadomości, więc nie zostaną wysłane ponownie."
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.attachments.dismiss.draft"
+msgstr "Odrzuć załączniki wersji roboczej"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.attachments.dismiss.email"
+msgstr "Odrzuć załączniki wiadomości"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.attachments.include.draft"
+msgstr "Dołącz załączniki wersji roboczej"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.attachments.include.email"
+msgstr "Dołącz załączniki wiadomości"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.attachments.label.draft"
+msgstr "Załączniki wersji roboczej ({count})"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.attachments.label.email"
+msgstr "Załączniki wiadomości ({count})"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.attachments.meta.cloud"
+msgstr "Pliki w chmurze · nie można wysłać"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.attachments.meta.followUp"
+msgstr "Nie są dołączane do kolejnych wiadomości"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.attachments.meta.nothingChosen"
+msgstr "Nic nie wybrano"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.attachments.meta.notWithDrops"
+msgstr "Nie są wysyłane z upuszczonymi wiadomościami"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.attachments.meta.sentEarlier"
+msgstr "Wysłano wcześniej, nie ponownie"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.attachments.meta.some"
+msgstr "{sent} z {total} · {size}"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.attachments.remove.draft"
+msgstr "Nie dołączaj załączników wersji roboczej"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.attachments.remove.email"
+msgstr "Nie dołączaj załączników wiadomości"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.attachments.spoken.draft"
+msgstr "Załączniki wersji roboczej"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.attachments.spoken.email"
+msgstr "Załączniki wiadomości"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.detail.field.attendees"
+msgstr "Uczestnicy"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.detail.field.cc"
+msgstr "DW"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.detail.field.replyTo"
+msgstr "Odpowiedź na"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.detail.field.size"
+msgstr "Rozmiar"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.detail.field.subject"
+msgstr "Temat"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.detail.field.to"
+msgstr "Do"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.detail.field.type"
+msgstr "Typ"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.detail.field.when"
+msgstr "Kiedy"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.detail.field.where"
+msgstr "Gdzie"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.detail.lifetimeItem"
+msgstr "Pominięcie obowiązuje do przełączenia na inny element poczty."
+
+#. js-lingui-explicit-id
+#: src/outlook/hooks/useOutlookContextItems.tsx
+msgid "officeAddin.outlook.context.draft.announce.sentInstead"
+msgstr "Wersja robocza dołączona. Zaznaczenie pozostaje wyłączone do czasu jego zmiany."
+
+#. js-lingui-explicit-id
+#: src/outlook/components/OutlookContextDetails.tsx
+msgid "officeAddin.outlook.context.draft.detail.bodyLabel"
+msgstr "Tekst wersji roboczej"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.draft.detail.replacedBySelection"
+msgstr "Zamiast wersji roboczej wysyłane jest zaznaczenie."
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.draft.detail.replyContext"
+msgstr "Kontekst odpowiedzi jest widoczny tylko tutaj. Trafia do Erato przez wersję roboczą i nigdy nie jest wysyłany osobno."
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.draft.detail.replyToValue"
+msgstr "{subject} — {sender}"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.draft.detail.scheduling"
+msgstr "Planowanie ma pierwszeństwo, więc ta wiadomość nie zawiera wersji roboczej. Zakończ planowanie, aby znowu ją wysyłać."
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.draft.detail.unchanged"
+msgstr "Erato ma już tę wersję z wcześniejszej wiadomości, więc nie zostanie wysłana ponownie. Zostanie wysłana znowu, gdy ją zmienisz."
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.draft.include"
+msgstr "Dołącz wersję roboczą"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+#: src/outlook/utils/outlookSentWith.ts
+msgid "officeAddin.outlook.context.draft.label"
+msgstr "Twoja wersja robocza"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.draft.meta.replacedBySelection"
+msgstr "Zastąpiona zaznaczeniem"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.draft.meta.replyTo"
+msgstr "Odpowiedź do {sender}"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.draft.meta.scheduling"
+msgstr "Nie jest wysyłana podczas planowania"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.draft.meta.unchanged"
+msgstr "Bez zmian, nie wysłano ponownie"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+#: src/outlook/utils/outlookSentWith.ts
+msgid "officeAddin.outlook.context.draft.spoken"
+msgstr "Wersja robocza"
+
+#. js-lingui-explicit-id
+#: src/outlook/components/AddinChatInput.tsx
+msgid "officeAddin.outlook.context.drop.announce.added"
+msgstr "{count, plural, one {Dodano # wiadomość.} few {Dodano # wiadomości.} many {Dodano # wiadomości.} other {Dodano # wiadomości.}}"
+
+#. js-lingui-explicit-id
+#: src/outlook/components/AddinChatInput.tsx
+msgid "officeAddin.outlook.context.drop.announce.reading"
+msgstr "{count, plural, one {Czytanie # upuszczonej wiadomości.} few {Czytanie # upuszczonych wiadomości.} many {Czytanie # upuszczonych wiadomości.} other {Czytanie # upuszczonej wiadomości.}}"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/buildDropEmailGroup.ts
+msgid "officeAddin.outlook.context.drop.bodyAlwaysSent"
+msgstr "Zawsze wysyłana"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.drop.meta.attachments"
+msgstr "{total, plural, one {{kept}/# załącznik} few {{kept}/# załączniki} many {{kept}/# załączników} other {{kept}/# załącznika}}"
+
+#. js-lingui-explicit-id
+#: src/outlook/hooks/useOutlookContextItems.tsx
+msgid "officeAddin.outlook.context.dropProgress.lockReason"
+msgstr "Upuszczonych wiadomości nie można anulować, gdy Erato je czyta"
+
+#. js-lingui-explicit-id
+#: src/outlook/hooks/useOutlookContextItems.tsx
+msgid "officeAddin.outlook.context.dropProgress.spoken"
+msgstr "Upuszczone wiadomości"
+
+#. js-lingui-explicit-id
+#: src/outlook/hooks/useOutlookContextItems.tsx
+msgid "officeAddin.outlook.context.lock.sending"
+msgstr "Nie można zmienić podczas wysyłania wiadomości"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+#~ msgid "officeAddin.outlook.context.meta.followUp"
+#~ msgstr "Nie jest dołączany do kolejnych wiadomości"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+#~ msgid "officeAddin.outlook.context.meta.nothingChosen"
+#~ msgstr "Nic nie wybrano"
+
+#. js-lingui-explicit-id
+#: src/outlook/hooks/useOutlookContextItems.tsx
+msgid "officeAddin.outlook.context.retry"
+msgstr "Spróbuj ponownie"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.scheduling.announce.ended"
+msgstr "Planowanie zakończone."
+
+#. js-lingui-explicit-id
+#: src/outlook/hooks/useOutlookContextItems.tsx
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.scheduling.announce.endedDraft"
+msgstr "Planowanie zakończone. Wersja robocza jest znowu wysyłana."
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.scheduling.description"
+msgstr "Planowanie pozostaje włączone przez godzinę od ostatniego odczytu kalendarza przez Erato (do {time})."
+
+#. js-lingui-explicit-id
+#: src/outlook/hooks/useOutlookContextItems.tsx
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.scheduling.end"
+msgstr "Zakończ planowanie"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.scheduling.label"
+msgstr "Planowanie"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.selection.detail.insteadOfAppointment"
+msgstr "Wysyłane zamiast szczegółów terminu, więc Erato przepisze tylko ten tekst."
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.selection.detail.insteadOfDraft"
+msgstr "Wysyłane zamiast wersji roboczej, więc Erato przepisze tylko ten tekst."
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.selection.detail.lifetime"
+msgstr "Pominięcie obowiązuje do zmiany zaznaczenia lub przełączenia na inny element poczty."
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.selection.include"
+msgstr "Dołącz zaznaczenie"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.selection.meta.replacesAppointment"
+msgstr "Zastępuje szczegóły terminu"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.selection.meta.replacesDraft"
+msgstr "Zastępuje wersję roboczą"
+
+#. js-lingui-explicit-id
+#: src/outlook/hooks/useOutlookContextItems.tsx
+#: src/outlook/utils/outlookSentWith.ts
+msgid "officeAddin.outlook.context.selection.spoken"
+msgstr "Zaznaczenie"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+#: src/outlook/utils/outlookSentWith.ts
+msgid "officeAddin.outlook.context.selection.title"
+msgstr "Zaznaczony tekst"
+
+#. js-lingui-explicit-id
+#: src/outlook/hooks/useOutlookContextItems.tsx
+msgid "officeAddin.outlook.context.sendInstead"
+msgstr "Wyślij zamiast tego"
+
+#. js-lingui-explicit-id
+#: src/outlook/components/AddinChatAddMenuExtraContent.tsx
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.thread.announce.included"
+msgstr "Wątek wiadomości dołączony."
+
+#. js-lingui-explicit-id
+#: src/outlook/hooks/useOutlookContextItems.tsx
+msgid "officeAddin.outlook.context.thread.announce.loaded"
+msgstr "Wątek wiadomości wczytany."
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.thread.announce.restoredPartial"
+msgstr "Wątek wiadomości dołączony. Twój wcześniejszy wybór wrócił."
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.thread.detail.intro"
+msgstr "Odznacz to, czego Erato ma nie czytać. Załączniki wliczają się do limitu {limit}."
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.thread.detail.lifetime"
+msgstr "Pominięcie obowiązuje do przełączenia na inny element poczty. Po ponownym dołączeniu te zaznaczenia wrócą."
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.thread.detail.notIncluded"
+msgstr "Wiadomość nie jest teraz dołączona. Twoje wybory poniżej zostają zachowane i wrócą, gdy ją dołączysz."
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.thread.detail.trimFailedNote"
+msgstr "Niektóre odznaczone załączniki znajdują się w przekazanej wiadomości i nie da się ich wyciąć, więc wiadomość z tym e-mailem nie zostanie wysłana. Zaznacz je ponownie lub pomiń wiadomość."
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.thread.dismiss"
+msgstr "Odrzuć wątek wiadomości"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.thread.include"
+msgstr "Dołącz wiadomość"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.thread.includeEvery"
+msgstr "Dołącz wszystkie wiadomości"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.thread.meta.followUp"
+msgstr "Nie jest dołączany do kolejnych wiadomości"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.thread.meta.loading"
+msgstr "Wczytywanie wątku wiadomości…"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.thread.meta.nothingChosen"
+msgstr "Nic nie wybrano"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.thread.meta.signingIn"
+msgstr "Logowanie…"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.thread.meta.someMessages"
+msgstr "{total, plural, one {{included} z # wiadomości} few {{included} z # wiadomości} many {{included} z # wiadomości} other {{included} z # wiadomości}}"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.thread.meta.trimFailed"
+msgstr "Nie można pominąć odznaczonych części"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.thread.remove"
+msgstr "Pomiń wiadomość"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookContextChips.ts
+msgid "officeAddin.outlook.context.thread.retryInclude"
+msgstr "Spróbuj ponownie wczytać wiadomość"
+
+#. js-lingui-explicit-id
+#: src/outlook/hooks/useOutlookContextItems.tsx
+msgid "officeAddin.outlook.context.thread.spoken"
+msgstr "Wątek wiadomości"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/outlookSentWith.ts
+msgid "officeAddin.outlook.sentWith.draft.meta.to"
+msgstr "{others, plural, =0 {Do: {first}} other {Do: {first} +#}}"
+
+#. js-lingui-explicit-id
 #: src/outlook/components/AddinPinHintBanner.tsx
 msgid "officeAddin.pinHint.description"
 msgstr "Dopóki nie zostanie przypięty, ten dodatek pozostaje przy wiadomości, z której go otwarto. Wybierz ikonę pinezki, aby był zsynchronizowany podczas czytania."
@@ -765,12 +1331,17 @@ msgid "officeAddin.pinHint.title"
 msgstr "Przypnij, aby śledzić pocztę"
 
 #. js-lingui-explicit-id
-#: src/core/selection/AddinSelectionChip.tsx
-msgid "officeAddin.selection.shownByErato"
-msgstr "Pokazane przez Erato"
+#: src/core/selection/selectionExcerpt.ts
+msgid "officeAddin.selection.quoted"
+msgstr "„{excerpt}”"
 
 #. js-lingui-explicit-id
 #: src/core/selection/AddinSelectionChip.tsx
+#~ msgid "officeAddin.selection.shownByErato"
+#~ msgstr "Pokazane przez Erato"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordContextChips.ts
 msgid "officeAddin.selection.useThis"
 msgstr "Użyj tego zaznaczenia"
 
@@ -1941,9 +2512,29 @@ msgid "officeAddin.teams.bot.setup.viewScript"
 msgstr ""
 
 #. js-lingui-explicit-id
+#: src/teams/providers/TeamsChatPickerProvider.tsx
+msgid "officeAddin.teams.composer.announce.attached"
+msgstr "Załączono transkrypcję Teams."
+
+#. js-lingui-explicit-id
+#: src/teams/providers/TeamsChatPickerProvider.tsx
+msgid "officeAddin.teams.composer.announce.removed"
+msgstr "Usunięto transkrypcję Teams."
+
+#. js-lingui-explicit-id
+#: src/teams/providers/TeamsChatPickerProvider.tsx
+msgid "officeAddin.teams.composer.announce.updated"
+msgstr "Zaktualizowano transkrypcję Teams."
+
+#. js-lingui-explicit-id
 #: src/teams/components/TeamsChatAddMenuExtraContent.tsx
 msgid "officeAddin.teams.fileSource.chats"
 msgstr "Czaty Teams…"
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatAddMenuExtraContent.tsx
+msgid "officeAddin.teams.fileSource.chatsEditHint"
+msgstr "Edytuj konwersacje w swojej transkrypcji"
 
 #. js-lingui-explicit-id
 #: src/teams/components/TeamsChatAddMenuExtraContent.tsx
@@ -2149,6 +2740,11 @@ msgstr "Wyniki częściowe — Teams ogranicza liczbę żądań."
 
 #. js-lingui-explicit-id
 #: src/teams/components/TeamsChatPickerDialog.tsx
+msgid "officeAddin.teams.picker.pickedCount"
+msgstr "{count, plural, one {# wybrana wiadomość} few {# wybrane wiadomości} many {# wybranych wiadomości} other {# wybranej wiadomości}}"
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatPickerDialog.tsx
 msgid "officeAddin.teams.picker.privateChannel"
 msgstr "Prywatny"
 
@@ -2242,6 +2838,16 @@ msgstr "Czaty Teams"
 #: src/teams/components/TeamsChatPickerDialog.tsx
 msgid "officeAddin.teams.picker.unknownSender"
 msgstr "Nieznany nadawca"
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatPickerDialog.tsx
+msgid "officeAddin.teams.picker.update"
+msgstr "Aktualizuj"
+
+#. js-lingui-explicit-id
+#: src/teams/components/TeamsChatPickerDialog.tsx
+msgid "officeAddin.teams.picker.updateRemovesHint"
+msgstr "Nic nie wybrano: „Aktualizuj” usunie transkrypcję."
 
 #. js-lingui-explicit-id
 #: src/teams/components/TeamsChatPickerDialog.tsx
@@ -2745,7 +3351,7 @@ msgid "officeAddin.word.authoring.outputUnverified"
 msgstr "Program Word zapisał zmiany, ale nie udało się zweryfikować wyniku. Oryginał został zapisany do odzyskania."
 
 #. js-lingui-explicit-id
-#: src/word/components/WordChatInput.tsx
+#: src/word/utils/wordContextChips.ts
 msgid "officeAddin.word.authoring.packageBlocked"
 msgstr "Program Word dla sieci Web nie przekazał całego pliku, na przykład dlatego, że dokument ma etykietę poufności. Erato odczytał tylko treść główną dokumentu, więc nie może zmienić nagłówków, stopek ani układu strony, a każda zmiana zastępuje całą treść główną zamiast edytować fragmenty w miejscu."
 
@@ -2795,27 +3401,27 @@ msgid "officeAddin.word.authoring.readFailed"
 msgstr "Word nie mógł odczytać dokumentu na potrzeby tej operacji. Nie wprowadzono zmian."
 
 #. js-lingui-explicit-id
-#: src/word/components/WordChatInput.tsx
+#: src/word/utils/wordAuthoringMessages.ts
 msgid "officeAddin.word.authoring.readOnlyTooLarge"
 msgstr "Ten plik jest za duży, aby Erato mógł go otworzyć w całości. Erato otrzymuje tylko dołączony tekst i może go przeredagować, ale nie może zmienić jego struktury ani formatowania."
 
 #. js-lingui-explicit-id
-#: src/word/components/WordChatInput.tsx
+#: src/word/utils/wordAuthoringMessages.ts
 msgid "officeAddin.word.authoring.readOnlyTooLargeTracking"
 msgstr "Plik jest też za duży, aby Erato mógł go otworzyć w całości, więc Erato otrzymuje tylko dołączony tekst."
 
 #. js-lingui-explicit-id
-#: src/word/components/WordChatInput.tsx
+#: src/word/utils/wordAuthoringMessages.ts
 msgid "officeAddin.word.authoring.readOnlyTracking"
 msgstr "Śledzenie zmian jest włączone, więc Erato odczytuje ten dokument tak, jakby wszystkie śledzone zmiany zostały zaakceptowane, nie widząc, kto co zmienił, i nie edytuje go."
 
 #. js-lingui-explicit-id
-#: src/word/components/WordChatInput.tsx
+#: src/word/utils/wordAuthoringMessages.ts
 msgid "officeAddin.word.authoring.readOnlyUnavailable"
 msgstr "Word nie przekazał całego dokumentu, więc Erato może odczytać jego tekst, ale nie może go edytować. Wyślij ponownie, aby spróbować jeszcze raz."
 
 #. js-lingui-explicit-id
-#: src/word/components/WordChatInput.tsx
+#: src/word/utils/wordAuthoringMessages.ts
 msgid "officeAddin.word.authoring.readOnlyUnsupported"
 msgstr "Erato nie może edytować struktury pliku tego dokumentu, więc może tylko odczytać jego tekst."
 
@@ -3053,73 +3659,71 @@ msgstr "Wstawiono do dokumentu."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx
-msgid "officeAddin.word.chip.changed"
-msgstr "Dokument dołączony — zmieniony od ostatniego wysłania"
+#~ msgid "officeAddin.word.chip.changed"
+#~ msgstr "Dokument dołączony — zmieniony od ostatniego wysłania"
 
 #. js-lingui-explicit-id
-#: src/word/components/WordChatInput.tsx
+#: src/word/utils/wordContextChips.ts
 msgid "officeAddin.word.chip.commentInstead"
-msgstr "Zamiast dokumentu wysyłany jest komentarz"
+msgstr "Zamiast dokumentu wysyłany jest komentarz."
 
 #. js-lingui-explicit-id
-#: src/word/components/WordChatInput.tsx
+#: src/word/utils/wordContextChips.ts
 msgid "officeAddin.word.chip.dismiss"
 msgstr "Nie dołączaj tego dokumentu"
 
 #. js-lingui-explicit-id
-#: src/word/components/WordChatInput.tsx
+#: src/word/utils/wordContextChips.ts
 msgid "officeAddin.word.chip.include"
 msgstr "Dołącz ten dokument"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx
-msgid "officeAddin.word.chip.included"
-msgstr "Dokument dołączony"
+#~ msgid "officeAddin.word.chip.included"
+#~ msgstr "Dokument dołączony"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx
-msgid "officeAddin.word.chip.includedInParts"
-msgstr "Dokument dołączony · czytany w częściach"
+#~ msgid "officeAddin.word.chip.includedInParts"
+#~ msgstr "Dokument dołączony · czytany w częściach"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx
-msgid "officeAddin.word.chip.includedNamed"
-msgstr "Dołączono: {documentName}"
+#~ msgid "officeAddin.word.chip.includedNamed"
+#~ msgstr "Dołączono: {documentName}"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx
-msgid "officeAddin.word.chip.includedPartial"
-msgstr "Dokument dołączony (częściowo)"
-
-#. js-lingui-explicit-id
-#. placeholder {0}: coverage.paragraphsSent
-#. placeholder {1}: coverage.paragraphsTotal
-#: src/word/components/WordChatInput.tsx
-msgid "officeAddin.word.chip.includedTruncated"
-msgstr "Dokument dołączony (pierwsze {0} z {1} akapitów)"
+#~ msgid "officeAddin.word.chip.includedPartial"
+#~ msgstr "Dokument dołączony (częściowo)"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx
+#~ msgid "officeAddin.word.chip.includedTruncated"
+#~ msgstr "Dokument dołączony (pierwsze {0} z {1} akapitów)"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordContextChips.ts
 msgid "officeAddin.word.chip.newDocument"
 msgstr "Nowy dokument"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx
-msgid "officeAddin.word.chip.notIncluded"
-msgstr "Dokument niedołączony"
+#~ msgid "officeAddin.word.chip.notIncluded"
+#~ msgstr "Dokument niedołączony"
 
 #. js-lingui-explicit-id
-#: src/word/components/WordChatInput.tsx
+#: src/word/utils/wordContextChips.ts
 msgid "officeAddin.word.chip.reading"
 msgstr "Odczytywanie dokumentu…"
 
 #. js-lingui-explicit-id
-#: src/word/components/WordChatInput.tsx
+#: src/word/utils/wordContextChips.ts
 msgid "officeAddin.word.chip.selectionInstead"
-msgstr "Zamiast dokumentu wysyłane jest Twoje zaznaczenie"
+msgstr "Zamiast dokumentu wysyłane jest Twoje zaznaczenie."
 
 #. js-lingui-explicit-id
-#: src/word/components/WordChatInput.tsx
+#: src/word/utils/wordContextChips.ts
 msgid "officeAddin.word.chip.selectLaterPart"
 msgstr "Wysyłany jest tylko początek. Aby pracować nad dalszą częścią, zaznacz ją w programie Word."
 
@@ -3219,7 +3823,7 @@ msgid "officeAddin.word.comments.askAgainNote"
 msgstr "Twoja prośba jest z powrotem w polu wiadomości: wyślij ją ponownie, aby pracować z aktualnymi komentarzami."
 
 #. js-lingui-explicit-id
-#: src/word/components/WordCommentChip.tsx
+#: src/word/utils/wordCommentChips.ts
 msgid "officeAddin.word.comments.atCursorMany"
 msgstr "{count, plural, one {Kursor znajduje się w # komentarzu} few {Kursor znajduje się w # komentarzach} many {Kursor znajduje się w # komentarzach} other {Kursor znajduje się w # komentarza}}"
 
@@ -3272,29 +3876,30 @@ msgid "officeAddin.word.comments.attribution.youNamed"
 msgstr "ciebie ({0})"
 
 #. js-lingui-explicit-id
-#: src/word/components/WordChatInput.tsx
+#: src/word/utils/wordCommentChips.ts
+#: src/word/utils/wordComposerNotice.ts
 msgid "officeAddin.word.comments.blocked.chooseComment"
 msgstr "Kursor znajduje się w więcej niż jednym komentarzu, więc Erato nie wie, o który chodzi."
 
 #. js-lingui-explicit-id
-#: src/word/components/WordChatInput.tsx
-#: src/word/components/WordCommentChip.tsx
+#: src/word/utils/wordCommentChips.ts
+#: src/word/utils/wordComposerNotice.ts
 msgid "officeAddin.word.comments.blocked.pickedGone"
 msgstr "Wybranego komentarza nie ma już w dokumencie."
 
 #. js-lingui-explicit-id
-#: src/word/components/WordChatInput.tsx
 #: src/word/components/WordCommentPicker.tsx
+#: src/word/utils/wordComposerNotice.ts
 msgid "officeAddin.word.comments.blocked.readFailed"
 msgstr "Erato nie mógł odczytać komentarzy w programie Word."
 
 #. js-lingui-explicit-id
-#: src/word/components/WordCommentChip.tsx
+#: src/word/utils/wordCommentText.ts
 msgid "officeAddin.word.comments.changeDefault"
 msgstr "Zmień ustawienie domyślne"
 
 #. js-lingui-explicit-id
-#: src/word/components/WordCommentChip.tsx
+#: src/word/utils/wordCommentText.ts
 msgid "officeAddin.word.comments.choose"
 msgstr "Wybierz komentarz…"
 
@@ -3384,57 +3989,57 @@ msgid "officeAddin.word.comments.copyMode"
 msgstr "Erato nie może teraz zmieniać komentarzy w tej wersji Worda. Skopiuj każdy komentarz i opublikuj go samodzielnie w Wordzie."
 
 #. js-lingui-explicit-id
-#: src/word/components/WordCommentCoverage.tsx
+#: src/word/utils/wordCommentCoverage.ts
 msgid "officeAddin.word.comments.coverage.emails"
 msgstr "Adresy e-mail autorów komentarzy nigdy nie są wysyłane."
 
 #. js-lingui-explicit-id
-#: src/word/components/WordCommentCoverage.tsx
+#: src/word/utils/wordCommentCoverage.ts
 msgid "officeAddin.word.comments.coverage.nearbyDocument"
 msgstr "Jeśli twoje pytanie tego wymaga, Erato może przeczytać pozostałe komentarze w dokumencie."
 
 #. js-lingui-explicit-id
-#: src/word/components/WordCommentCoverage.tsx
+#: src/word/utils/wordCommentCoverage.ts
 msgid "officeAddin.word.comments.coverage.nearbyNear"
 msgstr "Jeśli twoje pytanie tego wymaga, Erato może przeczytać do {limit} komentarzy powyżej i {limit} poniżej zaznaczenia."
 
 #. js-lingui-explicit-id
-#: src/word/components/WordCommentCoverage.tsx
+#: src/word/utils/wordCommentCoverage.ts
 msgid "officeAddin.word.comments.coverage.resolved"
 msgstr "Rozwiązane komentarze są wysyłane tylko wtedy, gdy są w zaznaczeniu albo gdy o nie poprosisz."
 
 #. js-lingui-explicit-id
-#: src/word/components/WordCommentCoverage.tsx
+#: src/word/utils/wordCommentCoverage.ts
 msgid "officeAddin.word.comments.coverage.resolvedMap"
 msgstr "Lista obejmuje też rozwiązane komentarze, każdy z jego początkiem."
 
 #. js-lingui-explicit-id
-#: src/word/components/WordCommentCoverage.tsx
+#: src/word/utils/wordCommentCoverage.ts
 msgid "officeAddin.word.comments.coverage.rest"
 msgstr "{rest, plural, one {# inny komentarz nie jest wysyłany.} few {# inne komentarze nie są wysyłane.} many {# innych komentarzy nie jest wysyłanych.} other {# innego komentarza nie wysłano.}}"
 
 #. js-lingui-explicit-id
-#: src/word/components/WordCommentCoverage.tsx
+#: src/word/utils/wordCommentCoverage.ts
 msgid "officeAddin.word.comments.coverage.sentMap"
 msgstr "{threads, plural, one {Lista komentarza w dokumencie: autor, miejsce, stan i początek.} few {Lista # komentarzy w dokumencie: autor, miejsce, stan i początek każdego.} many {Lista # komentarzy w dokumencie: autor, miejsce, stan i początek każdego.} other {Lista # komentarza w dokumencie: autor, miejsce, stan i początek każdego.}}"
 
 #. js-lingui-explicit-id
-#: src/word/components/WordCommentCoverage.tsx
+#: src/word/utils/wordCommentCoverage.ts
 msgid "officeAddin.word.comments.coverage.sentOpen"
 msgstr "{threads, plural, one {Otwarty komentarz w dokumencie wraz z odpowiedziami.} few {# otwarte komentarze w dokumencie wraz z odpowiedziami.} many {# otwartych komentarzy w dokumencie wraz z odpowiedziami.} other {# otwartego komentarza w dokumencie wraz z odpowiedziami.}}"
 
 #. js-lingui-explicit-id
-#: src/word/components/WordCommentCoverage.tsx
+#: src/word/utils/wordCommentCoverage.ts
 msgid "officeAddin.word.comments.coverage.sentSelection"
 msgstr "{threads, plural, one {Komentarz w zaznaczeniu wraz z odpowiedziami.} few {# komentarze w zaznaczeniu wraz z odpowiedziami.} many {# komentarzy w zaznaczeniu wraz z odpowiedziami.} other {# komentarza w zaznaczeniu wraz z odpowiedziami.}}"
 
 #. js-lingui-explicit-id
-#: src/word/components/WordCommentCoverage.tsx
+#: src/word/utils/wordCommentCoverage.ts
 msgid "officeAddin.word.comments.coverage.sentThread"
 msgstr "Komentarz autorstwa {author} wraz z odpowiedziami."
 
 #. js-lingui-explicit-id
-#: src/word/components/WordCommentCoverage.tsx
+#: src/word/utils/wordCommentCoverage.ts
 msgid "officeAddin.word.comments.coverage.trigger"
 msgstr "Co jest wysyłane"
 
@@ -3450,7 +4055,7 @@ msgid "officeAddin.word.comments.deleteReplies"
 msgstr "{0, plural, one {Usuwa też # odpowiedź od {authors}.} few {Usuwa też # odpowiedzi od {authors}.} many {Usuwa też # odpowiedzi od {authors}.} other {Usuwa też # odpowiedzi od {authors}.}}"
 
 #. js-lingui-explicit-id
-#: src/word/components/WordCommentChip.tsx
+#: src/word/utils/wordCommentText.ts
 msgid "officeAddin.word.comments.dismissPick"
 msgstr "Usuń wybrany komentarz"
 
@@ -3465,14 +4070,14 @@ msgid "officeAddin.word.comments.expired"
 msgstr "Te zmiany komentarzy należą do wcześniejszej sesji tego panelu, więc nie można ich już zastosować. Zapytaj ponownie, aby otrzymać nową propozycję."
 
 #. js-lingui-explicit-id
-#: src/word/components/WordChatInput.tsx
+#: src/word/utils/wordCommentChips.ts
 msgid "officeAddin.word.comments.includeOpen"
 msgstr "Uwzględnij otwarte komentarze"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordCommentChip.tsx
-msgid "officeAddin.word.comments.inSelection"
-msgstr "{count, plural, one {# komentarz w zaznaczeniu} few {# komentarze w zaznaczeniu} many {# komentarzy w zaznaczeniu} other {# komentarza w zaznaczeniu}}"
+#~ msgid "officeAddin.word.comments.inSelection"
+#~ msgstr "{count, plural, one {# komentarz w zaznaczeniu} few {# komentarze w zaznaczeniu} many {# komentarzy w zaznaczeniu} other {# komentarza w zaznaczeniu}}"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordCommentChangesCard.tsx
@@ -3486,8 +4091,8 @@ msgstr "Zachowaj"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordCommentChip.tsx
-msgid "officeAddin.word.comments.mapListed"
-msgstr "{threads, plural, one {# komentarz jest wymieniony razem z dokumentem} few {# komentarze są wymienione razem z dokumentem} many {# komentarzy jest wymienionych razem z dokumentem} other {# komentarza wymieniono razem z dokumentem}}"
+#~ msgid "officeAddin.word.comments.mapListed"
+#~ msgstr "{threads, plural, one {# komentarz jest wymieniony razem z dokumentem} few {# komentarze są wymienione razem z dokumentem} many {# komentarzy jest wymienionych razem z dokumentem} other {# komentarza wymieniono razem z dokumentem}}"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordCommentChangesCard.tsx
@@ -3560,7 +4165,7 @@ msgid "officeAddin.word.comments.picker.refresh"
 msgstr "Odśwież"
 
 #. js-lingui-explicit-id
-#: src/word/components/WordCommentPicker.tsx
+#: src/word/utils/wordCommentText.ts
 msgid "officeAddin.word.comments.picker.replies"
 msgstr "{replies, plural, =0 {brak odpowiedzi} one {# odpowiedź} few {# odpowiedzi} many {# odpowiedzi} other {# odpowiedzi}}"
 
@@ -3590,17 +4195,17 @@ msgid "officeAddin.word.comments.picker.sortDocument"
 msgstr "Kolejność w dokumencie"
 
 #. js-lingui-explicit-id
-#: src/word/components/WordCommentPicker.tsx
+#: src/word/utils/wordCommentText.ts
 msgid "officeAddin.word.comments.picker.statusOpen"
 msgstr "Otwarty"
 
 #. js-lingui-explicit-id
-#: src/word/components/WordCommentPicker.tsx
+#: src/word/utils/wordCommentText.ts
 msgid "officeAddin.word.comments.picker.statusResolved"
 msgstr "Rozwiązany"
 
 #. js-lingui-explicit-id
-#: src/word/components/WordCommentPicker.tsx
+#: src/word/utils/wordCommentText.ts
 msgid "officeAddin.word.comments.picker.timeUnknown"
 msgstr "czas nieznany"
 
@@ -3630,7 +4235,12 @@ msgid "officeAddin.word.comments.preparing"
 msgstr "Przygotowywanie zmian komentarzy…"
 
 #. js-lingui-explicit-id
-#: src/word/components/WordCommentPicker.tsx
+#: src/word/utils/wordCommentText.ts
+msgid "officeAddin.word.comments.readingCount"
+msgstr "{done} z {total}"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordCommentText.ts
 msgid "officeAddin.word.comments.readingProgress"
 msgstr "Odczytywanie komentarzy… {done} z {total}"
 
@@ -3678,7 +4288,7 @@ msgid "officeAddin.word.comments.revertWarning"
 msgstr "Przywrócić to, co zrobiło tu Erato? Komentarze lub odpowiedzi, które ktoś od tego czasu zmienił, pozostaną bez zmian. Usuniętych komentarzy nie da się przywrócić."
 
 #. js-lingui-explicit-id
-#: src/word/components/WordCommentChip.tsx
+#: src/word/utils/wordCommentText.ts
 msgid "officeAddin.word.comments.sendWithout"
 msgstr "Wyślij bez komentarzy"
 
@@ -3723,12 +4333,12 @@ msgid "officeAddin.word.comments.status.unverified"
 msgstr "Zapisano, ale bez potwierdzenia. Sprawdź dokument, zanim spróbujesz ponownie."
 
 #. js-lingui-explicit-id
-#: src/word/components/WordCommentChip.tsx
+#: src/word/utils/wordCommentText.ts
 msgid "officeAddin.word.comments.switchToComment"
 msgstr "Pracuj zamiast tego nad komentarzem autorstwa {author}"
 
 #. js-lingui-explicit-id
-#: src/word/components/WordCommentChip.tsx
+#: src/word/utils/wordCommentText.ts
 msgid "officeAddin.word.comments.switchToPassage"
 msgstr "Użyj zamiast tego zaznaczonego fragmentu"
 
@@ -3745,27 +4355,27 @@ msgid "officeAddin.word.comments.target"
 msgstr "{0}: „{1}”"
 
 #. js-lingui-explicit-id
-#: src/word/components/WordCommentChip.tsx
+#: src/word/utils/wordCommentText.ts
 msgid "officeAddin.word.comments.thread.on"
 msgstr "do „{shown}”"
 
 #. js-lingui-explicit-id
-#: src/word/components/WordCommentChip.tsx
+#: src/word/utils/wordCommentText.ts
 msgid "officeAddin.word.comments.thread.point"
 msgstr "w miejscu bez zaznaczonego tekstu"
 
 #. js-lingui-explicit-id
-#: src/word/components/WordCommentChip.tsx
+#: src/word/utils/wordCommentText.ts
 msgid "officeAddin.word.comments.thread.title"
 msgstr "Komentarz autorstwa {author}"
 
 #. js-lingui-explicit-id
-#: src/word/components/WordCommentChip.tsx
+#: src/word/utils/wordCommentText.ts
 msgid "officeAddin.word.comments.thread.titleWithReplies"
 msgstr "{replies, plural, =0 {Komentarz autorstwa {author}} one {Komentarz autorstwa {author} · # odpowiedź} few {Komentarz autorstwa {author} · # odpowiedzi} many {Komentarz autorstwa {author} · # odpowiedzi} other {Komentarz autorstwa {author} · # odpowiedzi}}"
 
 #. js-lingui-explicit-id
-#: src/word/components/WordCommentChip.tsx
+#: src/word/utils/wordCommentText.ts
 msgid "officeAddin.word.comments.thread.unknown"
 msgstr "Wybrany komentarz"
 
@@ -3860,29 +4470,493 @@ msgid "officeAddin.word.comments.verb.resolve"
 msgstr "Oznacz wątek jako rozwiązany"
 
 #. js-lingui-explicit-id
-#: src/word/components/WordCommentChip.tsx
+#: src/word/utils/wordCommentText.ts
 msgid "officeAddin.word.comments.why.chosen"
 msgstr "Wybrany przez ciebie"
 
 #. js-lingui-explicit-id
-#: src/word/components/WordCommentChip.tsx
+#: src/word/utils/wordCommentText.ts
 msgid "officeAddin.word.comments.why.cursor"
 msgstr "Przy kursorze"
 
 #. js-lingui-explicit-id
-#: src/word/components/WordCommentChip.tsx
+#: src/word/utils/wordCommentText.ts
 msgid "officeAddin.word.comments.why.default"
 msgstr "Twoje ustawienie domyślne"
 
 #. js-lingui-explicit-id
-#: src/word/components/WordCommentChip.tsx
+#: src/word/utils/wordCommentText.ts
 msgid "officeAddin.word.comments.withAgain"
 msgstr "Uwzględnij komentarze"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordCommentChip.tsx
-msgid "officeAddin.word.comments.without"
-msgstr "Ta wiadomość zostanie wysłana bez komentarzy."
+#~ msgid "officeAddin.word.comments.without"
+#~ msgstr "Ta wiadomość zostanie wysłana bez komentarzy."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordChatInput.tsx
+#: src/word/components/WordCommentDetails.tsx
+msgid "officeAddin.word.context.comment.announce.chosen"
+msgstr "Wybrano komentarz autorstwa {author}."
+
+#. js-lingui-explicit-id
+#: src/word/hooks/useWordContextItems.tsx
+msgid "officeAddin.word.context.comment.announce.commentInstead"
+msgstr "Dołączono komentarz autorstwa {author}. Zostanie wysłany zamiast fragmentu."
+
+#. js-lingui-explicit-id
+#: src/word/hooks/useWordContextItems.tsx
+msgid "officeAddin.word.context.comment.announce.passageInstead"
+msgstr "Dołączono zaznaczenie. Komentarz nie zostanie wysłany z tą wiadomością."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordCommentChips.ts
+msgid "officeAddin.word.context.comment.announce.removed"
+msgstr "Usunięto komentarze z tej wiadomości. Dołącz je ponownie przyciskiem +"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordCommentChips.ts
+msgid "officeAddin.word.context.comment.atCursor"
+msgstr "Komentarze przy kursorze"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordCommentChips.ts
+msgid "officeAddin.word.context.comment.attention"
+msgstr "{count, plural, one {Kursor jest w # komentarzu} few {Kursor jest w # komentarzach} many {Kursor jest w # komentarzach} other {Kursor jest w # komentarza}}"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentDetails.tsx
+msgid "officeAddin.word.context.comment.choices"
+msgstr "Komentarze przy kursorze"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordCommentChips.ts
+msgid "officeAddin.word.context.comment.ifIncluded"
+msgstr "Jeśli zostaną uwzględnione"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordCommentChips.ts
+msgid "officeAddin.word.context.comment.lifetime.message"
+msgstr "Pominięcie komentarzy dotyczy tylko następnej wiadomości."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordCommentChips.ts
+msgid "officeAddin.word.context.comment.lifetime.pick"
+msgstr "Wybrany komentarz pozostaje, dopóki nie wybierzesz innego, nie usuniesz go lub nie zaznaczysz innego tekstu."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordCommentChips.ts
+msgid "officeAddin.word.context.comment.meta.chooseOne"
+msgstr "Wybierz jeden"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordCommentChips.ts
+msgid "officeAddin.word.context.comment.meta.gone"
+msgstr "Nie ma go już w dokumencie"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordCommentChips.ts
+msgid "officeAddin.word.context.comment.meta.offForMessage"
+msgstr "Wyłączone dla tej wiadomości"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordCommentChips.ts
+msgid "officeAddin.word.context.comment.meta.readFailed"
+msgstr "Nie udało się odczytać komentarzy"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordCommentChips.ts
+msgid "officeAddin.word.context.comment.spoken"
+msgstr "Komentarze"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordCommentChips.ts
+msgid "officeAddin.word.context.comment.spokenPicked"
+msgstr "Wybrany komentarz"
+
+#. js-lingui-explicit-id
+#: src/word/hooks/useWordContextItems.tsx
+msgid "officeAddin.word.context.document.announce.read"
+msgstr "Dokument odczytany."
+
+#. js-lingui-explicit-id
+#: src/word/hooks/useWordContextItems.tsx
+msgid "officeAddin.word.context.document.announce.sentInstead"
+msgstr "Dokument dołączony. Twoje zaznaczenie pozostaje wyłączone, dopóki się nie zmieni."
+
+#. js-lingui-explicit-id
+#: src/word/hooks/useWordContextItems.tsx
+msgid "officeAddin.word.context.document.announce.sentInsteadOfComment"
+msgstr "Dokument dołączony. Komentarz nie zostanie wysłany z tą wiadomością."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordContextDetails.tsx
+msgid "officeAddin.word.context.document.commentsHeading"
+msgstr "Komentarze"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordContextChips.ts
+msgid "officeAddin.word.context.document.commentsOffNote"
+msgstr "Komentarze są wyłączone dla tej wiadomości."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordContextChips.ts
+msgid "officeAddin.word.context.document.coverage.authoring"
+msgstr "Erato odczytuje te części dokumentu, których potrzebuje Twoje zapytanie."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordContextChips.ts
+msgid "officeAddin.word.context.document.coverage.changed"
+msgstr "Zmieniony od ostatniego wysłania: Erato odczyta go ponownie z tą wiadomością."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordContextChips.ts
+msgid "officeAddin.word.context.document.coverage.empty"
+msgstr "Dokument jest pusty, więc wysyłana jest tylko jego nazwa."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordContextChips.ts
+msgid "officeAddin.word.context.document.coverage.first"
+msgstr "{total, plural, one {Erato otrzymuje pierwsze {sent} z # akapitu.} few {Erato otrzymuje pierwsze {sent} z # akapitów.} many {Erato otrzymuje pierwsze {sent} z # akapitów.} other {Erato otrzymuje pierwsze {sent} z # akapitu.}}"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordContextChips.ts
+msgid "officeAddin.word.context.document.coverage.partial"
+msgstr "Erato otrzymuje tylko początek pierwszego akapitu, ponieważ sam przekracza limit wysyłania."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordContextChips.ts
+msgid "officeAddin.word.context.document.coverage.whole"
+msgstr "{total, plural, one {Erato otrzymuje cały dokument, # akapit.} few {Erato otrzymuje cały dokument, # akapity.} many {Erato otrzymuje cały dokument, # akapitów.} other {Erato otrzymuje cały dokument, # akapitu.}}"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordContextChips.ts
+msgid "officeAddin.word.context.document.coverageHeading"
+msgstr "Zakres"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordCommentChips.ts
+#: src/word/utils/wordContextChips.ts
+msgid "officeAddin.word.context.document.coverageIfSentHeading"
+msgstr "Jeśli zostanie wysłany zamiast tego"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordContextChips.ts
+msgid "officeAddin.word.context.document.dismissError"
+msgstr "Odrzuć dokument"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordContextChips.ts
+msgid "officeAddin.word.context.document.lifetime"
+msgstr "Pominięcie obowiązuje w tym czacie. Nowe czaty stosują ustawienie „{setting}”."
+
+#. js-lingui-explicit-id
+#: src/word/hooks/useWordContextItems.tsx
+msgid "officeAddin.word.context.document.lockReason"
+msgstr "Nie można zmienić, gdy czat jest zarchiwizowany lub trwa zadanie"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordContextChips.ts
+msgid "officeAddin.word.context.document.meta.beginningOnly"
+msgstr "Tylko początek"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordContextChips.ts
+msgid "officeAddin.word.context.document.meta.bodyOnly"
+msgstr "Tylko treść główna"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordContextChips.ts
+msgid "officeAddin.word.context.document.meta.cannotEdit"
+msgstr "Nie można edytować"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordContextChips.ts
+msgid "officeAddin.word.context.document.meta.changed"
+msgstr "Zmieniony od ostatniego wysłania"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordContextChips.ts
+msgid "officeAddin.word.context.document.meta.comments"
+msgstr "{comments, plural, one {# komentarz} few {# komentarze} many {# komentarzy} other {# komentarza}}"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordContextChips.ts
+msgid "officeAddin.word.context.document.meta.commentsOff"
+msgstr "komentarze wyłączone"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordContextChips.ts
+msgid "officeAddin.word.context.document.meta.commentsUnread"
+msgstr "nie udało się odczytać komentarzy"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordContextChips.ts
+msgid "officeAddin.word.context.document.meta.firstOf"
+msgstr "Pierwsze {sent} z {total} ¶"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordContextChips.ts
+msgid "officeAddin.word.context.document.meta.notSentHere"
+msgstr "Nie można wysłać w tym czacie"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordContextChips.ts
+msgid "officeAddin.word.context.document.meta.paragraphs"
+msgstr "{total} ¶"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordContextChips.ts
+msgid "officeAddin.word.context.document.meta.readInParts"
+msgstr "Odczytywany częściami"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordContextChips.ts
+msgid "officeAddin.word.context.document.meta.readOnly"
+msgstr "Tylko do odczytu"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordCommentChips.ts
+#: src/word/utils/wordContextChips.ts
+msgid "officeAddin.word.context.document.meta.replacedByComment"
+msgstr "Zastąpiony komentarzem"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordCommentChips.ts
+#: src/word/utils/wordContextChips.ts
+msgid "officeAddin.word.context.document.meta.replacedBySelection"
+msgstr "Zastąpiony zaznaczeniem"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordContextChips.ts
+msgid "officeAddin.word.context.document.meta.trackChanges"
+msgstr "Śledzenie zmian włączone"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordContextChips.ts
+msgid "officeAddin.word.context.document.meta.unreadable"
+msgstr "Nie udało się odczytać dokumentu"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordContextChips.ts
+msgid "officeAddin.word.context.document.notSentHereEmptyNote"
+msgstr "Ten czat może pracować tylko z dokumentami zawierającymi tekst, więc pusty dokument nie zostanie wysłany."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordContextChips.ts
+msgid "officeAddin.word.context.document.notSentHereNote"
+msgstr "Ten czat może tylko rozpoczynać nowe dokumenty, więc dokument z tekstem nie zostanie wysłany."
+
+#. js-lingui-explicit-id
+#: src/word/hooks/useWordContextItems.tsx
+#: src/word/utils/wordSentWith.ts
+msgid "officeAddin.word.context.document.spoken"
+msgstr "Dokument"
+
+#. js-lingui-explicit-id
+#: src/word/hooks/useWordContextItems.tsx
+#: src/word/utils/wordSentWith.ts
+msgid "officeAddin.word.context.document.unnamed"
+msgstr "Ten dokument"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordContextChips.ts
+msgid "officeAddin.word.context.document.unreadableNote"
+msgstr "Word nie przekazał tego dokumentu, więc nie zostanie wysłany. Spróbuj ponownie lub go pomiń."
+
+#. js-lingui-explicit-id
+#: src/word/hooks/useWordContextItems.tsx
+msgid "officeAddin.word.context.openComments.announce.sentInstead"
+msgstr "Dołączono otwarte komentarze. Komentarz nie zostanie wysłany z tą wiadomością."
+
+#. js-lingui-explicit-id
+#: src/word/hooks/useWordContextItems.tsx
+msgid "officeAddin.word.context.openComments.announce.sentInsteadOfSelection"
+msgstr "Dołączono otwarte komentarze. Twoje zaznaczenie pozostaje wyłączone, dopóki się nie zmieni."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordCommentChips.ts
+msgid "officeAddin.word.context.openComments.commentInstead"
+msgstr "Zamiast otwartych komentarzy wysyłany jest komentarz przy kursorze lub wybrany przez ciebie."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordCommentChips.ts
+msgid "officeAddin.word.context.openComments.intro"
+msgstr "Widoczne, gdy dokument jest wyłączony, aby można było wysłać jego komentarze bez tekstu."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordCommentChips.ts
+msgid "officeAddin.word.context.openComments.introNoDocument"
+msgstr "Wysyła otwarte komentarze dokumentu wraz z odpowiedziami."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordCommentChips.ts
+msgid "officeAddin.word.context.openComments.label"
+msgstr "Otwarte komentarze ({count})"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordCommentChips.ts
+msgid "officeAddin.word.context.openComments.lifetime"
+msgstr "Pominięcie dotyczy tego czatu."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordCommentChips.ts
+msgid "officeAddin.word.context.openComments.meta.included"
+msgstr "Z odpowiedziami"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordCommentChips.ts
+msgid "officeAddin.word.context.openComments.meta.noneOpen"
+msgstr "Brak otwartych"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordCommentChips.ts
+msgid "officeAddin.word.context.openComments.meta.notIncluded"
+msgstr "Niedołączone"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordCommentChips.ts
+msgid "officeAddin.word.context.openComments.noneOpenIntro"
+msgstr "Żaden komentarz w tym dokumencie nie jest otwarty. Użyj „Wybierz komentarz…”, aby pracować nad rozwiązanym."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordCommentChips.ts
+msgid "officeAddin.word.context.openComments.remove"
+msgstr "Nie dołączaj otwartych komentarzy"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordCommentChips.ts
+msgid "officeAddin.word.context.openComments.selectionInstead"
+msgstr "Zamiast otwartych komentarzy wysyłane jest Twoje zaznaczenie."
+
+#. js-lingui-explicit-id
+#: src/word/hooks/useWordContextItems.tsx
+#: src/word/utils/wordCommentChips.ts
+#: src/word/utils/wordSentWith.ts
+msgid "officeAddin.word.context.openComments.spoken"
+msgstr "Otwarte komentarze"
+
+#. js-lingui-explicit-id
+#: src/word/hooks/useWordContextItems.tsx
+msgid "officeAddin.word.context.retry"
+msgstr "Spróbuj ponownie"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordContextChips.ts
+msgid "officeAddin.word.context.selection.announce.usedInstead"
+msgstr "Zaznaczenie dołączone. Jest wysyłane zamiast dokumentu."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordContextChips.ts
+msgid "officeAddin.word.context.selection.commentInstead"
+msgstr "Zamiast tego fragmentu wysyłany jest komentarz."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentDetails.tsx
+msgid "officeAddin.word.context.selection.commentsHeading"
+msgstr "Komentarze w tym fragmencie"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordContextChips.ts
+msgid "officeAddin.word.context.selection.eratoNote"
+msgstr "Erato zaznaczyło ten fragment. Jest widoczny, ale nie zostanie wysłany, dopóki go nie użyjesz."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordContextChips.ts
+msgid "officeAddin.word.context.selection.include"
+msgstr "Dołącz zaznaczenie"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordContextChips.ts
+msgid "officeAddin.word.context.selection.lifetime"
+msgstr "Pominięcie obowiązuje do zmiany zaznaczenia."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordContextChips.ts
+msgid "officeAddin.word.context.selection.meta"
+msgstr "Zaznaczony fragment · {paragraphs} ¶"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordContextChips.ts
+msgid "officeAddin.word.context.selection.meta.commentsOff"
+msgstr "Komentarze wyłączone · {paragraphs} ¶"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordContextChips.ts
+msgid "officeAddin.word.context.selection.meta.commentsUnread"
+msgstr "Nie udało się odczytać komentarzy · {paragraphs} ¶"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordContextChips.ts
+msgid "officeAddin.word.context.selection.meta.readFailed"
+msgstr "Nie odczytano · wyślij ponownie"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordContextChips.ts
+msgid "officeAddin.word.context.selection.meta.replacedByComment"
+msgstr "Zastąpione komentarzem"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordContextChips.ts
+msgid "officeAddin.word.context.selection.meta.shownByErato"
+msgstr "Pokazane przez Erato · {paragraphs} ¶"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordContextChips.ts
+msgid "officeAddin.word.context.selection.meta.tooLong"
+msgstr "Za długie · tylko początek"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordContextChips.ts
+msgid "officeAddin.word.context.selection.meta.withComments"
+msgstr "{commentCount, plural, one {# komentarz · {paragraphs} ¶} few {# komentarze · {paragraphs} ¶} many {# komentarzy · {paragraphs} ¶} other {# komentarza · {paragraphs} ¶}}"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordContextChips.ts
+msgid "officeAddin.word.context.selection.paragraphs"
+msgstr "{count, plural, one {# akapit} few {# akapity} many {# akapitów} other {# akapitu}}"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordContextChips.ts
+msgid "officeAddin.word.context.selection.paragraphsErato"
+msgstr "{count, plural, one {# akapit · Pokazane przez Erato po „Pokaż w Wordzie”} few {# akapity · Pokazane przez Erato po „Pokaż w Wordzie”} many {# akapitów · Pokazane przez Erato po „Pokaż w Wordzie”} other {# akapitu · Pokazane przez Erato po „Pokaż w Wordzie”}}"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordContextDetails.tsx
+msgid "officeAddin.word.context.selection.quoteLabel"
+msgstr "Zaznaczony tekst"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentDetails.tsx
+msgid "officeAddin.word.context.selection.sendComments"
+msgstr "{count, plural, one {Wyślij komentarz z tego fragmentu} few {Wyślij # komentarze z tego fragmentu} many {Wyślij # komentarzy z tego fragmentu} other {Wyślij # komentarza z tego fragmentu}}"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordCommentDetails.tsx
+msgid "officeAddin.word.context.selection.sendCommentsHint"
+msgstr "Wyłączenie dotyczy tylko tej wiadomości"
+
+#. js-lingui-explicit-id
+#: src/word/hooks/useWordContextItems.tsx
+#: src/word/utils/wordSentWith.ts
+msgid "officeAddin.word.context.selection.spoken"
+msgstr "Zaznaczenie"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordContextChips.ts
+msgid "officeAddin.word.context.selection.title"
+msgstr "Zaznaczony fragment"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordContextChips.ts
+msgid "officeAddin.word.context.selection.titleErato"
+msgstr "Fragment zaznaczony przez Erato"
+
+#. js-lingui-explicit-id
+#: src/word/hooks/useWordContextItems.tsx
+msgid "officeAddin.word.context.sendInstead"
+msgstr "Wyślij zamiast tego"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordImportConfirm.tsx
@@ -4927,11 +6001,6 @@ msgstr "Zaznaczono fragment w Wordzie. Może to zmienić miejsce wstawiania przy
 #~ msgstr "Pokaż szczegóły"
 
 #. js-lingui-explicit-id
-#: src/word/components/WordReviewCardParts.tsx
-#~ msgid "officeAddin.word.review.showInWord"
-#~ msgstr "Pokaż w Wordzie ↗"
-
-#. js-lingui-explicit-id
 #. placeholder {0}: filtered.length
 #: src/word/components/WordReviewPanel.tsx
 msgid "officeAddin.word.review.shown"
@@ -5205,8 +6274,8 @@ msgstr "Twoja prośba jest z powrotem w polu wiadomości. Zaznacz fragment, o kt
 
 #. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx
-msgid "officeAddin.word.selection.commentInstead"
-msgstr "Zamiast tego fragmentu wysyłany jest komentarz poniżej."
+#~ msgid "officeAddin.word.selection.commentInstead"
+#~ msgstr "Zamiast tego fragmentu wysyłany jest komentarz poniżej."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
@@ -5350,8 +6419,8 @@ msgstr "Propozycja zgubiła lub przesunęła pole, link, przypis lub komentarz z
 
 #. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx
-msgid "officeAddin.word.selection.meta"
-msgstr "{paragraphCount, plural, one {Zaznaczony fragment · # akapit} few {Zaznaczony fragment · # akapity} many {Zaznaczony fragment · # akapitów} other {Zaznaczony fragment · # akapitu}}"
+#~ msgid "officeAddin.word.selection.meta"
+#~ msgstr "{paragraphCount, plural, one {Zaznaczony fragment · # akapit} few {Zaznaczony fragment · # akapity} many {Zaznaczony fragment · # akapitów} other {Zaznaczony fragment · # akapitu}}"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSelectionCard.tsx
@@ -5404,7 +6473,8 @@ msgid "officeAddin.word.selection.rangeUnproven"
 msgstr "Word nie mógł dokładnie zlokalizować fragmentu w jego akapicie. Niczego nie zastąpiono."
 
 #. js-lingui-explicit-id
-#: src/word/components/WordChatInput.tsx
+#: src/word/utils/wordComposerNotice.ts
+#: src/word/utils/wordContextChips.ts
 msgid "officeAddin.word.selection.readFailed"
 msgstr "Erato nie mógł odczytać zaznaczenia w programie Word, więc wiadomość nie została wysłana. Wyślij ją ponownie lub odrzuć zaznaczenie, aby wysłać ją bez niego."
 
@@ -5559,7 +6629,7 @@ msgid "officeAddin.word.selection.scope"
 msgstr "Zastąpienie zapisuje tylko w zaznaczonym przez ciebie fragmencie i tylko wtedy, gdy nie zmienił się od twojej prośby."
 
 #. js-lingui-explicit-id
-#: src/word/components/WordChatInput.tsx
+#: src/word/utils/wordContextChips.ts
 msgid "officeAddin.word.selection.sentInsteadOfDocument"
 msgstr "Wysyłane zamiast dokumentu."
 
@@ -5619,7 +6689,7 @@ msgid "officeAddin.word.selection.trackedItems"
 msgstr "Śledzenie zmian jest włączone, a ten fragment zawiera pola, linki, przypisy, komentarze lub zakładki, więc śledzona zmiana oznaczyłaby cały jego akapit jako zmieniony. Wyłącz śledzenie zmian, aby go zastąpić. Niczego nie zastąpiono."
 
 #. js-lingui-explicit-id
-#: src/word/components/WordChatInput.tsx
+#: src/word/utils/wordContextChips.ts
 msgid "officeAddin.word.selection.truncated"
 msgstr "Za długi, aby wysłać go w całości. Wysyłany jest tylko początek."
 
@@ -5654,7 +6724,7 @@ msgstr "Word mógł zastąpić fragment, ale nie udało się sprawdzić wyniku. 
 #~ msgstr "Użyj bieżącego zaznaczenia"
 
 #. js-lingui-explicit-id
-#: src/word/components/WordChatInput.tsx
+#: src/word/utils/wordComposerNotice.ts
 msgid "officeAddin.word.send.notIncluded"
 msgstr "Odczytywanie dokumentu trwało zbyt długo, więc ta wiadomość została wysłana bez niego."
 
@@ -5664,13 +6734,13 @@ msgstr "Odczytywanie dokumentu trwało zbyt długo, więc ta wiadomość został
 #~ msgstr ""
 
 #. js-lingui-explicit-id
-#: src/word/components/WordChatInput.tsx
+#: src/word/utils/wordComposerNotice.ts
 msgid "officeAddin.word.send.previousCapture"
 msgstr "Odczytywanie dokumentu trwało zbyt długo, więc Erato użył wcześniejszej kopii. Może brakować ostatnich zmian."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordChatInput.tsx
-#: src/word/components/WordCommentPicker.tsx
+#: src/word/utils/wordCommentText.ts
 msgid "officeAddin.word.send.readingComments"
 msgstr "Odczytywanie komentarzy…"
 
@@ -5685,12 +6755,12 @@ msgid "officeAddin.word.send.readingSelection"
 msgstr "Odczytywanie zaznaczenia…"
 
 #. js-lingui-explicit-id
-#: src/word/components/WordChatInput.tsx
+#: src/word/utils/wordComposerNotice.ts
 msgid "officeAddin.word.send.stillReading"
 msgstr "Word nadal przekazuje dokument."
 
 #. js-lingui-explicit-id
-#: src/word/components/WordChatInput.tsx
+#: src/word/utils/wordComposerNotice.ts
 msgid "officeAddin.word.send.withoutDocument"
 msgstr "Wyślij bez dokumentu"
 
@@ -5786,6 +6856,7 @@ msgstr "Zachowanie w programie Word"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSettingsDialog.tsx
+#: src/word/utils/wordContextChips.ts
 msgid "officeAddin.word.settings.includeDocument"
 msgstr "Dołączaj otwarty dokument do nowych czatów"
 

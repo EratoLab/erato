@@ -149,4 +149,163 @@ describe("EntraGraphTokenProvider", () => {
     expect(latest.current?.signInCount).toBe(1);
     expect(toast.success).toHaveBeenCalledTimes(1);
   });
+
+  describe("a sign-in a surface asks for in place", () => {
+    const interactiveSource = (
+      interactive: () => Promise<unknown> = async () => ({
+        accessToken: "graph-token",
+        bootstrap: "bootstrap",
+      }),
+    ) => {
+      const acquireGraphToken = vi.fn(
+        async (_scopes: string[], options?: { allowInteraction?: boolean }) => {
+          if (options?.allowInteraction) return interactive();
+          throw new InteractionRequiredError("interaction_required");
+        },
+      );
+      return {
+        source: { acquireGraphToken } as unknown as AuthSource &
+          GraphCapableSource,
+        acquireGraphToken,
+      };
+    };
+
+    it("says what the failed acquire needs: a sign-in, or access for a missing grant", async () => {
+      const { source } = interactiveSource();
+      const latest = mountLatest(source);
+      expect(latest.current?.signInNeeded).toBeNull();
+
+      await act(async () => {
+        await expect(
+          latest.current!.acquireToken(["Mail.Read"]),
+        ).rejects.toBeInstanceOf(InteractionRequiredError);
+      });
+      expect(latest.current?.signInNeeded).toBe("sign-in");
+      cleanup();
+
+      const consent = mountLatest({
+        acquireGraphToken: vi.fn().mockRejectedValue(
+          new InteractionRequiredError("consent_required", {
+            reason: "consent",
+          }),
+        ),
+      } as unknown as AuthSource & GraphCapableSource);
+      await act(async () => {
+        await expect(
+          consent.current!.acquireToken(["Mail.Read.Shared"]),
+        ).rejects.toBeInstanceOf(InteractionRequiredError);
+      });
+      expect(consent.current?.signInNeeded).toBe("consent");
+    });
+
+    it("signs in for the scopes that failed, bumps signInCount and clears the need", async () => {
+      const { source, acquireGraphToken } = interactiveSource();
+      const latest = mountLatest(source);
+      await act(async () => {
+        await expect(
+          latest.current!.acquireToken(["Mail.Read"]),
+        ).rejects.toBeInstanceOf(InteractionRequiredError);
+      });
+
+      await act(async () => {
+        await latest.current!.signIn();
+      });
+
+      expect(acquireGraphToken).toHaveBeenLastCalledWith(["Mail.Read"], {
+        allowInteraction: true,
+      });
+      expect(latest.current?.signInCount).toBe(1);
+      expect(latest.current?.signInNeeded).toBeNull();
+      // The prompt stays for every other Graph caller, and its success
+      // promises nothing about an email: any Graph surface may have asked.
+      expect(toast.warning).toHaveBeenCalledTimes(1);
+      expect(toast.success).toHaveBeenCalledWith(
+        expect.objectContaining({ title: "Signed in." }),
+      );
+    });
+
+    it("signs in for the scopes a surface names, whoever prompted last", async () => {
+      const { source, acquireGraphToken } = interactiveSource();
+      const latest = mountLatest(source);
+      await act(async () => {
+        await expect(
+          latest.current!.acquireToken(["Calendars.Read"]),
+        ).rejects.toBeInstanceOf(InteractionRequiredError);
+      });
+
+      await act(async () => {
+        await latest.current!.signIn(["Mail.Read"]);
+      });
+
+      expect(acquireGraphToken).toHaveBeenLastCalledWith(["Mail.Read"], {
+        allowInteraction: true,
+      });
+    });
+
+    it("clears the need once a silent acquire for those scopes succeeds", async () => {
+      let needsUser = true;
+      const source = {
+        acquireGraphToken: vi.fn(async () => {
+          if (needsUser) throw new InteractionRequiredError("interaction");
+          return { accessToken: "t", bootstrap: { idToken: "i" } };
+        }),
+      } as unknown as AuthSource & GraphCapableSource;
+      const latest = mountLatest(source);
+      await act(async () => {
+        await expect(
+          latest.current!.acquireToken(["Mail.Read"]),
+        ).rejects.toBeInstanceOf(InteractionRequiredError);
+      });
+      expect(latest.current?.signInNeeded).toBe("sign-in");
+
+      needsUser = false;
+      await act(async () => {
+        await latest.current!.acquireToken(["Calendars.Read"]);
+      });
+      expect(latest.current?.signInNeeded).toBe("sign-in");
+
+      await act(async () => {
+        await latest.current!.acquireToken(["Mail.Read"]);
+      });
+      expect(latest.current?.signInNeeded).toBeNull();
+    });
+
+    it("keeps the need when the popup is cancelled", async () => {
+      const { source } = interactiveSource(async () => {
+        throw new Error("popup closed");
+      });
+      const latest = mountLatest(source);
+      await act(async () => {
+        await expect(
+          latest.current!.acquireToken(["Mail.Read"]),
+        ).rejects.toBeInstanceOf(InteractionRequiredError);
+      });
+
+      await act(async () => {
+        await expect(latest.current!.signIn()).rejects.toThrow("popup closed");
+      });
+
+      expect(latest.current?.signInNeeded).toBe("sign-in");
+      expect(latest.current?.signInCount).toBe(0);
+    });
+
+    it("clears the need when the prompt's own action signs in", async () => {
+      const { source } = interactiveSource();
+      const latest = mountLatest(source);
+      await act(async () => {
+        await expect(
+          latest.current!.acquireToken(["Mail.Read"]),
+        ).rejects.toBeInstanceOf(InteractionRequiredError);
+      });
+      const [prompt] = vi.mocked(toast.warning).mock.calls[0] as unknown as [
+        { actions: Array<{ onClick: () => void }> },
+      ];
+
+      await act(async () => {
+        prompt.actions[0].onClick();
+      });
+
+      expect(latest.current?.signInNeeded).toBeNull();
+    });
+  });
 });

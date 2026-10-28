@@ -1,0 +1,1360 @@
+{
+  "stories": {
+    "thread-included": {
+      "chips": [
+        {
+          "kind": "outlook.thread",
+          "origin": "ambient",
+          "dismissScope": "item",
+          "state": "included",
+          "label": "RE: Q4 vendor contract renewal",
+          "meta": "5 messages · 1.5 MB of 25 MB",
+          "control": "Leave out the email"
+        }
+      ],
+      "modes": []
+    },
+    "thread-partial": {
+      "chips": [
+        {
+          "kind": "outlook.thread",
+          "origin": "ambient",
+          "dismissScope": "item",
+          "state": "included",
+          "label": "RE: Q4 vendor contract renewal",
+          "meta": "3 of 5 messages · 1.2 MB of 25 MB",
+          "control": "Leave out the email"
+        }
+      ],
+      "modes": []
+    },
+    "thread-loading": {
+      "chips": [
+        {
+          "kind": "outlook.thread",
+          "origin": "ambient",
+          "dismissScope": "item",
+          "state": "loading",
+          "label": "RE: Q4 vendor contract renewal",
+          "meta": "Loading email thread…",
+          "control": "Leave out the email"
+        }
+      ],
+      "modes": []
+    },
+    "thread-error": {
+      "chips": [
+        {
+          "kind": "outlook.thread",
+          "origin": "ambient",
+          "dismissScope": "item",
+          "state": "error",
+          "tone": "error",
+          "label": "RE: Q4 vendor contract renewal",
+          "meta": "Couldn't load the email thread",
+          "control": "Dismiss email thread",
+          "actions": [
+            { "label": "Try again", "announcement": "Email thread loaded." }
+          ]
+        }
+      ],
+      "modes": []
+    },
+    "thread-error-again": {
+      "chips": [
+        {
+          "kind": "outlook.thread",
+          "origin": "ambient",
+          "dismissScope": "item",
+          "state": "error",
+          "tone": "error",
+          "label": "RE: Q4 vendor contract renewal",
+          "meta": "Couldn't load the email thread",
+          "control": "Dismiss email thread",
+          "actions": [
+            { "label": "Try again", "announcement": "Email thread loaded." }
+          ]
+        }
+      ],
+      "modes": []
+    },
+    "thread-sign-in": {
+      "chips": [
+        {
+          "kind": "outlook.thread",
+          "origin": "ambient",
+          "dismissScope": "item",
+          "state": "attention",
+          "tone": "warning",
+          "label": "RE: Q4 vendor contract renewal",
+          "meta": "Sign in to load email",
+          "control": "Leave out the email",
+          "actions": [
+            { "label": "Sign in", "announcement": "Email thread loaded." }
+          ]
+        }
+      ],
+      "modes": []
+    },
+    "thread-consent": {
+      "chips": [
+        {
+          "kind": "outlook.thread",
+          "origin": "ambient",
+          "dismissScope": "item",
+          "state": "attention",
+          "tone": "warning",
+          "label": "RE: Q4 vendor contract renewal",
+          "meta": "Allow access to load email",
+          "control": "Leave out the email",
+          "actions": [
+            { "label": "Allow access", "announcement": "Email thread loaded." }
+          ]
+        }
+      ],
+      "modes": []
+    },
+    "thread-signing-in": {
+      "chips": [
+        {
+          "kind": "outlook.thread",
+          "origin": "ambient",
+          "dismissScope": "item",
+          "state": "loading",
+          "label": "RE: Q4 vendor contract renewal",
+          "meta": "Signing in…",
+          "control": "Leave out the email"
+        }
+      ],
+      "modes": []
+    },
+    "thread-off": {
+      "chips": [
+        {
+          "kind": "outlook.thread",
+          "origin": "ambient",
+          "dismissScope": "item",
+          "state": "suggested",
+          "label": "RE: Q4 vendor contract renewal",
+          "meta": null,
+          "control": "Include the email"
+        }
+      ],
+      "modes": []
+    },
+    "thread-follow-up": {
+      "chips": [
+        {
+          "kind": "outlook.thread",
+          "origin": "ambient",
+          "dismissScope": "item",
+          "state": "suggested",
+          "label": "RE: Q4 vendor contract renewal",
+          "meta": "Not included on follow-up messages",
+          "control": "Include the email"
+        }
+      ],
+      "modes": []
+    },
+    "thread-follow-up-loading": {
+      "chips": [
+        {
+          "kind": "outlook.thread",
+          "origin": "ambient",
+          "dismissScope": "item",
+          "state": "suggested",
+          "label": "RE: Q4 vendor contract renewal",
+          "meta": "Not included on follow-up messages",
+          "control": "Include the email"
+        }
+      ],
+      "modes": []
+    },
+    "thread-follow-up-error": {
+      "chips": [
+        {
+          "kind": "outlook.thread",
+          "origin": "ambient",
+          "dismissScope": "item",
+          "state": "suggested",
+          "label": "RE: Q4 vendor contract renewal",
+          "meta": "Not included on follow-up messages",
+          "control": "Include the email"
+        }
+      ],
+      "modes": []
+    },
+    "thread-nothing-chosen": {
+      "chips": [
+        {
+          "kind": "outlook.thread",
+          "origin": "ambient",
+          "dismissScope": "item",
+          "state": "suggested",
+          "label": "RE: Q4 vendor contract renewal",
+          "meta": "Nothing chosen",
+          "control": "Include every message"
+        }
+      ],
+      "modes": []
+    },
+    "thread-trim-failed": {
+      "chips": [
+        {
+          "kind": "outlook.thread",
+          "origin": "ambient",
+          "dismissScope": "item",
+          "state": "error",
+          "tone": "error",
+          "label": "RE: Q4 vendor contract renewal",
+          "meta": "Couldn't leave out unticked parts",
+          "control": "Dismiss email thread"
+        }
+      ],
+      "modes": []
+    },
+    "thread-sent-in-chat": { "chips": [], "modes": [] },
+    "thread-dropped-as-email": {
+      "chips": [
+        {
+          "kind": "outlook.droppedEmail",
+          "origin": "user",
+          "state": "included",
+          "label": "Re: Offsite agenda",
+          "meta": "Lena Hoffmann • 10/7/2026 · 2/2 attachments",
+          "control": "Remove Re: Offsite agenda"
+        }
+      ],
+      "modes": []
+    },
+    "drops": {
+      "chips": [
+        {
+          "kind": "outlook.thread",
+          "origin": "ambient",
+          "dismissScope": "item",
+          "state": "included",
+          "label": "RE: Q4 vendor contract renewal",
+          "meta": "5 messages · 1.5 MB of 25 MB",
+          "control": "Leave out the email"
+        },
+        {
+          "kind": "outlook.droppedEmail",
+          "origin": "user",
+          "state": "included",
+          "label": "Re: Offsite agenda",
+          "meta": "Lena Hoffmann • 10/7/2026 · 2/2 attachments",
+          "control": "Remove Re: Offsite agenda"
+        },
+        {
+          "kind": "outlook.droppedEmail",
+          "origin": "user",
+          "state": "included",
+          "label": "Budget 2027 draft",
+          "meta": "Jonas Weber • 10/12/2026 · 3/3 attachments",
+          "control": "Remove Budget 2027 draft"
+        }
+      ],
+      "modes": []
+    },
+    "drop-trim-failed": {
+      "chips": [
+        {
+          "kind": "outlook.thread",
+          "origin": "ambient",
+          "dismissScope": "item",
+          "state": "included",
+          "label": "RE: Q4 vendor contract renewal",
+          "meta": "5 messages · 1.5 MB of 25 MB",
+          "control": "Leave out the email"
+        },
+        {
+          "kind": "outlook.droppedEmail",
+          "origin": "user",
+          "state": "error",
+          "tone": "error",
+          "label": "Re: Offsite agenda",
+          "meta": "Couldn't leave out unticked parts",
+          "control": "Remove Re: Offsite agenda"
+        }
+      ],
+      "modes": []
+    },
+    "dropping": {
+      "chips": [
+        {
+          "kind": "outlook.thread",
+          "origin": "ambient",
+          "dismissScope": "item",
+          "state": "included",
+          "label": "RE: Q4 vendor contract renewal",
+          "meta": "5 messages · 1.5 MB of 25 MB",
+          "control": "Leave out the email"
+        },
+        {
+          "kind": "outlook.dropProgress",
+          "origin": "user",
+          "state": "loading",
+          "label": "Reading email 1 of 2…",
+          "meta": null,
+          "control": null,
+          "lockReason": "Dropped emails can't be cancelled while Erato reads them"
+        }
+      ],
+      "modes": []
+    },
+    "mail-attachments-no-graph": {
+      "chips": [
+        {
+          "kind": "outlook.mailAttachment",
+          "origin": "ambient",
+          "dismissScope": "item",
+          "state": "included",
+          "label": "contract-v3.pdf",
+          "meta": "Email attachment · 482 KB",
+          "control": "Don't include contract-v3.pdf"
+        },
+        {
+          "kind": "outlook.mailAttachment",
+          "origin": "ambient",
+          "dismissScope": "item",
+          "state": "included",
+          "label": "pricing.xlsx",
+          "meta": "Email attachment · 36 KB",
+          "control": "Don't include pricing.xlsx"
+        }
+      ],
+      "modes": []
+    },
+    "mail-attachments-with-drop": {
+      "chips": [
+        {
+          "kind": "outlook.mailAttachment",
+          "origin": "ambient",
+          "dismissScope": "item",
+          "state": "superseded",
+          "label": "contract-v3.pdf",
+          "meta": "Not sent with dropped emails",
+          "control": "Don't include contract-v3.pdf"
+        },
+        {
+          "kind": "outlook.droppedEmail",
+          "origin": "user",
+          "state": "included",
+          "label": "Re: Offsite agenda",
+          "meta": "Lena Hoffmann • 10/7/2026 · 2/2 attachments",
+          "control": "Remove Re: Offsite agenda"
+        }
+      ],
+      "modes": []
+    },
+    "read-scheduling": {
+      "chips": [
+        {
+          "kind": "outlook.thread",
+          "origin": "ambient",
+          "dismissScope": "item",
+          "state": "included",
+          "label": "RE: Q4 vendor contract renewal",
+          "meta": "5 messages · 1.5 MB of 25 MB",
+          "control": "Leave out the email"
+        }
+      ],
+      "modes": [
+        {
+          "label": "Scheduling",
+          "description": "Scheduling stays on for an hour after Erato last read your calendar (until 3:40 PM).",
+          "endLabel": "End scheduling",
+          "endedAnnouncement": "Scheduling ended."
+        }
+      ]
+    },
+    "draft": {
+      "chips": [
+        {
+          "kind": "outlook.draft",
+          "origin": "ambient",
+          "dismissScope": "item",
+          "state": "included",
+          "label": "Your draft",
+          "meta": "Reply to Anna Weber",
+          "control": "Don't include draft"
+        },
+        {
+          "kind": "outlook.draftAttachment",
+          "origin": "ambient",
+          "dismissScope": "item",
+          "state": "included",
+          "label": "contract-v3.pdf",
+          "meta": "Draft attachment · 482 KB",
+          "control": "Don't include contract-v3.pdf"
+        },
+        {
+          "kind": "outlook.draftAttachment",
+          "origin": "ambient",
+          "dismissScope": "item",
+          "state": "included",
+          "label": "pricing.xlsx",
+          "meta": "Draft attachment · 36 KB",
+          "control": "Don't include pricing.xlsx"
+        }
+      ],
+      "modes": []
+    },
+    "draft-new-message": {
+      "chips": [
+        {
+          "kind": "outlook.draft",
+          "origin": "ambient",
+          "dismissScope": "item",
+          "state": "included",
+          "label": "Your draft",
+          "meta": null,
+          "control": "Don't include draft"
+        }
+      ],
+      "modes": []
+    },
+    "draft-unchanged": {
+      "chips": [
+        {
+          "kind": "outlook.draft",
+          "origin": "ambient",
+          "dismissScope": "item",
+          "state": "superseded",
+          "label": "Your draft",
+          "meta": "Unchanged, not re-sent",
+          "control": "Don't include draft"
+        },
+        {
+          "kind": "outlook.draftAttachment",
+          "origin": "ambient",
+          "dismissScope": "item",
+          "state": "superseded",
+          "label": "contract-v3.pdf",
+          "meta": "Sent earlier, not re-sent",
+          "control": "Don't include contract-v3.pdf"
+        },
+        {
+          "kind": "outlook.draftAttachment",
+          "origin": "ambient",
+          "dismissScope": "item",
+          "state": "superseded",
+          "label": "pricing.xlsx",
+          "meta": "Sent earlier, not re-sent",
+          "control": "Don't include pricing.xlsx"
+        }
+      ],
+      "modes": []
+    },
+    "draft-off": {
+      "chips": [
+        {
+          "kind": "outlook.draft",
+          "origin": "ambient",
+          "dismissScope": "item",
+          "state": "suggested",
+          "label": "Your draft",
+          "meta": null,
+          "control": "Include draft"
+        },
+        {
+          "kind": "outlook.draftAttachment",
+          "origin": "ambient",
+          "dismissScope": "item",
+          "state": "included",
+          "label": "contract-v3.pdf",
+          "meta": "Draft attachment · 482 KB",
+          "control": "Don't include contract-v3.pdf"
+        },
+        {
+          "kind": "outlook.draftAttachment",
+          "origin": "ambient",
+          "dismissScope": "item",
+          "state": "included",
+          "label": "pricing.xlsx",
+          "meta": "Draft attachment · 36 KB",
+          "control": "Don't include pricing.xlsx"
+        }
+      ],
+      "modes": []
+    },
+    "selection": {
+      "chips": [
+        {
+          "kind": "outlook.selection",
+          "origin": "ambient",
+          "dismissScope": "selection",
+          "state": "included",
+          "label": "“Could you confirm the delivery date by Friday?”",
+          "meta": "Replaces draft",
+          "control": "Dismiss selection"
+        },
+        {
+          "kind": "outlook.draft",
+          "origin": "ambient",
+          "dismissScope": "item",
+          "state": "superseded",
+          "label": "Your draft",
+          "meta": "Replaced by selection",
+          "control": "Don't include draft",
+          "actions": [
+            {
+              "label": "Send this instead",
+              "announcement": "Draft included. Your selection is off until it changes."
+            }
+          ]
+        },
+        {
+          "kind": "outlook.draftAttachment",
+          "origin": "ambient",
+          "dismissScope": "item",
+          "state": "included",
+          "label": "contract-v3.pdf",
+          "meta": "Draft attachment · 482 KB",
+          "control": "Don't include contract-v3.pdf"
+        },
+        {
+          "kind": "outlook.draftAttachment",
+          "origin": "ambient",
+          "dismissScope": "item",
+          "state": "included",
+          "label": "pricing.xlsx",
+          "meta": "Draft attachment · 36 KB",
+          "control": "Don't include pricing.xlsx"
+        }
+      ],
+      "modes": []
+    },
+    "selection-dismissed": {
+      "chips": [
+        {
+          "kind": "outlook.selection",
+          "origin": "ambient",
+          "dismissScope": "selection",
+          "state": "suggested",
+          "label": "“Could you confirm the delivery date by Friday?”",
+          "meta": null,
+          "control": "Include selection"
+        },
+        {
+          "kind": "outlook.draft",
+          "origin": "ambient",
+          "dismissScope": "item",
+          "state": "included",
+          "label": "Your draft",
+          "meta": "Reply to Anna Weber",
+          "control": "Don't include draft"
+        },
+        {
+          "kind": "outlook.draftAttachment",
+          "origin": "ambient",
+          "dismissScope": "item",
+          "state": "included",
+          "label": "contract-v3.pdf",
+          "meta": "Draft attachment · 482 KB",
+          "control": "Don't include contract-v3.pdf"
+        },
+        {
+          "kind": "outlook.draftAttachment",
+          "origin": "ambient",
+          "dismissScope": "item",
+          "state": "included",
+          "label": "pricing.xlsx",
+          "meta": "Draft attachment · 36 KB",
+          "control": "Don't include pricing.xlsx"
+        }
+      ],
+      "modes": []
+    },
+    "selection-no-draft": {
+      "chips": [
+        {
+          "kind": "outlook.selection",
+          "origin": "ambient",
+          "dismissScope": "selection",
+          "state": "included",
+          "label": "“Could you confirm the delivery date by Friday?”",
+          "meta": "Selected text",
+          "control": "Dismiss selection"
+        }
+      ],
+      "modes": []
+    },
+    "selection-draft-unchanged": {
+      "chips": [
+        {
+          "kind": "outlook.selection",
+          "origin": "ambient",
+          "dismissScope": "selection",
+          "state": "included",
+          "label": "“Could you confirm the delivery date by Friday?”",
+          "meta": "Selected text",
+          "control": "Dismiss selection"
+        },
+        {
+          "kind": "outlook.draft",
+          "origin": "ambient",
+          "dismissScope": "item",
+          "state": "superseded",
+          "label": "Your draft",
+          "meta": "Unchanged, not re-sent",
+          "control": "Don't include draft"
+        }
+      ],
+      "modes": []
+    },
+    "appointment": {
+      "chips": [
+        {
+          "kind": "outlook.appointment",
+          "origin": "ambient",
+          "dismissScope": "item",
+          "state": "included",
+          "label": "Appointment details",
+          "meta": "Fri, Oct 23, 10:00 – 11:00 AM",
+          "control": "Don't include appointment details"
+        }
+      ],
+      "modes": []
+    },
+    "appointment-selection": {
+      "chips": [
+        {
+          "kind": "outlook.selection",
+          "origin": "ambient",
+          "dismissScope": "selection",
+          "state": "included",
+          "label": "“Could you confirm the delivery date by Friday?”",
+          "meta": "Replaces appointment details",
+          "control": "Dismiss selection"
+        },
+        {
+          "kind": "outlook.appointment",
+          "origin": "ambient",
+          "dismissScope": "item",
+          "state": "superseded",
+          "label": "Appointment details",
+          "meta": "Replaced by selection",
+          "control": "Don't include appointment details",
+          "actions": [
+            {
+              "label": "Send this instead",
+              "announcement": "Appointment details included. Your selection is off until it changes."
+            }
+          ]
+        }
+      ],
+      "modes": []
+    },
+    "attachments-group": {
+      "chips": [
+        {
+          "kind": "outlook.draft",
+          "origin": "ambient",
+          "dismissScope": "item",
+          "state": "included",
+          "label": "Your draft",
+          "meta": "Reply to Anna Weber",
+          "control": "Don't include draft"
+        },
+        {
+          "kind": "outlook.draftAttachments",
+          "origin": "ambient",
+          "dismissScope": "item",
+          "state": "included",
+          "label": "Draft attachments (3)",
+          "meta": "3 of 3 · 738 KB",
+          "control": "Don't include draft attachments"
+        }
+      ],
+      "modes": []
+    },
+    "attachments-group-partial": {
+      "chips": [
+        {
+          "kind": "outlook.draft",
+          "origin": "ambient",
+          "dismissScope": "item",
+          "state": "included",
+          "label": "Your draft",
+          "meta": "Reply to Anna Weber",
+          "control": "Don't include draft"
+        },
+        {
+          "kind": "outlook.draftAttachments",
+          "origin": "ambient",
+          "dismissScope": "item",
+          "state": "included",
+          "label": "Draft attachments (3)",
+          "meta": "2 of 3 · 702 KB",
+          "control": "Don't include draft attachments"
+        }
+      ],
+      "modes": []
+    },
+    "attachments-group-off": {
+      "chips": [
+        {
+          "kind": "outlook.draft",
+          "origin": "ambient",
+          "dismissScope": "item",
+          "state": "included",
+          "label": "Your draft",
+          "meta": "Reply to Anna Weber",
+          "control": "Don't include draft"
+        },
+        {
+          "kind": "outlook.draftAttachments",
+          "origin": "ambient",
+          "dismissScope": "item",
+          "state": "suggested",
+          "label": "Draft attachments (3)",
+          "meta": null,
+          "control": "Include draft attachments"
+        }
+      ],
+      "modes": []
+    },
+    "attachments-group-cloud": {
+      "chips": [
+        {
+          "kind": "outlook.draft",
+          "origin": "ambient",
+          "dismissScope": "item",
+          "state": "included",
+          "label": "Your draft",
+          "meta": "Reply to Anna Weber",
+          "control": "Don't include draft"
+        },
+        {
+          "kind": "outlook.draftAttachments",
+          "origin": "ambient",
+          "dismissScope": "item",
+          "state": "error",
+          "tone": "error",
+          "label": "Draft attachments (3)",
+          "meta": "Cloud files · can't be sent",
+          "control": "Dismiss draft attachments"
+        }
+      ],
+      "modes": []
+    },
+    "attachments-follow-up": {
+      "chips": [
+        {
+          "kind": "outlook.draft",
+          "origin": "ambient",
+          "dismissScope": "item",
+          "state": "superseded",
+          "label": "Your draft",
+          "meta": "Unchanged, not re-sent",
+          "control": "Don't include draft"
+        },
+        {
+          "kind": "outlook.draftAttachment",
+          "origin": "ambient",
+          "dismissScope": "item",
+          "state": "superseded",
+          "label": "contract-v3.pdf",
+          "meta": "Sent earlier, not re-sent",
+          "control": "Don't include contract-v3.pdf"
+        },
+        {
+          "kind": "outlook.draftAttachment",
+          "origin": "ambient",
+          "dismissScope": "item",
+          "state": "suggested",
+          "label": "pricing.xlsx",
+          "meta": "Not included on follow-up messages",
+          "control": "Include pricing.xlsx"
+        }
+      ],
+      "modes": []
+    },
+    "attachments-sent-earlier": {
+      "chips": [
+        {
+          "kind": "outlook.draft",
+          "origin": "ambient",
+          "dismissScope": "item",
+          "state": "superseded",
+          "label": "Your draft",
+          "meta": "Unchanged, not re-sent",
+          "control": "Don't include draft"
+        },
+        {
+          "kind": "outlook.draftAttachments",
+          "origin": "ambient",
+          "dismissScope": "item",
+          "state": "superseded",
+          "label": "Draft attachments (3)",
+          "meta": "Sent earlier, not re-sent",
+          "control": "Don't include draft attachments"
+        }
+      ],
+      "modes": []
+    },
+    "cloud-attachment": {
+      "chips": [
+        {
+          "kind": "outlook.draft",
+          "origin": "ambient",
+          "dismissScope": "item",
+          "state": "included",
+          "label": "Your draft",
+          "meta": "Reply to Anna Weber",
+          "control": "Don't include draft"
+        },
+        {
+          "kind": "outlook.draftAttachment",
+          "origin": "ambient",
+          "dismissScope": "item",
+          "state": "included",
+          "label": "contract-v3.pdf",
+          "meta": "Draft attachment · 482 KB",
+          "control": "Don't include contract-v3.pdf"
+        },
+        {
+          "kind": "outlook.draftAttachment",
+          "origin": "ambient",
+          "dismissScope": "item",
+          "state": "error",
+          "tone": "error",
+          "label": "Renewal terms.docx",
+          "meta": "Cloud file · can't be sent",
+          "control": "Dismiss Renewal terms.docx"
+        }
+      ],
+      "modes": []
+    },
+    "attachments-with-drop": {
+      "chips": [
+        {
+          "kind": "outlook.draft",
+          "origin": "ambient",
+          "dismissScope": "item",
+          "state": "included",
+          "label": "Your draft",
+          "meta": "Reply to Anna Weber",
+          "control": "Don't include draft"
+        },
+        {
+          "kind": "outlook.draftAttachment",
+          "origin": "ambient",
+          "dismissScope": "item",
+          "state": "superseded",
+          "label": "contract-v3.pdf",
+          "meta": "Not sent with dropped emails",
+          "control": "Don't include contract-v3.pdf"
+        },
+        {
+          "kind": "outlook.draftAttachment",
+          "origin": "ambient",
+          "dismissScope": "item",
+          "state": "superseded",
+          "label": "pricing.xlsx",
+          "meta": "Not sent with dropped emails",
+          "control": "Don't include pricing.xlsx"
+        },
+        {
+          "kind": "outlook.droppedEmail",
+          "origin": "user",
+          "state": "included",
+          "label": "Re: Offsite agenda",
+          "meta": "Lena Hoffmann • 10/7/2026 · 2/2 attachments",
+          "control": "Remove Re: Offsite agenda"
+        }
+      ],
+      "modes": []
+    },
+    "scheduling": {
+      "chips": [
+        {
+          "kind": "outlook.draft",
+          "origin": "ambient",
+          "dismissScope": "item",
+          "state": "superseded",
+          "label": "Your draft",
+          "meta": "Not sent while scheduling",
+          "control": "Don't include draft",
+          "actions": [
+            {
+              "label": "End scheduling",
+              "announcement": "Scheduling ended. Your draft is sent again."
+            }
+          ]
+        },
+        {
+          "kind": "outlook.draftAttachment",
+          "origin": "ambient",
+          "dismissScope": "item",
+          "state": "included",
+          "label": "contract-v3.pdf",
+          "meta": "Draft attachment · 482 KB",
+          "control": "Don't include contract-v3.pdf"
+        },
+        {
+          "kind": "outlook.draftAttachment",
+          "origin": "ambient",
+          "dismissScope": "item",
+          "state": "included",
+          "label": "pricing.xlsx",
+          "meta": "Draft attachment · 36 KB",
+          "control": "Don't include pricing.xlsx"
+        }
+      ],
+      "modes": [
+        {
+          "label": "Scheduling",
+          "description": "Scheduling stays on for an hour after Erato last read your calendar (until 3:40 PM).",
+          "endLabel": "End scheduling",
+          "endedAnnouncement": "Scheduling ended. Your draft is sent again."
+        }
+      ]
+    },
+    "scheduling-unchanged": {
+      "chips": [
+        {
+          "kind": "outlook.draft",
+          "origin": "ambient",
+          "dismissScope": "item",
+          "state": "superseded",
+          "label": "Your draft",
+          "meta": "Unchanged, not re-sent",
+          "control": "Don't include draft"
+        }
+      ],
+      "modes": [
+        {
+          "label": "Scheduling",
+          "description": "Scheduling stays on for an hour after Erato last read your calendar (until 3:40 PM).",
+          "endLabel": "End scheduling",
+          "endedAnnouncement": "Scheduling ended."
+        }
+      ]
+    },
+    "sending": {
+      "chips": [
+        {
+          "kind": "outlook.draft",
+          "origin": "ambient",
+          "dismissScope": "item",
+          "state": "superseded",
+          "label": "Your draft",
+          "meta": "Not sent while scheduling",
+          "control": "Don't include draft",
+          "lockReason": "Can't change this while the message is being sent"
+        },
+        {
+          "kind": "outlook.draftAttachment",
+          "origin": "ambient",
+          "dismissScope": "item",
+          "state": "superseded",
+          "label": "contract-v3.pdf",
+          "meta": "Not sent with dropped emails",
+          "control": "Don't include contract-v3.pdf",
+          "lockReason": "Can't change this while the message is being sent"
+        },
+        {
+          "kind": "outlook.draftAttachment",
+          "origin": "ambient",
+          "dismissScope": "item",
+          "state": "superseded",
+          "label": "pricing.xlsx",
+          "meta": "Not sent with dropped emails",
+          "control": "Don't include pricing.xlsx",
+          "lockReason": "Can't change this while the message is being sent"
+        },
+        {
+          "kind": "outlook.droppedEmail",
+          "origin": "user",
+          "state": "included",
+          "label": "Re: Offsite agenda",
+          "meta": "Lena Hoffmann • 10/7/2026 · 2/2 attachments",
+          "control": "Remove Re: Offsite agenda",
+          "lockReason": "Can't change this while the message is being sent"
+        }
+      ],
+      "modes": [
+        {
+          "label": "Scheduling",
+          "description": "Scheduling stays on for an hour after Erato last read your calendar (until 3:40 PM).",
+          "endLabel": "End scheduling",
+          "endedAnnouncement": "Scheduling ended. Your draft is sent again."
+        }
+      ]
+    },
+    "busy": {
+      "chips": [
+        {
+          "kind": "outlook.selection",
+          "origin": "ambient",
+          "dismissScope": "selection",
+          "state": "included",
+          "label": "“Could you confirm the delivery date by Friday?”",
+          "meta": "Replaces draft",
+          "control": "Dismiss selection"
+        },
+        {
+          "kind": "outlook.draft",
+          "origin": "ambient",
+          "dismissScope": "item",
+          "state": "superseded",
+          "label": "Your draft",
+          "meta": "Replaced by selection",
+          "control": "Don't include draft",
+          "actions": [
+            {
+              "label": "Send this instead",
+              "announcement": "Draft included. Your selection is off until it changes."
+            }
+          ]
+        },
+        {
+          "kind": "outlook.draftAttachments",
+          "origin": "ambient",
+          "dismissScope": "item",
+          "state": "superseded",
+          "label": "Draft attachments (3)",
+          "meta": "Not sent with dropped emails",
+          "control": "Don't include draft attachments"
+        },
+        {
+          "kind": "outlook.droppedEmail",
+          "origin": "user",
+          "state": "included",
+          "label": "Re: Offsite agenda",
+          "meta": "Lena Hoffmann • 10/7/2026 · 2/2 attachments",
+          "control": "Remove Re: Offsite agenda"
+        },
+        {
+          "kind": "outlook.droppedEmail",
+          "origin": "user",
+          "state": "included",
+          "label": "Budget 2027 draft",
+          "meta": "Jonas Weber • 10/12/2026 · 3/3 attachments",
+          "control": "Remove Budget 2027 draft"
+        }
+      ],
+      "modes": []
+    },
+    "interactive-read": {
+      "chips": [
+        {
+          "kind": "outlook.thread",
+          "origin": "ambient",
+          "dismissScope": "item",
+          "state": "included",
+          "label": "RE: Q4 vendor contract renewal",
+          "meta": "5 messages · 1.5 MB of 25 MB",
+          "control": "Leave out the email"
+        }
+      ],
+      "modes": []
+    },
+    "interactive-compose": {
+      "chips": [
+        {
+          "kind": "outlook.draft",
+          "origin": "ambient",
+          "dismissScope": "item",
+          "state": "included",
+          "label": "Your draft",
+          "meta": "Reply to Anna Weber",
+          "control": "Don't include draft"
+        },
+        {
+          "kind": "outlook.draftAttachment",
+          "origin": "ambient",
+          "dismissScope": "item",
+          "state": "included",
+          "label": "contract-v3.pdf",
+          "meta": "Draft attachment · 482 KB",
+          "control": "Don't include contract-v3.pdf"
+        },
+        {
+          "kind": "outlook.draftAttachment",
+          "origin": "ambient",
+          "dismissScope": "item",
+          "state": "included",
+          "label": "pricing.xlsx",
+          "meta": "Draft attachment · 36 KB",
+          "control": "Don't include pricing.xlsx"
+        }
+      ],
+      "modes": []
+    }
+  },
+  "flows": {
+    "ThreadPartial: Delete": {
+      "story": "thread-partial",
+      "chips": [
+        {
+          "kind": "outlook.thread",
+          "origin": "ambient",
+          "dismissScope": "item",
+          "state": "suggested",
+          "label": "RE: Q4 vendor contract renewal",
+          "meta": null,
+          "control": "Include the email"
+        }
+      ],
+      "modes": []
+    },
+    "ThreadError: Delete": {
+      "story": "thread-error",
+      "chips": [
+        {
+          "kind": "outlook.thread",
+          "origin": "ambient",
+          "dismissScope": "item",
+          "state": "suggested",
+          "label": "RE: Q4 vendor contract renewal",
+          "meta": null,
+          "control": "Try loading the email again"
+        }
+      ],
+      "modes": []
+    },
+    "ThreadError: Delete, + loads": {
+      "story": "thread-error",
+      "chips": [
+        {
+          "kind": "outlook.thread",
+          "origin": "ambient",
+          "dismissScope": "item",
+          "state": "included",
+          "label": "RE: Q4 vendor contract renewal",
+          "meta": "5 messages · 1.5 MB of 25 MB",
+          "control": "Leave out the email"
+        }
+      ],
+      "modes": []
+    },
+    "ThreadErrorAgain: + fails again": {
+      "story": "thread-error-again",
+      "chips": [
+        {
+          "kind": "outlook.thread",
+          "origin": "ambient",
+          "dismissScope": "item",
+          "state": "error",
+          "tone": "error",
+          "label": "RE: Q4 vendor contract renewal",
+          "meta": "Couldn't load the email thread",
+          "control": "Dismiss email thread",
+          "actions": [
+            { "label": "Try again", "announcement": "Email thread loaded." }
+          ]
+        }
+      ],
+      "modes": []
+    },
+    "ThreadSignIn: Sign in loads": {
+      "story": "thread-sign-in",
+      "chips": [
+        {
+          "kind": "outlook.thread",
+          "origin": "ambient",
+          "dismissScope": "item",
+          "state": "included",
+          "label": "RE: Q4 vendor contract renewal",
+          "meta": "5 messages · 1.5 MB of 25 MB",
+          "control": "Leave out the email"
+        }
+      ],
+      "modes": []
+    },
+    "ThreadFollowUp: +": {
+      "story": "thread-follow-up",
+      "chips": [
+        {
+          "kind": "outlook.thread",
+          "origin": "ambient",
+          "dismissScope": "item",
+          "state": "included",
+          "label": "RE: Q4 vendor contract renewal",
+          "meta": "5 messages · 1.5 MB of 25 MB",
+          "control": "Leave out the email"
+        }
+      ],
+      "modes": []
+    },
+    "ThreadFollowUpError: + loads": {
+      "story": "thread-follow-up-error",
+      "chips": [
+        {
+          "kind": "outlook.thread",
+          "origin": "ambient",
+          "dismissScope": "item",
+          "state": "included",
+          "label": "RE: Q4 vendor contract renewal",
+          "meta": "5 messages · 1.5 MB of 25 MB",
+          "control": "Leave out the email"
+        }
+      ],
+      "modes": []
+    },
+    "InteractiveRead: send": {
+      "story": "interactive-read",
+      "chips": [],
+      "modes": []
+    },
+    "Drops: Delete the first": {
+      "story": "drops",
+      "chips": [
+        {
+          "kind": "outlook.thread",
+          "origin": "ambient",
+          "dismissScope": "item",
+          "state": "included",
+          "label": "RE: Q4 vendor contract renewal",
+          "meta": "5 messages · 1.5 MB of 25 MB",
+          "control": "Leave out the email"
+        },
+        {
+          "kind": "outlook.droppedEmail",
+          "origin": "user",
+          "state": "included",
+          "label": "Budget 2027 draft",
+          "meta": "Jonas Weber • 10/12/2026 · 3/3 attachments",
+          "control": "Remove Budget 2027 draft"
+        }
+      ],
+      "modes": []
+    },
+    "Selection: Delete": {
+      "story": "selection",
+      "chips": [
+        {
+          "kind": "outlook.selection",
+          "origin": "ambient",
+          "dismissScope": "selection",
+          "state": "suggested",
+          "label": "“Could you confirm the delivery date by Friday?”",
+          "meta": null,
+          "control": "Include selection"
+        },
+        {
+          "kind": "outlook.draft",
+          "origin": "ambient",
+          "dismissScope": "item",
+          "state": "included",
+          "label": "Your draft",
+          "meta": "Reply to Anna Weber",
+          "control": "Don't include draft"
+        },
+        {
+          "kind": "outlook.draftAttachment",
+          "origin": "ambient",
+          "dismissScope": "item",
+          "state": "included",
+          "label": "contract-v3.pdf",
+          "meta": "Draft attachment · 482 KB",
+          "control": "Don't include contract-v3.pdf"
+        },
+        {
+          "kind": "outlook.draftAttachment",
+          "origin": "ambient",
+          "dismissScope": "item",
+          "state": "included",
+          "label": "pricing.xlsx",
+          "meta": "Draft attachment · 36 KB",
+          "control": "Don't include pricing.xlsx"
+        }
+      ],
+      "modes": []
+    },
+    "Draft: Delete": {
+      "story": "draft",
+      "chips": [
+        {
+          "kind": "outlook.draft",
+          "origin": "ambient",
+          "dismissScope": "item",
+          "state": "suggested",
+          "label": "Your draft",
+          "meta": null,
+          "control": "Include draft"
+        },
+        {
+          "kind": "outlook.draftAttachment",
+          "origin": "ambient",
+          "dismissScope": "item",
+          "state": "included",
+          "label": "contract-v3.pdf",
+          "meta": "Draft attachment · 482 KB",
+          "control": "Don't include contract-v3.pdf"
+        },
+        {
+          "kind": "outlook.draftAttachment",
+          "origin": "ambient",
+          "dismissScope": "item",
+          "state": "included",
+          "label": "pricing.xlsx",
+          "meta": "Draft attachment · 36 KB",
+          "control": "Don't include pricing.xlsx"
+        }
+      ],
+      "modes": []
+    },
+    "AttachmentsGroup: untick pricing, Delete": {
+      "story": "attachments-group",
+      "chips": [
+        {
+          "kind": "outlook.draft",
+          "origin": "ambient",
+          "dismissScope": "item",
+          "state": "included",
+          "label": "Your draft",
+          "meta": "Reply to Anna Weber",
+          "control": "Don't include draft"
+        },
+        {
+          "kind": "outlook.draftAttachments",
+          "origin": "ambient",
+          "dismissScope": "item",
+          "state": "suggested",
+          "label": "Draft attachments (3)",
+          "meta": null,
+          "control": "Include draft attachments"
+        }
+      ],
+      "modes": []
+    },
+    "Scheduling: End": {
+      "story": "scheduling",
+      "chips": [
+        {
+          "kind": "outlook.draft",
+          "origin": "ambient",
+          "dismissScope": "item",
+          "state": "included",
+          "label": "Your draft",
+          "meta": "Reply to Anna Weber",
+          "control": "Don't include draft"
+        },
+        {
+          "kind": "outlook.draftAttachment",
+          "origin": "ambient",
+          "dismissScope": "item",
+          "state": "included",
+          "label": "contract-v3.pdf",
+          "meta": "Draft attachment · 482 KB",
+          "control": "Don't include contract-v3.pdf"
+        },
+        {
+          "kind": "outlook.draftAttachment",
+          "origin": "ambient",
+          "dismissScope": "item",
+          "state": "included",
+          "label": "pricing.xlsx",
+          "meta": "Draft attachment · 36 KB",
+          "control": "Don't include pricing.xlsx"
+        }
+      ],
+      "modes": []
+    }
+  }
+}

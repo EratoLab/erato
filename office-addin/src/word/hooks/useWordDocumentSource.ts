@@ -43,6 +43,11 @@ export interface WordDocumentPreview {
 
 export interface WordDocumentSource {
   preview: WordDocumentPreview;
+  /**
+   * The last good capture of this document, for the chips' token estimate
+   * only: never a copy for a send, and never to be changed.
+   */
+  lastBuild: WordDocumentBuild | null;
   /** A send-ready copy: reuses an unchanged capture, joins a running one, or starts one. */
   capture: () => Promise<WordDocumentBuild | null>;
   captureExpectedSlow: () => boolean;
@@ -50,6 +55,12 @@ export interface WordDocumentSource {
   previousCapture: () => WordDocumentBuild | null;
   /** Records what a send carried, for the "changed since last send" label. */
   markSent: (build: WordDocumentBuild | null) => void;
+  /**
+   * Reads the document again now, though a failed read otherwise waits for
+   * the next send. `reading` turns true at once, so an unreadable document
+   * shows loading, not a last flash of its error.
+   */
+  retry: () => void;
 }
 
 export const WORD_CAPTURE_SLOW_MS = 300;
@@ -180,6 +191,7 @@ export function useWordDocumentSource({
   authoringEnabled?: boolean;
 }): WordDocumentSource {
   const [preview, setPreview] = useState<WordDocumentPreview>(INITIAL_PREVIEW);
+  const [lastBuild, setLastBuild] = useState<WordDocumentBuild | null>(null);
   const lastSentHashRef = useRef<string | null>(null);
   const generationRef = useRef(0);
   const cacheRef = useRef<CachedCapture | null>(null);
@@ -256,6 +268,7 @@ export function useWordDocumentSource({
             status: "unreadable",
             readError: error,
           });
+          setLastBuild(null);
           return entry;
         }
         const hash = hashDocument(
@@ -275,6 +288,7 @@ export function useWordDocumentSource({
             lastSentHashRef.current !== hash,
           reading: false,
         });
+        setLastBuild(build);
         return entry;
       });
     flightRef.current = { promise, authoring, generation, startedAt };
@@ -302,6 +316,7 @@ export function useWordDocumentSource({
     flightRef.current = null;
     lastSentHashRef.current = null;
     setPreview(INITIAL_PREVIEW);
+    setLastBuild(null);
   }, [documentIdentity]);
 
   useEffect(
@@ -397,5 +412,20 @@ export function useWordDocumentSource({
     [],
   );
 
-  return { preview, capture, captureExpectedSlow, previousCapture, markSent };
+  const retry = useCallback(() => {
+    setPreview((previous) =>
+      previous.reading ? previous : { ...previous, reading: true },
+    );
+    void startCapture();
+  }, [startCapture]);
+
+  return {
+    preview,
+    lastBuild,
+    capture,
+    captureExpectedSlow,
+    previousCapture,
+    markSent,
+    retry,
+  };
 }
