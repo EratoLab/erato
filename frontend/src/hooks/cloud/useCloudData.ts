@@ -28,6 +28,7 @@ interface UseCloudDataOptions {
   itemId: string | null;
   /** Optional drive search query */
   searchQuery?: string;
+  enabled?: boolean;
 }
 
 interface UseCloudDataResult {
@@ -50,6 +51,7 @@ export function useCloudData({
   driveId,
   itemId,
   searchQuery,
+  enabled = true,
 }: UseCloudDataOptions): UseCloudDataResult {
   // Only Sharepoint is supported for now
   if (provider !== "sharepoint") {
@@ -64,20 +66,23 @@ export function useCloudData({
     isLoading: isDrivesLoading,
     error: drivesError,
     refetch: refetchDrives,
-  } = useAllDrives({
-    ...(normalizedSearchQuery
-      ? {
-          queryParams: {
-            query: normalizedSearchQuery,
-          },
-        }
-      : {}),
-  });
+  } = useAllDrives(
+    {
+      ...(normalizedSearchQuery
+        ? {
+            queryParams: {
+              query: normalizedSearchQuery,
+            },
+          }
+        : {}),
+    },
+    { enabled: enabled && !driveId },
+  );
 
   // Fetch items from current location
   // Use getDriveRoot if no itemId, otherwise getDriveItemChildren
-  const shouldFetchRoot = !!driveId && !itemId;
-  const shouldFetchChildren = !!driveId && !!itemId;
+  const shouldFetchRoot = enabled && !!driveId && !itemId;
+  const shouldFetchChildren = enabled && !!driveId && !!itemId;
 
   const {
     data: rootData,
@@ -144,14 +149,19 @@ export function useCloudData({
   ]);
 
   // Combine loading states
-  const isLoading = isDrivesLoading || isRootLoading || isChildrenLoading;
+  const isLoading =
+    (!driveId && isDrivesLoading) ||
+    (shouldFetchRoot && isRootLoading) ||
+    (shouldFetchChildren && isChildrenLoading);
 
   // Combine errors (prioritize drives error since it's always needed)
   // Convert React Query error types to standard Error
   const error =
-    (drivesError ? new Error(String(drivesError)) : null) ??
-    (rootError ? new Error(String(rootError)) : null) ??
-    (childrenError ? new Error(String(childrenError)) : null) ??
+    (!driveId && drivesError ? new Error(String(drivesError)) : null) ??
+    (shouldFetchRoot && rootError ? new Error(String(rootError)) : null) ??
+    (shouldFetchChildren && childrenError
+      ? new Error(String(childrenError))
+      : null) ??
     null;
 
   // Refetch items based on current state

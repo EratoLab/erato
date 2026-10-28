@@ -3514,6 +3514,19 @@ export type RetryDelegatedRunResponse = {
  */
 export type RetryKind = "task";
 
+/**
+ * A drive item (file or folder)
+ */
+export type SearchFileHit = DriveItem & {
+  drive_id: string;
+  drive_name: string;
+  /**
+   * Parent folder path relative to the drive. None means Graph did not supply a usable path.
+   */
+  parent_path?: string;
+  site_name?: string;
+};
+
 export type SetShareLinkRequest = {
   enabled: boolean;
   resource_id: string;
@@ -3630,6 +3643,19 @@ export type SharepointProviderMetadata = {
    * The ID of the file item
    */
   item_id: string;
+};
+
+export type SharepointSearchResponse = {
+  drives: Drive[];
+  files: SearchFileHit[];
+  /**
+   * Some discovery/search calls failed or timed out; successful hits are still usable.
+   */
+  partial: boolean;
+  /**
+   * A discovery, pagination, or result budget was reached. Refine the query.
+   */
+  truncated: boolean;
 };
 
 export type StartMcpServerOauthResponse = {

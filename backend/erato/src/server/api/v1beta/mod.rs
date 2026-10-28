@@ -387,6 +387,10 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         )
         // Sharepoint/OneDrive integration routes
         .route(
+            "/integrations/sharepoint/search",
+            get(sharepoint::search_sharepoint),
+        )
+        .route(
             "/integrations/sharepoint/all-drives",
             get(sharepoint::all_drives),
         )
@@ -531,6 +535,7 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         share_links::share_link_messages,
         ms_office::ews_proxy,
         sharepoint::all_drives,
+        sharepoint::search::search_sharepoint,
         sharepoint::get_drive_root,
         sharepoint::get_drive_item,
         sharepoint::get_drive_item_children,
@@ -669,6 +674,8 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         sharepoint::AllDrivesResponse,
         sharepoint::DriveItemsResponse,
         sharepoint::DriveItemResponse,
+        sharepoint::SearchFileHit,
+        sharepoint::SharepointSearchResponse,
         entra_id::OrganizationUser,
         entra_id::OrganizationUsersResponse,
         entra_id::OrganizationGroup,
