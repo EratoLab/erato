@@ -875,11 +875,11 @@ bounded_text_preview = true
 # project_id = "your-project" # Omit when using an Express-mode api_key
 # location = "global"
 #
-# Gemini Live uses the regional WebSocket API and an OAuth access token.
+# Gemini Live uses the regional WebSocket API with an API key or OAuth token.
 # [speech_providers.provider.google_live]
 # provider_kind = "gemini_live"
 # model_name = "gemini-3.8-live"
 # voice = "Kore"
-# access_token = "your-oauth-access-token"
+# api_key = "your-api-key" # Alternatively set access_token for OAuth
 # project_id = "your-project"
 # location = "eu"

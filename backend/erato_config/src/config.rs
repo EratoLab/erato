@@ -1893,8 +1893,8 @@ impl AppConfig {
             }
             if provider.provider_kind == "gemini_live" {
                 assert!(
-                    provider.access_token.is_some() && provider.api_key.is_none(),
-                    "Gemini Live speech provider {id} requires access_token and does not support api_key"
+                    provider.access_token.is_some() != provider.api_key.is_some(),
+                    "Gemini Live speech provider {id} requires exactly one of api_key or access_token"
                 );
                 assert!(
                     provider
