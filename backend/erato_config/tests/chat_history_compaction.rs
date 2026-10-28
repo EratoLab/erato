@@ -32,6 +32,7 @@ fn enabled_compaction_requires_explicit_existing_provider() {
     config.chat_history_compaction.chat_provider_id = Some("summary".into());
     assert!(config.validate_chat_history_compaction().is_err());
     config.chat_providers = Some(ChatProvidersConfig {
+        replacement_providers: Vec::new(),
         priority_order: vec!["summary".into()],
         all_providers: Default::default(),
         providers: HashMap::from([("summary".into(), ChatProviderConfig::default())]),

@@ -1,4 +1,5 @@
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -84,11 +85,24 @@ describe("AddinSetupRoute Word branch", () => {
       .filter((url) => url.includes("manifest"));
   }
 
-  async function selectWord() {
+  async function selectWord(
+    distribution:
+      | "Microsoft 365 admin center"
+      | "SharePoint app catalog"
+      | null = "Microsoft 365 admin center",
+  ) {
     render(<AddinSetupRoute />);
     await waitFor(() => expect(fetchedManifests()).toHaveLength(1));
     fireEvent.click(screen.getByRole("button", { name: "Word" }));
-    await waitFor(() => expect(fetchedManifests()).toHaveLength(2));
+    if (distribution) {
+      fireEvent.click(screen.getByRole("button", { name: distribution }));
+      await waitFor(() => expect(fetchedManifests()).toHaveLength(2));
+      await waitFor(() =>
+        expect(
+          screen.getByRole("button", { name: "Download Word manifest" }),
+        ).toBeEnabled(),
+      );
+    }
   }
 
   it("offers Word as a selectable product and refetches the document manifest", async () => {
@@ -121,7 +135,7 @@ describe("AddinSetupRoute Word branch", () => {
 
     const anchor = stubDownload();
     fireEvent.click(
-      screen.getByRole("button", { name: "Download manifest-document.xml" }),
+      screen.getByRole("button", { name: "Download Word manifest" }),
     );
 
     expect(anchor.click).toHaveBeenCalled();
@@ -156,25 +170,109 @@ describe("AddinSetupRoute Word branch", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("names both delivery routes, the Mac gap, and both sign-in redirect URIs", async () => {
-    await selectWord();
+  it("requires an explicit distribution choice before fetching or downloading", async () => {
+    await selectWord(null);
+    expect(fetchedManifests()).toHaveLength(1);
+    expect(
+      screen.getByRole("button", { name: "Download Word manifest" }),
+    ).toBeDisabled();
+    expect(screen.getByLabelText("Manifest preview")).toHaveValue("");
+    expect(
+      screen.getByText(/eligible Microsoft 365 subscription licences/),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: /Network share/ }),
+    ).not.toBeInTheDocument();
+  });
 
-    expect(screen.getByRole("link", { name: "Integrated Apps" })).toBeVisible();
+  it("shows only integrated deployment instructions and shared authentication prerequisites", async () => {
+    await selectWord();
+    expect(fetchedManifests().at(-1)).toContain("distribution=integrated-apps");
     expect(
-      screen.getByRole("link", { name: "SharePoint app catalog" }),
+      screen.getByText(/Assign it to the intended users or groups/),
     ).toBeVisible();
     expect(
-      screen.getByText(
-        /Word on Mac is not supported for on-premises mailboxes/,
-      ),
-    ).toBeVisible();
+      screen.queryByText(/Upload the XML to the Apps for Office library/),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: "Open app catalog docs" }),
+    ).not.toBeInTheDocument();
+    fireEvent.click(screen.getByText("Authentication prerequisites"));
     expect(
       screen.getByText(`brk-multihub://${window.location.host}`),
     ).toBeVisible();
     expect(
       screen.getByText(`${window.location.origin}/oauth2/callback`),
     ).toBeVisible();
-    expect(screen.getByText('cookie_samesite = "none"')).toBeVisible();
+  });
+
+  it("downloads the SharePoint variant and shows its instructions only", async () => {
+    await selectWord("SharePoint app catalog");
+    expect(fetchedManifests().at(-1)).toContain("distribution=sharepoint");
+    expect(
+      screen.getByText(/Upload the XML to the Apps for Office library/),
+    ).toBeVisible();
+    expect(
+      screen.queryByText(/Assign it to the intended users or groups/),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: "Open Integrated Apps" }),
+    ).not.toBeInTheDocument();
+    const anchor = stubDownload();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Download Word manifest" }),
+    );
+    expect(anchor.download).toBe("manifest-document-sharepoint.xml");
+  });
+
+  it("disables downloads while switching and ignores a superseded response", async () => {
+    await selectWord();
+    let resolveSharepoint!: (value: string) => void;
+    const pending = new Promise<string>((resolve) => {
+      resolveSharepoint = resolve;
+    });
+    vi.mocked(globalThis.fetch).mockImplementation(
+      async (url) =>
+        ({
+          ok: true,
+          text: async () =>
+            String(url).includes("distribution=sharepoint")
+              ? pending
+              : "<OfficeApp>integrated</OfficeApp>",
+        }) as Response,
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "SharePoint app catalog" }),
+    );
+    expect(
+      screen.getByRole("button", { name: "Download Word manifest" }),
+    ).toBeDisabled();
+    expect(screen.getByLabelText("Manifest preview")).not.toHaveValue(
+      "<OfficeApp />",
+    );
+    await waitFor(() =>
+      expect(fetchedManifests().at(-1)).toContain("distribution=sharepoint"),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Microsoft 365 admin center" }),
+    );
+    await waitFor(() =>
+      expect(screen.getByLabelText("Manifest preview")).toHaveValue(
+        "<OfficeApp>integrated</OfficeApp>",
+      ),
+    );
+    await act(async () => {
+      resolveSharepoint("<OfficeApp>sharepoint</OfficeApp>");
+      await pending;
+    });
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Download Word manifest" }),
+      ).toBeEnabled(),
+    );
+    expect(screen.getByLabelText("Manifest preview")).toHaveValue(
+      "<OfficeApp>integrated</OfficeApp>",
+    );
   });
 });
 

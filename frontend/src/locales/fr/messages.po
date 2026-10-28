@@ -707,6 +707,11 @@ msgstr "Impossible de mettre a jour les soumissions du hub."
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubMyPage.tsx
+msgid "assistantHub.my.loadError"
+msgstr "Impossible de charger vos soumissions au hub."
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubMyPage.tsx
 msgid "assistantHub.my.loading"
 msgstr "Chargement des soumissions..."
 
@@ -811,6 +816,11 @@ msgid "assistantHub.my.withdrawConfirmTitle"
 msgstr "Retirer la soumission"
 
 #. js-lingui-explicit-id
+#: src/pages/AssistantHubMyPage.tsx
+msgid "assistantHub.my.withdrawSuccess"
+msgstr "Soumission retirée."
+
+#. js-lingui-explicit-id
 #: src/pages/assistantHubUtils.tsx
 msgid "assistantHub.rating.none"
 msgstr "Aucune note pour le moment"
@@ -829,6 +839,11 @@ msgstr "{formattedScore} / 10 (1 note)"
 #: src/pages/AssistantHubReviewPage.tsx
 msgid "assistantHub.review.accept"
 msgstr "Accepter"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubReviewPage.tsx
+msgid "assistantHub.review.acceptSuccess"
+msgstr "Version acceptée."
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubReviewPage.tsx
@@ -857,6 +872,11 @@ msgstr "Refuser"
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubReviewPage.tsx
+msgid "assistantHub.review.declineSuccess"
+msgstr "Version refusée."
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubReviewPage.tsx
 msgid "assistantHub.review.diff"
 msgstr "Changements depuis la version precedente"
 
@@ -879,6 +899,11 @@ msgstr "Impossible de mettre a jour l'etat de revue du hub des assistants."
 #: src/pages/AssistantHubReviewPage.tsx
 msgid "assistantHub.review.feature"
 msgstr "Mettre l'assistant en avant"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubReviewPage.tsx
+msgid "assistantHub.review.loadError"
+msgstr "Impossible de charger les soumissions à revoir."
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubReviewPage.tsx
@@ -1004,6 +1029,11 @@ msgstr "{0} / 10"
 #: src/pages/AssistantHubDetailPage.tsx
 msgid "assistantHub.reviews.submit"
 msgstr "Envoyer la revue"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubDetailPage.tsx
+msgid "assistantHub.reviews.success"
+msgstr "Revue enregistrée."
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubDetailPage.tsx
@@ -1177,6 +1207,11 @@ msgstr "Creer une version revue immuable a partir du brouillon d'assistant actue
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubSubmitPage.tsx
+msgid "assistantHub.submit.success"
+msgstr "Version soumise pour revue."
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubSubmitPage.tsx
 msgid "assistantHub.submit.title"
 msgstr "Soumettre au hub"
 
@@ -1262,6 +1297,11 @@ msgstr "Voulez-vous vraiment archiver cet assistant ?"
 #: src/pages/AssistantsPage.tsx
 msgid "assistants.archive.confirmTitle"
 msgstr "Confirmer l'archivage"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantsPage.tsx
+msgid "assistants.archive.error"
+msgstr "Impossible d'archiver l'assistant. Veuillez réessayer."
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantsPage.tsx
@@ -1591,6 +1631,31 @@ msgid "chat.attachments.toggle"
 msgstr "Afficher ou masquer les pièces jointes"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "chat.audio_back"
+msgstr "Réponse vocale"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "chat.audio_blocked"
+msgstr "Lecture automatique bloquée. Écoutez la réponse terminée ci-dessous."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "chat.audio_failed"
+msgstr "Audio indisponible. Votre réponse textuelle reste disponible."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/MessageContent.tsx
+msgid "chat.audio_replay"
+msgstr "Réécouter la réponse audio"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "chat.audio_stop"
+msgstr "Arrêter la lecture"
+
+#. js-lingui-explicit-id
 #: src/components/ui/FileUpload/audioTranscriptionStatus.ts
 msgid "chat.audio.announce.failed"
 msgstr "{filename} : transcription impossible."
@@ -1821,6 +1886,11 @@ msgstr "Déposez pour téléverser"
 #: src/components/ui/Chat/ChatInputTokenUsage.tsx
 #~ msgid "chat.files.reference_only"
 #~ msgstr "Référence uniquement — le contenu du fichier est omis"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/chatActionFeedback.ts
+msgid "chat.history.archiveFailed"
+msgstr "Impossible d'archiver la discussion"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/DelegatedRunsSection.tsx
@@ -2142,6 +2212,11 @@ msgid "chat.history.menu.unpin"
 msgstr "Désépingler"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Chat/chatActionFeedback.ts
+msgid "chat.history.pinFailed"
+msgstr "Impossible d'épingler la discussion"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatHistorySidebar.tsx
 msgid "chat.history.pinned"
 msgstr "Épinglés"
@@ -2189,9 +2264,19 @@ msgid "chat.history.rename.userProvided.placeholder"
 msgstr "Laissez vide pour utiliser le titre généré"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/unarchiveFeedback.ts
+#: src/components/ui/Chat/chatActionFeedback.ts
+msgid "chat.history.renameFailed"
+msgstr "Impossible de renommer la discussion"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/chatActionFeedback.ts
 msgid "chat.history.unarchiveFailed"
 msgstr "Impossible de désarchiver la discussion"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/chatActionFeedback.ts
+msgid "chat.history.unpinFailed"
+msgstr "Impossible de désépingler la discussion"
 
 #. js-lingui-explicit-id
 #: src/hooks/audio/useAudioTranscriptionRecorder.ts
@@ -2800,6 +2885,11 @@ msgstr "Toute personne connectée à cette organisation peut le consulter."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatShareDialog.tsx
+msgid "chat.share.toggle.error"
+msgstr "Impossible de mettre à jour le lien de partage. Veuillez réessayer."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatShareDialog.tsx
 msgid "chat.share.toggle.label"
 msgstr "Activer le lien de partage"
 
@@ -3173,19 +3263,85 @@ msgid "cloudFilePicker.error.selectFiles"
 msgstr "Échec de la sélection des fichiers. Veuillez réessayer."
 
 #. js-lingui-explicit-id
+#: src/components/ui/CloudFilePicker/CloudSearchResults.tsx
+#~ msgid "cloudFilePicker.fileBytes"
+#~ msgstr "{size} octets"
+
+#. js-lingui-explicit-id
+#: src/components/ui/CloudFilePicker/CloudFilePicker.tsx
+msgid "cloudFilePicker.loadError"
+msgstr "Impossible de charger les fichiers. Veuillez réessayer."
+
+#. js-lingui-explicit-id
 #: src/components/ui/CloudFilePicker/CloudFilePicker.tsx
 msgid "cloudFilePicker.navigation.goBack"
 msgstr "Retour"
 
 #. js-lingui-explicit-id
+#: src/components/ui/CloudFilePicker/CloudSearchResults.tsx
+msgid "cloudFilePicker.noResults"
+msgstr "Aucun lecteur ni fichier correspondant trouvé."
+
+#. js-lingui-explicit-id
+#: src/components/ui/CloudFilePicker/CloudSearchResults.tsx
+#~ msgid "cloudFilePicker.pathUnavailable"
+#~ msgstr "Chemin du dossier indisponible"
+
+#. js-lingui-explicit-id
 #: src/components/ui/CloudFilePicker/CloudFilePicker.tsx
-msgid "cloudFilePicker.searchDrives"
-msgstr "Rechercher des lecteurs..."
+msgid "cloudFilePicker.removeFile"
+msgstr "Retirer {fileName}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/CloudFilePicker/CloudFilePicker.tsx
+#: src/components/ui/CloudFilePicker/CloudSearchResults.tsx
+msgid "cloudFilePicker.retry"
+msgstr "Réessayer"
+
+#. js-lingui-explicit-id
+#: src/components/ui/CloudFilePicker/CloudFilePicker.tsx
+msgid "cloudFilePicker.search"
+msgstr "Rechercher des lecteurs et des fichiers…"
+
+#. js-lingui-explicit-id
+#: src/components/ui/CloudFilePicker/CloudFilePicker.tsx
+#~ msgid "cloudFilePicker.searchDrives"
+#~ msgstr "Rechercher des lecteurs..."
+
+#. js-lingui-explicit-id
+#: src/components/ui/CloudFilePicker/CloudSearchResults.tsx
+msgid "cloudFilePicker.searchError"
+msgstr "La recherche a échoué. Veuillez réessayer."
+
+#. js-lingui-explicit-id
+#: src/components/ui/CloudFilePicker/CloudSearchResults.tsx
+msgid "cloudFilePicker.searching"
+msgstr "Recherche de lecteurs et de fichiers…"
+
+#. js-lingui-explicit-id
+#: src/components/ui/CloudFilePicker/CloudSearchResults.tsx
+#~ msgid "cloudFilePicker.searchPartial"
+#~ msgstr "Certains emplacements n’ont pas pu être parcourus. Les résultats peuvent être incomplets."
+
+#. js-lingui-explicit-id
+#: src/components/ui/CloudFilePicker/CloudSearchResults.tsx
+msgid "cloudFilePicker.searchTruncated"
+msgstr "Limite de recherche atteinte. Affinez votre recherche pour trouver davantage de fichiers."
+
+#. js-lingui-explicit-id
+#: src/components/ui/CloudFilePicker/CloudFilePicker.tsx
+msgid "cloudFilePicker.selectedFiles"
+msgstr "Fichiers sélectionnés"
 
 #. js-lingui-explicit-id
 #: src/components/ui/CloudFilePicker/CloudFilePicker.tsx
 msgid "cloudFilePicker.selection.filesSelected"
 msgstr "fichiers sélectionnés"
+
+#. js-lingui-explicit-id
+#: src/hooks/cloud/useCloudSelection.ts
+msgid "cloudFilePicker.selection.limit"
+msgstr "Vous pouvez sélectionner au maximum {maxFiles} fichiers"
 
 #. js-lingui-explicit-id
 #: src/components/ui/CloudFilePicker/CloudFilePicker.tsx
@@ -3206,6 +3362,11 @@ msgstr "sur"
 #: src/components/ui/CloudFilePicker/CloudFilePicker.tsx
 msgid "cloudFilePicker.selection.oneFile"
 msgstr "1 fichier sélectionné"
+
+#. js-lingui-explicit-id
+#: src/hooks/cloud/useCloudSelection.ts
+msgid "cloudFilePicker.selection.unsupported"
+msgstr "Ce type de fichier n’est pas pris en charge actuellement"
 
 #. js-lingui-explicit-id
 #: src/components/ui/CloudFilePicker/CloudFilePicker.tsx
@@ -3573,6 +3734,11 @@ msgstr "Programme d’installation"
 
 #. js-lingui-explicit-id
 #: src/pages/DesktopSidecarSetupPage.tsx
+msgid "desktopSidecar.setup.artifact.intunewin"
+msgstr "Paquet Microsoft Intune"
+
+#. js-lingui-explicit-id
+#: src/pages/DesktopSidecarSetupPage.tsx
 msgid "desktopSidecar.setup.artifact.recommended"
 msgstr "Recommandé"
 
@@ -3795,6 +3961,11 @@ msgstr "Le feedback n'a pas pu être supprimé. Veuillez réessayer."
 
 #. js-lingui-explicit-id
 #: src/hooks/chat/useMessageFeedback.ts
+msgid "feedback.error.submit_failed"
+msgstr "Impossible d'envoyer le commentaire. Veuillez réessayer."
+
+#. js-lingui-explicit-id
+#: src/hooks/chat/useMessageFeedback.ts
 msgid "feedback.error.time_limit_exceeded"
 msgstr "La fenêtre de modification a expiré. Le feedback ne peut plus être modifié."
 
@@ -3813,6 +3984,11 @@ msgstr "J'aime ce message"
 #: src/components/ui/Feedback/FeedbackViewDialog.tsx
 msgid "feedback.remove"
 msgstr "Supprimer"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Feedback/FeedbackViewDialog.tsx
+msgid "feedback.removing"
+msgstr "Suppression..."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Feedback/FeedbackViewDialog.tsx
@@ -5395,6 +5571,7 @@ msgstr "Arrêter le test"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
+#: src/pages/AssistantsPage.tsx
 msgid "preferences.dialog.dataTab.archiveAll.archiving"
 msgstr "Archivage..."
 

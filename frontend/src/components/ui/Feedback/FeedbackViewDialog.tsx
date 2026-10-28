@@ -19,6 +19,7 @@ interface FeedbackViewDialogProps {
   feedback: MessageFeedback | null;
   canEdit: boolean;
   error?: string | null;
+  isRemoving?: boolean;
 }
 
 export const FeedbackViewDialog: React.FC<FeedbackViewDialogProps> = ({
@@ -29,6 +30,7 @@ export const FeedbackViewDialog: React.FC<FeedbackViewDialogProps> = ({
   feedback,
   canEdit,
   error,
+  isRemoving = false,
 }) => {
   const handleEdit = useCallback(() => {
     onEdit();
@@ -50,7 +52,10 @@ export const FeedbackViewDialog: React.FC<FeedbackViewDialogProps> = ({
       <div className="space-y-4">
         {/* Error message */}
         {error && (
-          <div className="rounded-md bg-theme-error-bg p-3 text-sm text-theme-error-fg">
+          <div
+            role="alert"
+            className="rounded-md bg-theme-error-bg p-3 text-sm text-theme-error-fg"
+          >
             {error}
           </div>
         )}
@@ -92,13 +97,22 @@ export const FeedbackViewDialog: React.FC<FeedbackViewDialogProps> = ({
             <Button
               variant="danger"
               onClick={onRemove}
+              disabled={isRemoving}
               className="mr-auto"
-              aria-label={t({
-                id: "feedback.remove",
-                message: "Remove",
-              })}
+              aria-label={
+                isRemoving
+                  ? t({ id: "feedback.removing", message: "Removing..." })
+                  : t({
+                      id: "feedback.remove",
+                      message: "Remove",
+                    })
+              }
             >
-              <Trans id="feedback.remove">Remove</Trans>
+              {isRemoving ? (
+                <Trans id="feedback.removing">Removing...</Trans>
+              ) : (
+                <Trans id="feedback.remove">Remove</Trans>
+              )}
             </Button>
           )}
           <Button
@@ -115,6 +129,7 @@ export const FeedbackViewDialog: React.FC<FeedbackViewDialogProps> = ({
             <Button
               variant="primary"
               onClick={handleEdit}
+              disabled={isRemoving}
               aria-label={t({
                 id: "Edit",
                 message: "Edit",

@@ -15,6 +15,11 @@ import { FileUploadWithTokenCheck } from "@/components/ui/FileUpload/FileUploadW
 import { isAudioTranscriptionComplete } from "@/components/ui/FileUpload/audioTranscriptionStatus";
 import { ConfirmationDialog } from "@/components/ui/Modal/ConfirmationDialog";
 import { componentRegistry } from "@/config/componentRegistry";
+import {
+  enableSpeechPlayback,
+  stopSpeechPlayback,
+  useSpeechPlayback,
+} from "@/hooks/audio/speechPlayback";
 import { useAudioDictationRecorder } from "@/hooks/audio/useAudioDictationRecorder";
 import { useAudioTranscriptionRecorder } from "@/hooks/audio/useAudioTranscriptionRecorder";
 import { useTokenManagement, useActiveModelSelection } from "@/hooks/chat";
@@ -523,8 +528,23 @@ export const ChatInput = ({
   } = useAudioDictationFeature();
   const {
     enabled: audioConversationalEnabled,
+    speechEnabled,
     maxRecordingDurationSeconds: maxConversationalDurationSeconds,
   } = useAudioConversationalFeature();
+  const speech = useSpeechPlayback();
+  useEffect(() => {
+    useSpeechPlayback.setState({
+      conversational: isAudioMode && Boolean(speechEnabled),
+    });
+    if (!isAudioMode) stopSpeechPlayback();
+  }, [isAudioMode, speechEnabled]);
+  useEffect(
+    () => () => {
+      useSpeechPlayback.setState({ conversational: false });
+      stopSpeechPlayback();
+    },
+    [],
+  );
   const { autofocus: shouldAutofocus, maxFiles: maxFilesPerMessage } =
     useChatInputFeature();
   const aiUsageAdvisory = useOptionalTranslation("chat.ai_usage_advisory");
@@ -2703,7 +2723,7 @@ export const ChatInput = ({
     if (!shouldRestartAudioModeAfterResponseRef.current) {
       return;
     }
-    if (!isPendingResponse) {
+    if (!isPendingResponse || (speechEnabled && speech.enabled)) {
       return;
     }
     if (
@@ -2741,6 +2761,9 @@ export const ChatInput = ({
     isFileButtonProcessing,
     isLoading,
     isPendingResponse,
+    speech.enabled,
+    speech.playing,
+    speechEnabled,
     isRecording,
     isRecordingUpload,
     isUploading,
@@ -2755,7 +2778,7 @@ export const ChatInput = ({
     if (!audioModeRestartSawPendingResponseRef.current) {
       return;
     }
-    if (!isAudioMode || isPendingResponse) {
+    if (!isAudioMode || isPendingResponse || speech.playing) {
       return;
     }
     if (
@@ -2793,6 +2816,9 @@ export const ChatInput = ({
     isFileButtonProcessing,
     isLoading,
     isPendingResponse,
+    speech.enabled,
+    speech.playing,
+    speechEnabled,
     isRecording,
     isRecordingUpload,
     isUploading,
@@ -3410,6 +3436,47 @@ export const ChatInput = ({
                     onCancel={cancelDelegationRunModeChoice}
                   />
                 </div>
+              )}
+              {isAudioMode && speechEnabled && (
+                <>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    aria-pressed={speech.enabled}
+                    onClick={() => void enableSpeechPlayback(!speech.enabled)}
+                  >
+                    {t({ id: "chat.audio_back", message: "Audio-back" })}
+                  </Button>
+                  {speech.playing && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => stopSpeechPlayback()}
+                    >
+                      {t({ id: "chat.audio_stop", message: "Stop playback" })}
+                    </Button>
+                  )}
+                  {speech.blocked && (
+                    <span role="status">
+                      {t({
+                        id: "chat.audio_blocked",
+                        message:
+                          "Autoplay blocked. Replay the completed response below.",
+                      })}
+                    </span>
+                  )}
+                  {speech.failed && (
+                    <span role="status">
+                      {t({
+                        id: "chat.audio_failed",
+                        message:
+                          "Audio unavailable. Your text response is still available.",
+                      })}
+                    </span>
+                  )}
+                </>
               )}
               {isAudioMode && (
                 <Button

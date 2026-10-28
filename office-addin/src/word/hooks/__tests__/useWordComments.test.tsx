@@ -146,6 +146,19 @@ describe("useWordComments", () => {
     expect(word.calls()).not.toContain("range.getComments");
   });
 
+  it.each([
+    ["pc", "alpha bravo", ""],
+    ["web", null, null],
+  ] as const)(
+    "tells a point comment from an anchor whose text the read left out on %s",
+    async (host, t1, t5) => {
+      install({ host, selection: { tag: "END", offset: 0 } });
+      const list = await ready(mount());
+      expect(refOf(list, "T1").quote).toBe(t1);
+      expect(refOf(list, "T5").quote).toBe(t5);
+    },
+  );
+
   it("learns once per document whether it is legacy, with one package on desktop", async () => {
     install({ selection: PASSAGE_OVER_T1 });
     const hook = mount();

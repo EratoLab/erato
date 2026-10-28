@@ -20,3 +20,4 @@ jsonschema = { version = "0.30.0", default-features = false }
 tracing = "0.1.41"
 utoipa = { version = "5.3.1", features = ["uuid", "chrono"] }
 url = "2.5.8"
+uuid = "1"

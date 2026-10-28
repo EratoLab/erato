@@ -1,5 +1,6 @@
 import { i18n } from "@lingui/core";
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -127,10 +128,12 @@ describe("AddinChatAddMenuExtraContent", () => {
     state.currentThread = null;
     state.stagedEmails = [];
     state.policyExcludedAttachmentIds = new Map();
+    state.getAttachmentFile.mockReset();
   });
   afterEach(() => {
     cleanup();
     vi.clearAllMocks();
+    vi.restoreAllMocks();
   });
 
   it("points at the chips for what is already in the composer", () => {
@@ -214,6 +217,56 @@ describe("AddinChatAddMenuExtraContent", () => {
     await waitFor(() => expect(onSelectFiles).toHaveBeenCalledWith([file]));
     expect(onClose).toHaveBeenCalled();
     expectNoRestore();
+  });
+
+  it("holds the attachment rows from the click until Outlook hands the file over", async () => {
+    let handOver: (file: File) => void = () => {};
+    state.getAttachmentFile.mockImplementation(
+      () =>
+        new Promise<File>((resolve) => {
+          handOver = resolve;
+        }),
+    );
+    const { onSelectFiles, onClose } = renderMenu(
+      menuState({ attachments: "upload" }, { row: "add-again" }),
+    );
+
+    const row = screen.getByTestId("addin-add-menu-attachment-att-1");
+    fireEvent.click(row);
+    expect(row).toBeDisabled();
+    expect(screen.getByTestId("addin-add-menu-email-thread")).toBeDisabled();
+    fireEvent.click(row);
+    expect(state.getAttachmentFile).toHaveBeenCalledTimes(1);
+
+    const file = new File(["report"], "quarterly-report.pdf");
+    await act(async () => {
+      handOver(file);
+    });
+    expect(onSelectFiles).toHaveBeenCalledTimes(1);
+    expect(onSelectFiles).toHaveBeenCalledWith([file]);
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("says so in the menu when Outlook can't hand the attachment over", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    state.getAttachmentFile.mockRejectedValue(new Error("InternalError"));
+    const { onSelectFiles, onClose } = renderMenu(
+      menuState({ attachments: "upload" }),
+    );
+
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("addin-add-menu-attachment-att-1"));
+    });
+
+    const alert = screen.getByRole("alert");
+    expect(alert).toHaveTextContent(
+      "Couldn't load this attachment from Outlook. Try again.",
+    );
+    expect(alert).toHaveAttribute("data-tone", "error");
+    expect(alert).not.toHaveAttribute("data-row-item");
+    expect(onSelectFiles).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
+    expect(screen.getByTestId("addin-add-menu-attachment-att-1")).toBeEnabled();
   });
 
   it("keeps an upload row disabled when the composer has no room or no upload path", () => {

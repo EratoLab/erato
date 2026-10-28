@@ -707,6 +707,11 @@ msgstr "Failed to update hub submissions."
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubMyPage.tsx
+msgid "assistantHub.my.loadError"
+msgstr "Could not load your hub submissions."
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubMyPage.tsx
 msgid "assistantHub.my.loading"
 msgstr "Loading submissions..."
 
@@ -811,6 +816,11 @@ msgid "assistantHub.my.withdrawConfirmTitle"
 msgstr "Withdraw submission"
 
 #. js-lingui-explicit-id
+#: src/pages/AssistantHubMyPage.tsx
+msgid "assistantHub.my.withdrawSuccess"
+msgstr "Submission withdrawn."
+
+#. js-lingui-explicit-id
 #: src/pages/assistantHubUtils.tsx
 msgid "assistantHub.rating.none"
 msgstr "No ratings yet"
@@ -829,6 +839,11 @@ msgstr "{formattedScore} / 10 (1 rating)"
 #: src/pages/AssistantHubReviewPage.tsx
 msgid "assistantHub.review.accept"
 msgstr "Accept"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubReviewPage.tsx
+msgid "assistantHub.review.acceptSuccess"
+msgstr "Version accepted."
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubReviewPage.tsx
@@ -857,6 +872,11 @@ msgstr "Decline"
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubReviewPage.tsx
+msgid "assistantHub.review.declineSuccess"
+msgstr "Version declined."
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubReviewPage.tsx
 msgid "assistantHub.review.diff"
 msgstr "Changes from previous accepted version"
 
@@ -879,6 +899,11 @@ msgstr "Failed to update assistant hub review state."
 #: src/pages/AssistantHubReviewPage.tsx
 msgid "assistantHub.review.feature"
 msgstr "Feature assistant"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubReviewPage.tsx
+msgid "assistantHub.review.loadError"
+msgstr "Could not load the submissions to review."
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubReviewPage.tsx
@@ -1004,6 +1029,11 @@ msgstr "{0} / 10"
 #: src/pages/AssistantHubDetailPage.tsx
 msgid "assistantHub.reviews.submit"
 msgstr "Submit review"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubDetailPage.tsx
+msgid "assistantHub.reviews.success"
+msgstr "Review saved."
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubDetailPage.tsx
@@ -1177,6 +1207,11 @@ msgstr "Create an immutable reviewed version from the current assistant draft"
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubSubmitPage.tsx
+msgid "assistantHub.submit.success"
+msgstr "Version submitted for review."
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubSubmitPage.tsx
 msgid "assistantHub.submit.title"
 msgstr "Submit to Hub"
 
@@ -1262,6 +1297,11 @@ msgstr "Are you sure you want to archive this assistant?"
 #: src/pages/AssistantsPage.tsx
 msgid "assistants.archive.confirmTitle"
 msgstr "Confirm Archive"
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantsPage.tsx
+msgid "assistants.archive.error"
+msgstr "Failed to archive assistant. Please try again."
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantsPage.tsx
@@ -1591,6 +1631,31 @@ msgid "chat.attachments.toggle"
 msgstr "Toggle attachments"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "chat.audio_back"
+msgstr "Audio-back"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "chat.audio_blocked"
+msgstr "Autoplay blocked. Replay the completed response below."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "chat.audio_failed"
+msgstr "Audio unavailable. Your text response is still available."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/MessageContent.tsx
+msgid "chat.audio_replay"
+msgstr "Replay audio response"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "chat.audio_stop"
+msgstr "Stop playback"
+
+#. js-lingui-explicit-id
 #: src/components/ui/FileUpload/audioTranscriptionStatus.ts
 msgid "chat.audio.announce.failed"
 msgstr "{filename}: couldn't transcribe."
@@ -1821,6 +1886,11 @@ msgstr "Drop to upload"
 #: src/components/ui/Chat/ChatInputTokenUsage.tsx
 #~ msgid "chat.files.reference_only"
 #~ msgstr "Reference only — file contents are omitted"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/chatActionFeedback.ts
+msgid "chat.history.archiveFailed"
+msgstr "Couldn't archive the chat"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/DelegatedRunsSection.tsx
@@ -2142,6 +2212,11 @@ msgid "chat.history.menu.unpin"
 msgstr "Unpin"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Chat/chatActionFeedback.ts
+msgid "chat.history.pinFailed"
+msgstr "Couldn't pin the chat"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatHistorySidebar.tsx
 msgid "chat.history.pinned"
 msgstr "Pinned"
@@ -2189,9 +2264,19 @@ msgid "chat.history.rename.userProvided.placeholder"
 msgstr "Leave empty to use generated title"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/unarchiveFeedback.ts
+#: src/components/ui/Chat/chatActionFeedback.ts
+msgid "chat.history.renameFailed"
+msgstr "Couldn't rename the chat"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/chatActionFeedback.ts
 msgid "chat.history.unarchiveFailed"
 msgstr "Couldn't unarchive the chat"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/chatActionFeedback.ts
+msgid "chat.history.unpinFailed"
+msgstr "Couldn't unpin the chat"
 
 #. js-lingui-explicit-id
 #: src/hooks/audio/useAudioTranscriptionRecorder.ts
@@ -2800,6 +2885,11 @@ msgstr "Anyone logged in to this organization can view it."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatShareDialog.tsx
+msgid "chat.share.toggle.error"
+msgstr "Could not update the share link. Please try again."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatShareDialog.tsx
 msgid "chat.share.toggle.label"
 msgstr "Enable share link"
 
@@ -3173,19 +3263,85 @@ msgid "cloudFilePicker.error.selectFiles"
 msgstr "Failed to select files. Please try again."
 
 #. js-lingui-explicit-id
+#: src/components/ui/CloudFilePicker/CloudSearchResults.tsx
+#~ msgid "cloudFilePicker.fileBytes"
+#~ msgstr "{size} bytes"
+
+#. js-lingui-explicit-id
+#: src/components/ui/CloudFilePicker/CloudFilePicker.tsx
+msgid "cloudFilePicker.loadError"
+msgstr "Could not load files. Please try again."
+
+#. js-lingui-explicit-id
 #: src/components/ui/CloudFilePicker/CloudFilePicker.tsx
 msgid "cloudFilePicker.navigation.goBack"
 msgstr "Go back"
 
 #. js-lingui-explicit-id
+#: src/components/ui/CloudFilePicker/CloudSearchResults.tsx
+msgid "cloudFilePicker.noResults"
+msgstr "No matching drives or files found."
+
+#. js-lingui-explicit-id
+#: src/components/ui/CloudFilePicker/CloudSearchResults.tsx
+#~ msgid "cloudFilePicker.pathUnavailable"
+#~ msgstr "Folder path unavailable"
+
+#. js-lingui-explicit-id
 #: src/components/ui/CloudFilePicker/CloudFilePicker.tsx
-msgid "cloudFilePicker.searchDrives"
-msgstr "Search drives..."
+msgid "cloudFilePicker.removeFile"
+msgstr "Remove {fileName}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/CloudFilePicker/CloudFilePicker.tsx
+#: src/components/ui/CloudFilePicker/CloudSearchResults.tsx
+msgid "cloudFilePicker.retry"
+msgstr "Retry"
+
+#. js-lingui-explicit-id
+#: src/components/ui/CloudFilePicker/CloudFilePicker.tsx
+msgid "cloudFilePicker.search"
+msgstr "Search drives and files…"
+
+#. js-lingui-explicit-id
+#: src/components/ui/CloudFilePicker/CloudFilePicker.tsx
+#~ msgid "cloudFilePicker.searchDrives"
+#~ msgstr "Search drives..."
+
+#. js-lingui-explicit-id
+#: src/components/ui/CloudFilePicker/CloudSearchResults.tsx
+msgid "cloudFilePicker.searchError"
+msgstr "Search failed. Please try again."
+
+#. js-lingui-explicit-id
+#: src/components/ui/CloudFilePicker/CloudSearchResults.tsx
+msgid "cloudFilePicker.searching"
+msgstr "Searching drives and files…"
+
+#. js-lingui-explicit-id
+#: src/components/ui/CloudFilePicker/CloudSearchResults.tsx
+#~ msgid "cloudFilePicker.searchPartial"
+#~ msgstr "Some locations could not be searched. Results may be incomplete."
+
+#. js-lingui-explicit-id
+#: src/components/ui/CloudFilePicker/CloudSearchResults.tsx
+msgid "cloudFilePicker.searchTruncated"
+msgstr "Search limits reached. Refine your search to find more files."
+
+#. js-lingui-explicit-id
+#: src/components/ui/CloudFilePicker/CloudFilePicker.tsx
+msgid "cloudFilePicker.selectedFiles"
+msgstr "Selected files"
 
 #. js-lingui-explicit-id
 #: src/components/ui/CloudFilePicker/CloudFilePicker.tsx
 msgid "cloudFilePicker.selection.filesSelected"
 msgstr "files selected"
+
+#. js-lingui-explicit-id
+#: src/hooks/cloud/useCloudSelection.ts
+msgid "cloudFilePicker.selection.limit"
+msgstr "Maximum {maxFiles} files can be selected"
 
 #. js-lingui-explicit-id
 #: src/components/ui/CloudFilePicker/CloudFilePicker.tsx
@@ -3206,6 +3362,11 @@ msgstr "of"
 #: src/components/ui/CloudFilePicker/CloudFilePicker.tsx
 msgid "cloudFilePicker.selection.oneFile"
 msgstr "1 file selected"
+
+#. js-lingui-explicit-id
+#: src/hooks/cloud/useCloudSelection.ts
+msgid "cloudFilePicker.selection.unsupported"
+msgstr "File type not supported at the moment"
 
 #. js-lingui-explicit-id
 #: src/components/ui/CloudFilePicker/CloudFilePicker.tsx
@@ -3573,6 +3734,11 @@ msgstr "Installer"
 
 #. js-lingui-explicit-id
 #: src/pages/DesktopSidecarSetupPage.tsx
+msgid "desktopSidecar.setup.artifact.intunewin"
+msgstr "Microsoft Intune package"
+
+#. js-lingui-explicit-id
+#: src/pages/DesktopSidecarSetupPage.tsx
 msgid "desktopSidecar.setup.artifact.recommended"
 msgstr "Recommended"
 
@@ -3795,6 +3961,11 @@ msgstr "Failed to remove feedback. Please try again."
 
 #. js-lingui-explicit-id
 #: src/hooks/chat/useMessageFeedback.ts
+msgid "feedback.error.submit_failed"
+msgstr "Failed to submit feedback. Please try again."
+
+#. js-lingui-explicit-id
+#: src/hooks/chat/useMessageFeedback.ts
 msgid "feedback.error.time_limit_exceeded"
 msgstr "The editing window has expired. Feedback can no longer be modified."
 
@@ -3813,6 +3984,11 @@ msgstr "Like message"
 #: src/components/ui/Feedback/FeedbackViewDialog.tsx
 msgid "feedback.remove"
 msgstr "Remove"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Feedback/FeedbackViewDialog.tsx
+msgid "feedback.removing"
+msgstr "Removing..."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Feedback/FeedbackViewDialog.tsx
@@ -5395,6 +5571,7 @@ msgstr "Stop test"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
+#: src/pages/AssistantsPage.tsx
 msgid "preferences.dialog.dataTab.archiveAll.archiving"
 msgstr "Archiving..."
 

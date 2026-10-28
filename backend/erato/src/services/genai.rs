@@ -145,7 +145,8 @@ impl From<ContentPart> for GenAiMessageContent {
                 );
                 GenAiMessageContent::from_text(String::new())
             }
-            ContentPart::ClientToolPending(_)
+            ContentPart::AudioFilePointer(_)
+            | ContentPart::ClientToolPending(_)
             | ContentPart::ToolApprovalRequest(_)
             | ContentPart::ToolApproval(_)
             | ContentPart::ToolRejection(_) => {

@@ -101,3 +101,35 @@ it("reports a failed save", async () => {
     "Could not save this choice",
   );
 });
+
+it("shows the choice being saved at once, busy, and falls back when the save fails", async () => {
+  let reject!: (error: Error) => void;
+  vi.mocked(fetchUpdateProfilePreferences).mockReturnValue(
+    new Promise((_, rej) => {
+      reject = rej;
+    }),
+  );
+  setup(["outlook.get_conversation.v1"]);
+  const control = screen.getByRole("radiogroup", {
+    name: "Read an email conversation",
+  });
+
+  fireEvent.click(screen.getByRole("radio", { name: "Ask each time" }));
+
+  expect(
+    within(control).getByRole("radio", { name: "Ask each time" }),
+  ).toHaveAttribute("aria-checked", "true");
+  expect(control).toHaveAttribute("aria-busy", "true");
+
+  reject(new Error("offline"));
+
+  expect(await screen.findByRole("alert")).toHaveTextContent(
+    "Could not save this choice",
+  );
+  expect(
+    within(control).getByRole("radio", {
+      name: "Always allow (policy default)",
+    }),
+  ).toHaveAttribute("aria-checked", "true");
+  expect(control).not.toHaveAttribute("aria-busy");
+});
