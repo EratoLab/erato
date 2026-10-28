@@ -1631,6 +1631,31 @@ msgid "chat.attachments.toggle"
 msgstr "Przełącz załączniki"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "chat.audio_back"
+msgstr "Odpowiedź głosowa"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "chat.audio_blocked"
+msgstr "Automatyczne odtwarzanie jest zablokowane. Odtwórz gotową odpowiedź poniżej."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "chat.audio_failed"
+msgstr "Dźwięk jest niedostępny. Odpowiedź tekstowa jest nadal dostępna."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/MessageContent.tsx
+msgid "chat.audio_replay"
+msgstr "Odtwórz ponownie odpowiedź głosową"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "chat.audio_stop"
+msgstr "Zatrzymaj odtwarzanie"
+
+#. js-lingui-explicit-id
 #: src/components/ui/FileUpload/audioTranscriptionStatus.ts
 msgid "chat.audio.announce.canceled"
 msgstr "{filename}: transkrypcję anulowano."
@@ -1729,31 +1754,6 @@ msgstr "Przesyłanie…"
 #: src/components/ui/FileUpload/audioTranscriptionStatus.ts
 msgid "chat.audio.status.uploadingDuration"
 msgstr "Przesyłanie · {duration}"
-
-#. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatInput.tsx
-msgid "chat.audio_back"
-msgstr "Odpowiedź głosowa"
-
-#. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatInput.tsx
-msgid "chat.audio_blocked"
-msgstr "Automatyczne odtwarzanie jest zablokowane. Odtwórz gotową odpowiedź poniżej."
-
-#. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatInput.tsx
-msgid "chat.audio_failed"
-msgstr "Dźwięk jest niedostępny. Odpowiedź tekstowa jest nadal dostępna."
-
-#. js-lingui-explicit-id
-#: src/components/ui/Message/MessageContent.tsx
-msgid "chat.audio_replay"
-msgstr "Odtwórz ponownie odpowiedź głosową"
-
-#. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatInput.tsx
-msgid "chat.audio_stop"
-msgstr "Zatrzymaj odtwarzanie"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatInput.tsx
