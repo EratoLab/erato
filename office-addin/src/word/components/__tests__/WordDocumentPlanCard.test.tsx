@@ -838,7 +838,7 @@ describe("structural document review", () => {
       screen.queryByRole("button", { name: "Download original document" }),
     ).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Undo" }));
-    await screen.findByText(/^(Restored the document|Undone: )/);
+    await screen.findByText("Restored the document");
     expect(word.insert).toHaveBeenCalledTimes(2);
     expect(screen.queryByRole("alert")).toBeNull();
     expect(screen.queryByRole("button", { name: "Undo" })).toBeNull();
@@ -866,7 +866,7 @@ describe("structural document review", () => {
     expect(word.ooxml()).toContain("Status: revised in place.");
     expect(screen.queryByTestId("word-plan-adjustments")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Undo" }));
-    await screen.findByText(/^(Restored the document|Undone: )/);
+    await screen.findByText(/^Undone: /);
     expect(screen.queryByRole("alert")).toBeNull();
     expect(wordPackageFingerprint(word.ooxml())).toBe(original);
     expect(word.insert).not.toHaveBeenCalled();
@@ -896,7 +896,7 @@ describe("structural document review", () => {
     fireEvent.click(
       screen.getByRole("button", { name: "Reject these tracked changes" }),
     );
-    await screen.findByText(/^(Restored the document|Undone: )/);
+    await screen.findByText(/^Undone: /);
     expect(screen.queryByTestId("word-plan-adjustments")).toBeNull();
     expect(wordPackageFingerprint(word.ooxml())).toBe(original);
     expect(word.insert).not.toHaveBeenCalled();
@@ -993,7 +993,7 @@ describe("structural document review", () => {
       screen.getByRole("button", { name: "Download original document" }),
     ).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Undo" }));
-    await screen.findByText(/^(Restored the document|Undone: )/);
+    await screen.findByText(/^Undone: /);
     expect(wordPackageFingerprint(word.ooxml())).toBe(original);
     expect(word.insert).not.toHaveBeenCalled();
   });
@@ -1598,6 +1598,51 @@ describe("route preview", () => {
     expect(routeText()).toBe(
       "Replaces the whole document (in-place editing is off).",
     );
+  });
+
+  /** Rewrites the body of three chapters, which makes the plan large. */
+  const rewriteThreeChapters = (s: WordAuthoringSnapshot) =>
+    replaceBlock(s, "", (ref) => {
+      const text = s.blocks.find((b) => b.ref === ref)!.text;
+      return /^(Intro|Scope|Plan) body\.$/.test(text)
+        ? [
+            {
+              kind: "replace",
+              source: [ref],
+              blocks: [
+                { id: `r-${ref}`, type: "paragraph", text: `${text} Revised.` },
+              ],
+            },
+          ]
+        : [{ kind: "keep", source: [ref] }];
+    });
+
+  it("keeps the change wording for a large plan written in place, through Undo", async () => {
+    const { word } = await mountRealistic(rewriteThreeChapters, {
+      xml: CHAPTERS,
+    });
+    expect(routeText()).toBe("Edits 3 passages in place.");
+    expect(
+      screen.queryByRole("button", { name: "Replace document" }),
+    ).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Apply changes" }));
+    await screen.findByText(/^Applied: /);
+    fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+    await screen.findByText(/^Undone: /);
+    expect(screen.queryByText("Restored the document")).toBeNull();
+    expect(word.insert).not.toHaveBeenCalled();
+  });
+
+  it("names a large whole-document replacement as such, through Undo", async () => {
+    window.WORD_FORCE_IMPORT_APPLY = true;
+    const { word } = await mountRealistic(rewriteThreeChapters, {
+      xml: CHAPTERS,
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Replace document" }));
+    await screen.findByText(/^Applied: /);
+    fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+    await screen.findByText("Restored the document");
+    expect(word.insert).toHaveBeenCalledTimes(2);
   });
 
   it("keeps the general reason for a change the classifier cannot write in place", async () => {

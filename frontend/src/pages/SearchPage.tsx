@@ -9,10 +9,13 @@ import { buildChatHistoryRowMenuItems } from "@/components/ui/Chat/ChatHistoryLi
 import { ChatShareDialog } from "@/components/ui/Chat/ChatShareDialog";
 import { EditChatTitleDialog } from "@/components/ui/Chat/EditChatTitleDialog";
 import {
+  dismissChatActionFailure,
+  runChatAction,
+} from "@/components/ui/Chat/chatActionFeedback";
+import {
   ArchivedChatPill,
   archivedChatLabel,
 } from "@/components/ui/Chat/chatArchiveActions";
-import { notifyUnarchiveFailed } from "@/components/ui/Chat/unarchiveFeedback";
 import { Card } from "@/components/ui/Container/Card";
 import { PageHeader } from "@/components/ui/Container/PageHeader";
 import { Button } from "@/components/ui/Controls/Button";
@@ -310,23 +313,22 @@ export default function SearchPage() {
     searchResults.find((result) => result.chatId === titleDialogChatId) ?? null;
 
   const handleArchiveResult = async (chatId: string) => {
-    await archiveChat(chatId);
-    await Promise.all([refetchHistory(), refetchSearchResults()]);
+    if (await runChatAction("archive", chatId, () => archiveChat(chatId))) {
+      await Promise.all([refetchHistory(), refetchSearchResults()]);
+    }
   };
 
   const handleUnarchiveResult = async (chatId: string) => {
-    try {
-      await unarchiveChat(chatId);
-    } catch {
-      notifyUnarchiveFailed();
-      return;
+    if (await runChatAction("unarchive", chatId, () => unarchiveChat(chatId))) {
+      await Promise.all([refetchHistory(), refetchSearchResults()]);
     }
-    await Promise.all([refetchHistory(), refetchSearchResults()]);
   };
 
   const handlePinResult = async (chatId: string, isPinned: boolean) => {
-    await pinChat(chatId, isPinned);
-    await refetchSearchResults();
+    const action = isPinned ? "pin" : "unpin";
+    if (await runChatAction(action, chatId, () => pinChat(chatId, isPinned))) {
+      await refetchSearchResults();
+    }
   };
 
   const handleSubmitEditTitleDialog = async (title: string) => {
@@ -339,9 +341,14 @@ export default function SearchPage() {
       // updateChatTitle already invalidates the recent-chats query, which
       // refetches every loaded page. Only the separate search-results query
       // still needs an explicit refetch to reflect the new title.
-      await updateChatTitle(titleDialogChatId, title);
-      await refetchSearchResults();
-      setTitleDialogChatId(null);
+      if (
+        await runChatAction("rename", titleDialogChatId, () =>
+          updateChatTitle(titleDialogChatId, title),
+        )
+      ) {
+        await refetchSearchResults();
+        setTitleDialogChatId(null);
+      }
     } finally {
       setIsUpdatingChatTitle(false);
     }
@@ -350,6 +357,9 @@ export default function SearchPage() {
   const handleCloseEditTitleDialog = () => {
     if (isUpdatingChatTitle) {
       return;
+    }
+    if (titleDialogChatId) {
+      dismissChatActionFailure("rename", titleDialogChatId);
     }
     setTitleDialogChatId(null);
   };

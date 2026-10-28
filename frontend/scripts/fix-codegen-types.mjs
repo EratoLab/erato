@@ -158,6 +158,18 @@ const schemaStringFieldFixes = [
     to: "show_tray_icon?: boolean | null | undefined;",
   },
   {
+    from: "outlook_addin_autopin?: null | undefined;",
+    to: "outlook_addin_autopin?: boolean | null | undefined;",
+  },
+  {
+    from: "outlook_addin_autopin_panes?: null | undefined;",
+    to: "outlook_addin_autopin_panes?: boolean | null | undefined;",
+  },
+  {
+    from: "outlook_addin_id?: null | undefined;",
+    to: "outlook_addin_id?: string | null | undefined;",
+  },
+  {
     from: "is_pinned?: null | undefined;",
     to: "is_pinned?: boolean | null | undefined;",
   },

@@ -25,6 +25,9 @@ const spies = vi.hoisted(() => {
     updateChatTitle: vi.fn(async () => undefined),
     fetchNextHistoryPage: vi.fn(async () => undefined),
     toastError: vi.fn(),
+    runChatAction: vi.fn(),
+    /** What the Toaster would show, with the store's dedupe-slot rules. */
+    toasts: [] as Array<{ title?: string; dedupeKey?: string }>,
     chatContext: {
       chats: [] as { id: string }[],
       isLoading: false,
@@ -54,6 +57,7 @@ const spies = vi.hoisted(() => {
       current: null as {
         isOpen: boolean;
         generatedTitle: string;
+        onClose?: () => void;
         onSubmit?: (title: string) => Promise<void> | void;
       } | null,
     },
@@ -173,12 +177,44 @@ vi.mock("@erato/frontend/library", async () => {
     EditChatTitleDialog: (props: {
       isOpen: boolean;
       generatedTitle: string;
+      onClose?: () => void;
       onSubmit?: (title: string) => Promise<void> | void;
     }) => {
       spies.renameDialogProps.current = props;
       return props.isOpen ? <div data-testid="rename-dialog" /> : null;
     },
-    toast: { error: spies.toastError },
+    // Mirrors the library helper over a toast fake with the store's slot rules.
+    runChatAction: async (
+      action: string,
+      chatId: string,
+      perform: () => Promise<unknown>,
+    ) => {
+      spies.runChatAction(action, chatId);
+      const dedupeKey = `chat-${action}:${chatId}`;
+      const dismiss = () => {
+        spies.toasts = spies.toasts.filter(
+          (toast) => toast.dedupeKey !== dedupeKey,
+        );
+      };
+      dismiss();
+      try {
+        await perform();
+      } catch {
+        spies.toastError({ dedupeKey });
+        spies.toasts = [
+          ...spies.toasts.filter((toast) => toast.dedupeKey !== dedupeKey),
+          { dedupeKey },
+        ];
+        return false;
+      }
+      dismiss();
+      return true;
+    },
+    dismissChatActionFailure: (action: string, chatId: string) => {
+      spies.toasts = spies.toasts.filter(
+        (toast) => toast.dedupeKey !== `chat-${action}:${chatId}`,
+      );
+    },
     hasActiveFilters: (values: { typeFilter: string; statusFilter: string }) =>
       values.typeFilter !== "all" || values.statusFilter !== "active",
     mapRecentChatToSession: (chat: { id: string }) => ({ id: chat.id }),
@@ -252,6 +288,7 @@ describe("AddinHistoryDrawerCore", () => {
     vi.clearAllMocks();
     spies.historyListProps.length = 0;
     spies.renameDialogProps.current = null;
+    spies.toasts = [];
     spies.filterMenuStore.current = null;
     spies.sharingEnabled.current = true;
     spies.showMetadata.current = true;
@@ -655,7 +692,7 @@ describe("AddinHistoryDrawerCore", () => {
     expect(spies.toastError).toHaveBeenCalledTimes(1);
   });
 
-  it("toasts when unarchiving fails", async () => {
+  it("toasts when unarchiving fails, in the slot the archived-chat notice uses", async () => {
     spies.unarchiveChat.mockRejectedValueOnce(new Error("unarchive failed"));
     renderDrawer();
 
@@ -663,6 +700,7 @@ describe("AddinHistoryDrawerCore", () => {
       spies.historyListProps[0]?.onSessionUnarchive?.("c1");
     });
 
+    expect(spies.runChatAction).toHaveBeenCalledWith("unarchive", "c1");
     expect(spies.toastError).toHaveBeenCalledTimes(1);
   });
 
@@ -677,5 +715,64 @@ describe("AddinHistoryDrawerCore", () => {
 
     expect(spies.toastError).toHaveBeenCalledTimes(1);
     expect(screen.getByTestId("rename-dialog")).toBeInTheDocument();
+  });
+
+  it.each([
+    ["archive", "onSessionArchive", spies.archiveChat],
+    ["unarchive", "onSessionUnarchive", spies.unarchiveChat],
+  ] as const)(
+    "keeps one %s error on screen and clears it when a retry lands",
+    async (_action, handler, mutation) => {
+      mutation
+        .mockRejectedValueOnce(new Error("failed"))
+        .mockRejectedValueOnce(new Error("failed again"));
+      renderDrawer();
+      const run = () => spies.historyListProps[0]?.[handler]?.("c1");
+
+      await act(async () => run());
+      await act(async () => run());
+      expect(spies.toasts).toHaveLength(1);
+
+      await act(async () => run());
+      expect(spies.toasts).toHaveLength(0);
+    },
+  );
+
+  it("replaces a rename error on retry and drops it once the rename lands", async () => {
+    spies.updateChatTitle
+      .mockRejectedValueOnce(new Error("rename failed"))
+      .mockRejectedValueOnce(new Error("rename failed again"));
+    renderDrawer();
+    fireEvent.click(screen.getByTestId("rename-c1"));
+    const submit = () => spies.renameDialogProps.current?.onSubmit?.("New");
+
+    await act(async () => {
+      await submit();
+    });
+    await act(async () => {
+      await submit();
+    });
+    expect(spies.toasts).toHaveLength(1);
+
+    await act(async () => {
+      await submit();
+    });
+    expect(spies.toasts).toHaveLength(0);
+    expect(screen.queryByTestId("rename-dialog")).toBeNull();
+  });
+
+  it("drops the rename error when the rename is abandoned", async () => {
+    spies.updateChatTitle.mockRejectedValueOnce(new Error("rename failed"));
+    renderDrawer();
+    fireEvent.click(screen.getByTestId("rename-c1"));
+    await act(async () => {
+      await spies.renameDialogProps.current?.onSubmit?.("New");
+    });
+    expect(spies.toasts).toHaveLength(1);
+
+    act(() => spies.renameDialogProps.current?.onClose?.());
+
+    expect(spies.toasts).toHaveLength(0);
+    expect(screen.queryByTestId("rename-dialog")).toBeNull();
   });
 });

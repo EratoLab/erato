@@ -186,6 +186,30 @@ describe("readWordComments: the Office.js record", () => {
       );
       expect(thread(threads, "T5").creationDate).toBeNull();
     });
+
+    it("reads Word PC's empty date on a reply without dateUtc as none, and keeps the root's", async () => {
+      const { threads } = await read({ host: "pc", legacy: true });
+      const t1 = thread(threads, "T1");
+      expect(t1.creationDate).toEqual(new Date("2026-09-03T08:15:30Z"));
+      expect(t1.replies?.map((reply) => reply.creationDate)).toEqual([
+        null,
+        null,
+      ]);
+    });
+
+    it.each([
+      "1899-11-30T00:00:00Z",
+      "1899-12-30T00:00:00Z",
+      "1970-01-01T00:00:00Z",
+    ])("takes a reply dated %s for no date", async (date) => {
+      const { threads } = await read({
+        legacy: true,
+        replyDateWithoutUtc: date,
+      });
+      const t2 = thread(threads, "T2");
+      expect(t2.creationDate).toEqual(new Date("2026-09-01T14:45:00Z"));
+      expect(t2.replies?.[0].creationDate).toBeNull();
+    });
   });
 
   it("keeps the same records whatever order Word lists items in", async () => {

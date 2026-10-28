@@ -457,14 +457,7 @@ impl AppState {
         let chat_provider_id = if let Some(ref chat_providers) = self.config.chat_providers {
             if let Some(ref summary_provider_id) = chat_providers.summary.summary_chat_provider_id {
                 // Validate that the configured provider exists
-                if chat_providers.providers.contains_key(summary_provider_id) {
-                    summary_provider_id.as_str()
-                } else {
-                    return Err(eyre::eyre!(
-                        "Configured summary chat provider '{}' not found in providers",
-                        summary_provider_id
-                    ));
-                }
+                self.config.resolve_chat_provider_id(summary_provider_id)?
             } else {
                 // Fall back to highest priority provider
                 self.config.determine_chat_provider(None, None)?
@@ -502,16 +495,7 @@ impl AppState {
             .as_deref()
             .ok_or_eyre("Prompt optimizer chat provider is not configured")?;
 
-        if let Some(chat_providers) = &self.config.chat_providers {
-            if !chat_providers.providers.contains_key(chat_provider_id) {
-                return Err(eyre::eyre!(
-                    "Configured prompt optimizer chat provider '{}' not found in providers",
-                    chat_provider_id
-                ));
-            }
-        } else if self.config.chat_provider.is_none() {
-            return Err(eyre::eyre!("No chat provider configuration found"));
-        }
+        let chat_provider_id = self.config.resolve_chat_provider_id(chat_provider_id)?;
 
         Ok(ChatProviderConfigWithId {
             chat_provider_id: chat_provider_id.to_string(),
@@ -527,6 +511,7 @@ impl AppState {
             .chat_provider_id
             .as_deref()
             .ok_or_eyre("Compaction chat provider is not configured")?;
+        let id = self.config.resolve_chat_provider_id(id)?;
         Ok(ChatProviderConfigWithId {
             chat_provider_id: id.to_string(),
             chat_provider_config: self.config.get_chat_provider(id).clone(),
@@ -558,6 +543,7 @@ impl AppState {
                 .determine_chat_provider(None, None)
                 .expect("Unable to choose default chat provider")
         });
+        let chat_provider_id = self.config.resolve_chat_provider_id(chat_provider_id)?;
         self.genai_for_chat_provider_config_with_headers_context(
             self.config.get_chat_provider(chat_provider_id).clone(),
             chat_provider_headers_context,
@@ -601,6 +587,25 @@ impl AppState {
             chat_provider_id: chat_provider_id.to_string(),
             chat_provider_config: self.config.get_chat_provider(chat_provider_id).clone(),
         })
+    }
+
+    pub async fn chat_provider_for_saved_selection(
+        &self,
+        policy: &PolicyEngine,
+        subject: &Subject,
+        user_groups: &[String],
+        saved_id: &str,
+    ) -> Result<ChatProviderConfigWithId, Report> {
+        match self
+            .chat_provider_for_chatcompletion(policy, subject, user_groups, Some(saved_id))
+            .await
+        {
+            Ok(provider) => Ok(provider),
+            Err(_) => {
+                self.chat_provider_for_chatcompletion(policy, subject, user_groups, None)
+                    .await
+            }
+        }
     }
 
     /// Determines chat provider allowlist for a user based on their group memberships.
@@ -649,6 +654,21 @@ impl AppState {
     ) -> Result<Vec<AvailableModel>, Report> {
         self.available_models_with_headers_context(policy, subject, user_groups, None)
             .await
+    }
+
+    /// Project a persisted selection onto the models a user can currently select.
+    pub fn effective_saved_model_id(
+        &self,
+        saved: Option<&str>,
+        available: &[AvailableModel],
+    ) -> Option<String> {
+        let saved = saved?;
+        let resolved = self.config.resolve_chat_provider_id(saved).ok();
+        available
+            .iter()
+            .find(|model| Some(model.chat_provider_id.as_str()) == resolved)
+            .or_else(|| available.first())
+            .map(|model| model.chat_provider_id.clone())
     }
 
     /// Get available chat models for a user, using the same per-user header
@@ -816,6 +836,11 @@ impl AppState {
         config: ChatProviderConfig,
         chat_provider_headers_context: Option<&ChatProviderHeadersContext<'a>>,
     ) -> Result<GenaiClient, Report> {
+        if config.archived {
+            return Err(eyre::eyre!(
+                "Cannot create a client for an archived provider"
+            ));
+        }
         let base_url = config.base_url.clone();
         let request_params = config.additional_request_parameters_map();
         let header_map = Self::build_request_headers(&config, chat_provider_headers_context)?;

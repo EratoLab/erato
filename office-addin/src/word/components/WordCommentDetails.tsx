@@ -152,9 +152,11 @@ export function WordCommentDetail({
           data-ui="word-comment-detail-quote"
         >
           {detail.why && <WordCommentWhyTag why={detail.why} />}
-          <span className="break-words text-theme-fg-secondary">
-            {wordCommentQuoteText(thread.quote)}
-          </span>
+          {thread.quote !== null && (
+            <span className="break-words text-theme-fg-secondary">
+              {wordCommentQuoteText(thread.quote)}
+            </span>
+          )}
           <WordShowInWordButton
             onShow={() => onShowInWord(thread)}
             disabled={false}
@@ -196,9 +198,11 @@ export function WordCommentDetail({
                 <span className="line-clamp-2 text-sm text-theme-fg-primary">
                   {choice.text}
                 </span>
-                <span className="truncate text-xs text-theme-fg-secondary">
-                  {wordCommentQuoteText(choice.quote)}
-                </span>
+                {choice.quote !== null && (
+                  <span className="truncate text-xs text-theme-fg-secondary">
+                    {wordCommentQuoteText(choice.quote)}
+                  </span>
+                )}
               </button>
             </li>
           ))}

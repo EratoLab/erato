@@ -1,16 +1,24 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import {
+  QueryClient,
+  QueryClientProvider,
+  useQuery,
+} from "@tanstack/react-query";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { createElement, type ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockNavigate = vi.fn();
+const route = vi.hoisted((): { pathname: string; params: { id?: string } } => ({
+  pathname: "/chat",
+  params: {},
+}));
 vi.mock("react-router-dom", async () => {
   const actual = await vi.importActual("react-router-dom");
   return {
     ...actual,
     useNavigate: () => mockNavigate,
-    useLocation: () => ({ pathname: "/chat" }),
-    useParams: () => ({}),
+    useLocation: () => ({ pathname: route.pathname }),
+    useParams: () => route.params,
   };
 });
 
@@ -78,6 +86,8 @@ function makePage(offset: number, ids: string[], hasMore: boolean) {
   };
 }
 
+const ARCHIVED_AT = "2026-10-28T09:00:00.000Z";
+
 let queryClient: QueryClient;
 
 const wrapper = ({ children }: { children: ReactNode }) =>
@@ -87,7 +97,12 @@ beforeEach(() => {
   vi.clearAllMocks();
   useChatHistoryFilterStore.setState({ ...CHAT_HISTORY_FILTER_DEFAULTS });
   useGenerationStatusStore.getState().reset();
-  mockArchiveMutation.mockResolvedValue(undefined);
+  route.pathname = "/chat";
+  route.params = {};
+  mockArchiveMutation.mockImplementation(
+    ({ pathParams }: { pathParams: { chatId: string } }) =>
+      Promise.resolve({ chat_id: pathParams.chatId, archived_at: ARCHIVED_AT }),
+  );
   mockUnarchiveMutation.mockResolvedValue({ chat_id: "chat5" });
   queryClient = new QueryClient({
     defaultOptions: {
@@ -291,6 +306,57 @@ describe("useChatHistory archiveChat optimistic removal", () => {
   });
 });
 
+describe("useChatHistory archiveChat leaving the archived chat", () => {
+  const detailKey = ["chatDetail", { chatId: "chat5" }];
+
+  it.each(["active", "all"] as const)(
+    "keeps the archive in the cached detail the aborted refetch would revert (status filter: %s)",
+    async (statusFilter) => {
+      useChatHistoryFilterStore.setState({ statusFilter });
+      queryClient.setQueryData(archivedInclusiveQueryKey, {
+        pageParams: [0],
+        pages: [makePage(0, ["chat5"], false)],
+      });
+      route.pathname = "/chat/chat5";
+      route.params = { id: "chat5" };
+      queryClient.setQueryData(detailKey, { id: "chat5" });
+      const openChat = renderHook(
+        () =>
+          useQuery({
+            queryKey: detailKey,
+            queryFn: ({ signal }) =>
+              new Promise((_, reject) => {
+                signal.addEventListener("abort", () => reject(signal.reason));
+              }),
+          }),
+        { wrapper },
+      );
+      const { result } = renderHook(() => useChatHistory(), { wrapper });
+
+      await act(async () => {
+        await result.current.archiveChat("chat5");
+      });
+      expect(mockNavigate).toHaveBeenCalledWith("/chat/new", { replace: true });
+      openChat.unmount();
+
+      expect(queryClient.getQueryData(detailKey)).toEqual({
+        id: "chat5",
+        archived_at: ARCHIVED_AT,
+      });
+    },
+  );
+
+  it("leaves an uncached detail for the next mount to fetch", async () => {
+    const { result } = renderHook(() => useChatHistory(), { wrapper });
+
+    await act(async () => {
+      await result.current.archiveChat("chat5");
+    });
+
+    expect(queryClient.getQueryData(detailKey)).toBeUndefined();
+  });
+});
+
 describe("useChatHistory unarchiveChat", () => {
   it("refetches the lists instead of editing cached pages in place", async () => {
     const setQueriesDataSpy = vi.spyOn(queryClient, "setQueriesData");
@@ -323,6 +389,24 @@ describe("useChatHistory unarchiveChat", () => {
     });
     expect(invalidateSpy).toHaveBeenCalledWith({
       queryKey: ["generatingChats"],
+    });
+  });
+
+  it("unlocks the cached detail as soon as the unarchive lands", async () => {
+    const detailKey = ["chatDetail", { chatId: "chat5" }];
+    queryClient.setQueryData(detailKey, {
+      id: "chat5",
+      archived_at: ARCHIVED_AT,
+    });
+    const { result } = renderHook(() => useChatHistory(), { wrapper });
+
+    await act(async () => {
+      await result.current.unarchiveChat("chat5");
+    });
+
+    expect(queryClient.getQueryData(detailKey)).toEqual({
+      id: "chat5",
+      archived_at: undefined,
     });
   });
 

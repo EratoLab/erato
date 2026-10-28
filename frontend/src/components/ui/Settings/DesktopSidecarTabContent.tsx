@@ -2,6 +2,7 @@ import { i18n } from "@lingui/core";
 import { t } from "@lingui/core/macro";
 import { useId, useState } from "react";
 
+import { desktopSidecarLaunchUrl } from "@/lib/desktopSidecarLaunch";
 import {
   DEFAULT_DESKTOP_SIDECAR_ENDPOINT,
   DesktopSidecarProvider,
@@ -18,9 +19,6 @@ import { Button } from "../Controls/Button";
 import { SidecarIndexingControls } from "../DesktopSidecar/SidecarIndexingCard";
 import { SidecarPermissions } from "../DesktopSidecar/SidecarPermissions";
 import { ComputerIcon, FolderIcon } from "../icons";
-
-// eslint-disable-next-line lingui/no-unlocalized-strings -- Desktop-sidecar URL protocol.
-const DESKTOP_SIDECAR_LAUNCH_URL = "erato-launch://launch";
 
 /**
  * The sidecar as one entity row of the Servers & Tools pane: connection
@@ -235,7 +233,7 @@ function SidecarConnectionActions({ onRetry }: { onRetry: () => void }) {
             variant="primary"
             size="sm"
             onClick={() => {
-              window.location.assign(DESKTOP_SIDECAR_LAUNCH_URL);
+              window.location.assign(desktopSidecarLaunchUrl());
             }}
           >
             {t({

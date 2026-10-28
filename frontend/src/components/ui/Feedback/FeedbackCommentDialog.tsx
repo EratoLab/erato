@@ -36,24 +36,20 @@ export const FeedbackCommentDialog: React.FC<FeedbackCommentDialogProps> = ({
   const [comment, setComment] = useState(initialComment);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Sync comment state when dialog opens or initialComment changes (e.g., switching to edit mode)
+  // Cleared on close rather than after submit: onSubmit also resolves when
+  // the submit failed and the dialog stays open with an error.
   useEffect(() => {
-    if (isOpen) {
-      setComment(initialComment);
-    }
+    setComment(isOpen ? initialComment : "");
   }, [isOpen, initialComment]);
 
   const handleSubmit = useCallback(async () => {
     setIsSubmitting(true);
     try {
       await onSubmit(comment);
-      if (mode === "create") {
-        setComment(""); // Clear comment after successful submission in create mode
-      }
     } finally {
       setIsSubmitting(false);
     }
-  }, [comment, onSubmit, mode]);
+  }, [comment, onSubmit]);
 
   const handleSkip = useCallback(() => {
     if (mode === "create") {
@@ -90,7 +86,10 @@ export const FeedbackCommentDialog: React.FC<FeedbackCommentDialogProps> = ({
       <div className="space-y-4">
         {/* Error message */}
         {error && (
-          <div className="rounded-md bg-theme-error-bg p-3 text-sm text-theme-error-fg">
+          <div
+            role="alert"
+            className="rounded-md bg-theme-error-bg p-3 text-sm text-theme-error-fg"
+          >
             {error}
           </div>
         )}

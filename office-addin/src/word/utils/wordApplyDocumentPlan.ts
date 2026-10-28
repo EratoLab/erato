@@ -394,12 +394,14 @@ function wholeDocumentGuard(
   snapshot: WordAuthoringSnapshot,
   options: WordDocumentApplyOptions,
   fallbackReasons: () => WordRouteReason[],
+  compiled?: string,
 ): WordDocumentApplyResult | undefined {
   const write = wordWholeDocumentWrite(
     { route },
     plan,
     snapshot,
     wordApplyPolicy(),
+    compiled,
   );
   const reason =
     write.write === "refuse"
@@ -579,6 +581,7 @@ async function applyPlan(
         snapshot,
         options,
         fallbackReasons,
+        compiled,
       );
       if (guarded) return guarded;
       await watchComments();
