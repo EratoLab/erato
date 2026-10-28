@@ -167,7 +167,7 @@ function SidecarIndexingSettings({
       setParallelism(null);
       setThrottle(null);
     } catch {
-      /* Retain the draft; the mutation exposes the error above. */
+      /* Retain the draft; the mutation exposes the error below the button. */
     }
   };
   const hasChanges =
@@ -181,14 +181,6 @@ function SidecarIndexingSettings({
   );
   return (
     <div className="space-y-4">
-      {saveError && (
-        <p role="alert" className="text-theme-error-fg">
-          {t({
-            id: "sidecar.indexing.saveError",
-            message: "Could not save indexing settings. Please try again.",
-          })}
-        </p>
-      )}
       <form
         aria-labelledby={indexingTitleId}
         className="space-y-4"
@@ -440,6 +432,14 @@ function SidecarIndexingSettings({
             message: "Save indexing settings",
           })}
         </Button>
+        {saveError && (
+          <p role="alert" className="text-theme-error-fg">
+            {t({
+              id: "sidecar.indexing.saveError",
+              message: "Could not save indexing settings. Please try again.",
+            })}
+          </p>
+        )}
       </form>
     </div>
   );

@@ -170,6 +170,7 @@ describe("FeatureConfigProvider", () => {
           maxRecordingDurationSeconds: 1200,
         },
         audioConversational: {
+          speechEnabled: false,
           enabled: false,
           maxRecordingDurationSeconds: 1200,
         },
@@ -824,6 +825,7 @@ describe("FeatureConfigProvider", () => {
       });
 
       expect(result.current).toEqual({
+        speechEnabled: false,
         enabled: false,
         maxRecordingDurationSeconds: 1200,
       });
@@ -840,6 +842,7 @@ describe("FeatureConfigProvider", () => {
       });
 
       expect(result.current).toEqual({
+        speechEnabled: false,
         enabled: true,
         maxRecordingDurationSeconds: 600,
       });

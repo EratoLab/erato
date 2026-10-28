@@ -10,9 +10,15 @@ import { Alert } from "@/components/ui/Feedback/Alert";
 import { SpinnerIcon } from "@/components/ui/Feedback/SpinnerIcon";
 import { Textarea } from "@/components/ui/Input";
 import { ShareGrantsList } from "@/components/ui/Sharing/ShareGrantsList";
+import { toast } from "@/components/ui/Toast";
+import { usePageErrorToast } from "@/components/ui/Toast/usePageErrorToast";
 import { ArrowLeftIcon } from "@/components/ui/icons";
 import { usePageAlignment } from "@/hooks/ui";
 import {
+  assistantHubConfigQuery,
+  frequentAssistantsQuery,
+  getAssistantQuery,
+  startingAssistantQuery,
   useAssistantHubConfig,
   useGetAssistant,
   useListReviewAssistantHubVersions,
@@ -34,8 +40,40 @@ import {
 } from "./assistantHubUtils";
 
 import type { AssistantHubVersion } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type { QueryClient } from "@tanstack/react-query";
+
+/** Error toasts stay until dismissed, so the next attempt has to replace them. */
+const REVIEW_TOAST_KEY = "assistant-hub-review";
+
+type VersionAction = "accept" | "decline" | "publish" | "current" | "feature";
+
+// Publishing also decides the start screen and who may open the version's
+// assistant, so those refresh alongside the hub views; the sidebar's frequent
+// list too, without holding the row busy.
+const refreshAfterVersionChange = (
+  queryClient: QueryClient,
+  version: AssistantHubVersion,
+) => {
+  void queryClient.invalidateQueries({
+    queryKey: frequentAssistantsQuery({}).queryKey,
+  });
+  return Promise.all([
+    queryClient.invalidateQueries({
+      queryKey: assistantHubConfigQuery({}).queryKey.slice(0, -1),
+    }),
+    queryClient.invalidateQueries({
+      queryKey: startingAssistantQuery({}).queryKey,
+    }),
+    queryClient.invalidateQueries({
+      queryKey: getAssistantQuery({
+        pathParams: { assistantId: version.assistant_id },
+      }).queryKey,
+    }),
+  ]);
+};
 
 export default function AssistantHubReviewPage() {
+  const showError = usePageErrorToast();
   const navigate = useNavigate();
   const { versionId } = useParams<{ versionId?: string }>();
   const queryClient = useQueryClient();
@@ -52,6 +90,10 @@ export default function AssistantHubReviewPage() {
   const [reviewComments, setReviewComments] = useState<
     Partial<Record<string, string>>
   >({});
+  const [pendingAction, setPendingAction] = useState<{
+    versionId: string;
+    action: VersionAction;
+  } | null>(null);
 
   useEffect(() => {
     document.title = `${t({
@@ -60,9 +102,42 @@ export default function AssistantHubReviewPage() {
     })} - ${t({ id: "branding.page_title_suffix" })}`;
   }, []);
 
-  const refresh = async () => {
-    await queryClient.invalidateQueries();
+  // The busy state lasts until the refreshed list shows the outcome, so a
+  // second click cannot act on the stale version.
+  const runVersionAction = async (
+    version: AssistantHubVersion,
+    action: VersionAction,
+    mutate: () => Promise<unknown>,
+    successTitle?: string,
+  ) => {
+    if (pendingAction) return;
+    toast.dismissKey(REVIEW_TOAST_KEY);
+    setPendingAction({ versionId: version.version_id, action });
+    try {
+      await mutate();
+      await refreshAfterVersionChange(queryClient, version);
+      if (successTitle) {
+        toast.success({ dedupeKey: REVIEW_TOAST_KEY, title: successTitle });
+      }
+    } catch {
+      showError({
+        dedupeKey: REVIEW_TOAST_KEY,
+        title: t({
+          id: "assistantHub.review.error",
+          message: "Failed to update assistant hub review state.",
+        }),
+      });
+    } finally {
+      setPendingAction(null);
+    }
   };
+
+  const isPendingAction = (
+    version: AssistantHubVersion,
+    action: VersionAction,
+  ) =>
+    pendingAction?.versionId === version.version_id &&
+    pendingAction.action === action;
 
   const handleReview = async (
     version: AssistantHubVersion,
@@ -70,46 +145,62 @@ export default function AssistantHubReviewPage() {
   ) => {
     const reviewerReviewComment = reviewComments[version.version_id]?.trim();
 
-    await reviewVersion.mutateAsync({
-      pathParams: { versionId: version.version_id },
-      body: {
-        accepted,
-        reviewer_review_comment:
-          reviewerReviewComment && reviewerReviewComment.length > 0
-            ? reviewerReviewComment
-            : null,
-      },
-    });
-    await refresh();
+    await runVersionAction(
+      version,
+      accepted ? "accept" : "decline",
+      () =>
+        reviewVersion.mutateAsync({
+          pathParams: { versionId: version.version_id },
+          body: {
+            accepted,
+            reviewer_review_comment:
+              reviewerReviewComment && reviewerReviewComment.length > 0
+                ? reviewerReviewComment
+                : null,
+          },
+        }),
+      accepted
+        ? t({
+            id: "assistantHub.review.acceptSuccess",
+            message: "Version accepted.",
+          })
+        : t({
+            id: "assistantHub.review.declineSuccess",
+            message: "Version declined.",
+          }),
+    );
   };
 
   const handleSetPublished = async (
     version: AssistantHubVersion,
     isPublished: boolean,
   ) => {
-    await setPublished.mutateAsync({
-      pathParams: { versionId: version.version_id },
-      body: { is_published: isPublished },
-    });
-    await refresh();
+    await runVersionAction(version, "publish", () =>
+      setPublished.mutateAsync({
+        pathParams: { versionId: version.version_id },
+        body: { is_published: isPublished },
+      }),
+    );
   };
 
   const handleSetCurrent = async (version: AssistantHubVersion) => {
-    await setCurrent.mutateAsync({
-      pathParams: { versionId: version.version_id },
-    });
-    await refresh();
+    await runVersionAction(version, "current", () =>
+      setCurrent.mutateAsync({
+        pathParams: { versionId: version.version_id },
+      }),
+    );
   };
 
   const handleSetFeatured = async (
     version: AssistantHubVersion,
     featured: boolean,
   ) => {
-    await setFeatured.mutateAsync({
-      pathParams: { versionId: version.version_id },
-      body: { featured },
-    });
-    await refresh();
+    await runVersionAction(version, "feature", () =>
+      setFeatured.mutateAsync({
+        pathParams: { versionId: version.version_id },
+        body: { featured },
+      }),
+    );
   };
 
   const versions = useMemo(() => data?.versions ?? [], [data?.versions]);
@@ -129,7 +220,8 @@ export default function AssistantHubReviewPage() {
         <Button
           variant="secondary"
           size="sm"
-          loading={setPublished.isPending}
+          loading={isPendingAction(version, "publish")}
+          disabled={pendingAction !== null}
           onClick={() => {
             void handleSetPublished(version, !version.is_published);
           }}
@@ -148,7 +240,8 @@ export default function AssistantHubReviewPage() {
           <Button
             variant="secondary"
             size="sm"
-            loading={setCurrent.isPending}
+            loading={isPendingAction(version, "current")}
+            disabled={pendingAction !== null}
             onClick={() => {
               void handleSetCurrent(version);
             }}
@@ -162,7 +255,8 @@ export default function AssistantHubReviewPage() {
         <Button
           variant="secondary"
           size="sm"
-          loading={setFeatured.isPending}
+          loading={isPendingAction(version, "feature")}
+          disabled={pendingAction !== null}
           onClick={() => {
             void handleSetFeatured(version, !version.featured);
           }}
@@ -240,17 +334,11 @@ export default function AssistantHubReviewPage() {
             </Alert>
           )}
 
-          {[
-            error,
-            reviewVersion.error,
-            setPublished.error,
-            setCurrent.error,
-            setFeatured.error,
-          ].some(Boolean) && (
+          {error && (
             <Alert type="error">
               {t({
-                id: "assistantHub.review.error",
-                message: "Failed to update assistant hub review state.",
+                id: "assistantHub.review.loadError",
+                message: "Could not load the submissions to review.",
               })}
             </Alert>
           )}
@@ -424,7 +512,8 @@ export default function AssistantHubReviewPage() {
                         <Button
                           variant="secondary"
                           size="sm"
-                          loading={reviewVersion.isPending}
+                          loading={isPendingAction(selectedVersion, "decline")}
+                          disabled={pendingAction !== null}
                           onClick={() => {
                             void handleReview(selectedVersion, false);
                           }}
@@ -437,7 +526,8 @@ export default function AssistantHubReviewPage() {
                         <Button
                           variant="primary"
                           size="sm"
-                          loading={reviewVersion.isPending}
+                          loading={isPendingAction(selectedVersion, "accept")}
+                          disabled={pendingAction !== null}
                           onClick={() => {
                             void handleReview(selectedVersion, true);
                           }}

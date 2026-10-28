@@ -7,6 +7,7 @@ use std::collections::HashMap;
 fn embedded_image_retrieval_defaults_and_overrides() {
     let mut config = AppConfig {
         chat_providers: Some(ChatProvidersConfig {
+            replacement_providers: Vec::new(),
             priority_order: vec!["model".into()],
             all_providers: AllChatProvidersConfig::default(),
             providers: HashMap::from([("model".into(), ChatProviderConfig::default())]),

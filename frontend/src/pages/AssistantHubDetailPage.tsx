@@ -10,9 +10,11 @@ import { Button } from "@/components/ui/Controls/Button";
 import { Alert } from "@/components/ui/Feedback/Alert";
 import { SpinnerIcon } from "@/components/ui/Feedback/SpinnerIcon";
 import { FormField, Textarea } from "@/components/ui/Input";
+import { toast } from "@/components/ui/Toast";
 import { ArrowLeftIcon } from "@/components/ui/icons";
 import { usePageAlignment } from "@/hooks/ui";
 import {
+  assistantHubConfigQuery,
   useAssistantHubConfig,
   useGetAssistant,
   useGetAssistantHubAssistant,
@@ -37,6 +39,9 @@ import type {
   AssistantHubVersion,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type React from "react";
+
+/** Repeated saves replace the confirmation instead of stacking it. */
+const USER_REVIEW_TOAST_KEY = "assistant-hub-user-review";
 
 function AssistantHubReviewsSection({
   hubAssistantId,
@@ -65,6 +70,7 @@ function AssistantHubReviewsSection({
   const [score, setScore] = useState(ratingScale);
   const [comment, setComment] = useState("");
   const [submitError, setSubmitError] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     if (!myReview) {
@@ -80,9 +86,11 @@ function AssistantHubReviewsSection({
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!canSubmit) return;
+    if (!canSubmit || isSubmitting) return;
 
     setSubmitError(false);
+    toast.dismissKey(USER_REVIEW_TOAST_KEY);
+    setIsSubmitting(true);
     try {
       await submitReview.mutateAsync({
         pathParams: { hubAssistantId },
@@ -91,9 +99,22 @@ function AssistantHubReviewsSection({
           comment: comment.trim().length > 0 ? comment.trim() : null,
         },
       });
-      await queryClient.invalidateQueries();
+      // Scores and comments appear in every hub view; the busy state lasts
+      // until this page shows the saved review.
+      await queryClient.invalidateQueries({
+        queryKey: assistantHubConfigQuery({}).queryKey.slice(0, -1),
+      });
+      toast.success({
+        dedupeKey: USER_REVIEW_TOAST_KEY,
+        title: t({
+          id: "assistantHub.reviews.success",
+          message: "Review saved.",
+        }),
+      });
     } catch {
       setSubmitError(true);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -215,8 +236,8 @@ function AssistantHubReviewsSection({
           <Button
             type="submit"
             variant="primary"
-            loading={submitReview.isPending}
-            disabled={!canSubmit || submitReview.isPending}
+            loading={isSubmitting}
+            disabled={!canSubmit}
           >
             {myReview
               ? t({

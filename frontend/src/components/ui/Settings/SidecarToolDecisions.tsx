@@ -31,14 +31,19 @@ export function SidecarToolDecisions({
 }) {
   const { data: profile } = useProfile({});
   const queryClient = useQueryClient();
-  const [saving, setSaving] = useState<string | null>(null);
+  // The choice being saved shows at once, so the control does not sit on the
+  // old value until the profile has refetched.
+  const [saving, setSaving] = useState<{
+    qualifiedName: string;
+    decision: McpToolDecision;
+  } | null>(null);
   const [failed, setFailed] = useState(false);
   const tools = SIDECAR_CHAT_TOOL_METHODS.filter(({ method }) =>
     client.supports(method),
   );
   if (tools.length === 0) return null;
   const save = async (qualifiedName: string, decision: McpToolDecision) => {
-    setSaving(qualifiedName);
+    setSaving({ qualifiedName, decision });
     setFailed(false);
     try {
       await saveClientToolDecision(
@@ -74,9 +79,13 @@ export function SidecarToolDecisions({
               >
                 <span className="text-sm text-theme-fg-secondary">{label}</span>
                 <McpToolDecisionControl
-                  value={controlDecisionOf(
-                    profile?.client_tool_decisions?.[qualifiedName],
-                  )}
+                  value={
+                    saving?.qualifiedName === qualifiedName
+                      ? saving.decision
+                      : controlDecisionOf(
+                          profile?.client_tool_decisions?.[qualifiedName],
+                        )
+                  }
                   policy="auto"
                   availability={{ allowAlways: true, askAvailable: true }}
                   onChange={(decision) => void save(qualifiedName, decision)}

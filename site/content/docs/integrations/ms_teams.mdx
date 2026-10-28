@@ -48,6 +48,15 @@ tenant_id = "TENANT_ID"
 messaging_endpoint = "https://teams-bot.example.com"
 ```
 
+`messaging_endpoint` accepts an HTTPS origin (Erato appends `/api/integrations/ms_teams/messages`) or a full HTTPS URL ending in that path. When an API gateway adds a path prefix, configure the complete public URL:
+
+```toml
+[integrations.ms_office.teams.bot]
+messaging_endpoint = "https://your-api-gateway.example.com/prodtest/rest/hugo-erato-teams-test/api/integrations/ms_teams/messages"
+```
+
+The setup page and Azure Cloud Shell helper use this full URL, including the prefix. Configure the gateway to forward requests to the unchanged backend route `/api/integrations/ms_teams/messages`, removing the prefix and preserving the request body and Authorization header. This route must bypass interactive login such as oauth2-proxy. Setting `messaging_endpoint` does not configure gateway routing. URLs with credentials, query strings or fragments are not supported. When unset, the endpoint is derived from the setup page's origin; `public_base_url` separately controls user-facing links.
+
 Everything else has defaults: `app_id` and `sso_app_id` come from the add-in's `msal_client_id`, `oauth_connection_name` is `graph-sso`, and `sso_resource` is `api://<host>/botid-<app_id>` for the host the Teams package is downloaded from. Explicit values still win. Erato logs at startup which settings it filled in; the setup page shows their values.
 
 **Upgrading an existing bot without single sign-on:** single sign-on is now on by default, so the Teams package rendered after the upgrade points `webApplicationInfo` at the derived `sso_resource`. The installed package changes only when you upload a new one; users then accept the update, and the OAuth connection must have that token exchange URL. Run the guided setup before uploading, or set `sso_enabled = false` to keep the package as it was.

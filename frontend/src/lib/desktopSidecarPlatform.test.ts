@@ -11,10 +11,6 @@ const targets = [
     platform: { os: "windows", architecture: "x86_64" },
   },
   {
-    id: "windows-aarch64",
-    platform: { os: "windows", architecture: "aarch64" },
-  },
-  {
     id: "macos-x86_64",
     platform: { os: "macos", architecture: "x86_64" },
   },
@@ -101,16 +97,24 @@ describe("desktop sidecar platform selection", () => {
   it("prefers an exact platform match and otherwise falls back within the OS", () => {
     expect(
       selectBestDesktopSidecarTarget(targets, {
-        os: "windows",
+        os: "macos",
         architecture: "aarch64",
       })?.id,
-    ).toBe("windows-aarch64");
+    ).toBe("macos-aarch64");
     expect(
       selectBestDesktopSidecarTarget(targets, {
         os: "linux",
         architecture: "aarch64",
       })?.id,
     ).toBe("linux-x86_64-gnu");
+  });
+
+  it("falls back to Windows x86_64 when no Windows ARM64 artifact is distributed", () => {
+    const client = { os: "windows", architecture: "aarch64" };
+    const target = selectBestDesktopSidecarTarget(targets, client);
+
+    expect(target?.id).toBe("windows-x86_64");
+    expect(isDesktopSidecarTargetForClient(target!, client)).toBe(false);
   });
 
   it("defaults an undetected Mac to Apple Silicon without recommending it", () => {

@@ -32,6 +32,8 @@ allowed_origins = ["https://app.example.test"]
 
 [desktop_sidecar.organization_configuration]
 show_tray_icon = false
+outlook_addin_autopin = true
+outlook_addin_autopin_panes = false
 
 [desktop_sidecar.distribution]
 enabled = true
@@ -52,7 +54,7 @@ directory = "/tmp/desktop-sidecar-artifacts"
         .set_override("database_url", "postgres://user:pass@localhost:5432/test")
         .unwrap();
 
-    let config: AppConfig = builder
+    let mut config: AppConfig = builder
         .build()
         .expect("Failed to build config schema")
         .try_deserialize()
@@ -64,6 +66,36 @@ directory = "/tmp/desktop-sidecar-artifacts"
             .organization_configuration
             .show_tray_icon,
         Some(false)
+    );
+    let organization_configuration = config.desktop_sidecar_organization_configuration();
+    assert_eq!(organization_configuration.outlook_addin_autopin, Some(true));
+    assert_eq!(
+        organization_configuration.outlook_addin_autopin_panes,
+        Some(false)
+    );
+    // Without the Office add-in, the sidecar has no add-in id to pin.
+    assert_eq!(organization_configuration.outlook_addin_id, None);
+    config.integrations.ms_office.addin.enabled = true;
+    config.integrations.ms_office.addin.addin_id =
+        " 00000000-0000-4000-8000-000000000001 ".to_owned();
+    assert_eq!(
+        config
+            .desktop_sidecar_organization_configuration()
+            .outlook_addin_id
+            .as_deref(),
+        Some("00000000-0000-4000-8000-000000000001")
+    );
+    // An explicit id wins over the Office add-in's.
+    config
+        .desktop_sidecar
+        .organization_configuration
+        .outlook_addin_id = Some("00000000-0000-4000-8000-000000000002".to_owned());
+    assert_eq!(
+        config
+            .desktop_sidecar_organization_configuration()
+            .outlook_addin_id
+            .as_deref(),
+        Some("00000000-0000-4000-8000-000000000002")
     );
     assert!(config.desktop_sidecar.show_settings_tab);
     assert_eq!(

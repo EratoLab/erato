@@ -50,9 +50,11 @@ msi = "0.10.0"
 zip = { version = "8.6.0", default-features = false, features = ["deflate"] }
 
 # Dependencies: Outgoing HTTP
-reqwest = { version = "0.13.1", default-features = false, features = ["rustls", "charset", "http2", "system-proxy", "multipart"] }
+reqwest = { version = "0.13.1", default-features = false, features = ["rustls", "charset", "http2", "system-proxy", "multipart", "stream", "json"] }
 reqwest-middleware = "0.5.1"
 reqwest-tracing = { version = "0.7.1", features = ["opentelemetry_0_32"] }
+tokio-tungstenite = { version = "0.28.0", features = ["rustls-tls-webpki-roots"] }
+webpki-roots = "1.0.10"
 
 # Dependencies: Security
 rcgen = { version = "0.14.8", default-features = false, features = ["ring", "pem", "x509-parser"] }
@@ -60,6 +62,9 @@ rustls = { version = "0.23", default-features = false, features = ["ring", "std"
 x509-parser = "0.18"
 time = "0.3"
 aes-gcm-siv = "0.11.1"
+aes = "0.9.1"
+cbc = { version = "0.2.1", features = ["alloc"] }
+uuid = { version = "1", features = ["v4", "v5"] }
 hmac = "0.13.0"
 jsonwebtoken = { version = "10.4.0", features = ["aws_lc_rs"] }
 regorus = "0.5.0"

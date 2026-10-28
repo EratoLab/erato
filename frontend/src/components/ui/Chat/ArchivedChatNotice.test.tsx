@@ -1,27 +1,32 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ArchivedChatNotice } from "./ArchivedChatNotice";
+import { useToastStore } from "../Toast/toastStore";
 
 const unarchiveChat = vi.fn<(chatId: string) => Promise<void>>();
-const notifyUnarchiveFailed = vi.fn();
 
 vi.mock("@/providers/ChatProvider", () => ({
   useChatContext: () => ({ unarchiveChat }),
 }));
 
-vi.mock("./unarchiveFeedback", () => ({
-  notifyUnarchiveFailed: () => notifyUnarchiveFailed(),
-}));
-
 const unarchiveButton = () =>
   screen.queryByRole("button", { name: "Unarchive" });
+
+const errorToasts = () =>
+  useToastStore.getState().toasts.filter((toast) => toast.variant === "error");
 
 describe("ArchivedChatNotice", () => {
   beforeEach(() => {
     unarchiveChat.mockReset();
     unarchiveChat.mockResolvedValue(undefined);
-    notifyUnarchiveFailed.mockClear();
+    useToastStore.getState().clear();
   });
 
   it("restores the chat through the shared context action", () => {
@@ -38,7 +43,55 @@ describe("ArchivedChatNotice", () => {
     render(<ArchivedChatNotice chatId="chat-1" />);
     fireEvent.click(unarchiveButton()!);
 
-    await waitFor(() => expect(notifyUnarchiveFailed).toHaveBeenCalled());
+    await waitFor(() => expect(errorToasts()).toHaveLength(1));
+  });
+
+  it("replaces the failure on a retry and retracts it once a retry restores the chat", async () => {
+    unarchiveChat.mockRejectedValue(new Error("nope"));
+    render(<ArchivedChatNotice chatId="chat-1" />);
+
+    fireEvent.click(unarchiveButton()!);
+    await waitFor(() => expect(errorToasts()).toHaveLength(1));
+    await waitFor(() => expect(unarchiveButton()).toBeEnabled());
+    fireEvent.click(unarchiveButton()!);
+    await waitFor(() => expect(unarchiveChat).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(unarchiveButton()).toBeEnabled());
+    expect(errorToasts()).toHaveLength(1);
+
+    unarchiveChat.mockResolvedValue(undefined);
+    fireEvent.click(unarchiveButton()!);
+
+    await waitFor(() => expect(unarchiveChat).toHaveBeenCalledTimes(3));
+    await waitFor(() => expect(errorToasts()).toHaveLength(0));
+  });
+
+  it("stays busy until the restore and its refetches settle", async () => {
+    let settle!: () => void;
+    unarchiveChat.mockReturnValue(
+      new Promise<void>((resolve) => {
+        settle = resolve;
+      }),
+    );
+    render(<ArchivedChatNotice chatId="chat-1" />);
+
+    fireEvent.click(unarchiveButton()!);
+
+    expect(unarchiveButton()).toBeDisabled();
+    expect(unarchiveButton()).toHaveAttribute("aria-busy", "true");
+    await act(async () => {
+      settle();
+    });
+    expect(unarchiveButton()).toBeEnabled();
+  });
+
+  it("does not carry a restore under way over to another archived chat", () => {
+    unarchiveChat.mockReturnValue(new Promise<void>(() => {}));
+    const { rerender } = render(<ArchivedChatNotice chatId="chat-1" />);
+
+    fireEvent.click(unarchiveButton()!);
+    rerender(<ArchivedChatNotice chatId="chat-2" />);
+
+    expect(unarchiveButton()).toBeEnabled();
   });
 
   it("states the archive but withholds the way back for a delegated run", () => {

@@ -247,7 +247,13 @@ export function WordDocumentPlanCard({
       return {
         route: route.route,
         text: wordRoutePreviewText(route, wordPlanPassages(plan)),
-        write: wordWholeDocumentWrite(route, plan, snapshot, wordApplyPolicy()),
+        write: wordWholeDocumentWrite(
+          route,
+          plan,
+          snapshot,
+          wordApplyPolicy(),
+          xml,
+        ),
         comments: wordPlanCommentConsequences(snapshot, xml, compiled),
       };
     } catch {
@@ -769,7 +775,7 @@ export function WordDocumentPlanCard({
     );
   if (!plan || !planReview)
     return <Alert type="error">{wordAuthoringIssueText("invalid")}</Alert>;
-  const applyLabel = wordPlanApplyLabel(planReview);
+  const applyLabel = wordPlanApplyLabel(planReview, replacedRoute === "import");
   const coauthorsNotice = coauthors && replaces && (
     <Alert
       type="warning"
@@ -1122,7 +1128,7 @@ export function WordDocumentPlanCard({
               review={review}
               kind="plan"
               title={planTitle}
-              wholeDocument={planReview.scope.wholeFile}
+              wholeDocument={review.documentPlanOutcome?.route === "import"}
               note={adjustmentNote}
               warning={commentWarning}
             />

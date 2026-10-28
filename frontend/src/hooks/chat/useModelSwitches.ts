@@ -24,6 +24,11 @@ export function useModelSwitches(
         model.model_display_name,
       ]),
     );
+    for (const message of Object.values(messages)) {
+      if (message.chatProviderId && message.chatProviderDisplayName) {
+        modelNames.set(message.chatProviderId, message.chatProviderDisplayName);
+      }
+    }
     return getModelSwitches(messages, messageOrder, modelNames);
   }, [availableModels, messageOrder, messages]);
 }

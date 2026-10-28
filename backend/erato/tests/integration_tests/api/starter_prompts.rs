@@ -2,7 +2,9 @@
 
 use axum::Router;
 use axum_test::TestServer;
-use erato::config::{PromptSourceSpecification, StarterPromptConfig, StarterPromptsConfig};
+use erato::config::{
+    PromptSourceSpecification, ProviderReplacement, StarterPromptConfig, StarterPromptsConfig,
+};
 use erato::server::router::router;
 use serde_json::Value;
 use sqlx::Pool;
@@ -59,11 +61,27 @@ async fn test_starter_prompts_endpoint(pool: Pool<Postgres>) {
             chat_provider: Some("missing-provider".to_string()),
         },
     );
+    let mut replaced_prompt = prompts["web_research"].clone();
+    replaced_prompt.chat_provider = Some("old-provider".to_string());
+    prompts.insert("replaced".to_string(), replaced_prompt);
+    app_config
+        .chat_providers
+        .as_mut()
+        .unwrap()
+        .replacement_providers
+        .push(ProviderReplacement {
+            old: "old-provider".to_string(),
+            new: "mock-llm".to_string(),
+        });
 
     app_config.starter_prompts = StarterPromptsConfig {
         enabled: true,
         prompts,
-        priority_order: vec!["draft_email".to_string(), "web_research".to_string()],
+        priority_order: vec![
+            "draft_email".to_string(),
+            "web_research".to_string(),
+            "replaced".to_string(),
+        ],
     };
     app_config.facets.facets.insert(
         "web_search".to_string(),
@@ -105,11 +123,13 @@ async fn test_starter_prompts_endpoint(pool: Pool<Postgres>) {
         .get("starter_prompts")
         .and_then(Value::as_array)
         .expect("Missing starter prompts list");
-    assert_eq!(starter_prompts.len(), 2);
+    assert_eq!(starter_prompts.len(), 3);
     assert_eq!(starter_prompts[0]["id"], "draft_email");
     assert_eq!(starter_prompts[1]["id"], "web_research");
     assert_eq!(starter_prompts[0]["chat_provider"], Value::Null);
     assert_eq!(starter_prompts[1]["chat_provider"], "mock-llm");
+    assert_eq!(starter_prompts[2]["id"], "replaced");
+    assert_eq!(starter_prompts[2]["chat_provider"], "mock-llm");
     assert_eq!(
         starter_prompts[1]["selected_facets"],
         serde_json::json!(["web_search"])
