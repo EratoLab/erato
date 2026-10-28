@@ -5,7 +5,7 @@ import {
   useCallback,
   useMemo,
   useEffect,
-  useLayoutEffect,
+  useInsertionEffect,
   useRef,
   useState,
 } from "react";
@@ -603,7 +603,8 @@ export const MessageList = memo<MessageListProps>(
     );
     const controlsContext = useStableValue(incomingControlsContext);
     const latestOnMessageAction = useRef(incomingOnMessageAction);
-    useLayoutEffect(() => {
+    // Before any layout effect, so a row calling it from one sees this render's.
+    useInsertionEffect(() => {
       latestOnMessageAction.current = incomingOnMessageAction;
     });
     const onMessageAction = useCallback(

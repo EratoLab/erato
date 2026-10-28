@@ -2,7 +2,13 @@ import { useRef } from "react";
 
 import type { ChatMessage } from "./MessageList";
 
-export const shallowEqual = (previous: unknown, next: unknown): boolean => {
+// A key missing on one side never matches an `undefined` value on the other,
+// so `{ canEdit: true }` and `{ canEdit: true, isSharedDialog: undefined }` differ.
+const shallowEqualBy = (
+  previous: unknown,
+  next: unknown,
+  isSameValue: (key: string, previous: unknown, next: unknown) => boolean,
+): boolean => {
   if (Object.is(previous, next)) return true;
   if (
     typeof previous !== "object" ||
@@ -20,32 +26,25 @@ export const shallowEqual = (previous: unknown, next: unknown): boolean => {
     keys.every(
       (key) =>
         Object.hasOwn(nextRecord, key) &&
-        Object.is(previousRecord[key], nextRecord[key]),
+        isSameValue(key, previousRecord[key], nextRecord[key]),
     )
   );
 };
+
+export const shallowEqual = (previous: unknown, next: unknown): boolean =>
+  shallowEqualBy(previous, next, (_key, a, b) => Object.is(a, b));
 
 // The chat providers rebuild every message object, and its `loading` object,
 // on each streamed update even when nothing in it changed.
 export const isSameMessage = (
   previous: ChatMessage,
   next: ChatMessage,
-): boolean => {
-  if (previous === next) return true;
-  const previousRecord = previous as unknown as Record<string, unknown>;
-  const nextRecord = next as unknown as Record<string, unknown>;
-  const keys = Object.keys(previousRecord);
-  return (
-    keys.length === Object.keys(nextRecord).length &&
-    keys.every(
-      (key) =>
-        Object.hasOwn(nextRecord, key) &&
-        (Object.is(previousRecord[key], nextRecord[key]) ||
-          (key === "loading" &&
-            shallowEqual(previousRecord[key], nextRecord[key]))),
-    )
+): boolean =>
+  shallowEqualBy(
+    previous,
+    next,
+    (key, a, b) => Object.is(a, b) || (key === "loading" && shallowEqual(a, b)),
   );
-};
 
 /** The previous value for as long as `isEqual` says nothing changed. */
 export function useStableValue<T>(
