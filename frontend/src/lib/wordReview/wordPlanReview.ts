@@ -232,7 +232,8 @@ export type WordPlanTitle =
     };
 
 export interface WordPlanScope {
-  /** Applying re-imports the whole file rather than replacing the body. */
+  /** The full .docx package was read, which the in-place route needs as well as the import;
+   * the route, not this flag, decides how Apply writes. */
   wholeFile: boolean;
   unchanged: WordPlanScopePart[];
 }

@@ -16,8 +16,12 @@ import {
   Textarea,
 } from "@/components/ui/Input";
 import { SubjectSelector } from "@/components/ui/Sharing/SubjectSelector";
+import { toast } from "@/components/ui/Toast";
+import { usePageErrorToast } from "@/components/ui/Toast/usePageErrorToast";
 import { usePageAlignment } from "@/hooks/ui";
 import {
+  listMyAssistantHubVersionsQuery,
+  listReviewAssistantHubVersionsQuery,
   useAssistantHubConfig,
   useGetAssistant,
   useListMyAssistantHubVersions,
@@ -39,8 +43,12 @@ import {
 import type {
   AssistantHubAudienceGrantInput,
   AssistantHubSubmissionRequest,
+  AssistantHubVersionsResponse,
   ShareGrant,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+
+/** Error toasts stay until dismissed, so the next attempt has to replace them. */
+const SUBMIT_TOAST_KEY = "assistant-hub-submit";
 
 const toKeywordList = (value: string) =>
   value
@@ -134,6 +142,7 @@ const suggestNextVersionNumber = (
 };
 
 export default function AssistantHubSubmitPage() {
+  const showError = usePageErrorToast();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { sourceAssistantId } = useParams<{ sourceAssistantId: string }>();
@@ -164,7 +173,6 @@ export default function AssistantHubSubmitPage() {
   const [selectedAudience, setSelectedAudience] = useState<AudienceSubject[]>(
     [],
   );
-  const [errorMessage, setErrorMessage] = useState("");
   const [prefilledFromVersionId, setPrefilledFromVersionId] = useState<
     string | null
   >(null);
@@ -404,39 +412,88 @@ export default function AssistantHubSubmitPage() {
 
   const handlePreview = async () => {
     if (!sourceAssistantId) return;
+    toast.dismissKey(SUBMIT_TOAST_KEY);
     const validationError = validate();
     if (validationError) {
-      setErrorMessage(validationError);
+      showError({ dedupeKey: SUBMIT_TOAST_KEY, title: validationError });
       return;
     }
-    setErrorMessage("");
-    await previewDiff.mutateAsync({
-      pathParams: { sourceAssistantId },
-      body: requestBody,
-    });
+    try {
+      await previewDiff.mutateAsync({
+        pathParams: { sourceAssistantId },
+        body: requestBody,
+      });
+    } catch {
+      showError({
+        dedupeKey: SUBMIT_TOAST_KEY,
+        title: t({
+          id: "assistantHub.submit.error.preview",
+          message: "Failed to preview the submission diff.",
+        }),
+      });
+    }
   };
 
   const handleSubmit = async () => {
     if (!sourceAssistantId) return;
+    toast.dismissKey(SUBMIT_TOAST_KEY);
     const validationError = validate();
     if (validationError) {
-      setErrorMessage(validationError);
+      showError({ dedupeKey: SUBMIT_TOAST_KEY, title: validationError });
       return;
     }
-    setErrorMessage("");
-    await submitVersion.mutateAsync({
-      pathParams: { sourceAssistantId },
-      body: requestBody,
-    });
-    await queryClient.invalidateQueries();
-    navigate("/assistant-hub/my");
+    try {
+      const { version } = await submitVersion.mutateAsync({
+        pathParams: { sourceAssistantId },
+        body: requestBody,
+      });
+
+      // Leaving aborts refetches this page observes, so the new version is
+      // seeded and the lists refetch when they next mount.
+      const myVersionsKey = listMyAssistantHubVersionsQuery({}).queryKey;
+      queryClient.setQueryData<AssistantHubVersionsResponse>(
+        myVersionsKey,
+        (current) =>
+          current && { ...current, versions: [version, ...current.versions] },
+      );
+      for (const queryKey of [
+        myVersionsKey,
+        listReviewAssistantHubVersionsQuery({}).queryKey,
+      ]) {
+        void queryClient.invalidateQueries({ queryKey, refetchType: "none" });
+      }
+
+      toast.success({
+        dedupeKey: SUBMIT_TOAST_KEY,
+        title: t({
+          id: "assistantHub.submit.success",
+          message: "Version submitted for review.",
+        }),
+      });
+      navigate("/assistant-hub/my");
+    } catch {
+      showError({
+        dedupeKey: SUBMIT_TOAST_KEY,
+        title: t({
+          id: "assistantHub.submit.error.submit",
+          message: "Failed to submit the assistant version.",
+        }),
+      });
+    }
   };
 
+  const handleCancel = () => {
+    toast.dismissKey(SUBMIT_TOAST_KEY);
+    navigate("/assistants/created");
+  };
+
+  // Share grants only prefill the audience once; a newer submission arriving
+  // later must not swap the form for a spinner.
   const isLoading =
     isLoadingConfig ||
     isLoadingAssistant ||
     isLoadingMyVersions ||
-    isLoadingPreviousShareGrants;
+    (isLoadingPreviousShareGrants && prefilledAudienceForVersionId === null);
 
   return (
     <div className="flex h-full flex-col bg-theme-bg-secondary">
@@ -482,24 +539,6 @@ export default function AssistantHubSubmitPage() {
               {t({
                 id: "assistantHub.disabled",
                 message: "The assistant hub is not enabled.",
-              })}
-            </Alert>
-          )}
-
-          {errorMessage && <Alert type="error">{errorMessage}</Alert>}
-          {previewDiff.error && (
-            <Alert type="error">
-              {t({
-                id: "assistantHub.submit.error.preview",
-                message: "Failed to preview the submission diff.",
-              })}
-            </Alert>
-          )}
-          {submitVersion.error && (
-            <Alert type="error">
-              {t({
-                id: "assistantHub.submit.error.submit",
-                message: "Failed to submit the assistant version.",
               })}
             </Alert>
           )}
@@ -759,10 +798,7 @@ export default function AssistantHubSubmitPage() {
               </Card>
 
               <div className="flex justify-end gap-3">
-                <Button
-                  variant="secondary"
-                  onClick={() => navigate("/assistants/created")}
-                >
+                <Button variant="secondary" onClick={handleCancel}>
                   {t({ id: "common.cancel", message: "Cancel" })}
                 </Button>
                 <Button

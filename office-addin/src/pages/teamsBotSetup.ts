@@ -1,5 +1,5 @@
-import release from "../../../site/public/setup/teams/1.1.1/release.json";
-export { default as teamsHelperSource } from "../../../site/public/setup/teams/1.1.1/EratoTeamsSetup.ps1?raw";
+import release from "../../../site/public/setup/teams/1.1.2/release.json";
+export { default as teamsHelperSource } from "../../../site/public/setup/teams/1.1.2/EratoTeamsSetup.ps1?raw";
 
 export const teamsHelperRelease = {
   ...release,
@@ -131,7 +131,7 @@ export function validMessagingEndpoint(value: string): boolean {
     const url = new URL(value);
     return (
       url.protocol === "https:" &&
-      url.pathname === TEAMS_BOT_MESSAGES_PATH &&
+      url.pathname.endsWith(TEAMS_BOT_MESSAGES_PATH) &&
       !url.search &&
       !url.hash &&
       !url.username &&

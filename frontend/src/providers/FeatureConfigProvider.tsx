@@ -74,6 +74,7 @@ interface AudioDictationFeatureConfig {
 
 /** Configuration for conversational audio features */
 interface AudioConversationalFeatureConfig {
+  speechEnabled?: boolean;
   /** Whether conversational audio mode is enabled */
   enabled: boolean;
   /** Maximum recording duration in seconds for conversational audio captures */
@@ -433,6 +434,7 @@ function createFeatureConfig(
         environment.audioDictationMaxRecordingDurationSeconds,
     },
     audioConversational: {
+      speechEnabled: environment.speechEnabled ?? false,
       enabled: Boolean(environment.audioConversationalEnabled),
       maxRecordingDurationSeconds:
         environment.audioConversationalMaxRecordingDurationSeconds,

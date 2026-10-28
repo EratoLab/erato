@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 
 import {
   outlookSidecarUri,
@@ -33,6 +33,26 @@ const snapshot: SidecarSnapshot = {
 };
 
 describe("Outlook source navigation", () => {
+  afterEach(() => {
+    delete window.DESKTOP_SIDECAR_WINDOWS_LAUNCH_SCHEME;
+  });
+
+  it("requires discovery to match the configured environment's launch scheme", () => {
+    window.DESKTOP_SIDECAR_WINDOWS_LAUNCH_SCHEME = "erato-launch-staging";
+    expect(outlookSidecarUri(reference, snapshot, "windows")).toBeNull();
+    const environmentSnapshot = {
+      ...snapshot,
+      discoveryExtensions: {
+        "x-erato-outlook-navigation": {
+          ...descriptor,
+          launchUriPrefix: "erato-launch-staging://outlook/open?reference=",
+        },
+      },
+    };
+    expect(
+      outlookSidecarUri(reference, environmentSnapshot, "windows"),
+    ).toMatch(/^erato-launch-staging:\/\/outlook\/open\?reference=/);
+  });
   it("round-trips UTF-8 as unpadded base64url without leaking it into query parameters", () => {
     const uri = outlookSidecarUri(reference, snapshot, "windows")!;
     const encoded = uri.split("reference=")[1];

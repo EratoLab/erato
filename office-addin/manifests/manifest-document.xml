@@ -26,7 +26,8 @@
     <SourceLocation DefaultValue="https://localhost:3002/public/platform-office-addin/word" />
   </DefaultSettings>
   <Permissions>ReadWriteDocument</Permissions>
-  <!-- Keep command-specific Requirements absent for the SharePoint catalog route. -->
+  <!-- The backend omits this entire section for SharePoint catalog distribution. -->
+  <!-- OFFICE_ADDIN_DOCUMENT_COMMANDS_START -->
   <VersionOverrides xmlns="http://schemas.microsoft.com/office/taskpaneappversionoverrides" xsi:type="VersionOverridesV1_0">
     <Hosts>
       <Host xsi:type="Document">
@@ -80,4 +81,5 @@
       </bt:LongStrings>
     </Resources>
   </VersionOverrides>
+  <!-- OFFICE_ADDIN_DOCUMENT_COMMANDS_END -->
 </OfficeApp>

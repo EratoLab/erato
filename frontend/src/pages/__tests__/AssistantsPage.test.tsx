@@ -1,9 +1,16 @@
 import { i18n } from "@lingui/core";
 import { I18nProvider } from "@lingui/react";
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { useToastStore } from "@/components/ui/Toast/toastStore";
+import {
+  frequentAssistantsQuery,
+  listAssistantsQuery,
+  startingAssistantQuery,
+} from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import { messages as enMessages } from "@/locales/en/messages.json";
 
 import AssistantsPage from "../AssistantsPage";
@@ -37,6 +44,7 @@ const useListMyAssistantHubVersions = vi.fn((_variables?: unknown) => ({
   isLoading: false,
   error: null,
 }));
+const archiveAssistant = vi.fn();
 
 vi.mock("@/providers/FeatureConfigProvider", () => ({
   useAssistantsFeature: () => ({ enabled: true, usageViewEnabled: false }),
@@ -57,34 +65,40 @@ vi.mock("@/hooks/ui/useThemedIcon", () => ({
   useThemedIcon: () => null,
 }));
 
-vi.mock("@/lib/generated/v1betaApi/v1betaApiComponents", () => ({
-  useArchiveAssistant: () => ({
-    mutateAsync: vi.fn(),
+vi.mock(
+  "@/lib/generated/v1betaApi/v1betaApiComponents",
+  async (importOriginal) => ({
+    ...(await importOriginal<
+      typeof import("@/lib/generated/v1betaApi/v1betaApiComponents")
+    >()),
+    useArchiveAssistant: () => ({
+      mutateAsync: archiveAssistant,
+    }),
+    useAssistantHubConfig: () => ({
+      data: assistantHubConfigLoading
+        ? undefined
+        : {
+            enabled: assistantHubEnabled,
+            enable_categories: assistantHubCategoriesEnabled,
+            can_review: true,
+            categories: [
+              {
+                id: "productivity",
+                display_name: "Productivity",
+                icon: "Sparkles",
+              },
+            ],
+          },
+      isLoading: assistantHubConfigLoading,
+      error: null,
+    }),
+    useListAssistantHubAssistants: (variables: unknown) =>
+      useListAssistantHubAssistants(variables),
+    useListAssistants: (variables: unknown) => useListAssistants(variables),
+    useListMyAssistantHubVersions: (variables: unknown) =>
+      useListMyAssistantHubVersions(variables),
   }),
-  useAssistantHubConfig: () => ({
-    data: assistantHubConfigLoading
-      ? undefined
-      : {
-          enabled: assistantHubEnabled,
-          enable_categories: assistantHubCategoriesEnabled,
-          can_review: true,
-          categories: [
-            {
-              id: "productivity",
-              display_name: "Productivity",
-              icon: "Sparkles",
-            },
-          ],
-        },
-    isLoading: assistantHubConfigLoading,
-    error: null,
-  }),
-  useListAssistantHubAssistants: (variables: unknown) =>
-    useListAssistantHubAssistants(variables),
-  useListAssistants: (variables: unknown) => useListAssistants(variables),
-  useListMyAssistantHubVersions: (variables: unknown) =>
-    useListMyAssistantHubVersions(variables),
-}));
+);
 
 vi.mock("../assistantHubUtils", () => ({
   AssistantHubBreadcrumb: ({
@@ -166,27 +180,29 @@ const createHubVersion = ({
     submitted_at: "2026-01-02T00:00:00Z",
   }) as AssistantHubVersion;
 
-function renderRoutes(initialEntry: string) {
+function renderRoutes(initialEntry: string, queryClient = new QueryClient()) {
   return render(
-    <MemoryRouter initialEntries={[initialEntry]}>
-      <I18nProvider i18n={i18n}>
-        <Routes>
-          <Route
-            path="/assistant-hub"
-            element={<AssistantsPage view="hub" />}
-          />
-          <Route
-            path="/assistants"
-            element={<AssistantsPage view="shared_with_user" />}
-          />
-          <Route
-            path="/assistants/created"
-            element={<AssistantsPage view="owned_by_user" />}
-          />
-        </Routes>
-        <LocationProbe />
-      </I18nProvider>
-    </MemoryRouter>,
+    <QueryClientProvider client={queryClient}>
+      <MemoryRouter initialEntries={[initialEntry]}>
+        <I18nProvider i18n={i18n}>
+          <Routes>
+            <Route
+              path="/assistant-hub"
+              element={<AssistantsPage view="hub" />}
+            />
+            <Route
+              path="/assistants"
+              element={<AssistantsPage view="shared_with_user" />}
+            />
+            <Route
+              path="/assistants/created"
+              element={<AssistantsPage view="owned_by_user" />}
+            />
+          </Routes>
+          <LocationProbe />
+        </I18nProvider>
+      </MemoryRouter>
+    </QueryClientProvider>,
   );
 }
 
@@ -205,6 +221,8 @@ describe("AssistantsPage", () => {
     useListAssistants.mockClear();
     useListAssistantHubAssistants.mockClear();
     useListMyAssistantHubVersions.mockClear();
+    archiveAssistant.mockReset();
+    useToastStore.setState({ toasts: [] });
     i18n.load("en", enMessages as unknown as Messages);
     i18n.activate("en");
   });
@@ -555,5 +573,93 @@ describe("AssistantsPage", () => {
       queryParams: { sharing_relation: "shared_with_user" },
     });
     expect(useListAssistantHubAssistants).not.toHaveBeenCalled();
+  });
+
+  describe("archiving an assistant", () => {
+    const settle = () =>
+      act(() => new Promise<void>((resolve) => setTimeout(resolve, 0)));
+    const card = () => screen.getByTestId("assistant-list-item");
+    const confirmArchive = () => {
+      fireEvent.click(
+        within(card()).getByRole("button", { name: "Open menu" }),
+      );
+      fireEvent.click(screen.getByRole("menuitem", { name: "Archive" }));
+      fireEvent.click(screen.getByRole("button", { name: "Confirm action" }));
+    };
+    const archived = { id: "writer", archived_at: "2026-01-04T00:00:00Z" };
+
+    beforeEach(() => {
+      assistantHubEnabled = false;
+      assistants = [createAssistant("writer", "Writer")];
+    });
+
+    it("shows the card as archiving until the archive lands", async () => {
+      let finish!: (value: typeof archived) => void;
+      archiveAssistant.mockReturnValue(
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+      );
+      renderRoutes("/assistants/created");
+
+      confirmArchive();
+
+      expect(within(card()).getByRole("status")).toHaveTextContent(
+        "Archiving...",
+      );
+      expect(
+        within(card()).queryByRole("button", { name: "New Chat" }),
+      ).not.toBeInTheDocument();
+
+      finish(archived);
+      await settle();
+
+      expect(within(card()).queryByRole("status")).not.toBeInTheDocument();
+      expect(archiveAssistant).toHaveBeenCalledTimes(1);
+    });
+
+    it("reports a failed archive in a toast and keeps the card usable", async () => {
+      archiveAssistant.mockRejectedValue(new Error("boom"));
+      renderRoutes("/assistants/created");
+
+      confirmArchive();
+      await settle();
+
+      expect(
+        useToastStore
+          .getState()
+          .toasts.map((toast) => [toast.variant, toast.title]),
+      ).toEqual([["error", "Failed to archive assistant. Please try again."]]);
+      expect(
+        within(card()).getByRole("button", { name: "New Chat" }),
+      ).toBeEnabled();
+    });
+
+    it("marks the other assistant listings stale so they drop the archived assistant", async () => {
+      const queryClient = new QueryClient();
+      const startingPickerKey = listAssistantsQuery({
+        queryParams: { sharing_relation: "all" },
+      }).queryKey;
+      const frequentKey = frequentAssistantsQuery({
+        queryParams: { limit: 5 },
+      }).queryKey;
+      const startingAssistantKey = startingAssistantQuery({}).queryKey;
+      queryClient.setQueryData(startingPickerKey, []);
+      queryClient.setQueryData(frequentKey, { assistants: [] });
+      queryClient.setQueryData(startingAssistantKey, {});
+      archiveAssistant.mockResolvedValue(archived);
+      renderRoutes("/assistants/created", queryClient);
+
+      confirmArchive();
+      await settle();
+
+      for (const queryKey of [
+        startingPickerKey,
+        frequentKey,
+        startingAssistantKey,
+      ]) {
+        expect(queryClient.getQueryState(queryKey)?.isInvalidated).toBe(true);
+      }
+    });
   });
 });

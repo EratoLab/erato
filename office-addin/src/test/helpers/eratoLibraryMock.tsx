@@ -376,14 +376,33 @@ export const DEFAULT_STUBS = {
   registerClientToolExecutor: () => noop,
   registerOperationExecutor: () => noop,
   removeArchivedChatFromLists: async () => noop,
+  runChatAction: async (
+    _action: string,
+    _chatId: string,
+    perform: () => Promise<unknown>,
+  ) => {
+    try {
+      await perform();
+      return true;
+    } catch {
+      return false;
+    }
+  },
   requestClientOperationSweep: noop,
+  dismissChatActionFailure: noop,
   resolveComponentOverride: (override: unknown, fallback: unknown) =>
     override ?? fallback,
   seedGenerationStatusFromListing: noop,
   setAuthRecoveryHandler: noop,
   setClientPlatform: noop,
   setWordLiveCards: noop,
-  toast: { info: noop, success: noop, warning: noop, error: noop },
+  toast: {
+    info: noop,
+    success: noop,
+    warning: noop,
+    error: noop,
+    dismissKey: noop,
+  },
   transformEmailFencesForCopy: (value: string) => value,
   wordShowInWordLabel: () => "Show in Word",
   UploadUnknownError: class extends Error {},
@@ -396,7 +415,12 @@ export const DEFAULT_STUBS = {
     setSelectedModel: noop,
     isSelectionReady: true,
   }),
-  useArchiveChatEndpoint: () => ({ mutateAsync: async () => undefined }),
+  useArchiveChatEndpoint: () => ({
+    mutateAsync: async () => ({
+      archived_at: "2026-01-01T00:00:00Z",
+      chat_id: "chat",
+    }),
+  }),
   useAssistantsFeature: () => ({
     enabled: false,
     delegationEnabled: false,

@@ -89,14 +89,6 @@ export interface AssistantFormProps {
    */
   isSubmitting?: boolean;
   /**
-   * Success message to display
-   */
-  successMessage?: string;
-  /**
-   * Error message to display
-   */
-  errorMessage?: string;
-  /**
    * Callback when form is submitted
    */
   onSubmit: (data: AssistantFormData) => void | Promise<void>;
@@ -149,8 +141,6 @@ export const AssistantForm: React.FC<AssistantFormProps> = ({
   initialData,
   availableModels = [],
   isSubmitting = false,
-  successMessage,
-  errorMessage,
   onSubmit,
   onCancel,
   mode = "create",
@@ -678,12 +668,6 @@ export const AssistantForm: React.FC<AssistantFormProps> = ({
   return (
     <form onSubmit={handleSubmit} className={className}>
       <div className="space-y-6">
-        {/* Success message */}
-        {successMessage && <Alert type="success">{successMessage}</Alert>}
-
-        {/* Error message */}
-        {errorMessage && <Alert type="error">{errorMessage}</Alert>}
-
         {unavailableConfiguredFacets.length > 0 && (
           <Alert type="warning">
             {t({

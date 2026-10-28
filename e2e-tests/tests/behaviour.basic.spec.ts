@@ -352,7 +352,7 @@ test(
       preference_job_title: jobTitle,
       preference_assistant_custom_instructions: customInstructions,
       preference_assistant_additional_information: additionalInformation,
-      preference_default_chat_provider: null,
+      // An unchanged default provider is omitted to preserve its saved ID.
       preference_starting_hub_assistant_id: null,
       preference_starting_assistant_id: null,
       preference_starting_assistant_cleared: false,

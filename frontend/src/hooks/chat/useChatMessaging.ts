@@ -28,6 +28,14 @@ import {
 
 import { getIdToken } from "@/auth/tokenStore";
 import { useChatHistory } from "@/hooks";
+import {
+  beginSpeechResponse,
+  moveSpeechStream,
+  playSpeechChunk,
+  speechFailed,
+  stopSpeechPlayback,
+  useSpeechPlayback,
+} from "@/hooks/audio/speechPlayback";
 import { BUDGET_QUERY_KEY } from "@/hooks/budget/useBudgetStatus";
 import { refreshChatQueries } from "@/hooks/chat/refreshChatQueries";
 import { useFileUploadStore } from "@/hooks/files/useFileUploadStore";
@@ -808,6 +816,7 @@ export function useChatMessaging(
 
   // For backward compatibility with tests
   const cancelMessage = useCallback(() => {
+    stopSpeechPlayback();
     const preparation = preparationAbortByKeyRef.current[streamKey];
     if (preparation) {
       // Nothing has reached the server yet; sendMessage rolls the send back.
@@ -1002,6 +1011,14 @@ export function useChatMessaging(
       .isStreaming;
   }, []);
 
+  const speechChatIdRef = useRef(chatId);
+  useEffect(() => {
+    // The null -> saved-chat transition belongs to the same conversational turn.
+    if (speechChatIdRef.current && speechChatIdRef.current !== chatId)
+      stopSpeechPlayback();
+    speechChatIdRef.current = chatId;
+  }, [chatId]);
+
   // Handle incoming SSE events
   const processStreamEvent = useCallback(
     (event: SSEEvent, streamKeyRef?: { current: string }) => {
@@ -1026,6 +1043,18 @@ export function useChatMessaging(
 
         // Handle different message types from SSE
         switch (responseData.message_type) {
+          case "audio_delta":
+            playSpeechChunk(
+              responseData.message_id,
+              responseData.sequence,
+              responseData.audio,
+              responseData.sample_rate,
+              activeStreamKey,
+            );
+            break;
+          case "audio_error":
+            speechFailed(activeStreamKey);
+            break;
           case "chat_created":
             logger.log(
               "[DEBUG_REDIRECT] processStreamEvent: chat_created event received. Full payload:",
@@ -1033,6 +1062,7 @@ export function useChatMessaging(
             );
             {
               const previousStreamKey = activeStreamKey;
+              moveSpeechStream(previousStreamKey, responseData.chat_id);
               // A resume stream replays the chat's full event history, so
               // this frame can announce a chat this client never submitted
               // (most visibly a delegated run entered mid-generation). Such
@@ -1284,6 +1314,7 @@ export function useChatMessaging(
             break;
 
           case "error": {
+            stopSpeechPlayback(activeStreamKey);
             const streamError = responseData;
             const description =
               streamError.error_description || "Streaming error";
@@ -1988,6 +2019,10 @@ export function useChatMessaging(
           effectiveChatIdForRequest ? undefined : disabledMcpTools,
         );
 
+        const speech = useSpeechPlayback.getState();
+        requestBody.conversational_audio_back =
+          speech.conversational && speech.enabled;
+        beginSpeechResponse(streamKey);
         logger.log("[DEBUG_STREAMING] sendMessage: Sending requestBody:", {
           requestBody,
           effectiveChatIdForRequest,

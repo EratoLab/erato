@@ -334,6 +334,19 @@ async fn records_to_response(
     records: Vec<HubVersionRecord>,
     include_audience_grants: bool,
 ) -> Vec<AssistantHubVersion> {
+    let available_models = match app_state
+        .global_policy_engine
+        .request_engine(&app_state.db, &app_state.config)
+        .await
+    {
+        Ok(policy) => super::available_models_for_me(app_state, &policy, me_user)
+            .await
+            .ok(),
+        Err(error) => {
+            tracing::warn!(%error, "Could not resolve assistant hub model selections");
+            None
+        }
+    };
     let creator_display_names = resolve_creator_display_names(app_state, me_user, &records).await;
     let hub_assistant_ids: Vec<Uuid> = records
         .iter()
@@ -371,12 +384,19 @@ async fn records_to_response(
             let audience_grants = audience_grants_by_assistant_id
                 .remove(&record.version.assistant_id.to_string())
                 .unwrap_or_default();
-            record_to_response(
+            let mut response = record_to_response(
                 record,
                 creator_display_name,
                 review_summary,
                 audience_grants,
-            )
+            );
+            if let Some(models) = &available_models {
+                response.assistant.default_chat_provider = app_state.effective_saved_model_id(
+                    response.assistant.default_chat_provider.as_deref(),
+                    models,
+                );
+            }
+            response
         })
         .collect()
 }

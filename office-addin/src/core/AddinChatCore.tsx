@@ -852,6 +852,7 @@ export function AddinChatCoreView({
                 : false
             }
             error={feedback.feedbackViewDialogState.error}
+            isRemoving={feedback.feedbackViewDialogState.isRemoving}
           />
           <FeedbackCommentDialog
             isOpen={feedback.feedbackDialogState.isOpen}
