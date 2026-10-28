@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { renderHook, act, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 
 import { installAudioCaptureAccessPolicy } from "../audioCaptureAccess";
 import { useAudioTranscriptionRecorder } from "../useAudioTranscriptionRecorder";
@@ -203,6 +203,8 @@ class MockWebSocket {
   /** When false, the mock withholds the automatic session_state reply so
    *  tests can drive the handshake manually (pre-handshake capture). */
   static autoRespondSessionState = true;
+  /** Withholds `completed` and each chunk's transcription, as a server still at work. */
+  static holdReplies = false;
   readyState = MockWebSocket.OPEN;
   sentJsonFrames: Record<string, unknown>[] = [];
   sentBinaryFrames: Uint8Array[] = [];
@@ -253,7 +255,7 @@ class MockWebSocket {
         this.pendingChunkIndex = Number(frame.chunk_index);
       }
 
-      if (frame.type === "finish") {
+      if (frame.type === "finish" && !MockWebSocket.holdReplies) {
         this.emitJson({
           type: "completed",
           file_upload_id: audioFileUpload.id,
@@ -294,6 +296,9 @@ class MockWebSocket {
 
     const bytes = data instanceof Uint8Array ? data : new Uint8Array(data);
     this.sentBinaryFrames.push(bytes);
+    if (MockWebSocket.holdReplies) {
+      return;
+    }
     const chunkIndex = this.pendingChunkIndex ?? 0;
     this.emitJson({
       type: "chunk_ack",
@@ -361,6 +366,7 @@ describe("useAudioTranscriptionRecorder", () => {
     MockAudioWorkletNode.instances.length = 0;
     MockWebSocket.instances.length = 0;
     MockWebSocket.autoRespondSessionState = true;
+    MockWebSocket.holdReplies = false;
     mockVadListeners.length = 0;
     mockVadEngine.start.mockClear();
     mockVadEngine.stop.mockClear();
@@ -687,5 +693,193 @@ describe("useAudioTranscriptionRecorder", () => {
 
     await waitFor(() => expect(result.current.isRecording).toBe(true));
     expect(mockCreateRicky0123VadEngine).not.toHaveBeenCalled();
+  });
+  describe("canceling from the recording's tile", () => {
+    const renderRecorder = () => {
+      let attachedFiles: FileUploadItem[] = [];
+      let rerenderHook = () => {};
+      const setAttachedFiles = vi.fn((next: FileUploadItem[]) => {
+        attachedFiles = next;
+        rerenderHook();
+      });
+      const hook = renderHook(() =>
+        useAudioTranscriptionRecorder({
+          audioTranscriptionEnabled: true,
+          uploadEnabled: true,
+          maxRecordingDurationSeconds: 1200,
+          chatId: "chat-1",
+          silentChatId: null,
+          setSilentChatId: vi.fn(),
+          attachedFiles,
+          setAttachedFiles,
+        }),
+      );
+      rerenderHook = hook.rerender;
+      return hook;
+    };
+
+    const startRecording = async (
+      result: ReturnType<typeof renderRecorder>["result"],
+    ) => {
+      await act(async () => {
+        result.current.toggleAudioRecording();
+      });
+      await waitFor(() => expect(result.current.isRecording).toBe(true));
+    };
+
+    it("stops the capture and closes the socket while recording, without an error", async () => {
+      const { result } = renderRecorder();
+      await startRecording(result);
+      act(() => {
+        emitAudioSamples(new Float32Array(1600).fill(0.1));
+      });
+      const socket = MockWebSocket.instances[0];
+
+      act(() => {
+        result.current.removeRecordedAudioFile(audioFileUpload.id);
+      });
+
+      expect(result.current.isRecording).toBe(false);
+      expect(socket.close).toHaveBeenCalled();
+      const [track] = (
+        (await (navigator.mediaDevices.getUserMedia as ReturnType<typeof vi.fn>)
+          .mock.results[0].value) as MockMediaStream
+      ).getTracks();
+      expect(track.stop).toHaveBeenCalled();
+      expect(socket.sentJsonFrames).not.toContainEqual(
+        expect.objectContaining({ type: "finish" }),
+      );
+      await act(async () => {});
+      expect(result.current.recordingError).toBeNull();
+    });
+
+    it("counts the running recording up by the audio it captured, then hands over to the length at Stop", async () => {
+      MockWebSocket.holdReplies = true;
+      const { result } = renderRecorder();
+      await startRecording(result);
+      // The 300 ms primer, before any speech.
+      expect(result.current.liveRecordingDuration).toEqual({
+        fileUploadId: audioFileUpload.id,
+        durationMs: 300,
+      });
+
+      act(() => {
+        emitAudioSamples(new Float32Array(16_000).fill(0.1));
+      });
+      await waitFor(
+        () =>
+          expect(result.current.liveRecordingDuration?.durationMs).toBe(1300),
+        { timeout: 2000 },
+      );
+      act(() => {
+        emitAudioSamples(new Float32Array(16_000).fill(0.1));
+      });
+      await waitFor(
+        () =>
+          expect(result.current.liveRecordingDuration?.durationMs).toBe(2300),
+        { timeout: 2000 },
+      );
+
+      await act(async () => {
+        result.current.toggleAudioRecording();
+      });
+      expect(result.current.liveRecordingDuration).toBeNull();
+      expect(result.current.recordedDurationsMs).toEqual({
+        [audioFileUpload.id]: 2300,
+      });
+    });
+
+    it("knows the recorded length at Stop and drops it on cancel while the server still transcribes", async () => {
+      MockWebSocket.holdReplies = true;
+      const { result } = renderRecorder();
+      await startRecording(result);
+      act(() => {
+        emitAudioSamples(new Float32Array(16_000).fill(0.1));
+      });
+
+      await act(async () => {
+        result.current.toggleAudioRecording();
+      });
+      const socket = MockWebSocket.instances[0];
+      await waitFor(() =>
+        expect(socket.sentJsonFrames).toContainEqual(
+          expect.objectContaining({ type: "finish" }),
+        ),
+      );
+      // The 300 ms primer and one second of speech, while the server's
+      // chunks still say nothing about the last of it.
+      expect(result.current.recordedDurationsMs).toEqual({
+        [audioFileUpload.id]: 1300,
+      });
+
+      act(() => {
+        result.current.removeRecordedAudioFile(audioFileUpload.id);
+      });
+      await act(async () => {});
+
+      expect(socket.close).toHaveBeenCalled();
+      expect(result.current.recordingError).toBeNull();
+      expect(result.current.recordedDurationsMs).toEqual({});
+      expect(result.current.hasRecordedAudioFile(audioFileUpload.id)).toBe(
+        false,
+      );
+    });
+
+    it("unlocks the composer once a retried recording's tile exists, and its cancel ends the retry quietly", async () => {
+      // jsdom's Blob has no arrayBuffer(); the retry reads the kept recording.
+      const original = Object.getOwnPropertyDescriptor(
+        Blob.prototype,
+        "arrayBuffer",
+      );
+      Object.defineProperty(Blob.prototype, "arrayBuffer", {
+        configurable: true,
+        value(this: Blob) {
+          return new Promise<ArrayBuffer>((resolve) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result as ArrayBuffer);
+            reader.readAsArrayBuffer(this);
+          });
+        },
+      });
+      onTestFinished(() => {
+        if (original) {
+          Object.defineProperty(Blob.prototype, "arrayBuffer", original);
+        } else {
+          delete (Blob.prototype as { arrayBuffer?: unknown }).arrayBuffer;
+        }
+      });
+      const { result } = renderRecorder();
+      await startRecording(result);
+      act(() => {
+        emitAudioSamples(new Float32Array(1600).fill(0.1));
+      });
+      await act(async () => {
+        result.current.toggleAudioRecording();
+      });
+      await waitFor(() =>
+        expect(result.current.hasRecordedAudioFile(audioFileUpload.id)).toBe(
+          true,
+        ),
+      );
+
+      MockWebSocket.holdReplies = true;
+      act(() => {
+        result.current.retryAudioTranscription(audioFileUpload.id);
+      });
+      await waitFor(() => expect(MockWebSocket.instances).toHaveLength(2));
+      const retrySocket = MockWebSocket.instances[1];
+      await waitFor(() => expect(retrySocket.sentBinaryFrames).toHaveLength(1));
+      // The first chunk waits on the server, but the composer is free.
+      expect(result.current.isRecordingUpload).toBe(false);
+
+      act(() => {
+        result.current.removeRecordedAudioFile(audioFileUpload.id);
+      });
+      await act(async () => {});
+
+      expect(retrySocket.close).toHaveBeenCalled();
+      expect(result.current.recordingError).toBeNull();
+      expect(result.current.isRecordingUpload).toBe(false);
+    });
   });
 });

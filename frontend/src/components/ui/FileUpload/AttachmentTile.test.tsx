@@ -497,5 +497,182 @@ describe("AttachmentTile custom face", () => {
       );
       expect(screen.getByRole("button", { name: "Retrying…" })).toBeDisabled();
     });
+
+    it("draws a recording by its first words and a More button that opens the preview", async () => {
+      const onActivate = vi.fn();
+      await renderWithProviders(
+        <AttachmentTile
+          file={file("audio-recording-20261028-1818.wav")}
+          metaLabel="Transcribing · 0:42"
+          status={{
+            busy: true,
+            transcript: {
+              excerpt: "Hello team, this is the first thing I said.",
+              more: {
+                label: "More",
+                accessibleName: "More: audio-recording-20261028-1818.wav",
+              },
+            },
+          }}
+          onActivate={onActivate}
+          onRemove={vi.fn()}
+        />,
+      );
+      expect(
+        screen.queryByText("audio-recording-20261028-1818.wav"),
+      ).toBeNull();
+      const excerpt = document.querySelector(
+        '[data-ui="attachment-tile-excerpt"]',
+      );
+      expect(excerpt).toHaveTextContent(
+        "Hello team, this is the first thing I said.",
+      );
+      expect(excerpt).toHaveClass("line-clamp-2");
+      expect(excerpt).not.toHaveAttribute("data-placeholder");
+      // More is the tile's one activation, a library Button rather than a
+      // label inside a button.
+      const more = screen.getByRole("button", {
+        name: "More: audio-recording-20261028-1818.wav, Transcribing · 0:42",
+      });
+      expect(more).toHaveAttribute("data-ui", "attachment-tile-more");
+      expect(more).toHaveAttribute("data-variant", "link");
+      expect(more).toHaveTextContent(/^More$/);
+      expect(more).toHaveAttribute(
+        "title",
+        "audio-recording-20261028-1818.wav",
+      );
+      expect(
+        screen
+          .getAllByRole("button")
+          .filter(
+            (button) => button.getAttribute("data-ui") !== "attachment-remove",
+          ),
+      ).toEqual([more]);
+      fireEvent.click(more);
+      expect(onActivate).toHaveBeenCalledTimes(1);
+    });
+
+    it("holds the excerpt's place with a placeholder until words arrive", async () => {
+      await renderWithProviders(
+        <AttachmentTile
+          file={file("audio-recording-20261028-1818.wav")}
+          metaLabel="Recording · 0:07"
+          status={{
+            busy: true,
+            transcript: { placeholder: "The transcript appears here…" },
+          }}
+          onActivate={vi.fn()}
+        />,
+      );
+      expect(
+        screen.queryByText("audio-recording-20261028-1818.wav"),
+      ).toBeNull();
+      const excerpt = document.querySelector(
+        '[data-ui="attachment-tile-excerpt"]',
+      );
+      expect(excerpt).toHaveTextContent("The transcript appears here…");
+      expect(excerpt).toHaveAttribute("data-placeholder", "true");
+      expect(excerpt).toHaveClass("h-10");
+      expect(
+        document.querySelector('[data-ui="attachment-tile-more"]'),
+      ).toBeNull();
+      expect(
+        screen.getByRole("button", {
+          name: "Preview attachment audio-recording-20261028-1818.wav, Recording · 0:07",
+        }),
+      ).toBeInTheDocument();
+    });
+
+    it("leaves a settled recording without words to its meta line, and drops More where nothing opens", async () => {
+      const { rerender } = await renderWithProviders(
+        <AttachmentTile
+          file={file("audio-recording-20261028-1818.wav")}
+          metaLabel="Transcript ready · 0:07"
+          status={{ transcript: {} }}
+          onActivate={vi.fn()}
+        />,
+      );
+      expect(
+        screen.queryByText("audio-recording-20261028-1818.wav"),
+      ).toBeNull();
+      expect(
+        document.querySelector('[data-ui="attachment-tile-excerpt"]'),
+      ).toBeNull();
+      expect(
+        document.querySelector('[data-ui="attachment-tile-meta"]'),
+      ).toHaveTextContent(/^Transcript ready · 0:07$/);
+      expect(
+        screen.getByRole("button", {
+          name: "Preview attachment audio-recording-20261028-1818.wav, Transcript ready · 0:07",
+        }),
+      ).toBeInTheDocument();
+
+      rerender(
+        <I18nProvider i18n={(await import("@lingui/core")).i18n}>
+          <ThemeProvider
+            enableCustomTheme={false}
+            initialThemeMode="light"
+            persistThemeMode={false}
+          >
+            <AttachmentTile
+              file={file("audio-recording-20261028-1818.wav")}
+              metaLabel="Transcript ready · 0:42"
+              status={{
+                transcript: {
+                  excerpt: "All done.",
+                  more: { label: "More", accessibleName: "More: x" },
+                },
+              }}
+            />
+          </ThemeProvider>
+        </I18nProvider>,
+      );
+      expect(
+        document.querySelector('[data-ui="attachment-tile-excerpt"]'),
+      ).toHaveTextContent("All done.");
+      expect(
+        document.querySelector('[data-ui="attachment-tile-more"]'),
+      ).toBeNull();
+    });
+
+    it("keeps a failed recording's retry clickable beside its More", async () => {
+      const onActivate = vi.fn();
+      const onSelect = vi.fn();
+      await renderWithProviders(
+        <AttachmentTile
+          file={file("audio-recording.wav")}
+          metaLabel="Couldn't transcribe"
+          status={{
+            tone: "error",
+            action: {
+              label: "Retry transcription",
+              accessibleName: "Retry transcription: audio-recording.wav",
+              onSelect,
+            },
+            transcript: {
+              excerpt: "The first half made it.",
+              more: {
+                label: "More",
+                accessibleName: "More: audio-recording.wav",
+              },
+            },
+          }}
+          onActivate={onActivate}
+        />,
+      );
+      const action = screen.getByRole("button", {
+        name: "Retry transcription: audio-recording.wav",
+      });
+      expect(action).toHaveClass("relative");
+      fireEvent.click(action);
+      expect(onSelect).toHaveBeenCalledTimes(1);
+      expect(onActivate).not.toHaveBeenCalled();
+      fireEvent.click(
+        screen.getByRole("button", {
+          name: "More: audio-recording.wav, Couldn't transcribe",
+        }),
+      );
+      expect(onActivate).toHaveBeenCalledTimes(1);
+    });
   });
 });

@@ -172,7 +172,7 @@ const expectFits = async (page: Page, width: number, label: string) => {
   for (const item of await transcripts(page).all()) {
     const box = await boxOf(item);
     boxes.push(box);
-    expect(box.height, label).toBeCloseTo(32, 0);
+    expect(box.height, label).toBeCloseTo(54, 0);
     expect(box.x, label).toBeGreaterThanOrEqual(lane.x - 0.5);
     expect(box.x + box.width, label).toBeLessThanOrEqual(
       lane.x + lane.width + 0.5,

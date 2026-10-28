@@ -703,7 +703,7 @@ export const ComposerContextLane = memo(function ComposerContextLane({
         role="list"
         aria-label={laneLabel(label)}
         data-ui="composer-context-lane"
-        className="flex min-w-0 flex-wrap items-start gap-1.5"
+        className="flex min-w-0 flex-wrap items-center gap-2"
         onFocus={() => setHasFocus(true)}
         onBlur={(event) => {
           if (!event.currentTarget.contains(event.relatedTarget)) {
@@ -752,7 +752,7 @@ export const ComposerContextLane = memo(function ComposerContextLane({
                 setExpanded(true);
                 say(announceExpanded());
               }}
-              className="composer-context-chip-geometry composer-context-chip-skin whitespace-nowrap px-2.5 text-xs font-semibold text-theme-fg-secondary hover:text-theme-fg-primary focus:outline-none"
+              className="composer-context-more-geometry composer-context-chip-skin whitespace-nowrap px-2.5 text-xs font-semibold text-theme-fg-secondary hover:text-theme-fg-primary focus:outline-none"
             >
               {moreChipText(measuring ? ordered.length : hiddenCount)}
             </button>
@@ -777,7 +777,7 @@ export const ComposerContextLane = memo(function ComposerContextLane({
                 focusAfterCollapseRef.current = true;
                 setExpanded(false);
               }}
-              className="composer-context-chip-geometry composer-context-chip-skin whitespace-nowrap px-2.5 text-xs font-semibold text-theme-fg-secondary hover:text-theme-fg-primary focus:outline-none"
+              className="composer-context-more-geometry composer-context-chip-skin whitespace-nowrap px-2.5 text-xs font-semibold text-theme-fg-secondary hover:text-theme-fg-primary focus:outline-none"
             >
               {lessChipLabel()}
             </button>

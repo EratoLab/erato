@@ -1657,6 +1657,11 @@ msgstr "Arrêter la lecture"
 
 #. js-lingui-explicit-id
 #: src/components/ui/FileUpload/audioTranscriptionStatus.ts
+msgid "chat.audio.announce.canceled"
+msgstr "{filename} : transcription annulée."
+
+#. js-lingui-explicit-id
+#: src/components/ui/FileUpload/audioTranscriptionStatus.ts
 msgid "chat.audio.announce.failed"
 msgstr "{filename} : transcription impossible."
 
@@ -1664,6 +1669,26 @@ msgstr "{filename} : transcription impossible."
 #: src/components/ui/FileUpload/audioTranscriptionStatus.ts
 msgid "chat.audio.announce.ready"
 msgstr "{filename} : transcription prête."
+
+#. js-lingui-explicit-id
+#: src/components/ui/FileUpload/audioTranscriptionStatus.ts
+msgid "chat.audio.cancel"
+msgstr "Annuler la transcription"
+
+#. js-lingui-explicit-id
+#: src/components/ui/FileUpload/audioTranscriptionStatus.ts
+msgid "chat.audio.cancelNamed"
+msgstr "Annuler la transcription : {filename}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/FileUpload/audioTranscriptionStatus.ts
+msgid "chat.audio.more"
+msgstr "Plus"
+
+#. js-lingui-explicit-id
+#: src/components/ui/FileUpload/audioTranscriptionStatus.ts
+msgid "chat.audio.moreNamed"
+msgstr "Plus : {filename}"
 
 #. js-lingui-explicit-id
 #: src/components/ui/FileUpload/audioTranscriptionStatus.ts
@@ -1739,6 +1764,11 @@ msgstr "Téléversement…"
 #: src/components/ui/FileUpload/audioTranscriptionStatus.ts
 msgid "chat.audio.status.uploadingDuration"
 msgstr "Téléversement · {duration}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/FileUpload/audioTranscriptionStatus.ts
+msgid "chat.audio.transcriptPlaceholder"
+msgstr "La transcription s’affichera ici…"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatInput.tsx

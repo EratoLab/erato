@@ -1,14 +1,20 @@
 import { i18n } from "@lingui/core";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 
+import sharepointEml from "../../../test/fixtures/eml/sharepoint-inline-images.eml?raw";
 import {
+  bodyContentIds,
   buildDropEmailGroup,
   dropAttachmentCounts,
+  isBodyPicture,
   isEmailBodyPart,
   judgeDropEmailParts,
+  partTypeLabel,
   senderAndDate,
 } from "../buildDropEmailGroup";
+import { collectDismissedPaths } from "../dismissedAttachmentPaths";
 import { parseEmlBytes } from "../parsedEmail";
+import { trimEmlAttachments } from "../trimEmlAttachments";
 
 import type {
   DropEmailGroupOptions,
@@ -112,7 +118,26 @@ function makeOptions(overrides: Partial<FixedOptions> = {}) {
 
 /** The rows are built from parsed parts, so the file is always the item shape. */
 function fileOf(item: { file: unknown }) {
-  return item.file as { id: string; filename: string; size: number };
+  return item.file as {
+    id: string;
+    filename: string;
+    displayName?: string;
+    size: number;
+  };
+}
+
+/**
+ * A SharePoint notice as Exchange hands it over: three pictures the HTML
+ * shows through `cid:` links, named by GUID or not at all, a nameless inline
+ * picture nothing links to, and a named PDF.
+ */
+async function parseSharepoint(): Promise<ParsedEmail> {
+  const parsed = await parseEmlBytes(
+    new TextEncoder().encode(sharepointEml).buffer,
+    { filename: "sharepoint.eml" },
+  );
+  if (!parsed) throw new Error("fixture did not parse");
+  return parsed;
 }
 
 const UNSUPPORTED: StagedPartValidation = {
@@ -300,6 +325,130 @@ describe("buildDropEmailGroup", () => {
     } finally {
       i18n.loadAndActivate({ locale: "en", messages: {} });
     }
+  });
+
+  describe("an email whose body shows pictures", () => {
+    it("counts the pictures in the body row's name and names and types the rest by their MIME type", async () => {
+      const parsed = await parseSharepoint();
+      expect(parsed.attachments).toHaveLength(5);
+
+      const group = buildDropEmailGroup(
+        stagedDrop(parsed),
+        makeOptions({ bodySizeLabel: "3 KB" }),
+      );
+      expect(
+        group.items.map((item) =>
+          item.kind === "selectableAttachment"
+            ? [
+                fileOf(item).displayName ?? fileOf(item).filename,
+                item.labelOverride,
+                typeof item.onToggle,
+              ]
+            : item.kind,
+        ),
+      ).toEqual([
+        ["Email body with 3 images", "Email", "undefined"],
+        // Inline but linked from nowhere: still listed, read-only, by its type.
+        ["Inline image 1", "PNG image", "undefined"],
+        ["Wiederherstellung.pdf", undefined, "function"],
+      ]);
+      const body = group.items[0];
+      expect(body.kind === "selectableAttachment" && body.metaLabel).toBe(
+        "Email · 3 KB · Always sent",
+      );
+      // Read-only like a part policy leaves out, so it says that it is sent.
+      const inline = group.items[1];
+      expect(inline.kind === "selectableAttachment" && inline.metaLabel).toBe(
+        "PNG image · 70 B · Always sent",
+      );
+      const pdfRow = group.items[2];
+      expect(
+        pdfRow.kind === "selectableAttachment" && pdfRow.metaLabel,
+      ).toBeUndefined();
+      expect(JSON.stringify(group)).not.toMatch(/696debbf|0ce1705a|373014b8/);
+    });
+
+    it("leaves the pictures in what is sent when the attachment is left out", async () => {
+      const parsed = await parseSharepoint();
+      const pdf = parsed.attachments.find(
+        (attachment) => attachment.filename === "Wiederherstellung.pdf",
+      )!;
+      const trimmed = trimEmlAttachments(
+        new Uint8Array(parsed.rawBytes),
+        collectDismissedPaths(parsed.attachments, new Set([pdf.id])),
+      );
+      const sent = await parseEmlBytes(trimmed!.slice().buffer);
+
+      const bodyIds = bodyContentIds(sent!.html);
+      expect(
+        sent!.attachments.filter((part) => isBodyPicture(part, bodyIds)),
+      ).toHaveLength(3);
+      expect(sent!.attachments.map((part) => part.mimeType)).not.toContain(
+        "application/pdf",
+      );
+      // The inline picture nothing links to goes as well, as its row says.
+      expect(
+        sent!.attachments.filter(
+          (part) => isEmailBodyPart(part) && !isBodyPicture(part, bodyIds),
+        ),
+      ).toHaveLength(1);
+      // The chip counts what the reader would call attachments: the PDF.
+      expect(dropAttachmentCounts(stagedDrop(parsed), undefined)).toEqual({
+        kept: 1,
+        total: 1,
+      });
+    });
+
+    it("folds the pictures a forward's body shows into the forward", async () => {
+      const outer =
+        `From: Anna <a@example.com>${CRLF}` +
+        `Subject: Fwd: Achtung${CRLF}` +
+        `Content-Type: multipart/mixed; boundary="----OUTER"${CRLF}${CRLF}` +
+        `------OUTER${CRLF}` +
+        `Content-Type: text/plain${CRLF}${CRLF}` +
+        `See below.${CRLF}` +
+        `------OUTER${CRLF}` +
+        `Content-Type: message/rfc822${CRLF}${CRLF}` +
+        sharepointEml +
+        `${CRLF}------OUTER--${CRLF}`;
+      const parsed = await parseEmlBytes(
+        new TextEncoder().encode(outer).buffer,
+      );
+
+      const card = forwardCard(
+        buildDropEmailGroup(stagedDrop(parsed!), makeOptions()).items,
+      );
+      expect(
+        card.attachments.map((row) => [
+          fileOf(row).displayName ?? fileOf(row).filename,
+          row.labelOverride,
+        ]),
+      ).toEqual([
+        ["Inline image 1", "PNG image"],
+        ["Wiederherstellung.pdf", undefined],
+      ]);
+    });
+
+    it("finds a cid link whatever its case or escaping", () => {
+      expect([
+        ...bodyContentIds(
+          `<img src="CID:Logo%40x"><div style="background:url(cid:bg@x)">`,
+        ),
+      ]).toEqual(["logo@x", "bg@x"]);
+      expect(bodyContentIds(null).size).toBe(0);
+    });
+  });
+
+  describe("partTypeLabel", () => {
+    it("names the type a reader knows from the MIME type", () => {
+      expect(partTypeLabel("image/png")).toBe("PNG image");
+      expect(partTypeLabel("image/jpeg; name=x")).toBe("JPEG image");
+      expect(partTypeLabel("image/svg+xml")).toBe("SVG image");
+      expect(partTypeLabel("image/x-emf")).toBe("EMF image");
+      expect(partTypeLabel("application/pdf")).toBe("PDF document");
+      expect(partTypeLabel("audio/mpeg")).toBe("MPEG audio");
+      expect(partTypeLabel("application/octet-stream")).toBeNull();
+    });
   });
 
   describe("dropAttachmentCounts", () => {

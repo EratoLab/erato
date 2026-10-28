@@ -1,5 +1,4 @@
 import { t } from "@lingui/core/macro";
-import clsx from "clsx";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { ComposerContextArea } from "@/components/ui/Chat/ComposerContext/ComposerContextArea";
@@ -165,14 +164,7 @@ export const MessageEditor = ({
       {/* Above the textarea, matching both the composer and the sent message.
           Below it, switching into edit mode would move the tiles from one side
           of the text to the other and back again on cancel. */}
-      <div
-        className={clsx(
-          hasLane && "mb-2",
-          // "Sent as before" is why a chip here cannot be removed: the label
-          // gives way first, down to its own floor.
-          "[&_[data-locked=true]_[data-ui=composer-context-chip-meta]]:shrink-[0.0001]",
-        )}
-      >
+      <div className={hasLane ? "mb-2" : undefined}>
         <ComposerContextArea
           items={items}
           hasFiles={slotFiles.length > 0}

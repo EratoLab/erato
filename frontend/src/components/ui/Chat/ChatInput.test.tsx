@@ -460,6 +460,7 @@ describe("ChatInput", () => {
     mockUseAudioTranscriptionRecorder.mockReturnValue({
       isRecording: false,
       isRecordingUpload: false,
+      recordedDurationsMs: {},
       recordingError: null,
       setRecordingError: vi.fn(),
       recordingBars: [2, 2, 2, 2, 2],
@@ -1696,6 +1697,150 @@ describe("ChatInput", () => {
       );
     });
 
+    it("cancels a recording from its tile while it records, without asking", async () => {
+      const removeRecordedAudioFile = vi.fn();
+      const handleRemoveFile = vi.fn();
+      const confirm = vi.spyOn(window, "confirm");
+      mockUseAudioTranscriptionRecorder.mockReturnValue({
+        ...mockUseAudioTranscriptionRecorder(),
+        isRecording: true,
+        removeRecordedAudioFile,
+      });
+      stage([recording("recording")]);
+      mockUseChatInputHandlers.mockReturnValue({
+        ...mockUseChatInputHandlers(),
+        handleRemoveFile,
+      });
+      await renderComposer({ onFilePreview: vi.fn() });
+
+      expect(screen.getByRole("textbox")).toBeDisabled();
+      const cancel = screen.getByRole("button", {
+        name: "Cancel transcription: audio-recording-20261020-1200.wav",
+      });
+      expect(cancel).toBeEnabled();
+      fireEvent.click(cancel);
+
+      expect(confirm).not.toHaveBeenCalled();
+      expect(removeRecordedAudioFile).toHaveBeenCalledWith("audio-rec-1");
+      expect(handleRemoveFile).toHaveBeenCalledWith("audio-rec-1");
+    });
+
+    it("still asks before removing a transcribed recording", async () => {
+      const handleRemoveFile = vi.fn();
+      const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+      stage([recording("completed", { transcript: "Hello." })]);
+      mockUseChatInputHandlers.mockReturnValue({
+        ...mockUseChatInputHandlers(),
+        handleRemoveFile,
+      });
+      await renderComposer();
+
+      fireEvent.click(
+        screen.getByRole("button", {
+          name: "Remove audio-recording-20261020-1200.wav",
+        }),
+      );
+
+      expect(confirm).toHaveBeenCalled();
+      expect(handleRemoveFile).not.toHaveBeenCalled();
+    });
+
+    it("shows a stopped recording's length from the recorder and keeps Send off until the transcript is ready", async () => {
+      mockUseAudioTranscriptionRecorder.mockReturnValue({
+        ...mockUseAudioTranscriptionRecorder(),
+        recordedDurationsMs: { "audio-rec-1": 38_290 },
+      });
+      stage([
+        recording("recording", {
+          chunks: [{ status: "completed", end_ms: 30_000 }],
+        }),
+      ]);
+      const onFilePreview = vi.fn();
+      await renderComposer({ onFilePreview });
+
+      const tile = document.querySelector<HTMLElement>(
+        '[data-ui="attachment-tile"]',
+      )!;
+      expect(
+        tile.querySelector('[data-ui="attachment-tile-meta"]'),
+      ).toHaveTextContent("Transcribing · 0:38");
+      expect(screen.getByRole("textbox")).toBeEnabled();
+      fireEvent.change(screen.getByRole("textbox"), {
+        target: { value: "Summarise it." },
+      });
+      expect(screen.getByTestId("chat-input-send-message")).toBeDisabled();
+
+      fireEvent.click(
+        screen.getByRole("button", {
+          name: "Preview attachment audio-recording-20261020-1200.wav, Transcribing · 0:38",
+        }),
+      );
+      expect(onFilePreview).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: "audio-rec-1",
+          audio_transcription: expect.objectContaining({
+            recorded_duration_ms: 38_290,
+          }),
+        }),
+      );
+    });
+
+    it("counts a running recording up from the recorder and shows its latest words instead of its name", async () => {
+      mockUseAudioTranscriptionRecorder.mockReturnValue({
+        ...mockUseAudioTranscriptionRecorder(),
+        liveRecordingDuration: {
+          fileUploadId: "audio-rec-1",
+          durationMs: 41_400,
+        },
+      });
+      stage([
+        recording("recording", {
+          chunks: [
+            {
+              status: "completed",
+              end_ms: 30_000,
+              transcript: "This is what I said first.",
+            },
+          ],
+        }),
+      ]);
+      const onFilePreview = vi.fn();
+      await renderComposer({ onFilePreview });
+
+      const tile = document.querySelector<HTMLElement>(
+        '[data-ui="attachment-tile"]',
+      )!;
+      expect(
+        tile.querySelector('[data-ui="attachment-tile-meta"]'),
+      ).toHaveTextContent("Recording · 0:41");
+      expect(
+        tile.querySelector('[data-ui="attachment-tile-excerpt"]'),
+      ).toHaveTextContent("This is what I said first.");
+      expect(tile).not.toHaveTextContent("audio-recording-20261020-1200.wav");
+
+      fireEvent.click(
+        screen.getByRole("button", {
+          name: "More: audio-recording-20261020-1200.wav, Recording · 0:41",
+        }),
+      );
+      expect(onFilePreview).toHaveBeenCalledWith(
+        expect.objectContaining({ id: "audio-rec-1" }),
+      );
+    });
+
+    it("says a recording that left the composer while in progress was canceled", async () => {
+      mockUseAudioTranscriptionFeature.mockReturnValue({ enabled: true });
+      stage([recording("transcribing")]);
+      const view = await renderComposer({ chatId: "chat-1" });
+      expect(audioLive()).toBeEmptyDOMElement();
+
+      stage([]);
+      view.rerenderComposer();
+      expect(audioLive()).toHaveTextContent(
+        "audio-recording-20261020-1200.wav: transcription canceled.",
+      );
+    });
+
     it("hands a kit's attachment slot the retry controls, with or without the lane", async () => {
       const slotProps = vi.fn();
       componentRegistry.ChatInputAttachmentPreview = function KitFiles(
@@ -2324,6 +2469,7 @@ describe("ChatInput", () => {
       mockUseAudioTranscriptionRecorder.mockReturnValue({
         isRecording: false,
         isRecordingUpload: false,
+        recordedDurationsMs: {},
         recordingError: null,
         setRecordingError: vi.fn(),
         recordingBars: [2, 2, 2, 2, 2],
@@ -2400,6 +2546,7 @@ describe("ChatInput", () => {
       mockUseAudioTranscriptionRecorder.mockReturnValue({
         isRecording: false,
         isRecordingUpload: false,
+        recordedDurationsMs: {},
         recordingError: null,
         setRecordingError: vi.fn(),
         recordingBars: [2, 2, 2, 2, 2],
@@ -2467,6 +2614,7 @@ describe("ChatInput", () => {
       mockUseAudioTranscriptionRecorder.mockReturnValue({
         isRecording: false,
         isRecordingUpload: false,
+        recordedDurationsMs: {},
         recordingError: null,
         setRecordingError: vi.fn(),
         recordingBars: [2, 2, 2, 2, 2],
@@ -3369,6 +3517,7 @@ describe("ChatInput", () => {
       mockUseAudioTranscriptionRecorder.mockReturnValue({
         isRecording: true,
         isRecordingUpload: false,
+        recordedDurationsMs: {},
         recordingError: null,
         setRecordingError: vi.fn(),
         recordingBars: [3, 6, 9, 6, 3],
@@ -3410,6 +3559,7 @@ describe("ChatInput", () => {
       mockUseAudioTranscriptionRecorder.mockReturnValue({
         isRecording: false,
         isRecordingUpload: false,
+        recordedDurationsMs: {},
         recordingError: null,
         setRecordingError: vi.fn(),
         recordingBars: [2, 2, 2, 2, 2],
@@ -3512,6 +3662,7 @@ describe("ChatInput", () => {
       mockUseAudioTranscriptionRecorder.mockReturnValue({
         isRecording: true,
         isRecordingUpload: false,
+        recordedDurationsMs: {},
         recordingError: null,
         setRecordingError: vi.fn(),
         recordingBars: [3, 6, 9, 6, 3],
@@ -3548,6 +3699,7 @@ describe("ChatInput", () => {
       mockUseAudioTranscriptionRecorder.mockReturnValue({
         isRecording: false,
         isRecordingUpload: false,
+        recordedDurationsMs: {},
         recordingError: null,
         setRecordingError: vi.fn(),
         recordingBars: [2, 2, 2, 2, 2],
@@ -3678,6 +3830,7 @@ describe("ChatInput", () => {
       mockUseAudioTranscriptionRecorder.mockReturnValue({
         isRecording: true,
         isRecordingUpload: false,
+        recordedDurationsMs: {},
         recordingError: null,
         setRecordingError: vi.fn(),
         recordingBars: [3, 6, 9, 6, 3],
@@ -3714,6 +3867,7 @@ describe("ChatInput", () => {
       mockUseAudioTranscriptionRecorder.mockReturnValue({
         isRecording: false,
         isRecordingUpload: false,
+        recordedDurationsMs: {},
         recordingError: null,
         setRecordingError: vi.fn(),
         recordingBars: [2, 2, 2, 2, 2],
@@ -3790,6 +3944,7 @@ describe("ChatInput", () => {
       mockUseAudioTranscriptionRecorder.mockReturnValue({
         isRecording: true,
         isRecordingUpload: false,
+        recordedDurationsMs: {},
         recordingError: null,
         setRecordingError: vi.fn(),
         recordingBars: [3, 6, 9, 6, 3],
@@ -3816,6 +3971,7 @@ describe("ChatInput", () => {
       mockUseAudioTranscriptionRecorder.mockReturnValue({
         isRecording: false,
         isRecordingUpload: true,
+        recordedDurationsMs: {},
         recordingError: null,
         setRecordingError: vi.fn(),
         recordingBars: [2, 2, 2, 2, 2],
@@ -3863,6 +4019,7 @@ describe("ChatInput", () => {
       mockUseAudioTranscriptionRecorder.mockReturnValue({
         isRecording: false,
         isRecordingUpload: false,
+        recordedDurationsMs: {},
         recordingError: null,
         setRecordingError: vi.fn(),
         recordingBars: [2, 2, 2, 2, 2],

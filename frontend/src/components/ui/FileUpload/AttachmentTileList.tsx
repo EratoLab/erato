@@ -24,6 +24,8 @@ export interface AttachmentTileItem {
   /** Replaces the derived meta line, e.g. a staged recording's "Transcribing…". */
   metaLabel?: string;
   status?: AttachmentTileStatus;
+  /** Overrides the list's `disabled` for this tile, e.g. a recording that can still be canceled. */
+  disabled?: boolean;
 }
 
 /** Mirrors the tile's own media test, so banding matches what each tile draws. */
@@ -141,7 +143,7 @@ export const AttachmentTileList: React.FC<AttachmentTileListProps> = ({
       ...(item.status ? { status: item.status } : {}),
       showCaption: showCaptions,
       expandable,
-      disabled,
+      disabled: item.disabled ?? disabled,
       onRemove: onRemove ? () => onRemove(item.id) : undefined,
       onActivate: onActivate ? () => onActivate(item) : undefined,
     };
@@ -168,9 +170,10 @@ export const AttachmentTileList: React.FC<AttachmentTileListProps> = ({
             // `auto` per spec, which clips the remove button's overhang and can
             // raise a phantom horizontal scrollbar. So the cap pays for the
             // overhang in padding, takes it back in margin to leave the tiles
-            // where they were, and pins `overflow-x` explicitly.
+            // where they were, and pins `overflow-x` explicitly. The left side
+            // pays for a tile's focus ring, which sits outside its frame.
             capHeight &&
-              "-mr-1 -mt-1 overflow-y-auto overflow-x-hidden pr-1 pt-1",
+              "-mx-1 -mt-1 overflow-y-auto overflow-x-hidden px-1 pt-1",
           )}
           style={
             capHeight

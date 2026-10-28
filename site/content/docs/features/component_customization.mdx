@@ -517,7 +517,11 @@ look without redrawing it, and read the chip's state from
 `ComposerContextChipFaceProps` (`item.state`, the resolved `tone`, the host
 glyph in `icon`, and the `meta` line, which for a suggested chip states how
 long it stays off). Draw the `meta` line: it is how a sighted user learns why
-a chip is not sent.
+a chip is not sent. The default face draws a file tile's anatomy, so chips and
+staged files read as one family at one height: the glyph on a tinted plate
+(`composer-context-chip-icon`), the label on line one
+(`composer-context-chip-label`, with `composer-context-chip-lock` after it) and
+the meta on line two (`composer-context-chip-meta`).
 
 The lane draws ambient items first and the user's own after them. An item
 whose origin changes as the user acts on it, such as a comment chosen in place
@@ -550,9 +554,12 @@ Themes and kits can reach the lane through these hooks and classes:
   chips it is drawn with `--theme-radius-control`, `--theme-bg-secondary`,
   `--theme-bg-hover` and `--theme-spacing-control-gap` only, and has no face
   point. The "+" carries no count badge;
-- the classes `composer-context-chip-geometry`, `composer-context-chip-skin` and
-  `composer-context-control-geometry`, and the layout tokens
-  `layout.composerContext.chipHeight` and `layout.composerContext.detailWidth`.
+- the classes `composer-context-chip-geometry`, `composer-context-chip-skin`,
+  `composer-context-control-geometry` and `composer-context-more-geometry`, and
+  the layout tokens `layout.composerContext.chipHeight`,
+  `layout.composerContext.areaMaxHeight` (the staged area's cap while it holds
+  chips; files alone keep `layout.attachmentTile.stagedMaxHeight`) and
+  `layout.composerContext.detailWidth`.
 
 The skin moves variables (`--composer-context-chip-border`, `-bg`, `-label`,
 `-meta`, `-icon`) per state and tone rather than final colours, so a kit face
@@ -647,6 +654,21 @@ that declares less than 20 is reported at startup. Under the `"enforce"` stance
 the host draws its own preview, status included; under `"warn"` the override
 is installed and shows no status, and only the outcome announcements remain.
 Draw the status, then declare `builtAgainstSharedSurfaceMinor: 20`.
+
+From shared surface 1.22 the composer's own recordings also carry
+`status.transcript` on the tile props: their generated file name says nothing,
+so the tile shows `transcript.excerpt` (the start of the words, which the
+default tile clamps to two lines with an ellipsis) and a `transcript.more`
+label instead of the name. The name stays the tooltip and the accessible name,
+and More opens the preview with the player and the whole transcript; the
+default tile draws it as a link `Button` stretched over the tile, so a click
+anywhere still opens the preview. While a recording without words is still
+running or transcribing, `transcript.placeholder` holds the excerpt's place,
+so the tile keeps its size when the words arrive. Once it settles without
+words, `transcript` is empty and the meta line stands alone; a time in it
+counts up while the recording runs. Uploaded audio files carry no `transcript`
+and keep their name. The default tile exposes `attachment-tile-excerpt` (with
+`data-placeholder` while it holds the placeholder) and `attachment-tile-more`.
 
 ## Full Registry Example
 

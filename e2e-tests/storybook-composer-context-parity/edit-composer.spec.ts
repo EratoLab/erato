@@ -101,7 +101,7 @@ test.describe("Edit composer: the lane in the editor", () => {
     await expect(transcript).toHaveAttribute("data-state", "included");
     await expect(labelOf(transcript)).toHaveText("Product sync");
     await expect(metaOf(transcript)).toContainText("1 conversation");
-    expect((await boxOf(transcript)).height).toBeCloseTo(32, 0);
+    expect((await boxOf(transcript)).height).toBeCloseTo(54, 0);
     // The (x) is drawn without hover, inside its chip.
     const remove = transcript.locator(REMOVE);
     await expect(remove).toBeVisible();

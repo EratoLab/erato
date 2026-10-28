@@ -12,7 +12,10 @@ import {
 
 import { FileAttachmentsPreview } from "@/components/ui/FileUpload";
 import { FileUploadWithTokenCheck } from "@/components/ui/FileUpload/FileUploadWithTokenCheck";
-import { isAudioTranscriptionComplete } from "@/components/ui/FileUpload/audioTranscriptionStatus";
+import {
+  audioTranscriptionTileStatus,
+  isAudioTranscriptionComplete,
+} from "@/components/ui/FileUpload/audioTranscriptionStatus";
 import { ConfirmationDialog } from "@/components/ui/Modal/ConfirmationDialog";
 import { componentRegistry } from "@/config/componentRegistry";
 import {
@@ -129,6 +132,7 @@ import { toast } from "../Toast/toast";
 import type { AssistantMentionPopoverHandle } from "./AssistantMentionPopover";
 import type { ChatInputControlsHandle } from "./ChatInputControlsContext";
 import type { ChatInputAudioTranscriptionControls } from "../FileUpload/FileAttachmentsPreview";
+import type { AudioTranscriptionState } from "../FileUpload/audioTranscriptionStatus";
 import type {
   ComposerContextItem,
   ComposerMode,
@@ -677,6 +681,8 @@ export const ChatInput = ({
     setRecordingError,
     recordingBars,
     retryingAudioFileId,
+    recordedDurationsMs,
+    liveRecordingDuration,
     retryAudioTranscription,
     removeRecordedAudioFile,
     clearRecordedAudioFiles,
@@ -1886,6 +1892,7 @@ export const ChatInput = ({
       retryingFileId: retryingAudioFileId,
       onRetry: (fileId) => void retryAudioTranscription(fileId),
       disabled: isDisabled || isRecordingUpload,
+      cancelable: true,
     }),
     [
       hasRecordedAudioFile,
@@ -2118,9 +2125,15 @@ export const ChatInput = ({
   const handleRemoveFileById = useCallback(
     (fileId: string) => {
       const fileToRemove = attachedFiles.find((file) => file.id === fileId);
+      // A recording still being worked on has no transcript to lose: its
+      // remove control is "Cancel transcription".
+      const cancelsTranscription = Boolean(
+        fileToRemove && audioTranscriptionTileStatus(fileToRemove)?.busy,
+      );
       if (
         fileToRemove &&
         isAudioTranscriptionAttachment(fileToRemove) &&
+        !cancelsTranscription &&
         !window.confirm(
           t`Removing this audio attachment will also clear its transcription. Continue?`,
         )
@@ -2231,9 +2244,38 @@ export const ChatInput = ({
       return next;
     });
   }, [contextItems, composeLocked, overLimitItemIds, maxUploadFormatted]);
+  const stagedFiles = useMemo(
+    () =>
+      attachedFiles.map((file) => {
+        if (!file.audio_transcription) {
+          return file;
+        }
+        const length: Pick<
+          AudioTranscriptionState,
+          "recorded_duration_ms" | "recording_elapsed_ms"
+        > | null =
+          file.id in recordedDurationsMs
+            ? { recorded_duration_ms: recordedDurationsMs[file.id] }
+            : liveRecordingDuration?.fileUploadId === file.id
+              ? { recording_elapsed_ms: liveRecordingDuration.durationMs }
+              : null;
+        if (!length) {
+          return file;
+        }
+        const audioTranscription: NonNullable<
+          FileUploadItem["audio_transcription"]
+        > &
+          AudioTranscriptionState = {
+          ...file.audio_transcription,
+          ...length,
+        };
+        return { ...file, audio_transcription: audioTranscription };
+      }),
+    [attachedFiles, recordedDurationsMs, liveRecordingDuration],
+  );
   const slotFiles = useMemo(
-    () => unclaimedFiles(attachedFiles, claimedFileIds),
-    [attachedFiles, claimedFileIds],
+    () => unclaimedFiles(stagedFiles, claimedFileIds),
+    [stagedFiles, claimedFileIds],
   );
 
   // One token reset for the batch: per-file removal would read a stale count
@@ -3123,7 +3165,7 @@ export const ChatInput = ({
             if (contextItems === undefined) {
               return (
                 <StagedAttachments
-                  attachedFiles={attachedFiles}
+                  attachedFiles={stagedFiles}
                   maxFiles={maxFiles}
                   onRemoveFile={handleRemoveFileById}
                   onRemoveAllFiles={handleRemoveAllFilesWithTokenReset}

@@ -1,6 +1,6 @@
 import { Alert, GroupedFileAttachmentsPreview } from "@erato/frontend/library";
 import { t } from "@lingui/core/macro";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 
 import type {
   OutlookAttachmentChipModel,
@@ -13,6 +13,9 @@ import type {
   OutlookThreadChipModel,
 } from "../utils/outlookContextChips";
 import type { FileAttachmentGroup } from "@erato/frontend/library";
+
+/** How often an open draft detail re-reads the draft. */
+export const DRAFT_DETAIL_REFRESH_MS = 2_000;
 
 // Read with the detail when it opens; a live role would announce it again.
 function DetailNote({ note }: { note: OutlookContextNote }) {
@@ -126,31 +129,23 @@ export function OutlookSelectionDetail({
 
 export function OutlookDraftDetail({
   model,
-  readLiveFields,
+  refresh,
 }: {
   model: OutlookDraftChipModel;
-  /** Re-reads what the next send would read, once the detail opens. */
-  readLiveFields?: () => Promise<OutlookDetailField[] | null>;
+  /** Re-reads the draft the next send would read; the model follows it. */
+  refresh?: () => unknown;
 }) {
-  const [liveFields, setLiveFields] = useState<OutlookDetailField[] | null>(
-    null,
-  );
   useEffect(() => {
-    if (!readLiveFields) return;
-    let active = true;
-    void readLiveFields()
-      .then((fields) => {
-        if (active && fields) setLiveFields(fields);
-      })
-      .catch(() => {});
-    return () => {
-      active = false;
-    };
-  }, [readLiveFields]);
+    if (!refresh) return;
+    refresh();
+    // The user can type in the item with the detail still open beside it.
+    const timer = window.setInterval(refresh, DRAFT_DETAIL_REFRESH_MS);
+    return () => window.clearInterval(timer);
+  }, [refresh]);
   return (
     <div className="flex flex-col gap-3">
       <Notes notes={model.notes} />
-      <Fields fields={liveFields ?? model.fields} />
+      <Fields fields={model.fields} />
       {model.body ? (
         <Quote
           label={t({

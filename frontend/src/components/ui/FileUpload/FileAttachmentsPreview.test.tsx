@@ -425,5 +425,129 @@ describe("inside the composer's shared staged area", () => {
         }),
       ).toBeEnabled();
     });
+
+    it("makes a busy recording's remove control its cancel, usable while the composer is locked", async () => {
+      const onRemoveFile = vi.fn();
+      await renderWithProviders(
+        <FileAttachmentsPreview
+          attachedFiles={[
+            recording("a", { status: "recording" }),
+            recording("b", { status: "failed" }),
+            file("c", "spec.pdf"),
+          ]}
+          maxFiles={5}
+          onRemoveFile={onRemoveFile}
+          onRemoveAllFiles={vi.fn()}
+          disabled
+          audioTranscription={{ ...noRetry, disabled: true, cancelable: true }}
+        />,
+      );
+      const cancel = screen.getByRole("button", {
+        name: "Cancel transcription: audio-recording-a.wav",
+      });
+      expect(cancel).toBeEnabled();
+      expect(cancel).toHaveAttribute("title", "Cancel transcription");
+      fireEvent.click(cancel);
+      expect(onRemoveFile).toHaveBeenCalledWith("a");
+      expect(
+        screen.getByRole("button", { name: "Remove audio-recording-b.wav" }),
+      ).toBeDisabled();
+      expect(
+        screen.getByRole("button", { name: "Remove spec.pdf" }),
+      ).toBeDisabled();
+    });
+
+    it("keeps the remove control where the composer cannot cancel", async () => {
+      await renderWithProviders(
+        <FileAttachmentsPreview
+          attachedFiles={[recording("a", { status: "transcribing" })]}
+          maxFiles={5}
+          onRemoveFile={vi.fn()}
+          onRemoveAllFiles={vi.fn()}
+          audioTranscription={noRetry}
+        />,
+      );
+      expect(
+        screen.getByRole("button", { name: "Remove audio-recording-a.wav" }),
+      ).toBeEnabled();
+    });
+
+    it("reads a stopped recording's length from the recorder, not from the chunks the server took up", async () => {
+      await renderWithProviders(
+        <FileAttachmentsPreview
+          attachedFiles={[
+            recording("a", {
+              status: "recording",
+              chunks: [{ status: "completed", end_ms: 30_000 }],
+              recorded_duration_ms: 38_290,
+            }),
+          ]}
+          maxFiles={5}
+          onRemoveFile={vi.fn()}
+          onRemoveAllFiles={vi.fn()}
+          audioTranscription={noRetry}
+        />,
+      );
+      expect(
+        document.querySelector('[data-ui="attachment-tile-meta"]'),
+      ).toHaveTextContent("Transcribing · 0:38");
+    });
+
+    it("shows the composer's recording by its first words with a More that opens the preview, a wordless one by a placeholder, and an uploaded audio file by its name", async () => {
+      const onFilePreview = vi.fn();
+      await renderWithProviders(
+        <FileAttachmentsPreview
+          attachedFiles={[
+            recording("a", {
+              status: "recording",
+              chunks: [
+                {
+                  status: "completed",
+                  end_ms: 30_000,
+                  transcript: "This is what I said first.",
+                },
+              ],
+              recording_elapsed_ms: 41_400,
+            }),
+            {
+              ...recording("b", { status: "completed", transcript: "Hi." }),
+              filename: "interview.wav",
+            },
+            recording("c", {
+              status: "recording",
+              chunks: [],
+              recording_elapsed_ms: 3_000,
+            }),
+          ]}
+          maxFiles={5}
+          onRemoveFile={vi.fn()}
+          onRemoveAllFiles={vi.fn()}
+          onFilePreview={onFilePreview}
+          audioTranscription={noRetry}
+        />,
+      );
+      expect(screen.queryByText("audio-recording-a.wav")).toBeNull();
+      const [words, placeholder] = document.querySelectorAll(
+        '[data-ui="attachment-tile-excerpt"]',
+      );
+      expect(words).toHaveTextContent("This is what I said first.");
+      expect(placeholder).toHaveTextContent("The transcript appears here…");
+      expect(placeholder).toHaveAttribute("data-placeholder", "true");
+      const more = screen.getByRole("button", {
+        name: "More: audio-recording-a.wav, Recording · 0:41",
+      });
+      expect(more).toHaveAttribute("title", "audio-recording-a.wav");
+      fireEvent.click(more);
+      expect(onFilePreview).toHaveBeenCalledWith(
+        expect.objectContaining({ id: "a" }),
+      );
+      expect(screen.getByText("interview.wav")).toBeInTheDocument();
+      expect(
+        document.querySelectorAll('[data-ui="attachment-tile-excerpt"]'),
+      ).toHaveLength(2);
+      expect(
+        document.querySelectorAll('[data-ui="attachment-tile-more"]'),
+      ).toHaveLength(1);
+    });
   });
 });

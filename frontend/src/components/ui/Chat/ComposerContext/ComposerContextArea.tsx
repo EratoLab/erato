@@ -113,12 +113,18 @@ export const ComposerContextArea = ({
         onScroll={readOverflow}
         // The overhang pays for focus rings and corner controls in padding and
         // takes it back in margin; overflow-y-auto would clip them otherwise.
+        // A file tile's ring sits outside its frame, so the left needs it too.
         className={clsx(
-          "-mr-1 -mt-1 flex-col gap-2 overflow-y-auto overflow-x-hidden pr-1 pt-1",
+          "-mx-1 -mt-1 flex-col gap-2 overflow-y-auto overflow-x-hidden px-1 pt-1",
           empty ? "hidden" : "flex",
         )}
         style={{
-          maxHeight: "var(--theme-layout-attachment-tile-staged-max-height)",
+          // Chips are tiles too, so the area makes room for them; files alone
+          // keep the web composer's cap.
+          maxHeight:
+            items.length > 0
+              ? "var(--theme-layout-composer-context-area-max-height)"
+              : "var(--theme-layout-attachment-tile-staged-max-height)",
         }}
       >
         <ComposerContextLane

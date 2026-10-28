@@ -247,7 +247,7 @@ export const expectFits = async (page: Page, width: number, label: string) => {
     const lane = await boxOf(page.locator(LANE));
     for (const item of await page.locator(CHIP).all()) {
       const box = await boxOf(item);
-      expect(box.height, label).toBeCloseTo(32, 0);
+      expect(box.height, label).toBeCloseTo(54, 0);
       expect(box.x, label).toBeGreaterThanOrEqual(lane.x - 0.5);
       expect(box.x + box.width, label).toBeLessThanOrEqual(
         lane.x + lane.width + 0.5,

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  audioTranscriptExcerpt,
   audioTranscriptionDuration,
   audioTranscriptionOutcomeText,
   audioTranscriptionPhase,
@@ -66,6 +67,141 @@ describe("audioTranscriptionTileStatus", () => {
     });
   });
 
+  it("shows the recorded length once the recording stopped, as transcribing", () => {
+    const chunks = [chunk("completed", 30_000)];
+    expect(
+      audioTranscriptionTileStatus(
+        rec({ status: "recording", chunks, recorded_duration_ms: 38_290 }),
+      ),
+    ).toMatchObject({
+      phase: "transcribing",
+      busy: true,
+      metaLabel: "Transcribing · 0:38",
+    });
+    expect(
+      audioTranscriptionTileStatus(
+        rec({ status: "completed", chunks, recorded_duration_ms: 38_290 }),
+      )?.metaLabel,
+    ).toBe("Transcript ready · 0:38");
+    expect(
+      audioTranscriptionTileStatus(rec({ status: "recording", chunks }))
+        ?.metaLabel,
+    ).toBe("Recording · 0:30");
+  });
+
+  it("counts a running recording by the recorder's clock, not the chunks' 30-second steps", () => {
+    const chunks = [chunk("completed", 30_000, "First half.")];
+    expect(
+      audioTranscriptionTileStatus(
+        rec({ status: "recording", chunks, recording_elapsed_ms: 41_400 }),
+      ),
+    ).toMatchObject({
+      phase: "recording",
+      busy: true,
+      metaLabel: "Recording · 0:41",
+    });
+    expect(
+      audioTranscriptionTileStatus(
+        rec({ status: "recording", chunks: [], recording_elapsed_ms: 1_300 }),
+      )?.metaLabel,
+    ).toBe("Recording · 0:01");
+  });
+
+  it("draws the composer's recordings by their first words, uploaded audio by its name", () => {
+    const chunks = [
+      chunk("completed", 30_000, "Hello team."),
+      chunk("completed", 41_000, "Here is the update."),
+    ];
+    expect(
+      audioTranscriptionTileStatus(
+        rec({ status: "recording", chunks, recording_elapsed_ms: 44_000 }),
+      )?.transcript,
+    ).toEqual({
+      excerpt: "Hello team. Here is the update.",
+      more: {
+        label: "More",
+        name: "More: audio-recording-20261020-1200.wav",
+      },
+    });
+    expect(
+      audioTranscriptionTileStatus(
+        rec({
+          status: "completed",
+          chunks,
+          transcript: "Hello team. Here is the update, in full.",
+          recorded_duration_ms: 41_000,
+        }),
+      )?.transcript?.excerpt,
+    ).toBe("Hello team. Here is the update, in full.");
+    // No words yet: a placeholder holds their place while they may come.
+    expect(
+      audioTranscriptionTileStatus(
+        rec({ status: "recording", chunks: [], recording_elapsed_ms: 3_000 }),
+      )?.transcript,
+    ).toEqual({ placeholder: "The transcript appears here…" });
+    expect(
+      audioTranscriptionTileStatus(
+        rec({
+          status: "transcribing",
+          chunks: [],
+          recorded_duration_ms: 3_000,
+        }),
+      )?.transcript,
+    ).toEqual({ placeholder: "The transcript appears here…" });
+    // Settled without words, the meta line stands alone.
+    for (const status of ["completed", "failed", "canceled"]) {
+      expect(
+        audioTranscriptionTileStatus(
+          rec({ status, chunks: [], recorded_duration_ms: 3_000 }),
+        )?.transcript,
+      ).toEqual({});
+    }
+    expect(
+      audioTranscriptionTileStatus(rec({ status: "completed", chunks }))
+        ?.transcript,
+    ).toBeUndefined();
+  });
+
+  it("offers the cancel only on a busy recording the composer can cancel", () => {
+    const cancelable = { retryable: false, retrying: false, cancelable: true };
+    expect(
+      audioTranscriptionTileStatus(rec({ status: "transcribing" }), cancelable)
+        ?.cancel,
+    ).toEqual({
+      label: "Cancel transcription",
+      name: "Cancel transcription: audio-recording-20261020-1200.wav",
+    });
+    expect(
+      audioTranscriptionTileStatus(rec({ status: "transcribing" }))?.cancel,
+    ).toBeUndefined();
+    for (const status of ["completed", "failed", "canceled"]) {
+      expect(
+        audioTranscriptionTileStatus(rec({ status }), cancelable)?.cancel,
+      ).toBeUndefined();
+    }
+  });
+
+  it("calls a recording failed once nothing is left to work on and a chunk failed", () => {
+    expect(
+      audioTranscriptionPhase({
+        status: "transcribing",
+        chunks: [chunk("failed", 30_000), chunk("completed", 38_000)],
+      }),
+    ).toBe("failed");
+    expect(
+      audioTranscriptionPhase({
+        status: "transcribing",
+        chunks: [chunk("failed", 30_000), chunk("transcribing", 38_000)],
+      }),
+    ).toBe("transcribing");
+    expect(
+      audioTranscriptionPhase({
+        status: "recording",
+        chunks: [chunk("failed", 30_000), chunk("completed", 38_000)],
+      }),
+    ).toBe("recording");
+  });
+
   it("reads the phase from the chunks when the status is missing", () => {
     expect(
       audioTranscriptionPhase({ chunks: [chunk("completed", 1000)] }),
@@ -118,6 +254,25 @@ describe("audioTranscriptionTileStatus", () => {
   });
 });
 
+describe("audioTranscriptExcerpt", () => {
+  it("keeps a short transcript whole, on one line of spaces", () => {
+    expect(audioTranscriptExcerpt("  Hello\n  team. ")).toBe("Hello team.");
+  });
+
+  it("keeps the first words of a long one, ending at a word", () => {
+    const words = Array.from({ length: 80 }, (_, index) => `word${index}`);
+    const excerpt = audioTranscriptExcerpt(words.join(" "));
+    expect(excerpt.startsWith("word0 word1 ")).toBe(true);
+    expect(excerpt.endsWith("…")).toBe(true);
+    expect(excerpt.length).toBeLessThanOrEqual(201);
+    expect(words).toContain(excerpt.slice(0, -1).split(" ").at(-1));
+  });
+
+  it("cuts a single overlong word at the limit", () => {
+    expect(audioTranscriptExcerpt("a".repeat(300))).toBe(`${"a".repeat(200)}…`);
+  });
+});
+
 describe("audioTranscriptionDuration", () => {
   it.each([
     [[chunk("completed", 42_000)], "0:42"],
@@ -159,6 +314,9 @@ describe("transcript and completion", () => {
     expect(audioTranscriptionOutcomeText("a.wav", "failed")).toBe(
       "a.wav: couldn't transcribe.",
     );
-    expect(audioTranscriptionOutcomeText("a.wav", "canceled")).toBeNull();
+    expect(audioTranscriptionOutcomeText("a.wav", "canceled")).toBe(
+      "a.wav: transcription canceled.",
+    );
+    expect(audioTranscriptionOutcomeText("a.wav", "transcribing")).toBeNull();
   });
 });

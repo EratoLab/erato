@@ -411,7 +411,13 @@ export const StatusBusyAndError: Story = {
       {
         ...item("s1", "audio-recording-0942.wav"),
         metaLabel: "Transcribing · 0:42",
-        status: { busy: true },
+        status: {
+          busy: true,
+          remove: {
+            label: "Cancel transcription",
+            accessibleName: "Cancel transcription: audio-recording-0942.wav",
+          },
+        },
       },
       {
         ...item("s2", "audio-recording-0951.wav"),
@@ -427,6 +433,58 @@ export const StatusBusyAndError: Story = {
         },
       },
       item("s3", "Acme_Inc_Organizational_Data.docx"),
+    ],
+    size: "compact",
+    onRemove: () => {},
+    onActivate: () => {},
+  },
+};
+
+/**
+ * The composer's own recordings: their first words take the generated file
+ * name's place (it stays the tooltip and accessible name), clamped to two
+ * lines, and the More button opens the preview. Until words arrive a
+ * placeholder holds their two lines, so the tile does not grow when they do.
+ */
+export const StatusTranscript: Story = {
+  args: {
+    items: [
+      {
+        ...item("t1", "audio-recording-0960.wav"),
+        metaLabel: "Recording · 0:07",
+        status: {
+          busy: true,
+          transcript: { placeholder: "The transcript appears here…" },
+        },
+      },
+      {
+        ...item("t2", "audio-recording-0961.wav"),
+        metaLabel: "Transcribing · 0:38",
+        status: {
+          busy: true,
+          transcript: {
+            excerpt:
+              "The customer wants delivery in two batches, the first before the end of the quarter and the second once the site is ready.",
+            more: {
+              label: "More",
+              accessibleName: "More: audio-recording-0961.wav",
+            },
+          },
+        },
+      },
+      {
+        ...item("t3", "audio-recording-0962.wav"),
+        metaLabel: "Transcript ready · 0:42",
+        status: {
+          transcript: {
+            excerpt: "Okay, this is a test.",
+            more: {
+              label: "More",
+              accessibleName: "More: audio-recording-0962.wav",
+            },
+          },
+        },
+      },
     ],
     size: "compact",
     onRemove: () => {},

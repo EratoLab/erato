@@ -18,6 +18,12 @@ export interface ParsedAttachment {
   disposition: "attachment" | "inline" | null;
   related: boolean;
   contentId: string | null;
+  /**
+   * The part names nothing a person would recognise: it has no filename, or
+   * only its Content-ID or a bare GUID. `filename` still carries what the
+   * bytes say, for matching and validation; the detail names the part itself.
+   */
+  unnamed?: true;
   toFile: () => File;
   /**
    * The forwarded email inside a `message/rfc822` part, parsed in turn. Its
@@ -161,9 +167,11 @@ async function buildAttachment(
       ? ((await parseEmlBytesAt(blobPart, {}, depth + 1, `${id}/`)) ??
         undefined)
       : undefined;
+  const ownName = attachment.filename?.trim() || null;
+  const contentId = attachment.contentId ?? null;
   // A forwarded email usually has no filename; name it after its subject.
   const filename =
-    attachment.filename?.trim() ||
+    ownName ||
     (isMessage ? buildDefaultName(nested?.subject ?? undefined) : null) ||
     "attachment";
   return {
@@ -173,13 +181,31 @@ async function buildAttachment(
     size,
     disposition: attachment.disposition ?? null,
     related: attachment.related === true,
-    contentId: attachment.contentId ?? null,
+    contentId,
+    ...(!isMessage && isMachineName(ownName, contentId)
+      ? { unnamed: true as const }
+      : {}),
     toFile: () =>
       blobPart === null
         ? new File([], filename, { type: mimeType })
         : new File([blobPart], filename, { type: mimeType }),
     ...(nested ? { nested, nestedTrimmable: trimmable } : {}),
   };
+}
+
+const BARE_GUID = /^\{?[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}\}?$/i;
+
+function isMachineName(name: string | null, contentId: string | null): boolean {
+  if (!name) return true;
+  if (BARE_GUID.test(name)) return true;
+  return (
+    contentId !== null &&
+    name.toLowerCase() === stripAngleBrackets(contentId).toLowerCase()
+  );
+}
+
+export function stripAngleBrackets(contentId: string): string {
+  return contentId.trim().replace(/^<|>$/g, "");
 }
 
 function toBlobPart(

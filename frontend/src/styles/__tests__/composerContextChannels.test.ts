@@ -46,6 +46,7 @@ describe("composer context chip channels", () => {
     const layer = componentsLayer();
     expect(layer).toContain(".composer-context-chip-geometry {");
     expect(layer).toContain(".composer-context-control-geometry {");
+    expect(layer).toContain(".composer-context-more-geometry {");
     expect(layer).not.toContain(".composer-context-chip-skin");
     expect(rawCss).toMatch(/^\.composer-context-chip-skin \{/m);
   });
@@ -61,8 +62,22 @@ describe("composer context chip channels", () => {
       "border-radius",
       "var(--attachment-tile-radius, var(--theme-radius-base))",
     );
+    declares(".composer-context-more-geometry", "height", "2rem");
+    declares(
+      ".composer-context-more-geometry",
+      "border-radius",
+      "var(--attachment-tile-radius, var(--theme-radius-base))",
+    );
     declares(".composer-context-control-geometry", "width", "1.5rem");
     declares(".composer-context-control-geometry", "height", "1.5rem");
+  });
+
+  it("tints the glyph's plate with the glyph's own colour", () => {
+    declares(
+      ".composer-context-chip-skin",
+      "--attachment-tile-icon-tint",
+      "var(--composer-context-chip-icon, var(--theme-fg-secondary))",
+    );
   });
 
   it("frames an included chip with the attachment tokens", () => {
@@ -163,9 +178,12 @@ describe("composer context chip channels", () => {
     }
   });
 
-  it("declares both layout tokens", () => {
+  it("declares the layout tokens", () => {
     expect(globalsCss).toContain(
-      "--theme-layout-composer-context-chip-height: 2rem;",
+      "--theme-layout-composer-context-chip-height: calc(3.25rem + 2px);",
+    );
+    expect(globalsCss).toContain(
+      "--theme-layout-composer-context-area-max-height: 16.5rem;",
     );
     expect(globalsCss).toContain(
       "--theme-layout-composer-context-detail-width: 24rem;",
