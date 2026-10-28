@@ -1,5 +1,6 @@
 pub mod audio_cpp;
 pub mod gemini;
+pub mod gemini_live;
 pub mod openai;
 pub mod openai_realtime;
 pub mod sentences;
@@ -48,6 +49,7 @@ pub fn provider(config: &SpeechProviderConfig) -> Result<Box<dyn SpeechProvider>
         "openai_realtime" => Box::new(openai_realtime::OpenAiRealtime(config.clone())),
         "audio_cpp" => Box::new(audio_cpp::AudioCpp(config.clone())),
         "gemini" => Box::new(gemini::Gemini(config.clone())),
+        "gemini_live" => Box::new(gemini_live::GeminiLive(config.clone())),
         _ => return Err(eyre!("Unknown speech provider")),
     })
 }
