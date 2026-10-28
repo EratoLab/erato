@@ -1785,6 +1785,49 @@ describe("ChatInput", () => {
       );
     });
 
+    it("counts a running recording up from the recorder and shows its latest words instead of its name", async () => {
+      mockUseAudioTranscriptionRecorder.mockReturnValue({
+        ...mockUseAudioTranscriptionRecorder(),
+        liveRecordingDuration: {
+          fileUploadId: "audio-rec-1",
+          durationMs: 41_400,
+        },
+      });
+      stage([
+        recording("recording", {
+          chunks: [
+            {
+              status: "completed",
+              end_ms: 30_000,
+              transcript: "This is what I said first.",
+            },
+          ],
+        }),
+      ]);
+      const onFilePreview = vi.fn();
+      await renderComposer({ onFilePreview });
+
+      const tile = document.querySelector<HTMLElement>(
+        '[data-ui="attachment-tile"]',
+      )!;
+      expect(
+        tile.querySelector('[data-ui="attachment-tile-meta"]'),
+      ).toHaveTextContent("Recording · 0:41");
+      expect(
+        tile.querySelector('[data-ui="attachment-tile-excerpt"]'),
+      ).toHaveTextContent("This is what I said first.");
+      expect(tile).not.toHaveTextContent("audio-recording-20261020-1200.wav");
+
+      fireEvent.click(
+        screen.getByRole("button", {
+          name: "More: audio-recording-20261020-1200.wav, Recording · 0:41",
+        }),
+      );
+      expect(onFilePreview).toHaveBeenCalledWith(
+        expect.objectContaining({ id: "audio-rec-1" }),
+      );
+    });
+
     it("says a recording that left the composer while in progress was canceled", async () => {
       mockUseAudioTranscriptionFeature.mockReturnValue({ enabled: true });
       stage([recording("transcribing")]);

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  audioTranscriptExcerpt,
   audioTranscriptionDuration,
   audioTranscriptionOutcomeText,
   audioTranscriptionPhase,
@@ -86,6 +87,62 @@ describe("audioTranscriptionTileStatus", () => {
       audioTranscriptionTileStatus(rec({ status: "recording", chunks }))
         ?.metaLabel,
     ).toBe("Recording · 0:30");
+  });
+
+  it("counts a running recording by the recorder's clock, not the chunks' 30-second steps", () => {
+    const chunks = [chunk("completed", 30_000, "First half.")];
+    expect(
+      audioTranscriptionTileStatus(
+        rec({ status: "recording", chunks, recording_elapsed_ms: 41_400 }),
+      ),
+    ).toMatchObject({
+      phase: "recording",
+      busy: true,
+      metaLabel: "Recording · 0:41",
+    });
+    expect(
+      audioTranscriptionTileStatus(
+        rec({ status: "recording", chunks: [], recording_elapsed_ms: 1_300 }),
+      )?.metaLabel,
+    ).toBe("Recording · 0:01");
+  });
+
+  it("draws the composer's recordings by their latest words, uploaded audio by its name", () => {
+    const chunks = [
+      chunk("completed", 30_000, "Hello team."),
+      chunk("completed", 41_000, "Here is the update."),
+    ];
+    expect(
+      audioTranscriptionTileStatus(
+        rec({ status: "recording", chunks, recording_elapsed_ms: 44_000 }),
+      )?.transcript,
+    ).toEqual({
+      excerpt: "Hello team. Here is the update.",
+      more: {
+        label: "More",
+        name: "More: audio-recording-20261020-1200.wav",
+      },
+    });
+    expect(
+      audioTranscriptionTileStatus(
+        rec({
+          status: "completed",
+          chunks,
+          transcript: "Hello team. Here is the update, in full.",
+          recorded_duration_ms: 41_000,
+        }),
+      )?.transcript?.excerpt,
+    ).toBe("Hello team. Here is the update, in full.");
+    // No words yet: the meta line stands alone.
+    expect(
+      audioTranscriptionTileStatus(
+        rec({ status: "recording", chunks: [], recording_elapsed_ms: 3_000 }),
+      )?.transcript,
+    ).toEqual({});
+    expect(
+      audioTranscriptionTileStatus(rec({ status: "completed", chunks }))
+        ?.transcript,
+    ).toBeUndefined();
   });
 
   it("offers the cancel only on a busy recording the composer can cancel", () => {
@@ -177,6 +234,21 @@ describe("audioTranscriptionTileStatus", () => {
         locked: true,
       })?.action?.disabled,
     ).toBe(true);
+  });
+});
+
+describe("audioTranscriptExcerpt", () => {
+  it("keeps a short transcript whole, on one line of spaces", () => {
+    expect(audioTranscriptExcerpt("  Hello\n  team. ")).toBe("Hello team.");
+  });
+
+  it("keeps the latest words of a long one, starting at a word", () => {
+    const words = Array.from({ length: 80 }, (_, index) => `word${index}`);
+    const excerpt = audioTranscriptExcerpt(words.join(" "));
+    expect(excerpt.startsWith("…word")).toBe(true);
+    expect(excerpt.endsWith("word78 word79")).toBe(true);
+    expect(excerpt.length).toBeLessThanOrEqual(201);
+    expect(words).toContain(excerpt.slice(1).split(" ")[0]);
   });
 });
 

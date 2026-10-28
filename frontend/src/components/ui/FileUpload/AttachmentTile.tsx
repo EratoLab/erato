@@ -62,6 +62,17 @@ export interface AttachmentTileStatus {
   };
   /** What the remove control does instead, e.g. canceling a transcription. */
   remove?: { label: string; accessibleName: string };
+  /**
+   * Draws a recording by its words instead of its generated file name, which
+   * stays the tooltip and accessible name. Without an excerpt the meta line
+   * stands alone.
+   */
+  transcript?: {
+    /** The latest words; the face keeps the last two lines in view. */
+    excerpt?: string;
+    /** Drawn beside the meta line when the tile opens a preview. */
+    more?: { label: string; accessibleName: string };
+  };
 }
 
 /** Sizes are tokens so a theme can retune them; the plate stays proportional chrome. */
@@ -262,9 +273,17 @@ export const AttachmentTile: React.FC<AttachmentTileProps> = ({
     !isMedia && !selection && !renderContent ? status?.action : undefined;
   const hoverTitle =
     !isMedia && status?.title ? `${filename}\n${status.title}` : filename;
-  const activationName = meta
-    ? `${activateLabel ?? t({ id: "chat.file.preview_attachment", message: "Preview attachment" })} ${filename}, ${meta}`
-    : `${activateLabel ?? t({ id: "chat.file.preview_attachment", message: "Preview attachment" })} ${filename}`;
+  const transcriptFace = isMedia ? undefined : status?.transcript;
+  const excerpt = transcriptFace?.excerpt;
+  const more =
+    transcriptFace?.excerpt && onActivate ? transcriptFace.more : undefined;
+  const activationName = more
+    ? meta
+      ? `${more.accessibleName}, ${meta}`
+      : more.accessibleName
+    : meta
+      ? `${activateLabel ?? t({ id: "chat.file.preview_attachment", message: "Preview attachment" })} ${filename}, ${meta}`
+      : `${activateLabel ?? t({ id: "chat.file.preview_attachment", message: "Preview attachment" })} ${filename}`;
 
   // Splitting the extension into its own node survives a truncating stem, but
   // a whole-name query joins the direct text children of one element only — so
@@ -319,18 +338,42 @@ export const AttachmentTile: React.FC<AttachmentTileProps> = ({
         </span>
       )}
       <span className="min-w-0 flex-1">
-        {nameNode}
-        {meta && (
+        {transcriptFace
+          ? excerpt && (
+              // Bottom-aligned and clipped at two lines, so the latest words
+              // stay in view, which line-clamp (it cuts the end) cannot do.
+              <span
+                data-ui="attachment-tile-excerpt"
+                className="flex max-h-10 flex-col justify-end overflow-hidden text-sm leading-5 text-[var(--theme-fg-primary)]"
+              >
+                <span>{excerpt}</span>
+              </span>
+            )
+          : nameNode}
+        {(Boolean(meta) || Boolean(more)) && (
           <span
             data-ui="attachment-tile-meta"
             className={clsx(
-              "block truncate text-xs",
+              "text-xs",
+              more ? "flex items-baseline gap-2" : "block truncate",
               failed
                 ? "text-[var(--theme-error-fg)]"
                 : "text-[var(--theme-fg-muted)]",
             )}
           >
-            {meta}
+            {more ? (
+              <>
+                <span className="min-w-0 truncate">{meta}</span>
+                <span
+                  data-ui="attachment-tile-more"
+                  className="ml-auto shrink-0 font-medium text-[var(--theme-fg-accent)] underline underline-offset-2"
+                >
+                  {more.label}
+                </span>
+              </>
+            ) : (
+              meta
+            )}
           </span>
         )}
         {invalid && validation.reason && (
@@ -508,7 +551,12 @@ export const AttachmentTile: React.FC<AttachmentTileProps> = ({
       style={
         {
           ...(!renderContent && variant === "tile" && !isMedia
-            ? { maxWidth: geometry.docMaxWidth }
+            ? {
+                // Two lines of words need more room than a file name does.
+                maxWidth: excerpt
+                  ? `min(100%, calc(${geometry.docMaxWidth} * 1.5))`
+                  : geometry.docMaxWidth,
+              }
             : undefined),
           // Handed down as a variable rather than set on the plate, where an
           // inline value would outrank the theme rule the hook exists to accept.

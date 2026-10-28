@@ -648,6 +648,17 @@ the host draws its own preview, status included; under `"warn"` the override
 is installed and shows no status, and only the outcome announcements remain.
 Draw the status, then declare `builtAgainstSharedSurfaceMinor: 20`.
 
+From shared surface 1.22 the composer's own recordings also carry
+`status.transcript` on the tile props: their generated file name says nothing,
+so the tile shows `transcript.excerpt` (the latest words, of which the default
+tile keeps the last two lines in view) and a `transcript.more` label instead of
+the name. The name stays the tooltip and the accessible name, and activating
+the tile opens the preview with the player and the whole transcript. Until a
+recording has words, `transcript` is empty and the meta line stands alone; a
+time in it counts up while the recording runs. Uploaded audio files carry no
+`transcript` and keep their name. The default tile exposes
+`attachment-tile-excerpt` and `attachment-tile-more`.
+
 ## Full Registry Example
 
 A complete `componentRegistry.ts` with multiple overrides:

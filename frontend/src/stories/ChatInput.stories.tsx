@@ -336,17 +336,21 @@ export const AudioRecording = recordingStory(
   "recording",
   "Still recording: the tile spins and counts the length; Send waits. Its × cancels the transcription and stays usable while the rest of the composer is locked.",
 );
+export const AudioSpeaking = recordingStory(
+  "speaking",
+  "Still recording, with the first 30 s transcribed: the tile shows the latest words in place of the generated file name (kept for the tooltip and the accessible name), and More opens the preview.",
+);
 export const AudioTranscribing = recordingStory(
   "transcribing",
   "Transcribing: the tile spins; Send waits until the transcript is ready, and the tile's × cancels the transcription.",
 );
 export const AudioStopped = recordingStory(
   "stopped",
-  "Stopped while the server still works through it: the tile reads the length the recorder measured, not the chunks the server has taken up, and the preview shows the transcript so far.",
+  "Stopped while the server still works through it: the tile reads the length the recorder measured, not the chunks the server has taken up, shows the transcript so far, and More opens the preview with all of it.",
 );
 export const AudioTranscriptReady = recordingStory(
   "completed",
-  "Transcript ready: Send is free, and the tile opens the transcript.",
+  "Transcript ready: Send is free, the tile shows the transcript's last words, and More opens the player and the whole transcript.",
 );
 export const AudioFailed = recordingStory(
   "failed",

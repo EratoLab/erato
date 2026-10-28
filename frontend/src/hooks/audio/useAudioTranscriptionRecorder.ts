@@ -168,6 +168,17 @@ type UseAudioTranscriptionRecorderOptions = {
   setAttachedFiles: (files: FileUploadItem[]) => void;
 };
 
+/** The audio a live session holds, sent or still buffered: the recording's own clock. */
+function liveSessionDurationMs(
+  session: LiveAudioTranscriptionSession,
+  maxDurationMs: number,
+): number {
+  const capturedMs =
+    session.queuedPcmBytes / CANONICAL_PCM_BYTES_PER_MS +
+    (session.pendingSourceSamples.length * 1000) / session.sourceSampleRate;
+  return Math.min(capturedMs, maxDurationMs);
+}
+
 function isAudioTranscriptionAttachment(file: FileUploadItem): boolean {
   return Boolean(file.audio_transcription);
 }
@@ -423,6 +434,11 @@ export function useAudioTranscriptionRecorder({
   const [recordedDurationsMs, setRecordedDurationsMs] = useState<
     Readonly<Record<string, number>>
   >({});
+  /** The running recording's length so far, while it records. */
+  const [liveRecordingDuration, setLiveRecordingDuration] = useState<{
+    fileUploadId: string;
+    durationMs: number;
+  } | null>(null);
   const [recordingBars, setRecordingBars] = useState<number[]>(
     Array.from({ length: AUDIO_BARS_COUNT }, () => 2),
   );
@@ -472,6 +488,7 @@ export function useAudioTranscriptionRecorder({
   const vadDebugProcessedFrameCountRef = useRef(0);
   const onVadAutoStopRef = useRef(onVadAutoStop);
   const recordingDurationTimerRef = useRef<number | null>(null);
+  const liveDurationTimerRef = useRef<number | null>(null);
   const createChatMutation = useCreateChat();
   const { fetcherOptions: fileFetchOptions } = useV1betaApiContext();
   const fileFetchOptionsRef = useRef(fileFetchOptions);
@@ -623,6 +640,37 @@ export function useAudioTranscriptionRecorder({
     }
   }, []);
 
+  const stopLiveDurationTicker = useCallback(() => {
+    if (liveDurationTimerRef.current !== null) {
+      window.clearTimeout(liveDurationTimerRef.current);
+      liveDurationTimerRef.current = null;
+    }
+    setLiveRecordingDuration(null);
+  }, []);
+
+  const startLiveDurationTicker = useCallback(
+    (session: LiveAudioTranscriptionSession) => {
+      const maxDurationMs = maxRecordingDurationSeconds * 1000;
+      const tick = () => {
+        const durationMs = liveSessionDurationMs(session, maxDurationMs);
+        setLiveRecordingDuration({
+          fileUploadId: session.fileUploadId,
+          durationMs,
+        });
+        // The tile rounds to whole seconds, so wake just after the rounded
+        // value moves on: a fixed interval drifts against the audio and now
+        // and then skips or repeats a second.
+        const untilNextSecondMs = 1000 - ((durationMs + 500) % 1000);
+        liveDurationTimerRef.current = window.setTimeout(
+          tick,
+          Math.max(50, untilNextSecondMs + 25),
+        );
+      };
+      tick();
+    },
+    [maxRecordingDurationSeconds],
+  );
+
   const stopVadEngine = useCallback(() => {
     const hadVadEngine = Boolean(vadEngineRef.current);
     vadEngineRef.current?.destroy();
@@ -639,6 +687,7 @@ export function useAudioTranscriptionRecorder({
 
   const stopMediaRecordingStream = useCallback(() => {
     clearRecordingDurationTimer();
+    stopLiveDurationTicker();
     stopVadEngine();
     // Detach the device-loss listeners before stopping the track. Our own
     // `track.stop()` does not fire `ended`, but a `mute` grace timer may be
@@ -653,6 +702,7 @@ export function useAudioTranscriptionRecorder({
     stopRecordingVisualizer();
   }, [
     clearRecordingDurationTimer,
+    stopLiveDurationTicker,
     stopRecordingVisualizer,
     stopVadEngine,
     unwatchCaptureTrack,
@@ -1697,6 +1747,7 @@ export function useAudioTranscriptionRecorder({
           t`Recording stopped automatically after the configured maximum duration.`,
         );
       }, recordingLimitMs * 1000);
+      startLiveDurationTicker(liveSession);
       setIsRecording(true);
       setRecordingError(null);
     } catch (error) {
@@ -1746,6 +1797,7 @@ export function useAudioTranscriptionRecorder({
     isMounted,
     stopAudioRecording,
     startLiveAudioTranscriptionSession,
+    startLiveDurationTicker,
     flushLiveAudioSamples,
     selectedAudioInputDeviceId,
     setRecordingBarsThrottled,
@@ -1807,6 +1859,7 @@ export function useAudioTranscriptionRecorder({
     setRecordingError,
     retryingAudioFileId,
     recordedDurationsMs,
+    liveRecordingDuration,
     recordingBars,
     recordingDiagnostics,
     isVadListening,

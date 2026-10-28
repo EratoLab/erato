@@ -492,5 +492,51 @@ describe("inside the composer's shared staged area", () => {
         document.querySelector('[data-ui="attachment-tile-meta"]'),
       ).toHaveTextContent("Transcribing · 0:38");
     });
+
+    it("shows the composer's recording by its latest words with a More that opens the preview, and an uploaded audio file by its name", async () => {
+      const onFilePreview = vi.fn();
+      await renderWithProviders(
+        <FileAttachmentsPreview
+          attachedFiles={[
+            recording("a", {
+              status: "recording",
+              chunks: [
+                {
+                  status: "completed",
+                  end_ms: 30_000,
+                  transcript: "This is what I said first.",
+                },
+              ],
+              recording_elapsed_ms: 41_400,
+            }),
+            {
+              ...recording("b", { status: "completed", transcript: "Hi." }),
+              filename: "interview.wav",
+            },
+          ]}
+          maxFiles={5}
+          onRemoveFile={vi.fn()}
+          onRemoveAllFiles={vi.fn()}
+          onFilePreview={onFilePreview}
+          audioTranscription={noRetry}
+        />,
+      );
+      expect(screen.queryByText("audio-recording-a.wav")).toBeNull();
+      expect(
+        document.querySelector('[data-ui="attachment-tile-excerpt"]'),
+      ).toHaveTextContent("This is what I said first.");
+      const more = screen.getByRole("button", {
+        name: "More: audio-recording-a.wav, Recording · 0:41",
+      });
+      expect(more).toHaveAttribute("title", "audio-recording-a.wav");
+      fireEvent.click(more);
+      expect(onFilePreview).toHaveBeenCalledWith(
+        expect.objectContaining({ id: "a" }),
+      );
+      expect(screen.getByText("interview.wav")).toBeInTheDocument();
+      expect(
+        document.querySelectorAll('[data-ui="attachment-tile-excerpt"]'),
+      ).toHaveLength(1);
+    });
   });
 });

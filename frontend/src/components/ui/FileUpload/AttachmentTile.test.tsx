@@ -497,5 +497,94 @@ describe("AttachmentTile custom face", () => {
       );
       expect(screen.getByRole("button", { name: "Retrying…" })).toBeDisabled();
     });
+
+    it("draws a recording by its latest words, keeping the name for hover and its name", async () => {
+      const onActivate = vi.fn();
+      await renderWithProviders(
+        <AttachmentTile
+          file={file("audio-recording-20261028-1818.wav")}
+          metaLabel="Transcribing · 0:42"
+          status={{
+            busy: true,
+            transcript: {
+              excerpt: "…and that is the last thing I said.",
+              more: {
+                label: "More",
+                accessibleName: "More: audio-recording-20261028-1818.wav",
+              },
+            },
+          }}
+          onActivate={onActivate}
+          onRemove={vi.fn()}
+        />,
+      );
+      expect(
+        screen.queryByText("audio-recording-20261028-1818.wav"),
+      ).toBeNull();
+      expect(
+        document.querySelector('[data-ui="attachment-tile-excerpt"]'),
+      ).toHaveTextContent("…and that is the last thing I said.");
+      expect(
+        document.querySelector('[data-ui="attachment-tile-more"]'),
+      ).toHaveTextContent("More");
+      const activation = screen.getByRole("button", {
+        name: "More: audio-recording-20261028-1818.wav, Transcribing · 0:42",
+      });
+      expect(activation).toHaveAttribute(
+        "title",
+        "audio-recording-20261028-1818.wav",
+      );
+      fireEvent.click(screen.getByText("More"));
+      expect(onActivate).toHaveBeenCalledTimes(1);
+    });
+
+    it("leaves a recording without words to its meta line, and drops More where nothing opens", async () => {
+      const { rerender } = await renderWithProviders(
+        <AttachmentTile
+          file={file("audio-recording-20261028-1818.wav")}
+          metaLabel="Recording · 0:07"
+          status={{ busy: true, transcript: {} }}
+          onActivate={vi.fn()}
+        />,
+      );
+      expect(
+        screen.queryByText("audio-recording-20261028-1818.wav"),
+      ).toBeNull();
+      expect(
+        document.querySelector('[data-ui="attachment-tile-meta"]'),
+      ).toHaveTextContent(/^Recording · 0:07$/);
+      expect(
+        screen.getByRole("button", {
+          name: "Preview attachment audio-recording-20261028-1818.wav, Recording · 0:07",
+        }),
+      ).toBeInTheDocument();
+
+      rerender(
+        <I18nProvider i18n={(await import("@lingui/core")).i18n}>
+          <ThemeProvider
+            enableCustomTheme={false}
+            initialThemeMode="light"
+            persistThemeMode={false}
+          >
+            <AttachmentTile
+              file={file("audio-recording-20261028-1818.wav")}
+              metaLabel="Transcript ready · 0:42"
+              status={{
+                transcript: {
+                  excerpt: "All done.",
+                  more: { label: "More", accessibleName: "More: x" },
+                },
+              }}
+            />
+          </ThemeProvider>
+        </I18nProvider>,
+      );
+      expect(
+        document.querySelector('[data-ui="attachment-tile-excerpt"]'),
+      ).toHaveTextContent("All done.");
+      expect(
+        document.querySelector('[data-ui="attachment-tile-more"]'),
+      ).toBeNull();
+    });
   });
 });

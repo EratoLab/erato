@@ -14,13 +14,20 @@ import { openWord, SHELL, style, textarea } from "./word-story";
 // status card above the composer is gone. The tile spins while the recording
 // is worked on, takes the error colours when it fails, offers the retry
 // inside its frame, and Send waits until every recording is transcribed.
+// The composer's own recordings show their latest words and a More instead of
+// the generated file name, and count their length up while they run
+// (ERMAIN-1072).
 
 const TILE = '[data-ui="attachment-tile"]';
 const META = '[data-ui="attachment-tile-meta"]';
+const EXCERPT = '[data-ui="attachment-tile-excerpt"]';
+const MORE = '[data-ui="attachment-tile-more"]';
 const SEND = '[data-testid="chat-input-send-message"]';
 const RECORDING = "audio-recording-20261020-0942.wav";
 const TRANSCRIPT =
   "Quick summary of the sales call: the customer wants delivery in two batches";
+const PARTIAL =
+  "Quick summary of the sales call: the customer wants delivery in two batches.";
 const LIVE = '[data-ui="chat-audio-status-live"]';
 
 interface Phase {
@@ -30,6 +37,8 @@ interface Phase {
   sendable: boolean;
   /** The tile's (x) cancels the transcription rather than removing a transcript. */
   cancels: boolean;
+  /** Words to show, so the tile offers More and its activation is named for it. */
+  more: boolean;
 }
 const PHASES: Phase[] = [
   {
@@ -38,6 +47,7 @@ const PHASES: Phase[] = [
     status: "busy",
     sendable: false,
     cancels: true,
+    more: false,
   },
   {
     story: "audio-transcribing",
@@ -45,6 +55,7 @@ const PHASES: Phase[] = [
     status: "busy",
     sendable: false,
     cancels: true,
+    more: false,
   },
   {
     story: "audio-transcript-ready",
@@ -52,6 +63,7 @@ const PHASES: Phase[] = [
     status: null,
     sendable: true,
     cancels: false,
+    more: true,
   },
   // A failed recording keeps Send off: its tile is the only place that says why.
   {
@@ -60,6 +72,7 @@ const PHASES: Phase[] = [
     status: "error",
     sendable: false,
     cancels: false,
+    more: false,
   },
 ];
 
@@ -71,7 +84,23 @@ const openComposer = (
 
 /** A tile's preview button wraps its face, or sits beside an action inside the frame. */
 const activation = (scope: Locator) =>
-  scope.getByRole("button", { name: /^Preview attachment/ });
+  scope.getByRole("button", { name: /^(Preview attachment|More:) / });
+/** The meta line's own words, without the More beside them. */
+const metaWords = (tile: Locator) =>
+  tile.locator(META).evaluate((meta) => {
+    const copy = meta.cloneNode(true) as HTMLElement;
+    copy.querySelector('[data-ui="attachment-tile-more"]')?.remove();
+    return copy.textContent?.trim() ?? "";
+  });
+/** A recording's tile by its name, which only its tooltip still carries. */
+const tileNamed = (page: Page, filename: string) =>
+  page
+    .locator(`[title^="${filename}"] ${TILE}`)
+    .or(
+      page
+        .locator(TILE)
+        .filter({ has: page.locator(`[title^="${filename}"]`) }),
+    );
 const shellOf = (page: Page) => page.locator(SHELL);
 
 /** Visible things the composer draws above its box, outside it. */
@@ -104,7 +133,7 @@ test.describe("the composer's recording", () => {
 
       const tile = page.locator(`${SHELL} ${TILE}`);
       await expect(tile).toHaveCount(1);
-      await expect(tile.locator(META)).toHaveText(phase.meta);
+      await expect.poll(() => metaWords(tile)).toBe(phase.meta);
       if (phase.status) {
         await expect(tile).toHaveAttribute("data-status", phase.status);
       } else {
@@ -121,8 +150,12 @@ test.describe("the composer's recording", () => {
       }
       // The activation names the status, so a screen reader hears it with the file.
       await expect(activation(shellOf(page))).toHaveAccessibleName(
-        `Preview attachment ${RECORDING}, ${phase.meta}`,
+        `${phase.more ? "More:" : "Preview attachment"} ${RECORDING}, ${phase.meta}`,
       );
+      // The generated name is no help on the face; the tooltip keeps it.
+      await expect(tile).not.toContainText(RECORDING);
+      await expect(tile.locator(MORE)).toHaveCount(phase.more ? 1 : 0);
+      await expect(tile.locator(EXCERPT)).toHaveCount(phase.more ? 1 : 0);
       const remove = shellOf(page).locator('[data-ui="attachment-remove"]');
       await expect(remove).toHaveAccessibleName(
         phase.cancels
@@ -206,20 +239,86 @@ test.describe("the composer's recording", () => {
     await openComposer(page, "audio-stopped", { width: 340 });
     const tile = page.locator(`${SHELL} ${TILE}`);
     // The server has taken up only the first 30 s, and still says "recording".
-    await expect(tile.locator(META)).toHaveText("Transcribing · 0:38");
+    await expect.poll(() => metaWords(tile)).toBe("Transcribing · 0:38");
     await expect(tile).toHaveAttribute("data-status", "busy");
     await textarea(page).fill("Summarise the recording.");
     await expect(page.locator(SEND)).toBeDisabled();
 
-    await activation(shellOf(page)).click();
+    await expect(tile.locator(EXCERPT)).toHaveText(PARTIAL);
+    await expect(activation(shellOf(page))).toHaveAccessibleName(
+      `More: ${RECORDING}, Transcribing · 0:38`,
+    );
+
+    await tile.locator(MORE).click();
     const section = page
       .getByRole("dialog", { name: `Preview: ${RECORDING}` })
       .locator('[data-ui="file-preview-audio-transcription"]');
     await expect(section).toHaveAttribute("data-status", "transcribing");
     await expect(section).toContainText("Transcribing · 0:38");
-    await expect(section).toContainText(
-      "Quick summary of the sales call: the customer wants delivery in two batches.",
-    );
+    await expect(section).toContainText(PARTIAL);
+  });
+
+  for (const theme of ["light", "dark"] as const) {
+    test(`a recording shows its latest words in two lines at most, and a More inside its frame, ${theme}`, async ({
+      page,
+    }) => {
+      await openComposer(page, "audio-transcript-ready", { theme, width: 340 });
+      const tile = page.locator(`${SHELL} ${TILE}`);
+      const excerpt = tile.locator(EXCERPT);
+      await expect(excerpt).toHaveText(new RegExp(`${TRANSCRIPT}`));
+      const lines = await excerpt.evaluate((box) => {
+        const text = box.firstElementChild!.getBoundingClientRect();
+        const frame = box.getBoundingClientRect();
+        const lineHeight = parseFloat(getComputedStyle(box).lineHeight);
+        return {
+          shown: Math.round(frame.height / lineHeight),
+          written: Math.round(text.height / lineHeight),
+          // The text's end is what stays in view.
+          endGap: Math.abs(frame.bottom - text.bottom),
+          clippedAbove: text.top < frame.top - 0.5,
+        };
+      });
+      expect(lines.shown).toBe(2);
+      expect(lines.written).toBeGreaterThan(2);
+      expect(lines.clippedAbove).toBe(true);
+      expect(lines.endGap).toBeLessThan(0.5);
+
+      const more = tile.locator(MORE);
+      await expect(more).toHaveText("More");
+      const frame = await boxOf(tile);
+      const inner = await boxOf(more);
+      expect(inner.x + inner.width).toBeLessThanOrEqual(frame.x + frame.width);
+      expect(inner.y + inner.height).toBeLessThanOrEqual(
+        frame.y + frame.height,
+      );
+      expect(await more.evaluate(contrastOf)).toBeGreaterThanOrEqual(4.5);
+      expect(await excerpt.evaluate(contrastOf)).toBeGreaterThanOrEqual(4.5);
+      await expect(activation(shellOf(page))).toHaveAttribute(
+        "title",
+        RECORDING,
+      );
+      expect(
+        await page.evaluate(() => document.scrollingElement!.scrollWidth),
+      ).toBeLessThanOrEqual(340);
+
+      await more.click();
+      const preview = page.getByRole("dialog", {
+        name: `Preview: ${RECORDING}`,
+      });
+      await expect(
+        preview.locator('[data-ui="file-preview-audio-transcription"]'),
+      ).toContainText(TRANSCRIPT);
+    });
+  }
+
+  test("a recording without words yet shows its status line alone", async ({
+    page,
+  }) => {
+    await openComposer(page, "audio-recording", { width: 340 });
+    const tile = page.locator(`${SHELL} ${TILE}`);
+    await expect(tile.locator(EXCERPT)).toHaveCount(0);
+    await expect(tile.locator(MORE)).toHaveCount(0);
+    await expect(tile).toHaveText("Recording · 0:42");
   });
 
   test("(x) cancels the transcription: the recording goes, Send stops waiting, the cancel is said", async ({
@@ -269,6 +368,12 @@ test.describe("the composer's recording", () => {
     await expect(
       page.locator(`${SHELL} [data-ui="attachment-remove"]`),
     ).toHaveAccessibleName(`Transkription abbrechen: ${RECORDING}`);
+
+    await openComposer(page, "audio-stopped", { locale: "de", width: 340 });
+    await expect(page.locator(`${SHELL} ${TILE} ${MORE}`)).toHaveText("Mehr");
+    await expect(
+      shellOf(page).getByRole("button", { name: /^Mehr: / }),
+    ).toHaveAccessibleName(`Mehr: ${RECORDING}, Wird transkribiert · 0:38`);
   });
 });
 
@@ -281,9 +386,10 @@ test.describe("every phase on its tile", () => {
     ["audio-recording-0905.wav", "Couldn't transcribe", "error"],
     ["audio-recording-0906.wav", "Couldn't transcribe", "error"],
     ["audio-recording-0907.wav", "Transcription canceled", null],
+    ["audio-recording-0908.wav", "Recording · 0:41", "busy"],
+    ["audio-recording-0909.wav", "Transcribing · 0:38", "busy"],
+    ["customer-interview.wav", "Transcript ready · 0:42", null],
   ];
-  const tileNamed = (page: Page, filename: string) =>
-    page.locator(TILE).filter({ hasText: filename });
 
   test("meta, status and a retry inside the failed tile's frame", async ({
     page,
@@ -294,7 +400,7 @@ test.describe("every phase on its tile", () => {
     for (const [filename, meta, status] of STATUSES) {
       const tile = tileNamed(page, filename);
       await tile.scrollIntoViewIfNeeded();
-      await expect(tile.locator(META), filename).toHaveText(meta);
+      await expect.poll(() => metaWords(tile), filename).toBe(meta);
       if (status) await expect(tile).toHaveAttribute("data-status", status);
       else await expect(tile).not.toHaveAttribute("data-status");
       const retry = tile.locator('[data-ui="attachment-tile-action"]');
@@ -336,6 +442,68 @@ test.describe("every phase on its tile", () => {
     );
     await expect(retrying).toHaveText("Retrying…");
     await expect(retrying).toBeDisabled();
+
+    // The recordings this composer made show their words; an uploaded audio
+    // file keeps its name.
+    await expect(
+      tileNamed(page, "audio-recording-0904.wav").locator(EXCERPT),
+    ).toContainText("45 days payment terms instead of 30.");
+    const uploaded = tileNamed(page, "customer-interview.wav");
+    await expect(uploaded).toContainText("customer-interview.wav");
+    await expect(uploaded.locator(EXCERPT)).toHaveCount(0);
+    await expect(uploaded.locator(MORE)).toHaveCount(0);
+  });
+
+  test("a running recording counts up every second, not in 30-second chunk steps", async ({
+    page,
+  }) => {
+    await openStory(
+      page,
+      "ui-fileattachmentspreview--audio-recording-live",
+      TILE,
+      { width: 340 },
+    );
+    // Every value the meta line takes for 5.5 s, with when it took it.
+    const changes = await page.evaluate(
+      ({ tile, meta }) =>
+        new Promise<{ text: string; at: number }[]>((resolve) => {
+          const read = () =>
+            document.querySelector(`${tile} ${meta}`)?.textContent ?? "";
+          const seen = [{ text: read(), at: performance.now() }];
+          const observer = new MutationObserver(() => {
+            const text = read();
+            if (seen.at(-1)!.text !== text) {
+              seen.push({ text, at: performance.now() });
+            }
+          });
+          observer.observe(document.body, {
+            subtree: true,
+            childList: true,
+            characterData: true,
+          });
+          setTimeout(() => {
+            observer.disconnect();
+            resolve(seen);
+          }, 5_500);
+        }),
+      { tile: TILE, meta: META },
+    );
+    const seen = changes.map((change) => change.text);
+    for (let index = 2; index < changes.length; index += 1) {
+      const gap = changes[index].at - changes[index - 1].at;
+      expect(gap, seen.join(" | ")).toBeGreaterThan(800);
+      expect(gap, seen.join(" | ")).toBeLessThan(1200);
+    }
+    const seconds = seen.map((text) =>
+      Number(/0:(\d\d)/.exec(text)?.[1] ?? Number.NaN),
+    );
+    expect(seconds.length, seen.join(" | ")).toBeGreaterThanOrEqual(5);
+    for (let index = 1; index < seconds.length; index += 1) {
+      expect(seconds[index] - seconds[index - 1], seen.join(" | ")).toBe(1);
+    }
+    // At 0:30 the first chunk's words arrive and take the tile.
+    await expect(page.locator(`${TILE} ${EXCERPT}`)).toHaveText(PARTIAL);
+    await expect(page.locator(`${TILE} ${MORE}`)).toHaveText("More");
   });
 
   test("Tab reaches the preview, the retry, then the remove", async ({
@@ -378,6 +546,9 @@ test.describe("every phase on its tile", () => {
           4.5,
         );
       }
+      for (const more of await page.locator(MORE).all()) {
+        expect(await more.evaluate(contrastOf)).toBeGreaterThanOrEqual(4.5);
+      }
     });
   }
 });
@@ -386,7 +557,7 @@ test("a Word composer's recording carries its status in the lane's file row", as
   page,
 }) => {
   await openWord(page, "Busy");
-  const tile = page.locator(`${AREA} ${TILE}`).filter({ hasText: RECORDING });
+  const tile = tileNamed(page, RECORDING);
   await tile.scrollIntoViewIfNeeded();
   await expect(tile).toHaveAttribute("data-status", "busy");
   await expect(tile.locator(META)).toHaveText("Transcribing · 0:42");

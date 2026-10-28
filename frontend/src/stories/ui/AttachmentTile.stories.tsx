@@ -441,6 +441,55 @@ export const StatusBusyAndError: Story = {
 };
 
 /**
+ * The composer's own recordings: their latest words take the generated file
+ * name's place (it stays the tooltip and accessible name), the last two lines
+ * in view, and More opens the preview. Without words yet, the meta line
+ * stands alone.
+ */
+export const StatusTranscript: Story = {
+  args: {
+    items: [
+      {
+        ...item("t1", "audio-recording-0960.wav"),
+        metaLabel: "Recording · 0:07",
+        status: { busy: true, transcript: {} },
+      },
+      {
+        ...item("t2", "audio-recording-0961.wav"),
+        metaLabel: "Transcribing · 0:38",
+        status: {
+          busy: true,
+          transcript: {
+            excerpt:
+              "…the customer wants delivery in two batches, the first before the end of the quarter.",
+            more: {
+              label: "More",
+              accessibleName: "More: audio-recording-0961.wav",
+            },
+          },
+        },
+      },
+      {
+        ...item("t3", "audio-recording-0962.wav"),
+        metaLabel: "Transcript ready · 0:42",
+        status: {
+          transcript: {
+            excerpt: "Okay, this is a test.",
+            more: {
+              label: "More",
+              accessibleName: "More: audio-recording-0962.wav",
+            },
+          },
+        },
+      },
+    ],
+    size: "compact",
+    onRemove: () => {},
+    onActivate: () => {},
+  },
+};
+
+/**
  * Recipe: the tile inside the real composer, not a stand-in for it. `ChatInput`
  * renders `FileAttachmentsPreview`, which is what draws these tiles — so this
  * story breaks if the composer's own wiring regresses.

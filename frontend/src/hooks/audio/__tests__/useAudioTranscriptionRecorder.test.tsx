@@ -753,6 +753,42 @@ describe("useAudioTranscriptionRecorder", () => {
       expect(result.current.recordingError).toBeNull();
     });
 
+    it("counts the running recording up by the audio it captured, then hands over to the length at Stop", async () => {
+      MockWebSocket.holdReplies = true;
+      const { result } = renderRecorder();
+      await startRecording(result);
+      // The 300 ms primer, before any speech.
+      expect(result.current.liveRecordingDuration).toEqual({
+        fileUploadId: audioFileUpload.id,
+        durationMs: 300,
+      });
+
+      act(() => {
+        emitAudioSamples(new Float32Array(16_000).fill(0.1));
+      });
+      await waitFor(
+        () =>
+          expect(result.current.liveRecordingDuration?.durationMs).toBe(1300),
+        { timeout: 2000 },
+      );
+      act(() => {
+        emitAudioSamples(new Float32Array(16_000).fill(0.1));
+      });
+      await waitFor(
+        () =>
+          expect(result.current.liveRecordingDuration?.durationMs).toBe(2300),
+        { timeout: 2000 },
+      );
+
+      await act(async () => {
+        result.current.toggleAudioRecording();
+      });
+      expect(result.current.liveRecordingDuration).toBeNull();
+      expect(result.current.recordedDurationsMs).toEqual({
+        [audioFileUpload.id]: 2300,
+      });
+    });
+
     it("knows the recorded length at Stop and drops it on cancel while the server still transcribes", async () => {
       MockWebSocket.holdReplies = true;
       const { result } = renderRecorder();
