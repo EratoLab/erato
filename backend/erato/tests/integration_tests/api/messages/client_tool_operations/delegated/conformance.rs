@@ -652,6 +652,20 @@ async fn a_granted_call_reaches_the_pane_with_lineage_and_the_server_context_ref
         "the stored call keeps what the model sent"
     );
     let child_turns = turn_bodies(&child);
+    if let Some(context) = &row.context {
+        let offered = &child_turns[0]["tools"]
+            .as_array()
+            .and_then(|tools| {
+                tools
+                    .iter()
+                    .find(|tool| tool["function"]["name"] == row.read_tool)
+            })
+            .expect("the granted read tool")["function"]["parameters"];
+        assert!(
+            offered["properties"].get(context.input).is_none(),
+            "the task's model is not asked for the context version the server fills: {offered}"
+        );
+    }
     assert!(child_turns[1].to_string().contains(PANE_TEXT));
     if let Some(context_ref) = row.context_ref() {
         assert!(
