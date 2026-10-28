@@ -4221,20 +4221,34 @@ async fn prepare_chat_request_with_adapters_memory_inner(
         assistant_config
             .as_ref()
             .and_then(|a| a.default_chat_provider.as_deref())
+            .filter(|id| app_state.config.resolve_chat_provider_id(id).is_ok())
     });
 
     // Resolve chat provider configuration
-    let ChatProviderConfigWithId {
-        chat_provider_config,
-        chat_provider_id,
-    } = app_state
+    let chosen_provider = app_state
         .chat_provider_for_chatcompletion(
             policy,
             &me_profile_input.subject,
             me_profile_input.user_groups,
             effective_chat_provider_id,
         )
-        .await?;
+        .await;
+    let chosen_provider = if requested_chat_provider_id.is_none() && chosen_provider.is_err() {
+        app_state
+            .chat_provider_for_chatcompletion(
+                policy,
+                &me_profile_input.subject,
+                me_profile_input.user_groups,
+                None,
+            )
+            .await?
+    } else {
+        chosen_provider?
+    };
+    let ChatProviderConfigWithId {
+        chat_provider_config,
+        chat_provider_id,
+    } = chosen_provider;
 
     let mcp_auth_context = McpRequestAuthContext {
         app_state: Some(app_state),
@@ -5925,6 +5939,7 @@ async fn stream_generate_chat_completion<'a>(
                 .speech_provider
                 .as_ref()
                 .and_then(|id| {
+                    let id = app_state.config.resolve_speech_provider_id(id).ok()?;
                     app_state
                         .config
                         .speech_providers
@@ -5933,7 +5948,7 @@ async fn stream_generate_chat_completion<'a>(
                         .map(|config| {
                             crate::services::speech::session::SpeechSession::start(
                                 config.clone(),
-                                id.clone(),
+                                id.to_string(),
                                 (*task).clone(),
                                 tx.clone(),
                                 assistant_message_id,
@@ -15593,6 +15608,20 @@ pub(crate) async fn start_regeneration(
             };
 
             let me_profile_input = MeProfileChatRequestInput::from_me_profile(&me_user);
+            let fallback_chat_provider_id = if let Some(id) = fallback_chat_provider_id {
+                app_state
+                    .chat_provider_for_saved_selection(
+                        &policy,
+                        &me_user.to_subject(),
+                        &me_user.groups,
+                        &id,
+                    )
+                    .await
+                    .ok()
+                    .map(|provider| provider.chat_provider_id)
+            } else {
+                None
+            };
             let user_input = crate::services::prompt_composition::PromptCompositionUserInput {
                 just_submitted_user_message_id: previous_message.id,
                 requested_chat_provider_id: request
@@ -16199,6 +16228,20 @@ pub(crate) async fn start_edit(
                         None
                     }
                 }
+            } else {
+                None
+            };
+            let fallback_chat_provider_id = if let Some(id) = fallback_chat_provider_id {
+                app_state
+                    .chat_provider_for_saved_selection(
+                        &policy,
+                        &me_user.to_subject(),
+                        &me_user.groups,
+                        &id,
+                    )
+                    .await
+                    .ok()
+                    .map(|provider| provider.chat_provider_id)
             } else {
                 None
             };
@@ -17154,6 +17197,15 @@ pub async fn react_to_task_result_sse(
         .await
         .ok()
         .flatten();
+    let chat_provider_id = if let Some(id) = chat_provider_id {
+        app_state
+            .chat_provider_for_saved_selection(&policy, &me_user.to_subject(), &me_user.groups, &id)
+            .await
+            .ok()
+            .map(|provider| provider.chat_provider_id)
+    } else {
+        None
+    };
 
     // 12. `RefuseParked`: the content this turn runs on was written by the
     //     server, and what it would displace is an approval card the same
@@ -19397,7 +19449,12 @@ async fn resume_parked_generation(
         .config
         .chat_providers
         .as_ref()
-        .is_some_and(|providers| providers.providers.contains_key(&chat_provider_id))
+        .is_some_and(|providers| {
+            providers
+                .providers
+                .get(&chat_provider_id)
+                .is_some_and(|provider| !provider.archived)
+        })
         || (chat_provider_id == "default" && app_state.config.chat_provider.is_some());
     if !still_configured
         || allowlist

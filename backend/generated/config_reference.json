@@ -182,6 +182,9 @@
   "chat_provider.api_version": {
     "hide_in_docs": true
   },
+  "chat_provider.archived": {
+    "hide_in_docs": true
+  },
   "chat_provider.base_url": {
     "hide_in_docs": true
   },
@@ -309,6 +312,7 @@
   "chat_providers.providers.<provider-id>.additional_request_parameters.[]": {},
   "chat_providers.providers.<provider-id>.api_key": {},
   "chat_providers.providers.<provider-id>.api_version": {},
+  "chat_providers.providers.<provider-id>.archived": {},
   "chat_providers.providers.<provider-id>.base_url": {},
   "chat_providers.providers.<provider-id>.enable_embedded_image_retrieval_tool": {},
   "chat_providers.providers.<provider-id>.guardrails.filter_input_prompt_injection.enabled": {},
@@ -348,6 +352,8 @@
   "chat_providers.providers.<provider-id>.system_prompt.source": {},
   "chat_providers.providers.<provider-id>.system_prompt_langfuse.prompt_name": {},
   "chat_providers.providers.<provider-id>.validate_availability": {},
+  "chat_providers.replacement_providers.[].new": {},
+  "chat_providers.replacement_providers.[].old": {},
   "chat_providers.summary.max_tokens": {},
   "chat_providers.summary.summary_chat_provider_id": {},
   "chat_providers.summary.system_prompt": {},
@@ -1087,6 +1093,7 @@
   "server.encryption_key": {},
   "speech_providers.provider.<provider-id>.access_token": {},
   "speech_providers.provider.<provider-id>.api_key": {},
+  "speech_providers.provider.<provider-id>.archived": {},
   "speech_providers.provider.<provider-id>.base_url": {},
   "speech_providers.provider.<provider-id>.instructions": {},
   "speech_providers.provider.<provider-id>.location": {},
@@ -1095,6 +1102,8 @@
   "speech_providers.provider.<provider-id>.provider_kind": {},
   "speech_providers.provider.<provider-id>.sample_rate": {},
   "speech_providers.provider.<provider-id>.voice": {},
+  "speech_providers.replacement_providers.[].new": {},
+  "speech_providers.replacement_providers.[].old": {},
   "starter_prompts.enabled": {},
   "starter_prompts.priority_order.[]": {},
   "starter_prompts.prompts.<prompt-id>.chat_provider": {},

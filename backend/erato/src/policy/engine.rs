@@ -81,7 +81,25 @@ fn build_config_permissions_policy_data(config: &AppConfig) -> JsonValue {
         .model_permissions
         .rules
         .values()
-        .map(model_permission_rule_to_json)
+        .map(|rule| {
+            let mut data = model_permission_rule_to_json(rule);
+            if let Some(ids) = data["resource_ids"].as_array_mut() {
+                let replacements: Vec<_> = ids
+                    .iter()
+                    .filter_map(|id| {
+                        id.as_str()
+                            .and_then(|id| config.resolve_chat_provider_id(id).ok())
+                            .map(|id| json!(id))
+                    })
+                    .collect();
+                for replacement in replacements {
+                    if !ids.contains(&replacement) {
+                        ids.push(replacement);
+                    }
+                }
+            }
+            data
+        })
         .collect();
     let mcp_server_rules: Vec<JsonValue> = config
         .mcp_server_permissions
@@ -1474,6 +1492,46 @@ mod tests {
             .unwrap();
 
         assert_eq!(allowed, requested_ids);
+    }
+
+    #[tokio::test]
+    async fn replacement_inherits_only_the_old_rules_groups() {
+        let mut config = AppConfig {
+            chat_providers: Some(
+                serde_json::from_value(json!({
+                    "priority_order": ["new"],
+                    "providers": {"new": {"provider_kind": "openai", "model_name": "model"}},
+                    "replacement_providers": [{"old": "removed", "new": "new"}]
+                }))
+                .unwrap(),
+            ),
+            ..Default::default()
+        };
+        config.model_permissions.rules.insert(
+            "group".into(),
+            ModelPermissionRule::AllowForGroupMembers {
+                chat_provider_ids: vec!["removed".into()],
+                groups: vec!["team".into()],
+            },
+        );
+        let engine = PolicyEngine::new();
+        engine.set_data(configuration_data(&config)).await.unwrap();
+        let subject = Subject::User("user_1".into());
+        let requested = vec!["new".to_string()];
+        assert_eq!(
+            engine
+                .filter_authorized_chat_provider_ids(&subject, &["team".into()], &requested)
+                .await
+                .unwrap(),
+            requested
+        );
+        assert!(
+            engine
+                .filter_authorized_chat_provider_ids(&subject, &["other".into()], &requested)
+                .await
+                .unwrap()
+                .is_empty()
+        );
     }
 
     #[tokio::test]

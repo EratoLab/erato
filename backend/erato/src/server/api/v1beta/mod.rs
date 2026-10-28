@@ -716,6 +716,22 @@ pub async fn fallback() -> impl IntoResponse {
     )
 }
 
+async fn available_models_for_me(
+    app_state: &AppState,
+    policy: &PolicyEngine,
+    me_user: &MeProfile,
+) -> Result<Vec<crate::state::AvailableModel>, Report> {
+    let context = ChatProviderHeadersContext::new(&me_user.id, &me_user.id_token_claims);
+    app_state
+        .available_models_with_headers_context(
+            policy,
+            &me_user.to_subject(),
+            &me_user.groups,
+            Some(&context),
+        )
+        .await
+}
+
 #[utoipa::path(
     get,
     path = "/me/profile",
@@ -730,8 +746,16 @@ pub async fn fallback() -> impl IntoResponse {
 pub async fn profile(
     State(app_state): State<AppState>,
     Extension(me_user): Extension<MeProfile>,
+    Extension(policy): Extension<PolicyEngine>,
 ) -> Result<Json<UserProfile>, StatusCode> {
     let mut profile = me_user.profile.clone();
+    if profile.preference_default_chat_provider.is_some() {
+        let models = available_models_for_me(&app_state, &policy, &me_user)
+            .await
+            .map_err(log_internal_server_error)?;
+        profile.preference_default_chat_provider = app_state
+            .effective_saved_model_id(profile.preference_default_chat_provider.as_deref(), &models);
+    }
     enrich_profile_with_entra_id_photo(&app_state, &me_user, &mut profile).await;
     Ok(Json(profile))
 }
@@ -971,6 +995,7 @@ fn is_starting_assistant_fk_violation(report: &Report) -> bool {
 pub async fn update_profile_preferences(
     State(app_state): State<AppState>,
     Extension(me_user): Extension<MeProfile>,
+    Extension(policy): Extension<PolicyEngine>,
     Json(request): Json<UpdateProfilePreferencesRequest>,
 ) -> Result<Json<UserProfile>, StatusCode> {
     let user_id = Uuid::parse_str(&me_user.id).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
@@ -1035,6 +1060,13 @@ pub async fn update_profile_preferences(
     profile.preference_assistant_additional_information =
         updated_prefs.assistant_additional_information;
     profile.preference_default_chat_provider = updated_prefs.default_chat_provider;
+    if profile.preference_default_chat_provider.is_some() {
+        let models = available_models_for_me(&app_state, &policy, &me_user)
+            .await
+            .map_err(log_internal_server_error)?;
+        profile.preference_default_chat_provider = app_state
+            .effective_saved_model_id(profile.preference_default_chat_provider.as_deref(), &models);
+    }
     profile.preference_starting_hub_assistant_id = updated_prefs
         .starting_hub_assistant_id
         .map(|id| id.to_string());
@@ -1351,21 +1383,25 @@ async fn build_starter_prompt_info(
         .cloned()
         .collect();
 
-    let chat_provider = match starter_prompt.chat_provider.as_ref() {
-        Some(provider_id)
-            if policy
+    let chat_provider = match starter_prompt
+        .chat_provider
+        .as_deref()
+        .and_then(|id| app_state.config.resolve_chat_provider_id(id).ok())
+    {
+        Some(id) => {
+            let id = id.to_string();
+            policy
                 .filter_authorized_chat_provider_ids(
                     subject,
                     user_groups,
-                    std::slice::from_ref(provider_id),
+                    std::slice::from_ref(&id),
                 )
                 .await
                 .map_err(log_internal_server_error)?
-                .contains(provider_id) =>
-        {
-            Some(provider_id.clone())
+                .into_iter()
+                .find(|allowed| allowed == &id)
         }
-        _ => None,
+        None => None,
     };
 
     Ok(StarterPromptInfo {
@@ -1719,6 +1755,10 @@ pub struct ChatMessage {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false)]
     chat_provider_id: Option<String>,
+    /// Historical display name for the provider that generated this message.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    chat_provider_display_name: Option<String>,
     /// The text content of the message
     content: Vec<ContentPart>,
     /// Optional error information if generation failed
@@ -2099,8 +2139,7 @@ async fn upload_file_memory_inner(
     };
 
     // Determine if any available model supports image understanding or audio input
-    let available_models = app_state
-        .available_models(&policy, &me_user.to_subject(), &me_user.groups)
+    let available_models = available_models_for_me(&app_state, &policy, &me_user)
         .await
         .map_err(log_internal_server_error)?;
     let (supports_image_understanding, supports_audio_input) =
@@ -2635,6 +2674,7 @@ impl ChatMessage {
             chat_id: msg.chat_id.to_string(),
             role: parsed_message.role.to_string(),
             chat_provider_id,
+            chat_provider_display_name: None,
             content: parsed_message.content,
             error,
             error_report: None,
@@ -3198,6 +3238,13 @@ async fn assemble_chat_messages_response(
         .map(|msg| {
             let feedback = feedbacks.get(&msg.id).cloned();
             let mut chat_message = ChatMessage::from_model_with_feedback(msg.clone(), feedback)?;
+            chat_message.chat_provider_display_name = chat_message
+                .chat_provider_id
+                .as_deref()
+                .and_then(|id| app_state.config.chat_providers.as_ref()?.providers.get(id))
+                .map(|provider| provider.model_display_name())
+                .filter(|name| !name.is_empty())
+                .map(str::to_string);
             chat_message.error_report = chat_message.error.as_ref().map(|error| {
                 render_message_error_report(&app_state.config, &msg, assistant_id, error)
             });
@@ -3367,12 +3414,12 @@ pub async fn recent_chats(
     .map_err(log_internal_server_error)?;
 
     // Convert from model RecentChat to API RecentChat
-    let available_models = app_state
-        .available_models(&policy, &me_user.to_subject(), &me_user.groups)
+    let available_models = available_models_for_me(&app_state, &policy, &me_user)
         .await
         .map_err(log_internal_server_error)?;
     let api_chats = extend_recent_chats_to_api_model(
         model_chats,
+        &app_state,
         &app_state.db,
         &policy,
         &me_user.to_subject(),
@@ -3517,6 +3564,7 @@ pub async fn generating_chats(
 #[instrument(skip_all)]
 async fn extend_recent_chats_to_api_model(
     model_chats: Vec<models::chat::RecentChat>,
+    app_state: &AppState,
     db: &sea_orm::DatabaseConnection,
     policy: &PolicyEngine,
     subject: &Subject,
@@ -3550,6 +3598,8 @@ async fn extend_recent_chats_to_api_model(
     // Build the API RecentChat objects
     let mut api_chats = Vec::with_capacity(model_chats.len());
     for (chat, file_uploads_result) in model_chats.into_iter().zip(file_uploads_results) {
+        let effective_provider = app_state
+            .effective_saved_model_id(chat.last_chat_provider_id.as_deref(), available_models);
         let file_uploads = file_uploads_result?;
 
         // Convert file uploads to FileReference (just IDs)
@@ -3561,7 +3611,7 @@ async fn extend_recent_chats_to_api_model(
             .collect();
 
         // Get the last model information based on the last chat provider ID
-        let last_model = if let Some(ref provider_id) = chat.last_chat_provider_id {
+        let last_model = if let Some(ref provider_id) = effective_provider {
             available_models
                 .iter()
                 .find(|model| &model.chat_provider_id == provider_id)
@@ -3589,7 +3639,7 @@ async fn extend_recent_chats_to_api_model(
             mcp_write_tools_enabled: chat.mcp_write_tools_enabled,
             disabled_mcp_server_ids: chat.disabled_mcp_server_ids.clone(),
             disabled_mcp_tools: chat.disabled_mcp_tools.clone(),
-            last_chat_provider_id: chat.last_chat_provider_id.clone(),
+            last_chat_provider_id: effective_provider,
             last_selected_facets: chat.last_selected_facets.clone(),
             last_model,
             can_edit,
@@ -3667,8 +3717,7 @@ pub async fn frequent_assistants(
     .map_err(log_internal_server_error)?;
 
     // Determine if any available model supports image understanding
-    let available_models = app_state
-        .available_models(&policy, &me_user.to_subject(), &me_user.groups)
+    let available_models = available_models_for_me(&app_state, &policy, &me_user)
         .await
         .map_err(log_internal_server_error)?;
     let (supports_image_understanding, supports_audio_input) =
@@ -3728,7 +3777,10 @@ pub async fn frequent_assistants(
                     prompt: fa.assistant.prompt,
                     mcp_server_ids: fa.assistant.mcp_server_ids,
                     facet_ids: fa.assistant.facet_ids,
-                    default_chat_provider: fa.assistant.default_chat_provider,
+                    default_chat_provider: app_state.effective_saved_model_id(
+                        fa.assistant.default_chat_provider.as_deref(),
+                        &available_models,
+                    ),
                     enforce_facet_settings: fa.assistant.enforce_facet_settings,
                     created_at: fa.assistant.created_at,
                     updated_at: fa.assistant.updated_at,
@@ -3964,9 +4016,13 @@ pub async fn chat_detail(
             })?;
 
     let can_edit = permissions::can_user_edit_chat(&me_user.id, &chat.owner_user_id);
+    let available_models = available_models_for_me(&app_state, &policy, &me_user)
+        .await
+        .map_err(log_internal_server_error)?;
 
     Ok(Json(ChatDetail {
-        last_chat_provider_id: chat.last_chat_provider_id,
+        last_chat_provider_id: app_state
+            .effective_saved_model_id(chat.last_chat_provider_id.as_deref(), &available_models),
         last_selected_facets: chat.last_selected_facets,
         id: chat.id.to_string(),
         title_by_summary: chat.title_by_summary,
@@ -4148,8 +4204,7 @@ pub async fn get_file(
     let file_id = Uuid::parse_str(&file_id).map_err(|_| StatusCode::BAD_REQUEST)?;
 
     // Determine if any available model supports image understanding
-    let available_models = app_state
-        .available_models(&policy, &me_user.to_subject(), &me_user.groups)
+    let available_models = available_models_for_me(&app_state, &policy, &me_user)
         .await
         .map_err(log_internal_server_error)?;
     let (supports_image_understanding, supports_audio_input) =
@@ -4719,6 +4774,11 @@ pub async fn file_capabilities(
     // Determine if image understanding is supported
     let (supports_image_understanding, supports_audio_input) =
         if let Some(model_id) = params.model_id {
+            let model_id = app_state
+                .config
+                .resolve_chat_provider_id(&model_id)
+                .map_err(|_| StatusCode::NOT_FOUND)?
+                .to_string();
             if !policy
                 .filter_authorized_chat_provider_ids(
                     &me_user.to_subject(),
@@ -4743,8 +4803,7 @@ pub async fn file_capabilities(
             )
         } else {
             // Without a specific model, check if ANY available model supports image understanding
-            let available_models = app_state
-                .available_models(&policy, &me_user.to_subject(), &me_user.groups)
+            let available_models = available_models_for_me(&app_state, &policy, &me_user)
                 .await
                 .map_err(log_internal_server_error)?;
 

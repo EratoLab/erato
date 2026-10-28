@@ -611,7 +611,7 @@ fn build_frontend_environment(
                     .audio_conversational
                     .speech_provider
                     .as_ref()
-                    .is_some_and(|id| config.speech_providers.provider.contains_key(id)),
+                    .is_some_and(|id| config.resolve_speech_provider_id(id).is_ok()),
         ),
     );
     // Always inject max upload size (use configured value or default)

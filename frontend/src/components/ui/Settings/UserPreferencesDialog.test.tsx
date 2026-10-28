@@ -859,7 +859,7 @@ describe("UserPreferencesDialog", () => {
           "Prefer concise bullet points and highlight risks first.",
         preference_assistant_additional_information:
           "I work with enterprise customers in regulated industries.",
-        preference_default_chat_provider: null,
+        // An unchanged model is omitted so a resolved archived ID is not rewritten.
         // Always sent explicitly, even while the start-screen section is
         // hidden: omitting any of them would let a save wipe the stored state.
         preference_starting_hub_assistant_id: null,
