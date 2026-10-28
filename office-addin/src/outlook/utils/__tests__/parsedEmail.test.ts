@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
+import sharepointEml from "../../../test/fixtures/eml/sharepoint-inline-images.eml?raw";
 import { parseEmlBytes } from "../parsedEmail";
 
 const CRLF = "\r\n";
@@ -122,6 +123,53 @@ describe("parseEmlBytes", () => {
     expect(att.related).toBe(true);
     expect(att.contentId).toBe("<logo>");
     expect(att.filename).toBe("logo.png");
+  });
+
+  it("marks a part named only by its Content-ID, a bare GUID, or nothing as unnamed, keeping its filename", async () => {
+    const parsed = await parseEmlBytes(toArrayBuffer(sharepointEml));
+    expect(
+      parsed!.attachments.map((att) => [att.filename, att.unnamed ?? false]),
+    ).toEqual([
+      ["696debbf-3819-4844-9bc1-1e11029649a4", true],
+      ["attachment", true],
+      ["373014b8-2d4f-4e6a-8b1c-0f9e8d7c6b5a", true],
+      ["attachment", true],
+      ["Wiederherstellung.pdf", false],
+    ]);
+    expect(parsed!.subject).toBe(
+      "Achtung. Wir haben bemerkt, dass Sie kürzlich eine große Anzahl Dateien gelöscht haben",
+    );
+  });
+
+  it("takes a name equal to the Content-ID for a missing one, not one that only resembles it", async () => {
+    const boundary = "----CID";
+    const eml =
+      `From: a@x${CRLF}` +
+      `Subject: Named parts${CRLF}` +
+      `MIME-Version: 1.0${CRLF}` +
+      `Content-Type: multipart/mixed; boundary="${boundary}"${CRLF}${CRLF}` +
+      `--${boundary}${CRLF}` +
+      `Content-Type: text/plain${CRLF}${CRLF}` +
+      `Body${CRLF}` +
+      `--${boundary}${CRLF}` +
+      `Content-Type: image/png; name="image001.png"${CRLF}` +
+      `Content-Disposition: inline; filename="image001.png"${CRLF}` +
+      `Content-ID: <image001.png@01DC1234.56789AB0>${CRLF}` +
+      `Content-Transfer-Encoding: base64${CRLF}${CRLF}` +
+      `${btoa("png")}${CRLF}` +
+      `--${boundary}${CRLF}` +
+      `Content-Type: application/pdf; name="Logo"${CRLF}` +
+      `Content-Disposition: attachment; filename="Logo"${CRLF}` +
+      `Content-ID: <logo>${CRLF}` +
+      `Content-Transfer-Encoding: base64${CRLF}${CRLF}` +
+      `${btoa("pdf")}${CRLF}` +
+      `--${boundary}--${CRLF}`;
+
+    const parsed = await parseEmlBytes(toArrayBuffer(eml));
+    expect(parsed!.attachments.map((att) => att.unnamed ?? false)).toEqual([
+      false,
+      true,
+    ]);
   });
 
   it("returns an empty-shaped ParsedEmail for non-MIME garbage (postal-mime is lenient)", async () => {

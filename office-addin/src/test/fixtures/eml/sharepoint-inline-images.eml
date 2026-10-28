@@ -1,0 +1,57 @@
+From: SharePoint Online <no-reply@sharepointonline.com>
+To: Max Token <max@example.com>
+Subject: =?utf-8?Q?Achtung=2E_Wir_haben_bemerkt=2C_dass_Sie_k=C3=BCrzlich_eine_gro=C3=9Fe_Anzahl_Dateien_gel=C3=B6scht_haben?=
+Date: Tue, 27 Oct 2026 09:14:00 +0000
+Message-ID: <sharepoint-inline-images@example.com>
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="mixed-boundary"
+
+--mixed-boundary
+Content-Type: multipart/related; boundary="related-boundary"; type="text/html"
+
+--related-boundary
+Content-Type: text/html; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+<html><body><p><img src=3D"cid:696debbf-3819-4844-9bc1-1e11029649a4" alt=3D=
+"SharePoint" width=3D"24" height=3D"24"></p><p>Achtung. Wir haben bemerkt, =
+dass Sie k=C3=BCrzlich eine gro=C3=9Fe Anzahl Dateien gel=C3=B6scht haben.<=
+/p><p><img src=3D"cid:0ce1705a-5b2e-4c1d-9f3a-6a1d2e7b8c90" alt=3D""> Datei=
+en wiederherstellen</p><p><img src=3D"cid:373014b8-2d4f-4e6a-8b1c-0f9e8d7c6=
+b5a" alt=3D""> Microsoft</p></body></html>
+--related-boundary
+Content-Type: image/png; name="696debbf-3819-4844-9bc1-1e11029649a4"
+Content-Description: 696debbf-3819-4844-9bc1-1e11029649a4
+Content-Disposition: inline; filename="696debbf-3819-4844-9bc1-1e11029649a4"; size=70
+Content-ID: <696debbf-3819-4844-9bc1-1e11029649a4>
+Content-Transfer-Encoding: base64
+
+iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==
+--related-boundary
+Content-Type: image/png
+Content-Disposition: inline
+Content-ID: <0ce1705a-5b2e-4c1d-9f3a-6a1d2e7b8c90>
+Content-Transfer-Encoding: base64
+
+iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==
+--related-boundary
+Content-Type: image/gif; name="373014b8-2d4f-4e6a-8b1c-0f9e8d7c6b5a"
+Content-ID: <373014b8-2d4f-4e6a-8b1c-0f9e8d7c6b5a>
+Content-Transfer-Encoding: base64
+
+R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7
+--related-boundary--
+
+--mixed-boundary
+Content-Type: image/png
+Content-Disposition: inline
+Content-Transfer-Encoding: base64
+
+iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==
+--mixed-boundary
+Content-Type: application/pdf; name="Wiederherstellung.pdf"
+Content-Disposition: attachment; filename="Wiederherstellung.pdf"
+Content-Transfer-Encoding: base64
+
+JVBERi0xLjQKMSAwIG9iago8PC9UeXBlL0NhdGFsb2c+PgplbmRvYmoKdHJhaWxlcgo8PC9Sb290IDEgMCBSPj4KJSVFT0YK
+--mixed-boundary--

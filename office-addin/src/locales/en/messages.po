@@ -1101,9 +1101,49 @@ msgid "officeAddin.outlook.context.drop.bodyAlwaysSent"
 msgstr "Always sent"
 
 #. js-lingui-explicit-id
+#: src/outlook/utils/buildDropEmailGroup.ts
+msgid "officeAddin.outlook.context.drop.bodyWithPictures"
+msgstr "{bodyPictures, plural, one {Email body with # image} other {Email body with # images}}"
+
+#. js-lingui-explicit-id
 #: src/outlook/utils/outlookContextChips.ts
 msgid "officeAddin.outlook.context.drop.meta.attachments"
 msgstr "{total, plural, one {{kept}/# attachment} other {{kept}/# attachments}}"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/buildDropEmailGroup.ts
+msgid "officeAddin.outlook.context.drop.partType.audio"
+msgstr "{format} audio"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/buildDropEmailGroup.ts
+msgid "officeAddin.outlook.context.drop.partType.image"
+msgstr "{format} image"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/buildDropEmailGroup.ts
+msgid "officeAddin.outlook.context.drop.partType.pdf"
+msgstr "PDF document"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/buildDropEmailGroup.ts
+msgid "officeAddin.outlook.context.drop.partType.video"
+msgstr "{format} video"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/buildDropEmailGroup.ts
+msgid "officeAddin.outlook.context.drop.unnamedAttachment"
+msgstr "Attachment {n}"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/buildDropEmailGroup.ts
+msgid "officeAddin.outlook.context.drop.unnamedImage"
+msgstr "Image {n}"
+
+#. js-lingui-explicit-id
+#: src/outlook/utils/buildDropEmailGroup.ts
+msgid "officeAddin.outlook.context.drop.unnamedInlineImage"
+msgstr "Inline image {n}"
 
 #. js-lingui-explicit-id
 #: src/outlook/hooks/useOutlookContextItems.tsx

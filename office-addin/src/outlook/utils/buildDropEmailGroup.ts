@@ -1,6 +1,7 @@
-import { t } from "@lingui/core/macro";
+import { plural, t } from "@lingui/core/macro";
 
 import { formatShortDate } from "./outlookContextFormat";
+import { stripAngleBrackets } from "./parsedEmail";
 import { isPolicyExcluded } from "./validateStagedPart";
 
 import type { ParsedAttachment, ParsedEmail } from "./parsedEmail";
@@ -45,6 +46,136 @@ export function isEmailBodyPart(attachment: ParsedAttachment): boolean {
     return false;
   }
   return attachment.disposition === "inline" || attachment.related;
+}
+
+/** The Content-IDs an HTML body shows through `cid:` links, bare and lower-cased. */
+export function bodyContentIds(html: string | null): Set<string> {
+  const ids = new Set<string>();
+  for (const match of html?.matchAll(/cid:([^"'\s<>)]+)/gi) ?? []) {
+    let id = match[1];
+    try {
+      id = decodeURIComponent(id);
+    } catch {
+      // A malformed escape stays as written.
+    }
+    ids.add(id.toLowerCase());
+  }
+  return ids;
+}
+
+/**
+ * A picture the body shows through a `cid:` link. It travels in the email's
+ * bytes with the body, can no more be left out than the body, and is no
+ * attachment to the reader (Outlook does not list it either), so the detail
+ * counts it on the body row instead of listing it.
+ */
+export function isBodyPicture(
+  part: ParsedAttachment,
+  bodyIds: ReadonlySet<string>,
+): boolean {
+  return (
+    isEmailBodyPart(part) &&
+    part.mimeType.trim().toLowerCase().startsWith("image/") &&
+    part.contentId !== null &&
+    bodyIds.has(stripAngleBrackets(part.contentId).toLowerCase())
+  );
+}
+
+const FORMAT_NAMES: Record<string, string> = {
+  jpeg: "JPEG",
+  jpg: "JPEG",
+  pjpeg: "JPEG",
+  "svg+xml": "SVG",
+  webp: "WebP",
+  "x-icon": "ICO",
+  "vnd.microsoft.icon": "ICO",
+};
+
+/** "PNG image" from `image/png`; null where the MIME type says nothing a reader could use. */
+export function partTypeLabel(mimeType: string): string | null {
+  const [type, rawSubtype = ""] = mimeType
+    .split(";")[0]
+    .trim()
+    .toLowerCase()
+    .split("/");
+  const subtype = rawSubtype.trim();
+  if (type === "application" && subtype === "pdf") {
+    return t({
+      id: "officeAddin.outlook.context.drop.partType.pdf",
+      message: "PDF document",
+    });
+  }
+  if (!subtype || !["image", "audio", "video"].includes(type)) return null;
+  const format =
+    FORMAT_NAMES[subtype] ??
+    subtype
+      .replace(/^(x-|vnd\.)/, "")
+      .replace(/\+.*$/, "")
+      .toUpperCase();
+  if (type === "image") {
+    return t({
+      id: "officeAddin.outlook.context.drop.partType.image",
+      message: `${format} image`,
+    });
+  }
+  if (type === "audio") {
+    return t({
+      id: "officeAddin.outlook.context.drop.partType.audio",
+      message: `${format} audio`,
+    });
+  }
+  return t({
+    id: "officeAddin.outlook.context.drop.partType.video",
+    message: `${format} video`,
+  });
+}
+
+function hasExtension(filename: string): boolean {
+  return /\.[a-z0-9]{1,8}$/i.test(filename.trim());
+}
+
+/**
+ * Names the rows of one message: a part without a name of its own is
+ * numbered by kind ("Inline image 2"), and a row whose name carries no
+ * extension takes its type from the MIME type, where the filename would give
+ * none.
+ */
+function partRowNamer() {
+  const counts = { inlineImage: 0, image: 0, attachment: 0 };
+  return (
+    part: ParsedAttachment,
+  ): { displayName?: string; labelOverride?: string } => {
+    const typeLabel = partTypeLabel(part.mimeType) ?? undefined;
+    if (!part.unnamed) {
+      return hasExtension(part.filename) || !typeLabel
+        ? {}
+        : { labelOverride: typeLabel };
+    }
+    const image = part.mimeType.trim().toLowerCase().startsWith("image/");
+    let displayName: string;
+    if (image && isEmailBodyPart(part)) {
+      const n = ++counts.inlineImage;
+      displayName = t({
+        id: "officeAddin.outlook.context.drop.unnamedInlineImage",
+        message: `Inline image ${n}`,
+      });
+    } else if (image) {
+      const n = ++counts.image;
+      displayName = t({
+        id: "officeAddin.outlook.context.drop.unnamedImage",
+        message: `Image ${n}`,
+      });
+    } else {
+      const n = ++counts.attachment;
+      displayName = t({
+        id: "officeAddin.outlook.context.drop.unnamedAttachment",
+        message: `Attachment ${n}`,
+      });
+    }
+    return typeLabel
+      ? { displayName, labelOverride: typeLabel }
+      : { displayName };
+  };
 }
 
 /**
@@ -134,16 +265,31 @@ export function buildDropEmailGroup(
     id: "officeAddin.chatInput.emailLabel",
     message: "Email",
   });
+  const bodyIds = bodyContentIds(parsed.html);
+  const bodyPictures = parsed.attachments.filter((attachment) =>
+    isBodyPicture(attachment, bodyIds),
+  ).length;
   items.push({
     kind: "selectableAttachment",
     id: `${key}:body`,
     file: {
       id: `${key}:body`,
       filename: parsed.rawEmlFile.name,
-      displayName: t({
-        id: "officeAddin.chatInput.emailBody",
-        message: "Email body",
-      }),
+      // The count rides on the name: at pane width the meta line has no room
+      // left for it in German or Spanish.
+      displayName:
+        bodyPictures > 0
+          ? t({
+              id: "officeAddin.outlook.context.drop.bodyWithPictures",
+              message: plural(bodyPictures, {
+                one: "Email body with # image",
+                other: "Email body with # images",
+              }),
+            })
+          : t({
+              id: "officeAddin.chatInput.emailBody",
+              message: "Email body",
+            }),
       size: parsed.rawEmlFile.size,
     },
     metaLabel: [
@@ -160,18 +306,24 @@ export function buildDropEmailGroup(
     labelOverride: emailLabel,
   });
 
+  const nameRow = partRowNamer();
   for (const attachment of parsed.attachments) {
+    if (isBodyPicture(attachment, bodyIds)) continue;
     const rowId = `${key}:${attachment.id}`;
+    const { displayName, labelOverride } = nameRow(attachment);
+    const file = {
+      id: rowId,
+      filename: attachment.filename,
+      ...(displayName ? { displayName } : {}),
+      size: attachment.size,
+    };
     if (isEmailBodyPart(attachment)) {
       items.push({
         kind: "selectableAttachment",
         id: rowId,
-        file: {
-          id: rowId,
-          filename: attachment.filename,
-          size: attachment.size,
-        },
+        file,
         selected: true,
+        labelOverride,
       });
       continue;
     }
@@ -180,28 +332,44 @@ export function buildDropEmailGroup(
     const { nested } = attachment;
     if (nested) {
       const partsToggle = attachment.nestedTrimmable === true && !isExcluded;
-      const rows: ThreadMessageAttachmentItem[] = nested.attachments.map(
-        (part) => {
+      const nestedBodyIds = bodyContentIds(nested.html);
+      const nameNestedRow = partRowNamer();
+      const rows: ThreadMessageAttachmentItem[] = nested.attachments.flatMap(
+        (part): ThreadMessageAttachmentItem[] => {
+          if (isBodyPicture(part, nestedBodyIds)) return [];
           const partRowId = `${key}:${part.id}`;
-          const file = {
+          const { displayName: partName, labelOverride: partLabel } =
+            nameNestedRow(part);
+          const partFile = {
             id: partRowId,
             filename: part.filename,
+            ...(partName ? { displayName: partName } : {}),
             size: part.size,
           };
           if (isEmailBodyPart(part)) {
-            return { id: partRowId, file, selected: true };
+            return [
+              {
+                id: partRowId,
+                file: partFile,
+                selected: true,
+                labelOverride: partLabel,
+              },
+            ];
           }
           const partValidation = verdictOf(part);
-          return {
-            id: partRowId,
-            file,
-            selected: !dismissed(part.id),
-            onToggle:
-              partsToggle && !excluded(partValidation)
-                ? toggle(part.id)
-                : undefined,
-            validation: partValidation,
-          };
+          return [
+            {
+              id: partRowId,
+              file: partFile,
+              labelOverride: partLabel,
+              selected: !dismissed(part.id),
+              onToggle:
+                partsToggle && !excluded(partValidation)
+                  ? toggle(part.id)
+                  : undefined,
+              validation: partValidation,
+            },
+          ];
         },
       );
       items.push({
@@ -220,9 +388,10 @@ export function buildDropEmailGroup(
     items.push({
       kind: "selectableAttachment",
       id: rowId,
-      file: { id: rowId, filename: attachment.filename, size: attachment.size },
+      file,
       selected: !dismissed(attachment.id),
       onToggle: isExcluded ? undefined : toggle(attachment.id),
+      labelOverride,
       validation,
     });
   }
