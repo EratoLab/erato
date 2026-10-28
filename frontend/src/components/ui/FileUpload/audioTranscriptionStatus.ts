@@ -17,6 +17,8 @@ export interface AudioTranscriptionState {
    * The chunks reach it only as the server takes them up, one at a time.
    */
   recorded_duration_ms?: number | null;
+  /** Set by the composer while the recording runs: its length so far, by the recorder's clock. */
+  recording_elapsed_ms?: number | null;
 }
 
 export type AudioTranscriptionPhase =
@@ -46,6 +48,17 @@ export interface AudioTranscriptionTileStatus {
   title?: string;
   /** "Retry transcription", offered only for a recording the recorder still holds. */
   action?: AudioTranscriptionTileAction;
+  /**
+   * Set for the composer's own recordings, whose generated file name says
+   * nothing: the tile shows their latest words instead and keeps the name for
+   * its tooltip and accessible name. Without an excerpt yet, the meta line
+   * stands alone.
+   */
+  transcript?: {
+    excerpt?: string;
+    /** Opens the preview with the player and the whole transcript. */
+    more?: { label: string; name: string };
+  };
 }
 
 export function getCompletedChunkTranscript(
@@ -100,6 +113,22 @@ function formatDuration(ms: number): string | null {
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
   return `${minutes}:${String(seconds).padStart(2, "0")}`;
+}
+
+const EXCERPT_MAX_CHARS = 200;
+
+/**
+ * The transcript's latest words, cut at a word boundary. The tile shows the
+ * last two lines of it, so the newest text stays in view as chunks arrive.
+ */
+export function audioTranscriptExcerpt(transcript: string): string {
+  const text = transcript.replace(/\s+/g, " ").trim();
+  if (text.length <= EXCERPT_MAX_CHARS) {
+    return text;
+  }
+  const tail = text.slice(-EXCERPT_MAX_CHARS);
+  const wordStart = tail.indexOf(" ") + 1;
+  return `…${wordStart > 0 ? tail.slice(wordStart) : tail}`;
 }
 
 /** The recording's length so far, from its chunks' largest end, as "m:ss". */
@@ -229,6 +258,7 @@ export function audioTranscriptionTileStatus(
     return null;
   }
   const recordedMs = state.recorded_duration_ms ?? null;
+  const lengthMs = recordedMs ?? state.recording_elapsed_ms ?? null;
   const serverPhase = audioTranscriptionPhase(state);
   // The server reports "recording" until it takes up the last chunk.
   const phase =
@@ -241,16 +271,41 @@ export function audioTranscriptionTileStatus(
     phase,
     phase === "failed" || phase === "canceled"
       ? null
-      : recordedMs !== null
-        ? formatDuration(recordedMs)
+      : lengthMs !== null
+        ? formatDuration(lengthMs)
         : audioTranscriptionDuration(state.chunks),
   );
   const error = state.error?.trim();
   const { filename } = file;
+  // Only the composer's own recordings carry their length; an uploaded audio
+  // file keeps its name.
+  const transcriptText =
+    lengthMs !== null
+      ? getDisplayTranscript(state.transcript, state.chunks)
+      : undefined;
+  const excerpt = transcriptText
+    ? audioTranscriptExcerpt(transcriptText)
+    : undefined;
   return {
     phase,
     busy,
     metaLabel,
+    ...(lengthMs !== null
+      ? {
+          transcript: excerpt
+            ? {
+                excerpt,
+                more: {
+                  label: t({ id: "chat.audio.more", message: "More" }),
+                  name: t({
+                    id: "chat.audio.moreNamed",
+                    message: `More: ${filename}`,
+                  }),
+                },
+              }
+            : {},
+        }
+      : {}),
     ...(busy && options.cancelable
       ? {
           cancel: {

@@ -1682,6 +1682,16 @@ msgstr "Cancel transcription: {filename}"
 
 #. js-lingui-explicit-id
 #: src/components/ui/FileUpload/audioTranscriptionStatus.ts
+msgid "chat.audio.more"
+msgstr "More"
+
+#. js-lingui-explicit-id
+#: src/components/ui/FileUpload/audioTranscriptionStatus.ts
+msgid "chat.audio.moreNamed"
+msgstr "More: {filename}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/FileUpload/audioTranscriptionStatus.ts
 msgid "chat.audio.preview.pending"
 msgstr "The transcript appears here once it is ready."
 

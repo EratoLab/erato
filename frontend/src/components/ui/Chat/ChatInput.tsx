@@ -682,6 +682,7 @@ export const ChatInput = ({
     recordingBars,
     retryingAudioFileId,
     recordedDurationsMs,
+    liveRecordingDuration,
     retryAudioTranscription,
     removeRecordedAudioFile,
     clearRecordedAudioFiles,
@@ -2246,20 +2247,31 @@ export const ChatInput = ({
   const stagedFiles = useMemo(
     () =>
       attachedFiles.map((file) => {
-        if (!(file.id in recordedDurationsMs) || !file.audio_transcription) {
+        if (!file.audio_transcription) {
           return file;
         }
-        const recordedMs = recordedDurationsMs[file.id];
+        const length: Pick<
+          AudioTranscriptionState,
+          "recorded_duration_ms" | "recording_elapsed_ms"
+        > | null =
+          file.id in recordedDurationsMs
+            ? { recorded_duration_ms: recordedDurationsMs[file.id] }
+            : liveRecordingDuration?.fileUploadId === file.id
+              ? { recording_elapsed_ms: liveRecordingDuration.durationMs }
+              : null;
+        if (!length) {
+          return file;
+        }
         const audioTranscription: NonNullable<
           FileUploadItem["audio_transcription"]
         > &
           AudioTranscriptionState = {
           ...file.audio_transcription,
-          recorded_duration_ms: recordedMs,
+          ...length,
         };
         return { ...file, audio_transcription: audioTranscription };
       }),
-    [attachedFiles, recordedDurationsMs],
+    [attachedFiles, recordedDurationsMs, liveRecordingDuration],
   );
   const slotFiles = useMemo(
     () => unclaimedFiles(stagedFiles, claimedFileIds),

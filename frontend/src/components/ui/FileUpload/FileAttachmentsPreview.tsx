@@ -134,6 +134,23 @@ export const FileAttachmentsPreview: React.FC<FileAttachmentsPreviewProps> = ({
             busy: audio.busy,
             ...(audio.tone ? { tone: audio.tone } : {}),
             ...(audio.title ? { title: audio.title } : {}),
+            ...(audio.transcript
+              ? {
+                  transcript: {
+                    ...(audio.transcript.excerpt
+                      ? { excerpt: audio.transcript.excerpt }
+                      : {}),
+                    ...(audio.transcript.more
+                      ? {
+                          more: {
+                            label: audio.transcript.more.label,
+                            accessibleName: audio.transcript.more.name,
+                          },
+                        }
+                      : {}),
+                  },
+                }
+              : {}),
             ...(audio.cancel
               ? {
                   remove: {
