@@ -3,6 +3,8 @@ import { detect, fromNavigator } from "@lingui/detect-locale";
 
 import { env } from "@/app/env";
 
+import { loadBundledLocaleMessages } from "./bundledLocaleMessages";
+
 import type { Messages } from "@lingui/core";
 
 export const defaultLocale = "en";
@@ -215,19 +217,23 @@ async function loadComponentKitMessages(locale: string): Promise<Messages[]> {
   return messageLayers.filter((messages): messages is Messages => !!messages);
 }
 
+// The bundled catalog stays under the public one, which wins key by key: a
+// public catalog compiled from older sources (a backend started before a pull)
+// would otherwise drop every newer string to its English source text.
 async function loadCommonLocaleMessages(
   commonPublicBasePath: string,
   locale: string,
 ): Promise<Messages> {
-  const publicMessages = await loadOptionalMessages(
-    `${commonPublicBasePath}/locales/${locale}/messages.json`,
-  );
-  if (publicMessages) {
-    return publicMessages;
+  const [publicMessages, bundledMessages] = await Promise.all([
+    loadOptionalMessages(
+      `${commonPublicBasePath}/locales/${locale}/messages.json`,
+    ),
+    loadBundledLocaleMessages(locale),
+  ]);
+  if (!publicMessages && !bundledMessages) {
+    throw new Error(`No catalog for locale ${locale}`);
   }
-
-  const bundledMessages = await import(`../locales/${locale}/messages.po`);
-  return bundledMessages.messages;
+  return { ...bundledMessages, ...publicMessages };
 }
 
 async function loadOptionalMessages(url: string): Promise<Messages | null> {

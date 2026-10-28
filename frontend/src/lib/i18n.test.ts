@@ -17,6 +17,24 @@ vi.mock("@lingui/detect-locale", () => ({
   fromNavigator: vi.fn(),
 }));
 
+vi.mock("./bundledLocaleMessages", () => {
+  const bundled = new Map<string, Record<string, string>>([
+    ["en", { "bundled.only": "Bundled only" }],
+    [
+      "de",
+      {
+        "core.title": "Gebündelt",
+        "chat.audio.cancel": "Transkription abbrechen",
+        "chat.audio.status.transcribing": "Wird transkribiert…",
+      },
+    ],
+  ]);
+  return {
+    loadBundledLocaleMessages: async (locale: string) =>
+      bundled.get(locale) ?? null,
+  };
+});
+
 // Type the mocked functions
 const mockedDetect = detect as ReturnType<typeof vi.fn>;
 const mockedFromNavigator = fromNavigator as ReturnType<typeof vi.fn>;
@@ -263,6 +281,7 @@ describe("i18n Component Kit Catalogs", () => {
     expect(loadAndActivateSpy).toHaveBeenLastCalledWith({
       locale: "en",
       messages: {
+        "bundled.only": "Bundled only",
         "core.title": "Core",
         "example.title": "Example kit",
         "customer.title": "Customer kit",
@@ -307,7 +326,68 @@ describe("i18n Component Kit Catalogs", () => {
     );
     expect(loadAndActivateSpy).toHaveBeenLastCalledWith({
       locale: "en",
-      messages: { "shared.label": "Runtime override" },
+      messages: {
+        "bundled.only": "Bundled only",
+        "shared.label": "Runtime override",
+      },
+    });
+  });
+});
+
+describe("i18n common catalog", () => {
+  beforeEach(() => {
+    window.API_ROOT_URL = "/api/";
+  });
+
+  const serve = (catalogs: Partial<Record<string, Record<string, string>>>) => {
+    const fetchMock = vi.fn(async (url: string) => {
+      const messages = catalogs[url];
+      return {
+        ok: !!messages,
+        json: async () => ({ messages: messages ?? {} }),
+      } as Response;
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    return fetchMock;
+  };
+
+  it("keeps the bundled strings an older public catalog lacks, the public one winning key by key", async () => {
+    serve({
+      "/public/common/locales/de/messages.json": {
+        "core.title": "Öffentlich",
+      },
+      "/public/component-kits/kit/locales/de/messages.json": {
+        "chat.audio.status.transcribing": "Kit-Text",
+      },
+    });
+    window.ERATO_COMPONENT_KITS = [{ name: "kit", components: [] }];
+    const loadAndActivateSpy = vi.spyOn(i18n, "loadAndActivate");
+
+    await dynamicActivate("de");
+
+    expect(loadAndActivateSpy).toHaveBeenLastCalledWith({
+      locale: "de",
+      messages: {
+        "core.title": "Öffentlich",
+        "chat.audio.cancel": "Transkription abbrechen",
+        "chat.audio.status.transcribing": "Kit-Text",
+      },
+    });
+  });
+
+  it("uses the bundled catalog alone when there is no public one", async () => {
+    serve({});
+    const loadAndActivateSpy = vi.spyOn(i18n, "loadAndActivate");
+
+    await dynamicActivate("de");
+
+    expect(loadAndActivateSpy).toHaveBeenLastCalledWith({
+      locale: "de",
+      messages: {
+        "core.title": "Gebündelt",
+        "chat.audio.cancel": "Transkription abbrechen",
+        "chat.audio.status.transcribing": "Wird transkribiert…",
+      },
     });
   });
 });
