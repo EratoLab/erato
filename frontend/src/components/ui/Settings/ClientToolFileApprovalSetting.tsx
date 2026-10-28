@@ -15,7 +15,8 @@ import type { McpToolDecision } from "./mcpToolDecisions";
 export function ClientToolFileApprovalSetting() {
   const { data: profile } = useProfile({});
   const queryClient = useQueryClient();
-  const [saving, setSaving] = useState(false);
+  // Shown at once while saving rather than after the profile refetch.
+  const [saving, setSaving] = useState<McpToolDecision | null>(null);
   const [failed, setFailed] = useState(false);
   const save = async (decision: McpToolDecision) => {
     /* eslint-disable lingui/no-unlocalized-strings -- API enum values. */
@@ -26,7 +27,7 @@ export function ClientToolFileApprovalSetting() {
           ? "always_allow"
           : "ask";
     /* eslint-enable lingui/no-unlocalized-strings */
-    setSaving(true);
+    setSaving(decision);
     setFailed(false);
     try {
       await fetchUpdateProfilePreferences({
@@ -38,7 +39,7 @@ export function ClientToolFileApprovalSetting() {
     } catch {
       setFailed(true);
     } finally {
-      setSaving(false);
+      setSaving(null);
     }
   };
   return (
@@ -56,15 +57,16 @@ export function ClientToolFileApprovalSetting() {
             message: "How to handle uploads for files retrieved by sidecar?",
           })}
           value={
-            profile?.client_tool_file_approval === "never_allow"
+            saving ??
+            (profile?.client_tool_file_approval === "never_allow"
               ? "never"
               : profile?.client_tool_file_approval === "always_allow"
                 ? "allow"
-                : "ask"
+                : "ask")
           }
           policy="ask"
           availability={{ allowAlways: true, askAvailable: true }}
-          disabled={!profile || saving}
+          disabled={!profile || saving !== null}
           onChange={(decision) => {
             void save(decision);
           }}

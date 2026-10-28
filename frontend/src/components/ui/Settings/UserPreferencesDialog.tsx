@@ -1,6 +1,6 @@
 import { t } from "@lingui/core/macro";
 import { skipToken, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useId, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import {
@@ -228,11 +228,24 @@ export function UserPreferencesDialog({
     initialTab && visibleTabs.includes(initialTab) ? initialTab : defaultTab;
 
   useEffect(() => {
+    if (isOpen) {
+      setActiveTab(requestedDefaultTab);
+    }
+  }, [isOpen, requestedDefaultTab]);
+
+  // Read once per opening: saving a tool decision refetches the profile while
+  // the dialog stays open, which must neither move the user nor drop edits.
+  const hydratedProfileRef = useRef(false);
+  useEffect(() => {
     if (!isOpen) {
+      hydratedProfileRef.current = false;
       return;
     }
+    if (hydratedProfileRef.current) {
+      return;
+    }
+    hydratedProfileRef.current = userProfile !== undefined;
 
-    setActiveTab(requestedDefaultTab);
     setArchiveError(null);
     setNickname(userProfile?.preference_nickname ?? "");
     setJobTitle(userProfile?.preference_job_title ?? "");
@@ -262,21 +275,31 @@ export function UserPreferencesDialog({
           : "inherit",
     );
     setStartingAssistantPick(storedPick);
-  }, [isOpen, requestedDefaultTab, userProfile]);
+  }, [isOpen, userProfile]);
 
+  const hydratedModelRef = useRef(false);
   useEffect(() => {
     if (!isOpen) {
+      hydratedModelRef.current = false;
       return;
     }
+    if (
+      hydratedModelRef.current ||
+      availableModels.length === 0 ||
+      userProfile === undefined
+    ) {
+      return;
+    }
+    hydratedModelRef.current = true;
 
     setDefaultModel(
       availableModels.find(
         (model) =>
           model.chat_provider_id ===
-          userProfile?.preference_default_chat_provider,
+          userProfile.preference_default_chat_provider,
       ) ?? null,
     );
-  }, [availableModels, isOpen, userProfile?.preference_default_chat_provider]);
+  }, [availableModels, isOpen, userProfile]);
 
   useEffect(() => {
     if (!visibleTabs.includes(activeTab)) {
