@@ -657,14 +657,18 @@ Draw the status, then declare `builtAgainstSharedSurfaceMinor: 20`.
 
 From shared surface 1.22 the composer's own recordings also carry
 `status.transcript` on the tile props: their generated file name says nothing,
-so the tile shows `transcript.excerpt` (the latest words, of which the default
-tile keeps the last two lines in view) and a `transcript.more` label instead of
-the name. The name stays the tooltip and the accessible name, and activating
-the tile opens the preview with the player and the whole transcript. Until a
-recording has words, `transcript` is empty and the meta line stands alone; a
-time in it counts up while the recording runs. Uploaded audio files carry no
-`transcript` and keep their name. The default tile exposes
-`attachment-tile-excerpt` and `attachment-tile-more`.
+so the tile shows `transcript.excerpt` (the start of the words, which the
+default tile clamps to two lines with an ellipsis) and a `transcript.more`
+label instead of the name. The name stays the tooltip and the accessible name,
+and More opens the preview with the player and the whole transcript; the
+default tile draws it as a link `Button` stretched over the tile, so a click
+anywhere still opens the preview. While a recording without words is still
+running or transcribing, `transcript.placeholder` holds the excerpt's place,
+so the tile keeps its size when the words arrive. Once it settles without
+words, `transcript` is empty and the meta line stands alone; a time in it
+counts up while the recording runs. Uploaded audio files carry no `transcript`
+and keep their name. The default tile exposes `attachment-tile-excerpt` (with
+`data-placeholder` while it holds the placeholder) and `attachment-tile-more`.
 
 ## Full Registry Example
 

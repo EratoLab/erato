@@ -50,12 +50,13 @@ export interface AudioTranscriptionTileStatus {
   action?: AudioTranscriptionTileAction;
   /**
    * Set for the composer's own recordings, whose generated file name says
-   * nothing: the tile shows their latest words instead and keeps the name for
-   * its tooltip and accessible name. Without an excerpt yet, the meta line
-   * stands alone.
+   * nothing: the tile shows the start of their words instead and keeps the
+   * name for its tooltip and accessible name.
    */
   transcript?: {
     excerpt?: string;
+    /** Holds the excerpt's place while words may still arrive. */
+    placeholder?: string;
     /** Opens the preview with the player and the whole transcript. */
     more?: { label: string; name: string };
   };
@@ -118,17 +119,17 @@ function formatDuration(ms: number): string | null {
 const EXCERPT_MAX_CHARS = 200;
 
 /**
- * The transcript's latest words, cut at a word boundary. The tile shows the
- * last two lines of it, so the newest text stays in view as chunks arrive.
+ * The transcript's first words, cut at a word boundary. The tile clamps them
+ * to two lines, so the cut only keeps a twenty-minute transcript out of it.
  */
 export function audioTranscriptExcerpt(transcript: string): string {
   const text = transcript.replace(/\s+/g, " ").trim();
   if (text.length <= EXCERPT_MAX_CHARS) {
     return text;
   }
-  const tail = text.slice(-EXCERPT_MAX_CHARS);
-  const wordStart = tail.indexOf(" ") + 1;
-  return `…${wordStart > 0 ? tail.slice(wordStart) : tail}`;
+  const head = text.slice(0, EXCERPT_MAX_CHARS + 1);
+  const wordEnd = head.lastIndexOf(" ");
+  return `${wordEnd > 0 ? head.slice(0, wordEnd) : head.slice(0, -1)}…`;
 }
 
 /** The recording's length so far, from its chunks' largest end, as "m:ss". */
@@ -303,7 +304,14 @@ export function audioTranscriptionTileStatus(
                   }),
                 },
               }
-            : {},
+            : busy
+              ? {
+                  placeholder: t({
+                    id: "chat.audio.transcriptPlaceholder",
+                    message: "The transcript appears here…",
+                  }),
+                }
+              : {},
         }
       : {}),
     ...(busy && options.cancelable

@@ -64,13 +64,18 @@ export interface AttachmentTileStatus {
   remove?: { label: string; accessibleName: string };
   /**
    * Draws a recording by its words instead of its generated file name, which
-   * stays the tooltip and accessible name. Without an excerpt the meta line
-   * stands alone.
+   * stays the tooltip and accessible name. With neither an excerpt nor a
+   * placeholder the meta line stands alone.
    */
   transcript?: {
-    /** The latest words; the face keeps the last two lines in view. */
+    /** The first words, clamped to two lines. */
     excerpt?: string;
-    /** Drawn beside the meta line when the tile opens a preview. */
+    /** Holds the excerpt's two lines until words arrive. */
+    placeholder?: string;
+    /**
+     * A button beside the meta line that opens the preview, drawn only with
+     * an excerpt and an `onActivate`; the rest of the tile still opens it.
+     */
     more?: { label: string; accessibleName: string };
   };
 }
@@ -97,6 +102,13 @@ export interface AttachmentTileTitleProps {
   children: React.ReactNode;
   /** Kept in view after the truncating text, e.g. a lock mark. */
   end?: React.ReactNode;
+  /**
+   * `2` holds two lines from the start and ends the second with an ellipsis,
+   * for words rather than a name (a recording's transcript).
+   */
+  lines?: 1 | 2;
+  /** Muted italic: stands in for words that have not arrived yet. */
+  placeholder?: boolean;
   /** Names the element that carries the text. */
   "data-ui"?: string;
 }
@@ -105,9 +117,25 @@ export interface AttachmentTileTitleProps {
 export const AttachmentTileTitle = ({
   children,
   end,
+  lines = 1,
+  placeholder = false,
   "data-ui": hook,
 }: AttachmentTileTitleProps) =>
-  end ? (
+  lines === 2 ? (
+    <span
+      data-ui={hook}
+      data-placeholder={placeholder || undefined}
+      className={clsx(
+        // Running words, so the name's weight would make two lines heavy.
+        "line-clamp-2 h-10 break-words text-sm leading-5",
+        placeholder
+          ? "italic text-[var(--theme-fg-muted)]"
+          : "text-[var(--theme-fg-primary)]",
+      )}
+    >
+      {children}
+    </span>
+  ) : end ? (
     <span className={clsx("flex min-w-0 items-center gap-1", TITLE_TYPE)}>
       <span data-ui={hook} className="min-w-0 truncate">
         {children}
@@ -383,8 +411,13 @@ export const AttachmentTile: React.FC<AttachmentTileProps> = ({
     !isMedia && status?.title ? `${filename}\n${status.title}` : filename;
   const transcriptFace = isMedia ? undefined : status?.transcript;
   const excerpt = transcriptFace?.excerpt;
+  const excerptPlaceholder = excerpt ? undefined : transcriptFace?.placeholder;
+  const excerptText = excerpt ?? excerptPlaceholder;
   const more =
     transcriptFace?.excerpt && onActivate ? transcriptFace.more : undefined;
+  // A custom face draws its own More, and a selectable row wraps the face in
+  // its own activation, which a button cannot sit inside.
+  const moreButton = Boolean(more) && !renderContent && !selection;
   const activationName = more
     ? meta
       ? `${more.accessibleName}, ${meta}`
@@ -435,27 +468,34 @@ export const AttachmentTile: React.FC<AttachmentTileProps> = ({
       busy={busy}
       title={
         transcriptFace
-          ? excerpt && (
-              // Bottom-aligned and clipped at two lines, so the latest words
-              // stay in view, which line-clamp (it cuts the end) cannot do.
-              <span
+          ? excerptText && (
+              <AttachmentTileTitle
+                lines={2}
+                placeholder={!excerpt}
                 data-ui="attachment-tile-excerpt"
-                className="flex max-h-10 flex-col justify-end overflow-hidden text-sm leading-5 text-[var(--theme-fg-primary)]"
               >
-                <span>{excerpt}</span>
-              </span>
+                {excerptText}
+              </AttachmentTileTitle>
             )
           : nameNode
       }
       meta={meta}
       metaEnd={
-        more && (
-          <span
+        moreButton &&
+        more &&
+        onActivate && (
+          <Button
+            variant="link"
             data-ui="attachment-tile-more"
-            className="ml-auto shrink-0 font-medium text-[var(--theme-fg-accent)] underline underline-offset-2"
+            onClick={onActivate}
+            title={hoverTitle}
+            aria-label={activationName}
+            // Stretched over the tile, which stays one control that opens the
+            // preview wherever it is clicked.
+            className="ml-auto shrink-0 after:absolute after:inset-0"
           >
             {more.label}
-          </span>
+          </Button>
         )
       }
       tone={failed ? "error" : undefined}
@@ -568,14 +608,17 @@ export const AttachmentTile: React.FC<AttachmentTileProps> = ({
         aria-label={tileAction.accessibleName}
         disabled={tileAction.disabled}
         onClick={tileAction.onSelect}
-        className="self-start"
+        // Positioned, so it stays above a stretched More.
+        className="relative self-start"
       >
         {tileAction.label}
       </Button>
     );
     content = (
       <div {...documentFaceProps}>
-        {onActivate ? (
+        {moreButton ? (
+          <div className="flex min-w-0 items-center gap-2">{body}</div>
+        ) : onActivate ? (
           <button
             type="button"
             onClick={onActivate}
@@ -594,8 +637,8 @@ export const AttachmentTile: React.FC<AttachmentTileProps> = ({
         {actionButton}
       </div>
     );
-  } else if (selection) {
-    // Activation lives inside the frame, beside the checkbox, not wrapping both.
+  } else if (selection || moreButton) {
+    // Activation lives inside the frame: beside the checkbox, or in More.
     content = face;
   } else if (onActivate) {
     content = (
@@ -623,6 +666,17 @@ export const AttachmentTile: React.FC<AttachmentTileProps> = ({
     content = <div title={hoverTitle}>{face}</div>;
   }
 
+  const tileWidth: React.CSSProperties | undefined =
+    !renderContent && variant === "tile" && !isMedia
+      ? excerptText
+        ? {
+            // Two lines of words need more room than a file name does, and a
+            // fixed width keeps arriving words from widening it.
+            width: `min(100%, calc(${geometry.docMaxWidth} * 1.5))`,
+          }
+        : { maxWidth: geometry.docMaxWidth }
+      : undefined;
+
   return (
     <div
       className={clsx(
@@ -635,14 +689,7 @@ export const AttachmentTile: React.FC<AttachmentTileProps> = ({
       )}
       style={
         {
-          ...(!renderContent && variant === "tile" && !isMedia
-            ? {
-                // Two lines of words need more room than a file name does.
-                maxWidth: excerpt
-                  ? `min(100%, calc(${geometry.docMaxWidth} * 1.5))`
-                  : geometry.docMaxWidth,
-              }
-            : undefined),
+          ...tileWidth,
           // Handed down as a variable rather than set on the plate, where an
           // inline value would outrank the theme rule the hook exists to accept.
           "--attachment-tile-icon-tint": iconColor,

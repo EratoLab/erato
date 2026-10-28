@@ -107,7 +107,7 @@ describe("audioTranscriptionTileStatus", () => {
     ).toBe("Recording · 0:01");
   });
 
-  it("draws the composer's recordings by their latest words, uploaded audio by its name", () => {
+  it("draws the composer's recordings by their first words, uploaded audio by its name", () => {
     const chunks = [
       chunk("completed", 30_000, "Hello team."),
       chunk("completed", 41_000, "Here is the update."),
@@ -133,12 +133,29 @@ describe("audioTranscriptionTileStatus", () => {
         }),
       )?.transcript?.excerpt,
     ).toBe("Hello team. Here is the update, in full.");
-    // No words yet: the meta line stands alone.
+    // No words yet: a placeholder holds their place while they may come.
     expect(
       audioTranscriptionTileStatus(
         rec({ status: "recording", chunks: [], recording_elapsed_ms: 3_000 }),
       )?.transcript,
-    ).toEqual({});
+    ).toEqual({ placeholder: "The transcript appears here…" });
+    expect(
+      audioTranscriptionTileStatus(
+        rec({
+          status: "transcribing",
+          chunks: [],
+          recorded_duration_ms: 3_000,
+        }),
+      )?.transcript,
+    ).toEqual({ placeholder: "The transcript appears here…" });
+    // Settled without words, the meta line stands alone.
+    for (const status of ["completed", "failed", "canceled"]) {
+      expect(
+        audioTranscriptionTileStatus(
+          rec({ status, chunks: [], recorded_duration_ms: 3_000 }),
+        )?.transcript,
+      ).toEqual({});
+    }
     expect(
       audioTranscriptionTileStatus(rec({ status: "completed", chunks }))
         ?.transcript,
@@ -242,13 +259,17 @@ describe("audioTranscriptExcerpt", () => {
     expect(audioTranscriptExcerpt("  Hello\n  team. ")).toBe("Hello team.");
   });
 
-  it("keeps the latest words of a long one, starting at a word", () => {
+  it("keeps the first words of a long one, ending at a word", () => {
     const words = Array.from({ length: 80 }, (_, index) => `word${index}`);
     const excerpt = audioTranscriptExcerpt(words.join(" "));
-    expect(excerpt.startsWith("…word")).toBe(true);
-    expect(excerpt.endsWith("word78 word79")).toBe(true);
+    expect(excerpt.startsWith("word0 word1 ")).toBe(true);
+    expect(excerpt.endsWith("…")).toBe(true);
     expect(excerpt.length).toBeLessThanOrEqual(201);
-    expect(words).toContain(excerpt.slice(1).split(" ")[0]);
+    expect(words).toContain(excerpt.slice(0, -1).split(" ").at(-1));
+  });
+
+  it("cuts a single overlong word at the limit", () => {
+    expect(audioTranscriptExcerpt("a".repeat(300))).toBe(`${"a".repeat(200)}…`);
   });
 });
 

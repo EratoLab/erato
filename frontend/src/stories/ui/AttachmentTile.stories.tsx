@@ -441,10 +441,10 @@ export const StatusBusyAndError: Story = {
 };
 
 /**
- * The composer's own recordings: their latest words take the generated file
- * name's place (it stays the tooltip and accessible name), the last two lines
- * in view, and More opens the preview. Without words yet, the meta line
- * stands alone.
+ * The composer's own recordings: their first words take the generated file
+ * name's place (it stays the tooltip and accessible name), clamped to two
+ * lines, and the More button opens the preview. Until words arrive a
+ * placeholder holds their two lines, so the tile does not grow when they do.
  */
 export const StatusTranscript: Story = {
   args: {
@@ -452,7 +452,10 @@ export const StatusTranscript: Story = {
       {
         ...item("t1", "audio-recording-0960.wav"),
         metaLabel: "Recording · 0:07",
-        status: { busy: true, transcript: {} },
+        status: {
+          busy: true,
+          transcript: { placeholder: "The transcript appears here…" },
+        },
       },
       {
         ...item("t2", "audio-recording-0961.wav"),
@@ -461,7 +464,7 @@ export const StatusTranscript: Story = {
           busy: true,
           transcript: {
             excerpt:
-              "…the customer wants delivery in two batches, the first before the end of the quarter.",
+              "The customer wants delivery in two batches, the first before the end of the quarter and the second once the site is ready.",
             more: {
               label: "More",
               accessibleName: "More: audio-recording-0961.wav",
