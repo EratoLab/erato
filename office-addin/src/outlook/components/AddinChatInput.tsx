@@ -32,6 +32,7 @@ import {
   type MutableRefObject,
 } from "react";
 
+import { OutlookComposerMenuContext } from "./OutlookComposerMenuContext";
 import { AddinChatInputCore } from "../../core/AddinChatInputCore";
 import {
   useAvailableActionFacetArgs,
@@ -51,16 +52,10 @@ import {
 } from "../providers/OutlookEmailSourceProvider";
 import {
   NO_ITEM_SEND_IDENTITY,
-  readAppointmentComposeSnapshot,
   useOutlookMailItem,
   type AppointmentComposeSnapshot,
+  type OutlookMailItemData,
 } from "../providers/OutlookMailItemProvider";
-import {
-  isAppointmentCompose as isAppointmentComposeItem,
-  isMessageRead,
-  resolveSupportedMailboxItem,
-} from "../sessionPolicy";
-import { OutlookComposerMenuContext } from "./OutlookComposerMenuContext";
 import {
   dropAttachmentCounts,
   judgeDropEmailParts,
@@ -74,15 +69,10 @@ import {
 } from "../utils/outlookActionFacet";
 import { OUTLOOK_REPLY_FROM_READ_FACET_ID } from "../utils/outlookClientActions";
 import {
-  readComposeRecipients,
-  serializeComposeRecipients,
-} from "../utils/outlookComposeRecipients";
-import {
   getComposeBodyType,
   type BodyFormat,
 } from "../utils/outlookComposeWrite";
 import {
-  appointmentFields,
   outlookContextChips,
   type OutlookAppointmentDisplay,
   type OutlookContextDisplay,
@@ -282,6 +272,50 @@ function appointmentDisplay(
   };
 }
 
+/** The facets that may carry a message draft's To/CC/BCC. */
+const RECIPIENT_FACET_IDS = [
+  "outlook_rewrite_selection",
+  "outlook_review_draft",
+  "compose_email",
+] as const;
+
+// Classic Outlook was seen dropping callbacks (ERMAIN-431); without a format
+// the send still goes, as when the item races away from compose.
+const SEND_BODY_FORMAT_TIMEOUT_MS = 2_000;
+
+/** A compose body with text, or an appointment its facet can carry. */
+function isDraftCarriable(
+  mailItem: OutlookMailItemData | null,
+  body: string,
+  appointmentContextAvailable: boolean,
+): boolean {
+  const appointment = mailItem?.itemKind === "appointment";
+  return (
+    !!mailItem?.isComposeMode &&
+    (body.length > 0 || appointment) &&
+    (!appointment || appointmentContextAvailable)
+  );
+}
+
+async function readComposeBodyFormat(): Promise<BodyFormat | undefined> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      getComposeBodyType(),
+      new Promise<undefined>((resolve) => {
+        timer = setTimeout(
+          () => resolve(undefined),
+          SEND_BODY_FORMAT_TIMEOUT_MS,
+        );
+      }),
+    ]);
+  } catch {
+    return undefined;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /** A polite region for what no chip says: drops being read and added, a thread added from "+". */
 function useHostAnnouncer(): [string, (text: string) => void] {
   const [text, setText] = useState("");
@@ -356,15 +390,6 @@ export const AddinChatInput = forwardRef<
     (!isAppointmentCompose || appointmentRewriteAvailable);
   const hasActiveSelection = selectionCarriable && !choices.selectionDismissed;
 
-  // A non-empty compose body (or an appointment) can ride along as
-  // `outlook_review_draft`; its chip switches it off until the item changes.
-  const draftBodyText = mailItem?.bodyText ?? mailItem?.bodyHtml ?? "";
-  const draftAvailable =
-    !!mailItem?.isComposeMode &&
-    (draftBodyText.length > 0 || isAppointmentCompose) &&
-    (!isAppointmentCompose || appointmentContextAvailable);
-  const isDraftContextIncluded = draftAvailable && !choices.draftOff;
-
   // Draft de-dup marker (#4): what the last send of the draft context left in
   // this chat (see `OutlookSentDraft`). Client-side by design — the backend is
   // action-facet toggle-stateless. Reset when the chat changes so a fresh
@@ -416,19 +441,35 @@ export const AddinChatInput = forwardRef<
   const reviewCarriesRecipients = !!availableFacetArgs
     .get("outlook_review_draft")
     ?.has("recipients");
-  const liveComposeFields = useLiveComposeFields({
-    watch:
-      host !== "Outlook" || !mailItem?.isComposeMode
-        ? null
-        : isAppointmentCompose
-          ? "appointment"
-          : reviewCarriesRecipients
-            ? "recipients"
-            : null,
-    itemIdentity,
-    appointmentFallback,
-  });
-  // The appointment as render time last saw it; the send compares against it.
+  const { fields: liveComposeFields, refresh: refreshLiveDraft } =
+    useLiveComposeFields({
+      watch:
+        host !== "Outlook" || !mailItem?.isComposeMode
+          ? null
+          : isAppointmentCompose
+            ? "appointment"
+            : "message",
+      itemIdentity,
+      readRecipients: RECIPIENT_FACET_IDS.some((id) =>
+        availableFacetArgs.get(id)?.has("recipients"),
+      ),
+      appointmentFallback,
+    });
+
+  // A non-empty compose body (or an appointment) can ride along as
+  // `outlook_review_draft`; its chip switches it off until the item changes.
+  const draftBodyText =
+    liveComposeFields.bodyText ??
+    mailItem?.bodyText ??
+    mailItem?.bodyHtml ??
+    "";
+  const draftAvailable = isDraftCarriable(
+    mailItem,
+    draftBodyText,
+    appointmentContextAvailable,
+  );
+  const isDraftContextIncluded = draftAvailable && !choices.draftOff;
+  // The appointment as render time last read it.
   const seenAppointmentFingerprint =
     isAppointmentCompose && mailItem
       ? (liveComposeFields.appointmentFingerprint ??
@@ -931,18 +972,6 @@ export const AddinChatInput = forwardRef<
     ],
   );
 
-  // The appointment detail re-reads the live form once it opens, as the send
-  // does: editing it fires no event the bound item sees.
-  const readAppointmentFields = useCallback(async () => {
-    const live = resolveSupportedMailboxItem(Office.context.mailbox?.item);
-    if (!live || !isAppointmentComposeItem(live)) return null;
-    const snapshot = await readAppointmentComposeSnapshot(
-      live,
-      liveComposeFields.appointment ?? appointmentFallback,
-    );
-    return appointmentFields(appointmentDisplay(snapshot));
-  }, [appointmentFallback, liveComposeFields.appointment]);
-
   const updatingLabel = t({
     id: "officeAddin.fileSource.updatingThread",
     message: "Updating…",
@@ -973,16 +1002,13 @@ export const AddinChatInput = forwardRef<
         ]),
       ),
       fallbackSubject: emailSubject,
-      readAppointmentFields: isAppointmentCompose
-        ? readAppointmentFields
-        : undefined,
+      refreshDraft: refreshLiveDraft,
     }),
     [
       choices.threadChoice,
       emailSubject,
-      isAppointmentCompose,
       isDropResolutionStale,
-      readAppointmentFields,
+      refreshLiveDraft,
       resolvedDropByKey,
       stagedDrops,
       stagedPartVerdicts,
@@ -1080,33 +1106,25 @@ export const AddinChatInput = forwardRef<
       const sendItemKey = itemKey;
       setSendFailure(null);
 
-      // Recipient edits do not fire ItemChanged. Read the live fields at send
-      // time, and only when an email facet accepts the optional context.
-      const liveItem = resolveSupportedMailboxItem(Office.context.mailbox.item);
-
-      const recipients =
-        mailItem?.itemKind === "message" &&
-        mailItem.isComposeMode &&
-        liveItem &&
-        !isMessageRead(liveItem) &&
-        !isAppointmentComposeItem(liveItem) &&
-        [
-          "outlook_rewrite_selection",
-          "outlook_review_draft",
-          "compose_email",
-        ].some((id) => availableFacetArgs.get(id)?.has("recipients"))
-          ? serializeComposeRecipients(await readComposeRecipients(liveItem))
-          : undefined;
-      // Appointment fields are re-read from the LIVE item at send time:
-      // editing an appointment form fires no ItemChanged, so the provider's
-      // bind-time state is frozen at pane-open and would ship a stale (often
-      // empty) snapshot — and poison the de-dup fingerprint with it. Reads
-      // are bounded and fall back per-field to the provider state, so a
-      // wedged host degrades to the old behavior instead of losing the send.
-      const appointmentSnapshot =
-        isAppointmentCompose && liveItem && isAppointmentComposeItem(liveItem)
-          ? await readAppointmentComposeSnapshot(liveItem, appointmentFallback)
-          : null;
+      // The draft is re-read from the LIVE item at send time: body edits fire
+      // no event, so render time can hold an older body (text typed just
+      // before Send, or a draft that was empty when it opened), and the de-dup
+      // would compare that older body with itself. The read also lands in
+      // render state, so the chip after the send judges the next one from it.
+      // Each read is bounded (message 2 s, appointment 5 s per field) and
+      // falls back to what render time read last, so a wedged host degrades
+      // to the old behavior instead of holding the send.
+      const [live, bodyFormat] = await Promise.all([
+        refreshLiveDraft(),
+        // The live item can race away from compose (pinned pane, the user
+        // clicked a received email mid-send). The message must still go out,
+        // just without a compose body format.
+        mailItem?.isComposeMode ? readComposeBodyFormat() : undefined,
+      ]);
+      const recipients = live.recipients;
+      const appointmentSnapshot = isAppointmentCompose
+        ? (live.appointment ?? null)
+        : null;
 
       // Build the action facet (selection rewrite vs. draft review) via a pure
       // resolver so the selection-priority and draft de-dup rules stay testable.
@@ -1118,20 +1136,9 @@ export const AddinChatInput = forwardRef<
       // no value to a writing-review prompt and blow the backend's per-arg size
       // cap; text coercion still preserves quoted history (`>` lines), bullet
       // lists, and link URLs, so the model keeps the full conversation context.
-      let bodyFormat: BodyFormat | undefined;
-      if (mailItem?.isComposeMode) {
-        try {
-          bodyFormat = await getComposeBodyType();
-        } catch {
-          // The live item can race away from compose (pinned pane, the user
-          // clicked a received email mid-send). The message must still go
-          // out — just without a compose body format.
-          bodyFormat = undefined;
-        }
-      }
       const draftBody = appointmentSnapshot
         ? (appointmentSnapshot.bodyText ?? appointmentSnapshot.bodyHtml ?? "")
-        : draftBodyText;
+        : (live.bodyText ?? draftBodyText);
       const draftContextFingerprint = appointmentSnapshot
         ? outlookAppointmentFingerprint(appointmentSnapshot)
         : undefined;
@@ -1141,7 +1148,12 @@ export const AddinChatInput = forwardRef<
           hasActiveSelection,
           selectionData: composeSelection.data,
           selectionSource: composeSelection.sourceProperty,
-          draftContextIncluded: isDraftContextIncluded,
+          draftContextIncluded:
+            isDraftCarriable(
+              mailItem,
+              draftBody,
+              appointmentContextAvailable,
+            ) && !choices.draftOff,
           draftBody,
           lastSentDraftFingerprint: lastSentDraftRef.current?.sent ?? null,
           draftContextFingerprint,
@@ -1189,17 +1201,8 @@ export const AddinChatInput = forwardRef<
       // Rolled back on a declined send: the marker means "already sent".
       const previousSentDraft = lastSentDraftRef.current;
       if (sentDraftFingerprint !== null) {
-        // Remember what we sent so an unchanged follow-up de-dupes (#4). The
-        // draft chip sees the appointment as last read at render time, which
-        // can lag the live form, so it compares against that as well.
-        rememberSentDraft({
-          sent: sentDraftFingerprint,
-          seen:
-            appointmentSnapshot && seenAppointmentFingerprint !== undefined
-              ? seenAppointmentFingerprint
-              : sentDraftFingerprint,
-          recipients,
-        });
+        // Remember what we sent so an unchanged follow-up de-dupes (#4).
+        rememberSentDraft({ sent: sentDraftFingerprint, recipients });
       }
 
       // Snapshot the dropped emails staged for this send. They are cleared only
@@ -1388,10 +1391,10 @@ export const AddinChatInput = forwardRef<
       calendarFetcher,
       chatId,
       chatInputProps,
+      choices.draftOff,
       choices.schedulingEndedAt,
       composeEmailAvailable,
       appointmentContextAvailable,
-      appointmentFallback,
       appointmentRewriteAvailable,
       composeSelection.data,
       composeSelection.sourceProperty,
@@ -1400,7 +1403,6 @@ export const AddinChatInput = forwardRef<
       globalMaxSizeBytes,
       hasActiveSelection,
       isAppointmentCompose,
-      isDraftContextIncluded,
       itemIdentity,
       itemKey,
       lastSchedulingSignalAt,
@@ -1408,6 +1410,7 @@ export const AddinChatInput = forwardRef<
       maxSizeFormatted,
       onEmailSourceDropsSent,
       plan,
+      refreshLiveDraft,
       rememberSentDraft,
       replyFromReadAvailable,
       resolvedParts,
@@ -1415,7 +1418,6 @@ export const AddinChatInput = forwardRef<
       getFileProvenance,
       restoreDraft,
       scheduleFacetAvailable,
-      seenAppointmentFingerprint,
       stagedDrops,
       threadConversationId,
       threadFile,

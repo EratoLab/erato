@@ -113,7 +113,7 @@ function addinContext(state: OutlookStoryState): {
     schedulingThreadActive: state.scheduling,
     lastSentDraft:
       draftAvailable && state.draft === "unchanged"
-        ? { sent: fingerprint, seen: fingerprint }
+        ? { sent: fingerprint }
         : null,
   });
 

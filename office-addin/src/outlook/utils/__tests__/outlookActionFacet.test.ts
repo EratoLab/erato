@@ -597,11 +597,7 @@ describe("previewOutlookSend", () => {
   // the send uses and checks the facet it would carry.
   it.each([
     ["sent", draft, "outlook_review_draft"],
-    [
-      "unchanged",
-      { ...draft, lastSentDraft: { sent: "Hello", seen: "Hello" } },
-      null,
-    ],
+    ["unchanged", { ...draft, lastSentDraft: { sent: "Hello" } }, null],
     [
       "scheduling",
       { ...draft, ...scheduleReady, schedulingThreadActive: true },
@@ -619,7 +615,7 @@ describe("previewOutlookSend", () => {
         ...draft,
         hasActiveSelection: true,
         selectionData: "Hel",
-        lastSentDraft: { sent: "Hello", seen: "Hello" },
+        lastSentDraft: { sent: "Hello" },
       },
       "outlook_rewrite_selection",
     ],
@@ -629,7 +625,7 @@ describe("previewOutlookSend", () => {
         ...draft,
         ...scheduleReady,
         schedulingThreadActive: true,
-        lastSentDraft: { sent: "Hello", seen: "Hello" },
+        lastSentDraft: { sent: "Hello" },
       },
       "outlook_schedule",
     ],
@@ -714,7 +710,7 @@ describe("previewOutlookSend", () => {
       const unchanged = {
         ...draft,
         ...sticky,
-        lastSentDraft: { sent: "Hello", seen: "Hello" },
+        lastSentDraft: { sent: "Hello" },
       };
       expect(previewOutlookSend(unchanged).mode).toBe("scheduling");
     });
@@ -727,7 +723,7 @@ describe("previewOutlookSend", () => {
         previewOutlookSend({
           ...draft,
           ...sticky,
-          lastSentDraft: { sent: "Hello", seen: "Hello" },
+          lastSentDraft: { sent: "Hello" },
         }).draftWithoutScheduling,
       ).toBe("unchanged");
       expect(previewOutlookSend(draft).draftWithoutScheduling).toBeNull();
@@ -748,7 +744,7 @@ describe("previewOutlookSend", () => {
     expect(
       previewOutlookSend({
         ...selected,
-        lastSentDraft: { sent: "Hello", seen: "Hello" },
+        lastSentDraft: { sent: "Hello" },
       }).draftWithoutSelection,
     ).toBe("unchanged");
     expect(previewOutlookSend(draft).draftWithoutSelection).toBeNull();
@@ -759,9 +755,27 @@ describe("previewOutlookSend", () => {
       previewOutlookSend({
         ...draft,
         draftBody: "Hello again",
-        lastSentDraft: { sent: "Hello", seen: "Hello" },
+        lastSentDraft: { sent: "Hello" },
       }).draft,
     ).toBe("sent");
+  });
+
+  it("sends a body edited since the last send again, chip and send alike", () => {
+    const lastSentDraft = { sent: "Hello" };
+    const edited = { ...draft, draftBody: "Hello, and thanks", lastSentDraft };
+
+    const result = previewOutlookSend(edited);
+    expect(result.draft).toBe("sent");
+    expect(result.fingerprint).toBe("Hello, and thanks");
+    const send = resolveOutlookActionFacet({
+      ...edited,
+      lastSentDraftFingerprint: lastSentDraft.sent,
+      nowIso,
+      timezone,
+    });
+    expect(send.draft).toBe("sent");
+    expect(send.facet?.args?.full_body).toBe("Hello, and thanks");
+    expect(send.sentDraftFingerprint).toBe("Hello, and thanks");
   });
 
   it("carries the last send's recipients into the fingerprint", () => {
@@ -776,7 +790,7 @@ describe("previewOutlookSend", () => {
 
     const result = previewOutlookSend({
       ...withRecipients,
-      lastSentDraft: { sent, seen: sent, recipients },
+      lastSentDraft: { sent, recipients },
     });
 
     expect(result.fingerprint).toBe(sent);
@@ -793,7 +807,7 @@ describe("previewOutlookSend", () => {
       ]),
     };
     const sent = outlookDraftFingerprint({ ...withRecipients, recipients });
-    const lastSentDraft = { sent, seen: sent, recipients };
+    const lastSentDraft = { sent, recipients };
 
     const result = previewOutlookSend({
       ...withRecipients,
@@ -844,30 +858,23 @@ describe("previewOutlookSend", () => {
       draftBody: fields.bodyText,
       draftContextFingerprint: outlookAppointmentFingerprint(fields),
     });
-    const lastSentDraft = {
-      sent: outlookAppointmentFingerprint(live),
-      seen: outlookAppointmentFingerprint(bindTime),
-    };
+    const lastSentDraft = { sent: outlookAppointmentFingerprint(live) };
 
-    it("reads unchanged against the bind-time fields seen at the send", () => {
-      expect(
-        previewOutlookSend({ ...appointment(bindTime), lastSentDraft }).draft,
-      ).toBe("unchanged");
-    });
-
-    it("reads unchanged once the item rebinds to what was sent", () => {
+    it("reads unchanged once render time holds the form the send read", () => {
       expect(
         previewOutlookSend({ ...appointment(live), lastSentDraft }).draft,
       ).toBe("unchanged");
     });
 
-    it("re-includes details that match neither", () => {
-      const result = previewOutlookSend({
-        ...appointment({ ...live, subject: "Planning v2" }),
-        lastSentDraft,
-      });
-      expect(result.draft).toBe("sent");
-      expect(result.facetId).toBe("outlook_review_appointment");
+    it("re-includes details that differ from what the send read", () => {
+      for (const fields of [bindTime, { ...live, subject: "Planning v2" }]) {
+        const result = previewOutlookSend({
+          ...appointment(fields),
+          lastSentDraft,
+        });
+        expect(result.draft).toBe("sent");
+        expect(result.facetId).toBe("outlook_review_appointment");
+      }
     });
 
     it("is stable and keyed on every field", () => {

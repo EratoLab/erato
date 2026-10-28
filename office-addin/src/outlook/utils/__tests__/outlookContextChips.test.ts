@@ -1157,8 +1157,8 @@ describe("chips and send agree (matrix)", () => {
                         lastSentDraft:
                           draftState === "unchanged"
                             ? appointment
-                              ? { sent: "appt", seen: "appt" }
-                              : { sent: body, seen: body }
+                              ? { sent: "appt" }
+                              : { sent: body }
                             : null,
                       };
                       const sendPreview = previewOutlookSend(input);

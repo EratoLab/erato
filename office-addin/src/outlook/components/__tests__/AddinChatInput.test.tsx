@@ -13,9 +13,11 @@ import { createRef } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { outlookContextStore } from "../../hooks/outlookContextStore";
+import { LIVE_BODY_READ_TIMEOUT_MS } from "../../hooks/useLiveComposeFields";
 import { SCHEDULING_THREAD_MAX_AGE_MS } from "../../utils/outlookScheduleTool";
 import { EmailTrimError } from "../../utils/trimRawEmlBytes";
 import { AddinChatInput } from "../AddinChatInput";
+import { DRAFT_DETAIL_REFRESH_MS } from "../OutlookContextDetails";
 
 import type {
   OutlookItemAttachment,
@@ -1157,6 +1159,154 @@ describe("AddinChatInput", () => {
       expect(onSendMessage).toHaveBeenCalledTimes(2);
       // The marker forgets a draft it never sent.
       expect(chip("outlook-draft")).toHaveAttribute("data-state", "included");
+    });
+
+    describe("typed in the item, which no event reports", () => {
+      const typed = { text: "", getAsync: vi.fn() };
+      function typeInDraft(bindTime: string) {
+        composeMessage(bindTime);
+        typed.text = bindTime;
+        typed.getAsync = vi.fn(
+          (_coercion: unknown, callback: (result: unknown) => void) =>
+            callback(succeeded(typed.text)),
+        );
+        liveCompose({
+          body: {
+            getTypeAsync: (callback: (result: unknown) => void) =>
+              callback(succeeded(Office.CoercionType.Text)),
+            getAsync: typed.getAsync,
+          },
+        });
+      }
+      const detailShows = (text: string) =>
+        within(chip("outlook-draft")).getByText(text);
+
+      it("sends the text typed just before Send, and the chip shows it after", async () => {
+        typeInDraft("Dear Bob");
+        const { onSendMessage } = renderInput({ chatId: "chat-1" });
+        await waitFor(() => expect(typed.getAsync).toHaveBeenCalled());
+
+        typed.text = "Dear Bob, see you Friday";
+        send();
+        await waitFor(() => expect(onSendMessage).toHaveBeenCalledTimes(1));
+        expect(facetOf(onSendMessage, 0)).toEqual({
+          id: "outlook_review_draft",
+          args: { full_body: "Dear Bob, see you Friday", body_format: "text" },
+        });
+        await waitFor(() =>
+          expect(meta("outlook-draft")).toBe("Unchanged, not re-sent"),
+        );
+        expect(detailShows("Dear Bob, see you Friday")).toBeInTheDocument();
+      });
+
+      it("sends an edited draft again instead of calling it unchanged", async () => {
+        typeInDraft("Dear Bob");
+        const { onSendMessage } = renderInput({ chatId: "chat-1" });
+        send();
+        await waitFor(() => expect(onSendMessage).toHaveBeenCalledTimes(1));
+        await waitFor(() =>
+          expect(meta("outlook-draft")).toBe("Unchanged, not re-sent"),
+        );
+
+        typed.text = "Dear Bob, v2";
+        send();
+        await waitFor(() => expect(onSendMessage).toHaveBeenCalledTimes(2));
+        expect(facetOf(onSendMessage, 1)?.args?.full_body).toBe("Dear Bob, v2");
+        await waitFor(() => expect(detailShows("Dear Bob, v2")).toBeTruthy());
+        expect(meta("outlook-draft")).toBe("Unchanged, not re-sent");
+
+        send();
+        await waitFor(() => expect(onSendMessage).toHaveBeenCalledTimes(3));
+        expect(facetOf(onSendMessage, 2)).toBeUndefined();
+      });
+
+      it("carries a draft typed into an empty compose, not a request to write one", async () => {
+        h.availableFacetArgs = new Map([
+          ["outlook_review_draft", new Set<string>()],
+          ["compose_email", new Set<string>()],
+        ]);
+        typeInDraft("");
+        const { onSendMessage } = renderInput({ chatId: "chat-1" });
+        expect(queryChip("outlook-draft")).toBeNull();
+
+        typed.text = "Hi Anna, a quick question";
+        send();
+        await waitFor(() => expect(onSendMessage).toHaveBeenCalledTimes(1));
+        expect(facetOf(onSendMessage, 0)?.id).toBe("outlook_review_draft");
+        expect(facetOf(onSendMessage, 0)?.args?.full_body).toBe(
+          "Hi Anna, a quick question",
+        );
+        await waitFor(() =>
+          expect(meta("outlook-draft")).toBe("Unchanged, not re-sent"),
+        );
+      });
+
+      it("re-reads when the pane gains focus, so the chip says it goes again", async () => {
+        typeInDraft("Dear Bob");
+        const { onSendMessage } = renderInput({ chatId: "chat-1" });
+        send();
+        await waitFor(() => expect(onSendMessage).toHaveBeenCalledTimes(1));
+        await waitFor(() =>
+          expect(meta("outlook-draft")).toBe("Unchanged, not re-sent"),
+        );
+
+        typed.text = "Dear Bob, v2";
+        act(() => {
+          window.dispatchEvent(new Event("focus"));
+        });
+        await waitFor(() =>
+          expect(chip("outlook-draft")).toHaveAttribute(
+            "data-state",
+            "included",
+          ),
+        );
+        expect(detailShows("Dear Bob, v2")).toBeInTheDocument();
+      });
+
+      it("reads the draft when its detail opens and keeps it current while open", async () => {
+        vi.useFakeTimers();
+        try {
+          typeInDraft("Dear Bob");
+          typed.text = "Dear Bob, hi";
+          renderInput({ chatId: "chat-1" });
+          await act(async () => {
+            await vi.advanceTimersByTimeAsync(0);
+          });
+          expect(detailShows("Dear Bob, hi")).toBeInTheDocument();
+          const reads = typed.getAsync.mock.calls.length;
+
+          typed.text = "Dear Bob, hi there";
+          await act(async () => {
+            await vi.advanceTimersByTimeAsync(DRAFT_DETAIL_REFRESH_MS);
+          });
+          expect(detailShows("Dear Bob, hi there")).toBeInTheDocument();
+          expect(typed.getAsync.mock.calls.length).toBe(reads + 1);
+        } finally {
+          vi.useRealTimers();
+        }
+      });
+
+      it("goes with the body read last once a host that never answers runs out of time", async () => {
+        vi.useFakeTimers();
+        try {
+          typeInDraft("Dear Bob");
+          typed.getAsync.mockImplementation(() => {});
+          const { onSendMessage } = renderInput({ chatId: "chat-1" });
+
+          send();
+          await act(async () => {
+            await vi.advanceTimersByTimeAsync(LIVE_BODY_READ_TIMEOUT_MS - 1);
+          });
+          expect(onSendMessage).not.toHaveBeenCalled();
+          await act(async () => {
+            await vi.advanceTimersByTimeAsync(1);
+          });
+          expect(onSendMessage).toHaveBeenCalledTimes(1);
+          expect(facetOf(onSendMessage, 0)?.args?.full_body).toBe("Dear Bob");
+        } finally {
+          vi.useRealTimers();
+        }
+      });
     });
 
     describe("while scheduling", () => {

@@ -18,10 +18,7 @@ import type {
   ThreadGroupHandlers,
   ThreadPartVerdicts,
 } from "../utils/buildThreadGroup";
-import type {
-  OutlookContextModels,
-  OutlookDetailField,
-} from "../utils/outlookContextChips";
+import type { OutlookContextModels } from "../utils/outlookContextChips";
 import type { StagedPartValidation } from "../utils/validateStagedPart";
 import type {
   ComposerContextDetailAction,
@@ -79,8 +76,8 @@ export interface OutlookContextDetailData {
   /** Per drop, the size the send uploads, formatted, or "Updating…". */
   dropSizeLabels: ReadonlyMap<string, string>;
   fallbackSubject: string;
-  /** Reads the live appointment for its detail, as the send does. */
-  readAppointmentFields?: () => Promise<OutlookDetailField[] | null>;
+  /** Re-reads the live draft or appointment, as the send does, while its detail is open. */
+  refreshDraft?: () => unknown;
 }
 
 export interface OutlookContextItemsInput {
@@ -235,12 +232,7 @@ export function useOutlookContextItems({
         detail: {
           title: draft.label,
           render: () => (
-            <OutlookDraftDetail
-              model={draft}
-              readLiveFields={
-                appointment ? detail.readAppointmentFields : undefined
-              }
-            />
+            <OutlookDraftDetail model={draft} refresh={detail.refreshDraft} />
           ),
           ...(actions.length > 0 && !sending ? { actions } : {}),
         },

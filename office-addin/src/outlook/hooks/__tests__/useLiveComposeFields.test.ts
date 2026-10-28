@@ -2,7 +2,10 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { outlookAppointmentFingerprint } from "../../utils/outlookActionFacet";
-import { useLiveComposeFields } from "../useLiveComposeFields";
+import {
+  LIVE_BODY_READ_TIMEOUT_MS,
+  useLiveComposeFields,
+} from "../useLiveComposeFields";
 
 import type { AppointmentComposeSnapshot } from "../../providers/OutlookMailItemProvider";
 
@@ -62,6 +65,30 @@ const recipientsField = (addresses: string[]) => ({
     }),
 });
 
+/** A body whose text the test edits, as typing in the item would. */
+function liveBody(initial: string) {
+  const body = {
+    text: initial,
+    getAsync: vi.fn(
+      (coercion: unknown, callback: (result: unknown) => void) => {
+        expect(coercion).toBe(Office.CoercionType.Text);
+        callback({
+          status: Office.AsyncResultStatus.Succeeded,
+          value: body.text,
+        });
+      },
+    ),
+  };
+  return body;
+}
+
+const message = (readRecipients = true) => ({
+  watch: "message" as const,
+  itemIdentity: "draft-1",
+  readRecipients,
+  appointmentFallback: fallback,
+});
+
 describe("useLiveComposeFields", () => {
   beforeEach(() => {
     eventTypes.RecipientsChanged = "olkRecipientsChanged";
@@ -74,26 +101,21 @@ describe("useLiveComposeFields", () => {
     delete eventTypes.AppointmentTimeChanged;
     delete eventTypes.EnhancedLocationsChanged;
     vi.clearAllMocks();
+    vi.useRealTimers();
   });
 
   it("knows nothing until the host reports a recipient edit, then reads them", async () => {
     const { item, handlers } = mockItem({ to: recipientsField(["a@x"]) });
-    const { result } = renderHook(() =>
-      useLiveComposeFields({
-        watch: "recipients",
-        itemIdentity: "draft-1",
-        appointmentFallback: fallback,
-      }),
-    );
+    const { result } = renderHook(() => useLiveComposeFields(message()));
 
-    expect(result.current).toEqual({});
+    expect(result.current.fields).toEqual({});
     expect(item.addHandlerAsync).toHaveBeenCalledTimes(1);
 
     item.to = recipientsField(["a@x", "b@x"]);
     act(() => handlers.get("olkRecipientsChanged")?.());
 
     await waitFor(() =>
-      expect(result.current.recipients).toBe(
+      expect(result.current.fields.recipients).toBe(
         JSON.stringify({
           to: [
             { displayName: "a@x", emailAddress: "a@x" },
@@ -103,13 +125,120 @@ describe("useLiveComposeFields", () => {
       ),
     );
     // The draft's detail lists them as the next send reads them.
-    expect(result.current.recipientList).toEqual({
+    expect(result.current.fields.recipientList).toEqual({
       to: [
         { displayName: "a@x", emailAddress: "a@x" },
         { displayName: "b@x", emailAddress: "b@x" },
       ],
     });
-    expect(result.current.appointment).toBeUndefined();
+    expect(result.current.fields.appointment).toBeUndefined();
+  });
+
+  it("reads the body a send carries, which no item event reports", async () => {
+    const body = liveBody("Dear Bob");
+    mockItem({ body });
+    const { result } = renderHook(() => useLiveComposeFields(message(false)));
+    expect(result.current.fields.bodyText).toBeUndefined();
+
+    body.text = "Dear Bob, thanks";
+    let read: Awaited<ReturnType<typeof result.current.refresh>> = {};
+    await act(async () => {
+      read = await result.current.refresh();
+    });
+
+    expect(read).toEqual({ bodyText: "Dear Bob, thanks" });
+    expect(result.current.fields).toEqual({ bodyText: "Dear Bob, thanks" });
+  });
+
+  it("re-reads when the pane gains focus, the user back from typing in the item", async () => {
+    const body = liveBody("Dear Bob");
+    mockItem({ body });
+    const { result } = renderHook(() => useLiveComposeFields(message(false)));
+
+    body.text = "Dear Bob, see you";
+    act(() => {
+      window.dispatchEvent(new Event("focus"));
+    });
+
+    await waitFor(() =>
+      expect(result.current.fields.bodyText).toBe("Dear Bob, see you"),
+    );
+  });
+
+  it("keeps the last body when a read fails, and never rejects", async () => {
+    const body = liveBody("Dear Bob");
+    mockItem({ body });
+    const { result } = renderHook(() => useLiveComposeFields(message(false)));
+    await act(async () => {
+      await result.current.refresh();
+    });
+
+    body.getAsync.mockImplementationOnce(
+      (_coercion: unknown, callback: (result: unknown) => void) =>
+        callback({
+          status: Office.AsyncResultStatus.Failed,
+          error: { message: "busy" },
+        }),
+    );
+    let read: Awaited<ReturnType<typeof result.current.refresh>> = {
+      bodyText: "unset",
+    };
+    await act(async () => {
+      read = await result.current.refresh();
+    });
+
+    expect(read).toEqual({});
+    expect(result.current.fields.bodyText).toBe("Dear Bob");
+  });
+
+  it("gives up on a host that never answers after the bound", async () => {
+    vi.useFakeTimers();
+    mockItem({ body: { getAsync: vi.fn() } });
+    const { result } = renderHook(() => useLiveComposeFields(message(false)));
+
+    let settled = false;
+    const pending = result.current.refresh().then((read) => {
+      settled = true;
+      return read;
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(LIVE_BODY_READ_TIMEOUT_MS - 1);
+    });
+    expect(settled).toBe(false);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+    });
+    expect(await pending).toEqual({});
+  });
+
+  it("keeps only the latest read when two overlap", async () => {
+    const callbacks: ((result: unknown) => void)[] = [];
+    mockItem({
+      body: {
+        getAsync: (_coercion: unknown, callback: (result: unknown) => void) => {
+          callbacks.push(callback);
+        },
+      },
+    });
+    const { result } = renderHook(() => useLiveComposeFields(message(false)));
+
+    const first = result.current.refresh();
+    const second = result.current.refresh();
+    await act(async () => {
+      callbacks[1]?.({
+        status: Office.AsyncResultStatus.Succeeded,
+        value: "newer",
+      });
+      await second;
+      callbacks[0]?.({
+        status: Office.AsyncResultStatus.Succeeded,
+        value: "older",
+      });
+      // The caller still gets what its own read found.
+      expect(await first).toEqual({ bodyText: "older" });
+    });
+
+    expect(result.current.fields.bodyText).toBe("newer");
   });
 
   it("re-reads the appointment on time, attendee and location edits", async () => {
@@ -120,6 +249,7 @@ describe("useLiveComposeFields", () => {
       useLiveComposeFields({
         watch: "appointment",
         itemIdentity: "appt-1",
+        readRecipients: false,
         appointmentFallback: fallback,
       }),
     );
@@ -129,15 +259,15 @@ describe("useLiveComposeFields", () => {
       "olkAppointmentTimeChanged",
       "olkEnhancedLocationsChanged",
     ]);
-    expect(result.current.appointment).toBeUndefined();
+    expect(result.current.fields.appointment).toBeUndefined();
     act(() => handlers.get("olkEnhancedLocationsChanged")?.());
 
     await waitFor(() =>
-      expect(result.current.appointmentFingerprint).toBe(
+      expect(result.current.fields.appointmentFingerprint).toBe(
         outlookAppointmentFingerprint(moved),
       ),
     );
-    expect(result.current.appointment).toEqual(moved);
+    expect(result.current.fields.appointment).toEqual(moved);
     expect(readSnapshot).toHaveBeenCalledWith(item, fallback);
   });
 
@@ -145,18 +275,14 @@ describe("useLiveComposeFields", () => {
     const { item, handlers } = mockItem({ to: recipientsField(["a@x"]) });
     const { result, rerender, unmount } = renderHook(
       ({ itemIdentity }) =>
-        useLiveComposeFields({
-          watch: "recipients",
-          itemIdentity,
-          appointmentFallback: fallback,
-        }),
+        useLiveComposeFields({ ...message(), itemIdentity }),
       { initialProps: { itemIdentity: "draft-1" } },
     );
     act(() => handlers.get("olkRecipientsChanged")?.());
-    await waitFor(() => expect(result.current.recipients).toBeDefined());
+    await waitFor(() => expect(result.current.fields.recipients).toBeDefined());
 
     rerender({ itemIdentity: "draft-2" });
-    expect(result.current).toEqual({});
+    expect(result.current.fields).toEqual({});
     expect(item.removeHandlerAsync).toHaveBeenCalledWith(
       "olkRecipientsChanged",
     );
@@ -165,27 +291,18 @@ describe("useLiveComposeFields", () => {
     expect(item.removeHandlerAsync).toHaveBeenCalledTimes(2);
   });
 
-  it("registers nothing on a host without the events or for a read item", () => {
+  it("registers nothing on a host without the events or for a read item", async () => {
     delete eventTypes.RecipientsChanged;
     const { item } = mockItem();
-    renderHook(() =>
-      useLiveComposeFields({
-        watch: "recipients",
-        itemIdentity: "draft-1",
-        appointmentFallback: fallback,
-      }),
-    );
+    renderHook(() => useLiveComposeFields(message()));
     expect(item.addHandlerAsync).not.toHaveBeenCalled();
 
     eventTypes.RecipientsChanged = "olkRecipientsChanged";
     const read = mockItem({ subject: "Received" });
-    renderHook(() =>
-      useLiveComposeFields({
-        watch: "recipients",
-        itemIdentity: "read-1",
-        appointmentFallback: fallback,
-      }),
+    const { result } = renderHook(() =>
+      useLiveComposeFields({ ...message(), itemIdentity: "read-1" }),
     );
     expect(read.item.addHandlerAsync).not.toHaveBeenCalled();
+    expect(await result.current.refresh()).toEqual({});
   });
 });
