@@ -42,12 +42,13 @@ async fn async_main() -> Result<(), Report> {
         Err(err) => return Err(err),
     };
     let scenario = Scenario::get(&args.scenario_id)?;
-    let provider_config = config.get_chat_provider(&args.provider_id).clone();
+    let provider_id = config.resolve_chat_provider_id(&args.provider_id)?;
+    let provider_config = config.get_chat_provider(provider_id).clone();
 
     let recorder = ReqwestTraceRecorder::new(
         args.output_dir.clone(),
         RecordingMetadata {
-            chat_provider_id: args.provider_id.clone(),
+            chat_provider_id: provider_id.to_string(),
             provider_kind: provider_config.provider_kind.clone(),
             model_name: provider_config.model_name.clone(),
             scenario_id: scenario.id.to_string(),

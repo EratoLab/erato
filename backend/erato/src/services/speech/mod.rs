@@ -40,6 +40,9 @@ pub trait SpeechProvider: Send + Sync {
     }
 }
 pub fn provider(config: &SpeechProviderConfig) -> Result<Box<dyn SpeechProvider>, Report> {
+    if config.archived {
+        return Err(eyre!("Cannot use an archived speech provider"));
+    }
     Ok(match config.provider_kind.as_str() {
         "openai" => Box::new(openai::OpenAi(config.clone())),
         "openai_realtime" => Box::new(openai_realtime::OpenAiRealtime(config.clone())),

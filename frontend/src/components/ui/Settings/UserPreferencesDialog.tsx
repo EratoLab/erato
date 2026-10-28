@@ -392,8 +392,11 @@ export function UserPreferencesDialog({
         preference_assistant_additional_information: toNullableValue(
           additionalInformation,
         ),
-        preference_default_chat_provider:
-          defaultModel?.chat_provider_id ?? null,
+        ...((defaultModel?.chat_provider_id ?? null) !==
+          (userProfile?.preference_default_chat_provider ?? null) && {
+          preference_default_chat_provider:
+            defaultModel?.chat_provider_id ?? null,
+        }),
         // All three fields go out explicitly on every save: this PUT carries
         // all preference fields, so omitting them would let an unrelated edit
         // wipe the start-screen state. Null ids alone mean "inherit", so the

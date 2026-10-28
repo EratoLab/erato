@@ -1105,6 +1105,15 @@ pub async fn deliver_task_result(
             .await
             .ok()
             .flatten();
+    let chat_provider_id = if let Some(id) = chat_provider_id {
+        app_state
+            .chat_provider_for_saved_selection(policy, &me_user.to_subject(), &me_user.groups, &id)
+            .await
+            .ok()
+            .map(|provider| provider.chat_provider_id)
+    } else {
+        None
+    };
     let request =
         crate::server::api::v1beta::message_streaming::MessageSubmitRequest::for_result_delivery(
             origin_chat_id,

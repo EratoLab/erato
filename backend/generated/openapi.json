@@ -6274,6 +6274,10 @@
             "type": "string",
             "description": "The ID of the chat this message belongs to"
           },
+          "chat_provider_display_name": {
+            "type": "string",
+            "description": "Historical display name for the provider that generated this message."
+          },
           "chat_provider_id": {
             "type": "string",
             "description": "The chat provider used to generate this message, if available."

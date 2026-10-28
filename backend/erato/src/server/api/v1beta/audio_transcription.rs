@@ -1500,6 +1500,7 @@ fn audio_provider(
     let config = audio_feature.config(app_state);
     let config_key = audio_feature.config_key();
     if let Some(provider_id) = config.chat_provider_id.as_deref() {
+        let provider_id = app_state.config.resolve_chat_provider_id(provider_id)?;
         let provider = app_state.config.get_chat_provider(provider_id);
         if !provider.model_capabilities.supports_audio_input {
             return Err(eyre::eyre!(
@@ -1531,7 +1532,8 @@ fn audio_provider(
                     .providers
                     .get(*provider_id)
                     .is_some_and(|provider| {
-                        provider.model_capabilities.supports_audio_input
+                        !provider.archived
+                            && provider.model_capabilities.supports_audio_input
                             && audio_provider_kind_supports_binary_audio(&provider.provider_kind)
                     })
             })

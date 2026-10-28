@@ -932,6 +932,10 @@ export type ChatMessage = {
    */
   chat_id: string;
   /**
+   * Historical display name for the provider that generated this message.
+   */
+  chat_provider_display_name?: string;
+  /**
    * The chat provider used to generate this message, if available.
    */
   chat_provider_id?: string;

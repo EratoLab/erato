@@ -1189,6 +1189,53 @@ An ordered list of provider IDs that defines the priority for provider selection
 
 **Example:** `["primary", "backup", "local"]`
 
+#### Provider replacements and archives
+
+{/* erato_toml_config_key: chat_providers.replacement_providers.[] */}
+{/* erato_toml_config_key: chat_providers.replacement_providers.[].old */}
+{/* erato_toml_config_key: chat_providers.replacement_providers.[].new */}
+{/* erato_toml_config_key: chat_providers.providers.<provider-id>.archived */}
+{/* erato_toml_config_key: speech_providers.replacement_providers.[] */}
+{/* erato_toml_config_key: speech_providers.replacement_providers.[].old */}
+{/* erato_toml_config_key: speech_providers.replacement_providers.[].new */}
+{/* erato_toml_config_key: speech_providers.provider.<provider-id>.archived */}
+
+Set `archived = true` to retain a provider's historical metadata without making it selectable or requiring inference credentials. Configure `replacement_providers` as a list of `{ old, new }` ID pairs under `chat_providers` or `speech_providers`. An old ID can be archived or absent from the configuration; chains must end at an active provider. Chat model permission rules for an old ID also grant access to its replacement. Keep archived chat entries and their original token prices to calculate historical spending correctly; an absent old entry cannot supply its historical price or display name. File storage providers are not replaced by this mechanism.
+
+```toml
+[chat_providers]
+priority_order = ["new"]
+replacement_providers = [{ old = "old", new = "new" }]
+
+[chat_providers.providers.old]
+archived = true
+model_name = "old-model"
+
+[chat_providers.providers.old.model_capabilities]
+cost_input_tokens_per_1m = 1.0
+cost_output_tokens_per_1m = 2.0
+
+[chat_providers.providers.new]
+provider_kind = "openai"
+model_name = "new-model"
+```
+
+For speech synthesis, use the same mapping under `speech_providers` and update
+the configured `audio_conversational.speech_provider` only if desired:
+
+```toml
+[speech_providers]
+replacement_providers = [{ old = "old-voice", new = "new-voice" }]
+
+[speech_providers.provider.old-voice]
+archived = true
+
+[speech_providers.provider.new-voice]
+provider_kind = "openai"
+model_name = "tts-model"
+voice = "alloy"
+```
+
 #### Embedded PDF image retrieval
 
 {/* erato_toml_config_key: chat_providers.all_providers.enable_embedded_image_retrieval_tool */}

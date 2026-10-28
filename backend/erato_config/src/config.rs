@@ -1847,7 +1847,18 @@ impl AppConfig {
             }
         }
 
+        validate_provider_replacements(&config.speech_providers.replacement_providers, |id| {
+            config
+                .speech_providers
+                .provider
+                .get(id)
+                .map(|provider| provider.archived)
+        })
+        .unwrap_or_else(|error| panic!("Invalid speech provider replacements: {error}"));
         for (id, provider) in &config.speech_providers.provider {
+            if provider.archived {
+                continue;
+            }
             assert!(
                 matches!(
                     provider.provider_kind.as_str(),
@@ -1883,7 +1894,7 @@ impl AppConfig {
         }
         if let Some(id) = &config.audio_conversational.speech_provider {
             assert!(
-                config.speech_providers.provider.contains_key(id),
+                config.resolve_speech_provider_id(id).is_ok(),
                 "Unknown audio_conversational.speech_provider: {id}"
             );
         }
@@ -1923,6 +1934,7 @@ impl AppConfig {
 
                 self.chat_providers = Some(ChatProvidersConfig {
                     priority_order: vec!["default".to_string()],
+                    replacement_providers: Vec::new(),
                     all_providers: AllChatProvidersConfig::default(),
                     providers,
                     summary: SummaryConfig::default(),
@@ -1942,6 +1954,9 @@ impl AppConfig {
         // and apply default model capabilities
         if let Some(chat_providers) = &mut self.chat_providers {
             for (provider_id, provider_config) in &mut chat_providers.providers {
+                if provider_config.archived {
+                    continue;
+                }
                 if provider_config.system_prompt_langfuse.is_some() {
                     tracing::warn!(
                         "Config key `system_prompt_langfuse` is deprecated. Please use `system_prompt` with a prompt source specification instead."
@@ -1975,6 +1990,31 @@ impl AppConfig {
     /// Validates the chat providers configuration.
     pub fn validate_chat_providers(&self) -> Result<(), eyre::Report> {
         if let Some(chat_providers) = &self.chat_providers {
+            validate_provider_replacements(&chat_providers.replacement_providers, |id| {
+                chat_providers
+                    .providers
+                    .get(id)
+                    .map(|provider| provider.archived)
+            })?;
+            for replacement in &chat_providers.replacement_providers {
+                if let Some(old) = chat_providers.providers.get(&replacement.old)
+                    && !old.provider_kind.is_empty()
+                {
+                    let target = self.resolve_chat_provider_id(&replacement.old)?;
+                    let new = &chat_providers.providers[target];
+                    if (old.is_audio_transcription_provider()
+                        && !new.model_capabilities.supports_audio_input)
+                        || (!old.is_audio_transcription_provider()
+                            && new.is_audio_transcription_provider())
+                    {
+                        return Err(eyre!(
+                            "Provider replacement '{}' -> '{}' has an incompatible purpose",
+                            replacement.old,
+                            target
+                        ));
+                    }
+                }
+            }
             // Validate priority order is not empty
             if chat_providers.priority_order.is_empty() {
                 return Err(eyre!(
@@ -1985,6 +2025,13 @@ impl AppConfig {
             // Validate that at least one provider is configured
             if chat_providers.providers.is_empty() {
                 return Err(eyre!("At least one chat provider must be configured"));
+            }
+            if !chat_providers.priority_order.iter().any(|id| {
+                chat_providers.providers.get(id).is_some_and(|provider| {
+                    !provider.archived && !provider.is_audio_transcription_provider()
+                })
+            }) {
+                return Err(eyre!("Priority order must include an active chat provider"));
             }
 
             // Warn if a provider_id in priority order is not configured
@@ -2009,6 +2056,9 @@ impl AppConfig {
 
             // Validate individual provider configurations
             for (provider_id, provider_config) in &chat_providers.providers {
+                if provider_config.archived {
+                    continue;
+                }
                 if let Err(e) = provider_config.validate() {
                     return Err(eyre!(
                         "Invalid configuration for provider '{}': {}",
@@ -2027,6 +2077,9 @@ impl AppConfig {
                 &self.guardrails.prompt_patterns,
             )?;
             for (provider_id, provider_config) in &chat_providers.providers {
+                if provider_config.archived {
+                    continue;
+                }
                 if let Some(provider_guardrails) = &provider_config.guardrails {
                     validate_prompt_injection_filter_config(
                         &format!(
@@ -2100,18 +2153,7 @@ impl AppConfig {
                 eyre!("Prompt optimizer enabled but `prompt_optimizer.chat_provider_id` is not set")
             })?;
 
-        if let Some(chat_providers) = &self.chat_providers {
-            if !chat_providers.providers.contains_key(chat_provider_id) {
-                return Err(eyre!(
-                    "Prompt optimizer chat provider '{}' not found in configured chat_providers",
-                    chat_provider_id
-                ));
-            }
-        } else if self.chat_provider.is_none() {
-            return Err(eyre!(
-                "Prompt optimizer enabled but no chat provider configuration found"
-            ));
-        }
+        self.resolve_chat_provider_id(chat_provider_id)?;
 
         Ok(())
     }
@@ -2133,13 +2175,7 @@ impl AppConfig {
                 .ok_or_else(|| {
                     eyre!("chat_history_compaction.chat_provider_id is required when enabled")
                 })?;
-            if let Some(providers) = &self.chat_providers {
-                if !providers.providers.contains_key(id) {
-                    return Err(eyre!("Compaction chat provider '{}' not found", id));
-                }
-            } else if self.chat_provider.is_none() {
-                return Err(eyre!("No compaction chat provider configured"));
-            }
+            self.resolve_chat_provider_id(id)?;
         }
         Ok(())
     }
@@ -2216,7 +2252,10 @@ impl AppConfig {
         };
         let filtered: Vec<&str> = filtered
             .into_iter()
-            .filter(|id| !self.get_chat_provider(id).is_audio_transcription_provider())
+            .filter(|id| {
+                let provider = self.get_chat_provider(id);
+                !provider.archived && !provider.is_audio_transcription_provider()
+            })
             .collect();
         tracing::debug!(?filtered, "Available chat providers after allowlist filter");
         filtered
@@ -2270,11 +2309,15 @@ impl AppConfig {
         };
         let allowed: Vec<&str> = allowed
             .into_iter()
-            .filter(|id| !self.get_chat_provider(id).is_audio_transcription_provider())
+            .filter(|id| {
+                let provider = self.get_chat_provider(id);
+                !provider.archived && !provider.is_audio_transcription_provider()
+            })
             .collect();
         tracing::debug!(?allowed, "Allowed chat providers after allowlist filter");
 
         if let Some(requested) = requested_chat_provider {
+            let requested = self.resolve_chat_provider_id(requested)?;
             tracing::debug!(requested, "Requested chat provider");
             // Return the matching &str from allowed (which is from self), not the input reference
             if let Some(&matching) = allowed.iter().find(|&&p| p == requested) {
@@ -2326,13 +2369,38 @@ impl AppConfig {
         }
     }
 
+    /// Resolve a provider for a new operation, retaining exact lookup for historical data.
+    pub fn resolve_chat_provider_id<'a>(&'a self, id: &'a str) -> Result<&'a str, Report> {
+        if let Some(providers) = &self.chat_providers {
+            resolve_provider_id(id, &providers.replacement_providers, |id| {
+                providers
+                    .providers
+                    .get(id)
+                    .map(|provider| provider.archived)
+            })
+        } else if self.chat_provider.is_some() && id == "default" {
+            Ok("default")
+        } else {
+            Err(eyre!("Chat provider '{}' is unavailable", id))
+        }
+    }
+
+    pub fn resolve_speech_provider_id<'a>(&'a self, id: &'a str) -> Result<&'a str, Report> {
+        resolve_provider_id(id, &self.speech_providers.replacement_providers, |id| {
+            self.speech_providers
+                .provider
+                .get(id)
+                .map(|provider| provider.archived)
+        })
+    }
+
     /// Returns true if any chat provider uses Langfuse for system prompts.
     pub fn any_chat_provider_uses_langfuse(&self) -> bool {
         if let Some(chat_providers) = &self.chat_providers {
             chat_providers
                 .providers
                 .values()
-                .any(|p| p.uses_langfuse_system_prompt())
+                .any(|p| !p.archived && p.uses_langfuse_system_prompt())
                 || chat_providers.summary.uses_langfuse_system_prompt()
         } else if let Some(chat_provider) = &self.chat_provider {
             // Fallback to single provider for backward compatibility
@@ -2435,7 +2503,10 @@ fn validate_audio_feature_config(
     let configured_audio_provider = if let Some(provider_id) =
         audio_config.chat_provider_id.as_deref()
     {
-        let provider = app_config.get_chat_provider(provider_id);
+        let resolved_id = app_config
+            .resolve_chat_provider_id(provider_id)
+            .unwrap_or_else(|error| panic!("Invalid {config_key} provider: {error}"));
+        let provider = app_config.get_chat_provider(resolved_id);
         if !provider.model_capabilities.supports_audio_input {
             panic!(
                 "{config_key}.chat_provider_id '{}' does not have `model_capabilities.supports_audio_input = true`.",
@@ -2455,7 +2526,8 @@ fn validate_audio_feature_config(
             .iter()
             .filter_map(|provider_id| chat_providers.providers.get(provider_id))
             .find(|provider| {
-                provider.model_capabilities.supports_audio_input
+                !provider.archived
+                    && provider.model_capabilities.supports_audio_input
                     && audio_provider_kind_supports_binary_audio(&provider.provider_kind)
             })
     } else {
@@ -2530,6 +2602,7 @@ mod audio_config_tests {
         };
         let config = AppConfig {
             chat_providers: Some(ChatProvidersConfig {
+                replacement_providers: Vec::new(),
                 priority_order: vec!["audio".into(), "chat".into()],
                 providers: HashMap::from([
                     ("audio".into(), audio_provider),
@@ -2683,11 +2756,67 @@ pub struct LoggingConfig {
     pub format: LoggingFormat,
 }
 
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
+pub struct ProviderReplacement {
+    pub old: String,
+    pub new: String,
+}
+
+fn resolve_provider_id<'a>(
+    id: &'a str,
+    replacements: &'a [ProviderReplacement],
+    archived: impl Fn(&str) -> Option<bool>,
+) -> Result<&'a str, Report> {
+    let mut current = id;
+    let mut visited = std::collections::HashSet::new();
+    loop {
+        if !visited.insert(current) {
+            return Err(eyre!("Provider replacement cycle involving '{}'", current));
+        }
+        if let Some(replacement) = replacements.iter().find(|entry| entry.old == current) {
+            current = &replacement.new;
+            continue;
+        }
+        return match archived(current) {
+            Some(false) => Ok(current),
+            _ => Err(eyre!("Provider '{}' is unavailable", current)),
+        };
+    }
+}
+
+fn validate_provider_replacements(
+    replacements: &[ProviderReplacement],
+    archived: impl Fn(&str) -> Option<bool>,
+) -> Result<(), Report> {
+    let mut sources = std::collections::HashSet::new();
+    for replacement in replacements {
+        if replacement.old.is_empty()
+            || replacement.new.is_empty()
+            || !sources.insert(&replacement.old)
+        {
+            return Err(eyre!(
+                "Invalid or duplicate provider replacement source '{}'",
+                replacement.old
+            ));
+        }
+        if archived(&replacement.old) == Some(false) {
+            return Err(eyre!(
+                "Replacement source '{}' must be archived or absent",
+                replacement.old
+            ));
+        }
+        resolve_provider_id(&replacement.old, replacements, &archived)?;
+    }
+    Ok(())
+}
+
 #[derive(Debug, Deserialize, PartialEq, Clone, Facet, HeapSize)]
 pub struct ChatProvidersConfig {
     // Priority order of chat providers to use.
     // Each string should match a key in the providers map.
     pub priority_order: Vec<String>,
+    #[serde(default)]
+    pub replacement_providers: Vec<ProviderReplacement>,
     // Defaults that apply to all chat providers unless a provider-level setting overrides them.
     #[serde(default)]
     pub all_providers: AllChatProvidersConfig,
@@ -2835,6 +2964,8 @@ pub struct PromptOptimizerConfig {
 
 #[derive(Debug, Default, Deserialize, PartialEq, Clone, Facet, HeapSize)]
 pub struct ChatProviderConfig {
+    #[serde(default)]
+    pub archived: bool,
     // Overrides the all_providers setting when specified. Defaults to false.
     pub enable_embedded_image_retrieval_tool: Option<bool>,
     // May be one of:
@@ -2846,10 +2977,12 @@ pub struct ChatProviderConfig {
     // - "ollama"
     // - "gemini"
     // - "vertex_ai" (will be automatically converted to "gemini" during config loading)
+    #[serde(default)]
     pub provider_kind: String,
     // The model name to use for the chat provider.
     //
     // E.g. `gpt-4o`
+    #[serde(default)]
     pub model_name: String,
     // Whether to query the provider's model listing endpoint before exposing
     // this model to users. Defaults to `false`.
@@ -3021,6 +3154,7 @@ impl ChatProviderConfig {
         }
 
         Ok(ChatProviderConfig {
+            archived: self.archived,
             enable_embedded_image_retrieval_tool: self.enable_embedded_image_retrieval_tool,
             provider_kind: provider_kind.to_string(),
             model_name: self.model_name,
@@ -3076,6 +3210,11 @@ impl ChatProviderConfig {
 
     /// Validates that system_prompt and system_prompt_langfuse are mutually exclusive.
     pub fn validate(&self) -> Result<(), Report> {
+        if self.provider_kind.trim().is_empty() || self.model_name.trim().is_empty() {
+            return Err(eyre!(
+                "Active chat providers require provider_kind and model_name"
+            ));
+        }
         if self.system_prompt.is_some() && self.system_prompt_langfuse.is_some() {
             return Err(eyre!(
                 "Cannot specify both system_prompt and system_prompt_langfuse. They are mutually exclusive."
@@ -5923,13 +6062,20 @@ impl Default for FileProcessorConfig {
 pub struct SpeechProvidersConfig {
     #[serde(default)]
     pub provider: HashMap<String, SpeechProviderConfig>,
+    #[serde(default)]
+    pub replacement_providers: Vec<ProviderReplacement>,
 }
 
 #[derive(Debug, Deserialize, PartialEq, Clone, Facet, HeapSize)]
 pub struct SpeechProviderConfig {
+    #[serde(default)]
+    pub archived: bool,
     /// openai, openai_realtime, audio_cpp, or gemini.
+    #[serde(default)]
     pub provider_kind: String,
+    #[serde(default)]
     pub model_name: String,
+    #[serde(default)]
     pub voice: String,
     pub base_url: Option<String>,
     #[facet(sensitive)]
