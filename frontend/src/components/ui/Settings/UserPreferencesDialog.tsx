@@ -62,6 +62,9 @@ import type {
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { ReactNode } from "react";
 
+/** Error toasts stay until dismissed, so a retry's outcome has to replace them. */
+const PREFERENCES_SAVE_TOAST_KEY = "preferences-save";
+
 type PreferencesTab =
   | "personalization"
   | "appearance"
@@ -112,13 +115,11 @@ export function UserPreferencesDialog({
     useState<StartScreenChoice>("inherit");
   const [startingAssistantPick, setStartingAssistantPick] =
     useState<StartingAssistantPick | null>(null);
-  const [saveError, setSaveError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [disconnectingServerId, setDisconnectingServerId] = useState<
     string | null
   >(null);
   const [archiveError, setArchiveError] = useState<string | null>(null);
-  const [archiveSuccess, setArchiveSuccess] = useState<string | null>(null);
   const [isArchiving, setIsArchiving] = useState(false);
   const { mutateAsync: archiveAllChatsMutation } = useArchiveAllChatsEndpoint();
   const { mutateAsync: disconnectMcpServerOauthMutation } =
@@ -232,9 +233,7 @@ export function UserPreferencesDialog({
     }
 
     setActiveTab(requestedDefaultTab);
-    setSaveError(null);
     setArchiveError(null);
-    setArchiveSuccess(null);
     setNickname(userProfile?.preference_nickname ?? "");
     setJobTitle(userProfile?.preference_job_title ?? "");
     setCustomInstructions(
@@ -380,8 +379,13 @@ export function UserPreferencesDialog({
   } satisfies Record<PreferencesTab, string>;
   /* eslint-enable lingui/no-unlocalized-strings */
 
+  const handleClose = () => {
+    toast.dismissKey(PREFERENCES_SAVE_TOAST_KEY);
+    onClose();
+  };
+
   const handleSave = async () => {
-    setSaveError(null);
+    toast.dismissKey(PREFERENCES_SAVE_TOAST_KEY);
     setIsSaving(true);
     try {
       const requestBody: UpdateProfilePreferencesRequest = {
@@ -416,12 +420,13 @@ export function UserPreferencesDialog({
       });
       onClose();
     } catch {
-      setSaveError(
-        t({
+      toast.error({
+        dedupeKey: PREFERENCES_SAVE_TOAST_KEY,
+        title: t({
           id: "preferences.dialog.save.error",
           message: "Could not save preferences. Please try again.",
         }),
-      );
+      });
     } finally {
       setIsSaving(false);
     }
@@ -429,7 +434,6 @@ export function UserPreferencesDialog({
 
   const handleArchiveAllChats = async () => {
     setArchiveError(null);
-    setArchiveSuccess(null);
     setIsArchiving(true);
     try {
       const recentChatsQueryKey = recentChatsQuery({}).queryKey;
@@ -502,7 +506,7 @@ export function UserPreferencesDialog({
   return (
     <ModalBase
       isOpen={isOpen}
-      onClose={onClose}
+      onClose={handleClose}
       title={t({ id: "preferences.dialog.title", message: "Preferences" })}
       contentClassName="h-[80vh] max-h-[700px] max-w-4xl"
     >
@@ -537,8 +541,6 @@ export function UserPreferencesDialog({
           data-testid="user-preferences-dialog"
         >
           <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-1">
-            {saveError ? <Alert type="error">{saveError}</Alert> : null}
-
             {personalizationEnabled ? (
               <section
                 id={panelIds.personalization}
@@ -773,9 +775,6 @@ export function UserPreferencesDialog({
               hidden={activeTab !== "data"}
               className="space-y-4"
             >
-              {archiveSuccess ? (
-                <Alert type="success">{archiveSuccess}</Alert>
-              ) : null}
               {archiveError ? <Alert type="error">{archiveError}</Alert> : null}
               <Alert type="info">
                 {t({
@@ -819,7 +818,7 @@ export function UserPreferencesDialog({
             <div className="mt-3 flex justify-end gap-2 border-t border-theme-border pt-3">
               <Button
                 variant="secondary"
-                onClick={onClose}
+                onClick={handleClose}
                 disabled={isSaving}
                 type="button"
               >

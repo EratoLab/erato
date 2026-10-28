@@ -1,5 +1,5 @@
 import { t } from "@lingui/core/macro";
-import { skipToken } from "@tanstack/react-query";
+import { skipToken, useQueryClient } from "@tanstack/react-query";
 import clsx from "clsx";
 import { formatDistanceToNow } from "date-fns";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -14,6 +14,7 @@ import { Alert } from "@/components/ui/Feedback/Alert";
 import { SpinnerIcon } from "@/components/ui/Feedback/SpinnerIcon";
 import { Input } from "@/components/ui/Input";
 import { SharingDialog, SharingErrorBoundary } from "@/components/ui/Sharing";
+import { toast } from "@/components/ui/Toast";
 import {
   ArrowLeftIcon,
   CheckCircleIcon,
@@ -28,6 +29,9 @@ import {
 import { usePageAlignment } from "@/hooks/ui";
 import { useDateFnsLocale } from "@/hooks/useDateFnsLocale";
 import {
+  frequentAssistantsQuery,
+  listAssistantsQuery,
+  startingAssistantQuery,
   useArchiveAssistant,
   useAssistantHubConfig,
   useListAssistantHubAssistants,
@@ -54,6 +58,9 @@ import type {
 
 const logger = createLogger("UI", "AssistantsPage");
 const ASSISTANT_HUB_PAGE_SIZE = 18;
+/** Error toasts stay until dismissed, so the next archive replaces them. */
+const assistantArchiveToastKey = (assistantId: string) =>
+  `assistant-archive:${assistantId}`;
 
 export type AssistantsLandingView =
   | "hub"
@@ -656,6 +663,7 @@ function AssistantListCard({
   assistant,
   hubStatus,
   hubEnabled,
+  isArchiving,
   onArchive,
   onEdit,
   onShare,
@@ -665,6 +673,7 @@ function AssistantListCard({
   assistant: Assistant;
   hubStatus?: OwnedAssistantStatus;
   hubEnabled: boolean;
+  isArchiving: boolean;
   onArchive: () => void;
   onEdit: () => void;
   onShare: () => void;
@@ -695,7 +704,7 @@ function AssistantListCard({
         type="button"
         className="min-w-0 flex-1 text-left"
         onClick={onStartChat}
-        disabled={isArchived}
+        disabled={isArchived || isArchiving}
       >
         <div className="flex flex-wrap items-center gap-2">
           <h3 className="text-base font-semibold text-theme-fg-primary">
@@ -721,7 +730,19 @@ function AssistantListCard({
           </span>
         </div>
       </button>
-      {!isArchived && (
+      {!isArchived && isArchiving && (
+        <span
+          role="status"
+          className="inline-flex shrink-0 items-center gap-2 text-sm text-theme-fg-secondary"
+        >
+          <SpinnerIcon size="sm" aria-hidden="true" />
+          {t({
+            id: "preferences.dialog.dataTab.archiveAll.archiving",
+            message: "Archiving...",
+          })}
+        </span>
+      )}
+      {!isArchived && !isArchiving && (
         <div className="flex shrink-0 flex-wrap gap-2">
           {assistant.can_edit && (
             <DropdownMenu
@@ -815,7 +836,11 @@ function AssistantListView({
     id: string;
     name: string;
   } | null>(null);
-  const { data, isLoading, error, refetch } = useListAssistants({
+  const queryClient = useQueryClient();
+  const [archivingIds, setArchivingIds] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
+  const { data, isLoading, error } = useListAssistants({
     queryParams: {
       sharing_relation: view,
       ...(isCreatedView && hubEnabled ? { include_archived: true } : {}),
@@ -882,14 +907,39 @@ function AssistantListView({
       });
 
   const handleArchive = async (assistantId: string) => {
+    toast.dismissKey(assistantArchiveToastKey(assistantId));
+    setArchivingIds((prev) => new Set(prev).add(assistantId));
     try {
       await archiveAssistantMutation.mutateAsync({
         pathParams: { assistantId },
         body: {},
       });
-      await refetch();
+      // Other views cache the assistant too (mention list, start-screen pick,
+      // sidebar); the page stays, so only the list refetch is awaited.
+      void queryClient.invalidateQueries({
+        queryKey: frequentAssistantsQuery({}).queryKey,
+      });
+      void queryClient.invalidateQueries({
+        queryKey: startingAssistantQuery({}).queryKey,
+      });
+      await queryClient.invalidateQueries({
+        queryKey: listAssistantsQuery({}).queryKey,
+      });
     } catch (archiveError) {
       logger.error("Failed to archive assistant:", archiveError);
+      toast.error({
+        dedupeKey: assistantArchiveToastKey(assistantId),
+        title: t({
+          id: "assistants.archive.error",
+          message: "Failed to archive assistant. Please try again.",
+        }),
+      });
+    } finally {
+      setArchivingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(assistantId);
+        return next;
+      });
     }
   };
 
@@ -1022,6 +1072,7 @@ function AssistantListView({
                       : undefined
                   }
                   hubEnabled={hubEnabled}
+                  isArchiving={archivingIds.has(assistant.id)}
                   onStartChat={() => navigate(`/a/${assistant.id}`)}
                   onEdit={() => navigate(`/assistants/${assistant.id}/edit`)}
                   onShare={() =>

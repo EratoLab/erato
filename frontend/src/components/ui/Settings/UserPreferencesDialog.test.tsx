@@ -1139,6 +1139,36 @@ describe("UserPreferencesDialog", () => {
     });
   });
 
+  it("can be closed while saving, and a save that fails afterwards still reports in a toast", async () => {
+    let respond!: (response: Response) => void;
+    vi.spyOn(globalThis, "fetch").mockImplementation((input) =>
+      String(input) === "/api/v1beta/me/profile/preferences"
+        ? new Promise<Response>((resolve) => {
+            respond = resolve;
+          })
+        : Promise.resolve(createJsonResponse([])),
+    );
+    const onClose = vi.fn();
+    renderDialog({ onClose });
+
+    fireEvent.change(screen.getByLabelText("Nickname"), {
+      target: { value: "Maximilian" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await screen.findByRole("button", { name: "Saving..." });
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(onClose).toHaveBeenCalledTimes(1);
+
+    respond(createJsonResponse({ message: "boom" }, 500));
+
+    expect(
+      await within(screen.getByLabelText("Notifications")).findByText(
+        "Could not save preferences. Please try again.",
+      ),
+    ).toBeInTheDocument();
+  });
+
   it("shows a save error when updating preferences fails", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       createJsonResponse({ message: "boom" }, 500),

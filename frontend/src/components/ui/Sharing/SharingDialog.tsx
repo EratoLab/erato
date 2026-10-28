@@ -1,11 +1,12 @@
 import { t, msg } from "@lingui/core/macro";
 import { useLingui } from "@lingui/react";
-import { useState, useCallback, useMemo, useEffect } from "react";
+import { useState, useCallback, useMemo, useEffect, useRef } from "react";
 
 import { Button } from "@/components/ui/Controls/Button";
 import { SegmentedControl } from "@/components/ui/Controls/SegmentedControl";
 import { Alert } from "@/components/ui/Feedback/Alert";
 import { ModalBase } from "@/components/ui/Modal/ModalBase";
+import { toast } from "@/components/ui/Toast";
 import { useShareGrants } from "@/hooks/sharing";
 import { useAssistantsFeature } from "@/providers/FeatureConfigProvider";
 
@@ -14,6 +15,9 @@ import { SubjectSelector } from "./SubjectSelector";
 
 import type { SubjectTypeFilter } from "./SubjectSelector";
 import type { OrganizationMember } from "@/types/sharing";
+
+/** Error toasts stay until dismissed, so the next add or removal replaces them. */
+const SHARING_TOAST_KEY = "sharing-grants";
 
 interface SharingDialogProps {
   isOpen: boolean;
@@ -44,8 +48,11 @@ export function SharingDialog({
   const [selectedSubjects, setSelectedSubjects] = useState<
     OrganizationMember[]
   >([]);
-  const [successMessage, setSuccessMessage] = useState<string>("");
-  const [errorMessage, setErrorMessage] = useState<string>("");
+  const [isAdding, setIsAdding] = useState(false);
+  const isAddingRef = useRef(false);
+  // A row's Remove button has no busy state of its own, so a second
+  // confirmation while the first is in flight is dropped here.
+  const removingGrantIds = useRef(new Set<string>());
   // State for subject type toggle (users vs groups)
   const [subjectTypeFilter, setSubjectTypeFilter] =
     useState<SubjectTypeFilter>("user");
@@ -69,14 +76,6 @@ export function SharingDialog({
     [selectedSubjects],
   );
 
-  // Auto-clear success messages after 3 seconds
-  useEffect(() => {
-    if (successMessage) {
-      const timer = setTimeout(() => setSuccessMessage(""), 3000);
-      return () => clearTimeout(timer);
-    }
-  }, [successMessage]);
-
   // Clear selections when filter changes to avoid confusion
   // (user wouldn't see what's selected if it's from the other type)
   useEffect(() => {
@@ -99,15 +98,16 @@ export function SharingDialog({
   // Handle adding selected subjects
   // Not memoized: only called via button onClick, not passed to memoized children
   const handleAdd = async () => {
-    if (selectedSubjects.length === 0) return;
+    if (selectedSubjects.length === 0 || isAddingRef.current) return;
 
-    setSuccessMessage("");
-    setErrorMessage("");
+    isAddingRef.current = true;
+    setIsAdding(true);
+    toast.dismissKey(SHARING_TOAST_KEY);
 
     try {
-      // Create share grants for all selected subjects
-      await Promise.all(
-        selectedSubjects.map((subject) =>
+      const subjects = selectedSubjects;
+      const results = await Promise.allSettled(
+        subjects.map((subject) =>
           createGrant({
             subject_type:
               subject.type === "user"
@@ -123,21 +123,39 @@ export function SharingDialog({
         ),
       );
 
-      setSuccessMessage(
-        t({
-          id: "sharing.addPeople.success",
-          message: "Access granted successfully",
-        }),
+      // A duplicate grant is rejected by the backend, so only the failures
+      // may stay selected for a retry.
+      const grantedIds = new Set(
+        subjects
+          .filter((_, index) => results[index].status === "fulfilled")
+          .map((subject) => subject.id),
       );
-      setSelectedSubjects([]);
-    } catch (error) {
-      console.error("Failed to create share grants:", error);
-      setErrorMessage(
-        t({
-          id: "sharing.addPeople.error",
-          message: "Failed to grant access",
-        }),
+      setSelectedSubjects((prev) =>
+        prev.filter((subject) => !grantedIds.has(subject.id)),
       );
+
+      const failure = results.find((result) => result.status === "rejected");
+      if (failure) {
+        console.error("Failed to create share grants:", failure.reason);
+        toast.error({
+          dedupeKey: SHARING_TOAST_KEY,
+          title: t({
+            id: "sharing.addPeople.error",
+            message: "Failed to grant access",
+          }),
+        });
+      } else {
+        toast.success({
+          dedupeKey: SHARING_TOAST_KEY,
+          title: t({
+            id: "sharing.addPeople.success",
+            message: "Access granted successfully",
+          }),
+        });
+      }
+    } finally {
+      isAddingRef.current = false;
+      setIsAdding(false);
     }
   };
 
@@ -146,25 +164,31 @@ export function SharingDialog({
   // Prevents re-rendering the entire grants list on parent re-renders
   const handleRemove = useCallback(
     async (grantId: string) => {
-      setSuccessMessage("");
-      setErrorMessage("");
+      if (removingGrantIds.current.has(grantId)) return;
+
+      removingGrantIds.current.add(grantId);
+      toast.dismissKey(SHARING_TOAST_KEY);
 
       try {
         await deleteGrant(grantId);
-        setSuccessMessage(
-          t({
+        toast.success({
+          dedupeKey: SHARING_TOAST_KEY,
+          title: t({
             id: "sharing.remove.success",
             message: "Access removed successfully",
           }),
-        );
+        });
       } catch (error) {
         console.error("Failed to delete share grant:", error);
-        setErrorMessage(
-          t({
+        toast.error({
+          dedupeKey: SHARING_TOAST_KEY,
+          title: t({
             id: "sharing.remove.error",
             message: "Failed to remove access",
           }),
-        );
+        });
+      } finally {
+        removingGrantIds.current.delete(grantId);
       }
     },
     [deleteGrant],
@@ -174,8 +198,7 @@ export function SharingDialog({
   // Not memoized: ModalBase is not memoized, and onClose likely changes on parent re-renders
   const handleClose = () => {
     setSelectedSubjects([]);
-    setSuccessMessage("");
-    setErrorMessage("");
+    toast.dismissKey(SHARING_TOAST_KEY);
     setSubjectTypeFilter("user"); // Reset to default
     setAccessRole("viewer");
     onClose();
@@ -193,9 +216,6 @@ export function SharingDialog({
       )}
     >
       <div className="space-y-5">
-        {/* Success/Error alerts */}
-        {successMessage ? <Alert type="success">{successMessage}</Alert> : null}
-        {errorMessage ? <Alert type="error">{errorMessage}</Alert> : null}
         {hasSharepointFiles ? (
           <Alert type="warning">
             {t({
@@ -286,6 +306,7 @@ export function SharingDialog({
                 void handleAdd();
               }}
               disabled={selectedSubjects.length === 0}
+              loading={isAdding}
             >
               {t({ id: "sharing.addPeople.button", message: "Add" })}
             </Button>
