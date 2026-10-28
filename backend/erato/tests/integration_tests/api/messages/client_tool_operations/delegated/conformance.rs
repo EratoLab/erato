@@ -45,7 +45,7 @@ macro_rules! host_conformance {
                 a_pane_that_takes_no_task_calls_gets_no_grant
                 a_granted_call_reaches_the_pane_with_lineage_and_the_server_context_ref
                 a_child_cannot_call_write_tools_without_child_access_or_invented_tools
-                a_pane_gone_before_dispatch_is_context_unavailable_at_once
+                a_pane_gone_before_dispatch_is_context_unavailable_after_the_grace
                 a_pane_lost_in_flight_is_context_unavailable_after_the_grace
                 a_child_call_never_waits_for_the_inbox_even_for_a_durable_tool
                 a_client_task_asking_for_async_runs_in_wait_mode_beside_an_async_research_task
@@ -705,7 +705,7 @@ async fn a_child_cannot_call_write_tools_without_child_access_or_invented_tools(
     server.abort();
 }
 
-async fn a_pane_gone_before_dispatch_is_context_unavailable_at_once(
+async fn a_pane_gone_before_dispatch_is_context_unavailable_after_the_grace(
     pool: Pool<Postgres>,
     row: &HostRow,
 ) {
@@ -733,10 +733,12 @@ async fn a_pane_gone_before_dispatch_is_context_unavailable_at_once(
     wait_released(&state, &row.binding()).await;
     let gone = tokio::time::Instant::now();
     assert!(finish(run).await.contains(PARENT_FINAL));
+    let waited = gone.elapsed();
     assert!(
-        gone.elapsed() < DISPATCH_PAUSE + Duration::from_secs(5),
-        "the call fails at dispatch, not after the presence grace or the timeout: {:?}",
-        gone.elapsed()
+        waited >= executor_stream::PRESENCE_LOSS_GRACE
+            && waited
+                < DISPATCH_PAUSE + executor_stream::PRESENCE_LOSS_GRACE + Duration::from_secs(10),
+        "the call waits the presence grace for a pane, not the tool's timeout: {waited:?}"
     );
     let read = part_for(
         &assistant_row(&state.db, client_child.id).await,
@@ -769,11 +771,9 @@ async fn a_pane_lost_in_flight_is_context_unavailable_after_the_grace(
         client_tools: vec![row.read_tool.to_string(), WRITE_TOOL.to_string()],
         child_client_tools: vec![row.child_pane_tools().to_string()],
     };
-    assert!(
-        executor_stream::acquire(&state.db, &claim, Uuid::new_v4())
-            .await
-            .unwrap()
-    );
+    executor_stream::announce(&state.db, &claim, Uuid::new_v4())
+        .await
+        .unwrap();
     let chat_id = seed_origin_chat(&state.db).await;
     let run = spawn_parent(row, &base, chat_id, ACTION_FACET, Some(row.binding()));
     tokio::time::timeout(Duration::from_secs(15), async {
