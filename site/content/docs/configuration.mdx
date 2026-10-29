@@ -2537,6 +2537,9 @@ the replay file. Cancelling generation discards incomplete speech. A speech
 failure leaves the text response available. Code blocks and image descriptions
 are omitted from spoken output; Markdown links are read by their visible text.
 The synthesis response is limited to 64 MiB of PCM per assistant message.
+Speech queuing does not block text streaming. Speech input is limited to 1 MiB
+per assistant message; exceeding this limit stops speech synthesis and discards
+the incomplete replay while preserving the text response.
 
 ### Audio modes
 
