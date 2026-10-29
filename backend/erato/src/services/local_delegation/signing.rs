@@ -25,9 +25,12 @@ impl Signer {
             .backend_origin
             .as_deref()
             .ok_or_else(|| eyre!("Missing delegation issuer"))?;
+        // The issuer is pinned by the sidecar with exact string equality, so it
+        // must be the canonical `scheme://host[:port]` serialization. The
+        // scheme is not a trust input (the installed public key is), which
+        // lets a plaintext development backend issue assertions.
         let url = url::Url::parse(origin).map_err(|_| eyre!("Invalid delegation issuer"))?;
-        if url.scheme() != "https"
-            || url.origin().ascii_serialization() != origin
+        if url.origin().ascii_serialization() != origin
             || config.verification_keys.is_empty()
             || config.verification_keys.len() > 8
         {
@@ -194,5 +197,56 @@ mod tests {
             .insert("fixture".into(), URL_SAFE_NO_PAD.encode([0; 32]));
         assert!(Signer::new(&config).is_err());
         assert!(!format!("{config:?}").contains("MC4CAQ"));
+    }
+    #[test]
+    fn plaintext_development_origins_are_pinned_as_issuer() {
+        // The sidecar verifies `iss` by exact equality against the installed
+        // origin, so a loopback or non-loopback http dev host is a valid issuer.
+        for origin in [
+            "http://localhost:3130",
+            "http://devhost:3130",
+            "https://erato.example:8443",
+        ] {
+            let mut config = fixture();
+            config.backend_origin = Some(origin.into());
+            let signer = Signer::new(&config).unwrap_or_else(|error| panic!("{origin}: {error}"));
+            assert_eq!(signer.origin, origin);
+            let token = signer
+                .context(
+                    "owner",
+                    "http://devhost:3131",
+                    &"d".repeat(43),
+                    &"c".repeat(43),
+                )
+                .unwrap();
+            let public = URL_SAFE_NO_PAD
+                .decode(&config.verification_keys["fixture"])
+                .unwrap();
+            let mut validation = Validation::new(Algorithm::EdDSA);
+            validation.set_audience(&["erato-local-context-v1"]);
+            validation.set_issuer(&[origin]);
+            let verified = jsonwebtoken::decode::<Value>(
+                &token,
+                &DecodingKey::from_ed_der(&public),
+                &validation,
+            )
+            .unwrap();
+            assert_eq!(verified.claims["iss"], origin);
+        }
+    }
+    #[test]
+    fn non_canonical_issuers_are_rejected() {
+        for origin in [
+            "https://erato.example/",
+            "https://erato.example/path",
+            "https://erato.example:443",
+            "HTTPS://erato.example",
+            "http://devhost:3130/",
+            "erato.example",
+        ] {
+            let mut config = fixture();
+            config.backend_origin = Some(origin.into());
+            assert!(Signer::new(&config).is_err(), "{origin:?} was accepted");
+        }
     }
 }
