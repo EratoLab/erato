@@ -3367,6 +3367,9 @@ pub(crate) async fn settle_tail_deliveries(
     }
     crate::services::task_delivery::drain_pending_deliveries(app_state, policy, me_user, chat_id)
         .await;
+    if app_state.config.client_tools.durable_operations_enabled {
+        settle_waiting_parent(app_state, policy, me_user, chat_id, task, outcome).await;
+    }
     // The `wait` half: no delivery row to re-arm, so the slot is settled directly.
     reconcile_orphaned_parent_slot(
         app_state,
@@ -3378,6 +3381,114 @@ pub(crate) async fn settle_tail_deliveries(
         task.tool_budget_exhausted(),
     )
     .await;
+}
+
+/// Brings a parked parent up to date with task children that waited for a
+/// client, and resumes it once nothing is left open.
+///
+/// Two roles, because either side can finish last: as a child, this chat's
+/// parent learns what the child's turn ended on; as a parent that just parked,
+/// it learns about a child that finished while its own join still ran, when
+/// the child's tail found it running and could not.
+async fn settle_waiting_parent(
+    app_state: &AppState,
+    policy: &PolicyEngine,
+    me_user: &MeProfile,
+    chat_id: Uuid,
+    task: &Arc<StreamingTask>,
+    outcome: TaskOutcome,
+) {
+    let mut parents = Vec::new();
+    if let Some(parent) = awaiting_parent_of(app_state, chat_id).await {
+        parents.push(parent);
+    }
+    if outcome == TaskOutcome::AwaitingApproval {
+        parents.push((chat_id, task.message_id()));
+    }
+    for (parent_chat_id, parent_message_id) in parents {
+        let synced = match crate::services::delegated_client_tools::sync_waiting_parent(
+            &app_state.db,
+            &app_state.config,
+            parent_chat_id,
+            parent_message_id,
+        )
+        .await
+        {
+            Ok(Some(synced)) => synced,
+            Ok(None) => continue,
+            Err(error) => {
+                warn_and_capture_error("sync a parent waiting for its tasks", &error);
+                continue;
+            }
+        };
+        if synced.resumable() {
+            resume_waiting_parent(
+                app_state.clone(),
+                policy.clone(),
+                me_user.clone(),
+                parent_message_id,
+            )
+            .await;
+        }
+    }
+}
+
+/// The origin turn an awaited delegated chat answers, as its provenance names
+/// it.
+async fn awaiting_parent_of(app_state: &AppState, chat_id: Uuid) -> Option<(Uuid, Uuid)> {
+    let chat = crate::db::entity::prelude::Chats::find_by_id(chat_id)
+        .one(&app_state.db)
+        .await
+        .ok()
+        .flatten()?;
+    let provenance = crate::models::chat::parse_chat_configuration(&chat)
+        .ok()
+        .flatten()?
+        .provenance?;
+    if provenance.kind != crate::models::chat::ChatProvenanceKind::Delegation
+        || provenance.run_mode == Some(crate::models::message::ProvenanceRunMode::Async)
+    {
+        return None;
+    }
+    Some((provenance.origin_chat_id?, provenance.parent_message_id?))
+}
+
+/// Starts a parked parent's continuation for the tail that settled what it
+/// waited for, under that tail's principal: a durable operation belongs to
+/// the account that owns both chats. A refusal means someone else resumed it
+/// or the parent moved on.
+///
+/// Boxed for the reason `run_child_approval_continuation` is: this is a tail
+/// reaching `start_continuation`, whose own tail reaches this again.
+fn resume_waiting_parent(
+    app_state: AppState,
+    policy: PolicyEngine,
+    me_user: MeProfile,
+    message_id: Uuid,
+) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send>> {
+    Box::pin(async move {
+        let request = ContinueStreamRequest::with_decisions(message_id, Vec::new());
+        match start_continuation(
+            &app_state,
+            &policy,
+            &me_user,
+            request,
+            detached_generation_event_sink(),
+        )
+        .await
+        {
+            Ok(started) => tracing::info!(
+                chat_id = %started.chat_id,
+                %message_id,
+                "Resumed a parent whose waiting tasks settled"
+            ),
+            Err(error) => tracing::debug!(
+                ?error,
+                %message_id,
+                "Did not resume a parent whose waiting tasks settled"
+            ),
+        }
+    })
 }
 
 /// Release a lease whose generation never started. Going through the
@@ -5478,15 +5589,15 @@ async fn settle_delegation_slot<
 /// Held until the batch has finished so the requests can be carried up in ONE
 /// part: "parked" means "the last part is a `tool_approval_request`", so a
 /// second part would make the row unreadable to every check that relies on it.
-struct ParkedChild {
+pub(crate) struct ParkedChild {
     /// The origin call the child answers. Its id is the approval id, because
     /// that is the slot a decision settles.
-    tool_call: genai::chat::ToolCall,
-    child_chat_id: Uuid,
-    child_message_id: Uuid,
+    pub(crate) tool_call: genai::chat::ToolCall,
+    pub(crate) child_chat_id: Uuid,
+    pub(crate) child_message_id: Uuid,
     /// The child's own stop, copied so the card renders without reading
     /// another chat. The child's row stays the executable truth.
-    stop: crate::services::delegation::ChildStop,
+    pub(crate) stop: crate::services::delegation::ChildStop,
 }
 
 /// What a card reads for a client tool, which declares no MCP annotations:
@@ -5506,7 +5617,7 @@ fn client_tool_annotations() -> crate::models::message::ToolApprovalAnnotations 
 /// the child's own gated call is copied onto `child` so a card renders without
 /// reading another chat. A waiting child's item is never decided: it stays
 /// open while the origin slot is in progress.
-fn parked_child_approval_item(child: &ParkedChild) -> ApprovalItem {
+pub(crate) fn parked_child_approval_item(child: &ParkedChild) -> ApprovalItem {
     let child_ref = match &child.stop {
         crate::services::delegation::ChildStop::Approval(request) => {
             // The child parked on exactly one call - its gate stops the batch
@@ -18508,7 +18619,7 @@ pub(crate) struct ParkedApprovalState {
     pub(crate) unanswered: bool,
 }
 
-fn is_waiting_item(item: &ApprovalItem) -> bool {
+pub(crate) fn is_waiting_item(item: &ApprovalItem) -> bool {
     item.child
         .as_ref()
         .is_some_and(|child| child.waiting_for.is_some())
@@ -18623,7 +18734,7 @@ pub(crate) fn parked_approval_state(content: &[ContentPart]) -> Option<ParkedApp
 ///
 /// Unreadable metadata is treated as no marker: an unparseable column must not
 /// be the reason a turn is resumed a second time.
-fn continuation_owes_an_answer(message: &messages::Model) -> bool {
+pub(crate) fn continuation_owes_an_answer(message: &messages::Model) -> bool {
     message
         .generation_metadata
         .as_ref()
@@ -18921,6 +19032,38 @@ pub(crate) async fn start_continuation(
             },
         )));
     }
+    let empty_body = request.decision.is_none() && request.decisions.is_empty();
+    // A card's backstop: what its waiting children finished is applied even
+    // when no tail ran for them.
+    let synced = if empty_body && app_state.config.client_tools.durable_operations_enabled {
+        crate::services::delegated_client_tools::sync_waiting_parent(
+            &app_state.db,
+            &app_state.config,
+            chat.id,
+            message.id,
+        )
+        .await
+        .inspect_err(|error| warn_and_capture_error("sync a parent waiting for its tasks", error))
+        .ok()
+        .flatten()
+    } else {
+        None
+    };
+    let (message, parsed) = if synced.as_ref().is_some_and(|synced| synced.outcome.changed) {
+        let message = get_message_by_id(
+            &app_state.db,
+            policy,
+            &me_user.to_subject(),
+            &request.message_id,
+        )
+        .await
+        .map_err(|error| (axum::http::StatusCode::NOT_FOUND, error.to_string()))?;
+        let parsed = MessageSchema::validate(&message.raw_message)
+            .map_err(|error| (axum::http::StatusCode::BAD_REQUEST, error.to_string()))?;
+        (message, parsed)
+    } else {
+        (message, parsed)
+    };
     let Some(state) = parked_approval_state(&parsed.content) else {
         return Err((
             axum::http::StatusCode::BAD_REQUEST,
@@ -18928,19 +19071,32 @@ pub(crate) async fn start_continuation(
         )
             .into());
     };
+    let awaiting_approval = chat.generation_state.as_deref() == Some("awaiting_approval");
+    // Only a continuation that died before the model answered may run again,
+    // and `chats.generation_state` alone cannot say which those are: it is
+    // written by every generation on the chat, so a later turn that failed
+    // would otherwise reopen a settled row and append a second answer to a
+    // message that already has one. Either the row shows no answer or the
+    // message still carries a continuation's claim on it.
+    let crashed = (state.unanswered || continuation_owes_an_answer(&message))
+        && chat.generation_state.as_deref() == Some("errored");
+    let has_waiting_items = state.request.approval_items().iter().any(is_waiting_item);
+    // A turn resumed for its waiting children takes only the lease it parked
+    // under, never a newer turn's.
+    let parked_generation = synced.as_ref().map_or(chat.active_generation_id, |synced| {
+        synced.expected_generation
+    });
+    let mut resume_parked = false;
     let entry = if state.open.is_empty() {
-        // Only a continuation that died before the model answered may run
-        // again, and `chats.generation_state` alone cannot say which those are:
-        // it is written by every generation on the chat, so a later turn that
-        // failed would otherwise reopen a settled row and append a second
-        // answer to a message that already has one. Either the row shows no
-        // answer or the message still carries a continuation's claim on it.
-        let crashed = (state.unanswered || continuation_owes_an_answer(&message))
-            && chat.generation_state.as_deref() == Some("errored");
-        if !crashed {
+        if has_waiting_items && empty_body && awaiting_approval && state.unanswered {
+            resume_parked = true;
+            ContinuationEntry::WaitingSettled
+        } else if crashed {
+            resume_parked = has_waiting_items;
+            ContinuationEntry::ResumeCrashed
+        } else {
             return Err(already_continued());
         }
-        ContinuationEntry::ResumeCrashed
     } else {
         let decidable = state.decidable();
         let waiting = state.waiting();
@@ -18961,47 +19117,51 @@ pub(crate) async fn start_continuation(
             )
                 .into());
         }
-        if decidable.is_empty() && request.decision.is_none() && request.decisions.is_empty() {
-            return Err(
-                if chat.generation_state.as_deref() == Some("awaiting_approval") {
-                    StreamRouteError::ChildrenWaiting(Box::new(ChildrenWaitingError {
+        if decidable.is_empty() && empty_body {
+            if awaiting_approval {
+                return Err(StreamRouteError::ChildrenWaiting(Box::new(
+                    ChildrenWaitingError {
                         code: CHILDREN_WAITING_CODE.to_string(),
-                    }))
-                } else {
-                    already_continued()
-                },
-            );
-        }
-        // Validated here as well as in the worker: a body that does not answer
-        // the turn should be an HTTP status, not a stream that opens and dies.
-        let submitted_decisions = resolve_submitted_decisions(&request, &decidable)?;
-        if state.request.kind == ToolApprovalKind::ToolCallLimit
-            && submitted_decisions.iter().any(|(_, decision)| {
-                matches!(
-                    decision,
-                    ToolApprovalDecision::ApproveAlways | ToolApprovalDecision::RejectAlways
+                    },
+                )));
+            }
+            if !crashed {
+                return Err(already_continued());
+            }
+            resume_parked = true;
+            ContinuationEntry::ResumeCrashed
+        } else {
+            // Validated here as well as in the worker: a body that does not answer
+            // the turn should be an HTTP status, not a stream that opens and dies.
+            let submitted_decisions = resolve_submitted_decisions(&request, &decidable)?;
+            if state.request.kind == ToolApprovalKind::ToolCallLimit
+                && submitted_decisions.iter().any(|(_, decision)| {
+                    matches!(
+                        decision,
+                        ToolApprovalDecision::ApproveAlways | ToolApprovalDecision::RejectAlways
+                    )
+                })
+            {
+                return Err((
+                    axum::http::StatusCode::BAD_REQUEST,
+                    "Tool budget decisions cannot be saved as standing permissions".to_string(),
                 )
-            })
-        {
-            return Err((
-                axum::http::StatusCode::BAD_REQUEST,
-                "Tool budget decisions cannot be saved as standing permissions".to_string(),
-            )
-                .into());
+                    .into());
+            }
+            if approve_always_refused(
+                &state.request,
+                &decidable,
+                &submitted_decisions,
+                mcp.config.mcp_servers_global.approval.allow_always,
+            ) {
+                return Err((
+                    axum::http::StatusCode::BAD_REQUEST,
+                    "Always allow is disabled by MCP approval policy".to_string(),
+                )
+                    .into());
+            }
+            ContinuationEntry::Decide
         }
-        if approve_always_refused(
-            &state.request,
-            &decidable,
-            &submitted_decisions,
-            mcp.config.mcp_servers_global.approval.allow_always,
-        ) {
-            return Err((
-                axum::http::StatusCode::BAD_REQUEST,
-                "Always allow is disabled by MCP approval policy".to_string(),
-            )
-                .into());
-        }
-        ContinuationEntry::Decide
     };
 
     let app_state_for_worker = app_state.clone();
@@ -19019,8 +19179,25 @@ pub(crate) async fn start_continuation(
     // parked generation instead of starting a second one" — stops being true
     // once a user write can take a parked lease: the card can still be mounted
     // while another turn already owns the chat.
-    let (events, task) =
-        acquire_user_generation_lease(app_state, chat_id, request.message_id).await?;
+    let (events, task) = if resume_parked {
+        let Some(expected_generation) = parked_generation else {
+            return Err(already_continued());
+        };
+        app_state
+            .background_tasks
+            .try_start_task(
+                chat_id,
+                request.message_id,
+                Takeover::ResumeParked {
+                    expected_generation,
+                },
+                app_state.config.generation_status.stale_after_secs,
+            )
+            .await
+            .map_err(|held| lease_held_error(chat_id, held))?
+    } else {
+        acquire_user_generation_lease(app_state, chat_id, request.message_id).await?
+    };
 
     let client_stream_guard = task.client_stream_guard();
 
@@ -19168,8 +19345,12 @@ pub(crate) enum ContinuationEntry {
     Decide,
     /// The caller found every approval already decided on a generation that had
     /// been swept to `errored`: the outcomes are on the row and the only thing
-    /// missing is the model call.
+    /// missing is the model call. Task children that still wait for a client
+    /// may be open; the continuation parks on them again.
     ResumeCrashed,
+    /// Every task child the parked turn waited for has finished, and nothing
+    /// was left to decide: the turn goes on with their answers.
+    WaitingSettled,
 }
 
 /// The `Sender` a continuation with no SSE client of its own writes to.
@@ -19743,6 +19924,78 @@ async fn settle_parked_children(
     Ok(reparked)
 }
 
+/// Everything a continuation's new stop carries, in the old stop's order: the
+/// decided children that stopped again, the waiting children still open, and
+/// the waiting children that now ask.
+fn reparked_with_waiting_children(
+    content: &[ContentPart],
+    stop: &ContentPartToolApprovalRequest,
+    reparked: Vec<ParkedChild>,
+    mut converted: HashMap<String, Box<ContentPartToolApprovalRequest>>,
+) -> Vec<ParkedChild> {
+    let still_waiting = parked_approval_state(content)
+        .map(|state| state.waiting())
+        .unwrap_or_default();
+    let mut reparked: Vec<Option<ParkedChild>> = reparked.into_iter().map(Some).collect();
+    let mut carried = Vec::new();
+    for item in stop.approval_items() {
+        if let Some(child) = reparked
+            .iter_mut()
+            .find(|child| {
+                child
+                    .as_ref()
+                    .is_some_and(|child| child.tool_call.call_id == item.tool_call_id)
+            })
+            .and_then(Option::take)
+        {
+            carried.push(child);
+            continue;
+        }
+        let Some(waiting) = still_waiting
+            .iter()
+            .find(|waiting| waiting.approval_id == item.approval_id)
+        else {
+            continue;
+        };
+        let (Some(child), Some(waiting_for)) = (
+            waiting.child.as_ref(),
+            waiting
+                .child
+                .as_ref()
+                .and_then(|child| child.waiting_for.as_ref()),
+        ) else {
+            continue;
+        };
+        let stop = match converted.remove(&waiting.approval_id) {
+            Some(request) => crate::services::delegation::ChildStop::Approval(request),
+            None => crate::services::delegation::ChildStop::Waiting(
+                crate::services::delegation::ChildWait {
+                    attempt_id: waiting_for.attempt_id,
+                    tool_call_id: child.child_tool_call_id.clone(),
+                    tool_name: child.tool_name.clone(),
+                    namespace: child.mcp_server_id.clone(),
+                    host_context: waiting_for.host_context.clone(),
+                    input: child.input.clone(),
+                    requested_at: child.requested_at.clone(),
+                },
+            ),
+        };
+        carried.push(ParkedChild {
+            tool_call: genai::chat::ToolCall {
+                call_id: waiting.tool_call_id.clone(),
+                fn_name: waiting.tool_name.clone(),
+                fn_arguments: waiting.input.clone(),
+                thought_signatures: None,
+            },
+            child_chat_id: child.child_chat_id,
+            child_message_id: child.child_message_id,
+            stop,
+        });
+    }
+    carried.extend(reparked.into_iter().flatten());
+    carried
+}
+
 /// The calls of a park the row already approved that have not run yet, and
 /// the park's other pending calls.
 ///
@@ -19890,29 +20143,19 @@ pub(crate) async fn run_continuation(
     // Resolved again against the row as re-read here, so a body that raced
     // another continuation is refused on current state rather than on the state
     // the handler saw.
-    let submitted_decisions = if state.open.is_empty() {
-        // A crash retry is allowed to find nothing open — that is what it came
-        // for. A continuation that was given decisions to apply is not: the
-        // approvals were settled between the handler's read and this one, so
-        // another continuation owns the model call and making a second one
-        // would append a duplicate answer to the same row.
-        if entry != ContinuationEntry::ResumeCrashed {
+    let decidable = state.decidable();
+    let has_waiting_items = state.request.approval_items().iter().any(is_waiting_item);
+    let submitted_decisions = match entry {
+        // A continuation that was given decisions to apply finds them settled
+        // when another one got there between the handler's read and this one:
+        // that one owns the model call, and making a second would append a
+        // duplicate answer to the same row.
+        ContinuationEntry::Decide if decidable.is_empty() => {
             return Err(eyre!(
                 "Another continuation already settled this generation's approvals"
             ));
         }
-        // The same admission test the handler applied, against the row as it is
-        // now: a predecessor that finished in between has written the answer
-        // this retry came to produce, and producing a second one would leave
-        // the message with two.
-        if !state.unanswered && !continuation_owes_an_answer(&message) {
-            return Err(eyre!(
-                "This generation has already produced its answer; nothing to resume"
-            ));
-        }
-        Vec::new()
-    } else {
-        resolve_submitted_decisions(&request, &state.decidable()).map_err(
+        ContinuationEntry::Decide => resolve_submitted_decisions(&request, &decidable).map_err(
             |error| match error {
                 StreamRouteError::PlainText(_, message) => eyre!(message),
                 StreamRouteError::DecisionsMismatch(body) => eyre!(
@@ -19922,7 +20165,33 @@ pub(crate) async fn run_continuation(
                 ),
                 _ => eyre!("The approval decision could not be applied"),
             },
-        )?
+        )?,
+        // A crash retry is allowed to find nothing to decide — that is what it
+        // came for. The same admission test the handler applied, against the
+        // row as it is now: a predecessor that finished in between has written
+        // the answer this retry came to produce, and producing a second one
+        // would leave the message with two.
+        ContinuationEntry::ResumeCrashed => {
+            if !decidable.is_empty() {
+                return Err(eyre!(
+                    "This generation has approvals open again; a crash retry does not decide them"
+                ));
+            }
+            if !state.unanswered && !continuation_owes_an_answer(&message) {
+                return Err(eyre!(
+                    "This generation has already produced its answer; nothing to resume"
+                ));
+            }
+            Vec::new()
+        }
+        ContinuationEntry::WaitingSettled => {
+            if !state.open.is_empty() || !has_waiting_items || !state.unanswered {
+                return Err(eyre!(
+                    "This generation is not a settled wait for its tasks; nothing to resume"
+                ));
+            }
+            Vec::new()
+        }
     };
 
     mark_continuation_in_flight(app_state, policy, me_user, &message).await?;
@@ -20615,6 +20884,49 @@ pub(crate) async fn run_continuation(
         )
         .await?
     };
+
+    // Children that waited for a client may have finished, asked or called
+    // again while this ran. Read into this row rather than through the
+    // database: the writes below replace the whole content.
+    let mut converted: HashMap<String, Box<ContentPartToolApprovalRequest>> = HashMap::new();
+    if has_waiting_items {
+        let states = crate::services::delegated_client_tools::read_waiting_children(
+            &app_state.db,
+            &app_state.config,
+            &parsed.content,
+        )
+        .await;
+        // A child that now asks moves onto the new stop as an approval item;
+        // rewriting it on this stop would leave two open requests for one
+        // slot.
+        let synced = crate::services::delegated_client_tools::apply_waiting_sync(
+            &mut parsed.content,
+            &states,
+            false,
+        );
+        for (approval_id, state) in states {
+            if let crate::services::delegated_client_tools::ChildWaitState::Convert(request) = state
+            {
+                converted.insert(approval_id, request);
+            }
+        }
+        if synced.changed {
+            update_message_content(
+                &app_state.db,
+                policy,
+                &me_user.to_subject(),
+                &message.id,
+                parsed.content.clone(),
+            )
+            .await?;
+        }
+    }
+    let reparked_children = reparked_with_waiting_children(
+        &parsed.content,
+        &approval_request,
+        reparked_children,
+        converted,
+    );
 
     let (mut approved_calls, pending_from_park) =
         previously_approved_pending(&parsed.content, &approval_request);

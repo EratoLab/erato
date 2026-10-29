@@ -12,12 +12,17 @@ use crate::config::{
 use crate::db::entity::messages;
 use crate::db::entity_ext::chats;
 use crate::models::chat::{ChatProvenance, ClientToolGrant};
+use crate::models::message::{
+    ApprovalItem, ChildApprovalRef, ChildWaitingFor, ContentPart, ContentPartToolApprovalRequest,
+    ToolCallStatus as MessageToolCallStatus, ToolUse,
+};
 use crate::models::user_preference::ClientToolDecision;
 use crate::server::api::v1beta::message_streaming::DelegationDispatchContext;
 use crate::services::client_operations::{
     ExecutorBinding, OperationRegistry, OperationRequest, executor_stream,
 };
 use crate::services::client_tools::{GrantedCall, OfferedClientTool};
+use crate::services::delegation::ChildWait;
 use crate::state::AppState;
 use eyre::Report;
 use sea_orm::prelude::Uuid;
@@ -630,6 +635,481 @@ fn hide_inputs(schema: &mut Value, hidden: &[&str]) {
             }
         }
     }
+}
+
+/// What a waiting child's own rows say about its item on the parent's stop.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) enum ChildWaitState {
+    /// The child still runs, or its call has not completed.
+    Open,
+    /// The child stopped on an approval only the user can answer.
+    Convert(Box<ContentPartToolApprovalRequest>),
+    /// The child waits for a client again, on another call.
+    Rewait(ChildWait),
+    /// The child's turn is over: the slot's final output.
+    Settle { output: Value, failed: bool },
+}
+
+/// What applying a sync left open on the parent's stop.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub(crate) struct SyncOutcome {
+    pub changed: bool,
+    pub open_decidable: usize,
+    pub open_waiting: usize,
+}
+
+/// A parked parent after a sync, with what admission needs to resume it.
+#[derive(Debug, Clone)]
+pub(crate) struct Synced {
+    pub outcome: SyncOutcome,
+    pub generation_state: String,
+    pub expected_generation: Option<Uuid>,
+    pub has_waiting_items: bool,
+    pub unanswered: bool,
+    /// `errored` with nothing answered after the stop: a continuation crashed.
+    pub crashed: bool,
+}
+
+impl Synced {
+    /// Whether the parent can go on without the user: nothing is left to
+    /// decide, and either everything it waited for settled or a crashed
+    /// continuation has to re-park on what is still open.
+    pub(crate) fn resumable(&self) -> bool {
+        self.has_waiting_items
+            && self.outcome.open_decidable == 0
+            && ((self.generation_state == "awaiting_approval"
+                && self.unanswered
+                && self.outcome.open_waiting == 0)
+                || self.crashed)
+    }
+}
+
+/// Reads, for every open waiting item of `content`'s stop, what its child's
+/// chat, call and row say now. Database reads only; a read that fails keeps
+/// the item open rather than settling it.
+pub(crate) async fn read_waiting_children<C: sea_orm::ConnectionTrait>(
+    conn: &C,
+    config: &AppConfig,
+    content: &[ContentPart],
+) -> Vec<(String, ChildWaitState)> {
+    let Some(state) = crate::server::api::v1beta::message_streaming::parked_approval_state(content)
+    else {
+        return Vec::new();
+    };
+    let mut states = Vec::new();
+    for item in state.waiting() {
+        let Some(child) = item.child.as_ref() else {
+            continue;
+        };
+        let Some(waiting_for) = child.waiting_for.as_ref() else {
+            continue;
+        };
+        let parked_output = slot(content, &item.tool_call_id).and_then(|slot| slot.output.clone());
+        let child_state = read_waiting_child(
+            conn,
+            config,
+            &item.tool_call_id,
+            child,
+            waiting_for.attempt_id,
+            parked_output.as_ref(),
+        )
+        .await;
+        states.push((item.approval_id.clone(), child_state));
+    }
+    states
+}
+
+async fn read_waiting_child<C: sea_orm::ConnectionTrait>(
+    conn: &C,
+    config: &AppConfig,
+    parent_tool_call_id: &str,
+    child: &ChildApprovalRef,
+    attempt_id: Uuid,
+    parked_output: Option<&Value>,
+) -> ChildWaitState {
+    use crate::db::entity::client_operation_attempts as attempts;
+    use crate::services::delegation::DelegationRunStatus;
+    use sea_orm::EntityTrait;
+
+    let gone = |error: &str| ChildWaitState::Settle {
+        output: json!({ "status": "failed", "error": error }),
+        failed: true,
+    };
+    let child_chat = match chats::Entity::find_by_id(child.child_chat_id)
+        .one(conn)
+        .await
+    {
+        Ok(Some(chat)) => chat,
+        Ok(None) => return gone("The delegated run no longer exists."),
+        Err(error) => {
+            tracing::warn!(%error, child_chat_id = %child.child_chat_id, "Failed to read a waiting child");
+            return ChildWaitState::Open;
+        }
+    };
+    // A running child may still be between two calls of its continuation:
+    // its row can end on anything until its turn is over.
+    if child_chat.generation_state.as_deref() == Some("running") {
+        return ChildWaitState::Open;
+    }
+    match attempts::Entity::find_by_id(attempt_id).one(conn).await {
+        Ok(Some(attempt)) if attempt.chat_id == child.child_chat_id => {
+            if attempt.state != attempts::AttemptState::Completed {
+                return ChildWaitState::Open;
+            }
+        }
+        Ok(_) => return gone("The delegated run's call no longer exists."),
+        Err(error) => {
+            tracing::warn!(%error, %attempt_id, "Failed to read a waiting child's call");
+            return ChildWaitState::Open;
+        }
+    }
+    let row = match messages::Entity::find_by_id(child.child_message_id)
+        .one(conn)
+        .await
+    {
+        Ok(Some(row)) if row.chat_id == child.child_chat_id => row,
+        Ok(_) => return gone("The delegated run's answer no longer exists."),
+        Err(error) => {
+            tracing::warn!(%error, child_chat_id = %child.child_chat_id, "Failed to read a waiting child's row");
+            return ChildWaitState::Open;
+        }
+    };
+    let Ok(parsed) = crate::models::message::MessageSchema::validate(&row.raw_message) else {
+        return gone("The delegated run's answer could not be read.");
+    };
+    let parked = child_chat.generation_state.as_deref() == Some("awaiting_approval");
+    let stopped = match parsed.content.last() {
+        Some(ContentPart::ToolApprovalRequest(request)) => {
+            if parked {
+                return ChildWaitState::Convert(Box::new(request.clone()));
+            }
+            true
+        }
+        Some(ContentPart::ClientToolPending(_)) => {
+            if parked
+                && let Some(wait) = crate::services::delegation::read_child_wait(
+                    conn,
+                    child.child_chat_id,
+                    child.child_message_id,
+                )
+                .await
+                && wait.attempt_id != attempt_id
+            {
+                return ChildWaitState::Rewait(wait);
+            }
+            true
+        }
+        _ => false,
+    };
+    // A stop nobody can carry on from is the run's end, not a result.
+    let requested = if stopped || child_chat.generation_state.as_deref() == Some("errored") {
+        DelegationRunStatus::Failed
+    } else {
+        DelegationRunStatus::Completed
+    };
+    let spawned_at = crate::models::chat::parse_chat_configuration(&child_chat)
+        .ok()
+        .flatten()
+        .and_then(|configuration| configuration.provenance)
+        .and_then(|provenance| provenance.rebase_cutoff)
+        .unwrap_or(child_chat.created_at);
+    let envelope = crate::services::delegation::build_result_envelope(
+        conn,
+        child.child_chat_id,
+        child.child_message_id,
+        spawned_at,
+        child_chat.assistant_id,
+        None,
+        crate::services::delegation::task_model_report_for_chat(config, &child_chat),
+        parent_tool_call_id.to_string(),
+        requested,
+        None,
+        false,
+        config.delegation.result_max_chars,
+    )
+    .await;
+    ChildWaitState::Settle {
+        failed: envelope.status != DelegationRunStatus::Completed,
+        output: crate::services::delegation::resumed_slot_output(&envelope, parked_output, None),
+    }
+}
+
+/// The slot an item settles: the last tool part with its call id.
+fn slot<'a>(content: &'a [ContentPart], tool_call_id: &str) -> Option<&'a ToolUse> {
+    content.iter().rev().find_map(|part| match part {
+        ContentPart::ToolUse(tool_use) if tool_use.tool_call_id == tool_call_id => Some(tool_use),
+        _ => None,
+    })
+}
+
+fn slot_mut<'a>(content: &'a mut [ContentPart], tool_call_id: &str) -> Option<&'a mut ToolUse> {
+    content.iter_mut().rev().find_map(|part| match part {
+        ContentPart::ToolUse(tool_use) if tool_use.tool_call_id == tool_call_id => Some(tool_use),
+        _ => None,
+    })
+}
+
+/// Applies what [`read_waiting_children`] read to the parent's row. With
+/// `convert_in_place` an item whose child now asks becomes an approval item
+/// on the same stop; without it the item stays as it is, for a caller that
+/// carries the child onto a new stop.
+pub(crate) fn apply_waiting_sync(
+    content: &mut [ContentPart],
+    states: &[(String, ChildWaitState)],
+    convert_in_place: bool,
+) -> SyncOutcome {
+    use crate::server::api::v1beta::message_streaming::{ParkedChild, parked_child_approval_item};
+    use crate::services::delegation::{ChildStop, DelegationRunReason};
+
+    let mut changed = false;
+    let Some(stop_index) = content
+        .iter()
+        .rposition(|part| matches!(part, ContentPart::ToolApprovalRequest(_)))
+    else {
+        return SyncOutcome::default();
+    };
+    for (approval_id, state) in states {
+        let item = match &content[stop_index] {
+            ContentPart::ToolApprovalRequest(request) => request
+                .approval_items()
+                .into_iter()
+                .find(|item| &item.approval_id == approval_id),
+            _ => None,
+        };
+        let Some(item) = item else {
+            continue;
+        };
+        match state {
+            ChildWaitState::Open => {}
+            ChildWaitState::Settle { output, failed } => {
+                if let Some(slot) = slot_mut(content, &item.tool_call_id) {
+                    slot.status = if *failed {
+                        MessageToolCallStatus::Error
+                    } else {
+                        MessageToolCallStatus::Success
+                    };
+                    slot.output = Some(output.clone());
+                    slot.ended_at = Some(chrono::Utc::now().to_rfc3339());
+                    changed = true;
+                }
+            }
+            ChildWaitState::Convert(request) => {
+                if let Some(slot) = slot_mut(content, &item.tool_call_id)
+                    && let Some(output) = slot.output.as_mut().and_then(Value::as_object_mut)
+                {
+                    output.insert(
+                        "reason".to_string(),
+                        json!(DelegationRunReason::ApprovalPending.as_str()),
+                    );
+                    changed = true;
+                }
+                if convert_in_place && let Some(child) = item.child.as_ref() {
+                    let converted = parked_child_approval_item(&ParkedChild {
+                        tool_call: genai::chat::ToolCall {
+                            call_id: item.tool_call_id.clone(),
+                            fn_name: item.tool_name.clone(),
+                            fn_arguments: item.input.clone(),
+                            thought_signatures: None,
+                        },
+                        child_chat_id: child.child_chat_id,
+                        child_message_id: child.child_message_id,
+                        stop: ChildStop::Approval(request.clone()),
+                    });
+                    replace_item(&mut content[stop_index], approval_id, converted);
+                    changed = true;
+                }
+            }
+            ChildWaitState::Rewait(wait) => {
+                let mut rewritten = item.clone();
+                if let Some(child) = rewritten.child.as_mut() {
+                    child.child_tool_call_id = wait.tool_call_id.clone();
+                    child.tool_name = wait.tool_name.clone();
+                    child.mcp_server_id = wait.namespace.clone();
+                    child.input = wait.input.clone();
+                    child.requested_at = wait.requested_at.clone();
+                    child.waiting_for = Some(ChildWaitingFor {
+                        host_context: wait.host_context.clone(),
+                        attempt_id: wait.attempt_id,
+                    });
+                }
+                if rewritten != item {
+                    replace_item(&mut content[stop_index], approval_id, rewritten);
+                    changed = true;
+                }
+            }
+        }
+    }
+    let (open_decidable, open_waiting) =
+        crate::server::api::v1beta::message_streaming::parked_approval_state(content)
+            .map(|state| (state.decidable().len(), state.waiting().len()))
+            .unwrap_or_default();
+    SyncOutcome {
+        changed,
+        open_decidable,
+        open_waiting,
+    }
+}
+
+fn replace_item(part: &mut ContentPart, approval_id: &str, replacement: ApprovalItem) {
+    let ContentPart::ToolApprovalRequest(request) = part else {
+        return;
+    };
+    if request.approvals.is_empty() {
+        request.approvals = request.approval_items();
+    }
+    if let Some(item) = request
+        .approvals
+        .iter_mut()
+        .find(|item| item.approval_id == approval_id)
+    {
+        *item = replacement;
+    }
+}
+
+/// Brings a parked parent's waiting items up to date with their children,
+/// under the parent chat's advisory lock, and says whether it can go on.
+///
+/// Only a parent that is still parked on this message is touched: the chat is
+/// not archived, the message is its latest, and it is `awaiting_approval`, or
+/// `errored` by a continuation that crashed before answering. Idempotent, and
+/// safe to run from any tail, any replica and the cleanup sweep.
+pub(crate) async fn sync_waiting_parent(
+    db: &sea_orm::DatabaseConnection,
+    config: &AppConfig,
+    parent_chat_id: Uuid,
+    parent_message_id: Uuid,
+) -> Result<Option<Synced>, Report> {
+    use crate::query_metrics::named_statement_from_sql_and_values;
+    use sea_orm::{ConnectionTrait, EntityTrait, TransactionTrait};
+
+    let tx = db.begin().await?;
+    tx.query_one_raw(named_statement_from_sql_and_values(
+        sea_orm::DatabaseBackend::Postgres,
+        crate::metrics_constants::POSTGRES_QUERY_WAITING_PARENT_SYNC,
+        "SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))",
+        [parent_chat_id.to_string().into()],
+    ))
+    .await?;
+    let Some(chat) = chats::Entity::find_by_id(parent_chat_id).one(&tx).await? else {
+        return Ok(None);
+    };
+    let generation_state = chat.generation_state.clone().unwrap_or_default();
+    if chat.archived_at.is_some()
+        || !matches!(generation_state.as_str(), "awaiting_approval" | "errored")
+    {
+        return Ok(None);
+    }
+    let tip = crate::models::message::get_active_thread_tip(&tx, &parent_chat_id).await?;
+    if tip.as_ref().is_none_or(|tip| tip.id != parent_message_id) {
+        return Ok(None);
+    }
+    let Some(message) = messages::Entity::find_by_id(parent_message_id)
+        .one(&tx)
+        .await?
+        .filter(|message| message.chat_id == parent_chat_id)
+    else {
+        return Ok(None);
+    };
+    let mut parsed = crate::models::message::MessageSchema::validate(&message.raw_message)?;
+    let Some(state) =
+        crate::server::api::v1beta::message_streaming::parked_approval_state(&parsed.content)
+    else {
+        return Ok(None);
+    };
+    let crashed = generation_state == "errored"
+        && (state.unanswered
+            || crate::server::api::v1beta::message_streaming::continuation_owes_an_answer(
+                &message,
+            ));
+    if generation_state == "errored" && !crashed {
+        return Ok(None);
+    }
+    let has_waiting_items = state
+        .request
+        .approval_items()
+        .iter()
+        .any(crate::server::api::v1beta::message_streaming::is_waiting_item);
+    let states = read_waiting_children(&tx, config, &parsed.content).await;
+    let outcome = apply_waiting_sync(&mut parsed.content, &states, true);
+    if outcome.changed {
+        let raw_message = parsed.to_json()?;
+        // A row that no longer reads is worse than one that waits a little
+        // longer: the next tail or sweep tries again.
+        crate::models::message::MessageSchema::validate(&raw_message)?;
+        tx.execute_raw(named_statement_from_sql_and_values(
+            sea_orm::DatabaseBackend::Postgres,
+            crate::metrics_constants::POSTGRES_QUERY_WAITING_PARENT_SYNC,
+            r#"UPDATE messages SET raw_message = $1::jsonb, updated_at = now() WHERE id = $2"#,
+            [raw_message.to_string().into(), parent_message_id.into()],
+        ))
+        .await?;
+    }
+    tx.commit().await?;
+    Ok(Some(Synced {
+        outcome,
+        generation_state,
+        expected_generation: chat.active_generation_id,
+        has_waiting_items,
+        unanswered: state.unanswered,
+        crashed,
+    }))
+}
+
+/// How many parked parents one sweep looks at.
+const WAITING_PARENTS_BATCH: i64 = 100;
+
+/// Syncs parked parents whose latest message waits for children, for a child
+/// whose tail never ran (a crash between its completion and its tail). Starts
+/// no generation: a parent left with nothing open is resumed by the next tail
+/// or by the open parent chat. Returns how many parents changed.
+pub async fn sweep_waiting_parents(db: &sea_orm::DatabaseConnection, config: &AppConfig) -> usize {
+    use crate::query_metrics::named_statement_from_sql_and_values;
+    use sea_orm::{ConnectionTrait, TryGetable};
+
+    let statement = named_statement_from_sql_and_values(
+        sea_orm::DatabaseBackend::Postgres,
+        crate::metrics_constants::POSTGRES_QUERY_WAITING_PARENTS_SCAN,
+        r#"
+        SELECT tip.chat_id AS chat_id, tip.id AS message_id
+        FROM (
+            SELECT DISTINCT ON (m.chat_id) m.chat_id, m.id, m.raw_message
+            FROM messages m
+            JOIN chats c ON c.id = m.chat_id
+            WHERE c.archived_at IS NULL
+              AND c.generation_state IN ('awaiting_approval', 'errored')
+              AND m.is_message_in_active_thread
+            ORDER BY m.chat_id, m.created_at DESC, m.id DESC
+        ) tip
+        WHERE tip.raw_message -> 'content'
+            @> '[{"content_type":"tool_approval_request","approvals":[{"child":{"waiting_for":{}}}]}]'::jsonb
+        LIMIT $1
+        "#,
+        [WAITING_PARENTS_BATCH.into()],
+    );
+    let rows = match db.query_all_raw(statement).await {
+        Ok(rows) => rows,
+        Err(error) => {
+            tracing::warn!(%error, "The waiting-parents sweep could not scan");
+            return 0;
+        }
+    };
+    let mut changed = 0;
+    for row in rows {
+        let (Ok(chat_id), Ok(message_id)) = (
+            Uuid::try_get(&row, "", "chat_id"),
+            Uuid::try_get(&row, "", "message_id"),
+        ) else {
+            continue;
+        };
+        match sync_waiting_parent(db, config, chat_id, message_id).await {
+            Ok(Some(synced)) if synced.outcome.changed => changed += 1,
+            Ok(_) => {}
+            Err(error) => {
+                tracing::warn!(%error, %chat_id, "Could not sync a parent waiting for its tasks");
+            }
+        }
+    }
+    changed
 }
 
 #[cfg(test)]
