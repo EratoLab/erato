@@ -410,6 +410,19 @@ pub async fn continue_client_operation(
         .then(|| super::message_streaming::generation_request_context_from_headers(&headers));
     let request: OperationRequest =
         serde_json::from_value(row.request.clone()).map_err(|error| self::error(error.into()))?;
+    let lineage = request.lineage.is_some();
+    // A crashed continuation is reaped to `awaiting_approval`; an `errored`
+    // chat means it failed, and running it again would fail the same way.
+    if lineage && row.state == store::AttemptState::Continuing {
+        use sea_orm::EntityTrait;
+        let chat = crate::db::entity::prelude::Chats::find_by_id(row.chat_id)
+            .one(&state.db)
+            .await
+            .map_err(|error| self::error(error.into()))?;
+        if chat.is_some_and(|chat| chat.generation_state.as_deref() == Some("errored")) {
+            return Err((StatusCode::CONFLICT, "Operation continuation failed".into()));
+        }
+    }
     if let Some(context) = &context
         && (request.consent != crate::services::client_operations::ConsentPolicy::None
             || context.executor.as_ref() != Some(&request.binding)
@@ -446,13 +459,25 @@ pub async fn continue_client_operation(
         return Err(self::error(error));
     }
     tokio::spawn(async move {
+        let run = async {
+            let result = super::message_streaming::run_client_operation_continuation(
+                &task, &state, &policy, &me, id, context,
+            )
+            .await;
+            if result.is_err()
+                && lineage
+                && let Err(error) =
+                    store::end_failed_continuation(&state.db, id, task.generation_id).await
+            {
+                tracing::warn!(%error, attempt_id = %id, "Could not end a failed task call");
+            }
+            result
+        };
         let result = super::message_streaming::with_generation_task_lifecycle(
             &state.background_tasks,
             &task,
             row.chat_id,
-            super::message_streaming::run_client_operation_continuation(
-                &task, &state, &policy, &me, id, context,
-            ),
+            run,
         )
         .await;
         if let Err(error) = &result {

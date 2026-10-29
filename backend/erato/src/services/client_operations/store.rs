@@ -698,6 +698,35 @@ pub async fn complete_continuation(
     Ok(message)
 }
 
+/// Ends a task's call whose continuation failed, while its generation still
+/// holds the chat: the task's parent reads a completed call on a chat that is
+/// no longer running as the run's end. Only calls with lineage: any client may
+/// continue those, and would run a failing continuation again on every sweep.
+pub async fn end_failed_continuation(
+    db: &DatabaseConnection,
+    attempt_id: Uuid,
+    generation_id: Uuid,
+) -> Result<bool, Report> {
+    let tx = db.begin().await?;
+    let Some(row) = attempts::Entity::find_by_id(attempt_id).one(&tx).await? else {
+        return Ok(false);
+    };
+    lock_chat(&tx, row.chat_id, row.account_id).await?;
+    let ended = tx
+        .execute_raw(statement(
+            "client_operations.fail",
+            r#"
+        UPDATE client_operation_attempts SET state = 'completed'
+        WHERE attempt_id = $1 AND generation_id = $2 AND state = 'continuing'
+          AND jsonb_typeof(request -> 'lineage') = 'object'
+    "#,
+            vec![attempt_id.into(), generation_id.into()],
+        ))
+        .await?;
+    tx.commit().await?;
+    Ok(ended.rows_affected() == 1)
+}
+
 /// A new user turn supersedes operations on the abandoned assistant message.
 /// This runs inside the generation lease transaction and uses its chat lock.
 pub async fn supersede_other_attempts<C: ConnectionTrait>(

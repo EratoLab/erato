@@ -751,9 +751,15 @@ async fn read_waiting_child<C: sea_orm::ConnectionTrait>(
     if child_chat.generation_state.as_deref() == Some("running") {
         return ChildWaitState::Open;
     }
+    let errored = child_chat.generation_state.as_deref() == Some("errored");
     match attempts::Entity::find_by_id(attempt_id).one(conn).await {
         Ok(Some(attempt)) if attempt.chat_id == child.child_chat_id => {
-            if attempt.state != attempts::AttemptState::Completed {
+            // A crashed continuation is reaped to `awaiting_approval` and runs
+            // again; one that failed leaves its chat `errored`, and nothing
+            // continues it any more.
+            let failed_continuation =
+                attempt.state == attempts::AttemptState::Continuing && errored;
+            if attempt.state != attempts::AttemptState::Completed && !failed_continuation {
                 return ChildWaitState::Open;
             }
         }
@@ -801,8 +807,14 @@ async fn read_waiting_child<C: sea_orm::ConnectionTrait>(
         }
         _ => false,
     };
+    // Only a completed continuation drops its call's pending part, so a row
+    // that still holds it never got an answer. An `errored` chat alone does
+    // not say that: a replica that died after the completion is reaped to it.
+    let answered = !parsed.content.iter().any(|part| {
+        matches!(part, ContentPart::ClientToolPending(pending) if pending.attempt_id == attempt_id)
+    });
     // A stop nobody can carry on from is the run's end, not a result.
-    let requested = if stopped || child_chat.generation_state.as_deref() == Some("errored") {
+    let requested = if stopped || (errored && !answered) {
         DelegationRunStatus::Failed
     } else {
         DelegationRunStatus::Completed
