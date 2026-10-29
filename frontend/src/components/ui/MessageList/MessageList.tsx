@@ -16,12 +16,14 @@ import { useResolvedFiles } from "@/hooks/files/useResolvedFiles";
 import { useMessageListVirtualization, useScrollEvents } from "@/hooks/ui";
 import { usePaginatedData } from "@/hooks/ui/usePaginatedData";
 import { useScrollToBottom } from "@/hooks/useScrollToBottom";
+import { getAssistantTurns } from "@/utils/chat/assistantTurns";
 import {
   isSameMessage,
   shallowEqual,
   useStableEntries,
   useStableValue,
 } from "@/utils/chat/stableValues";
+import { getTaskResultFolds, taskResultOf } from "@/utils/chat/taskResultFolds";
 import { FileTypeUtil } from "@/utils/fileTypes";
 
 import { MessageListHeader } from "./MessageListHeader";
@@ -497,11 +499,13 @@ function useUnseenMessageCount({
   messages,
   currentSessionId,
   isAwayFromBottom,
+  foldedTaskResultRowIds,
 }: {
   messageOrder: string[];
   messages: Record<string, ChatMessage>;
   currentSessionId: string | null;
   isAwayFromBottom: boolean;
+  foldedTaskResultRowIds: ReadonlySet<string>;
 }) {
   const [lastSeen, setLastSeen] = useState<LastSeenSnapshot | null>(null);
 
@@ -533,7 +537,11 @@ function useUnseenMessageCount({
 
     messageOrder.forEach((messageId, index) => {
       const message = messages[messageId];
-      if (message.role === "user") return;
+      if (
+        message.role === "user" &&
+        (!taskResultOf(message) || foldedTaskResultRowIds.has(messageId))
+      )
+        return;
 
       const isUnseen =
         lastSeenIndex >= 0
@@ -554,7 +562,14 @@ function useUnseenMessageCount({
     }
 
     return count;
-  }, [isAwayFromBottom, lastSeen, currentSessionId, messageOrder, messages]);
+  }, [
+    isAwayFromBottom,
+    lastSeen,
+    currentSessionId,
+    messageOrder,
+    messages,
+    foldedTaskResultRowIds,
+  ]);
 }
 
 /**
@@ -597,6 +612,15 @@ export const MessageList = memo<MessageListProps>(
     const modelSwitches = useStableEntries(
       incomingModelSwitches ?? NO_MODEL_SWITCHES,
       shallowEqual,
+    );
+    const taskResultFolds = useMemo(
+      () => getTaskResultFolds(messages, messageOrder),
+      [messages, messageOrder],
+    );
+    const assistantTurns = useMemo(
+      () =>
+        getAssistantTurns(messages, messageOrder, taskResultFolds.foldedRowIds),
+      [messages, messageOrder, taskResultFolds],
     );
     const controlsContext = useStableValue(incomingControlsContext);
     const latestOnMessageAction = useRef(incomingOnMessageAction);
@@ -799,6 +823,7 @@ export const MessageList = memo<MessageListProps>(
       messages,
       currentSessionId,
       isAwayFromBottom: isScrolledUp || isAutoScrollPaused,
+      foldedTaskResultRowIds: taskResultFolds.foldedRowIds,
     });
 
     const handleNewMessagesClick = useCallback(() => {
@@ -1067,6 +1092,8 @@ export const MessageList = memo<MessageListProps>(
                     onViewFeedback={onViewFeedback}
                     allFilesById={allFilesById}
                     modelSwitches={modelSwitches}
+                    taskResultFolds={taskResultFolds}
+                    assistantTurns={assistantTurns}
                   />
                 ) : (
                   <StandardMessageList
@@ -1087,6 +1114,8 @@ export const MessageList = memo<MessageListProps>(
                     onViewFeedback={onViewFeedback}
                     allFilesById={allFilesById}
                     modelSwitches={modelSwitches}
+                    taskResultFolds={taskResultFolds}
+                    assistantTurns={assistantTurns}
                   />
                 )}
               </ConversationMessagesProvider>

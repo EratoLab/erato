@@ -1,9 +1,11 @@
 import { t } from "@lingui/core/macro";
 
-import { Button } from "@/components/ui/Controls/Button";
-import { OpenNewWindowIcon } from "@/components/ui/icons";
 import { useDelegatedRunLiveStatus } from "@/hooks/chat/useDelegatedRunLiveStatus";
-import { useDelegatedRunRetry } from "@/hooks/chat/useDelegatedRunRetry";
+import {
+  OpenDelegatedRunLink,
+  RetryTaskControl,
+  resultPreview,
+} from "@/lib/delegation/delegatedRunControls";
 import { DELEGATE_TASK_TOOL_NAME } from "@/lib/delegation/delegationEnvelope";
 import { delegationReasonLabel } from "@/lib/delegation/delegationLabels";
 import {
@@ -11,8 +13,6 @@ import {
   taskBriefFromInput,
 } from "@/lib/delegation/taskBrief";
 import { useSidecarLocalTrace } from "@/lib/desktopSidecar/localTraceStore";
-import { useDelegatedRunOpener } from "@/providers/DelegatedRunOpenProvider";
-import { getChatUrl } from "@/utils/chat/urlUtils";
 
 import { NestedTraceView } from "../NestedTraceView";
 import { TraceStep } from "../TraceStep";
@@ -30,13 +30,6 @@ interface DelegationStepProps extends BaseStepProps {
   envelope: DelegationEnvelope;
   approvalStatus?: ToolApprovalStatus;
 }
-
-/**
- * The delegate's answer is quoted, not reproduced — the run itself is a click
- * away. The brief is quoted for the same reason, but at the length every
- * surface quoting a brief shares: `TASK_BRIEF_PREVIEW_CHARS`.
- */
-const RESULT_PREVIEW_CHARS = 280;
 
 const stepLabel = (id: string): string =>
   id === "answer"
@@ -224,125 +217,6 @@ const backgroundPill = (
   }
 };
 
-const resultPreview = (result: string | undefined): string | undefined => {
-  const text = result?.trim();
-  if (!text) {
-    return undefined;
-  }
-  const characters = [...text];
-  return characters.length > RESULT_PREVIEW_CHARS
-    ? `${characters.slice(0, RESULT_PREVIEW_CHARS).join("")}…`
-    : text;
-};
-
-/**
- * Offer to run a failed task again, from the slot where it failed.
- *
- * Its own component, mounted only on the failed branch, because the hook it
- * calls needs a feature-config provider and a query client; called
- * unconditionally it would make every surface that renders any delegation step
- * owe both for a control almost no step shows.
- *
- * The copy has to state the retry's shape, not just offer it. This slot was
- * frozen at dispatch and will never be rewritten, and the retry is always an
- * async task — so its answer arrives as a delivered result later, not here.
- * Left unsaid, the reader waits on a step that can never update.
- */
-const RetryTaskControl = ({ childChatId }: { childChatId: string }) => {
-  // The origin is the chat this trace is being read in, which is where the
-  // run was dispatched from — so the hook's default is exactly right here.
-  const { enabled, retriedByChatId, isRetrying, refusal, retry } =
-    useDelegatedRunRetry(childChatId);
-
-  if (!enabled) {
-    return null;
-  }
-
-  if (retriedByChatId !== undefined) {
-    return (
-      <p data-testid="delegation-retried">
-        {t({
-          id: "trace.delegation.retried",
-          message: "Retried as a background task.",
-        })}
-      </p>
-    );
-  }
-
-  return (
-    <div
-      className="flex flex-wrap items-center gap-x-2"
-      data-testid="delegation-retry"
-    >
-      <Button
-        variant="link"
-        size="sm"
-        loading={isRetrying}
-        onClick={retry}
-        data-testid="delegation-retry-action"
-      >
-        {t({ id: "trace.delegation.retry", message: "Retry task" })}
-      </Button>
-      <span>
-        {t({
-          id: "trace.delegation.retry.background",
-          message:
-            "The retry runs as a background task; its answer arrives separately, not in this step.",
-        })}
-      </span>
-      {refusal !== null && (
-        <span data-testid="delegation-retry-refused">
-          {t({
-            id: "trace.delegation.retry.failed",
-            message: "This task cannot be retried",
-          })}
-        </span>
-      )}
-    </div>
-  );
-};
-
-const OpenDelegatedRunLink = ({
-  chatId,
-  assistantId,
-}: {
-  chatId: string;
-  assistantId: string | undefined;
-}) => {
-  const openRun = useDelegatedRunOpener();
-  const label = t({
-    id: "trace.delegation.openRun",
-    message: "Open delegated run",
-  });
-  if (openRun) {
-    return (
-      <button
-        type="button"
-        onClick={() => openRun(chatId)}
-        aria-label={label}
-        title={label}
-        data-testid="delegation-open-run"
-        className="focus-ring-tight inline-flex size-5 shrink-0 items-center justify-center rounded-[var(--theme-radius-base)] text-theme-fg-muted hover:text-theme-fg-primary"
-      >
-        <OpenNewWindowIcon className="size-3.5" />
-      </button>
-    );
-  }
-  return (
-    <a
-      href={getChatUrl(chatId, assistantId)}
-      target="_blank"
-      rel="noopener noreferrer"
-      aria-label={label}
-      title={label}
-      data-testid="delegation-open-run"
-      className="focus-ring-tight inline-flex size-5 shrink-0 items-center justify-center rounded-[var(--theme-radius-base)] text-theme-fg-muted hover:text-theme-fg-primary"
-    >
-      <OpenNewWindowIcon className="size-3.5" />
-    </a>
-  );
-};
-
 /**
  * A `delegate_to_assistant` call: the delegate's own steps nested under the
  * step that started them, plus a way into the run itself. The steps arrive on
@@ -464,7 +338,10 @@ export const DelegationStep = ({
               </p>
             )}
             {retryableChildChatId !== undefined && (
-              <RetryTaskControl childChatId={retryableChildChatId} />
+              <RetryTaskControl
+                childChatId={retryableChildChatId}
+                testIdPrefix="delegation"
+              />
             )}
           </div>
         )}
@@ -515,6 +392,11 @@ export const DelegationStep = ({
             <OpenDelegatedRunLink
               chatId={envelope.delegateChatId}
               assistantId={envelope.assistantId}
+              label={t({
+                id: "trace.delegation.openRun",
+                message: "Open delegated run",
+              })}
+              testId="delegation-open-run"
             />
           ) : undefined
         }

@@ -29,6 +29,7 @@ import type {
   MessageControlsProps,
 } from "../../../types/message-controls";
 import type {
+  ContentPartTaskResult,
   FileUploadItem,
   MessageFeedback,
   UserProfile,
@@ -99,6 +100,10 @@ export interface ChatMessageProps {
   allFilesById?: Record<string, FileUploadItem>;
   /** Optional so pre-existing renderers and tests remain valid call sites. */
   hostComponents?: ChatMessageHostComponents;
+  /** The delegated task result this assistant reply answers. */
+  taskResult?: ContentPartTaskResult;
+  /** Drawn as part of the assistant turn above it: no avatar or name. */
+  continuesTurn?: boolean;
 }
 
 export interface ChatMessageRendererState {
@@ -128,6 +133,8 @@ export interface ChatMessageRendererState {
    * names it; empty for every other message.
    */
   sentWith: readonly SentWithChip[];
+  /** Drawn as part of the assistant turn above it: no avatar or name. */
+  continuesTurn: boolean;
 }
 
 /**
@@ -149,6 +156,8 @@ export const useChatMessageRenderer = ({
   onViewFeedback,
   allFilesById = {},
   userDisplayNameOverride,
+  taskResult,
+  continuesTurn = false,
 }: ChatMessageProps): ChatMessageRendererState => {
   const isUser = message.role === "user";
   const role = isUser ? "user" : "assistant";
@@ -199,7 +208,11 @@ export const useChatMessageRenderer = ({
     // The host draws nothing for a message with no content, attachments or
     // not; the openwebui kit draws an attachment-only user message instead.
     // The divergence is unresolved, so this reports what the host does.
-    isEmpty: message.content.length === 0 && !message.loading && !message.error,
+    isEmpty:
+      message.content.length === 0 &&
+      !message.loading &&
+      !message.error &&
+      !taskResult,
     isAttachmentOnly:
       isUser &&
       hasOnlyBlankText &&
@@ -225,6 +238,7 @@ export const useChatMessageRenderer = ({
       // Mentions are a user-message affordance; an assistant echoing
       // "@Name" is quoting, not addressing, so it never highlights.
       mentionedAssistants: isUser ? message.mentioned_assistants : undefined,
+      taskResult,
     },
     controlsProps: {
       messageId: message.id,
@@ -245,6 +259,7 @@ export const useChatMessageRenderer = ({
     },
     lightbox,
     sentWith: sentWithChipsFor(message),
+    continuesTurn,
   };
 };
 
@@ -274,6 +289,7 @@ export const ChatMessage = memo(function ChatMessage(props: ChatMessageProps) {
     controlsProps,
     lightbox,
     sentWith,
+    continuesTurn,
   } = useChatMessageRenderer(props);
 
   const messageContentRowStyle = {
@@ -315,6 +331,7 @@ export const ChatMessage = memo(function ChatMessage(props: ChatMessageProps) {
       data-message-id={message.id}
       data-ui="chat-message"
       data-role={role}
+      data-continues-turn={continuesTurn || undefined}
     >
       {/* You attach the files, then you write the prompt — so for a user
           message the attachments sit above the body rather than under it.
@@ -344,22 +361,28 @@ export const ChatMessage = memo(function ChatMessage(props: ChatMessageProps) {
           data-ui="message-body"
         >
           {showAvatar && (
-            <Avatar userProfile={userProfile} userOrAssistant={!!isUser} />
+            <Avatar
+              userProfile={userProfile}
+              userOrAssistant={!!isUser}
+              className={continuesTurn ? "invisible" : undefined}
+            />
           )}
 
           <div className="min-w-0 flex-1 break-words">
-            <div className="flex items-start justify-between">
-              <div className="mb-1 text-sm font-semibold text-theme-fg-primary">
-                {isUser ? (
-                  (userDisplayNameOverride ??
-                  userProfile?.name ?? (
-                    <Trans id="branding.user_form_of_address">You</Trans>
-                  ))
-                ) : (
-                  <Trans id="branding.assistant_name">Assistant</Trans>
-                )}
+            {!continuesTurn && (
+              <div className="flex items-start justify-between">
+                <div className="mb-1 text-sm font-semibold text-theme-fg-primary">
+                  {isUser ? (
+                    (userDisplayNameOverride ??
+                    userProfile?.name ?? (
+                      <Trans id="branding.user_form_of_address">You</Trans>
+                    ))
+                  ) : (
+                    <Trans id="branding.assistant_name">Assistant</Trans>
+                  )}
+                </div>
               </div>
-            </div>
+            )}
 
             <MessageErrorAlert message={message} />
 

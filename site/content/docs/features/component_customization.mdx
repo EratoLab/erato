@@ -388,6 +388,11 @@ interface ChatMessageProps {
   onFilePreview?: (file: FileUploadItem) => void;
   onViewFeedback?: (messageId: string, feedback: MessageFeedback) => void;
   allFileDownloadUrls?: Record<string, string>;
+
+  // The delegated task result an assistant reply answers (shared surface 1.23)
+  taskResult?: ContentPartTaskResult;
+  // Part of the assistant turn drawn above it (shared surface 1.23)
+  continuesTurn?: boolean;
 }
 ```
 
@@ -431,6 +436,30 @@ import {
 A runtime kit cannot resolve the `@/…` alias at all — that alias only exists inside the frontend's own build. An import written against it fails module linking before the kit's entry point runs, which takes the kit's version handshake down with it and leaves every override silently on its default. Deep paths such as `@/components/ui/Message/MessageContent` are not a second way in; `@erato/frontend/shared` is the whole surface. The `@/customer/components/…` paths in the registration snippets above are a different thing and stay as they are: those are for the in-tree fork, where the alias does resolve.
 
 Host class names are a parallel channel with the same property — kits paste them as string literals, so a rename breaks them silently. See [Class Hooks](./theming#class-hooks) for the declared list and for which rules a kit's own utilities can and cannot override.
+
+### Delegated task results
+
+A delegated task's result reaches the model on a user-role row, but it is drawn
+on the assistant's side, as the step where the task reported back
+(`TaskResultStep`, `data-testid="task-result-step"`). From shared surface 1.23:
+
+- When the assistant replied to the result, the list hands the result to that
+  reply as `taskResult`, and the row itself is not drawn. A renderer that passes
+  `useChatMessageRenderer().contentProps` to `hostComponents.MessageContent`
+  draws the step above the reply with no code of its own.
+- A result without a reply arrives as its own message with `role: "assistant"`
+  and `showTimestamp: false`, so it carries no message actions.
+
+`TaskResultCard` remains as a deprecated alias of `TaskResultStep`.
+
+Assistant messages with no user message between them are one turn: a result
+and the reply to it come back into the turn that started the task. Every
+message after the first gets `continuesTurn` (also on
+`useChatMessageRenderer()`); the host then draws no name, keeps the avatar's
+space empty so the text stays aligned, drops the gap above, and marks the root
+`data-continues-turn`. Hover controls stay per message, since each acts on its
+own message. A renderer that ignores the prop draws every message with its
+header, as before.
 
 ### What the Example Demonstrates
 
