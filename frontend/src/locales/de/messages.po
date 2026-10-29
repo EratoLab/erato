@@ -77,6 +77,21 @@ msgid "approvalQueue.title"
 msgstr ""
 
 #. js-lingui-explicit-id
+#: src/components/ui/Message/ApprovalQueueCard.tsx
+msgid "approvalQueue.waitingDescription"
+msgstr "{waitingCount, plural, one {Sie geht von selbst weiter, sobald die Aufgabe fertig ist.} other {Sie geht von selbst weiter, sobald sie fertig sind.}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ApprovalQueueCard.tsx
+msgid "approvalQueue.waitingHeading"
+msgstr "{waitingCount, plural, one {Wartet außerdem auf eine Aufgabe} other {Wartet außerdem auf # Aufgaben}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ApprovalQueueCard.tsx
+msgid "approvalQueue.waitingTitle"
+msgstr "{waitingCount, plural, one {Diese Antwort wartet auf eine Aufgabe} other {Diese Antwort wartet auf # Aufgaben}}"
+
+#. js-lingui-explicit-id
 #: src/pages/AssistantEditPage.tsx
 msgid "assistant.action.backToAssistants"
 msgstr "Zurück zu Assistenten"
@@ -3767,8 +3782,19 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/ParkedChildItem.tsx
+#: src/components/ui/Message/WaitingTaskItem.tsx
 msgid "delegatedTaskApproval.unnamedTask"
 msgstr ""
+
+#. js-lingui-explicit-id
+#: src/lib/delegation/delegationLabels.ts
+msgid "delegation.waitingFor.connectedApp"
+msgstr "Wartet auf eine verbundene App auf diesem Gerät"
+
+#. js-lingui-explicit-id
+#: src/lib/delegation/delegationLabels.ts
+msgid "delegation.waitingFor.outlookMailbox"
+msgstr "Wartet auf Outlook auf diesem Gerät"
 
 #. js-lingui-explicit-id
 #: src/pages/DesktopSidecarSetupPage.tsx
@@ -5315,6 +5341,11 @@ msgstr "{label} entfernen, Inhalt beibehalten"
 #: src/components/ui/WordReview/WordRichBlockPreview.tsx
 msgid "officeAddin.word.rich.updateObject"
 msgstr "{label} aktualisieren"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ParkedTaskNotice.tsx
+msgid "parkedTaskNotice.clientPending"
+msgstr "Diese Aufgabe wartet darauf, dass einer ihrer Aufrufe auf diesem Gerät ausgeführt wird."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/ParkedTaskNotice.tsx
@@ -7603,6 +7634,11 @@ msgstr "Am Budget für Tool-Aufrufe gestoppt; die Antwort kann unvollständig se
 
 #. js-lingui-explicit-id
 #: src/lib/delegation/delegationLabels.ts
+msgid "trace.delegation.reason.clientPending"
+msgstr "Wartet darauf, dass einer ihrer Aufrufe auf diesem Gerät ausgeführt wird"
+
+#. js-lingui-explicit-id
+#: src/lib/delegation/delegationLabels.ts
 msgid "trace.delegation.reason.interrupted"
 msgstr ""
 
@@ -7871,6 +7907,11 @@ msgstr "Nicht unterstützter Dateityp(en): {filenames}"
 #: src/components/ui/FileUpload/FileUploadButton.tsx
 msgid "upload.maxSizeHint"
 msgstr "Maximale Dateigröße: {maxSizeFormatted}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/WaitingTaskItem.tsx
+msgid "waitingTask.open"
+msgstr "Aufgabe öffnen"
 
 #. js-lingui-explicit-id
 #: src/components/ui/WordReview/WordHistoryCards.tsx
@@ -9277,6 +9318,10 @@ msgstr "In Warteschlange – wird nach Ihrer Antwort auf die Bestätigung gesend
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Queued — sends when response finishes"
 msgstr "In Warteschlange – wird nach der Antwort gesendet"
+
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "Queued — sends when the waiting tasks finish"
+msgstr "In Warteschlange – wird gesendet, sobald die wartenden Aufgaben fertig sind"
 
 #: src/components/ui/Trace/SidecarLocalTraceView.tsx
 msgid "Read local mailbox"

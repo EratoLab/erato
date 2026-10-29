@@ -7,11 +7,15 @@ import {
   resultPreview,
 } from "@/lib/delegation/delegatedRunControls";
 import { DELEGATE_TASK_TOOL_NAME } from "@/lib/delegation/delegationEnvelope";
-import { delegationReasonLabel } from "@/lib/delegation/delegationLabels";
+import {
+  delegationReasonLabel,
+  waitingForHostLabel,
+} from "@/lib/delegation/delegationLabels";
 import {
   TASK_BRIEF_PREVIEW_CHARS,
   taskBriefFromInput,
 } from "@/lib/delegation/taskBrief";
+import { useWaitingHost } from "@/lib/delegation/waitingHosts";
 import { useSidecarLocalTrace } from "@/lib/desktopSidecar/localTraceStore";
 
 import { NestedTraceView } from "../NestedTraceView";
@@ -111,6 +115,8 @@ const outcomeLabel = (status: string): string | undefined => {
  */
 const pendingPill = (
   status: string,
+  reason: string | undefined,
+  host: string | undefined,
 ): { label: string; toneClassName?: string } | undefined => {
   switch (status) {
     case "queued":
@@ -118,6 +124,10 @@ const pendingPill = (
         label: t({ id: "trace.delegation.status.queued", message: "Queued" }),
       };
     case "input_required":
+      // Nothing to decide: the task goes on by itself once its call ran.
+      if (reason === "client_pending") {
+        return { label: waitingForHostLabel(host) };
+      }
       return {
         label: t({
           id: "trace.delegation.status.inputRequired",
@@ -240,6 +250,7 @@ export const DelegationStep = ({
   const liveStatus = useDelegatedRunLiveStatus(
     envelope.background ? envelope.delegateChatId : undefined,
   );
+  const waitingHost = useWaitingHost(part.tool_call_id);
   const stepStatus = stepStatusFor(envelope, status);
   // A queued slot inherits the rail's "running", because the rail has only
   // three states — but nothing about it is in flight, so it must not pulse
@@ -250,7 +261,9 @@ export const DelegationStep = ({
   const outcome =
     envelope.status !== undefined ? outcomeLabel(envelope.status) : undefined;
   const pending =
-    envelope.status !== undefined ? pendingPill(envelope.status) : undefined;
+    envelope.status !== undefined
+      ? pendingPill(envelope.status, envelope.reason, waitingHost)
+      : undefined;
   // Only the task route: a mention step already names the assistant it
   // delegated to, and its brief would just repeat the conversation.
   const brief =

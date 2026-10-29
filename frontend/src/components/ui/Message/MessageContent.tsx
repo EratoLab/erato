@@ -37,6 +37,7 @@ import {
   TASK_BRIEF_PREVIEW_CHARS,
   taskBriefFromInput,
 } from "@/lib/delegation/taskBrief";
+import { WaitingHostsContext } from "@/lib/delegation/waitingHosts";
 import {
   WORD_EDITS_FENCE,
   WORD_INSERT_FENCE,
@@ -63,6 +64,7 @@ import {
 } from "./SyntaxHighlightedCode";
 import { approvalStopState } from "./approvalItems";
 
+import type { ApprovalStopState } from "./approvalItems";
 import type { ToolApprovalStatus } from "../Trace/Trace";
 import type { WordHistoryMessage } from "@/components/ui/WordReview/useWordHistoryMessage";
 import type { HostCardCodeBlockProps } from "@/config/componentRegistry";
@@ -1311,26 +1313,65 @@ export const MessageContent = memo(function MessageContent({
     [content],
   );
 
-  // Tasks of this turn that stopped to ask while nothing here asks for them:
-  // the turn was stopped, or it ended on a stop no task's question can join.
-  // Only the last stop counts, as on the server: an earlier one is settled.
+  // A waiting task's item settles with its slot: the last `tool_use` of the
+  // parent's call, as the server reads it.
+  const slotStatuses = React.useMemo(() => {
+    const statuses: Record<string, string | undefined> = {};
+    content.forEach((part) => {
+      if (part.content_type === "tool_use" && part.tool_call_id) {
+        statuses[part.tool_call_id] = part.status;
+      }
+    });
+    return statuses;
+  }, [content]);
+
+  // Only the last stop can still wait on tasks: an earlier one was carried
+  // onto a later one or settled.
+  const lastStop = React.useMemo(():
+    | { index: number; state: ApprovalStopState }
+    | undefined => {
+    for (let index = content.length - 1; index >= 0; index--) {
+      const part = content[index];
+      if (part.content_type === "tool_approval_request") {
+        return {
+          index,
+          state: approvalStopState(part, content.slice(index + 1), {
+            slots: slotStatuses,
+            isLastStop: true,
+          }),
+        };
+      }
+    }
+    return undefined;
+  }, [content, slotStatuses]);
+
+  const waitingHosts = React.useMemo(
+    () =>
+      Object.fromEntries(
+        (lastStop?.state.waiting ?? []).map((item) => [
+          item.tool_call_id,
+          item.child?.waiting_for?.host_context,
+        ]),
+      ),
+    [lastStop],
+  );
+
+  // Tasks of this turn that stopped while nothing here shows them: the turn
+  // was stopped, or it ended on a stop no task can join. Only the last stop
+  // counts, as on the server: an earlier one is settled.
   const tasksWaitingElsewhere = React.useMemo(() => {
     if (isStreaming) {
       return [];
     }
     const covered = new Set<string>();
-    for (let index = content.length - 1; index >= 0; index--) {
-      const part = content[index];
-      if (part.content_type !== "tool_approval_request") {
-        continue;
+    [
+      ...(lastStop?.state.open ?? []),
+      ...(lastStop?.state.waiting ?? []),
+    ].forEach((item) => {
+      if (item.child) {
+        covered.add(item.child.child_chat_id);
       }
-      approvalStopState(part, content.slice(index + 1)).open.forEach((item) => {
-        if (item.child) {
-          covered.add(item.child.child_chat_id);
-        }
-      });
-      break;
-    }
+    });
     return content.flatMap((part) => {
       if (
         part.content_type !== "tool_use" ||
@@ -1352,10 +1393,11 @@ export const MessageContent = memo(function MessageContent({
           toolCallId: part.tool_call_id,
           childChatId,
           brief: taskBriefFromInput(part.input, TASK_BRIEF_PREVIEW_CHARS),
+          reason: envelope.reason,
         },
       ];
     });
-  }, [content, isStreaming]);
+  }, [content, isStreaming, lastStop]);
 
   const generatedImageFileIds = React.useMemo(() => {
     const fileIds = new Set<string>();
@@ -1640,19 +1682,23 @@ export const MessageContent = memo(function MessageContent({
             content.slice(lastTracePartIndex + 1).some(isRenderableContentPart);
 
           return (
-            <Trace
+            <WaitingHostsContext.Provider
               key={`trace-${cluster.startIndex}`}
-              parts={cluster.parts}
-              isStreaming={!!isStreaming}
-              hasLaterContent={hasLaterContent}
-              renderMarkdown={renderMarkdown}
-              durationMs={
-                durationFromTraceParts(cluster.parts) ??
-                (traceClusterCount === 1 ? traceDurationMs : null)
-              }
-              hasError={hasError}
-              toolApprovalStatuses={toolApprovalStatuses}
-            />
+              value={waitingHosts}
+            >
+              <Trace
+                parts={cluster.parts}
+                isStreaming={!!isStreaming}
+                hasLaterContent={hasLaterContent}
+                renderMarkdown={renderMarkdown}
+                durationMs={
+                  durationFromTraceParts(cluster.parts) ??
+                  (traceClusterCount === 1 ? traceDurationMs : null)
+                }
+                hasError={hasError}
+                toolApprovalStatuses={toolApprovalStatuses}
+              />
+            </WaitingHostsContext.Provider>
           );
         }
 
@@ -1682,13 +1728,20 @@ export const MessageContent = memo(function MessageContent({
           // under the ids its own predecessor already settled, so the request's
           // position is what tells the two stops apart. Which is also why the
           // key is positional — the two parts share a tool call id.
-          const stop = approvalStopState(part, content.slice(index + 1));
+          const stop =
+            index === lastStop?.index
+              ? lastStop.state
+              : approvalStopState(part, content.slice(index + 1), {
+                  slots: slotStatuses,
+                  isLastStop: false,
+                });
           return (
             <McpToolApprovalCard
               key={`tool-approval-${index}`}
               messageId={messageId}
               request={part}
               openItems={stop.open}
+              waitingItems={stop.waiting}
               resolution={stop.resolution}
             />
           );
@@ -1799,6 +1852,7 @@ export const MessageContent = memo(function MessageContent({
           key={`parked-task-${task.toolCallId}`}
           childChatId={task.childChatId}
           brief={task.brief}
+          reason={task.reason}
         />
       ))}
       {messageId && <ClientToolFileApprovals messageId={messageId} />}

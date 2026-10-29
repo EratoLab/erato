@@ -39,4 +39,22 @@ describe("ParkedTaskNotice", () => {
     fireEvent.click(open);
     expect(onOpen).toHaveBeenCalledWith("child-1");
   });
+
+  it("says a task waits for the device when its slot is client_pending", () => {
+    renderNotice(
+      <ParkedTaskNotice
+        childChatId="child-1"
+        brief="Check the calendar"
+        reason="client_pending"
+      />,
+    );
+
+    expect(screen.getByTestId("parked-task-notice")).toHaveTextContent(
+      "This task is waiting for one of its calls to run on this device.",
+    );
+    expect(screen.getByTestId("parked-task-open")).toHaveAttribute(
+      "href",
+      "/chat/child-1",
+    );
+  });
 });

@@ -1,6 +1,6 @@
 import { plural, t } from "@lingui/core/macro";
 import { useQueryClient } from "@tanstack/react-query";
-import { useContext, useEffect, useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
 
 import { getIdToken } from "@/auth/tokenStore";
 import { archivedNoticeText } from "@/components/ui/Chat/chatArchiveActions";
@@ -28,7 +28,7 @@ import { ApprovalQueueCard } from "./ApprovalQueueCard";
 import { OriginApprovalLink } from "./OriginApprovalLink";
 import { OwnCallApprovalItem } from "./OwnCallApprovalItem";
 import { TaskPlanApprovalCard } from "./TaskPlanApprovalCard";
-import { approvalItemsOf } from "./approvalItems";
+import { approvalItemsOf, isWaitingItem } from "./approvalItems";
 
 import type { ApprovalItemPart, StagedDecisions } from "./approvalItems";
 import type { ToolApprovalStatus } from "../Trace/Trace";
@@ -45,6 +45,51 @@ const COVERED_BY_PARENT = "covered_by_parent";
 /** The `409` for a stop every item of which is already decided. */
 // eslint-disable-next-line lingui/no-unlocalized-strings -- API refusal code
 const ALREADY_CONTINUED = "already_continued";
+
+/**
+ * `409`s that only say the row moved on without this card: another turn holds
+ * the chat, or nothing is left to decide while tasks wait. The refetched row
+ * says what is left.
+ */
+const SILENT_REFUSALS: ReadonlySet<string | undefined> = new Set([
+  ALREADY_CONTINUED,
+  // eslint-disable-next-line lingui/no-unlocalized-strings -- API refusal code
+  "generation_running",
+  // eslint-disable-next-line lingui/no-unlocalized-strings -- API refusal code
+  "children_waiting",
+]);
+
+// eslint-disable-next-line lingui/no-unlocalized-strings -- API refusal code
+const DECISIONS_MISMATCH = "decisions_mismatch";
+
+/** How often a card that shows waiting tasks reads the row again. */
+const WAITING_REFRESH_MS = 5_000;
+
+/** The `missing` ids of a `400 decisions_mismatch`, or none for anything else. */
+const mismatchedIds = (
+  cause: unknown,
+): { missing: string[]; unknown: string[] } | null => {
+  if (
+    !(cause instanceof FrontendRequestError) ||
+    cause.response?.status !== 400
+  )
+    return null;
+  try {
+    const body = JSON.parse(cause.response.body ?? "") as {
+      code?: unknown;
+      missing?: unknown;
+      unknown?: unknown;
+    };
+    if (body.code !== DECISIONS_MISMATCH) return null;
+    const ids = (value: unknown) =>
+      Array.isArray(value)
+        ? value.filter((id): id is string => typeof id === "string")
+        : [];
+    return { missing: ids(body.missing), unknown: ids(body.unknown) };
+  } catch {
+    return null;
+  }
+};
 
 /**
  * The generated schema collapses `serde_json::Value` to `void`, which would
@@ -77,6 +122,7 @@ export const McpToolApprovalCard = ({
   messageId,
   request,
   openItems,
+  waitingItems,
   resolution,
 }: {
   messageId: string;
@@ -89,6 +135,11 @@ export const McpToolApprovalCard = ({
    * the row around it.
    */
   openItems?: ApprovalItemPart[];
+  /**
+   * The stop's task children that still wait for a call on the device. They
+   * are shown, never decided, and keep the stop open until they finish.
+   */
+  waitingItems?: ApprovalItemPart[];
   resolution: ToolApprovalStatus | null;
 }) => {
   // Read before anything else on the part: for every kind but `mcp_tool` the
@@ -96,9 +147,15 @@ export const McpToolApprovalCard = ({
   // writes an empty server id), so they must not reach the MCP layout.
   // eslint-disable-next-line lingui/no-unlocalized-strings -- API kind value
   const kind = request.kind ?? "mcp_tool";
-  const approvalItems = openItems ?? approvalItemsOf(request);
+  const approvalItems =
+    openItems ??
+    approvalItemsOf(request).filter((item) => !isWaitingItem(item));
+  const waiting =
+    waitingItems ?? approvalItemsOf(request).filter(isWaitingItem);
   const approvalIds = approvalItems.map((item) => item.approval_id);
   const openItemCount = approvalItems.length;
+  // Nothing to decide: the stop waits for its tasks alone.
+  const waitingOnly = openItemCount === 0 && waiting.length > 0;
 
   // This component is also rendered in isolated stories/tests, where the chat
   // provider is deliberately absent. The in-app path always has it.
@@ -135,7 +192,7 @@ export const McpToolApprovalCard = ({
     if (!chatId || !isPending || isArchived === true) {
       return;
     }
-    registerConfirmation(chatId, registrationId);
+    registerConfirmation(chatId, registrationId, { waitingOnly });
     return () => unregisterConfirmation(chatId, registrationId);
   }, [
     chatId,
@@ -144,6 +201,7 @@ export const McpToolApprovalCard = ({
     registrationId,
     registerConfirmation,
     unregisterConfirmation,
+    waitingOnly,
   ]);
 
   // Unlike the registry (mount-scoped by design, so it can't wedge the send
@@ -152,12 +210,30 @@ export const McpToolApprovalCard = ({
   // server-side awaiting_approval generation state this card renders.
   const requestedAt = request.requested_at;
   useEffect(() => {
-    // Durable and never cleaned up, so it waits until the chat is known.
-    if (!chatId || !isPending || isArchived !== false) {
+    // Durable and never cleaned up, so it waits until the chat is known. A
+    // stop that only waits for its tasks asks nothing of the user.
+    if (!chatId || !isPending || waitingOnly || isArchived !== false) {
       return;
     }
     useGenerationStatusStore.getState().seedActionRequired(chatId, requestedAt);
-  }, [chatId, isArchived, isPending, requestedAt]);
+  }, [chatId, isArchived, isPending, requestedAt, waitingOnly]);
+
+  // A waiting task settles on the server, not here: the row is read again
+  // until it does, and never while this chat streams or a decision is in
+  // flight, whose own refetch would race this one.
+  const refetchMessages = chatContext?.refetchMessages;
+  const holdRefresh = useRef(false);
+  holdRefresh.current = isBusy || (chatContext?.isPendingResponse ?? false);
+  const watchesTasks = isPending && waiting.length > 0 && isArchived === false;
+  useEffect(() => {
+    if (!watchesTasks || !refetchMessages) {
+      return;
+    }
+    const timer = setInterval(() => {
+      if (!holdRefresh.current) void refetchMessages();
+    }, WAITING_REFRESH_MS);
+    return () => clearInterval(timer);
+  }, [refetchMessages, watchesTasks]);
 
   /**
    * Hand the decision to the chat's own streaming machinery when the host
@@ -289,6 +365,25 @@ export const McpToolApprovalCard = ({
         ]);
       }
     } catch (cause) {
+      // A task that waited stopped on a question meanwhile, and the answers
+      // given so far did not cover it. They are kept, and the refetched row
+      // asks only the new question.
+      const mismatch = mismatchedIds(cause);
+      const waitingIds = new Set(waiting.map((item) => item.approval_id));
+      if (
+        mismatch?.unknown.length === 0 &&
+        mismatch.missing.length > 0 &&
+        mismatch.missing.every((id) => waitingIds.has(id))
+      ) {
+        setError(null);
+        setStaged(
+          Object.fromEntries(
+            answers.map((answer) => [answer.approvalId, answer.decision]),
+          ),
+        );
+        await chatContext?.refetchMessages();
+        return;
+      }
       const refusal = readConflictRefusal(cause);
       // Nothing is wrong with this card: the same question is open in the chat
       // that dispatched the run, and only that one can act on the answer. The
@@ -301,7 +396,7 @@ export const McpToolApprovalCard = ({
       // double decision, a row this client had gone stale on. The user's answer
       // landed, so say nothing and let the settled row resolve the card.
       const alreadyContinued =
-        refusal?.status === 409 && refusal.code === ALREADY_CONTINUED;
+        refusal?.status === 409 && SILENT_REFUSALS.has(refusal.code);
       // The refusal envelope is API wire text; printed beside the link that
       // says where to go instead, it reads as a second, unexplained failure.
       setError(
@@ -368,7 +463,7 @@ export const McpToolApprovalCard = ({
   const isQueue =
     kind === "delegated_task" ||
     ((kind === "mcp_tool" || isClientTool) &&
-      approvalItems.some((item) => item.child != null));
+      (waiting.length > 0 || approvalItems.some((item) => item.child != null)));
 
   // Resolved decisions are represented beside the matching tool call in the
   // thinking trace. Keep this card solely for the pending decision UI.
@@ -435,6 +530,7 @@ export const McpToolApprovalCard = ({
         <ApprovalQueueCard
           request={request}
           items={approvalItems}
+          waiting={waiting}
           staged={staged}
           isArchived={isArchived === true}
           isBusy={cardIsBusy}

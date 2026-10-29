@@ -3,6 +3,7 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useGenerationStatusStore } from "@/hooks/chat/store/generationStatusStore";
+import { WaitingHostsContext } from "@/lib/delegation/waitingHosts";
 import { useSidecarLocalTraceStore } from "@/lib/desktopSidecar/localTraceStore";
 import { recentChatsQuery } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import { DelegatedRunOpenProvider } from "@/providers/DelegatedRunOpenProvider";
@@ -552,6 +553,53 @@ describe("delegation step", () => {
     expect(screen.getByTestId("delegation-reason")).toHaveTextContent(
       "Waiting for your decision",
     );
+  });
+
+  it("shows a task waiting on the device without asking for a decision", () => {
+    renderStep(
+      { ...IDENTITY, status: "input_required", reason: "client_pending" },
+      "delegate_task",
+      false,
+    );
+
+    expect(
+      screen.getByText("Waiting for a connected app on this device"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Needs your decision")).toBeNull();
+    expect(screen.getByTestId("delegation-reason")).toHaveTextContent(
+      "Waiting for one of its calls to run on this device",
+    );
+  });
+
+  it("names the host a waiting task waits for when the stop says it", () => {
+    render(
+      <QueryClientProvider client={queryClient}>
+        <StaticFeatureConfigProvider config={{}}>
+          <WaitingHostsContext.Provider
+            value={{ "call-delegate": "outlook_mailbox" }}
+          >
+            <ToolUseStep
+              part={part(
+                {
+                  ...IDENTITY,
+                  status: "input_required",
+                  reason: "client_pending",
+                },
+                "delegate_task",
+              )}
+              status="done"
+              isStreaming={false}
+              isCollapsed={false}
+              isLastStep
+            />
+          </WaitingHostsContext.Provider>
+        </StaticFeatureConfigProvider>
+      </QueryClientProvider>,
+    );
+
+    expect(
+      screen.getByText("Waiting for Outlook on this device"),
+    ).toBeInTheDocument();
   });
 
   it("keeps the retired timeout status readable on replayed parts", () => {

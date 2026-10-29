@@ -12,11 +12,24 @@ import { devtools } from "zustand/middleware";
  *
  * The hold is best-effort: a card whose renderer is unmounted (e.g. scrolled
  * out of a virtualized message list) deregisters, so it can't wedge the queue.
+ *
+ * A card that only waits for delegated tasks registers `waitingOnly`: it holds
+ * the queue the same way, but nothing is asked of the user.
  */
+export interface ConfirmationRegistrationOptions {
+  waitingOnly?: boolean;
+}
+
 interface ConfirmationRegistryStore {
   // chatId -> registration ids of currently-pending confirmation cards.
   pendingIdsByChatId: Partial<Record<string, string[]>>;
-  registerConfirmation: (chatId: string, registrationId: string) => void;
+  // The registration ids that only wait for tasks, across chats.
+  waitingOnlyIds: Partial<Record<string, true>>;
+  registerConfirmation: (
+    chatId: string,
+    registrationId: string,
+    options?: ConfirmationRegistrationOptions,
+  ) => void;
   unregisterConfirmation: (chatId: string, registrationId: string) => void;
   hasPending: (chatId: string | null | undefined) => boolean;
 }
@@ -26,22 +39,63 @@ const hasPendingIn = (
   chatId: string | null | undefined,
 ): boolean => (chatId ? (pendingIdsByChatId[chatId]?.length ?? 0) > 0 : false);
 
+const onlyWaitingIn = (
+  state: Pick<
+    ConfirmationRegistryStore,
+    "pendingIdsByChatId" | "waitingOnlyIds"
+  >,
+  chatId: string | null | undefined,
+): boolean => {
+  const pending = chatId ? state.pendingIdsByChatId[chatId] : undefined;
+  return (
+    !!pending &&
+    pending.length > 0 &&
+    pending.every((id) => state.waitingOnlyIds[id] === true)
+  );
+};
+
+const withWaitingOnly = (
+  waitingOnlyIds: Partial<Record<string, true>>,
+  registrationId: string,
+  waitingOnly: boolean,
+): Partial<Record<string, true>> => {
+  if ((waitingOnlyIds[registrationId] === true) === waitingOnly) {
+    return waitingOnlyIds;
+  }
+  const next = { ...waitingOnlyIds };
+  if (waitingOnly) {
+    next[registrationId] = true;
+  } else {
+    delete next[registrationId];
+  }
+  return next;
+};
+
 export const useConfirmationRegistryStore = create<ConfirmationRegistryStore>()(
   devtools(
     (set, get) => ({
       pendingIdsByChatId: {},
-      registerConfirmation: (chatId, registrationId) =>
+      waitingOnlyIds: {},
+      registerConfirmation: (chatId, registrationId, options = {}) =>
         set(
           (prev) => {
             const existing = prev.pendingIdsByChatId[chatId] ?? [];
+            const waitingOnlyIds = withWaitingOnly(
+              prev.waitingOnlyIds,
+              registrationId,
+              options.waitingOnly ?? false,
+            );
             if (existing.includes(registrationId)) {
-              return prev;
+              return waitingOnlyIds === prev.waitingOnlyIds
+                ? prev
+                : { waitingOnlyIds };
             }
             return {
               pendingIdsByChatId: {
                 ...prev.pendingIdsByChatId,
                 [chatId]: [...existing, registrationId],
               },
+              waitingOnlyIds,
             };
           },
           false,
@@ -61,7 +115,14 @@ export const useConfirmationRegistryStore = create<ConfirmationRegistryStore>()(
             } else {
               nextByChatId[chatId] = next;
             }
-            return { pendingIdsByChatId: nextByChatId };
+            return {
+              pendingIdsByChatId: nextByChatId,
+              waitingOnlyIds: withWaitingOnly(
+                prev.waitingOnlyIds,
+                registrationId,
+                false,
+              ),
+            };
           },
           false,
           "confirmationRegistry/unregisterConfirmation",
@@ -87,3 +148,12 @@ export const useHasPendingConfirmation = (
   useConfirmationRegistryStore((state) =>
     hasPendingIn(state.pendingIdsByChatId, chatId),
   );
+
+/**
+ * Reactive read of whether every unresolved card of `chatId` only waits for
+ * delegated tasks, so nothing the user can answer holds the queue.
+ */
+export const useOnlyWaitingConfirmations = (
+  chatId: string | null | undefined,
+): boolean =>
+  useConfirmationRegistryStore((state) => onlyWaitingIn(state, chatId));

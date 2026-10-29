@@ -46,7 +46,34 @@ export const delegationReasonLabel = (reason: string): string => {
         id: "trace.delegation.reason.interrupted",
         message: "Stopped when the server restarted mid-run",
       });
+    case "client_pending":
+      return t({
+        id: "trace.delegation.reason.clientPending",
+        message: "Waiting for one of its calls to run on this device",
+      });
     default:
       return reason;
+  }
+};
+
+/**
+ * What a task waits for while one of its calls runs on the device, by the
+ * `host_context.kind` of the binding the call waits for. An unknown or absent
+ * kind still says that the device is where it waits.
+ */
+export const waitingForHostLabel = (
+  hostContext: string | undefined,
+): string => {
+  switch (hostContext) {
+    case "outlook_mailbox":
+      return t({
+        id: "delegation.waitingFor.outlookMailbox",
+        message: "Waiting for Outlook on this device",
+      });
+    default:
+      return t({
+        id: "delegation.waitingFor.connectedApp",
+        message: "Waiting for a connected app on this device",
+      });
   }
 };
