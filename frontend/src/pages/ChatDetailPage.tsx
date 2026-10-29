@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { useChatHistoryStore } from "@/hooks/chat/useChatHistory";
-import { useChatContext } from "@/providers/ChatProvider";
+import { useChatSession } from "@/providers/ChatProvider";
 import { createLogger } from "@/utils/debugLogger";
 
 const logger = createLogger("UI", "ChatDetailPage(ID)");
@@ -23,7 +23,7 @@ const isNotFoundError = (error: unknown): boolean =>
 export default function ChatDetailPage() {
   // No sync logic needed - currentChatId is automatically derived from URL in useChatHistory
   const navigate = useNavigate();
-  const { currentChatId, messagingError } = useChatContext();
+  const { currentChatId, messagingError } = useChatSession();
   const isNewChatPending = useChatHistoryStore(
     (state) => state.isNewChatPending,
   );

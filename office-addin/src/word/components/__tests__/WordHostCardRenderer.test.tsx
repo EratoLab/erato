@@ -54,6 +54,9 @@ vi.mock("@erato/frontend/library", async (importOriginal) => {
       </div>
     ),
     useChatContext: () => mockUseChatContext(),
+    ...(await import("../../../test/helpers/eratoLibraryMock")).chatHooksFrom(
+      () => mockUseChatContext(),
+    ),
     useHostArtifact: () => mockUseHostArtifact(),
     usePersistedState: () => mockUsePersistedState(),
     useConfirmationRegistryStore: (

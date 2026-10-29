@@ -16,6 +16,12 @@ import { useResolvedFiles } from "@/hooks/files/useResolvedFiles";
 import { useMessageListVirtualization, useScrollEvents } from "@/hooks/ui";
 import { usePaginatedData } from "@/hooks/ui/usePaginatedData";
 import { useScrollToBottom } from "@/hooks/useScrollToBottom";
+import {
+  isSameMessage,
+  shallowEqual,
+  useStableEntries,
+  useStableValue,
+} from "@/utils/chat/stableValues";
 import { FileTypeUtil } from "@/utils/fileTypes";
 
 import { MessageListHeader } from "./MessageListHeader";
@@ -23,12 +29,6 @@ import { useMessageClassNameHelper } from "./MessageListUtils";
 import { ScrollToBottomButton } from "./ScrollToBottomButton";
 import { StandardMessageList } from "./StandardMessageList";
 import { VirtualizedMessageList } from "./VirtualizedMessageList";
-import {
-  isSameMessage,
-  shallowEqual,
-  useStableEntries,
-  useStableValue,
-} from "./stableProps";
 import { ConversationMessagesProvider } from "../Message/ConversationMessages";
 
 import type { ChatMessageProps } from "../Chat/ChatMessage";

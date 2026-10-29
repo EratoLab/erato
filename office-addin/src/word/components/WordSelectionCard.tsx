@@ -3,7 +3,8 @@ import {
   Card,
   extractTextFromContent,
   TextComparison,
-  useChatContext,
+  useChatSession,
+  useConversationMessage,
   useHostArtifact,
   WordReviewCard,
   WordReviewDetailsToggle,
@@ -603,8 +604,8 @@ export function WordSelectionCard({
   );
   const facetId = artifact?.facetId ?? "";
   const messageId = artifact?.messageId;
-  const { messages } = useChatContext();
-  const message = messageId ? messages[messageId] : undefined;
+  const { getTranscript } = useChatSession();
+  const message = useConversationMessage(messageId);
   const isGenerating = message?.status === "sending";
   // Identical versions in one answer share this key and so one review: they write the same text,
   // so each card shows the other's Replace and Undo.
@@ -1024,7 +1025,9 @@ export function WordSelectionCard({
   );
   const useCurrentSelection = () => {
     const request = message?.previous_message_id
-      ? extractTextFromContent(messages[message.previous_message_id]?.content)
+      ? extractTextFromContent(
+          getTranscript().messages[message.previous_message_id]?.content,
+        )
       : "";
     restoreRequest(request ?? "");
     wordSelectionStore.requestRefresh({ rearm: true });

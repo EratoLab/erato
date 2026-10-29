@@ -22,7 +22,7 @@ const mockUsePersistedState = vi.fn();
 const mockOpenNewAppointmentForm = vi.fn();
 const mockIsCreateAppointmentSupported = vi.fn();
 
-vi.mock("@erato/frontend/library", () => ({
+vi.mock("@erato/frontend/library", async () => ({
   ActionConfirmationCard: (props: {
     description?: unknown;
     onAllowOnce: () => void;
@@ -66,6 +66,9 @@ vi.mock("@erato/frontend/library", () => ({
     </div>
   ),
   useChatContext: () => mockUseChatContext(),
+  ...(await import("../../../test/helpers/eratoLibraryMock")).chatHooksFrom(
+    () => mockUseChatContext(),
+  ),
   useOutlookArtifact: () => mockUseOutlookArtifact(),
   usePersistedState: () => mockUsePersistedState(),
   useConfirmationRegistryStore: (

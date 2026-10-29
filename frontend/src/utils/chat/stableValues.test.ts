@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import { isSameMessage, shallowEqual } from "./stableProps";
+import { isSameMessage, shallowEqual } from "./stableValues";
 
-import type { ChatMessage } from "./MessageList";
+import type { ChatMessage } from "@/components/ui/MessageList/MessageList";
 
 const message: ChatMessage = {
   id: "m1",
@@ -15,7 +15,7 @@ const message: ChatMessage = {
 };
 const missing = undefined as unknown as ChatMessage;
 
-describe("stableProps", () => {
+describe("stableValues", () => {
   it("never matches a missing key with an undefined value", () => {
     expect(
       shallowEqual(

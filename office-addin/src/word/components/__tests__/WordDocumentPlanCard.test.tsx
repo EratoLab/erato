@@ -125,11 +125,11 @@ const mock = vi.hoisted(() => {
       void pendingConfirmations.delete(`${chatId}:${id}`),
   };
 });
-vi.mock("@erato/frontend/library", async (importOriginal) => ({
-  ...(await importOriginal<typeof EratoLibrary>()),
-  CopyErrorButton: () => null,
-  useHostArtifact: () => mock.artifact,
-  useChatContext: () => ({
+vi.mock("@erato/frontend/library", async (importOriginal) => {
+  const { chatHooksFrom } = await import(
+    "../../../test/helpers/eratoLibraryMock"
+  );
+  const useChatContext = () => ({
     messages: {
       request: {
         id: "request",
@@ -146,46 +146,53 @@ vi.mock("@erato/frontend/library", async (importOriginal) => ({
     },
     messageOrder: [String(mock.artifact.messageId)],
     currentChatId: "chat-A",
-  }),
-  usePersistedState: () => [mock.decisions, mock.setDecisions],
-  useConfirmationRegistryStore: (select: (value: unknown) => unknown) =>
-    select({
-      registerConfirmation: mock.registerConfirmation,
-      unregisterConfirmation: mock.unregisterConfirmation,
-    }),
-  ActionConfirmationCard: ({
-    onAllowOnce,
-    onDeny,
-    onAlwaysAllow,
-    alwaysAllowDisabledReason,
-    denyLabel,
-    isBusy,
-    progressLabel,
-  }: {
-    onAllowOnce: () => void;
-    onDeny: () => void;
-    onAlwaysAllow: () => void;
-    alwaysAllowDisabledReason?: string;
-    denyLabel?: string;
-    isBusy: boolean;
-    progressLabel?: string;
-  }) => (
-    <div>
-      {progressLabel && <output>{progressLabel}</output>}
-      <button disabled={isBusy} onClick={onAllowOnce}>
-        Allow once
-      </button>
-      <button
-        disabled={isBusy || !!alwaysAllowDisabledReason}
-        onClick={onAlwaysAllow}
-      >
-        Always allow
-      </button>
-      {alwaysAllowDisabledReason && <p>{alwaysAllowDisabledReason}</p>}
-      <button onClick={onDeny}>{denyLabel}</button>
-    </div>
-  ),
-}));
+  });
+  return {
+    ...(await importOriginal<typeof EratoLibrary>()),
+    CopyErrorButton: () => null,
+    useHostArtifact: () => mock.artifact,
+    useChatContext,
+    ...chatHooksFrom(useChatContext),
+    usePersistedState: () => [mock.decisions, mock.setDecisions],
+    useConfirmationRegistryStore: (select: (value: unknown) => unknown) =>
+      select({
+        registerConfirmation: mock.registerConfirmation,
+        unregisterConfirmation: mock.unregisterConfirmation,
+      }),
+    ActionConfirmationCard: ({
+      onAllowOnce,
+      onDeny,
+      onAlwaysAllow,
+      alwaysAllowDisabledReason,
+      denyLabel,
+      isBusy,
+      progressLabel,
+    }: {
+      onAllowOnce: () => void;
+      onDeny: () => void;
+      onAlwaysAllow: () => void;
+      alwaysAllowDisabledReason?: string;
+      denyLabel?: string;
+      isBusy: boolean;
+      progressLabel?: string;
+    }) => (
+      <div>
+        {progressLabel && <output>{progressLabel}</output>}
+        <button disabled={isBusy} onClick={onAllowOnce}>
+          Allow once
+        </button>
+        <button
+          disabled={isBusy || !!alwaysAllowDisabledReason}
+          onClick={onAlwaysAllow}
+        >
+          Always allow
+        </button>
+        {alwaysAllowDisabledReason && <p>{alwaysAllowDisabledReason}</p>}
+        <button onClick={onDeny}>{denyLabel}</button>
+      </div>
+    ),
+  };
+});
 /** The chat the message list exposes to message renderers, as the mocked context holds it. */
 function Conversation({ children }: { children: ReactNode }) {
   const id = String(mock.artifact.messageId);

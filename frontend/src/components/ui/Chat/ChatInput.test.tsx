@@ -83,9 +83,11 @@ const mockUseAudioTranscriptionRecorder = vi.fn();
 const mockUseIsMobile = vi.fn();
 const mockChatInputAddControls = vi.fn();
 
-vi.mock("@/providers/ChatProvider", () => ({
-  useChatContext: () => mockUseChatContext(),
-}));
+vi.mock("@/providers/ChatProvider", async () =>
+  (await import("@/test/chatProviderMock")).createChatProviderMock(() =>
+    mockUseChatContext(),
+  ),
+);
 
 vi.mock("@/providers/FeatureConfigProvider", () => ({
   useUploadFeature: () => mockUseUploadFeature(),

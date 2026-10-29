@@ -15,7 +15,7 @@ import {
   useGetAssistant,
   useRecentChats,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
-import { useChatContext } from "@/providers/ChatProvider";
+import { useChatSession } from "@/providers/ChatProvider";
 import {
   useAssistantsFeature,
   usePinnedChatsFeature,
@@ -111,14 +111,8 @@ export default function AssistantChatSpacePage() {
   );
 
   // Get chat context
-  const {
-    messages: contextMessages,
-    messageOrder: contextMessageOrder,
-    currentChatId,
-    mountKey,
-    pinChat,
-    pinnedChats,
-  } = useChatContext();
+  const { currentChatId, mountKey, pinChat, pinnedChats, getTranscript } =
+    useChatSession();
   const { enabled: pinnedChatsEnabled, maxItems: pinnedChatsLimit } =
     usePinnedChatsFeature();
 
@@ -174,7 +168,7 @@ export default function AssistantChatSpacePage() {
     logger.log("Handling message action in AssistantChatSpacePage:", action);
 
     if (action.type === "copy") {
-      const messageToCopy = contextMessages[action.messageId];
+      const messageToCopy = getTranscript().messages[action.messageId];
       const textContent = transformEmailFencesForCopy(
         extractTextFromContent(messageToCopy.content),
       );
@@ -269,8 +263,6 @@ export default function AssistantChatSpacePage() {
     <div className="flex size-full flex-col">
       <Chat
         key={mountKey}
-        messages={contextMessages}
-        messageOrder={contextMessageOrder}
         controlsContext={{
           currentUserId: "user1",
           dialogOwnerId: "user1",

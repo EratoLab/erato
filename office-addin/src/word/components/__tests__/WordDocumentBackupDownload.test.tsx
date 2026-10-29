@@ -28,27 +28,34 @@ import type {
 } from "@erato/frontend/word-review";
 
 const host = vi.hoisted(() => ({ messageId: "download-message" }));
-vi.mock("@erato/frontend/library", async (importOriginal) => ({
-  ...(await importOriginal<typeof EratoLibrary>()),
-  CopyErrorButton: () => null,
-  useHostArtifact: () => ({
-    facetId: "word_document_authoring",
-    messageId: host.messageId,
-    itemIdentity: "doc-A",
-    allowedClientActions: ["word.apply_document_plan"],
-    clientActionPresentation: "render_buttons",
-  }),
-  useChatContext: () => ({
+vi.mock("@erato/frontend/library", async (importOriginal) => {
+  const { chatHooksFrom } = await import(
+    "../../../test/helpers/eratoLibraryMock"
+  );
+  const useChatContext = () => ({
     messages: { [host.messageId]: { status: "completed", role: "assistant" } },
     messageOrder: [host.messageId],
-  }),
-  usePersistedState: () => [{}, vi.fn()],
-  useConfirmationRegistryStore: (select: (value: unknown) => unknown) =>
-    select({
-      registerConfirmation: () => {},
-      unregisterConfirmation: () => {},
+  });
+  return {
+    ...(await importOriginal<typeof EratoLibrary>()),
+    CopyErrorButton: () => null,
+    useHostArtifact: () => ({
+      facetId: "word_document_authoring",
+      messageId: host.messageId,
+      itemIdentity: "doc-A",
+      allowedClientActions: ["word.apply_document_plan"],
+      clientActionPresentation: "render_buttons",
     }),
-}));
+    useChatContext,
+    ...chatHooksFrom(useChatContext),
+    usePersistedState: () => [{}, vi.fn()],
+    useConfirmationRegistryStore: (select: (value: unknown) => unknown) =>
+      select({
+        registerConfirmation: () => {},
+        unregisterConfirmation: () => {},
+      }),
+  };
+});
 
 async function interruptedDocument() {
   const ooxml = mixedAuthoringXml();

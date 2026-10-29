@@ -51,9 +51,9 @@ vi.mock("@/lib/generated/v1betaApi/v1betaApiComponents", () => ({
   ),
 }));
 
-vi.mock("@/providers/ChatProvider", () => ({
-  useChatContext: vi.fn(),
-}));
+vi.mock("@/providers/ChatProvider", async () =>
+  (await import("@/test/chatProviderMock")).createChatProviderMock(),
+);
 
 vi.mock("@/components/ui/Chat/ChatShareDialog", () => ({
   ChatShareDialog: () => null,

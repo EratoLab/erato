@@ -65,7 +65,7 @@ import {
   useFacets,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import { useV1betaApiContext } from "@/lib/generated/v1betaApi/v1betaApiContext";
-import { useChatContext } from "@/providers/ChatProvider";
+import { useChatSession } from "@/providers/ChatProvider";
 import {
   useUploadFeature,
   useChatInputFeature,
@@ -485,7 +485,7 @@ export const ChatInput = ({
     isUploading,
     cancelMessage,
     messagingError,
-  } = useChatContext();
+  } = useChatSession();
   const setMessagingError = useMessagingStore((state) => state.setError);
   const silentChatId = useFileUploadStore((state) => state.silentChatId);
   const uploadedFiles = useFileUploadStore((state) => state.uploadedFiles);

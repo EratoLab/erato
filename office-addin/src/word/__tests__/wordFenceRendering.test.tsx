@@ -20,25 +20,30 @@ import type {
   Message,
 } from "@erato/frontend/library";
 
-vi.mock("@erato/frontend/library", async (importOriginal) => ({
-  ...(await importOriginal<object>()),
-  useChatContext: () => ({
+vi.mock("@erato/frontend/library", async (importOriginal) => {
+  const { chatHooksFrom } = await import("../../test/helpers/eratoLibraryMock");
+  const useChatContext = () => ({
     messages: {},
     messageOrder: [],
     currentChatId: null,
-  }),
-  useConfirmationRegistryStore: (
-    selector: (state: {
-      registerConfirmation: () => void;
-      unregisterConfirmation: () => void;
-    }) => unknown,
-  ) =>
-    selector({
-      registerConfirmation: () => {},
-      unregisterConfirmation: () => {},
-    }),
-  usePersistedState: () => [{}, () => {}],
-}));
+  });
+  return {
+    ...(await importOriginal<object>()),
+    useChatContext,
+    ...chatHooksFrom(useChatContext),
+    useConfirmationRegistryStore: (
+      selector: (state: {
+        registerConfirmation: () => void;
+        unregisterConfirmation: () => void;
+      }) => unknown,
+    ) =>
+      selector({
+        registerConfirmation: () => {},
+        unregisterConfirmation: () => {},
+      }),
+    usePersistedState: () => [{}, () => {}],
+  };
+});
 
 /** Keep fence classification and the host renderer real; only chat-shell hooks are stubbed. */
 const EDITS_FENCE =

@@ -65,6 +65,9 @@ vi.mock("@erato/frontend/library", async (importOriginal) => ({
     </div>
   ),
   useChatContext: () => mockUseChatContext(),
+  ...(await import("../../../test/helpers/eratoLibraryMock")).chatHooksFrom(
+    () => mockUseChatContext(),
+  ),
   useHostArtifact: () => mockUseHostArtifact(),
   usePersistedState: (key: string, fallback: unknown) =>
     key === WORD_PREFERENCES_KEY

@@ -20,9 +20,11 @@ vi.mock("../store/generationStatusStore", () => ({
     mockUseGenerationStatusFor(...args),
 }));
 
-vi.mock("@/providers/ChatProvider", () => ({
-  useChatContext: () => ({ unarchiveChat: vi.fn() }),
-}));
+vi.mock("@/providers/ChatProvider", async () =>
+  (await import("@/test/chatProviderMock")).createChatProviderMock(() => ({
+    unarchiveChat: vi.fn(),
+  })),
+);
 
 const renderHeader = (header: ReactNode) =>
   render(<MemoryRouter>{header}</MemoryRouter>);

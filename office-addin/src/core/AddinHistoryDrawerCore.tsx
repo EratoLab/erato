@@ -18,7 +18,7 @@ import {
   runChatAction,
   sidebarNavigationIconClassName,
   useAssistantsFeature,
-  useChatContext,
+  useChatSession,
   useChatSharingFeature,
   useFeatureConfig,
   useGroupedChatSessions,
@@ -68,11 +68,9 @@ export function AddinHistoryDrawerCore({
   sectionsBeforeHistory,
   sectionsAfterHistory,
 }: AddinHistoryDrawerCoreProps) {
-  const chat = useChatContext();
-  // The context value gets a fresh identity on every streaming tick, but
-  // these members only change when the session changes. Handlers must key on
-  // them — depending on the whole value would re-mint every row callback per
-  // chunk and defeat ChatHistoryList's memo mid-stream.
+  const chat = useChatSession();
+  // Handlers key on these members, not the whole session value, so a row
+  // callback changes only when what it uses does.
   const {
     archiveChat,
     unarchiveChat,

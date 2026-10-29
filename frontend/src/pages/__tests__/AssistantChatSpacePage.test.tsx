@@ -28,9 +28,9 @@ import "@testing-library/jest-dom";
 i18n.load("en", enMessages as unknown as Messages);
 i18n.activate("en");
 
-vi.mock("@/providers/ChatProvider", () => ({
-  useChatContext: vi.fn(),
-}));
+vi.mock("@/providers/ChatProvider", async () =>
+  (await import("@/test/chatProviderMock")).createChatProviderMock(),
+);
 
 vi.mock("@/lib/generated/v1betaApi/v1betaApiComponents", () => ({
   useGetAssistant: vi.fn(),

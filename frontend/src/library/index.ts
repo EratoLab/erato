@@ -362,9 +362,24 @@ export {
 export {
   ChatProvider,
   ChatContext,
+  ChatContextProviders,
+  ChatSessionContext,
+  ChatTranscriptContext,
   useChatContext,
+  useChatSession,
+  useChatTranscript,
   type ChatContextValue,
+  type ChatSessionValue,
+  type ChatTranscriptValue,
 } from "@/providers/ChatProvider";
+export {
+  useConversationMessage,
+  useConversationSelector,
+} from "@/components/ui/Message/ConversationMessages";
+export {
+  useStableChatMessages,
+  useStableValue,
+} from "@/utils/chat/stableValues";
 export {
   defaultLocale,
   dynamicActivate,

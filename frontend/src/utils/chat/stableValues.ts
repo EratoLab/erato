@@ -1,6 +1,6 @@
 import { useRef } from "react";
 
-import type { ChatMessage } from "./MessageList";
+import type { ChatMessage } from "@/components/ui/MessageList/MessageList";
 
 // A key missing on one side never matches an `undefined` value on the other,
 // so `{ canEdit: true }` and `{ canEdit: true, isSharedDialog: undefined }` differ.
@@ -84,4 +84,11 @@ export function useStableEntries<T>(
     ref.current = { input: record, output: changed ? next : previous };
   }
   return ref.current.output;
+}
+
+/** Message objects that keep their identity while their content is unchanged. */
+export function useStableChatMessages<T extends ChatMessage>(
+  messages: Record<string, T>,
+): Record<string, T> {
+  return useStableEntries(messages, isSameMessage);
 }
