@@ -409,6 +409,15 @@ describe("read freshness", () => {
       },
     );
 
+    it("for a capture taken while Word was still tagging languages, which fires no events", async () => {
+      const freshness = await open(doc.snapshot, {
+        ...capture,
+        changes: { ...capture.changes!, proofingPending: true },
+      }).section(refOf(doc.snapshot, "1. Chapter 1"));
+
+      expect(freshness.changes).toBe("unknown");
+    });
+
     it("for a capture without paragraph ids", async () => {
       const ordinalMap = new Map(
         [...doc.ordinalMap].map(([k, p]) => [k, { ...p, uniqueLocalId: null }]),

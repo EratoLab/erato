@@ -14,6 +14,10 @@ import type { WordAuthoringSnapshot } from "@erato/frontend/word-review";
 export interface WordCaptureChanges {
   position: WordChangePosition;
   capturedAt: string;
+  /** Word was still tagging languages, or changed the file otherwise, when the capture stopped
+   * waiting: it goes on without a paragraph event (Word for Mac: about 100 s after opening a long
+   * document, ERMAIN-1005 F1). */
+  proofingPending?: boolean;
 }
 
 /** What a read needs from its capture to tell what changed since: the position and the paragraph
@@ -155,6 +159,7 @@ export function assessWordReadFreshness(
   const unknown = new Set<WordUnknownChange>();
   const mapping = mappingOf(snapshot, capture);
   if (mapping.idsMissing) unknown.add("no-ids");
+  if (capture.changes.proofingPending) unknown.add("proofing");
   const sections = wordCaptureSections(snapshot);
   const blockCount = snapshot.blocks.length;
   const readEntries =

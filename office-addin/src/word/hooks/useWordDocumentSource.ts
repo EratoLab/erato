@@ -23,6 +23,7 @@ import type {
   WordParagraphRead,
 } from "../utils/buildWordDocumentArgs";
 import type { WordDocumentReadNote } from "../utils/readWordDocument";
+import type { WordCaptureChanges } from "../utils/wordReadFreshness";
 import type { WordAuthoringSnapshot } from "@erato/frontend/word-review";
 
 export type WordDocumentStatus =
@@ -156,7 +157,7 @@ async function captureDocument(
   error?: string;
   retry?: boolean;
 }> {
-  const changes = {
+  const changes: WordCaptureChanges = {
     position: wordChangePosition(),
     capturedAt: new Date().toISOString(),
   };
@@ -178,6 +179,7 @@ async function captureDocument(
     assignParagraphOrdinals(build.authoring, result.paragraphs);
     if (result.note) build.readNote = result.note;
     if (result.authoring.proofingPending) {
+      changes.proofingPending = true;
       if (result.authoring.proofingPending === "tagging")
         build.authoring.proofingPending = true;
       // Word adds its tags without a change event, so only a send can pick them up.

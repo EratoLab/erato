@@ -14,7 +14,8 @@ export type WordUnknownChange =
   | "other-journal"
   | "out-of-range"
   | "no-location"
-  | "no-capture";
+  | "no-capture"
+  | "proofing";
 
 export interface WordChangeEntry {
   seq: number;

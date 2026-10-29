@@ -770,6 +770,7 @@ describe("useWordDocumentSource", () => {
       expect(sent!.authoring?.proofingPending).toBe(
         pending === "tagging" ? true : undefined,
       );
+      expect(sent!.changes?.proofingPending).toBe(true);
     },
   );
 
