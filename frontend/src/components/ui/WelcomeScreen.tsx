@@ -65,7 +65,9 @@ function useWelcomeBranding() {
   return { logoSize };
 }
 
-const markdownComponents = {
+export const welcomeMarkdownComponents: React.ComponentProps<
+  typeof Markdown
+>["components"] = {
   li: ({ ...props }) => <li className="list-disc" {...props} />,
   p: ({ ...props }) => <p className="mb-4 first:mt-0" {...props} />,
   h1: ({ children, ...props }) => (
@@ -106,7 +108,7 @@ const markdownComponents = {
       {children}
     </a>
   ),
-} satisfies React.ComponentProps<typeof Markdown>["components"];
+};
 
 /** Customer logo and the welcome heading; sits above the composer. */
 export function WelcomeScreenUpper({ className = "" }: WelcomeScreenProps) {
@@ -177,7 +179,7 @@ export function WelcomeScreenLower({ className = "" }: WelcomeScreenProps) {
       </h2>
 
       <div className={clsx("text-base text-theme-fg-muted", textAlignment)}>
-        <Markdown components={markdownComponents}>
+        <Markdown components={welcomeMarkdownComponents}>
           {t({
             id: "branding.welcomeScreen.description",
             message:

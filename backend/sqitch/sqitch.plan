@@ -61,3 +61,4 @@
 0058_add_client_operation_transports [0057_add_ms_teams_requests] 2026-10-12T16:00:00Z Codex <codex@openai.com> # Shared ownership for attached durable client operations
 0059_add_interrupted_parts_index [0058_add_client_operation_transports] 2026-10-18T19:00:00Z Codex <codex@openai.com> # Index unresolved tool messages for cleanup
 0060_add_audio_synthesis [0059_add_interrupted_parts_index] 2026-10-27T12:00:00Z Codex <codex@openai.com> # Persist generated speech input and format metadata
+0061_add_assistant_welcome [0060_add_audio_synthesis] 2026-10-28T22:00:00Z Codex <codex@openai.com> # Assistant welcome content

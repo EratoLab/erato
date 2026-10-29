@@ -93,6 +93,11 @@ async fn test_assistant_hub_rejects_duplicate_version_number(pool: Pool<Postgres
         None,
         Some("mock-llm".to_string()),
         false,
+        Some("## Welcome to this version".into()),
+        Some(vec![erato::models::assistant::AssistantStarterPrompt {
+            name: "Start".into(),
+            prompt: "Help me".into(),
+        }]),
     )
     .await
     .expect("failed to create source assistant");
@@ -116,6 +121,40 @@ async fn test_assistant_hub_rejects_duplicate_version_number(pool: Pool<Postgres
         .with_bearer_token(&owner_token)
         .await;
     assert_eq!(first_response.status_code(), http::StatusCode::CREATED);
+    let snapshot: serde_json::Value = first_response.json();
+    assert_eq!(
+        snapshot["version"]["assistant"]["welcome_message"],
+        "## Welcome to this version"
+    );
+    assert_eq!(
+        snapshot["version"]["assistant"]["starter_prompts"],
+        json!([{"name":"Start", "prompt":"Help me"}])
+    );
+
+    // Submitted versions retain their own assistant content when the draft changes.
+    let edited = server
+        .put(&format!("/api/v1beta/assistants/{}", source_assistant.id))
+        .json(&json!({"welcome_message": "Changed draft", "starter_prompts": []}))
+        .with_bearer_token(&owner_token)
+        .await;
+    assert_eq!(edited.status_code(), http::StatusCode::OK);
+    use sea_orm::EntityTrait;
+    let snapshot_id =
+        sqlx::types::Uuid::parse_str(snapshot["version"]["assistant"]["id"].as_str().unwrap())
+            .unwrap();
+    let frozen = erato::db::entity::assistants::Entity::find_by_id(snapshot_id)
+        .one(&app_state.db)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        frozen.welcome_message.as_deref(),
+        Some("## Welcome to this version")
+    );
+    assert_eq!(
+        frozen.starter_prompts,
+        json!([{"name":"Start", "prompt":"Help me"}])
+    );
 
     let duplicate_response = server
         .post(&format!(
@@ -193,6 +232,8 @@ async fn test_assistant_hub_featured_status_carries_across_versions(pool: Pool<P
         None,
         Some("mock-llm".to_string()),
         false,
+        None,
+        None,
     )
     .await
     .expect("failed to create source assistant");
@@ -402,6 +443,8 @@ async fn test_assistant_hub_user_reviews_are_upserted_summarized_and_visibility_
         None,
         Some("mock-llm".to_string()),
         false,
+        None,
+        None,
     )
     .await
     .expect("failed to create source assistant");
@@ -750,6 +793,8 @@ async fn test_published_current_assistant_hub_version_is_listed_for_audience_vie
         None,
         Some("mock-llm".to_string()),
         false,
+        None,
+        None,
     )
     .await
     .expect("failed to create source assistant");
@@ -930,6 +975,8 @@ async fn test_published_current_assistant_hub_version_is_listed_for_group_audien
         None,
         Some("mock-llm".to_string()),
         false,
+        None,
+        None,
     )
     .await
     .expect("failed to create source assistant");

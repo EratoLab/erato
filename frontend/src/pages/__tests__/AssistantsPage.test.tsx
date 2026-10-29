@@ -158,6 +158,7 @@ const createAssistant = (
   description: `${name} description`,
   prompt: `${name} prompt`,
   can_edit: true,
+  starter_prompts: [],
   enforce_facet_settings: false,
   archived_at: archivedAt,
   created_at: "2026-01-01T00:00:00Z",
@@ -293,6 +294,7 @@ describe("AssistantsPage", () => {
         assistant: {
           created_at: "2026-01-01T00:00:00Z",
           description: "Featured assistant description",
+          starter_prompts: [],
           enforce_facet_settings: false,
           id: "featured-snapshot",
           name: "Featured assistant",
@@ -340,6 +342,7 @@ describe("AssistantsPage", () => {
         }),
         assistant: {
           created_at: "2026-01-01T00:00:00Z",
+          starter_prompts: [],
           enforce_facet_settings: false,
           id: "uncategorized-snapshot",
           name: "Uncategorized assistant",
@@ -393,6 +396,7 @@ describe("AssistantsPage", () => {
       }),
       assistant: {
         created_at: "2026-01-01T00:00:00Z",
+        starter_prompts: [],
         enforce_facet_settings: false,
         id: `assistant-${index}`,
         name: `Assistant ${index}`,

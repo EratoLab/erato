@@ -148,6 +148,8 @@ async fn create_source_assistant(
         None,
         Some("mock-llm".to_string()),
         false,
+        None,
+        None,
     )
     .await
     .expect("failed to create source assistant")

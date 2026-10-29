@@ -27,6 +27,8 @@ vi.mock("@/components/ui/Assistant/AssistantForm", () => ({
           void onSubmit({
             name: "Reviewer",
             description: "",
+            welcomeMessage: "",
+            starterPrompts: [],
             prompt: "Review the draft.",
             defaultModel: null,
             facetIds: [],

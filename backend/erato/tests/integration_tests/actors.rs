@@ -288,6 +288,8 @@ async fn insert_assistant(db: &DatabaseConnection, owner_user_id: Uuid) -> Uuid 
         owner_user_id: ActiveValue::Set(owner_user_id),
         name: ActiveValue::Set("Retention Assistant".to_string()),
         description: ActiveValue::Set(None),
+        welcome_message: ActiveValue::Set(None),
+        starter_prompts: ActiveValue::Set(serde_json::json!([])),
         prompt: ActiveValue::Set("prompt".to_string()),
         mcp_server_ids: ActiveValue::Set(None),
         default_chat_provider: ActiveValue::Set(None),

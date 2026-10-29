@@ -38,6 +38,8 @@ async fn create_hub_assistant(conn: &DatabaseConnection, owner_id: Uuid) -> Uuid
         None,
         None,
         false,
+        None,
+        None,
     )
     .await
     .expect("failed to create source assistant");
@@ -269,6 +271,8 @@ async fn create_plain_assistant(conn: &DatabaseConnection, owner_id: Uuid) -> Uu
         None,
         None,
         false,
+        None,
+        None,
     )
     .await
     .expect("failed to create private assistant")

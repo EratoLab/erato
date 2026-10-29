@@ -3773,6 +3773,9 @@ pub async fn frequent_assistants(
                     id: fa.assistant.id.to_string(),
                     name: fa.assistant.name,
                     description: fa.assistant.description,
+                    welcome_message: fa.assistant.welcome_message,
+                    starter_prompts: serde_json::from_value(fa.assistant.starter_prompts)
+                        .unwrap_or_default(),
                     owner_email: None,
                     prompt: fa.assistant.prompt,
                     mcp_server_ids: fa.assistant.mcp_server_ids,

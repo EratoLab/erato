@@ -55,6 +55,8 @@ function buildFormData(
   return {
     name: initialData?.name ?? "",
     description: initialData?.description ?? "",
+    welcomeMessage: initialData?.welcomeMessage ?? "",
+    starterPrompts: initialData?.starterPrompts ?? [],
     prompt: initialData?.prompt ?? "",
     defaultModel: initialData?.defaultModel ?? null,
     facetIds: initialData?.facetIds ?? [],
@@ -67,6 +69,8 @@ function buildFormData(
 export interface AssistantFormData {
   name: string;
   description: string;
+  welcomeMessage: string;
+  starterPrompts: { name: string; prompt: string }[];
   prompt: string;
   defaultModel: ChatModel | null;
   facetIds: string[];
@@ -279,7 +283,7 @@ export const AssistantForm: React.FC<AssistantFormProps> = ({
   const validateField = useCallback(
     (
       field: keyof AssistantFormData,
-      value: string | ChatModel | null | FileUploadItem[] | string[] | boolean,
+      value: AssistantFormData[keyof AssistantFormData],
     ): string => {
       switch (field) {
         case "name": {
@@ -353,6 +357,17 @@ export const AssistantForm: React.FC<AssistantFormProps> = ({
     newErrors.description = validateField("description", formData.description);
     newErrors.prompt = validateField("prompt", formData.prompt);
 
+    if (
+      formData.starterPrompts.length > 3 ||
+      formData.starterPrompts.some(
+        (item) => !item.name.trim() || !item.prompt.trim(),
+      )
+    ) {
+      newErrors.starterPrompts = t({
+        id: "assistant.form.starterPrompt.invalid",
+        message: "Enter a name and prompt for each starter prompt.",
+      });
+    }
     setErrors(newErrors);
 
     return !Object.values(newErrors).some((error) => error !== "");
@@ -362,7 +377,7 @@ export const AssistantForm: React.FC<AssistantFormProps> = ({
   const handleFieldChange = useCallback(
     (
       field: keyof AssistantFormData,
-      value: string | ChatModel | null | FileUploadItem[] | string[] | boolean,
+      value: AssistantFormData[keyof AssistantFormData],
     ) => {
       setFormData((prev) => ({ ...prev, [field]: value }));
 
@@ -749,6 +764,131 @@ export const AssistantForm: React.FC<AssistantFormProps> = ({
             })}
           />
         </FormField>
+
+        <FormField
+          label={t({
+            id: "assistant.form.welcomeMessage",
+            message: "Welcome message (Markdown)",
+          })}
+          htmlFor="assistant-welcome-message"
+        >
+          <MarkdownPreviewInput
+            id="assistant-welcome-message"
+            rows={4}
+            maxLength={10000}
+            value={formData.welcomeMessage}
+            disabled={isSubmitting}
+            onChange={(event) =>
+              setFormData((previous) => ({
+                ...previous,
+                welcomeMessage: event.target.value,
+              }))
+            }
+            tablistLabel={t({
+              id: "common.markdownEditor",
+              message: "Markdown editor",
+            })}
+            markdownTabLabel={t({ id: "common.markdown", message: "Markdown" })}
+            previewTabLabel={t({ id: "common.preview", message: "Preview" })}
+            emptyPreviewMessage={t({
+              id: "common.markdownPreviewEmpty",
+              message: "Nothing to preview yet.",
+            })}
+          />
+        </FormField>
+        <fieldset className="space-y-3" disabled={isSubmitting}>
+          <legend>
+            {t({
+              id: "assistant.form.starterPrompts",
+              message: "Starter prompts (up to 3)",
+            })}
+          </legend>
+          {formData.starterPrompts.map((item, index) => (
+            <div
+              key={index}
+              className="space-y-2 rounded border border-theme-border p-3"
+            >
+              <label className="block">
+                {t({
+                  id: "assistant.form.starterPrompt.name",
+                  message: "Name",
+                })}
+                <Input
+                  required
+                  maxLength={100}
+                  className="block w-full rounded border border-theme-border bg-theme-bg-primary p-2"
+                  value={item.name}
+                  onChange={(event) =>
+                    setFormData((previous) => ({
+                      ...previous,
+                      starterPrompts: previous.starterPrompts.map((p, i) =>
+                        i === index ? { ...p, name: event.target.value } : p,
+                      ),
+                    }))
+                  }
+                />
+              </label>
+              <label className="block">
+                {t({
+                  id: "assistant.form.starterPrompt.prompt",
+                  message: "Prompt",
+                })}
+                <Textarea
+                  required
+                  maxLength={10000}
+                  className="block w-full rounded border border-theme-border bg-theme-bg-primary p-2"
+                  value={item.prompt}
+                  onChange={(event) =>
+                    setFormData((previous) => ({
+                      ...previous,
+                      starterPrompts: previous.starterPrompts.map((p, i) =>
+                        i === index ? { ...p, prompt: event.target.value } : p,
+                      ),
+                    }))
+                  }
+                />
+              </label>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() =>
+                  setFormData((previous) => ({
+                    ...previous,
+                    starterPrompts: previous.starterPrompts.filter(
+                      (_, i) => i !== index,
+                    ),
+                  }))
+                }
+              >
+                {t({
+                  id: "assistant.form.starterPrompt.remove",
+                  message: "Remove prompt",
+                })}
+              </Button>
+            </div>
+          ))}
+          {errors.starterPrompts && <p role="alert">{errors.starterPrompts}</p>}
+          {formData.starterPrompts.length < 3 && (
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() =>
+                setFormData((previous) => ({
+                  ...previous,
+                  starterPrompts: [
+                    ...previous.starterPrompts,
+                    { name: "", prompt: "" },
+                  ],
+                }))
+              }
+            >
+              {t({
+                id: "assistant.form.starterPrompt.add",
+                message: "Add starter prompt",
+              })}
+            </Button>
+          )}
+        </fieldset>
 
         {/* System Prompt field */}
         <FormField

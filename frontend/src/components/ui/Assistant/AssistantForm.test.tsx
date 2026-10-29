@@ -181,6 +181,33 @@ function renderFormWithMcpServers({
 }
 
 describe("AssistantForm", () => {
+  it("limits starter prompts to three and supports removing and clearing welcome content", async () => {
+    renderFormWithMcpServers({
+      initialData: {
+        name: "Helper",
+        prompt: "You are a helpful assistant.",
+        welcomeMessage: "# Welcome",
+        starterPrompts: [
+          { name: "One", prompt: "First" },
+          { name: "Two", prompt: "Second" },
+          { name: "Three", prompt: "Third" },
+        ],
+      },
+    });
+    expect(
+      screen.queryByRole("button", { name: "Add starter prompt" }),
+    ).not.toBeInTheDocument();
+    fireEvent.click(
+      screen.getAllByRole("button", { name: "Remove prompt" })[0],
+    );
+    expect(
+      screen.getByRole("button", { name: "Add starter prompt" }),
+    ).toBeInTheDocument();
+    const welcome = screen.getByLabelText("Welcome message (Markdown)");
+    fireEvent.change(welcome, { target: { value: "" } });
+    expect(welcome).toHaveValue("");
+  });
+
   beforeEach(() => {
     estimateTokenUsageFromPartsMock.mockReset();
     clearLastEstimationMock.mockReset();

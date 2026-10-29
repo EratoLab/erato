@@ -338,12 +338,14 @@ export type Assistant = {
    * The system prompt used by the assistant
    */
   prompt: string;
+  starter_prompts: AssistantStarterPrompt[];
   /**
    * When this assistant was last updated
    *
    * @format date-time
    */
   updated_at: string;
+  welcome_message?: string | null | undefined;
 };
 
 /**
@@ -396,10 +398,12 @@ export type AssistantHubAssistantSnapshot = {
   mcp_server_ids?: string[] | null | undefined;
   name: string;
   prompt: string;
+  starter_prompts: AssistantStarterPrompt[];
   /**
    * @format date-time
    */
   updated_at: string;
+  welcome_message?: string | null | undefined;
 };
 
 export type AssistantHubAudienceGrantInput = {
@@ -570,6 +574,11 @@ export type AssistantHubVersionResponse = {
 
 export type AssistantHubVersionsResponse = {
   versions: AssistantHubVersion[];
+};
+
+export type AssistantStarterPrompt = {
+  name: string;
+  prompt: string;
 };
 
 export type AssistantUsage = {
@@ -1661,6 +1670,8 @@ export type CreateAssistantRequest = {
    * Optional list of share grants to create with the assistant
    */
   share_grants?: null | undefined;
+  starter_prompts?: AssistantStarterPrompt[] | null | undefined;
+  welcome_message?: string | null | undefined;
 };
 
 /**
@@ -4142,6 +4153,8 @@ export type UpdateAssistantRequest = {
    * Optional new prompt for the assistant
    */
   prompt?: null | undefined;
+  starter_prompts?: AssistantStarterPrompt[] | null | undefined;
+  welcome_message?: string | null | undefined;
 };
 
 /**

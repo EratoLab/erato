@@ -208,6 +208,16 @@ const formatDiffValue = (value: unknown, field?: string): string => {
 };
 
 const normalizeDiffLabel = (key: string) => {
+  if (key === "welcome_message")
+    return t({
+      id: "assistant.form.welcomeMessage",
+      message: "Welcome message (Markdown)",
+    });
+  if (key === "starter_prompts")
+    return t({
+      id: "assistant.form.starterPrompts",
+      message: "Starter prompts (up to 3)",
+    });
   if (key === "files" || key === "file_ids") {
     return t({ id: "assistantHub.diff.files", message: "Files" });
   }
@@ -834,6 +844,30 @@ export function AssistantHubVersionConfigurationSection({
             </p>
           )}
         </div>
+      </div>
+      <div className="mt-6 space-y-3">
+        <h3>
+          {t({
+            id: "assistant.form.welcomeMessage",
+            message: "Welcome message (Markdown)",
+          })}
+        </h3>
+        <p className="whitespace-pre-wrap">
+          {version.assistant.welcome_message}
+        </p>
+        <h3>
+          {t({
+            id: "assistant.form.starterPrompts",
+            message: "Starter prompts (up to 3)",
+          })}
+        </h3>
+        {/* eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Older cached hub responses may omit prompts. */}
+        {(version.assistant.starter_prompts ?? []).map((item, index) => (
+          <div key={index}>
+            <strong>{item.name}</strong>
+            <p className="whitespace-pre-wrap">{item.prompt}</p>
+          </div>
+        ))}
       </div>
       <div className="mt-6">
         <div className="mb-2 text-sm font-medium text-theme-fg-primary">

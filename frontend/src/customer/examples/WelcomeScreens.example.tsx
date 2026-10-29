@@ -20,6 +20,7 @@
  *   AssistantWelcomeScreen: AssistantWelcomeScreen,
  * };
  */
+import { AssistantWelcomeContent } from "@/components/ui/Assistant/AssistantWelcomeContent";
 import { useChatInputControls } from "@/components/ui/Chat/ChatInputControlsContext";
 import { Button } from "@/components/ui/Controls/Button";
 
@@ -110,6 +111,7 @@ export function AssistantWelcomeScreen({
           {assistant.name}
         </span>
       </p>
+      <AssistantWelcomeContent assistant={assistant} />
       <ExampleActions className="mt-2" />
     </div>
   );

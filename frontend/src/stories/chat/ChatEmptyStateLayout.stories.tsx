@@ -80,6 +80,10 @@ const makeQueryClient = () => {
 };
 
 const assistant: AssistantWithFiles = {
+  welcome_message: "## Ready to research?\nChoose a starting point below.",
+  starter_prompts: [
+    { name: "Research a topic", prompt: "Help me research a topic." },
+  ],
   id: "assistant-research",
   name: "Research Assistant",
   description: "Finds and summarizes sources for product and market questions.",

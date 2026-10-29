@@ -222,6 +222,37 @@ msgstr "Sie sind ein hilfreicher Assistent, der..."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Assistant/AssistantForm.tsx
+msgid "assistant.form.starterPrompt.add"
+msgstr "Startprompt hinzufügen"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Assistant/AssistantForm.tsx
+msgid "assistant.form.starterPrompt.invalid"
+msgstr "Geben Sie für jeden Startprompt einen Namen und einen Prompt ein."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Assistant/AssistantForm.tsx
+msgid "assistant.form.starterPrompt.name"
+msgstr "Name"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Assistant/AssistantForm.tsx
+msgid "assistant.form.starterPrompt.prompt"
+msgstr "Prompt"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Assistant/AssistantForm.tsx
+msgid "assistant.form.starterPrompt.remove"
+msgstr "Prompt entfernen"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Assistant/AssistantForm.tsx
+#: src/pages/assistantHubUtils.tsx
+msgid "assistant.form.starterPrompts"
+msgstr "Startprompts (bis zu 3)"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Assistant/AssistantForm.tsx
 msgid "assistant.form.validation.description.tooLong"
 msgstr "Beschreibung muss weniger als 500 Zeichen lang sein"
 
@@ -249,6 +280,12 @@ msgstr "System-Prompt ist erforderlich"
 #: src/components/ui/Assistant/AssistantForm.tsx
 msgid "assistant.form.validation.prompt.tooShort"
 msgstr "System-Prompt muss mindestens 10 Zeichen lang sein"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Assistant/AssistantForm.tsx
+#: src/pages/assistantHubUtils.tsx
+msgid "assistant.form.welcomeMessage"
+msgstr "Willkommensnachricht (Markdown)"
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantChatSpacePage.tsx
