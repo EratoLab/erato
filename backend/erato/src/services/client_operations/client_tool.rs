@@ -48,6 +48,15 @@ impl ConfiguredClientToolKind {
     }
 }
 
+/// The realm whose executors hold this host family's client context.
+fn realm_for(host: ClientToolHostContext) -> ExecutionRealm {
+    match host {
+        ClientToolHostContext::OutlookMailbox | ClientToolHostContext::WordDocument => {
+            ExecutionRealm::OfficeAddin
+        }
+    }
+}
+
 fn serialized_len(value: &Value) -> usize {
     serde_json::to_vec(value).map_or(usize::MAX, |bytes| bytes.len())
 }
@@ -69,7 +78,7 @@ impl OperationKind for ConfiguredClientToolKind {
         &self.operation_id
     }
     fn realm(&self) -> ExecutionRealm {
-        ExecutionRealm::OfficeAddin
+        realm_for(self.host)
     }
     fn consent(&self) -> ConsentPolicy {
         ConsentPolicy::None
@@ -171,6 +180,19 @@ impl OperationKind for ConfiguredClientToolKind {
                 }
                 Ok(ValidatedResult {
                     output: json!({"status":"error","error":"Client tool validation failed"}),
+                    succeeded: false,
+                })
+            }
+            // A device prompt the user declined. Only a task's granted call
+            // counts it as declined; the user's own calls have their card.
+            (OperationOutcome::Rejected, None, Some(error))
+                if error.code == crate::services::delegated_client_tools::DECLINED
+                    && request.lineage.is_some() =>
+            {
+                bounded_message(error)?;
+                let tool_name = request.operation_id.rsplit('/').next().unwrap_or_default();
+                Ok(ValidatedResult {
+                    output: crate::services::delegated_client_tools::declined_output(tool_name),
                     succeeded: false,
                 })
             }
@@ -294,6 +316,7 @@ mod tests {
             consent: ConsentPolicy::None,
             expires_at: chrono::Utc::now(),
             input: json!({"lookahead_days":7}),
+            lineage: None,
         }
     }
 
@@ -507,6 +530,78 @@ mod tests {
             ),
             other_executor,
             revision,
+        ] {
+            assert!(
+                kind.validate_result(&request, &refused).is_err(),
+                "{refused:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn realm_comes_from_the_host_context() {
+        let mut kind = kind(None);
+        assert_eq!(kind.realm(), ExecutionRealm::OfficeAddin);
+        kind.host = ClientToolHostContext::WordDocument;
+        assert_eq!(kind.realm(), ExecutionRealm::OfficeAddin);
+        assert_eq!(
+            realm_for(ClientToolHostContext::OutlookMailbox),
+            ExecutionRealm::OfficeAddin
+        );
+    }
+
+    #[test]
+    fn a_declined_rejection_is_accepted_only_for_grant_operations() {
+        let mut request = request();
+        let kind = kind(Some(SCHEMA));
+        let declined = |request: &OperationRequest| {
+            result(
+                request,
+                OperationOutcome::Rejected,
+                None,
+                Some(("declined", None)),
+            )
+        };
+        assert!(kind.validate_result(&request, &declined(&request)).is_err());
+        request.lineage = Some(super::super::executor_stream::CallLineage {
+            owner_chat_id: Uuid::new_v4(),
+            owner_message_id: Uuid::new_v4(),
+            requesting_chat_id: request.chat_id,
+            requesting_message_id: request.message_id,
+            context_ref: None,
+        });
+        let validated = kind.validate_result(&request, &declined(&request)).unwrap();
+        assert!(!validated.succeeded);
+        assert_eq!(validated.output["status"], "cancelled");
+        assert_eq!(validated.output["reason"], "declined");
+        assert!(
+            validated.output["error"]
+                .as_str()
+                .unwrap()
+                .contains("'fetch_availability'")
+        );
+        for refused in [
+            result(
+                &request,
+                OperationOutcome::Failed,
+                None,
+                Some(("declined", None)),
+            ),
+            result(
+                &request,
+                OperationOutcome::Rejected,
+                value(json!({})),
+                Some(("declined", None)),
+            ),
+            result(
+                &request,
+                OperationOutcome::Rejected,
+                None,
+                Some((
+                    "declined",
+                    Some("x".repeat(MAX_OPERATION_MESSAGE_CHARS + 1)),
+                )),
+            ),
         ] {
             assert!(
                 kind.validate_result(&request, &refused).is_err(),

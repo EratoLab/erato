@@ -1048,6 +1048,7 @@ async fn cleanup_removes_only_rows_that_no_run_or_stream_can_use(pool: Pool<Post
         consent: ConsentPolicy::None,
         expires_at: chrono::Utc::now() + chrono::Duration::hours(1),
         input: json!({}),
+        lineage: None,
     };
     let pending = request(
         Uuid::new_v4(),

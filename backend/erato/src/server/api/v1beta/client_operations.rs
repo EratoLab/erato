@@ -119,7 +119,19 @@ pub(super) async fn authorize_open_operation(
                 && offer.binding == request.binding
         }));
     }
-    if crate::models::chat::chat_is_delegated_run(&chat) {
+    // In a task, only a granted call while its grant holds; the user's
+    // standing Never below still applies to it.
+    let delegated = crate::models::chat::chat_is_delegated_run(&chat);
+    if delegated != request.lineage.is_some()
+        || delegated
+            && !crate::services::delegated_client_tools::authorize_grant_operation(
+                state,
+                &chat,
+                request,
+                request.account_id,
+            )
+            .await?
+    {
         return Ok(false);
     }
     // A configured tool's call is never offered or dispatched under Never, so a
@@ -128,6 +140,11 @@ pub(super) async fn authorize_open_operation(
         == Some(&crate::models::user_preference::ClientToolDecision::NeverAllow)
     {
         return Ok(false);
+    }
+    // The grant, not the task turn's allowlist or registration, decides what
+    // a task may call.
+    if delegated {
+        return Ok(true);
     }
     Ok(state.config.client_tools.tools.values().any(|tool| {
         tool.qualified_name() == request.operation_id
@@ -274,6 +291,7 @@ pub async fn claim_client_operation(
         id,
         &request.binding,
         &registered,
+        &crate::services::client_tools::child_client_tools(&headers),
         request.user_confirmed,
     )
     .await

@@ -3298,7 +3298,7 @@
             "description": "When the chat does not exist or is not accessible"
           },
           "409": {
-            "description": "When the chat is archived (plain text), the chat's generation lease is already held and delegation.tasks.enabled is on (JSON, code = generation_running), every approval the row opened is already decided (JSON, code = already_continued, body = AlreadyContinuedError), the chat that dispatched this delegated run is still asking the same question (JSON, code = covered_by_parent, body = CoveredByParentError), or the stop carries open task children and the request did not set `shows_child_items` (plain text)",
+            "description": "When the chat is archived (plain text), the chat's generation lease is already held and delegation.tasks.enabled is on (JSON, code = generation_running), every approval the row opened is already decided (JSON, code = already_continued, body = AlreadyContinuedError), the chat that dispatched this delegated run is still asking the same question (JSON, code = covered_by_parent, body = CoveredByParentError), an empty body names a parked row whose only open items are task children waiting for a client (JSON, code = children_waiting, body = ChildrenWaitingError), or the stop carries open task children and the request did not set `shows_child_items`, names a waiting child, or sends a single `decision` while only waiting children are open (plain text)",
             "content": {
               "application/json": {
                 "schema": {
@@ -6652,6 +6652,49 @@
           },
           "tool_name": {
             "type": "string"
+          },
+          "waiting_for": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ChildWaitingFor",
+                "description": "Set when the child waits for a client to run its granted call rather\nthan for a decision. Such an item is never decided: it stays open while\nthe parent's slot for the child is in progress."
+              }
+            ]
+          }
+        }
+      },
+      "ChildWaitingFor": {
+        "type": "object",
+        "description": "The durable client operation a waiting child is parked on.",
+        "required": [
+          "host_context",
+          "attempt_id"
+        ],
+        "properties": {
+          "attempt_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The child's parked attempt; the item settles only once it completed."
+          },
+          "host_context": {
+            "type": "string",
+            "description": "The `host_context.kind` of the binding the call waits for, e.g.\n`outlook_mailbox`."
+          }
+        }
+      },
+      "ChildrenWaitingError": {
+        "type": "object",
+        "description": "Body of the `409` `continuestream` answers to an empty body while the\nparked row waits only for task children that wait for a client: nothing is\nleft to decide, and the turn continues on its own once they finish.",
+        "required": [
+          "code"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "Always `children_waiting`."
           }
         }
       },
@@ -10650,6 +10693,10 @@
           },
           "kind": {
             "type": "string"
+          },
+          "lineage": {
+            "$ref": "#/components/schemas/CallLineage",
+            "description": "Set only on a delegated task's granted call: the turn that owns its\nclient context and the task turn that made it. Its result arrives only\nthrough a claim."
           },
           "message_id": {
             "type": "string",

@@ -85,6 +85,12 @@ pub struct OperationRequest {
     pub expires_at: DateTime<Utc>,
     #[schema(value_type = OperationPayload)]
     pub input: Value,
+    /// Set only on a delegated task's granted call: the turn that owns its
+    /// client context and the task turn that made it. Its result arrives only
+    /// through a claim.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub lineage: Option<executor_stream::CallLineage>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
@@ -483,6 +489,7 @@ mod tests {
             consent: ConsentPolicy::None,
             expires_at: Utc::now(),
             input: serde_json::json!({}),
+            lineage: None,
         };
         let error = |message: String| {
             from_fast_result(

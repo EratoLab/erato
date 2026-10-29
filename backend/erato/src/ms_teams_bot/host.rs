@@ -108,6 +108,9 @@ impl From<StreamRouteError> for StartError {
             StreamRouteError::CoveredByParent(_) => StartError::Rejected(
                 "This approval is answered in the chat that started the task.".to_string(),
             ),
+            StreamRouteError::ChildrenWaiting(_) => StartError::Rejected(
+                "This response continues on its own once its tasks finish.".to_string(),
+            ),
             StreamRouteError::NothingToReact(_) => {
                 StartError::Rejected("The request could not be processed.".to_string())
             }
@@ -847,9 +850,16 @@ fn completion_from_content(chat_id: Uuid, message_id: Uuid, content: &[ContentPa
                     ToolApprovalKind::TaskPlan => ApprovalKind::TaskPlan,
                     ToolApprovalKind::ToolCallLimit => ApprovalKind::ToolCallLimit,
                 },
+                // A child waiting for a client is not a decision; it resumes
+                // on its own once a client ran its call.
                 items: request
                     .approval_items()
                     .into_iter()
+                    .filter(|item| {
+                        item.child
+                            .as_ref()
+                            .is_none_or(|child| child.waiting_for.is_none())
+                    })
                     .map(|item| match item.child {
                         // A delegated task's item names the parent's delegation
                         // call; the decision is about the child's gated tool.
@@ -1128,9 +1138,51 @@ mod tests {
                     requested_at: String::new(),
                     allow_always: Some(false),
                     kind: Some(ToolApprovalKind::McpTool),
+                    waiting_for: None,
                 }),
             });
         ContentPart::ToolApprovalRequest(request)
+    }
+
+    #[test]
+    fn waiting_items_get_no_card() {
+        let ContentPart::ToolApprovalRequest(mut mixed) = mixed_approval(ToolApprovalKind::McpTool)
+        else {
+            unreachable!()
+        };
+        let mut waiting = mixed.approvals[1].clone();
+        waiting.approval_id = "task-w".to_string();
+        waiting.tool_call_id = "task-w".to_string();
+        let child = waiting.child.as_mut().unwrap();
+        child.kind = Some(ToolApprovalKind::ClientTool);
+        child.waiting_for = Some(crate::models::message::ChildWaitingFor {
+            host_context: "outlook_mailbox".to_string(),
+            attempt_id: Uuid::new_v4(),
+        });
+        mixed.approvals.push(waiting.clone());
+        let completion = completion_from_content(
+            Uuid::nil(),
+            Uuid::nil(),
+            &[ContentPart::ToolApprovalRequest(mixed.clone())],
+        );
+        let ids: Vec<String> = completion
+            .approvals
+            .expect("the decidable items keep their card")
+            .items
+            .into_iter()
+            .map(|item| item.approval_id)
+            .collect();
+        assert_eq!(ids, ["call-1", "task-a"]);
+
+        mixed.kind = ToolApprovalKind::DelegatedTask;
+        mixed.approvals = vec![waiting];
+        let completion = completion_from_content(
+            Uuid::nil(),
+            Uuid::nil(),
+            &[ContentPart::ToolApprovalRequest(mixed)],
+        );
+        assert!(completion.approvals.is_none());
+        assert!(!completion.needs_client);
     }
 
     #[test]

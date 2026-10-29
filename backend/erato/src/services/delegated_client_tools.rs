@@ -1,19 +1,27 @@
-//! Client tools in delegated tasks (ERMAIN-1001). A task that names a child
-//! facet is a client task for that facet's host. At launch it gets a grant for
-//! the read tools its parent turn was offered for that host; every later turn
-//! of the task is offered, and dispatches, exactly those tools while the grant
-//! holds, live over the executor stream of the grant's binding.
+//! Client tools in delegated tasks (ERMAIN-1001, ERMAIN-1032). A task that
+//! names a child facet is a client task for that facet's host. At launch it
+//! gets a grant for the read tools its parent turn was offered for that host;
+//! every later turn of the task is offered, and dispatches, exactly those tools
+//! while the grant holds: live over the executor stream of the grant's binding,
+//! or, for the grant's durable tools, as durable operations for that binding.
 
-use crate::config::{ClientToolChildAccess, ClientToolConfig, ClientToolHostContext, FacetsConfig};
+use crate::config::{
+    AppConfig, ChildDispatch, ClientToolChildAccess, ClientToolConfig, ClientToolHostContext,
+    FacetsConfig,
+};
+use crate::db::entity::messages;
 use crate::db::entity_ext::chats;
 use crate::models::chat::{ChatProvenance, ClientToolGrant};
 use crate::models::user_preference::ClientToolDecision;
 use crate::server::api::v1beta::message_streaming::DelegationDispatchContext;
-use crate::services::client_operations::{ExecutorBinding, executor_stream};
+use crate::services::client_operations::{
+    ExecutorBinding, OperationRegistry, OperationRequest, executor_stream,
+};
 use crate::services::client_tools::{GrantedCall, OfferedClientTool};
 use crate::state::AppState;
+use eyre::Report;
 use sea_orm::prelude::Uuid;
-use serde_json::Value;
+use serde_json::{Value, json};
 
 /// The host a task is a client task for: that of the first facet it names
 /// with a `child_host_context`.
@@ -67,6 +75,30 @@ fn grantable(config: &ClientToolConfig, host: &str) -> bool {
         && config
             .host_context
             .is_some_and(|context| context.as_str() == host)
+}
+
+/// Whether a granted call of this tool waits durably for a client: the tool or
+/// the deployment asks for it, its host context outlives the pane session, it
+/// has a `[durable]` table and durable operations are on, so its kind exists.
+pub(crate) fn durable_dispatch(
+    config: &AppConfig,
+    registry: &OperationRegistry,
+    tool: &ClientToolConfig,
+) -> bool {
+    config.client_tools.durable_operations_enabled
+        && tool
+            .child_dispatch
+            .unwrap_or(config.delegation.tasks.child_dispatch)
+            == ChildDispatch::Durable
+        && tool
+            .host_context
+            .is_some_and(|host| host.outlives_pane_session())
+        && tool.durable.is_some()
+        && registry.for_operation(&tool.qualified_name()).is_some()
+}
+
+pub(crate) fn durable_eligible(app_state: &AppState, tool: &ClientToolConfig) -> bool {
+    durable_dispatch(&app_state.config, &app_state.client_operations, tool)
 }
 
 fn binding_host(binding: &ExecutorBinding) -> Option<&str> {
@@ -160,8 +192,15 @@ pub(crate) async fn resolve_grant(
         .map(|tool| tool.config.qualified_name())
         .collect();
     tools.sort();
+    let mut durable_tools: Vec<String> = granted
+        .iter()
+        .filter(|tool| durable_eligible(app_state, &tool.config))
+        .map(|tool| tool.config.qualified_name())
+        .collect();
+    durable_tools.sort();
     Ok(ClientToolGrant {
         tools,
+        durable_tools,
         binding: binding.clone(),
         owner_chat_id: context.origin_chat.id,
         owner_message_id,
@@ -171,14 +210,14 @@ pub(crate) async fn resolve_grant(
 
 /// The grant-level half of the offer predicate (contract §4): the run is on
 /// the grant's binding, nobody took it over, and the turn that owns the client
-/// context is still the one running in the parent chat.
+/// context still holds it: it runs, or it is parked on this task.
 pub fn grant_offer_allowed(
     grant: &ClientToolGrant,
     provenance: &ChatProvenance,
     executor: Option<&ExecutorBinding>,
-    owner_running: bool,
+    owner_holds: bool,
 ) -> bool {
-    executor == Some(&grant.binding) && provenance.adopted_at.is_none() && owner_running
+    executor == Some(&grant.binding) && provenance.adopted_at.is_none() && owner_holds
 }
 
 /// The tool-level half: listed in the grant, still `read` for the grant's
@@ -207,13 +246,14 @@ pub(crate) async fn granted_tools(
         .flatten()?;
     let provenance = configuration.provenance?;
     let grant = configuration.task?.client_grant?;
-    let owner_running = app_state
-        .background_tasks
-        .active_generation(&grant.owner_chat_id)
-        .await
-        .and_then(|generation| generation.message_id())
-        == Some(grant.owner_message_id);
-    if !grant_offer_allowed(&grant, &provenance, executor, owner_running) {
+    let owner_holds = match owner_holds_context(app_state, &grant, chat.id).await {
+        Ok(holds) => holds,
+        Err(error) => {
+            tracing::warn!(%error, "Cannot tell whether a grant's owner turn holds its context");
+            false
+        }
+    };
+    if !grant_offer_allowed(&grant, &provenance, executor, owner_holds) {
         return None;
     }
     let account_id = account_id?;
@@ -242,11 +282,136 @@ pub(crate) async fn granted_tools(
                     context_ref: grant.context_ref.clone(),
                     context_input: config.child_context_input.clone(),
                     host_inputs: config.child_host_inputs.clone(),
+                    durable: grant.durable_tools.contains(&qualified_name)
+                        && durable_eligible(app_state, config),
                 },
             ));
         }
     }
     Some((grant.binding, tools))
+}
+
+async fn owner_running(app_state: &AppState, grant: &ClientToolGrant) -> bool {
+    app_state
+        .background_tasks
+        .active_generation(&grant.owner_chat_id)
+        .await
+        .and_then(|generation| generation.message_id())
+        == Some(grant.owner_message_id)
+}
+
+/// The owner clause of the offer predicate: the grant's owner turn runs, or it
+/// is parked on this task.
+async fn owner_holds_context(
+    app_state: &AppState,
+    grant: &ClientToolGrant,
+    child_chat_id: Uuid,
+) -> Result<bool, Report> {
+    use sea_orm::EntityTrait;
+    if owner_running(app_state, grant).await {
+        return Ok(true);
+    }
+    let Some(origin_chat) = chats::Entity::find_by_id(grant.owner_chat_id)
+        .one(&app_state.db)
+        .await?
+    else {
+        return Ok(false);
+    };
+    let Some(parent_message) = messages::Entity::find_by_id(grant.owner_message_id)
+        .one(&app_state.db)
+        .await?
+    else {
+        return Ok(false);
+    };
+    parked_on_child(&app_state.db, &origin_chat, &parent_message, child_chat_id).await
+}
+
+/// Whether the parent turn is parked on this child: its chat is not archived,
+/// it is the chat's latest message, and its stop has an open item for the
+/// child. Decision parts after the stop do not end it, so a decision
+/// continuation that is running or crashed keeps the calls it waits for.
+pub(crate) async fn parked_on_child<C: sea_orm::ConnectionTrait>(
+    conn: &C,
+    origin_chat: &chats::Model,
+    parent_message: &messages::Model,
+    child_chat_id: Uuid,
+) -> Result<bool, Report> {
+    if origin_chat.archived_at.is_some() || parent_message.chat_id != origin_chat.id {
+        return Ok(false);
+    }
+    let tip = crate::models::message::get_active_thread_tip(conn, &origin_chat.id).await?;
+    if tip.is_none_or(|tip| tip.id != parent_message.id) {
+        return Ok(false);
+    }
+    let content = crate::models::message::MessageSchema::validate(&parent_message.raw_message)?;
+    Ok(
+        crate::server::api::v1beta::message_streaming::parked_approval_state(&content.content)
+            .is_some_and(|state| {
+                state.open.iter().any(|item| {
+                    item.child
+                        .as_ref()
+                        .is_some_and(|child| child.child_chat_id == child_chat_id)
+                })
+            }),
+    )
+}
+
+/// Whether a delegated chat's durable operation may still be handed to a
+/// client or settled by one. `Err` when something could not be read, so the
+/// caller answers without withdrawing; `Ok(false)` only on a definite refusal.
+pub(crate) async fn authorize_grant_operation(
+    app_state: &AppState,
+    chat: &chats::Model,
+    request: &OperationRequest,
+    account_id: Uuid,
+) -> Result<bool, Report> {
+    let Some(lineage) = request.lineage.as_ref().filter(|_| {
+        request.kind == crate::services::client_operations::client_tool::CLIENT_TOOL_KIND
+    }) else {
+        return Ok(false);
+    };
+    let Some(configuration) = crate::models::chat::parse_chat_configuration(chat)? else {
+        return Ok(false);
+    };
+    let (Some(provenance), Some(grant)) = (
+        configuration.provenance,
+        configuration.task.and_then(|task| task.client_grant),
+    ) else {
+        return Ok(false);
+    };
+    let Some(tool) = app_state
+        .config
+        .client_tools
+        .tools
+        .values()
+        .find(|tool| tool.qualified_name() == request.operation_id)
+    else {
+        return Ok(false);
+    };
+    let host_allows = binding_host(&grant.binding).is_some_and(|host| grantable(tool, host));
+    if request.binding != grant.binding
+        || provenance.adopted_at.is_some()
+        || !grant.tools.contains(&request.operation_id)
+        || !grant.durable_tools.contains(&request.operation_id)
+        || !host_allows
+        || !durable_eligible(app_state, tool)
+        || lineage.owner_chat_id != grant.owner_chat_id
+        || lineage.owner_message_id != grant.owner_message_id
+        || lineage.requesting_chat_id != request.chat_id
+        || lineage.requesting_message_id != request.message_id
+    {
+        return Ok(false);
+    }
+    let decision = crate::models::user_preference::find_client_tool_decision(
+        &app_state.db,
+        &account_id,
+        &request.operation_id,
+    )
+    .await?;
+    if decision == Some(ClientToolDecision::NeverAllow) {
+        return Ok(false);
+    }
+    owner_holds_context(app_state, &grant, chat.id).await
 }
 
 /// What the parent's trace reports as the part each granted read asked for:
@@ -377,6 +542,31 @@ fn contract_freshness(freshness: &Value) -> Option<Value> {
 /// The outcome of a granted call the user declined.
 pub const DECLINED: &str = "declined";
 
+/// The stored output of a granted call the user declined, on either path.
+pub fn declined_output(tool_name: &str) -> Value {
+    json!({
+        "status": "cancelled",
+        "reason": DECLINED,
+        "error": format!(
+            "The user declined this call, so the task has no result from '{tool_name}'; say in the answer what is missing because of it."
+        ),
+    })
+}
+
+/// What a task's model reads for a durable granted call that ended without a
+/// client's result. The child's continuation reads the stored output only.
+pub fn unanswered_grant_call_text(code: &str, tool_name: &str) -> Option<String> {
+    match code {
+        "expired" => Some(format!(
+            "No client ran this call before it expired, so the task has no result from '{tool_name}'; say in the answer what is missing because of it."
+        )),
+        "withdrawn" => Some(format!(
+            "This call was withdrawn because the task's parent turn moved on or the tool is no longer allowed, so the task has no result from '{tool_name}'; say in the answer what is missing."
+        )),
+        _ => None,
+    }
+}
+
 /// The input a granted call is dispatched with: the grant's context version
 /// in place of whatever the model put there, or nothing when the grant has
 /// none, and none of the fields the host fills. The stored call keeps the
@@ -459,6 +649,7 @@ mod tests {
     fn grant() -> ClientToolGrant {
         ClientToolGrant {
             tools: vec!["word/read_document_blocks".into()],
+            durable_tools: Vec::new(),
             binding: binding("word_document", "pane-one"),
             owner_chat_id: Uuid::new_v4(),
             owner_message_id: Uuid::new_v4(),
@@ -563,6 +754,7 @@ mod tests {
             context_ref: Some("server-token".into()),
             context_input: Some("snapshot".into()),
             host_inputs: Vec::new(),
+            durable: false,
         };
         let input = json!({"snapshot": "forged", "part": "intro"});
         assert_eq!(
@@ -607,6 +799,7 @@ mod tests {
             context_ref: Some("server-token".into()),
             context_input: Some("snapshot".into()),
             host_inputs: vec!["documentIdentity".into()],
+            durable: false,
         };
         let variant = |extra: &str| {
             json!({"type": "object",
@@ -775,6 +968,93 @@ mod tests {
                 vec![vec!["range".to_string(), "start".to_string()]],
             )])
         );
+    }
+
+    #[test]
+    fn a_grant_without_durable_tools_reads_as_live() {
+        let grant = grant();
+        let mut stored = serde_json::to_value(&grant).unwrap();
+        assert!(stored.get("durable_tools").is_none());
+        stored.as_object_mut().unwrap().remove("durable_tools");
+        let read: ClientToolGrant = serde_json::from_value(stored).unwrap();
+        assert!(read.durable_tools.is_empty());
+        assert_eq!(read, grant);
+        let durable = ClientToolGrant {
+            durable_tools: vec!["word/read_document_blocks".into()],
+            ..grant
+        };
+        assert_eq!(
+            serde_json::to_value(&durable).unwrap()["durable_tools"],
+            json!(["word/read_document_blocks"])
+        );
+    }
+
+    #[test]
+    fn durable_eligible_needs_flag_table_host_and_kind() {
+        let mail_read = ClientToolConfig {
+            name: "read_message".into(),
+            namespace: Some("outlook".into()),
+            parameters: r#"{"type":"object"}"#.into(),
+            child_access: ClientToolChildAccess::Read,
+            host_context: Some(ClientToolHostContext::OutlookMailbox),
+            child_dispatch: Some(ChildDispatch::Durable),
+            durable: Some(crate::config::ClientToolDurableConfig {
+                host_context: ClientToolHostContext::OutlookMailbox,
+                result_schema: None,
+                attempt_expiry_secs: 3600,
+                claim_lease_secs: 120,
+            }),
+            ..Default::default()
+        };
+        let eligible = |config: &mut AppConfig, tool: &ClientToolConfig| {
+            config.client_tools.tools.clear();
+            config
+                .client_tools
+                .tools
+                .insert("tool".into(), tool.clone());
+            let registry =
+                crate::services::client_operations::registry(config, None).expect("registry");
+            durable_dispatch(config, &registry, tool)
+        };
+        let mut config = AppConfig::default();
+        config.client_tools.durable_operations_enabled = true;
+        assert!(eligible(&mut config, &mail_read));
+
+        config.client_tools.durable_operations_enabled = false;
+        assert!(!eligible(&mut config, &mail_read));
+        config.client_tools.durable_operations_enabled = true;
+
+        let live = ClientToolConfig {
+            child_dispatch: Some(ChildDispatch::Live),
+            ..mail_read.clone()
+        };
+        assert!(!eligible(&mut config, &live));
+        let by_default = ClientToolConfig {
+            child_dispatch: None,
+            ..mail_read.clone()
+        };
+        assert!(!eligible(&mut config, &by_default));
+        config.delegation.tasks.child_dispatch = ChildDispatch::Durable;
+        assert!(eligible(&mut config, &by_default));
+        assert!(!eligible(&mut config, &live));
+
+        let without_table = ClientToolConfig {
+            durable: None,
+            ..mail_read.clone()
+        };
+        assert!(!eligible(&mut config, &without_table));
+        let word = ClientToolConfig {
+            host_context: Some(ClientToolHostContext::WordDocument),
+            durable: Some(crate::config::ClientToolDurableConfig {
+                host_context: ClientToolHostContext::WordDocument,
+                ..mail_read.durable.clone().unwrap()
+            }),
+            ..mail_read.clone()
+        };
+        assert!(!eligible(&mut config, &word));
+
+        let registry = crate::services::client_operations::OperationRegistry::default();
+        assert!(!durable_dispatch(&config, &registry, &mail_read));
     }
 
     #[test]

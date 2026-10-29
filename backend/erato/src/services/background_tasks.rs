@@ -696,12 +696,14 @@ impl BackgroundTaskManager {
                             >(
                                 payload["operation_executor"].clone()
                             );
+                            // A task's granted operation settles only through a claim.
                             let bound = match task.client_operation(&tool_call_id).await {
                                 Some(operation) => executor
                                     .as_ref()
                                     .is_ok_and(|binding| *binding == operation.binding)
                                     && operation.consent
-                                        == crate::services::client_operations::ConsentPolicy::None,
+                                        == crate::services::client_operations::ConsentPolicy::None
+                                    && operation.lineage.is_none(),
                                 None => true,
                             } && task.executor_call(&tool_call_id).await.is_none_or(
                                 |handed_over| {

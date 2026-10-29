@@ -183,6 +183,9 @@ pub async fn park(
     Ok(())
 }
 
+/// `child_tools` are the registered tools whose handlers accept grant calls;
+/// a delegated task's operation goes only to one of those.
+#[allow(clippy::too_many_arguments)]
 pub async fn claim(
     db: &DatabaseConnection,
     registry: &OperationRegistry,
@@ -190,6 +193,7 @@ pub async fn claim(
     attempt_id: Uuid,
     binding: &ExecutorBinding,
     registered: &[String],
+    child_tools: &[String],
     confirmed: bool,
 ) -> Result<Uuid, Report> {
     let initial = get(db, account_id, attempt_id).await?;
@@ -203,6 +207,7 @@ pub async fn claim(
     let tool_name = request.operation_id.rsplit('/').next().unwrap_or_default();
     if !binding.validate()
         || !registered.iter().any(|name| name == tool_name)
+        || request.lineage.is_some() && !child_tools.iter().any(|name| name == tool_name)
         || binding.realm != request.binding.realm
         || binding.host_context != request.binding.host_context
     {
@@ -222,9 +227,35 @@ pub async fn claim(
             .claim_expires_at
             .is_some_and(|expiry| expiry > Utc::now())
     {
-        return row
+        let token = row
             .claim_token
-            .ok_or_else(|| eyre!("Operation claim missing"));
+            .ok_or_else(|| eyre!("Operation claim missing"))?;
+        // A task's granted call may wait on a prompt on the device for as long
+        // as the attempt lives, so its executor renews the claim it holds.
+        if request.lineage.is_some() {
+            let renewed = tx
+                .query_one_raw(statement(
+                    "client_operations.claim",
+                    r#"
+        UPDATE client_operation_attempts
+        SET claim_expires_at = LEAST(expires_at, now() + make_interval(secs => $3))
+        WHERE attempt_id = $1 AND state = 'claimed' AND claim_token = $2
+          AND claim_expires_at > now()
+        RETURNING attempt_id
+    "#,
+                    vec![
+                        attempt_id.into(),
+                        token.into(),
+                        (kind.claim_lease().num_seconds() as f64).into(),
+                    ],
+                ))
+                .await?;
+            if renewed.is_none() {
+                return Err(eyre!("Operation is not claimable"));
+            }
+            tx.commit().await?;
+        }
+        return Ok(token);
     }
     let token = Uuid::new_v4();
     let changed = tx
@@ -454,6 +485,15 @@ async fn settle_server_outcome(
         return Err(eyre!("Operation already settled"));
     }
     let request: OperationRequest = serde_json::from_value(row.request)?;
+    let mut output = serde_json::json!({"status":"cancelled","reason":code});
+    if request.lineage.is_some()
+        && let Some(text) = crate::services::delegated_client_tools::unanswered_grant_call_text(
+            code,
+            request.operation_id.rsplit('/').next().unwrap_or_default(),
+        )
+    {
+        output["error"] = text.into();
+    }
     let result = OperationResult {
         attempt_id,
         operation_id: request.operation_id,
@@ -468,7 +508,7 @@ async fn settle_server_outcome(
         executor: request.binding,
     };
     let validated = ValidatedResult {
-        output: serde_json::json!({"status":"cancelled","reason":code}),
+        output,
         succeeded: false,
     };
     let changed = tx
