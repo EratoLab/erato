@@ -17,41 +17,26 @@ import {
 } from "./wordAuthoringReadData";
 import { WordDocumentDraftStore } from "./wordDocumentDrafts";
 import { MAX_WORD_DOCX_BYTES } from "./wordDocumentPackageCodec";
+import {
+  wordReadFragments,
+  WORD_READ_PAGE_BYTES,
+  wordReadRecord,
+} from "./wordReadFragments";
 import { readWordTableCell } from "./wordTableCellRead";
 import { readWordTargets } from "./wordTargetRead";
 
+import type { WordReadFragment, WordReadRecord } from "./wordReadFragments";
 import type {
   ClientToolCallContext,
   ClientToolExecutor,
 } from "@erato/frontend/library";
-import type {
-  WordAuthoringSnapshot,
-  WordPlanRun,
-} from "@erato/frontend/word-review";
+import type { WordAuthoringSnapshot } from "@erato/frontend/word-review";
 
 export { WORD_READ_TOOL };
-const PAGE_BYTES = 20 * 1024;
 const MAX_PAGES = 12;
-interface Fragment {
-  ref: string;
-  type: string;
-  level?: number;
-  styleRef?: string;
-  protected: boolean;
-  part: number;
-  parts: number;
-  text: string;
-  runs?: WordPlanRun[];
-  nativeKind?: string;
-  description?: string;
-  sectionBoundary?: boolean;
-  structureJson?: string;
-  structurePart?: number;
-  structureParts?: number;
-}
 interface Session {
   snapshot: WordAuthoringSnapshot;
-  pages: Fragment[][];
+  pages: WordReadFragment[][];
   cursors: string[];
   next: number;
   chatId: string | null;
@@ -114,18 +99,9 @@ export class WordDocumentReadSession {
     snapshot.readScopes = new Map();
     snapshot.readToken = undefined;
     snapshot.ownerMessageId = undefined;
-    const pages: Fragment[][] = [[]];
-    const records = [
-      ...snapshot.blocks
-        .map(wordReadableSourceBlock)
-        .map(({ content, objects, format, ...b }) => ({
-          ...b,
-          structure: {
-            ...(content ? { content } : {}),
-            ...(objects ? { objects } : {}),
-            ...(format ? { format } : {}),
-          },
-        })),
+    const pages: WordReadFragment[][] = [[]];
+    const records: WordReadRecord[] = [
+      ...snapshot.blocks.map(wordReadableSourceBlock).map(wordReadRecord),
       ...(snapshot.fullDocument
         ? (snapshot.stories ?? []).map(
             ({ xml, part: _part, nativeId: _nativeId, ...story }) => ({
@@ -163,69 +139,12 @@ export class WordDocumentReadSession {
       MAX_SOURCE_BYTES
     )
       snapshot.completeReadIssue = "too-large";
-    for (const { text, runs, structure, ...block } of records) {
-      const chars = Array.from(text);
-      const fragments: Fragment[] = [];
-      let offset = 0,
-        codeUnitOffset = 0;
-      do {
-        let end = Math.min(chars.length, offset + 4096);
-        let fragment: Fragment;
-        while (true) {
-          const piece = chars.slice(offset, end).join("");
-          let position = 0;
-          const pieceRuns = runs?.flatMap((r) => {
-            const start = Math.max(0, codeUnitOffset - position);
-            const until = Math.min(
-              r.text.length,
-              codeUnitOffset + piece.length - position,
-            );
-            position += r.text.length;
-            return until > start
-              ? [{ ...r, text: r.text.slice(start, until) }]
-              : [];
-          });
-          fragment = {
-            ...block,
-            text: piece,
-            ...(pieceRuns ? { runs: pieceRuns } : {}),
-            part: fragments.length + 1,
-            parts: 0,
-          };
-          if (
-            new TextEncoder().encode(JSON.stringify(fragment)).length <=
-              PAGE_BYTES ||
-            end <= offset + 1
-          )
-            break;
-          end = offset + Math.max(1, Math.floor((end - offset) / 2));
-        }
-        fragments.push(fragment);
-        codeUnitOffset += fragment.text.length;
-        offset = end;
-      } while (offset < chars.length);
-      if (Object.keys(structure).length) {
-        const data = Array.from(JSON.stringify(structure));
-        const count = Math.ceil(data.length / 2048);
-        for (let part = 0; part < count; part++)
-          fragments.push({
-            ref: block.ref,
-            type: block.type,
-            protected: false,
-            text: "",
-            part: fragments.length + 1,
-            parts: 0,
-            structureJson: data.slice(part * 2048, (part + 1) * 2048).join(""),
-            structurePart: part + 1,
-            structureParts: count,
-          });
-      }
-      for (const fragment of fragments) {
-        fragment.parts = fragments.length;
+    for (const record of records)
+      for (const fragment of wordReadFragments(record)) {
         let page = pages[pages.length - 1];
         if (
           new TextEncoder().encode(JSON.stringify([...page, fragment])).length >
-            PAGE_BYTES &&
+            WORD_READ_PAGE_BYTES &&
           page.length
         ) {
           page = [];
@@ -233,7 +152,6 @@ export class WordDocumentReadSession {
         }
         page.push(fragment);
       }
-    }
     if (wordStyleNamesBytes(snapshot.styles) > 16384)
       snapshot.completeReadIssue = "too-large";
     if (pages.length > MAX_PAGES) snapshot.completeReadIssue = "too-large";
