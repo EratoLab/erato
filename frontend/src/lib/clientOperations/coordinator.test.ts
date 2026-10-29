@@ -920,7 +920,10 @@ describe("ClientOperationCoordinator task calls", () => {
         claim_token: "claim",
         expires_at: new Date(Date.now() + 10_000).toISOString(),
       })
-      .mockRejectedValueOnce(new Error("Operation authorization withdrawn"));
+      .mockRejectedValueOnce({
+        status: 409,
+        payload: "Operation authorization withdrawn",
+      });
     const { handler, finish, signals } = hangingHandler();
     const { coordinator } = coordinatorWith(api, [], [handler]);
     try {
@@ -930,6 +933,70 @@ describe("ClientOperationCoordinator task calls", () => {
       await vi.advanceTimersByTimeAsync(5_000);
       expect(signals[0]?.aborted).toBe(true);
       await vi.advanceTimersByTimeAsync(0);
+      expect(api.complete).not.toHaveBeenCalled();
+    } finally {
+      coordinator.dispose();
+    }
+  });
+
+  it("keeps the device waiting while renewals fail on the way, as long as the claim holds", async () => {
+    vi.useFakeTimers();
+    takesGrantCalls();
+    const { api } = fakeApi(operation({ lineage }));
+    const lost = { name: "unknown", message: "Network error (Failed to fetch)" };
+    api.claim
+      .mockResolvedValueOnce({
+        claim_token: "claim-1",
+        expires_at: new Date(Date.now() + 20_000).toISOString(),
+      })
+      .mockRejectedValueOnce(lost)
+      .mockRejectedValueOnce(lost)
+      .mockImplementation(async () => ({
+        claim_token: "claim-2",
+        expires_at: new Date(Date.now() + 20_000).toISOString(),
+      }));
+    const { handler, finish, signals } = hangingHandler();
+    const { coordinator } = coordinatorWith(api, [], [handler]);
+    try {
+      await coordinator.reconcile();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(finish).toHaveLength(1);
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(api.claim).toHaveBeenCalledTimes(2);
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect(api.claim).toHaveBeenCalledTimes(3);
+      expect(signals[0]?.aborted).toBe(false);
+      await vi.advanceTimersByTimeAsync(2_500);
+      expect(api.claim).toHaveBeenCalledTimes(4);
+      expect(signals[0]?.aborted).toBe(false);
+      finish[0]?.({ ok: true, result: null });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(api.complete.mock.calls[0]?.[1]).toBe("claim-2");
+    } finally {
+      coordinator.dispose();
+    }
+  });
+
+  it("stops the device once its claim lapses without a renewal getting through", async () => {
+    vi.useFakeTimers();
+    takesGrantCalls();
+    const { api } = fakeApi(operation({ lineage }));
+    api.claim
+      .mockResolvedValueOnce({
+        claim_token: "claim",
+        expires_at: new Date(Date.now() + 10_000).toISOString(),
+      })
+      .mockRejectedValue(new TypeError("Failed to fetch"));
+    const { handler, finish, signals } = hangingHandler();
+    const { coordinator } = coordinatorWith(api, [], [handler]);
+    try {
+      await coordinator.reconcile();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(finish).toHaveLength(1);
+      await vi.advanceTimersByTimeAsync(8_000);
+      expect(signals[0]?.aborted).toBe(false);
+      await vi.advanceTimersByTimeAsync(2_000);
+      expect(signals[0]?.aborted).toBe(true);
       expect(api.complete).not.toHaveBeenCalled();
     } finally {
       coordinator.dispose();

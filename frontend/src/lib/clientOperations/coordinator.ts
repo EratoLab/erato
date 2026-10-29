@@ -118,6 +118,20 @@ export interface ClientOperationHandler {
 // Renewals never come closer together than this, so a claim cut short by the
 // attempt's end is not re-claimed in a loop.
 const MIN_RENEWAL_MS = 1_000;
+// How soon a renewal that never reached the server is tried again.
+const RENEWAL_RETRY_MS = 5_000;
+/** A request that never reached the server: what the generated fetcher throws
+ * for a failed `fetch`, or the failed `fetch` itself. A refusal carries a
+ * status or the server's own error body instead. */
+function isTransportFailure(error: unknown): boolean {
+  if (error instanceof TypeError) return true;
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    !("status" in error) &&
+    (error as { name?: unknown }).name === "unknown"
+  );
+}
 
 function sameBinding(a: ExecutorBinding, b: ExecutorBinding): boolean {
   return (
@@ -504,16 +518,30 @@ export class ClientOperationCoordinator {
       let claim = await this.#claim(request, handler);
       // Re-claiming with the same binding extends a live claim; a lapsed one
       // comes back with a new token, which is the one the result must carry.
-      const renewLater = () => {
+      // A renewal lost on the way (a sleeping laptop, a dropped network) is
+      // tried again while the claim still holds; only a refusal stops the
+      // device at once.
+      const renewLater = (retry = false) => {
         const claimEnds = Date.parse(claim.expires_at);
         if (done || claimEnds >= attemptEnds) return;
-        const delay = Math.max(MIN_RENEWAL_MS, (claimEnds - Date.now()) / 2);
+        const left = claimEnds - Date.now();
+        const delay = retry
+          ? Math.max(MIN_RENEWAL_MS, Math.min(RENEWAL_RETRY_MS, left / 2))
+          : Math.max(MIN_RENEWAL_MS, left / 2);
         timers.push(
           setTimeout(() => {
-            void this.#claim(request, handler, true).then((renewed) => {
-              claim = renewed;
-              renewLater();
-            }, stop);
+            void this.#claim(request, handler, true).then(
+              (renewed) => {
+                claim = renewed;
+                renewLater();
+              },
+              (error: unknown) => {
+                const holds = Date.parse(claim.expires_at) - Date.now();
+                if (isTransportFailure(error) && holds > MIN_RENEWAL_MS)
+                  renewLater(true);
+                else stop();
+              },
+            );
           }, delay),
         );
       };
