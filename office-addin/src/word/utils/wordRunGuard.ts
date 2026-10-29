@@ -1,4 +1,7 @@
+import { beginWordOwnWrite } from "./wordChangeJournal";
 import { wordWriteHost } from "./wordWriteHost";
+
+import type { WordOwnWrite } from "./wordChangeJournal";
 
 export class WordRunAborted extends Error {
   constructor() {
@@ -37,6 +40,7 @@ export function runWordGuarded<T>(
 ): Promise<WordGuardedResult<T>> {
   let aborted = false;
   let writeQueued = false;
+  let own: WordOwnWrite | undefined;
   let finished = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let deadline = Date.now() + options.timeoutMs;
@@ -55,6 +59,8 @@ export function runWordGuarded<T>(
     beforeWrite() {
       if (aborted) throw new WordRunAborted();
       writeQueued = true;
+      // Guarded writes go in at the selection or as comments, naming no paragraph ids.
+      own ??= beginWordOwnWrite("anchor");
     },
     beforeSelect() {
       if (aborted) throw new WordRunAborted();
@@ -83,8 +89,8 @@ export function runWordGuarded<T>(
     run = Promise.reject(error);
   }
   const settled = run.then(
-    () => undefined,
-    () => undefined,
+    () => own?.end(),
+    () => own?.end(),
   );
 
   return new Promise((resolve) => {

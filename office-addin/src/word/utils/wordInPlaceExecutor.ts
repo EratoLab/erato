@@ -4,6 +4,7 @@ import {
   strictDifferingParts,
   wordDocumentDiagnostic as diagnostic,
 } from "./wordApplyDiagnostics";
+import { nameWordOwnWriteIds } from "./wordChangeJournal";
 import {
   captureWordDocumentPackage,
   currentWordDocumentUrl,
@@ -925,6 +926,7 @@ export async function applyWordPlanInPlace(
       };
       before = encodeWordDocumentBackup(live, record);
       onBeforeWrite?.(before);
+      nameWordOwnWriteIds(recordOps.map((op) => op.id));
       snapshot.used = true;
       stage = "write";
       progress.stage("writing");
@@ -994,6 +996,10 @@ export async function applyWordPlanInPlace(
       for (const at of renamable) proxies[at].load("uniqueLocalId");
       for (const paragraph of made.values()) paragraph.load("uniqueLocalId");
       await context.sync();
+      nameWordOwnWriteIds([
+        ...renamable.map((at) => proxies[at].uniqueLocalId),
+        ...[...made.values()].map((paragraph) => paragraph.uniqueLocalId),
+      ]);
       if (renamable.length) {
         const renamed = new Map(
           renamable.map((at) => [liveB[at].id, proxies[at].uniqueLocalId]),
@@ -1902,6 +1908,7 @@ export async function revertWordPlanInPlace(
               return stale("list", ops[k].ref);
       stage = "restore";
       writing = true;
+      nameWordOwnWriteIds(ops.map((op) => op.id));
       const recreated = new Map<number, Word.Paragraph>();
       const restyle: { k: number; paragraph: Word.Paragraph }[] = [];
       // Only the revisions this write left, paragraph by paragraph from the end; the mode stays as is.
@@ -2067,6 +2074,10 @@ export async function revertWordPlanInPlace(
       const boundaryIds = new Map(
         boundaries.map((at) => [at, items[at].uniqueLocalId]),
       );
+      nameWordOwnWriteIds([
+        ...[...restoredIds.values()].flat(),
+        ...boundaryIds.values(),
+      ]);
       const expectedIds = idsBefore.map((id, at) => boundaryIds.get(at) ?? id);
       for (const r of [...pending].reverse())
         expectedIds.splice(

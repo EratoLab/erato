@@ -1,5 +1,11 @@
+import {
+  noteWordChangeEventsActive,
+  recordWordParagraphEvent,
+} from "./wordChangeJournal";
 import { withWordTimeout } from "./wordTimeout";
 import { wordWriteHost } from "./wordWriteHost";
+
+import type { WordParagraphEvent } from "./wordChangeJournal";
 
 type Listener = () => void;
 
@@ -69,13 +75,17 @@ async function installParagraphEvents(): Promise<void> {
     return;
   try {
     await word.run(async (context) => {
-      const handler = async () => markWordDocumentChanged();
+      const handler = async (event: WordParagraphEvent) => {
+        recordWordParagraphEvent(event);
+        markWordDocumentChanged();
+      };
       context.document.onParagraphAdded.add(handler);
       context.document.onParagraphChanged.add(handler);
       context.document.onParagraphDeleted.add(handler);
       await context.sync();
     });
     paragraphEventsActive = true;
+    noteWordChangeEventsActive();
   } catch {
     // Callers then treat every return to the pane as a change.
   }

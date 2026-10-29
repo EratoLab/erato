@@ -1,6 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  resetWordChangeJournalForTests,
+  wordChangePosition,
+  wordChangesSince,
+} from "../wordChangeJournal";
+import {
   markWordDocumentChanged,
   readWordChangeTrackingMode,
   resetWordDocumentChangeSignalForTests,
@@ -8,7 +13,11 @@ import {
   subscribeWordDocumentChanged,
 } from "../wordDocumentChangeSignal";
 
-type Handler = () => Promise<void>;
+type Handler = (event?: {
+  type: string;
+  source: string;
+  uniqueLocalIds: string[];
+}) => Promise<void>;
 
 function installWord(supportsEvents: boolean) {
   const handlers: Record<string, Handler[]> = {
@@ -47,6 +56,7 @@ function installWord(supportsEvents: boolean) {
 describe("wordDocumentChangeSignal", () => {
   beforeEach(() => {
     resetWordDocumentChangeSignalForTests();
+    resetWordChangeJournalForTests();
   });
 
   afterEach(() => {
@@ -93,6 +103,34 @@ describe("wordDocumentChangeSignal", () => {
     await handlers.deleted[0]();
 
     expect(listener).toHaveBeenCalledTimes(3);
+  });
+
+  it("passes each event's type, source and paragraph ids to the change journal", async () => {
+    const handlers = installWord(true);
+    const listener = vi.fn();
+    subscribeWordDocumentChanged(listener);
+    await vi.waitFor(() => expect(wordParagraphEventsActive()).toBe(true));
+    const start = wordChangePosition();
+
+    await handlers.changed[0]({
+      type: "ParagraphChanged",
+      source: "Remote",
+      uniqueLocalIds: ["p1"],
+    });
+    await handlers.deleted[0]({
+      type: "ParagraphDeleted",
+      source: "Local",
+      uniqueLocalIds: ["p2"],
+    });
+
+    expect(listener).toHaveBeenCalledTimes(2);
+    expect(wordChangesSince(start)).toMatchObject({
+      ok: true,
+      entries: [
+        { kind: "changed", source: "remote", ids: ["p1"] },
+        { kind: "deleted", source: "local", ids: ["p2"] },
+      ],
+    });
   });
 
   it("registers no paragraph events below WordApi 1.6", async () => {
