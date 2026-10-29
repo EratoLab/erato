@@ -51,6 +51,11 @@ export interface WordDocumentBuild {
   partialOrdinal: number | null;
 }
 
+/** Word for Windows and Mac end getText with the paragraph mark, which block texts never have. */
+export function withoutParagraphMark(text: string): string {
+  return text.replace(/\r$/, "");
+}
+
 /** Stay below the backend’s 64 KiB argument cap, measured in UTF-8 bytes. */
 export const DOCUMENT_TEXT_BUDGET_BYTES = 61_440;
 export const HEADING_OUTLINE_BUDGET_BYTES = 8_192;
