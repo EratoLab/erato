@@ -1364,6 +1364,27 @@ async fn a_lapsed_renewal_returns_a_new_token(pool: Pool<Postgres>) {
     assert!(seconds_from_now(row.claim_expires_at.unwrap()) >= 85);
 }
 
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_granted_call_outside_a_task_chat_is_withdrawn_at_claim(pool: Pool<Postgres>) {
+    let setup = setup(pool, 10, true, true).await;
+    let request = with_lineage(&setup.state, &park(&setup).await).await;
+    let refused = app_server(setup.state.clone())
+        .post(&format!(
+            "/api/v1beta/me/client-operations/{}/claim",
+            request.attempt_id
+        ))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .add_header("X-Erato-Client-Tools", TOOL)
+        .add_header("X-Erato-Child-Client-Tools", TOOL)
+        .json(&json!({"binding": mailbox()}))
+        .await;
+    refused.assert_status_conflict();
+    assert_eq!(refused.text(), "Operation authorization withdrawn");
+    let row = attempt(&setup.state, request.attempt_id).await;
+    assert_eq!(row.state, AttemptState::Ready);
+    assert_eq!(row.result.unwrap()["error"]["code"], "withdrawn");
+}
+
 mod attached;
 
 mod word;

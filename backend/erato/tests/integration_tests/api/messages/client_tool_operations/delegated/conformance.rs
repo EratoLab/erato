@@ -11,6 +11,8 @@ use super::slow_path::{
     a_durable_child_call_waits_for_a_client_and_the_parent_resumes,
     a_durable_child_that_finishes_before_the_parent_parks_resumes_the_parent_once,
     a_grant_operation_is_withdrawn_once_the_parent_chat_is_archived,
+    a_grant_operation_is_withdrawn_once_the_user_never_allows_the_tool,
+    a_grant_operation_its_grant_does_not_hold_durably_is_withdrawn,
     a_grant_operation_result_is_refused_without_a_claim,
     a_pane_without_grant_support_cannot_claim_a_grant_operation,
     a_parent_errored_after_its_decisions_resumes_once_when_the_waiting_child_finishes,
@@ -106,6 +108,8 @@ macro_rules! host_conformance {
             a_pane_without_grant_support_cannot_claim_a_grant_operation
             a_claimed_grant_operation_is_authorized_while_the_parent_is_parked_on_the_child
             a_grant_operation_is_withdrawn_once_the_parent_chat_is_archived
+            a_grant_operation_is_withdrawn_once_the_user_never_allows_the_tool
+            a_grant_operation_its_grant_does_not_hold_durably_is_withdrawn
             a_grant_operation_result_is_refused_without_a_claim
             continuestream_refuses_a_decision_naming_a_waiting_item
             continuestream_refuses_a_single_decision_when_only_waiting_items_are_open

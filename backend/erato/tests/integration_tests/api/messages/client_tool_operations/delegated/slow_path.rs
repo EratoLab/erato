@@ -347,6 +347,59 @@ pub(super) async fn a_grant_operation_is_withdrawn_once_the_parent_chat_is_archi
     waiting.server.abort();
 }
 
+async fn assert_claim_withdrawn(row: &HostRow, waiting: &Waiting) {
+    let refused = claim_as_pane(row, waiting, true).await;
+    refused.assert_status_conflict();
+    assert_eq!(refused.text(), "Operation authorization withdrawn");
+    let settled = attempt_row(waiting).await;
+    assert_eq!(settled.state, attempts::AttemptState::Ready);
+    assert_eq!(
+        settled.validated_result.unwrap()["output"]["reason"],
+        "withdrawn"
+    );
+}
+
+pub(super) async fn a_grant_operation_is_withdrawn_once_the_user_never_allows_the_tool(
+    pool: Pool<Postgres>,
+    row: &HostRow,
+) {
+    let waiting = park_a_waiting_child(row, pool, false, |_| {}).await;
+    erato::models::user_preference::set_client_tool_decision(
+        &waiting.state.db,
+        &account(&waiting.state).await,
+        &row.qualified(),
+        erato::models::user_preference::ClientToolDecision::NeverAllow,
+    )
+    .await
+    .unwrap();
+    assert_claim_withdrawn(row, &waiting).await;
+    waiting.server.abort();
+}
+
+pub(super) async fn a_grant_operation_its_grant_does_not_hold_durably_is_withdrawn(
+    pool: Pool<Postgres>,
+    row: &HostRow,
+) {
+    use sea_orm::ConnectionTrait;
+    let waiting = park_a_waiting_child(row, pool, false, |_| {}).await;
+    waiting
+        .state
+        .db
+        .execute_unprepared(&format!(
+            "UPDATE chats SET assistant_configuration = jsonb_set(assistant_configuration, \
+             '{{task,client_grant,durable_tools}}', '[]'::jsonb) WHERE id = '{}'",
+            waiting.child.id
+        ))
+        .await
+        .unwrap();
+    assert_eq!(
+        task_spec(&reload(&waiting.state.db, waiting.child.id).await)["client_grant"]["durable_tools"],
+        json!([])
+    );
+    assert_claim_withdrawn(row, &waiting).await;
+    waiting.server.abort();
+}
+
 pub(super) async fn a_grant_operation_result_is_refused_without_a_claim(
     pool: Pool<Postgres>,
     row: &HostRow,
