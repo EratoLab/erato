@@ -943,7 +943,10 @@ describe("ClientOperationCoordinator task calls", () => {
     vi.useFakeTimers();
     takesGrantCalls();
     const { api } = fakeApi(operation({ lineage }));
-    const lost = { name: "unknown", message: "Network error (Failed to fetch)" };
+    const lost = {
+      name: "unknown",
+      message: "Network error (Failed to fetch)",
+    };
     api.claim
       .mockResolvedValueOnce({
         claim_token: "claim-1",
