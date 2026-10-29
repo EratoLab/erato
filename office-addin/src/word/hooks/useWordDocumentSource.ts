@@ -119,16 +119,18 @@ function copyForSend(
 }
 
 /** Native body blocks exclude table-cell paragraphs and can group anchored ranges, so only a text
- * that is unique on both sides maps a block to a paragraph collection ordinal. */
+ * that is unique on both sides maps a block to a paragraph collection ordinal. Word for Windows and
+ * Mac end getText with the paragraph mark, which block texts never have. */
 function assignParagraphOrdinals(
   authoring: WordAuthoringSnapshot,
   paragraphs: WordParagraphRead[],
 ): void {
   const ordinalsByText = new Map<string, number[]>();
   for (const paragraph of paragraphs) {
-    const ordinals = ordinalsByText.get(paragraph.text);
+    const text = paragraph.text.replace(/\r$/, "");
+    const ordinals = ordinalsByText.get(text);
     if (ordinals) ordinals.push(paragraph.ordinal);
-    else ordinalsByText.set(paragraph.text, [paragraph.ordinal]);
+    else ordinalsByText.set(text, [paragraph.ordinal]);
   }
   const blocksByText = new Map<string, number>();
   for (const block of authoring.blocks)
