@@ -24,12 +24,14 @@ import {
   wordReadPageStarts,
   wordReadRecord,
 } from "./wordReadFragments";
-import { readWordSection } from "./wordSectionRead";
+import { wordReadFreshness, wordResultBlocks } from "./wordReadFreshness";
+import { readWordSection, wordSectionReadExtent } from "./wordSectionRead";
 import { readWordTableCell } from "./wordTableCellRead";
 import { readWordTargets } from "./wordTargetRead";
 
 import type { WordReadAccess } from "./wordReadAccess";
 import type { WordReadFragment, WordReadRecord } from "./wordReadFragments";
+import type { WordReadCapture, WordReadScope } from "./wordReadFreshness";
 import type {
   ClientToolCallContext,
   ClientToolExecutionResult,
@@ -55,6 +57,7 @@ export type WordDocumentReadRequest = Pick<
 export class WordDocumentReadSession {
   private session: Session | null = null;
   private access: WordReadAccess = "write";
+  private capture?: WordReadCapture;
   private completeBudgetCheck?: () => Promise<string | undefined>;
   private completeBudget?: Promise<string | undefined>;
   readonly drafts = new WordDocumentDraftStore();
@@ -88,6 +91,7 @@ export class WordDocumentReadSession {
   }
   clear(): void {
     this.access = "write";
+    this.capture = undefined;
     this.completeBudgetCheck = undefined;
     this.completeBudget = undefined;
     this.drafts.clear();
@@ -98,11 +102,12 @@ export class WordDocumentReadSession {
     snapshot?: WordAuthoringSnapshot,
     request?: WordDocumentReadRequest,
     completeBudgetCheck?: () => Promise<string | undefined>,
-    options?: { access?: WordReadAccess },
+    options?: { access?: WordReadAccess; capture?: WordReadCapture },
   ): void {
     this.clear();
     if (!snapshot || isWordHistorySnapshot(snapshot)) return;
     this.access = options?.access ?? "write";
+    this.capture = options?.capture;
     this.completeBudgetCheck = completeBudgetCheck;
     snapshot.revoked = false;
     snapshot.read.clear();
@@ -192,8 +197,10 @@ export class WordDocumentReadSession {
         !capture.used &&
         !capture.revoked &&
         !context.signal?.aborted
-      )
-        return access === "read-only" ? withReadOnlyFields(result) : result;
+      ) {
+        const fresh = this.withFreshness(result, input, capture);
+        return access === "read-only" ? withReadOnlyFields(fresh) : fresh;
+      }
       return {
         ok: false,
         error: "The document capture is no longer available.",
@@ -221,6 +228,39 @@ export class WordDocumentReadSession {
       };
     }
     return result;
+  }
+
+  /** Every read response says which capture it read and what Word reported changed since. */
+  private withFreshness(
+    result: ClientToolExecutionResult,
+    input: unknown,
+    snapshot: WordAuthoringSnapshot,
+  ): ClientToolExecutionResult {
+    if (
+      !result.ok ||
+      result.disposition === "local_only" ||
+      !result.result ||
+      typeof result.result !== "object" ||
+      Array.isArray(result.result)
+    )
+      return result;
+    const args = input as Record<string, unknown>;
+    const section = args.section as Record<string, unknown> | undefined;
+    const scope: WordReadScope = section
+      ? (wordSectionReadExtent(snapshot, section.ref, section.throughRef) ?? {
+          kind: "blocks",
+          blocks: new Set(),
+        })
+      : "target" in args || "table_cell" in args
+        ? { kind: "blocks", blocks: wordResultBlocks(snapshot, result.result) }
+        : { kind: "document" };
+    return {
+      ...result,
+      result: {
+        ...result.result,
+        freshness: wordReadFreshness(snapshot, this.capture, scope),
+      },
+    };
   }
 
   private async executeRead(

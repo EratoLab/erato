@@ -1,4 +1,5 @@
 import type { WordDocumentReadNote } from "./readWordDocument";
+import type { WordCaptureChanges } from "./wordReadFreshness";
 import type { WordAuthoringSnapshot } from "@erato/frontend/word-review";
 
 export interface WordParagraphRead {
@@ -40,6 +41,7 @@ export interface WordDocumentBuild {
   trackingMode?: string;
   /** Track Changes was on at the read. */
   trackChanges?: boolean;
+  changes?: WordCaptureChanges;
   args: WordDocumentArgs;
   coverage: WordDocumentCoverage;
   ordinalMap: Map<number, { uniqueLocalId: string | null; text: string }>;

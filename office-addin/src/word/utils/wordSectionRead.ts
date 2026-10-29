@@ -89,6 +89,28 @@ function decodeCursor(cursor: string): unknown {
   }
 }
 
+/** The blocks a section:{ref, throughRef?} read covers, or undefined for refs this capture lacks. */
+export function wordSectionReadExtent(
+  snapshot: WordAuthoringSnapshot,
+  ref: unknown,
+  throughRef: unknown,
+): { kind: "extent"; from: number; to: number } | undefined {
+  const index = wordBlockIndex(snapshot);
+  const start = reference(ref) ? index.get(ref) : undefined;
+  if (start === undefined) return undefined;
+  if (throughRef === undefined) {
+    const { from, to } = wordSectionExtent(
+      wordCaptureSections(snapshot),
+      start,
+    );
+    return { kind: "extent", from, to };
+  }
+  const through = reference(throughRef) ? index.get(throughRef) : undefined;
+  return through === undefined || through < start
+    ? undefined
+    : { kind: "extent", from: start, to: through + 1 };
+}
+
 /** section:{ref, throughRef?, cursor?}: a section of the capture in pages of whole blocks. Always
  * read-only: no read token, no write scope, no change to the capture's write state. */
 export function readWordSection(

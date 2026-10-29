@@ -8,6 +8,12 @@ import {
 import { mixedAuthoringXml } from "../../../test/mocks/word/mixedAuthoringFixtures";
 import { readWordDocument } from "../../utils/readWordDocument";
 import {
+  noteWordChangeEventsActive,
+  recordWordParagraphEvent,
+  resetWordChangeJournalForTests,
+  wordChangesSince,
+} from "../../utils/wordChangeJournal";
+import {
   useWordDocumentSource,
   WORD_CAPTURE_CEILING_MS,
   WORD_CAPTURE_SLOW_MS,
@@ -61,6 +67,13 @@ const deferred = <T,>() => {
   return { promise, resolve };
 };
 
+function journalSince(build: WordDocumentBuild) {
+  const since = wordChangesSince(build.changes!.position);
+  return since.ok
+    ? since.entries.map(({ source, reason }) => ({ source, reason }))
+    : since.reason;
+}
+
 const changeDocument = () =>
   act(() => {
     for (const listener of changes) listener();
@@ -82,6 +95,8 @@ function renderSource({
 
 describe("useWordDocumentSource", () => {
   beforeEach(() => {
+    resetWordChangeJournalForTests();
+    noteWordChangeEventsActive();
     read.mockReset();
     changes.clear();
     signal.eventsActive = false;
@@ -285,6 +300,32 @@ describe("useWordDocumentSource", () => {
       undefined,
       undefined,
     ]);
+  });
+
+  it("records where the change journal stood before the paragraph read, kept by every send's copy", async () => {
+    read.mockImplementation(async () => {
+      recordWordParagraphEvent({
+        type: "ParagraphChanged",
+        source: "Local",
+        uniqueLocalIds: ["p1"],
+      });
+      return { ok: true, tracking: "Off", paragraphs: paragraphs(["Alpha"]) };
+    });
+    const before = Date.now();
+    const { result } = renderSource();
+    await waitFor(() => expect(result.current.preview.status).toBe("included"));
+
+    const first = (await result.current.capture())!;
+    const second = (await result.current.capture())!;
+
+    expect(Date.parse(first.changes!.capturedAt)).toBeGreaterThanOrEqual(
+      before,
+    );
+    expect(second.changes).toEqual(first.changes);
+    expect(wordChangesSince(first.changes!.position)).toMatchObject({
+      ok: true,
+      entries: [{ source: "local", ids: ["p1"] }],
+    });
   });
 
   it("keeps the text but no authoring when Word did not hand over the full document", async () => {
@@ -571,6 +612,20 @@ describe("useWordDocumentSource", () => {
     await waitFor(() => expect(read).toHaveBeenCalledTimes(2));
   });
 
+  it("journals a return to the pane without paragraph events as an unknown change", async () => {
+    readsText(["Alpha"]);
+    const { result } = renderSource();
+    await waitFor(() => expect(result.current.preview.status).toBe("included"));
+    const captured = (await result.current.capture())!;
+
+    leavePane();
+    focusPane();
+
+    expect(journalSince(captured)).toEqual([
+      { source: "unknown", reason: "return-to-pane" },
+    ]);
+  });
+
   it("with paragraph events, does not read again on a return when Track Changes is unchanged", async () => {
     signal.eventsActive = true;
     readsAuthoring("Off");
@@ -592,12 +647,16 @@ describe("useWordDocumentSource", () => {
     readsAuthoring("Off");
     const { result } = renderSource({ authoringEnabled: true });
     await waitFor(() => expect(result.current.preview.status).toBe("included"));
+    const captured = (await result.current.capture())!;
     signal.trackingMode.mockResolvedValue("TrackAll");
 
     leavePane();
     focusPane();
 
     await waitFor(() => expect(read).toHaveBeenCalledTimes(2));
+    expect(journalSince(captured)).toEqual([
+      { source: "unknown", reason: "tracking-mode" },
+    ]);
   });
 
   const reads = {

@@ -4,6 +4,11 @@ import { buildWordDocumentArgs } from "../utils/buildWordDocumentArgs";
 import { readWordDocument } from "../utils/readWordDocument";
 import { wordErrorText } from "../utils/wordApplyDiagnostics";
 import {
+  noteWordCapturedIds,
+  recordWordUnknownChange,
+  wordChangePosition,
+} from "../utils/wordChangeJournal";
+import {
   readWordChangeTrackingMode,
   subscribeWordDocumentChanged,
   wordParagraphEventsActive,
@@ -151,9 +156,15 @@ async function captureDocument(
   error?: string;
   retry?: boolean;
 }> {
+  const changes = {
+    position: wordChangePosition(),
+    capturedAt: new Date().toISOString(),
+  };
   const result = await readWordDocument(includeAuthoring);
   if (!result.ok) return { build: null, error: result.error };
+  noteWordCapturedIds(result.paragraphs.map((p) => p.uniqueLocalId));
   const build = buildWordDocumentArgs(result.paragraphs);
+  build.changes = changes;
   if (result.tracking !== undefined) build.trackingMode = result.tracking;
   if (isWordTrackingMode(result.tracking)) build.trackChanges = true;
   if (result.authoring) {
@@ -345,6 +356,7 @@ export function useWordDocumentSource({
       }
       leftPaneRef.current = false;
       if (!wordParagraphEventsActive()) {
+        recordWordUnknownChange("return-to-pane");
         generationRef.current += 1;
         refresh();
         return;
@@ -356,7 +368,10 @@ export function useWordDocumentSource({
         return;
       }
       void readWordChangeTrackingMode().then((mode) => {
-        if (mode !== captured) generationRef.current += 1;
+        if (mode !== captured) {
+          recordWordUnknownChange("tracking-mode");
+          generationRef.current += 1;
+        }
         refresh();
       });
     };

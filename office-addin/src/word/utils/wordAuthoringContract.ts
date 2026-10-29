@@ -1,9 +1,14 @@
 export const WORD_SECTION_PROPERTIES =
   "headers/footers:{default?:storyId|null,first?:storyId|null,even?:storyId|null}; null removes that reference. layout:{orientation:portrait|landscape,width?,height?,margins?:{top,right,bottom,left,header,footer,gutter},columns?,columnSpacing?,break:nextPage|continuous|evenPage|oddPage,pageNumberStart?,differentFirstPage?,differentOddEvenPages?}. All dimensions are points.";
 
+/** The blind spots of every read's freshness, per host (ERMAIN-1005 F1). */
+export const WORD_FRESHNESS_NOTICE =
+  'freshness says what Word reported changed since capturedAt. Word\'s own changes fire no events, nor do formatting-only edits on Windows and Mac (on the web they may come late), so changes:"none" means no text change was observed.';
+
 /** Protocol vocabulary belongs here; model behavior instructions come from deployment configuration. */
 export const WORD_AUTHORING_CONTRACT = {
   version: 1,
+  freshness: WORD_FRESHNESS_NOTICE,
   scopedEdit: {
     read: "read_document_blocks accepts {snapshot,documentIdentity,target:{kind?,text?,nearbyText?,ref?,refs?,throughRef?,offset?}}. Search filters are ANDed; text searches object text/properties and nearbyText searches adjacent body blocks. Five bounded candidates per page. An ambiguous search grants no scope. Select returned refs explicitly (at most 16), or ref/throughRef for a contiguous body range. For multiple dependencies, target:{queries:[selectors]} resolves them atomically into one readToken; every selector must resolve uniquely or select explicit refs/a range. Any missing or ambiguous query grants no scope for the entire batch. Query results identify refs by index; select or refine unresolved queries without reading the whole document. At most 16 distinct targets and 24 KiB for the combined response, including guidance/metadata. Optional include:[text|formatting|table|media|structures|stories|sections] requests guidance for new content as well as existing target kinds. Only overall ready grants a readToken; larger responses require a narrower selection or complete read.",
     input:
