@@ -8,8 +8,6 @@ use tokio_tungstenite::{
     tungstenite::{Message, client::IntoClientRequest},
 };
 
-pub struct GeminiLive(pub SpeechProviderConfig);
-
 fn endpoint_host(location: &str) -> String {
     match location {
         "global" => "aiplatform.googleapis.com".to_string(),
@@ -18,10 +16,24 @@ fn endpoint_host(location: &str) -> String {
     }
 }
 
-#[async_trait]
-impl SpeechProvider for GeminiLive {
-    async fn stream(&self, text: &str) -> Result<SpeechAudio, Report> {
-        let c = &self.0;
+type Socket =
+    tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>;
+
+/// One instance belongs to one assistant response. Only fully consumed turns are reused.
+pub struct GeminiLive {
+    config: SpeechProviderConfig,
+    idle: Arc<tokio::sync::Mutex<Option<Socket>>>,
+}
+impl GeminiLive {
+    pub fn new(config: SpeechProviderConfig) -> Self {
+        Self {
+            config,
+            idle: Arc::new(tokio::sync::Mutex::new(None)),
+        }
+    }
+
+    async fn connect(&self) -> Result<Socket, Report> {
+        let c = &self.config;
         if c.access_token.is_some() == c.api_key.is_some() {
             return Err(eyre!(
                 "Gemini Live requires exactly one of api_key or access_token"
@@ -122,16 +134,37 @@ impl SpeechProvider for GeminiLive {
                 break;
             }
         }
+        Ok(socket)
+    }
+}
+
+#[async_trait]
+impl SpeechProvider for GeminiLive {
+    async fn finish(&self) -> Result<(), Report> {
+        if let Some(mut socket) = self.idle.lock().await.take() {
+            let _ = tokio::time::timeout(Duration::from_secs(2), socket.close(None)).await;
+        }
+        Ok(())
+    }
+
+    async fn stream(&self, text: &str) -> Result<SpeechAudio, Report> {
+        let cached = self.idle.lock().await.take();
+        let mut socket = match cached {
+            Some(socket) => socket,
+            None => self.connect().await?,
+        };
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(180);
+        let idle = self.idle.clone();
         socket.send(Message::Text(json!({"clientContent":{"turns":[{"role":"user","parts":[{"text":text}]}],"turnComplete":true}}).to_string().into())).await?;
         let chunks = futures::stream::try_unfold(
-            (socket, deadline, VecDeque::<Vec<u8>>::new(), false),
-            |(mut socket, deadline, mut ready, mut complete)| async move {
+            (socket, deadline, VecDeque::<Vec<u8>>::new(), false, idle),
+            |(mut socket, deadline, mut ready, mut complete, idle)| async move {
                 loop {
                     if let Some(chunk) = ready.pop_front() {
-                        return Ok(Some((chunk, (socket, deadline, ready, complete))));
+                        return Ok(Some((chunk, (socket, deadline, ready, complete, idle))));
                     }
                     if complete {
-                        let _ = socket.close(None).await;
+                        *idle.lock().await = Some(socket);
                         return Ok(None);
                     }
                     let event = next_event(&mut socket, deadline).await?;
@@ -265,6 +298,56 @@ pub(crate) mod tests {
     }
 
     #[tokio::test]
+    async fn reuses_connection_for_multiple_passages_and_closes_on_finish() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}", listener.local_addr().unwrap());
+        let server = tokio::spawn(async move {
+            let (stream, _) = listener.accept().await.unwrap();
+            let mut socket = tokio_tungstenite::accept_async(stream).await.unwrap();
+            let Message::Text(setup) = socket.next().await.unwrap().unwrap() else {
+                panic!()
+            };
+            assert!(
+                serde_json::from_str::<Value>(&setup)
+                    .unwrap()
+                    .get("setup")
+                    .is_some()
+            );
+            socket
+                .send(Message::Text(
+                    json!({"setupComplete":{}}).to_string().into(),
+                ))
+                .await
+                .unwrap();
+            for expected in ["First passage.", "Second passage."] {
+                let Message::Text(text) = socket.next().await.unwrap().unwrap() else {
+                    panic!()
+                };
+                let request: Value = serde_json::from_str(&text).unwrap();
+                assert_eq!(
+                    request["clientContent"]["turns"][0]["parts"][0]["text"],
+                    expected
+                );
+                socket.send(Message::Text(json!({"serverContent":{"modelTurn":{"parts":[{"inlineData":{"mimeType":"audio/pcm;rate=24000","data":"AQIDBA=="}}]},"turnComplete":true}}).to_string().into())).await.unwrap();
+            }
+            assert!(matches!(socket.next().await, Some(Ok(Message::Close(_)))));
+        });
+        let provider = provider(&config(url)).unwrap();
+        for text in ["First passage.", "Second passage."] {
+            let result = tokio::time::timeout(Duration::from_secs(3), provider.synthesize(text))
+                .await
+                .unwrap()
+                .unwrap();
+            assert_eq!(result.pcm, [1, 2, 3, 4]);
+        }
+        provider.finish().await.unwrap();
+        tokio::time::timeout(Duration::from_secs(3), server)
+            .await
+            .unwrap()
+            .unwrap();
+    }
+
+    #[tokio::test]
     async fn streams_audio_completes_and_builds_replay_wav() {
         let (url, _, task) = mock("complete", "Hello.").await;
         let audio = provider(&config(url))
@@ -330,9 +413,9 @@ pub(crate) mod tests {
     async fn rejects_mismatched_model_scope_and_multiple_credentials() {
         let mut c = config("http://localhost".into());
         c.model_name = "projects/test/locations/us/publishers/google/models/gemini-3.8-live".into();
-        assert!(GeminiLive(c.clone()).stream("Hello.").await.is_err());
+        assert!(GeminiLive::new(c.clone()).stream("Hello.").await.is_err());
         c.model_name = "gemini-3.8-live".into();
         c.api_key = serde_json::from_value(json!("key")).unwrap();
-        assert!(GeminiLive(c).stream("Hello.").await.is_err());
+        assert!(GeminiLive::new(c).stream("Hello.").await.is_err());
     }
 }

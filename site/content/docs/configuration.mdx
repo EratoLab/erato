@@ -2415,9 +2415,11 @@ Configure speech output separately from chat and transcription. The registry use
 `[speech_providers.provider.<id>]`. Set `audio_conversational.speech_provider` to
 that ID, select conversational mode, and enable **Audio-back** to hear responses.
 The `speech_provider` setting is available only in `audio_conversational`.
-Other input modes do not generate speech. Audio-back starts sentence by sentence
-while text is generated. Completed audio is saved as a WAV file on the assistant
-message, with the exact spoken input and sentence segments in file metadata.
+Other input modes do not generate speech. Audio-back streams audio while text is generated, combining complete sentences
+into passages of up to 2000 characters. Short passages wait up to 250 ms for
+more context; sentences queued during synthesis are combined for the next request.
+Single line breaks do not force a synthesis boundary. Completed audio is saved as a WAV file on the assistant
+message, with the exact spoken input and passage segments in file metadata.
 Replay after reload does not invoke the provider again.
 
 ```toml
@@ -2472,7 +2474,11 @@ identifier matching those settings. `location = "eu"` routes to the EU
 multi-region endpoint. A custom `base_url` overrides that endpoint and must
 itself point to the intended deployment. Choose a voice and location supported
 by the model. Like other generative speech models, Live is instructed to read
-the text exactly but may deviate from it.
+the text exactly but may deviate from it. One Live connection is retained for
+the assistant response, so later passages retain the preceding session context.
+Each passage waits for the previous turn to complete before submission; the
+connection closes when the response ends. REST TTS requests remain independent,
+but receive the larger passages.
 An optional `instructions` string controls delivery on models that support it.
 Credentials are backend-only. Provider/model-specific options must be supported
 by the selected model; streamed output uses 16-bit little-endian mono PCM.
