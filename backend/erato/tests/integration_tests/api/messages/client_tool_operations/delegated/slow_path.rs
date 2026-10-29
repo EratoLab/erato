@@ -789,6 +789,42 @@ fn item_for(row: &erato::db::entity::messages::Model, call: &str) -> Value {
         .clone()
 }
 
+/// The result of the task `call` as the parent's model read it in `body`.
+fn task_result_in(body: &Value, call: &str) -> Value {
+    let suffix = format!(":{call}");
+    let content = &body["messages"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|message| {
+            message["role"] == "tool"
+                && message["tool_call_id"]
+                    .as_str()
+                    .is_some_and(|id| id == call || id.ends_with(&suffix))
+        })
+        .unwrap_or_else(|| panic!("no result for {call}: {body}"))["content"];
+    content
+        .as_str()
+        .and_then(|text| serde_json::from_str(text).ok())
+        .unwrap_or_else(|| content.clone())
+}
+
+/// The tool parts of a row for the provider's `call`: one per dispatch.
+fn calls_named(row: &erato::db::entity::messages::Model, call: &str) -> usize {
+    let suffix = format!(":{call}");
+    row.raw_message["content"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|part| {
+            part["content_type"] == "tool_use"
+                && part["tool_call_id"]
+                    .as_str()
+                    .is_some_and(|id| id.ends_with(&suffix))
+        })
+        .count()
+}
+
 fn assert_row_reads(row: &erato::db::entity::messages::Model) {
     erato::models::message::MessageSchema::validate(&row.raw_message)
         .unwrap_or_else(|error| panic!("{error}: {}", row.raw_message));
@@ -962,6 +998,12 @@ pub(super) async fn a_durable_child_call_waits_for_a_client_and_the_parent_resum
     row: &HostRow,
 ) {
     let mut waiting = park_a_waiting_child(row, pool, true, |_| {}).await;
+    let item = item_for(&waiting.parent_message, CLIENT_TASK_CALL);
+    assert_eq!(
+        item["child"]["waiting_for"]["attempt_id"],
+        json!(waiting.request.attempt_id),
+        "the parent shows what its task waits for: {item}"
+    );
     let resumed = record_parent_resumes(&mut waiting.llm);
     let mut pane = Pane::open_serving(
         &waiting.base,
@@ -998,12 +1040,12 @@ pub(super) async fn a_durable_child_call_waits_for_a_client_and_the_parent_resum
             .unwrap()
             .contains(CHILD_ANSWER)
     );
-    let read = part_for(
-        &assistant_row(&waiting.state.db, waiting.child.id).await,
-        CHILD_READ_CALL,
-    );
+    let child_row = assistant_row(&waiting.state.db, waiting.child.id).await;
+    let read = part_for(&child_row, CHILD_READ_CALL);
     assert_eq!(read["status"], "success");
     assert_eq!(read["output"]["result"]["text"], PANE_TEXT);
+    assert_eq!(calls_named(&child_row, CHILD_READ_CALL), 1);
+    assert_eq!(attempts_of(&waiting.state, waiting.child.id).await.len(), 1);
     assert_eq!(
         attempt_row(&waiting).await.state,
         attempts::AttemptState::Completed
@@ -1042,12 +1084,13 @@ pub(super) async fn a_device_prompt_answered_after_the_tool_timeout_completes_wi
     pool: Pool<Postgres>,
     row: &HostRow,
 ) {
-    let waiting = park_a_waiting_child(row, pool, false, |config| {
+    let mut waiting = park_a_waiting_child(row, pool, false, |config| {
         let tool = config.client_tools.tools.get_mut(READ_KEY).unwrap();
         tool.timeout_ms = Some(1_500);
         tool.durable.as_mut().unwrap().claim_lease_secs = 2;
     })
     .await;
+    let resumed = record_parent_resumes(&mut waiting.llm);
     let attempt_id = waiting.request.attempt_id;
     let result = pane_result(row, &waiting.request);
 
@@ -1071,6 +1114,13 @@ pub(super) async fn a_device_prompt_answered_after_the_tool_timeout_completes_wi
         .await
         .assert_status_ok();
     wait_answered(&waiting.state, waiting.chat_id).await;
+    let read = part_for(
+        &assistant_row(&waiting.state.db, waiting.child.id).await,
+        CHILD_READ_CALL,
+    );
+    assert_eq!(read["status"], "success", "{read}");
+    assert_eq!(read["output"]["result"]["text"], PANE_TEXT);
+    assert_eq!(turn_bodies(&resumed).len(), 1, "one parent continuation");
     waiting.server.abort();
 }
 
@@ -1103,18 +1153,21 @@ pub(super) async fn a_device_decline_ends_the_durable_call_as_declined(
     assert_eq!(read["output"]["reason"], "declined");
     let declined_text = read["output"]["error"].as_str().unwrap();
     assert!(declined_text.contains(row.read_tool), "{declined_text}");
-    assert!(
-        turn_bodies(&child_turns)[0]
-            .to_string()
-            .contains("The user declined this call")
-    );
+    let child_turn = turn_bodies(&child_turns)[0].to_string();
+    assert!(child_turn.contains("The user declined this call"));
+    assert!(child_turn.contains("say in the answer what is missing"));
     let slot = part_for(&answered, CLIENT_TASK_CALL);
     assert_eq!(
         slot["output"]["client_tools"],
         json!({"declined": 1}),
         "{slot}"
     );
-    assert!(turn_bodies(&resumed)[0].to_string().contains(CHILD_ANSWER));
+    let parent_turns = turn_bodies(&resumed);
+    assert_eq!(parent_turns.len(), 1, "one parent continuation");
+    let told = task_result_in(&parent_turns[0], CLIENT_TASK_CALL);
+    assert_eq!(told["client_tools"], json!({"declined": 1}), "{told}");
+    assert!(told.to_string().contains(CHILD_ANSWER), "{told}");
+    assert_eq!(attempts_of(&waiting.state, waiting.child.id).await.len(), 1);
     waiting.server.abort();
 }
 
@@ -1129,6 +1182,7 @@ pub(super) async fn no_client_before_the_attempt_ends_gives_expired(
         build_openai_text_streaming_response(&[CHILD_ANSWER]),
         &[],
     );
+    let resumed = record_parent_resumes(&mut waiting.llm);
     waiting
         .state
         .db
@@ -1149,17 +1203,25 @@ pub(super) async fn no_client_before_the_attempt_ends_gives_expired(
     );
     assert_eq!(read["output"]["status"], "cancelled", "{read}");
     assert_eq!(read["output"]["reason"], "expired");
-    assert!(
-        turn_bodies(&child_turns)[0]
-            .to_string()
-            .contains("No client ran this call before it expired")
-    );
+    let child_turns = turn_bodies(&child_turns);
+    assert_eq!(child_turns.len(), 1, "one child continuation");
+    let child_turn = child_turns[0].to_string();
+    assert!(child_turn.contains("No client ran this call before it expired"));
+    assert!(child_turn.contains("say in the answer what is missing"));
     let slot = part_for(&answered, CLIENT_TASK_CALL);
     assert_eq!(
         slot["output"]["client_tools"],
         json!({"expired": 1}),
         "{slot}"
     );
+    let parent_turns = turn_bodies(&resumed);
+    assert_eq!(parent_turns.len(), 1, "one parent continuation");
+    let told = task_result_in(&parent_turns[0], CLIENT_TASK_CALL);
+    assert_eq!(told["client_tools"], json!({"expired": 1}), "{told}");
+    assert!(told.to_string().contains(CHILD_ANSWER), "{told}");
+    let settled = attempt_row(&waiting).await;
+    assert_eq!(settled.state, attempts::AttemptState::Completed);
+    assert_eq!(attempts_of(&waiting.state, waiting.child.id).await.len(), 1);
     waiting.server.abort();
 }
 
@@ -1189,14 +1251,21 @@ pub(super) async fn a_durable_and_a_live_child_only_the_durable_one_waits(
             .contains(SECOND_ANSWER)
     );
 
+    let live_child = child_for(&launched.state, launched.chat_id, SECOND_TASK_CALL).await;
+    assert!(
+        attempts_of(&launched.state, live_child.id).await.is_empty(),
+        "the live child's call never became a durable operation"
+    );
     let durable = child_for(&launched.state, launched.chat_id, CLIENT_TASK_CALL).await;
     let request = operation_of(&launched.state, durable.id, 0).await;
     answer_as_pane(row, &launched.state, &request, pane_result(row, &request)).await;
-    wait_answered(&launched.state, launched.chat_id).await;
+    let answered = wait_answered(&launched.state, launched.chat_id).await;
+    assert_eq!(answered.id, parked.id);
     let parent_turns = turn_bodies(&resumed);
     assert_eq!(parent_turns.len(), 1, "one parent continuation");
     assert!(parent_turns[0].to_string().contains(CHILD_ANSWER));
     assert!(parent_turns[0].to_string().contains(SECOND_ANSWER));
+    assert_eq!(attempts_of(&launched.state, durable.id).await.len(), 1);
     launched.server.abort();
 }
 
@@ -1330,6 +1399,18 @@ pub(super) async fn two_waiting_children_one_still_running_give_one_parent_conti
     let second = child_for(&launched.state, launched.chat_id, SECOND_TASK_CALL).await;
     let first_request = operation_of(&launched.state, first.id, 0).await;
     let second_request = operation_of(&launched.state, second.id, 0).await;
+    for (call, child, request) in [
+        (CLIENT_TASK_CALL, &first, &first_request),
+        (SECOND_TASK_CALL, &second, &second_request),
+    ] {
+        let item = item_for(&parked, call);
+        assert_eq!(item["child"]["child_chat_id"], json!(child.id), "{item}");
+        assert_eq!(
+            item["child"]["waiting_for"]["attempt_id"],
+            json!(request.attempt_id),
+            "one waiting item per child: {item}"
+        );
+    }
 
     answer_as_pane(
         row,
@@ -1822,6 +1903,7 @@ pub(super) async fn a_restart_while_parked_gives_one_continuation_and_no_duplica
         chat_id,
         child,
         request,
+        parent_message,
         ..
     } = park_a_waiting_child(row, pool.clone(), false, |_| {}).await;
     let child_turns = after_the_read(
@@ -1830,6 +1912,8 @@ pub(super) async fn a_restart_while_parked_gives_one_continuation_and_no_duplica
         &[],
     );
     let resumed = record_parent_resumes(&mut llm);
+    let parent_rows = rows_of(chat_id, &state.db).await.len();
+    let child_rows = rows_of(child.id, &state.db).await.len();
     let config = state.config.clone();
     server.abort();
     drop(_pane);
@@ -1841,7 +1925,6 @@ pub(super) async fn a_restart_while_parked_gives_one_continuation_and_no_duplica
     post_result(row, &b, &token, &pane_result(row, &request))
         .await
         .assert_status_ok();
-    let parent_message = assistant_row(&b.db, chat_id).await;
     let (on_b, on_c, backstop) = tokio::join!(
         continue_operation(&b, request.attempt_id),
         continue_operation(&c, request.attempt_id),
@@ -1864,12 +1947,21 @@ pub(super) async fn a_restart_while_parked_gives_one_continuation_and_no_duplica
     }
     assert!(on_b.status_code().is_success() || on_c.status_code().is_success());
 
-    wait_answered(&b, chat_id).await;
+    let answered = wait_answered(&b, chat_id).await;
+    assert_eq!(answered.id, parent_message.id);
     wait_idle(&b, child.id, "completed").await;
     tokio::time::sleep(Duration::from_millis(500)).await;
     assert_eq!(attempts_of(&b, child.id).await.len(), 1);
     assert_eq!(turn_bodies(&child_turns).len(), 1, "one child continuation");
     assert_eq!(turn_bodies(&resumed).len(), 1, "one parent continuation");
+    assert_eq!(rows_of(chat_id, &b.db).await.len(), parent_rows);
+    assert_eq!(rows_of(child.id, &b.db).await.len(), child_rows);
+    let child_row = assistant_row(&b.db, child.id).await;
+    assert_eq!(calls_named(&child_row, CHILD_READ_CALL), 1);
+    assert_eq!(
+        part_for(&child_row, CHILD_READ_CALL)["output"]["result"]["text"],
+        PANE_TEXT
+    );
 }
 
 pub(super) async fn the_sweep_settles_a_waiting_child_whose_tail_never_ran_and_an_empty_continue_resumes_the_parent(
@@ -2007,10 +2099,15 @@ pub(super) async fn a_waiting_call_is_withdrawn_once_the_parent_moved_on(
         .await
         .assert_status_ok();
     wait_idle(&waiting.state, waiting.child.id, "completed").await;
+    let child_turns = turn_bodies(&child_turns);
     assert!(
-        turn_bodies(&child_turns)[0]
+        child_turns[0]
             .to_string()
             .contains("This call was withdrawn")
+    );
+    assert!(
+        !offers(&child_turns[0], row.read_tool),
+        "a parent that moved on no longer holds the grant's context"
     );
     let settled = eventually("the old parent slot to settle", || async {
         let row = erato::db::entity::messages::Entity::find_by_id(waiting.parent_message.id)
