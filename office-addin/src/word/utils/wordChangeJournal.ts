@@ -14,6 +14,8 @@ export interface WordChangeEntry {
   kind: WordChangeKind;
   source: WordChangeSource;
   ids: readonly string[];
+  /** Ids named beyond the first 64 an entry keeps; no read can place them. */
+  moreIds?: number;
   reason?: WordUnknownChange;
   /** Per added id: the ids of its live neighbours, previous ones nearest first, then next ones;
    * null when Word could not tell them. An id that has no key here was not looked up. */
@@ -40,41 +42,57 @@ export interface WordOwnWrite {
 /** ERMAIN-1005 F1: Word reports a pane write 0.5–1.7 s after its final sync (in-place Apply,
  * insertText; Word PC and the web). */
 const OWN_TAIL_MS = 3_000;
-/** An import's Added and Deleted for every paragraph kept coming for 15.3 s after Apply resolved
- * on a 1,654-block document, without pauses. */
+/** For events naming only paragraphs the write named: Word PC reported an in-place Revert's
+ * Changed more than 3 s after the Revert ended (ERMAIN-1010 gate, 1 of 7). A user's edit to that
+ * same paragraph within these 6 s counts as own too. */
+const NAMED_TAIL_MS = 6_000;
+/** Word PC sent a 1,654-block import's Added and Deleted, one id each, until 58.5 s after Apply
+ * resolved, with pauses of up to 5.6 s and the Deleted of the old paragraphs last (ERMAIN-1010
+ * gate). Word for Mac sent them all within 2.4 s. */
+const IMPORT_CAP_MS = 120_000;
 const IMPORT_QUIET_MS = 2_000;
-const IMPORT_CAP_MS = 30_000;
 /** A write still open this long after it began counts as ended then, so a Word.run that settles
  * late or never cannot claim the user's later edits. The slowest F1 Apply took 6.4 s. */
 const OPEN_WRITE_CAP_MS = 60_000;
+/** A local or remote event of the kind and source of one this recent joins its entry, so a burst
+ * of one-id events cannot push older positions out of the journal. */
+const MERGE_BURST_MS = 250;
+const MERGE_MAX_IDS = 64;
 const MAX_ENTRIES = 1_000;
 const NEIGHBOUR_STEPS = 8;
 const NEIGHBOUR_BURST_MS = 100;
 const NEIGHBOUR_BURST_IDS = 50;
 const NEIGHBOUR_TIMEOUT_MS = 1_000;
 
+type MergedEntry = WordChangeEntry & { ids: string[] };
+
 interface OpenWrite {
   kind: WordOwnWriteKind;
   ids: Set<string>;
   begin: number;
-  /** When an anchor or import write starts claiming every Local event: at its write, not before
-   * the checks that may refuse it. */
+  /** When an anchor or import write starts claiming Local events by kind: at its write, not
+   * before the checks that may refuse it. */
   from: number;
   end?: number;
   lastEvent: number;
+  /** An import's: the paragraphs live when it began whose Deleted Word has not sent yet. */
+  replaced: Set<string>;
   /** Its own entry per kind; merging keeps an import's burst from evicting older positions. */
-  entries: Partial<Record<WordChangeKind, WordChangeEntry & { ids: string[] }>>;
+  entries: Partial<Record<WordChangeKind, MergedEntry>>;
 }
 
 let journal = globalThis.crypto.randomUUID();
 let seq = 0;
 let dropped = 0;
-/** Own events after this seq merge into the entry before them; a position taken since must not
- * see an entry grow behind it. */
+/** Events after this seq merge into the entry before them; a position taken since must not see
+ * an entry grow behind it. */
 let sealed = 0;
 let entries: WordChangeEntry[] = [];
 let eventsActive = false;
 let captured = new Set<string>();
+/** The latest capture's ids, plus those added since, less those deleted. */
+let live = new Set<string>();
+let bursts = new Map<string, { entry: MergedEntry; at: number }>();
 let writes: OpenWrite[] = [];
 let pendingNeighbours = new Map<string, WordChangeEntry>();
 let neighbourTimer: ReturnType<typeof setTimeout> | undefined;
@@ -108,6 +126,7 @@ export function wordChangesSince(
 /** The paragraph ids of the latest capture, to tell a replacement of all of them. */
 export function noteWordCapturedIds(ids: Iterable<string | null>): void {
   captured = new Set([...ids].filter((id): id is string => !!id));
+  live = new Set(captured);
 }
 
 export function recordWordUnknownChange(reason: WordUnknownChange): void {
@@ -117,8 +136,9 @@ export function recordWordUnknownChange(reason: WordUnknownChange): void {
 /**
  * Registers a write of the pane's own, from before its first write to after its final sync, so
  * the Local events it causes count as own: "ids" claims events naming only the ids it names,
- * "anchor" (an insert at the selection, a comment) and "import" every Local event, an import until
- * Word goes quiet. A user's edit that lands inside such a window counts as own too.
+ * "anchor" (an insert at the selection, a comment) every Local event, and "import" every Local
+ * Added and Deleted until Word has reported the paragraphs from before it deleted and gone quiet.
+ * A user's edit that lands inside such a window counts as own too.
  */
 export function beginWordOwnWrite(kind: WordOwnWriteKind): WordOwnWrite {
   const now = Date.now();
@@ -129,6 +149,7 @@ export function beginWordOwnWrite(kind: WordOwnWriteKind): WordOwnWrite {
     begin: now,
     from: now,
     lastEvent: now,
+    replaced: new Set(kind === "import" ? live : []),
     entries: {},
   };
   writes.push(write);
@@ -157,6 +178,7 @@ export function markWordOwnImport(): void {
     if (write.end === undefined && write.kind !== "import") {
       write.kind = "import";
       write.from = now;
+      write.replaced = new Set(live);
     }
 }
 
@@ -187,19 +209,19 @@ export function recordWordParagraphEvent(event?: WordParagraphEvent): void {
       : event?.type === "ParagraphDeleted"
         ? "deleted"
         : "changed";
+  const source = event?.source === "Remote" ? "remote" : "local";
   if (kind === "deleted") forgetPendingNeighbours(ids);
-  const owner =
-    event?.source === "Remote"
-      ? undefined
-      : writes.find((write) => owns(write, now, ids));
+  const owners =
+    source === "remote"
+      ? []
+      : writes.filter((write) => owns(write, now, kind, ids));
+  noteLive(kind, ids);
+  const owner = owners[0];
   if (owner) {
-    owner.lastEvent = now;
+    for (const write of owners) write.lastEvent = now;
     const open = owner.entries[kind];
-    if (open && open.seq > sealed) {
-      open.ids.push(...ids);
-      return;
-    }
-    owner.entries[kind] = append({ kind, source: "own", ids: [...ids] });
+    if (!open || !merge(open, ids))
+      owner.entries[kind] = record(kind, "own", ids);
     return;
   }
   prune(now);
@@ -209,12 +231,26 @@ export function recordWordParagraphEvent(event?: WordParagraphEvent): void {
     recordWordUnknownChange("ids-replaced");
     return;
   }
-  const entry = append({
-    kind,
-    source: event?.source === "Remote" ? "remote" : "local",
-    ids,
-  });
+  const key = `${kind}:${source}`;
+  const burst = bursts.get(key);
+  let entry: MergedEntry;
+  if (burst && now - burst.at <= MERGE_BURST_MS && merge(burst.entry, ids)) {
+    burst.at = now;
+    entry = burst.entry;
+  } else {
+    entry = record(kind, source, ids);
+    bursts.set(key, { entry, at: now });
+  }
   if (kind === "added") queueNeighbours(entry);
+}
+
+function noteLive(kind: WordChangeKind, ids: readonly string[]): void {
+  if (kind === "added") for (const id of ids) live.add(id);
+  if (kind !== "deleted") return;
+  for (const id of ids) {
+    live.delete(id);
+    for (const write of writes) write.replaced.delete(id);
+  }
 }
 
 function endOf(write: OpenWrite, now: number): number | undefined {
@@ -222,21 +258,42 @@ function endOf(write: OpenWrite, now: number): number | undefined {
   return write.end ?? (now > cap ? cap : undefined);
 }
 
-function owns(write: OpenWrite, now: number, ids: readonly string[]): boolean {
+function owns(
+  write: OpenWrite,
+  now: number,
+  kind: WordChangeKind,
+  ids: readonly string[],
+): boolean {
+  if (now < write.begin) return false;
   const end = endOf(write, now);
-  if (write.kind === "import" && now >= write.from)
-    return (
-      end === undefined ||
-      now <= end + OWN_TAIL_MS ||
-      (now <= end + IMPORT_CAP_MS &&
-        now - Math.max(write.lastEvent, end) <= IMPORT_QUIET_MS)
-    );
-  if (now < write.begin || (end !== undefined && now > end + OWN_TAIL_MS))
-    return false;
+  const within = (tail: number) => end === undefined || now <= end + tail;
+  if (
+    write.kind === "import" &&
+    now >= write.from &&
+    kind !== "changed" &&
+    importOpen(write, now, end)
+  )
+    return true;
+  if (write.kind === "anchor" && now >= write.from && within(OWN_TAIL_MS))
+    return true;
   return (
-    (write.kind === "anchor" && now >= write.from) ||
-    (ids.length > 0 && ids.every((id) => write.ids.has(id)))
+    ids.length > 0 &&
+    ids.every((id) => write.ids.has(id)) &&
+    within(NAMED_TAIL_MS)
   );
+}
+
+/** Word sends no Changed for an import (Word PC and Mac), only Added and Deleted. */
+function importOpen(
+  write: OpenWrite,
+  now: number,
+  end: number | undefined,
+): boolean {
+  if (end === undefined || now <= end + OWN_TAIL_MS) return true;
+  // Word PC reports an import from a few milliseconds after it ends, Word for Mac before then: an
+  // import with no event after it ended by now changed nothing (refused at its sync) or is over.
+  if (now > end + IMPORT_CAP_MS || write.lastEvent <= end) return false;
+  return write.replaced.size > 0 || now - write.lastEvent <= IMPORT_QUIET_MS;
 }
 
 function prune(now: number): void {
@@ -244,7 +301,7 @@ function prune(now: number): void {
     const end = endOf(write, now);
     return (
       end === undefined ||
-      now <= end + (write.kind === "import" ? IMPORT_CAP_MS : OWN_TAIL_MS)
+      now <= end + (write.kind === "import" ? IMPORT_CAP_MS : NAMED_TAIL_MS)
     );
   });
 }
@@ -254,6 +311,27 @@ function replacesCapture(ids: readonly string[]): boolean {
   let hits = 0;
   for (const id of ids) if (captured.has(id)) hits += 1;
   return hits * 2 >= captured.size;
+}
+
+/** Adds ids to an entry no position was taken after; ids beyond the first 64 are only counted. */
+function merge(entry: MergedEntry, ids: readonly string[]): boolean {
+  if (entry.seq <= sealed) return false;
+  for (const id of ids) {
+    if (entry.ids.includes(id)) continue;
+    if (entry.ids.length < MERGE_MAX_IDS) entry.ids.push(id);
+    else entry.moreIds = (entry.moreIds ?? 0) + 1;
+  }
+  return true;
+}
+
+function record(
+  kind: WordChangeKind,
+  source: WordChangeSource,
+  ids: readonly string[],
+): MergedEntry {
+  const entry = append({ kind, source, ids: [] as string[] });
+  merge(entry, ids);
+  return entry;
 }
 
 function append<T extends Omit<WordChangeEntry, "seq" | "at">>(
@@ -281,8 +359,9 @@ function forgetPendingNeighbours(ids: readonly string[]): void {
 
 function queueNeighbours(entry: WordChangeEntry): void {
   if (!entry.ids.length) return;
-  entry.location = new Map();
-  for (const id of entry.ids) pendingNeighbours.set(id, entry);
+  entry.location ??= new Map();
+  for (const id of entry.ids)
+    if (!entry.location.has(id)) pendingNeighbours.set(id, entry);
   clearTimeout(neighbourTimer);
   neighbourTimer = setTimeout(() => {
     void resolveNeighbours();
@@ -358,6 +437,8 @@ export function resetWordChangeJournalForTests(): void {
   entries = [];
   eventsActive = false;
   captured = new Set();
+  live = new Set();
+  bursts = new Map();
   writes = [];
   pendingNeighbours = new Map();
   clearTimeout(neighbourTimer);

@@ -196,7 +196,7 @@ export function wordReadFreshness(
       for (let block = blocks[0]; block <= blocks[1]; block++)
         if (sections.entryOf[block] >= 0) touched.add(sections.entryOf[block]);
     }
-    if (!entry.ids.length) unknown = true;
+    if (!entry.ids.length || entry.moreIds) unknown = true;
   }
   freshness.changes = within
     ? "in-scope"

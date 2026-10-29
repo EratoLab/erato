@@ -25,6 +25,7 @@ import {
 } from "../wordApplyDocumentPlan";
 import { applyWordEdits, revertWordEdits } from "../wordApplyEdits";
 import {
+  noteWordCapturedIds,
   noteWordChangeEventsActive,
   recordWordParagraphEvent,
   resetWordChangeJournalForTests,
@@ -106,7 +107,7 @@ describe("the pane's own writes in the change journal", () => {
 
     event("ParagraphChanged", [written]);
     event("ParagraphChanged", [other]);
-    clockFromNow()(3_001);
+    clockFromNow()(6_001);
     event("ParagraphChanged", [written]);
 
     expect(sources()).toEqual([
@@ -116,11 +117,12 @@ describe("the pane's own writes in the change journal", () => {
     ]);
   });
 
-  it("counts an import's burst as own until Word goes quiet", async () => {
+  it("counts an import's Added and Deleted as own until Word reported the paragraphs from before it deleted, and a Changed as local", async () => {
     onTestFinished(setWordWebImport("confirm"));
     window.WORD_FORCE_IMPORT_APPLY = true;
     installWordOoxmlHost(realisticWordPackageXml(), { profile: "word-web" });
     const snapshot = await captureRealisticSnapshot();
+    noteWordCapturedIds(["old-1", "old-2"]);
     const result = await applyWordDocumentPlan(
       JSON.stringify(statusRewritePlan(snapshot, "Status: imported.")),
       snapshot,
@@ -132,15 +134,21 @@ describe("the pane's own writes in the change journal", () => {
     expect(result.outcome?.route).toBe("import");
     const later = clockFromNow();
 
-    for (let k = 1; k <= 10; k++) {
-      later(k * 1_500);
+    for (let k = 0; k <= 10; k++) {
+      later(10 + k * 5_600);
       event("ParagraphAdded", [`new-${k}`]);
     }
-    event("ParagraphDeleted", ["old-1", "old-2"]);
-    later(10 * 1_500 + 2_001);
     event("ParagraphChanged", ["new-1"]);
+    event("ParagraphDeleted", ["old-1", "old-2"]);
+    later(10 + 10 * 5_600 + 2_001);
+    event("ParagraphAdded", ["typed"]);
 
-    expect(sources()).toEqual(["added:own", "deleted:own", "changed:local"]);
+    expect(sources()).toEqual([
+      "added:own",
+      "changed:local",
+      "deleted:own",
+      "added:local",
+    ]);
   });
 
   it("counts a revert of an in-place Apply as own for the paragraphs it restored, and an edit elsewhere as local", async () => {

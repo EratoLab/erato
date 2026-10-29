@@ -15,6 +15,7 @@ import {
 import { WORD_FRESHNESS_NOTICE } from "../wordAuthoringContract";
 import {
   beginWordOwnWrite,
+  markWordOwnImport,
   nameWordOwnWriteIds,
   noteWordCapturedIds,
   noteWordChangeEventsActive,
@@ -422,6 +423,32 @@ describe("read freshness", () => {
         sections: [],
       });
     });
+
+    it("count Word PC's import as own, from its first Added through pauses of 5.6 s to the Deleted of every captured paragraph 58 s after it", async () => {
+      vi.useFakeTimers();
+      const write = beginWordOwnWrite("ids");
+      markWordOwnImport();
+      write.end();
+      const t0 = Date.now();
+      const added = [10, 558, 3_695, 9_257, 13_193, 17_544, 57_900];
+      for (const [k, ms] of added.entries()) {
+        vi.setSystemTime(t0 + ms);
+        event("ParagraphAdded", [`new-${k}`]);
+      }
+      for (const [k, p] of [...doc.ordinalMap.values()].entries()) {
+        vi.setSystemTime(t0 + 58_000 + k);
+        event("ParagraphDeleted", [p.uniqueLocalId!]);
+      }
+
+      expect(
+        await open(doc.snapshot, capture).section(
+          refOf(doc.snapshot, "1. Chapter 1"),
+        ),
+      ).toMatchObject({
+        changes: "none",
+        counts: { own: 2, local: 0, remote: 0, unknown: 0 },
+      });
+    });
   });
 
   describe("unknown", () => {
@@ -466,6 +493,34 @@ describe("read freshness", () => {
       }).section(refOf(doc.snapshot, "1. Chapter 1"));
 
       expect(freshness.changes).toBe("unknown");
+    });
+
+    it("for a burst naming more paragraphs than its entry keeps, though each lies elsewhere", async () => {
+      vi.useFakeTimers();
+      resetWordChangeJournalForTests();
+      noteWordChangeEventsActive();
+      doc = document(6);
+      capture = {
+        changes: { position: wordChangePosition(), capturedAt: CAPTURED_AT },
+        ordinalMap: doc.ordinalMap,
+      };
+      const from = doc.snapshot.blocks.findIndex(
+        (b) => b.text === "2. Chapter 2",
+      );
+      const later = doc.snapshot.blocks
+        .slice(from)
+        .flatMap((b) => doc.ids.get(b.ref)!);
+      const chapter1 = async () => (await sectionRead()).changes;
+      for (const id of later.slice(0, 64)) {
+        vi.advanceTimersByTime(10);
+        event("ParagraphChanged", [id]);
+      }
+      expect(await chapter1()).toBe("elsewhere");
+
+      vi.advanceTimersByTime(10);
+      event("ParagraphChanged", [later[64]]);
+
+      expect(await chapter1()).toBe("unknown");
     });
 
     it("once the capture's ids were replaced", async () => {
