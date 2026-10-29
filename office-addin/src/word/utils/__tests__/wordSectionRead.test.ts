@@ -116,6 +116,44 @@ describe("section pages", () => {
     expect(writeState(snapshot)).toEqual(untouchedWriteState);
   });
 
+  it("reads a chapter whose paragraphs Word split into identical runs as if they were one run", async () => {
+    const tagged = (split: boolean) =>
+      document([12, 47, 9]).map((b): SectionBlock => {
+        if (b.type !== "paragraph") return b;
+        const third = Math.ceil(b.text.length / 3);
+        const pieces = split
+          ? [0, third, 2 * third].map((at) => b.text.slice(at, at + third))
+          : [b.text];
+        return {
+          ...b,
+          format: { font: { language: "en-US" } },
+          runs: pieces.map((text) => ({ text, language: "en-US" })),
+        };
+      });
+    const whole = sectionSnapshot(tagged(false));
+    const split = sectionSnapshot(tagged(true));
+    const start = split.blocks.findIndex((b) => b.text === "2. Chapter 2");
+    const end = split.blocks.findIndex((b) => b.text === "3. Chapter 3");
+    const ref = split.blocks[start].ref;
+    // As runs, the chapter would repeat its text past three pages.
+    expect(
+      bytes(split.blocks.slice(start, end).map(({ xml: _xml, ...b }) => b)),
+    ).toBeGreaterThan(3 * WORD_READ_PAGE_BYTES);
+
+    expect(wordDocumentOutline(split)).toEqual(wordDocumentOutline(whole));
+    const pages = await readSection(open(split).read, { ref });
+    expect(pages).toHaveLength(3);
+    expect(pages[0].section.kib).toBe(
+      wordDocumentOutline(whole).find((e) => e.ref === ref)?.kib,
+    );
+    expect(pages.flatMap((p) => p.blocks)).toEqual(
+      (await readSection(open(whole).read, { ref })).flatMap((p) => p.blocks),
+    );
+    expect(pages.flatMap((p) => p.blocks)).not.toContainEqual(
+      expect.objectContaining({ runs: expect.anything() }),
+    );
+  });
+
   const numbered = (n: number): SectionBlock => ({
     type: "list-item",
     level: 0,
