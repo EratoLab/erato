@@ -90,6 +90,10 @@ pub enum Takeover {
     TakeParked,
     /// A system-initiated turn: leaves a parked lease alone.
     RefuseParked,
+    /// Resumes the parked turn itself once nothing it waits for is open. Only
+    /// the generation that parked is taken: any newer turn has written a new
+    /// `active_generation_id`, and superseding it would cancel its operations.
+    ResumeParked { expected_generation: Uuid },
 }
 
 /// Why a lease acquisition was refused, with enough about the holder for the
@@ -325,7 +329,6 @@ impl BackgroundTaskManager {
         };
 
         let generation_id = Uuid::new_v4();
-        let take_parked = matches!(takeover, Takeover::TakeParked);
 
         let txn = match db.begin().await {
             Ok(txn) => txn,
@@ -343,7 +346,7 @@ impl BackgroundTaskManager {
             chat_id,
             message_id,
             generation_id,
-            take_parked,
+            takeover,
             stale_after_secs,
         )
         .await;
@@ -418,7 +421,7 @@ impl BackgroundTaskManager {
         chat_id: Uuid,
         message_id: Uuid,
         generation_id: Uuid,
-        take_parked: bool,
+        takeover: Takeover,
         stale_after_secs: u64,
     ) -> Result<bool, sea_orm::DbErr> {
         // Serialize same-chat contenders. Transaction-scoped, so it is
@@ -430,6 +433,48 @@ impl BackgroundTaskManager {
             [chat_id.to_string().into()],
         );
         txn.query_one_raw(lock_statement).await?;
+
+        if let Takeover::ResumeParked {
+            expected_generation,
+        } = takeover
+        {
+            let resume_statement = named_statement_from_sql_and_values(
+                sea_orm::DatabaseBackend::Postgres,
+                POSTGRES_QUERY_GENERATION_TRY_START,
+                r#"
+                UPDATE chats
+                SET active_generation_id = $1,
+                    generation_state = 'running',
+                    generation_started_at = now(),
+                    generation_heartbeat_at = now(),
+                    generation_ended_at = NULL
+                WHERE id = $2
+                  AND active_generation_id = $3
+                  AND generation_state IN ('awaiting_approval', 'errored')
+                RETURNING id
+                "#,
+                [
+                    generation_id.into(),
+                    chat_id.into(),
+                    expected_generation.into(),
+                ],
+            );
+            if txn.query_one_raw(resume_statement).await?.is_none() {
+                return Ok(false);
+            }
+            // A turn written below the parked message is the user's: the
+            // parked one is no longer the chat's to resume.
+            let tip = crate::models::message::get_active_thread_tip(txn, &chat_id)
+                .await
+                .map_err(|error| sea_orm::DbErr::Custom(error.to_string()))?;
+            if tip.is_none_or(|tip| tip.id != message_id) {
+                return Ok(false);
+            }
+            return Self::finish_lease_claim(txn, chat_id, message_id, generation_id)
+                .await
+                .map(|()| true);
+        }
+        let take_parked = matches!(takeover, Takeover::TakeParked);
 
         // `generation_heartbeat_at` is nullable, and NULL compares to NULL
         // rather than to false, so a row left 'running' without one would
@@ -469,6 +514,17 @@ impl BackgroundTaskManager {
             return Ok(false);
         }
 
+        Self::finish_lease_claim(txn, chat_id, message_id, generation_id).await?;
+        Ok(true)
+    }
+
+    /// What every claimed lease does inside the CAS transaction.
+    async fn finish_lease_claim<C: ConnectionTrait>(
+        txn: &C,
+        chat_id: Uuid,
+        message_id: Uuid,
+        generation_id: Uuid,
+    ) -> Result<(), sea_orm::DbErr> {
         crate::services::client_operations::store::supersede_other_attempts(
             txn, chat_id, message_id,
         )
@@ -502,7 +558,7 @@ impl BackgroundTaskManager {
         );
         txn.execute_raw(shared_statement).await?;
 
-        Ok(true)
+        Ok(())
     }
 
     /// Read who holds the lease, for the refusal body. Best-effort: a missing
