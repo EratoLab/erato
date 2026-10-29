@@ -1,5 +1,5 @@
 /* eslint-disable lingui/no-unlocalized-strings -- log lines and wire constants, never user-facing */
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
 import {
   approvalItemsOf,
@@ -9,6 +9,7 @@ import {
 import { createLogger } from "@/utils/debugLogger";
 
 import { readConflictRefusal } from "./conflictRefusal";
+import { useConfirmationRegistryStore } from "./store/confirmationRegistryStore";
 import { useGenerationStatusStore } from "./store/generationStatusStore";
 import { getStreamKey, useMessagingStore } from "./store/messagingStore";
 
@@ -89,6 +90,10 @@ export interface UseResumeSettledWaitingStopOptions {
  * end and its tail, which the cleanup tick repairs on the row but cannot
  * continue without the user's request). It waits a grace period first, and
  * every refusal that says the turn moved on is silent.
+ *
+ * Until the turn answers, the chat's message queue stays held as waiting only,
+ * as the card held it while the tasks ran: a queued message sent now would
+ * take the parked turn's place before it answers with what the tasks found.
  */
 export function useResumeSettledWaitingStop({
   chatId,
@@ -116,6 +121,32 @@ export function useResumeSettledWaitingStop({
   const askKey =
     chatId && tip && stop ? `${chatId}:${tip.id}:${stop.index}` : undefined;
   const toolCallId = stop?.toolCallId;
+
+  const registerConfirmation = useConfirmationRegistryStore(
+    (state) => state.registerConfirmation,
+  );
+  const unregisterConfirmation = useConfirmationRegistryStore(
+    (state) => state.unregisterConfirmation,
+  );
+  // A resume that failed for a reason nobody can wait out releases the queue.
+  const [gaveUpOn, setGaveUpOn] = useState<string | null>(null);
+  const holdsQueue =
+    chatId !== null &&
+    askKey !== undefined &&
+    actionRequired &&
+    gaveUpOn !== askKey;
+  useEffect(() => {
+    if (!holdsQueue || !chatId || !askKey) return;
+    const registrationId = `settled-stop:${askKey}`;
+    registerConfirmation(chatId, registrationId, { waitingOnly: true });
+    return () => unregisterConfirmation(chatId, registrationId);
+  }, [
+    askKey,
+    chatId,
+    holdsQueue,
+    registerConfirmation,
+    unregisterConfirmation,
+  ]);
 
   useEffect(() => {
     if (
@@ -153,6 +184,7 @@ export function useResumeSettledWaitingStop({
           `[DEBUG_STREAMING] Resuming the settled stop of ${tipId} failed`,
           error,
         );
+        setGaveUpOn(askKey);
       });
     }, SETTLED_STOP_GRACE_MS);
     return () => clearTimeout(timer);

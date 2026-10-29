@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { FrontendRequestError } from "@/utils/errorReport";
 
+import { useConfirmationRegistryStore } from "../store/confirmationRegistryStore";
 import { useGenerationStatusStore } from "../store/generationStatusStore";
 import { getStreamKey, useMessagingStore } from "../store/messagingStore";
 import {
@@ -172,6 +173,51 @@ describe("useResumeSettledWaitingStop", () => {
     vi.useRealTimers();
     useGenerationStatusStore.getState().reset();
     useMessagingStore.setState({ sseAbortCallbacksByKey: {} });
+    useConfirmationRegistryStore.setState({
+      pendingIdsByChatId: {},
+      waitingOnlyIds: {},
+    });
+  });
+  const queueHeld = () => {
+    const { pendingIdsByChatId, waitingOnlyIds } =
+      useConfirmationRegistryStore.getState();
+    const ids = pendingIdsByChatId["chat-1"] ?? [];
+    return ids.length > 0 && ids.every((id) => waitingOnlyIds[id] === true);
+  };
+
+  it("holds the queue as waiting only until the turn answers", () => {
+    parked();
+    const { rerender } = render(settled());
+    expect(queueHeld()).toBe(true);
+    rerender({
+      rows: [...settled(), { content_type: "text", text: "Done." }],
+    });
+    expect(queueHeld()).toBe(false);
+  });
+
+  it("holds the queue only while the chat is parked", () => {
+    const { rerender } = render(settled());
+    expect(queueHeld()).toBe(false);
+    parked();
+    rerender({ rows: settled() });
+    expect(queueHeld()).toBe(true);
+    act(() => {
+      useGenerationStatusStore.getState().reset();
+    });
+    expect(queueHeld()).toBe(false);
+  });
+
+  it("releases the queue when the resume fails for another reason", async () => {
+    parked();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const { resume } = render(settled());
+    resume.mockRejectedValueOnce(new Error("offline"));
+    expect(queueHeld()).toBe(true);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(SETTLED_STOP_GRACE_MS);
+    });
+    expect(queueHeld()).toBe(false);
+    warn.mockRestore();
   });
 
   it("resumes the turn once, after the grace, while the chat is parked", async () => {
