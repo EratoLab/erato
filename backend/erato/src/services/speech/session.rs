@@ -280,6 +280,72 @@ mod tests {
     use axum::{Router, body::Body, response::Response, routing::post};
 
     #[tokio::test]
+    async fn augsburg_capture_streams_all_text_before_slow_speech_and_preserves_replay_pcm() {
+        use axum::routing::get;
+        let fixture = mock_llm_server::endpoints::augsburg::capture();
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}", listener.local_addr().unwrap());
+        let server = tokio::spawn(async move {
+            axum::serve(
+                listener,
+                Router::new().route(
+                    "/ws/google.cloud.aiplatform.v1.LlmBidiService/BidiGenerateContent",
+                    get(mock_llm_server::endpoints::augsburg::live),
+                ),
+            )
+            .await
+            .unwrap();
+        });
+        let manager = BackgroundTaskManager::new(None, Default::default(), None);
+        let message_id = Uuid::new_v4();
+        let (_, task) = manager.start_task(Uuid::new_v4(), message_id).await;
+        let (tx, mut rx) = mpsc::channel(16);
+        let mut session = SpeechSession::start(
+            super::super::gemini_live::tests::config(url),
+            "mock".into(),
+            task,
+            tx,
+            message_id,
+        );
+        for event in fixture
+            .events
+            .iter()
+            .filter(|event| event.event == "text_delta")
+        {
+            session.push(event.data["new_text"].as_str().unwrap());
+            tokio::time::sleep(std::time::Duration::from_millis(40)).await;
+        }
+        // The provider deliberately waits 5 seconds before its first audio.
+        // Text delivery must already be complete, even with >8 pending sentences.
+        assert!(matches!(
+            rx.try_recv(),
+            Err(mpsc::error::TryRecvError::Empty)
+        ));
+        let drain = tokio::spawn(async move {
+            let mut count = 0;
+            while rx.recv().await.is_some() {
+                count += 1;
+            }
+            count
+        });
+        if let Some(tail) = session.sentences.finish() {
+            session.sender.as_ref().unwrap().send(tail).unwrap();
+        }
+        session.sender.take();
+        let (pcm, _, rate) =
+            tokio::time::timeout(std::time::Duration::from_secs(45), &mut session.worker)
+                .await
+                .unwrap()
+                .unwrap()
+                .unwrap();
+        assert_eq!(rate, 24000);
+        assert_eq!(pcm, fixture.pcm);
+        assert_eq!(drain.await.unwrap(), 1372);
+        assert_eq!(&wav(&pcm, rate).unwrap()[44..], fixture.pcm);
+        server.abort();
+    }
+
+    #[tokio::test]
     async fn stalled_speech_does_not_backpressure_text_and_input_is_bounded() {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let address = listener.local_addr().unwrap();

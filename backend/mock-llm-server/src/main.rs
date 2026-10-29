@@ -61,6 +61,14 @@ async fn main() {
     // Build the router with all endpoints nested under /base-openai
     let app = Router::new()
         .route("/health", get(health))
+        .route(
+            "/fixtures/augsburg/v1/audio/transcriptions",
+            post(endpoints::augsburg::transcription),
+        )
+        .route(
+            "/fixtures/augsburg/ws/google.cloud.aiplatform.v1.LlmBidiService/BidiGenerateContent",
+            get(endpoints::augsburg::live),
+        )
         .nest(
             "/base-openai",
             Router::new()

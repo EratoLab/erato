@@ -691,6 +691,20 @@ pub fn get_default_mocks() -> Vec<Mock> {
                 ..Default::default()
             }),
         },
+        Mock {
+            name: "AugsburgAudioBack".to_string(),
+            description: "Captured Augsburg text, paced independently of speech output".to_string(),
+            match_rules: vec![MatchRule::LastMessageIsUserWithPattern(
+                MatchRuleLastMessageIsUserWithPattern { pattern: "Historie von Augsburg".to_string() },
+            )],
+            response: ResponseConfig::Static(StaticResponseConfig {
+                chunks: crate::endpoints::augsburg::capture().events.iter()
+                    .filter(|event| event.event == "text_delta")
+                    .map(|event| event.data["new_text"].as_str().unwrap().to_string()).collect(),
+                delay_ms: 40,
+                ..Default::default()
+            }),
+        },
         // The four delegation mocks must all precede ToolResultResponse: the
         // delegate's post-tool turn ends in a tool result too, and the
         // catch-all would answer it instead of the delegate. Among

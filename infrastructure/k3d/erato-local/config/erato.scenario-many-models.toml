@@ -54,7 +54,8 @@ max_backoff_ms = 50
 
 [audio_conversational]
 enabled = true
-chat_provider_id = "mock-llm-openai"
+chat_provider_id = "mock-augsburg-transcription"
+speech_provider = "mock-augsburg-live"
 max_recording_duration_seconds = 1200
 chunk_duration_seconds = 30
 max_attempts = 3
@@ -164,3 +165,22 @@ enabled = true
 
 [frontend.additional_environment]
 K3D_TEST_SCENARIO = "many-models"
+
+# Audio-back regression: all upstream services use the captured Augsburg fixture.
+[chat_providers.providers.mock-augsburg-transcription]
+provider_kind = "openai_audio_transcriptions"
+model_name = "fixture-transcription"
+model_display_name = "Mock Augsburg Transcription"
+base_url = "http://erato-local-mock-llm-server:44320/fixtures/augsburg/v1/"
+
+[chat_providers.providers.mock-augsburg-transcription.model_capabilities]
+supports_audio_input = true
+
+[speech_providers.provider.mock-augsburg-live]
+provider_kind = "gemini_live"
+model_name = "gemini-3.8-live"
+voice = "Kore"
+api_key = "mock-key"
+project_id = "mock-project"
+location = "eu"
+base_url = "http://erato-local-mock-llm-server:44320/fixtures/augsburg"

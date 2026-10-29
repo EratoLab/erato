@@ -1507,6 +1507,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3a822ea5bc7590f9d40f1ba12c0dc3c2760f3482c6984db1573ad11031420831"
 
 [[package]]
+name = "claxon"
+version = "0.4.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4bfbf56724aa9eca8afa4fcfadeb479e722935bb2a0900c2d37e0cc477af0688"
+
+[[package]]
 name = "cmake"
 version = "0.1.57"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5314,11 +5320,15 @@ name = "mock-llm-server"
 version = "0.1.0"
 dependencies = [
  "axum",
+ "base64 0.22.1",
+ "claxon",
  "colored",
+ "flate2",
  "futures",
  "rand 0.8.6",
  "serde",
  "serde_json",
+ "sha2 0.11.0",
  "tokio",
  "tower 0.5.3",
  "tower-http",
