@@ -3206,9 +3206,21 @@ async fn reconcile_orphaned_parent_slot(
     // limit, a durable client operation). A withdrawal or a settlement closes
     // the child's own copy, so those never run again.
     //
-    // A running lease means the dispatching turn may yet write the slot itself.
+    // A running lease on this message means the dispatching turn may yet write
+    // the slot itself. A newer turn the user started writes another row, and
+    // nothing comes back to this slot once the child's last tail has gone.
     if origin_chat.generation_state.as_deref() == Some("running") {
-        return;
+        let answers_another_row = app_state
+            .background_tasks
+            .try_active_generation(&origin_chat.id)
+            .await
+            .ok()
+            .flatten()
+            .and_then(|generation| generation.message_id())
+            .is_some_and(|message_id| message_id != parent_message_id);
+        if !answers_another_row {
+            return;
+        }
     }
     let Ok(parent) = get_message_by_id(&app_state.db, policy, &subject, &parent_message_id).await
     else {

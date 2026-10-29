@@ -332,9 +332,10 @@ async fn owner_holds_context(
 }
 
 /// Whether the parent turn is parked on this child: its chat is not archived,
-/// it is the chat's latest message, and its stop has an open item for the
-/// child. Decision parts after the stop do not end it, so a decision
-/// continuation that is running or crashed keeps the calls it waits for.
+/// it is the chat's latest message, and either its stop has an open item for
+/// the child or the child's slot still waits for a client outside any stop.
+/// Decision parts after the stop do not end it, so a decision continuation
+/// that is running or crashed keeps the calls it waits for.
 pub(crate) async fn parked_on_child<C: sea_orm::ConnectionTrait>(
     conn: &C,
     origin_chat: &chats::Model,
@@ -349,7 +350,7 @@ pub(crate) async fn parked_on_child<C: sea_orm::ConnectionTrait>(
         return Ok(false);
     }
     let content = crate::models::message::MessageSchema::validate(&parent_message.raw_message)?;
-    Ok(
+    let on_stop =
         crate::server::api::v1beta::message_streaming::parked_approval_state(&content.content)
             .is_some_and(|state| {
                 state.open.iter().any(|item| {
@@ -357,8 +358,35 @@ pub(crate) async fn parked_on_child<C: sea_orm::ConnectionTrait>(
                         .as_ref()
                         .is_some_and(|child| child.child_chat_id == child_chat_id)
                 })
-            }),
-    )
+            });
+    Ok(on_stop || slot_waits_for_client(&content.content, child_chat_id))
+}
+
+/// A child the turn could not carry on its stop (it ended on the tool-call
+/// limit, on its own durable operation, or on an error) still waits for its
+/// client: the slot says so until the child's own tail settles it.
+fn slot_waits_for_client(content: &[ContentPart], child_chat_id: Uuid) -> bool {
+    use crate::services::delegation::{DelegationRunReason, DelegationRunStatus};
+    content
+        .iter()
+        .rev()
+        .find_map(|part| match part {
+            ContentPart::ToolUse(tool_use)
+                if tool_use
+                    .output
+                    .as_ref()
+                    .is_some_and(|output| output["delegate_chat_id"] == json!(child_chat_id)) =>
+            {
+                Some(tool_use)
+            }
+            _ => None,
+        })
+        .is_some_and(|slot| {
+            let output = slot.output.as_ref().unwrap_or(&Value::Null);
+            slot.status == MessageToolCallStatus::InProgress
+                && output["status"] == DelegationRunStatus::InputRequired.as_str()
+                && output["reason"] == DelegationRunReason::ClientPending.as_str()
+        })
 }
 
 /// Whether a delegated chat's durable operation may still be handed to a
