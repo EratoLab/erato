@@ -42,6 +42,7 @@ import { useClientActionConfirmFlow } from "../../core/clientActions/useClientAc
 import { useWordClientActionDecisions } from "../hooks/useWordClientActionDecisions";
 import { useWordReviewFocus } from "../hooks/useWordReviewFocus";
 import { useWordWrite } from "../providers/WordWriteProvider";
+import { withoutParagraphMark } from "../utils/buildWordDocumentArgs";
 import { isActionDenied } from "../utils/clientActionPolicy";
 import {
   renderWordDiagnosticReport,
@@ -597,7 +598,7 @@ export function WordDocumentPlanCard({
       !source ||
       !ordinal ||
       !paragraph ||
-      source.text !== paragraph.text ||
+      source.text !== withoutParagraphMark(paragraph.text) ||
       !host.beginOperation()
     )
       return;

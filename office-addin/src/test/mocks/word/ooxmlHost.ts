@@ -46,6 +46,8 @@ export interface WordOoxmlHostOptions {
   replaceDropsRunProperties?: boolean;
   /** Paragraph.text of table-cell paragraphs ends with this, as a host may report the end-of-cell mark. */
   cellParagraphTextSuffix?: string;
+  /** Word for Windows and Mac: Paragraph.getText ends with the paragraph mark. */
+  getTextEndsWithParagraphMark?: boolean;
   /** Adversarial: insertParagraph copies all of the anchor's paragraph properties, not just its
    * style and list membership. */
   insertInheritsAnchorProperties?: boolean;
@@ -1815,7 +1817,12 @@ export function installWordOoxmlHost(
           dropListOnRestyle(target());
         });
       },
-      getText: () => result(() => paragraphText(target())),
+      getText: () =>
+        result(
+          () =>
+            paragraphText(target()) +
+            (settings.getTextEndsWithParagraphMark ? "\r" : ""),
+        ),
       getReviewedText: (version?: string) =>
         result(() =>
           version === "Original" && !settings.reviewedOriginalIsCurrent
