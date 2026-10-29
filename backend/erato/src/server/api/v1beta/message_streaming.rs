@@ -621,6 +621,7 @@ fn cancelled_client_tool_text(reason: &str) -> String {
     let why = match reason {
         "context_unavailable" => "no connected client could run it",
         "withdrawn" => "the user no longer allows this tool",
+        "expired" => "no client ran it before it expired",
         _ => "the client did not return a result in time",
     };
     format!("Client tool was not completed (reason: {reason}); {why}.")

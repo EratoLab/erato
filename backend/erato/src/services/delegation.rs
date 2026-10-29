@@ -1383,6 +1383,10 @@ pub struct TaskClientTools {
     /// Granted calls the user declined, so their results are missing.
     #[serde(skip_serializing_if = "is_zero")]
     pub declined: u32,
+    /// Durable granted calls no client ran before they expired, so their
+    /// results are missing.
+    #[serde(skip_serializing_if = "is_zero")]
+    pub expired: u32,
 }
 
 fn is_zero(count: &u32) -> bool {
@@ -1399,11 +1403,13 @@ impl TaskClientTools {
             unavailable: note.unavailable.clone(),
             freshness: calls.freshness,
             declined: calls.declined,
+            expired: calls.expired,
         };
         (tools.run_mode.is_some()
             || tools.unavailable.is_some()
             || tools.freshness.is_some()
-            || tools.declined > 0)
+            || tools.declined > 0
+            || tools.expired > 0)
             .then_some(tools)
     }
 }
