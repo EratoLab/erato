@@ -417,7 +417,12 @@ describe("authoring arguments", () => {
   const authoring = (
     snapshot: Partial<WordAuthoringSnapshot>,
   ): WordAuthoringSnapshot =>
-    ({ token: "snapshot-1", ...snapshot }) as WordAuthoringSnapshot;
+    ({
+      token: "snapshot-1",
+      blocks: [],
+      styles: [],
+      ...snapshot,
+    }) as WordAuthoringSnapshot;
   const args = (snapshot: Partial<WordAuthoringSnapshot>) =>
     resolveWordActionFacet(
       input({
