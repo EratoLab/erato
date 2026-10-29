@@ -35,7 +35,7 @@ type SynthesizedResponse = (Vec<u8>, Vec<String>, u32);
 // Gather a useful initial passage without waiting indefinitely for more text.
 // Subsequent calls drain sentences accumulated during synthesis, up to the input cap.
 async fn next_passage(
-    receiver: &mut mpsc::Receiver<String>,
+    receiver: &mut mpsc::UnboundedReceiver<String>,
     pending: &mut Option<String>,
 ) -> Option<String> {
     const MIN_CHARS: usize = 160;
@@ -72,10 +72,12 @@ async fn next_passage(
 
 pub struct SpeechSession {
     sentences: Sentences,
-    sender: Option<mpsc::Sender<String>>,
+    sender: Option<mpsc::UnboundedSender<String>>,
     worker: tokio::task::JoinHandle<Result<SynthesizedResponse, Report>>,
     config: SpeechProviderConfig,
     provider_id: String,
+    input_bytes: usize,
+    input_limit_exceeded: bool,
     task: Arc<StreamingTask>,
 }
 impl Drop for SpeechSession {
@@ -91,7 +93,7 @@ impl SpeechSession {
         tx: mpsc::Sender<Result<Event, Report>>,
         message_id: Uuid,
     ) -> Self {
-        let (sender, mut receiver) = mpsc::channel::<String>(8);
+        let (sender, mut receiver) = mpsc::unbounded_channel::<String>();
         let settings = config.clone();
         let worker_task = task.clone();
         let worker = tokio::spawn(async move {
@@ -158,13 +160,25 @@ impl SpeechSession {
             worker,
             config,
             provider_id,
+            input_bytes: 0,
+            input_limit_exceeded: false,
             task,
         }
     }
-    pub async fn push(&mut self, text: &str) {
+    // Never await speech capacity on the LLM text-stream path. Bound total input
+    // instead: on overflow disable audio for this response, preserving its text.
+    pub fn push(&mut self, text: &str) {
+        const MAX_INPUT_BYTES: usize = 1024 * 1024;
+        self.input_bytes = self.input_bytes.saturating_add(text.len());
+        if self.input_bytes > MAX_INPUT_BYTES {
+            self.input_limit_exceeded = true;
+            self.sender.take();
+            self.worker.abort();
+            return;
+        }
         for sentence in self.sentences.push(text) {
             if let Some(sender) = &self.sender {
-                let _ = sender.send(sentence).await;
+                let _ = sender.send(sentence);
             }
         }
     }
@@ -176,10 +190,13 @@ impl SpeechSession {
         chat_id: Uuid,
         message_id: Uuid,
     ) -> Result<Option<ContentPart>, Report> {
+        if self.input_limit_exceeded {
+            return Err(eyre!("Speech input exceeds 1 MiB"));
+        }
         if let Some(tail) = self.sentences.finish()
             && let Some(sender) = &self.sender
         {
-            let _ = sender.send(tail).await;
+            let _ = sender.send(tail);
         }
         self.sender.take();
         let (pcm, segments, sample_rate) = (&mut self.worker).await??;
@@ -263,12 +280,60 @@ mod tests {
     use axum::{Router, body::Body, response::Response, routing::post};
 
     #[tokio::test]
+    async fn stalled_speech_does_not_backpressure_text_and_input_is_bounded() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let entered = Arc::new(tokio::sync::Notify::new());
+        let notify = entered.clone();
+        let server = tokio::spawn(async move {
+            axum::serve(
+                listener,
+                Router::new().route(
+                    "/audio/speech",
+                    post(move || {
+                        let notify = notify.clone();
+                        async move {
+                            notify.notify_one();
+                            std::future::pending::<Response>().await
+                        }
+                    }),
+                ),
+            )
+            .await
+            .unwrap();
+        });
+        let config = serde_json::from_value(serde_json::json!({
+            "provider_kind":"audio_cpp", "model_name":"mock", "voice":"mock", "base_url":format!("http://{address}")
+        })).unwrap();
+        let manager = BackgroundTaskManager::new(None, Default::default(), None);
+        let message_id = Uuid::new_v4();
+        let (_, task) = manager.start_task(Uuid::new_v4(), message_id).await;
+        let (tx, _rx) = mpsc::channel(8);
+        let mut session = SpeechSession::start(config, "mock".into(), task, tx, message_id);
+        session.push("The first sentence. More text ");
+        tokio::time::timeout(std::time::Duration::from_secs(3), entered.notified())
+            .await
+            .unwrap();
+        // More than the former eight queued sentences, with the provider still stalled.
+        for _ in 0..100 {
+            session.push("Another complete sentence. ");
+        }
+        assert!(!session.worker.is_finished());
+        assert!(!session.input_limit_exceeded);
+        session.push(&"x".repeat(1024 * 1024));
+        assert!(session.input_limit_exceeded);
+        assert!(session.sender.is_none());
+        assert!((&mut session.worker).await.unwrap_err().is_cancelled());
+        server.abort();
+    }
+
+    #[tokio::test]
     async fn passages_merge_queued_text_and_preserve_overflow_and_tail() {
-        let (tx, mut rx) = mpsc::channel(8);
-        tx.send("Hello. ".into()).await.unwrap();
-        tx.send("More context. ".into()).await.unwrap();
-        tx.send("x".repeat(1990)).await.unwrap();
-        tx.send("Final tail".into()).await.unwrap();
+        let (tx, mut rx) = mpsc::unbounded_channel();
+        tx.send("Hello. ".into()).unwrap();
+        tx.send("More context. ".into()).unwrap();
+        tx.send("x".repeat(1990)).unwrap();
+        tx.send("Final tail".into()).unwrap();
         drop(tx);
         let mut pending = None;
         assert_eq!(
@@ -284,7 +349,7 @@ mod tests {
 
     #[tokio::test]
     async fn short_passage_flushes_while_text_channel_remains_open() {
-        let (_tx, mut rx) = mpsc::channel(8);
+        let (_tx, mut rx) = mpsc::unbounded_channel();
         let mut pending = Some("Short sentence.".into());
         let passage = tokio::time::timeout(
             std::time::Duration::from_secs(1),
@@ -304,9 +369,9 @@ mod tests {
         let (mut events, task) = manager.start_task(Uuid::new_v4(), message_id).await;
         let (tx, _rx) = mpsc::channel(8);
         let mut session = SpeechSession::start(config, "live".into(), task, tx, message_id);
-        session.push("Hello.").await;
+        session.push("Hello.");
         if let Some(tail) = session.sentences.finish() {
-            session.sender.as_ref().unwrap().send(tail).await.unwrap();
+            session.sender.as_ref().unwrap().send(tail).unwrap();
         }
         session.sender.take();
         let (pcm, segments, rate) = (&mut session.worker).await.unwrap().unwrap();
@@ -348,9 +413,7 @@ mod tests {
         let (mut events, task) = manager.start_task(Uuid::new_v4(), message_id).await;
         let (tx, _rx) = mpsc::channel(8);
         let mut session = SpeechSession::start(config, "test".into(), task.clone(), tx, message_id);
-        session
-            .push("First sentence. More text still arriving")
-            .await;
+        session.push("First sentence. More text still arriving");
         let event = tokio::time::timeout(std::time::Duration::from_secs(3), events.recv())
             .await
             .unwrap()
