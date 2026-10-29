@@ -151,6 +151,11 @@ export interface ContinueToolApprovalInput {
    */
   itemDecisions?: DecidedApproval[];
   /**
+   * Name every decided item even when there is one: set while tasks on the
+   * stop still wait, so one that turns into a question is reported back.
+   */
+  enumerate?: boolean;
+  /**
    * The stop's open items, so the seeded parts can be numbered the way the
    * server numbers them. Without them only the flat fields are seeded, which is
    * exactly one item's worth.
@@ -2670,6 +2675,7 @@ export function useChatMessaging(
       mcpServerId,
       approvalIds,
       itemDecisions,
+      enumerate,
       items,
       kind,
       nothingToDecide = false,
@@ -2940,6 +2946,7 @@ export function useChatMessaging(
                     decision,
                     approvalIds,
                     itemDecisions,
+                    enumerate,
                   }),
             ),
           },

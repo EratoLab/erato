@@ -32,6 +32,21 @@ describe("buildContinueStreamBody", () => {
     });
   });
 
+  it("names a single open item when asked to enumerate", () => {
+    expect(
+      buildContinueStreamBody({
+        messageId: "message-1",
+        decision: "approve",
+        approvalIds: ["call-a"],
+        enumerate: true,
+      }),
+    ).toEqual({
+      message_id: "message-1",
+      decisions: [{ approval_id: "call-a", decision: "approve" }],
+      shows_child_items: true,
+    });
+  });
+
   it("covers every open item once a stop carries more than one", () => {
     expect(
       buildContinueStreamBody({

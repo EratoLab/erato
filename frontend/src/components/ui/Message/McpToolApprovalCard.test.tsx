@@ -830,6 +830,7 @@ describe("McpToolApprovalCard", () => {
         // item, keyed by the gated call.
         approvalIds: [approvalRequest.tool_call_id],
         itemDecisions: undefined,
+        enumerate: false,
         items: [
           {
             approval_id: approvalRequest.tool_call_id,
@@ -2246,6 +2247,40 @@ describe("tasks waiting on the device", () => {
       { approval_id: "task-ask-2", decision: "approve" },
       { approval_id: "task-wait", decision: "approve" },
     ]);
+  });
+
+  it("names a single answer while a task waits, so a question it turned into comes back", async () => {
+    const mismatch = JSON.stringify({
+      code: "decisions_mismatch",
+      missing: ["task-wait"],
+      unknown: [],
+    });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(mismatch, { status: 400 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const refetchMessages = vi.fn(async () => undefined);
+    renderCard(
+      withChatContext(
+        <McpToolApprovalCard
+          messageId="message-1"
+          request={{ ...delegatedTaskRequest, approvals: [asking, waits] }}
+          openItems={[asking]}
+          waitingItems={[waits]}
+          resolution={null}
+        />,
+        "chat-1",
+        { refetchMessages },
+      ),
+    );
+
+    fireEvent.click(screen.getByText("Allow once"));
+
+    await waitFor(() => expect(refetchMessages).toHaveBeenCalled());
+    expect(sentBody(fetchMock).decisions).toEqual([
+      { approval_id: "task-ask", decision: "approve" },
+    ]);
+    expect(screen.queryByText(/decisions_mismatch/)).toBeNull();
   });
 
   it.each(["children_waiting", "generation_running"])(

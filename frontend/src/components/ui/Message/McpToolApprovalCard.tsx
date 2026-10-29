@@ -259,6 +259,7 @@ export const McpToolApprovalCard = ({
         mcpServerId: request.mcp_server_id,
         approvalIds,
         itemDecisions,
+        enumerate: waiting.length > 0,
         items: approvalItems,
         kind,
       });
@@ -284,6 +285,7 @@ export const McpToolApprovalCard = ({
           decision,
           approvalIds,
           itemDecisions,
+          enumerate: waiting.length > 0,
         }),
       ),
     });
