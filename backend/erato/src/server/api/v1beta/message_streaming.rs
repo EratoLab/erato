@@ -9670,7 +9670,7 @@ async fn stream_generate_chat_completion<'a>(
                             ));
                         }
                         if let Some(speech) = &mut speech {
-                            speech.push(&content).await;
+                            speech.push(&content);
                         }
                         current_turn_streamed_text.push_str(&content);
                         let content_index =
