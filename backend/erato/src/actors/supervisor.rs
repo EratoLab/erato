@@ -103,6 +103,8 @@ impl Actor for WorkerSupervisor {
             delegated_run_auto_archive_after_days: config.delegation.auto_archive_after_days,
             generation_stale_after_secs: config.generation_status.stale_after_secs,
             result_max_chars: config.delegation.result_max_chars,
+            durable_operations_enabled: config.client_tools.durable_operations_enabled,
+            app_config: std::sync::Arc::new(config.clone()),
         };
 
         // Start the cron manager
