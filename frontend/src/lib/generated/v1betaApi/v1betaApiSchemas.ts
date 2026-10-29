@@ -1462,6 +1462,7 @@ export type ContentPartTaskResult = {
    * @format uuid
    */
   child_chat_id: string;
+  model?: TaskModelReport;
   /**
    * The `delegate_task` call in the origin turn that started it.
    */
@@ -3762,6 +3763,24 @@ export type SubmissionRecovery =
   | "cannot_continue";
 
 export type SubmissionStatus = "correcting" | "accepted" | "unresolved";
+
+/**
+ * The model a delegated run runs on, as its result reports it.
+ */
+export type TaskModelReport = {
+  chat_provider_id: string;
+  display_name?: string;
+  /**
+   * Tells the origin model about a fallback, so its answer can say the
+   * task did not run on the model it was configured for.
+   */
+  note?: string;
+  /**
+   * The model the run was set up for but the user may not use, so it ran
+   * on `chat_provider_id` instead.
+   */
+  unavailable_chat_provider_id?: string;
+};
 
 /**
  * The marker on a delivered task result's user row.

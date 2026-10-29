@@ -130,6 +130,7 @@ export const TaskResultCard = ({ part }: { part: ContentPartTaskResult }) => {
   // nothing but a redelivery could raise it.
   const isRedelivery =
     part.redeliveries === undefined ? part.sequence > 0 : part.redeliveries > 0;
+  const modelName = part.model?.display_name ?? part.model?.chat_provider_id;
 
   const openRunAffordance = openRun ? (
     <button
@@ -188,6 +189,26 @@ export const TaskResultCard = ({ part }: { part: ContentPartTaskResult }) => {
       {part.reason !== undefined && (
         <div data-testid="task-result-reason" className="mt-1 text-xs">
           {delegationReasonLabel(part.reason)}
+        </div>
+      )}
+
+      {modelName !== undefined && (
+        <div data-testid="task-result-model" className="mt-1 text-xs">
+          {t({
+            id: "message.taskResult.model",
+            message: `Model: ${modelName}`,
+          })}
+        </div>
+      )}
+      {part.model?.unavailable_chat_provider_id !== undefined && (
+        <div
+          data-testid="task-result-model-unavailable"
+          className="mt-1 text-xs"
+        >
+          {t({
+            id: "message.taskResult.model.unavailable",
+            message: `The model set up for this task is not available to you, so it ran on ${modelName}.`,
+          })}
         </div>
       )}
 

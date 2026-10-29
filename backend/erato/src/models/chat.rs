@@ -149,6 +149,12 @@ pub struct TaskSpec {
     /// Whether the run speaks as the origin chat's assistant or the bare model.
     #[serde(default)]
     pub persona: TaskPersona,
+    /// The model the run was launched on. Resolved once at launch so later
+    /// turns, an adoption and a retry keep it rather than falling back to
+    /// whatever default applies by then. Absent on runs launched before the
+    /// model was recorded.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model: Option<TaskModel>,
     /// How a completed async result re-enters the origin chat.
     #[serde(default)]
     pub scheduling: TaskScheduling,
@@ -162,6 +168,16 @@ pub struct TaskSpec {
     /// tail never got to write anything.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub parent_tool_call_id: Option<String>,
+}
+
+/// The chat provider a delegated run runs on.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct TaskModel {
+    pub chat_provider_id: String,
+    /// The model the run was set up for but the user may not use;
+    /// `chat_provider_id` is then the model it fell back to.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub unavailable_chat_provider_id: Option<String>,
 }
 
 /// The offer route a delegated run came from.
@@ -303,6 +319,10 @@ pub struct ResultDelivery {
     /// Matches `ContentPartTaskResult::sequence`.
     #[serde(default)]
     pub sequence: u32,
+    /// The run's model, settled when the delivery is recorded like the
+    /// status: the sweep that may append it has no config to name it with.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model: Option<crate::services::delegation::TaskModelReport>,
     pub at: DateTimeWithTimeZone,
 }
 

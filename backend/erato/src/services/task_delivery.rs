@@ -100,6 +100,7 @@ pub async fn record_pending_delivery(
         .and_then(|task| task.parent_tool_call_id.clone())
         .unwrap_or_default();
     let spawned_at = provenance.rebase_cutoff.unwrap_or(chat.created_at);
+    let model = crate::services::delegation::task_model_report_for_chat(&app_state.config, &chat);
 
     // Probe the answer row before asking for an envelope. `build_result_envelope`
     // maps a missing answer to `completed` / `no_answer` — right for the awaited
@@ -128,6 +129,7 @@ pub async fn record_pending_delivery(
             redeliveries: 0,
             redelivery_of: None,
             sequence: 0,
+            model: model.clone(),
             at: sqlx::types::chrono::Utc::now().into(),
         }
     } else {
@@ -137,6 +139,7 @@ pub async fn record_pending_delivery(
             child_assistant_message_id,
             spawned_at,
             chat.assistant_id,
+            None,
             None,
             parent_tool_call_id.clone(),
             if run_failed {
@@ -165,6 +168,7 @@ pub async fn record_pending_delivery(
             redeliveries: 0,
             redelivery_of: None,
             sequence: 0,
+            model,
             at: sqlx::types::chrono::Utc::now().into(),
         }
     };
@@ -231,6 +235,7 @@ fn rearmed_envelope(
         redeliveries: 0,
         redelivery_of: None,
         sequence: delivered.sequence.saturating_add(1),
+        model: delivered.model.clone(),
         at: sqlx::types::chrono::Utc::now().into(),
     }
 }
@@ -351,6 +356,7 @@ pub async fn rearm_delivery_after_child_decision(
                 child_assistant_message_id,
                 spawned_at,
                 chat.assistant_id,
+                None,
                 None,
                 parent_tool_call_id,
                 if outcome == TaskOutcome::Errored {
@@ -963,6 +969,7 @@ pub async fn deliver_task_result(
                         truncated,
                         sequence: delivery.sequence,
                         redeliveries: delivery.redeliveries,
+                        model: delivery.model.clone(),
                     },
                 );
                 // A failed read here is NOT `None`: `None` means "no anchor",
@@ -1235,6 +1242,7 @@ async fn child_answer_for_delivery<C: ConnectionTrait>(
         result_message_id,
         spawned_at,
         child.assistant_id,
+        None,
         None,
         parent_tool_call_id,
         // The status was settled when the delivery was recorded; asking for it
@@ -1785,6 +1793,7 @@ async fn deliver_one_child_db_only(
                     // the envelope.
                     sequence: delivery.sequence,
                     redeliveries: delivery.redeliveries,
+                    model: delivery.model.clone(),
                 },
             );
             let input_parameters = crate::models::message::InputParameters {
@@ -1919,6 +1928,7 @@ mod tests {
             redeliveries: 0,
             redelivery_of: None,
             sequence: 0,
+            model: None,
             at: sqlx::types::chrono::Utc::now().into(),
         }
     }

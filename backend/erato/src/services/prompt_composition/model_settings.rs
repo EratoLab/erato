@@ -84,6 +84,7 @@ mod tests {
             hidden: false,
             hidden_always_active_for_platform: None,
             delegation: None,
+            child_chat_provider: None,
         }
     }
 
