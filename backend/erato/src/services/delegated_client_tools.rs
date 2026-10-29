@@ -694,21 +694,27 @@ pub(crate) struct Synced {
     pub expected_generation: Option<Uuid>,
     pub has_waiting_items: bool,
     pub unanswered: bool,
-    /// `errored` with nothing answered after the stop: a continuation crashed.
+    /// `errored` with nothing answered after the stop: a continuation crashed,
+    /// or ended without answering on purpose.
     pub crashed: bool,
+    /// The message still carries a continuation's in-flight marker, which only
+    /// a crash leaves behind; a continuation that stops on purpose (the content
+    /// filter) clears it.
+    pub owes_answer: bool,
 }
 
 impl Synced {
     /// Whether the parent can go on without the user: nothing is left to
     /// decide, and either everything it waited for settled or a crashed
-    /// continuation has to re-park on what is still open.
+    /// continuation has to re-park on what is still open. An errored turn
+    /// that cleared its marker runs again only when the user asks.
     pub(crate) fn resumable(&self) -> bool {
         self.has_waiting_items
             && self.outcome.open_decidable == 0
             && ((self.generation_state == "awaiting_approval"
                 && self.unanswered
                 && self.outcome.open_waiting == 0)
-                || self.crashed)
+                || (self.crashed && self.owes_answer))
     }
 }
 
@@ -1056,11 +1062,9 @@ pub(crate) async fn sync_waiting_parent(
     else {
         return Ok(None);
     };
-    let crashed = generation_state == "errored"
-        && (state.unanswered
-            || crate::server::api::v1beta::message_streaming::continuation_owes_an_answer(
-                &message,
-            ));
+    let owes_answer =
+        crate::server::api::v1beta::message_streaming::continuation_owes_an_answer(&message);
+    let crashed = generation_state == "errored" && (state.unanswered || owes_answer);
     if generation_state == "errored" && !crashed {
         return Ok(None);
     }
@@ -1092,17 +1096,48 @@ pub(crate) async fn sync_waiting_parent(
         has_waiting_items,
         unanswered: state.unanswered,
         crashed,
+        owes_answer,
     }))
 }
 
 /// How many parked parents one sweep looks at.
 const WAITING_PARENTS_BATCH: i64 = 100;
 
+/// Where the next waiting-parents sweep starts. Parents are visited in chat
+/// order and the sweep wraps around, so a batch that keeps matching cannot
+/// hide the parents after it.
+#[derive(Debug, Clone, Default)]
+pub struct WaitingParentsCursor(std::sync::Arc<std::sync::Mutex<Option<Uuid>>>);
+
+impl WaitingParentsCursor {
+    fn get(&self) -> Option<Uuid> {
+        *self
+            .0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+
+    fn set(&self, after: Option<Uuid>) {
+        *self
+            .0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = after;
+    }
+}
+
 /// Syncs parked parents whose latest message waits for children, for a child
 /// whose tail never ran (a crash between its completion and its tail). Starts
 /// no generation: a parent left with nothing open is resumed by the next tail
 /// or by the open parent chat. Returns how many parents changed.
-pub async fn sweep_waiting_parents(db: &sea_orm::DatabaseConnection, config: &AppConfig) -> usize {
+///
+/// Only parents a sync can move are scanned: a waiting item whose slot is
+/// still open while its call has completed, or failed in a continuation, on a
+/// child that no longer runs.
+pub async fn sweep_waiting_parents(
+    db: &sea_orm::DatabaseConnection,
+    config: &AppConfig,
+    cursor: &WaitingParentsCursor,
+) -> usize {
     use crate::query_metrics::named_statement_from_sql_and_values;
     use sea_orm::{ConnectionTrait, TryGetable};
 
@@ -1121,11 +1156,40 @@ pub async fn sweep_waiting_parents(db: &sea_orm::DatabaseConnection, config: &Ap
         ) tip
         WHERE c.archived_at IS NULL
           AND c.generation_state IN ('awaiting_approval', 'errored')
+          AND ($2::uuid IS NULL OR c.id > $2)
           AND tip.raw_message -> 'content'
             @> '[{"content_type":"tool_approval_request","approvals":[{"child":{"waiting_for":{}}}]}]'::jsonb
+          AND EXISTS (
+            SELECT 1
+            FROM jsonb_array_elements(tip.raw_message -> 'content') AS stop(part)
+            CROSS JOIN LATERAL jsonb_array_elements(
+                CASE WHEN jsonb_typeof(stop.part -> 'approvals') = 'array'
+                     THEN stop.part -> 'approvals' ELSE '[]'::jsonb END
+            ) AS item(value)
+            JOIN client_operation_attempts a ON a.attempt_id = CASE
+                WHEN item.value #>> '{child,waiting_for,attempt_id}'
+                    ~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+                THEN (item.value #>> '{child,waiting_for,attempt_id}')::uuid
+            END
+            JOIN chats child ON child.id = a.chat_id
+            WHERE stop.part ->> 'content_type' = 'tool_approval_request'
+              AND child.generation_state IS DISTINCT FROM 'running'
+              AND (a.state = 'completed'
+                OR (a.state = 'continuing' AND child.generation_state = 'errored'))
+              AND (
+                SELECT slot.part ->> 'status'
+                FROM jsonb_array_elements(tip.raw_message -> 'content')
+                    WITH ORDINALITY AS slot(part, position)
+                WHERE slot.part ->> 'content_type' = 'tool_use'
+                  AND slot.part ->> 'tool_call_id' = item.value ->> 'tool_call_id'
+                ORDER BY slot.position DESC
+                LIMIT 1
+              ) = 'in_progress'
+          )
+        ORDER BY c.id
         LIMIT $1
         "#,
-        [WAITING_PARENTS_BATCH.into()],
+        [WAITING_PARENTS_BATCH.into(), cursor.get().into()],
     );
     let rows = match db.query_all_raw(statement).await {
         Ok(rows) => rows,
@@ -1134,6 +1198,8 @@ pub async fn sweep_waiting_parents(db: &sea_orm::DatabaseConnection, config: &Ap
             return 0;
         }
     };
+    let full = rows.len() as i64 >= WAITING_PARENTS_BATCH;
+    let mut last = None;
     let mut changed = 0;
     for row in rows {
         let (Ok(chat_id), Ok(message_id)) = (
@@ -1142,6 +1208,7 @@ pub async fn sweep_waiting_parents(db: &sea_orm::DatabaseConnection, config: &Ap
         ) else {
             continue;
         };
+        last = Some(chat_id);
         match sync_waiting_parent(db, config, chat_id, message_id).await {
             Ok(Some(synced)) if synced.outcome.changed => changed += 1,
             Ok(_) => {}
@@ -1150,6 +1217,7 @@ pub async fn sweep_waiting_parents(db: &sea_orm::DatabaseConnection, config: &Ap
             }
         }
     }
+    cursor.set(if full { last } else { None });
     changed
 }
 

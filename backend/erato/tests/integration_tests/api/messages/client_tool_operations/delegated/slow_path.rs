@@ -2021,11 +2021,38 @@ pub(super) async fn the_sweep_settles_a_waiting_child_whose_tail_never_ran_and_a
     pool: Pool<Postgres>,
     row: &HostRow,
 ) {
+    sweep_after_a_lost_tail(row, pool, "completed").await;
+}
+
+/// The stale-generation reap writes `errored` for a chat whose calls have all
+/// completed, so a replica that died after the child's answer leaves it so.
+pub(super) async fn a_child_reaped_errored_after_its_answer_reads_as_completed(
+    pool: Pool<Postgres>,
+    row: &HostRow,
+) {
+    sweep_after_a_lost_tail(row, pool, "errored").await;
+}
+
+fn cleanup_args(
+    state: &erato::state::AppState,
+) -> erato::actors::cleanup_worker::CleanupWorkerArgs {
+    erato::actors::cleanup_worker::CleanupWorkerArgs {
+        db: state.db.clone(),
+        cleanup_enabled: false,
+        cleanup_archived_max_age_days: 30,
+        delegated_run_auto_archive_after_days: 0,
+        generation_stale_after_secs: state.config.generation_status.stale_after_secs,
+        result_max_chars: state.config.delegation.result_max_chars,
+        durable_operations_enabled: true,
+        app_config: std::sync::Arc::new(state.config.clone()),
+        waiting_parents_cursor: Default::default(),
+    }
+}
+
+/// The child's continuation committed its answer and completed the call, and
+/// the process died before its tail; the child chat is left `child_state`.
+async fn lose_the_tail(waiting: &Waiting, child_state: &str) {
     use sea_orm::ConnectionTrait;
-    let mut waiting = park_a_waiting_child(row, pool, false, |_| {}).await;
-    let resumed = record_parent_resumes(&mut waiting.llm);
-    // The child's continuation committed its answer and completed the call,
-    // and the process died before its tail.
     let child_row = assistant_row(&waiting.state.db, waiting.child.id).await;
     let mut raw = child_row.raw_message.clone();
     let content = raw["content"].as_array_mut().unwrap();
@@ -2062,23 +2089,19 @@ pub(super) async fn the_sweep_settles_a_waiting_child_whose_tail_never_ran_and_a
         .state
         .db
         .execute_unprepared(&format!(
-            "UPDATE chats SET generation_state = 'completed' WHERE id = '{}'",
+            "UPDATE chats SET generation_state = '{child_state}' WHERE id = '{}'",
             waiting.child.id
         ))
         .await
         .unwrap();
+}
 
-    let args = erato::actors::cleanup_worker::CleanupWorkerArgs {
-        db: waiting.state.db.clone(),
-        cleanup_enabled: false,
-        cleanup_archived_max_age_days: 30,
-        delegated_run_auto_archive_after_days: 0,
-        generation_stale_after_secs: waiting.state.config.generation_status.stale_after_secs,
-        result_max_chars: waiting.state.config.delegation.result_max_chars,
-        durable_operations_enabled: true,
-        app_config: std::sync::Arc::new(waiting.state.config.clone()),
-    };
-    erato::actors::cleanup_worker::run_cleanup_tick(&args)
+async fn sweep_after_a_lost_tail(row: &HostRow, pool: Pool<Postgres>, child_state: &str) {
+    let mut waiting = park_a_waiting_child(row, pool, false, |_| {}).await;
+    let resumed = record_parent_resumes(&mut waiting.llm);
+    lose_the_tail(&waiting, child_state).await;
+
+    erato::actors::cleanup_worker::run_cleanup_tick(&cleanup_args(&waiting.state))
         .await
         .unwrap();
     let swept = assistant_row(&waiting.state.db, waiting.chat_id).await;

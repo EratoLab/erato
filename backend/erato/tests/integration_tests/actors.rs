@@ -1023,6 +1023,7 @@ async fn cleanup_tick_sweeps_without_cleanup_enabled_and_archives_with_it(pool: 
         result_max_chars: 4000,
         durable_operations_enabled: false,
         app_config: std::sync::Arc::new(erato::config::AppConfig::default()),
+        waiting_parents_cursor: Default::default(),
     };
     run_cleanup_tick(&args).await.expect("tick must not fail");
 
@@ -1173,6 +1174,7 @@ fn sweep_args(db: &DatabaseConnection) -> CleanupWorkerArgs {
         result_max_chars: 4000,
         durable_operations_enabled: false,
         app_config: std::sync::Arc::new(erato::config::AppConfig::default()),
+        waiting_parents_cursor: Default::default(),
     }
 }
 

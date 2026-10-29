@@ -9652,6 +9652,7 @@ async fn a_placeholder_a_real_dispatch_wrote_is_settled_by_the_sweep(pool: Pool<
         result_max_chars: app_state.config.delegation.result_max_chars,
         durable_operations_enabled: false,
         app_config: std::sync::Arc::new(app_state.config.clone()),
+        waiting_parents_cursor: Default::default(),
     };
     let tick = || erato::actors::cleanup_worker::run_cleanup_tick(&cleanup_args);
     let part_of = async |message_id: Uuid| -> Value {

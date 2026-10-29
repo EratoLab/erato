@@ -31,6 +31,8 @@ pub struct CleanupWorkerArgs {
     pub durable_operations_enabled: bool,
     /// The configuration a synced task result is reported under.
     pub app_config: std::sync::Arc<crate::config::AppConfig>,
+    /// Where the next tick's waiting-parents sweep starts.
+    pub waiting_parents_cursor: crate::services::delegated_client_tools::WaitingParentsCursor,
 }
 
 pub struct CleanupWorker;
@@ -165,6 +167,7 @@ pub async fn run_cleanup_tick(args: &CleanupWorkerArgs) -> Result<(), ActorProce
         let synced = crate::services::delegated_client_tools::sweep_waiting_parents(
             &args.db,
             &args.app_config,
+            &args.waiting_parents_cursor,
         )
         .await;
         if synced > 0 {
