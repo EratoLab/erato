@@ -745,14 +745,21 @@ async fn a_pane_gone_before_dispatch_is_context_unavailable_after_the_grace(
     assert!(task_spec(&client_child)["client_grant"].is_object());
     drop(pane);
     wait_released(&state, &row.binding()).await;
-    let gone = tokio::time::Instant::now();
+    tokio::time::timeout(DISPATCH_PAUSE + Duration::from_secs(10), async {
+        while row_count(&state, "client_executor_calls").await == 0 {
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .expect("the granted call is handed over without a pane");
+    // The grace runs from the hand-over; the slack covers the polling above.
+    let handed = tokio::time::Instant::now();
     assert!(finish(run).await.contains(PARENT_FINAL));
-    let waited = gone.elapsed();
+    let waited = handed.elapsed();
     assert!(
-        waited >= executor_stream::PRESENCE_LOSS_GRACE
-            && waited
-                < DISPATCH_PAUSE + executor_stream::PRESENCE_LOSS_GRACE + Duration::from_secs(10),
-        "the call waits the presence grace for a pane, not the tool's timeout: {waited:?}"
+        waited >= executor_stream::PRESENCE_LOSS_GRACE - Duration::from_millis(500)
+            && waited < executor_stream::PRESENCE_LOSS_GRACE + Duration::from_secs(10),
+        "the call waits the full presence grace for a pane, not the tool's timeout: {waited:?}"
     );
     let read = part_for(
         &assistant_row(&state.db, client_child.id).await,
@@ -807,7 +814,7 @@ async fn a_pane_lost_in_flight_is_context_unavailable_after_the_grace(
     let lost = tokio::time::Instant::now();
     assert!(finish(run).await.contains(PARENT_FINAL));
     assert!(
-        lost.elapsed() >= Duration::from_secs(10),
+        lost.elapsed() >= executor_stream::PRESENCE_LOSS_GRACE,
         "the call waits out the presence grace: {:?}",
         lost.elapsed()
     );
