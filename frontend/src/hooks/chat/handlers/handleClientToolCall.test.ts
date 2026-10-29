@@ -160,6 +160,45 @@ describe("handleClientToolCall", () => {
     }
   });
 
+  it("passes a grant call's lineage and answers with the executor stream's binding", async () => {
+    const execute = vi.fn(async () => ({ ok: true as const, result: null }));
+    registerClientToolExecutor("fetch_availability", execute);
+    const executor = {
+      device_id: "pane-device-000000",
+      realm: "office-addin" as const,
+      host_context: { kind: "outlook_mailbox", identity: "a".repeat(64) },
+    };
+    const lineage = {
+      owner_chat_id: "chat-0",
+      owner_message_id: "msg-0",
+      requesting_chat_id: "chat-1",
+      requesting_message_id: "msg-1",
+      context_ref: "capture-1",
+    };
+    const unregister = registerOperationExecutor("fetch_availability", () => ({
+      ...executor,
+      device_id: "other-device-00000",
+    }));
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({ delivered: true, stored: false }),
+    });
+    try {
+      await handleClientToolCall(makeEvent(), { ...deps, executor, lineage });
+      expect(execute).toHaveBeenCalledWith(
+        { window_start: "x" },
+        expect.objectContaining({ chatId: "chat-1", lineage }),
+      );
+      const init = fetchMock.mock.calls[0][1] as RequestInit;
+      expect((init.headers as Record<string, string>)["X-Erato-Executor"]).toBe(
+        JSON.stringify(executor),
+      );
+    } finally {
+      unregister();
+    }
+  });
+
   describe("with an operation binding", () => {
     const sweep = vi.fn<() => void>();
     let unregister: () => void;
@@ -394,6 +433,61 @@ describe("handleClientToolCall", () => {
 
     expect(executor).toHaveBeenCalledTimes(1);
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  describe("a call pushed over the executor stream", () => {
+    const executor = {
+      device_id: "pane-device-000000",
+      realm: "office-addin" as const,
+      host_context: { kind: "outlook_mailbox", identity: "a".repeat(64) },
+    };
+    const execute = vi.fn(async () => ({ ok: true as const, result: 1 }));
+
+    beforeEach(() => {
+      vi.useFakeTimers();
+      execute.mockClear();
+      registerClientToolExecutor("fetch_availability", execute);
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("retries its result POST after a network error or a 5xx", async () => {
+      fetchMock
+        .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+        .mockResolvedValueOnce({ ok: false, status: 502 })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => ({ delivered: true, stored: false }),
+        });
+      const done = handleClientToolCall(makeEvent(), { ...deps, executor });
+      await vi.advanceTimersByTimeAsync(999);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      await vi.advanceTimersByTimeAsync(2_000);
+      await done;
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+      expect(execute).toHaveBeenCalledOnce();
+      expect(hasClientToolCallBeenAnswered("call-1")).toBe(true);
+    });
+
+    it("gives up on a 4xx at once, and on a 5xx after its retries", async () => {
+      fetchMock.mockResolvedValueOnce({ ok: false, status: 404 });
+      await handleClientToolCall(makeEvent(), { ...deps, executor });
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+
+      fetchMock.mockResolvedValue({ ok: false, status: 503 });
+      const done = handleClientToolCall(makeEvent({ tool_call_id: "call-2" }), {
+        ...deps,
+        executor,
+      });
+      await vi.advanceTimersByTimeAsync(60_000);
+      await done;
+      expect(fetchMock).toHaveBeenCalledTimes(1 + 5);
+    });
   });
 
   it("un-marks on a failed POST so a later replay retries", async () => {

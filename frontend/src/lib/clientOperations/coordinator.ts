@@ -8,6 +8,7 @@ import {
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 
 import { continueAttachedOperation } from "./attachedContinuation";
+import { executorStreamHeaders, openExecutorStream } from "./executorStream";
 import { clientOperationHandlerRegistry } from "./handlers";
 import { withClientCallLock } from "./operationLock";
 
@@ -39,6 +40,12 @@ export interface ClientOperationApi {
   ): Promise<unknown>;
   continue(id: string, signal: AbortSignal): Promise<unknown>;
   attach?(request: OperationRequest, signal: AbortSignal): Promise<unknown>;
+  /** Holds the pane's executor stream open until `signal` aborts. */
+  stream?(
+    headers: Record<string, string>,
+    onNudge: () => void,
+    signal: AbortSignal,
+  ): Promise<unknown>;
   cancel(id: string, signal: AbortSignal): Promise<unknown>;
 }
 function headers(request: OperationRequest): Record<string, string> {
@@ -71,6 +78,7 @@ export const clientOperationApi: ClientOperationApi = {
   continue: (id, signal) =>
     fetchContinueClientOperation({ pathParams: { attemptId: id } }, signal),
   attach: continueAttachedOperation,
+  stream: openExecutorStream,
   cancel: (id, signal) =>
     fetchCancelClientOperation({ pathParams: { attemptId: id } }, signal),
 };
@@ -119,6 +127,7 @@ export class ClientOperationCoordinator {
   readonly #attached = new Set<string>();
   readonly #builtIns: readonly ClientOperationHandler[];
   readonly #unsubscribe: () => void;
+  #stream: { key: string; controller: AbortController } | undefined;
   #running: Promise<void> | undefined;
   #refresh = false;
   enabled = true;
@@ -136,6 +145,7 @@ export class ClientOperationCoordinator {
   }
   dispose(): void {
     this.#abort.abort();
+    this.#closeStream();
     this.#unsubscribe();
     this.#operations.clear();
     this.#claims.clear();
@@ -154,6 +164,35 @@ export class ClientOperationCoordinator {
   }
   #check(): void {
     this.#abort.signal.throwIfAborted();
+  }
+  #closeStream(): void {
+    this.#stream?.controller.abort();
+    this.#stream = undefined;
+  }
+  /** Keeps one executor stream open for the pane's current binding and tools. */
+  #syncStream(enabled: boolean): void {
+    const headers =
+      enabled && this.api.stream ? executorStreamHeaders() : undefined;
+    const key = headers && JSON.stringify(headers);
+    if (key === this.#stream?.key) return;
+    this.#closeStream();
+    if (!headers || !key || !this.api.stream) return;
+    const stream = { key, controller: new AbortController() };
+    this.#stream = stream;
+    void this.api
+      .stream(
+        headers,
+        () => {
+          void this.reconcile();
+        },
+        stream.controller.signal,
+      )
+      .catch(() => {
+        /* The next sweep reopens it. */
+      })
+      .finally(() => {
+        if (this.#stream === stream) this.#stream = undefined;
+      });
   }
   #continue(
     request: OperationRequest,
@@ -233,7 +272,9 @@ export class ClientOperationCoordinator {
         this.accountChanged();
         return;
       }
-      this.enabled = page.enabled;
+      // Before the durable early return: a stream may serve live calls alone.
+      if (after === undefined) this.#syncStream(page.executor_stream_enabled);
+      this.enabled = page.enabled || page.executor_stream_enabled;
       if (!page.enabled) {
         this.#operations.clear();
         this.#claims.clear();

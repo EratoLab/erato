@@ -34,6 +34,7 @@ use crate::services::background_tasks::{
     BackgroundTaskManager, ClientStreamGuard, LeaseHeld, StreamingEvent, StreamingTask, Takeover,
     TaskCleanupGuard, TaskOutcome, ToolCallStatus as BgToolCallStatus,
 };
+use crate::services::client_operations::executor_stream;
 use crate::services::client_tools::{ClientToolDelivery, ClientToolOutcome};
 use crate::services::display_text::{MAX_DISPLAY_NAME_CHARS, sanitize_display_text};
 use crate::services::genai::{build_chat_options_for_completion, build_chat_options_for_summary};
@@ -1209,6 +1210,60 @@ pub(crate) async fn send_background_event(
     if let Err(error) = task.send_event(event).await {
         let error = Report::msg(error).wrap_err(context);
         warn_and_capture_error(context, &error);
+    }
+}
+
+/// Where a live call goes while executor streams are enabled. `None` keeps the
+/// chat path; so does a failed lookup, except for a grant call, which has no
+/// chat path.
+pub(crate) async fn route_executor_call(
+    db: &sea_orm::DatabaseConnection,
+    task: &StreamingTask,
+    user_id: &str,
+    binding: &crate::services::client_operations::ExecutorBinding,
+    tool_name: &str,
+    grant_call: bool,
+) -> Option<executor_stream::LiveCallRoute> {
+    let account_id = Uuid::parse_str(user_id).ok()?;
+    let attached = !grant_call && task.client_stream_attached().await;
+    match executor_stream::route_live_call(db, account_id, binding, tool_name, attached, grant_call)
+        .await
+    {
+        Ok(route) => Some(route),
+        Err(error) => {
+            tracing::warn!(%error, "Cannot look up the executor stream for a client tool call");
+            grant_call.then_some(executor_stream::LiveCallRoute::Unavailable)
+        }
+    }
+}
+
+/// Registers the call before queueing it, so a result racing the stream's poll
+/// is already checked against the binding. A queue error keeps the chat path.
+pub(crate) async fn hand_over_executor_call(
+    db: &sea_orm::DatabaseConnection,
+    task: &StreamingTask,
+    call: executor_stream::ExecutorCall,
+) -> Option<executor_stream::ExecutorCall> {
+    task.register_executor_call(call.tool_call_id.clone(), call.binding.clone())
+        .await;
+    match executor_stream::hand_over(db, &call).await {
+        Ok(()) => Some(call),
+        Err(error) => {
+            tracing::warn!(%error, "Cannot hand a client tool call to the executor stream");
+            task.remove_executor_call(&call.tool_call_id).await;
+            None
+        }
+    }
+}
+
+pub(crate) async fn settle_executor_call(
+    db: &sea_orm::DatabaseConnection,
+    task: &StreamingTask,
+    call: &executor_stream::ExecutorCall,
+) {
+    task.remove_executor_call(&call.tool_call_id).await;
+    if let Err(error) = executor_stream::settle(db, call.message_id, &call.tool_call_id).await {
+        tracing::warn!(%error, "Cannot settle an executor stream call");
     }
 }
 
@@ -7779,6 +7834,40 @@ async fn stream_generate_chat_completion<'a>(
                         reason: "context_unavailable".into(),
                     });
                 }
+                let mut executor_target = None;
+                if let Some(binding) = tool_policy
+                    .filter(|policy| {
+                        app_state.config.client_tools.executor_stream_enabled
+                            && validation_failure.is_none()
+                            && durable_request.is_none()
+                            && submission.is_none()
+                            && !policy.inbox_only
+                    })
+                    .and_then(|policy| policy.executor.as_ref())
+                {
+                    match route_executor_call(
+                        &app_state.db,
+                        task,
+                        &user_id,
+                        binding,
+                        &tool_name,
+                        false,
+                    )
+                    .await
+                    {
+                        // Without a stream that serves the tool yet, the call waits
+                        // for one, as for a pane that reconnects mid-call.
+                        Some(
+                            executor_stream::LiveCallRoute::Executor(_)
+                            | executor_stream::LiveCallRoute::Unavailable,
+                        ) => {
+                            executor_target = Uuid::parse_str(&user_id)
+                                .ok()
+                                .map(|account_id| (binding.clone(), account_id));
+                        }
+                        Some(executor_stream::LiveCallRoute::ChatStream) | None => {}
+                    }
+                }
                 let server_refused = validation_failure.is_some();
                 let outcome = if let Some(failure) = validation_failure {
                     failure
@@ -7792,7 +7881,24 @@ async fn stream_generate_chat_completion<'a>(
                             request.consent
                                 != crate::services::client_operations::ConsentPolicy::None
                         });
-                    if !inbox_only {
+                    let mut handed_over = None;
+                    if !inbox_only && let Some((binding, account_id)) = executor_target {
+                        let call = executor_stream::ExecutorCall {
+                            account_id,
+                            binding,
+                            chat_id,
+                            generation_id: task.generation_id,
+                            message_id: assistant_message_id,
+                            tool_call_id: call_id.clone(),
+                            tool_name: tool_name.clone(),
+                            input: tool_input.clone(),
+                            lineage: None,
+                        };
+                        handed_over = hand_over_executor_call(&app_state.db, task, call).await;
+                    }
+                    // A handed-over call is neither broadcast nor logged, so no
+                    // chat stream runs it a second time.
+                    if !inbox_only && handed_over.is_none() {
                         // Signal the client to execute: broadcast (submit path + resume
                         // replay) AND the typed tx stream (regenerate/edit path).
                         send_background_event(
@@ -7860,6 +7966,14 @@ async fn stream_generate_chat_completion<'a>(
                             _ = task.wait_for_abort() => Park::Aborted,
                             _ = task.wait_for_client_disconnect(), if durable_request.is_some() => Park::TimedOut,
                             _ = task.wait_for_client_transport_loss(), if live_submission => Park::TransportUnavailable,
+                            _ = async {
+                                match &handed_over {
+                                    Some(call) => executor_stream::wait_for_presence_loss(
+                                        &app_state.db, call,
+                                    ).await,
+                                    None => std::future::pending().await,
+                                }
+                            } => Park::TransportUnavailable,
                             _ = tokio::time::sleep(tokio::time::Duration::from_millis(
                                 park_timeout_ms,
                             )) => Park::TimedOut,
@@ -7895,6 +8009,11 @@ async fn stream_generate_chat_completion<'a>(
                         task.remove_pending_client_tool(&call_id).await;
                     }
                     let raced_in = result_rx.try_recv().ok();
+                    // Only after the waiter is gone: a result that finds no
+                    // binding to check must find nothing to deliver to either.
+                    if let Some(call) = &handed_over {
+                        settle_executor_call(&app_state.db, task, call).await;
+                    }
 
                     match park {
                         Park::Delivered(outcome) => outcome,
@@ -9020,6 +9139,11 @@ async fn stream_generate_chat_completion<'a>(
                 },
             )
             .await?;
+            if app_state.config.client_tools.executor_stream_enabled
+                && let Err(error) = executor_stream::nudge(&app_state.db, &request).await
+            {
+                tracing::warn!(%error, "Cannot announce a parked operation on its executor stream");
+            }
             task.remove_pending_client_tool(&request.tool_call_id).await;
             if let Ok(outcome) = result_rx.try_recv() {
                 let result =
@@ -16992,6 +17116,37 @@ pub async fn client_tool_result(
                 "No suspended generation matches this message".to_string(),
             ));
         }
+        if app_state.config.client_tools.executor_stream_enabled {
+            let account_id = Uuid::parse_str(&me_user.id).map_err(|_| {
+                (
+                    axum::http::StatusCode::UNAUTHORIZED,
+                    "Invalid account".into(),
+                )
+            })?;
+            let handed_over = crate::services::client_operations::executor_stream::call_binding(
+                &app_state.db,
+                account_id,
+                request.chat_id,
+                request.message_id,
+                &request.tool_call_id,
+            )
+            .await
+            .map_err(|_| {
+                (
+                    axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                    "Operation lookup failed".into(),
+                )
+            })?;
+            if handed_over.is_some_and(|binding| {
+                crate::services::client_operations::ExecutorBinding::from_headers(&headers)
+                    != Some(binding)
+            }) {
+                return Err((
+                    axum::http::StatusCode::CONFLICT,
+                    "Operation binding mismatch".into(),
+                ));
+            }
+        }
         if resolve_files
             && let Some((result, file_ids)) = super::file_resolution::resolve_client_tool_files(
                 &app_state,
@@ -17006,7 +17161,9 @@ pub async fn client_tool_result(
             payload["result"] = result;
             payload["file_upload_ids"] = json!(file_ids);
         }
-        if app_state.config.client_tools.durable_operations_enabled {
+        if app_state.config.client_tools.durable_operations_enabled
+            || app_state.config.client_tools.executor_stream_enabled
+        {
             payload["operation_executor"] = serde_json::to_value(
                 crate::services::client_operations::ExecutorBinding::from_headers(&headers),
             )
@@ -17036,6 +17193,15 @@ pub async fn client_tool_result(
         return Err((
             axum::http::StatusCode::NOT_FOUND,
             "No suspended generation matches this message".to_string(),
+        ));
+    }
+    if let Some(binding) = task.executor_call(&request.tool_call_id).await
+        && crate::services::client_operations::ExecutorBinding::from_headers(&headers).as_ref()
+            != Some(&binding)
+    {
+        return Err((
+            axum::http::StatusCode::CONFLICT,
+            "Operation binding mismatch".into(),
         ));
     }
 
@@ -20351,7 +20517,10 @@ pub async fn resume_message_sse(
         let broadcast_rx = task.subscribe();
         let history = futures::stream::iter(event_history.into_iter().map(Ok::<_, Report>));
         let live = live_streaming_events(broadcast_rx);
-        owned_streaming_events_to_sse(futures::StreamExt::chain(history, live), guard)
+        owned_streaming_events_to_sse(
+            futures::StreamExt::chain(history, live),
+            guard.with_local_stream(&task),
+        )
     } else {
         owned_streaming_events_to_sse(
             shared_generation_event_stream(app_state.background_tasks.clone(), generation_id),

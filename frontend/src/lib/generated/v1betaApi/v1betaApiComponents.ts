@@ -3845,6 +3845,92 @@ export const useListClientOperations = <
   });
 };
 
+export type ClientOperationStreamError = Fetcher.ErrorWrapper<undefined>;
+
+export type ClientOperationStreamVariables = V1betaApiContext["fetcherOptions"];
+
+export const fetchClientOperationStream = (
+  variables: ClientOperationStreamVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<undefined, ClientOperationStreamError, undefined, {}, {}, {}>({
+    url: "/api/v1beta/me/client-operations/stream",
+    method: "get",
+    ...variables,
+    signal,
+  });
+
+export function clientOperationStreamQuery(
+  variables: ClientOperationStreamVariables,
+): {
+  queryKey: reactQuery.QueryKey;
+  queryFn: (options: QueryFnOptions) => Promise<undefined>;
+};
+
+export function clientOperationStreamQuery(
+  variables: ClientOperationStreamVariables | reactQuery.SkipToken,
+): {
+  queryKey: reactQuery.QueryKey;
+  queryFn:
+    | ((options: QueryFnOptions) => Promise<undefined>)
+    | reactQuery.SkipToken;
+};
+
+export function clientOperationStreamQuery(
+  variables: ClientOperationStreamVariables | reactQuery.SkipToken,
+) {
+  return {
+    queryKey: queryKeyFn({
+      path: "/api/v1beta/me/client-operations/stream",
+      operationId: "clientOperationStream",
+      variables,
+    }),
+    queryFn:
+      variables === reactQuery.skipToken
+        ? reactQuery.skipToken
+        : ({ signal }: QueryFnOptions) =>
+            fetchClientOperationStream(variables, signal),
+  };
+}
+
+export const useSuspenseClientOperationStream = <TData = undefined,>(
+  variables: ClientOperationStreamVariables,
+  options?: Omit<
+    reactQuery.UseQueryOptions<undefined, ClientOperationStreamError, TData>,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useSuspenseQuery<
+    undefined,
+    ClientOperationStreamError,
+    TData
+  >({
+    ...clientOperationStreamQuery(deepMerge(fetcherOptions, variables)),
+    ...options,
+    ...queryOptions,
+  });
+};
+
+export const useClientOperationStream = <TData = undefined,>(
+  variables: ClientOperationStreamVariables | reactQuery.SkipToken,
+  options?: Omit<
+    reactQuery.UseQueryOptions<undefined, ClientOperationStreamError, TData>,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useQuery<undefined, ClientOperationStreamError, TData>({
+    ...clientOperationStreamQuery(
+      variables === reactQuery.skipToken
+        ? variables
+        : deepMerge(fetcherOptions, variables),
+    ),
+    ...options,
+    ...queryOptions,
+  });
+};
+
 export type CancelClientOperationPathParams = {
   /**
    * @format uuid
@@ -8507,6 +8593,11 @@ export type QueryOperation =
       path: "/api/v1beta/me/client-operations";
       operationId: "listClientOperations";
       variables: ListClientOperationsVariables | reactQuery.SkipToken;
+    }
+  | {
+      path: "/api/v1beta/me/client-operations/stream";
+      operationId: "clientOperationStream";
+      variables: ClientOperationStreamVariables | reactQuery.SkipToken;
     }
   | {
       path: "/api/v1beta/me/desktop-sidecar/organization-configuration";

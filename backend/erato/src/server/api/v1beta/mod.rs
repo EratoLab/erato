@@ -187,6 +187,7 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         .route("/messages/continuestream", post(continue_message_sse))
         .route("/messages/clienttoolresult", post(client_tool_result))
         .route("/client-operations", get(list_client_operations))
+        .route("/client-operations/stream", get(executor_stream))
         .route(
             "/client-operations/{attempt_id}/claim",
             post(claim_client_operation),
@@ -477,6 +478,7 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         complete_client_operation,
         cancel_client_operation,
         continue_client_operation,
+        executor_stream,
         list_user_tool_approval_settings,
         create_user_tool_approval_setting,
         apply_user_tool_approval_settings_batch,

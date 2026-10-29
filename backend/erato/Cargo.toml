@@ -64,7 +64,7 @@ time = "0.3"
 aes-gcm-siv = "0.11.1"
 aes = "0.9.1"
 cbc = { version = "0.2.1", features = ["alloc"] }
-uuid = { version = "1", features = ["v4", "v5"] }
+uuid = { version = "1", features = ["v4", "v5", "v7"] }
 hmac = "0.13.0"
 jsonwebtoken = { version = "10.4.0", features = ["aws_lc_rs"] }
 regorus = "0.5.0"

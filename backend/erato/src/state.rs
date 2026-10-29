@@ -112,6 +112,8 @@ pub struct AppState {
     pub file_storage_providers: HashMap<String, FileStorage>,
     pub config: AppConfig,
     pub client_operations: crate::services::client_operations::OperationRegistry,
+    /// Executor streams held by this replica (ERMAIN-1000).
+    pub executor_streams: crate::services::client_operations::executor_stream::ExecutorStreamHub,
     /// Startup-compiled guardrails; each scan clones its selected regexes.
     pub prompt_guardrails: Arc<CompiledPromptGuardrails>,
     pub actor_manager: ActorManager,
@@ -267,7 +269,8 @@ impl AppState {
             config.delegation.tasks.enabled
                 || config.client_tools.durable_operations_enabled
                 || config.chat_history_compaction.enabled,
-        );
+        )
+        .with_executor_stream_cleanup(config.client_tools.executor_stream_enabled);
 
         // Initialize the system prompt renderer
         let system_prompt_renderer = SystemPromptRenderer::new();
@@ -335,6 +338,7 @@ impl AppState {
                 &config,
                 local_delegation_signer.as_ref(),
             )?,
+            executor_streams: Default::default(),
             local_delegation_signer,
             ms_teams_bot,
             entra_group_overage,
@@ -1253,6 +1257,7 @@ impl Clone for AppState {
             file_storage_providers: self.file_storage_providers.clone(),
             config: self.config.clone(),
             client_operations: self.client_operations.clone(),
+            executor_streams: self.executor_streams.clone(),
             prompt_guardrails: self.prompt_guardrails.clone(),
             actor_manager: self.actor_manager.clone(),
             langfuse_client: self.langfuse_client.clone(),
@@ -1327,6 +1332,7 @@ impl AppState {
         report.opaque(c, "shared.prompt_renderer", &self.system_prompt_renderer);
         report.record(c, "shared.prompt_guardrails", &self.prompt_guardrails);
         report.opaque(c, "shared.client_operations", &self.client_operations);
+        report.opaque(c, "shared.executor_streams", &self.executor_streams);
         report.opaque(c, "shared.langfuse", &self.langfuse_client);
         report.opaque(
             c,

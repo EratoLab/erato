@@ -797,6 +797,33 @@ export type BudgetStatusResponse = {
 };
 
 /**
+ * The chat and turn that own a call's client context, and the ones that made
+ * the call. Only grant calls carry it.
+ */
+export type CallLineage = {
+  /**
+   * Opaque client context version, from the owner turn's action-facet arguments.
+   */
+  context_ref?: string;
+  /**
+   * @format uuid
+   */
+  owner_chat_id: string;
+  /**
+   * @format uuid
+   */
+  owner_message_id: string;
+  /**
+   * @format uuid
+   */
+  requesting_chat_id: string;
+  /**
+   * @format uuid
+   */
+  requesting_message_id: string;
+};
+
+/**
  * @deprecated true
  */
 export type Chat = {
@@ -2003,6 +2030,36 @@ export type ExecutorBinding = {
   realm: ExecutionRealm;
 };
 
+export type ExecutorStreamClientToolCall = {
+  /**
+   * @format uuid
+   */
+  chat_id: string;
+  input: OperationPayload;
+  lineage?: CallLineage;
+  /**
+   * @format uuid
+   */
+  message_id: string;
+  tool_call_id: string;
+  tool_name: string;
+};
+
+export type ExecutorStreamEvent =
+  | (ExecutorStreamClientToolCall & {
+      message_type: "client_tool_call";
+    })
+  | (ExecutorStreamOperationAvailable & {
+      message_type: "client_operation_available";
+    });
+
+export type ExecutorStreamOperationAvailable = {
+  /**
+   * @format uuid
+   */
+  attempt_id: string;
+};
+
 export type FacetInfo = {
   default_enabled: boolean;
   display_name: string;
@@ -2333,6 +2390,10 @@ export type ListClientOperationsResponse = {
    */
   after?: string;
   enabled: boolean;
+  /**
+   * Whether `GET /me/client-operations/stream` serves executor streams.
+   */
+  executor_stream_enabled: boolean;
   operations: ClientOperationView[];
 };
 

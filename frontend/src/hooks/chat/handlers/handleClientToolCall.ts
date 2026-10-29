@@ -13,8 +13,10 @@ import {
 } from "../clientToolExecutors";
 
 import type {
+  CallLineage,
   ClientToolResultRequest,
   ClientToolResultResponse,
+  ExecutorBinding,
   MessageSubmitStreamingResponseClientToolCall,
   Value,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
@@ -23,7 +25,16 @@ interface HandleClientToolCallDeps {
   chatId: string | null;
   getAuthHeaders: () => Record<string, string>;
   extraHeaders?: Record<string, string>;
+  /** The executor stream's binding; its result must carry it. */
+  executor?: ExecutorBinding;
+  lineage?: CallLineage;
 }
+
+/** A chat stream's event, or a call pushed over the executor stream. */
+export type ClientToolCallEvent = Pick<
+  MessageSubmitStreamingResponseClientToolCall,
+  "message_id" | "tool_call_id" | "tool_name"
+> & { input?: unknown; message_type: "client_tool_call" };
 
 /**
  * Runs the registered executor for a `client_tool_call` and POSTs the outcome to
@@ -34,9 +45,7 @@ interface HandleClientToolCallDeps {
  * expires on the backend rather than uploading private native information.
  */
 export async function handleClientToolCall(
-  responseData: MessageSubmitStreamingResponseClientToolCall & {
-    message_type: "client_tool_call";
-  },
+  responseData: ClientToolCallEvent,
   deps: HandleClientToolCallDeps,
 ): Promise<void> {
   const { message_id, tool_call_id, tool_name, input } = responseData;
@@ -82,6 +91,7 @@ export async function handleClientToolCall(
           messageId: message_id,
           chatId,
           signal,
+          ...(deps.lineage ? { lineage: deps.lineage } : {}),
         });
         if (outcome.disposition === "local_only") return;
         body = outcome.ok
@@ -115,6 +125,26 @@ export async function handleClientToolCall(
   else await run();
 }
 
+// The executor stream sends a call again only when another stream takes the
+// binding, so a pushed call's result is retried here instead of by a replay.
+const EXECUTOR_RESULT_RETRY_MS = [1_000, 2_000, 4_000, 8_000];
+
+const wait = (ms: number) =>
+  new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+/** Sends again after a network error or a 5xx, once per delay. */
+async function sendWithRetries(
+  send: () => Promise<Response>,
+  delays: readonly number[],
+): Promise<Response> {
+  for (const delay of delays) {
+    const response = await send().catch(() => undefined);
+    if (response && response.status < 500) return response;
+    await wait(delay);
+  }
+  return send();
+}
+
 async function postClientToolResult(
   body: ClientToolResultRequest,
   toolName: string,
@@ -122,19 +152,24 @@ async function postClientToolResult(
   deps: HandleClientToolCallDeps,
 ): Promise<void> {
   if (isClientToolResultLocalOnly(toolName)) return;
-  // A call with a durable operation identity only accepts its submit binding.
-  const binding = operationExecutorBinding(toolName);
+  // A call with a durable operation identity only accepts its submit binding;
+  // a call from the executor stream only accepts the stream's binding.
+  const binding = deps.executor ?? operationExecutorBinding(toolName);
   try {
-    const response = await fetch("/api/v1beta/me/messages/clienttoolresult", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...deps.getAuthHeaders(),
-        ...(deps.extraHeaders ?? {}),
-        ...(binding ? { "X-Erato-Executor": JSON.stringify(binding) } : {}),
-      },
-      body: JSON.stringify(body),
-    });
+    const response = await sendWithRetries(
+      () =>
+        fetch("/api/v1beta/me/messages/clienttoolresult", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...deps.getAuthHeaders(),
+            ...(deps.extraHeaders ?? {}),
+            ...(binding ? { "X-Erato-Executor": JSON.stringify(binding) } : {}),
+          },
+          body: JSON.stringify(body),
+        }),
+      deps.executor ? EXECUTOR_RESULT_RETRY_MS : [],
+    );
     if (response.ok) {
       if (binding) {
         const settled = (await response

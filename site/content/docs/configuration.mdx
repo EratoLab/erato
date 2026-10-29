@@ -5970,6 +5970,32 @@ compare-and-set path. After a durable park, a short SSE drop no longer ends the
 call as a timeout: the turn detaches and the frontend resumes it from the
 operation inbox.
 
+#### `client_tools.executor_stream_enabled`
+
+{/* erato_toml_config_key: client_tools.executor_stream_enabled */}
+
+Default: `false`. Lets a client open an executor stream,
+`GET /api/v1beta/me/client-operations/stream`, for its `X-Erato-Executor`
+binding. A device can have several panes for one binding, such as two Outlook
+tabs on one mailbox: a new call goes to the newest pane that advertises its
+tool, and a call one pane received never moves to another.
+
+A live client tool call normally runs over the calling chat's own stream, and
+it still does while that stream is connected. When the calling chat has no
+connected stream, the call goes to the stream that serves the call's binding and
+advertises the tool, whichever chat of the account made it. Without such a
+stream, or once the pane that received the call is gone, the call ends as
+`context_unavailable` after 15 seconds; a pane that connects or reconnects in
+that time still gets it. The tool's own `timeout_ms` still
+applies. Calls with a durable operation and submission tools keep their usual
+path.
+
+With `client_tools.durable_operations_enabled` also on, the stream announces new
+durable operations for its binding, so the client claims them at once instead of
+at its next inbox poll.
+
+With the setting off, the stream endpoint answers `404` and nothing else changes.
+
 #### `client_tools.tools.<key>.durable`
 
 {/* erato_toml_config_key: client_tools.tools.<key>.durable.host_context */}

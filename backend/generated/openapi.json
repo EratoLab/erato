@@ -2132,6 +2132,36 @@
         ]
       }
     },
+    "/api/v1beta/me/client-operations/stream": {
+      "get": {
+        "tags": [],
+        "summary": "A pane's stream for its executor binding. It receives live client tool calls\nfrom any of the account's chats that no stream of the calling chat can take,\nand announces new durable operations for the binding. Of a binding's panes,\nthe newest that serves a call's tool gets it. A pane sends one\n`X-Erato-Executor-Instance`, a UUIDv7 made when it opened, on all its\nstreams: a delivered call is sent again only to a later stream of that pane.",
+        "operationId": "clientOperationStream",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExecutorStreamEvent"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "No valid X-Erato-Executor binding or no X-Erato-Client-Tools"
+          },
+          "404": {
+            "description": "Executor streams are disabled"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
     "/api/v1beta/me/client-operations/{attempt_id}/cancel": {
       "post": {
         "tags": [],
@@ -6143,6 +6173,38 @@
           }
         }
       },
+      "CallLineage": {
+        "type": "object",
+        "description": "The chat and turn that own a call's client context, and the ones that made\nthe call. Only grant calls carry it.",
+        "required": [
+          "owner_chat_id",
+          "owner_message_id",
+          "requesting_chat_id",
+          "requesting_message_id"
+        ],
+        "properties": {
+          "context_ref": {
+            "type": "string",
+            "description": "Opaque client context version, from the owner turn's action-facet arguments."
+          },
+          "owner_chat_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "owner_message_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "requesting_chat_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "requesting_message_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
       "Chat": {
         "type": "object",
         "required": [
@@ -8521,6 +8583,100 @@
         },
         "additionalProperties": false
       },
+      "ExecutorStreamClientToolCall": {
+        "type": "object",
+        "required": [
+          "chat_id",
+          "message_id",
+          "tool_call_id",
+          "tool_name",
+          "input"
+        ],
+        "properties": {
+          "chat_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "input": {
+            "$ref": "#/components/schemas/OperationPayload"
+          },
+          "lineage": {
+            "$ref": "#/components/schemas/CallLineage"
+          },
+          "message_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "tool_call_id": {
+            "type": "string"
+          },
+          "tool_name": {
+            "type": "string"
+          }
+        }
+      },
+      "ExecutorStreamEvent": {
+        "oneOf": [
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ExecutorStreamClientToolCall",
+                "description": "Run the tool and POST the result to `clienttoolresult` with this\nstream's `X-Erato-Executor`."
+              },
+              {
+                "type": "object",
+                "required": [
+                  "message_type"
+                ],
+                "properties": {
+                  "message_type": {
+                    "type": "string",
+                    "enum": [
+                      "client_tool_call"
+                    ]
+                  }
+                }
+              }
+            ],
+            "description": "Run the tool and POST the result to `clienttoolresult` with this\nstream's `X-Erato-Executor`."
+          },
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ExecutorStreamOperationAvailable",
+                "description": "A durable operation for this binding can be claimed now."
+              },
+              {
+                "type": "object",
+                "required": [
+                  "message_type"
+                ],
+                "properties": {
+                  "message_type": {
+                    "type": "string",
+                    "enum": [
+                      "client_operation_available"
+                    ]
+                  }
+                }
+              }
+            ],
+            "description": "A durable operation for this binding can be claimed now."
+          }
+        ]
+      },
+      "ExecutorStreamOperationAvailable": {
+        "type": "object",
+        "required": [
+          "attempt_id"
+        ],
+        "properties": {
+          "attempt_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
       "FacetInfo": {
         "type": "object",
         "required": [
@@ -9108,6 +9264,7 @@
         "required": [
           "account_id",
           "enabled",
+          "executor_stream_enabled",
           "operations"
         ],
         "properties": {
@@ -9120,6 +9277,10 @@
           },
           "enabled": {
             "type": "boolean"
+          },
+          "executor_stream_enabled": {
+            "type": "boolean",
+            "description": "Whether `GET /me/client-operations/stream` serves executor streams."
           },
           "operations": {
             "type": "array",
