@@ -1,7 +1,8 @@
 //! The hosts the delegated-task cases run against, one row per host context.
 use super::{TIMEOUT_MS, WRITE_TOOL};
 use erato::config::{
-    ClientToolChildAccess, ClientToolConfig, ClientToolDurableConfig, ClientToolHostContext,
+    ChildDispatch, ClientToolChildAccess, ClientToolConfig, ClientToolDurableConfig,
+    ClientToolHostContext,
 };
 use erato::services::client_operations::{ExecutionRealm, ExecutorBinding, HostContext};
 use serde_json::{Value, json};
@@ -52,7 +53,9 @@ impl HostRow {
         }
     }
 
-    pub fn read_config(&self, durable: bool) -> ClientToolConfig {
+    /// `durable` adds a `[durable]` table; `dispatch` is the tool's own
+    /// `child_dispatch`.
+    pub fn read_config(&self, durable: bool, dispatch: Option<ChildDispatch>) -> ClientToolConfig {
         ClientToolConfig {
             name: self.read_tool.into(),
             namespace: Some(self.namespace.into()),
@@ -70,6 +73,7 @@ impl HostRow {
                 attempt_expiry_secs: 3600,
                 claim_lease_secs: 120,
             }),
+            child_dispatch: dispatch,
             ..Default::default()
         }
     }

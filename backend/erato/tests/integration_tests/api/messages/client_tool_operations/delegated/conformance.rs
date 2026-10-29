@@ -1,5 +1,15 @@
 //! The cases every host context must pass, run once per row of `rows`.
 use super::super::executor_stream::wait_released;
+use super::slow_path::{
+    a_claimed_grant_operation_is_authorized_while_the_parent_is_parked_on_the_child,
+    a_durable_child_call_parks_and_the_parent_shows_what_it_waits_for,
+    a_grant_operation_is_withdrawn_once_the_parent_chat_is_archived,
+    a_grant_operation_result_is_refused_without_a_claim,
+    a_pane_without_grant_support_cannot_claim_a_grant_operation,
+    an_empty_continuestream_while_children_wait_is_children_waiting,
+    continuestream_refuses_a_decision_naming_a_waiting_item,
+    continuestream_refuses_a_single_decision_when_only_waiting_items_are_open,
+};
 use super::*;
 use crate::test_utils::build_openai_paused_tool_calls_streaming_response;
 use erato::config::ClientToolHostContext;
@@ -7,7 +17,9 @@ use erato::services::client_operations::executor_stream;
 use sea_orm::ConnectionTrait;
 use std::collections::BTreeSet;
 
-/// One module per row, named before the colon, with one test per case.
+/// One module per row, named before the colon, with one test per case. A row
+/// marked `slow_path` also runs the slow-path cases; a guard case holds every
+/// row to whether its host's context outlives the pane session.
 macro_rules! host_conformance {
     (@cases [$($why:literal)?]) => {};
     (@cases [$($why:literal)?] $case:ident $($rest:ident)*) => {
@@ -19,12 +31,20 @@ macro_rules! host_conformance {
 
         host_conformance!(@cases [$($why)?] $($rest)*);
     };
-    ($name:ident: $row:ident($($arg:expr),*) $(, ignore = $why:literal)?) => {
+    (@row $name:ident, $row:ident($($arg:expr),*), $slow_path:literal, [$($why:literal)?],
+        [$($slow_case:ident)*]) => {
         mod $name {
             use super::*;
 
+            const SLOW_PATH: bool = $slow_path;
+
             fn row() -> HostRow {
                 rows::$row($($arg),*)
+            }
+
+            #[test]
+            fn slow_path_rows_are_the_hosts_that_outlive_the_pane() {
+                assert_eq!(row().host.outlives_pane_session(), SLOW_PATH);
             }
 
             host_conformance!(@cases [$($why)?]
@@ -58,12 +78,31 @@ macro_rules! host_conformance {
                 freshness_reaches_the_task_result_and_the_parent_trace
                 freshness_after_an_approval_reaches_the_task_result_and_the_trace
             );
+            host_conformance!(@cases [$($why)?] $($slow_case)*);
         }
+    };
+    ($name:ident: $row:ident($($arg:expr),*), slow_path $(, ignore = $why:literal)?) => {
+        host_conformance!(@row $name, $row($($arg),*), true, [$($why)?], [
+            a_durable_child_call_parks_and_the_parent_shows_what_it_waits_for
+            a_pane_without_grant_support_cannot_claim_a_grant_operation
+            a_claimed_grant_operation_is_authorized_while_the_parent_is_parked_on_the_child
+            a_grant_operation_is_withdrawn_once_the_parent_chat_is_archived
+            a_grant_operation_result_is_refused_without_a_claim
+            continuestream_refuses_a_decision_naming_a_waiting_item
+            continuestream_refuses_a_single_decision_when_only_waiting_items_are_open
+            an_empty_continuestream_while_children_wait_is_children_waiting
+        ]);
+    };
+    ($name:ident: $row:ident($($arg:expr),*) $(, ignore = $why:literal)?) => {
+        host_conformance!(@row $name, $row($($arg),*), false, [$($why)?], []);
     };
 }
 
 host_conformance!(fake_host: fake_host(ClientToolHostContext::WordDocument));
-host_conformance!(fake_live_host: fake_live_host(ClientToolHostContext::OutlookMailbox));
+host_conformance!(
+    fake_live_host: fake_live_host(ClientToolHostContext::OutlookMailbox),
+    slow_path
+);
 // A host's row is enabled by the issue that makes its pane take grant calls,
 // so a passing row never stands for a host whose pane would refuse them.
 host_conformance!(
@@ -72,12 +111,9 @@ host_conformance!(
 );
 host_conformance!(
     outlook_mailbox: outlook_mailbox(),
+    slow_path,
     ignore = "ERMAIN-1006: enabled once the Outlook pane takes grant calls"
 );
-
-/// The child narrates, pauses long enough for the test to close the pane,
-/// and then calls the read tool.
-const DISPATCH_PAUSE: Duration = Duration::from_secs(6);
 
 /// Long enough for the pane to receive the call, short enough that a durable
 /// escalation would happen inside the test.
@@ -841,7 +877,7 @@ async fn a_child_call_never_waits_for_the_inbox_even_for_a_durable_tool(
     mock_client_child_reads(row, &mut mocks, &child);
     let (state, _llm) = delegated_state(row, pool, mocks, |config| {
         config.client_tools.durable_operations_enabled = true;
-        let mut tool = row.read_config(true);
+        let mut tool = row.read_config(true, None);
         tool.timeout_ms = Some(UNANSWERED_TIMEOUT_MS);
         config.client_tools.tools.insert(READ_KEY.into(), tool);
     })
