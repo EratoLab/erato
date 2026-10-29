@@ -7,23 +7,46 @@ import { DesktopSidecarRow } from "./DesktopSidecarTabContent";
 import type { ReactNode } from "react";
 
 vi.mock("./ClientToolFileApprovalSetting", () => ({
-  ClientToolFileApprovalSetting: () => null,
+  ClientToolFileApprovalSetting: () => (
+    <div data-testid="client-tool-file-approval" />
+  ),
 }));
 vi.mock("./SidecarToolDecisions", () => ({
   SidecarToolDecisions: () => <div data-testid="sidecar-tool-decisions" />,
 }));
+vi.mock("../DesktopSidecar/SidecarIndexingCard", () => ({
+  SidecarIndexingControls: () => <div data-testid="sidecar-indexing" />,
+}));
+
+const SETTINGS_METHODS = [
+  "sidecar.configure.v1",
+  "indexing.status.v1",
+  "indexing.reset.v1",
+  "sources.list.v1",
+  "outlook.list_mailboxes.v1",
+  "sidecar.status.v1",
+  "sidecar.request_permission.v1",
+  "sidecar.open_data_directory.v1",
+];
 
 const providerMounted = vi.fn();
 const sidecar = vi.hoisted(() => ({
   state: "unavailable",
   strict: false,
-  invoke: vi.fn().mockResolvedValue({ opened: true }),
+  supported: ["sidecar.open_data_directory.v1"],
+  invoke: vi.fn(),
 }));
 beforeEach(() => {
   providerMounted.mockClear();
   sidecar.state = "unavailable";
   sidecar.strict = false;
-  sidecar.invoke.mockClear();
+  sidecar.supported = ["sidecar.open_data_directory.v1"];
+  sidecar.invoke.mockReset();
+  sidecar.invoke.mockImplementation(async (method: string) =>
+    method === "sidecar.status.v1"
+      ? { permissions: { macos_full_disk_access: "granted" } }
+      : { opened: true },
+  );
 });
 vi.mock("@/providers/DesktopSidecarProvider", () => ({
   DEFAULT_DESKTOP_SIDECAR_ENDPOINT: "https://localhost:1234",
@@ -39,8 +62,7 @@ vi.mock("@/providers/DesktopSidecarProvider", () => ({
     client:
       sidecar.state === "ready"
         ? {
-            supports: (method: string) =>
-              method === "sidecar.open_data_directory.v1",
+            supports: (method: string) => sidecar.supported.includes(method),
             invoke: sidecar.invoke,
           }
         : null,
@@ -83,17 +105,72 @@ it("retains the directory command for a legacy sidecar", () => {
   );
 });
 
-it("does not offer the legacy directory command in strict consent mode", () => {
+function openStrictRow(supported: string[]) {
   sidecar.state = "ready";
   sidecar.strict = true;
+  sidecar.supported = supported;
   render(<DesktopSidecarRow />);
   fireEvent.click(
     screen.getByRole("button", { name: /Desktop Sidecar.*this device/ }),
   );
+}
+
+it("shows the indexing settings of a strict sidecar that allows the settings methods", () => {
+  openStrictRow(SETTINGS_METHODS);
+  expect(screen.getByTestId("sidecar-indexing")).toBeInTheDocument();
+  expect(
+    screen.getByText(
+      "Evidence sharing requires review in the desktop app for each package.",
+    ),
+  ).toBeInTheDocument();
+  expect(
+    screen.queryByTestId("client-tool-file-approval"),
+  ).not.toBeInTheDocument();
+  expect(
+    screen.queryByTestId("sidecar-tool-decisions"),
+  ).not.toBeInTheDocument();
+});
+
+it("shows permissions and maintenance of a strict sidecar without the indexing settings", async () => {
+  openStrictRow([
+    "sidecar.configure.v1",
+    "indexing.status.v1",
+    "sidecar.status.v1",
+  ]);
+  expect(screen.queryByTestId("sidecar-indexing")).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Maintenance" }));
+  expect(
+    await screen.findByRole("heading", { name: "System permissions" }),
+  ).toBeInTheDocument();
   expect(
     screen.queryByRole("button", { name: "Open data directory" }),
   ).not.toBeInTheDocument();
+});
+
+it("keeps only the connection actions for a strict sidecar that refuses the settings methods", () => {
+  openStrictRow([]);
+  expect(screen.queryByTestId("sidecar-indexing")).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Connection" }));
+  expect(
+    screen.getByRole("button", { name: "Retry connection" }),
+  ).toBeVisible();
+  expect(
+    screen.queryByRole("button", { name: "Open data directory" }),
+  ).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("heading", { name: "System permissions" }),
+  ).not.toBeInTheDocument();
   expect(sidecar.invoke).not.toHaveBeenCalled();
+});
+
+it("offers the directory command of a strict sidecar that allows it", () => {
+  openStrictRow(["sidecar.open_data_directory.v1"]);
+  fireEvent.click(screen.getByRole("button", { name: "Connection" }));
+  fireEvent.click(screen.getByRole("button", { name: "Open data directory" }));
+  expect(sidecar.invoke).toHaveBeenCalledWith(
+    "sidecar.open_data_directory.v1",
+    {},
+  );
 });
 
 it.each([

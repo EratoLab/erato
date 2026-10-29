@@ -53,7 +53,7 @@ export interface IndexingStopV1Result {
    */
   resetInProgress?: boolean;
   /**
-   * Absolute local filesystem path of the sidecar-managed indexing root, in the sidecar OS native path syntax (not a URI). Report it even before initialization or after reset, without creating the directory. Updated implementations must include it; optional in the wire schema for compatibility with older v1 servers.
+   * Absolute local filesystem path of the sidecar-managed indexing root, in the sidecar OS native path syntax (not a URI). Report it even before initialization or after reset, without creating the directory. Updated implementations must include it, except strict-profile sidecars, which keep local paths native (DELEGATION.md); optional in the wire schema for compatibility with older v1 servers.
    */
   indexingDirectory?: string;
   [k: string]: unknown;

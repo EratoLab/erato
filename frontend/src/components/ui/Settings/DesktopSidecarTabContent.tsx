@@ -2,6 +2,7 @@ import { i18n } from "@lingui/core";
 import { t } from "@lingui/core/macro";
 import { useId, useState } from "react";
 
+import { supportsIndexingSettings } from "@/hooks/useSidecarIndexing";
 import { desktopSidecarLaunchUrl } from "@/lib/desktopSidecarLaunch";
 import {
   DEFAULT_DESKTOP_SIDECAR_ENDPOINT,
@@ -56,6 +57,15 @@ function DesktopSidecarEntityRow({
   const permissionsId = useId();
   const connected = snapshot.state === "ready";
   const connecting = snapshot.state === "discovering";
+  const strict = Boolean(snapshot.localDelegation);
+  // A strict sidecar that still refuses the settings methods keeps the
+  // connection view; a legacy one explains which update it needs.
+  const indexing =
+    connected &&
+    !!client &&
+    (strict
+      ? supportsIndexingSettings(client)
+      : client.supports("indexing.status.v1"));
 
   const statusLabel = connected
     ? t({
@@ -117,7 +127,7 @@ function DesktopSidecarEntityRow({
                 message: "Tool permissions",
               })}
             </h3>
-            {!snapshot.localDelegation && (
+            {!strict && (
               <p className="text-xs text-theme-fg-secondary">
                 {t({
                   id: "preferences.dialog.desktopSidecar.permissions.description",
@@ -127,18 +137,17 @@ function DesktopSidecarEntityRow({
               </p>
             )}
           </div>
-          {snapshot.localDelegation ? (
+          {strict ? (
             <p className="text-sm text-theme-fg-secondary">{t`Evidence sharing requires review in the desktop app for each package.`}</p>
           ) : (
             <ClientToolFileApprovalSetting />
           )}
-          {connected && !snapshot.localDelegation && client && (
+          {/* Strict mode offers no client tools; the legacy ones stay off (chatTools). */}
+          {connected && !strict && client && (
             <SidecarToolDecisions client={client} />
           )}
         </section>
-        {connected &&
-        !snapshot.localDelegation &&
-        client?.supports("indexing.status.v1") ? (
+        {indexing ? (
           <SidecarIndexingControls
             connectionActions={<SidecarConnectionActions onRetry={onRetry} />}
           />
@@ -147,9 +156,7 @@ function DesktopSidecarEntityRow({
             <SettingsDisclosure
               headingLevel={3}
               title={
-                connected &&
-                !snapshot.localDelegation &&
-                client?.supports("sidecar.status.v1")
+                connected && client?.supports("sidecar.status.v1")
                   ? t({
                       id: "sidecar.maintenance.title",
                       message: "Maintenance",
@@ -162,7 +169,7 @@ function DesktopSidecarEntityRow({
               defaultExpanded={!connected}
             >
               <SidecarConnectionActions onRetry={onRetry} />
-              {!snapshot.localDelegation && <SidecarPermissions />}
+              <SidecarPermissions />
             </SettingsDisclosure>
           </div>
         )}
@@ -188,9 +195,7 @@ function SidecarConnectionActions({ onRetry }: { onRetry: () => void }) {
         </p>
       ) : null}
       <div className="flex flex-wrap gap-2">
-        {connected &&
-        !snapshot.localDelegation &&
-        client?.supports("sidecar.open_data_directory.v1") ? (
+        {connected && client?.supports("sidecar.open_data_directory.v1") ? (
           <Button
             variant="secondary"
             size="sm"

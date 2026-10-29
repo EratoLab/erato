@@ -1125,6 +1125,8 @@ unsupported provenance versions, rather than interpret them as version 1.
 [DELEGATION.md](./DELEGATION.md) defines the strict snapshot profile and its
 closed schemas. Version 0.1.28 reserves these methods with disabled availability;
 shipping their schemas does not qualify any implementation or enable delegation.
+Version 0.1.41 lists the settings methods a strict sidecar keeps and the
+account-level results they return there.
 
 ## Platform permissions
 
