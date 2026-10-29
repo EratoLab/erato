@@ -4652,7 +4652,10 @@ pub struct DelegationTasksConfig {
     #[serde(default)]
     pub persona: TaskPersona,
 
-    // Facets composed into every task child. Each id must name a facet under
+    // Facets a task may name in `facet_ids` beyond the planning turn's
+    // selected ones. They widen the list the model picks from: a child gets
+    // one only when its task names it, and it never gets an MCP tool outside
+    // the planning turn's own allowlist. Each id must name a facet under
     // `facets.facets`. Defaults to none.
     #[serde(default)]
     pub child_facet_ids: Vec<String>,
