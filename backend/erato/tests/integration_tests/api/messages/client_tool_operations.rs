@@ -1206,6 +1206,164 @@ async fn opted_in_tool_without_a_binding_keeps_the_legacy_path(pool: Pool<Postgr
     assert!(chat_attempts(&setup.state, setup.chat_id).await.is_empty());
 }
 
+/// The parked call as a delegated task's granted call would be stored: with
+/// lineage. Only the store sees it; the chat is not a task chat.
+async fn with_lineage(
+    state: &erato::state::AppState,
+    request: &OperationRequest,
+) -> OperationRequest {
+    use sea_orm::ConnectionTrait;
+    let mut request = request.clone();
+    request.lineage = Some(
+        erato::services::client_operations::executor_stream::CallLineage {
+            owner_chat_id: Uuid::new_v4(),
+            owner_message_id: Uuid::new_v4(),
+            requesting_chat_id: request.chat_id,
+            requesting_message_id: request.message_id,
+            context_ref: None,
+        },
+    );
+    state
+        .db
+        .execute_raw(sea_orm::Statement::from_sql_and_values(
+            sea_orm::DatabaseBackend::Postgres,
+            "UPDATE client_operation_attempts SET request = $1 WHERE attempt_id = $2",
+            [
+                serde_json::to_value(&request).unwrap().into(),
+                request.attempt_id.into(),
+            ],
+        ))
+        .await
+        .unwrap();
+    request
+}
+
+async fn store_claim(
+    state: &erato::state::AppState,
+    request: &OperationRequest,
+    child_tools: &[String],
+) -> Result<Uuid, eyre::Report> {
+    store::claim(
+        &state.db,
+        &state.client_operations,
+        request.account_id,
+        request.attempt_id,
+        &mailbox(),
+        &[TOOL.to_string()],
+        child_tools,
+        false,
+    )
+    .await
+}
+
+async fn set_attempt_times(state: &erato::state::AppState, id: Uuid, assignments: &str) {
+    use sea_orm::ConnectionTrait;
+    state
+        .db
+        .execute_unprepared(&format!(
+            "UPDATE client_operation_attempts SET {assignments} WHERE attempt_id = '{id}'"
+        ))
+        .await
+        .unwrap();
+}
+
+fn seconds_from_now(at: chrono::DateTime<chrono::FixedOffset>) -> i64 {
+    (at.with_timezone(&chrono::Utc) - chrono::Utc::now()).num_seconds()
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_same_binding_claim_renews_a_grant_operation_up_to_the_expiry(pool: Pool<Postgres>) {
+    let setup = setup(pool, 10, true, true).await;
+    let request = with_lineage(&setup.state, &park(&setup).await).await;
+    let child_tools = [TOOL.to_string()];
+    let refused = store_claim(&setup.state, &request, &[]).await.unwrap_err();
+    assert_eq!(
+        refused.to_string(),
+        "Executor binding mismatch",
+        "a grant operation goes only to a handler that takes grant calls"
+    );
+    let token = store_claim(&setup.state, &request, &child_tools)
+        .await
+        .unwrap();
+    set_attempt_times(
+        &setup.state,
+        request.attempt_id,
+        "claim_expires_at = now() + interval '5 seconds'",
+    )
+    .await;
+    assert_eq!(
+        store_claim(&setup.state, &request, &child_tools)
+            .await
+            .unwrap(),
+        token
+    );
+    let renewed = attempt(&setup.state, request.attempt_id).await;
+    assert_eq!(renewed.state, AttemptState::Claimed);
+    assert!(
+        (85..=90).contains(&seconds_from_now(renewed.claim_expires_at.unwrap())),
+        "the renewal grants a full lease again"
+    );
+    set_attempt_times(
+        &setup.state,
+        request.attempt_id,
+        "expires_at = now() + interval '20 seconds'",
+    )
+    .await;
+    assert_eq!(
+        store_claim(&setup.state, &request, &child_tools)
+            .await
+            .unwrap(),
+        token
+    );
+    let capped = attempt(&setup.state, request.attempt_id).await;
+    assert_eq!(capped.claim_expires_at, Some(capped.expires_at));
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_same_binding_reclaim_of_a_plain_client_tool_operation_does_not_extend_the_lease(
+    pool: Pool<Postgres>,
+) {
+    let setup = setup(pool, 10, true, true).await;
+    let request = park(&setup).await;
+    let token = store_claim(&setup.state, &request, &[]).await.unwrap();
+    set_attempt_times(
+        &setup.state,
+        request.attempt_id,
+        "claim_expires_at = now() + interval '5 seconds'",
+    )
+    .await;
+    assert_eq!(
+        store_claim(&setup.state, &request, &[]).await.unwrap(),
+        token
+    );
+    let row = attempt(&setup.state, request.attempt_id).await;
+    assert!(seconds_from_now(row.claim_expires_at.unwrap()) <= 5);
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_lapsed_renewal_returns_a_new_token(pool: Pool<Postgres>) {
+    let setup = setup(pool, 10, true, true).await;
+    let request = with_lineage(&setup.state, &park(&setup).await).await;
+    let child_tools = [TOOL.to_string()];
+    let first = store_claim(&setup.state, &request, &child_tools)
+        .await
+        .unwrap();
+    set_attempt_times(
+        &setup.state,
+        request.attempt_id,
+        "claim_expires_at = now() - interval '1 second'",
+    )
+    .await;
+    let second = store_claim(&setup.state, &request, &child_tools)
+        .await
+        .unwrap();
+    assert_ne!(second, first);
+    let row = attempt(&setup.state, request.attempt_id).await;
+    assert_eq!(row.state, AttemptState::Claimed);
+    assert_eq!(row.claim_token, Some(second));
+    assert!(seconds_from_now(row.claim_expires_at.unwrap()) >= 85);
+}
+
 mod attached;
 
 mod word;

@@ -1002,6 +1002,94 @@ async fn grant_calls_need_a_pane_that_takes_them(pool: Pool<Postgres>) {
     ));
 }
 
+/// A pending attempt for the mailbox binding, nudged on its stream.
+async fn nudged_attempt(
+    state: &erato::state::AppState,
+    chat_id: Uuid,
+    lineage: Option<executor_stream::CallLineage>,
+) -> OperationRequest {
+    let db = &state.db;
+    let message_id = seed_row(db, chat_id, None, "assistant", None, None).await;
+    let request = OperationRequest {
+        attempt_id: Uuid::new_v4(),
+        operation_id: QUALIFIED.into(),
+        kind: client_tool::CLIENT_TOOL_KIND.into(),
+        realm: ExecutionRealm::OfficeAddin,
+        chat_id,
+        message_id,
+        tool_call_id: CALL.into(),
+        account_id: account(state).await,
+        binding: mailbox(),
+        base_revision: None,
+        consent: ConsentPolicy::None,
+        expires_at: chrono::Utc::now() + chrono::Duration::hours(1),
+        input: json!({}),
+        lineage,
+    };
+    db.execute_raw(sea_orm::Statement::from_sql_and_values(
+        sea_orm::DatabaseBackend::Postgres,
+        r#"INSERT INTO client_operation_attempts
+             (attempt_id, account_id, chat_id, message_id, tool_call_id, generation_id,
+              request, state, expires_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending', $8)"#,
+        [
+            request.attempt_id.into(),
+            request.account_id.into(),
+            chat_id.into(),
+            message_id.into(),
+            CALL.into(),
+            Uuid::new_v4().into(),
+            serde_json::to_value(&request).unwrap().into(),
+            request.expires_at.into(),
+        ],
+    ))
+    .await
+    .unwrap();
+    executor_stream::nudge(db, &request).await.unwrap();
+    request
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_grant_operation_nudge_goes_only_to_a_stream_that_takes_grant_calls(
+    pool: Pool<Postgres>,
+) {
+    let mut config = hermetic_app_config(None, None);
+    config.client_tools.executor_stream_enabled = true;
+    let state = test_app_state(config, pool).await;
+    let chat_id = seed_origin_chat(&state.db).await;
+    let (base, server) = serve(&state).await;
+    let mut plain = Pane::open_serving(&base, &mailbox(), TOOL, None).await;
+    let own = nudged_attempt(&state, chat_id, None).await;
+    let nudge = plain
+        .next(Duration::from_secs(2))
+        .await
+        .expect("the user's own operation goes to any stream of its binding");
+    assert_eq!(nudge["attempt_id"], own.attempt_id.to_string());
+
+    let granted = nudged_attempt(
+        &state,
+        chat_id,
+        Some(executor_stream::CallLineage {
+            owner_chat_id: Uuid::new_v4(),
+            owner_message_id: Uuid::new_v4(),
+            requesting_chat_id: chat_id,
+            requesting_message_id: Uuid::new_v4(),
+            context_ref: None,
+        }),
+    )
+    .await;
+    assert_eq!(plain.next(Duration::from_secs(1)).await, None);
+    let mut takes_grants = Pane::open_serving(&base, &mailbox(), TOOL, Some(TOOL)).await;
+    let nudge = takes_grants
+        .next(Duration::from_secs(2))
+        .await
+        .expect("a stream that takes grant calls gets the waiting nudge");
+    assert_eq!(nudge["message_type"], "client_operation_available");
+    assert_eq!(nudge["attempt_id"], granted.attempt_id.to_string());
+    assert_eq!(plain.next(Duration::from_millis(500)).await, None);
+    server.abort();
+}
+
 #[sqlx::test(migrator = "crate::MIGRATOR")]
 async fn cleanup_removes_only_rows_that_no_run_or_stream_can_use(pool: Pool<Postgres>) {
     let state = test_app_state(hermetic_app_config(None, None), pool).await;

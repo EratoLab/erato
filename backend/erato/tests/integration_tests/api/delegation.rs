@@ -19687,7 +19687,16 @@ async fn cancelled_local_research_continues_without_reoffering_collection(pool: 
     local_research_roundtrip(pool, false, true).await;
 }
 
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_same_binding_reclaim_of_local_evidence_does_not_extend_the_lease(pool: Pool<Postgres>) {
+    local_research_case(pool, false, true, true).await;
+}
+
 async fn local_research_roundtrip(pool: Pool<Postgres>, repeated: bool, cancelled: bool) {
+    local_research_case(pool, repeated, cancelled, false).await;
+}
+
+async fn local_research_case(pool: Pool<Postgres>, repeated: bool, cancelled: bool, reclaim: bool) {
     use base64::{Engine as _, engine::general_purpose::STANDARD};
     use erato::db::entity::client_operation_attempts::AttemptState;
     use erato::services::client_operations::store as operations;
@@ -19915,6 +19924,34 @@ async fn local_research_roundtrip(pool: Pool<Postgres>, repeated: bool, cancelle
             .await;
         claimed.assert_status_ok();
         let token = claimed.json::<Value>()["claim_token"].clone();
+        if reclaim {
+            app_state
+                .db
+                .execute_unprepared(&format!(
+                    "UPDATE client_operation_attempts \
+                     SET claim_expires_at = now() + interval '5 seconds' WHERE attempt_id = '{id}'"
+                ))
+                .await
+                .unwrap();
+            let again = server
+                .post(&format!("{generic_path}/claim"))
+                .with_bearer_token(TEST_JWT_TOKEN)
+                .add_header("X-Erato-Client-Tools", "local_collect_evidence")
+                .json(&json!({"binding":binding}))
+                .await;
+            again.assert_status_ok();
+            assert_eq!(again.json::<Value>()["claim_token"], token);
+            let lease = operations::get(&app_state.db, owner, id)
+                .await
+                .unwrap()
+                .claim_expires_at
+                .unwrap()
+                .with_timezone(&chrono::Utc);
+            assert!(
+                lease <= chrono::Utc::now() + chrono::Duration::seconds(5),
+                "only a task's granted call renews its claim"
+            );
+        }
         let authorized = server
             .post(&format!("{native_path}/authorize"))
             .with_bearer_token(TEST_JWT_TOKEN)
