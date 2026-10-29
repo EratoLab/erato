@@ -21,7 +21,7 @@ Before enabling the SharePoint integration, ensure:
 
 1. **OIDC Provider**: Your SSO/OIDC provider (e.g., Microsoft Entra ID / Azure AD) is configured to issue access tokens with Microsoft Graph API permissions
 2. **Token Forwarding**: Your authentication proxy (e.g., oauth2-proxy) forwards the access token to the backend via the `X-Forwarded-Access-Token` header
-3. **Graph API Permissions**: The access token has at least `Files.Read` permission for the Microsoft Graph API
+3. **Graph API Permissions**: Cross-drive filename search (enabled by default) requires delegated `Files.Read.All` or `Sites.Read.All` permission for Microsoft Graph. For deployments with only `Files.Read`, set `file_search_enabled = false` to retain drive/site search and browsing. Individual discovery sources may require additional permissions.
 
 ## Configuration
 
@@ -37,6 +37,7 @@ enabled = true
 | Option                  | Type     | Default | Description                                                                                |
 | ----------------------- | -------- | ------- | ------------------------------------------------------------------------------------------ |
 | `enabled`               | boolean  | `false` | Whether the SharePoint integration is enabled                                              |
+| `file_search_enabled` | boolean | `true` | Enable cross-drive filename search; false restores drive/site-only search |
 | `file_upload_enabled`   | boolean  | `true`  | Whether file linking from SharePoint is enabled                                            |
 | `auth_via_access_token` | boolean  | `true`  | Use the user's forwarded access token for MS Graph API (currently required)                |
 | `show_disclaimer`       | boolean  | `false` | Show a disclaimer about unexpectedly visible SharePoint/OneDrive directories in the picker |
@@ -48,6 +49,7 @@ enabled = true
 [integrations.sharepoint]
 enabled = true
 file_upload_enabled = true
+file_search_enabled = true
 auth_via_access_token = true
 show_disclaimer = true
 all_drives_sources = ["me_drive", "me_drives", "shared_with_me", "shared_drive_details"]
@@ -66,15 +68,27 @@ all_drives_sources = ["me_drive", "me_drives", "shared_with_me", "shared_drive_d
 - `shared_with_me`
 - `shared_drive_details`
 
-If you do not set `all_drives_sources`, Erato queries the full set of sources to preserve the existing behavior. This can be useful for tenants where some discovery paths return very large numbers of drives or where only a subset of drive types should be exposed.
+If you do not set `all_drives_sources`, Erato queries the full set of sources to preserve the existing behavior. This can be useful for tenants where some discovery paths return very large numbers of drives or where only a subset of drive types should appear in browsing and drive-name search. This setting does not restrict the cross-drive filename search scope; Microsoft Graph applies the signed-in user’s access permissions.
 
 ## File Search
 
-The picker’s “Search drives and files…” field searches filenames across the drives discovered through `all_drives_sources`, including accessible public libraries hidden from the initial browsing view. File results show their library and folder path when available. Selections persist across searches and navigation and can be removed individually before attaching.
+With `integrations.sharepoint.file_search_enabled = true` (the default), the picker searches filenames across all indexed SharePoint and OneDrive files the signed-in user can access, including public libraries. It uses [Microsoft Search](https://learn.microsoft.com/en-us/graph/search-concept-files) (`POST /v1.0/search/query`) with a filename restriction, one request per result page instead of one search per drive. Drive/site-name search runs independently using `all_drives_sources`; it is not a prerequisite for finding files.
 
-Search uses the signed-in user’s Microsoft Graph access token. Only filename matches are displayed; matches in file contents alone are excluded. Results depend on Microsoft’s search index, so newly changed files and some partial filename queries may not appear immediately.
+File results show their library, site, and folder path when metadata is available. Only libraries/sites represented in the bounded result set are looked up for display metadata. A failed metadata lookup does not prevent selecting the file. Selections persist across searches and navigation.
 
-Search displays up to 100 files and bounds discovery, pagination, and request time. The picker indicates when search limits are reached. Unavailable locations are skipped without showing a retry warning. Narrow the query or browse a library directly when needed.
+Search uses the signed-in user’s delegated Microsoft Graph access token; it does not grant additional access. Only filename matches are displayed. Microsoft’s indexed phrase/prefix matching does not guarantee arbitrary filename substring matches, and recently changed files may not appear immediately.
+
+Search displays up to 100 files and reads at most ten global result pages. Graph work is bounded to 20 seconds overall, with shorter budgets for file queries and optional drive-name discovery. Successful file pages survive subsequent failures, and incomplete discovery does not block file results. The picker indicates when search limits are reached.
+
+To disable filename search and restore the original drive/site-only search:
+
+```toml
+[integrations.sharepoint]
+enabled = true
+file_search_enabled = false
+```
+
+This changes the picker field back to “Search drives...”, uses the existing `/all-drives?query=...` endpoint, and disables `/integrations/sharepoint/search` on the backend. Browsing and attaching files remain available. This is also the compatibility option for deployments without the Microsoft Search permissions listed above.
 
 ## Authentication Flow
 

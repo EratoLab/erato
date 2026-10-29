@@ -65,6 +65,7 @@ const FRONTEND_ENV_KEY_MCP_SERVERS_IN_CHAT_INPUT_ENABLED: &str =
 const FRONTEND_ENV_KEY_MCP_SERVERS_IN_ASSISTANT_EDITOR_ENABLED: &str =
     "MCP_SERVERS_IN_ASSISTANT_EDITOR_ENABLED";
 const FRONTEND_ENV_KEY_SHAREPOINT_ENABLED: &str = "SHAREPOINT_ENABLED";
+const FRONTEND_ENV_KEY_SHAREPOINT_FILE_SEARCH_ENABLED: &str = "SHAREPOINT_FILE_SEARCH_ENABLED";
 const FRONTEND_ENV_KEY_SHAREPOINT_SHOW_DISCLAIMER: &str = "SHAREPOINT_SHOW_DISCLAIMER";
 const FRONTEND_ENV_KEY_CHAT_SHARING_ENABLED: &str = "CHAT_SHARING_ENABLED";
 const FRONTEND_ENV_KEY_MESSAGE_FEEDBACK_ENABLED: &str = "MESSAGE_FEEDBACK_ENABLED";
@@ -529,6 +530,10 @@ fn build_frontend_environment(
             config.integrations.sharepoint.enabled
                 && config.integrations.sharepoint.file_upload_enabled,
         ),
+    );
+    env.additional_environment.insert(
+        FRONTEND_ENV_KEY_SHAREPOINT_FILE_SEARCH_ENABLED.to_string(),
+        Value::Bool(config.integrations.sharepoint.file_search_enabled),
     );
     env.additional_environment.insert(
         FRONTEND_ENV_KEY_SHAREPOINT_SHOW_DISCLAIMER.to_string(),
@@ -1336,6 +1341,22 @@ impl erato_memory::HeapSize for FrontedEnvironment {
 mod tests {
     use super::*;
     use std::path::PathBuf;
+
+    #[test]
+    fn sharepoint_file_search_toggle_is_exposed_to_frontends() {
+        let mut config = AppConfig::default();
+        assert!(config.integrations.sharepoint.file_search_enabled);
+        for enabled in [true, false] {
+            config.integrations.sharepoint.file_search_enabled = enabled;
+            let environment = build_frontend_environment(&config, FrontendKind::Web);
+            assert_eq!(
+                environment
+                    .additional_environment
+                    .get(FRONTEND_ENV_KEY_SHAREPOINT_FILE_SEARCH_ENABLED),
+                Some(&Value::Bool(enabled))
+            );
+        }
+    }
 
     #[tokio::test]
     async fn office_branding_is_served_at_stable_urls_with_actual_content_types() {

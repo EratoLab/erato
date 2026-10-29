@@ -3372,8 +3372,8 @@ msgstr "Buscar unidades y archivos…"
 
 #. js-lingui-explicit-id
 #: src/components/ui/CloudFilePicker/CloudFilePicker.tsx
-#~ msgid "cloudFilePicker.searchDrives"
-#~ msgstr "Buscar unidades..."
+msgid "cloudFilePicker.searchDrives"
+msgstr "Buscar unidades..."
 
 #. js-lingui-explicit-id
 #: src/components/ui/CloudFilePicker/CloudSearchResults.tsx

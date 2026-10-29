@@ -149,6 +149,7 @@ chat_provider_ids = ["test-token-limit"]
 # [integrations.sharepoint]
 # enabled = true
 # file_upload_enabled = true  # Whether file upload from Sharepoint is enabled (default: true)
+# file_search_enabled = true  # Cross-drive filename search; false restores drive/site-only search. Requires Files.Read.All or Sites.Read.All.
 # auth_via_access_token = true  # Use the user's access token for MS Graph API (currently required)
 # show_disclaimer = false  # Show a disclaimer about unexpectedly visible directories (default: false)
 # all_drives_sources = ["me_drive", "me_drives", "shared_with_me", "shared_drive_details"]  # Optional; omit to query all sources

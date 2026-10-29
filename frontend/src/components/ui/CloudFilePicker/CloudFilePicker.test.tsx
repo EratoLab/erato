@@ -15,13 +15,19 @@ vi.mock("@/components/providers/ThemeProvider", () => ({
   useTheme: () => ({ iconMappings: {} }),
 }));
 vi.mock("@/providers/FeatureConfigProvider", () => ({
-  useCloudProvidersFeature: () => ({ sharepointShowDisclaimer: false }),
+  useCloudProvidersFeature: () => ({
+    sharepointShowDisclaimer: false,
+    sharepointFileSearchEnabled: state.fileSearchEnabled,
+  }),
 }));
 
 const state = vi.hoisted(() => ({
   partial: false,
   error: false,
   retry: vi.fn(),
+  fileSearchEnabled: true,
+  browse: vi.fn(),
+  search: vi.fn(),
 }));
 const drive: CloudDrive = {
   id: "finance",
@@ -38,40 +44,52 @@ const budget: CloudItem = {
   provider: "sharepoint",
 };
 vi.mock("@/hooks/cloud/useCloudData", () => ({
-  useCloudData: ({ driveId }: { driveId: string | null }) => ({
-    drives: [drive],
-    items: driveId ? [budget] : [],
-    isLoading: false,
-    error: null,
-    refetchDrives: vi.fn(),
-    refetchItems: vi.fn(),
-  }),
+  useCloudData: (options: {
+    driveId: string | null;
+    searchQuery?: string;
+    enabled?: boolean;
+  }) => {
+    state.browse(options);
+    return {
+      drives: [drive],
+      items: options.driveId ? [budget] : [],
+      isLoading: false,
+      error: null,
+      refetchDrives: vi.fn(),
+      refetchItems: vi.fn(),
+    };
+  },
 }));
 vi.mock("@/hooks/cloud/useCloudSearch", () => ({
-  useCloudSearch: ({ query }: { query: string }) => ({
-    drives: [drive],
-    files: query.trim()
-      ? [
-          {
-            ...budget,
-            name: query === "Ledger" ? "Ledger.pdf" : "Budget.pdf",
-            drive_id: query === "Ledger" ? "sales" : "finance",
-            drive_name: query === "Ledger" ? "Sales" : "Finance",
-            parent_path: "/Annual reports",
-          },
-        ]
-      : [],
-    isLoading: false,
-    error: state.error,
-    partial: state.partial,
-    truncated: false,
-    refetch: state.retry,
-  }),
+  useCloudSearch: (options: { query: string; enabled: boolean }) => {
+    state.search(options);
+    const { query } = options;
+    return {
+      drives: [drive],
+      files: query.trim()
+        ? [
+            {
+              ...budget,
+              name: query === "Ledger" ? "Ledger.pdf" : "Budget.pdf",
+              drive_id: query === "Ledger" ? "sales" : "finance",
+              drive_name: query === "Ledger" ? "Sales" : "Finance",
+              parent_path: "/Annual reports",
+            },
+          ]
+        : [],
+      isLoading: false,
+      error: state.error,
+      partial: state.partial,
+      truncated: false,
+      refetch: state.retry,
+    };
+  },
 }));
 
 beforeEach(() => {
   state.partial = false;
   state.error = false;
+  state.fileSearchEnabled = true;
   vi.clearAllMocks();
 });
 
@@ -95,6 +113,35 @@ function search(query: string) {
 }
 
 describe("SharePoint file picker", () => {
+  it("uses the debounced drive-only search and never enables file search when disabled", async () => {
+    state.fileSearchEnabled = false;
+    setup();
+    expect(
+      screen.getByRole("searchbox", { name: "Search drives..." }),
+    ).toBeInTheDocument();
+    search("Finance");
+    await waitFor(() =>
+      expect(state.browse).toHaveBeenLastCalledWith(
+        expect.objectContaining({ searchQuery: "Finance", enabled: true }),
+      ),
+    );
+    expect(state.search.mock.calls.every(([options]) => !options.enabled)).toBe(
+      true,
+    );
+    expect(
+      screen.queryByRole("checkbox", { name: "Budget.pdf" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/No matching drives or files/),
+    ).not.toBeInTheDocument();
+    search("");
+    await waitFor(() =>
+      expect(state.browse).toHaveBeenLastCalledWith(
+        expect.objectContaining({ searchQuery: "", enabled: true }),
+      ),
+    );
+  });
+
   it("keeps cross-drive selections across searches and navigation, and submits canonical IDs", async () => {
     const { onFilesSelected } = setup();
     search("Budget");

@@ -66,7 +66,8 @@ export const CloudFilePicker = memo<CloudFilePickerProps>(
     const [error, setError] = useState<string | null>(null);
     const [driveSearchQuery, setDriveSearchQuery] = useState("");
     const [debouncedDriveSearchQuery] = useDebounce(driveSearchQuery, 200);
-    const { sharepointShowDisclaimer } = useCloudProvidersFeature();
+    const { sharepointShowDisclaimer, sharepointFileSearchEnabled } =
+      useCloudProvidersFeature();
 
     // Navigation state
     const {
@@ -94,7 +95,10 @@ export const CloudFilePicker = memo<CloudFilePickerProps>(
     } = useCloudSelection({ multiple, maxFiles, acceptedFileTypes });
 
     // Data fetching using generated hooks
-    const searching = driveId === null && driveSearchQuery.trim().length > 0;
+    const searching =
+      sharepointFileSearchEnabled &&
+      driveId === null &&
+      driveSearchQuery.trim().length > 0;
     const search = useCloudSearch({
       provider,
       query: debouncedDriveSearchQuery,
@@ -113,6 +117,9 @@ export const CloudFilePicker = memo<CloudFilePickerProps>(
       provider,
       driveId,
       itemId,
+      searchQuery: sharepointFileSearchEnabled
+        ? undefined
+        : debouncedDriveSearchQuery,
       enabled: isOpen && !searching,
     });
 
@@ -214,6 +221,9 @@ export const CloudFilePicker = memo<CloudFilePickerProps>(
 
     const showDriveList = driveId === null;
     const showItemBrowser = driveId !== null;
+    const searchLabel = sharepointFileSearchEnabled
+      ? t({ id: "cloudFilePicker.search", message: "Search drives and files…" })
+      : t({ id: "cloudFilePicker.searchDrives", message: "Search drives..." });
 
     return createPortal(
       // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions
@@ -298,16 +308,10 @@ export const CloudFilePicker = memo<CloudFilePickerProps>(
                   <Input
                     type="search"
                     maxLength={200}
-                    aria-label={t({
-                      id: "cloudFilePicker.search",
-                      message: "Search drives and files…",
-                    })}
+                    aria-label={searchLabel}
                     value={driveSearchQuery}
                     onChange={handleDriveSearchChange}
-                    placeholder={t({
-                      id: "cloudFilePicker.search",
-                      message: "Search drives and files…",
-                    })}
+                    placeholder={searchLabel}
                   />
                 </div>
                 {searching ? (

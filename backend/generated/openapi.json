@@ -1654,13 +1654,13 @@
             "description": "Search is not authorized"
           },
           "404": {
-            "description": "Integration disabled"
+            "description": "Integration or file search disabled"
           },
           "502": {
             "description": "Graph search failed"
           },
           "504": {
-            "description": "Drive discovery timed out"
+            "description": "Microsoft Search timed out"
           }
         },
         "security": [

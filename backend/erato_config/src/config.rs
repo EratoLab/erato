@@ -6446,7 +6446,7 @@ impl SharepointAllDrivesSource {
     ];
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default, Facet, HeapSize)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
 pub struct SharepointConfig {
     // Whether the Sharepoint/OneDrive integration is enabled.
     // Defaults to `false`.
@@ -6458,6 +6458,11 @@ pub struct SharepointConfig {
     // Defaults to `true` when the integration is enabled.
     #[serde(default = "default_true")]
     pub file_upload_enabled: bool,
+
+    /// Search filenames across SharePoint/OneDrive using Microsoft Search.
+    /// When false, the picker searches drive/site names only. Defaults to true.
+    #[serde(default = "default_true")]
+    pub file_search_enabled: bool,
 
     // Whether to use the user's existing access token for MS Graph API calls.
     // Currently this must be `true` when the integration is enabled.
@@ -6488,6 +6493,41 @@ pub struct SharepointConfig {
     // If empty or omitted, all sources are queried.
     #[serde(default)]
     pub all_drives_sources: Vec<SharepointAllDrivesSource>,
+}
+
+impl Default for SharepointConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            file_upload_enabled: true,
+            file_search_enabled: true,
+            auth_via_access_token: true,
+            show_disclaimer: false,
+            all_drives_sources: Vec::new(),
+        }
+    }
+}
+
+#[cfg(test)]
+mod sharepoint_config_tests {
+    use super::*;
+
+    #[test]
+    fn file_search_defaults_to_enabled_and_can_be_disabled() {
+        assert!(SharepointConfig::default().file_search_enabled);
+        assert!(
+            AppConfig::default()
+                .integrations
+                .sharepoint
+                .file_search_enabled
+        );
+        let config: SharepointConfig = serde_json::from_str("{}").unwrap();
+        assert!(config.file_search_enabled);
+        let config: SharepointConfig =
+            serde_json::from_str(r#"{"enabled":true,"file_search_enabled":false}"#).unwrap();
+        assert!(!config.file_search_enabled);
+        assert!(config.file_upload_enabled);
+    }
 }
 
 fn default_true() -> bool {
@@ -8911,6 +8951,7 @@ tool_call_allowlist = ["search/*"]
 [integrations.{prefix}sharepoint]
 enabled = true
 file_upload_enabled = false
+file_search_enabled = false
 show_disclaimer = true
 all_drives_sources = ["me_drive", "shared_with_me"]
 
@@ -8939,6 +8980,7 @@ enabled = true
         );
         assert!(stable.integrations.sharepoint.enabled);
         assert!(!stable.integrations.sharepoint.file_upload_enabled);
+        assert!(!stable.integrations.sharepoint.file_search_enabled);
         assert!(stable.integrations.sharepoint.auth_via_access_token);
         assert!(stable.integrations.entra_id.enabled);
         assert!(stable.integrations.entra_id.auth_via_access_token);
