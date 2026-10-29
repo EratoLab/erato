@@ -3622,6 +3622,7 @@ mod tests {
             scheduling: erato_config::config::TaskScheduling::default(),
             propagate_child_mcp_approvals: true,
             approval: erato_config::config::DelegationTasksApprovalConfig::default(),
+            child_dispatch: Default::default(),
         }
     }
 

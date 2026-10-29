@@ -1967,6 +1967,30 @@ impl AppConfig {
                     );
                 }
             }
+            if let Some(dispatch) = tool.child_dispatch {
+                if !child_read {
+                    panic!(
+                        "Client tool '{}' sets child_dispatch, which requires child_access = \"read\".",
+                        qualified
+                    );
+                }
+                if dispatch == ChildDispatch::Durable {
+                    let host = tool.host_context.expect("checked above");
+                    if !host.outlives_pane_session() {
+                        panic!(
+                            "Client tool '{}' sets child_dispatch = \"durable\", which needs a host context that outlives the pane session; {} does not.",
+                            qualified,
+                            host.as_str()
+                        );
+                    }
+                    if tool.durable.is_none() {
+                        panic!(
+                            "Client tool '{}' sets child_dispatch = \"durable\", which requires a [durable] table.",
+                            qualified
+                        );
+                    }
+                }
+            }
         }
 
         config
@@ -4865,6 +4889,17 @@ pub struct DelegationTasksConfig {
     // from which batch size a plan is worth asking about.
     #[serde(default)]
     pub approval: DelegationTasksApprovalConfig,
+
+    // How a client task's granted calls reach the client, for client tools
+    // that do not set their own `child_dispatch`. "live" hands each call to
+    // the parent's pane over its executor stream while the parent turn runs.
+    // "durable" lets a call wait for a client and for approvals on the device,
+    // as a durable client operation, but only for tools whose host context
+    // outlives the pane session and that have a `[durable]` table, while
+    // `client_tools.durable_operations_enabled` is on; every other tool stays
+    // live. Defaults to "live".
+    #[serde(default)]
+    pub child_dispatch: ChildDispatch,
 }
 
 impl Default for DelegationTasksConfig {
@@ -4885,6 +4920,7 @@ impl Default for DelegationTasksConfig {
             scheduling: TaskScheduling::default(),
             propagate_child_mcp_approvals: default_delegation_tasks_propagate_child_mcp_approvals(),
             approval: DelegationTasksApprovalConfig::default(),
+            child_dispatch: ChildDispatch::default(),
         }
     }
 }
@@ -5875,6 +5911,30 @@ pub struct ClientToolConfig {
     /// `child_access = "read"`.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub child_host_inputs: Vec<String>,
+
+    /// How a delegated task's calls of this tool reach the client: `live` on
+    /// the parent's pane while the parent turn runs, or `durable`, waiting for
+    /// a client and for approvals on the device as a durable client operation.
+    /// `durable` needs a host context that outlives the pane session (not
+    /// `word_document`) and a `[durable]` table, whose `attempt_expiry_secs`
+    /// bounds the wait. Requires `child_access = "read"`. Default:
+    /// `delegation.tasks.child_dispatch`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub child_dispatch: Option<ChildDispatch>,
+}
+
+/// `client_tools.tools.<id>.child_dispatch` and `delegation.tasks.child_dispatch`.
+#[derive(Debug, Deserialize, Serialize, PartialEq, Eq, Clone, Copy, Default, Facet, HeapSize)]
+#[facet(rename_all = "snake_case")]
+#[serde(rename_all = "snake_case")]
+#[repr(C)]
+pub enum ChildDispatch {
+    /// Handed to the parent's pane over its executor stream; fails when no
+    /// pane takes it.
+    #[default]
+    Live,
+    /// Parked as a durable client operation that waits for a client.
+    Durable,
 }
 
 /// `client_tools.tools.<id>.child_access`.
@@ -5944,6 +6004,16 @@ impl ClientToolHostContext {
         match self {
             Self::OutlookMailbox => "outlook_mailbox",
             Self::WordDocument => "word_document",
+        }
+    }
+
+    /// Whether the client context stays valid after the pane that served the
+    /// turn closes, so a delegated call may wait for a client durably. A Word
+    /// capture belongs to one pane instance.
+    pub fn outlives_pane_session(&self) -> bool {
+        match self {
+            Self::OutlookMailbox => true,
+            Self::WordDocument => false,
         }
     }
 }

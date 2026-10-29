@@ -841,6 +841,7 @@ mod tests {
             child_context_arg: None,
             child_context_input: None,
             child_host_inputs: Vec::new(),
+            child_dispatch: None,
         }
     }
 
