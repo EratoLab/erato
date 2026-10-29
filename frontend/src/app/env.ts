@@ -62,6 +62,7 @@ export type Env = {
   mcpServersInChatInputEnabled?: boolean;
   mcpServersInAssistantEditorEnabled?: boolean;
   sharepointEnabled: boolean;
+  sharepointFileSearchEnabled?: boolean;
   sharepointShowDisclaimer: boolean;
   chatSharingEnabled: boolean;
   messageEditingEnabled: boolean;
@@ -146,6 +147,7 @@ declare global {
     MCP_SERVERS_IN_CHAT_INPUT_ENABLED?: boolean;
     MCP_SERVERS_IN_ASSISTANT_EDITOR_ENABLED?: boolean;
     SHAREPOINT_ENABLED?: boolean;
+    SHAREPOINT_FILE_SEARCH_ENABLED?: boolean;
     SHAREPOINT_SHOW_DISCLAIMER?: boolean;
     CHAT_SHARING_ENABLED?: boolean;
     MESSAGE_EDITING_ENABLED?: boolean;
@@ -391,6 +393,10 @@ export const env = (): Env => {
     import.meta.env.VITE_SHAREPOINT_SHOW_DISCLAIMER === "true"
       ? true
       : (window.SHAREPOINT_SHOW_DISCLAIMER ?? false);
+  const sharepointFileSearchEnabled =
+    import.meta.env.VITE_SHAREPOINT_FILE_SEARCH_ENABLED !== undefined
+      ? import.meta.env.VITE_SHAREPOINT_FILE_SEARCH_ENABLED === "true"
+      : (window.SHAREPOINT_FILE_SEARCH_ENABLED ?? true);
   const chatSharingEnabled =
     import.meta.env.VITE_CHAT_SHARING_ENABLED === "true"
       ? true
@@ -569,6 +575,7 @@ export const env = (): Env => {
     mcpServersInChatInputEnabled,
     mcpServersInAssistantEditorEnabled,
     sharepointEnabled,
+    sharepointFileSearchEnabled,
     sharepointShowDisclaimer,
     chatSharingEnabled,
     messageEditingEnabled,

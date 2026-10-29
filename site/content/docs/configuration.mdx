@@ -3816,6 +3816,18 @@ Whether file linking from SharePoint is enabled. When disabled, users can browse
 
 **Type:** `boolean`
 
+##### `integrations.sharepoint.file_search_enabled`
+
+{/* erato_toml_config_key: integrations.sharepoint.file_search_enabled */}
+
+Enable cross-drive filename search in the SharePoint/OneDrive picker using Microsoft Search. Searches all indexed files the signed-in user can access, independently of `all_drives_sources`. Requires delegated `Files.Read.All` or `Sites.Read.All` permission.
+
+When `false`, the picker uses the original drive/site-name search and the filename-search endpoint is disabled. Browsing and attaching files remain available.
+
+**Default value:** `true`
+
+**Type:** `boolean`
+
 ##### `integrations.sharepoint.auth_via_access_token`
 
 {/* erato_toml_config_key: integrations.sharepoint.auth_via_access_token */}

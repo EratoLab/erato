@@ -3335,8 +3335,8 @@ msgstr "Rechercher des lecteurs et des fichiers…"
 
 #. js-lingui-explicit-id
 #: src/components/ui/CloudFilePicker/CloudFilePicker.tsx
-#~ msgid "cloudFilePicker.searchDrives"
-#~ msgstr "Rechercher des lecteurs..."
+msgid "cloudFilePicker.searchDrives"
+msgstr "Rechercher des lecteurs..."
 
 #. js-lingui-explicit-id
 #: src/components/ui/CloudFilePicker/CloudSearchResults.tsx

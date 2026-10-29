@@ -210,6 +210,7 @@ describe("FeatureConfigProvider", () => {
         cloudProviders: {
           availableProviders: [],
           sharepointShowDisclaimer: false,
+          sharepointFileSearchEnabled: true,
         },
         messageActions: { editingEnabled: true, regenerationEnabled: true },
         messageFeedback: {
@@ -1076,7 +1077,21 @@ describe("FeatureConfigProvider", () => {
       expect(result.current).toEqual({
         availableProviders: ["sharepoint"],
         sharepointShowDisclaimer: true,
+        sharepointFileSearchEnabled: true,
       });
+    });
+
+    it("honors disabled SharePoint file search from the backend environment", () => {
+      mockEnv.mockReturnValue({
+        ...vi.mocked(env)(),
+        sharepointEnabled: true,
+        sharepointFileSearchEnabled: false,
+      });
+      const { result } = renderHook(() => useCloudProvidersFeature(), {
+        wrapper: createWrapper(),
+      });
+      expect(result.current.sharepointFileSearchEnabled).toBe(false);
+      expect(result.current.availableProviders).toContain("sharepoint");
     });
   });
 

@@ -73,6 +73,7 @@ describe("AssistantFileUploadSelector", () => {
     vi.mocked(useCloudProvidersFeature).mockReturnValue({
       availableProviders: [],
       sharepointShowDisclaimer: false,
+      sharepointFileSearchEnabled: true,
     });
   });
 
@@ -131,6 +132,7 @@ describe("AssistantFileUploadSelector", () => {
     vi.mocked(useCloudProvidersFeature).mockReturnValue({
       availableProviders: ["sharepoint"],
       sharepointShowDisclaimer: false,
+      sharepointFileSearchEnabled: true,
     });
     mockUploadFiles.mockResolvedValue([
       {

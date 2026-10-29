@@ -895,6 +895,13 @@
       "replacement_key": "integrations.sharepoint.enabled"
     }
   },
+  "integrations.experimental_sharepoint.file_search_enabled": {
+    "hide_in_docs": true,
+    "deprecated": {
+      "note": "Please use `integrations.sharepoint.file_search_enabled` instead.",
+      "replacement_key": "integrations.sharepoint.file_search_enabled"
+    }
+  },
   "integrations.experimental_sharepoint.file_upload_enabled": {
     "hide_in_docs": true,
     "deprecated": {
@@ -1017,6 +1024,7 @@
   "integrations.sharepoint.all_drives_sources.[]": {},
   "integrations.sharepoint.auth_via_access_token": {},
   "integrations.sharepoint.enabled": {},
+  "integrations.sharepoint.file_search_enabled": {},
   "integrations.sharepoint.file_upload_enabled": {},
   "integrations.sharepoint.show_disclaimer": {},
   "logging.format": {},

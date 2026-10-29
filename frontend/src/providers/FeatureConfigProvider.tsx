@@ -173,6 +173,8 @@ interface CloudProvidersFeatureConfig {
   availableProviders: CloudProvider[];
   /** Whether to show the Sharepoint/OneDrive directory visibility disclaimer */
   sharepointShowDisclaimer: boolean;
+  /** Whether filename search is enabled alongside drive/site search */
+  sharepointFileSearchEnabled: boolean;
 }
 
 /**
@@ -345,6 +347,7 @@ export const defaultStaticFeatureConfig: FeatureConfig = {
   cloudProviders: {
     availableProviders: [],
     sharepointShowDisclaimer: false,
+    sharepointFileSearchEnabled: true,
   },
   messageActions: {
     editingEnabled: true,
@@ -482,6 +485,8 @@ function createFeatureConfig(
     cloudProviders: {
       availableProviders,
       sharepointShowDisclaimer: environment.sharepointShowDisclaimer,
+      sharepointFileSearchEnabled:
+        environment.sharepointFileSearchEnabled ?? true,
     },
     messageActions: {
       editingEnabled: environment.messageEditingEnabled,

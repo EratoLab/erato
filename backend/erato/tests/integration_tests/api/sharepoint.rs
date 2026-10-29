@@ -42,6 +42,22 @@ impl SharepointTestExt for axum_test::TestRequest {
     }
 }
 
+/// Disabling filename search must also block direct API calls, without calling Graph.
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_sharepoint_file_search_disabled(pool: Pool<Postgres>) {
+    let (mut config, _server) = setup_mock_llm_server(None).await;
+    config.integrations.sharepoint.file_search_enabled = false;
+    let state = test_app_state_with_sharepoint(config, pool).await;
+    let app = router(state.clone()).split_for_parts().0.with_state(state);
+    let server = TestServer::new(app.into_make_service()).unwrap();
+    server
+        .get("/api/v1beta/integrations/sharepoint/search?query=Budget")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .with_ms_graph_token("not-a-real-graph-token")
+        .await
+        .assert_status(StatusCode::NOT_FOUND);
+}
+
 /// Test listing all drives accessible to the user.
 ///
 /// # Test Categories
