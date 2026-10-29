@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   hasClientToolCallBeenAnswered,
+  registerClientToolExecutor,
   resetClientToolRegistryForTests,
   trackClientToolCallAbort,
 } from "@/hooks/chat/clientToolExecutors";
@@ -49,6 +50,23 @@ const identity = {
   attempt_id: request.attempt_id,
   operation_id: request.operation_id,
   executor: binding,
+};
+const lineage = {
+  owner_chat_id: request.chat_id,
+  owner_message_id: request.message_id,
+  requesting_chat_id: "00000000-0000-4000-8000-0000000000c2",
+  requesting_message_id: "00000000-0000-4000-8000-0000000000e2",
+};
+const grantRequest: OperationRequest = {
+  ...request,
+  chat_id: lineage.requesting_chat_id,
+  message_id: lineage.requesting_message_id,
+  lineage,
+};
+const declined: ClientToolExecutionResult = {
+  ok: false,
+  error: "The user declined",
+  validationErrors: [{ code: "declined", path: "", message: "Declined" }],
 };
 
 afterEach(resetClientToolRegistryForTests);
@@ -153,6 +171,19 @@ describe("toOperationResult", () => {
     expect(long?.endsWith("\u{1F600}")).toBe(true);
   });
 
+  it("reports a decline on the device only for a task's call", () => {
+    expect(toOperationResult(grantRequest, declined)).toEqual({
+      ...identity,
+      outcome: "rejected",
+      error: { code: "declined" },
+    });
+    expect(toOperationResult(request, declined)).toEqual({
+      ...identity,
+      outcome: "rejected",
+      error: { code: "validation_failed" },
+    });
+  });
+
   it("carries the request's base revision only when it has one", () => {
     expect(
       toOperationResult(
@@ -230,6 +261,64 @@ describe("ClientToolOperationHandler", () => {
     expect(result.executor).toBe(request.binding);
     expect(result.outcome).toBe("succeeded");
     expect(hasClientToolCallBeenAnswered(request.tool_call_id)).toBe(true);
+  });
+
+  it("never matches a task's call unless the tool takes grant calls", () => {
+    const subject = handler();
+    registerClientToolExecutor("fetch_availability", vi.fn());
+    expect(subject.matches(grantRequest)).toBe(false);
+    expect(subject.matches(request)).toBe(true);
+    registerClientToolExecutor("fetch_availability", vi.fn(), undefined, {
+      acceptsGrantCalls: true,
+    });
+    expect(subject.matches(grantRequest)).toBe(true);
+  });
+
+  it("runs a claimed task's call under the grant its lineage carries", async () => {
+    registerClientToolExecutor("fetch_availability", vi.fn(), undefined, {
+      acceptsGrantCalls: true,
+    });
+    const run = vi.fn<ClientToolExecutor>(async () => ({
+      ok: true,
+      result: { busy: [] },
+    }));
+    const signal = new AbortController().signal;
+    await handler(run).execute(
+      { ...grantRequest, lineage: { ...lineage, context_ref: "v1" } },
+      claim,
+      signal,
+    );
+    expect(run).toHaveBeenCalledWith(
+      { lookahead_days: 7 },
+      {
+        toolCallId: "avail-call",
+        messageId: grantRequest.message_id,
+        chatId: grantRequest.chat_id,
+        signal,
+        hostGrant: {
+          ownerChatId: request.chat_id,
+          ownerMessageId: request.message_id,
+          requestingChatId: grantRequest.chat_id,
+          requestingMessageId: grantRequest.message_id,
+          contextRef: "v1",
+        },
+      },
+    );
+  });
+
+  it("answers a task's call to a tool that takes none without running it", async () => {
+    registerClientToolExecutor("fetch_availability", vi.fn());
+    const run = vi.fn<ClientToolExecutor>();
+    const result = await handler(run).execute(
+      grantRequest,
+      claim,
+      new AbortController().signal,
+    );
+    expect(run).not.toHaveBeenCalled();
+    expect(result).toMatchObject({
+      outcome: "failed",
+      error: { code: "execution_failed" },
+    });
   });
 
   it("turns a thrown executor into a failure without its text", async () => {

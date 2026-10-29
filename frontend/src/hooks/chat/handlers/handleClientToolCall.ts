@@ -3,17 +3,16 @@ import { withClientCallLock } from "@/lib/clientOperations/operationLock";
 import { operationExecutorBinding } from "@/lib/clientOperations/registration";
 
 import {
-  clientToolAcceptsGrantCalls,
   getClientToolExecutor,
   isClientToolResultLocalOnly,
   hasClientToolCallBeenAnswered,
   markClientToolCallAnswered,
   releaseClientToolCallAbort,
+  runClientToolCall,
   trackClientToolCallAbort,
   unmarkClientToolCallAnswered,
 } from "../clientToolExecutors";
 
-import type { ClientToolHostGrant } from "../clientToolExecutors";
 import type {
   CallLineage,
   ClientToolResultRequest,
@@ -32,14 +31,6 @@ interface HandleClientToolCallDeps {
   /** Set on a delegated task's call, under the grant the server asserted. */
   lineage?: CallLineage;
 }
-
-const hostGrantOf = (lineage: CallLineage): ClientToolHostGrant => ({
-  ownerChatId: lineage.owner_chat_id,
-  ownerMessageId: lineage.owner_message_id,
-  requestingChatId: lineage.requesting_chat_id,
-  requestingMessageId: lineage.requesting_message_id,
-  ...(lineage.context_ref ? { contextRef: lineage.context_ref } : {}),
-});
 
 /** A chat stream's event, or a call pushed over the executor stream. */
 export type ClientToolCallEvent = Pick<
@@ -89,20 +80,6 @@ export async function handleClientToolCall(
     );
     return;
   }
-  // The server only routes a task's call to a tool advertised as taking them;
-  // a handler that did not opt in has no grant check and must not run it.
-  if (deps.lineage && !clientToolAcceptsGrantCalls(tool_name)) {
-    await postClientToolResult(
-      {
-        ...base,
-        error: `The client tool "${tool_name}" does not take calls from delegated tasks`,
-      },
-      tool_name,
-      tool_call_id,
-      deps,
-    );
-    return;
-  }
   const run = async () => {
     // Tracked so the user stop pathway can abort the execution mid-flight;
     // an aborted executor settles like any failure and POSTs its error. Held
@@ -111,13 +88,13 @@ export async function handleClientToolCall(
     try {
       let body: ClientToolResultRequest;
       try {
-        const outcome = await executor(input ?? null, {
-          toolCallId: tool_call_id,
-          messageId: message_id,
-          chatId,
-          signal,
-          ...(deps.lineage ? { hostGrant: hostGrantOf(deps.lineage) } : {}),
-        });
+        const outcome = await runClientToolCall(
+          tool_name,
+          executor,
+          input ?? null,
+          { toolCallId: tool_call_id, messageId: message_id, chatId, signal },
+          deps.lineage,
+        );
         if (outcome.disposition === "local_only") return;
         body = outcome.ok
           ? // Coalesce to explicit null so an empty success is delivered as a
