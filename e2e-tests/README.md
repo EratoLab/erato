@@ -241,3 +241,25 @@ pnpm exec playwright show-report
 - [Playwright Documentation](https://playwright.dev/)
 - [Erato Scenarios Documentation](../infrastructure/k3d/erato-local/Scenarios.md)
 - [Erato Configuration Documentation](../site/content/docs/configuration.mdx)
+
+### Conversational Audio-back capture regression
+
+`tests/audio-back.many-models.spec.ts` uses the `many-models` scenario's existing
+Mock-LLM plus local transcription and Gemini Live mocks. It feeds the existing
+`sales-summary-1-3.wav` audio-test fixture through the browser's `getUserMedia`
+API, allowing the real worklet/VAD/transcription flow to submit the captured
+Augsburg question. No Google/OpenAI service credentials are used by this test;
+replay storage uses the scenario's local S3-compatible service.
+
+Build/deploy the current backend and mock-llm-server before running:
+
+```sh
+pnpm exec playwright test tests/audio-back.many-models.spec.ts --project=chromium-many-models
+pnpm exec playwright test tests/audio-back.many-models.spec.ts --project=firefox-many-models
+```
+
+The test checks that all text arrives before deliberately delayed audio, that
+streamed audio completes without sequence gaps, and that replay after reload
+uses the saved file rather than generating another response. See
+[`fixtures/augsburg`](../backend/mock-llm-server/fixtures/augsburg/README.md) for
+compression, sanitization, original timings, and replay pacing details.
