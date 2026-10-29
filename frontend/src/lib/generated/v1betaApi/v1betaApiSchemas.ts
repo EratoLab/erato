@@ -1815,6 +1815,14 @@ export type DesktopSidecarOrganizationConfiguration = {
   show_tray_icon?: boolean | null | undefined;
 };
 
+/**
+ * Derived wire configuration; policy guides have only one configuration source.
+ */
+export type DesktopSidecarOrganizationConfigurationResponse =
+  DesktopSidecarOrganizationConfiguration & {
+    policy_guides: PolicyGuidesConfig;
+  };
+
 export type DisconnectMcpServerOauthResponse = {
   connection_status: McpServerStatusValue;
 };
@@ -3184,6 +3192,38 @@ export type PendingToolCall = {
   call_id: string;
   fn_arguments: Value;
   fn_name: string;
+};
+
+export type PolicyGuideConfig = {
+  /**
+   * Describes the false predicate: content is allowed under this policy.
+   */
+  choice_allow: string;
+  /**
+   * Describes the true predicate: content should be refused under this policy.
+   */
+  choice_refuse: string;
+  /**
+   * Highest priority first. Only the first provider is used, after replacement resolution.
+   */
+  decision_providers: string[];
+  /**
+   * Explicit opt-in; disabled definitions are still sent to the sidecar.
+   */
+  enabled: boolean;
+  /**
+   * Arbitrary JSON values; forwarded verbatim, never added to model instructions.
+   */
+  metadata: {
+    [key: string]: unknown;
+  };
+  question: string;
+};
+
+export type PolicyGuidesConfig = {
+  policies: {
+    [key: string]: PolicyGuideConfig;
+  };
 };
 
 /**

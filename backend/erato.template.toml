@@ -870,6 +870,22 @@ bounded_text_preview = true
 # base_url = "http://localhost:8080/v1"
 # api_key = "optional-server-key"
 
+# Policy guides are evaluated explicitly; enabling one does not attach it to
+# uploads or tool calls. True probability means refusal, with no built-in threshold.
+# The first provider wins after replacement resolution; there is no fallback.
+# [policy_guides.policies.confidential]
+# enabled = true # defaults to false
+# question = "Does the supplied content contain confidential information?"
+# choice_refuse = "The content contains confidential business information."
+# choice_allow = "The content contains only public information."
+# decision_providers = ["decisions", "local_decisions"]
+# [policy_guides.policies.confidential.metadata]
+# label = "Confidential information"
+# tags = ["upload", "review"]
+# display = { severity = "warning", visible = true }
+# All definitions, including disabled ones and metadata, are sent to the sidecar.
+# Provider credentials remain on the backend. The sidecar decides what it trusts.
+
 # Speech output is independent of the chat/transcription provider.
 # Select this ID with audio_conversational.speech_provider, then enable Audio-back in the UI.
 # [speech_providers.provider.assistant_voice]

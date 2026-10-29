@@ -2409,7 +2409,7 @@ This creates a PDF with 20 pages, each containing unique identifiers like `PAGE-
 {/* erato_toml_config_key: decision_providers.provider.<provider-id>.api_key */}
 
 Configure named decision providers independently of chat and speech providers.
-The registry does not enable a feature by itself; a future backend consumer must
+The registry does not enable a feature by itself; a backend consumer must
 select a provider ID explicitly and resolve it through the replacement registry.
 Archived entries may omit provider settings; a replacement chain must end at an
 active provider. For example:
@@ -2442,6 +2442,70 @@ OpenAI and structured state to llama.cpp (JSON scalars are serialized as text).
 It returns estimated probabilities,
 which are not necessarily calibrated; consumers determine their own thresholds.
 Credentials stay on the backend.
+
+### Policy guides
+
+{/* erato_toml_config_key: policy_guides */}
+{/* erato_toml_config_key: policy_guides.policies */}
+{/* erato_toml_config_key: policy_guides.policies.<policy-id>.enabled */}
+{/* erato_toml_config_key: policy_guides.policies.<policy-id>.question */}
+{/* erato_toml_config_key: policy_guides.policies.<policy-id>.choice_refuse */}
+{/* erato_toml_config_key: policy_guides.policies.<policy-id>.choice_allow */}
+{/* erato_toml_config_key: policy_guides.policies.<policy-id>.decision_providers */}
+{/* erato_toml_config_key: policy_guides.policies.<policy-id>.decision_providers.[] */}
+{/* erato_toml_config_key: policy_guides.policies.<policy-id>.metadata */}
+
+Policy guides define reusable predicates evaluated through a named decision
+provider. The section defaults to an empty policy map. Policies are disabled by
+default; an enabled policy requires a nonblank question, both descriptions and
+at least one configured provider reference. For example, using the providers
+defined above:
+
+```toml
+[policy_guides.policies.confidential]
+enabled = true
+question = "Does the supplied content contain confidential information?"
+choice_refuse = "The content contains confidential business information."
+choice_allow = "The content contains only public information."
+decision_providers = ["previous", "local_classifier"]
+
+[policy_guides.policies.confidential.metadata]
+label = "Confidential information"
+tags = ["upload", "review"]
+display = { severity = "warning", visible = true }
+```
+
+Provider order defines priority: only the first entry is used, after resolving
+decision-provider replacement chains (here `previous` resolves to `classifier`).
+There is no retry or fallback to later entries on errors or provider refusal.
+All provider references on enabled policies must resolve to active providers;
+disabled policies may retain references to unavailable providers.
+
+The internal evaluator accepts caller-supplied text or JSON. It combines the
+question and both descriptions into a predicate: true means `choice_refuse`,
+false means `choice_allow`. The result is the estimated **refusal probability**,
+without a threshold or conversion to allow/refuse. A provider declining to
+evaluate is a separate outcome, and transport or malformed-response errors
+remain errors. Enabling a guide does not enforce upload or tool-call policies.
+Content selection, interpretation of the probability, public API endpoints and
+concrete enforcement attachment points are future work.
+
+Metadata supports arbitrary JSON values, like `frontend.additional_environment`,
+including nested objects, arrays, numbers and booleans. It is forwarded verbatim
+and is not included in model instructions. Policy definitions and metadata are
+visible to authenticated frontend clients and receiving sidecars; put no secrets
+there. Decision-provider credentials and definitions remain on the backend.
+
+The top-level section is the only policy-guide configuration source. Its complete
+map, including disabled entries, metadata and ordered provider IDs, is included
+in `organization_configuration.policy_guides` sent through `sidecar.configure.v1`.
+An empty map clears previously accepted definitions. User-layer policy guides do
+not override organization definitions. Clients send configuration independently
+of `localDelegation`; the sidecar decides whether to trust and apply it. A sidecar
+may retain policy definitions without executing them, reject a call or ignore
+untrusted settings. Clients preserve saved user settings and respect rejection.
+These are startup settings: restart the backend after changes and let the frontend
+refetch and synchronize configuration; there is no policy-guide hot reload.
 
 ### Speech providers
 

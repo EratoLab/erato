@@ -2317,7 +2317,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DesktopSidecarOrganizationConfiguration"
+                  "$ref": "#/components/schemas/DesktopSidecarOrganizationConfigurationResponse"
                 }
               }
             }
@@ -8055,6 +8055,25 @@
           }
         }
       },
+      "DesktopSidecarOrganizationConfigurationResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/DesktopSidecarOrganizationConfiguration"
+          },
+          {
+            "type": "object",
+            "required": [
+              "policy_guides"
+            ],
+            "properties": {
+              "policy_guides": {
+                "$ref": "#/components/schemas/PolicyGuidesConfig"
+              }
+            }
+          }
+        ],
+        "description": "Derived wire configuration; policy guides have only one configuration source."
+      },
       "DisconnectMcpServerOauthResponse": {
         "type": "object",
         "required": [
@@ -10787,6 +10806,66 @@
           },
           "fn_name": {
             "type": "string"
+          }
+        }
+      },
+      "PolicyGuideConfig": {
+        "type": "object",
+        "required": [
+          "enabled",
+          "question",
+          "choice_refuse",
+          "choice_allow",
+          "decision_providers",
+          "metadata"
+        ],
+        "properties": {
+          "choice_allow": {
+            "type": "string",
+            "description": "Describes the false predicate: content is allowed under this policy."
+          },
+          "choice_refuse": {
+            "type": "string",
+            "description": "Describes the true predicate: content should be refused under this policy."
+          },
+          "decision_providers": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Highest priority first. Only the first provider is used, after replacement resolution."
+          },
+          "enabled": {
+            "type": "boolean",
+            "description": "Explicit opt-in; disabled definitions are still sent to the sidecar."
+          },
+          "metadata": {
+            "type": "object",
+            "description": "Arbitrary JSON values; forwarded verbatim, never added to model instructions.",
+            "additionalProperties": {},
+            "propertyNames": {
+              "type": "string"
+            }
+          },
+          "question": {
+            "type": "string"
+          }
+        }
+      },
+      "PolicyGuidesConfig": {
+        "type": "object",
+        "required": [
+          "policies"
+        ],
+        "properties": {
+          "policies": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/PolicyGuideConfig"
+            },
+            "propertyNames": {
+              "type": "string"
+            }
           }
         }
       },

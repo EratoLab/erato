@@ -96,6 +96,7 @@ export type {
   SidecarOpenDataDirectoryV1Result,
   SidecarRestartV1Params,
   SidecarRestartV1Result,
+  PolicyGuides,
   SidecarConfiguration,
   SidecarConfigureV1Params,
   SidecarConfigureV1Result,

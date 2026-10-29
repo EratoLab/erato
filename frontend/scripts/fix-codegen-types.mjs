@@ -425,7 +425,7 @@ async function fixEnabledImport(filePath) {
   return false;
 }
 
-async function fixSchemaStringFields(filePath) {
+async function fixSchemaFields(filePath) {
   try {
     let content = await fs.readFile(filePath, "utf8");
     const relativeFilePath = path.relative(process.cwd(), filePath);
@@ -438,15 +438,24 @@ async function fixSchemaStringFields(filePath) {
       }
     }
 
+    // The generator emits `any` for arbitrary JSON metadata. Consumers must
+    // narrow policy metadata before using it, matching the sidecar contract.
+    const narrowed = content.replace(
+      /export type PolicyGuideConfig = \{[\s\S]*?\n\};/,
+      (definition) => definition.replace(/\bany\b/g, "unknown"),
+    );
+    changed ||= narrowed !== content;
+    content = narrowed;
+
     if (changed) {
       await fs.writeFile(filePath, content, "utf8");
-      console.log(`Fixed schema string field types in: ${relativeFilePath}`);
+      console.log(`Fixed schema field types in: ${relativeFilePath}`);
       return true;
     }
 
-    console.log(`No schema string field fixes needed in: ${relativeFilePath}`);
+    console.log(`No schema field fixes needed in: ${relativeFilePath}`);
   } catch (error) {
-    console.error(`Error fixing schema string fields in ${filePath}:`, error);
+    console.error(`Error fixing schema fields in ${filePath}:`, error);
   }
 
   return false;
@@ -527,7 +536,7 @@ async function run() {
       changesMade = true;
     }
 
-    if (await fixSchemaStringFields(schemaFile)) {
+    if (await fixSchemaFields(schemaFile)) {
       changesMade = true;
     }
 

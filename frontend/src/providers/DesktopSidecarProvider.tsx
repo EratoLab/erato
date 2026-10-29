@@ -182,9 +182,6 @@ export function DesktopSidecarConfigurationSync() {
     if (
       !client ||
       snapshot.state !== "ready" ||
-      // Any delegation declaration blocks legacy content, even if strict support
-      // is unavailable or unknown. Fail closed; never fall back to raw RPCs.
-      Boolean(snapshot.localDelegation) ||
       !client.supports("sidecar.configure.v1") ||
       !organizationConfiguration
     ) {
@@ -209,12 +206,16 @@ export function DesktopSidecarConfigurationSync() {
           email: profile?.email,
         }),
       };
+      // Configuration trust is enforced by the sidecar. Optional mailbox
+      // initialization must not prevent delivery if enumeration is denied.
       const { mailboxes } = client.supports("outlook.list_mailboxes.v1")
-        ? await client.invoke(
-            "outlook.list_mailboxes.v1",
-            {},
-            { signal: controller.signal },
-          )
+        ? await client
+            .invoke(
+              "outlook.list_mailboxes.v1",
+              {},
+              { signal: controller.signal },
+            )
+            .catch(() => ({ mailboxes: [] }))
         : { mailboxes: [] };
       controller.signal.throwIfAborted();
       await client.invoke(
@@ -224,6 +225,7 @@ export function DesktopSidecarConfigurationSync() {
           mailboxes,
           profile?.email,
         ),
+        { signal: controller.signal },
       );
       await queryClient.invalidateQueries({
         queryKey: ["sidecar-indexing", snapshot.instanceId],
@@ -243,7 +245,6 @@ export function DesktopSidecarConfigurationSync() {
     queryClient,
     snapshot.instanceId,
     snapshot.state,
-    snapshot.localDelegation,
   ]);
 
   return null;

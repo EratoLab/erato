@@ -663,7 +663,7 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         PromptOptimizerRequest,
         PromptOptimizerResponse,
         budget::BudgetStatusResponse,
-        crate::config::DesktopSidecarOrganizationConfiguration,
+        crate::config::DesktopSidecarOrganizationConfigurationResponse,
         desktop_sidecar::DesktopSidecarDistributionResponse,
         desktop_sidecar::DesktopSidecarDistributionTargetResponse,
         desktop_sidecar::DesktopSidecarDistributionPlatformResponse,

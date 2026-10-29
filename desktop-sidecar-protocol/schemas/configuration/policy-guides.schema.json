@@ -1,0 +1,98 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://schemas.erato.ai/desktop-sidecar/v1/configuration/policy-guides.schema.json",
+  "title": "PolicyGuides",
+  "type": "object",
+  "description": "Organization-managed policy definitions. Acceptance and application of outside configuration are decided by the sidecar.",
+  "properties": {
+    "policies": {
+      "type": "object",
+      "propertyNames": {
+        "pattern": "\\S"
+      },
+      "additionalProperties": {
+        "$ref": "#/definitions/PolicyGuide"
+      }
+    }
+  },
+  "required": ["policies"],
+  "additionalProperties": true,
+  "definitions": {
+    "PolicyGuide": {
+      "title": "PolicyGuide",
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Disabled definitions are retained but must not be evaluated."
+        },
+        "question": {
+          "type": "string"
+        },
+        "choice_refuse": {
+          "type": "string",
+          "description": "True predicate: the content should be refused."
+        },
+        "choice_allow": {
+          "type": "string",
+          "description": "False predicate: the content is allowed."
+        },
+        "decision_providers": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Ordered provider IDs, highest priority first. No automatic fallback or local resolution is implied."
+        },
+        "metadata": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "Arbitrary JSON values, preserved verbatim and not sent to the model."
+        }
+      },
+      "required": [
+        "enabled",
+        "question",
+        "choice_refuse",
+        "choice_allow",
+        "decision_providers",
+        "metadata"
+      ],
+      "additionalProperties": true,
+      "if": {
+        "additionalProperties": true,
+        "properties": {
+          "enabled": {
+            "const": true
+          }
+        }
+      },
+      "then": {
+        "additionalProperties": true,
+        "properties": {
+          "question": {
+            "pattern": "\\S",
+            "type": "string"
+          },
+          "choice_refuse": {
+            "pattern": "\\S",
+            "type": "string"
+          },
+          "choice_allow": {
+            "pattern": "\\S",
+            "type": "string"
+          },
+          "decision_providers": {
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "pattern": "\\S"
+            },
+            "type": "array"
+          }
+        }
+      }
+    }
+  }
+}

@@ -68,19 +68,25 @@ directory = "/tmp/desktop-sidecar-artifacts"
         Some(false)
     );
     let organization_configuration = config.desktop_sidecar_organization_configuration();
-    assert_eq!(organization_configuration.outlook_addin_autopin, Some(true));
     assert_eq!(
-        organization_configuration.outlook_addin_autopin_panes,
+        organization_configuration.settings.outlook_addin_autopin,
+        Some(true)
+    );
+    assert_eq!(
+        organization_configuration
+            .settings
+            .outlook_addin_autopin_panes,
         Some(false)
     );
     // Without the Office add-in, the sidecar has no add-in id to pin.
-    assert_eq!(organization_configuration.outlook_addin_id, None);
+    assert_eq!(organization_configuration.settings.outlook_addin_id, None);
     config.integrations.ms_office.addin.enabled = true;
     config.integrations.ms_office.addin.addin_id =
         " 00000000-0000-4000-8000-000000000001 ".to_owned();
     assert_eq!(
         config
             .desktop_sidecar_organization_configuration()
+            .settings
             .outlook_addin_id
             .as_deref(),
         Some("00000000-0000-4000-8000-000000000001")
@@ -93,6 +99,7 @@ directory = "/tmp/desktop-sidecar-artifacts"
     assert_eq!(
         config
             .desktop_sidecar_organization_configuration()
+            .settings
             .outlook_addin_id
             .as_deref(),
         Some("00000000-0000-4000-8000-000000000002")

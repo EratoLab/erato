@@ -1,4 +1,5 @@
 /* This file is generated. Do not edit. */
+export type { PolicyGuides } from "./policy-guides.js";
 export type { SidecarStatusV1Params } from "./sidecar-status-v1-params.js";
 export type { SidecarStatusV1Result } from "./sidecar-status-v1-result.js";
 export type { SidecarRequestPermissionV1Params } from "./sidecar-request-permission-v1-params.js";
