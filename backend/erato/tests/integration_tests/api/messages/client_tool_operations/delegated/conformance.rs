@@ -1,6 +1,7 @@
 //! The cases every host context must pass, run once per row of `rows`.
 use super::super::executor_stream::wait_released;
 use super::slow_path::{
+    a_child_reaped_errored_after_its_answer_reads_as_completed,
     a_child_that_finishes_while_approvals_are_open_keeps_the_parent_parked,
     a_child_that_parks_on_a_second_grant_call_updates_its_waiting_item,
     a_claimed_grant_operation_is_authorized_while_the_parent_is_parked_on_the_child,
@@ -10,6 +11,8 @@ use super::slow_path::{
     a_durable_child_call_parks_and_the_parent_shows_what_it_waits_for,
     a_durable_child_call_waits_for_a_client_and_the_parent_resumes,
     a_durable_child_that_finishes_before_the_parent_parks_resumes_the_parent_once,
+    a_failed_owner_lookup_withdraws_nothing,
+    a_failed_task_call_continuation_is_not_run_again_and_the_parent_reads_it_as_failed,
     a_grant_operation_is_withdrawn_once_the_parent_chat_is_archived,
     a_grant_operation_is_withdrawn_once_the_user_never_allows_the_tool,
     a_grant_operation_its_grant_does_not_hold_durably_is_withdrawn,
@@ -17,17 +20,22 @@ use super::slow_path::{
     a_pane_without_grant_support_cannot_claim_a_grant_operation,
     a_parent_errored_after_its_decisions_resumes_once_when_the_waiting_child_finishes,
     a_restart_while_parked_gives_one_continuation_and_no_duplicate_calls,
+    a_task_call_left_continuing_on_an_errored_child_is_refused_and_settles_as_failed,
     a_waiting_call_is_withdrawn_once_the_parent_moved_on,
+    a_waiting_child_left_out_of_the_stop_keeps_its_call_and_its_slot_settles,
     a_waiting_child_that_parks_on_an_ask_during_the_decision_continuation_reparks_as_an_approval,
     a_waiting_childs_continuation_is_offered_its_granted_tools_while_the_parent_is_parked,
     a_withdrawn_childs_ask_is_answerable_in_its_own_chat,
     an_approved_child_call_on_a_durable_tool_waits_and_the_parent_shows_it,
     an_empty_continuestream_while_children_wait_is_children_waiting,
+    an_errored_parent_that_cleared_its_marker_is_not_resumed_by_its_child,
     approvals_decided_while_a_child_waits_repark_on_the_waiting_child,
     continuestream_refuses_a_decision_naming_a_waiting_item,
     continuestream_refuses_a_single_decision_when_only_waiting_items_are_open,
     no_client_before_the_attempt_ends_gives_expired,
     resume_parked_refuses_a_chat_whose_generation_moved_on,
+    the_old_slot_settles_while_a_newer_parent_turn_runs,
+    the_sweep_reaches_a_parent_behind_a_full_batch_that_never_changes,
     the_sweep_settles_a_waiting_child_whose_tail_never_ran_and_an_empty_continue_resumes_the_parent,
     two_waiting_children_one_still_running_give_one_parent_continuation_with_both_answers,
 };
@@ -133,6 +141,14 @@ macro_rules! host_conformance {
             the_sweep_settles_a_waiting_child_whose_tail_never_ran_and_an_empty_continue_resumes_the_parent
             a_waiting_call_is_withdrawn_once_the_parent_moved_on
             a_withdrawn_childs_ask_is_answerable_in_its_own_chat
+            a_failed_task_call_continuation_is_not_run_again_and_the_parent_reads_it_as_failed
+            a_task_call_left_continuing_on_an_errored_child_is_refused_and_settles_as_failed
+            the_old_slot_settles_while_a_newer_parent_turn_runs
+            a_waiting_child_left_out_of_the_stop_keeps_its_call_and_its_slot_settles
+            the_sweep_reaches_a_parent_behind_a_full_batch_that_never_changes
+            a_failed_owner_lookup_withdraws_nothing
+            an_errored_parent_that_cleared_its_marker_is_not_resumed_by_its_child
+            a_child_reaped_errored_after_its_answer_reads_as_completed
         ]);
     };
     ($name:ident: $row:ident($($arg:expr),*) $(, ignore = $why:literal)?) => {

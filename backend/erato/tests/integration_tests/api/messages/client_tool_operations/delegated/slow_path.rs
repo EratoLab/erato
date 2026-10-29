@@ -2262,3 +2262,423 @@ pub(super) async fn a_withdrawn_childs_ask_is_answerable_in_its_own_chat(
     assert!(extract_full_text(&parse_sse_events(&decided)).contains(CHILD_ANSWER));
     waiting.server.abort();
 }
+
+async fn sql(state: &erato::state::AppState, statement: String) {
+    use sea_orm::ConnectionTrait;
+    state.db.execute_unprepared(&statement).await.unwrap();
+}
+
+/// The pane's result is in, and the child's continuation began and died: what
+/// the stale-generation reap leaves for the next client to continue.
+async fn answered_and_left_continuing(row: &HostRow, waiting: &Waiting) {
+    let token = claim_token(row, &waiting.state, waiting.request.attempt_id).await;
+    post_result(
+        row,
+        &waiting.state,
+        &token,
+        &pane_result(row, &waiting.request),
+    )
+    .await
+    .assert_status_ok();
+    sql(
+        &waiting.state,
+        format!(
+            "UPDATE client_operation_attempts SET state = 'continuing' WHERE attempt_id = '{}'",
+            waiting.request.attempt_id
+        ),
+    )
+    .await;
+}
+
+fn assert_failed_task_result(body: &Value) {
+    let result = task_result_in(body, CLIENT_TASK_CALL);
+    assert_eq!(result["status"], "failed", "{result}");
+}
+
+pub(super) async fn a_failed_task_call_continuation_is_not_run_again_and_the_parent_reads_it_as_failed(
+    pool: Pool<Postgres>,
+    row: &HostRow,
+) {
+    let mut waiting = park_a_waiting_child(row, pool, false, |_| {}).await;
+    let resumed = record_parent_resumes(&mut waiting.llm);
+    let child_turns = after_the_read(
+        &mut waiting.llm,
+        build_openai_text_streaming_response(&[CHILD_ANSWER]),
+        &[],
+    );
+    answered_and_left_continuing(row, &waiting).await;
+    // A continuation that cannot read its own turn fails the same way each time.
+    let child_row = assistant_row(&waiting.state.db, waiting.child.id).await;
+    sql(
+        &waiting.state,
+        format!(
+            "UPDATE messages SET generation_parameters = '\"unreadable\"'::jsonb WHERE id = '{}'",
+            child_row.id
+        ),
+    )
+    .await;
+
+    continue_operation(&waiting.state, waiting.request.attempt_id)
+        .await
+        .assert_status_ok();
+    wait_idle(&waiting.state, waiting.child.id, "errored").await;
+    assert_eq!(
+        attempt_row(&waiting).await.state,
+        attempts::AttemptState::Completed,
+        "a failed continuation ends its call"
+    );
+    let answered = wait_answered(&waiting.state, waiting.chat_id).await;
+    assert_eq!(answered.id, waiting.parent_message.id);
+    assert_eq!(part_for(&answered, CLIENT_TASK_CALL)["status"], "error");
+    let parent_turns = turn_bodies(&resumed);
+    assert_eq!(parent_turns.len(), 1, "one parent continuation");
+    assert_failed_task_result(&parent_turns[0]);
+
+    let again = continue_operation(&waiting.state, waiting.request.attempt_id).await;
+    again.assert_status_ok();
+    assert_eq!(again.json::<Value>()["state"], "completed");
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    assert!(turn_bodies(&child_turns).is_empty(), "the child never ran");
+    assert_eq!(
+        reload(&waiting.state.db, waiting.child.id)
+            .await
+            .generation_state
+            .as_deref(),
+        Some("errored")
+    );
+    waiting.server.abort();
+}
+
+pub(super) async fn a_task_call_left_continuing_on_an_errored_child_is_refused_and_settles_as_failed(
+    pool: Pool<Postgres>,
+    row: &HostRow,
+) {
+    let mut waiting = park_a_waiting_child(row, pool, false, |_| {}).await;
+    let resumed = record_parent_resumes(&mut waiting.llm);
+    answered_and_left_continuing(row, &waiting).await;
+    // The continuation failed and the write that ends its call did not land.
+    sql(
+        &waiting.state,
+        format!(
+            "UPDATE chats SET generation_state = 'errored' WHERE id = '{}'",
+            waiting.child.id
+        ),
+    )
+    .await;
+
+    let refused = continue_operation(&waiting.state, waiting.request.attempt_id).await;
+    refused.assert_status_conflict();
+    assert_eq!(refused.text(), "Operation continuation failed");
+
+    erato::actors::cleanup_worker::run_cleanup_tick(&cleanup_args(&waiting.state))
+        .await
+        .unwrap();
+    let swept = assistant_row(&waiting.state.db, waiting.chat_id).await;
+    assert_eq!(part_for(&swept, CLIENT_TASK_CALL)["status"], "error");
+    let continued = continuestream(
+        &waiting,
+        json!({ "decisions": [], "shows_child_items": true }),
+    )
+    .await;
+    continued.assert_status_ok();
+    assert!(extract_full_text(&parse_sse_events(&continued)).contains(PARENT_FINAL));
+    let parent_turns = turn_bodies(&resumed);
+    assert_eq!(parent_turns.len(), 1, "one parent continuation");
+    assert_failed_task_result(&parent_turns[0]);
+    waiting.server.abort();
+}
+
+pub(super) async fn the_old_slot_settles_while_a_newer_parent_turn_runs(
+    pool: Pool<Postgres>,
+    row: &HostRow,
+) {
+    use erato::services::background_tasks::{Takeover, TaskOutcome};
+    let mut waiting = park_a_waiting_child(row, pool, false, |_| {}).await;
+    after_the_read(
+        &mut waiting.llm,
+        build_openai_text_streaming_response(&[CHILD_ANSWER]),
+        &[],
+    );
+    move_on(&mut waiting).await;
+    claim_as_pane(row, &waiting, true)
+        .await
+        .assert_status_conflict();
+    // The user's next turn is still running when the task finishes.
+    let tip = assistant_row(&waiting.state.db, waiting.chat_id).await;
+    assert_ne!(tip.id, waiting.parent_message.id);
+    let (_events, newer) = waiting
+        .state
+        .background_tasks
+        .try_start_task(
+            waiting.chat_id,
+            tip.id,
+            Takeover::RefuseParked,
+            waiting.state.config.generation_status.stale_after_secs,
+        )
+        .await
+        .expect("the newer turn takes the parent chat");
+
+    continue_operation(&waiting.state, waiting.request.attempt_id)
+        .await
+        .assert_status_ok();
+    wait_idle(&waiting.state, waiting.child.id, "completed").await;
+    let settled = eventually("the old parent slot to settle", || async {
+        let row = erato::db::entity::messages::Entity::find_by_id(waiting.parent_message.id)
+            .one(&waiting.state.db)
+            .await
+            .unwrap()
+            .unwrap();
+        (part_for(&row, CLIENT_TASK_CALL)["status"] != "in_progress").then_some(row)
+    })
+    .await;
+    let slot = part_for(&settled, CLIENT_TASK_CALL);
+    assert_eq!(slot["status"], "success", "{slot}");
+    assert!(
+        slot["output"]["result"]
+            .as_str()
+            .unwrap()
+            .contains(CHILD_ANSWER)
+    );
+    assert_eq!(
+        reload(&waiting.state.db, waiting.chat_id)
+            .await
+            .generation_state
+            .as_deref(),
+        Some("running"),
+        "the newer turn kept the chat"
+    );
+    waiting
+        .state
+        .background_tasks
+        .remove_task(
+            &waiting.chat_id,
+            newer.generation_id,
+            TaskOutcome::Completed,
+        )
+        .await;
+    waiting.server.abort();
+}
+
+/// What a turn leaves that ended on a stop no child item can share (the
+/// tool-call limit, its own durable operation): the child's slot waits, and
+/// no stop names the child.
+async fn drop_the_stop(waiting: &Waiting) {
+    let mut raw = waiting.parent_message.raw_message.clone();
+    raw["content"]
+        .as_array_mut()
+        .unwrap()
+        .retain(|part| part["content_type"] != "tool_approval_request");
+    let raw = serde_json::to_string(&raw).unwrap().replace('\'', "''");
+    sql(
+        &waiting.state,
+        format!(
+            "UPDATE messages SET raw_message = '{raw}'::jsonb WHERE id = '{}'",
+            waiting.parent_message.id
+        ),
+    )
+    .await;
+    assert_row_reads(&assistant_row(&waiting.state.db, waiting.chat_id).await);
+}
+
+pub(super) async fn a_waiting_child_left_out_of_the_stop_keeps_its_call_and_its_slot_settles(
+    pool: Pool<Postgres>,
+    row: &HostRow,
+) {
+    let mut waiting = park_a_waiting_child(row, pool, false, |_| {}).await;
+    let child_turns = after_the_read(
+        &mut waiting.llm,
+        build_openai_text_streaming_response(&[CHILD_ANSWER]),
+        &[],
+    );
+    drop_the_stop(&waiting).await;
+
+    answer_as_pane(
+        row,
+        &waiting.state,
+        &waiting.request,
+        pane_result(row, &waiting.request),
+    )
+    .await;
+    wait_idle(&waiting.state, waiting.child.id, "completed").await;
+    let child_turns = turn_bodies(&child_turns);
+    assert_eq!(child_turns.len(), 1);
+    assert!(child_turns[0].to_string().contains(PANE_TEXT));
+    assert!(
+        offers(&child_turns[0], row.read_tool),
+        "the parent still holds the grant's context"
+    );
+    let settled = eventually("the parent slot to settle", || async {
+        let row = assistant_row(&waiting.state.db, waiting.chat_id).await;
+        (part_for(&row, CLIENT_TASK_CALL)["status"] != "in_progress").then_some(row)
+    })
+    .await;
+    let slot = part_for(&settled, CLIENT_TASK_CALL);
+    assert_eq!(slot["status"], "success", "{slot}");
+    assert!(
+        slot["output"]["result"]
+            .as_str()
+            .unwrap()
+            .contains(CHILD_ANSWER)
+    );
+    waiting.server.abort();
+}
+
+pub(super) async fn the_sweep_reaches_a_parent_behind_a_full_batch_that_never_changes(
+    pool: Pool<Postgres>,
+    row: &HostRow,
+) {
+    let waiting = park_a_waiting_child(row, pool, false, |_| {}).await;
+    lose_the_tail(&waiting, "completed").await;
+    // Parents that answered after their stop and then errored keep matching
+    // the scan, and no sync changes them. Their ids sort before the real one.
+    let mut answered = waiting.parent_message.raw_message.clone();
+    answered["content"]
+        .as_array_mut()
+        .unwrap()
+        .push(json!({"content_type": "text", "text": "answered"}));
+    let answered = serde_json::to_string(&answered)
+        .unwrap()
+        .replace('\'', "''");
+    sql(
+        &waiting.state,
+        format!(
+            "INSERT INTO chats (id, owner_user_id, assistant_configuration, generation_state, created_via) \
+             SELECT ('00000000-0000-4000-8000-' || lpad(g::text, 12, '0'))::uuid, owner_user_id, \
+                    assistant_configuration, 'errored', created_via \
+             FROM chats, generate_series(1, 100) g WHERE id = '{}'",
+            waiting.chat_id
+        ),
+    )
+    .await;
+    sql(
+        &waiting.state,
+        format!(
+            "INSERT INTO messages (id, chat_id, raw_message, generation_parameters, is_message_in_active_thread) \
+             SELECT ('00000000-0000-4000-9000-' || lpad(g::text, 12, '0'))::uuid, \
+                    ('00000000-0000-4000-8000-' || lpad(g::text, 12, '0'))::uuid, \
+                    '{answered}'::jsonb, generation_parameters, true \
+             FROM messages, generate_series(1, 100) g WHERE id = '{}'",
+            waiting.parent_message.id
+        ),
+    )
+    .await;
+    let args = cleanup_args(&waiting.state);
+    let slot_status = async || {
+        part_for(
+            &assistant_row(&waiting.state.db, waiting.chat_id).await,
+            CLIENT_TASK_CALL,
+        )["status"]
+            .clone()
+    };
+
+    erato::actors::cleanup_worker::run_cleanup_tick(&args)
+        .await
+        .unwrap();
+    assert_eq!(
+        slot_status().await,
+        "in_progress",
+        "the first batch is full"
+    );
+    erato::actors::cleanup_worker::run_cleanup_tick(&args)
+        .await
+        .unwrap();
+    assert_eq!(slot_status().await, "success");
+    waiting.server.abort();
+}
+
+pub(super) async fn a_failed_owner_lookup_withdraws_nothing(pool: Pool<Postgres>, row: &HostRow) {
+    let waiting = park_a_waiting_child(row, pool, false, |_| {}).await;
+    // The parent's turn holds the grant's context only by running elsewhere:
+    // a newer message sits below the parked one, and another replica leases
+    // the parked message.
+    sql(
+        &waiting.state,
+        format!(
+            "INSERT INTO messages (id, chat_id, raw_message, created_at, updated_at, is_message_in_active_thread) \
+             VALUES ('{}', '{}', '{{\"role\":\"user\",\"content\":[{{\"content_type\":\"text\",\"text\":\"later\"}}]}}'::jsonb, now(), now(), true)",
+            Uuid::new_v4(),
+            waiting.chat_id
+        ),
+    )
+    .await;
+    sql(
+        &waiting.state,
+        format!(
+            "UPDATE temp_chat_generations SET message_id = '{}', owner_pod = 'elsewhere', \
+                 state = 'running', ended_at = NULL, heartbeat_at = now() \
+             WHERE chat_id = '{}'",
+            waiting.parent_message.id, waiting.chat_id
+        ),
+    )
+    .await;
+
+    sql(
+        &waiting.state,
+        "ALTER TABLE temp_chat_generations RENAME TO temp_chat_generations_away".into(),
+    )
+    .await;
+    let failed = claim_as_pane(row, &waiting, true).await;
+    sql(
+        &waiting.state,
+        "ALTER TABLE temp_chat_generations_away RENAME TO temp_chat_generations".into(),
+    )
+    .await;
+    failed.assert_status(axum::http::StatusCode::INTERNAL_SERVER_ERROR);
+    let attempt = attempt_row(&waiting).await;
+    assert_eq!(attempt.state, attempts::AttemptState::Pending);
+    assert!(attempt.validated_result.is_none(), "nothing was withdrawn");
+
+    claim_as_pane(row, &waiting, true).await.assert_status_ok();
+    waiting.server.abort();
+}
+
+pub(super) async fn an_errored_parent_that_cleared_its_marker_is_not_resumed_by_its_child(
+    pool: Pool<Postgres>,
+    row: &HostRow,
+) {
+    let mut waiting = park_a_waiting_child(row, pool, false, |_| {}).await;
+    let resumed = record_parent_resumes(&mut waiting.llm);
+    after_the_read(
+        &mut waiting.llm,
+        build_openai_text_streaming_response(&[CHILD_ANSWER]),
+        &[],
+    );
+    // What a continuation stopped by the content filter leaves: the chat
+    // `errored`, the waiting item still open, and no in-flight marker.
+    sql(
+        &waiting.state,
+        format!(
+            "UPDATE chats SET generation_state = 'errored' WHERE id = '{}'",
+            waiting.chat_id
+        ),
+    )
+    .await;
+
+    answer_as_pane(
+        row,
+        &waiting.state,
+        &waiting.request,
+        pane_result(row, &waiting.request),
+    )
+    .await;
+    wait_idle(&waiting.state, waiting.child.id, "completed").await;
+    let settled = eventually("the parent slot to settle", || async {
+        let row = assistant_row(&waiting.state.db, waiting.chat_id).await;
+        (part_for(&row, CLIENT_TASK_CALL)["status"] != "in_progress").then_some(row)
+    })
+    .await;
+    assert_eq!(part_for(&settled, CLIENT_TASK_CALL)["status"], "success");
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    assert!(
+        turn_bodies(&resumed).is_empty(),
+        "only the user runs it again"
+    );
+    assert_eq!(
+        reload(&waiting.state.db, waiting.chat_id)
+            .await
+            .generation_state
+            .as_deref(),
+        Some("errored")
+    );
+    waiting.server.abort();
+}
