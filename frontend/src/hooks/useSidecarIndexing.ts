@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useDesktopSidecar } from "@/providers/DesktopSidecarProvider";
 
 import type {
+  DesktopSidecarClient,
   IndexingStatusV1Result,
   OutlookListingWarning,
   OutlookMailbox,
@@ -31,15 +32,23 @@ type SidecarIndexingState = UseQueryResult<IndexingData, Error> & {
   saveError: Error | null;
 };
 
+/** Whether the sidecar offers everything the indexing settings read and write. */
+export function supportsIndexingSettings(
+  client: Pick<DesktopSidecarClient, "supports">,
+): boolean {
+  return (
+    client.supports("indexing.status.v1") &&
+    (client.supports("sources.list.v1") ||
+      client.supports("outlook.list_mailboxes.v1")) &&
+    client.supports("sidecar.configure.v1")
+  );
+}
+
 export function useSidecarIndexing(): SidecarIndexingState {
   const { client, snapshot } = useDesktopSidecar();
   const queryClient = useQueryClient();
   const supported =
-    snapshot.state === "ready" &&
-    !!client?.supports("indexing.status.v1") &&
-    (client.supports("sources.list.v1") ||
-      client.supports("outlook.list_mailboxes.v1")) &&
-    client.supports("sidecar.configure.v1");
+    snapshot.state === "ready" && !!client && supportsIndexingSettings(client);
   const queryKey = ["sidecar-indexing", snapshot.instanceId];
   const query = useQuery<IndexingData, Error>({
     queryKey,
