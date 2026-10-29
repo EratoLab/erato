@@ -32,6 +32,44 @@ pub struct AudioSynthesisMetadata {
 
 type SynthesizedResponse = (Vec<u8>, Vec<String>, u32);
 
+// Gather a useful initial passage without waiting indefinitely for more text.
+// Subsequent calls drain sentences accumulated during synthesis, up to the input cap.
+async fn next_passage(
+    receiver: &mut mpsc::Receiver<String>,
+    pending: &mut Option<String>,
+) -> Option<String> {
+    const MIN_CHARS: usize = 160;
+    const MAX_CHARS: usize = 2000;
+    let mut text = match pending.take() {
+        Some(text) => text,
+        None => receiver.recv().await?,
+    };
+    let deadline = tokio::time::Instant::now() + std::time::Duration::from_millis(250);
+    let mut length = text.chars().count();
+    loop {
+        let next = match receiver.try_recv() {
+            Ok(next) => Some(next),
+            Err(mpsc::error::TryRecvError::Disconnected) => None,
+            Err(mpsc::error::TryRecvError::Empty) if length < MIN_CHARS => {
+                tokio::time::timeout_at(deadline, receiver.recv())
+                    .await
+                    .ok()
+                    .flatten()
+            }
+            Err(mpsc::error::TryRecvError::Empty) => None,
+        };
+        let Some(next) = next else { break };
+        let next_length = next.chars().count();
+        if length + next_length > MAX_CHARS {
+            *pending = Some(next);
+            break;
+        }
+        text.push_str(&next);
+        length += next_length;
+    }
+    Some(text)
+}
+
 pub struct SpeechSession {
     sentences: Sentences,
     sender: Option<mpsc::Sender<String>>,
@@ -63,8 +101,9 @@ impl SpeechSession {
             let mut segments = Vec::new();
             let mut rate = 0;
             let mut sequence = 0;
+            let mut pending = None;
             let run = async {
-                while let Some(text) = receiver.recv().await {
+                while let Some(text) = next_passage(&mut receiver, &mut pending).await {
                     let text = super::sentences::speakable(&text);
                     if text.trim().is_empty() {
                         continue;
@@ -105,6 +144,7 @@ impl SpeechSession {
                         return Err(eyre!("Incomplete or empty speech response"));
                     }
                 }
+                provider.finish().await?;
                 Ok((pcm, segments, rate))
             };
             tokio::select! {
@@ -221,6 +261,39 @@ mod tests {
     use super::*;
     use crate::services::background_tasks::BackgroundTaskManager;
     use axum::{Router, body::Body, response::Response, routing::post};
+
+    #[tokio::test]
+    async fn passages_merge_queued_text_and_preserve_overflow_and_tail() {
+        let (tx, mut rx) = mpsc::channel(8);
+        tx.send("Hello. ".into()).await.unwrap();
+        tx.send("More context. ".into()).await.unwrap();
+        tx.send("x".repeat(1990)).await.unwrap();
+        tx.send("Final tail".into()).await.unwrap();
+        drop(tx);
+        let mut pending = None;
+        assert_eq!(
+            next_passage(&mut rx, &mut pending).await.unwrap(),
+            "Hello. More context. "
+        );
+        assert_eq!(
+            next_passage(&mut rx, &mut pending).await.unwrap(),
+            "x".repeat(1990) + "Final tail"
+        );
+        assert!(next_passage(&mut rx, &mut pending).await.is_none());
+    }
+
+    #[tokio::test]
+    async fn short_passage_flushes_while_text_channel_remains_open() {
+        let (_tx, mut rx) = mpsc::channel(8);
+        let mut pending = Some("Short sentence.".into());
+        let passage = tokio::time::timeout(
+            std::time::Duration::from_secs(1),
+            next_passage(&mut rx, &mut pending),
+        )
+        .await
+        .unwrap();
+        assert_eq!(passage.as_deref(), Some("Short sentence."));
+    }
 
     #[tokio::test]
     async fn gemini_live_sentence_audio_is_collected_for_replay() {

@@ -25,6 +25,10 @@ pub struct CompleteAudio {
 #[async_trait]
 pub trait SpeechProvider: Send + Sync {
     async fn stream(&self, text: &str) -> Result<SpeechAudio, Report>;
+    /// Release any session retained across passages of this assistant response.
+    async fn finish(&self) -> Result<(), Report> {
+        Ok(())
+    }
     async fn synthesize(&self, text: &str) -> Result<CompleteAudio, Report> {
         let mut audio = self.stream(text).await?;
         let mut pcm = Vec::new();
@@ -49,7 +53,7 @@ pub fn provider(config: &SpeechProviderConfig) -> Result<Box<dyn SpeechProvider>
         "openai_realtime" => Box::new(openai_realtime::OpenAiRealtime(config.clone())),
         "audio_cpp" => Box::new(audio_cpp::AudioCpp(config.clone())),
         "gemini" => Box::new(gemini::Gemini(config.clone())),
-        "gemini_live" => Box::new(gemini_live::GeminiLive(config.clone())),
+        "gemini_live" => Box::new(gemini_live::GeminiLive::new(config.clone())),
         _ => return Err(eyre!("Unknown speech provider")),
     })
 }

@@ -28,6 +28,10 @@ impl Sentences {
                 if rest.is_empty() {
                     break;
                 }
+                // A visual line wrap is not a synthesis boundary. Preserve paragraphs.
+                if ch == '\n' && !rest.starts_with('\n') {
+                    continue;
+                }
                 if ch == '.' {
                     let token = self.pending[..i].split_whitespace().last().unwrap_or("");
                     if ["Mr", "Mrs", "Ms", "Dr", "Prof", "St", "vs", "e.g", "i.e"].contains(&token)
@@ -94,6 +98,16 @@ pub fn speakable(markdown: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn line_wraps_stay_with_the_surrounding_sentence() {
+        let mut s = Sentences::default();
+        assert!(s.push("A wrapped\nline without punctuation").is_empty());
+        assert_eq!(
+            s.push(" ends here. Next"),
+            ["A wrapped\nline without punctuation ends here."]
+        );
+    }
+
     #[test]
     fn long_unicode_input_is_bounded_without_losing_text() {
         let input = "文".repeat(4500);
