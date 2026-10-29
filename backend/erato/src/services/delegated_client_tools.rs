@@ -1070,17 +1070,18 @@ pub async fn sweep_waiting_parents(db: &sea_orm::DatabaseConnection, config: &Ap
         sea_orm::DatabaseBackend::Postgres,
         crate::metrics_constants::POSTGRES_QUERY_WAITING_PARENTS_SCAN,
         r#"
-        SELECT tip.chat_id AS chat_id, tip.id AS message_id
-        FROM (
-            SELECT DISTINCT ON (m.chat_id) m.chat_id, m.id, m.raw_message
+        SELECT c.id AS chat_id, tip.id AS message_id
+        FROM chats c
+        CROSS JOIN LATERAL (
+            SELECT m.id, m.raw_message
             FROM messages m
-            JOIN chats c ON c.id = m.chat_id
-            WHERE c.archived_at IS NULL
-              AND c.generation_state IN ('awaiting_approval', 'errored')
-              AND m.is_message_in_active_thread
-            ORDER BY m.chat_id, m.created_at DESC, m.id DESC
+            WHERE m.chat_id = c.id AND m.is_message_in_active_thread
+            ORDER BY m.created_at DESC, m.id DESC
+            LIMIT 1
         ) tip
-        WHERE tip.raw_message -> 'content'
+        WHERE c.archived_at IS NULL
+          AND c.generation_state IN ('awaiting_approval', 'errored')
+          AND tip.raw_message -> 'content'
             @> '[{"content_type":"tool_approval_request","approvals":[{"child":{"waiting_for":{}}}]}]'::jsonb
         LIMIT $1
         "#,
