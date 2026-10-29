@@ -483,29 +483,40 @@ export const Chat = ({
   }, [refreshChats]);
 
   // Handle session select with void return type
-  const handleSessionSelectWrapper = (sessionId: string) => {
-    logger.log(
-      `[CHAT_FLOW] Handling session select in Chat component for session: ${sessionId}`,
-    );
-    // Call handleSessionSelect or directly use switchSession if that's not working
-    if (customSessionSelect) {
-      customSessionSelect(sessionId);
-    } else {
+  const handleSessionSelectWrapper = useCallback(
+    (sessionId: string) => {
       logger.log(
-        `[CHAT_FLOW] Directly calling switchSession with ID: ${sessionId}`,
+        `[CHAT_FLOW] Handling session select in Chat component for session: ${sessionId}`,
       );
-      switchSession(sessionId);
-    }
-  };
+      // Call handleSessionSelect or directly use switchSession if that's not working
+      if (customSessionSelect) {
+        customSessionSelect(sessionId);
+      } else {
+        logger.log(
+          `[CHAT_FLOW] Directly calling switchSession with ID: ${sessionId}`,
+        );
+        switchSession(sessionId);
+      }
+    },
+    [customSessionSelect, switchSession],
+  );
 
   // Handle archiving a session
-  const handleArchiveSession = (sessionId: string) => {
-    void runChatAction("archive", sessionId, () => archiveChat(sessionId));
-  };
+  const handleArchiveSession = useCallback(
+    (sessionId: string) => {
+      void runChatAction("archive", sessionId, () => archiveChat(sessionId));
+    },
+    [archiveChat],
+  );
 
-  const handleUnarchiveSession = (sessionId: string) => {
-    void runChatAction("unarchive", sessionId, () => unarchiveChat(sessionId));
-  };
+  const handleUnarchiveSession = useCallback(
+    (sessionId: string) => {
+      void runChatAction("unarchive", sessionId, () =>
+        unarchiveChat(sessionId),
+      );
+    },
+    [unarchiveChat],
+  );
 
   const [titleDialogChatId, setTitleDialogChatId] = useState<string | null>(
     null,
@@ -590,6 +601,23 @@ export const Chat = ({
       logger.log("[CHAT_FLOW] Error creating new chat:", error);
     }
   }, [onNewChat, createChat]);
+
+  // The sidebar is memoized; per-render handlers would re-render it, and every
+  // history row with it, on each streamed token.
+  const handleSidebarNewChat = useCallback(() => {
+    void handleNewChat();
+  }, [handleNewChat]);
+  const handleSessionPin = useCallback(
+    (sessionId: string, isPinned: boolean) => {
+      void runChatAction(isPinned ? "pin" : "unpin", sessionId, () =>
+        pinChat(sessionId, isPinned),
+      );
+    },
+    [pinChat],
+  );
+  const handleLoadMoreSessions = useCallback(() => {
+    void fetchNextHistoryPage();
+  }, [fetchNextHistoryPage]);
 
   // Use the file preview modal hook
   const {
@@ -821,9 +849,7 @@ export const Chat = ({
       >
         <ChatHistorySidebar
           collapsed={sidebarCollapsed}
-          onNewChat={() => {
-            void handleNewChat();
-          }}
+          onNewChat={handleSidebarNewChat}
           onToggleCollapse={onToggleCollapse}
           sessions={sessions}
           currentSessionId={currentChatId ?? ""}
@@ -833,17 +859,7 @@ export const Chat = ({
           onSessionEditTitle={handleEditTitleSession}
           pinnedSessions={pinnedSessions}
           pinnedChatsLimit={pinnedChatsLimit}
-          onSessionPin={
-            pinnedChatsEnabled
-              ? (sessionId, isPinned) => {
-                  void runChatAction(
-                    isPinned ? "pin" : "unpin",
-                    sessionId,
-                    () => pinChat(sessionId, isPinned),
-                  );
-                }
-              : undefined
-          }
+          onSessionPin={pinnedChatsEnabled ? handleSessionPin : undefined}
           onSessionShare={
             chatSharingEnabled ? handleOpenShareDialog : undefined
           }
@@ -851,9 +867,7 @@ export const Chat = ({
           isLoading={chatHistoryLoading}
           hasMoreSessions={hasNextHistoryPage}
           isLoadingMoreSessions={isFetchingNextHistoryPage}
-          onLoadMoreSessions={() => {
-            void fetchNextHistoryPage();
-          }}
+          onLoadMoreSessions={handleLoadMoreSessions}
           error={
             chatHistoryError instanceof Error ? chatHistoryError : undefined
           }

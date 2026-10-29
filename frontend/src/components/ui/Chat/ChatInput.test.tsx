@@ -5852,6 +5852,38 @@ describe("ChatInput", () => {
       expect(textarea).toHaveFocus();
     });
 
+    it("leaves text selected in the page selected when the turn ends", async () => {
+      const { textarea, endTurn } = await renderComposer({ pending: true });
+      const answer = document.createElement("p");
+      answer.textContent = "An earlier answer";
+      document.body.appendChild(answer);
+      textarea.blur();
+      document.getSelection()?.selectAllChildren(answer);
+
+      endTurn();
+      await flushFrame();
+
+      expect(textarea).not.toHaveFocus();
+      expect(document.getSelection()?.toString()).toBe("An earlier answer");
+      document.getSelection()?.removeAllRanges();
+      answer.remove();
+    });
+
+    it("still refocuses the textarea when only a caret sits in the page", async () => {
+      const { textarea, endTurn } = await renderComposer({ pending: true });
+      const answer = document.createElement("p");
+      answer.textContent = "An earlier answer";
+      document.body.appendChild(answer);
+      textarea.blur();
+      document.getSelection()?.collapse(answer.firstChild, 3);
+
+      endTurn();
+      await flushFrame();
+
+      expect(textarea).toHaveFocus();
+      answer.remove();
+    });
+
     it("focuses the browse search before the next frame", async () => {
       enableDelegation();
       const { textarea } = await renderComposer();

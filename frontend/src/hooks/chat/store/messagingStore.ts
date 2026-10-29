@@ -857,6 +857,12 @@ export const useMessagingStore = create<MessagingStore>()(
       name: "Messaging Store",
       store: "messaging-store",
       enabled: process.env.NODE_ENV === "development",
+      // The extension filters before serializing, so a streamed token no
+      // longer copies the whole store, every chat's messages included.
+      actionsDenylist: [
+        "messaging/handleTextDelta",
+        "messaging/handleReasoningDelta",
+      ],
     },
   ),
 );

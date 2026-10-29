@@ -1732,6 +1732,11 @@ export const ChatInput = ({
         if (active?.closest('[data-ui="composer-context-lane"]')) {
           return;
         }
+        // Text selected in the page (focus stays on the body) would be lost
+        // to the focus. A textarea's own selection reports as collapsed.
+        if (document.getSelection()?.isCollapsed === false) {
+          return;
+        }
         if (
           active === null ||
           active === document.body ||

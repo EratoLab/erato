@@ -19,10 +19,7 @@ import { useScrollToBottom } from "@/hooks/useScrollToBottom";
 import { FileTypeUtil } from "@/utils/fileTypes";
 
 import { MessageListHeader } from "./MessageListHeader";
-import {
-  useMessageClassNameHelper,
-  useMessageAnimations,
-} from "./MessageListUtils";
+import { useMessageClassNameHelper } from "./MessageListUtils";
 import { ScrollToBottomButton } from "./ScrollToBottomButton";
 import { StandardMessageList } from "./StandardMessageList";
 import { VirtualizedMessageList } from "./VirtualizedMessageList";
@@ -861,9 +858,6 @@ export const MessageList = memo<MessageListProps>(
 
     // Helper function to get CSS classes for message highlighting
     const getMessageClassName = useMessageClassNameHelper();
-
-    // Inject message animations
-    useMessageAnimations();
 
     // Use our hook for scroll events
     useScrollEvents({
