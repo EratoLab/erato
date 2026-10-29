@@ -7,14 +7,64 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
+use std::time::SystemTime;
 
 const EXPLICIT_ID_FLAG: &str = "js-lingui-explicit-id";
 const UNIT_SEPARATOR: char = '\u{1f}';
 
 #[derive(Debug, erato_memory::HeapSize)]
 pub struct TranslationPoCache {
-    entries: Mutex<HashMap<PathBuf, Vec<u8>>>,
+    entries: Mutex<HashMap<PathBuf, CachedCatalog>>,
     fallback_locale: String,
+}
+
+#[derive(Debug, erato_memory::HeapSize)]
+struct CachedCatalog {
+    sources: CatalogSources,
+    compiled: CompiledMessagesJson,
+}
+
+/// A compiled `messages.json` body with an ETag derived from its content.
+#[derive(Clone, Debug, erato_memory::HeapSize)]
+pub struct CompiledMessagesJson {
+    pub body: Vec<u8>,
+    pub etag: String,
+}
+
+impl CompiledMessagesJson {
+    fn new(body: Vec<u8>) -> Self {
+        let content_hash: String = Sha256::digest(&body)[..16]
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect();
+        Self {
+            body,
+            etag: format!("\"{content_hash}\""),
+        }
+    }
+}
+
+/// A cached catalog is reused only while its PO files still match these.
+#[derive(Debug, PartialEq, Eq, erato_memory::HeapSize)]
+struct CatalogSources {
+    po: SourceStamp,
+    fallback: Option<SourceStamp>,
+}
+
+#[derive(Debug, PartialEq, Eq, erato_memory::HeapSize)]
+struct SourceStamp {
+    modified: SystemTime,
+    len: u64,
+}
+
+impl SourceStamp {
+    fn read(path: &Path) -> io::Result<Self> {
+        let metadata = fs::metadata(path)?;
+        Ok(Self {
+            modified: metadata.modified()?,
+            len: metadata.len(),
+        })
+    }
 }
 
 impl TranslationPoCache {
@@ -25,21 +75,32 @@ impl TranslationPoCache {
         }
     }
 
-    pub fn compile_messages_json(&self, po_path: &Path) -> io::Result<Vec<u8>> {
+    pub fn compile_messages_json(&self, po_path: &Path) -> io::Result<CompiledMessagesJson> {
         let po_path = po_path.canonicalize()?;
+        let fallback_path = fallback_po_path(&po_path, &self.fallback_locale)
+            .filter(|fallback_path| fallback_path != &po_path);
+        // Stamped before reading: a write racing the read then leaves an
+        // outdated stamp, which forces a recompile instead of a stale entry.
+        let sources = CatalogSources {
+            po: SourceStamp::read(&po_path)?,
+            fallback: fallback_path
+                .as_deref()
+                .map(SourceStamp::read)
+                .transpose()?,
+        };
         if let Some(cached) = self
             .entries
             .lock()
             .expect("translation po cache should not be poisoned")
             .get(&po_path)
-            .cloned()
+            .filter(|cached| cached.sources == sources)
+            .map(|cached| cached.compiled.clone())
         {
             return Ok(cached);
         }
 
         let po_contents = fs::read_to_string(&po_path)?;
-        let fallback_messages = fallback_po_path(&po_path, &self.fallback_locale)
-            .filter(|fallback_path| fallback_path != &po_path)
+        let fallback_messages = fallback_path
             .map(|fallback_path| {
                 fs::read_to_string(&fallback_path).and_then(|contents| {
                     compile_po_catalog_to_messages(&contents).map_err(|err| {
@@ -59,13 +120,21 @@ impl TranslationPoCache {
                 format!("failed to compile {}: {err}", po_path.display()),
             )
         })?);
-        let compiled = serde_json::to_vec(&json!({ "messages": messages }))
-            .map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))?;
+        let compiled = CompiledMessagesJson::new(
+            serde_json::to_vec(&json!({ "messages": messages }))
+                .map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))?,
+        );
 
         self.entries
             .lock()
             .expect("translation po cache should not be poisoned")
-            .insert(po_path, compiled.clone());
+            .insert(
+                po_path,
+                CachedCatalog {
+                    sources,
+                    compiled: compiled.clone(),
+                },
+            );
         Ok(compiled)
     }
 
@@ -611,7 +680,7 @@ msgstr "Abbrechen"
         let compiled = TranslationPoCache::new("en")
             .compile_messages_json(&de_path)
             .unwrap();
-        let value: Value = serde_json::from_slice(&compiled).unwrap();
+        let value: Value = serde_json::from_slice(&compiled.body).unwrap();
 
         assert_eq!(
             value["messages"]["navigation.page.new_chat"],
@@ -619,6 +688,95 @@ msgstr "Abbrechen"
         );
         assert_eq!(value["messages"]["common.cancel"], json!(["Abbrechen"]));
         assert_eq!(value["messages"]["common.close"], json!(["Close"]));
+    }
+
+    #[test]
+    fn jit_catalog_recompiles_when_po_sources_change() {
+        fn write_po(path: &Path, contents: &str, modified: SystemTime) {
+            std::fs::write(path, contents).unwrap();
+            std::fs::File::options()
+                .write(true)
+                .open(path)
+                .unwrap()
+                .set_modified(modified)
+                .unwrap();
+        }
+
+        let tempdir = tempfile::tempdir().unwrap();
+        let en_dir = tempdir.path().join("locales/en");
+        let de_dir = tempdir.path().join("locales/de");
+        std::fs::create_dir_all(&en_dir).unwrap();
+        std::fs::create_dir_all(&de_dir).unwrap();
+        let en_path = en_dir.join("messages.po");
+        let de_path = de_dir.join("messages.po");
+        let initial = SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(1_700_000_000);
+        let changed = initial + std::time::Duration::from_secs(10);
+
+        let en_contents = r#"
+#. js-lingui-explicit-id
+msgid "common.close"
+msgstr "Close"
+"#;
+        write_po(&en_path, en_contents, initial);
+        write_po(
+            &de_path,
+            r#"
+#. js-lingui-explicit-id
+msgid "common.cancel"
+msgstr "Abbrechen"
+"#,
+            initial,
+        );
+
+        let cache = TranslationPoCache::new("en");
+        let compile = |path: &Path| -> Value {
+            serde_json::from_slice(&cache.compile_messages_json(path).unwrap().body).unwrap()
+        };
+        let value = compile(&de_path);
+        assert_eq!(value["messages"]["common.cancel"], json!(["Abbrechen"]));
+        assert_eq!(value["messages"]["common.close"], json!(["Close"]));
+
+        // Same size and mtime: the cached catalog is served without rereading.
+        write_po(
+            &de_path,
+            r#"
+#. js-lingui-explicit-id
+msgid "common.cancel"
+msgstr "Abbrechxn"
+"#,
+            initial,
+        );
+        assert_eq!(compile(&de_path), value);
+
+        write_po(
+            &de_path,
+            r#"
+#. js-lingui-explicit-id
+msgid "common.cancel"
+msgstr "Abbrechen"
+
+#. js-lingui-explicit-id
+msgid "messageList.scrollToBottom.newMessageCount"
+msgstr "{count} neue Nachrichten"
+"#,
+            changed,
+        );
+        let value = compile(&de_path);
+        assert_eq!(
+            value["messages"]["messageList.scrollToBottom.newMessageCount"],
+            json!([["count"], " neue Nachrichten"])
+        );
+
+        write_po(
+            &en_path,
+            &format!(
+                "{en_contents}\n#. js-lingui-explicit-id\nmsgid \"common.save\"\nmsgstr \"Save\"\n"
+            ),
+            changed,
+        );
+        let value = compile(&de_path);
+        assert_eq!(value["messages"]["common.save"], json!(["Save"]));
+        assert_eq!(value["messages"]["common.cancel"], json!(["Abbrechen"]));
     }
 
     #[test]
