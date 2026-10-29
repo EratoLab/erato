@@ -296,13 +296,13 @@ pub(crate) async fn granted_tools(
     Some((grant.binding, tools))
 }
 
-async fn owner_running(app_state: &AppState, grant: &ClientToolGrant) -> bool {
-    app_state
+async fn owner_running(app_state: &AppState, grant: &ClientToolGrant) -> Result<bool, Report> {
+    Ok(app_state
         .background_tasks
-        .active_generation(&grant.owner_chat_id)
-        .await
+        .try_active_generation(&grant.owner_chat_id)
+        .await?
         .and_then(|generation| generation.message_id())
-        == Some(grant.owner_message_id)
+        == Some(grant.owner_message_id))
 }
 
 /// The owner clause of the offer predicate: the grant's owner turn runs, or it
@@ -313,7 +313,7 @@ async fn owner_holds_context(
     child_chat_id: Uuid,
 ) -> Result<bool, Report> {
     use sea_orm::EntityTrait;
-    if owner_running(app_state, grant).await {
+    if owner_running(app_state, grant).await? {
         return Ok(true);
     }
     let Some(origin_chat) = chats::Entity::find_by_id(grant.owner_chat_id)

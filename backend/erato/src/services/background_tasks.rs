@@ -803,31 +803,54 @@ impl BackgroundTaskManager {
 
     /// Return the active shared generation for a chat, if one is registered.
     pub async fn get_shared_generation(&self, chat_id: &Uuid) -> Option<(Uuid, Option<Uuid>)> {
-        let db = self.db.as_ref()?;
+        self.try_get_shared_generation(chat_id).await.ok().flatten()
+    }
+
+    /// [`Self::get_shared_generation`] for a caller that must not read a
+    /// failed query as "nothing runs".
+    pub async fn try_get_shared_generation(
+        &self,
+        chat_id: &Uuid,
+    ) -> Result<Option<(Uuid, Option<Uuid>)>, sea_orm::DbErr> {
+        let Some(db) = self.db.as_ref() else {
+            return Ok(None);
+        };
         let statement = named_statement_from_sql_and_values(
             sea_orm::DatabaseBackend::Postgres,
             POSTGRES_QUERY_GENERATION_SHARED_START,
             "SELECT generation_id, message_id FROM temp_chat_generations WHERE chat_id = $1 AND state = 'running'",
             [(*chat_id).into()],
         );
-        let row = db.query_one_raw(statement).await.ok().flatten()?;
-        Some((
-            row.try_get("", "generation_id").ok()?,
-            row.try_get("", "message_id").ok()?,
-        ))
+        let Some(row) = db.query_one_raw(statement).await? else {
+            return Ok(None);
+        };
+        Ok(Some((
+            row.try_get("", "generation_id")?,
+            row.try_get("", "message_id")?,
+        )))
     }
 
     /// This replica's task for the chat, else a generation leased elsewhere.
     pub async fn active_generation(&self, chat_id: &Uuid) -> Option<ActiveGeneration> {
+        self.try_active_generation(chat_id).await.ok().flatten()
+    }
+
+    /// [`Self::active_generation`], with a failed read of the shared lease as
+    /// an error.
+    pub async fn try_active_generation(
+        &self,
+        chat_id: &Uuid,
+    ) -> Result<Option<ActiveGeneration>, sea_orm::DbErr> {
         if let Some(task) = self.get_task(chat_id).await {
-            return Some(ActiveGeneration::Local(task));
+            return Ok(Some(ActiveGeneration::Local(task)));
         }
-        self.get_shared_generation(chat_id)
-            .await
+        Ok(self
+            .try_get_shared_generation(chat_id)
+            .await?
             .map(|(generation_id, message_id)| ActiveGeneration::Shared {
                 generation_id,
                 message_id,
-            })
+            }))
     }
 
     pub async fn abort_generation(&self, generation: &ActiveGeneration) -> Result<(), String> {
