@@ -35,9 +35,9 @@ vi.mock("@/hooks/chat/useChatHistory", () => ({
   }),
 }));
 
-vi.mock("@/providers/ChatProvider", () => ({
-  useChatContext: vi.fn(),
-}));
+vi.mock("@/providers/ChatProvider", async () =>
+  (await import("@/test/chatProviderMock")).createChatProviderMock(),
+);
 
 vi.mock("@/providers/FileCapabilitiesProvider", () => ({
   FileCapabilitiesProvider: ({ children }: { children: React.ReactNode }) =>

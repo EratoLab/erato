@@ -1,5 +1,5 @@
 import {
-  ChatContext,
+  ChatContextProviders,
   chatDetailQuery,
   getSupportedFileTypes,
   mapMessageToUiMessage,
@@ -22,6 +22,8 @@ import {
   useMessagingStore,
   useModelHistory,
   usePersistedState,
+  useStableChatMessages,
+  useStableValue,
   useUnarchiveChat,
   useUpdateChatTitle,
   type ArchiveChatResponse,
@@ -369,49 +371,63 @@ function AddinChatDataProvider({
     [session.newChatCounter],
   );
 
+  // Unchanged messages keep their objects across streamed updates, and the
+  // order stays the same array, so consumers can skip them.
+  const transformedMessages = useStableChatMessages(
+    useMemo(
+      () =>
+        Object.entries(messages || {}).reduce(
+          (accumulator, [messageId, message]) => {
+            const isStreamingMessage =
+              message.role === "assistant" &&
+              ((isStreaming && message.status === "sending") ||
+                (!isStreaming &&
+                  message.status === "complete" &&
+                  message.id.includes("temp-")));
+
+            if (isStreamingMessage) {
+              const isOptimisticPlaceholder =
+                !isStreaming &&
+                message.status === "sending" &&
+                message.id.startsWith("temp-assistant-");
+              accumulator[messageId] = {
+                ...message,
+                sender: message.role,
+                authorId: "assistant_id",
+                loading: {
+                  state: isOptimisticPlaceholder
+                    ? "thinking"
+                    : isStreaming
+                      ? "typing"
+                      : "done",
+                  ...(pendingLabel && message.id.startsWith("temp-assistant-")
+                    ? { context: pendingLabel }
+                    : {}),
+                },
+              };
+            } else {
+              accumulator[messageId] = mapMessageToUiMessage(message);
+            }
+            return accumulator;
+          },
+          {} as Record<string, AddinChatMessage>,
+        ),
+      [messages, isStreaming, pendingLabel],
+    ),
+  );
+  const messageOrder = useStableValue(
+    useMemo(
+      () =>
+        Object.keys(transformedMessages).sort(
+          (left, right) =>
+            new Date(transformedMessages[left].createdAt).getTime() -
+            new Date(transformedMessages[right].createdAt).getTime(),
+        ),
+      [transformedMessages],
+    ),
+  );
+
   const contextValue = useMemo<ChatContextValue>(() => {
-    const transformedMessages = Object.entries(messages || {}).reduce(
-      (accumulator, [messageId, message]) => {
-        const isStreamingMessage =
-          message.role === "assistant" &&
-          ((isStreaming && message.status === "sending") ||
-            (!isStreaming &&
-              message.status === "complete" &&
-              message.id.includes("temp-")));
-
-        if (isStreamingMessage) {
-          const isOptimisticPlaceholder =
-            !isStreaming &&
-            message.status === "sending" &&
-            message.id.startsWith("temp-assistant-");
-          accumulator[messageId] = {
-            ...message,
-            sender: message.role,
-            authorId: "assistant_id",
-            loading: {
-              state: isOptimisticPlaceholder
-                ? "thinking"
-                : isStreaming
-                  ? "typing"
-                  : "done",
-              ...(pendingLabel && message.id.startsWith("temp-assistant-")
-                ? { context: pendingLabel }
-                : {}),
-            },
-          };
-        } else {
-          accumulator[messageId] = mapMessageToUiMessage(message);
-        }
-        return accumulator;
-      },
-      {} as Record<string, AddinChatMessage>,
-    );
-    const messageOrder = Object.keys(transformedMessages).sort(
-      (left, right) =>
-        new Date(transformedMessages[left].createdAt).getTime() -
-        new Date(transformedMessages[right].createdAt).getTime(),
-    );
-
     return {
       chats,
       pinnedChats: [],
@@ -475,11 +491,10 @@ function AddinChatDataProvider({
     isPendingResponse,
     isStreaming,
     isUploading,
-    messages,
+    messageOrder,
     messagingError,
     mountKey,
     navigateToChat,
-    pendingLabel,
     refetchHistory,
     refetchMessages,
     regenerateMessage,
@@ -488,6 +503,7 @@ function AddinChatDataProvider({
     session.newChatCounter,
     silentChatId,
     streamingContent,
+    transformedMessages,
     unarchiveChat,
     updateChatTitle,
     uploadError,
@@ -496,6 +512,6 @@ function AddinChatDataProvider({
   ]);
 
   return (
-    <ChatContext.Provider value={contextValue}>{children}</ChatContext.Provider>
+    <ChatContextProviders value={contextValue}>{children}</ChatContextProviders>
   );
 }

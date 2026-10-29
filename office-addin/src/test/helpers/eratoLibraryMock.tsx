@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
 
 import type * as EratoLibrary from "@erato/frontend/library";
-import type { ReactNode } from "react";
+import type { Context, ReactNode } from "react";
 
 /**
  * Default module body for `vi.mock("@erato/frontend/library", ...)`.
@@ -322,6 +322,7 @@ export const DEFAULT_STUBS = {
   useGetFile: () => ({ data: undefined, isLoading: false, error: null }),
   useGetFilePreview: () => ({ data: undefined, isLoading: false, error: null }),
   useGroupedFileAttachmentsPreview: () => [],
+  useGroupedLoadMorePaused: () => false,
   getFileName: (file: { filename?: string; name?: string }) =>
     file.filename ?? file.name ?? "",
   useMessageAttachmentFiles: () => ({
@@ -601,13 +602,65 @@ export const DEFAULT_STUBS = {
     setCurrentChatId: noop,
     clearStatus: noop,
   })),
+  ChatContextProviders: StubPassthrough,
+  useStableChatMessages: <T,>(messages: T) => messages,
+  useStableValue: <T,>(value: T) => value,
 } satisfies Partial<Record<keyof typeof EratoLibrary, unknown>>;
+
+type ChatContextHook = () => Record<string, unknown>;
+
+/**
+ * The session, transcript and conversation hooks, derived from a test's
+ * `useChatContext`, so a test describes its chat in one place. A factory that
+ * does not go through `createEratoLibraryMock` spreads this next to it.
+ */
+export const chatHooksFrom = (useChatContext: ChatContextHook) => {
+  const useMessages = () =>
+    (useChatContext().messages ?? {}) as Record<string, unknown>;
+  return {
+    useChatSession: () => {
+      const context = useChatContext();
+      return { ...context, getTranscript: () => context };
+    },
+    useChatTranscript: useChatContext,
+    useConversationMessage: (messageId?: string) => {
+      const messages = useMessages();
+      return messageId === undefined ? undefined : messages[messageId];
+    },
+    useConversationSelector: (
+      select: (messages: Record<string, unknown>) => unknown,
+    ) => select(useMessages()),
+  };
+};
 
 /**
  * Module body for `vi.mock("@erato/frontend/library", ...)`: the inert
  * defaults with `overrides` spread over them. The spread is shallow, so an
- * override replaces a default outright rather than merging into it.
+ * override replaces a default outright rather than merging into it. A
+ * `useChatContext` override also backs the narrower chat hooks, and a
+ * `ChatContext` override is what the real chat providers fill.
  */
 export const createEratoLibraryMock = (
   overrides: Record<string, unknown> = {},
-): Record<string, unknown> => ({ ...DEFAULT_STUBS, ...overrides });
+): Record<string, unknown> => {
+  const derived: Record<string, unknown> = {};
+  const useChatContext = overrides.useChatContext as
+    | ChatContextHook
+    | undefined;
+  if (useChatContext) Object.assign(derived, chatHooksFrom(useChatContext));
+  const ChatContext = overrides.ChatContext as Context<unknown> | undefined;
+  if (ChatContext) {
+    derived.ChatContextProviders = function ChatContextProviders({
+      value,
+      children,
+    }: {
+      value: unknown;
+      children?: ReactNode;
+    }) {
+      return (
+        <ChatContext.Provider value={value}>{children}</ChatContext.Provider>
+      );
+    };
+  }
+  return { ...DEFAULT_STUBS, ...derived, ...overrides };
+};

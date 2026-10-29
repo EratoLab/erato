@@ -9,7 +9,7 @@ import { messages as enMessages } from "@/locales/en/messages.json";
 import { ChatHistorySidebar } from "./ChatHistorySidebar";
 
 import type { ChatSession } from "@/types/chat";
-import type { Messages } from "@lingui/core";
+import type { I18n, Messages } from "@lingui/core";
 
 let mockedFiltersEnabled = true;
 let mockedCollapsedMode = "hidden";
@@ -100,6 +100,38 @@ const sessions: ChatSession[] = [
     updatedAt: new Date("2024-01-01").toISOString(),
   },
 ];
+
+const todaySession = (): ChatSession => ({
+  ...sessions[0],
+  id: "chat-today",
+  updatedAt: new Date().toISOString(),
+});
+const olderSession = (id: string): ChatSession => ({
+  ...sessions[0],
+  id,
+  updatedAt: new Date("2020-01-01").toISOString(),
+});
+const pagedSidebar = (
+  i18n: I18n,
+  pageSessions: ChatSession[],
+  isLoadingMoreSessions: boolean,
+) => (
+  <MemoryRouter>
+    <I18nProvider i18n={i18n}>
+      <ChatHistorySidebar
+        sessions={pageSessions}
+        currentSessionId="chat-today"
+        onSessionSelect={vi.fn()}
+        onSessionArchive={vi.fn()}
+        onSessionUnarchive={vi.fn()}
+        isLoading={false}
+        hasMoreSessions={true}
+        isLoadingMoreSessions={isLoadingMoreSessions}
+        onLoadMoreSessions={vi.fn()}
+      />
+    </I18nProvider>
+  </MemoryRouter>
+);
 
 describe("ChatHistorySidebar", () => {
   it("shows the ungrouped recent list without a filter menu when disabled", async () => {
@@ -882,6 +914,51 @@ describe("ChatHistorySidebar", () => {
     expect(historyListProps).toHaveLength(1);
     expect(historyListProps[0].sessions.map((s) => s.id)).toEqual(["chat-old"]);
     expect(historyListProps[0].hasMore).toBe(true);
+  });
+
+  it("keeps loading while each page adds rows to an open group", async () => {
+    const { i18n } = await import("@lingui/core");
+    const firstPage = [todaySession(), olderSession("chat-old-1")];
+    const { rerender } = render(pagedSidebar(i18n, firstPage, false));
+
+    rerender(pagedSidebar(i18n, firstPage, true));
+    rerender(
+      pagedSidebar(i18n, [...firstPage, olderSession("chat-old-2")], false),
+    );
+
+    expect(historyListProps.at(-1)?.sessions.map((s) => s.id)).toEqual([
+      "chat-old-1",
+      "chat-old-2",
+    ]);
+    expect(historyListProps.at(-1)?.hasMore).toBe(true);
+  });
+
+  it("stops loading older chats while each page lands only in a collapsed group", async () => {
+    const { i18n } = await import("@lingui/core");
+    const firstPage = [todaySession(), olderSession("chat-old-1")];
+    const { rerender } = render(pagedSidebar(i18n, firstPage, false));
+    fireEvent.click(screen.getByRole("button", { name: "Collapse Older" }));
+    await waitFor(() =>
+      expect(screen.getAllByTestId("history-list")).toHaveLength(1),
+    );
+
+    rerender(pagedSidebar(i18n, firstPage, true));
+    rerender(
+      pagedSidebar(i18n, [...firstPage, olderSession("chat-old-2")], false),
+    );
+
+    expect(historyListProps.at(-1)?.sessions.map((s) => s.id)).toEqual([
+      "chat-today",
+    ]);
+    expect(historyListProps.at(-1)?.hasMore).toBe(false);
+
+    fireEvent.click(screen.getByRole("button", { name: "Expand Older" }));
+
+    expect(historyListProps.at(-1)?.sessions.map((s) => s.id)).toEqual([
+      "chat-old-1",
+      "chat-old-2",
+    ]);
+    expect(historyListProps.at(-1)?.hasMore).toBe(true);
   });
 
   it("renders the Recent section with a single unlabeled list when grouping is off", async () => {

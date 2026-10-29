@@ -22,6 +22,7 @@ import {
   useCallback,
   useRef,
   useEffect,
+  useInsertionEffect,
   useLayoutEffect,
   useMemo,
 } from "react";
@@ -60,6 +61,7 @@ import {
   collectSupersededMessageIds,
   constructSubmitStreamRequestBody,
 } from "@/utils/chat/messageUtils";
+import { useStableValue } from "@/utils/chat/stableValues";
 import { createLogger } from "@/utils/debugLogger";
 import { createSSEConnection, type SSEEvent } from "@/utils/sse/sseClient";
 
@@ -994,17 +996,24 @@ export function useChatMessaging(
   ]);
 
   // --- Hoist messageOrder definition here ---
-  const messageOrder = useMemo(
-    () =>
-      Object.values(messages)
-        .sort(
-          (a, b) =>
-            new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
-        )
-        .map((m) => m.id),
-    [messages],
+  const messageOrder = useStableValue(
+    useMemo(
+      () =>
+        Object.values(messages)
+          .sort(
+            (a, b) =>
+              new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+          )
+          .map((m) => m.id),
+      [messages],
+    ),
   );
   // --- End of hoisted messageOrder ---
+  // Read when sending, so `sendMessage` keeps one identity across stream chunks.
+  const latestTranscriptRef = useRef({ messages, messageOrder });
+  useInsertionEffect(() => {
+    latestTranscriptRef.current = { messages, messageOrder };
+  });
 
   const isStreamCurrentlyActive = useCallback((targetStreamKey: string) => {
     return useMessagingStore.getState().getStreaming(targetStreamKey)
@@ -1773,6 +1782,7 @@ export function useChatMessaging(
 
   // Find the most recent assistant message ID, including temporary ones
   const findMostRecentAssistantMessageId = useCallback(() => {
+    const { messages, messageOrder } = latestTranscriptRef.current;
     let previousMessageId: string | undefined = undefined;
 
     // Iterate backward through the pre-sorted messageOrder
@@ -1795,7 +1805,7 @@ export function useChatMessaging(
     }
 
     return previousMessageId;
-  }, [messages, messageOrder]); // Update dependencies
+  }, []);
 
   // Send a message
   const sendMessage = useCallback(
@@ -1828,6 +1838,9 @@ export function useChatMessaging(
       logger.log(
         `[DEBUG_STREAMING] sendMessage called. Content: "${content}", Files: ${inputFileIds?.length ?? 0}, Model: ${modelId ?? "default"}, Assistant: ${assistantId ?? "none"}`,
       );
+      // Read before the optimistic messages below: once they have rendered,
+      // the new reply's placeholder is the most recent assistant message.
+      const previousMessageId = findMostRecentAssistantMessageId();
 
       // Create optimistic user message immediately on submit so UI updates
       // first. The tracked mentions ride along so the highlight shows before
@@ -1966,8 +1979,6 @@ export function useChatMessaging(
           await new Promise((resolve) => setTimeout(resolve, 50));
         }
 
-        // Find the most recent assistant message to use as previous_message_id
-        const previousMessageId = findMostRecentAssistantMessageId();
         logger.log(
           `[DEBUG_STREAMING] sendMessage: Determined previousMessageId: ${previousMessageId}`,
         );

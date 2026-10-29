@@ -1,8 +1,9 @@
 import {
-  useChatContext,
+  useChatSession,
+  useConversationSelector,
   useConfirmationRegistryStore,
 } from "@erato/frontend/library";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { resolveAutoPromptBehavior } from "./clientActionPolicy";
 
@@ -159,7 +160,7 @@ export function useClientActionConfirmFlow<
   // form, "ask" surfaces the inline confirmation card). If the summary can't
   // be snapshotted, requestConfirmation returns false and nothing happens —
   // the buttons remain as fallback.
-  const { messages, messageOrder, currentChatId } = useChatContext();
+  const { currentChatId } = useChatSession();
 
   // Publish this card's pending state to the shared registry so the chat
   // composer's message queue holds its auto-send while a tool-consent card is
@@ -187,18 +188,25 @@ export function useClientActionConfirmFlow<
     unregisterConfirmation,
   ]);
 
-  const isLatestAssistantMessage = useMemo(() => {
+  // A boolean selection, so tokens streamed into any message pass this card by.
+  const isLatestAssistantMessage = useConversationSelector((messages) => {
     if (!args.messageId) {
       return false;
     }
-    for (let index = messageOrder.length - 1; index >= 0; index -= 1) {
-      const id = messageOrder[index];
-      if (messages[id]?.role === "assistant") {
-        return id === args.messageId;
+    // The last assistant message in the provider's order: by time, ties and
+    // missing timestamps going to the later entry, as its stable sort does.
+    let latestId: string | undefined;
+    let latestAt = Number.NEGATIVE_INFINITY;
+    for (const [id, message] of Object.entries(messages)) {
+      if (message?.role !== "assistant") continue;
+      const at = new Date(message.createdAt).getTime();
+      if (!(at < latestAt)) {
+        latestId = id;
+        latestAt = at;
       }
     }
-    return false;
-  }, [args.messageId, messages, messageOrder]);
+    return latestId === args.messageId;
+  }, Object.is);
   const autoPromptBehavior = resolveAutoPromptBehavior({
     presentation: args.presentation,
     facetId: args.facetId,

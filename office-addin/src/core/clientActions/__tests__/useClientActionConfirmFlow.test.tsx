@@ -15,10 +15,13 @@ const registry = vi.hoisted(() => ({
   unregisterConfirmation: vi.fn(),
 }));
 
-// The hook's ONLY library imports; the Outlook renderer tests hand-write the
-// same two, so a new import here would break them as well.
+// The hook's ONLY library imports; the Outlook renderer tests mock the same
+// ones, so a new import here would break them as well.
 vi.mock("@erato/frontend/library", () => ({
-  useChatContext: () => chatContext,
+  useChatSession: () => chatContext,
+  useConversationSelector: (
+    select: (messages: typeof chatContext.messages) => unknown,
+  ) => select(chatContext.messages),
   useConfirmationRegistryStore: (
     selector: (state: typeof registry) => unknown,
   ) => selector(registry),
@@ -39,10 +42,15 @@ type FlowArgs = Parameters<
   typeof useClientActionConfirmFlow<EditSummary, WordClientAction>
 >[0];
 
-function setup(overrides: Partial<FlowArgs> = {}) {
+function setup(
+  overrides: Partial<FlowArgs> = {},
+  conversation?: (messageId: string) => Record<string, unknown>,
+) {
   const messageId = overrides.messageId ?? freshMessageId();
-  chatContext.messages = { [messageId]: { role: "assistant" } };
-  chatContext.messageOrder = [messageId];
+  chatContext.messages = conversation?.(messageId) ?? {
+    [messageId]: { role: "assistant" },
+  };
+  chatContext.messageOrder = Object.keys(chatContext.messages);
   const execute = vi.fn<
     (
       action: WordClientAction,
@@ -192,6 +200,27 @@ describe("useClientActionConfirmFlow (host-neutral)", () => {
     });
     expect(otherItem.result.current.confirmCard).toBeNull();
     expect(otherItem.execute).not.toHaveBeenCalled();
+  });
+
+  it("auto-prompts only the newest assistant message by time, not by position or string order", () => {
+    const fresh = {
+      presentation: "auto_prompt",
+      isFreshCompletion: true,
+      proposedAction: "word.apply_edits",
+    } as const;
+    // ".500Z" is the later time but sorts before "00Z" as a string.
+    const superseded = setup(fresh, (id) => ({
+      newer: { role: "assistant", createdAt: "2026-01-01T00:00:00.500Z" },
+      [id]: { role: "assistant", createdAt: "2026-01-01T00:00:00Z" },
+    }));
+    expect(superseded.result.current.confirmCard).toBeNull();
+
+    const newest = setup(fresh, (id) => ({
+      [id]: { role: "assistant", createdAt: "2026-01-01T00:00:00.500Z" },
+      older: { role: "assistant", createdAt: "2026-01-01T00:00:00Z" },
+      question: { role: "user", createdAt: "2026-01-01T00:00:01Z" },
+    }));
+    expect(newest.result.current.confirmCard).not.toBeNull();
   });
 
   it("consumes the once-per-message slot per scope, so a remount cannot re-prompt", () => {

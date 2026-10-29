@@ -1,6 +1,15 @@
 "use client";
 
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useInsertionEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 import { useBudgetStatus } from "@/hooks/budget/useBudgetStatus";
 import {
@@ -10,8 +19,13 @@ import {
 } from "@/hooks/chat";
 import { useGenerationStatusStore } from "@/hooks/chat/store/generationStatusStore";
 import { useFileDropzone, useFileUploadStore } from "@/hooks/files";
+import { isMessageBlockedByPromptInjection } from "@/types/chat";
 import { mapMessageToUiMessage } from "@/utils/adapters/messageAdapter";
 import { getSupportedFileTypes } from "@/utils/capabilitiesToFileTypes";
+import {
+  useStableChatMessages,
+  useStableValue,
+} from "@/utils/chat/stableValues";
 
 import {
   useChatInputFeature,
@@ -145,6 +159,79 @@ export const useChatContext = () => {
   return context;
 };
 
+type ChatTranscriptKey = "messages" | "messageOrder" | "streamingContent";
+
+export type ChatTranscriptValue = Pick<ChatContextValue, ChatTranscriptKey>;
+
+/** The chat context without the transcript, so it stays put while a reply streams. */
+export type ChatSessionValue = Omit<ChatContextValue, ChatTranscriptKey> & {
+  hasMessages: boolean;
+  isLastMessageBlockedByPromptInjection: boolean;
+  /** The latest transcript for event handlers; reading it does not subscribe. */
+  getTranscript: () => ChatTranscriptValue;
+};
+
+export const ChatSessionContext = createContext<ChatSessionValue | null>(null);
+export const ChatTranscriptContext = createContext<ChatTranscriptValue | null>(
+  null,
+);
+
+export const useChatSession = () => {
+  const session = useContext(ChatSessionContext);
+  if (!session) {
+    throw new Error("useChatSession must be used within a ChatProvider");
+  }
+  return session;
+};
+
+export const useChatTranscript = () => {
+  const transcript = useContext(ChatTranscriptContext);
+  if (!transcript) {
+    throw new Error("useChatTranscript must be used within a ChatProvider");
+  }
+  return transcript;
+};
+
+/**
+ * Provides a chat context value whole, as `ChatContext`, and in two halves:
+ * the session, which keeps its identity while only messages change, and the
+ * transcript, which changes on every streamed token.
+ */
+export function ChatContextProviders({
+  value,
+  children,
+}: {
+  value: ChatContextValue;
+  children: ReactNode;
+}) {
+  const { messages, messageOrder, streamingContent, ...rest } = value;
+  const transcript = useMemo<ChatTranscriptValue>(
+    () => ({ messages, messageOrder, streamingContent }),
+    [messages, messageOrder, streamingContent],
+  );
+  const latestTranscript = useRef(transcript);
+  useInsertionEffect(() => {
+    latestTranscript.current = transcript;
+  });
+  const getTranscript = useCallback(() => latestTranscript.current, []);
+  const session = useStableValue<ChatSessionValue>({
+    ...rest,
+    hasMessages: messageOrder.length > 0,
+    isLastMessageBlockedByPromptInjection: isMessageBlockedByPromptInjection(
+      messages[messageOrder[messageOrder.length - 1]],
+    ),
+    getTranscript,
+  });
+
+  return (
+    <ChatSessionContext.Provider value={session}>
+      <ChatTranscriptContext.Provider value={transcript}>
+        <ChatContext.Provider value={value}>{children}</ChatContext.Provider>
+      </ChatTranscriptContext.Provider>
+    </ChatSessionContext.Provider>
+  );
+}
+
 interface ChatProviderProps {
   children: ReactNode;
   /**
@@ -273,73 +360,71 @@ export function ChatProvider({
   const isLoading = isHistoryLoading || isMessagingLoading;
   const error = historyError ?? messagingError;
 
+  // Unchanged messages keep their objects across streamed updates, so the
+  // transcript's consumers can skip them; the order stays the same array too.
+  const transformedMessages = useStableChatMessages(
+    useMemo(
+      () =>
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- isUserMessage can be undefined based on props type
+        Object.entries(messages || {}).reduce(
+          (acc, [id, msg]) => {
+            // Check if this is a streaming message (either actively streaming or completed but waiting for real message)
+            const isStreamingMessage =
+              msg.role === "assistant" &&
+              ((isStreaming && msg.status === "sending") || // Actively streaming
+                (!isStreaming &&
+                  msg.status === "complete" &&
+                  msg.id.includes("temp-"))); // Streaming completed but placeholder
+
+            if (isStreamingMessage) {
+              // Determine loading state based on streaming status
+              // "thinking" - optimistic placeholder before backend confirms (isStreaming=false, status="sending", temp ID)
+              // "typing" - backend confirmed and actively streaming (isStreaming=true)
+              // "done" - streaming completed, waiting for refetch
+              const isOptimisticPlaceholder =
+                !isStreaming &&
+                msg.status === "sending" &&
+                msg.id.startsWith("temp-assistant-");
+              const loadingState = isOptimisticPlaceholder
+                ? "thinking"
+                : isStreaming
+                  ? "typing"
+                  : "done";
+
+              acc[id] = {
+                ...msg,
+                sender: msg.role,
+                authorId: "assistant_id",
+                loading: {
+                  state: loadingState,
+                },
+              };
+            } else {
+              acc[id] = mapMessageToUiMessage(msg);
+            }
+            return acc;
+          },
+          {} as Record<string, ChatMessage>,
+        ),
+      [messages, isStreaming],
+    ),
+  );
+  const orderedMessageIds = useStableValue(
+    useMemo(
+      () =>
+        // With the refetch pattern, we prioritize server ordering
+        // and just sort by created timestamp for simplicity
+        Object.keys(transformedMessages).sort(
+          (a, b) =>
+            new Date(transformedMessages[a].createdAt).getTime() -
+            new Date(transformedMessages[b].createdAt).getTime(),
+        ),
+      [transformedMessages],
+    ),
+  );
+
   // Memoize the context value to prevent unnecessary re-renders
   const contextValue = useMemo(() => {
-    // Transform messages from useChatMessaging to include the "sender" field required by UI components
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- isUserMessage can be undefined based on props type
-    const transformedMessages = Object.entries(messages || {}).reduce(
-      (acc, [id, msg]) => {
-        // Check if this is a streaming message (either actively streaming or completed but waiting for real message)
-        const isStreamingMessage =
-          msg.role === "assistant" &&
-          ((isStreaming && msg.status === "sending") || // Actively streaming
-            (!isStreaming &&
-              msg.status === "complete" &&
-              msg.id.includes("temp-"))); // Streaming completed but placeholder
-
-        if (isStreamingMessage) {
-          // Determine loading state based on streaming status
-          // "thinking" - optimistic placeholder before backend confirms (isStreaming=false, status="sending", temp ID)
-          // "typing" - backend confirmed and actively streaming (isStreaming=true)
-          // "done" - streaming completed, waiting for refetch
-          const isOptimisticPlaceholder =
-            !isStreaming &&
-            msg.status === "sending" &&
-            msg.id.startsWith("temp-assistant-");
-          const loadingState = isOptimisticPlaceholder
-            ? "thinking"
-            : isStreaming
-              ? "typing"
-              : "done";
-
-          acc[id] = {
-            ...msg,
-            sender: msg.role,
-            authorId: "assistant_id",
-            loading: {
-              state: loadingState,
-            },
-          };
-        } else {
-          acc[id] = mapMessageToUiMessage(msg);
-        }
-        return acc;
-      },
-      {} as Record<string, ChatMessage>,
-    );
-
-    // Create a properly ordered message array based on previous_message_id relationships
-    const createMessageOrder = (
-      messagesToOrder: Record<string, ChatMessage>,
-    ): string[] => {
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- isUserMessage can be undefined based on props type
-      if (!messagesToOrder || Object.keys(messagesToOrder).length === 0) {
-        return [];
-      }
-
-      // With the refetch pattern, we prioritize server ordering
-      // and just sort by created timestamp for simplicity
-      const orderedIds = Object.keys(messagesToOrder).sort((a, b) => {
-        const dateA = new Date(messagesToOrder[a].createdAt);
-        const dateB = new Date(messagesToOrder[b].createdAt);
-        return dateA.getTime() - dateB.getTime();
-      });
-      return orderedIds;
-    };
-
-    // Create the message order
-    const orderedMessageIds = createMessageOrder(transformedMessages);
-
     return {
       // Chat history
       chats,
@@ -414,7 +499,8 @@ export function ChatProvider({
     isFetchingNextHistoryPage,
 
     // Messaging dependencies
-    messages,
+    transformedMessages,
+    orderedMessageIds,
     isMessagingLoading,
     isStreaming,
     isPendingResponse,
@@ -451,6 +537,6 @@ export function ChatProvider({
   ]);
 
   return (
-    <ChatContext.Provider value={contextValue}>{children}</ChatContext.Provider>
+    <ChatContextProviders value={contextValue}>{children}</ChatContextProviders>
   );
 }

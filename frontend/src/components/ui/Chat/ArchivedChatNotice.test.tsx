@@ -12,9 +12,11 @@ import { useToastStore } from "../Toast/toastStore";
 
 const unarchiveChat = vi.fn<(chatId: string) => Promise<void>>();
 
-vi.mock("@/providers/ChatProvider", () => ({
-  useChatContext: () => ({ unarchiveChat }),
-}));
+vi.mock("@/providers/ChatProvider", async () =>
+  (await import("@/test/chatProviderMock")).createChatProviderMock(() => ({
+    unarchiveChat,
+  })),
+);
 
 const unarchiveButton = () =>
   screen.queryByRole("button", { name: "Unarchive" });

@@ -778,6 +778,462 @@ const decisionKeys = (part: ContentPart): string[] => {
   ].filter((key): key is string => typeof key === "string" && key.length > 0);
 };
 
+type ResolvedEratoFileLink = {
+  previewFile: FileUploadItem;
+  resolvedHref: string;
+};
+
+interface MarkdownMessageContextValue {
+  messageId?: string;
+  isStreaming: boolean;
+  mentionedAssistants?: AssistantMention[];
+  resolveEratoFileLink: (url: string) => ResolvedEratoFileLink | null;
+  onFileLinkPreview?: (file: FileUploadItem) => void;
+  onImageClick?: (image: UiImagePart) => void;
+  imageAdvisory: string | null;
+  generatedImageFileIds: ReadonlySet<string>;
+}
+
+// The markdown overrides live at module level so React keeps their elements
+// across re-renders (a new function per render is a new element type, which
+// remounts it); the per-message values they read come through this context.
+const MarkdownMessageContext = React.createContext<MarkdownMessageContextValue>(
+  {
+    isStreaming: false,
+    resolveEratoFileLink: () => null,
+    imageAdvisory: null,
+    generatedImageFileIds: new Set(),
+  },
+);
+
+type MarkdownElementProps<Tag extends React.ElementType> =
+  React.ComponentPropsWithoutRef<Tag> & { node?: unknown };
+
+function MarkdownLink({
+  href,
+  id,
+  children,
+  node: _node,
+  ...props
+}: MarkdownElementProps<"a">) {
+  const {
+    mentionedAssistants,
+    messageId,
+    resolveEratoFileLink,
+    onFileLinkPreview,
+  } = React.useContext(MarkdownMessageContext);
+  if (href?.startsWith(ERATO_MENTION_SCHEME)) {
+    const mentionId = href.slice(ERATO_MENTION_SCHEME.length);
+    const mention = mentionedAssistants?.find(
+      (candidate) => candidate.id === mentionId,
+    );
+    // Only ids this message actually mentions get the pill; a hand-typed
+    // erato-mention link degrades to its plain text.
+    if (!mention) {
+      return <>{children}</>;
+    }
+    // Not a link: the token's meaning is "this run of text addressed that
+    // assistant", so it renders as the same pill the composer backdrop
+    // paints — same tone tokens, same inset outline.
+    return (
+      <span
+        className="rounded-[var(--theme-radius-control)] bg-theme-info-bg box-decoration-clone shadow-[inset_0_0_0_1px_var(--theme-info-border)]"
+        data-mention-id={mentionId}
+        data-testid="message-assistant-mention"
+      >
+        {children}
+      </span>
+    );
+  }
+  const rewrittenHref = rewriteFootnoteValue(href, messageId);
+  const rewrittenId = rewriteFootnoteValue(id, messageId);
+  const isHashLink = rewrittenHref?.startsWith("#") ?? false;
+  const resolvedEratoFile = rewrittenHref
+    ? resolveEratoFileLink(rewrittenHref)
+    : null;
+  const finalHref =
+    resolvedEratoFile?.resolvedHref ?? rewrittenHref ?? "#missing-link-target";
+
+  return (
+    <a
+      href={finalHref}
+      id={rewrittenId}
+      target={isHashLink || resolvedEratoFile ? undefined : "_blank"}
+      rel={isHashLink || resolvedEratoFile ? undefined : "noopener noreferrer"}
+      className="text-theme-fg-accent underline hover:opacity-80"
+      onClick={(event) => {
+        if (!resolvedEratoFile) {
+          return;
+        }
+
+        event.preventDefault();
+        onFileLinkPreview?.(resolvedEratoFile.previewFile);
+      }}
+      {...props}
+      data-footnote-ref={
+        // rehype-raw converts the generated boolean attribute to "".
+        "data-footnote-ref" in props ? true : undefined
+      }
+    >
+      {children}
+    </a>
+  );
+}
+
+function MarkdownImage({
+  src,
+  alt,
+  node: _node,
+  ...props
+}: MarkdownElementProps<"img">) {
+  const {
+    resolveEratoFileLink,
+    onFileLinkPreview,
+    onImageClick,
+    imageAdvisory,
+    generatedImageFileIds,
+  } = React.useContext(MarkdownMessageContext);
+  const resolvedEratoFile = src ? resolveEratoFileLink(src) : null;
+  const isEratoFileImageUrl =
+    // eslint-disable-next-line lingui/no-unlocalized-strings
+    typeof src === "string" ? src.startsWith("erato-file://") : false;
+  const isEratoFileImage =
+    resolvedEratoFile && isImageFile(resolvedEratoFile.previewFile);
+  const unresolvedSrc =
+    isEratoFileImageUrl && !resolvedEratoFile
+      ? `${src}${UNRESOLVED_IMAGE_ANCHOR}`
+      : src;
+  const resolvedSrc = resolvedEratoFile?.resolvedHref ?? unresolvedSrc ?? "";
+
+  if (!isEratoFileImage) {
+    if (resolvedEratoFile) {
+      // Preserve link resolution for known non-image attachments.
+      return (
+        <a
+          href={resolvedSrc}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-theme-fg-accent underline hover:opacity-80"
+          onClick={(event) => {
+            if (!onFileLinkPreview) {
+              return;
+            }
+
+            event.preventDefault();
+            onFileLinkPreview(resolvedEratoFile.previewFile);
+          }}
+        >
+          {typeof alt === "string"
+            ? alt
+            : t({
+                id: "chat.message.image.fallback_alt",
+                message: "Image",
+              })}
+        </a>
+      );
+    }
+
+    if (isEratoFileImageUrl) {
+      return (
+        <a
+          href={unresolvedSrc ?? UNRESOLVED_IMAGE_ANCHOR}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-theme-fg-accent underline hover:opacity-80"
+        >
+          {typeof alt === "string"
+            ? alt
+            : t({
+                id: "chat.message.image.fallback_alt",
+                message: "Image",
+              })}
+        </a>
+      );
+    }
+
+    return (
+      <img
+        src={resolvedSrc}
+        alt={typeof alt === "string" ? alt : ""}
+        loading="lazy"
+        {...props}
+      />
+    );
+  }
+
+  const imagePart: UiImagePart = {
+    type: "image" as const,
+    src: resolvedSrc,
+    id: resolvedEratoFile.previewFile.id,
+    fileUploadId: resolvedEratoFile.previewFile.id,
+  };
+  const shouldShowInlineImageAdvisory =
+    !!imageAdvisory &&
+    !!imagePart.fileUploadId &&
+    generatedImageFileIds.has(imagePart.fileUploadId);
+
+  const imageElement = (
+    <img
+      src={resolvedSrc}
+      alt={typeof alt === "string" ? alt : ""}
+      loading="lazy"
+      className="w-full rounded-lg border object-contain [border-color:var(--theme-border-media)]"
+      style={MARKDOWN_IMAGE_STYLE}
+      {...props}
+    />
+  );
+
+  const advisoryElement = shouldShowInlineImageAdvisory ? (
+    <span className="mt-2 block text-xs text-theme-fg-muted">
+      {imageAdvisory}
+    </span>
+  ) : null;
+
+  if (onImageClick) {
+    return (
+      <>
+        <button
+          type="button"
+          className={clsx(
+            "block w-full cursor-pointer border-0 bg-transparent p-0",
+            shouldShowInlineImageAdvisory ? "mt-4" : "my-4",
+          )}
+          onClick={() =>
+            onImageClick({
+              ...imagePart,
+              src: imagePart.src,
+            })
+          }
+        >
+          {imageElement}
+        </button>
+        {advisoryElement}
+      </>
+    );
+  }
+
+  return (
+    <>
+      {imageElement}
+      {advisoryElement}
+    </>
+  );
+}
+
+function MarkdownListItem({
+  children,
+  id,
+  node: _node,
+  ...props
+}: MarkdownElementProps<"li">) {
+  const { messageId } = React.useContext(MarkdownMessageContext);
+  return (
+    <li
+      className="my-1 text-theme-fg-primary"
+      id={rewriteFootnoteValue(id, messageId)}
+      {...props}
+    >
+      {children}
+    </li>
+  );
+}
+
+function MarkdownParagraph({
+  children,
+  node: _node,
+  ...props
+}: MarkdownElementProps<"p">) {
+  const { isStreaming } = React.useContext(MarkdownMessageContext);
+  // A streamed paragraph holding only an unfinished emphasis or code marker.
+  if (
+    isStreaming &&
+    typeof children === "string" &&
+    children.match(/^(\*{1,2}|_{1,2}|~{1,2}|`{1,3})[^*_~`]*$/)
+  ) {
+    return (
+      <span className="whitespace-pre-wrap text-theme-fg-primary" {...props}>
+        {children}
+      </span>
+    );
+  }
+  return (
+    <p className="mb-4 text-theme-fg-primary last:mb-0" {...props}>
+      {children}
+    </p>
+  );
+}
+
+const MARKDOWN_COMPONENTS: Partial<Components> = {
+  pre: MarkdownPre,
+  code: MarkdownCode,
+  a: MarkdownLink,
+  img: MarkdownImage,
+  // Custom table styling
+  table({ children, node: _node, ...props }) {
+    return (
+      <div className="my-4 overflow-x-auto">
+        <table className="min-w-full divide-y divide-theme-border" {...props}>
+          {children}
+        </table>
+      </div>
+    );
+  },
+  // Table header
+  th({ children, node: _node, ...props }) {
+    return (
+      <th
+        className="bg-theme-bg-secondary px-4 py-2 text-left text-sm font-medium text-theme-fg-primary"
+        {...props}
+      >
+        {children}
+      </th>
+    );
+  },
+  // Table cell
+  td({ children, node: _node, ...props }) {
+    return (
+      <td
+        className="border-t border-theme-border px-4 py-2 text-sm text-theme-fg-secondary"
+        {...props}
+      >
+        {children}
+      </td>
+    );
+  },
+  // Headers
+  h1({ children, node: _node, ...props }) {
+    return (
+      <h1
+        className="mb-4 mt-6 font-heading-bold text-2xl font-bold text-theme-fg-primary"
+        {...props}
+      >
+        {children}
+      </h1>
+    );
+  },
+  h2({ children, node: _node, ...props }) {
+    return (
+      <h2
+        className="mb-3 mt-5 font-heading text-xl font-semibold text-theme-fg-primary"
+        {...props}
+      >
+        {children}
+      </h2>
+    );
+  },
+  h3({ children, node: _node, ...props }) {
+    return (
+      <h3
+        className="mb-2 mt-4 font-heading text-lg font-semibold text-theme-fg-primary"
+        {...props}
+      >
+        {children}
+      </h3>
+    );
+  },
+  // Blockquote
+  blockquote({ children, node: _node, ...props }) {
+    return (
+      <blockquote
+        className="my-4 border-l-4 border-theme-border pl-4 italic text-theme-fg-secondary"
+        {...props}
+      >
+        {children}
+      </blockquote>
+    );
+  },
+  // Lists
+  ul({ children, node: _node, ...props }) {
+    return (
+      <ul className="my-3 list-disc pl-6 text-theme-fg-primary" {...props}>
+        {children}
+      </ul>
+    );
+  },
+  ol({ children, node: _node, ...props }) {
+    return (
+      <ol className="my-3 list-decimal pl-6 text-theme-fg-primary" {...props}>
+        {children}
+      </ol>
+    );
+  },
+  li: MarkdownListItem,
+  // Horizontal rule
+  hr({ node: _node, ...props }) {
+    return <hr className="my-6 border-theme-border" {...props} />;
+  },
+  // Strong/Bold
+  strong({ children, node: _node, ...props }) {
+    return (
+      <strong
+        className="font-body-semibold font-semibold text-theme-fg-primary"
+        {...props}
+      >
+        {children}
+      </strong>
+    );
+  },
+  // Emphasis/Italic
+  em({ children, node: _node, ...props }) {
+    return (
+      <em className="italic" {...props}>
+        {children}
+      </em>
+    );
+  },
+  p: MarkdownParagraph,
+  // Footnote references - render as inline instead of superscript
+  sup({ children, node: _node, ...props }) {
+    return (
+      <span className="inline" {...props}>
+        {children}
+      </span>
+    );
+  },
+  // Custom footnotes section with translated heading
+  section({ children, node, ...props }) {
+    // Check if this is the footnotes section
+    // react-markdown may pass data-footnotes in different ways
+    const sectionProps = props as Record<string, unknown>;
+    const isFootnotes =
+      sectionProps["data-footnotes"] === "" ||
+      sectionProps["data-footnotes"] === "true" ||
+      sectionProps["data-footnotes"] === true ||
+      sectionProps["dataFootnotes"] === "true" ||
+      sectionProps["dataFootnotes"] === true ||
+      // Also check the node properties from the AST
+      (node?.properties as Record<string, unknown> | undefined)?.[
+        "dataFootnotes"
+      ] === true;
+
+    if (isFootnotes) {
+      return (
+        <section
+          className="mt-6 border-t border-theme-border pt-4"
+          data-footnotes="true"
+        >
+          <h2
+            id="user-content-footnote-label"
+            className="mb-3 font-heading text-lg font-semibold text-theme-fg-primary"
+          >
+            {t({ id: "chat.message.footnotes", message: "Footnotes" })}
+          </h2>
+          {/* Filter out the auto-generated h2 from children */}
+          {React.Children.toArray(children).filter(
+            (child) =>
+              !React.isValidElement(child) ||
+              (child.type !== "h2" &&
+                (child.props as { id?: string }).id !==
+                  "user-content-footnote-label"),
+          )}
+        </section>
+      );
+    }
+
+    return <section {...props}>{children}</section>;
+  },
+};
+
 export const MessageContent = memo(function MessageContent({
   content: messageContent,
   messageId,
@@ -871,9 +1327,7 @@ export const MessageContent = memo(function MessageContent({
   }, [content]);
 
   const resolveEratoFileLink = React.useCallback(
-    (
-      url: string,
-    ): { previewFile: FileUploadItem; resolvedHref: string } | null => {
+    (url: string): ResolvedEratoFileLink | null => {
       const fileId = getEratoFileIdFromUrl(url);
       if (!fileId) {
         return null;
@@ -928,412 +1382,28 @@ export const MessageContent = memo(function MessageContent({
     [filesById],
   );
 
-  // Define custom components for react-markdown
-  const markdownComponents: Partial<Components> = {
-    pre: MarkdownPre,
-    code: MarkdownCode,
-    // Ensure links open in new tab
-    a({ href, id, children, node: _node, ...props }) {
-      if (href?.startsWith(ERATO_MENTION_SCHEME)) {
-        const mentionId = href.slice(ERATO_MENTION_SCHEME.length);
-        const mention = mentionedAssistants?.find(
-          (candidate) => candidate.id === mentionId,
-        );
-        // Only ids this message actually mentions get the pill; a hand-typed
-        // erato-mention link degrades to its plain text.
-        if (!mention) {
-          return <>{children}</>;
-        }
-        // Not a link: the token's meaning is "this run of text addressed that
-        // assistant", so it renders as the same pill the composer backdrop
-        // paints — same tone tokens, same inset outline.
-        return (
-          <span
-            className="rounded-[var(--theme-radius-control)] bg-theme-info-bg box-decoration-clone shadow-[inset_0_0_0_1px_var(--theme-info-border)]"
-            data-mention-id={mentionId}
-            data-testid="message-assistant-mention"
-          >
-            {children}
-          </span>
-        );
-      }
-      const rewrittenHref = rewriteFootnoteValue(href, messageId);
-      const rewrittenId = rewriteFootnoteValue(id, messageId);
-      const isHashLink = rewrittenHref?.startsWith("#") ?? false;
-      const resolvedEratoFile = rewrittenHref
-        ? resolveEratoFileLink(rewrittenHref)
-        : null;
-      const finalHref =
-        resolvedEratoFile?.resolvedHref ??
-        rewrittenHref ??
-        "#missing-link-target";
-
-      return (
-        <a
-          href={finalHref}
-          id={rewrittenId}
-          target={isHashLink || resolvedEratoFile ? undefined : "_blank"}
-          rel={
-            isHashLink || resolvedEratoFile ? undefined : "noopener noreferrer"
-          }
-          className="text-theme-fg-accent underline hover:opacity-80"
-          onClick={(event) => {
-            if (!resolvedEratoFile) {
-              return;
-            }
-
-            event.preventDefault();
-            onFileLinkPreview?.(resolvedEratoFile.previewFile);
-          }}
-          {...props}
-          data-footnote-ref={
-            // rehype-raw converts the generated boolean attribute to "".
-            "data-footnote-ref" in props ? true : undefined
-          }
-        >
-          {children}
-        </a>
-      );
-    },
-    img({ src, alt, node: _node, ...props }) {
-      const resolvedEratoFile = src ? resolveEratoFileLink(src) : null;
-      const isEratoFileImageUrl =
-        // eslint-disable-next-line lingui/no-unlocalized-strings
-        typeof src === "string" ? src.startsWith("erato-file://") : false;
-      const isEratoFileImage =
-        resolvedEratoFile && isImageFile(resolvedEratoFile.previewFile);
-      const unresolvedSrc =
-        isEratoFileImageUrl && !resolvedEratoFile
-          ? `${src}${UNRESOLVED_IMAGE_ANCHOR}`
-          : src;
-      const resolvedSrc =
-        resolvedEratoFile?.resolvedHref ?? unresolvedSrc ?? "";
-
-      if (!isEratoFileImage) {
-        if (resolvedEratoFile) {
-          // Preserve link resolution for known non-image attachments.
-          return (
-            <a
-              href={resolvedSrc}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-theme-fg-accent underline hover:opacity-80"
-              onClick={(event) => {
-                if (!onFileLinkPreview) {
-                  return;
-                }
-
-                event.preventDefault();
-                onFileLinkPreview(resolvedEratoFile.previewFile);
-              }}
-            >
-              {typeof alt === "string"
-                ? alt
-                : t({
-                    id: "chat.message.image.fallback_alt",
-                    message: "Image",
-                  })}
-            </a>
-          );
-        }
-
-        if (isEratoFileImageUrl) {
-          return (
-            <a
-              href={unresolvedSrc ?? UNRESOLVED_IMAGE_ANCHOR}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-theme-fg-accent underline hover:opacity-80"
-            >
-              {typeof alt === "string"
-                ? alt
-                : t({
-                    id: "chat.message.image.fallback_alt",
-                    message: "Image",
-                  })}
-            </a>
-          );
-        }
-
-        return (
-          <img
-            src={resolvedSrc}
-            alt={typeof alt === "string" ? alt : ""}
-            loading="lazy"
-            {...props}
-          />
-        );
-      }
-
-      const imagePart: UiImagePart = {
-        type: "image" as const,
-        src: resolvedSrc,
-        id: resolvedEratoFile.previewFile.id,
-        fileUploadId: resolvedEratoFile.previewFile.id,
-      };
-      const shouldShowInlineImageAdvisory =
-        !!imageAdvisory &&
-        !!imagePart.fileUploadId &&
-        generatedImageFileIds.has(imagePart.fileUploadId);
-
-      const imageElement = (
-        <img
-          src={resolvedSrc}
-          alt={typeof alt === "string" ? alt : ""}
-          loading="lazy"
-          className="w-full rounded-lg border object-contain [border-color:var(--theme-border-media)]"
-          style={MARKDOWN_IMAGE_STYLE}
-          {...props}
-        />
-      );
-
-      const advisoryElement = shouldShowInlineImageAdvisory ? (
-        <span className="mt-2 block text-xs text-theme-fg-muted">
-          {imageAdvisory}
-        </span>
-      ) : null;
-
-      if (onImageClick) {
-        return (
-          <>
-            <button
-              type="button"
-              className={clsx(
-                "block w-full cursor-pointer border-0 bg-transparent p-0",
-                shouldShowInlineImageAdvisory ? "mt-4" : "my-4",
-              )}
-              onClick={() =>
-                onImageClick({
-                  ...imagePart,
-                  src: imagePart.src,
-                })
-              }
-            >
-              {imageElement}
-            </button>
-            {advisoryElement}
-          </>
-        );
-      }
-
-      return (
-        <>
-          {imageElement}
-          {advisoryElement}
-        </>
-      );
-    },
-    // Custom table styling
-    table({ children, node: _node, ...props }) {
-      return (
-        <div className="my-4 overflow-x-auto">
-          <table className="min-w-full divide-y divide-theme-border" {...props}>
-            {children}
-          </table>
-        </div>
-      );
-    },
-    // Table header
-    th({ children, node: _node, ...props }) {
-      return (
-        <th
-          className="bg-theme-bg-secondary px-4 py-2 text-left text-sm font-medium text-theme-fg-primary"
-          {...props}
-        >
-          {children}
-        </th>
-      );
-    },
-    // Table cell
-    td({ children, node: _node, ...props }) {
-      return (
-        <td
-          className="border-t border-theme-border px-4 py-2 text-sm text-theme-fg-secondary"
-          {...props}
-        >
-          {children}
-        </td>
-      );
-    },
-    // Headers
-    h1({ children, node: _node, ...props }) {
-      return (
-        <h1
-          className="mb-4 mt-6 font-heading-bold text-2xl font-bold text-theme-fg-primary"
-          {...props}
-        >
-          {children}
-        </h1>
-      );
-    },
-    h2({ children, node: _node, ...props }) {
-      return (
-        <h2
-          className="mb-3 mt-5 font-heading text-xl font-semibold text-theme-fg-primary"
-          {...props}
-        >
-          {children}
-        </h2>
-      );
-    },
-    h3({ children, node: _node, ...props }) {
-      return (
-        <h3
-          className="mb-2 mt-4 font-heading text-lg font-semibold text-theme-fg-primary"
-          {...props}
-        >
-          {children}
-        </h3>
-      );
-    },
-    // Blockquote
-    blockquote({ children, node: _node, ...props }) {
-      return (
-        <blockquote
-          className="my-4 border-l-4 border-theme-border pl-4 italic text-theme-fg-secondary"
-          {...props}
-        >
-          {children}
-        </blockquote>
-      );
-    },
-    // Lists
-    ul({ children, node: _node, ...props }) {
-      return (
-        <ul className="my-3 list-disc pl-6 text-theme-fg-primary" {...props}>
-          {children}
-        </ul>
-      );
-    },
-    ol({ children, node: _node, ...props }) {
-      return (
-        <ol className="my-3 list-decimal pl-6 text-theme-fg-primary" {...props}>
-          {children}
-        </ol>
-      );
-    },
-    li({ children, id, node: _node, ...props }) {
-      return (
-        <li
-          className="my-1 text-theme-fg-primary"
-          id={rewriteFootnoteValue(id, messageId)}
-          {...props}
-        >
-          {children}
-        </li>
-      );
-    },
-    // Horizontal rule
-    hr({ node: _node, ...props }) {
-      return <hr className="my-6 border-theme-border" {...props} />;
-    },
-    // Strong/Bold
-    strong({ children, node: _node, ...props }) {
-      return (
-        <strong
-          className="font-body-semibold font-semibold text-theme-fg-primary"
-          {...props}
-        >
-          {children}
-        </strong>
-      );
-    },
-    // Emphasis/Italic
-    em({ children, node: _node, ...props }) {
-      return (
-        <em className="italic" {...props}>
-          {children}
-        </em>
-      );
-    },
-    // Handle incomplete markdown gracefully
-    p({ children, node: _node, ...props }) {
-      return (
-        <p className="mb-4 text-theme-fg-primary last:mb-0" {...props}>
-          {children}
-        </p>
-      );
-    },
-    // Footnote references - render as inline instead of superscript
-    sup({ children, node: _node, ...props }) {
-      return (
-        <span className="inline" {...props}>
-          {children}
-        </span>
-      );
-    },
-    // Custom footnotes section with translated heading
-    section({ children, node, ...props }) {
-      // Check if this is the footnotes section
-      // react-markdown may pass data-footnotes in different ways
-      const sectionProps = props as Record<string, unknown>;
-      const isFootnotes =
-        sectionProps["data-footnotes"] === "" ||
-        sectionProps["data-footnotes"] === "true" ||
-        sectionProps["data-footnotes"] === true ||
-        sectionProps["dataFootnotes"] === "true" ||
-        sectionProps["dataFootnotes"] === true ||
-        // Also check the node properties from the AST
-        (node?.properties as Record<string, unknown> | undefined)?.[
-          "dataFootnotes"
-        ] === true;
-
-      if (isFootnotes) {
-        return (
-          <section
-            className="mt-6 border-t border-theme-border pt-4"
-            data-footnotes="true"
-          >
-            <h2
-              id="user-content-footnote-label"
-              className="mb-3 font-heading text-lg font-semibold text-theme-fg-primary"
-            >
-              {t({ id: "chat.message.footnotes", message: "Footnotes" })}
-            </h2>
-            {/* Filter out the auto-generated h2 from children */}
-            {React.Children.toArray(children).filter(
-              (child) =>
-                !React.isValidElement(child) ||
-                (child.type !== "h2" &&
-                  (child.props as { id?: string }).id !==
-                    "user-content-footnote-label"),
-            )}
-          </section>
-        );
-      }
-
-      return <section {...props}>{children}</section>;
-    },
-  };
-
-  // Create dynamic components based on streaming state
-  const components: Partial<Components> = {
-    ...markdownComponents,
-    // Override p component for streaming to handle incomplete markdown
-    p: isStreaming
-      ? ({ children, node: _node, ...props }) => {
-          // Check if this paragraph contains only incomplete markdown
-          if (
-            typeof children === "string" &&
-            children.match(/^(\*{1,2}|_{1,2}|~{1,2}|`{1,3})[^*_~`]*$/)
-          ) {
-            return (
-              <span
-                className="whitespace-pre-wrap text-theme-fg-primary"
-                {...props}
-              >
-                {children}
-              </span>
-            );
-          }
-          return (
-            <p className="mb-4 text-theme-fg-primary last:mb-0" {...props}>
-              {children}
-            </p>
-          );
-        }
-      : markdownComponents.p,
-  };
+  const markdownMessage = React.useMemo<MarkdownMessageContextValue>(
+    () => ({
+      messageId,
+      isStreaming,
+      mentionedAssistants,
+      resolveEratoFileLink,
+      onFileLinkPreview,
+      onImageClick,
+      imageAdvisory,
+      generatedImageFileIds,
+    }),
+    [
+      messageId,
+      isStreaming,
+      mentionedAssistants,
+      resolveEratoFileLink,
+      onFileLinkPreview,
+      onImageClick,
+      imageAdvisory,
+      generatedImageFileIds,
+    ],
+  );
 
   const renderMarkdown = (text: string) => {
     const mentionLinkedText =
@@ -1346,37 +1416,39 @@ export const MessageContent = memo(function MessageContent({
       <BlockCodeContext.Provider value={{ isBlockCode: false, isStreaming }}>
         <HostArtifactContext.Provider value={hostArtifact ?? null}>
           <WordHistoryContext.Provider value={wordHistoryRendering}>
-            <Markdown
-              remarkPlugins={[remarkGfm, remarkMath]}
-              rehypePlugins={[
-                rehypeRaw,
-                [rehypeSanitize, markdownSanitizeSchema],
-                rehypeKatex,
-              ]}
-              components={components}
-              urlTransform={(url, key, node) => {
-                // Sanitization prefixes IDs to prevent DOM clobbering; keep
-                // generated footnote links pointed at those prefixed IDs.
-                if (
-                  key === "href" &&
-                  url.startsWith("#") &&
-                  (node.properties.dataFootnoteRef !== undefined ||
-                    node.properties.dataFootnoteBackref !== undefined)
-                ) {
-                  return `#user-content-${url.slice(1)}`;
-                }
-                // eslint-disable-next-line lingui/no-unlocalized-strings
-                return url.startsWith("erato-file://") ||
-                  url.startsWith(ERATO_MENTION_SCHEME)
-                  ? url
-                  : defaultUrlTransform(url);
-              }}
-              // Handle incomplete markdown patterns gracefully
-              skipHtml={false}
-              unwrapDisallowed={false}
-            >
-              {linkedTextContent}
-            </Markdown>
+            <MarkdownMessageContext.Provider value={markdownMessage}>
+              <Markdown
+                remarkPlugins={[remarkGfm, remarkMath]}
+                rehypePlugins={[
+                  rehypeRaw,
+                  [rehypeSanitize, markdownSanitizeSchema],
+                  rehypeKatex,
+                ]}
+                components={MARKDOWN_COMPONENTS}
+                urlTransform={(url, key, node) => {
+                  // Sanitization prefixes IDs to prevent DOM clobbering; keep
+                  // generated footnote links pointed at those prefixed IDs.
+                  if (
+                    key === "href" &&
+                    url.startsWith("#") &&
+                    (node.properties.dataFootnoteRef !== undefined ||
+                      node.properties.dataFootnoteBackref !== undefined)
+                  ) {
+                    return `#user-content-${url.slice(1)}`;
+                  }
+                  // eslint-disable-next-line lingui/no-unlocalized-strings
+                  return url.startsWith("erato-file://") ||
+                    url.startsWith(ERATO_MENTION_SCHEME)
+                    ? url
+                    : defaultUrlTransform(url);
+                }}
+                // Handle incomplete markdown patterns gracefully
+                skipHtml={false}
+                unwrapDisallowed={false}
+              >
+                {linkedTextContent}
+              </Markdown>
+            </MarkdownMessageContext.Provider>
           </WordHistoryContext.Provider>
         </HostArtifactContext.Provider>
       </BlockCodeContext.Provider>

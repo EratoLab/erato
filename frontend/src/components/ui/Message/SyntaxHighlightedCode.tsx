@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 
 import { useTheme } from "@/components/providers/ThemeProvider";
@@ -77,21 +78,25 @@ export function SyntaxHighlightedCode({
   surface = "own",
 }: SyntaxHighlightedCodeProps) {
   const { syntaxTheme, blockStyle } = useResolvedCodeTheme();
-  const blockCustomStyle = {
-    ...BASE_BLOCK_CODE_CUSTOM_STYLE,
-    ...blockStyle,
-    ...(surface === "hoisted" ? HOISTED_SURFACE : null),
-  };
 
-  return (
-    <SyntaxHighlighter
-      customStyle={blockCustomStyle}
-      language={language === "" ? undefined : language}
-      PreTag="div"
-      style={syntaxTheme}
-    >
-      {code}
-    </SyntaxHighlighter>
+  // Building the token tree is most of a streaming message's re-render cost,
+  // and code blocks finished earlier in the message no longer change.
+  return useMemo(
+    () => (
+      <SyntaxHighlighter
+        customStyle={{
+          ...BASE_BLOCK_CODE_CUSTOM_STYLE,
+          ...blockStyle,
+          ...(surface === "hoisted" ? HOISTED_SURFACE : null),
+        }}
+        language={language === "" ? undefined : language}
+        PreTag="div"
+        style={syntaxTheme}
+      >
+        {code}
+      </SyntaxHighlighter>
+    ),
+    [code, language, surface, syntaxTheme, blockStyle],
   );
 }
 

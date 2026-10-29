@@ -33,7 +33,7 @@ import {
   recentChatsQuery,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import { useV1betaApiContext } from "@/lib/generated/v1betaApi/v1betaApiContext";
-import { useChatContext } from "@/providers/ChatProvider";
+import { useChatSession } from "@/providers/ChatProvider";
 import {
   useChatInputFeature,
   useChatSharingFeature,
@@ -175,7 +175,7 @@ export default function SearchPage() {
     refetchHistory,
     pinChat,
     pinnedChats,
-  } = useChatContext();
+  } = useChatSession();
 
   // Get feature configurations
   const { autofocus: shouldAutofocus } = useChatInputFeature();

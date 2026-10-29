@@ -1,10 +1,12 @@
 import { ArchivedChatNotice } from "../../components/ui/Chat/ArchivedChatNotice";
-import { ChatContext } from "../../providers/ChatProvider";
+import { ChatContextProviders } from "../../providers/ChatProvider";
 
 import type { ChatContextValue } from "../../providers/ChatProvider";
 import type { Meta, StoryObj } from "@storybook/react";
 
 const chatContext = {
+  messages: {},
+  messageOrder: [],
   unarchiveChat: async () => undefined,
 } as unknown as ChatContextValue;
 
@@ -20,11 +22,11 @@ const meta: Meta<typeof ArchivedChatNotice> = {
   tags: ["autodocs"],
   decorators: [
     (Story) => (
-      <ChatContext.Provider value={chatContext}>
+      <ChatContextProviders value={chatContext}>
         <div className="w-full max-w-3xl border-b border-theme-border bg-[var(--theme-shell-page)] p-3 sm:px-4">
           <Story />
         </div>
-      </ChatContext.Provider>
+      </ChatContextProviders>
     ),
   ],
   args: { chatId: "chat-1" },

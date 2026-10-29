@@ -110,11 +110,20 @@ export function useExplicitNavigation() {
     ],
   );
 
-  return {
-    performNavigation,
-    shouldNavigateFromNewChat,
-    shouldNavigateFromAssistant,
-    navigateToAssistantChat,
-    currentAssistantId,
-  };
+  return useMemo(
+    () => ({
+      performNavigation,
+      shouldNavigateFromNewChat,
+      shouldNavigateFromAssistant,
+      navigateToAssistantChat,
+      currentAssistantId,
+    }),
+    [
+      performNavigation,
+      shouldNavigateFromNewChat,
+      shouldNavigateFromAssistant,
+      navigateToAssistantChat,
+      currentAssistantId,
+    ],
+  );
 }

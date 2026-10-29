@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-import { useChatContext } from "@/providers/ChatProvider";
+import { useChatSession } from "@/providers/ChatProvider";
 
 import { Button } from "../Controls/Button";
 import { UndoIcon } from "../icons";
@@ -17,7 +17,7 @@ export const ArchivedChatNotice = ({
   chatId,
   variant = "chat",
 }: ArchivedChatNoticeProps) => {
-  const { unarchiveChat } = useChatContext();
+  const { unarchiveChat } = useChatSession();
   // Keyed by chat: the notice can be reused for another archived chat while a
   // restore is still under way.
   const [unarchivingChatId, setUnarchivingChatId] = useState<string | null>(

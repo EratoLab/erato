@@ -65,7 +65,7 @@ import {
   useFacets,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import { useV1betaApiContext } from "@/lib/generated/v1betaApi/v1betaApiContext";
-import { useChatContext } from "@/providers/ChatProvider";
+import { useChatSession } from "@/providers/ChatProvider";
 import {
   useUploadFeature,
   useChatInputFeature,
@@ -485,7 +485,7 @@ export const ChatInput = ({
     isUploading,
     cancelMessage,
     messagingError,
-  } = useChatContext();
+  } = useChatSession();
   const setMessagingError = useMessagingStore((state) => state.setError);
   const silentChatId = useFileUploadStore((state) => state.silentChatId);
   const uploadedFiles = useFileUploadStore((state) => state.uploadedFiles);
@@ -1730,6 +1730,11 @@ export const ChatInput = ({
         const active = document.activeElement;
         // A keyboard user walking the context chips keeps their place.
         if (active?.closest('[data-ui="composer-context-lane"]')) {
+          return;
+        }
+        // Text selected in the page (focus stays on the body) would be lost
+        // to the focus. A textarea's own selection reports as collapsed.
+        if (document.getSelection()?.isCollapsed === false) {
           return;
         }
         if (

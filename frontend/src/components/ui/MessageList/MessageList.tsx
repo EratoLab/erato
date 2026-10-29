@@ -1,6 +1,14 @@
 import clsx from "clsx";
 import { debounce } from "lodash";
-import { memo, useCallback, useMemo, useEffect, useRef, useState } from "react";
+import {
+  memo,
+  useCallback,
+  useMemo,
+  useEffect,
+  useInsertionEffect,
+  useRef,
+  useState,
+} from "react";
 
 import { messageAttachmentFileIds } from "@/components/ui/Chat/messageAttachmentFileIds";
 import { useFileUploadStore } from "@/hooks/files/useFileUploadStore";
@@ -8,13 +16,16 @@ import { useResolvedFiles } from "@/hooks/files/useResolvedFiles";
 import { useMessageListVirtualization, useScrollEvents } from "@/hooks/ui";
 import { usePaginatedData } from "@/hooks/ui/usePaginatedData";
 import { useScrollToBottom } from "@/hooks/useScrollToBottom";
+import {
+  isSameMessage,
+  shallowEqual,
+  useStableEntries,
+  useStableValue,
+} from "@/utils/chat/stableValues";
 import { FileTypeUtil } from "@/utils/fileTypes";
 
 import { MessageListHeader } from "./MessageListHeader";
-import {
-  useMessageClassNameHelper,
-  useMessageAnimations,
-} from "./MessageListUtils";
+import { useMessageClassNameHelper } from "./MessageListUtils";
 import { ScrollToBottomButton } from "./ScrollToBottomButton";
 import { StandardMessageList } from "./StandardMessageList";
 import { VirtualizedMessageList } from "./VirtualizedMessageList";
@@ -243,8 +254,14 @@ const getImageFilePointerFilename = (
   }
 };
 
+const EMPTY_ASSISTANT_FILES: FileUploadItem[] = [];
+const NO_MODEL_SWITCHES: Record<string, ModelSwitch> = {};
+const mockImagePointerFiles = new WeakMap<ContentPart, FileUploadItem>();
+
 const toMockImagePointerFile = (part: ContentPart): FileUploadItem | null => {
   if (part.content_type === "image_file_pointer") {
+    const cached = mockImagePointerFiles.get(part);
+    if (cached) return cached;
     const filename = getImageFilePointerFilename(
       part.preview_url ?? part.download_url,
       part.file_upload_id,
@@ -259,7 +276,7 @@ const toMockImagePointerFile = (part: ContentPart): FileUploadItem | null => {
           [...fileCapability.operations, "analyze_image"],
     };
 
-    return {
+    const file: FileUploadItem = {
       id: part.file_upload_id,
       filename,
       file_capability: capability,
@@ -268,6 +285,8 @@ const toMockImagePointerFile = (part: ContentPart): FileUploadItem | null => {
       download_url: part.download_url ?? "",
       preview_url: part.preview_url ?? part.download_url ?? undefined,
     };
+    mockImagePointerFiles.set(part, file);
+    return file;
   }
   return null;
 };
@@ -543,8 +562,8 @@ function useUnseenMessageCount({
  */
 export const MessageList = memo<MessageListProps>(
   ({
-    messages,
-    messageOrder,
+    messages: incomingMessages,
+    messageOrder: incomingMessageOrder,
     loadOlderMessages,
     hasOlderMessages,
     isPending,
@@ -558,19 +577,37 @@ export const MessageList = memo<MessageListProps>(
     userDisplayNameOverride,
     controls,
     messageRenderer,
-    controlsContext,
-    onMessageAction,
+    controlsContext: incomingControlsContext,
+    onMessageAction: incomingOnMessageAction,
     className,
     useVirtualization = false,
     virtualizationThreshold = 30,
     onScrollToBottomRef,
     onFilePreview,
-    assistantFiles = [],
+    assistantFiles = EMPTY_ASSISTANT_FILES,
     onViewFeedback,
     isTransitioning,
     emptyStateComponent,
-    modelSwitches,
+    modelSwitches: incomingModelSwitches,
   }) => {
+    // Hosts rebuild these on every streamed update; the memoized rows below
+    // should re-render only for the message that actually changed.
+    const messages = useStableEntries(incomingMessages, isSameMessage);
+    const messageOrder = useStableValue(incomingMessageOrder);
+    const modelSwitches = useStableEntries(
+      incomingModelSwitches ?? NO_MODEL_SWITCHES,
+      shallowEqual,
+    );
+    const controlsContext = useStableValue(incomingControlsContext);
+    const latestOnMessageAction = useRef(incomingOnMessageAction);
+    // Before any layout effect, so a row calling it from one sees this render's.
+    useInsertionEffect(() => {
+      latestOnMessageAction.current = incomingOnMessageAction;
+    });
+    const onMessageAction = useCallback(
+      (action: MessageAction) => latestOnMessageAction.current(action),
+      [],
+    );
     const uploadedFiles = useFileUploadStore((state) => state.uploadedFiles);
 
     const lastMessageLoadingContent = useMemo(() => {
@@ -822,9 +859,6 @@ export const MessageList = memo<MessageListProps>(
     // Helper function to get CSS classes for message highlighting
     const getMessageClassName = useMessageClassNameHelper();
 
-    // Inject message animations
-    useMessageAnimations();
-
     // Use our hook for scroll events
     useScrollEvents({
       containerRef,
@@ -880,7 +914,9 @@ export const MessageList = memo<MessageListProps>(
         ),
       [messageOrder, messages],
     );
-    const allFilesById = useResolvedFiles(attachmentIds, knownFilesById);
+    const allFilesById = useStableValue(
+      useResolvedFiles(attachmentIds, knownFilesById),
+    );
 
     // Check if there are no messages to display
     const showEmptyState = messageOrder.length === 0 && !isPending;

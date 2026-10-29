@@ -4,7 +4,8 @@ import {
   Button,
   Card,
   extractTextFromContent,
-  useChatContext,
+  useChatSession,
+  useConversationMessage,
   useHostArtifact,
   useProfile,
   WordReviewCard,
@@ -398,10 +399,10 @@ export function WordCommentChangesCard({
     entry.action,
   );
   const { profile } = useProfile();
-  const { messages } = useChatContext();
+  const { getTranscript } = useChatSession();
   const facetId = artifact?.facetId ?? "";
   const messageId = artifact?.messageId;
-  const message = messageId ? messages[messageId] : undefined;
+  const message = useConversationMessage(messageId);
   const isGenerating = message?.status === "sending";
   const draft = wordCommentDraft(content);
   const batchKey = `${messageId ?? ""}:${entry.action}:${content}`;
@@ -685,7 +686,9 @@ export function WordCommentChangesCard({
   };
   const askAgain = () => {
     const request = message?.previous_message_id
-      ? extractTextFromContent(messages[message.previous_message_id]?.content)
+      ? extractTextFromContent(
+          getTranscript().messages[message.previous_message_id]?.content,
+        )
       : "";
     restoreRequest(request ?? "");
     setNote(

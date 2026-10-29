@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/Chat/chatActionFeedback";
 import { useSidebar } from "@/hooks/ui";
 import { useProfile } from "@/hooks/useProfile";
-import { useChatContext } from "@/providers/ChatProvider";
+import { useChatSession } from "@/providers/ChatProvider";
 import {
   useChatSharingFeature,
   usePinnedChatsFeature,
@@ -44,7 +44,7 @@ export default function SearchPageStructure({
     isFetchingNextHistoryPage,
     isHistoryLoading: chatHistoryLoading,
     historyError: chatHistoryError,
-  } = useChatContext();
+  } = useChatSession();
 
   const { profile } = useProfile();
   const {

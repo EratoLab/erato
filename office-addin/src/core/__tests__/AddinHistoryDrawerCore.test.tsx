@@ -65,6 +65,7 @@ const spies = vi.hoisted(() => {
     sharingEnabled: { current: true },
     showMetadata: { current: true },
     filtersEnabled: { current: true },
+    loadMorePaused: { current: false },
     sanitizeCapabilities: [] as unknown[],
   };
 });
@@ -244,6 +245,7 @@ vi.mock("@erato/frontend/library", async () => {
             { key: "a", label: "Group A", sessions: sessions.slice(0, 1) },
             { key: "b", label: "Group B", sessions: sessions.slice(1) },
           ].filter((group) => group.sessions.length > 0),
+    useGroupedLoadMorePaused: () => spies.loadMorePaused.current,
     useSanitizedChatHistoryFilters: (capabilities: unknown) => {
       spies.sanitizeCapabilities.push(capabilities);
       return spies.filters;
@@ -293,6 +295,7 @@ describe("AddinHistoryDrawerCore", () => {
     spies.sharingEnabled.current = true;
     spies.showMetadata.current = true;
     spies.filtersEnabled.current = true;
+    spies.loadMorePaused.current = false;
     spies.sanitizeCapabilities.length = 0;
     spies.chatContext.chats = [{ id: "c1" }, { id: "c2" }];
     spies.chatContext.isLoading = false;
@@ -364,6 +367,18 @@ describe("AddinHistoryDrawerCore", () => {
 
     fireEvent.click(screen.getByTestId("load-more"));
     expect(spies.fetchNextHistoryPage).toHaveBeenCalled();
+  });
+
+  it("drops the pagination sentinel while loading older chats is paused", () => {
+    spies.chatContext.hasNextHistoryPage = true;
+    spies.loadMorePaused.current = true;
+    renderDrawer();
+
+    expect(spies.historyListProps.map((props) => props.hasMore)).toEqual([
+      false,
+      false,
+    ]);
+    expect(screen.queryByTestId("load-more")).toBeNull();
   });
 
   it("closes on an element-scoped Escape", () => {

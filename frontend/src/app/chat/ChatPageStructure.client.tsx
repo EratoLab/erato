@@ -4,7 +4,7 @@ import { useLocation } from "react-router-dom";
 import { Chat } from "@/components/ui/Chat/Chat";
 import { ChatEmptyState } from "@/components/ui/Chat/ChatEmptyState";
 import { useChatHeader } from "@/hooks/chat/useChatHeader";
-import { useChatContext } from "@/providers/ChatProvider";
+import { useChatSession } from "@/providers/ChatProvider";
 import { extractTextFromContent } from "@/utils/adapters/contentPartAdapter";
 import { createLogger } from "@/utils/debugLogger";
 import { transformEmailFencesForCopy } from "@/utils/emailClipboard";
@@ -19,12 +19,7 @@ export default function ChatPageStructure({
 }: {
   children: React.ReactNode;
 }) {
-  const {
-    messages: contextMessages,
-    messageOrder: contextMessageOrder,
-    currentChatId,
-    mountKey,
-  } = useChatContext();
+  const { currentChatId, mountKey, getTranscript } = useChatSession();
   const location = useLocation();
   const pathname = location.pathname;
   const prevChatIdRef = useRef<string | null | undefined>(currentChatId);
@@ -38,8 +33,6 @@ export default function ChatPageStructure({
     }
   }, [currentChatId]);
 
-  const displayMessages = contextMessages;
-  const displayMessageOrder = contextMessageOrder;
   const { header: chatHeader, composerLocked } = useChatHeader(currentChatId);
 
   logger.log(
@@ -50,8 +43,6 @@ export default function ChatPageStructure({
     <div className="flex size-full flex-col">
       <Chat
         key={mountKey}
-        messages={displayMessages}
-        messageOrder={displayMessageOrder}
         controlsContext={{
           currentUserId: "user1",
           dialogOwnerId: "user1",
@@ -70,7 +61,7 @@ export default function ChatPageStructure({
         onMessageAction={async (action: MessageAction) => {
           logger.log("Handling message action in ChatPageStructure:", action);
           if (action.type === "copy") {
-            const messageToCopy = displayMessages[action.messageId];
+            const messageToCopy = getTranscript().messages[action.messageId];
             const textContent = transformEmailFencesForCopy(
               extractTextFromContent(messageToCopy.content),
             );

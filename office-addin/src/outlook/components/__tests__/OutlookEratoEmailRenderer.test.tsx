@@ -36,7 +36,7 @@ const mockComposeSelection = vi.fn(() => ({
   sourceProperty: "body",
 }));
 
-vi.mock("@erato/frontend/library", () => ({
+vi.mock("@erato/frontend/library", async () => ({
   // Mirrors the real card's lifecycle contract: decision buttons only while
   // pending, a resolved row afterwards.
   ActionConfirmationCard: (props: {
@@ -83,6 +83,9 @@ vi.mock("@erato/frontend/library", () => ({
   htmlToPlainText: (html: string) =>
     new DOMParser().parseFromString(html, "text/html").body.textContent ?? "",
   useChatContext: () => mockUseChatContext(),
+  ...(await import("../../../test/helpers/eratoLibraryMock")).chatHooksFrom(
+    () => mockUseChatContext(),
+  ),
   useOutlookArtifact: () => mockUseOutlookArtifact(),
   usePersistedState: () => mockUsePersistedState(),
   useConfirmationRegistryStore: (

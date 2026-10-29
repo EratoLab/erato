@@ -3,7 +3,7 @@ import {
   Card,
   Alert,
   SyntaxHighlightedCode,
-  useChatContext,
+  useConversationSelector,
   useHostArtifact,
   WordReviewCard,
   WordReviewDetailsToggle,
@@ -149,8 +149,11 @@ function WordActionCard({
   );
   const facetId = artifact?.facetId ?? "";
   const messageId = artifact?.messageId;
-  const { messages } = useChatContext();
-  const isGenerating = !!messageId && messages[messageId]?.status === "sending";
+  const isGenerating = useConversationSelector(
+    (messages) =>
+      messageId !== undefined && messages[messageId]?.status === "sending",
+    Object.is,
+  );
   const batchKey = `${messageId ?? ""}:${entry.action}:${content}`;
   const review = reviews.get(batchKey) ?? EMPTY_WORD_REVIEW;
   const cardRef = useWordReviewFocus(

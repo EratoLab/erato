@@ -1,9 +1,13 @@
+import { createLogger } from "@/utils/debugLogger";
+
 import { useMessagingStore } from "../store/messagingStore";
 
 import type {
   ContentPart,
   MessageSubmitStreamingResponseMessageTextDelta,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+
+const logger = createLogger("EVENT", "handleTextDelta");
 
 export function appendTextLikeDelta(
   currentContent: ContentPart[],
@@ -60,7 +64,7 @@ export const handleTextDelta = (
   // because it bypasses multiple state transformations that could cause UI lag
   if (process.env.NODE_ENV === "development") {
     // Log only a snippet to avoid too much noise, or log less frequently
-    console.log(
+    logger.log(
       `[DEBUG_STREAMING] handleTextDelta: Received delta: "${responseData.new_text ? responseData.new_text.substring(0, 30) + "..." : "[EMPTY_DELTA]"}", Current message ID in store: ${useMessagingStore.getState().getStreaming(streamKey).currentMessageId}`,
     );
   }
@@ -73,7 +77,7 @@ export const handleTextDelta = (
       if (process.env.NODE_ENV === "development") {
         // Check if we are actually appending to the correct message
         if (currentStreaming.currentMessageId) {
-          console.log(
+          logger.log(
             `[DEBUG_STORE] handleTextDelta: Appending to message ID ${currentStreaming.currentMessageId}. Prev content parts: ${currentStreaming.content.length}, New delta: "${responseData.new_text}"`,
           );
         } else {

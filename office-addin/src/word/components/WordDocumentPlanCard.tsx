@@ -3,7 +3,8 @@ import {
   Alert,
   CopyErrorButton,
   extractTextFromContent,
-  useChatContext,
+  useChatSession,
+  useConversationSelector,
   useHostArtifact,
   useWordMessageLineage,
   WordProposalCard,
@@ -146,7 +147,7 @@ export function WordDocumentPlanCard({
   content: string;
 }) {
   const artifact = useHostArtifact();
-  const { messages, currentChatId } = useChatContext();
+  const { currentChatId, getTranscript } = useChatSession();
   const host = useWordWrite();
   const { decisions, setDecisions, grantAlways } = useWordClientActionDecisions(
     entry.action,
@@ -154,7 +155,11 @@ export function WordDocumentPlanCard({
   const [copyNote, setCopyNote] = useState("");
   const facetId = artifact?.facetId ?? "";
   const messageId = artifact?.messageId;
-  const generating = !!messageId && messages[messageId]?.status === "sending";
+  const generating = useConversationSelector(
+    (messages) =>
+      messageId !== undefined && messages[messageId]?.status === "sending",
+    Object.is,
+  );
   const key = `${messageId ?? ""}:${entry.action}:${content}`;
   const review = host.reviews.get(key) ?? EMPTY_WORD_REVIEW;
   const cardRef = useWordReviewFocus(
@@ -639,6 +644,7 @@ export function WordDocumentPlanCard({
   };
   const askAgainWith = (instruction: string) => {
     if (confirmCard) denyCard(confirmCard);
+    const { messages } = getTranscript();
     const message = messageId ? messages[messageId] : undefined;
     const request = message?.previous_message_id
       ? extractTextFromContent(messages[message.previous_message_id]?.content)

@@ -147,14 +147,14 @@ vi.mock("@/components/ui/Modal/FilePreviewModal", () => ({
   FilePreviewModal: () => null,
 }));
 
-vi.mock("@/providers/ChatProvider", () => ({
-  useChatContext: () => ({
+vi.mock("@/providers/ChatProvider", async () =>
+  (await import("@/test/chatProviderMock")).createChatProviderMock(() => ({
     ...baseChatContext,
     chats: chatLists.chats,
     pinnedChats: chatLists.pinnedChats,
     ...testState.chatContext,
-  }),
-}));
+  })),
+);
 
 const baseChatContext = {
   sendMessage: vi.fn(),

@@ -26,7 +26,7 @@ import {
   chatMessagesQuery,
   useChatDetail,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
-import { useChatContext } from "@/providers/ChatProvider";
+import { useChatSession, useChatTranscript } from "@/providers/ChatProvider";
 import {
   useChatInputFeature,
   useChatSharingFeature,
@@ -34,7 +34,7 @@ import {
   useSidebarFeature,
   useUploadFeature,
 } from "@/providers/FeatureConfigProvider";
-import { isPromptInjectionFilterDetails } from "@/types/chat";
+import { isMessageBlockedByPromptInjection } from "@/types/chat";
 import { mapRecentChatToSession } from "@/utils/chat/recentChatSession";
 import { createLogger } from "@/utils/debugLogger";
 
@@ -60,7 +60,7 @@ import { MessageEditProvider } from "../MessageList/MessageEditContext";
 import { MessageList } from "../MessageList/MessageList";
 import { DocumentIcon, ShareIcon } from "../icons";
 
-import type { ChatMessage } from "../MessageList/MessageList";
+import type { ChatMessage, MessageListProps } from "../MessageList/MessageList";
 import type {
   FileUploadItem,
   ChatModel,
@@ -82,13 +82,14 @@ const logger = createLogger("UI", "Chat");
 
 export interface ChatProps {
   /**
-   * Messages to display
+   * Messages to display. Omit both to read them from the ChatProvider, which
+   * keeps the rest of the chat from re-rendering on every streamed token.
    */
-  messages: Record<string, ChatMessage>;
+  messages?: Record<string, ChatMessage>;
   /**
    * Order of message IDs
    */
-  messageOrder: string[];
+  messageOrder?: string[];
   className?: string;
   /**
    * Layout configuration
@@ -154,13 +155,59 @@ export interface ChatProps {
   readOnly?: boolean;
 }
 
+type ChatTranscriptListProps = Omit<
+  MessageListProps,
+  "messages" | "messageOrder" | "modelSwitches" | "onMessageAction"
+> & {
+  messages?: Record<string, ChatMessage>;
+  messageOrder?: string[];
+  availableModels: Parameters<typeof useModelSwitches>[2];
+  messageActions: Omit<
+    Parameters<typeof useStandardMessageActions>[0],
+    "messages"
+  >;
+};
+
+/** The part of `Chat` that needs the messages, and so renders per streamed token. */
+function ChatTranscriptList({
+  messages: messagesProp,
+  messageOrder: messageOrderProp,
+  availableModels,
+  messageActions,
+  ...listProps
+}: ChatTranscriptListProps) {
+  const transcript = useChatTranscript();
+  const messages = messagesProp ?? transcript.messages;
+  const messageOrder = messageOrderProp ?? transcript.messageOrder;
+  const modelSwitches = useModelSwitches(
+    messages,
+    messageOrder,
+    availableModels,
+  );
+  const onMessageAction = useStandardMessageActions({
+    messages,
+    ...messageActions,
+  });
+
+  return (
+    <MessageList
+      {...listProps}
+      messages={messages}
+      messageOrder={messageOrder}
+      modelSwitches={modelSwitches}
+      onMessageAction={onMessageAction}
+      useVirtualization={messageOrder.length > 30}
+    />
+  );
+}
+
 /**
  * Main Chat component that integrates chat UI, history, and messaging functionality.
  * This is the top-level component that coordinates all chat-related components.
  */
 export const Chat = ({
-  messages,
-  messageOrder,
+  messages: messagesProp,
+  messageOrder: messageOrderProp,
   className,
   layout = "default",
   maxWidth,
@@ -273,7 +320,9 @@ export const Chat = ({
     hasNextHistoryPage,
     isFetchingNextHistoryPage,
     currentChatLastModel,
-  } = useChatContext();
+    hasMessages: sessionHasMessages,
+    isLastMessageBlockedByPromptInjection: sessionLastMessageBlocked,
+  } = useChatSession();
 
   const { availableModels, selectedModel, setSelectedModel, isSelectionReady } =
     useActiveModelSelection({
@@ -324,23 +373,18 @@ export const Chat = ({
   const isCompacting = useCompactionStore(
     (state) => !!currentChatId && state.pending[currentChatId] === true,
   );
-  const modelSwitches = useModelSwitches(
-    messages,
-    messageOrder,
-    availableModels,
-  );
-  const lastMessage =
-    messageOrder.length > 0
-      ? messages[messageOrder[messageOrder.length - 1]]
-      : undefined;
+  // A host passing its own transcript gets the same derived state from it.
+  const hasMessages = messageOrderProp
+    ? messageOrderProp.length > 0
+    : sessionHasMessages;
   const isLastMessageBlockedByPromptInjection =
-    lastMessage?.role === "assistant" &&
-    lastMessage.error?.error_type === "content_filter" &&
-    isPromptInjectionFilterDetails(lastMessage.error.filter_details);
+    messagesProp && messageOrderProp
+      ? isMessageBlockedByPromptInjection(
+          messagesProp[messageOrderProp[messageOrderProp.length - 1]],
+        )
+      : sessionLastMessageBlocked;
   const { shareLink: currentChatShareLink } = useChatShareLink(
-    chatSharingEnabled && currentChatId && messageOrder.length > 0
-      ? currentChatId
-      : null,
+    chatSharingEnabled && currentChatId && hasMessages ? currentChatId : null,
   );
 
   const currentChatLastSelectedFacets = currentChat?.last_selected_facets;
@@ -483,29 +527,40 @@ export const Chat = ({
   }, [refreshChats]);
 
   // Handle session select with void return type
-  const handleSessionSelectWrapper = (sessionId: string) => {
-    logger.log(
-      `[CHAT_FLOW] Handling session select in Chat component for session: ${sessionId}`,
-    );
-    // Call handleSessionSelect or directly use switchSession if that's not working
-    if (customSessionSelect) {
-      customSessionSelect(sessionId);
-    } else {
+  const handleSessionSelectWrapper = useCallback(
+    (sessionId: string) => {
       logger.log(
-        `[CHAT_FLOW] Directly calling switchSession with ID: ${sessionId}`,
+        `[CHAT_FLOW] Handling session select in Chat component for session: ${sessionId}`,
       );
-      switchSession(sessionId);
-    }
-  };
+      // Call handleSessionSelect or directly use switchSession if that's not working
+      if (customSessionSelect) {
+        customSessionSelect(sessionId);
+      } else {
+        logger.log(
+          `[CHAT_FLOW] Directly calling switchSession with ID: ${sessionId}`,
+        );
+        switchSession(sessionId);
+      }
+    },
+    [customSessionSelect, switchSession],
+  );
 
   // Handle archiving a session
-  const handleArchiveSession = (sessionId: string) => {
-    void runChatAction("archive", sessionId, () => archiveChat(sessionId));
-  };
+  const handleArchiveSession = useCallback(
+    (sessionId: string) => {
+      void runChatAction("archive", sessionId, () => archiveChat(sessionId));
+    },
+    [archiveChat],
+  );
 
-  const handleUnarchiveSession = (sessionId: string) => {
-    void runChatAction("unarchive", sessionId, () => unarchiveChat(sessionId));
-  };
+  const handleUnarchiveSession = useCallback(
+    (sessionId: string) => {
+      void runChatAction("unarchive", sessionId, () =>
+        unarchiveChat(sessionId),
+      );
+    },
+    [unarchiveChat],
+  );
 
   const [titleDialogChatId, setTitleDialogChatId] = useState<string | null>(
     null,
@@ -591,6 +646,23 @@ export const Chat = ({
     }
   }, [onNewChat, createChat]);
 
+  // The sidebar is memoized; per-render handlers would re-render it, and every
+  // history row with it, on each streamed token.
+  const handleSidebarNewChat = useCallback(() => {
+    void handleNewChat();
+  }, [handleNewChat]);
+  const handleSessionPin = useCallback(
+    (sessionId: string, isPinned: boolean) => {
+      void runChatAction(isPinned ? "pin" : "unpin", sessionId, () =>
+        pinChat(sessionId, isPinned),
+      );
+    },
+    [pinChat],
+  );
+  const handleLoadMoreSessions = useCallback(() => {
+    void fetchNextHistoryPage();
+  }, [fetchNextHistoryPage]);
+
   // Use the file preview modal hook
   const {
     isPreviewModalOpen,
@@ -632,15 +704,14 @@ export const Chat = ({
     onFeedbackSuccess: handleFeedbackSuccess,
   });
 
-  const standardMessageActionHandler = useStandardMessageActions({
-    messages,
+  const messageActions = {
     onBeginEdit: setEditingMessageId,
     handleRegenerate,
     handleFeedbackSubmit,
     feedbackConfig,
     openFeedbackDialog,
     onUnhandledAction: handleMessageAction,
-  });
+  };
 
   // Restore placeholder definitions for props passed to MessageList
   const hasOlderMessages = false;
@@ -679,7 +750,7 @@ export const Chat = ({
 
   if (process.env.NODE_ENV === "development") {
     logger.log(
-      `Chat.tsx rendering. chatLoading: ${chatLoading}, currentChatId: ${currentChatId ?? ""}, sidebarCollapsed: ${sidebarCollapsed}, messagesCount: ${Object.keys(messages).length}`,
+      `Chat.tsx rendering. chatLoading: ${chatLoading}, currentChatId: ${currentChatId ?? ""}, sidebarCollapsed: ${sidebarCollapsed}, hasMessages: ${hasMessages}`,
     );
   }
 
@@ -687,7 +758,7 @@ export const Chat = ({
   // that cannot send, and the centered layout hides `topContent` with it.
   const showEmptyState =
     !!emptyStateComponent &&
-    messageOrder.length === 0 &&
+    !hasMessages &&
     !chatLoading &&
     !isPendingResponse &&
     !composerDisabled &&
@@ -704,7 +775,7 @@ export const Chat = ({
   const canShareCurrentChat =
     chatSharingEnabled &&
     !!currentChatId &&
-    messageOrder.length > 0 &&
+    hasMessages &&
     canEditForCurrentChat;
   const currentShareButtonLabel = currentChatShareLink?.enabled
     ? t({
@@ -762,9 +833,11 @@ export const Chat = ({
         </>
       ) : (
         <MessageEditProvider value={messageEditValue}>
-          <MessageList
-            messages={messages}
-            messageOrder={messageOrder}
+          <ChatTranscriptList
+            messages={messagesProp}
+            messageOrder={messageOrderProp}
+            availableModels={availableModels}
+            messageActions={messageActions}
             loadOlderMessages={loadOlderMessages}
             hasOlderMessages={hasOlderMessages}
             isPending={chatLoading}
@@ -781,15 +854,12 @@ export const Chat = ({
               ...controlsContext,
               canEdit: canEditForCurrentChat && !isCompacting,
             }}
-            onMessageAction={standardMessageActionHandler}
             className={layout}
-            useVirtualization={messageOrder.length > 30}
             virtualizationThreshold={30}
             onScrollToBottomRef={handleMessageListRef}
             onFilePreview={openPreviewModal}
             onViewFeedback={openFeedbackViewDialog}
             assistantFiles={assistantFiles}
-            modelSwitches={modelSwitches}
           />
         </MessageEditProvider>
       )}
@@ -821,9 +891,7 @@ export const Chat = ({
       >
         <ChatHistorySidebar
           collapsed={sidebarCollapsed}
-          onNewChat={() => {
-            void handleNewChat();
-          }}
+          onNewChat={handleSidebarNewChat}
           onToggleCollapse={onToggleCollapse}
           sessions={sessions}
           currentSessionId={currentChatId ?? ""}
@@ -833,17 +901,7 @@ export const Chat = ({
           onSessionEditTitle={handleEditTitleSession}
           pinnedSessions={pinnedSessions}
           pinnedChatsLimit={pinnedChatsLimit}
-          onSessionPin={
-            pinnedChatsEnabled
-              ? (sessionId, isPinned) => {
-                  void runChatAction(
-                    isPinned ? "pin" : "unpin",
-                    sessionId,
-                    () => pinChat(sessionId, isPinned),
-                  );
-                }
-              : undefined
-          }
+          onSessionPin={pinnedChatsEnabled ? handleSessionPin : undefined}
           onSessionShare={
             chatSharingEnabled ? handleOpenShareDialog : undefined
           }
@@ -851,9 +909,7 @@ export const Chat = ({
           isLoading={chatHistoryLoading}
           hasMoreSessions={hasNextHistoryPage}
           isLoadingMoreSessions={isFetchingNextHistoryPage}
-          onLoadMoreSessions={() => {
-            void fetchNextHistoryPage();
-          }}
+          onLoadMoreSessions={handleLoadMoreSessions}
           error={
             chatHistoryError instanceof Error ? chatHistoryError : undefined
           }

@@ -44,6 +44,12 @@ export const isPromptInjectionFilterDetails = (
   "matched_text" in filterDetails &&
   typeof filterDetails.matched_text === "string";
 
+/** An assistant answer withheld by the prompt-injection guardrail. */
+export const isMessageBlockedByPromptInjection = (message?: Message) =>
+  message?.role === "assistant" &&
+  message.error?.error_type === "content_filter" &&
+  isPromptInjectionFilterDetails(message.error.filter_details);
+
 export interface MessageError {
   error_description: string;
   error_type: string;
