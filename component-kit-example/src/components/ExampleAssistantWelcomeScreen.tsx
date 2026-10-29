@@ -1,3 +1,5 @@
+import { AssistantWelcomeContent } from "@erato/frontend/shared";
+
 import { kitClassName } from "./utils";
 
 import type { ComponentRegistry } from "@erato/frontend/library";
@@ -7,5 +9,6 @@ export const ExampleAssistantWelcomeScreen: NonNullable<
 > = ({ assistant, className }) => (
   <section data-component-kit="example" className={kitClassName(className)}>
     <div>{assistant.name}</div>
+    <AssistantWelcomeContent assistant={assistant} />
   </section>
 );

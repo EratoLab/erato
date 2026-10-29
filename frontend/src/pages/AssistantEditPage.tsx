@@ -102,6 +102,8 @@ export default function AssistantEditPage() {
       const requestBody = {
         name: formData.name,
         prompt: formData.prompt,
+        welcome_message: formData.welcomeMessage,
+        starter_prompts: formData.starterPrompts,
         ...(formData.description && { description: formData.description }),
         ...((formData.defaultModel?.chat_provider_id ?? null) !==
           (assistant?.default_chat_provider ?? null) && {
@@ -248,6 +250,9 @@ export default function AssistantEditPage() {
   const initialData: Partial<AssistantFormData> = {
     name: assistant.name,
     description: assistant.description ?? "",
+    welcomeMessage: assistant.welcome_message ?? "",
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Tolerate cached assistant responses from before welcome content was introduced.
+    starterPrompts: assistant.starter_prompts ?? [],
     prompt: assistant.prompt,
     defaultModel: selectedModel,
     facetIds: assistant.facet_ids ?? [],

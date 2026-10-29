@@ -73,3 +73,5 @@ the composer, and suppress the default content beneath it (subtitle,
 description, starter prompts, past conversations). A `StarterPrompts` override
 only applies to the built-in welcome, where it renders beneath the composer in
 the centered layout and above it in the bottom-aligned layout.
+
+Assistant welcome overrides receive `assistant.welcome_message` and `assistant.starter_prompts`. Render `AssistantWelcomeContent` (exported from `@erato/frontend/library`) to reuse Markdown rendering and editable-draft starter buttons. The helper uses the existing chat input controls, preserves model/facet settings, and is independent of the home starter-prompts flag. Whole-screen overrides still render once above the composer; they own placement of this content.

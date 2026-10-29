@@ -760,6 +760,8 @@ async fn test_mention_validation_matrix(pool: Pool<Postgres>) {
         None,
         None,
         false,
+        None,
+        None,
     )
     .await
     .unwrap();
@@ -853,6 +855,8 @@ async fn test_shared_viewer_mention_accepted_and_persisted(pool: Pool<Postgres>)
         None,
         None,
         false,
+        None,
+        None,
     )
     .await
     .unwrap();
@@ -1298,6 +1302,8 @@ async fn insert_fixed_delegate_assistant(
         id: ActiveValue::Set(id),
         owner_user_id: ActiveValue::Set(owner_user_id),
         name: ActiveValue::Set("Fixed Delegate".to_string()),
+        welcome_message: ActiveValue::Set(None),
+        starter_prompts: ActiveValue::Set(serde_json::json!([])),
         description: ActiveValue::Set(Some("A delegate assistant with a fixed id".to_string())),
         prompt: ActiveValue::Set(prompt.to_string()),
         mcp_server_ids: ActiveValue::Set(mcp_server_ids),

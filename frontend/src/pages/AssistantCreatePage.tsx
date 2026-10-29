@@ -45,6 +45,8 @@ export default function AssistantCreatePage() {
       const requestBody = {
         name: formData.name,
         prompt: formData.prompt,
+        welcome_message: formData.welcomeMessage,
+        starter_prompts: formData.starterPrompts,
         ...(formData.description && { description: formData.description }),
         default_chat_provider: formData.defaultModel?.chat_provider_id ?? null,
         ...(formData.facetIds.length > 0 && {

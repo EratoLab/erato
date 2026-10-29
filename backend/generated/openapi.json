@@ -5098,6 +5098,7 @@
         "type": "object",
         "description": "An assistant model",
         "required": [
+          "starter_prompts",
           "id",
           "name",
           "prompt",
@@ -5163,10 +5164,22 @@
             "type": "string",
             "description": "The system prompt used by the assistant"
           },
+          "starter_prompts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AssistantStarterPrompt"
+            }
+          },
           "updated_at": {
             "type": "string",
             "format": "date-time",
             "description": "When this assistant was last updated"
+          },
+          "welcome_message": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       },
@@ -5228,6 +5241,7 @@
       "AssistantHubAssistantSnapshot": {
         "type": "object",
         "required": [
+          "starter_prompts",
           "id",
           "name",
           "prompt",
@@ -5282,9 +5296,21 @@
           "prompt": {
             "type": "string"
           },
+          "starter_prompts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AssistantStarterPrompt"
+            }
+          },
           "updated_at": {
             "type": "string",
             "format": "date-time"
+          },
+          "welcome_message": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       },
@@ -5766,6 +5792,21 @@
             "items": {
               "$ref": "#/components/schemas/AssistantHubVersion"
             }
+          }
+        }
+      },
+      "AssistantStarterPrompt": {
+        "type": "object",
+        "required": [
+          "name",
+          "prompt"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "prompt": {
+            "type": "string"
           }
         }
       },
@@ -7765,6 +7806,21 @@
               "$ref": "#/components/schemas/ShareGrantInput"
             },
             "description": "Optional list of share grants to create with the assistant"
+          },
+          "starter_prompts": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/AssistantStarterPrompt"
+            }
+          },
+          "welcome_message": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       },
@@ -12351,6 +12407,21 @@
               "null"
             ],
             "description": "Optional new prompt for the assistant"
+          },
+          "starter_prompts": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/AssistantStarterPrompt"
+            }
+          },
+          "welcome_message": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       },

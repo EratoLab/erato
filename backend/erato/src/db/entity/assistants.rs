@@ -22,6 +22,10 @@ pub struct Model {
     pub updated_at: DateTimeWithTimeZone,
     pub facet_ids: Option<Vec<String>>,
     pub enforce_facet_settings: bool,
+    #[sea_orm(column_type = "Text", nullable)]
+    pub welcome_message: Option<String>,
+    #[sea_orm(column_type = "JsonBinary")]
+    pub starter_prompts: Json,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

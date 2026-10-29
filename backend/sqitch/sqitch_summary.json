@@ -59,7 +59,8 @@
     "deploy/0057_add_ms_teams_requests.sql",
     "deploy/0058_add_client_operation_transports.sql",
     "deploy/0059_add_interrupted_parts_index.sql",
-    "deploy/0060_add_audio_synthesis.sql"
+    "deploy/0060_add_audio_synthesis.sql",
+    "deploy/0061_add_assistant_welcome.sql"
   ],
-  "latest_change": "4d25c2d79f9527059cbe2a009e8a0895470118aa"
+  "latest_change": "8a65407577fbb0ef2d4dd0997371dda993fa02fc"
 }

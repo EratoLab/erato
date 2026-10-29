@@ -58,6 +58,8 @@ async fn test_create_assistant_model_directly(pool: Pool<Postgres>) {
         None,
         Some("openai".to_string()),
         false,
+        None,
+        None,
     )
     .await;
 
@@ -108,6 +110,8 @@ async fn test_list_assistants_endpoint(pool: Pool<Postgres>) {
         None,
         Some("openai".to_string()),
         false,
+        None,
+        None,
     )
     .await
     .expect("Failed to create assistant 1");
@@ -123,6 +127,8 @@ async fn test_list_assistants_endpoint(pool: Pool<Postgres>) {
         None,
         Some("anthropic".to_string()),
         false,
+        None,
+        None,
     )
     .await
     .expect("Failed to create assistant 2");
@@ -207,6 +213,8 @@ async fn test_get_assistant_endpoint(pool: Pool<Postgres>) {
         Some(vec!["server1".to_string()]),
         Some("openai".to_string()),
         true,
+        None,
+        None,
     )
     .await
     .expect("Failed to create assistant");
@@ -332,6 +340,8 @@ async fn test_update_assistant_endpoint(pool: Pool<Postgres>) {
         Some(vec!["web_search".to_string()]),
         Some("mock-llm".to_string()),
         false,
+        None,
+        None,
     )
     .await
     .expect("Failed to create assistant");
@@ -405,6 +415,8 @@ async fn test_update_assistant_empty_mcp_servers_clears_restriction(pool: Pool<P
         None,
         None,
         false,
+        None,
+        None,
     )
     .await
     .expect("Failed to create assistant");
@@ -470,6 +482,8 @@ async fn test_archive_assistant_endpoint(pool: Pool<Postgres>) {
         None,
         None,
         false,
+        None,
+        None,
     )
     .await
     .expect("Failed to create assistant");
@@ -565,6 +579,8 @@ async fn test_assistant_authorization(pool: Pool<Postgres>) {
         None,
         None,
         false,
+        None,
+        None,
     )
     .await
     .expect("Failed to create assistant");
@@ -795,6 +811,8 @@ async fn test_create_assistant_endpoint(pool: Pool<Postgres>) {
     // Test creating an assistant via the API
     let create_request = json!({
         "name": "API Test Assistant",
+        "welcome_message": "## Welcome",
+        "starter_prompts": [{"name":"Start", "prompt":"Help me start"}],
         "description": "An assistant created via the API endpoint",
         "prompt": "You are a helpful test assistant created via the API.",
         "mcp_server_ids": ["server1", "server2"],
@@ -852,6 +870,26 @@ async fn test_create_assistant_endpoint(pool: Pool<Postgres>) {
     assert_eq!(get_response.status_code(), http::StatusCode::OK);
 
     let get_response_json: Value = get_response.json();
+    assert_eq!(get_response_json["welcome_message"], "## Welcome");
+    assert_eq!(
+        get_response_json["starter_prompts"],
+        json!([{"name":"Start", "prompt":"Help me start"}])
+    );
+    let unchanged = server
+        .put(&format!("/api/v1beta/assistants/{}", assistant_id))
+        .json(&json!({"name":"Renamed"}))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await;
+    assert_eq!(unchanged.status_code(), http::StatusCode::OK);
+    assert_eq!(unchanged.json::<Value>()["welcome_message"], "## Welcome");
+    let cleared = server
+        .put(&format!("/api/v1beta/assistants/{}", assistant_id))
+        .json(&json!({"welcome_message":"", "starter_prompts":[]}))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await;
+    assert_eq!(cleared.status_code(), http::StatusCode::OK);
+    assert!(cleared.json::<Value>()["welcome_message"].is_null());
+    assert_eq!(cleared.json::<Value>()["starter_prompts"], json!([]));
     assert_eq!(get_response_json["name"], "API Test Assistant");
     assert_eq!(get_response_json["id"], assistant_id);
     // Verify files field exists (should be empty since we didn't add any files)
@@ -1008,6 +1046,8 @@ async fn test_list_assistants_sharing_relation_filter(pool: Pool<Postgres>) {
         None,
         None,
         false,
+        None,
+        None,
     )
     .await
     .expect("Failed to create owned assistant 1");
@@ -1023,6 +1063,8 @@ async fn test_list_assistants_sharing_relation_filter(pool: Pool<Postgres>) {
         None,
         None,
         false,
+        None,
+        None,
     )
     .await
     .expect("Failed to create owned assistant 2");
@@ -1039,6 +1081,8 @@ async fn test_list_assistants_sharing_relation_filter(pool: Pool<Postgres>) {
         None,
         None,
         false,
+        None,
+        None,
     )
     .await
     .expect("Failed to create shared assistant 1");
@@ -1054,6 +1098,8 @@ async fn test_list_assistants_sharing_relation_filter(pool: Pool<Postgres>) {
         None,
         None,
         false,
+        None,
+        None,
     )
     .await
     .expect("Failed to create shared assistant 2");

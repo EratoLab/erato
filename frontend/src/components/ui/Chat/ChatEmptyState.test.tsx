@@ -41,6 +41,7 @@ const assistant: AssistantWithFiles = {
   prompt: "Use the supplied policy docs to answer questions.",
   created_at: "2026-03-23T08:00:00.000Z",
   facet_ids: [],
+  starter_prompts: [],
   enforce_facet_settings: false,
   mcp_server_ids: [],
   updated_at: "2026-03-23T09:00:00.000Z",

@@ -254,6 +254,8 @@ mod test_cases {
                 owner_user_id: Uuid::new_v4(),
                 name: name.to_string(),
                 description: None,
+                welcome_message: None,
+                starter_prompts: serde_json::json!([]),
                 prompt: prompt.to_string(),
                 mcp_server_ids: None,
                 facet_ids: None,

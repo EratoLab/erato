@@ -24,6 +24,8 @@ use crate::models::assistant::FileInfo;
 /// An assistant model
 #[derive(Debug, Serialize, ToSchema)]
 pub struct Assistant {
+    pub welcome_message: Option<String>,
+    pub starter_prompts: Vec<crate::models::assistant::AssistantStarterPrompt>,
     /// The unique ID of the assistant
     pub id: String,
     /// The display name of the assistant
@@ -123,6 +125,8 @@ pub struct ShareGrantInput {
 /// Request to create a new assistant
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct CreateAssistantRequest {
+    pub welcome_message: Option<String>,
+    pub starter_prompts: Option<Vec<crate::models::assistant::AssistantStarterPrompt>>,
     /// The name of the assistant
     pub name: String,
     /// Optional description of the assistant
@@ -155,6 +159,8 @@ pub struct CreateAssistantResponse {
 /// Request to update an existing assistant
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct UpdateAssistantRequest {
+    pub welcome_message: Option<String>,
+    pub starter_prompts: Option<Vec<crate::models::assistant::AssistantStarterPrompt>>,
     /// Optional new name for the assistant
     pub name: Option<String>,
     /// Optional new description for the assistant
@@ -459,6 +465,7 @@ pub async fn create_assistant(
         return Err(StatusCode::UNPROCESSABLE_ENTITY);
     }
 
+    validate_welcome_content(&request.welcome_message, &request.starter_prompts)?;
     // Create the assistant
     let created_assistant = assistant::create_assistant(
         &app_state.db,
@@ -471,6 +478,8 @@ pub async fn create_assistant(
         request.facet_ids,
         request.default_chat_provider,
         request.enforce_facet_settings,
+        request.welcome_message,
+        request.starter_prompts,
     )
     .await
     .map_err(log_internal_server_error)?;
@@ -595,6 +604,9 @@ pub async fn create_assistant(
                     id: assistant_with_files.id.to_string(),
                     name: assistant_with_files.name,
                     description: assistant_with_files.description,
+                    welcome_message: assistant_with_files.welcome_message,
+                    starter_prompts: serde_json::from_value(assistant_with_files.starter_prompts)
+                        .map_err(|e| log_internal_server_error(e.into()))?,
                     owner_email,
                     prompt: assistant_with_files.prompt,
                     mcp_server_ids: assistant_with_files.mcp_server_ids,
@@ -688,6 +700,9 @@ pub async fn list_assistants(
             id: assistant.id.to_string(),
             name: assistant.name,
             description: assistant.description,
+            welcome_message: assistant.welcome_message,
+            starter_prompts: serde_json::from_value(assistant.starter_prompts)
+                .map_err(|e| log_internal_server_error(e.into()))?,
             owner_email,
             prompt: assistant.prompt,
             mcp_server_ids: assistant.mcp_server_ids,
@@ -794,6 +809,9 @@ pub async fn get_assistant(
             id: assistant_with_files.id.to_string(),
             name: assistant_with_files.name,
             description: assistant_with_files.description,
+            welcome_message: assistant_with_files.welcome_message,
+            starter_prompts: serde_json::from_value(assistant_with_files.starter_prompts)
+                .map_err(|e| log_internal_server_error(e.into()))?,
             owner_email,
             prompt: assistant_with_files.prompt,
             mcp_server_ids: assistant_with_files.mcp_server_ids,
@@ -876,6 +894,7 @@ pub async fn update_assistant(
         return Err(StatusCode::UNPROCESSABLE_ENTITY);
     }
 
+    validate_welcome_content(&request.welcome_message, &request.starter_prompts)?;
     // Update the assistant
     let updated_assistant = assistant::update_assistant(
         &app_state.db,
@@ -889,6 +908,8 @@ pub async fn update_assistant(
         request.facet_ids,
         request.default_chat_provider,
         request.enforce_facet_settings,
+        request.welcome_message,
+        request.starter_prompts,
     )
     .await
     .map_err(|e| {
@@ -1040,6 +1061,9 @@ pub async fn update_assistant(
                 id: assistant_with_files.id.to_string(),
                 name: assistant_with_files.name,
                 description: assistant_with_files.description,
+                welcome_message: assistant_with_files.welcome_message,
+                starter_prompts: serde_json::from_value(assistant_with_files.starter_prompts)
+                    .map_err(|e| log_internal_server_error(e.into()))?,
                 owner_email,
                 prompt: assistant_with_files.prompt,
                 mcp_server_ids: assistant_with_files.mcp_server_ids,
@@ -1119,4 +1143,70 @@ pub async fn archive_assistant(
         id: archived_assistant.id.to_string(),
         archived_at: archived_assistant.archived_at.unwrap(),
     }))
+}
+
+fn validate_welcome_content(
+    message: &Option<String>,
+    prompts: &Option<Vec<crate::models::assistant::AssistantStarterPrompt>>,
+) -> Result<(), StatusCode> {
+    if message.as_ref().is_some_and(|s| s.chars().count() > 10000)
+        || prompts.as_ref().is_some_and(|items| {
+            items.len() > 3
+                || items.iter().any(|p| {
+                    p.name.trim().is_empty()
+                        || p.prompt.trim().is_empty()
+                        || p.name.chars().count() > 100
+                        || p.prompt.chars().count() > 10000
+                })
+        })
+    {
+        return Err(StatusCode::UNPROCESSABLE_ENTITY);
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod welcome_content_tests {
+    use super::*;
+    use crate::models::assistant::AssistantStarterPrompt;
+
+    #[test]
+    fn welcome_validation_and_patch_semantics() {
+        let valid = || AssistantStarterPrompt {
+            name: "Start".into(),
+            prompt: "Help me start".into(),
+        };
+        assert!(validate_welcome_content(&None, &Some(vec![])).is_ok());
+        assert!(
+            validate_welcome_content(
+                &Some("# Hello".into()),
+                &Some(vec![valid(), valid(), valid()])
+            )
+            .is_ok()
+        );
+        assert!(
+            validate_welcome_content(&None, &Some(vec![valid(), valid(), valid(), valid()]))
+                .is_err()
+        );
+        assert!(
+            validate_welcome_content(
+                &None,
+                &Some(vec![AssistantStarterPrompt {
+                    name: " ".into(),
+                    prompt: "test".into()
+                }])
+            )
+            .is_err()
+        );
+        assert!(validate_welcome_content(&Some("a".repeat(10001)), &None).is_err());
+        let omitted: UpdateAssistantRequest =
+            serde_json::from_value(serde_json::json!({})).unwrap();
+        assert!(omitted.welcome_message.is_none());
+        assert!(omitted.starter_prompts.is_none());
+        let cleared: UpdateAssistantRequest =
+            serde_json::from_value(serde_json::json!({"welcome_message":"", "starter_prompts":[]}))
+                .unwrap();
+        assert_eq!(cleared.welcome_message.as_deref(), Some(""));
+        assert!(cleared.starter_prompts.unwrap().is_empty());
+    }
 }

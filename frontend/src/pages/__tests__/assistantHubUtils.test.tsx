@@ -21,6 +21,7 @@ const acceptedVersion: AssistantHubVersion = {
   assistant: {
     created_at: "2026-01-01T00:00:00Z",
     description: "Assistant description",
+    starter_prompts: [],
     enforce_facet_settings: false,
     id: "assistant-snapshot",
     name: "Accepted assistant",

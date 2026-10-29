@@ -758,3 +758,5 @@ export {
 } from "@/hooks/chat/composeReloadState";
 
 export { default as BrandingOverviewPage } from "@/pages/BrandingOverviewPage";
+
+export { AssistantWelcomeContent } from "@/components/ui/Assistant/AssistantWelcomeContent";

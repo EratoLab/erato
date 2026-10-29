@@ -69,6 +69,8 @@ pub struct AssistantHubSubmissionDiffResponse {
 
 #[derive(Debug, Serialize, ToSchema)]
 pub struct AssistantHubAssistantSnapshot {
+    pub welcome_message: Option<String>,
+    pub starter_prompts: Vec<crate::models::assistant::AssistantStarterPrompt>,
     pub id: String,
     pub name: String,
     pub description: Option<String>,
@@ -510,6 +512,9 @@ fn record_to_response(
             id: record.assistant.id.to_string(),
             name: record.assistant.name,
             description: record.assistant.description,
+            welcome_message: record.assistant.welcome_message,
+            starter_prompts: serde_json::from_value(record.assistant.starter_prompts)
+                .unwrap_or_default(),
             prompt: record.assistant.prompt,
             mcp_server_ids: record.assistant.mcp_server_ids,
             facet_ids: record.assistant.facet_ids,

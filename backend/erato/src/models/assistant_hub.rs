@@ -263,6 +263,8 @@ async fn clone_source_assistant(
         owner_user_id: Set(source.owner_user_id),
         name: Set(source.name),
         description: Set(source.description),
+        welcome_message: Set(source.welcome_message),
+        starter_prompts: Set(source.starter_prompts),
         prompt: Set(source.prompt),
         mcp_server_ids: Set(source.mcp_server_ids),
         facet_ids: Set(source.facet_ids),
@@ -425,6 +427,8 @@ pub async fn build_submission_diff(
         "changes": [
             diff_field("name", baseline_assistant.as_ref().map(|a| a.name.clone()), source.name),
             diff_field("description", baseline_assistant.as_ref().map(|a| a.description.clone()), source.description),
+            diff_field("welcome_message", baseline_assistant.as_ref().map(|a| a.welcome_message.clone()), source.welcome_message),
+            diff_field("starter_prompts", baseline_assistant.as_ref().map(|a| a.starter_prompts.clone()), source.starter_prompts),
             diff_field("prompt", baseline_assistant.as_ref().map(|a| a.prompt.clone()), source.prompt),
             diff_field("mcp_server_ids", baseline_assistant.as_ref().map(|a| a.mcp_server_ids.clone().unwrap_or_default()), source.mcp_server_ids.unwrap_or_default()),
             diff_field("facet_ids", baseline_assistant.as_ref().map(|a| a.facet_ids.clone().unwrap_or_default()), source.facet_ids.unwrap_or_default()),

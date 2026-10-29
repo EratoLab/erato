@@ -47,6 +47,8 @@ vi.mock("@/components/ui/Assistant/AssistantForm", () => ({
           void onSubmit({
             name: initialData?.name ?? "",
             description: initialData?.description ?? "",
+            welcomeMessage: "",
+            starterPrompts: [],
             prompt: initialData?.prompt ?? "",
             defaultModel: initialData?.defaultModel ?? null,
             facetIds: initialData?.facetIds ?? [],
@@ -113,6 +115,7 @@ describe("AssistantEditPage", () => {
       prompt: "You are an assistant without server restrictions.",
       default_chat_provider: null,
       facet_ids: null,
+      starter_prompts: [],
       enforce_facet_settings: false,
       files: [],
       mcp_server_ids: null,

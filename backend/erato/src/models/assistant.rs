@@ -14,8 +14,14 @@ use sea_orm::{
     ColumnTrait, Condition, DatabaseConnection, EntityTrait, IntoActiveModel, JoinType,
     QueryFilter, QuerySelect, Set,
 };
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use sqlx::types::Uuid;
+
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
+pub struct AssistantStarterPrompt {
+    pub name: String,
+    pub prompt: String,
+}
 
 /// Serializable file information for API responses
 #[derive(Debug, Clone, Serialize)]
@@ -54,6 +60,8 @@ pub struct AssistantWithFiles {
     pub owner_user_id: Uuid,
     pub name: String,
     pub description: Option<String>,
+    pub welcome_message: Option<String>,
+    pub starter_prompts: serde_json::Value,
     pub prompt: String,
     pub mcp_server_ids: Option<Vec<String>>,
     pub facet_ids: Option<Vec<String>>,
@@ -118,6 +126,8 @@ pub async fn create_assistant(
     facet_ids: Option<Vec<String>>,
     default_chat_provider: Option<String>,
     enforce_facet_settings: bool,
+    welcome_message: Option<String>,
+    starter_prompts: Option<Vec<AssistantStarterPrompt>>,
 ) -> Result<assistants::Model, Report> {
     // Get the user ID from subject (subject contains the user UUID)
     let user_id_str = subject.user_id();
@@ -133,6 +143,8 @@ pub async fn create_assistant(
         owner_user_id: Set(user.id),
         name: Set(name),
         description: Set(description),
+        welcome_message: Set(welcome_message.filter(|s| !s.trim().is_empty())),
+        starter_prompts: Set(serde_json::to_value(starter_prompts.unwrap_or_default())?),
         prompt: Set(prompt),
         mcp_server_ids: Set(normalize_assistant_id_list(mcp_server_ids)),
         facet_ids: Set(normalize_assistant_id_list(facet_ids)),
@@ -464,6 +476,8 @@ pub async fn get_assistant_with_files(
         owner_user_id: assistant.owner_user_id,
         name: assistant.name,
         description: assistant.description,
+        welcome_message: assistant.welcome_message,
+        starter_prompts: assistant.starter_prompts,
         prompt: assistant.prompt,
         mcp_server_ids: assistant.mcp_server_ids,
         facet_ids: assistant.facet_ids,
@@ -490,6 +504,8 @@ pub async fn update_assistant(
     facet_ids: Option<Option<Vec<String>>>,
     default_chat_provider: Option<Option<String>>,
     enforce_facet_settings: Option<bool>,
+    welcome_message: Option<String>,
+    starter_prompts: Option<Vec<AssistantStarterPrompt>>,
 ) -> Result<assistants::Model, Report> {
     // Get the assistant (owners and editor grants can update)
     let assistant =
@@ -499,6 +515,12 @@ pub async fn update_assistant(
     // Update the assistant record
     let mut active_assistant = assistant.into_active_model();
 
+    if let Some(message) = welcome_message {
+        active_assistant.welcome_message = Set((!message.trim().is_empty()).then_some(message));
+    }
+    if let Some(prompts) = starter_prompts {
+        active_assistant.starter_prompts = Set(serde_json::to_value(prompts)?);
+    }
     if let Some(new_name) = name {
         active_assistant.name = Set(new_name);
     }

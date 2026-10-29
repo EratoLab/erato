@@ -78,6 +78,14 @@ type Enabled<
 const schemaFile = path.join(targetDir, "v1betaApiSchemas.ts");
 const schemaStringFieldFixes = [
   {
+    from: "starter_prompts?: null | undefined;",
+    to: "starter_prompts?: AssistantStarterPrompt[] | null | undefined;",
+  },
+  {
+    from: "welcome_message?: null | undefined;",
+    to: "welcome_message?: string | null | undefined;",
+  },
+  {
     from: "progress_message?: null | undefined;",
     to: "progress_message?: string | null | undefined;",
   },

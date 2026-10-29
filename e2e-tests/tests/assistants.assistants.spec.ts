@@ -16,6 +16,47 @@ test.describe("Assistant Management", () => {
     ).toBeVisible();
   });
 
+  test("welcome prompts populate an editable draft", async ({ page }) => {
+    const name = `Welcome Assistant-${Date.now()}`;
+    await page
+      .getByRole("button", { name: /create.*assistant|new.*assistant/i })
+      .click();
+    await page.locator("#assistant-name").fill(name);
+    await page
+      .getByLabel(/system prompt/i)
+      .fill("You are a helpful assistant.");
+    await page
+      .getByLabel("Welcome message (Markdown)", { exact: true })
+      .fill("## Welcome to your assistant");
+    await page.getByRole("button", { name: "Add starter prompt" }).click();
+    const prompts = page.getByRole("group", {
+      name: "Starter prompts (up to 3)",
+    });
+    await prompts.getByLabel("Name", { exact: true }).fill("Help me start");
+    await prompts
+      .getByLabel("Prompt", { exact: true })
+      .fill("Help me plan my day.");
+    await page.getByRole("button", { name: /create assistant/i }).click();
+    await page.waitForURL("/assistants/created");
+    await page.getByRole("button", { name: new RegExp(name) }).click();
+    await expect(
+      page.getByRole("heading", { name: "Welcome to your assistant" }),
+    ).toBeVisible();
+    await page
+      .getByRole("button", { name: "Help me start", exact: true })
+      .click();
+    const composer = page.getByRole("textbox", { name: /type a message/i });
+    await expect(composer).toHaveValue("Help me plan my day.");
+    await expect(composer).toBeFocused();
+    await expect(page.getByTestId("message-user")).toHaveCount(0);
+    await composer.fill("Help me plan tomorrow instead.");
+    await composer.press("Enter");
+    await chatIsReadyToChat(page, { expectAssistantResponse: true });
+    await expect(
+      page.getByRole("heading", { name: "Welcome to your assistant" }),
+    ).toHaveCount(0);
+  });
+
   test("should create an assistant with file upload", async ({ page }) => {
     // Generate a unique name with random hexadecimal suffix
     const randomSuffix = Math.floor(Math.random() * 16777215)

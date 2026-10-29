@@ -25,6 +25,8 @@ import {
   resolveChatAttentionStatus,
 } from "@/utils/chatHistoryGrouping";
 
+import { AssistantWelcomeContent } from "./AssistantWelcomeContent";
+
 import type { SegmentedControlOption } from "@/components/ui/Controls/SegmentedControl";
 import type { AssistantWithFiles } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { ChatSession } from "@/types/chat";
@@ -400,6 +402,10 @@ export function AssistantWelcomeLower({
       )}
       data-testid="assistant-welcome-screen-lower"
     >
+      {/* eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Older cached assistant responses may omit prompts. */}
+      {assistant.welcome_message || assistant.starter_prompts?.length ? (
+        <AssistantWelcomeContent assistant={assistant} />
+      ) : null}
       {!isLoadingChats &&
         (pastChats.length > 0 || delegatedRuns.length > 0) && (
           <div className="w-full">
