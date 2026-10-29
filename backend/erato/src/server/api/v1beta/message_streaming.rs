@@ -558,6 +558,12 @@ fn gate_mcp_tool_call(
     }
 }
 
+fn approval_unavailable_in_delegated_run(tool_name: &str) -> String {
+    format!(
+        "The tool '{tool_name}' requires user approval, which is unavailable in a delegated run; the call was not executed."
+    )
+}
+
 fn refuse_denied_tool_call(tool_call: &genai::chat::ToolCall) -> ToolCallGate {
     ToolCallGate::Refuse(format!(
         "The user has disabled the tool '{}' in their settings; the call was not executed.",
@@ -608,6 +614,16 @@ fn ask_for_tool_call(
         // queue, not by this per-call gate.
         pending_tool_calls: Vec::new(),
     }))
+}
+
+/// The model's text for a client call that ended without a result.
+fn cancelled_client_tool_text(reason: &str) -> String {
+    let why = match reason {
+        "context_unavailable" => "no connected client could run it",
+        "withdrawn" => "the user no longer allows this tool",
+        _ => "the client did not return a result in time",
+    };
+    format!("Client tool was not completed (reason: {reason}); {why}.")
 }
 
 /// The client-tool counterpart of [`gate_mcp_tool_call`]. There is no policy
@@ -2396,6 +2412,12 @@ pub struct ContinueStreamRequest {
     decisions: Vec<ApprovalDecisionItem>,
     #[serde(default)]
     decision: Option<ToolApprovalDecision>,
+    /// Whether the client shows each task child an `mcp_tool` or `client_tool`
+    /// part carries as an item of its own. Decisions on such a part are refused
+    /// without it while a child is open: an older client shows only the turn's
+    /// own call and would answer the children unseen.
+    #[serde(default)]
+    shows_child_items: bool,
     /// The `X-Erato-Client-Tools` of the device answering, when it sent one.
     #[serde(skip)]
     registered_client_tools: Option<Vec<String>>,
@@ -2407,6 +2429,7 @@ pub struct ContinueStreamRequest {
 impl ContinueStreamRequest {
     /// The decisions an approval card submitted, one per approval id. The
     /// set is validated like any other continuation (exact, no duplicates).
+    /// The card lists every item, a parked child's included.
     pub(crate) fn with_decisions(
         message_id: Uuid,
         decisions: Vec<(String, ToolApprovalDecision)>,
@@ -2421,6 +2444,7 @@ impl ContinueStreamRequest {
                 })
                 .collect(),
             decision: None,
+            shows_child_items: true,
             registered_client_tools: None,
             executor: None,
         }
@@ -3164,8 +3188,11 @@ async fn reconcile_orphaned_parent_slot(
     // Deliberately no archived check, unlike the `async` path's
     // `DELIVERY_REASON_ORIGIN_ARCHIVED`: that one appends a row and runs a
     // reaction turn, this rewrites a slot already in the row. An archived
-    // origin is also the only route that reaches here at all — a withdrawal or
-    // a settlement closes the child's own copy, so those never run again.
+    // origin is one route that reaches here. The others are a child the origin
+    // never carried up: one that parked before the user stopped the turn, or
+    // on a turn that ended on a stop no child item can share (the tool-call
+    // limit, a durable client operation). A withdrawal or a settlement closes
+    // the child's own copy, so those never run again.
     //
     // A running lease means the dispatching turn may yet write the slot itself.
     if origin_chat.generation_state.as_deref() == Some("running") {
@@ -3635,6 +3662,12 @@ pub(crate) struct DelegationDispatchContext<'a> {
     /// wall-clock. Incremented once, where the call is parsed, before
     /// anything can refuse it.
     pub tasks_this_turn: std::sync::atomic::AtomicUsize,
+    /// The client tools this turn offered with `child_access = "read"`: the
+    /// most a client task launched from it can be granted.
+    pub parent_client_tools: Vec<crate::services::client_tools::OfferedClientTool>,
+    /// This turn's persisted action-facet arguments; a grant's context
+    /// version is read from them.
+    pub action_facet_args: Option<HashMap<String, String>>,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -4512,7 +4545,8 @@ async fn prepare_chat_request_with_adapters_memory_inner(
     // park budget against nobody. Suppression acts HERE, at the offering
     // site, across every source (client-action tool, global/facet/action
     // client-tool allowlists) — a security control derived from the durable
-    // chat row, not caller-remembered state.
+    // chat row, not caller-remembered state. The one way back in is the grant
+    // a client task was launched with, which is read off the same row.
     let is_delegated_run = crate::models::chat::chat_is_delegated_run(chat);
     // Offer the synthetic client-action tool only when the current request's
     // action facet declares client actions and the chat allows writes: client
@@ -4669,6 +4703,18 @@ async fn prepare_chat_request_with_adapters_memory_inner(
                 native_strict,
             ));
         }
+    } else if is_delegated_run {
+        append_granted_client_tools(
+            app_state,
+            chat,
+            generation_request_context.executor.as_ref(),
+            me_profile_input.user_id,
+            &mcp_claimed_names,
+            effective_model_settings.compat_omit_strict,
+            &mut chat_request_tools,
+            &mut offered_client_tools,
+        )
+        .await?;
     }
     // Both delegation routes are offered here. They are request-scoped like
     // the client-action tool and never offered inside a delegated run itself
@@ -5429,6 +5475,48 @@ struct ParkedChild {
     request: ContentPartToolApprovalRequest,
 }
 
+/// The item a parked child adds to the stop that carries it up.
+///
+/// Named after the origin call, because that is the slot a decision settles;
+/// the child's own gated call is copied onto `child` so a card renders without
+/// reading another chat.
+fn parked_child_approval_item(child: &ParkedChild) -> ApprovalItem {
+    // The child parked on exactly one call - its gate stops the batch at the
+    // first gated one - so the first item is that call.
+    let gated = child.request.approval_items().into_iter().next();
+    let (child_tool_call_id, child_tool_name, child_input, child_display) = gated
+        .map(|item| (item.tool_call_id, item.tool_name, item.input, item.display))
+        .unwrap_or_else(|| {
+            (
+                child.request.tool_call_id.clone(),
+                child.request.tool_name.clone(),
+                child.request.input.clone(),
+                child.request.display.clone(),
+            )
+        });
+    ApprovalItem {
+        approval_id: child.tool_call.call_id.clone(),
+        tool_call_id: child.tool_call.call_id.clone(),
+        tool_name: child.tool_call.fn_name.clone(),
+        display: None,
+        input: child.tool_call.fn_arguments.clone(),
+        child: Some(crate::models::message::ChildApprovalRef {
+            child_chat_id: child.child_chat_id,
+            child_message_id: child.child_message_id,
+            child_tool_call_id,
+            tool_name: child_tool_name,
+            display: child_display,
+            mcp_server_id: child.request.mcp_server_id.clone(),
+            input: child_input,
+            annotations: child.request.annotations.clone(),
+            preset: child.request.preset.clone(),
+            requested_at: child.request.requested_at.clone(),
+            allow_always: Some(child.request.allow_always),
+            kind: Some(child.request.kind),
+        }),
+    }
+}
+
 /// The one `delegated_task` approval part a parked batch leaves behind.
 ///
 /// The flat fields describe the first item only, for readers that predate
@@ -5439,43 +5527,7 @@ fn delegated_task_approval_part(
     pending_tool_calls: Vec<crate::models::message::PendingToolCall>,
     allow_always: bool,
 ) -> ContentPartToolApprovalRequest {
-    let approvals: Vec<ApprovalItem> = parked
-        .iter()
-        .map(|child| {
-            // The child parked on exactly one call - its gate stops the batch
-            // at the first gated one - so the first item is that call.
-            let gated = child.request.approval_items().into_iter().next();
-            let (child_tool_call_id, child_tool_name, child_input, child_display) = gated
-                .map(|item| (item.tool_call_id, item.tool_name, item.input, item.display))
-                .unwrap_or_else(|| {
-                    (
-                        child.request.tool_call_id.clone(),
-                        child.request.tool_name.clone(),
-                        child.request.input.clone(),
-                        child.request.display.clone(),
-                    )
-                });
-            ApprovalItem {
-                approval_id: child.tool_call.call_id.clone(),
-                tool_call_id: child.tool_call.call_id.clone(),
-                tool_name: child.tool_call.fn_name.clone(),
-                display: None,
-                input: child.tool_call.fn_arguments.clone(),
-                child: Some(crate::models::message::ChildApprovalRef {
-                    child_chat_id: child.child_chat_id,
-                    child_message_id: child.child_message_id,
-                    child_tool_call_id,
-                    tool_name: child_tool_name,
-                    display: child_display,
-                    mcp_server_id: child.request.mcp_server_id.clone(),
-                    input: child_input,
-                    annotations: child.request.annotations.clone(),
-                    preset: child.request.preset.clone(),
-                    requested_at: child.request.requested_at.clone(),
-                }),
-            }
-        })
-        .collect();
+    let approvals: Vec<ApprovalItem> = parked.iter().map(parked_child_approval_item).collect();
     let head = &parked[0];
     ContentPartToolApprovalRequest {
         tool_call_id: head.tool_call.call_id.clone(),
@@ -5491,6 +5543,20 @@ fn delegated_task_approval_part(
         approvals,
         pending_tool_calls,
     }
+}
+
+/// Carry parked children up on the stop the turn's own gated call already
+/// owns, so the user answers the turn and its tasks in one place.
+///
+/// The part keeps its kind and flat fields: they still describe its own call,
+/// which stays the first item. Only children launched before that call can be
+/// here - a child that parks first ends the batch before the call is popped.
+fn fold_parked_children(part: &mut ContentPartToolApprovalRequest, parked: &[ParkedChild]) {
+    if part.approvals.is_empty() {
+        part.approvals = part.approval_items();
+    }
+    part.approvals
+        .extend(parked.iter().map(parked_child_approval_item));
 }
 
 /// The `task_plan` approval part a gated batch leaves behind.
@@ -5836,7 +5902,32 @@ async fn launch_prepared_task<'a>(
         brief,
         run_mode,
         scheduling,
+        client_task,
     } = prepared;
+    // Resolved at launch, not at validation: a queued task launches later, and
+    // the grant must reflect the pane and decisions at the time it starts.
+    let client_task = match client_task {
+        Some(launch) => {
+            let grant = crate::services::delegated_client_tools::resolve_grant(
+                app_state,
+                context,
+                launch.host,
+                assistant_message_id,
+            )
+            .await;
+            Some(crate::services::delegation::ClientTaskLaunchSpec {
+                note: crate::models::chat::ClientTaskNote {
+                    host_context: launch.host,
+                    run_mode: launch
+                        .coerced
+                        .then(|| crate::services::delegated_client_tools::wait_note(launch.host)),
+                    unavailable: grant.as_ref().err().map(|reason| reason.to_string()),
+                },
+                grant: grant.ok(),
+            })
+        }
+        None => None,
+    };
     match crate::services::delegation::launch_delegation(
         app_state,
         policy,
@@ -5848,6 +5939,7 @@ async fn launch_prepared_task<'a>(
             parent_tool_call_id: Some(meta.tool_call.call_id.clone()),
             retry_of: None,
             parent_message_id: Some(assistant_message_id),
+            client_task,
         },
         brief,
     )
@@ -6043,8 +6135,8 @@ async fn stream_generate_chat_completion<'a>(
     initial_message_content: Vec<ContentPart>,
     is_delegated_run: bool,
     // Whether a delegated run of this chat may stop on an approval-gated MCP
-    // call and let its origin turn ask, instead of having the call refused.
-    // Always `false` for a turn that is not a delegated run at all.
+    // or granted client call and let its origin turn ask, instead of having
+    // the call refused. Always `false` for a turn that is not a delegated run.
     child_may_park: bool,
     delegation: Option<DelegationDispatchContext<'_>>,
     // What this run may spend on tool calls, when it is a task run. `None`
@@ -6191,7 +6283,11 @@ async fn stream_generate_chat_completion<'a>(
     if app_state.config.client_tools.durable_operations_enabled
         && let Some(task) = streaming_task
     {
-        for offered in offered_client_tools.values() {
+        // Granted tools are live-only: no transport is set up for them.
+        for offered in offered_client_tools
+            .values()
+            .filter(|offered| offered.grant.is_none())
+        {
             let Some(durable) = &offered.config.durable else {
                 continue;
             };
@@ -6600,6 +6696,12 @@ async fn stream_generate_chat_completion<'a>(
                         // never offered in that case.
                         && !available_mcp_tools_by_name.contains_key(&call.fn_name)
                         && !approved_task_call_ids.contains(&call.call_id)
+                },
+                |call| {
+                    crate::services::delegated_client_tools::names_child_facet(
+                        &app_state.config.facets,
+                        call,
+                    )
                 },
             );
             if !gated_positions.is_empty() {
@@ -7612,6 +7714,13 @@ async fn stream_generate_chat_completion<'a>(
                             decision,
                         ) {
                             ToolCallGate::Ask(_) if registered_kind => ToolCallGate::Run,
+                            // The MCP arm's rule: a child with nowhere to ask
+                            // finishes without the call instead of parking.
+                            ToolCallGate::Ask(_) if is_delegated_run && !child_may_park => {
+                                ToolCallGate::Refuse(approval_unavailable_in_delegated_run(
+                                    &tool_name,
+                                ))
+                            }
                             gate => gate,
                         }
                     }
@@ -7647,7 +7756,8 @@ async fn stream_generate_chat_completion<'a>(
                 // executor, e.g. an approval given on another machine: answer at
                 // once instead of letting the call wait out its timeout.
                 let missing_executor = tool_policy.is_some_and(|policy| {
-                    policy.config.requires_client_registration
+                    policy.grant.is_none()
+                        && policy.config.requires_client_registration
                         && continuing_client_tools
                             .as_ref()
                             .is_some_and(|registered| !registered.contains(&policy.config.name))
@@ -7726,8 +7836,14 @@ async fn stream_generate_chat_completion<'a>(
                     .get(&call_id)
                     .and_then(|charge| charge.submission_attempt)
                     .unwrap_or(0);
+                // A granted call never parks durably and never waits for the
+                // inbox: it is live on the grant's executor or it fails.
+                let grant = tool_policy.and_then(|policy| policy.grant.as_ref());
                 let operation_kind = tool_policy
-                    .filter(|_| app_state.config.client_tools.durable_operations_enabled)
+                    .filter(|policy| {
+                        app_state.config.client_tools.durable_operations_enabled
+                            && policy.grant.is_none()
+                    })
                     .and_then(|policy| {
                         app_state
                             .client_operations
@@ -7835,7 +7951,40 @@ async fn stream_generate_chat_completion<'a>(
                     });
                 }
                 let mut executor_target = None;
-                if let Some(binding) = tool_policy
+                if grant.is_some() && validation_failure.is_none() {
+                    let binding = tool_policy.and_then(|policy| policy.executor.as_ref());
+                    let route = match binding {
+                        Some(binding) if app_state.config.client_tools.executor_stream_enabled => {
+                            route_executor_call(
+                                &app_state.db,
+                                task,
+                                &user_id,
+                                binding,
+                                &tool_name,
+                                true,
+                            )
+                            .await
+                        }
+                        _ => None,
+                    };
+                    match (route, binding, Uuid::parse_str(&user_id)) {
+                        // Without a pane that takes the call yet, it waits for
+                        // one, as a call of the user's own turn does.
+                        (
+                            Some(
+                                executor_stream::LiveCallRoute::Executor(_)
+                                | executor_stream::LiveCallRoute::Unavailable,
+                            ),
+                            Some(binding),
+                            Ok(account_id),
+                        ) => executor_target = Some((binding.clone(), account_id)),
+                        _ => {
+                            validation_failure = Some(ClientToolOutcome::Cancelled {
+                                reason: "context_unavailable".into(),
+                            });
+                        }
+                    }
+                } else if let Some(binding) = tool_policy
                     .filter(|policy| {
                         app_state.config.client_tools.executor_stream_enabled
                             && validation_failure.is_none()
@@ -7891,14 +8040,30 @@ async fn stream_generate_chat_completion<'a>(
                             message_id: assistant_message_id,
                             tool_call_id: call_id.clone(),
                             tool_name: tool_name.clone(),
-                            input: tool_input.clone(),
-                            lineage: None,
+                            input: match grant {
+                                Some(grant) => {
+                                    crate::services::delegated_client_tools::dispatch_input(
+                                        &tool_input,
+                                        grant,
+                                    )
+                                }
+                                None => tool_input.clone(),
+                            },
+                            lineage: grant.map(|grant| executor_stream::CallLineage {
+                                owner_chat_id: grant.owner_chat_id,
+                                owner_message_id: grant.owner_message_id,
+                                requesting_chat_id: chat_id,
+                                requesting_message_id: assistant_message_id,
+                                context_ref: grant.context_ref.clone(),
+                            }),
                         };
                         handed_over = hand_over_executor_call(&app_state.db, task, call).await;
                     }
                     // A handed-over call is neither broadcast nor logged, so no
-                    // chat stream runs it a second time.
-                    if !inbox_only && handed_over.is_none() {
+                    // chat stream runs it a second time. A granted call has no
+                    // chat path at all.
+                    let grant_unavailable = grant.is_some() && handed_over.is_none();
+                    if !inbox_only && handed_over.is_none() && grant.is_none() {
                         // Signal the client to execute: broadcast (submit path + resume
                         // replay) AND the typed tx stream (regenerate/edit path).
                         send_background_event(
@@ -7956,6 +8121,8 @@ async fn stream_generate_chat_completion<'a>(
                     }
                     let park = if inbox_only {
                         Park::TimedOut
+                    } else if grant_unavailable {
+                        Park::TransportUnavailable
                     } else {
                         tokio::select! {
                             received = &mut result_rx => match received {
@@ -8155,9 +8322,7 @@ async fn stream_generate_chat_completion<'a>(
                             BgToolCallStatus::Error,
                             MessageToolCallStatus::Error,
                             json!({ "status": "cancelled", "reason": reason }),
-                            format!(
-                                "Client tool was not completed (reason: {reason}); the client did not return a result in time."
-                            ),
+                            cancelled_client_tool_text(reason),
                         ),
                     };
                 if let Some(output) = validated_output {
@@ -8352,9 +8517,8 @@ async fn stream_generate_chat_completion<'a>(
                     // awaited one its slot on the origin turn, an `async` one
                     // its own card, announced to the origin by an
                     // `input_required` delivery.
-                    Some(format!(
-                        "The tool '{}' requires user approval, which is unavailable in a delegated run; the call was not executed.",
-                        unfinished_tool_call.fn_name
+                    Some(approval_unavailable_in_delegated_run(
+                        &unfinished_tool_call.fn_name,
                     ))
                 }
                 ToolCallGate::Ask(approval_request) => {
@@ -8939,10 +9103,10 @@ async fn stream_generate_chat_completion<'a>(
             }
             let settled = tokio::select! {
                 settled = in_flight.next(), if !in_flight.is_empty() => settled,
-                () = wait_for_optional_abort(streaming_task), if !aborting => {
-                    aborting = true;
-                    continue;
-                }
+                // Handled at the top of the loop, which also ends the turn. Setting
+                // `aborting` here would skip that and let the turn carry on as if
+                // nobody had stopped it.
+                () = wait_for_optional_abort(streaming_task), if !aborting => continue,
             };
             let Some(settled) = settled else {
                 // Nothing left in flight; anything still queued is released on
@@ -9029,14 +9193,45 @@ async fn stream_generate_chat_completion<'a>(
         // place, so the children's requests can now be carried up as the one
         // part that ends the turn.
         //
-        // Skipped when something else already ended the turn. An abort means
-        // the user withdrew the question, and a gated call of this turn's own
-        // already owns the single approval part — one part carries one kind, so
-        // a parked child cannot be folded into an `mcp_tool` card. In both
-        // cases the child keeps its `input_required` slot and stays answerable
-        // from its own chat.
+        // A gated call of this turn's own already owns that part, so the
+        // children join it as items with `child` set: one stop, decided per
+        // item. Any other exit keeps them out. An abort means the user withdrew
+        // the question; the tool-call limit and a durable client operation are
+        // stops that no item of a child can share. There the child keeps its
+        // `input_required` slot and stays answerable from its own chat.
+        let aborted = streaming_task.is_some_and(|task| task.is_abort_requested());
+        // A Stop while the batch settled withdraws the turn's own question as
+        // well: the turn ends stopped, not on a card nobody asked to see.
+        if aborted && exit_error.is_none() && pending_approval_part.take().is_some() {
+            exit_metadata = build_generation_metadata(
+                total_prompt_tokens,
+                total_completion_tokens,
+                total_total_tokens,
+                total_reasoning_tokens,
+                langfuse_trace_id.clone(),
+                true,
+                None,
+                non_empty_string(&captured_reasoning_summary),
+                non_empty_vec(&captured_reasoning_items),
+                non_empty_vec(&captured_reasoning_item_encrypted_content),
+            );
+        }
         if !parked_children.is_empty() {
-            if pending_approval_part.is_none() && exit_error.is_none() && !exit_after_join {
+            let own_gated_call = pending_approval_part.as_ref().is_some_and(|part| {
+                matches!(
+                    part.kind,
+                    ToolApprovalKind::McpTool | ToolApprovalKind::ClientTool
+                )
+            });
+            if own_gated_call && exit_error.is_none() && !aborted {
+                if let Some(part) = pending_approval_part.as_mut() {
+                    fold_parked_children(part, &parked_children);
+                }
+            } else if pending_approval_part.is_none()
+                && exit_error.is_none()
+                && !exit_after_join
+                && !aborted
+            {
                 let pending_tool_calls = unfinished_tool_calls
                     .drain(..)
                     .map(|call| crate::models::message::PendingToolCall {
@@ -12528,6 +12723,7 @@ mod tests {
             message_id: Uuid::nil(),
             decisions: Vec::new(),
             decision: Some(decision),
+            shows_child_items: false,
             registered_client_tools: None,
             executor: None,
         }
@@ -12544,9 +12740,360 @@ mod tests {
                 })
                 .collect(),
             decision: None,
+            shows_child_items: false,
             registered_client_tools: None,
             executor: None,
         }
+    }
+
+    fn gated_request(call_id: &str, requested_at: &str) -> super::ContentPartToolApprovalRequest {
+        let restrictive = McpToolApprovalConfig {
+            enabled: true,
+            preset: McpToolApprovalPreset::Restrictive,
+            allow_always: false,
+        };
+        let call = ToolCall {
+            call_id: call_id.to_string(),
+            fn_name: "publish".to_string(),
+            fn_arguments: json!({"topic": call_id}),
+            thought_signatures: None,
+        };
+        let tool = Tool::new("publish", "publish", Map::new());
+        let ToolCallGate::Ask(request) =
+            gate_mcp_tool_call(&restrictive, "server", &tool, &call, None)
+        else {
+            panic!("expected approval");
+        };
+        let mut request = *request;
+        request.requested_at = requested_at.to_string();
+        request
+    }
+
+    fn parked_child(parent_call_id: &str, requested_at: &str) -> super::ParkedChild {
+        super::ParkedChild {
+            tool_call: ToolCall {
+                call_id: parent_call_id.to_string(),
+                fn_name: "delegate_task".to_string(),
+                fn_arguments: json!({"task": parent_call_id}),
+                thought_signatures: None,
+            },
+            child_chat_id: Uuid::new_v4(),
+            child_message_id: Uuid::new_v4(),
+            request: gated_request(&format!("{parent_call_id}-child"), requested_at),
+        }
+    }
+
+    fn child_item(approval_id: &str) -> ApprovalItem {
+        let child = parked_child(approval_id, "2026-10-20T10:00:00Z");
+        super::parked_child_approval_item(&child)
+    }
+
+    #[test]
+    fn folding_children_keeps_the_gated_call_first_and_its_flat_fields() {
+        let mut part = gated_request("own-call", "2026-10-20T10:00:01Z");
+        let before = part.clone();
+        let children = [
+            parked_child("task-a", "2026-10-20T10:00:02Z"),
+            parked_child("task-b", "2026-10-20T10:00:03Z"),
+        ];
+        super::fold_parked_children(&mut part, &children);
+
+        assert_eq!(part.kind, ToolApprovalKind::McpTool);
+        assert_eq!(part.tool_call_id, before.tool_call_id);
+        assert_eq!(part.tool_name, before.tool_name);
+        assert_eq!(part.mcp_server_id, before.mcp_server_id);
+        assert_eq!(part.input, before.input);
+        assert_eq!(part.requested_at, before.requested_at);
+        assert_eq!(part.pending_tool_calls, before.pending_tool_calls);
+        let ids: Vec<&str> = part
+            .approvals
+            .iter()
+            .map(|item| item.approval_id.as_str())
+            .collect();
+        assert_eq!(ids, ["own-call", "task-a", "task-b"]);
+        assert!(part.approvals[0].child.is_none());
+        for (item, parked) in part.approvals[1..].iter().zip(&children) {
+            let child = item.child.as_ref().expect("a child item");
+            assert_eq!(child.child_chat_id, parked.child_chat_id);
+            assert_eq!(child.child_message_id, parked.child_message_id);
+            assert_eq!(child.tool_name, "publish");
+            assert_eq!(child.mcp_server_id, "server");
+            assert_eq!(child.requested_at, parked.request.requested_at);
+            assert_eq!(child.allow_always, Some(false));
+            assert_eq!(child.kind, Some(ToolApprovalKind::McpTool));
+            assert_eq!(item.tool_name, "delegate_task");
+        }
+
+        // A part written before `approvals` existed is projected first, so its
+        // own call is never lost behind the children.
+        let mut legacy = gated_request("legacy-call", "2026-10-20T10:00:01Z");
+        legacy.approvals.clear();
+        super::fold_parked_children(&mut legacy, &children[..1]);
+        assert_eq!(legacy.approvals.len(), 2);
+        assert_eq!(legacy.approvals[0].approval_id, "legacy-call");
+        assert!(legacy.approvals[0].child.is_none());
+    }
+
+    #[test]
+    fn decisions_route_per_item() {
+        let open = [open_approval("own"), child_item("task-a")];
+        let submitted = vec![
+            ("own".to_string(), ToolApprovalDecision::Approve),
+            ("task-a".to_string(), ToolApprovalDecision::Reject),
+        ];
+
+        let (mcp, child, plan) =
+            super::split_decisions_by_lane(ToolApprovalKind::McpTool, &open, submitted.clone());
+        assert_eq!(mcp, vec![submitted[0].clone()]);
+        assert_eq!(child, vec![submitted[1].clone()]);
+        assert!(plan.is_empty());
+
+        let (mcp, child, plan) =
+            super::split_decisions_by_lane(ToolApprovalKind::ClientTool, &open, submitted.clone());
+        assert!(mcp.is_empty());
+        assert_eq!(child, vec![submitted[1].clone()]);
+        assert_eq!(plan, vec![submitted[0].clone()]);
+
+        // A `delegated_task` item that lost its child is still the child lane's,
+        // which settles it as a failure.
+        let orphan = [open_approval("task-x"), child_item("task-y")];
+        let decided = vec![
+            ("task-x".to_string(), ToolApprovalDecision::Approve),
+            ("task-y".to_string(), ToolApprovalDecision::Approve),
+        ];
+        let (mcp, child, plan) = super::split_decisions_by_lane(
+            ToolApprovalKind::DelegatedTask,
+            &orphan,
+            decided.clone(),
+        );
+        assert!(mcp.is_empty());
+        assert!(plan.is_empty());
+        assert_eq!(child, decided, "row order is kept");
+
+        let (mcp, child, plan) =
+            super::split_decisions_by_lane(ToolApprovalKind::ToolCallLimit, &open, submitted);
+        assert!(mcp.is_empty() && child.is_empty() && plan.is_empty());
+    }
+
+    #[test]
+    fn approve_always_is_refused_per_item() {
+        let always = |approval_id: &str| {
+            vec![(approval_id.to_string(), ToolApprovalDecision::ApproveAlways)]
+        };
+        let mut client = gated_request("own", "2026-10-20T10:00:01Z");
+        client.kind = ToolApprovalKind::ClientTool;
+        let open = [open_approval("own"), child_item("task-a")];
+
+        assert!(
+            !super::approve_always_refused(&client, &open, &always("own"), false),
+            "a client tool's own standing answer is not the MCP policy's to forbid"
+        );
+        assert!(
+            super::approve_always_refused(&client, &open, &always("task-a"), false),
+            "a child on a client-tool part asks about an MCP tool"
+        );
+        assert!(!super::approve_always_refused(
+            &client,
+            &open,
+            &always("task-a"),
+            true
+        ));
+
+        let mcp = gated_request("own", "2026-10-20T10:00:01Z");
+        assert!(super::approve_always_refused(
+            &mcp,
+            &open,
+            &always("own"),
+            false
+        ));
+        assert!(!super::approve_always_refused(
+            &mcp,
+            &open,
+            &[("own".to_string(), ToolApprovalDecision::Approve)],
+            false
+        ));
+
+        let mut client_child = parked_child("task-c", "2026-10-20T10:00:02Z");
+        client_child.request.kind = ToolApprovalKind::ClientTool;
+        client_child.request.allow_always = true;
+        let mut legacy_child = child_item("task-l");
+        if let Some(child) = legacy_child.child.as_mut() {
+            child.kind = None;
+        }
+        let tasks = super::delegated_task_approval_part(
+            std::slice::from_ref(&client_child),
+            Vec::new(),
+            false,
+        );
+        let open = [
+            super::parked_child_approval_item(&client_child),
+            child_item("task-a"),
+            legacy_child,
+        ];
+        assert!(
+            !super::approve_always_refused(&tasks, &open, &always("task-c"), false),
+            "a child asking about a client tool is not the MCP policy's to forbid"
+        );
+        assert!(super::approve_always_refused(
+            &tasks,
+            &open,
+            &always("task-a"),
+            false
+        ));
+        assert!(
+            super::approve_always_refused(&tasks, &open, &always("task-l"), false),
+            "an item without a kind asked about an MCP tool"
+        );
+    }
+
+    #[test]
+    fn only_a_part_that_carries_an_open_child_needs_a_client_that_shows_it() {
+        use crate::models::message::ContentPart;
+
+        let state = |part: super::ContentPartToolApprovalRequest| {
+            super::parked_approval_state(&[ContentPart::ToolApprovalRequest(part)])
+                .expect("a parked row")
+        };
+        let mut mixed = gated_request("own", "2026-10-20T10:00:01Z");
+        super::fold_parked_children(
+            &mut mixed,
+            &[parked_child("task-a", "2026-10-20T10:00:02Z")],
+        );
+        assert!(super::decision_needs_child_items(&state(mixed.clone())));
+        mixed.kind = ToolApprovalKind::ClientTool;
+        assert!(super::decision_needs_child_items(&state(mixed)));
+
+        assert!(!super::decision_needs_child_items(&state(gated_request(
+            "own",
+            "2026-10-20T10:00:01Z"
+        ))));
+        let delegated = super::delegated_task_approval_part(
+            &[parked_child("task-a", "2026-10-20T10:00:02Z")],
+            Vec::new(),
+            false,
+        );
+        assert!(
+            !super::decision_needs_child_items(&state(delegated)),
+            "a `delegated_task` card has always listed its children"
+        );
+    }
+
+    #[test]
+    fn a_mixed_part_stays_open_until_every_item_is_decided() {
+        use crate::models::message::{ContentPart, ContentPartToolApproval, ToolUse};
+
+        let mut part = gated_request("own", "2026-10-20T10:00:01Z");
+        super::fold_parked_children(
+            &mut part,
+            &[
+                parked_child("task-a", "2026-10-20T10:00:02Z"),
+                parked_child("task-b", "2026-10-20T10:00:03Z"),
+            ],
+        );
+        let approval = |approval_id: &str| {
+            ContentPart::ToolApproval(ContentPartToolApproval {
+                tool_call_id: approval_id.to_string(),
+                always_allow: false,
+                user_tool_approval_setting_id: None,
+                approved_at: "2026-10-20T10:01:00Z".to_string(),
+                approval_id: Some(approval_id.to_string()),
+                child_chat_id: None,
+            })
+        };
+        let own_ran = ContentPart::ToolUse(ToolUse {
+            tool_call_id: "own".to_string(),
+            ..ToolUse::default()
+        });
+
+        let mut content = vec![
+            ContentPart::ToolApprovalRequest(part),
+            approval("own"),
+            own_ran,
+        ];
+        let state = super::parked_approval_state(&content).expect("a parked row");
+        let open: Vec<&str> = state
+            .open
+            .iter()
+            .map(|item| item.approval_id.as_str())
+            .collect();
+        assert_eq!(open, ["task-a", "task-b"]);
+
+        content.push(approval("task-a"));
+        content.push(approval("task-b"));
+        let state = super::parked_approval_state(&content).expect("a parked row");
+        assert!(state.open.is_empty());
+        assert!(
+            state.unanswered,
+            "decisions and tool output answer nothing, so a crash retry is admitted"
+        );
+    }
+
+    #[test]
+    fn an_approved_pending_call_is_carried_as_approved_until_it_runs() {
+        use crate::models::message::{
+            ContentPart, ContentPartToolApproval, PendingToolCall, ToolUse,
+        };
+
+        let pending = |call_id: &str| PendingToolCall {
+            call_id: call_id.to_string(),
+            fn_name: "read_document".to_string(),
+            fn_arguments: json!({}),
+        };
+        let approval = |call_id: &str| {
+            ContentPart::ToolApproval(ContentPartToolApproval {
+                tool_call_id: call_id.to_string(),
+                always_allow: false,
+                user_tool_approval_setting_id: None,
+                approved_at: "2026-10-20T10:01:00Z".to_string(),
+                approval_id: Some(call_id.to_string()),
+                child_chat_id: None,
+            })
+        };
+        let own_ran = ContentPart::ToolUse(ToolUse {
+            tool_call_id: "own".to_string(),
+            ..ToolUse::default()
+        });
+
+        let mut reparked = gated_request("task-a", "2026-10-20T10:00:01Z");
+        reparked.kind = ToolApprovalKind::DelegatedTask;
+        reparked.pending_tool_calls = vec![pending("own"), pending("later")];
+        let (carried, rest) = super::previously_approved_pending(&[approval("own")], &reparked);
+        assert_eq!(carried, vec![pending("own")]);
+        assert_eq!(rest, vec![pending("later")]);
+
+        reparked.pending_tool_calls = vec![pending("own")];
+        let (carried, rest) =
+            super::previously_approved_pending(&[approval("own"), own_ran.clone()], &reparked);
+        assert!(
+            carried.is_empty(),
+            "a call that already ran is not re-seeded"
+        );
+        assert_eq!(rest, vec![pending("own")]);
+
+        // A continuation that died after approving a client-tool part's own
+        // call and before dispatching it left the call on no part's pending
+        // list: the item itself is what still names it.
+        let mut client = gated_request("own", "2026-10-20T10:00:01Z");
+        client.kind = ToolApprovalKind::ClientTool;
+        super::fold_parked_children(
+            &mut client,
+            &[parked_child("task-a", "2026-10-20T10:00:02Z")],
+        );
+        client.pending_tool_calls = vec![pending("later")];
+        let (carried, rest) =
+            super::previously_approved_pending(&[approval("own"), approval("task-a")], &client);
+        assert_eq!(
+            carried,
+            vec![PendingToolCall {
+                call_id: "own".to_string(),
+                fn_name: "publish".to_string(),
+                fn_arguments: json!({"topic": "own"}),
+            }],
+            "a child's item is never re-seeded as a call of this turn"
+        );
+        assert_eq!(rest, vec![pending("later")]);
+        let (carried, _) = super::previously_approved_pending(&[approval("own"), own_ran], &client);
+        assert!(carried.is_empty());
     }
 
     #[test]
@@ -12743,6 +13290,7 @@ mod tests {
             message_id: Uuid::nil(),
             decisions: Vec::new(),
             decision: None,
+            shows_child_items: false,
             registered_client_tools: None,
             executor: None,
         };
@@ -13641,12 +14189,15 @@ pub(crate) fn reject_if_archived(
 ///
 /// The in-memory task only knows about this replica, so the chat's own
 /// generation lease is checked as well.
+///
+/// Returns the chat as stored after the adoption: a caller that prepares the
+/// generation from it must see `adopted_at`, which ends a client grant.
 async fn accept_user_write_into_delegated_run(
     app_state: &AppState,
     chat: &chats::Model,
-) -> Result<(), (axum::http::StatusCode, String)> {
+) -> Result<chats::Model, (axum::http::StatusCode, String)> {
     if !crate::models::chat::chat_is_delegated_run(chat) {
-        return Ok(());
+        return Ok(chat.clone());
     }
 
     let local_task_running = app_state
@@ -13674,10 +14225,28 @@ async fn accept_user_write_into_delegated_run(
         ));
     }
 
-    if let Err(error) = crate::models::chat::mark_delegated_run_adopted(&app_state.db, chat).await {
-        tracing::warn!(%error, chat_id = %chat.id, "Failed to mark the delegated run as adopted");
-    }
-    Ok(())
+    let failed = || {
+        (
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            "Failed to load chat".to_string(),
+        )
+    };
+    // Adoption ends a client grant, so a write that cannot record it must not
+    // run as the task.
+    crate::models::chat::mark_delegated_run_adopted(&app_state.db, chat)
+        .await
+        .map_err(|error| {
+            tracing::warn!(%error, chat_id = %chat.id, "Failed to mark the delegated run as adopted");
+            failed()
+        })?;
+    chats::Entity::find_by_id(chat.id)
+        .one(&app_state.db)
+        .await
+        .map_err(|error| {
+            tracing::warn!(%error, chat_id = %chat.id, "Failed to reload the adopted delegated run");
+            failed()
+        })?
+        .ok_or_else(failed)
 }
 
 /// A submit whose generation is running in the background: the chat it
@@ -15237,6 +15806,10 @@ async fn run_generation_after_user_message_memory_inner(
         ChatProviderHeadersContext::new(&me_user.id, &me_user.id_token_claims)
             .with_chat_id(chat.id);
 
+    let parent_client_tools =
+        crate::services::delegated_client_tools::grant_candidates(offered_client_tools.values());
+    let action_facet_args = generation_parameters.action_facet_args.clone();
+
     // Save initial empty assistant message
     let empty_assistant_message_json = json!({
         "role": "assistant",
@@ -15331,6 +15904,8 @@ async fn run_generation_after_user_message_memory_inner(
             background_dispatches: std::sync::atomic::AtomicUsize::new(0),
             task_scope: task_offer_scope.clone(),
             tasks_this_turn: std::sync::atomic::AtomicUsize::new(0),
+            parent_client_tools,
+            action_facet_args,
         }),
         task_tool_budgets_for_chat(chat),
         None,
@@ -15739,7 +16314,7 @@ pub(crate) async fn start_regeneration(
         }
     })?;
     reject_if_archived(&chat)?;
-    accept_user_write_into_delegated_run(&app_state, &chat).await?;
+    let chat = accept_user_write_into_delegated_run(&app_state, &chat).await?;
 
     // Assistant mentions: an explicit request value is validated hard (400);
     // absent, fall back to the mentions persisted on the turn's user message,
@@ -15970,6 +16545,10 @@ pub(crate) async fn start_regeneration(
                 })
                 .unwrap_or_default();
 
+            let parent_client_tools = crate::services::delegated_client_tools::grant_candidates(
+                offered_client_tools.values(),
+            );
+            let action_facet_args = generation_parameters.action_facet_args.clone();
             let initial_assistant_message = submit_message(
                 &app_state.db,
                 &policy,
@@ -16075,6 +16654,8 @@ pub(crate) async fn start_regeneration(
                     background_dispatches: std::sync::atomic::AtomicUsize::new(0),
                     task_scope: task_offer_scope.clone(),
                     tasks_this_turn: std::sync::atomic::AtomicUsize::new(0),
+                    parent_client_tools,
+                    action_facet_args,
                 }),
                 task_tool_budgets_for_chat(&chat),
                 None,
@@ -16273,7 +16854,7 @@ pub(crate) async fn start_edit(
         }
     })?;
     reject_if_archived(&chat)?;
-    accept_user_write_into_delegated_run(&app_state, &chat).await?;
+    let chat = accept_user_write_into_delegated_run(&app_state, &chat).await?;
 
     // Assistant mentions follow the same edit contract as the action facet:
     // an explicit request value is validated hard (400), an absent one falls
@@ -16592,6 +17173,10 @@ pub(crate) async fn start_edit(
                 })
                 .unwrap_or_default();
 
+            let parent_client_tools = crate::services::delegated_client_tools::grant_candidates(
+                offered_client_tools.values(),
+            );
+            let action_facet_args = generation_parameters.action_facet_args.clone();
             let initial_assistant_message = submit_message(
                 &app_state.db,
                 &policy,
@@ -16697,6 +17282,8 @@ pub(crate) async fn start_edit(
                     background_dispatches: std::sync::atomic::AtomicUsize::new(0),
                     task_scope: task_offer_scope.clone(),
                     tasks_this_turn: std::sync::atomic::AtomicUsize::new(0),
+                    parent_client_tools,
+                    action_facet_args,
                 }),
                 task_tool_budgets_for_chat(&chat),
                 None,
@@ -17931,6 +18518,48 @@ fn resolve_submitted_decisions(
         })
         .collect())
 }
+
+/// Whether deciding this stop needs a client that shows a parked child as an
+/// item of its own.
+///
+/// A `delegated_task` part has always been read per item. An `mcp_tool` or
+/// `client_tool` part only carries children since the turn's own gated call
+/// shares its part with them, and a client that predates that renders the own
+/// call alone while it answers every open item.
+fn decision_needs_child_items(state: &ParkedApprovalState) -> bool {
+    matches!(
+        state.request.kind,
+        ToolApprovalKind::McpTool | ToolApprovalKind::ClientTool
+    ) && state.open.iter().any(|item| item.child.is_some())
+}
+
+/// Whether a set of decisions asks for an "always allow" the MCP policy
+/// forbids.
+///
+/// Checked per item: a client tool's standing answer is the user's preference
+/// and no MCP policy binds it, whether the turn's own call or a child's asks
+/// about it. A child item recorded before its kind was asked about an MCP tool.
+fn approve_always_refused(
+    request: &ContentPartToolApprovalRequest,
+    open: &[ApprovalItem],
+    decisions: &[(String, ToolApprovalDecision)],
+    mcp_allows_always: bool,
+) -> bool {
+    decisions.iter().any(|(approval_id, decision)| {
+        let asked_about = match open
+            .iter()
+            .find(|item| &item.approval_id == approval_id)
+            .and_then(|item| item.child.as_ref())
+        {
+            Some(child) => child.kind.unwrap_or_default(),
+            None => request.kind,
+        };
+        matches!(decision, ToolApprovalDecision::ApproveAlways)
+            && asked_about != ToolApprovalKind::ClientTool
+            && !mcp_allows_always
+    })
+}
+
 /// A continuation running in the background, and its event feed.
 pub(crate) struct StartedContinuation {
     pub chat_id: Uuid,
@@ -18015,6 +18644,13 @@ pub(crate) async fn start_continuation(
         }
         ContinuationEntry::ResumeCrashed
     } else {
+        if !request.shows_child_items && decision_needs_child_items(&state) {
+            return Err((
+                axum::http::StatusCode::CONFLICT,
+                "This decision also covers tasks this version of the app cannot show. Reload the page to see and decide each of them.".to_string(),
+            )
+                .into());
+        }
         // Validated here as well as in the worker: a body that does not answer
         // the turn should be an HTTP status, not a stream that opens and dies.
         let submitted_decisions = resolve_submitted_decisions(&request, &state.open)?;
@@ -18032,12 +18668,12 @@ pub(crate) async fn start_continuation(
             )
                 .into());
         }
-        if state.request.kind != ToolApprovalKind::ClientTool
-            && submitted_decisions
-                .iter()
-                .any(|(_, decision)| matches!(decision, ToolApprovalDecision::ApproveAlways))
-            && !mcp.config.mcp_servers_global.approval.allow_always
-        {
+        if approve_always_refused(
+            &state.request,
+            &state.open,
+            &submitted_decisions,
+            mcp.config.mcp_servers_global.approval.allow_always,
+        ) {
             return Err((
                 axum::http::StatusCode::BAD_REQUEST,
                 "Always allow is disabled by MCP approval policy".to_string(),
@@ -18133,7 +18769,7 @@ pub(crate) async fn start_continuation(
         (status = OK, content_type = "text/event-stream", body = MessageSubmitStreamingResponseMessage),
         (status = BAD_REQUEST, body = ApprovalDecisionsError, description = "The message has no pending approval, the decision is invalid, or the submitted decisions do not cover the open approvals (JSON, code = decisions_mismatch)"),
         (status = NOT_FOUND, description = "When the chat does not exist or is not accessible"),
-        (status = CONFLICT, body = GenerationRunningError, description = "When the chat is archived (plain text), the chat's generation lease is already held and delegation.tasks.enabled is on (JSON, code = generation_running), every approval the row opened is already decided (JSON, code = already_continued, body = AlreadyContinuedError), or the chat that dispatched this delegated run is still asking the same question (JSON, code = covered_by_parent, body = CoveredByParentError)"),
+        (status = CONFLICT, body = GenerationRunningError, description = "When the chat is archived (plain text), the chat's generation lease is already held and delegation.tasks.enabled is on (JSON, code = generation_running), every approval the row opened is already decided (JSON, code = already_continued, body = AlreadyContinuedError), the chat that dispatched this delegated run is still asking the same question (JSON, code = covered_by_parent, body = CoveredByParentError), or the stop carries open task children and the request did not set `shows_child_items` (plain text)"),
         (status = UNAUTHORIZED, description = "When no valid JWT token is provided"),
         (status = INTERNAL_SERVER_ERROR, description = "When an internal server error occurs")
     ),
@@ -18317,7 +18953,7 @@ fn run_child_approval_continuation(
 }
 
 /// Resume one child the user has decided about, and read the result its origin
-/// slot is owed.
+/// slot is owed, with the trace of the run it resumed when one ran.
 ///
 /// A decision is applied to whatever the child still has open rather than to
 /// the id the parent's card recorded: the child's own row is the executable
@@ -18331,7 +18967,14 @@ async fn resume_parked_child(
     child: &crate::models::message::ChildApprovalRef,
     parent_tool_call_id: String,
     decision: ToolApprovalDecision,
-) -> Result<crate::services::delegation::DelegationResultEnvelope, String> {
+    parked_output: Option<&JsonValue>,
+) -> Result<
+    (
+        crate::services::delegation::DelegationResultEnvelope,
+        Option<crate::services::delegation_trace::DelegationTrace>,
+    ),
+    String,
+> {
     use sea_orm::EntityTrait;
 
     let child_chat = crate::db::entity::chats::Entity::find_by_id(child.child_chat_id)
@@ -18373,8 +19016,9 @@ async fn resume_parked_child(
 
     let mut status = crate::services::delegation::DelegationRunStatus::Completed;
     let mut hit_tool_budget = false;
+    let mut resumed_trace = None;
     if !open.is_empty() {
-        let (_child_rx, child_task) = app_state
+        let (mut child_rx, child_task) = app_state
             .background_tasks
             .try_start_task(
                 child.child_chat_id,
@@ -18396,25 +19040,66 @@ async fn resume_parked_child(
                 })
                 .collect(),
             decision: None,
+            shows_child_items: false,
+            // None on purpose: the child goes on with the binding it was
+            // launched on, which its grant names, not the deciding client's.
             registered_client_tools: None,
             executor: None,
         };
-        let resumed = run_child_approval_continuation(
+        let client_reads = configuration
+            .as_ref()
+            .and_then(|configuration| configuration.task.as_ref())
+            .and_then(|task| task.client_grant.as_ref())
+            .map(|grant| {
+                crate::services::delegated_client_tools::client_read_fields(
+                    &app_state.config.client_tools,
+                    grant,
+                )
+            })
+            .unwrap_or_default();
+        let mut trace = match crate::services::delegation::parked_trace(parked_output) {
+            Some(parked) => {
+                crate::services::delegation_trace::DelegationTraceCollector::resumed(parked)
+            }
+            None => crate::services::delegation_trace::DelegationTraceCollector::new(
+                std::time::Instant::now(),
+            ),
+        }
+        .with_client_reads(client_reads);
+        let run = run_child_approval_continuation(
             app_state.clone(),
             policy.clone(),
             me_user.clone(),
             child_task.clone(),
             request,
             child.child_chat_id,
-        )
-        .await;
+        );
+        tokio::pin!(run);
+        let mut tap_open = true;
+        let resumed = loop {
+            tokio::select! {
+                resumed = &mut run => break resumed,
+                received = child_rx.recv(), if tap_open => match received {
+                    Ok(event) => {
+                        trace.apply(&event);
+                    }
+                    Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {}
+                    Err(tokio::sync::broadcast::error::RecvError::Closed) => tap_open = false,
+                },
+            }
+        };
+        while let Ok(event) = child_rx.try_recv() {
+            trace.apply(&event);
+        }
+        trace.finish();
+        resumed_trace = Some(trace.snapshot());
         if resumed.is_err() {
             status = crate::services::delegation::DelegationRunStatus::Failed;
         }
         hit_tool_budget = child_task.tool_budget_exhausted();
     }
 
-    Ok(crate::services::delegation::build_result_envelope(
+    let envelope = crate::services::delegation::build_result_envelope(
         &app_state.db,
         child.child_chat_id,
         child.child_message_id,
@@ -18431,7 +19116,8 @@ async fn resume_parked_child(
         hit_tool_budget,
         app_state.config.delegation.result_max_chars,
     )
-    .await)
+    .await;
+    Ok((envelope, resumed_trace))
 }
 
 /// Overwrite the origin slot a resumed child owes, and tell the client.
@@ -18542,10 +19228,39 @@ async fn settle_parked_children(
         };
         let child = item.child.clone();
 
+        // A child asking about a client tool keeps its standing answer as the
+        // user's client-tool preference, as its own card would.
+        let client_standing = match (child.as_ref(), decision) {
+            (
+                Some(child),
+                ToolApprovalDecision::ApproveAlways | ToolApprovalDecision::RejectAlways,
+            ) if child.kind == Some(ToolApprovalKind::ClientTool) => {
+                let standing = if decision == ToolApprovalDecision::ApproveAlways {
+                    crate::models::user_preference::ClientToolDecision::AlwaysAllow
+                } else {
+                    crate::models::user_preference::ClientToolDecision::NeverAllow
+                };
+                crate::models::user_preference::set_client_tool_decision(
+                    &app_state.db,
+                    &user_id,
+                    &format!("{}/{}", child.mcp_server_id, child.tool_name),
+                    standing,
+                )
+                .await
+                .inspect_err(|error| {
+                    warn_and_capture_error("store a task's standing client tool decision", error)
+                })
+                .is_ok()
+            }
+            _ => false,
+        };
+        let mcp_child = child
+            .as_ref()
+            .filter(|child| child.kind != Some(ToolApprovalKind::ClientTool));
         // The standing decision belongs to the CHILD's server and tool. The
         // parent's `delegate_task` is a synthetic name no grant can name, and
         // storing it would produce a setting no gate ever consults.
-        let always_allow_setting = match child.as_ref() {
+        let always_allow_setting = match mcp_child {
             Some(child) if matches!(decision, ToolApprovalDecision::ApproveAlways) => {
                 store_standing_tool_decision(
                     app_state,
@@ -18558,7 +19273,7 @@ async fn settle_parked_children(
             }
             _ => None,
         };
-        let never_allow_setting = match child.as_ref() {
+        let never_allow_setting = match mcp_child {
             Some(child) if matches!(decision, ToolApprovalDecision::RejectAlways) => {
                 store_standing_tool_decision(
                     app_state,
@@ -18575,7 +19290,7 @@ async fn settle_parked_children(
         if decision.is_approval() {
             content.push(ContentPart::ToolApproval(ContentPartToolApproval {
                 tool_call_id: item.tool_call_id.clone(),
-                always_allow: always_allow_setting.is_some(),
+                always_allow: always_allow_setting.is_some() || client_standing,
                 user_tool_approval_setting_id: always_allow_setting
                     .as_ref()
                     .map(|setting| setting.id),
@@ -18586,7 +19301,7 @@ async fn settle_parked_children(
         } else {
             content.push(ContentPart::ToolRejection(ContentPartToolRejection {
                 tool_call_id: item.tool_call_id.clone(),
-                never_allow: never_allow_setting.is_some(),
+                never_allow: never_allow_setting.is_some() || client_standing,
                 user_tool_approval_setting_id: never_allow_setting
                     .as_ref()
                     .map(|setting| setting.id),
@@ -18613,6 +19328,7 @@ async fn settle_parked_children(
                     child,
                     item.tool_call_id.clone(),
                     decision,
+                    parked_output.as_ref(),
                 )
                 .await
             }
@@ -18622,7 +19338,7 @@ async fn settle_parked_children(
             None => Err("The delegated run this decision covers was not recorded.".to_string()),
         };
         let (output, still_parked, failed) = match resumed {
-            Ok(envelope) => {
+            Ok((envelope, resumed_trace)) => {
                 let still_parked = envelope.status
                     == crate::services::delegation::DelegationRunStatus::InputRequired;
                 let failed =
@@ -18631,6 +19347,7 @@ async fn settle_parked_children(
                     crate::services::delegation::resumed_slot_output(
                         &envelope,
                         parked_output.as_ref(),
+                        resumed_trace.as_ref(),
                     ),
                     still_parked,
                     failed,
@@ -18690,6 +19407,95 @@ async fn settle_parked_children(
         .await?;
     }
     Ok(reparked)
+}
+
+/// The calls of a park the row already approved that have not run yet, and
+/// the park's other pending calls.
+///
+/// Two kinds of call are approved but not run. A child that parks again after
+/// a mixed decision carries the turn's approved own call into the new part as
+/// pending; seeded as an ordinary pending call it would be asked about a second
+/// time. And a `client_tool` part's own call is approved before its children
+/// resume and dispatched only after they have, so a continuation that died in
+/// between leaves it approved on the row and in no part's pending calls.
+fn previously_approved_pending(
+    content: &[ContentPart],
+    request: &ContentPartToolApprovalRequest,
+) -> (
+    Vec<crate::models::message::PendingToolCall>,
+    Vec<crate::models::message::PendingToolCall>,
+) {
+    let approved_unrun = |call: &crate::models::message::PendingToolCall| {
+        let approved = content.iter().any(|part| {
+            matches!(part, ContentPart::ToolApproval(approval) if approval.tool_call_id == call.call_id)
+        });
+        let ran = content.iter().any(|part| {
+            matches!(part, ContentPart::ToolUse(tool_use) if tool_use.tool_call_id == call.call_id)
+        });
+        approved && !ran
+    };
+    let own_calls = if request.kind == ToolApprovalKind::ClientTool {
+        request
+            .approval_items()
+            .into_iter()
+            .filter(|item| item.child.is_none())
+            .map(|item| crate::models::message::PendingToolCall {
+                call_id: item.tool_call_id,
+                fn_name: item.tool_name,
+                fn_arguments: item.input,
+            })
+            .collect()
+    } else {
+        Vec::new()
+    };
+    let (carried, rest): (Vec<_>, Vec<_>) = request
+        .pending_tool_calls
+        .iter()
+        .cloned()
+        .partition(&approved_unrun);
+    let approved = own_calls
+        .into_iter()
+        .filter(&approved_unrun)
+        .chain(carried)
+        .collect();
+    (approved, rest)
+}
+
+/// Split a stop's decisions into the lanes that settle them, keeping row order
+/// within each.
+///
+/// The lanes share no settlement: an MCP item names a tool this process calls,
+/// a child item a child whose own continuation makes the call, and a plan or
+/// client-tool item a call that never reached its executor, re-seeded on
+/// approval and refused on denial. An item with `child` set is a child's
+/// whatever the part's kind, because a turn's own gated call carries its parked
+/// children on its own part.
+fn split_decisions_by_lane(
+    kind: ToolApprovalKind,
+    open: &[ApprovalItem],
+    submitted: SubmittedDecisions,
+) -> (SubmittedDecisions, SubmittedDecisions, SubmittedDecisions) {
+    let mut mcp = Vec::new();
+    let mut child = Vec::new();
+    let mut plan = Vec::new();
+    for (approval_id, decision) in submitted {
+        let lane = match kind {
+            ToolApprovalKind::ToolCallLimit => continue,
+            _ if names_child(open, &approval_id) => &mut child,
+            ToolApprovalKind::McpTool => &mut mcp,
+            // An item that lost its child still settles there, as a failure.
+            ToolApprovalKind::DelegatedTask => &mut child,
+            ToolApprovalKind::TaskPlan | ToolApprovalKind::ClientTool => &mut plan,
+        };
+        lane.push((approval_id, decision));
+    }
+    (mcp, child, plan)
+}
+
+/// Whether the open item `approval_id` is a parked child's.
+fn names_child(open: &[ApprovalItem], approval_id: &str) -> bool {
+    open.iter()
+        .any(|item| item.approval_id == approval_id && item.child.is_some())
 }
 
 /// Apply a user's approval decisions to a parked turn and finish it.
@@ -18961,25 +19767,8 @@ pub(crate) async fn run_continuation(
     )
     .await?;
 
-    // The two kinds share no settlement: an `mcp_tool` item names a tool this
-    // process calls, a `delegated_task` item names a child whose own
-    // continuation makes the call. Splitting the decisions here keeps each loop
-    // reading only the items it can act on.
-    let (mcp_decisions, child_decisions, plan_decisions): (
-        SubmittedDecisions,
-        SubmittedDecisions,
-        SubmittedDecisions,
-    ) = match approval_request.kind {
-        ToolApprovalKind::McpTool => (submitted_decisions, Vec::new(), Vec::new()),
-        ToolApprovalKind::DelegatedTask => (Vec::new(), submitted_decisions, Vec::new()),
-        // A client tool item, like a plan item, names a call that never
-        // reached its executor, so it settles the same way: re-seeded on
-        // approval, refused on denial.
-        ToolApprovalKind::TaskPlan | ToolApprovalKind::ClientTool => {
-            (Vec::new(), Vec::new(), submitted_decisions)
-        }
-        ToolApprovalKind::ToolCallLimit => (Vec::new(), Vec::new(), Vec::new()),
-    };
+    let (mcp_decisions, child_decisions, plan_decisions) =
+        split_decisions_by_lane(approval_request.kind, &state.open, submitted_decisions);
 
     // Why an approved call the rebuilt tool set no longer carries cannot run.
     // `None` is the one retryable answer: a denial is final whatever the
@@ -19332,56 +20121,15 @@ pub(crate) async fn run_continuation(
         .await?;
     }
 
-    if let Some(error) = mcp_content_filter_error {
-        // All approval items have settled durably. A filtered result ends the
-        // generation, as in the normal path, without another model request.
-        let mut metadata = message
-            .generation_metadata
-            .as_ref()
-            .and_then(|value| serde_json::from_value::<GenerationMetadata>(value.clone()).ok())
-            .unwrap_or_default();
-        metadata.error = Some(error.clone());
-        metadata.continuation_in_flight = None;
-        update_message_generation_metadata(
-            &app_state.db,
-            policy,
-            &me_user.to_subject(),
-            &message.id,
-            metadata,
-        )
-        .await?;
-        let event =
-            MessageSubmitStreamingResponseMessage::Error(MessageSubmitStreamingResponseError {
-                message_id: Some(message.id),
-                error,
-            });
-        send_background_event(
-            task,
-            StreamingEvent::Error {
-                error: Some(serde_json::to_value(&event)?),
-            },
-            "broadcast continued MCP content-filter error",
-        )
-        .await;
-        send_generation_event(&event, tx.clone()).await?;
-        return stream_update_assistant_message_completion::<MessageSubmitStreamingResponseMessage>(
-            tx,
-            task,
-            app_state,
-            policy,
-            parsed.content,
-            me_user,
-            message.id,
-        )
-        .await;
-    }
-
     // A plan item names a call that was never made, so there is nothing to
     // resume and nothing to overwrite: an approved item is re-seeded into the
     // dispatch loop exactly as an abandoned call is, and a denied one settles as
     // the refusal the model reads instead of the task's result. No child exists
     // on either path yet — that is what asking before dispatch bought.
     let mut approved_plan_calls: Vec<crate::models::message::PendingToolCall> = Vec::new();
+    // A delegated run is offered client tools only under its grant.
+    let declines_client_calls = approval_request.kind == ToolApprovalKind::ClientTool
+        && crate::models::chat::chat_is_delegated_run(&chat);
     for (approval_id, decision) in &plan_decisions {
         let decision = *decision;
         let Some(item) = state
@@ -19455,15 +20203,27 @@ pub(crate) async fn run_continuation(
             progress: None,
             total: None,
             // A plan denial carries no `reason`: the closed envelope vocabulary
-            // has none for it, and "the user said no" is not a run outcome.
-            output: Some(json!({
-                "status": "rejected",
-                "error": if approval_request.kind == ToolApprovalKind::ClientTool {
-                    "The user denied this tool call."
-                } else {
-                    "The user declined this task."
-                },
-            })),
+            // has none for it, and "the user said no" is not a run outcome. A
+            // task's client call does: its result counts what was declined.
+            output: Some(if declines_client_calls {
+                json!({
+                    "status": "cancelled",
+                    "reason": crate::services::delegated_client_tools::DECLINED,
+                    "error": format!(
+                        "The user declined this call, so the task has no result from '{}'; say in the answer what is missing because of it.",
+                        item.tool_name
+                    ),
+                })
+            } else {
+                json!({
+                    "status": "rejected",
+                    "error": if approval_request.kind == ToolApprovalKind::ClientTool {
+                        "The user denied this tool call."
+                    } else {
+                        "The user declined this task."
+                    },
+                })
+            }),
             started_at: Some(now_timestamp()),
             ended_at: Some(now_timestamp()),
         };
@@ -19529,6 +20289,71 @@ pub(crate) async fn run_continuation(
         .await?
     };
 
+    let (mut approved_calls, pending_from_park) =
+        previously_approved_pending(&parsed.content, &approval_request);
+    for call in approved_plan_calls {
+        if !approved_calls
+            .iter()
+            .any(|approved| approved.call_id == call.call_id)
+        {
+            approved_calls.push(call);
+        }
+    }
+
+    if let Some(error) = mcp_content_filter_error {
+        // All approval items have settled durably. A filtered result ends the
+        // generation, as in the normal path, without another model request. A
+        // child that parked again stays answerable from its own chat, as one
+        // that parks on a turn ended by a filtered result does.
+        if !reparked_children.is_empty() {
+            tracing::warn!(
+                chat_id = %chat.id,
+                parked = reparked_children.len(),
+                "A task child parked again on a continuation ended by a filtered result; \
+                 it stays answerable from its own chat"
+            );
+        }
+        let mut metadata = message
+            .generation_metadata
+            .as_ref()
+            .and_then(|value| serde_json::from_value::<GenerationMetadata>(value.clone()).ok())
+            .unwrap_or_default();
+        metadata.error = Some(error.clone());
+        metadata.continuation_in_flight = None;
+        update_message_generation_metadata(
+            &app_state.db,
+            policy,
+            &me_user.to_subject(),
+            &message.id,
+            metadata,
+        )
+        .await?;
+        let event =
+            MessageSubmitStreamingResponseMessage::Error(MessageSubmitStreamingResponseError {
+                message_id: Some(message.id),
+                error,
+            });
+        send_background_event(
+            task,
+            StreamingEvent::Error {
+                error: Some(serde_json::to_value(&event)?),
+            },
+            "broadcast continued MCP content-filter error",
+        )
+        .await;
+        send_generation_event(&event, tx.clone()).await?;
+        return stream_update_assistant_message_completion::<MessageSubmitStreamingResponseMessage>(
+            tx,
+            task,
+            app_state,
+            policy,
+            parsed.content,
+            me_user,
+            message.id,
+        )
+        .await;
+    }
+
     // A child that stopped a second time re-parks the turn waiting on it: one
     // new part of the same shape, and no model call — this turn has learnt
     // nothing yet that it could answer with.
@@ -19541,10 +20366,15 @@ pub(crate) async fn run_continuation(
                 _ => None,
             })
             .collect();
-        let pending_tool_calls = approval_request
-            .pending_tool_calls
+        // An approved own client-tool call has not run yet, and the new part is
+        // the only record the next continuation reads, so it goes first.
+        let pending_tool_calls = approved_calls
             .iter()
-            .filter(|call| !settled_call_ids.contains(call.call_id.as_str()))
+            .chain(
+                pending_from_park
+                    .iter()
+                    .filter(|call| !settled_call_ids.contains(call.call_id.as_str())),
+            )
             .cloned()
             .collect();
         parsed.content.push(ContentPart::ToolApprovalRequest(
@@ -19607,14 +20437,87 @@ pub(crate) async fn run_continuation(
             needing_auth_server_ids: mcp_servers_needing_auth,
             missing_credential_server_ids: mcp_servers_missing_credential,
         },
-        approved_plan_calls,
-        approval_request.pending_tool_calls,
+        approved_calls,
+        pending_from_park,
         None,
         request.registered_client_tools.clone(),
         request.executor.clone(),
         assistant_config.and_then(|assistant| assistant.mcp_server_ids),
     )
     .await
+}
+
+/// Offers a delegated run the client tools its grant still covers, the same
+/// way on a fresh turn and on a continuation. The grant already implies the
+/// allowlist and the executor's registration, so neither is consulted; an MCP
+/// tool of the same name still wins.
+#[allow(clippy::too_many_arguments)]
+async fn append_granted_client_tools(
+    app_state: &AppState,
+    chat: &crate::db::entity::chats::Model,
+    executor: Option<&crate::services::client_operations::ExecutorBinding>,
+    account_id: Option<Uuid>,
+    mcp_claimed_names: &HashSet<String>,
+    omit_strict: bool,
+    tools: &mut Vec<genai::chat::Tool>,
+    policies: &mut HashMap<String, crate::services::client_tools::OfferedClientTool>,
+) -> Result<(), Report> {
+    let Some((binding, granted)) = crate::services::delegated_client_tools::granted_tools(
+        app_state, chat, executor, account_id,
+    )
+    .await
+    else {
+        return Ok(());
+    };
+    let allowlist: Vec<String> = granted
+        .iter()
+        .map(|(config, _)| config.qualified_name())
+        .collect();
+    let selection = crate::services::client_tools::select_client_tools(
+        granted.iter().map(|(config, _)| config).collect(),
+        &allowlist,
+        |name| mcp_claimed_names.contains(name),
+    );
+    for (skipped_tool, skip) in &selection.skipped {
+        tracing::warn!(
+            "Not offering granted client tool '{}': {:?}",
+            skipped_tool.qualified_name(),
+            skip
+        );
+    }
+    for config in selection.offered {
+        let schema = match serde_json::from_str::<JsonValue>(&config.parameters) {
+            Ok(schema) => schema,
+            Err(error) => {
+                tracing::warn!(
+                    "Not offering granted client tool '{}': parameters are not valid JSON: {}",
+                    config.name,
+                    error
+                );
+                continue;
+            }
+        };
+        let mut policy = crate::services::client_tools::OfferedClientTool::prepare(config, &schema)
+            .map_err(|error| eyre!(error))?;
+        policy.executor = Some(binding.clone());
+        policy.grant = granted
+            .iter()
+            .find(|(granted, _)| granted.qualified_name() == config.qualified_name())
+            .map(|(_, call)| call.clone());
+        let schema = match &policy.grant {
+            Some(call) => crate::services::delegated_client_tools::task_schema(&schema, call),
+            None => schema,
+        };
+        tools.push(crate::services::client_tools::build_client_tool(
+            &config.name,
+            &config.description,
+            schema,
+            omit_strict,
+            false,
+        ));
+        policies.insert(config.name.clone(), policy);
+    }
+    Ok(())
 }
 
 /// Synthetic durable kinds use the same offered-policy dispatch map without
@@ -19909,6 +20812,23 @@ async fn resume_parked_generation(
             ));
             offered_client_tools.insert(name.clone(), policy);
         }
+    } else {
+        // The run's own persisted binding, which it inherited at launch: a
+        // resume or an approval from another client must not move the grant.
+        append_granted_client_tools(
+            app_state,
+            &chat,
+            generation_parameters
+                .request_context
+                .as_ref()
+                .and_then(|context| context.executor.as_ref()),
+            Some(user_id),
+            &mcp_claimed_names,
+            compat_omit_strict,
+            &mut continuation_tools,
+            &mut offered_client_tools,
+        )
+        .await?;
     }
     let mut task_offer_scope: Option<crate::services::delegation::TaskOfferScope> = None;
     let mut delegation_offered_file_ids: Vec<Uuid> = Vec::new();
@@ -20174,6 +21094,10 @@ async fn resume_parked_generation(
             background_dispatches: std::sync::atomic::AtomicUsize::new(0),
             task_scope: task_offer_scope,
             tasks_this_turn: std::sync::atomic::AtomicUsize::new(0),
+            parent_client_tools: crate::services::delegated_client_tools::grant_candidates(
+                offered_client_tools.values(),
+            ),
+            action_facet_args: generation_parameters.action_facet_args.clone(),
         });
     let (end_content, generation_metadata) = stream_generate_chat_completion(
         tx.clone(),

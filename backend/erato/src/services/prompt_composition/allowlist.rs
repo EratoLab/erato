@@ -63,6 +63,7 @@ mod tests {
             hidden_always_active_for_platform: None,
             delegation: None,
             child_chat_provider: None,
+            child_host_context: None,
         }
     }
 

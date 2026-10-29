@@ -601,6 +601,7 @@ export {
   type ClientToolExecutionResult,
   type ClientToolValidationIssue,
   type ClientToolCallContext,
+  type ClientToolHostGrant,
 } from "@/hooks/chat/clientToolExecutors";
 // Durable client operations: a shell registers handlers for parked calls and
 // advertises the executor binding that may claim them.

@@ -3850,6 +3850,170 @@ fn durable_opt_in_requires_a_host_context() {
     migrate_durable_tool("attempt_expiry_secs = 3600");
 }
 
+fn migrate_child_read_tool(tool_toml: &str) -> AppConfig {
+    migrate_config_with_action_facets(&format!(
+        r#"
+[client_tools.tools.read_blocks]
+name = "read_document_blocks"
+namespace = "word"
+description = "Read document blocks"
+parameters = '{{"type":"object"}}'
+{tool_toml}
+"#
+    ))
+}
+
+#[test]
+fn child_access_read_loads_with_a_host_context() {
+    let config = migrate_child_read_tool(
+        r#"child_access = "read"
+host_context = "word_document"
+child_context_arg = "document_snapshot"
+child_context_input = "snapshot""#,
+    );
+    let tool = &config.client_tools.tools["read_blocks"];
+    assert_eq!(
+        tool.child_access,
+        erato::config::ClientToolChildAccess::Read
+    );
+    assert_eq!(
+        tool.host_context,
+        Some(erato::config::ClientToolHostContext::WordDocument)
+    );
+    assert_eq!(tool.child_context_arg.as_deref(), Some("document_snapshot"));
+    assert_eq!(tool.child_context_input.as_deref(), Some("snapshot"));
+    let plain = migrate_child_read_tool("");
+    assert!(
+        plain.client_tools.tools["read_blocks"]
+            .child_access
+            .is_none()
+    );
+}
+
+#[test]
+#[should_panic(expected = "cannot combine child_access = \"read\" with submission")]
+fn child_access_read_rejects_submission_tools() {
+    migrate_child_read_tool(
+        r#"child_access = "read"
+host_context = "word_document"
+[client_tools.tools.read_blocks.submission]"#,
+    );
+}
+
+#[test]
+#[should_panic(expected = "sets child_access = \"read\" and requires host_context")]
+fn child_access_read_requires_a_host_context() {
+    migrate_child_read_tool(
+        r#"child_access = "read"
+[client_tools.tools.read_blocks.durable]
+host_context = "word_document""#,
+    );
+}
+
+#[test]
+#[should_panic(expected = "host_context must match durable.host_context")]
+fn host_context_must_match_the_durable_host_context() {
+    migrate_child_read_tool(
+        r#"host_context = "word_document"
+[client_tools.tools.read_blocks.durable]
+host_context = "outlook_mailbox""#,
+    );
+}
+
+#[test]
+#[should_panic(expected = "must set child_context_arg and child_context_input together")]
+fn child_context_arg_requires_child_context_input() {
+    migrate_child_read_tool(
+        r#"child_access = "read"
+host_context = "word_document"
+child_context_arg = "document_snapshot""#,
+    );
+}
+
+#[test]
+#[should_panic(expected = "must set child_context_arg and child_context_input together")]
+fn child_context_input_requires_child_context_arg() {
+    migrate_child_read_tool(
+        r#"child_access = "read"
+host_context = "word_document"
+child_context_input = "snapshot""#,
+    );
+}
+
+#[test]
+#[should_panic(expected = "which require child_access = \"read\"")]
+fn child_context_fields_require_child_access_read() {
+    migrate_child_read_tool(
+        r#"host_context = "word_document"
+child_context_arg = "document_snapshot"
+child_context_input = "snapshot""#,
+    );
+}
+
+#[test]
+#[should_panic(expected = "empty or untrimmed child_context_arg or child_context_input")]
+fn child_context_fields_must_be_trimmed() {
+    migrate_child_read_tool(
+        r#"child_access = "read"
+host_context = "word_document"
+child_context_arg = "document_snapshot"
+child_context_input = " snapshot""#,
+    );
+}
+
+#[test]
+#[should_panic(expected = "but name different child_context_arg values")]
+fn read_tools_of_one_host_share_their_child_context_arg() {
+    migrate_child_read_tool(
+        r#"child_access = "read"
+host_context = "word_document"
+child_context_arg = "document_snapshot"
+child_context_input = "snapshot"
+
+[client_tools.tools.read_outline]
+name = "read_document_outline"
+namespace = "word"
+description = "Read the outline"
+parameters = '{"type":"object"}'
+child_access = "read"
+host_context = "word_document"
+child_context_arg = "outline_snapshot"
+child_context_input = "snapshot""#,
+    );
+}
+
+fn migrate_child_facet(facet_toml: &str) -> AppConfig {
+    migrate_config_with_action_facets(&format!(
+        r#"
+[facets.facets.word_reader]
+display_name = "Read the open document"
+child_host_context = "word_document"
+{facet_toml}
+"#
+    ))
+}
+
+#[test]
+fn child_host_context_loads_on_a_regular_facet() {
+    let config = migrate_child_facet("");
+    assert_eq!(
+        config.facets.facets["word_reader"].child_host_context,
+        Some(erato::config::ClientToolHostContext::WordDocument)
+    );
+}
+
+#[test]
+#[should_panic(expected = "sets child_host_context, so it must be a regular facet")]
+fn child_host_context_rejects_hidden_facets() {
+    migrate_child_facet("hidden = true");
+}
+
+#[test]
+#[should_panic(expected = "sets child_host_context, so it must be a regular facet")]
+fn child_host_context_rejects_an_allowlist() {
+    migrate_child_facet(r#"tool_call_allowlist = ["word/*"]"#);
+}
+
 #[test]
 fn test_top_level_client_tools_load_with_namespace() {
     let config = migrate_config_with_action_facets(

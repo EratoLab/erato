@@ -247,6 +247,7 @@ async fn test_facets_persisted_in_generation_parameters(pool: Pool<Postgres>) {
             hidden_always_active_for_platform: None,
             delegation: None,
             child_chat_provider: None,
+            child_host_context: None,
         },
     );
     facets.insert(
@@ -264,6 +265,7 @@ async fn test_facets_persisted_in_generation_parameters(pool: Pool<Postgres>) {
             hidden_always_active_for_platform: None,
             delegation: None,
             child_chat_provider: None,
+            child_host_context: None,
         },
     );
     app_config.facets = FacetsConfig {
@@ -929,6 +931,7 @@ async fn test_facet_prompt_injection_toggle_behavior(pool: Pool<Postgres>) {
             hidden_always_active_for_platform: None,
             delegation: None,
             child_chat_provider: None,
+            child_host_context: None,
         },
     );
     facets.insert(
@@ -946,6 +949,7 @@ async fn test_facet_prompt_injection_toggle_behavior(pool: Pool<Postgres>) {
             hidden_always_active_for_platform: None,
             delegation: None,
             child_chat_provider: None,
+            child_host_context: None,
         },
     );
     app_config.facets = FacetsConfig {
@@ -7961,6 +7965,11 @@ async fn test_denied_mcp_tool_does_not_promote_a_same_named_client_tool(pool: Po
             submission: None,
             replay: Default::default(),
             durable: None,
+            child_access: Default::default(),
+            host_context: None,
+            child_context_arg: None,
+            child_context_input: None,
+            child_host_inputs: Vec::new(),
         },
     );
     app_config.facets.tool_call_allowlist = vec!["outlook/read_file".to_string()];
@@ -8355,6 +8364,11 @@ async fn test_writes_off_withholds_client_actions_but_keeps_client_tools(pool: P
             submission: None,
             replay: Default::default(),
             durable: None,
+            child_access: Default::default(),
+            host_context: None,
+            child_context_arg: None,
+            child_context_input: None,
+            child_host_inputs: Vec::new(),
         },
     );
     app_config.facets.tool_call_allowlist = vec!["client/*".to_string()];
@@ -8902,6 +8916,11 @@ async fn test_disabled_mcp_server_does_not_promote_a_same_named_client_tool(pool
             submission: None,
             replay: Default::default(),
             durable: None,
+            child_access: Default::default(),
+            host_context: None,
+            child_context_arg: None,
+            child_context_input: None,
+            child_host_inputs: Vec::new(),
         },
     );
     app_config.facets.tool_call_allowlist = vec!["outlook/read_file".to_string()];
@@ -9488,6 +9507,11 @@ async fn test_disabled_mcp_tool_does_not_promote_a_same_named_client_tool(pool: 
             submission: None,
             replay: Default::default(),
             durable: None,
+            child_access: Default::default(),
+            host_context: None,
+            child_context_arg: None,
+            child_context_input: None,
+            child_host_inputs: Vec::new(),
         },
     );
     app_config.facets.tool_call_allowlist = vec!["outlook/read_file".to_string()];
@@ -11130,6 +11154,11 @@ async fn test_optional_client_tools_follow_registration_without_changing_legacy_
                 submission: None,
                 replay: Default::default(),
                 durable: None,
+                child_access: Default::default(),
+                host_context: None,
+                child_context_arg: None,
+                child_context_input: None,
+                child_host_inputs: Vec::new(),
             },
         );
     }
@@ -11193,6 +11222,11 @@ async fn test_never_allowed_client_tool_is_not_offered(pool: Pool<Postgres>) {
                 submission: None,
                 replay: Default::default(),
                 durable: None,
+                child_access: Default::default(),
+                host_context: None,
+                child_context_arg: None,
+                child_context_input: None,
+                child_host_inputs: Vec::new(),
             },
         );
     }

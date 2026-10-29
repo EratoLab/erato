@@ -1457,6 +1457,16 @@ impl AppConfig {
         }
 
         for (facet_id, facet) in &config.facets.facets {
+            // A hidden facet is injected into every request, and an allowlist
+            // would switch MCP filtering on and strip the child's MCP tools.
+            if facet.child_host_context.is_some()
+                && (facet.hidden || !facet.tool_call_allowlist.is_empty())
+            {
+                panic!(
+                    "Facet '{facet_id}' sets child_host_context, so it must be a regular facet \
+                     without hidden or tool_call_allowlist."
+                );
+            }
             if facet.delegation.is_some()
                 && !allowlist_selects_reserved_tool(
                     &facet.tool_call_allowlist,
@@ -1709,6 +1719,7 @@ impl AppConfig {
         // assembly.
         let mut seen_qualified_names = std::collections::HashSet::new();
         let mut replay_by_name = HashMap::new();
+        let mut child_context_arg_by_host: HashMap<&str, (String, String)> = HashMap::new();
         for tool in config.client_tools.tools.values() {
             let name = tool.name.trim();
             if name.is_empty() {
@@ -1880,6 +1891,79 @@ impl AppConfig {
                     panic!(
                         "Client tool '{}' durable.attempt_expiry_secs must cover timeout_ms plus claim_lease_secs.",
                         qualified
+                    );
+                }
+            }
+            if let (Some(host_context), Some(durable)) = (&tool.host_context, &tool.durable)
+                && *host_context != durable.host_context
+            {
+                panic!(
+                    "Client tool '{}' host_context must match durable.host_context.",
+                    qualified
+                );
+            }
+            let child_read = tool.child_access == ClientToolChildAccess::Read;
+            if child_read && tool.submission.is_some() {
+                panic!(
+                    "Client tool '{}' cannot combine child_access = \"read\" with submission.",
+                    qualified
+                );
+            }
+            if child_read && tool.host_context.is_none() {
+                panic!(
+                    "Client tool '{}' sets child_access = \"read\" and requires host_context.",
+                    qualified
+                );
+            }
+            match (&tool.child_context_arg, &tool.child_context_input) {
+                (None, None) => {}
+                (Some(arg), Some(input)) => {
+                    if !child_read {
+                        panic!(
+                            "Client tool '{}' sets child_context_arg and child_context_input, which require child_access = \"read\".",
+                            qualified
+                        );
+                    }
+                    for value in [arg, input] {
+                        if value.is_empty() || value != value.trim() {
+                            panic!(
+                                "Client tool '{}' has an empty or untrimmed child_context_arg or child_context_input '{}'.",
+                                qualified, value
+                            );
+                        }
+                    }
+                    // A task's grant carries one context version per host.
+                    let host = tool.host_context.as_ref().expect("checked above").as_str();
+                    if let Some((previous_arg, previous_tool)) =
+                        child_context_arg_by_host.insert(host, (arg.clone(), qualified.clone()))
+                        && previous_arg != *arg
+                    {
+                        panic!(
+                            "Client tools '{}' and '{}' read host_context '{}' but name different child_context_arg values.",
+                            previous_tool, qualified, host
+                        );
+                    }
+                }
+                _ => panic!(
+                    "Client tool '{}' must set child_context_arg and child_context_input together.",
+                    qualified
+                ),
+            }
+            if !tool.child_host_inputs.is_empty() && !child_read {
+                panic!(
+                    "Client tool '{}' sets child_host_inputs, which require child_access = \"read\".",
+                    qualified
+                );
+            }
+            for (index, input) in tool.child_host_inputs.iter().enumerate() {
+                if input.is_empty()
+                    || input != input.trim()
+                    || tool.child_host_inputs[..index].contains(input)
+                    || tool.child_context_input.as_ref() == Some(input)
+                {
+                    panic!(
+                        "Client tool '{}' has an empty, untrimmed or repeated child_host_inputs entry '{}', or one the server fills as child_context_input.",
+                        qualified, input
                     );
                 }
             }
@@ -5590,6 +5674,13 @@ pub struct FacetConfig {
     // runs on the parent turn's model instead.
     #[serde(default)]
     pub child_chat_provider: Option<String>,
+    // Marks a child facet: a delegated task that names it in `facet_ids` is a
+    // client task for this host, runs in wait mode and may read through the
+    // parent's `child_access = "read"` client tools of the same host. The
+    // facet only carries instructions; it restricts no tools, so it must not
+    // be `hidden` or have a `tool_call_allowlist`.
+    #[serde(default)]
+    pub child_host_context: Option<ClientToolHostContext>,
 }
 
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default, Facet, HeapSize)]
@@ -5752,6 +5843,57 @@ pub struct ClientToolConfig {
     /// instead of ending as a timeout. Not allowed together with `submission`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub durable: Option<ClientToolDurableConfig>,
+
+    /// Whether a delegated task may call this tool. `read` lets a task that
+    /// names a facet with a matching `child_host_context` call it live on the
+    /// parent's executor, under a grant the server writes at launch. Requires
+    /// `host_context`; not allowed together with `submission`. Default: `none`.
+    #[serde(default, skip_serializing_if = "ClientToolChildAccess::is_none")]
+    pub child_access: ClientToolChildAccess,
+
+    /// Host family whose client state this tool reads, e.g. `word_document`.
+    /// Required for `child_access = "read"`. Must equal `durable.host_context`
+    /// when both are set.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub host_context: Option<ClientToolHostContext>,
+
+    /// The parent turn's action-facet argument that holds its client context
+    /// version (Word: `document_snapshot`). Set together with
+    /// `child_context_input`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub child_context_arg: Option<String>,
+
+    /// The tool input field the server fills with that context version on a
+    /// delegated task's call, replacing whatever the model sent (Word:
+    /// `snapshot`). Set together with `child_context_arg`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub child_context_input: Option<String>,
+
+    /// Input fields the host fills on a delegated task's call from the client
+    /// context it holds (Word: `documentIdentity`). The task's model is not
+    /// asked for them, and what it sends anyway is dropped. Requires
+    /// `child_access = "read"`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub child_host_inputs: Vec<String>,
+}
+
+/// `client_tools.tools.<id>.child_access`.
+#[derive(Debug, Deserialize, Serialize, PartialEq, Eq, Clone, Copy, Default, Facet, HeapSize)]
+#[facet(rename_all = "snake_case")]
+#[serde(rename_all = "snake_case")]
+#[repr(C)]
+pub enum ClientToolChildAccess {
+    /// Delegated tasks never get the tool.
+    #[default]
+    None,
+    /// Delegated tasks of the tool's host may read through it.
+    Read,
+}
+
+impl ClientToolChildAccess {
+    pub fn is_none(&self) -> bool {
+        *self == Self::None
+    }
 }
 
 /// `[client_tools.tools.<id>.durable]`. Selects a compiled host family, never

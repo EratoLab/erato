@@ -6046,6 +6046,62 @@ model as fixed `validation_failed` text, on the live path too, so tools that rel
 on correctable validation errors must not opt in. Every backend replica must load
 the same `durable` tables.
 
+#### `client_tools.tools.<key>.child_access`
+
+{/* erato_toml_config_key: client_tools.tools.<key>.child_access */}
+{/* erato_toml_config_key: client_tools.tools.<key>.host_context */}
+{/* erato_toml_config_key: client_tools.tools.<key>.child_context_arg */}
+{/* erato_toml_config_key: client_tools.tools.<key>.child_context_input */}
+{/* erato_toml_config_key: client_tools.tools.<key>.child_host_inputs.[] */}
+
+Lets delegated tasks read through a client tool on the device of the turn that
+planned them. Off by default.
+
+```toml
+[client_tools.tools.word_read_document_blocks]
+# name, namespace, description and parameters as usual
+child_access = "read"
+host_context = "word_document"
+child_context_arg = "document_snapshot"
+child_context_input = "snapshot"
+child_host_inputs = ["documentIdentity"]
+```
+
+- **`child_access`** _(default: `"none"`)_ - `read` lets a delegated task call
+  the tool when the task names a facet with the same
+  [`child_host_context`](#child-facets-for-client-tasks). Not allowed together
+  with `submission`.
+- **`host_context`** _(required for `read`)_ - The host family whose client state
+  the tool reads: `word_document` or `outlook_mailbox`. It must equal
+  `durable.host_context` when both are set.
+- **`child_context_arg`** and **`child_context_input`** _(optional, set
+  together, require `read`)_ - `child_context_arg` names the planning turn's
+  action-facet argument that holds the client's context version, for example
+  Word's `document_snapshot`. The server writes its value into the input field
+  `child_context_input` of every call a task makes, replacing what the model
+  sent. All `read` tools of one host that set them must name the same
+  `child_context_arg`.
+- **`child_host_inputs`** _(optional, requires `read`)_ - Input fields the host
+  fills from the client context it holds, for example Word's
+  `documentIdentity`. The server drops them from every call a task makes.
+
+A task's model sees the tool's `parameters` without `child_context_input` and
+`child_host_inputs`, in every alternative the schema offers, so it is never
+asked for values it cannot know.
+
+When a client task starts, the server writes a grant onto it. The grant lists the
+tools the planning turn was offered with `child_access = "read"` and the task's
+host, that the user has not set to never allow, and that the executor stream of
+the planning turn's binding accepts for delegated calls
+(`X-Erato-Child-Client-Tools`). This needs `client_tools.executor_stream_enabled`.
+When no tool qualifies, the task runs without client tools and its result says
+why. The task is offered only the granted tools, and only while the planning turn
+is still running and the task runs on the grant's binding. A task the user took
+over and a retried task get none. Its calls go live to the executor stream with
+the grant's lineage and never park durably, even for a tool with a `durable`
+table. Without a stream that takes the call, or once its stream goes away, the
+call ends as `context_unavailable` after 15 seconds.
+
 #### `client_tools.tools.<key>.requires_client_registration`
 
 {/* erato_toml_config_key: client_tools.tools.<key>.requires_client_registration */}
@@ -6242,6 +6298,21 @@ plan_min_tasks = 3
 - `run_modes` - Overrides `delegation.tasks.run_modes`. Unioned with the global list rather than replacing it, because a run mode is a capability the facet's author meant to grant; `wait` is always kept available.
 - `scheduling` - Overrides `delegation.tasks.scheduling`. The first selected facet that states one wins.
 - `approval.mode` and `approval.plan_min_tasks` - Override `delegation.tasks.approval.mode` and `delegation.tasks.approval.plan_min_tasks`. Merged like a cap rather than replacing: the strictest `mode` (`always` beats `plan` beats `async_only` beats `never`) and the lowest `plan_min_tasks` win, so selecting a second planning facet can only ever make a turn ask more.
+
+##### Child facets for client tasks
+
+{/* erato_toml_config_key: facets.facets.<facet-id>.child_host_context */}
+
+A facet with `child_host_context` (`word_document` or `outlook_mailbox`) marks client tasks. A delegated task that names it in `facet_ids` always runs in `wait` mode: an `async` request runs as `wait` and the task result says so. The task gets a grant for the planning turn's client tools of that host that set [`child_access = "read"`](#client_toolstoolskeychild_access). The facet restricts no tools and only carries instructions, so it must not be `hidden` or have a `tool_call_allowlist`. List it in the planning facet's `child_facet_ids`.
+
+When the user set a granted tool to ask, the task's call waits for a decision in the planning turn's chat, next to the turn's own approvals, as an MCP approval of a task does. With `delegation.tasks.propagate_child_mcp_approvals` off, the call is refused instead. A declined call ends as `declined`, and the task result counts it. The task result also carries the last freshness the client reported for the document or mailbox the task read, and the planning turn's trace shows each read with the part it asked for.
+
+```toml
+[facets.facets.word_reader]
+display_name = "Read the open document"
+child_host_context = "word_document"
+additional_system_prompt = "Read only the part of the document your task names."
+```
 
 #### `facets.priority_order`
 
@@ -6457,7 +6528,7 @@ max_tasks_per_turn = 4
 child_facet_ids = ["web_search"]
 ```
 
-Delegated tasks never receive client tools, so a task started on a Word turn cannot read or edit the open document. Pass what it needs in the brief or as attached files. An action facet's `erato/*` patterns do not change its MCP tool set.
+Delegated tasks receive no client tools unless they name a [child facet](#child-facets-for-client-tasks) whose host matches client tools of the turn that set `child_access = "read"`. Such a task can read the open document through those tools but never edit it; any other task cannot read it at all, so pass what it needs in the brief or as attached files. An action facet's `erato/*` patterns do not change its MCP tool set.
 
 ##### Which model a task runs on
 

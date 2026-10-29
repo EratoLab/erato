@@ -455,6 +455,14 @@ pub struct ChildApprovalRef {
     pub annotations: ToolApprovalAnnotations,
     pub preset: String,
     pub requested_at: String,
+    /// The child's own `allow_always`. The part's flag describes the part's own
+    /// call, which on a `client_tool` part is never bound by the MCP policy.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub allow_always: Option<bool>,
+    /// What the child's gated call is: `mcp_tool` or `client_tool`. Absent on
+    /// items recorded before client tasks could park, which were all MCP.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kind: Option<ToolApprovalKind>,
 }
 
 /// One decision the user owes on a parked turn. A stop carries several of
@@ -497,9 +505,10 @@ pub struct ContentPartToolApprovalRequest {
     pub requested_at: String,
     #[serde(default)]
     pub kind: ToolApprovalKind,
-    /// Every decision this stop covers. An `mcp_tool` stop carries one item
-    /// describing the same call as the flat fields above; readers that branch
-    /// on `kind` first may use either.
+    /// Every decision this stop covers. An `mcp_tool` or `client_tool` stop
+    /// carries its own call first, described by the flat fields above too,
+    /// followed by any task children that parked in the same batch, each with
+    /// `child` set. Readers must branch per item, not on `kind` alone.
     #[serde(default)]
     pub approvals: Vec<ApprovalItem>,
     #[serde(default)]

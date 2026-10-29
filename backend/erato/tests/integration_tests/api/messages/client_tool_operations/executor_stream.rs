@@ -97,33 +97,63 @@ async fn setup_stream(
 type Body = Pin<Box<dyn futures::Stream<Item = reqwest::Result<Vec<u8>>> + Send>>;
 
 /// A pane's executor stream, read one SSE event at a time.
-struct Pane {
+pub(super) struct Pane {
     body: Body,
     buffer: String,
 }
 
 fn stream_request(base: &str, binding: &ExecutorBinding) -> reqwest::RequestBuilder {
-    reqwest::Client::new()
+    serving_request(base, binding, TOOL, None)
+}
+
+/// A stream advertising `client_tools`, of which `child_client_tools` accept
+/// grant calls.
+fn serving_request(
+    base: &str,
+    binding: &ExecutorBinding,
+    client_tools: &str,
+    child_client_tools: Option<&str>,
+) -> reqwest::RequestBuilder {
+    let request = reqwest::Client::new()
         .get(format!("{base}/me/client-operations/stream"))
         .bearer_auth(TEST_JWT_TOKEN)
-        .header("X-Erato-Client-Tools", TOOL)
-        .header("X-Erato-Executor", serde_json::to_string(binding).unwrap())
+        .header("X-Erato-Client-Tools", client_tools)
+        .header("X-Erato-Executor", serde_json::to_string(binding).unwrap());
+    match child_client_tools {
+        Some(names) => request.header("X-Erato-Child-Client-Tools", names),
+        None => request,
+    }
 }
 
 impl Pane {
     async fn open(base: &str, binding: &ExecutorBinding) -> Self {
-        Self::connect(stream_request(base, binding)).await
+        Self::open_request(stream_request(base, binding)).await
     }
 
     /// A stream sent with the pane's `X-Erato-Executor-Instance`.
     async fn open_as(base: &str, binding: &ExecutorBinding, instance: Uuid) -> Self {
-        Self::connect(
+        Self::open_request(
             stream_request(base, binding).header("X-Erato-Executor-Instance", instance.to_string()),
         )
         .await
     }
 
-    async fn connect(request: reqwest::RequestBuilder) -> Self {
+    pub(super) async fn open_serving(
+        base: &str,
+        binding: &ExecutorBinding,
+        client_tools: &str,
+        child_client_tools: Option<&str>,
+    ) -> Self {
+        Self::open_request(serving_request(
+            base,
+            binding,
+            client_tools,
+            child_client_tools,
+        ))
+        .await
+    }
+
+    async fn open_request(request: reqwest::RequestBuilder) -> Self {
         let response = request.send().await.unwrap();
         assert_eq!(response.status(), 200);
         assert_eq!(response.headers()["content-type"], "text/event-stream");
@@ -138,7 +168,7 @@ impl Pane {
     }
 
     /// The next event's data, or `None` when nothing arrives in time.
-    async fn next(&mut self, within: Duration) -> Option<Value> {
+    pub(super) async fn next(&mut self, within: Duration) -> Option<Value> {
         tokio::time::timeout(within, async {
             loop {
                 if let Some(end) = self.buffer.find("\n\n") {
@@ -156,7 +186,7 @@ impl Pane {
         .ok()
     }
 
-    async fn call(&mut self) -> Value {
+    pub(super) async fn call(&mut self) -> Value {
         let event = self
             .next(Duration::from_secs(10))
             .await
@@ -284,7 +314,7 @@ async fn assert_answered(state: &erato::state::AppState, chat_id: Uuid) {
     assert_eq!(call_output(&message)["status"], "success");
 }
 
-async fn rows(state: &erato::state::AppState, table: &str) -> i64 {
+pub(super) async fn rows(state: &erato::state::AppState, table: &str) -> i64 {
     state
         .db
         .query_one_raw(sea_orm::Statement::from_string(
@@ -298,7 +328,7 @@ async fn rows(state: &erato::state::AppState, table: &str) -> i64 {
         .unwrap()
 }
 
-async fn account(state: &erato::state::AppState) -> Uuid {
+pub(super) async fn account(state: &erato::state::AppState) -> Uuid {
     erato::models::user::get_or_create_user(&state.db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
         .await
         .unwrap()
@@ -338,7 +368,7 @@ async fn wait_handed_over(state: &erato::state::AppState) {
     .expect("the call is handed to the executor stream");
 }
 
-async fn wait_released(state: &erato::state::AppState, binding: &ExecutorBinding) {
+pub(super) async fn wait_released(state: &erato::state::AppState, binding: &ExecutorBinding) {
     tokio::time::timeout(Duration::from_secs(5), async {
         while presence(state, binding).await.is_some() {
             tokio::time::sleep(Duration::from_millis(20)).await;
@@ -897,7 +927,7 @@ async fn a_newer_pane_without_the_tool_leaves_its_calls_to_one_with_it(pool: Poo
     let (base, server) = serve(&setup.state).await;
     let mut serving = Pane::open_as(&base, &mailbox(), Uuid::now_v7()).await;
     tokio::time::sleep(Duration::from_millis(5)).await;
-    let mut other_tools = Pane::connect(
+    let mut other_tools = Pane::open_request(
         reqwest::Client::new()
             .get(format!("{base}/me/client-operations/stream"))
             .bearer_auth(TEST_JWT_TOKEN)

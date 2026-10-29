@@ -75,7 +75,9 @@ describe("openExecutorStream", () => {
       ok: true as const,
       result: { busy: [] },
     }));
-    registerClientToolExecutor("fetch_availability", execute);
+    registerClientToolExecutor("fetch_availability", execute, undefined, {
+      acceptsGrantCalls: true,
+    });
     // The submit binding of another host must not replace the stream's own.
     const unregister = registerOperationExecutor("fetch_availability", () => ({
       ...binding,
@@ -129,7 +131,13 @@ describe("openExecutorStream", () => {
           chatId: "chat-b",
           messageId: "message-b",
           toolCallId: "call-b",
-          lineage,
+          hostGrant: {
+            ownerChatId: "chat-a",
+            ownerMessageId: "message-a",
+            requestingChatId: "chat-b",
+            requestingMessageId: "message-b",
+            contextRef: "capture-1",
+          },
         }),
       );
       const init = fetch.mock.calls[0]?.[1];

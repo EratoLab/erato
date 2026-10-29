@@ -718,6 +718,21 @@ chat_provider_ids = ["test-token-limit"]
 # # Optional per-tool park timeout (default 60000 ms).
 # # timeout_ms = 30000
 #
+# # Optional: lets a delegated task that names a child facet of the same host
+# # (see `child_host_context` under [facets] below) read through this tool on the
+# # device of the turn that planned it. Needs executor_stream_enabled; not
+# # allowed with `submission`. Must equal the durable table's host_context.
+# # child_access = "read"
+# # host_context = "outlook_mailbox"
+# # For a tool that reads a captured context version, name the planning turn's
+# # action-facet argument that holds it and the input field the server fills
+# # with it on every call a task makes (Word: "document_snapshot", "snapshot").
+# # child_context_arg = "document_snapshot"
+# # child_context_input = "snapshot"
+# # Input fields the host fills on a task's call from the context it holds; the
+# # task's model is not asked for them (Word: "documentIdentity").
+# # child_host_inputs = ["documentIdentity"]
+#
 # # Optional: replay this tool's calls from EARLIER user turns as bounded
 # # receipts instead of full arguments/results (default mode = "full"). The
 # # current turn always sees its own calls in full; stored messages are
@@ -840,6 +855,15 @@ chat_provider_ids = ["test-token-limit"]
 # [facets.facets.plan.delegation.approval]
 # mode = "plan"
 # plan_min_tasks = 3
+#
+# # A child facet for client tasks: a task that names it runs in wait mode and
+# # may read through the planning turn's client tools of this host that set
+# # child_access = "read". Prompt only: never hidden, no tool_call_allowlist.
+# # List it in the planning facet's child_facet_ids.
+# [facets.facets.mailbox_reader]
+# display_name = "Read the open mailbox"
+# child_host_context = "outlook_mailbox"
+# additional_system_prompt = "Read only what your task names."
 
 # Adaptive attachment budgets (zero independently disables each numeric limit).
 [file_context]

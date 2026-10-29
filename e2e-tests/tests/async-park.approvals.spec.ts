@@ -362,7 +362,7 @@ const parkDetachedChild = async (
   await expect(card.getByTestId("task-result-input-required")).toContainText(
     "Answer it in the task's own chat:",
   );
-  await expect(page.getByTestId("delegated-task-approval")).toHaveCount(0);
+  await expect(page.getByTestId("approval-queue")).toHaveCount(0);
   await expect(page.getByTestId("mcp-tool-approval")).toHaveCount(0);
   await expect(openRun).toHaveAttribute(
     "href",

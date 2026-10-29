@@ -1041,6 +1041,7 @@ mod tests {
             parent_tool_call_id: "call-1".to_string(),
             result: Some("The answer.".to_string()),
             truncated: false,
+            client_tools: None,
         }
     }
 
