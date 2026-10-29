@@ -22,17 +22,25 @@ import {
   WORD_READ_PAGE_BYTES,
   wordReadRecord,
 } from "./wordReadFragments";
+import {
+  readWordSection,
+  withReadOnlyFields,
+  wordReadIssueBlocks,
+} from "./wordSectionRead";
 import { readWordTableCell } from "./wordTableCellRead";
 import { readWordTargets } from "./wordTargetRead";
 
 import type { WordReadFragment, WordReadRecord } from "./wordReadFragments";
+import type { WordReadAccess } from "./wordSectionRead";
 import type {
   ClientToolCallContext,
+  ClientToolExecutionResult,
   ClientToolExecutor,
 } from "@erato/frontend/library";
 import type { WordAuthoringSnapshot } from "@erato/frontend/word-review";
 
 export { WORD_READ_TOOL };
+export type { WordReadAccess };
 const MAX_PAGES = 12;
 interface Session {
   snapshot: WordAuthoringSnapshot;
@@ -48,6 +56,7 @@ export type WordDocumentReadRequest = Pick<
 
 export class WordDocumentReadSession {
   private session: Session | null = null;
+  private access: WordReadAccess = "write";
   private completeBudgetCheck?: () => Promise<string | undefined>;
   private completeBudget?: Promise<string | undefined>;
   readonly drafts = new WordDocumentDraftStore();
@@ -80,6 +89,7 @@ export class WordDocumentReadSession {
       : undefined;
   }
   clear(): void {
+    this.access = "write";
     this.completeBudgetCheck = undefined;
     this.completeBudget = undefined;
     this.drafts.clear();
@@ -90,9 +100,11 @@ export class WordDocumentReadSession {
     snapshot?: WordAuthoringSnapshot,
     request?: WordDocumentReadRequest,
     completeBudgetCheck?: () => Promise<string | undefined>,
+    options?: { access?: WordReadAccess },
   ): void {
     this.clear();
     if (!snapshot || isWordHistorySnapshot(snapshot)) return;
+    this.access = options?.access ?? "write";
     this.completeBudgetCheck = completeBudgetCheck;
     snapshot.revoked = false;
     snapshot.read.clear();
@@ -165,9 +177,21 @@ export class WordDocumentReadSession {
     if (request) this.bindRequest(snapshot.token, request);
   }
 
-  execute: ClientToolExecutor = async (input, context) => {
+  /** Reads with the access the session was activated with. */
+  execute: ClientToolExecutor = (input, context) =>
+    this.run(input, context, this.access);
+
+  /** Reads read-only whatever the session's access, as a call under a host grant must. */
+  executeReadOnly: ClientToolExecutor = (input, context) =>
+    this.run(input, context, "read-only");
+
+  private async run(
+    input: unknown,
+    context: ClientToolCallContext | undefined,
+    access: WordReadAccess,
+  ): Promise<ClientToolExecutionResult> {
     const capture = context && this.snapshotForSubmission(context);
-    const result = await this.executeRead(input, context);
+    const result = await this.executeRead(input, context, access);
     if (result.ok) {
       if (
         capture &&
@@ -177,7 +201,7 @@ export class WordDocumentReadSession {
         !capture.revoked &&
         !context.signal?.aborted
       )
-        return result;
+        return access === "read-only" ? withReadOnlyFields(result) : result;
       return {
         ok: false,
         error: "The document capture is no longer available.",
@@ -196,7 +220,7 @@ export class WordDocumentReadSession {
       !snapshot ||
       snapshot.used ||
       snapshot.revoked ||
-      snapshot.issue ||
+      wordReadIssueBlocks(snapshot, access) ||
       context?.signal?.aborted
     ) {
       return {
@@ -205,9 +229,13 @@ export class WordDocumentReadSession {
       };
     }
     return result;
-  };
+  }
 
-  private executeRead: ClientToolExecutor = async (input, context) => {
+  private async executeRead(
+    input: unknown,
+    context: ClientToolCallContext | undefined,
+    access: WordReadAccess,
+  ): Promise<ClientToolExecutionResult> {
     const session = this.session;
     const fail = (error: string, code: string, path = "/snapshot") => ({
       ok: false as const,
@@ -234,16 +262,26 @@ export class WordDocumentReadSession {
         "",
       );
     const args = input as Record<string, unknown>;
-    if ("target" in args) return readWordTargets(snapshot, args);
+    if ("section" in args) return readWordSection(snapshot, args);
+    if ("target" in args) return readWordTargets(snapshot, args, access);
     if ("table_cell" in args) {
-      if (snapshot.revoked || snapshot.used || snapshot.issue)
+      if (
+        snapshot.revoked ||
+        snapshot.used ||
+        wordReadIssueBlocks(snapshot, access)
+      )
         return fail(
           "This capture is unavailable; use a fresh request or the existing complete-read workflow.",
           snapshot.issue ??
             (snapshot.used ? "snapshot-used" : "snapshot-revoked"),
         );
-      return readWordTableCell(snapshot, args);
+      return readWordTableCell(snapshot, args, access);
     }
+    if (access === "read-only")
+      return fail(
+        "A read-only read cannot page the complete document. Read its parts with section:{ref} pages, following nextCursor, or with target, target.queries or table_cell.",
+        "read-only-complete",
+      );
 
     if (
       Object.keys(args).some((k) => k !== "snapshot" && k !== "cursor") ||
@@ -363,7 +401,7 @@ export class WordDocumentReadSession {
         ...(complete ? { readToken: snapshot.readToken } : {}),
       },
     };
-  };
+  }
 }
 
 export const wordDocumentReadSession = new WordDocumentReadSession();

@@ -10,13 +10,23 @@ import {
 } from "@erato/frontend/word-review";
 
 import { cutToUtf8Bytes } from "./buildWordDocumentArgs";
-import { wordReadableSourceBlock } from "./wordAuthoringReadData";
+import {
+  wordReadableSourceBlock,
+  wordReadableStyles,
+} from "./wordAuthoringReadData";
+import { wordBlockIndex } from "./wordDocumentOutline";
 import {
   WORD_SCOPED_GUIDANCE,
   wordScopedReadContract,
 } from "./wordScopedReadContract";
+import {
+  WORD_DOCUMENT_CONTENT_NOTICE,
+  WORD_READ_ONLY_ACCESS,
+  wordReadIssueBlocks,
+} from "./wordSectionRead";
 
 import type { WordScopedGuidance } from "./wordScopedReadContract";
+import type { WordReadAccess } from "./wordSectionRead";
 import type { ClientToolExecutionResult } from "@erato/frontend/library";
 import type {
   WordScopeTarget,
@@ -205,21 +215,25 @@ function selectTargets(
       ),
     };
   const inventory = wordTargetInventory(snapshot);
+  const positions = wordBlockIndex(snapshot);
+  const position = (ref: string | undefined) =>
+    ref === undefined ? -1 : (positions.get(ref) ?? -1);
   let matches = inventory.filter((t) => {
-    const position = snapshot.blocks.findIndex((b) => b.ref === t.bodyRef);
+    if (
+      (query.kind !== undefined && t.kind !== query.kind) ||
+      (query.ref !== undefined && t.ref !== query.ref) ||
+      (query.refs !== undefined && !(query.refs as string[]).includes(t.ref)) ||
+      (query.text !== undefined &&
+        !normalized(t.text).includes(normalized(query.text as string)))
+    )
+      return false;
+    if (query.nearbyText === undefined) return true;
+    const i = position(t.bodyRef);
     const nearby =
-      position < 0
+      i < 0
         ? ""
-        : `${snapshot.blocks[position - 1]?.text ?? ""}\n${snapshot.blocks[position + 1]?.text ?? ""}`;
-    return (
-      (query.kind === undefined || t.kind === query.kind) &&
-      (query.ref === undefined || t.ref === query.ref) &&
-      (query.refs === undefined || (query.refs as string[]).includes(t.ref)) &&
-      (query.text === undefined ||
-        normalized(t.text).includes(normalized(query.text as string))) &&
-      (query.nearbyText === undefined ||
-        normalized(nearby).includes(normalized(query.nearbyText as string)))
-    );
+        : `${snapshot.blocks[i - 1]?.text ?? ""}\n${snapshot.blocks[i + 1]?.text ?? ""}`;
+    return normalized(nearby).includes(normalized(query.nearbyText as string));
   });
   let explicit = Array.isArray(query.refs);
   if (explicit && matches.length !== (query.refs as string[]).length)
@@ -232,9 +246,9 @@ function selectTargets(
   if (query.throughRef !== undefined) {
     const start =
       matches.length === 1 && !matches[0].objectTarget
-        ? snapshot.blocks.findIndex((b) => b.ref === matches[0].bodyRef)
+        ? position(matches[0].bodyRef)
         : -1;
-    const end = snapshot.blocks.findIndex((b) => b.ref === query.throughRef);
+    const end = position(query.throughRef as string);
     if (start < 0 || end < start || end - start >= MAX_WORD_SCOPE_TARGETS)
       return {
         error: targetReadFailure(
@@ -264,7 +278,7 @@ function selectTargets(
     scope: "objects",
     totalMatches: matches.length,
     candidates: matches.slice(offset, offset + candidateLimit).map((t) => {
-      const i = snapshot.blocks.findIndex((b) => b.ref === t.bodyRef);
+      const i = position(t.bodyRef);
       return {
         ref: t.ref,
         kind: t.kind,
@@ -280,12 +294,20 @@ function selectTargets(
   return { matches, base, ready };
 }
 
+/** Read-only reads return the same targets but grant no scope, carry no write contract and may
+ * read a capture under Track Changes. */
 export function readWordTargets(
   snapshot: WordAuthoringSnapshot,
   input: Record<string, unknown>,
+  access: WordReadAccess = "write",
 ): ClientToolExecutionResult {
   const fail = targetReadFailure;
-  if (snapshot.revoked || snapshot.used || snapshot.issue)
+  const readOnly = access === "read-only";
+  if (
+    snapshot.revoked ||
+    snapshot.used ||
+    wordReadIssueBlocks(snapshot, access)
+  )
     return fail("snapshot-unavailable", "Use an active, available capture.");
   if (
     input.snapshot !== snapshot.token ||
@@ -382,8 +404,9 @@ export function readWordTargets(
           ? "ambiguous"
           : "not-found",
         repeatedQuery: count > 1,
-        recovery:
-          "No write authorized, including unique matches in this batch. Refine unresolved selectors using their candidate context, page them individually, or ask for clarification. Then read all needed refs/queries together. Repeating the same query cannot reveal a new target.",
+        recovery: readOnly
+          ? "Refine unresolved selectors using their candidate context, page them individually, or ask for clarification. Repeating the same query cannot reveal a new target."
+          : "No write authorized, including unique matches in this batch. Refine unresolved selectors using their candidate context, page them individually, or ask for clarification. Then read all needed refs/queries together. Repeating the same query cannot reveal a new target.",
       },
     };
   }
@@ -392,15 +415,16 @@ export function readWordTargets(
       "target-limit",
       "A combined scope may contain at most 16 distinct targets.",
     );
+  const include = input.include as WordScopedGuidance[] | undefined;
   // Scope includes exact target data plus bounded identifying neighbors. Neighbors
   // and references mentioned in properties are context, never implicit write grants.
   const context = {
     targets: matches.map(({ detail, ...t }) => ({ ...t, content: detail })),
-    ...wordScopedReadContract(
-      snapshot,
-      matches,
-      input.include as WordScopedGuidance[] | undefined,
-    ),
+    ...(readOnly
+      ? include?.includes("formatting")
+        ? { styles: wordReadableStyles(snapshot.styles) }
+        : {}
+      : wordScopedReadContract(snapshot, matches, include)),
     sectionsUsingTargets: (snapshot.sections ?? [])
       .filter((s) =>
         matches.some(
@@ -419,7 +443,12 @@ export function readWordTargets(
         ...base,
         ...context,
         status: "ready",
-        readToken: "0".repeat(36),
+        ...(readOnly
+          ? {
+              access: WORD_READ_ONLY_ACCESS,
+              contentNotice: WORD_DOCUMENT_CONTENT_NOTICE,
+            }
+          : { readToken: "0".repeat(36) }),
         maxContextBytes: MAX_WORD_SCOPE_BYTES,
         fullDocument: !!snapshot.fullDocument,
       }),
@@ -431,10 +460,23 @@ export function readWordTargets(
         ...base,
         status: "unsupported",
         reason: "scope-context-limit",
-        fallback: snapshot.completeReadIssue
-          ? "narrow-target"
-          : "narrow-target-or-complete-read",
+        fallback: readOnly
+          ? "narrow-target-or-section"
+          : snapshot.completeReadIssue
+            ? "narrow-target"
+            : "narrow-target-or-complete-read",
         maxContextBytes: MAX_WORD_SCOPE_BYTES,
+      },
+    };
+  if (readOnly)
+    return {
+      ok: true,
+      result: {
+        ...base,
+        status: "ready",
+        ...context,
+        maxContextBytes: MAX_WORD_SCOPE_BYTES,
+        fullDocument: !!snapshot.fullDocument,
       },
     };
   snapshot.readScopes ??= new Map();

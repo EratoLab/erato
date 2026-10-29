@@ -6,7 +6,9 @@ import {
 
 import { cutToUtf8Bytes } from "./buildWordDocumentArgs";
 import { WORD_AUTHORING_CONTRACT } from "./wordAuthoringContract";
+import { wordReadIssueBlocks } from "./wordSectionRead";
 
+import type { WordReadAccess } from "./wordSectionRead";
 import type { ClientToolExecutionResult } from "@erato/frontend/library";
 import type {
   WordAuthoringSnapshot,
@@ -34,17 +36,24 @@ const snippet = (text: string) => {
   return { text: bounded, truncated: bounded !== text };
 };
 
-/** Snapshot-only discovery and authorization: no Office, network or live-document access. */
+/** Snapshot-only discovery and authorization: no Office, network or live-document access. A
+ * read-only read returns the cell without a scope and may read a capture under Track Changes. */
 export function readWordTableCell(
   snapshot: WordAuthoringSnapshot,
   input: Record<string, unknown>,
+  access: WordReadAccess = "write",
 ): ClientToolExecutionResult {
   const fail = (code: string, message: string): ClientToolExecutionResult => ({
     ok: false,
     error: message,
     validationErrors: [{ path: "/table_cell", code, message }],
   });
-  if (snapshot.revoked || snapshot.used || snapshot.issue)
+  const readOnly = access === "read-only";
+  if (
+    snapshot.revoked ||
+    snapshot.used ||
+    wordReadIssueBlocks(snapshot, access)
+  )
     return fail(
       "snapshot-unavailable",
       "Use the current request's active, available snapshot.",
@@ -170,7 +179,11 @@ export function readWordTableCell(
       result: { ...result, status: matches.length ? "ambiguous" : "not-found" },
     };
   const match = matches[0];
-  const fallback = snapshot.completeReadIssue ? "target" : "complete-read";
+  const fallback = readOnly
+    ? "section"
+    : snapshot.completeReadIssue
+      ? "target"
+      : "complete-read";
   if (encoder.encode(match.text).length > CELL_BYTES)
     return {
       ok: true,
@@ -179,6 +192,20 @@ export function readWordTableCell(
         status: "unsupported",
         reason: "cell-context-limit",
         fallback,
+      },
+    };
+  if (readOnly)
+    return {
+      ok: true,
+      result: {
+        ...result,
+        status: "ready",
+        cell: {
+          sourceRef: match.sourceRef,
+          rowIndex: match.rowIndex,
+          cellIndex: match.cellIndex,
+          text: match.text,
+        },
       },
     };
   const scope: WordTableCellScope = {
