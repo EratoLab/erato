@@ -20086,11 +20086,19 @@ async fn local_research_roundtrip(pool: Pool<Postgres>, repeated: bool, cancelle
             .contains("LOCAL-RESEARCH-FINISHED")
     );
     assert_eq!(
-        store::receipts(&app_state.db, owner, None)
+        store::receipts(&app_state.db, owner, None, "https://erato.example")
             .await
             .unwrap()
             .len(),
         if repeated { 2 } else { 1 }
+    );
+    // A deployment that changes its issuer must not replay receipts bound to
+    // the previous issuer into the newly pinned native installation.
+    assert!(
+        store::receipts(&app_state.db, owner, None, "https://new-deployment.example")
+            .await
+            .unwrap()
+            .is_empty()
     );
 }
 

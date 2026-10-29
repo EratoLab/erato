@@ -560,3 +560,41 @@ it("renews a lost native context and recovers the same job instead of keeping a 
   expect(JSON.stringify(f.changed.mock.calls)).not.toContain("PRIVATE_SECRET");
   coordinator.dispose();
 });
+
+it("keeps a bound executor available when a historical receipt is denied", async () => {
+  const f = fixture();
+  f.job.state = "completed";
+  f.job.receipt = "old-receipt";
+  f.job.binding.backendOrigin = "https://previous-deployment.example";
+  const original = f.invoke.getMockImplementation()!;
+  f.invoke.mockImplementation(async (method) => {
+    if (method === "local_tasks.start.v1") {
+      throw new Error("PRIVATE_SECRET incompatible historical binding");
+    }
+    return original(method);
+  });
+  const coordinator = f.create();
+  try {
+    for (let sweep = 0; sweep < 2; sweep += 1) {
+      await coordinator.reconcile();
+      expect(getClientToolHeaders()["X-Erato-Client-Tools"]).toContain(
+        "local_collect_evidence",
+      );
+      expect(JSON.parse(getClientToolHeaders()["X-Erato-Executor"])).toEqual(
+        f.operation.binding,
+      );
+    }
+    expect(f.api.context).toHaveBeenCalledTimes(1);
+    expect(f.api.complete).not.toHaveBeenCalled();
+    expect(f.operations.complete).not.toHaveBeenCalled();
+    expect(f.operations.cancel).not.toHaveBeenCalled();
+    expect(
+      f.invoke.mock.calls.some(([method]) => method === "local_exports.ack.v1"),
+    ).toBe(false);
+    expect(JSON.stringify(f.changed.mock.calls)).not.toContain(
+      "PRIVATE_SECRET",
+    );
+  } finally {
+    coordinator.dispose();
+  }
+});

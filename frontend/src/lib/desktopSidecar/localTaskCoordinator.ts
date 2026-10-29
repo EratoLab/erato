@@ -422,10 +422,11 @@ export class LocalEvidenceHandler implements ClientOperationHandler {
             signal,
           );
         } catch {
-          this.#check(
-            signal,
-          ); /* Native denial stays local; renew context/handle on reconnect. */
-          this.#context = undefined;
+          this.#check(signal);
+          // A historical job can be denied even with a valid current context
+          // (for example after changing the backend issuer). Keep the bound
+          // executor available for new work. Context expiry, instance changes
+          // and live-operation failures still trigger reauthentication.
           this.#handles.delete(job.id);
         }
       }
