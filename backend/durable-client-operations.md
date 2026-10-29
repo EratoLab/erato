@@ -70,9 +70,11 @@ requirements and delegated-child restrictions still apply on continuation. A kin
 must explicitly authorize a bound child operation; no parent-to-child SSE relay is
 introduced. The executor stream below is no relay either: a delegated child gets
 configured client tools only through the grant its client task was launched with
-(ERMAIN-1001, [design record](delegated-client-tools.md)). A granted call is never
-a durable operation: it goes live over the executor stream or ends as
-`context_unavailable`, even for a tool with a `durable` table.
+(ERMAIN-1001, [design record](delegated-client-tools.md)). A granted call goes
+live over the executor stream or ends as `context_unavailable`, unless its tool
+dispatches durably for the grant (`child_dispatch`, ERMAIN-1032): then it is a
+`client_tool.v1` operation carrying the call's `lineage`, which only a claim for
+the grant's binding may answer (see "Grant operations" below).
 
 ## Rollout prerequisites and current limits
 
@@ -357,6 +359,47 @@ Decided open questions:
 Every replica must load the same `durable` tables. A replica without the tool's
 kind treats its open attempts as unauthorized and withdraws them at claim.
 
+### Grant operations (ERMAIN-1032)
+
+A delegated task's call of a tool whose `child_dispatch` is durable for the grant
+is a `client_tool.v1` operation in the task's chat. What differs from the user's
+own durable calls, all keyed on `OperationRequest.lineage` (set only for these):
+
+- **Realm and binding.** The kind's realm comes from the tool's host context
+  (both current contexts map to `office-addin`); the binding is the grant's. The
+  call parks at once, without a live first try.
+- **Authorization.** A delegated chat's operation is authorized by its grant
+  (`authorize_grant_operation`) instead of the allowlist and registration check;
+  the user's Never still applies. It needs the grant, the tool in
+  `durable_tools`, lineage ids that match the grant and the request, and the
+  owner clause (the parent turn runs or is parked on the task). A definite
+  refusal at claim, renewal or result settles it `withdrawn`; a read failure
+  answers 500 and withdraws nothing. Other delegated operations stay refused.
+- **Claims.** A claim needs `X-Erato-Child-Client-Tools` naming the bare tool
+  (else 409 "Executor binding mismatch"). A same-binding claim of a live claim
+  renews it: same token, `claim_expires_at = LEAST(expires_at, now() + lease)`.
+  After it lapsed a claim gets a new token, and a result posted with the old one
+  is refused. Other kinds keep a same-binding re-claim as it was.
+- **Results** arrive only through a claim: `clienttoolresult` answers 409
+  "Operation requires a claim", the cross-replica command path drops them, and the
+  park tail never accepts a raced-in fast result for them.
+- **Decline.** `{outcome: "rejected", result: null, error: {code: "declined"}}`
+  is valid only for grant operations and is stored as `{status: "cancelled",
+  reason: "declined", error}`. `expired` and `withdrawn` carry an `error` text
+  for the task's model.
+- **Continuation.** Any coordinator of the account continues a ready or
+  continuing grant operation, or expires a pending or claimed one past its
+  attempt end, with a detached `/continue`, so a closed pane never strands the
+  task. A continuation that fails ends its call (`completed`); `/continue`
+  refuses a call left `continuing` on an `errored` chat (409 "Operation
+  continuation failed"), while a crashed one, reaped to `awaiting_approval`, runs
+  again.
+- **Frontend.** The claiming pane runs the call beside the sweep, one per
+  attempt, renews its claim at half the remaining lease while the device waits,
+  retries a renewal lost in transport while the claim holds, and aborts the call
+  on a refused renewal, the attempt's end or dispose. Non-lineage operations keep
+  the sequential sweep, the observer rule and the attached continuation.
+
 Turning the flag on has costs beyond configured tools. Generation starts take the
 compare-and-set lease path with the lease identity guard. Every abort runs the
 inbox abort transaction. Late results probe the logged inbox. For an opted-in tool,
@@ -433,8 +476,9 @@ calls. With it off, the stream endpoint answers 404 and no row is written.
   A handed-over call is neither broadcast nor written to the shared event log, so
   no chat stream runs it twice; proposal and status updates still are. The event
   is `client_tool_call {chat_id, message_id, tool_call_id, tool_name, input,
-  lineage?}`. `lineage` is set only for grant calls (ERMAIN-1001), which always use
-  the executor stream.
+  lineage?}`. `lineage` is set only for grant calls (ERMAIN-1001). A live grant
+  call always uses the executor stream; a durable one becomes a grant operation
+  instead (ERMAIN-1032).
 - **Results** use `clienttoolresult` with the calling chat and message ids. A
   handed-over call accepts only the binding it was sent to (409 otherwise), on the
   run's replica from memory and on another replica from the queue row.
@@ -446,7 +490,9 @@ calls. With it off, the stream endpoint answers 404 and no row is written.
 - **Nudge.** After a durable park commits, a `client_operation_available
   {attempt_id}` row for the binding is released once the attempt is claimable
   (pending, its chat no longer running). The frontend coordinator then sweeps the
-  inbox at once; the 10 s poll stays the fallback.
+  inbox at once; the 10 s poll stays the fallback. A grant operation's nudge
+  (`grant_call`, with the bare `tool_name`) goes only to a stream that lists the
+  tool in `X-Erato-Child-Client-Tools`, and waits until one connects.
 - **Frontend.** `ClientOperationCoordinator` opens the stream when
   `ListClientOperationsResponse.executor_stream_enabled` is set and the pane has a
   binding, reopens it when the binding or tools change, and dispatches calls
@@ -459,8 +505,10 @@ private checkpoint, job lifecycle and continuation paths. The native kind uses t
 shared attempts table, with a narrow export/binding extension. Its offer policy
 retains the single-replica, async-leaf, exclusive-scope and depth-one restrictions.
 Ordinary configured client tools remain suppressed in delegated children. Only a
-client task's grant offers them, live over the executor stream (ERMAIN-1001, see
-[delegated-client-tools.md](delegated-client-tools.md)).
+client task's grant offers them, live over the executor stream or as grant
+operations (ERMAIN-1001, ERMAIN-1032, see
+[delegated-client-tools.md](delegated-client-tools.md)). Local evidence keeps its
+own rules: its requests never carry `lineage`.
 
 Protocol 0.1.28 keeps its existing signed fields: native `jobId` is the generic
 attempt UUID; native `attemptId` retains the original generation UUID. No native

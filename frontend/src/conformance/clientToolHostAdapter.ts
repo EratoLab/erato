@@ -79,8 +79,8 @@ export interface ClientToolHostConformanceHarness {
   }[];
   /**
    * A read that asks on the device, and how the user answers it. A decline
-   * answers with the `declined` code; the backend does not map that code to
-   * the `declined` outcome yet (ERMAIN-1034).
+   * answers with the `declined` code, which the durable path reports as the
+   * `declined` outcome; the live path does not map it yet (ERMAIN-1034).
    */
   deviceApproval?: {
     read: ClientToolHostCall;
