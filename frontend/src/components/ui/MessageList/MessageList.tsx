@@ -617,11 +617,22 @@ export const MessageList = memo<MessageListProps>(
       () => getTaskResultFolds(messages, messageOrder),
       [messages, messageOrder],
     );
-    const assistantTurns = useMemo(
-      () =>
-        getAssistantTurns(messages, messageOrder, taskResultFolds.foldedRowIds),
-      [messages, messageOrder, taskResultFolds],
-    );
+    const assistantTurns = useMemo(() => {
+      const markedIds = new Set(
+        messageOrder.filter((id) => {
+          const fold = taskResultFolds.byReplyId[id];
+          return Boolean(
+            modelSwitches[id] ?? (fold && modelSwitches[fold.rowId]),
+          );
+        }),
+      );
+      return getAssistantTurns(
+        messages,
+        messageOrder,
+        taskResultFolds.foldedRowIds,
+        markedIds,
+      );
+    }, [messages, messageOrder, taskResultFolds, modelSwitches]);
     const controlsContext = useStableValue(incomingControlsContext);
     const latestOnMessageAction = useRef(incomingOnMessageAction);
     // Before any layout effect, so a row calling it from one sees this render's.

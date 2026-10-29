@@ -7,6 +7,7 @@ import { useGenerationStatusStore } from "@/hooks/chat/store/generationStatusSto
 import { StaticFeatureConfigProvider } from "@/providers/FeatureConfigProvider";
 
 import type { ContentPartTaskResult } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type { ReactElement } from "react";
 
 const part = (
   overrides: Partial<ContentPartTaskResult> = {},
@@ -234,19 +235,25 @@ describe("TaskResultStep", () => {
     expect(screen.getByTestId("task-result-summary")).toHaveTextContent(long);
   });
 
-  it("opens by default only when the result needs the reader", () => {
-    const toggle = () =>
-      screen.getByRole("button", { name: /task reported back/i });
+  it("starts collapsed only for a completed result a reply restates", () => {
+    const expanded = (ui: ReactElement) => {
+      const { unmount } = render(ui);
+      const value = screen
+        .getByRole("button", { name: /task reported back/i })
+        .getAttribute("aria-expanded");
+      unmount();
+      return value;
+    };
 
-    const { unmount } = render(<TaskResultStep part={part()} />);
-    expect(toggle()).toHaveAttribute("aria-expanded", "false");
-    unmount();
-
-    render(
-      <TaskResultStep
-        part={part({ status: "input_required", reason: "approval_pending" })}
-      />,
-    );
-    expect(toggle()).toHaveAttribute("aria-expanded", "true");
+    expect(expanded(<TaskResultStep part={part()} hasReply />)).toBe("false");
+    expect(expanded(<TaskResultStep part={part()} />)).toBe("true");
+    expect(
+      expanded(
+        <TaskResultStep
+          part={part({ status: "input_required", reason: "approval_pending" })}
+          hasReply
+        />,
+      ),
+    ).toBe("true");
   });
 });

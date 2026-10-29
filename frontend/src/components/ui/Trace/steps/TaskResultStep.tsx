@@ -70,8 +70,8 @@ interface TaskResultStepProps {
   part: ContentPartTaskResult;
   /**
    * True when the assistant's reply to this result is drawn right below it.
-   * The reply restates the answer, so the step then quotes it instead of
-   * repeating it in full.
+   * The reply restates the answer, so a completed step then starts collapsed
+   * and quotes it instead of repeating it in full.
    */
   hasReply?: boolean;
 }
@@ -143,7 +143,7 @@ export const TaskResultStep = ({
             testId="task-result-open-run"
           />
         }
-        defaultOpen={needsAttention}
+        defaultOpen={needsAttention || !hasReply}
       >
         <div
           className="space-y-0.5 pb-1 pl-2.5 pt-0.5 text-xs text-theme-fg-muted"

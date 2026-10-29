@@ -52,4 +52,19 @@ describe("getAssistantTurns", () => {
 
     expect(turns.continuing.size).toBe(0);
   });
+
+  it("starts a new turn below a model switch", () => {
+    const turns = getAssistantTurns(
+      {
+        dispatch: message("dispatch", "assistant"),
+        reply: message("reply", "assistant"),
+      },
+      ["dispatch", "reply"],
+      new Set(),
+      new Set(["reply"]),
+    );
+
+    expect(turns.continuing.size).toBe(0);
+    expect(turns.continued.size).toBe(0);
+  });
 });

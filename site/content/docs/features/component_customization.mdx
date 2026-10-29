@@ -458,8 +458,8 @@ message after the first gets `continuesTurn` (also on
 `useChatMessageRenderer()`); the host then draws no name, keeps the avatar's
 space empty so the text stays aligned, drops the gap above, and marks the root
 `data-continues-turn`. Hover controls stay per message, since each acts on its
-own message. A renderer that ignores the prop draws every message with its
-header, as before.
+own message. A renderer that ignores the prop still draws every message with
+its header; the list tightens the spacing between them either way.
 
 ### What the Example Demonstrates
 

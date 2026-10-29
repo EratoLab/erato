@@ -25,12 +25,14 @@ const isMarker = (message: TurnMessage) =>
 /**
  * Without a user message in between, assistant messages are one turn: a
  * delegated task's result and the reply to it come back into the turn that
- * started the task.
+ * started the task. A message with a marker drawn above it (`markedIds`, a
+ * model switch) starts a new one.
  */
 export function getAssistantTurns(
   messages: Readonly<Record<string, TurnMessage | undefined>>,
   messageOrder: readonly string[],
   hiddenIds: ReadonlySet<string>,
+  markedIds: ReadonlySet<string> = new Set(),
 ): AssistantTurns {
   const continuing = new Set<string>();
   const continued = new Set<string>();
@@ -44,7 +46,8 @@ export function getAssistantTurns(
       isAssistantSide(previous) &&
       isAssistantSide(message) &&
       !isMarker(previous) &&
-      !isMarker(message)
+      !isMarker(message) &&
+      !markedIds.has(id)
     ) {
       continuing.add(message.id);
       continued.add(previous.id);

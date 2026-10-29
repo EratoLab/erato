@@ -93,7 +93,12 @@ export const ChatMessageBubble = memo(function ChatMessageBubble({
   const filesById = allFilesById;
 
   // Content validation
-  if (message.content.length === 0 && !message.loading && !message.error) {
+  if (
+    message.content.length === 0 &&
+    !message.loading &&
+    !message.error &&
+    !taskResult
+  ) {
     return null;
   }
 

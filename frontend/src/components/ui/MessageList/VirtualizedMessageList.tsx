@@ -70,12 +70,16 @@ export const VirtualizedMessageList: React.FC<VirtualizedMessageListProps> = ({
 }) => {
   // Message renderer
   const renderMessages = useCallback(() => {
+    // The first drawn message heads its turn even when an older page holds the rest.
+    let drawnAbove = false;
     return visibleData.map((messageId, index) => {
       if (taskResultFolds.foldedRowIds.has(messageId)) return null;
       const message = messages[messageId];
       const isNew = isNewlyLoaded(index);
       const fold = taskResultFolds.byReplyId[messageId];
-      const continuesTurn = assistantTurns.continuing.has(messageId);
+      const continuesTurn =
+        drawnAbove && assistantTurns.continuing.has(messageId);
+      drawnAbove = true;
 
       return (
         <MessageItem

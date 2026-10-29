@@ -137,7 +137,7 @@ describe("MessageList with a delivered task result", () => {
       "completed",
     );
     expect(
-      within(standalone).queryByRole("button", { name: /edit message/i }),
+      within(standalone).queryByRole("button", { name: /copy message/i }),
     ).toBeNull();
   });
 

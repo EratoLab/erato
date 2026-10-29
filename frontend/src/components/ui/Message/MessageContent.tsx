@@ -1609,6 +1609,7 @@ export const MessageContent = memo(function MessageContent({
 
     return (
       <article className="max-w-none font-sans text-base">
+        {taskResult && <TaskResultStep part={taskResult} hasReply />}
         <pre className="message-content-raw-block whitespace-pre-wrap">
           <code>{rawText}</code>
         </pre>

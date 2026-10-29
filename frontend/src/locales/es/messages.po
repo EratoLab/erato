@@ -7573,13 +7573,13 @@ msgstr "Delegado a un asistente"
 #: src/components/ui/Trace/steps/DelegationStep.tsx
 #: src/components/ui/Trace/steps/TaskResultStep.tsx
 msgid "trace.delegation.model"
-msgstr ""
+msgstr "Modelo: {modelName}"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Trace/steps/DelegationStep.tsx
 #: src/components/ui/Trace/steps/TaskResultStep.tsx
 msgid "trace.delegation.model.unavailable"
-msgstr ""
+msgstr "El modelo configurado para esta tarea no está disponible para ti, así que se ejecutó con {modelName}."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Trace/steps/DelegationStep.tsx
