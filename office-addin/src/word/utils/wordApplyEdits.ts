@@ -7,6 +7,7 @@ import { wordErrorText } from "./wordApplyDiagnostics";
 import { trackWordApply } from "./wordApplyProgress";
 import {
   beginWordOwnWrite,
+  markWordOwnAnchor,
   markWordOwnImport,
   nameWordOwnWriteIds,
 } from "./wordChangeJournal";
@@ -242,10 +243,7 @@ export async function applyWordEdits(args: {
 }): Promise<WordApplyResult> {
   const progress = trackWordApply("edits", args.onStage);
   let result: WordApplyResult | undefined;
-  // A line break makes new paragraphs, whose ids no one knows before Word reports them.
-  const own = beginWordOwnWrite(
-    args.edits.some((edit) => /[\r\n\v\f]/u.test(edit.text)) ? "anchor" : "ids",
-  );
+  const own = beginWordOwnWrite("ids");
   try {
     result = await applyEdits(args.edits, args.capture, progress);
     return result;
@@ -322,6 +320,9 @@ async function applyEdits(
             edit.positions.map((position) => entries[position].id),
           ),
         );
+        // A line break makes new paragraphs, whose ids no one knows before Word reports them.
+        if (verified.applicable.some((edit) => /[\r\n\v\f]/u.test(edit.text)))
+          markWordOwnAnchor();
         for (const edit of verified.applicable) {
           writeReplacement(items, edit.positions, edit.text);
         }

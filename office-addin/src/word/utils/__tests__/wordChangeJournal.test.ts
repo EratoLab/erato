@@ -6,6 +6,7 @@ import {
 } from "../../../test/mocks/word/document";
 import {
   beginWordOwnWrite,
+  markWordOwnAnchor,
   markWordOwnImport,
   nameWordOwnWriteIds,
   noteWordCapturedIds,
@@ -120,11 +121,9 @@ describe("wordChangeJournal", () => {
   });
 
   it("keeps a blind spot the pane noticed as an unknown entry", () => {
-    recordWordUnknownChange("return-to-pane");
     recordWordUnknownChange("tracking-mode");
 
     expect(since().map(({ source, reason }) => ({ source, reason }))).toEqual([
-      { source: "unknown", reason: "return-to-pane" },
       { source: "unknown", reason: "tracking-mode" },
     ]);
   });
@@ -142,7 +141,12 @@ describe("wordChangeJournal", () => {
       vi.advanceTimersByTime(1);
       changed(["p1"]);
 
-      expect(sources()).toEqual(["own", "local", "local", "own", "local"]);
+      expect(since().map((e) => [e.source, e.ids])).toEqual([
+        ["own", ["p1", "p1"]],
+        ["local", ["p2"]],
+        ["local", ["p1", "p2"]],
+        ["local", ["p1"]],
+      ]);
     });
 
     it("claims every Local event of a write that names no ids, such as an insert or a comment", () => {
@@ -198,6 +202,53 @@ describe("wordChangeJournal", () => {
 
       expect(sources().at(-1)).toBe("local");
       expect(sources().filter((s) => s === "own")).toHaveLength(1);
+    });
+
+    it("claims every Local event only from the write on, not during the checks before it", () => {
+      const anchor = beginWordOwnWrite("ids");
+      changed(["p1"]);
+      markWordOwnAnchor();
+      changed(["p2"]);
+      anchor.end();
+      vi.advanceTimersByTime(3_001);
+      const replace = beginWordOwnWrite("ids");
+      changed(["p3"]);
+      markWordOwnImport();
+      changed(["p4"]);
+      replace.end();
+
+      expect(sources()).toEqual(["local", "own", "local", "own"]);
+    });
+
+    it("ends a write still open after 60 s, so a run that never settles claims nothing later", () => {
+      const anchor = beginWordOwnWrite("anchor");
+      const replace = beginWordOwnWrite("import");
+      vi.advanceTimersByTime(60_000);
+      changed(["p1"]);
+      vi.advanceTimersByTime(3_001);
+      changed(["p2"]);
+      vi.advanceTimersByTime(60_000);
+      changed(["p3"]);
+      anchor.end();
+      replace.end();
+
+      expect(sources()).toEqual(["own", "local", "local"]);
+    });
+
+    it("keeps an import's interleaved Added and Deleted in one entry each, so earlier positions stay in range", () => {
+      const write = beginWordOwnWrite("import");
+      for (let k = 0; k < 2_404; k++) {
+        added([`n${k}`]);
+        deleted([`p${k}`]);
+      }
+      write.end();
+
+      expect(
+        since().map(({ kind, source, ids }) => [kind, source, ids.length]),
+      ).toEqual([
+        ["added", "own", 2_404],
+        ["deleted", "own", 2_404],
+      ]);
     });
 
     it("keeps an own entry that a later position may count from", () => {
@@ -265,14 +316,31 @@ describe("wordChangeJournal", () => {
       expect(since()[0].location?.get("n1")).toEqual(["p1"]);
     });
 
-    it("leaves a paragraph Word no longer has without neighbours", async () => {
-      install(["p1"]);
+    it("leaves the whole burst unplaced when Word no longer has one of its paragraphs", async () => {
+      install(["p1", "n1"]);
       noteWordCapturedIds(["p1"]);
+      added(["n1"]);
       added(["gone"]);
 
       await vi.advanceTimersByTimeAsync(100);
 
-      expect(since()[0].location?.get("gone")).toEqual([]);
+      expect(since().map((e) => e.location?.get(e.ids[0]))).toEqual([
+        null,
+        null,
+      ]);
+    });
+
+    it("does not look up a paragraph deleted before the burst settles, so the rest keep their place", async () => {
+      install(["p1", "n1"]);
+      noteWordCapturedIds(["p1"]);
+      added(["n1"]);
+      added(["gone"]);
+      deleted(["gone"]);
+
+      await vi.advanceTimersByTimeAsync(100);
+
+      expect(since()[0].location?.get("n1")).toEqual(["p1"]);
+      expect(since()[1].location?.get("gone")).toBeNull();
     });
 
     it("leaves a burst of more than 50 ids unresolved", async () => {

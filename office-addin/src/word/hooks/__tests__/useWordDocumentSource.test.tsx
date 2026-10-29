@@ -25,6 +25,7 @@ import type { WordDocumentReadResult } from "../../utils/readWordDocument";
 const changes = vi.hoisted(() => new Set<() => void>());
 const signal = vi.hoisted(() => ({
   eventsActive: false,
+  registering: undefined as Promise<void> | undefined,
   trackingMode: vi.fn<() => Promise<string | null>>(),
 }));
 
@@ -38,6 +39,7 @@ vi.mock("../../utils/wordDocumentChangeSignal", () => ({
     return () => changes.delete(listener);
   },
   wordParagraphEventsActive: () => signal.eventsActive,
+  wordParagraphEventsPending: () => signal.registering,
   readWordChangeTrackingMode: () => signal.trackingMode(),
 }));
 
@@ -100,6 +102,7 @@ describe("useWordDocumentSource", () => {
     read.mockReset();
     changes.clear();
     signal.eventsActive = false;
+    signal.registering = undefined;
     signal.trackingMode.mockReset().mockResolvedValue("Off");
   });
 
@@ -326,6 +329,37 @@ describe("useWordDocumentSource", () => {
       ok: true,
       entries: [{ source: "local", ids: ["p1"] }],
     });
+  });
+
+  it("waits for the paragraph events to register before it takes the journal position", async () => {
+    resetWordChangeJournalForTests();
+    const registered = deferred<void>();
+    signal.registering = registered.promise;
+    readsText(["Alpha"]);
+    const { result } = renderSource();
+    await act(async () => {});
+    expect(read).not.toHaveBeenCalled();
+
+    noteWordChangeEventsActive();
+    registered.resolve();
+    await waitFor(() => expect(result.current.preview.status).toBe("included"));
+
+    expect(journalSince((await result.current.capture())!)).toEqual([]);
+  });
+
+  it("replaces a capture taken before the paragraph events registered once they have", async () => {
+    resetWordChangeJournalForTests();
+    readsText(["Alpha"]);
+    const { result } = renderSource();
+    await waitFor(() => expect(result.current.preview.status).toBe("included"));
+    expect(journalSince((await result.current.capture())!)).toBe("no-events");
+
+    noteWordChangeEventsActive();
+    signal.eventsActive = true;
+    const sent = (await result.current.capture())!;
+
+    expect(read).toHaveBeenCalledTimes(2);
+    expect(journalSince(sent)).toEqual([]);
   });
 
   it("keeps the text but no authoring when Word did not hand over the full document", async () => {
@@ -610,20 +644,6 @@ describe("useWordDocumentSource", () => {
     focusPane();
 
     await waitFor(() => expect(read).toHaveBeenCalledTimes(2));
-  });
-
-  it("journals a return to the pane without paragraph events as an unknown change", async () => {
-    readsText(["Alpha"]);
-    const { result } = renderSource();
-    await waitFor(() => expect(result.current.preview.status).toBe("included"));
-    const captured = (await result.current.capture())!;
-
-    leavePane();
-    focusPane();
-
-    expect(journalSince(captured)).toEqual([
-      { source: "unknown", reason: "return-to-pane" },
-    ]);
   });
 
   it("with paragraph events, does not read again on a return when Track Changes is unchanged", async () => {

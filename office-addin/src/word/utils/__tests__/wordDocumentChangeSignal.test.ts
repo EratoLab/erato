@@ -10,6 +10,7 @@ import {
   readWordChangeTrackingMode,
   resetWordDocumentChangeSignalForTests,
   wordParagraphEventsActive,
+  wordParagraphEventsPending,
   subscribeWordDocumentChanged,
 } from "../wordDocumentChangeSignal";
 
@@ -141,13 +142,21 @@ describe("wordDocumentChangeSignal", () => {
     expect(vi.mocked(globalThis.Word.run)).not.toHaveBeenCalled();
   });
 
-  it("reports paragraph events as active once Word accepted them", async () => {
+  it("reports paragraph events as active once Word accepted them, and pending until then", async () => {
     installWord(true);
     expect(wordParagraphEventsActive()).toBe(false);
+    expect(wordParagraphEventsPending()).toBeUndefined();
 
     subscribeWordDocumentChanged(vi.fn());
+    const pending = wordParagraphEventsPending();
+    expect(pending).toBeInstanceOf(Promise);
+    await pending;
 
-    await vi.waitFor(() => expect(wordParagraphEventsActive()).toBe(true));
+    expect(wordParagraphEventsActive()).toBe(true);
+    expect(wordChangePosition().events).toBe(true);
+    await vi.waitFor(() =>
+      expect(wordParagraphEventsPending()).toBeUndefined(),
+    );
   });
 
   it("reports paragraph events as inactive when Word refuses them", async () => {

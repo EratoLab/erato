@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { buildWordDocumentArgs } from "../utils/buildWordDocumentArgs";
+import {
+  buildWordDocumentArgs,
+  withoutParagraphMark,
+} from "../utils/buildWordDocumentArgs";
 import { readWordDocument } from "../utils/readWordDocument";
 import { wordErrorText } from "../utils/wordApplyDiagnostics";
 import {
@@ -11,6 +14,7 @@ import {
 import {
   readWordChangeTrackingMode,
   subscribeWordDocumentChanged,
+  wordParagraphEventsPending,
   wordParagraphEventsActive,
 } from "../utils/wordDocumentChangeSignal";
 import { captureWordAuthoringSnapshot } from "../utils/wordDocumentXml";
@@ -73,6 +77,8 @@ export const WORD_CAPTURE_SLOW_MS = 300;
 /** Above every Office.js timeout in the read, so only a capture that hangs elsewhere hits it. */
 export const WORD_CAPTURE_CEILING_MS = 90_000;
 const LARGE_DOCUMENT_PARAGRAPHS = 1500;
+/** Registering the paragraph events took up to 2.4 s on a cold Word for Mac (ERMAIN-1005 F1). */
+const EVENTS_READY_WAIT_MS = 3_000;
 
 interface CachedCapture {
   build: WordDocumentBuild | null;
@@ -125,15 +131,14 @@ function copyForSend(
 }
 
 /** Native body blocks exclude table-cell paragraphs and can group anchored ranges, so only a text
- * that is unique on both sides maps a block to a paragraph collection ordinal. Word for Windows and
- * Mac end getText with the paragraph mark, which block texts never have. */
+ * that is unique on both sides maps a block to a paragraph collection ordinal. */
 function assignParagraphOrdinals(
   authoring: WordAuthoringSnapshot,
   paragraphs: WordParagraphRead[],
 ): void {
   const ordinalsByText = new Map<string, number[]>();
   for (const paragraph of paragraphs) {
-    const text = paragraph.text.replace(/\r$/, "");
+    const text = withoutParagraphMark(paragraph.text);
     const ordinals = ordinalsByText.get(text);
     if (ordinals) ordinals.push(paragraph.ordinal);
     else ordinalsByText.set(text, [paragraph.ordinal]);
@@ -157,6 +162,13 @@ async function captureDocument(
   error?: string;
   retry?: boolean;
 }> {
+  const registering = wordParagraphEventsPending();
+  if (registering)
+    await withWordTimeout(
+      registering,
+      EVENTS_READY_WAIT_MS,
+      () => new Error("paragraph events not registered"),
+    ).catch(() => {});
   const changes: WordCaptureChanges = {
     position: wordChangePosition(),
     capturedAt: new Date().toISOString(),
@@ -224,7 +236,10 @@ export function useWordDocumentSource({
       !!entry &&
       !entry.retry &&
       entry.generation === generationRef.current &&
-      entry.authoring === authoringRef.current
+      entry.authoring === authoringRef.current &&
+      // Taken before the paragraph events registered, it could never tell what changed since.
+      (entry.build?.changes?.position.events !== false ||
+        !wordParagraphEventsActive())
     );
   }, []);
 
@@ -358,7 +373,6 @@ export function useWordDocumentSource({
       }
       leftPaneRef.current = false;
       if (!wordParagraphEventsActive()) {
-        recordWordUnknownChange("return-to-pane");
         generationRef.current += 1;
         refresh();
         return;

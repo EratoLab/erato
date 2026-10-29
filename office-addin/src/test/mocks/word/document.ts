@@ -215,7 +215,7 @@ export function installMockWordDocument(
       });
 
       /** The paragraph `step` places from `uniqueLocalId` once the batch runs; a null object past
-       * either end or from a paragraph the body no longer has. */
+       * either end. */
       const neighbourProxy = (
         uniqueLocalId: string,
         step: number,
@@ -391,7 +391,14 @@ export function installMockWordDocument(
           },
           body: bodyProxy,
           getSelection: () => selection,
-          getParagraphByUniqueLocalId: (id: string) => paragraphProxy(id),
+          // Word rejects the batch's sync for an id the body does not have.
+          getParagraphByUniqueLocalId: (id: string) => {
+            queue.push(() => {
+              if (!body.some((entry) => entry.uniqueLocalId === id))
+                throw new Error("ItemNotFound");
+            });
+            return paragraphProxy(id);
+          },
         },
         sync: () => {
           syncCount += 1;

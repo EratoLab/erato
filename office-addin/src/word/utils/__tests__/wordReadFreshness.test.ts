@@ -7,6 +7,7 @@ import {
 import {
   body,
   chapter,
+  heading,
   okResult,
   readContext,
   sectionSnapshot,
@@ -23,7 +24,6 @@ import {
   wordChangePosition,
 } from "../wordChangeJournal";
 import { WordDocumentReadSession } from "../wordDocumentReadTool";
-import { assessWordReadFreshness } from "../wordReadFreshness";
 
 import type { SectionBlock } from "../../../test/mocks/word/sectionFixtures";
 import type { WordDocumentBuild } from "../buildWordDocumentArgs";
@@ -111,6 +111,8 @@ function open(
       okResult<{ status: string; freshness: WordReadFreshness }>(
         await call({ ...base, table_cell: { text } }, readOnly),
       ),
+    raw: (input: Record<string, unknown>, readOnly = false) =>
+      call({ ...base, ...input }, readOnly),
     complete: async () =>
       okResult<{ freshness: WordReadFreshness }>(
         await call({ snapshot: snapshot.token, cursor: null }),
@@ -250,6 +252,45 @@ describe("read freshness", () => {
       expect((await reads.cell("Service 2", true)).freshness.changes).toBe(
         "elsewhere",
       );
+    });
+
+    it("counts any change as in scope for a search that found no single target, which looked through the whole capture", async () => {
+      const session = new WordDocumentReadSession();
+      session.activate(doc.snapshot, readContext, undefined, { capture });
+      const read = async (input: Record<string, unknown>) =>
+        okResult<{ status: string; freshness: WordReadFreshness }>(
+          await session.execute(
+            {
+              snapshot: doc.snapshot.token,
+              documentIdentity: doc.snapshot.identity,
+              ...input,
+            },
+            readContext,
+          ),
+        );
+      const ambiguous = await read({ target: { text: "Section 1." } });
+      const missing = await read({ target: { text: "Not in this document" } });
+      const unresolved = await read({
+        target: {
+          queries: [
+            { ref: firstBody(doc.snapshot, 1).ref },
+            { text: "Not in this document" },
+          ],
+        },
+      });
+      const cells = await read({ table_cell: { text: "Service" } });
+
+      expect(
+        [ambiguous, missing, unresolved, cells].map((r) => [
+          r.status,
+          r.freshness.changes,
+        ]),
+      ).toEqual([
+        ["ambiguous", "in-scope"],
+        ["not-found", "in-scope"],
+        ["not-found", "in-scope"],
+        ["ambiguous", "in-scope"],
+      ]);
     });
 
     it("counts any change as in scope for the complete read", async () => {
@@ -397,17 +438,14 @@ describe("read freshness", () => {
       });
     });
 
-    it.each(["return-to-pane", "tracking-mode"] as const)(
-      "after the pane noticed a blind spot: %s",
-      async (reason) => {
-        recordWordUnknownChange(reason);
+    it("after the pane noticed a Track Changes toggle", async () => {
+      recordWordUnknownChange("tracking-mode");
 
-        expect(await sectionRead()).toMatchObject({
-          changes: "unknown",
-          counts: { own: 0, local: 0, remote: 0, unknown: 1 },
-        });
-      },
-    );
+      expect(await sectionRead()).toMatchObject({
+        changes: "unknown",
+        counts: { own: 0, local: 0, remote: 0, unknown: 1 },
+      });
+    });
 
     it("for a capture taken while Word was still tagging languages, which fires no events", async () => {
       const freshness = await open(doc.snapshot, {
@@ -428,13 +466,6 @@ describe("read freshness", () => {
       }).section(refOf(doc.snapshot, "1. Chapter 1"));
 
       expect(freshness.changes).toBe("unknown");
-      expect(
-        assessWordReadFreshness(
-          doc.snapshot,
-          { ...capture, ordinalMap },
-          { kind: "document" },
-        ).unknown,
-      ).toEqual(["no-ids"]);
     });
 
     it("once the capture's ids were replaced", async () => {
@@ -451,24 +482,14 @@ describe("read freshness", () => {
       noteWordChangeEventsActive();
 
       expect((await sectionRead()).changes).toBe("unknown");
-      expect(
-        assessWordReadFreshness(doc.snapshot, capture, { kind: "document" })
-          .unknown,
-      ).toEqual(["other-journal"]);
     });
 
     it("for a capture older than the journal keeps", async () => {
-      for (let k = 0; k < 1_001; k++) {
-        const write = beginWordOwnWrite("anchor");
-        event(k % 2 ? "ParagraphAdded" : "ParagraphChanged", ["p1"]);
-        write.end();
-      }
+      for (let k = 0; k < 1_001; k++) recordWordUnknownChange("tracking-mode");
 
-      expect(
-        assessWordReadFreshness(doc.snapshot, capture, { kind: "document" }),
-      ).toMatchObject({
-        freshness: { changes: "unknown" },
-        unknown: ["out-of-range"],
+      expect(await sectionRead()).toMatchObject({
+        changes: "unknown",
+        counts: { own: 0, local: 0, remote: 0, unknown: 0 },
       });
     });
 
@@ -485,6 +506,56 @@ describe("read freshness", () => {
       });
     });
   });
+
+  it("drops the last section refs to stay within 512 bytes", async () => {
+    resetWordChangeJournalForTests();
+    noteWordChangeEventsActive();
+    doc = document(40);
+    doc.snapshot.token = `snapshot-${"t".repeat(200)}`;
+    capture = {
+      changes: { position: wordChangePosition(), capturedAt: CAPTURED_AT },
+      ordinalMap: doc.ordinalMap,
+    };
+    for (let n = 1; n <= 40; n++)
+      event("ParagraphChanged", doc.ids.get(firstBody(doc.snapshot, n).ref)!);
+
+    const freshness = await open(doc.snapshot, capture).section(
+      refOf(doc.snapshot, "1. Chapter 1"),
+    );
+
+    expect(freshness.sections.length).toBeGreaterThan(0);
+    expect(freshness.sections.length).toBeLessThan(32);
+    expect(freshness.sections[0]).toBe(refOf(doc.snapshot, "1.1 Section 1.1"));
+    expect(
+      new TextEncoder().encode(JSON.stringify(freshness)).length,
+    ).toBeLessThanOrEqual(512);
+  });
+
+  it.each(["write", "read-only"] as const)(
+    "keeps a %s target response within its 24 KiB with the freshness block",
+    async (access) => {
+      const statuses = new Set<string>();
+      for (let bytes = 4_000; !statuses.has("unsupported"); bytes += 32) {
+        const snapshot = sectionSnapshot(
+          [heading(1, "1. One"), body("x".repeat(bytes))],
+          { token: `snapshot-${"t".repeat(300)}` },
+        );
+        const response = okResult<{ status: string }>(
+          await open(snapshot, {
+            changes: {
+              position: wordChangePosition(),
+              capturedAt: CAPTURED_AT,
+            },
+          }).raw({ target: { ref: "b2" } }, access === "read-only"),
+        );
+        statuses.add(response.status);
+        expect(
+          new TextEncoder().encode(JSON.stringify(response)).length,
+        ).toBeLessThanOrEqual(24 * 1024);
+      }
+      expect([...statuses].sort()).toEqual(["ready", "unsupported"]);
+    },
+  );
 
   it("lists at most 32 changed sections and stays within 512 bytes, which replay keeps whole", async () => {
     resetWordChangeJournalForTests();

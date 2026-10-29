@@ -96,6 +96,8 @@ export function runWordGuarded<T>(
   return new Promise((resolve) => {
     onTimeout = () => {
       aborted = true;
+      // Whatever Word still writes after this counts as the user's: the safe side.
+      own?.end();
       resolve({ outcome: "timeout", writeQueued, settled });
     };
     arm();

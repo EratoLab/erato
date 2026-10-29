@@ -15,7 +15,7 @@ import {
 } from "./wordReadFragments";
 
 import type { WordCaptureSections } from "./wordDocumentOutline";
-import type { ClientToolExecutionResult } from "@erato/frontend/library";
+import type { WordReadOutcome } from "./wordReadFreshness";
 import type { WordAuthoringSnapshot } from "@erato/frontend/word-review";
 
 const object = (v: unknown): v is Record<string, unknown> =>
@@ -30,15 +30,13 @@ interface PageItem {
   bytes: number;
 }
 
-function failure(
-  path: string,
-  code: string,
-  message: string,
-): ClientToolExecutionResult {
+function failure(path: string, code: string, message: string): WordReadOutcome {
   return {
-    ok: false,
-    error: message,
-    validationErrors: [{ path, code, message }],
+    result: {
+      ok: false,
+      error: message,
+      validationErrors: [{ path, code, message }],
+    },
   };
 }
 
@@ -89,34 +87,12 @@ function decodeCursor(cursor: string): unknown {
   }
 }
 
-/** The blocks a section:{ref, throughRef?} read covers, or undefined for refs this capture lacks. */
-export function wordSectionReadExtent(
-  snapshot: WordAuthoringSnapshot,
-  ref: unknown,
-  throughRef: unknown,
-): { kind: "extent"; from: number; to: number } | undefined {
-  const index = wordBlockIndex(snapshot);
-  const start = reference(ref) ? index.get(ref) : undefined;
-  if (start === undefined) return undefined;
-  if (throughRef === undefined) {
-    const { from, to } = wordSectionExtent(
-      wordCaptureSections(snapshot),
-      start,
-    );
-    return { kind: "extent", from, to };
-  }
-  const through = reference(throughRef) ? index.get(throughRef) : undefined;
-  return through === undefined || through < start
-    ? undefined
-    : { kind: "extent", from: start, to: through + 1 };
-}
-
 /** section:{ref, throughRef?, cursor?}: a section of the capture in pages of whole blocks. Always
  * read-only: no read token, no write scope, no change to the capture's write state. */
 export function readWordSection(
   snapshot: WordAuthoringSnapshot,
   input: Record<string, unknown>,
-): ClientToolExecutionResult {
+): WordReadOutcome {
   if (snapshot.revoked || snapshot.used)
     return failure(
       "/snapshot",
@@ -215,30 +191,33 @@ export function readWordSection(
   const holder = sections.entryOf[extent.from];
   const blocks = snapshot.blocks.slice(extent.from, extent.to);
   return {
-    ok: true,
+    scope: { kind: "extent", from: extent.from, to: extent.to },
     result: {
-      snapshot: snapshot.token,
-      documentIdentity: snapshot.identity,
-      section: {
-        ref: section.ref,
-        ...(section.throughRef !== undefined
-          ? { throughRef: section.throughRef }
-          : {}),
-        title:
-          entry?.title ??
-          wordOutlineTitle(blocks.find((b) => b.text.trim())?.text ?? ""),
-        level:
-          entry?.level ?? (holder >= 0 ? sections.outline[holder].level : 1),
-        page: page + 1,
-        pages: starts.length,
-        kib: wordOutlineKib(sections.spanBytes(extent.from, extent.to)),
-        paragraphs: sections.paragraphs(extent.from, extent.to),
+      ok: true,
+      result: {
+        snapshot: snapshot.token,
+        documentIdentity: snapshot.identity,
+        section: {
+          ref: section.ref,
+          ...(section.throughRef !== undefined
+            ? { throughRef: section.throughRef }
+            : {}),
+          title:
+            entry?.title ??
+            wordOutlineTitle(blocks.find((b) => b.text.trim())?.text ?? ""),
+          level:
+            entry?.level ?? (holder >= 0 ? sections.outline[holder].level : 1),
+          page: page + 1,
+          pages: starts.length,
+          kib: wordOutlineKib(sections.spanBytes(extent.from, extent.to)),
+          paragraphs: sections.paragraphs(extent.from, extent.to),
+        },
+        blocks: items
+          .slice(starts[page], starts[page + 1] ?? items.length)
+          .map((item) => item.value),
+        nextCursor: page + 1 < starts.length ? binding(page + 1) : null,
+        complete: page + 1 === starts.length,
       },
-      blocks: items
-        .slice(starts[page], starts[page + 1] ?? items.length)
-        .map((item) => item.value),
-      nextCursor: page + 1 < starts.length ? binding(page + 1) : null,
-      complete: page + 1 === starts.length,
     },
   };
 }

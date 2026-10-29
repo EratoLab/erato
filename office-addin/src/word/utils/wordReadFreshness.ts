@@ -1,12 +1,9 @@
 import { wordChangesSince } from "./wordChangeJournal";
-import { wordBlockIndex, wordCaptureSections } from "./wordDocumentOutline";
+import { wordCaptureSections } from "./wordDocumentOutline";
 
 import type { WordDocumentBuild } from "./buildWordDocumentArgs";
-import type {
-  WordChangeEntry,
-  WordChangePosition,
-  WordUnknownChange,
-} from "./wordChangeJournal";
+import type { WordChangeEntry, WordChangePosition } from "./wordChangeJournal";
+import type { ClientToolExecutionResult } from "@erato/frontend/library";
 import type { WordAuthoringSnapshot } from "@erato/frontend/word-review";
 
 /** Where the change journal stood when a capture started, and when that was. A send's copy of the
@@ -27,11 +24,17 @@ export interface WordReadCapture {
   ordinalMap?: WordDocumentBuild["ordinalMap"];
 }
 
-/** The blocks a response read, as indexes into the capture's body blocks. */
-export type WordReadScope =
+/** The blocks a response depends on, as indexes into the capture's body blocks. */
+export type WordFreshnessScope =
   | { kind: "document" }
   | { kind: "extent"; from: number; to: number }
   | { kind: "blocks"; blocks: ReadonlySet<number> };
+
+/** A read's response, with the scope its freshness covers when it read the capture. */
+export interface WordReadOutcome {
+  result: ClientToolExecutionResult;
+  scope?: WordFreshnessScope;
+}
 
 export type WordFreshnessChanges =
   | "none"
@@ -49,7 +52,7 @@ export interface WordReadFreshness {
 
 const MAX_SECTIONS = 32;
 /** Replay keeps a receipt field only up to 512 bytes of JSON (MAX_RECEIPT_FIELD_BYTES). */
-const MAX_FRESHNESS_BYTES = 512;
+export const MAX_WORD_FRESHNESS_BYTES = 512;
 const encoder = new TextEncoder();
 
 interface Mapping {
@@ -132,19 +135,14 @@ function blocksOfId(
   return null;
 }
 
-export interface WordFreshnessAssessment {
-  freshness: WordReadFreshness;
-  unknown: WordUnknownChange[];
-}
-
 /** changes: "in-scope" when a local or remote change lies in what the response read; otherwise
  * "unknown" when the journal cannot tell, "elsewhere" when such a change lies outside, else "none".
  * The pane's own writes never change it. */
-export function assessWordReadFreshness(
+export function wordReadFreshness(
   snapshot: WordAuthoringSnapshot,
   capture: WordReadCapture | undefined,
-  scope: WordReadScope,
-): WordFreshnessAssessment {
+  scope: WordFreshnessScope,
+): WordReadFreshness {
   const counts = { own: 0, local: 0, remote: 0, unknown: 0 };
   const freshness: WordReadFreshness = {
     context_ref: snapshot.token,
@@ -153,13 +151,11 @@ export function assessWordReadFreshness(
     counts,
     sections: [],
   };
-  if (!capture?.changes) return { freshness, unknown: ["no-capture"] };
+  if (!capture?.changes) return freshness;
   const since = wordChangesSince(capture.changes.position);
-  if (!since.ok) return { freshness, unknown: [since.reason] };
-  const unknown = new Set<WordUnknownChange>();
+  if (!since.ok) return freshness;
   const mapping = mappingOf(snapshot, capture);
-  if (mapping.idsMissing) unknown.add("no-ids");
-  if (capture.changes.proofingPending) unknown.add("proofing");
+  let unknown = mapping.idsMissing || !!capture.changes.proofingPending;
   const sections = wordCaptureSections(snapshot);
   const blockCount = snapshot.blocks.length;
   const readEntries =
@@ -184,7 +180,7 @@ export function assessWordReadFreshness(
   for (const entry of since.entries) {
     counts[entry.source] += 1;
     if (entry.source === "unknown") {
-      if (entry.reason) unknown.add(entry.reason);
+      unknown = true;
       continue;
     }
     if (entry.source === "own") continue;
@@ -193,18 +189,18 @@ export function assessWordReadFreshness(
     for (const id of entry.ids) {
       const blocks = blocksOfId(id, mapping, since.entries, blockCount);
       if (!blocks) {
-        unknown.add("no-location");
+        unknown = true;
         continue;
       }
       if (inScope(blocks[0], blocks[1])) within = true;
       for (let block = blocks[0]; block <= blocks[1]; block++)
         if (sections.entryOf[block] >= 0) touched.add(sections.entryOf[block]);
     }
-    if (!entry.ids.length) unknown.add("no-location");
+    if (!entry.ids.length) unknown = true;
   }
   freshness.changes = within
     ? "in-scope"
-    : unknown.size
+    : unknown
       ? "unknown"
       : outside
         ? "elsewhere"
@@ -216,44 +212,8 @@ export function assessWordReadFreshness(
   freshness.sections = refs;
   while (
     refs.length &&
-    encoder.encode(JSON.stringify(freshness)).length > MAX_FRESHNESS_BYTES
+    encoder.encode(JSON.stringify(freshness)).length > MAX_WORD_FRESHNESS_BYTES
   )
     refs.pop();
-  return { freshness, unknown: [...unknown] };
-}
-
-export function wordReadFreshness(
-  snapshot: WordAuthoringSnapshot,
-  capture: WordReadCapture | undefined,
-  scope: WordReadScope,
-): WordReadFreshness {
-  return assessWordReadFreshness(snapshot, capture, scope).freshness;
-}
-
-/** The blocks a target or table_cell response names, read or offered as candidates. */
-export function wordResultBlocks(
-  snapshot: WordAuthoringSnapshot,
-  result: unknown,
-): Set<number> {
-  const index = wordBlockIndex(snapshot);
-  const blocks = new Set<number>();
-  const add = (ref: unknown) => {
-    if (typeof ref !== "string") return;
-    const at = index.get(ref) ?? index.get(ref.split("__")[0]);
-    if (at !== undefined) blocks.add(at);
-  };
-  const visit = (value: unknown) => {
-    if (!value || typeof value !== "object") return;
-    if (Array.isArray(value)) {
-      for (const item of value) visit(item);
-      return;
-    }
-    const record = value as Record<string, unknown>;
-    for (const key of ["ref", "bodyRef", "sourceRef"]) add(record[key]);
-    if (Array.isArray(record.refs)) for (const ref of record.refs) add(ref);
-    for (const key of ["targets", "candidates", "queries", "cell", "target"])
-      visit(record[key]);
-  };
-  visit(result);
-  return blocks;
+  return freshness;
 }

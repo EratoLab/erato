@@ -5,17 +5,8 @@ export type WordChangeKind = "added" | "changed" | "deleted" | "unknown";
 /** own: the pane's own writes; local: the user here, or on the web a desktop co-author (Word for
  * the web reports those as Local); remote: a co-author as Word reports it. */
 export type WordChangeSource = "own" | "local" | "remote" | "unknown";
-export type WordUnknownChange =
-  | "no-events"
-  | "return-to-pane"
-  | "tracking-mode"
-  | "no-ids"
-  | "ids-replaced"
-  | "other-journal"
-  | "out-of-range"
-  | "no-location"
-  | "no-capture"
-  | "proofing";
+/** A change the journal knows happened but not where. */
+export type WordUnknownChange = "tracking-mode" | "ids-replaced";
 
 export interface WordChangeEntry {
   seq: number;
@@ -53,6 +44,9 @@ const OWN_TAIL_MS = 3_000;
  * on a 1,654-block document, without pauses. */
 const IMPORT_QUIET_MS = 2_000;
 const IMPORT_CAP_MS = 30_000;
+/** A write still open this long after it began counts as ended then, so a Word.run that settles
+ * late or never cannot claim the user's later edits. The slowest F1 Apply took 6.4 s. */
+const OPEN_WRITE_CAP_MS = 60_000;
 const MAX_ENTRIES = 1_000;
 const NEIGHBOUR_STEPS = 8;
 const NEIGHBOUR_BURST_MS = 100;
@@ -63,8 +57,13 @@ interface OpenWrite {
   kind: WordOwnWriteKind;
   ids: Set<string>;
   begin: number;
+  /** When an anchor or import write starts claiming every Local event: at its write, not before
+   * the checks that may refuse it. */
+  from: number;
   end?: number;
   lastEvent: number;
+  /** Its own entry per kind; merging keeps an import's burst from evicting older positions. */
+  entries: Partial<Record<WordChangeKind, WordChangeEntry & { ids: string[] }>>;
 }
 
 let journal = globalThis.crypto.randomUUID();
@@ -77,7 +76,6 @@ let entries: WordChangeEntry[] = [];
 let eventsActive = false;
 let captured = new Set<string>();
 let writes: OpenWrite[] = [];
-let lastOwnWrite: OpenWrite | undefined;
 let pendingNeighbours = new Map<string, WordChangeEntry>();
 let neighbourTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -125,7 +123,14 @@ export function recordWordUnknownChange(reason: WordUnknownChange): void {
 export function beginWordOwnWrite(kind: WordOwnWriteKind): WordOwnWrite {
   const now = Date.now();
   prune(now);
-  const write: OpenWrite = { kind, ids: new Set(), begin: now, lastEvent: now };
+  const write: OpenWrite = {
+    kind,
+    ids: new Set(),
+    begin: now,
+    from: now,
+    lastEvent: now,
+    entries: {},
+  };
   writes.push(write);
   return {
     end() {
@@ -145,10 +150,24 @@ export function nameWordOwnWriteIds(
     if (write.end === undefined) for (const id of named) write.ids.add(id);
 }
 
-/** The open writes replace the whole document. */
+/** The open writes replace the whole document, from now. */
 export function markWordOwnImport(): void {
+  const now = Date.now();
   for (const write of writes)
-    if (write.end === undefined) write.kind = "import";
+    if (write.end === undefined && write.kind !== "import") {
+      write.kind = "import";
+      write.from = now;
+    }
+}
+
+/** The open writes now create paragraphs whose ids no one knows before Word reports them. */
+export function markWordOwnAnchor(): void {
+  const now = Date.now();
+  for (const write of writes)
+    if (write.end === undefined && write.kind === "ids") {
+      write.kind = "anchor";
+      write.from = now;
+    }
 }
 
 export interface WordParagraphEvent {
@@ -168,25 +187,19 @@ export function recordWordParagraphEvent(event?: WordParagraphEvent): void {
       : event?.type === "ParagraphDeleted"
         ? "deleted"
         : "changed";
+  if (kind === "deleted") forgetPendingNeighbours(ids);
   const owner =
     event?.source === "Remote"
       ? undefined
       : writes.find((write) => owns(write, now, ids));
   if (owner) {
     owner.lastEvent = now;
-    const last = entries.at(-1);
-    if (
-      last &&
-      last.seq > sealed &&
-      last.source === "own" &&
-      last.kind === kind &&
-      lastOwnWrite === owner
-    ) {
-      last.ids = [...last.ids, ...ids];
+    const open = owner.entries[kind];
+    if (open && open.seq > sealed) {
+      open.ids.push(...ids);
       return;
     }
-    lastOwnWrite = owner;
-    append({ kind, source: "own", ids });
+    owner.entries[kind] = append({ kind, source: "own", ids: [...ids] });
     return;
   }
   prune(now);
@@ -204,29 +217,36 @@ export function recordWordParagraphEvent(event?: WordParagraphEvent): void {
   if (kind === "added") queueNeighbours(entry);
 }
 
+function endOf(write: OpenWrite, now: number): number | undefined {
+  const cap = write.begin + OPEN_WRITE_CAP_MS;
+  return write.end ?? (now > cap ? cap : undefined);
+}
+
 function owns(write: OpenWrite, now: number, ids: readonly string[]): boolean {
-  if (now < write.begin) return false;
-  if (write.kind === "import")
+  const end = endOf(write, now);
+  if (write.kind === "import" && now >= write.from)
     return (
-      write.end === undefined ||
-      now <= write.end + OWN_TAIL_MS ||
-      (now <= write.end + IMPORT_CAP_MS &&
-        now - write.lastEvent <= IMPORT_QUIET_MS)
+      end === undefined ||
+      now <= end + OWN_TAIL_MS ||
+      (now <= end + IMPORT_CAP_MS &&
+        now - Math.max(write.lastEvent, end) <= IMPORT_QUIET_MS)
     );
-  if (write.end !== undefined && now > write.end + OWN_TAIL_MS) return false;
+  if (now < write.begin || (end !== undefined && now > end + OWN_TAIL_MS))
+    return false;
   return (
-    write.kind === "anchor" ||
+    (write.kind === "anchor" && now >= write.from) ||
     (ids.length > 0 && ids.every((id) => write.ids.has(id)))
   );
 }
 
 function prune(now: number): void {
-  writes = writes.filter(
-    (write) =>
-      write.end === undefined ||
-      now <=
-        write.end + (write.kind === "import" ? IMPORT_CAP_MS : OWN_TAIL_MS),
-  );
+  writes = writes.filter((write) => {
+    const end = endOf(write, now);
+    return (
+      end === undefined ||
+      now <= end + (write.kind === "import" ? IMPORT_CAP_MS : OWN_TAIL_MS)
+    );
+  });
 }
 
 function replacesCapture(ids: readonly string[]): boolean {
@@ -236,15 +256,27 @@ function replacesCapture(ids: readonly string[]): boolean {
   return hits * 2 >= captured.size;
 }
 
-function append(entry: Omit<WordChangeEntry, "seq" | "at">): WordChangeEntry {
+function append<T extends Omit<WordChangeEntry, "seq" | "at">>(
+  entry: T,
+): T & WordChangeEntry {
   seq += 1;
-  const full: WordChangeEntry = { ...entry, seq, at: Date.now() };
+  const full = { ...entry, seq, at: Date.now() };
   entries.push(full);
   if (entries.length > MAX_ENTRIES) {
     const removed = entries.splice(0, entries.length - MAX_ENTRIES);
     dropped = removed.at(-1)!.seq;
   }
   return full;
+}
+
+/** A paragraph deleted before its neighbours are read would fail the whole burst's read. */
+function forgetPendingNeighbours(ids: readonly string[]): void {
+  for (const id of ids) {
+    const entry = pendingNeighbours.get(id);
+    if (!entry) continue;
+    pendingNeighbours.delete(id);
+    entry.location?.set(id, null);
+  }
 }
 
 function queueNeighbours(entry: WordChangeEntry): void {
@@ -327,7 +359,6 @@ export function resetWordChangeJournalForTests(): void {
   eventsActive = false;
   captured = new Set();
   writes = [];
-  lastOwnWrite = undefined;
   pendingNeighbours = new Map();
   clearTimeout(neighbourTimer);
   neighbourTimer = undefined;

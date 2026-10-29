@@ -19,12 +19,14 @@ import {
   WORD_READ_ONLY_FIELDS,
   wordReadRefusedByIssue,
 } from "./wordReadAccess";
+import { MAX_WORD_FRESHNESS_BYTES } from "./wordReadFreshness";
 import {
   WORD_SCOPED_GUIDANCE,
   wordScopedReadContract,
 } from "./wordScopedReadContract";
 
 import type { WordReadAccess } from "./wordReadAccess";
+import type { WordReadOutcome } from "./wordReadFreshness";
 import type { WordScopedGuidance } from "./wordScopedReadContract";
 import type { ClientToolExecutionResult } from "@erato/frontend/library";
 import type {
@@ -304,8 +306,10 @@ export function readWordTargets(
   snapshot: WordAuthoringSnapshot,
   input: Record<string, unknown>,
   access: WordReadAccess = "write",
-): ClientToolExecutionResult {
-  const fail = targetReadFailure;
+): WordReadOutcome {
+  const fail = (code: string, message: string) => ({
+    result: targetReadFailure(code, message),
+  });
   const readOnly = access === "read-only";
   if (
     snapshot.revoked ||
@@ -362,7 +366,7 @@ export function readWordTargets(
   let remainingCandidates = 5;
   for (const query of queries) {
     const selection = selectTargets(snapshot, query, remainingCandidates);
-    if (selection.error) return selection.error;
+    if (selection.error) return { result: selection.error };
     if (!batch || !selection.ready)
       remainingCandidates -= selection.base.candidates.length;
     selections.push(selection);
@@ -400,17 +404,21 @@ export function readWordTargets(
     const count = (counts.get(key) ?? 0) + 1;
     if (counts.size < 64 || counts.has(key)) counts.set(key, count);
     attempts[access].set(snapshot, counts);
+    // A search that found no single target looked through the whole capture.
     return {
-      ok: true,
+      scope: { kind: "document" },
       result: {
-        ...base,
-        status: selections.some((s) => !s.ready && s.matches.length)
-          ? "ambiguous"
-          : "not-found",
-        repeatedQuery: count > 1,
-        recovery: readOnly
-          ? "Refine unresolved selectors using their candidate context, page them individually, or ask for clarification. Repeating the same query cannot reveal a new target."
-          : "No write authorized, including unique matches in this batch. Refine unresolved selectors using their candidate context, page them individually, or ask for clarification. Then read all needed refs/queries together. Repeating the same query cannot reveal a new target.",
+        ok: true,
+        result: {
+          ...base,
+          status: selections.some((s) => !s.ready && s.matches.length)
+            ? "ambiguous"
+            : "not-found",
+          repeatedQuery: count > 1,
+          recovery: readOnly
+            ? "Refine unresolved selectors using their candidate context, page them individually, or ask for clarification. Repeating the same query cannot reveal a new target."
+            : "No write authorized, including unique matches in this batch. Refine unresolved selectors using their candidate context, page them individually, or ask for clarification. Then read all needed refs/queries together. Repeating the same query cannot reveal a new target.",
+        },
       },
     };
   }
@@ -419,6 +427,17 @@ export function readWordTargets(
       "target-limit",
       "A combined scope may contain at most 16 distinct targets.",
     );
+  const positions = wordBlockIndex(snapshot);
+  const scope = {
+    kind: "blocks" as const,
+    blocks: new Set(
+      matches.flatMap((t) => {
+        const at =
+          t.bodyRef === undefined ? undefined : positions.get(t.bodyRef);
+        return at === undefined ? [] : [at];
+      }),
+    ),
+  };
   const include = input.include as WordScopedGuidance[] | undefined;
   // Scope includes exact target data plus bounded identifying neighbors. Neighbors
   // and references mentioned in properties are context, never implicit write grants.
@@ -450,31 +469,38 @@ export function readWordTargets(
         ...(readOnly ? WORD_READ_ONLY_FIELDS : { readToken: "0".repeat(36) }),
         maxContextBytes: MAX_WORD_SCOPE_BYTES,
         fullDocument: !!snapshot.fullDocument,
+        freshness: "0".repeat(MAX_WORD_FRESHNESS_BYTES - 2),
       }),
     ).length > MAX_WORD_SCOPE_BYTES
   )
     return {
-      ok: true,
+      scope,
       result: {
-        ...base,
-        status: "unsupported",
-        reason: "scope-context-limit",
-        fallback:
-          readOnly || snapshot.completeReadIssue
-            ? "narrow-target-or-section"
-            : "narrow-target-or-complete-read",
-        maxContextBytes: MAX_WORD_SCOPE_BYTES,
+        ok: true,
+        result: {
+          ...base,
+          status: "unsupported",
+          reason: "scope-context-limit",
+          fallback:
+            readOnly || snapshot.completeReadIssue
+              ? "narrow-target-or-section"
+              : "narrow-target-or-complete-read",
+          maxContextBytes: MAX_WORD_SCOPE_BYTES,
+        },
       },
     };
   if (readOnly)
     return {
-      ok: true,
+      scope,
       result: {
-        ...base,
-        status: "ready",
-        ...context,
-        maxContextBytes: MAX_WORD_SCOPE_BYTES,
-        fullDocument: !!snapshot.fullDocument,
+        ok: true,
+        result: {
+          ...base,
+          status: "ready",
+          ...context,
+          maxContextBytes: MAX_WORD_SCOPE_BYTES,
+          fullDocument: !!snapshot.fullDocument,
+        },
       },
     };
   snapshot.readScopes ??= new Map();
@@ -495,14 +521,17 @@ export function readWordTargets(
     plans: new Set(),
   });
   return {
-    ok: true,
+    scope,
     result: {
-      ...base,
-      status: "ready",
-      readToken,
-      ...context,
-      maxContextBytes: MAX_WORD_SCOPE_BYTES,
-      fullDocument: !!snapshot.fullDocument,
+      ok: true,
+      result: {
+        ...base,
+        status: "ready",
+        readToken,
+        ...context,
+        maxContextBytes: MAX_WORD_SCOPE_BYTES,
+        fullDocument: !!snapshot.fullDocument,
+      },
     },
   };
 }
