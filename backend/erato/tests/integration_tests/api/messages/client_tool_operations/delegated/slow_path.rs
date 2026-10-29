@@ -504,6 +504,21 @@ pub(super) async fn continuestream_refuses_a_single_decision_when_only_waiting_i
         "{}",
         refused.text()
     );
+    // A card that shows waiting children answered a stop decided elsewhere.
+    let stale = continuestream(
+        &waiting,
+        json!({ "decision": "approve", "shows_child_items": true }),
+    )
+    .await;
+    stale.assert_status_conflict();
+    assert_eq!(
+        stale.json::<Value>(),
+        json!({ "code": "already_continued" })
+    );
+    assert_eq!(
+        attempt_row(&waiting).await.state,
+        attempts::AttemptState::Pending
+    );
     waiting.server.abort();
 }
 

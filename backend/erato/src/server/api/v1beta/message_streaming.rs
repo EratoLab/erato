@@ -19119,6 +19119,11 @@ pub(crate) async fn start_continuation(
                 .iter()
                 .any(|item| item.approval_id == decision.approval_id)
         });
+        // A client that shows waiting children and still sends a lone decision
+        // here answered a stop someone else already decided.
+        if request.decision.is_some() && decidable.is_empty() && request.shows_child_items {
+            return Err(already_continued());
+        }
         if names_waiting
             || (request.decision.is_some() && decidable.is_empty())
             || (!request.shows_child_items && decision_needs_child_items(&state))
