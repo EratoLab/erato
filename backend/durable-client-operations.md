@@ -98,11 +98,13 @@ Locks every context runs, as before. A POST that settles the unclaimed attempt
 through the fast path answers `stored: true`, and only then does the pane request
 a sweep, so a drop on the same pane resumes without waiting for the 10 s poll. A
 `client_tool_pending` part also requests a sweep, for a pane whose executor is not
-running. That sweep can race the generation's release after the park; a refused
-claim waits for the poll. A pane without a matching handler leaves the operation
-for another. The web app registers no `client_tool.v1` handler, so only the
-add-in continues these attempts; a continue-only fallback for other tabs would be
-a separate decision.
+running. That sweep can race the generation's release after the park; the server
+refuses the claim (409) until the release lands, and the coordinator retries it
+once after 1.5 s before leaving the attempt to the poll (a claim refused again,
+for example one another pane holds, is not retried early). A pane without a
+matching handler leaves the operation for another. The web app registers no
+`client_tool.v1` handler, so only the add-in continues these attempts; a
+continue-only fallback for other tabs would be a separate decision.
 
 An interactive executor continues a settled `consent: none` operation with
 `Accept: text/event-stream`, its `X-Erato-Executor` binding and current
