@@ -6,9 +6,9 @@ import {
 
 import { cutToUtf8Bytes } from "./buildWordDocumentArgs";
 import { WORD_AUTHORING_CONTRACT } from "./wordAuthoringContract";
-import { wordReadIssueBlocks } from "./wordSectionRead";
+import { wordReadRefusedByIssue } from "./wordReadAccess";
 
-import type { WordReadAccess } from "./wordSectionRead";
+import type { WordReadAccess } from "./wordReadAccess";
 import type { ClientToolExecutionResult } from "@erato/frontend/library";
 import type {
   WordAuthoringSnapshot,
@@ -52,7 +52,7 @@ export function readWordTableCell(
   if (
     snapshot.revoked ||
     snapshot.used ||
-    wordReadIssueBlocks(snapshot, access)
+    wordReadRefusedByIssue(snapshot, access)
   )
     return fail(
       "snapshot-unavailable",

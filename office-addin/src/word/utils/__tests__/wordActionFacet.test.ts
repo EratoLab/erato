@@ -449,7 +449,7 @@ describe("authoring arguments", () => {
     );
     expect(sent?.authoring_status).toContain("16 targets and 24 KiB");
     expect(sent?.truncation_note).toContain("too large to read completely");
-    expect(sent?.truncation_note).toContain("target.queries or table_cell");
+    expect(sent?.truncation_note).toContain("section:{ref} pages");
     expect(sent?.document_text).toBe("");
   });
 

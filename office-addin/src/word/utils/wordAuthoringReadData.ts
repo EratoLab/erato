@@ -24,7 +24,7 @@ export function wordStyleNamesBytes(
 
 export type WordReadableSourceBlock = Omit<
   WordSourceBlock,
-  "xml" | "paragraphOrdinal"
+  "xml" | "paragraphOrdinal" | "outlineLevel"
 >;
 
 /** A paragraph-wide run duplicates its text; send its font formatting once.
@@ -32,7 +32,13 @@ export type WordReadableSourceBlock = Omit<
 export function wordReadableSourceBlock(
   source: WordSourceBlock,
 ): WordReadableSourceBlock {
-  const { xml: _xml, paragraphOrdinal: _ordinal, runs, ...block } = source;
+  const {
+    xml: _xml,
+    paragraphOrdinal: _ordinal,
+    outlineLevel: _outlineLevel,
+    runs,
+    ...block
+  } = source;
   if (
     runs?.length === 1 &&
     runs[0].text === source.text &&

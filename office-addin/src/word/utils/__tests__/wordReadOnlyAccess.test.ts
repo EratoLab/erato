@@ -4,15 +4,16 @@ import {
   body,
   chapter,
   heading,
+  okResult,
+  openReadSession,
+  readContext,
   sectionSnapshot,
   table,
+  untouchedWriteState,
+  writeState,
 } from "../../../test/mocks/word/sectionFixtures";
-import { WordDocumentReadSession } from "../wordDocumentReadTool";
 
-import type { ClientToolExecutionResult } from "@erato/frontend/library";
 import type { WordAuthoringSnapshot } from "@erato/frontend/word-review";
-
-const context = { chatId: "chat-A", messageId: "message-A", toolCallId: "r" };
 
 const snapshotOf = (extra: Partial<WordAuthoringSnapshot> = {}) =>
   sectionSnapshot(
@@ -31,39 +32,6 @@ const snapshotOf = (extra: Partial<WordAuthoringSnapshot> = {}) =>
     extra,
   );
 
-function open(snapshot: WordAuthoringSnapshot, access?: "write" | "read-only") {
-  const session = new WordDocumentReadSession();
-  session.activate(
-    snapshot,
-    context,
-    undefined,
-    access ? { access } : undefined,
-  );
-  const args = (extra: Record<string, unknown>) => ({
-    snapshot: snapshot.token,
-    documentIdentity: snapshot.identity,
-    ...extra,
-  });
-  return {
-    session,
-    execute: (extra: Record<string, unknown>) =>
-      session.execute(args(extra), context),
-    readOnly: (extra: Record<string, unknown>) =>
-      session.executeReadOnly(args(extra), context),
-  };
-}
-const result = (response: ClientToolExecutionResult) => {
-  expect(response.ok, JSON.stringify(response).slice(0, 400)).toBe(true);
-  if (!response.ok) throw new Error(response.error);
-  return response.result as Record<string, unknown>;
-};
-const writeState = (snapshot: WordAuthoringSnapshot) => ({
-  readScopes: snapshot.readScopes?.size ?? 0,
-  read: snapshot.read.size,
-  readToken: snapshot.readToken,
-  used: snapshot.used,
-});
-const untouched = { readScopes: 0, read: 0, readToken: undefined, used: false };
 const WRITE_WORDS = /scopedEdit|repair|submit|readToken|write/i;
 
 const reads = {
@@ -80,9 +48,9 @@ const reads = {
 describe("read-only access", () => {
   it("executeReadOnly reads one call read-only in a write session, execute keeps write reads", async () => {
     const snapshot = snapshotOf();
-    const { execute, readOnly } = open(snapshot);
+    const { execute, readOnly } = openReadSession(snapshot);
 
-    const plain = result(await readOnly(reads.target));
+    const plain = okResult(await readOnly(reads.target));
     expect(plain).toMatchObject({
       status: "ready",
       access: "read-only",
@@ -92,9 +60,9 @@ describe("read-only access", () => {
     expect(plain).not.toHaveProperty("readToken");
     expect(plain).not.toHaveProperty("contract");
     expect(plain).not.toHaveProperty("styles");
-    expect(writeState(snapshot)).toEqual(untouched);
+    expect(writeState(snapshot)).toEqual(untouchedWriteState);
 
-    const write = result(await execute(reads.target));
+    const write = okResult(await execute(reads.target));
     expect(write).toMatchObject({
       status: "ready",
       readToken: expect.any(String),
@@ -106,17 +74,17 @@ describe("read-only access", () => {
 
   it("a session activated read-only reads every call read-only and refuses the complete read", async () => {
     const snapshot = snapshotOf();
-    const { execute } = open(snapshot, "read-only");
+    const { execute } = openReadSession(snapshot, "read-only");
 
     for (const read of Object.values(reads))
-      expect(result(await execute(read))).toMatchObject({
+      expect(okResult(await execute(read))).toMatchObject({
         access: "read-only",
       });
     expect(await execute({ cursor: null })).toMatchObject({
       ok: false,
       validationErrors: [{ code: "read-only-complete" }],
     });
-    expect(writeState(snapshot)).toEqual(untouched);
+    expect(writeState(snapshot)).toEqual(untouchedWriteState);
   });
 
   it.each([
@@ -124,12 +92,12 @@ describe("read-only access", () => {
     ["tracking", { issue: "tracking", trackingMode: "TrackAll" }],
   ] as const)("works under %s and writes no state", async (_name, extra) => {
     const snapshot = snapshotOf(extra);
-    const { readOnly, execute } = open(snapshot);
+    const { readOnly, execute } = openReadSession(snapshot);
 
-    const target = result(await readOnly(reads.target));
-    const queries = result(await readOnly(reads.queries));
-    const cell = result(await readOnly(reads.tableCell));
-    const section = result(await readOnly(reads.section));
+    const target = okResult(await readOnly(reads.target));
+    const queries = okResult(await readOnly(reads.queries));
+    const cell = okResult(await readOnly(reads.tableCell));
+    const section = okResult(await readOnly(reads.section));
 
     expect(target).toMatchObject({ status: "ready" });
     expect(queries).toMatchObject({
@@ -152,7 +120,7 @@ describe("read-only access", () => {
       ok: false,
       validationErrors: [{ code: "read-only-complete" }],
     });
-    expect(writeState(snapshot)).toEqual(untouched);
+    expect(writeState(snapshot)).toEqual(untouchedWriteState);
 
     // A write read stays refused under tracking; under too-large only the complete read is.
     const write = await execute(reads.target);
@@ -161,18 +129,89 @@ describe("read-only access", () => {
 
   it("keeps ordinary refusals under tracking recoverable", async () => {
     const snapshot = snapshotOf({ issue: "tracking" });
-    const { readOnly, execute } = open(snapshot);
+    const { readOnly, execute } = openReadSession(snapshot);
 
-    const refused = await readOnly({ section: { ref: "missing" } });
-    expect(refused).toMatchObject({
-      ok: false,
-      validationErrors: [{ code: "section-reference" }],
-    });
-    expect(refused).not.toHaveProperty("submissionFeedback");
+    for (const refused of [
+      await readOnly({ section: { ref: "missing" } }),
+      await execute({ section: { ref: "missing" } }),
+    ]) {
+      expect(refused).toMatchObject({
+        ok: false,
+        validationErrors: [{ code: "section-reference" }],
+      });
+      expect(refused).not.toHaveProperty("submissionFeedback");
+    }
     expect(await execute(reads.target)).toMatchObject({
       ok: false,
       submissionFeedback: { terminal: true },
     });
+  });
+
+  it("leaves the complete read's pages, cursors and read token to the write reader", async () => {
+    const snapshot = sectionSnapshot(
+      [body("Agreement"), ...chapter(1, 12), ...chapter(2, 12)],
+      {},
+    );
+    const { session, execute, readOnly } = openReadSession(snapshot);
+    const page = (cursor: string | null) =>
+      session.execute({ snapshot: snapshot.token, cursor }, readContext);
+
+    type Page = { nextCursor: string | null; complete: boolean };
+    const first = okResult<Page>(await page(null));
+    expect(first.complete).toBe(false);
+    const readAfterFirst = snapshot.read.size;
+
+    okResult(await execute({ section: { ref: "b2" } }));
+    okResult(await readOnly({ target: { ref: "b3" } }));
+    okResult(await readOnly({ target: { text: "Supplier" } }));
+    expect(snapshot.read.size).toBe(readAfterFirst);
+    expect(snapshot.readToken).toBeUndefined();
+
+    let cursor = first.nextCursor;
+    let last = first;
+    while (cursor) {
+      last = okResult<Page>(await page(cursor));
+      cursor = last.nextCursor;
+    }
+    expect(last).toMatchObject({
+      complete: true,
+      readToken: expect.any(String),
+    });
+    expect(snapshot.read.size).toBeGreaterThan(readAfterFirst);
+  });
+
+  it("counts read-only searches apart from the write reader's repeated queries", async () => {
+    const snapshot = snapshotOf();
+    const { execute, readOnly } = openReadSession(snapshot);
+    const search = { target: { text: "Payment is due" } };
+
+    expect(okResult(await readOnly(search))).toMatchObject({
+      repeatedQuery: false,
+    });
+    expect(okResult(await readOnly(search))).toMatchObject({
+      repeatedQuery: true,
+    });
+    expect(okResult(await execute(search))).toMatchObject({
+      repeatedQuery: false,
+    });
+    expect(okResult(await execute(search))).toMatchObject({
+      repeatedQuery: true,
+    });
+  });
+
+  it("points a write reader of a too-large capture to section pages", async () => {
+    const snapshot = snapshotOf({ completeReadIssue: "too-large" });
+    const { session } = openReadSession(snapshot);
+
+    const refused = await session.execute(
+      { snapshot: snapshot.token, cursor: null },
+      readContext,
+    );
+    expect(refused).toMatchObject({
+      ok: false,
+      validationErrors: [{ code: "too-large" }],
+    });
+    expect(refused.ok ? "" : refused.error).toContain("section:{ref}");
   });
 
   it.each([
@@ -181,7 +220,7 @@ describe("read-only access", () => {
     ["unsupported", { issue: "unsupported" }],
   ] as const)("still refuses a %s capture", async (_name, extra) => {
     const snapshot = snapshotOf();
-    const { readOnly } = open(snapshot);
+    const { readOnly } = openReadSession(snapshot);
     Object.assign(snapshot, extra);
 
     for (const read of Object.values(reads))
@@ -190,7 +229,7 @@ describe("read-only access", () => {
 
   it("refuses another request's calls", async () => {
     const snapshot = snapshotOf();
-    const { session } = open(snapshot);
+    const { session } = openReadSession(snapshot);
     expect(
       await session.executeReadOnly(
         {
@@ -198,7 +237,7 @@ describe("read-only access", () => {
           documentIdentity: snapshot.identity,
           ...reads.section,
         },
-        { ...context, messageId: "message-B" },
+        { ...readContext, messageId: "message-B" },
       ),
     ).toMatchObject({
       ok: false,
@@ -208,15 +247,15 @@ describe("read-only access", () => {
 
   it("never reaches the scope limit and adds only the style list for formatting", async () => {
     const snapshot = snapshotOf();
-    const { execute, readOnly } = open(snapshot);
+    const { execute, readOnly } = openReadSession(snapshot);
     const paragraphs = snapshot.blocks.filter((b) => b.type === "paragraph");
     for (const b of paragraphs.slice(0, 16))
-      result(await execute({ target: { ref: b.ref } }));
+      okResult(await execute({ target: { ref: b.ref } }));
     expect(
       await execute({ target: { ref: paragraphs[16].ref } }),
     ).toMatchObject({ ok: false, validationErrors: [{ code: "scope-limit" }] });
 
-    const formatted = result(
+    const formatted = okResult(
       await readOnly({
         target: { ref: paragraphs[16].ref },
         include: ["formatting", "table", "media"],
@@ -234,8 +273,8 @@ describe("read-only access", () => {
 
   it("recovers ambiguous reads without write-scope wording", async () => {
     const snapshot = snapshotOf();
-    const { readOnly } = open(snapshot);
-    const ambiguous = result(
+    const { readOnly } = openReadSession(snapshot);
+    const ambiguous = okResult(
       await readOnly({ target: { text: "Payment is due" } }),
     );
     expect(ambiguous).toMatchObject({

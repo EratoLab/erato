@@ -350,7 +350,12 @@ export function captureWordAuthoringSnapshot(
             ? "heading"
             : "paragraph",
         ...(isList
-          ? { level: listLevel }
+          ? {
+              level: listLevel,
+              ...(headingLevel >= 0 && headingLevel < 9
+                ? { outlineLevel: headingLevel + 1 }
+                : {}),
+            }
           : Number.isFinite(headingLevel) && headingLevel < 9
             ? { level: headingLevel + 1 }
             : {}),

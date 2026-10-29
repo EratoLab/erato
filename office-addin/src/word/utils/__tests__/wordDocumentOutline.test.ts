@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { packageXml } from "../../../test/mocks/word/authoringFixtures";
 import {
   body,
   chapter,
@@ -17,6 +18,7 @@ import {
   wordDocumentOutlineText,
   wordOutlineLine,
 } from "../wordDocumentOutline";
+import { captureWordAuthoringSnapshot } from "../wordDocumentXml";
 
 import type { SectionBlock } from "../../../test/mocks/word/sectionFixtures";
 
@@ -30,6 +32,8 @@ const numbered = (list: string, level: number, text: string): SectionBlock => ({
 });
 const clauses = (count: number, seed = 0) =>
   Array.from({ length: count }, (_, k) => body(clauseText(seed + k)));
+const W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
+const run = (text: string) => `<w:r><w:t>${text}</w:t></w:r>`;
 
 describe("heading outline", () => {
   it("lists every heading with level, title, size and paragraphs, after the start of the document", () => {
@@ -99,6 +103,66 @@ describe("heading outline", () => {
     ]);
   });
 
+  it("knows a heading style whose name carries aliases", () => {
+    const snapshot = sectionSnapshot([
+      numbered("existing-1", 0, "Gegenstand"),
+      ...clauses(2),
+      numbered("existing-1", 0, "Leistungen"),
+      ...clauses(2),
+    ]);
+    snapshot.blocks[0].styleRef = snapshot.blocks[3].styleRef = "berschrift1";
+    snapshot.styles.push({
+      id: "berschrift1",
+      name: "heading 1,h1",
+      type: "paragraph",
+    });
+    expect(
+      wordDocumentOutline(snapshot).map((e) => [e.ref, e.tag, e.level]),
+    ).toEqual([
+      ["b1", "H", 1],
+      ["b4", "H", 1],
+    ]);
+  });
+
+  it("counts numbered paragraphs in custom styles by their captured outline level", () => {
+    const style = (id: string, level: number) =>
+      `<w:style w:type="paragraph" w:styleId="${id}"><w:name w:val="${id}"/><w:pPr><w:numPr><w:ilvl w:val="${level}"/><w:numId w:val="1"/></w:numPr><w:outlineLvl w:val="${level}"/></w:pPr></w:style>`;
+    const numbering = `<pkg:part pkg:name="/word/numbering.xml" pkg:contentType="application/xml"><pkg:xmlData><w:numbering xmlns:w="${W}"><w:abstractNum w:abstractNumId="0"><w:lvl w:ilvl="0"><w:numFmt w:val="decimal"/></w:lvl><w:lvl w:ilvl="1"><w:numFmt w:val="decimal"/></w:lvl></w:abstractNum><w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num></w:numbering></pkg:xmlData></pkg:part>`;
+    const paragraph = (text: string, styleId?: string) =>
+      `<w:p>${styleId ? `<w:pPr><w:pStyle w:val="${styleId}"/></w:pPr>` : ""}${run(text)}</w:p>`;
+    const xml = packageXml(
+      [
+        paragraph("Vertrag"),
+        ...[1, 2].flatMap((n) => [
+          paragraph(`Kapitel ${n}`, "Gliederung1"),
+          paragraph("Text"),
+          paragraph(`Abschnitt ${n}.1`, "Gliederung2"),
+          paragraph("Text"),
+        ]),
+      ].join(""),
+    )
+      .replace(
+        "</w:styles>",
+        `${style("Gliederung1", 0)}${style("Gliederung2", 1)}</w:styles>`,
+      )
+      .replace("</pkg:package>", `${numbering}</pkg:package>`);
+    const snapshot = captureWordAuthoringSnapshot(xml, "doc-G", "Off");
+
+    expect(snapshot.blocks[1]).toMatchObject({ type: "list-item", level: 0 });
+    expect(
+      wordDocumentOutline(snapshot).map((e) => [e.tag, e.level, e.title]),
+    ).toEqual([
+      ["H", 1, "(start of document)"],
+      ["H", 1, "Kapitel 1"],
+      ["H", 2, "Abschnitt 1.1"],
+      ["H", 1, "Kapitel 2"],
+      ["H", 2, "Abschnitt 2.1"],
+    ]);
+    expect(
+      JSON.stringify(wordCaptureSections(snapshot).readable),
+    ).not.toContain("outlineLevel");
+  });
+
   it("maps every block to the deepest entry that holds it", () => {
     const snapshot = sectionSnapshot([
       heading(1, "One"),
@@ -143,6 +207,49 @@ describe("fallback outline without headings", () => {
     ]);
     expect(outline[0].title).toBe("Rahmenvertrag");
     expect(outline[1].title).toBe("Section 1");
+  });
+
+  it("starts the first section at the document start when only empty paragraphs precede it", () => {
+    const blocks: SectionBlock[] = [
+      body(""),
+      body(""),
+      ...[1, 2, 3].flatMap((n) => [
+        numbered("existing-1", 0, `Section ${n}`),
+        ...clauses(3, n),
+      ]),
+    ];
+    expect(
+      wordDocumentOutline(sectionSnapshot(blocks)).map((e) => [
+        e.ref,
+        e.tag,
+        e.title,
+      ]),
+    ).toEqual([
+      ["b1", "S", "Section 1"],
+      ["b7", "S", "Section 2"],
+      ["b11", "S", "Section 3"],
+    ]);
+  });
+
+  it("parts a numbered section above 60 KiB from its second block, so every entry has its own ref", () => {
+    const blocks: SectionBlock[] = [
+      body("Rahmenvertrag"),
+      ...[2, 190, 2].flatMap((count, k) => [
+        numbered("existing-1", 0, `Section ${k + 1}`),
+        ...clauses(count, k),
+      ]),
+    ];
+    const outline = wordDocumentOutline(sectionSnapshot(blocks));
+    const large = outline.findIndex((e) => e.title === "Section 2");
+
+    expect(outline[large]).toMatchObject({ tag: "S", level: 1 });
+    expect(outline[large].kib).toBeGreaterThan(60);
+    expect(outline[large + 1]).toMatchObject({
+      tag: "P",
+      level: 2,
+      from: outline[large].from + 1,
+    });
+    expect(new Set(outline.map((e) => e.ref)).size).toBe(outline.length);
   });
 
   it("takes the longest run of typed top-level numbers, never 1.1 or an enumeration", () => {
@@ -256,11 +363,13 @@ describe("outline text", () => {
       })?.args as Record<string, string>;
 
     const large = facet("too-large");
-    expect(large.heading_outline).toMatch(/^Sections of the document/);
+    expect(large.heading_outline).toMatch(/^Each line: \[ref\|/);
     expect(large.heading_outline).toContain("|H1|");
     expect(large.authoring_status).toMatch(/^available /);
     expect(large.authoring_status).toContain("section:{ref}");
-    expect(large.truncation_note).toContain("heading_outline");
+    expect(large.authoring_status).toContain("the Outline");
+    expect(large.truncation_note).toContain("the Outline");
+    expect(Object.values(large).join("\n")).not.toContain("heading_outline");
     expect(facet().heading_outline).toBe("");
   });
 });

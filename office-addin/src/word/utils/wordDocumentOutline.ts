@@ -1,3 +1,5 @@
+import { wordBuiltInParagraphStyle } from "@erato/frontend/word-review";
+
 import { HEADING_OUTLINE_BUDGET_BYTES } from "./buildWordDocumentArgs";
 import { wordReadableSourceBlock } from "./wordAuthoringReadData";
 import { WORD_READ_PAGE_BYTES } from "./wordReadFragments";
@@ -8,7 +10,7 @@ import type {
   WordSourceBlock,
 } from "@erato/frontend/word-review";
 
-export const MAX_OUTLINE_ENTRIES = 300;
+const MAX_OUTLINE_ENTRIES = 300;
 const TITLE_CHARS = 80;
 /** A span the headings leave larger than three pages gets the fallback outline inside it. */
 const FALLBACK_SPAN_BYTES = 3 * WORD_READ_PAGE_BYTES;
@@ -20,7 +22,8 @@ const MIN_NUMBERED_SECTIONS = 3;
 const TOP_LEVEL_NUMBER = /^(§\s*)?(\d+)\.?\s+\S/u;
 /** A typed number at any level, such as "4.1 ". */
 const CLAUSE_NUMBER = /^(§\s*)?\d+(\.\d+)*\.?\s+\S/u;
-const HEADING_STYLE = /^heading\s?([1-9])$/i;
+/** The capture's own fallback for a heading style it finds no outline level for. */
+const HEADING_STYLE_ID = /^Heading([1-9])$/i;
 const START_OF_DOCUMENT = "(start of document)";
 
 /** H: a heading; S: a numbered section; P: a part of about 20 KiB where nothing else structures a span. */
@@ -63,7 +66,6 @@ const captures = new WeakMap<
 >();
 const encoder = new TextEncoder();
 
-/** Body block ref to its index in snapshot.blocks. */
 export function wordBlockIndex(
   snapshot: WordAuthoringSnapshot,
 ): ReadonlyMap<string, number> {
@@ -77,25 +79,21 @@ export function wordBlockIndex(
 
 export const wordOutlineKib = (bytes: number) => Math.round(bytes / 102.4) / 10;
 
-/** One line of at most 80 code points. */
 export const wordOutlineTitle = (text: string) =>
   Array.from(text.replace(/\s+/gu, " ").trim()).slice(0, TITLE_CHARS).join("");
 const isParagraph = (b: WordSourceBlock) => b.type !== "native";
 const isEmptyParagraph = (b: WordSourceBlock) =>
   isParagraph(b) && !b.text.trim();
 
-const isTitleStyle = (name: string) => name.toLowerCase() === "title";
-
 function headingStyleLevels(
   styles: WordAuthoringSnapshot["styles"],
 ): Map<string, number> {
   const levels = new Map<string, number>();
   for (const style of styles) {
-    const match =
-      HEADING_STYLE.exec(style.id) ?? HEADING_STYLE.exec(style.name);
-    if (match) levels.set(style.id, Number(match[1]));
-    else if (isTitleStyle(style.id) || isTitleStyle(style.name))
-      levels.set(style.id, 0);
+    const builtIn = wordBuiltInParagraphStyle(style.name);
+    const heading = builtIn && HEADING_STYLE_ID.exec(builtIn);
+    if (heading) levels.set(style.id, Number(heading[1]));
+    else if (builtIn === "Title") levels.set(style.id, 0);
   }
   return levels;
 }
@@ -109,15 +107,12 @@ function headingLevel(
 ): number | undefined {
   if (!isParagraph(block) || !block.text.trim()) return undefined;
   if (block.type === "heading" && block.level) return block.level;
+  if (block.outlineLevel) return block.outlineLevel;
   if (!block.styleRef) return undefined;
   const level = styleLevels.get(block.styleRef);
   if (level !== undefined) return level;
-  const match = HEADING_STYLE.exec(block.styleRef);
-  return match
-    ? Number(match[1])
-    : isTitleStyle(block.styleRef)
-      ? 0
-      : undefined;
+  const match = HEADING_STYLE_ID.exec(block.styleRef);
+  return match ? Number(match[1]) : undefined;
 }
 
 interface Span {
@@ -202,6 +197,8 @@ function buildSections(snapshot: WordAuthoringSnapshot): WordCaptureSections {
   const paragraphs = (from: number, to: number) =>
     paragraphSums[to] - paragraphSums[from];
 
+  const hasContent = (from: number, to: number) =>
+    blocks.slice(from, to).some((b) => !isParagraph(b) || b.text.trim());
   const clauseStart = (i: number) => {
     const b = blocks[i];
     return (
@@ -239,13 +236,19 @@ function buildSections(snapshot: WordAuthoringSnapshot): WordCaptureSections {
       wordNumberingStarts(blocks, from, to) ??
       typedNumberStarts(blocks, from, to);
     if (!starts) return null;
-    const bounds = [...(starts[0] > from ? [from] : []), ...starts, to];
+    const bounds = [
+      ...(hasContent(from, starts[0])
+        ? [from, ...starts]
+        : [from, ...starts.slice(1)]),
+      to,
+    ];
+    // Parts start after the section's first block, so each has a ref of its own that reads it.
     return bounds.slice(0, -1).flatMap((start, k) => {
       const end = bounds[k + 1];
       return [
         { from: start, to: end, level, tag: "S" as const },
         ...(spanBytes(start, end) > FALLBACK_SPAN_BYTES
-          ? slices(start, end, level + 1)
+          ? slices(start + 1, end, level + 1)
           : []),
       ];
     });
@@ -264,7 +267,6 @@ function buildSections(snapshot: WordAuthoringSnapshot): WordCaptureSections {
     from: span.from,
     to: span.to,
   });
-  /** Numbered sections where they are detected and fit the caps, otherwise parts. */
   const fallback = (from: number, to: number, level: number): Span[] => {
     const sections = numbered(from, to, level);
     if (sections && sections.length <= MAX_OUTLINE_ENTRIES) {
@@ -289,7 +291,7 @@ function buildSections(snapshot: WordAuthoringSnapshot): WordCaptureSections {
   if (heads.every((h) => h.title)) spans.push(...fallback(0, blocks.length, 1));
   else {
     const first = heads[0].i;
-    if (blocks.slice(0, first).some((b) => !isParagraph(b) || b.text.trim()))
+    if (hasContent(0, first))
       spans.push(
         ...(spanBytes(0, first) > FALLBACK_SPAN_BYTES
           ? fallback(0, first, 1)
@@ -373,7 +375,7 @@ export function wordOutlineLine(entry: WordOutlineEntry): string {
 }
 
 const OUTLINE_HEADER =
-  "Sections of the document as [ref|H<level> heading, S numbered section or P part|size|paragraphs] title; read_document_blocks section:{ref} reads one in pages of up to 20 KiB:";
+  "Each line: [ref|H<level> heading, S numbered section or P part|size|paragraphs] title";
 
 /** heading_outline for a capture too large for a complete read, within 8 KiB and 300 entries:
  * the deepest level goes first, then the tail. */

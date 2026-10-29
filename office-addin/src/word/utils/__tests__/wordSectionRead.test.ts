@@ -9,23 +9,23 @@ import {
   chapter,
   clauseText,
   heading,
+  okResult,
+  openReadSession,
+  readContext,
   sectionPackageXml,
   sectionSnapshot,
+  untouchedWriteState,
+  writeState,
 } from "../../../test/mocks/word/sectionFixtures";
 import { wordDocumentOutline } from "../wordDocumentOutline";
-import { WordDocumentReadSession } from "../wordDocumentReadTool";
 import { createWordDocumentSubmissionExecutor } from "../wordDocumentSubmission";
 import { captureWordAuthoringSnapshot } from "../wordDocumentXml";
 import { WORD_READ_PAGE_BYTES } from "../wordReadFragments";
 
 import type { SectionBlock } from "../../../test/mocks/word/sectionFixtures";
-import type {
-  ClientToolExecutionResult,
-  ClientToolExecutor,
-} from "@erato/frontend/library";
+import type { ClientToolExecutionResult } from "@erato/frontend/library";
 import type { WordAuthoringSnapshot } from "@erato/frontend/word-review";
 
-const context = { chatId: "chat-A", messageId: "message-A", toolCallId: "r" };
 const bytes = (value: unknown) =>
   new TextEncoder().encode(JSON.stringify(value)).length;
 
@@ -55,29 +55,11 @@ interface SectionPage {
 }
 
 function open(snapshot: WordAuthoringSnapshot) {
-  const session = new WordDocumentReadSession();
-  session.activate(snapshot, context);
-  const call =
-    (executor: ClientToolExecutor) => (args: Record<string, unknown>) =>
-      executor(
-        {
-          snapshot: snapshot.token,
-          documentIdentity: snapshot.identity,
-          ...args,
-        },
-        context,
-      );
-  return {
-    session,
-    read: call(session.execute),
-    readOnly: call(session.executeReadOnly),
-  };
+  const { session, execute, readOnly } = openReadSession(snapshot);
+  return { session, read: execute, readOnly };
 }
-const page = (result: ClientToolExecutionResult): SectionPage => {
-  expect(result.ok, JSON.stringify(result).slice(0, 400)).toBe(true);
-  if (!result.ok) throw new Error(result.error);
-  return result.result as SectionPage;
-};
+const page = (result: ClientToolExecutionResult) =>
+  okResult<SectionPage>(result);
 async function readSection(
   read: ReturnType<typeof open>["read"],
   section: Record<string, unknown>,
@@ -94,14 +76,6 @@ async function readSection(
   } while (cursor && pages.length < 50);
   return pages;
 }
-const writeState = (snapshot: WordAuthoringSnapshot) => ({
-  readScopes: snapshot.readScopes?.size ?? 0,
-  read: snapshot.read.size,
-  readToken: snapshot.readToken,
-  used: snapshot.used,
-});
-const untouched = { readScopes: 0, read: 0, readToken: undefined, used: false };
-
 const document = (sizes: number[]) => [
   body("Master Services Agreement"),
   ...sizes.flatMap((kib, k) => chapter(k + 1, kib)),
@@ -139,31 +113,75 @@ describe("section pages", () => {
     expect(
       pages.flatMap((p) => p.blocks).find((b) => b.type === "native"),
     ).toMatchObject({ content: { rows: expect.any(Array) } });
-    expect(writeState(snapshot)).toEqual(untouched);
+    expect(writeState(snapshot)).toEqual(untouchedWriteState);
   });
 
-  it("returns for every outline entry exactly the size and paragraphs the outline lists", async () => {
-    const snapshot = sectionSnapshot(document([3, 30, 18, 52]));
-    const { read } = open(snapshot);
-    const outline = wordDocumentOutline(snapshot);
-    expect(outline.length).toBeGreaterThan(12);
-
-    for (const entry of outline) {
-      const pages = await readSection(read, { ref: entry.ref });
-      const blocks = pages.flatMap((p) => p.blocks);
-      expect(pages[0].section).toMatchObject({
-        kib: entry.kib,
-        paragraphs: entry.paragraphs,
-        level: entry.level,
-        title: entry.title,
-      });
-      expect(Math.round(bytes(blocks) / 102.4) / 10).toBe(entry.kib);
-      expect(blocks.filter((b) => b.type !== "native")).toHaveLength(
-        entry.paragraphs,
-      );
-      expect(pages.length).toBe(Math.max(1, Math.ceil(entry.kib / 20)));
-    }
+  const numbered = (n: number): SectionBlock => ({
+    type: "list-item",
+    level: 0,
+    list: "existing-1",
+    ordered: true,
+    text: `Section ${n}`,
   });
+  const clauses = (count: number, seed = 0) =>
+    Array.from({ length: count }, (_, k) => body(clauseText(seed + k)));
+  it.each([
+    ["headings", document([3, 30, 18, 52])],
+    [
+      "Word-numbered sections, one above 60 KiB",
+      [2, 190, 2].flatMap((count, k) => [
+        numbered(k + 1),
+        ...clauses(count, k),
+      ]),
+    ],
+    [
+      "typed sections after front matter above 60 KiB",
+      [
+        ...clauses(170),
+        ...[1, 2, 3].flatMap((n) => [
+          body(`§ ${n} Subject ${n}`),
+          ...clauses(4, n),
+        ]),
+      ],
+    ],
+    [
+      "a heading's own text above 60 KiB in typed sections",
+      [
+        heading(1, "Annex"),
+        ...[30, 170, 30].flatMap((count, k) => [
+          body(`${k + 1}. Subject ${k + 1}`),
+          ...clauses(count, k),
+        ]),
+        heading(1, "Signatures"),
+        body("Signed"),
+      ],
+    ],
+  ] as const)(
+    "returns for every outline entry exactly the size and paragraphs it lists: %s",
+    async (_name, blocks) => {
+      const snapshot = sectionSnapshot([...blocks]);
+      const { read } = open(snapshot);
+      const outline = wordDocumentOutline(snapshot);
+      expect(outline.length).toBeGreaterThan(3);
+      expect(outline.some((e) => e.tag !== "H" || e.level > 1)).toBe(true);
+
+      for (const entry of outline) {
+        const pages = await readSection(read, { ref: entry.ref });
+        const blocks = pages.flatMap((p) => p.blocks);
+        expect(pages[0].section).toMatchObject({
+          kib: entry.kib,
+          paragraphs: entry.paragraphs,
+          level: entry.level,
+          title: entry.title,
+        });
+        expect(Math.round(bytes(blocks) / 102.4) / 10).toBe(entry.kib);
+        expect(blocks.filter((b) => b.type !== "native")).toHaveLength(
+          entry.paragraphs,
+        );
+        expect(pages.length).toBe(Math.max(1, Math.ceil(entry.kib / 20)));
+      }
+    },
+  );
 
   it("reads a range by throughRef and from a block that starts no section", async () => {
     const snapshot = sectionSnapshot(document([12, 12]));
@@ -286,7 +304,7 @@ describe("section pages", () => {
           documentIdentity: snapshot.identity,
           section: { ref: "b1" },
         },
-        context,
+        readContext,
       ),
     ).toMatchObject({
       ok: false,
@@ -299,7 +317,7 @@ describe("section pages", () => {
           documentIdentity: snapshot.identity,
           section: { ref: "b1" },
         },
-        { ...context, messageId: "message-B" },
+        { ...readContext, messageId: "message-B" },
       ),
     ).toMatchObject({
       ok: false,
@@ -330,7 +348,7 @@ describe("a capture too large for a complete read", () => {
         pages += (await readSection(read, { ref: entry.ref })).length;
         if (pages >= 50) break;
       }
-    expect(writeState(snapshot)).toEqual(untouched);
+    expect(writeState(snapshot)).toEqual(untouchedWriteState);
 
     const paragraphs = snapshot.blocks.filter((b) =>
       b.text.startsWith("The Supplier shall"),
@@ -366,7 +384,7 @@ describe("a capture too large for a complete read", () => {
           ],
         },
       },
-      context,
+      readContext,
     );
     expect(submitted.ok, JSON.stringify(submitted).slice(0, 400)).toBe(true);
     if (!submitted.ok) throw new Error(submitted.error);

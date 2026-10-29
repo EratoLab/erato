@@ -1,6 +1,11 @@
+import { expect } from "vitest";
+
 import { packageXml } from "./authoringFixtures";
 import { escapeXml } from "../../../utils/escapeXml";
+import { WordDocumentReadSession } from "../../../word/utils/wordDocumentReadTool";
 
+import type { WordReadAccess } from "../../../word/utils/wordReadAccess";
+import type { ClientToolExecutionResult } from "@erato/frontend/library";
 import type {
   WordAuthoringSnapshot,
   WordSourceBlock,
@@ -125,3 +130,56 @@ export function sectionPackageXml(blocks: SectionBlock[]): string {
       .join(""),
   );
 }
+
+export const readContext = {
+  chatId: "chat-A",
+  messageId: "message-A",
+  toolCallId: "r",
+};
+
+/** A read session on the snapshot, owned by readContext; calls fill in snapshot and documentIdentity. */
+export function openReadSession(
+  snapshot: WordAuthoringSnapshot,
+  access?: WordReadAccess,
+) {
+  const session = new WordDocumentReadSession();
+  session.activate(
+    snapshot,
+    readContext,
+    undefined,
+    access ? { access } : undefined,
+  );
+  const args = (extra: Record<string, unknown>) => ({
+    snapshot: snapshot.token,
+    documentIdentity: snapshot.identity,
+    ...extra,
+  });
+  return {
+    session,
+    execute: (extra: Record<string, unknown>) =>
+      session.execute(args(extra), readContext),
+    readOnly: (extra: Record<string, unknown>) =>
+      session.executeReadOnly(args(extra), readContext),
+  };
+}
+
+export function okResult<T = Record<string, unknown>>(
+  response: ClientToolExecutionResult,
+): T {
+  expect(response.ok, JSON.stringify(response).slice(0, 400)).toBe(true);
+  if (!response.ok) throw new Error(response.error);
+  return response.result as T;
+}
+
+export const writeState = (snapshot: WordAuthoringSnapshot) => ({
+  readScopes: snapshot.readScopes?.size ?? 0,
+  read: snapshot.read.size,
+  readToken: snapshot.readToken,
+  used: snapshot.used,
+});
+export const untouchedWriteState = {
+  readScopes: 0,
+  read: 0,
+  readToken: undefined,
+  used: false,
+};

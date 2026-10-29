@@ -11,6 +11,8 @@ export interface WordReadFragment {
   type: string;
   level?: number;
   styleRef?: string;
+  list?: string;
+  ordered?: boolean;
   protected: boolean;
   part: number;
   parts: number;
@@ -24,15 +26,16 @@ export interface WordReadFragment {
   structureParts?: number;
 }
 
-export interface WordReadRecord {
-  ref: string;
-  type: string;
-  protected: boolean;
-  text: string;
-  runs?: WordPlanRun[];
-  structure: Record<string, unknown>;
-  [key: string]: unknown;
-}
+export type WordReadRecord = (
+  | Omit<WordReadableSourceBlock, "content" | "objects" | "format">
+  | {
+      ref: string;
+      type: "story" | "sections";
+      protected: boolean;
+      text: string;
+      runs?: undefined;
+    }
+) & { structure: Record<string, unknown> };
 
 /** A block as the complete read pages it: its text, with the rest as a structure object. */
 export function wordReadRecord(block: WordReadableSourceBlock): WordReadRecord {
@@ -47,10 +50,9 @@ export function wordReadRecord(block: WordReadableSourceBlock): WordReadRecord {
   };
 }
 
-const utf8Bytes = (value: unknown) =>
+export const wordReadJsonBytes = (value: unknown) =>
   new TextEncoder().encode(JSON.stringify(value)).length;
 
-/** Text pieces that each fit a page, then the structure JSON in parts; numbered part of parts. */
 export function wordReadFragments({
   text,
   runs,
@@ -79,13 +81,16 @@ export function wordReadFragments({
           : [];
       });
       fragment = {
-        ...(block as Omit<WordReadFragment, "text" | "part" | "parts">),
+        ...block,
         text: piece,
         ...(pieceRuns ? { runs: pieceRuns } : {}),
         part: fragments.length + 1,
         parts: 0,
       };
-      if (utf8Bytes(fragment) <= WORD_READ_PAGE_BYTES || end <= offset + 1)
+      if (
+        wordReadJsonBytes(fragment) <= WORD_READ_PAGE_BYTES ||
+        end <= offset + 1
+      )
         break;
       end = offset + Math.max(1, Math.floor((end - offset) / 2));
     }
@@ -113,4 +118,17 @@ export function wordReadFragments({
   }
   for (const fragment of fragments) fragment.parts = fragments.length;
   return fragments;
+}
+
+/** The index of each page's first item, packing items of these JSON sizes greedily into pages. */
+export function wordReadPageStarts(bytes: readonly number[]): number[] {
+  const starts: number[] = [];
+  let size = 0;
+  bytes.forEach((itemBytes, k) => {
+    if (!starts.length || size + 1 + itemBytes > WORD_READ_PAGE_BYTES) {
+      starts.push(k);
+      size = 2 + itemBytes;
+    } else size += 1 + itemBytes;
+  });
+  return starts;
 }

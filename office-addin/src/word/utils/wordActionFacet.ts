@@ -8,6 +8,7 @@ import {
 } from "@erato/frontend/word-review";
 
 import { wordDocumentOutlineText } from "./wordDocumentOutline";
+import { WORD_READ_PAGE_BYTES } from "./wordReadFragments";
 import { wordSelectionWithoutKeptItems } from "./wordSelectionAnchor";
 import { wordSelectionFacetArgs } from "./wordSelectionArgs";
 import { advertisedFacetArgs } from "../../core/clientActions/actionFacetArgs";
@@ -294,7 +295,7 @@ function wordAuthoringStatus(authoring: WordAuthoringSnapshot): string {
     return `${authoring.issue}${authoring.issueDetails?.length ? ` (${authoring.issueDetails.join(", ")})` : ""}`;
   // Starts with "available" because the facet prompt only submits plans when the status is available.
   if (authoring.completeReadIssue)
-    return `available for scoped reads and scoped edits only. Complete reads, whole-document plans and repairs are unavailable (${authoring.completeReadIssue}: the document exceeds the complete-read limit). heading_outline lists the document's sections with their sizes: read a section with read_document_blocks section:{ref} and follow nextCursor, in pages of up to 20 KiB that use no write scope. Use target, target.queries and table_cell reads only for what you edit, up to ${MAX_WORD_SCOPE_TARGETS} targets and ${MAX_WORD_SCOPE_BYTES / 1024} KiB per response; submit scoped_edit or table_cell changes.`;
+    return `available for scoped reads and scoped edits only. Complete reads, whole-document plans and repairs are unavailable (${authoring.completeReadIssue}: the document exceeds the complete-read limit). Read the sections the request needs from the Outline with read_document_blocks section:{ref}, in pages of up to ${WORD_READ_PAGE_BYTES / 1024} KiB that use no write scope. Use target, target.queries and table_cell reads only for what you edit, up to ${MAX_WORD_SCOPE_TARGETS} targets and ${MAX_WORD_SCOPE_BYTES / 1024} KiB per response; submit scoped_edit or table_cell changes.`;
   return "available";
 }
 
@@ -313,7 +314,7 @@ export function wordAuthoringDocumentArgs(
     heading_outline: tooLarge ? wordDocumentOutlineText(authoring) : "",
     paragraphs_sent: "0",
     truncation_note: tooLarge
-      ? "No paragraphs are included in this initial context. The document is too large to read completely: heading_outline lists its sections with their sizes. Read the sections the request needs with read_document_blocks section:{ref} pages, use target, target.queries or table_cell only for what you edit, and say which parts an answer covers."
+      ? "No paragraphs are included in this initial context. The document is too large to read completely: read the sections the request needs from the Outline with section:{ref} pages, and say which parts an answer covers."
       : "Document content is available through read_document_blocks; no paragraphs are included in this initial context.",
   };
 }

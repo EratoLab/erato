@@ -16,17 +16,16 @@ import {
 } from "./wordAuthoringReadData";
 import { wordBlockIndex } from "./wordDocumentOutline";
 import {
+  WORD_READ_ONLY_FIELDS,
+  wordReadRefusedByIssue,
+} from "./wordReadAccess";
+import {
   WORD_SCOPED_GUIDANCE,
   wordScopedReadContract,
 } from "./wordScopedReadContract";
-import {
-  WORD_DOCUMENT_CONTENT_NOTICE,
-  WORD_READ_ONLY_ACCESS,
-  wordReadIssueBlocks,
-} from "./wordSectionRead";
 
+import type { WordReadAccess } from "./wordReadAccess";
 import type { WordScopedGuidance } from "./wordScopedReadContract";
-import type { WordReadAccess } from "./wordSectionRead";
 import type { ClientToolExecutionResult } from "@erato/frontend/library";
 import type {
   WordScopeTarget,
@@ -42,7 +41,12 @@ const inventories = new WeakMap<
   WordAuthoringSnapshot,
   { fingerprint: string; targets: WordScopeTarget[] }
 >();
-const attempts = new WeakMap<WordAuthoringSnapshot, Map<string, number>>();
+/** Read-only readers, such as calls under a grant, count their own searches, so the coordinator's
+ * repeatedQuery reflects only its own. */
+const attempts: Record<
+  WordReadAccess,
+  WeakMap<WordAuthoringSnapshot, Map<string, number>>
+> = { write: new WeakMap(), "read-only": new WeakMap() };
 const snippet = (s: string) => ({
   text: cutToUtf8Bytes(s, 256),
   truncated: encoder.encode(s).length > 256,
@@ -306,7 +310,7 @@ export function readWordTargets(
   if (
     snapshot.revoked ||
     snapshot.used ||
-    wordReadIssueBlocks(snapshot, access)
+    wordReadRefusedByIssue(snapshot, access)
   )
     return fail("snapshot-unavailable", "Use an active, available capture.");
   if (
@@ -391,11 +395,11 @@ export function readWordTargets(
       }
     : selections[0].base;
   if (selections.some((s) => !s.ready)) {
-    const counts = attempts.get(snapshot) ?? new Map<string, number>();
+    const counts = attempts[access].get(snapshot) ?? new Map<string, number>();
     const key = JSON.stringify(input.target);
     const count = (counts.get(key) ?? 0) + 1;
     if (counts.size < 64 || counts.has(key)) counts.set(key, count);
-    attempts.set(snapshot, counts);
+    attempts[access].set(snapshot, counts);
     return {
       ok: true,
       result: {
@@ -443,12 +447,7 @@ export function readWordTargets(
         ...base,
         ...context,
         status: "ready",
-        ...(readOnly
-          ? {
-              access: WORD_READ_ONLY_ACCESS,
-              contentNotice: WORD_DOCUMENT_CONTENT_NOTICE,
-            }
-          : { readToken: "0".repeat(36) }),
+        ...(readOnly ? WORD_READ_ONLY_FIELDS : { readToken: "0".repeat(36) }),
         maxContextBytes: MAX_WORD_SCOPE_BYTES,
         fullDocument: !!snapshot.fullDocument,
       }),
@@ -460,10 +459,9 @@ export function readWordTargets(
         ...base,
         status: "unsupported",
         reason: "scope-context-limit",
-        fallback: readOnly
-          ? "narrow-target-or-section"
-          : snapshot.completeReadIssue
-            ? "narrow-target"
+        fallback:
+          readOnly || snapshot.completeReadIssue
+            ? "narrow-target-or-section"
             : "narrow-target-or-complete-read",
         maxContextBytes: MAX_WORD_SCOPE_BYTES,
       },
@@ -483,7 +481,9 @@ export function readWordTargets(
   if (snapshot.readScopes.size >= MAX_WORD_SCOPES)
     return fail(
       "scope-limit",
-      "Scoped read limit reached; use a fresh request or complete read.",
+      snapshot.completeReadIssue
+        ? "Scoped read limit reached; read further sections with section:{ref} pages, which use no write scope, or use a fresh request."
+        : "Scoped read limit reached; use a fresh request or complete read.",
     );
   const readToken = globalThis.crypto.randomUUID();
   snapshot.readScopes.set(readToken, {

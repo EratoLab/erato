@@ -98,6 +98,9 @@ export interface WordSourceBlock {
   sectionBoundary?: boolean;
   /** Host-only navigation mapping; block references are not paragraph ordinals. */
   paragraphOrdinal?: number;
+  /** Host-only: the heading level a list item's paragraph or style gives it (w:outlineLvl + 1), which
+   * its list-item type hides. */
+  outlineLevel?: number;
   level?: number;
   styleRef?: string;
   protected: boolean;
