@@ -1,14 +1,33 @@
 //! The cases every host context must pass, run once per row of `rows`.
 use super::super::executor_stream::wait_released;
 use super::slow_path::{
+    a_child_that_finishes_while_approvals_are_open_keeps_the_parent_parked,
+    a_child_that_parks_on_a_second_grant_call_updates_its_waiting_item,
     a_claimed_grant_operation_is_authorized_while_the_parent_is_parked_on_the_child,
+    a_device_decline_ends_the_durable_call_as_declined,
+    a_device_prompt_answered_after_the_tool_timeout_completes_within_the_attempt,
+    a_durable_and_a_live_child_only_the_durable_one_waits,
     a_durable_child_call_parks_and_the_parent_shows_what_it_waits_for,
+    a_durable_child_call_waits_for_a_client_and_the_parent_resumes,
+    a_durable_child_that_finishes_before_the_parent_parks_resumes_the_parent_once,
     a_grant_operation_is_withdrawn_once_the_parent_chat_is_archived,
     a_grant_operation_result_is_refused_without_a_claim,
     a_pane_without_grant_support_cannot_claim_a_grant_operation,
+    a_parent_errored_after_its_decisions_resumes_once_when_the_waiting_child_finishes,
+    a_restart_while_parked_gives_one_continuation_and_no_duplicate_calls,
+    a_waiting_call_is_withdrawn_once_the_parent_moved_on,
+    a_waiting_child_that_parks_on_an_ask_during_the_decision_continuation_reparks_as_an_approval,
+    a_waiting_childs_continuation_is_offered_its_granted_tools_while_the_parent_is_parked,
+    a_withdrawn_childs_ask_is_answerable_in_its_own_chat,
+    an_approved_child_call_on_a_durable_tool_waits_and_the_parent_shows_it,
     an_empty_continuestream_while_children_wait_is_children_waiting,
+    approvals_decided_while_a_child_waits_repark_on_the_waiting_child,
     continuestream_refuses_a_decision_naming_a_waiting_item,
     continuestream_refuses_a_single_decision_when_only_waiting_items_are_open,
+    no_client_before_the_attempt_ends_gives_expired,
+    resume_parked_refuses_a_chat_whose_generation_moved_on,
+    the_sweep_settles_a_waiting_child_whose_tail_never_ran_and_an_empty_continue_resumes_the_parent,
+    two_waiting_children_one_still_running_give_one_parent_continuation_with_both_answers,
 };
 use super::*;
 use crate::test_utils::build_openai_paused_tool_calls_streaming_response;
@@ -91,6 +110,25 @@ macro_rules! host_conformance {
             continuestream_refuses_a_decision_naming_a_waiting_item
             continuestream_refuses_a_single_decision_when_only_waiting_items_are_open
             an_empty_continuestream_while_children_wait_is_children_waiting
+            a_durable_child_call_waits_for_a_client_and_the_parent_resumes
+            a_waiting_childs_continuation_is_offered_its_granted_tools_while_the_parent_is_parked
+            a_device_prompt_answered_after_the_tool_timeout_completes_within_the_attempt
+            a_device_decline_ends_the_durable_call_as_declined
+            no_client_before_the_attempt_ends_gives_expired
+            a_durable_and_a_live_child_only_the_durable_one_waits
+            a_durable_child_that_finishes_before_the_parent_parks_resumes_the_parent_once
+            two_waiting_children_one_still_running_give_one_parent_continuation_with_both_answers
+            approvals_decided_while_a_child_waits_repark_on_the_waiting_child
+            a_child_that_finishes_while_approvals_are_open_keeps_the_parent_parked
+            a_waiting_child_that_parks_on_an_ask_during_the_decision_continuation_reparks_as_an_approval
+            an_approved_child_call_on_a_durable_tool_waits_and_the_parent_shows_it
+            a_child_that_parks_on_a_second_grant_call_updates_its_waiting_item
+            a_parent_errored_after_its_decisions_resumes_once_when_the_waiting_child_finishes
+            resume_parked_refuses_a_chat_whose_generation_moved_on
+            a_restart_while_parked_gives_one_continuation_and_no_duplicate_calls
+            the_sweep_settles_a_waiting_child_whose_tail_never_ran_and_an_empty_continue_resumes_the_parent
+            a_waiting_call_is_withdrawn_once_the_parent_moved_on
+            a_withdrawn_childs_ask_is_answerable_in_its_own_chat
         ]);
     };
     ($name:ident: $row:ident($($arg:expr),*) $(, ignore = $why:literal)?) => {
