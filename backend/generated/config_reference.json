@@ -551,6 +551,8 @@
     "deprecated": {
       "note": "Please use `facets.facets.<facet-id>.child_chat_provider` instead.",
       "replacement_key": "facets.facets.<facet-id>.child_chat_provider"
+    }
+  },
   "experimental_facets.facets.<facet-id>.child_host_context": {
     "hide_in_docs": true,
     "deprecated": {
