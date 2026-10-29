@@ -1,4 +1,5 @@
 /* eslint-disable lingui/no-unlocalized-strings -- Internal operation states and fixed errors. */
+import { clientToolAcceptsGrantCalls } from "@/hooks/chat/clientToolExecutors";
 import {
   fetchListClientOperations,
   fetchClaimClientOperation,
@@ -49,9 +50,14 @@ export interface ClientOperationApi {
   cancel(id: string, signal: AbortSignal): Promise<unknown>;
 }
 function headers(request: OperationRequest): Record<string, string> {
+  const tool = request.operation_id.split("/").at(-1) ?? "";
   return {
-    "X-Erato-Client-Tools": request.operation_id.split("/").at(-1) ?? "",
+    "X-Erato-Client-Tools": tool,
     "X-Erato-Executor": JSON.stringify(request.binding),
+    // A task's call is claimed only by a pane whose handler checks its grant.
+    ...(request.lineage && clientToolAcceptsGrantCalls(tool)
+      ? { "X-Erato-Child-Client-Tools": tool }
+      : {}),
   };
 }
 export const clientOperationApi: ClientOperationApi = {
@@ -109,6 +115,10 @@ export interface ClientOperationHandler {
   reset?(): void;
   dispose?(): void;
 }
+// Renewals never come closer together than this, so a claim cut short by the
+// attempt's end is not re-claimed in a loop.
+const MIN_RENEWAL_MS = 1_000;
+
 function sameBinding(a: ExecutorBinding, b: ExecutorBinding): boolean {
   return (
     a.device_id === b.device_id &&
@@ -140,6 +150,7 @@ export class ClientOperationCoordinator {
   readonly #attached = new Set<string>();
   /** Attempts whose refused claim already had its early retry. */
   readonly #retried = new Set<string>();
+  readonly #grantRuns = new Set<string>();
   readonly #builtIns: readonly ClientOperationHandler[];
   readonly #unsubscribe: () => void;
   #stream: { key: string; controller: AbortController } | undefined;
@@ -169,6 +180,7 @@ export class ClientOperationCoordinator {
     this.#claims.clear();
     this.#attached.clear();
     this.#retried.clear();
+    this.#grantRuns.clear();
     this.#builtIns.forEach((handler) => handler.dispose?.());
   }
   #handlers(): readonly ClientOperationHandler[] {
@@ -335,6 +347,10 @@ export class ClientOperationCoordinator {
         }
         seen.add(request.attempt_id);
         this.#operations.set(request.attempt_id, operation);
+        // A task's call is continued or expired by any of the user's clients,
+        // so a closed pane never strands the task that waits on it.
+        if (request.lineage && (await this.#settleGrantCall(operation)))
+          continue;
         const handler = this.#handlerFor(request);
         // Unsupported kinds are discoverable but never claimed/executed.
         if (!handler) continue;
@@ -375,6 +391,10 @@ export class ClientOperationCoordinator {
           continue;
         }
         if (handler.defer?.(request)) continue;
+        if (request.lineage) {
+          this.#startGrantRun(request, handler);
+          continue;
+        }
         await withClientCallLock(request.message_id, request.tool_call_id, () =>
           this.#run(request, handler),
         );
@@ -432,6 +452,89 @@ export class ClientOperationCoordinator {
       this.#claims.delete(
         request.attempt_id,
       ); /* Never upload executor exceptions. */
+    }
+  }
+  /** Continues a task's call that has a result or has expired; true when
+   * nothing is left for a handler to do. */
+  async #settleGrantCall(operation: ClientOperationView): Promise<boolean> {
+    const { request, state } = operation;
+    if (state === "completed") return true;
+    const expired =
+      (state === "pending" || state === "claimed") &&
+      Date.parse(request.expires_at) <= Date.now();
+    if (!expired && state !== "ready" && state !== "continuing") return false;
+    try {
+      await this.api.continue(request.attempt_id, this.#abort.signal);
+    } catch {
+      /* Another client holds the continuation, or it retries next sweep. */
+    }
+    this.#check();
+    return true;
+  }
+  /** A task's call may hold a prompt on the device for as long as its attempt
+   * lives, so it runs beside the sweep instead of blocking it. */
+  #startGrantRun(
+    request: OperationRequest,
+    handler: ClientOperationHandler,
+  ): void {
+    const id = request.attempt_id;
+    if (this.#grantRuns.has(id)) return;
+    this.#grantRuns.add(id);
+    void withClientCallLock(request.message_id, request.tool_call_id, () =>
+      this.#runGrantCall(request, handler),
+    )
+      .catch(() => {
+        /* Retried on the next sweep. */
+      })
+      .finally(() => this.#grantRuns.delete(id));
+  }
+  async #runGrantCall(
+    request: OperationRequest,
+    handler: ClientOperationHandler,
+  ): Promise<void> {
+    const controller = new AbortController();
+    const stop = () => controller.abort();
+    this.#abort.signal.addEventListener("abort", stop, { once: true });
+    const attemptEnds = Date.parse(request.expires_at);
+    const timers: ReturnType<typeof setTimeout>[] = [
+      setTimeout(stop, Math.max(0, attemptEnds - Date.now())),
+    ];
+    let done = false;
+    try {
+      let claim = await this.#claim(request, handler);
+      // Re-claiming with the same binding extends a live claim; a lapsed one
+      // comes back with a new token, which is the one the result must carry.
+      const renewLater = () => {
+        const claimEnds = Date.parse(claim.expires_at);
+        if (done || claimEnds >= attemptEnds) return;
+        const delay = Math.max(MIN_RENEWAL_MS, (claimEnds - Date.now()) / 2);
+        timers.push(
+          setTimeout(() => {
+            void this.#claim(request, handler, true).then((renewed) => {
+              claim = renewed;
+              renewLater();
+            }, stop);
+          }, delay),
+        );
+      };
+      renewLater();
+      const result = await handler.execute(request, claim, controller.signal);
+      controller.signal.throwIfAborted();
+      if (!result) return;
+      await this.api.complete(
+        request,
+        claim.claim_token,
+        result,
+        this.#abort.signal,
+      );
+      this.#check();
+      await this.api.continue(request.attempt_id, this.#abort.signal);
+    } catch {
+      this.#claims.delete(request.attempt_id);
+    } finally {
+      done = true;
+      timers.forEach(clearTimeout);
+      this.#abort.signal.removeEventListener("abort", stop);
     }
   }
   async review(id: string): Promise<void> {
