@@ -81,6 +81,7 @@ describe("indexing statistics contract", () => {
       ),
     );
     delete previousConfiguration.properties.indexing_sources;
+    delete previousConfiguration.properties.policy_guides;
     const previousCoverage = JSON.parse(
       readFileSync(
         new URL(
@@ -186,7 +187,10 @@ describe("indexing statistics contract", () => {
     delete previous.definitions.Depth.properties.missingFromLocalCacheDocuments;
     const ajv = new Ajv({
       strict: true,
-      schemas: [readSchema("configuration/sidecar-configuration.schema.json")],
+      schemas: [
+        readSchema("configuration/sidecar-configuration.schema.json"),
+        readSchema("configuration/policy-guides.schema.json"),
+      ],
     });
     addFormats(ajv);
     const validatePrevious = ajv.compile(previous);

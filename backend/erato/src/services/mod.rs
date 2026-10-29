@@ -37,6 +37,7 @@ pub mod mcp_tool_approval;
 pub mod mcp_transports;
 pub mod mcp_wait;
 pub mod ms_graph;
+pub mod policy_guides;
 pub mod prompt_composition;
 pub mod prompt_guardrails;
 pub mod task_delivery;

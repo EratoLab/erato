@@ -68,6 +68,10 @@
         "required": ["source_id", "enabled", "priority"],
         "additionalProperties": true
       }
+    },
+    "policy_guides": {
+      "$ref": "policy-guides.schema.json",
+      "description": "Organization policy map, replaced as a whole. An empty policies map clears prior definitions. User-layer entries do not override organization policy guides."
     }
   },
   "additionalProperties": true

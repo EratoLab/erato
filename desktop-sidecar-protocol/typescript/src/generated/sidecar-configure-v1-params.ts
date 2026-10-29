@@ -65,5 +65,41 @@ export interface SidecarConfiguration {
         [k: string]: unknown;
       }[]
     | null;
+  policy_guides?: PolicyGuides;
+  [k: string]: unknown;
+}
+/**
+ * Organization policy map, replaced as a whole. An empty policies map clears prior definitions. User-layer entries do not override organization policy guides.
+ */
+export interface PolicyGuides {
+  policies: {
+    [k: string]: PolicyGuide;
+  };
+  [k: string]: unknown;
+}
+export interface PolicyGuide {
+  /**
+   * Disabled definitions are retained but must not be evaluated.
+   */
+  enabled: boolean;
+  question: string;
+  /**
+   * True predicate: the content should be refused.
+   */
+  choice_refuse: string;
+  /**
+   * False predicate: the content is allowed.
+   */
+  choice_allow: string;
+  /**
+   * Ordered provider IDs, highest priority first. No automatic fallback or local resolution is implied.
+   */
+  decision_providers: string[];
+  /**
+   * Arbitrary JSON values, preserved verbatim and not sent to the model.
+   */
+  metadata: {
+    [k: string]: unknown;
+  };
   [k: string]: unknown;
 }

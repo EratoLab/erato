@@ -18,6 +18,11 @@ const outputDirectory =
 
 const typeTargets = [
   [
+    "schemas/configuration/policy-guides.schema.json",
+    "policy-guides.ts",
+    "PolicyGuides",
+  ],
+  [
     "schemas/methods/sidecar-status-v1-params.schema.json",
     "sidecar-status-v1-params.ts",
     "SidecarStatusV1Params",

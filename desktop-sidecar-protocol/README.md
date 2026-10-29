@@ -37,6 +37,12 @@ It preserves source Outlook data and configuration. See [full reset semantics](S
 
 ## Quick start
 
+Package 0.1.40 adds typed organization policy guides to the existing configuration
+contract. Configuration delivery is independent of `localDelegation`; the sidecar
+decides whether it trusts and applies outside settings. Definitions and metadata
+can be retained without native policy execution. See [policy guides](SPEC.md#policy-guides)
+and the [configuration fixture](conformance/fixtures/policy-guides.json).
+
 ```sh
 cd desktop-sidecar-protocol
 pnpm install

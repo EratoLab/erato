@@ -689,6 +689,10 @@ pub struct AppConfig {
     #[serde(default)]
     pub decision_providers: DecisionProvidersConfig,
 
+    /// Organization-managed policy definitions, evaluated explicitly by consumers.
+    #[serde(default)]
+    pub policy_guides: PolicyGuidesConfig,
+
     // If true, enables the data-retention half of the cleanup worker's tick,
     // which archives quiet delegated runs and deletes old archived chats.
     //
@@ -1068,6 +1072,14 @@ pub struct DesktopSidecarOrganizationConfiguration {
     #[serde(default)]
     #[schema(nullable = true)]
     pub outlook_addin_id: Option<String>,
+}
+
+/// Derived wire configuration; policy guides have only one configuration source.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct DesktopSidecarOrganizationConfigurationResponse {
+    #[serde(flatten)]
+    pub settings: DesktopSidecarOrganizationConfiguration,
+    pub policy_guides: PolicyGuidesConfig,
 }
 
 impl AppConfig {
@@ -1876,6 +1888,9 @@ impl AppConfig {
         config
             .validate_decision_providers()
             .unwrap_or_else(|error| panic!("Invalid decision provider configuration: {error}"));
+        config
+            .validate_policy_guides()
+            .unwrap_or_else(|error| panic!("Invalid policy guide configuration: {error}"));
         validate_provider_replacements(&config.speech_providers.replacement_providers, |id| {
             config
                 .speech_providers
@@ -2242,18 +2257,20 @@ impl AppConfig {
         self.frontend.additional_environment.clone()
     }
 
-    /// Returns the organization configuration sent to the desktop sidecar, with
-    /// `outlook_addin_id` filled from the Office add-in when it is enabled and
-    /// the value is unset.
+    /// Returns organization configuration with the complete top-level policy map
+    /// and `outlook_addin_id` filled from the enabled Office add-in when unset.
     pub fn desktop_sidecar_organization_configuration(
         &self,
-    ) -> DesktopSidecarOrganizationConfiguration {
+    ) -> DesktopSidecarOrganizationConfigurationResponse {
         let mut configuration = self.desktop_sidecar.organization_configuration.clone();
         let addin = &self.integrations.ms_office.addin;
         if configuration.outlook_addin_id.is_none() && addin.enabled {
             configuration.outlook_addin_id = Some(addin.addin_id.trim().to_owned());
         }
-        configuration
+        DesktopSidecarOrganizationConfigurationResponse {
+            settings: configuration,
+            policy_guides: self.policy_guides.clone(),
+        }
     }
 
     /// Returns the list of available chat providers, filtered by the optional allowlist.
@@ -2499,6 +2516,40 @@ impl AppConfig {
                         && url.fragment().is_none(),
                     "Invalid decision provider base_url for {id}"
                 );
+            }
+        }
+        Ok(())
+    }
+
+    pub fn validate_policy_guides(&self) -> Result<(), Report> {
+        for (id, policy) in &self.policy_guides.policies {
+            eyre::ensure!(!id.trim().is_empty(), "Policy guide ID must not be empty");
+            if !policy.enabled {
+                continue;
+            }
+            for (field, value) in [
+                ("question", &policy.question),
+                ("choice_refuse", &policy.choice_refuse),
+                ("choice_allow", &policy.choice_allow),
+            ] {
+                eyre::ensure!(
+                    !value.trim().is_empty(),
+                    "Policy guide {id} requires nonblank {field}"
+                );
+            }
+            eyre::ensure!(
+                !policy.decision_providers.is_empty(),
+                "Policy guide {id} requires at least one decision provider"
+            );
+            let mut seen = std::collections::HashSet::new();
+            for provider_id in &policy.decision_providers {
+                eyre::ensure!(
+                    !provider_id.trim().is_empty() && seen.insert(provider_id),
+                    "Policy guide {id} requires nonblank, unique decision provider IDs"
+                );
+                self.resolve_decision_provider_id(provider_id).map_err(|_| {
+                    eyre!("Policy guide {id} references unavailable decision provider {provider_id}")
+                })?;
             }
         }
         Ok(())
@@ -6180,6 +6231,45 @@ impl Default for FileProcessorConfig {
             limits: FileExtractionLimits::default(),
         }
     }
+}
+
+#[derive(
+    Debug, Default, Deserialize, Serialize, PartialEq, Eq, Clone, Facet, ToSchema, HeapSize,
+)]
+pub struct PolicyGuidesConfig {
+    #[serde(default)]
+    #[schema(required = true)]
+    pub policies: HashMap<String, PolicyGuideConfig>,
+}
+
+#[derive(
+    Debug, Default, Deserialize, Serialize, PartialEq, Eq, Clone, Facet, ToSchema, HeapSize,
+)]
+pub struct PolicyGuideConfig {
+    /// Explicit opt-in; disabled definitions are still sent to the sidecar.
+    #[serde(default)]
+    #[schema(required = true)]
+    pub enabled: bool,
+    #[serde(default)]
+    #[schema(required = true)]
+    pub question: String,
+    /// Describes the true predicate: content should be refused under this policy.
+    #[serde(default)]
+    #[schema(required = true)]
+    pub choice_refuse: String,
+    /// Describes the false predicate: content is allowed under this policy.
+    #[serde(default)]
+    #[schema(required = true)]
+    pub choice_allow: String,
+    /// Highest priority first. Only the first provider is used, after replacement resolution.
+    #[serde(default)]
+    #[schema(required = true)]
+    pub decision_providers: Vec<String>,
+    /// Arbitrary JSON values; forwarded verbatim, never added to model instructions.
+    #[serde(default)]
+    #[schema(required = true)]
+    #[facet(opaque)]
+    pub metadata: HashMap<String, serde_json::Value>,
 }
 
 #[derive(Debug, Default, Deserialize, PartialEq, Clone, Facet, HeapSize)]

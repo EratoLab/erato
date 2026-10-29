@@ -1,0 +1,35 @@
+{
+  "user_configuration": {
+    "show_tray_icon": false,
+    "future_setting": {
+      "preserve": true
+    }
+  },
+  "organization_configuration": {
+    "policy_guides": {
+      "policies": {
+        "confidential": {
+          "enabled": true,
+          "question": "Does this contain confidential information?",
+          "choice_refuse": "Confidential information",
+          "choice_allow": "Only public information",
+          "decision_providers": ["primary", "secondary"],
+          "metadata": {
+            "label": "Confidential information",
+            "nested": {
+              "tags": ["upload", true, null, 2]
+            }
+          }
+        },
+        "disabled": {
+          "enabled": false,
+          "question": "",
+          "choice_refuse": "",
+          "choice_allow": "",
+          "decision_providers": [],
+          "metadata": {}
+        }
+      }
+    }
+  }
+}

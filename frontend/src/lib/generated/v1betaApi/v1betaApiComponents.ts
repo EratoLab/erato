@@ -4069,7 +4069,7 @@ export const fetchOrganizationConfiguration = (
   signal?: AbortSignal,
 ) =>
   v1betaApiFetch<
-    Schemas.DesktopSidecarOrganizationConfiguration,
+    Schemas.DesktopSidecarOrganizationConfigurationResponse,
     OrganizationConfigurationError,
     undefined,
     {},
@@ -4088,7 +4088,7 @@ export function organizationConfigurationQuery(
   queryKey: reactQuery.QueryKey;
   queryFn: (
     options: QueryFnOptions,
-  ) => Promise<Schemas.DesktopSidecarOrganizationConfiguration>;
+  ) => Promise<Schemas.DesktopSidecarOrganizationConfigurationResponse>;
 };
 
 export function organizationConfigurationQuery(
@@ -4098,7 +4098,7 @@ export function organizationConfigurationQuery(
   queryFn:
     | ((
         options: QueryFnOptions,
-      ) => Promise<Schemas.DesktopSidecarOrganizationConfiguration>)
+      ) => Promise<Schemas.DesktopSidecarOrganizationConfigurationResponse>)
     | reactQuery.SkipToken;
 };
 
@@ -4120,12 +4120,12 @@ export function organizationConfigurationQuery(
 }
 
 export const useSuspenseOrganizationConfiguration = <
-  TData = Schemas.DesktopSidecarOrganizationConfiguration,
+  TData = Schemas.DesktopSidecarOrganizationConfigurationResponse,
 >(
   variables: OrganizationConfigurationVariables,
   options?: Omit<
     reactQuery.UseQueryOptions<
-      Schemas.DesktopSidecarOrganizationConfiguration,
+      Schemas.DesktopSidecarOrganizationConfigurationResponse,
       OrganizationConfigurationError,
       TData
     >,
@@ -4134,7 +4134,7 @@ export const useSuspenseOrganizationConfiguration = <
 ) => {
   const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
   return reactQuery.useSuspenseQuery<
-    Schemas.DesktopSidecarOrganizationConfiguration,
+    Schemas.DesktopSidecarOrganizationConfigurationResponse,
     OrganizationConfigurationError,
     TData
   >({
@@ -4145,12 +4145,12 @@ export const useSuspenseOrganizationConfiguration = <
 };
 
 export const useOrganizationConfiguration = <
-  TData = Schemas.DesktopSidecarOrganizationConfiguration,
+  TData = Schemas.DesktopSidecarOrganizationConfigurationResponse,
 >(
   variables: OrganizationConfigurationVariables | reactQuery.SkipToken,
   options?: Omit<
     reactQuery.UseQueryOptions<
-      Schemas.DesktopSidecarOrganizationConfiguration,
+      Schemas.DesktopSidecarOrganizationConfigurationResponse,
       OrganizationConfigurationError,
       TData
     >,
@@ -4159,7 +4159,7 @@ export const useOrganizationConfiguration = <
 ) => {
   const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
   return reactQuery.useQuery<
-    Schemas.DesktopSidecarOrganizationConfiguration,
+    Schemas.DesktopSidecarOrganizationConfigurationResponse,
     OrganizationConfigurationError,
     TData
   >({

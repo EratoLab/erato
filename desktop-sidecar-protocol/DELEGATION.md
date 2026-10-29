@@ -53,10 +53,17 @@ No platform is qualified by this contract change.
 A strict-required installation refuses startup if native consent is unavailable.
 It must never downgrade to legacy on a command-line mode, reset, restart,
 missing helper, signature failure or unsupported OS. The RPC boundary denies
-legacy content, metadata, configuration, progress and diagnostic methods before
+legacy content, metadata, progress and diagnostic methods before
 running them. Native code must route every public path through these checks, including
 alternate modes and diagnostic serialization. Origin allowlisting or a frontend
 approval boolean does not authorize an export.
+
+Configuration delivery is an exception: clients do not use `localDelegation` to
+gate `sidecar.configure.v1`. The installed sidecar decides whether it trusts outside
+configuration calls and whether to take their values into account; it may reject
+or ignore them. Sending configuration does not weaken native content/export
+checks, and clients must respect sidecar rejection. See SPEC section 11 for
+configuration replacement and preservation of saved user settings.
 
 ## Account and device authentication
 

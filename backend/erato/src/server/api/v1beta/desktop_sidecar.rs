@@ -1,4 +1,4 @@
-use crate::config::DesktopSidecarOrganizationConfiguration;
+use crate::config::DesktopSidecarOrganizationConfigurationResponse;
 use crate::distribution::desktop_sidecar::{
     BootstrapTransport, DesktopSidecarDistribution, DistributionArtifact, DistributionTarget,
     EMBEDDED_BOOTSTRAP_SLOT_CAPACITY, encode_executable_bootstrap_slot,
@@ -104,7 +104,7 @@ impl From<&DistributionArtifact> for DesktopSidecarDistributionFileResponse {
     get,
     path = "/me/desktop-sidecar/organization-configuration",
     responses(
-        (status = OK, body = DesktopSidecarOrganizationConfiguration),
+        (status = OK, body = DesktopSidecarOrganizationConfigurationResponse),
         (status = UNAUTHORIZED, description = "When no valid JWT token is provided")
     ),
     security(
@@ -115,7 +115,7 @@ pub async fn organization_configuration(
     State(app_state): State<AppState>,
     Extension(me_user): Extension<MeProfile>,
     Extension(policy): Extension<PolicyEngine>,
-) -> Result<Json<DesktopSidecarOrganizationConfiguration>, StatusCode> {
+) -> Result<Json<DesktopSidecarOrganizationConfigurationResponse>, StatusCode> {
     policy
         .rebuild_data_if_needed_req(&app_state.db, &app_state.config)
         .await?;

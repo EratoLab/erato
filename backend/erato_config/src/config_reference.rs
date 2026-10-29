@@ -318,6 +318,9 @@ fn map_key_placeholder(path: &[String]) -> String {
         Some("prompt_patterns") => "<pattern-id>".to_string(),
         Some("prompts") => "<prompt-id>".to_string(),
         Some("providers" | "provider") => "<provider-id>".to_string(),
+        Some("policies") if path.len() == 2 && path[0] == "policy_guides" => {
+            "<policy-id>".to_string()
+        }
         Some("rules") => "<rule-name>".to_string(),
         _ => "<key>".to_string(),
     }

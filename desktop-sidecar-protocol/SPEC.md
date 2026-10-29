@@ -223,18 +223,53 @@ each method entry.
 
 The `sidecar.configure.v1` capability replaces the current
 `user_configuration` and `organization_configuration` layers. Both layers are
-extensible objects. Sidecars MUST accept and persist unknown properties so that
-future configuration additions do not require a new method major.
+extensible objects. For configuration calls accepted by the sidecar's trust
+policy, sidecars MUST preserve unknown properties so that future configuration
+additions do not require a new method major. Clients send configuration independently
+of any `localDelegation` declaration. The sidecar itself decides whether to trust
+outside configuration calls and whether to apply their values; it may reject or
+ignore untrusted configuration. A successful RPC alone is not evidence of policy
+enforcement. Configuration delivery does not authorize content access or export.
 
 Each layer has a nullable `show_tray_icon` property. A non-null user value takes
 precedence over a non-null organization value. When both values are null or
 absent, the sidecar default is to show the tray icon. Applying configuration
 that is identical to the persisted configuration is a no-op.
 
-The complete configuration payload MUST be persisted in the current user's
+The complete accepted configuration payload MUST be persisted in the current user's
 platform-default configuration directory and restored on process startup.
 Applying a changed effective `show_tray_icon` value MUST update the running
 sidecar without requiring a restart.
+
+### Policy guides
+
+`organization_configuration.policy_guides` is an optional object containing a
+`policies` map keyed by policy ID. Each definition contains `enabled`, `question`,
+`choice_refuse`, `choice_allow`, an ordered `decision_providers` array of IDs and
+arbitrary JSON-valued `metadata`. Disabled definitions are retained but are not
+evaluated. User-layer `policy_guides` must not override organization definitions.
+
+The policy map is replaced as a whole with each accepted configuration update.
+`{"policies": {}}` explicitly clears existing definitions; an absent field in a
+replacement configuration also removes the prior field. Preserve metadata,
+provider order and unknown fields, including when returning saved configuration.
+Older sidecars may store these definitions without applying them. Old clients
+that do not send the field remain compatible with `sidecar.configure.v1`.
+
+The backend's evaluator uses the first provider ID, resolving configured provider
+replacements. It does not fall back to later entries. Provider IDs are references,
+not local execution capabilities; provider definitions and credentials are not
+included. The question and both descriptions form a predicate whose true
+probability means refusal (`choice_refuse`); false means allow (`choice_allow`).
+A provider declining to answer is distinct from this policy-refusal probability.
+Metadata is not model input. Content selection, thresholds, native evaluation and
+enforcement attachment points are separate consumer responsibilities.
+
+Clients preserving the user layer first read saved configuration. If that read is
+unavailable or denied, they must not invent an empty user layer and overwrite it.
+Optional mailbox initialization failures must not block an otherwise valid
+configuration send. Sidecar rejection is respected without bypass or a claim of
+successful application.
 
 ### Indexing configuration
 
