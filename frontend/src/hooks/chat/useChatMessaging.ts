@@ -1838,6 +1838,9 @@ export function useChatMessaging(
       logger.log(
         `[DEBUG_STREAMING] sendMessage called. Content: "${content}", Files: ${inputFileIds?.length ?? 0}, Model: ${modelId ?? "default"}, Assistant: ${assistantId ?? "none"}`,
       );
+      // Read before the optimistic messages below: once they have rendered,
+      // the new reply's placeholder is the most recent assistant message.
+      const previousMessageId = findMostRecentAssistantMessageId();
 
       // Create optimistic user message immediately on submit so UI updates
       // first. The tracked mentions ride along so the highlight shows before
@@ -1976,8 +1979,6 @@ export function useChatMessaging(
           await new Promise((resolve) => setTimeout(resolve, 50));
         }
 
-        // Find the most recent assistant message to use as previous_message_id
-        const previousMessageId = findMostRecentAssistantMessageId();
         logger.log(
           `[DEBUG_STREAMING] sendMessage: Determined previousMessageId: ${previousMessageId}`,
         );

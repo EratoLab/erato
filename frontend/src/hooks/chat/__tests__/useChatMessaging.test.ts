@@ -2746,6 +2746,54 @@ describe("useChatMessaging", () => {
     expect(result.current.messageOrder).toHaveLength(0);
   });
 
+  it("sends the last reply as the previous message, not the placeholder it adds for the new one", async () => {
+    mockUseChatMessages.mockReturnValue({
+      data: {
+        messages: [
+          {
+            id: "msg-user-1",
+            content: [{ content_type: "text", text: "Hello assistant" }],
+            role: "user",
+            created_at: "2023-01-01T12:00:00.000Z",
+            previous_message_id: null,
+            sibling_message_id: null,
+            is_message_in_active_thread: true,
+          },
+          {
+            id: "msg-asst-1",
+            content: [{ content_type: "text", text: "Hello! How can I help?" }],
+            role: "assistant",
+            created_at: "2023-01-01T12:01:00.000Z",
+            previous_message_id: "msg-user-1",
+            sibling_message_id: null,
+            is_message_in_active_thread: true,
+          },
+        ],
+      },
+      isLoading: false,
+      error: null,
+      refetch: vi.fn().mockResolvedValue({}),
+    });
+    const { result } = renderHook(() => useChatMessaging("chat-123"), {
+      wrapper: TestWrapper,
+    });
+
+    // The connection still open from the resume attempt makes the send wait
+    // before it reads the conversation, after its placeholders have rendered.
+    await act(async () => {
+      await result.current.sendMessage("Follow-up");
+    });
+
+    const submit = mockCreateSSEConnection.mock.calls
+      .filter((call: unknown[]) =>
+        (call[0] as string).endsWith("/submitstream"),
+      )
+      .at(-1);
+    expect(JSON.parse(submit?.[1].body as string)).toMatchObject({
+      previous_message_id: "msg-asst-1",
+    });
+  });
+
   describe("X-Erato-Platform header", () => {
     /**
      * Helper: find all non-resumestream createSSEConnection calls and return
