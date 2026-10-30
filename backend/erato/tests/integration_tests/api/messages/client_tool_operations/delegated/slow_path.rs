@@ -16,7 +16,11 @@ pub(super) fn dispatch_durably(row: &HostRow, config: &mut erato::config::AppCon
     config.client_tools.durable_operations_enabled = true;
     config.client_tools.tools.insert(
         READ_KEY.into(),
-        row.read_config(true, Some(ChildDispatch::Durable)),
+        row.read_config(
+            true,
+            Some(ChildDispatch::Durable),
+            erato::config::ClientToolApprovalScope::Call,
+        ),
     );
 }
 
@@ -567,7 +571,7 @@ fn child_pane_tools(row: &HostRow) -> String {
 }
 
 fn add_live_read(row: &HostRow, config: &mut erato::config::AppConfig) {
-    let mut tool = row.read_config(false, None);
+    let mut tool = row.read_config(false, None, erato::config::ClientToolApprovalScope::Call);
     tool.name = LIVE_TOOL.into();
     config.client_tools.tools.insert(LIVE_KEY.into(), tool);
 }

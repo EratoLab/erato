@@ -267,7 +267,7 @@ fn mock_parent_reads(mocks: &mut MockSet, row: &HostRow, reads: &[&'static str],
 
 /// The sidecar read waits durably for the parent's own calls.
 fn durable_own_read(row: &HostRow, timeout_ms: u64) -> impl FnOnce(&mut erato::config::AppConfig) {
-    let mut tool = row.read_config(true, None);
+    let mut tool = row.read_config(true, None, erato::config::ClientToolApprovalScope::Call);
     tool.timeout_ms = Some(timeout_ms);
     move |config| {
         config.client_tools.durable_operations_enabled = true;

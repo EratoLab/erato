@@ -1,5 +1,11 @@
 //! The cases every host context must pass, run once per row of `rows`.
 use super::super::executor_stream::wait_released;
+use super::approval_scope::{
+    a_context_approval_covers_every_task_reading_the_scope,
+    a_decision_before_an_outside_change_never_makes_a_new_approval,
+    a_later_turn_reuses_a_document_approval_and_a_turn_approval_asks_again,
+    a_new_pane_session_asks_again, scope_changed_ends_the_approval_and_asks_again,
+};
 use super::slow_path::{
     a_child_reaped_errored_after_its_answer_reads_as_completed,
     a_child_that_finishes_while_approvals_are_open_keeps_the_parent_parked,
@@ -111,6 +117,11 @@ macro_rules! host_conformance {
                 a_device_decline_of_a_live_grant_call_is_declined
                 freshness_reaches_the_task_result_and_the_parent_trace
                 freshness_after_an_approval_reaches_the_task_result_and_the_trace
+                a_context_approval_covers_every_task_reading_the_scope
+                a_later_turn_reuses_a_document_approval_and_a_turn_approval_asks_again
+                a_new_pane_session_asks_again
+                scope_changed_ends_the_approval_and_asks_again
+                a_decision_before_an_outside_change_never_makes_a_new_approval
             );
             host_conformance!(@cases [$($why)?] $($slow_case)*);
         }
@@ -950,7 +961,7 @@ async fn a_child_call_never_waits_for_the_inbox_even_for_a_durable_tool(
     mock_client_child_reads(row, &mut mocks, &child);
     let (state, _llm) = delegated_state(row, pool, mocks, |config| {
         config.client_tools.durable_operations_enabled = true;
-        let mut tool = row.read_config(true, None);
+        let mut tool = row.read_config(true, None, erato::config::ClientToolApprovalScope::Call);
         tool.timeout_ms = Some(UNANSWERED_TIMEOUT_MS);
         config.client_tools.tools.insert(READ_KEY.into(), tool);
     })
