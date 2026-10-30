@@ -26,7 +26,7 @@ default: no shipped configuration sets `child_access`, `child_host_context` or
   - `child_dispatch` without `read`, and `child_dispatch = "durable"` on a tool
     without a `durable` table or whose `host_context` does not outlive the pane
     session (`ClientToolHostContext::outlives_pane_session`: `outlook_mailbox`
-    does, `word_document` does not).
+    and `desktop_sidecar` do, `word_document` does not).
 - `client_tools.tools.<key>.child_dispatch = "live" | "durable"` says how a
   task's calls reach the device. Unset, the tool follows
   `delegation.tasks.child_dispatch` (default `live`), which applies `durable`
@@ -60,11 +60,16 @@ first that fails becomes the fixed reason in `TaskSpec.client_task.unavailable`:
 | Check | Reason when it fails |
 | -- | -- |
 | `client_tools.executor_stream_enabled` is on | client tools are not enabled for tasks |
-| the parent's binding has host context `H` | the turn was not sent from the pane this task needs |
+| one of the parent's bindings has host context `H` | the turn was not sent from the pane this task needs |
 | the parent offered a `read` tool of host `H` on that binding | the turn offered no client tools that tasks may use |
 | the user's decision for it is not Never | the user does not allow these client tools |
 | an executor stream is present for the binding | the pane is not connected |
 | the stream lists the tool in `X-Erato-Child-Client-Tools` | the pane does not take calls from tasks |
+
+The parent's bindings are its `X-Erato-Executor` binding and those it sent in
+`X-Erato-Additional-Executors` (see "Desktop sidecar"); the grant takes the one
+whose host context is `H`, and a granted task runs on that binding, not on the
+parent's primary. A task without a grant keeps the primary.
 
 The grant lists exactly the tools that pass. `context_ref` is the parent turn's
 persisted `action_facet_args[child_context_arg]`, opaque to the backend.
@@ -327,12 +332,35 @@ A host's handlers pass `clientToolHostAdapterConformanceFailures` from
 `@erato/frontend/conformance`. The adapter checklist and templates are in
 `office-addin/ARCHITECTURE.md`, "Client tools in delegated tasks".
 
+## Desktop sidecar (ERMAIN-1034)
+
+- Host context `desktop_sidecar`: the local index of the Erato desktop app on the
+  user's device. Its calls run in the `desktop-sidecar` realm, so a binding must
+  carry that realm and `host_context.kind = "desktop_sidecar"`. It outlives the
+  pane, so its tools may set `child_dispatch = "durable"`. Wait note: "wait (uses
+  the Erato app on this device)".
+- The add-in shells already send an Office binding in `X-Erato-Executor`, so a
+  shell sends the sidecar binding in the submit header
+  `X-Erato-Additional-Executors`, a JSON array with one binding per host context
+  kind (at most four, at most 4096 bytes, each entry parsed on its own; an entry
+  with an unknown field, without a host context, or repeating a kind is
+  dropped). `X-Erato-Executor` keeps its shape, so an older backend ignores the
+  new header and routes as before. The request context stores the further
+  bindings as `additional_executors`; each configured tool's offer takes the
+  binding of its `host_context` (else `durable.host_context`), and a tool
+  without a matching binding keeps the primary.
+- A continuation re-offers with the persisted context the same way. The approval
+  continuation, the attached `/continue` and `resumestream` accept any of the
+  answering client's bindings.
+- File results: a durable call's result may carry the ids of the files the tool
+  uploaded; the server reads them as the user where it writes the tool's output
+  (see `durable-client-operations.md`, "File results").
+
 ## Not in this record
 
 - ERMAIN-1033: approving once per document or thread.
-- ERMAIN-1034: the desktop sidecar host context; showing a device prompt of a
-  grant call in the parent chat (registering it under `hostGrant.ownerChatId`);
-  mapping a device decline on the live path; and a multi-executor envelope
-  (ERMAIN-911), which a second host family with its own binding in one message
-  needs.
+- ERMAIN-1034, still to come: showing a device prompt of a grant call in the
+  parent chat (registering it under `hostGrant.ownerChatId`); mapping a device
+  decline on the live path; the pushed call's deadline; freshness of reads that
+  returned files; the desktop sidecar's shells and conformance row.
 - ERMAIN-1031: the child's model.

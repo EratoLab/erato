@@ -5705,8 +5705,8 @@ How a client task's calls reach the device, for client tools that do not set
   [`client_tools.tools.<key>.child_dispatch`](#client_toolstoolskeychild_dispatch).
 
 `durable` applies only to the tools it can apply to: `child_access = "read"`, a
-`host_context` whose client state outlives the pane session (`outlook_mailbox`,
-not `word_document`), a `durable` table, and
+`host_context` whose client state outlives the pane session (`outlook_mailbox`
+and `desktop_sidecar`, not `word_document`), a `durable` table, and
 `client_tools.durable_operations_enabled` on. Every other tool stays live, so this
 key never makes a configuration invalid.
 
@@ -6080,12 +6080,16 @@ result_schema = '''{"type":"object","required":["busy"],"properties":{"busy":{"t
 ```
 
 - **`host_context`** _(required)_ - The host family whose executor binding the
-  call needs. `outlook_mailbox` is the Outlook add-in's signed-in mailbox. A call
-  without a matching `X-Erato-Executor` binding keeps the in-memory path. This
-  happens with older clients, Teams, or a desktop sidecar binding.
+  call needs. `outlook_mailbox` is the Outlook add-in's signed-in mailbox;
+  `desktop_sidecar` is the local index of the Erato desktop app on the user's
+  device. A call without a matching binding, in `X-Erato-Executor` or
+  `X-Erato-Additional-Executors`, keeps the in-memory path. This happens with
+  older clients, Teams, or a binding of another host family.
 - **`result_schema`** _(optional)_ - A JSON Schema string with top-level
   `type = "object"` that a successful result must satisfy. A result that fails
   it, or any malformed result, reaches the model as fixed feedback, never verbatim.
+  It applies only to results without files: a result that returned files
+  reaches the model inside the server's file wrapper and is not checked.
 - **`attempt_expiry_secs`** _(default: 3600, range: 60–86400)_ - How long a
   parked call stays claimable, counted from when the call was dispatched. It must
   cover the tool's `timeout_ms` (default 60000) plus `claim_lease_secs`. An
@@ -6133,8 +6137,8 @@ child_host_inputs = ["documentIdentity"]
   [`child_host_context`](#child-facets-for-client-tasks). Not allowed together
   with `submission`.
 - **`host_context`** _(required for `read`)_ - The host family whose client state
-  the tool reads: `word_document` or `outlook_mailbox`. It must equal
-  `durable.host_context` when both are set.
+  the tool reads: `word_document`, `outlook_mailbox` or `desktop_sidecar`. It
+  must equal `durable.host_context` when both are set.
 - **`child_context_arg`** and **`child_context_input`** _(optional, set
   together, require `read`)_ - `child_context_arg` names the planning turn's
   action-facet argument that holds the client's context version, for example
@@ -6201,9 +6205,18 @@ attempt_expiry_secs = 86400
 
 Refused at load time: `child_dispatch` without `child_access = "read"`, and
 `durable` on a tool without a `durable` table or whose `host_context` does not
-outlive the pane session. `outlook_mailbox` outlives it; `word_document` does not,
-so Word tools always stay live. A durable tool's calls are durable only while
-`client_tools.durable_operations_enabled` is on; otherwise they go live.
+outlive the pane session. `outlook_mailbox` and `desktop_sidecar` outlive it;
+`word_document` does not, so Word tools always stay live. A durable tool's calls
+are durable only while `client_tools.durable_operations_enabled` is on; otherwise
+they go live.
+
+Enable `durable` for a tool, and the desktop sidecar's `durable` tables, only
+once every replica runs a release that supports it (ERMAIN-1032 for durable task
+calls, ERMAIN-1034 for `desktop_sidecar` and results with files), and do not
+roll back below that release while such calls may be parked: an older replica
+cannot continue them and ends the task or the chat with an error. A backend
+older than ERMAIN-1034 refuses to load a configuration that names
+`desktop_sidecar`.
 
 **Default value:** unset (follows `delegation.tasks.child_dispatch`)
 
@@ -6410,7 +6423,7 @@ plan_min_tasks = 3
 
 {/* erato_toml_config_key: facets.facets.<facet-id>.child_host_context */}
 
-A facet with `child_host_context` (`word_document` or `outlook_mailbox`) marks client tasks. A delegated task that names it in `facet_ids` always runs in `wait` mode: an `async` request runs as `wait` and the task result says so. The task gets a grant for the planning turn's client tools of that host that set [`child_access = "read"`](#client_toolstoolskeychild_access). The facet restricts no tools and only carries instructions, so it must not be `hidden` or have a `tool_call_allowlist`. List it in the planning facet's `child_facet_ids`.
+A facet with `child_host_context` (`word_document`, `outlook_mailbox` or `desktop_sidecar`) marks client tasks. A delegated task that names it in `facet_ids` always runs in `wait` mode: an `async` request runs as `wait` and the task result says so. The task gets a grant for the planning turn's client tools of that host that set [`child_access = "read"`](#client_toolstoolskeychild_access). The facet restricts no tools and only carries instructions, so it must not be `hidden` or have a `tool_call_allowlist`. List it in the planning facet's `child_facet_ids`.
 
 When the user set a granted tool to ask, the task's call waits for a decision in the planning turn's chat, next to the turn's own approvals, as an MCP approval of a task does. With `delegation.tasks.propagate_child_mcp_approvals` off, the call is refused instead. A declined call ends as `declined`, and the task result counts it. The task result also carries the last freshness the client reported for the document or mailbox the task read, and the planning turn's trace shows each read with the part it asked for.
 
