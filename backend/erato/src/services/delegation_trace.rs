@@ -300,7 +300,8 @@ impl DelegationTraceCollector {
             })
             .collect::<Vec<_>>()
             .join(", ");
-        let freshness = output.and_then(|output| output.pointer("/result/freshness"));
+        let freshness =
+            output.and_then(crate::services::delegated_client_tools::granted_read_freshness);
         let changes = freshness
             .and_then(|freshness| freshness.get("changes"))
             .and_then(Value::as_str)
