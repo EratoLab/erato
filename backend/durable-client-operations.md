@@ -458,8 +458,11 @@ own durable calls, all keyed on `OperationRequest.lineage` (set only for these):
 - **Frontend.** The claiming pane runs the call beside the sweep, one per
   attempt, renews its claim at half the remaining lease while the device waits,
   retries a renewal lost in transport while the claim holds, and aborts the call
-  on a refused renewal, the attempt's end or dispose. Non-lineage operations keep
-  the sequential sweep, the observer rule and the attached continuation.
+  on a refused renewal, the attempt's end or dispose. Client tool calls of the
+  user's own turn run one at a time in a queue beside the sweep, so a device
+  prompt in one never holds up the sweep, its task calls or its streams; local
+  evidence keeps the sequential sweep. Non-lineage operations keep the observer
+  rule and the attached continuation.
 
 Turning the flag on has costs beyond configured tools. Generation starts take the
 compare-and-set lease path with the lease identity guard. Every abort runs the

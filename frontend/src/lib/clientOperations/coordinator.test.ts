@@ -285,6 +285,7 @@ describe("ClientOperationCoordinator handler registry", () => {
     registry.register(draft.handler);
     registry.register(availability.handler);
     await coordinator.reconcile();
+    await vi.waitFor(() => expect(api.continue).toHaveBeenCalledTimes(1));
     expect(draft.run).not.toHaveBeenCalled();
     expect(availability.run).toHaveBeenCalledWith(
       { lookahead_days: 7 },
@@ -294,7 +295,6 @@ describe("ClientOperationCoordinator handler registry", () => {
       outcome: "succeeded",
       result: { type: "value", value: { busy: [] } },
     });
-    expect(api.continue).toHaveBeenCalledTimes(1);
     coordinator.dispose();
   });
 
@@ -346,8 +346,8 @@ describe("ClientOperationCoordinator handler registry", () => {
     expect(api.claim).not.toHaveBeenCalled();
     inFlight = false;
     await coordinator.reconcile();
+    await vi.waitFor(() => expect(availability.run).toHaveBeenCalledTimes(1));
     expect(api.claim).toHaveBeenCalledTimes(1);
-    expect(availability.run).toHaveBeenCalledTimes(1);
     coordinator.dispose();
   });
 
@@ -362,6 +362,7 @@ describe("ClientOperationCoordinator handler registry", () => {
       const availability = toolHandler();
       registry.register(availability.handler);
       await coordinator.reconcile();
+      await new Promise((resolve) => setTimeout(resolve, 10));
       expect(api.claim).not.toHaveBeenCalled();
       expect(availability.run).not.toHaveBeenCalled();
       coordinator.dispose();
@@ -425,6 +426,7 @@ describe("ClientOperationCoordinator handler registry", () => {
     );
     try {
       await coordinator.reconcile();
+      await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(4));
       const calls = fetchMock.mock.calls.map(([url, init]) => ({
         url,
         headers: init.headers as Record<string, string>,
@@ -730,6 +732,7 @@ describe("ClientOperationCoordinator refused claims", () => {
     const { coordinator } = coordinatorWith(api, [], [handler]);
     try {
       await coordinator.reconcile();
+      await vi.advanceTimersByTimeAsync(0);
       expect(api.claim).toHaveBeenCalledTimes(1);
       expect(run).not.toHaveBeenCalled();
       await vi.advanceTimersByTimeAsync(1_400);
@@ -778,6 +781,8 @@ describe("ClientOperationCoordinator refused claims", () => {
     refused.api.claim.mockRejectedValueOnce(refusal);
     const second = coordinatorWith(refused.api, [], [toolHandler().handler]);
     await second.coordinator.reconcile();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(refused.api.claim).toHaveBeenCalledOnce();
     second.coordinator.dispose();
     await vi.advanceTimersByTimeAsync(5_000);
     expect(refused.api.list).toHaveBeenCalledTimes(1);
@@ -1042,6 +1047,52 @@ describe("ClientOperationCoordinator task calls", () => {
       await sweep;
     } finally {
       coordinator.dispose();
+    }
+  });
+
+  it("keeps claiming task calls and opening streams while a call of the user's own turn waits on the device", async () => {
+    takesGrantCalls();
+    const unregister = registerOperationExecutor(
+      "fetch_availability",
+      () => binding,
+    );
+    const own = operation();
+    const task = operation({
+      lineage,
+      attempt_id: "00000000-0000-4000-8000-0000000000a2",
+      tool_call_id: "avail-call-2",
+    });
+    const listed = [{ request: own, state: "pending" as AttemptState }];
+    let streams = false;
+    const { api } = fakeApi();
+    api.list.mockImplementation(async () => ({
+      ...page(listed),
+      executor_stream_enabled: streams,
+    }));
+    const stream = vi.fn<NonNullable<ClientOperationApi["stream"]>>(
+      (_headers, _onNudge, signal) =>
+        new Promise<void>((resolve) => {
+          signal.addEventListener("abort", () => resolve(), { once: true });
+        }),
+    );
+    const { handler, run, finish } = hangingHandler();
+    const { coordinator } = coordinatorWith({ ...api, stream }, [], [handler]);
+    try {
+      void coordinator.reconcile();
+      await vi.waitFor(() => expect(run).toHaveBeenCalledOnce());
+      listed.push({ request: task, state: "pending" });
+      streams = true;
+      void coordinator.reconcile();
+      await vi.waitFor(() => expect(run).toHaveBeenCalledTimes(2));
+      expect(run.mock.calls[1]?.[1]?.hostGrant).toMatchObject({
+        ownerChatId: lineage.owner_chat_id,
+      });
+      expect(stream).toHaveBeenCalledOnce();
+      finish.forEach((resolve) => resolve({ ok: true, result: null }));
+      await vi.waitFor(() => expect(api.complete).toHaveBeenCalledTimes(2));
+    } finally {
+      coordinator.dispose();
+      unregister();
     }
   });
 
