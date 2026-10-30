@@ -57,6 +57,7 @@ import {
 } from "../../../test/mocks/word/realisticWordFixtures";
 import { WordWriteProvider } from "../../providers/WordWriteProvider";
 import { buildWordArtifact } from "../../utils/buildWordArtifact";
+import { withoutParagraphMark } from "../../utils/buildWordDocumentArgs";
 import { WORD_CLIENT_ACTIONS } from "../../utils/wordClientActions";
 import {
   captureWordDocumentPackage,
@@ -365,12 +366,13 @@ function holdWord() {
 function renderRealisticCard(
   snapshot: ReturnType<typeof readySnapshot>,
   content: string,
+  ordinalMap: WordDocumentCapture["ordinalMap"] = new Map(),
 ) {
   const messageId = String(mock.artifact.messageId);
   const capture: WordDocumentCapture = {
     identity: "doc-A",
     authoring: snapshot,
-    ordinalMap: new Map(),
+    ordinalMap,
     paragraphsSent: snapshot.blocks.length,
     renderedOrdinals: new Set(),
     partialOrdinal: null,
@@ -1367,6 +1369,8 @@ async function mountRealistic(
     coauthors?: number;
     pendingUpdates?: boolean;
     platform?: "Mac";
+    /** Number the blocks by the live paragraphs, as a capture of a live document does. */
+    paragraphOrdinals?: boolean;
   } = {},
 ) {
   const {
@@ -1375,6 +1379,7 @@ async function mountRealistic(
     coauthors,
     pendingUpdates = false,
     platform,
+    paragraphOrdinals = false,
     ...host
   } = options;
   const word = installWordOoxmlHost(xml, {
@@ -1407,9 +1412,34 @@ async function mountRealistic(
     String(mock.artifact.messageId),
     tracking,
   );
+  const ordinalMap = new Map<
+    number,
+    { uniqueLocalId: string | null; text: string }
+  >();
+  if (paragraphOrdinals) {
+    const live = await globalThis.Word.run(async (context) => {
+      const paragraphs = context.document.body.paragraphs;
+      paragraphs.load("items/uniqueLocalId");
+      await context.sync();
+      const texts = paragraphs.items.map((p) => p.getText());
+      await context.sync();
+      return paragraphs.items.map((p, i) => ({
+        uniqueLocalId: p.uniqueLocalId,
+        text: texts[i].value,
+      }));
+    });
+    live.forEach((paragraph, i) => ordinalMap.set(i + 1, paragraph));
+    for (const block of snapshot.blocks) {
+      const ordinals = live.flatMap((p, i) =>
+        withoutParagraphMark(p.text) === block.text ? [i + 1] : [],
+      );
+      if (ordinals.length === 1) block.paragraphOrdinal = ordinals[0];
+    }
+  }
   const { refresh } = renderRealisticCard(
     snapshot,
     JSON.stringify(makePlan(snapshot)),
+    ordinalMap,
   );
   return { word, snapshot, coauthoringRead, refresh };
 }
@@ -1919,6 +1949,18 @@ describe("apply outcomes", () => {
       "Download original document",
     ])
       expect(screen.queryByRole("button", { name })).toBeNull();
+  });
+
+  it("locates a source passage where Word ends paragraph text with the paragraph mark", async () => {
+    const { word } = await mountRealistic(
+      (s) => statusRewritePlan(s, "Status: revised in place."),
+      { getTextEndsWithParagraphMark: true, paragraphOrdinals: true },
+    );
+    fireEvent.click(screen.getByRole("button", { name: /^Paragraph/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Show in Word" }));
+
+    await waitFor(() => expect(word.events).toContain("select:range"));
+    expect(screen.queryByText(/cannot be located/)).toBeNull();
   });
 
   it("locates a written passage from its review row after an in-place Apply", async () => {

@@ -262,6 +262,31 @@ describe("useWordDocumentSource", () => {
     ]);
   });
 
+  it("maps blocks where Word for Windows and Mac end getText with the paragraph mark", async () => {
+    read.mockResolvedValue({
+      ok: true,
+      tracking: "Off",
+      paragraphs: paragraphs(["Alpha\r", "Beta\r", "Twin\r", "Twin\r"]),
+      authoring: {
+        ooxml: packageXml(
+          ["Alpha", "Beta", "Twin", "Twin"].map((t) => paragraph(t)).join(""),
+        ),
+        tracking: "Off",
+      },
+    });
+    const { result } = renderSource({ authoringEnabled: true });
+    await waitFor(() => expect(result.current.preview.status).toBe("included"));
+
+    const blocks = (await result.current.capture())!.authoring!.blocks;
+
+    expect(blocks.map((block) => block.paragraphOrdinal)).toEqual([
+      1,
+      2,
+      undefined,
+      undefined,
+    ]);
+  });
+
   it("keeps the text but no authoring when Word did not hand over the full document", async () => {
     read.mockResolvedValue({
       ok: true,
