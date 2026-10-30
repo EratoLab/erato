@@ -3101,6 +3101,11 @@ export type OperationPayload =
       [key: string]: OperationPayload;
     };
 
+/**
+ * A parked call as the server stored it. Clients only receive it; it is read
+ * leniently so that a key a newer release adds does not break a replica that
+ * still runs this one.
+ */
 export type OperationRequest = {
   /**
    * @format uuid
