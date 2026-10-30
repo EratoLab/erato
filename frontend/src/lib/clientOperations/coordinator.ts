@@ -184,6 +184,9 @@ export class ClientOperationCoordinator {
   /** Attempts whose refused claim already had its early retry. */
   readonly #retried = new Set<string>();
   readonly #grantRuns = new Set<string>();
+  /** Calls of the user's own turn queued or running beside the sweep. */
+  readonly #ownRuns = new Set<string>();
+  #ownQueue: Promise<void> = Promise.resolve();
   readonly #builtIns: readonly ClientOperationHandler[];
   readonly #unsubscribe: () => void;
   readonly #streams = new Map<string, AbortController>();
@@ -214,6 +217,7 @@ export class ClientOperationCoordinator {
     this.#attached.clear();
     this.#retried.clear();
     this.#grantRuns.clear();
+    this.#ownRuns.clear();
     this.#builtIns.forEach((handler) => handler.dispose?.());
   }
   #handlers(): readonly ClientOperationHandler[] {
@@ -444,6 +448,10 @@ export class ClientOperationCoordinator {
           this.#startGrantRun(request, handler);
           continue;
         }
+        if (request.kind === "client_tool.v1") {
+          this.#queueOwnRun(request, handler);
+          continue;
+        }
         await withClientCallLock(request.message_id, request.tool_call_id, () =>
           this.#run(request, handler),
         );
@@ -602,6 +610,38 @@ export class ClientOperationCoordinator {
         /* Retried on the next sweep. */
       })
       .finally(() => this.#grantRuns.delete(id));
+  }
+  /** A client tool call of the user's own turn can hold a prompt on the
+   * device for as long as its claim is renewed, so it waits in a queue beside
+   * the sweep, which runs them one at a time. Local evidence never waits on
+   * the user and stays in the sweep, ahead of its receipt recovery. */
+  #queueOwnRun(
+    request: OperationRequest,
+    handler: ClientOperationHandler,
+  ): void {
+    const id = request.attempt_id;
+    if (this.#ownRuns.has(id)) return;
+    this.#ownRuns.add(id);
+    this.#ownQueue = this.#ownQueue
+      .then(async () => {
+        // Sweeps went on while it waited: the call may be settled or live
+        // here, or its tool gone.
+        const state = this.#operations.get(id)?.state;
+        if (
+          this.#abort.signal.aborted ||
+          (state !== "pending" && state !== "claimed") ||
+          this.#handlerFor(request) !== handler ||
+          handler.defer?.(request)
+        )
+          return;
+        await withClientCallLock(request.message_id, request.tool_call_id, () =>
+          this.#run(request, handler),
+        );
+      })
+      .catch(() => {
+        /* Retried on the next sweep. */
+      })
+      .finally(() => this.#ownRuns.delete(id));
   }
   async #runGrantCall(
     request: OperationRequest,
