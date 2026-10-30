@@ -1,5 +1,22 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  onTestFinished,
+  vi,
+} from "vitest";
 
+import { setWordWebImport } from "../../../test/mocks/word/applyPolicy";
+import { uninstallMockWordDocument } from "../../../test/mocks/word/document";
+import { installWordOoxmlHost } from "../../../test/mocks/word/ooxmlHost";
+import {
+  captureRealisticSnapshot,
+  realisticWordPackageXml,
+  statusRewritePlan,
+} from "../../../test/mocks/word/realisticWordFixtures";
+import { applyWordDocumentPlan } from "../wordApplyDocumentPlan";
 import {
   checkWordApprovalScope,
   wordApprovalScopeOptions,
@@ -107,6 +124,8 @@ describe("checkWordApprovalScope", () => {
 
   it.each([
     ["the user's edit", () => changed(["p1"])],
+    ["the user's new paragraph", () => added(["n1"])],
+    ["the user's deleted paragraph", () => deleted(["p1"])],
     ["a co-author's edit", () => changed(["p1"], "Remote")],
     [
       "every paragraph id replaced",
@@ -181,6 +200,84 @@ describe("checkWordApprovalScope", () => {
     wordChangePosition();
     noteWordCapturedIds(["p1", "p2"]);
     expect(checkWordApprovalScope(scope)).toEqual({ read: true });
+  });
+});
+
+describe("a document approval and the chat's own Apply", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    uninstallMockWordDocument();
+    delete window.WORD_FORCE_IMPORT_APPLY;
+  });
+
+  /** Sets the clock to `ms` after the moment this is called. */
+  function clockFromNow(): (ms: number) => void {
+    const now = Date.now();
+    const clock = vi.spyOn(Date, "now");
+    return (ms) => clock.mockReturnValue(now + ms);
+  }
+
+  async function liveIds(): Promise<{ text: string; id: string }[]> {
+    return globalThis.Word.run(async (context) => {
+      const paragraphs = context.document.body.paragraphs;
+      paragraphs.load("items/uniqueLocalId,items/text");
+      await context.sync();
+      return paragraphs.items.map((p) => ({
+        text: p.text,
+        id: p.uniqueLocalId,
+      }));
+    });
+  }
+
+  it("reads after an in-place Apply, and asks again after the user's edit beside it", async () => {
+    installWordOoxmlHost(realisticWordPackageXml(), {
+      profile: "word-pc-16.0.20326",
+    });
+    const snapshot = await captureRealisticSnapshot();
+    const scope = allow();
+    const result = await applyWordDocumentPlan(
+      JSON.stringify(statusRewritePlan(snapshot, "Status: done.")),
+      snapshot,
+      snapshot.ownerMessageId,
+    );
+    expect(result.outcome?.route).toBe("in-place");
+    const ids = await liveIds();
+    const written = ids.find((p) => p.text.startsWith("Status: done."))!.id;
+    const other = ids.find((p) => p.id !== written && p.text.trim())!.id;
+
+    changed([written]);
+    expect(checkWordApprovalScope(scope)).toEqual({ read: true });
+    changed([other]);
+    expectScopeChanged(scope);
+  });
+
+  it("reads after an import Apply whose events Word reports for most of a minute", async () => {
+    onTestFinished(setWordWebImport("confirm"));
+    window.WORD_FORCE_IMPORT_APPLY = true;
+    installWordOoxmlHost(realisticWordPackageXml(), { profile: "word-web" });
+    const snapshot = await captureRealisticSnapshot();
+    noteWordCapturedIds(["old-1", "old-2"]);
+    const scope = allow();
+    const result = await applyWordDocumentPlan(
+      JSON.stringify(statusRewritePlan(snapshot, "Status: imported.")),
+      snapshot,
+      snapshot.ownerMessageId,
+      undefined,
+      undefined,
+      { importConfirmed: true },
+    );
+    expect(result.outcome?.route).toBe("import");
+    const later = clockFromNow();
+    for (let k = 0; k <= 10; k++) {
+      later(10 + k * 5_600);
+      added([`new-${k}`]);
+    }
+    deleted(["old-1", "old-2"]);
+
+    expect(checkWordApprovalScope(scope)).toEqual({ read: true });
+    later(10 + 10 * 5_600 + 2_001);
+    added(["typed"]);
+    expectScopeChanged(scope);
   });
 });
 
