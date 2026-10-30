@@ -153,6 +153,22 @@ impl Pane {
         .await
     }
 
+    /// [`Pane::open_serving`] whose handlers also check covered calls'
+    /// approval scope for `scoped_client_tools`.
+    pub(super) async fn open_scoped(
+        base: &str,
+        binding: &ExecutorBinding,
+        client_tools: &str,
+        child_client_tools: &str,
+        scoped_client_tools: &str,
+    ) -> Self {
+        Self::open_request(
+            serving_request(base, binding, client_tools, Some(child_client_tools))
+                .header("X-Erato-Scoped-Client-Tools", scoped_client_tools),
+        )
+        .await
+    }
+
     async fn open_request(request: reqwest::RequestBuilder) -> Self {
         let response = request.send().await.unwrap();
         assert_eq!(response.status(), 200);
