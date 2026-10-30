@@ -24,6 +24,7 @@ import {
 import {
   beginWordOwnWrite,
   nameWordOwnWriteIds,
+  noteWordActiveChat,
   noteWordCapturedIds,
   noteWordChangeEventsActive,
   recordWordParagraphEvent,
@@ -38,6 +39,7 @@ import type {
 } from "@erato/frontend/library";
 
 const IDENTITY = "a".repeat(64);
+const CHAT = "chat-1";
 const options = wordApprovalScopeOptions(() => IDENTITY);
 const documentScope: ClientToolApprovalScopeRef = {
   hostContext: "word_document",
@@ -65,8 +67,14 @@ const covered = (position: unknown): ClientToolApprovalScope => ({
   position,
 });
 
+/** The grant of a task the chat that holds the approval launched. */
+const grant = (approvalScope?: ClientToolApprovalScope) => ({
+  ownerChatId: CHAT,
+  approvalScope,
+});
+
 function expectScopeChanged(scope: ClientToolApprovalScope) {
-  const check = checkWordApprovalScope(scope);
+  const check = checkWordApprovalScope(grant(scope));
   expect(check.read).toBe(false);
   if (check.read) return;
   expect(check.result).toMatchObject({
@@ -80,6 +88,7 @@ function expectScopeChanged(scope: ClientToolApprovalScope) {
 beforeEach(() => {
   resetWordChangeJournalForTests();
   noteWordChangeEventsActive();
+  noteWordActiveChat(CHAT);
 });
 
 afterEach(() => {
@@ -90,10 +99,11 @@ describe("checkWordApprovalScope", () => {
   it("reads a call allowed on its own, whatever changed", () => {
     changed(["p1"]);
     expect(checkWordApprovalScope(undefined)).toEqual({ read: true });
+    expect(checkWordApprovalScope(grant())).toEqual({ read: true });
   });
 
   it("reads while nothing changed since the user allowed the document", () => {
-    expect(checkWordApprovalScope(allow())).toEqual({ read: true });
+    expect(checkWordApprovalScope(grant(allow()))).toEqual({ read: true });
   });
 
   it("reads after the pane's own writes of every kind", () => {
@@ -119,7 +129,7 @@ describe("checkWordApprovalScope", () => {
     const sources = since.ok ? since.entries.map((entry) => entry.source) : [];
     expect(sources.length).toBeGreaterThan(0);
     expect(new Set(sources)).toEqual(new Set(["own"]));
-    expect(checkWordApprovalScope(scope)).toEqual({ read: true });
+    expect(checkWordApprovalScope(grant(scope))).toEqual({ read: true });
   });
 
   it.each([
@@ -148,6 +158,29 @@ describe("checkWordApprovalScope", () => {
     changed(["p2"]);
     write.end();
     expectScopeChanged(scope);
+  });
+
+  it.each([
+    ["another chat open in the pane", "chat-2"],
+    ["no chat open in the pane", null],
+  ])("answers scope_changed after a write with %s", (_name, chat) => {
+    const scope = allow();
+    noteWordActiveChat(chat);
+    const write = beginWordOwnWrite("ids");
+    nameWordOwnWriteIds(["p1"]);
+    changed(["p1"]);
+    write.end();
+    expectScopeChanged(scope);
+  });
+
+  it("reads after the chat's own write that settles after another chat was opened", () => {
+    const scope = allow();
+    const write = beginWordOwnWrite("ids");
+    nameWordOwnWriteIds(["p1"]);
+    noteWordActiveChat("chat-2");
+    changed(["p1"]);
+    write.end();
+    expect(checkWordApprovalScope(grant(scope))).toEqual({ read: true });
   });
 
   it("answers scope_changed after a reload of the pane", () => {
@@ -199,7 +232,7 @@ describe("checkWordApprovalScope", () => {
     // brings the same paragraphs back.
     wordChangePosition();
     noteWordCapturedIds(["p1", "p2"]);
-    expect(checkWordApprovalScope(scope)).toEqual({ read: true });
+    expect(checkWordApprovalScope(grant(scope))).toEqual({ read: true });
   });
 });
 
@@ -246,8 +279,29 @@ describe("a document approval and the chat's own Apply", () => {
     const other = ids.find((p) => p.id !== written && p.text.trim())!.id;
 
     changed([written]);
-    expect(checkWordApprovalScope(scope)).toEqual({ read: true });
+    expect(checkWordApprovalScope(grant(scope))).toEqual({ read: true });
     changed([other]);
+    expectScopeChanged(scope);
+  });
+
+  it("asks again after another chat's Apply in the same pane", async () => {
+    installWordOoxmlHost(realisticWordPackageXml(), {
+      profile: "word-pc-16.0.20326",
+    });
+    const snapshot = await captureRealisticSnapshot();
+    const scope = allow();
+    noteWordActiveChat("chat-2");
+    const result = await applyWordDocumentPlan(
+      JSON.stringify(statusRewritePlan(snapshot, "Status: done.")),
+      snapshot,
+      snapshot.ownerMessageId,
+    );
+    expect(result.outcome?.route).toBe("in-place");
+    const written = (await liveIds()).find((p) =>
+      p.text.startsWith("Status: done."),
+    )!.id;
+
+    changed([written]);
     expectScopeChanged(scope);
   });
 
@@ -274,7 +328,7 @@ describe("a document approval and the chat's own Apply", () => {
     }
     deleted(["old-1", "old-2"]);
 
-    expect(checkWordApprovalScope(scope)).toEqual({ read: true });
+    expect(checkWordApprovalScope(grant(scope))).toEqual({ read: true });
     later(10 + 10 * 5_600 + 2_001);
     added(["typed"]);
     expectScopeChanged(scope);

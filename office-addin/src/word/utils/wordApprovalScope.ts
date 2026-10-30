@@ -8,17 +8,19 @@ import {
 
 import type { WordChangePosition } from "./wordChangeJournal";
 import type {
-  ClientToolApprovalScope,
   ClientToolExecutionResult,
   ClientToolExecutorOptions,
+  ClientToolHostGrant,
 } from "@erato/frontend/library";
 
 /**
  * A document approval (contract §16, ERMAIN-1033) holds while the journal has seen no change to
- * the text but the pane's own since the position taken when the user allowed it. Formatting-only
- * edits on Windows and Mac, Track Changes toggles and Word's proofing make no entry, so they never
- * end one; Apply re-checks the live document. On Word for the web a formatting edit is a `local`
- * entry and ends it.
+ * the text since the position taken when the user allowed it, other than the pane's own writes
+ * made while the chat that holds the approval was open. Formatting-only edits on Windows and Mac,
+ * Track Changes toggles and Word's proofing make no entry, so they never end one; Apply re-checks
+ * the live document. On Word for the web a formatting edit is a `local` entry and ends it. A
+ * user's edit that lands while one of the chat's own anchor or import writes is still settling is
+ * recorded as own, so it does not end the approval either.
  */
 export type WordApprovalScopeCheck =
   | { read: true }
@@ -39,17 +41,21 @@ function isWordChangePosition(value: unknown): value is WordChangePosition {
 
 /**
  * For a grant read, after its lineage check and before it reads: whether a call covered by a
- * document approval may read. A call without one was allowed on its own and reads.
+ * document approval may read. A call without one was allowed on its own and reads. Another chat's
+ * write in this pane is a change from outside the chat that holds the approval.
  */
 export function checkWordApprovalScope(
-  scope: ClientToolApprovalScope | undefined,
+  grant: Pick<ClientToolHostGrant, "ownerChatId" | "approvalScope"> | undefined,
 ): WordApprovalScopeCheck {
-  if (!scope) return { read: true };
+  const scope = grant?.approvalScope;
+  if (!grant || !scope) return { read: true };
   if (!isWordChangePosition(scope.position)) return changed();
   // other-journal after a reload, no-events, or out-of-range once older entries were dropped.
   const since = wordChangesSince(scope.position);
   if (!since.ok) return changed();
-  return since.entries.every((entry) => entry.source === "own")
+  return since.entries.every(
+    (entry) => entry.source === "own" && entry.chat === grant.ownerChatId,
+  )
     ? { read: true }
     : changed();
 }

@@ -2,6 +2,7 @@ import { chatMessagesQuery, useMessagingStore } from "@erato/frontend/library";
 import { hashKey, useQueryClient } from "@tanstack/react-query";
 import { createElement, useCallback, useEffect, useRef, useState } from "react";
 
+import { noteWordActiveChat } from "./utils/wordChangeJournal";
 import {
   getWordDocumentIdentity,
   readLiveWordDocumentUrl,
@@ -114,6 +115,12 @@ function WordDocumentSessionController({
     },
     [rememberChat],
   );
+
+  // Writes from the pane count as this chat's own only while it is the one shown, so another
+  // chat's Apply ends this chat's document approval.
+  useEffect(() => {
+    noteWordActiveChat(currentChatId);
+  }, [currentChatId]);
 
   useEffect(() => {
     const onFocus = () => {

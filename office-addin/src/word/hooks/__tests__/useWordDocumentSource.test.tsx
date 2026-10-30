@@ -694,10 +694,13 @@ describe("useWordDocumentSource", () => {
       scopeId: identity,
       covers: "document",
     });
-    const scope = {
-      approvalId: "approval-1",
-      scopeId: identity,
-      position: anchor?.(),
+    const grant = {
+      ownerChatId: "chat-1",
+      approvalScope: {
+        approvalId: "approval-1",
+        scopeId: identity,
+        position: anchor?.(),
+      },
     };
 
     // A formatting-only edit on Windows or Mac sends no paragraph event.
@@ -707,20 +710,20 @@ describe("useWordDocumentSource", () => {
       await result.current.capture();
     });
     expect(read).toHaveBeenCalledTimes(1);
-    expect(checkWordApprovalScope(scope)).toEqual({ read: true });
+    expect(checkWordApprovalScope(grant)).toEqual({ read: true });
 
     signal.trackingMode.mockResolvedValue("TrackAll");
     leavePane();
     focusPane();
     await waitFor(() => expect(read).toHaveBeenCalledTimes(2));
-    expect(checkWordApprovalScope(scope)).toEqual({ read: true });
+    expect(checkWordApprovalScope(grant)).toEqual({ read: true });
 
     recordWordParagraphEvent({
       type: "ParagraphChanged",
       source: "Local",
       uniqueLocalIds: ["p1"],
     });
-    expect(checkWordApprovalScope(scope)).toMatchObject({ read: false });
+    expect(checkWordApprovalScope(grant)).toMatchObject({ read: false });
   });
 
   const reads = {
