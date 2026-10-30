@@ -407,10 +407,12 @@ A host's handlers pass `clientToolHostAdapterConformanceFailures` from
   source is available, has nothing newer queued and was observed no earlier than
   the read began; otherwise `unknown`. Thread and document reads add the scope
   signal for ERMAIN-1033, `freshness.scope = {kind, id, position, added}`: `id`
-  is `doc:<documentId>`, `index-thread:<sha256 of [sourceId, mailboxId,
-  conversationKey]>` from the search hit this client saw, or
-  `outlook-thread:<sha256 of [mailboxId, thread GUID]>` from the messages'
-  conversation index, else `unknown`; `position` and `added` stay `unknown`
+  is `doc:<documentId>` (also for a file read with its thread, which never
+  widens), `index-thread:<sha256 of [sourceId, mailboxId, conversationKey]>`
+  from the email search hit this client saw, or `outlook-thread:<sha256 of
+  [mailboxId, thread GUID]>` from the messages' conversation index, else
+  `unknown` (a Teams message read with its thread, whose hit names the whole
+  chat or channel); `position` and `added` stay `unknown`
   until the sidecar reports an index position and the items added since. The
   server copies only the contract keys into the task result, so `scope` stays in
   the task chat's tool output.

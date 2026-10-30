@@ -28,6 +28,8 @@ export interface SidecarFreshness {
 /** What a search hit says about where its document lives, as the index
  * groups a thread: same source, same mailbox, same conversation key. */
 export interface HitThread {
+  /** The hit's document kind: only an email export widens to its thread. */
+  kind: string;
   sourceId?: string;
   mailboxId: string | null;
   conversationKey: string | null;
@@ -99,18 +101,21 @@ const scope = (
 });
 
 /**
- * A document export covers the document alone, or its thread as the index
- * groups it. The export reports no thread key, so the thread comes from the
- * search hit this client saw for the document.
+ * A document export covers the document alone, or an email's thread as the
+ * index groups it. The export reports no thread key, so the thread comes from
+ * the search hit this client saw for the document. A file's export never
+ * widens, and a Teams message's covers a part of its chat the index names by
+ * no key, so its id stays unknown.
  */
 export async function documentScope(
   documentId: string,
   subjectScope: string | undefined,
   hit: HitThread | undefined,
 ): Promise<SidecarScopeSignal> {
-  if (subjectScope !== "subject_with_thread")
+  if (subjectScope !== "subject_with_thread" || hit?.kind === "file")
     return scope("document", `doc:${documentId.toLowerCase()}`);
-  if (!hit?.conversationKey) return scope("thread", undefined);
+  if (hit?.kind !== "email" || !hit.conversationKey)
+    return scope("thread", undefined);
   const digest = await sha256Hex(
     JSON.stringify([
       hit.sourceId ?? null,
