@@ -535,8 +535,6 @@ async fn settle_server_outcome(
     Ok(())
 }
 
-/// Called only after the existing generation CAS. Applying the result and
-/// claiming continuation commit together, so a retry can replay the message.
 /// A stored result's files, read as the user before the continuation starts:
 /// the model-visible wrapper around the tool's value and the ids the user may
 /// read.
@@ -545,6 +543,8 @@ pub struct ResolvedFiles {
     pub file_ids: Vec<Uuid>,
 }
 
+/// Called only after the existing generation CAS. Applying the result and
+/// claiming continuation commit together, so a retry can replay the message.
 pub async fn begin_continuation(
     db: &DatabaseConnection,
     account_id: Uuid,
