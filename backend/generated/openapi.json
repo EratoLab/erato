@@ -10792,6 +10792,14 @@
               "type"
             ],
             "properties": {
+              "file_upload_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "description": "Files the tool uploaded for its result, sent only when there are\nany so that a result without files keeps its earlier shape."
+              },
               "type": {
                 "type": "string",
                 "enum": [

@@ -17958,7 +17958,27 @@ pub async fn client_tool_result(
                         "Operation binding mismatch".into(),
                     ));
                 }
-                let outcome = ClientToolOutcome::from_payload(&operation_payload);
+                // The loop writes the tool's output from this delivery, so it
+                // gets the files read as the plain path reads them. A result
+                // stored below keeps its raw ids for the continuation to read.
+                let mut delivered_payload = operation_payload.clone();
+                if resolve_files
+                    && !request.file_upload_ids.is_empty()
+                    && let Some((result, file_ids)) =
+                        super::file_resolution::resolve_client_tool_files(
+                            &app_state,
+                            &policy,
+                            &me_user.to_subject(),
+                            me_user.access_token.as_deref(),
+                            payload.get("result").cloned(),
+                            &request.file_upload_ids,
+                        )
+                        .await
+                {
+                    delivered_payload["result"] = result;
+                    delivered_payload["file_upload_ids"] = json!(file_ids);
+                }
+                let outcome = ClientToolOutcome::from_payload(&delivered_payload);
                 // Delivery acknowledges receipt, not validity. The loop turns an
                 // invalid payload into fixed per-call feedback instead of timing out.
                 if matches!(
@@ -21922,6 +21942,53 @@ async fn complete_client_operation_generation(
     Ok(())
 }
 
+/// The files a stored client tool result reported, read with this user's
+/// permissions as a live result's files are. Only a result not yet applied
+/// needs them; a crash retry keeps what the first continuation wrote.
+async fn stored_result_files(
+    app_state: &AppState,
+    policy: &PolicyEngine,
+    me_user: &MeProfile,
+    account_id: Uuid,
+    attempt_id: Uuid,
+) -> Result<Option<crate::services::client_operations::store::ResolvedFiles>, Report> {
+    let row = crate::services::client_operations::store::get(&app_state.db, account_id, attempt_id)
+        .await?;
+    if row.state != crate::services::client_operations::store::AttemptState::Ready {
+        return Ok(None);
+    }
+    let Some(validated) = row
+        .validated_result
+        .map(serde_json::from_value::<crate::services::client_operations::ValidatedResult>)
+        .transpose()?
+        .filter(|validated| validated.succeeded && !validated.file_ids.is_empty())
+    else {
+        return Ok(None);
+    };
+    let subject = me_user.to_subject();
+    authorize!(
+        policy,
+        &subject,
+        &Resource::Chat(row.chat_id.to_string()),
+        Action::Update
+    )?;
+    Ok(super::file_resolution::resolve_client_tool_files(
+        app_state,
+        policy,
+        &subject,
+        me_user.access_token.as_deref(),
+        validated.output.get("result").cloned(),
+        &validated.file_ids,
+    )
+    .await
+    .map(
+        |(result, file_ids)| crate::services::client_operations::store::ResolvedFiles {
+            result,
+            file_ids,
+        },
+    ))
+}
+
 /// Authenticated requests may run on any replica. Generation ownership is
 /// acquired by the API before entry; no credential or principal is persisted.
 pub(crate) async fn run_client_operation_continuation(
@@ -21933,11 +22000,13 @@ pub(crate) async fn run_client_operation_continuation(
     context: Option<GenerationRequestContext>,
 ) -> Result<(), Report> {
     let account_id = Uuid::parse_str(&me_user.id)?;
+    let files = stored_result_files(app_state, policy, me_user, account_id, attempt_id).await?;
     let row = crate::services::client_operations::store::begin_continuation(
         &app_state.db,
         account_id,
         attempt_id,
         task.generation_id,
+        files,
     )
     .await?;
     let message = get_message_by_id(

@@ -164,6 +164,7 @@ fn pane_result(row: &HostRow, request: &OperationRequest) -> OperationResult {
         outcome: OperationOutcome::Succeeded,
         result: Some(OperationValue::Value {
             value: json!({ "text": PANE_TEXT, "freshness": row.freshness }),
+            file_upload_ids: Vec::new(),
         }),
         error: None,
         executor: row.binding(),

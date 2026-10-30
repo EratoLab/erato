@@ -5995,7 +5995,9 @@ pub struct ClientToolDurableConfig {
     pub host_context: ClientToolHostContext,
     /// Optional JSON Schema (as a JSON string, top-level `type = "object"`) that
     /// a successful result must satisfy. A failing result reaches the model as
-    /// fixed feedback, never verbatim.
+    /// fixed feedback, never verbatim. Applies only to results without files:
+    /// a result that returned files reaches the model inside the server's file
+    /// wrapper and is not checked.
     #[serde(default)]
     pub result_schema: Option<String>,
     /// Seconds from dispatch that a call stays claimable once parked. Must be

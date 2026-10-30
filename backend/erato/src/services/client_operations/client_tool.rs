@@ -8,6 +8,8 @@ use serde_json::json;
 pub const CLIENT_TOOL_KIND: &str = "client_tool.v1";
 const MAX_INPUT_BYTES: usize = 64 * 1024;
 const MAX_RESULT_BYTES: usize = 1024 * 1024;
+/// The most files the server reads for one result.
+const MAX_RESULT_FILES: usize = 20;
 
 pub struct ConfiguredClientToolKind {
     operation_id: String,
@@ -127,20 +129,39 @@ impl OperationKind for ConfiguredClientToolKind {
             return Err("Result identity mismatch".into());
         }
         match (result.outcome, &result.result, &result.error) {
-            (OperationOutcome::Succeeded, Some(OperationValue::Value { value }), None) => {
+            (
+                OperationOutcome::Succeeded,
+                Some(OperationValue::Value {
+                    value,
+                    file_upload_ids,
+                }),
+                None,
+            ) => {
                 if serialized_len(value) > MAX_RESULT_BYTES {
                     return Err("Result too large".into());
                 }
-                if self
-                    .result
-                    .as_ref()
-                    .is_some_and(|schema| !schema.is_valid(value))
+                if file_upload_ids.len() > MAX_RESULT_FILES
+                    || file_upload_ids
+                        .iter()
+                        .enumerate()
+                        .any(|(index, id)| file_upload_ids[..index].contains(id))
+                {
+                    return Err("Invalid result files".into());
+                }
+                // The schema describes the tool's own value; with files the
+                // model sees it inside the server's file wrapper instead.
+                if file_upload_ids.is_empty()
+                    && self
+                        .result
+                        .as_ref()
+                        .is_some_and(|schema| !schema.is_valid(value))
                 {
                     return Err("Result does not match the tool's result schema".into());
                 }
                 Ok(ValidatedResult {
                     output: json!({"status":"success","result":value}),
                     succeeded: true,
+                    file_ids: file_upload_ids.clone(),
                 })
             }
             (OperationOutcome::Failed, None, Some(error)) if error.code == "execution_failed" => {
@@ -150,6 +171,7 @@ impl OperationKind for ConfiguredClientToolKind {
                 Ok(ValidatedResult {
                     output: json!({"status":"error","error":message}),
                     succeeded: false,
+                    file_ids: Vec::new(),
                 })
             }
             (OperationOutcome::Rejected, None, Some(error))
@@ -177,11 +199,13 @@ impl OperationKind for ConfiguredClientToolKind {
                     return Ok(ValidatedResult {
                         output,
                         succeeded: false,
+                        file_ids: Vec::new(),
                     });
                 }
                 Ok(ValidatedResult {
                     output: json!({"status":"error","error":"Client tool validation failed"}),
                     succeeded: false,
+                    file_ids: Vec::new(),
                 })
             }
             // A device prompt the user declined. Only a task's granted call
@@ -195,6 +219,7 @@ impl OperationKind for ConfiguredClientToolKind {
                 Ok(ValidatedResult {
                     output: crate::services::delegated_client_tools::declined_output(tool_name),
                     succeeded: false,
+                    file_ids: Vec::new(),
                 })
             }
             _ => Err("Unsupported client tool result".into()),
@@ -343,7 +368,128 @@ mod tests {
     }
 
     fn value(value: Value) -> Option<OperationValue> {
-        Some(OperationValue::Value { value })
+        files(value, Vec::new())
+    }
+
+    fn files(value: Value, file_upload_ids: Vec<Uuid>) -> Option<OperationValue> {
+        Some(OperationValue::Value {
+            value,
+            file_upload_ids,
+        })
+    }
+
+    #[test]
+    fn a_succeeded_value_may_carry_its_uploaded_files() {
+        let request = request();
+        let ids: Vec<Uuid> = (0..MAX_RESULT_FILES).map(|_| Uuid::new_v4()).collect();
+        let with_files = result(
+            &request,
+            OperationOutcome::Succeeded,
+            files(json!({"busy":"none"}), ids.clone()),
+            None,
+        );
+        let validated = kind(None).validate_result(&request, &with_files).unwrap();
+        assert!(validated.succeeded);
+        assert_eq!(validated.file_ids, ids);
+        assert_eq!(
+            validated.output,
+            json!({"status":"success","result":{"busy":"none"}})
+        );
+        assert_eq!(
+            serde_json::to_value(&validated).unwrap()["file_ids"],
+            json!(ids)
+        );
+        // The schema is the tool's own value; a result with files skips it.
+        assert!(
+            kind(Some(SCHEMA))
+                .validate_result(&request, &with_files)
+                .is_ok()
+        );
+        let without_files = result(
+            &request,
+            OperationOutcome::Succeeded,
+            value(json!({"busy":"none"})),
+            None,
+        );
+        assert!(
+            kind(Some(SCHEMA))
+                .validate_result(&request, &without_files)
+                .is_err()
+        );
+
+        let mut too_many = ids.clone();
+        too_many.push(Uuid::new_v4());
+        let repeated = vec![ids[0], ids[1], ids[0]];
+        for refused in [
+            result(
+                &request,
+                OperationOutcome::Succeeded,
+                files(json!({}), too_many),
+                None,
+            ),
+            result(
+                &request,
+                OperationOutcome::Succeeded,
+                files(json!({}), repeated),
+                None,
+            ),
+            result(
+                &request,
+                OperationOutcome::Failed,
+                files(json!({}), vec![ids[0]]),
+                Some(("execution_failed", None)),
+            ),
+            result(
+                &request,
+                OperationOutcome::Rejected,
+                files(json!({}), vec![ids[0]]),
+                Some(("validation_failed", None)),
+            ),
+        ] {
+            assert!(
+                kind(None).validate_result(&request, &refused).is_err(),
+                "{refused:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_result_without_files_keeps_its_earlier_shape() {
+        let request = request();
+        let plain = result(
+            &request,
+            OperationOutcome::Succeeded,
+            value(json!({"busy":[]})),
+            None,
+        );
+        let serialized = serde_json::to_value(&plain).unwrap();
+        assert_eq!(
+            serialized["result"],
+            json!({"type":"value","value":{"busy":[]}})
+        );
+        let parsed: OperationResult = serde_json::from_value(serialized).unwrap();
+        assert_eq!(parsed, plain);
+        let validated = kind(None).validate_result(&request, &plain).unwrap();
+        assert!(validated.file_ids.is_empty());
+        assert!(
+            serde_json::to_value(&validated)
+                .unwrap()
+                .get("file_ids")
+                .is_none()
+        );
+
+        let id = Uuid::new_v4();
+        let from_fast = from_fast_result(
+            &request,
+            crate::services::client_tools::ClientToolOutcome::Result(json!({"busy":[]}), vec![id]),
+        )
+        .unwrap();
+        assert_eq!(from_fast.outcome, OperationOutcome::Succeeded);
+        assert_eq!(from_fast.result, files(json!({"busy":[]}), vec![id]));
+        assert_eq!(
+            serde_json::to_value(&from_fast).unwrap()["result"],
+            json!({"type":"value","value":{"busy":[]},"file_upload_ids":[id]})
+        );
     }
 
     #[test]

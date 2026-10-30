@@ -161,6 +161,11 @@ pub enum OperationValue {
     Value {
         #[schema(value_type = OperationPayload)]
         value: Value,
+        /// Files the tool uploaded for its result, sent only when there are
+        /// any so that a result without files keeps its earlier shape.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        #[schema(nullable = false)]
+        file_upload_ids: Vec<Uuid>,
     },
     Reference {
         reference: Uuid,
@@ -244,6 +249,10 @@ pub struct OperationResult {
 pub struct ValidatedResult {
     pub output: Value,
     pub succeeded: bool,
+    /// Files the executor reported with a succeeded value. The server reads
+    /// them, as the user, where it writes the tool's output.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub file_ids: Vec<Uuid>,
 }
 
 /// Server-owned offer context. Kinds may authorize a bound synthetic operation
@@ -425,9 +434,12 @@ pub fn from_fast_result(
 ) -> Result<OperationResult, eyre::Report> {
     use crate::services::client_tools::ClientToolOutcome;
     let (outcome, result, error) = match outcome {
-        ClientToolOutcome::Result(value, files) if files.is_empty() => (
+        ClientToolOutcome::Result(value, file_upload_ids) => (
             OperationOutcome::Succeeded,
-            Some(OperationValue::Value { value }),
+            Some(OperationValue::Value {
+                value,
+                file_upload_ids,
+            }),
             None,
         ),
         ClientToolOutcome::ValidationFailed(issues, feedback) => (
@@ -494,6 +506,7 @@ pub fn invalid_result_feedback() -> ValidatedResult {
             "validation_errors": [{"path":"", "code":"invalid_operation_result",
                 "message":"The executor returned an invalid operation result."}]
         }),
+        file_ids: Vec::new(),
     }
 }
 
