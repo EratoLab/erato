@@ -450,7 +450,8 @@ Outlives the pane:     yes (search, get document, read conversation durable)
 Device approvals:      file uploads (get_sidecar_document, attachments of
                        read_sidecar_conversation), under the owner chat
 Framing:               ERMAIN-946, before the overlay merges
-Conformance:           backend row desktop_sidecar; frontend
+Conformance:           backend rows desktop_sidecar (add-in) and
+                       desktop_sidecar_web (web app); frontend
                        desktopSidecar/chatTools.conformance.test.ts; overlay
                        erato-desktop-sidecar (draft)
 ```
@@ -504,8 +505,8 @@ Status:
 - `outlook_mailbox`: registered and skipped until ERMAIN-1006
   (`outlook/hooks/__tests__/outlookGrantReadConformance.test.ts`);
 - `desktop_sidecar`: passes with the server checking the owner
-  (`frontend/src/lib/desktopSidecar/chatTools.conformance.test.ts`; backend row
-  `desktop_sidecar`, slow path included).
+  (`frontend/src/lib/desktopSidecar/chatTools.conformance.test.ts`; backend rows
+  `desktop_sidecar` and `desktop_sidecar_web`, slow path included).
 
 ## Scoped Word cell reads
 

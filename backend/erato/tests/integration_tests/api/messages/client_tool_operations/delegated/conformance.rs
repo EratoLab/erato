@@ -182,6 +182,7 @@ host_conformance!(
     ignore = "ERMAIN-1006: enabled once the Outlook pane takes grant calls"
 );
 host_conformance!(desktop_sidecar: desktop_sidecar(), slow_path);
+host_conformance!(desktop_sidecar_web: desktop_sidecar_web(), slow_path);
 
 /// Long enough for the pane to receive the call, short enough that a durable
 /// escalation would happen inside the test.

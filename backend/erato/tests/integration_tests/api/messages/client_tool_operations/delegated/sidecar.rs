@@ -1,8 +1,9 @@
 //! The desktop sidecar as a host of delegated tasks (ERMAIN-1034). Its binding
-//! travels in `X-Erato-Additional-Executors` beside the shell's Office binding,
-//! and each client tool is routed to the binding of its host.
+//! travels in `X-Erato-Additional-Executors`, beside the shell's Office binding
+//! in an add-in and alone in the web app, and each client tool is routed to the
+//! binding of its host.
 use super::super::attached::next_call;
-use super::rows::{desktop_sidecar, office_primary};
+use super::rows::{desktop_sidecar, desktop_sidecar_web, office_primary};
 use super::slow_path::{
     Waiting, attempt_row, child_for, claim_token, continue_operation, pane_result,
     park_a_waiting_child, post_result, record_parent_resumes, task_result_in, wait_answered,
@@ -314,7 +315,18 @@ async fn approve_own_read(
 
 #[sqlx::test(migrator = "crate::MIGRATOR")]
 async fn an_approval_in_the_same_shell_keeps_a_sidecar_tool_durable(pool: Pool<Postgres>) {
-    let row = &desktop_sidecar();
+    approval_in_the_same_shell_keeps_a_sidecar_tool_durable(&desktop_sidecar(), pool).await;
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn an_approval_in_the_web_app_keeps_a_sidecar_tool_durable(pool: Pool<Postgres>) {
+    approval_in_the_same_shell_keeps_a_sidecar_tool_durable(&desktop_sidecar_web(), pool).await;
+}
+
+async fn approval_in_the_same_shell_keeps_a_sidecar_tool_durable(
+    row: &HostRow,
+    pool: Pool<Postgres>,
+) {
     let mut mocks = MockSet::new();
     mock_parent_reads(&mut mocks, row, &[PARENT_READ_CALL], Duration::ZERO);
     let (state, _llm) = delegated_state(row, pool, mocks, durable_own_read(row, 10)).await;
@@ -339,7 +351,7 @@ async fn an_approval_in_the_same_shell_keeps_a_sidecar_tool_durable(pool: Pool<P
     assert_eq!(request.consent, ConsentPolicy::None);
     assert!(request.lineage.is_none());
 
-    // A shell that sends only its Office binding answered for another device.
+    // A shell that sends no sidecar binding answered for another device.
     let legacy = seed_origin_chat(&state.db).await;
     finish(spawn_parent(
         row,
@@ -438,7 +450,15 @@ fn resume_request(
 
 #[sqlx::test(migrator = "crate::MIGRATOR")]
 async fn a_resumed_stream_reattaches_with_the_sidecar_binding(pool: Pool<Postgres>) {
-    let row = &desktop_sidecar();
+    resumed_stream_reattaches_with_the_sidecar_binding(&desktop_sidecar(), pool).await;
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_resumed_stream_in_the_web_app_reattaches_with_the_sidecar_binding(pool: Pool<Postgres>) {
+    resumed_stream_reattaches_with_the_sidecar_binding(&desktop_sidecar_web(), pool).await;
+}
+
+async fn resumed_stream_reattaches_with_the_sidecar_binding(row: &HostRow, pool: Pool<Postgres>) {
     let mut mocks = MockSet::new();
     mock_parent_reads(
         &mut mocks,
@@ -511,7 +531,7 @@ async fn a_resumed_stream_reattaches_with_the_sidecar_binding(pool: Pool<Postgre
             .await
             .unwrap(),
         Some(None),
-        "a reconnect with the Office binding alone cannot take the sidecar tool's transport"
+        "a reconnect without the sidecar binding cannot take the sidecar tool's transport"
     );
     drop(legacy);
 
@@ -527,7 +547,7 @@ async fn a_resumed_stream_reattaches_with_the_sidecar_binding(pool: Pool<Postgre
                 .unwrap(),
             Some(Some(_))
         ),
-        "the reconnect with both bindings takes the transport"
+        "the reconnect with the sidecar binding takes the transport"
     );
     let mut resumed = response.bytes_stream();
     let second = call_named(&mut resumed, PARENT_SECOND_READ_CALL).await;

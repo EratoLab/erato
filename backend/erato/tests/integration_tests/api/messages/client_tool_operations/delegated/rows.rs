@@ -15,16 +15,25 @@ pub(super) struct ContextVersion {
     pub value: &'static str,
 }
 
+/// How a host's shell sends the row's binding on a parent-side request.
+pub(super) enum Envelope {
+    /// As `X-Erato-Executor`.
+    Primary,
+    /// In `X-Erato-Additional-Executors` beside this `X-Erato-Executor`, as an
+    /// Office add-in sends the sidecar binding beside its own.
+    Beside(ExecutorBinding),
+    /// In `X-Erato-Additional-Executors` with no `X-Erato-Executor`, as the
+    /// web app sends the sidecar binding.
+    Alone,
+}
+
 /// What a host brings to a delegated task: its binding, one read tool, the
 /// turn the task is planned from and what its pane reports.
 pub(super) struct HostRow {
     pub host: ClientToolHostContext,
     pub device: &'static str,
     pub identity: &'static str,
-    /// The shell's `X-Erato-Executor` when the row's own binding travels in
-    /// `X-Erato-Additional-Executors`, as a sidecar binding beside an Office
-    /// add-in's does. `None` sends the row's binding as the primary.
-    pub primary: Option<ExecutorBinding>,
+    pub envelope: Envelope,
     /// Sent as `X-Erato-Platform` and required by the action facet.
     pub platform: &'static str,
     pub namespace: &'static str,
@@ -64,26 +73,29 @@ impl HostRow {
 
     /// The executor headers of a parent-side request that sends `executor`
     /// as the row's binding, the way the host's shell sends them. Without
-    /// `executor` a row with a primary still sends that primary.
+    /// `executor` a shell that sends its binding beside another still sends
+    /// that other one.
     pub fn executor_headers(
         &self,
         executor: Option<&ExecutorBinding>,
     ) -> Vec<(&'static str, String)> {
-        match &self.primary {
-            None => executor
+        let additional = executor.map(|binding| {
+            (
+                "X-Erato-Additional-Executors",
+                serde_json::to_string(&[binding]).unwrap(),
+            )
+        });
+        match &self.envelope {
+            Envelope::Primary => executor
                 .map(|binding| ("X-Erato-Executor", serde_json::to_string(binding).unwrap()))
                 .into_iter()
                 .collect(),
-            Some(primary) => {
+            Envelope::Beside(primary) => {
                 std::iter::once(("X-Erato-Executor", serde_json::to_string(primary).unwrap()))
-                    .chain(executor.map(|binding| {
-                        (
-                            "X-Erato-Additional-Executors",
-                            serde_json::to_string(&[binding]).unwrap(),
-                        )
-                    }))
+                    .chain(additional)
                     .collect()
             }
+            Envelope::Alone => additional.into_iter().collect(),
         }
     }
 
@@ -169,7 +181,7 @@ pub(super) fn fake_host(host: ClientToolHostContext) -> HostRow {
         host,
         device: "fake-device",
         identity: "fake-session-1",
-        primary: None,
+        envelope: Envelope::Primary,
         platform: "fake",
         namespace: "fake",
         read_tool: "read_part",
@@ -221,7 +233,7 @@ pub(super) fn word_document() -> HostRow {
         host: ClientToolHostContext::WordDocument,
         device: "word-device",
         identity: "pane-session-1",
-        primary: None,
+        envelope: Envelope::Primary,
         platform: "word",
         namespace: "word",
         read_tool: "read_document_blocks",
@@ -260,7 +272,7 @@ pub(super) fn outlook_mailbox() -> HostRow {
         host: ClientToolHostContext::OutlookMailbox,
         device: "outlook-device",
         identity: "mailbox-digest-1",
-        primary: None,
+        envelope: Envelope::Primary,
         platform: "outlook",
         namespace: "outlook",
         read_tool: "fetch_availability",
@@ -304,7 +316,7 @@ pub(super) fn desktop_sidecar() -> HostRow {
         host: ClientToolHostContext::DesktopSidecar,
         device: "sidecar-device",
         identity: "local",
-        primary: Some(office_primary()),
+        envelope: Envelope::Beside(office_primary()),
         // The action facet needs a platform; any value does.
         platform: "sidecar",
         namespace: "desktop",
@@ -330,5 +342,14 @@ pub(super) fn desktop_sidecar() -> HostRow {
             "counts": {"own": 0, "local": 0, "remote": 0, "unknown": 0},
         }),
         wait_note: wait_note(ClientToolHostContext::DesktopSidecar),
+    }
+}
+
+/// The sidecar row as the web app sends it: its binding alone in
+/// `X-Erato-Additional-Executors`, with no `X-Erato-Executor`.
+pub(super) fn desktop_sidecar_web() -> HostRow {
+    HostRow {
+        envelope: Envelope::Alone,
+        ..desktop_sidecar()
     }
 }
