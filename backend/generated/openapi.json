@@ -10646,6 +10646,7 @@
       },
       "OperationRequest": {
         "type": "object",
+        "description": "A parked call as the server stored it. Clients only receive it; it is read\nleniently so that a key a newer release adds does not break a replica that\nstill runs this one.",
         "required": [
           "attempt_id",
           "operation_id",
@@ -10711,8 +10712,7 @@
           "tool_call_id": {
             "type": "string"
           }
-        },
-        "additionalProperties": false
+        }
       },
       "OperationResult": {
         "type": "object",

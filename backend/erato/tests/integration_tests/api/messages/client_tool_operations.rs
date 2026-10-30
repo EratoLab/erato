@@ -1602,3 +1602,37 @@ async fn a_file_the_user_cannot_read_is_not_attached_at_continuation(pool: Pool<
     );
     assert!(message.raw_message.to_string().contains(ANSWER));
 }
+
+/// A replica of this release continues a row a newer release wrote, with
+/// keys it does not know in the stored request and result.
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_stored_result_with_a_newer_field_still_continues(pool: Pool<Postgres>) {
+    let setup = setup(pool, 10, true, true).await;
+    let request = park(&setup).await;
+    let token = claim_token(&setup.state, &request).await;
+    post_result(
+        &setup.state,
+        &token,
+        &value_result(&request, availability()),
+    )
+    .await
+    .assert_status_ok();
+    let row = attempt(&setup.state, request.attempt_id).await;
+    let mut stored_request = row.request.clone();
+    stored_request["future"] = json!(1);
+    let mut stored_result = row.result.clone().unwrap();
+    stored_result["future"] = json!(1);
+    stored_result["result"]["future"] = json!(1);
+    let mut newer: attempts::ActiveModel = row.into();
+    newer.request = ActiveValue::Set(stored_request);
+    newer.result = ActiveValue::Set(Some(stored_result));
+    newer.update(&setup.state.db).await.unwrap();
+    continue_turn(&setup.state, request.attempt_id).await;
+    let message = assistant_message(&setup).await;
+    assert!(message.raw_message.to_string().contains(ANSWER));
+    assert!(
+        call_output(&message)["result"]
+            .to_string()
+            .contains("AVAIL-SLOT-MARKER")
+    );
+}

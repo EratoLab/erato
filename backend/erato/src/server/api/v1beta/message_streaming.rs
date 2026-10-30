@@ -22040,7 +22040,9 @@ pub(crate) async fn run_client_operation_continuation(
         serde_json::from_value(row.request.clone())?;
     if let Some(kind) = app_state.client_operations.for_request(&request)
         && let Some(result) = row.result.as_ref()
-        && !kind.reoffer_after_result(&serde_json::from_value(result.clone())?)
+        && !kind.reoffer_after_result(crate::services::client_operations::stored_result_outcome(
+            result,
+        )?)
     {
         parameters
             .client_tools

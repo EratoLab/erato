@@ -119,8 +119,10 @@ pub enum ConsentPolicy {
     Native,
 }
 
+/// A parked call as the server stored it. Clients only receive it; it is read
+/// leniently so that a key a newer release adds does not break a replica that
+/// still runs this one.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
-#[serde(deny_unknown_fields)]
 pub struct OperationRequest {
     pub attempt_id: Uuid,
     pub operation_id: String,
@@ -283,9 +285,10 @@ pub trait OperationKind: Send + Sync {
     fn tool_offer(&self, _context: &OperationOfferContext<'_>) -> Option<OperationToolOffer> {
         None
     }
-    /// Whether this logical turn may offer the operation again after its result.
-    /// For example, cancelling native collection must not start another search.
-    fn reoffer_after_result(&self, _result: &OperationResult) -> bool {
+    /// Whether this logical turn may offer the operation again after a result
+    /// with this outcome. For example, cancelling native collection must not
+    /// start another search.
+    fn reoffer_after_result(&self, _outcome: OperationOutcome) -> bool {
         true
     }
     fn allow_cross_device(&self) -> bool {
@@ -426,6 +429,16 @@ pub fn pending(content: &[crate::models::message::ContentPart]) -> Option<&Clien
         Some(crate::models::message::ContentPart::ClientToolPending(pending)) => Some(pending),
         _ => None,
     }
+}
+
+/// The outcome of a stored result, whatever other keys a newer release wrote
+/// beside it. A continuation needs nothing else, and reading the whole result
+/// strictly would end a task for good on a key this release does not know.
+pub fn stored_result_outcome(result: &Value) -> Result<OperationOutcome, eyre::Report> {
+    let outcome = result
+        .get("outcome")
+        .ok_or_else(|| eyre::eyre!("Stored operation result has no outcome"))?;
+    Ok(serde_json::from_value(outcome.clone())?)
 }
 
 pub fn from_fast_result(
@@ -612,6 +625,56 @@ mod tests {
             {"pad": "x".repeat(MAX_ADDITIONAL_EXECUTORS_BYTES)}
         ]);
         assert!(additional(&padded.to_string(), None).is_empty());
+    }
+
+    fn stored_request() -> Value {
+        json!({
+            "attempt_id": Uuid::new_v4(), "operation_id": "desktop/search_sidecar_index",
+            "kind": client_tool::CLIENT_TOOL_KIND, "realm": "desktop-sidecar",
+            "chat_id": Uuid::new_v4(), "message_id": Uuid::new_v4(), "tool_call_id": "call",
+            "account_id": Uuid::new_v4(),
+            "binding": binding_json("desktop_sidecar", "client"),
+            "consent": "none", "expires_at": "2026-10-30T12:00:00Z", "input": {}
+        })
+    }
+
+    #[test]
+    fn a_stored_request_with_a_newer_field_still_parses() {
+        let mut stored = stored_request();
+        let plain: OperationRequest = serde_json::from_value(stored.clone()).unwrap();
+        assert_eq!(serde_json::to_value(&plain).unwrap(), stored);
+        stored["approval_scope"] = json!({"kind": "thread"});
+        let newer: OperationRequest = serde_json::from_value(stored).unwrap();
+        assert_eq!(newer, plain);
+    }
+
+    #[test]
+    fn a_stored_result_gives_its_outcome_whatever_else_it_carries() {
+        let stored = json!({
+            "attempt_id": Uuid::new_v4(), "operation_id": "desktop/search_sidecar_index",
+            "outcome": "succeeded",
+            "result": {"type": "value", "value": {"hits": []}, "future": 1},
+            "error": null,
+            "executor": binding_json("desktop_sidecar", "client"),
+            "approval_scope": {"kind": "thread"}
+        });
+        assert!(serde_json::from_value::<OperationResult>(stored.clone()).is_err());
+        assert_eq!(
+            stored_result_outcome(&stored).unwrap(),
+            OperationOutcome::Succeeded
+        );
+        let mut rejected = stored.clone();
+        rejected["outcome"] = json!("rejected");
+        assert_eq!(
+            stored_result_outcome(&rejected).unwrap(),
+            OperationOutcome::Rejected
+        );
+        let mut missing = stored.clone();
+        missing.as_object_mut().unwrap().remove("outcome");
+        assert!(stored_result_outcome(&missing).is_err());
+        let mut unknown = stored;
+        unknown["outcome"] = json!("postponed");
+        assert!(stored_result_outcome(&unknown).is_err());
     }
 
     #[test]
