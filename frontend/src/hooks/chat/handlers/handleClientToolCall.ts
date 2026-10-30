@@ -95,7 +95,6 @@ function unavailableForTask(
   ClientToolResultRequest,
   "error" | "validation_errors" | "submission_feedback"
 > {
-  // eslint-disable-next-line lingui/no-unlocalized-strings -- Read by the task's model, never shown.
   const message = `The client tool "${toolName}" is not available on this device right now, so nothing was read.`;
   return {
     error: message,
