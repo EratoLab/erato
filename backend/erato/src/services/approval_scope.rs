@@ -272,22 +272,39 @@ pub async fn by_id(
     }))
 }
 
+/// A decision is its stop and the position taken at its click: the same body
+/// sent again is the same decision, a new click on the same stop is another.
+const DECISION_MATCHES: &str = "s.decided_in_message_id = $6 AND s.decided_stop = $7 \
+     AND s.position IS NOT DISTINCT FROM $8";
+
+fn decision_values(
+    chat_id: Uuid,
+    key: &ScopeKey,
+    decided_in: Uuid,
+    decided_stop: i32,
+    position: Option<&Value>,
+) -> Vec<sea_orm::Value> {
+    let mut values = key_values(chat_id, key);
+    values.push(decided_in.into());
+    values.push(decided_stop.into());
+    values.push(position.cloned().into());
+    values
+}
+
 async fn decided_row(
     db: &DatabaseConnection,
     chat_id: Uuid,
     key: &ScopeKey,
     decided_in: Uuid,
     decided_stop: i32,
+    position: Option<&Value>,
 ) -> Result<Option<Uuid>, Report> {
-    let mut values = key_values(chat_id, key);
-    values.push(decided_in.into());
-    values.push(decided_stop.into());
     db.query_one_raw(statement(
         &format!(
             r#"SELECT s.id FROM client_tool_approval_scopes s
-               WHERE {KEY_MATCHES} AND s.decided_in_message_id = $6 AND s.decided_stop = $7"#
+               WHERE {KEY_MATCHES} AND {DECISION_MATCHES}"#
         ),
-        values,
+        decision_values(chat_id, key, decided_in, decided_stop, position),
     ))
     .await?
     .map(|row| row.try_get("", "id").map_err(Report::from))
@@ -295,8 +312,9 @@ async fn decided_row(
 }
 
 /// The approval one decision made: the row it already made, live or ended, or
-/// a new live row. A crash retry of the same decision finds the same row, so a
-/// decision never makes a second one.
+/// a new live row. A crash retry of the same body finds the same row, so a
+/// decision never makes a second one; a new click on the stop after a crash
+/// carries a new position and makes a new approval, which replaces a live one.
 pub async fn approve_for_decision(
     db: &DatabaseConnection,
     chat_id: Uuid,
@@ -306,14 +324,17 @@ pub async fn approve_for_decision(
     position: Option<&Value>,
 ) -> Result<Uuid, Report> {
     for _ in 0..3 {
-        if let Some(id) = decided_row(db, chat_id, key, decided_in, decided_stop).await? {
+        if let Some(id) = decided_row(db, chat_id, key, decided_in, decided_stop, position).await? {
             return Ok(id);
         }
         let mut values = vec![Uuid::new_v4().into()];
-        values.extend(key_values(chat_id, key));
-        values.push(decided_in.into());
-        values.push(decided_stop.into());
-        values.push(position.cloned().into());
+        values.extend(decision_values(
+            chat_id,
+            key,
+            decided_in,
+            decided_stop,
+            position,
+        ));
         if let Some(row) = db
             .query_one_raw(statement(
                 r#"INSERT INTO client_tool_approval_scopes
@@ -331,11 +352,11 @@ pub async fn approve_for_decision(
         // Another decision's approval is live: the newer decision replaces it.
         db.execute_raw(statement(
             &format!(
-                r#"UPDATE client_tool_approval_scopes s SET ended_at = now(), end_reason = $6
-                   WHERE {KEY_MATCHES} AND s.ended_at IS NULL"#
+                r#"UPDATE client_tool_approval_scopes s SET ended_at = now(), end_reason = $9
+                   WHERE {KEY_MATCHES} AND s.ended_at IS NULL AND NOT ({DECISION_MATCHES})"#
             ),
             {
-                let mut values = key_values(chat_id, key);
+                let mut values = decision_values(chat_id, key, decided_in, decided_stop, position);
                 values.push(END_SUPERSEDED.into());
                 values
             },
