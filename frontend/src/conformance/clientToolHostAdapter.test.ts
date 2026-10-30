@@ -63,7 +63,8 @@ type Flaw =
   | "trusts an unreadable position"
   | "keeps positions across a reload"
   | "refuses a call without an approval after an outside change"
-  | "registers no binding for its read";
+  | "registers no binding for its read"
+  | "skips its device prompt under a document approval";
 
 const READ = "fake_read";
 const WRITE = "fake_write";
@@ -288,7 +289,14 @@ const fakeHost = ({
     if (flaw === "answers local_only") {
       return { ok: true, disposition: "local_only" };
     }
-    if (asks && flaw !== "asks before checking the grant") {
+    if (
+      asks &&
+      flaw !== "asks before checking the grant" &&
+      !(
+        flaw === "skips its device prompt under a document approval" &&
+        grant.approvalScope
+      )
+    ) {
       if (!(await askOnDevice(grant, context))) {
         return declined;
       }
@@ -717,6 +725,11 @@ describe("clientToolHostAdapterConformanceFailures", () => {
     [
       "refuses a call without an approval after an outside change",
       `approval scope (fake_host): "fake_read" without an approval after a change from outside fails with "${SCOPE_CHANGED}" and codes [scope_changed]`,
+      true,
+    ],
+    [
+      "skips its device prompt under a document approval",
+      'device approval (fake_host): "fake_read" asking on the device under a document approval raises no approval',
       true,
     ],
   ])(

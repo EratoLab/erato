@@ -464,7 +464,8 @@ Each cell holds "date · build · result". Windows first, then Mac and the web.
   outside, its own change and optionally a reload): the read must be listed as
   scoped, take a position only for its own scope, read after its own changes,
   answer `scope_changed` without reading after an outside change or with an
-  unreadable or reloaded position, and give a bad grant the loss code first. A
+  unreadable or reloaded position, give a bad grant the loss code first, and a
+  read that asks on the device must still ask under the approval (CT-9). A
   host without it must not list the check.
 
 Status:
