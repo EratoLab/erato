@@ -1136,6 +1136,42 @@ describe("a delegated task's calls", () => {
     expect(outcome).not.toHaveProperty("result.freshness.scope");
   });
 
+  it("reports each source's searched period, and no changes only for an index caught up since the read", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-09-15T11:00:00Z"));
+    try {
+      const run = async (source: Partial<RawCoverageSource>) =>
+        byToolName(
+          setup({ "search.query.v1": withCoverage([coverageSource(source)]) }),
+          SEARCH_SIDECAR_INDEX_TOOL,
+        ).execute({ text: "contract" }, grantContext());
+      expect(await run({})).toMatchObject({
+        ok: true,
+        result: {
+          coverage: {
+            sources: [
+              {
+                from: "2026-01-01T00:00:00Z",
+                to: "2026-09-15T12:00:00Z",
+                status: "complete",
+              },
+            ],
+          },
+          freshness: {
+            ...unknownFreshness,
+            readAt: "2026-09-15T11:00:00.000Z",
+            changes: "none",
+          },
+        },
+      });
+      expect(await run({ observedAt: "2026-09-15T10:59:59Z" })).toMatchObject({
+        result: { freshness: { changes: "unknown" } },
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it.each<[string, object]>([
     ["another requesting chat", { chatId: "other-chat" }],
     ["another requesting message", { messageId: "other-message" }],
