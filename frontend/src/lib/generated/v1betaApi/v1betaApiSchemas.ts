@@ -110,6 +110,12 @@ export type ApprovalDecisionItem = {
    */
   approval_id: string;
   decision: ToolApprovalDecision;
+  /**
+   * The host's position at the click, for `approve_context` on a scope the
+   * host checks on the device. Only the client that holds the document can
+   * take it; it sends the decision with that host's `X-Erato-Executor`.
+   */
+  scope_position?: Record<string, any>;
 };
 
 /**
@@ -146,6 +152,46 @@ export type ApprovalItem = {
   input: Value;
   tool_call_id: string;
   tool_name: string;
+};
+
+/**
+ * What one decision on this item may cover besides the call itself.
+ */
+export type ApprovalScope = {
+  /**
+   * The scope's last approval ended because the host saw an outside change.
+   */
+  changed?: boolean;
+  covers: ApprovalScopeCovers;
+  /**
+   * The binding's host context kind, e.g. `word_document`.
+   */
+  host_context: string;
+  /**
+   * Server-derived; items with the same host context, scope id and tool
+   * share a decision.
+   */
+  scope_id: string;
+};
+
+/**
+ * What a context approval covers besides the call it was given on.
+ */
+export type ApprovalScopeCovers = "document" | "turn";
+
+/**
+ * The context approval a covered call runs under.
+ */
+export type ApprovalScopeLineage = {
+  /**
+   * @format uuid
+   */
+  approval_id: string;
+  /**
+   * The host's position at the decision, opaque to everyone but the host.
+   */
+  position: Record<string, any>;
+  scope_id: string;
 };
 
 export type ApprovedExport = {
@@ -801,6 +847,7 @@ export type BudgetStatusResponse = {
  * the call. Only grant calls carry it.
  */
 export type CallLineage = {
+  approval_scope?: ApprovalScopeLineage;
   /**
    * Opaque client context version, from the owner turn's action-facet arguments.
    */
@@ -1128,6 +1175,7 @@ export type ChildApprovalRef = {
    */
   allow_always?: boolean | null | undefined;
   annotations: ToolApprovalAnnotations;
+  approval_scope?: null | ApprovalScope;
   /**
    * @format uuid
    */
@@ -1587,6 +1635,13 @@ export type ContentPartToolApproval = {
    * @format uuid
    */
   child_chat_id?: null | undefined;
+  covers?: null | ApprovalScopeCovers;
+  /**
+   * The approval row that decision made.
+   *
+   * @format uuid
+   */
+  scope_approval_id?: null | undefined;
   tool_call_id: string;
   /**
    * @format uuid
@@ -1604,6 +1659,7 @@ export type ContentPartToolApprovalRequest = {
    */
   allow_always: boolean;
   annotations: ToolApprovalAnnotations;
+  approval_scope?: null | ApprovalScope;
   /**
    * Every decision this stop covers. An `mcp_tool` or `client_tool` stop
    * carries its own call first, described by the flat fields above too,
@@ -4228,7 +4284,8 @@ export type ToolApprovalDecision =
   | "reject"
   | "approve_always"
   | "reject_always"
-  | "withdraw";
+  | "withdraw"
+  | "approve_context";
 
 /**
  * Which surface a durable approval stop belongs to. `McpTool` is the

@@ -14,6 +14,7 @@ describe("isApprovalDecision", () => {
     expect(isApprovalDecision("reject_always")).toBe(false);
     expect(isApprovalDecision("approve")).toBe(true);
     expect(isApprovalDecision("approve_always")).toBe(true);
+    expect(isApprovalDecision("approve_context")).toBe(true);
   });
 });
 
@@ -98,6 +99,61 @@ describe("buildContinueStreamBody", () => {
     ).toEqual({
       message_id: "message-1",
       decision: "withdraw",
+      shows_child_items: true,
+    });
+  });
+
+  it("sends each item's scope position with approve_context", () => {
+    const position = { journal: "journal-1", seq: 41, events: true };
+    expect(
+      buildContinueStreamBody({
+        messageId: "message-1",
+        decision: "approve_context",
+        approvalIds: ["task-a", "task-b", "task-c"],
+        itemDecisions: [
+          {
+            approvalId: "task-a",
+            decision: "approve_context",
+            scopePosition: position,
+          },
+          {
+            approvalId: "task-b",
+            decision: "approve_context",
+            scopePosition: position,
+          },
+          { approvalId: "task-c", decision: "reject" },
+        ],
+      }),
+    ).toEqual({
+      message_id: "message-1",
+      decisions: [
+        {
+          approval_id: "task-a",
+          decision: "approve_context",
+          scope_position: position,
+        },
+        {
+          approval_id: "task-b",
+          decision: "approve_context",
+          scope_position: position,
+        },
+        { approval_id: "task-c", decision: "reject" },
+      ],
+      shows_child_items: true,
+    });
+  });
+
+  it("names a single approve_context item, whose position the legacy body cannot carry", () => {
+    expect(
+      buildContinueStreamBody({
+        messageId: "message-1",
+        decision: "approve_context",
+        approvalIds: ["task-a"],
+        itemDecisions: [{ approvalId: "task-a", decision: "approve_context" }],
+      }),
+    ).toEqual({
+      message_id: "message-1",
+      decisions: [{ approval_id: "task-a", decision: "approve_context" }],
       shows_child_items: true,
     });
   });

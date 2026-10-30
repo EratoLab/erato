@@ -8,6 +8,7 @@ import { handleClientToolCall } from "./handleClientToolCall";
 import { handleToolCallUpdate } from "./handleToolCallUpdate";
 import {
   abortClientToolCalls,
+  clientToolScopeChanged,
   hasClientToolCallBeenAnswered,
   isClientToolCallInFlight,
   registerClientToolExecutor,
@@ -299,6 +300,57 @@ describe("handleClientToolCall", () => {
         tool_call_id: "call-1",
         error: 'No client-tool executor registered for "fetch_availability"',
       });
+    });
+
+    it("takes the same call again after answering that its scope changed", async () => {
+      const execute = vi
+        .fn()
+        .mockResolvedValueOnce(
+          clientToolScopeChanged("The document changed outside this chat."),
+        )
+        .mockResolvedValueOnce({ ok: true, result: { text: "read" } });
+      registerClientToolExecutor("fetch_availability", execute, undefined, {
+        acceptsGrantCalls: true,
+      });
+      fetchMock.mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({ delivered: true, stored: false }),
+      });
+      const covered = {
+        ...lineage,
+        approval_scope: {
+          approval_id: "approval-1",
+          scope_id: "identity-1",
+          position: { journal: "j", seq: 1, events: true },
+        },
+      };
+      await handleClientToolCall(makeEvent(), {
+        ...deps,
+        executor,
+        lineage: covered,
+      });
+      expect(lastPostBody(fetchMock)).toEqual({
+        chat_id: "chat-1",
+        message_id: "msg-1",
+        tool_call_id: "call-1",
+        error: "The document changed outside this chat.",
+        validation_errors: [
+          {
+            path: "",
+            code: "scope_changed",
+            message: "The document changed outside this chat.",
+          },
+        ],
+      });
+      expect(hasClientToolCallBeenAnswered("call-1")).toBe(false);
+
+      await handleClientToolCall(makeEvent(), { ...deps, executor, lineage });
+      expect(execute).toHaveBeenCalledTimes(2);
+      expect(lastPostBody(fetchMock)).toMatchObject({
+        result: { text: "read" },
+      });
+      expect(hasClientToolCallBeenAnswered("call-1")).toBe(true);
     });
 
     it("is refused without running a handler that did not opt in", async () => {
