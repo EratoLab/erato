@@ -164,10 +164,47 @@ pub async fn set_client_tool_decision(
         [(*user_id).into(), entry.into()],
     ))
     .await?;
+    if decision == ClientToolDecision::NeverAllow {
+        end_never_allowed_approvals(conn, user_id, &[qualified_name.to_string()]).await?;
+    }
+    Ok(())
+}
+
+/// A tool set to Never allow keeps none of its document or response approvals,
+/// so setting it back to Ask asks again.
+async fn end_never_allowed_approvals(
+    conn: &DatabaseConnection,
+    user_id: &Uuid,
+    tool_names: &[String],
+) -> Result<(), Report> {
+    crate::services::approval_scope::end_for_tools(
+        conn,
+        *user_id,
+        tool_names,
+        crate::services::approval_scope::END_NEVER_ALLOWED,
+    )
+    .await?;
     Ok(())
 }
 
 pub async fn upsert_user_preferences(
+    conn: &DatabaseConnection,
+    user_id: &Uuid,
+    input: UpdateUserPreferencesInput,
+) -> Result<user_preferences::Model, Report> {
+    let never_allowed: Vec<String> = input
+        .client_tool_decisions
+        .iter()
+        .flatten()
+        .filter(|(_, decision)| **decision == ClientToolDecision::NeverAllow)
+        .map(|(name, _)| name.clone())
+        .collect();
+    let stored = upsert_user_preferences_row(conn, user_id, input).await?;
+    end_never_allowed_approvals(conn, user_id, &never_allowed).await?;
+    Ok(stored)
+}
+
+async fn upsert_user_preferences_row(
     conn: &DatabaseConnection,
     user_id: &Uuid,
     input: UpdateUserPreferencesInput,

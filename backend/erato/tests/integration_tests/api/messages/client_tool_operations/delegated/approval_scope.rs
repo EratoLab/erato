@@ -1143,8 +1143,137 @@ async fn always_and_never_on_a_scope_item_keep_their_meaning(pool: Pool<Postgres
         CHILD_READ_CALL,
     );
     assert_eq!(read["status"], "error", "{read}");
-    assert_eq!(chat.approvals().await.len(), 1);
+    let stored = chat.approvals().await;
+    assert_eq!(stored.len(), 1);
+    assert_eq!(stored[0].end_reason.as_deref(), Some("never_allowed"));
+
+    erato::models::user_preference::set_client_tool_decision(
+        &chat.state.db,
+        &account(&chat.state).await,
+        &row.qualified(),
+        erato::models::user_preference::ClientToolDecision::Ask,
+    )
+    .await
+    .unwrap();
+    finish(chat.second_turn(row, row.binding())).await;
+    assert_eq!(
+        chat.pane.next(Duration::from_millis(300)).await,
+        None,
+        "Ask after Never asks again instead of reading under the earlier approval"
+    );
+    let later = assistant_row(&chat.state.db, chat.chat_id).await;
+    assert_ne!(later.id, parent.id);
+    assert_eq!(
+        stop_items(&later)[0]["child"]["approval_scope"],
+        offered(row, row.identity)
+    );
+    assert_eq!(chat.approvals().await, stored);
     chat.server.abort();
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_tool_set_to_never_gets_no_approval(pool: Pool<Postgres>) {
+    let row = &rows::fake_host(ClientToolHostContext::WordDocument);
+    // The document allowed on one item and Never on the next: the first call is
+    // allowed once and no approval outlives the Never.
+    let mut chat = scope_chat(row, pool.clone(), 2, true, |_, _| {}, |_| {}).await;
+    let parent = chat.ask(row).await;
+    let items = stop_items(&parent);
+    assert_eq!(items.len(), 2);
+    let decided = spawn_decision_from(
+        &chat.base,
+        json!({
+            "message_id": parent.id,
+            "decisions": [
+                {"approval_id": items[0]["approval_id"], "decision": "approve_context",
+                 "scope_position": position(3)},
+                {"approval_id": items[1]["approval_id"], "decision": "reject_always"},
+            ],
+            "shows_child_items": true,
+        }),
+        &row.binding(),
+    );
+    let event = answer_calls(row, &mut chat, 1).await.remove(0);
+    assert!(event["lineage"].get("approval_scope").is_none(), "{event}");
+    assert!(finish(decided).await.contains(PARENT_FINAL));
+    assert_eq!(chat.pane.next(Duration::from_millis(300)).await, None);
+    assert!(chat.approvals().await.is_empty());
+    chat.server.abort();
+
+    let mut chat = scope_chat(row, pool, 1, true, |_, _| {}, |_| {}).await;
+    let parent = chat.ask(row).await;
+    erato::models::user_preference::set_client_tool_decision(
+        &chat.state.db,
+        &account(&chat.state).await,
+        &row.qualified(),
+        erato::models::user_preference::ClientToolDecision::NeverAllow,
+    )
+    .await
+    .unwrap();
+    let decided = allow_for_scope(
+        row,
+        &chat.base,
+        parent.id,
+        &stop_items(&parent),
+        &position(4),
+    );
+    assert!(finish(decided).await.contains(PARENT_FINAL));
+    assert_eq!(chat.pane.next(Duration::from_millis(300)).await, None);
+    assert!(chat.approvals().await.is_empty());
+    chat.server.abort();
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn never_in_settings_ends_the_tools_approvals(pool: Pool<Postgres>) {
+    use erato::models::user_preference::{
+        ClientToolDecision, UpdateUserPreferencesInput, upsert_user_preferences,
+    };
+    let row = &rows::fake_host(ClientToolHostContext::WordDocument);
+    let state = test_app_state(hermetic_app_config(None, None), pool).await;
+    let db = &state.db;
+    let chat_id = seed_origin_chat(db).await;
+    let read = document_key(row, &row.binding());
+    let other = ScopeKey {
+        tool_name: format!("{}/{OTHER_READ_TOOL}", row.namespace),
+        ..read.clone()
+    };
+    let decided_in = Uuid::new_v4();
+    for key in [&read, &other] {
+        scope::approve_for_decision(db, chat_id, key, decided_in, 0, Some(&position(1)))
+            .await
+            .unwrap();
+    }
+    upsert_user_preferences(
+        db,
+        &account(&state).await,
+        UpdateUserPreferencesInput {
+            client_tool_decisions: Some(
+                [
+                    (read.tool_name.clone(), ClientToolDecision::NeverAllow),
+                    (other.tool_name.clone(), ClientToolDecision::Ask),
+                ]
+                .into(),
+            ),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        scope::lookup(db, chat_id, &read)
+            .await
+            .unwrap()
+            .last_end
+            .as_deref(),
+        Some("never_allowed")
+    );
+    assert!(
+        scope::lookup(db, chat_id, &other)
+            .await
+            .unwrap()
+            .live
+            .is_some()
+    );
 }
 
 #[sqlx::test(migrator = "crate::MIGRATOR")]
