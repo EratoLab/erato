@@ -1407,6 +1407,7 @@
     "security_relevance": "unknown",
     "stability": "unstable"
   },
+  "client_tools.tools.<key>.approval_scope": {},
   "client_tools.tools.<key>.child_access": {
     "default_value_security": "unknown",
     "introduced_in": "unreleased",

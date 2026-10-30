@@ -6251,6 +6251,33 @@ Its calls then go to the Erato desktop app on the device, and a file the read re
 
 **Type:** `"live"` | `"durable"`
 
+#### `client_tools.tools.<key>.approval_scope`
+
+{/* erato_toml_config_key: client_tools.tools.<key>.approval_scope */}
+
+What one approval of a client task's call may cover. With `call`, every call the
+user's decision asks for needs its own approval. With `context`, the approval of
+a task's call in the planning chat also offers to allow every task call of this
+tool on the same document (`word_document`, only in the pane that has the
+document open) or in the same response (`outlook_mailbox`), until it changes from
+outside the chat. It is a tool approval only: the host's own prompts and any
+release review still run.
+
+```toml
+[client_tools.tools.word_read_document_blocks]
+# name, namespace, description and parameters as usual
+child_access = "read"
+host_context = "word_document"
+approval_scope = "context"
+```
+
+Refused at load time: `context` without `child_access = "read"`, and on a host
+context that does not support it.
+
+**Default value:** `"call"`
+
+**Type:** `"call"` | `"context"`
+
 #### `client_tools.tools.<key>.requires_client_registration`
 
 {/* erato_toml_config_key: client_tools.tools.<key>.requires_client_registration */}
