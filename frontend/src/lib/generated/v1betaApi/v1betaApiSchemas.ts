@@ -2079,12 +2079,28 @@ export type ExecutorStreamClientToolCall = {
    * @format uuid
    */
   chat_id: string;
+  /**
+   * When the server stops waiting for this call's result, by the server's
+   * clock.
+   *
+   * @format date-time
+   */
+  expires_at?: string;
   input: OperationPayload;
   lineage?: CallLineage;
   /**
    * @format uuid
    */
   message_id: string;
+  /**
+   * Milliseconds left until `expires_at` when this event was delivered.
+   * A client times the call from this, not from `expires_at`, so its own
+   * clock does not matter.
+   *
+   * @format int64
+   * @minimum 0
+   */
+  timeout_ms?: number;
   tool_call_id: string;
   tool_name: string;
 };

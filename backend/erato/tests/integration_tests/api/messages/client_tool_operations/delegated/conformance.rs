@@ -730,6 +730,11 @@ async fn a_granted_call_reaches_the_pane_with_lineage_and_the_server_context_ref
     let parent_message = assistant_row(&state.db, chat_id).await;
     assert_eq!(event["chat_id"], json!(client_child.id));
     assert_eq!(event["tool_name"], row.read_tool);
+    assert!(event["expires_at"].is_string(), "{event}");
+    let left = event["timeout_ms"]
+        .as_u64()
+        .expect("a pushed call carries the time it has left");
+    assert!(left > 0 && left <= TIMEOUT_MS, "{event}");
     assert_eq!(
         event["input"],
         row.dispatched_input(),

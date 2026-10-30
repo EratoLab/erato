@@ -8259,6 +8259,13 @@ async fn stream_generate_chat_completion<'a>(
                     // POSTed immediately cannot race ahead of the registered waiter.
                     let mut result_rx = task.register_client_tool_call(call_id.clone()).await;
 
+                    // Resolve this tool's park budget from the entry that was
+                    // OFFERED to this request (a bare-name config scan would be
+                    // ambiguous when namespaces reuse a name), else the default.
+                    let park_timeout_ms = tool_policy
+                        .and_then(|policy| policy.timeout_ms)
+                        .unwrap_or(DEFAULT_CLIENT_TOOL_PARK_TIMEOUT_MS);
+
                     let inbox_only = tool_policy.is_some_and(|policy| policy.inbox_only)
                         || durable_grant
                         || durable_request.as_ref().is_some_and(|request| {
@@ -8291,6 +8298,10 @@ async fn stream_generate_chat_completion<'a>(
                                 requesting_message_id: assistant_message_id,
                                 context_ref: grant.context_ref.clone(),
                             }),
+                            expires_at: i64::try_from(park_timeout_ms)
+                                .ok()
+                                .and_then(chrono::Duration::try_milliseconds)
+                                .and_then(|timeout| chrono::Utc::now().checked_add_signed(timeout)),
                         };
                         handed_over = hand_over_executor_call(&app_state.db, task, call).await;
                     }
@@ -8338,13 +8349,6 @@ async fn stream_generate_chat_completion<'a>(
                             );
                         }
                     }
-
-                    // Resolve this tool's park budget from the entry that was
-                    // OFFERED to this request (a bare-name config scan would be
-                    // ambiguous when namespaces reuse a name), else the default.
-                    let park_timeout_ms = tool_policy
-                        .and_then(|policy| policy.timeout_ms)
-                        .unwrap_or(DEFAULT_CLIENT_TOOL_PARK_TIMEOUT_MS);
 
                     // Park until the client POSTs a result, an abort arrives, or the
                     // bounded timeout fires.
