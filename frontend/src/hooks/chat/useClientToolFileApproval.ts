@@ -8,8 +8,19 @@ import { useGenerationStatusStore } from "./store/generationStatusStore";
 
 import type { ClientToolCallContext } from "./clientToolExecutors";
 import type { ClientToolFileApprovalRequest } from "./store/clientToolFileApprovalStore";
+import type { ChatGenerationStatus } from "./store/generationStatusStore";
 
 let nextRequestId = 0;
+
+/** The owner chat's status before its first open task prompt, and the entry
+ * that prompt seeded over it. */
+const interruptedOwners = new Map<
+  string,
+  {
+    saved: ChatGenerationStatus | undefined;
+    seeded: ChatGenerationStatus | undefined;
+  }
+>();
 
 export function useClientToolFileApproval() {
   const mounted = useRef(false);
@@ -61,10 +72,18 @@ export function useClientToolFileApproval() {
               .unregisterConfirmation(target, String(request.id));
             if (!useConfirmationRegistryStore.getState().hasPending(target)) {
               const status = useGenerationStatusStore.getState();
-              // The owner turn may be parked on its tasks; the poller restores
-              // what the server says instead of guessing it runs.
-              if (signal?.aborted || hostGrant)
-                status.markApprovalDecided(target);
+              const interrupted = interruptedOwners.get(target);
+              interruptedOwners.delete(target);
+              // The owner turn keeps running or stays parked on its tasks, so
+              // it gets back what it showed; a tombstone stamped now would
+              // outrank every later poll of that generation.
+              if (interrupted)
+                status.restoreStatus(
+                  target,
+                  interrupted.seeded,
+                  interrupted.saved,
+                );
+              else if (signal?.aborted) status.markApprovalDecided(target);
               else status.seedRunning(target, new Date().toISOString());
             }
             resolve(approved);
@@ -75,12 +94,23 @@ export function useClientToolFileApproval() {
         useClientToolFileApprovalStore.setState((state) => ({
           requests: [...state.requests, request],
         }));
-        useConfirmationRegistryStore
-          .getState()
-          .registerConfirmation(target, String(request.id));
+        const asking = useConfirmationRegistryStore.getState();
+        const first = !asking.hasPending(target);
+        asking.registerConfirmation(target, String(request.id));
+        const statusOf = () =>
+          useGenerationStatusStore.getState().statusByChatId[target];
+        const before = statusOf();
+        const earlier = first ? undefined : interruptedOwners.get(target);
         useGenerationStatusStore
           .getState()
           .seedActionRequired(target, new Date().toISOString());
+        if ((first && hostGrant) || earlier)
+          interruptedOwners.set(target, {
+            // What the server reported since the last prompt is newer.
+            saved:
+              earlier && before === earlier.seeded ? earlier.saved : before,
+            seeded: statusOf(),
+          });
       });
     },
     [],

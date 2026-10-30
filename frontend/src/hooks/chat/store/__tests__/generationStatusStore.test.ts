@@ -581,6 +581,28 @@ describe("generationStatusStore", () => {
       expect(statusOf("chat-1")).toMatchObject({ kind: "action_required" });
     });
 
+    it("restoreStatus puts back what a prompt seeded over, unless the entry changed since", () => {
+      store().seedRunning("chat-1", iso(0));
+      const saved = statusOf("chat-1");
+      store().seedActionRequired("chat-1", iso(5_000));
+      const seeded = statusOf("chat-1");
+      store().restoreStatus("chat-1", seeded, saved);
+      expect(statusOf("chat-1")).toBe(saved);
+
+      store().seedActionRequired("chat-1", iso(6_000));
+      const prompted = statusOf("chat-1");
+      store().applyPollSnapshot([pendingEntry("chat-1", 7_000)]);
+      store().restoreStatus("chat-1", prompted, saved);
+      expect(statusOf("chat-1")).toMatchObject({
+        kind: "action_required",
+        startedAt: iso(7_000),
+      });
+
+      store().seedActionRequired("chat-2", iso(0));
+      store().restoreStatus("chat-2", statusOf("chat-2"), undefined);
+      expect(statusOf("chat-2")).toBeUndefined();
+    });
+
     it("poll snapshot flips a running chat to action required", () => {
       store().seedRunning("chat-1", iso(0));
       store().applyPollSnapshot([pendingEntry("chat-1", 5_000)]);
