@@ -980,6 +980,43 @@ describe("ClientOperationCoordinator task calls", () => {
     }
   });
 
+  it("keeps the device waiting when a renewal fails on the server", async () => {
+    vi.useFakeTimers();
+    takesGrantCalls();
+    const { api } = fakeApi(operation({ lineage }));
+    api.claim
+      .mockResolvedValueOnce({
+        claim_token: "claim-1",
+        expires_at: new Date(Date.now() + 20_000).toISOString(),
+      })
+      .mockRejectedValueOnce({
+        status: 500,
+        payload: "Operation persistence failed",
+      })
+      .mockImplementation(async () => ({
+        claim_token: "claim-2",
+        expires_at: new Date(Date.now() + 20_000).toISOString(),
+      }));
+    const { handler, finish, signals } = hangingHandler();
+    const { coordinator } = coordinatorWith(api, [], [handler]);
+    try {
+      await coordinator.reconcile();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(finish).toHaveLength(1);
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(api.claim).toHaveBeenCalledTimes(2);
+      expect(signals[0]?.aborted).toBe(false);
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect(api.claim).toHaveBeenCalledTimes(3);
+      expect(signals[0]?.aborted).toBe(false);
+      finish[0]?.({ ok: true, result: null });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(api.complete.mock.calls[0]?.[1]).toBe("claim-2");
+    } finally {
+      coordinator.dispose();
+    }
+  });
+
   it("stops the device once its claim lapses without a renewal getting through", async () => {
     vi.useFakeTimers();
     takesGrantCalls();

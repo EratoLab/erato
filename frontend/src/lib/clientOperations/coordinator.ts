@@ -118,7 +118,7 @@ export interface ClientOperationHandler {
 // Renewals never come closer together than this, so a claim cut short by the
 // attempt's end is not re-claimed in a loop.
 const MIN_RENEWAL_MS = 1_000;
-// How soon a renewal that never reached the server is tried again.
+// How soon a renewal that the server never refused is tried again.
 const RENEWAL_RETRY_MS = 5_000;
 /** A request that never reached the server: what the generated fetcher throws
  * for a failed `fetch`, or the failed `fetch` itself. A refusal carries a
@@ -131,6 +131,17 @@ function isTransportFailure(error: unknown): boolean {
     !("status" in error) &&
     (error as { name?: unknown }).name === "unknown"
   );
+}
+/** A renewal that failed without a refusal: it never reached the server, or
+ * the server (or its ingress) failed. A read error answers 500 and withdraws
+ * nothing, so only a 4xx or a lost binding ends the claim. */
+function isRenewalNotRefused(error: unknown): boolean {
+  if (isTransportFailure(error)) return true;
+  const status =
+    typeof error === "object" && error !== null && "status" in error
+      ? error.status
+      : undefined;
+  return typeof status === "number" && status >= 500;
 }
 
 function sameBinding(a: ExecutorBinding, b: ExecutorBinding): boolean {
@@ -518,9 +529,9 @@ export class ClientOperationCoordinator {
       let claim = await this.#claim(request, handler);
       // Re-claiming with the same binding extends a live claim; a lapsed one
       // comes back with a new token, which is the one the result must carry.
-      // A renewal lost on the way (a sleeping laptop, a dropped network) is
-      // tried again while the claim still holds; only a refusal stops the
-      // device at once.
+      // A renewal lost on the way (a sleeping laptop, a dropped network) or
+      // failed on the server is tried again while the claim still holds; only
+      // a refusal stops the device at once.
       const renewLater = (retry = false) => {
         const claimEnds = Date.parse(claim.expires_at);
         if (done || claimEnds >= attemptEnds) return;
@@ -537,7 +548,7 @@ export class ClientOperationCoordinator {
               },
               (error: unknown) => {
                 const holds = Date.parse(claim.expires_at) - Date.now();
-                if (isTransportFailure(error) && holds > MIN_RENEWAL_MS)
+                if (isRenewalNotRefused(error) && holds > MIN_RENEWAL_MS)
                   renewLater(true);
                 else stop();
               },
