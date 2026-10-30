@@ -1,7 +1,8 @@
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
-import { beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useConfirmationRegistryStore } from "@/hooks/chat/store/confirmationRegistryStore";
+import { useGenerationStatusStore } from "@/hooks/chat/store/generationStatusStore";
 import { useClientToolFileApproval } from "@/hooks/chat/useClientToolFileApproval";
 import { fetchProfile } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import { OutlookSourceNavigationProvider } from "@/providers/OutlookSourceNavigationProvider";
@@ -61,10 +62,21 @@ vi.mock("../FilePreview/FilePreviewContent", () => ({
 }));
 let approveFiles: ReturnType<typeof useClientToolFileApproval>["approveFiles"];
 const context = { chatId: "chat", messageId: "message", toolCallId: "call" };
-function Harness({ messageId = "message" }: { messageId?: string }) {
+function Harness({
+  messageId = "message",
+  taskBriefsByChatId,
+}: {
+  messageId?: string;
+  taskBriefsByChatId?: ReadonlyMap<string, string | undefined>;
+}) {
   const approval = useClientToolFileApproval();
   approveFiles = approval.approveFiles;
-  return <ClientToolFileApprovals messageId={messageId} />;
+  return (
+    <ClientToolFileApprovals
+      messageId={messageId}
+      taskBriefsByChatId={taskBriefsByChatId}
+    />
+  );
 }
 const files = [
   new File(["first"], "first.txt"),
@@ -243,4 +255,88 @@ it("keeps approvals with their originating messages when navigating and holds th
   expect(useConfirmationRegistryStore.getState().hasPending("chat")).toBe(
     false,
   );
+});
+
+describe("a delegated task's file approval", () => {
+  const taskCall = {
+    chatId: "task-chat",
+    messageId: "task-message",
+    toolCallId: "task-call",
+    hostGrant: {
+      ownerChatId: "owner-chat",
+      ownerMessageId: "owner-message",
+      requestingChatId: "task-chat",
+      requestingMessageId: "task-message",
+    },
+  };
+  afterEach(() => {
+    useGenerationStatusStore.getState().reset();
+  });
+
+  it("asks in the owner chat and leaves its state to the server once answered", async () => {
+    render(<Harness messageId="owner-message" />);
+    let result!: Promise<ReadonlySet<File>>;
+    await act(async () => {
+      result = approveFiles(files, taskCall);
+    });
+    const registry = useConfirmationRegistryStore.getState();
+    expect(registry.hasPending("owner-chat")).toBe(true);
+    expect(registry.hasPending("task-chat")).toBe(false);
+    expect(
+      useGenerationStatusStore.getState().statusByChatId["owner-chat"],
+    ).toMatchObject({ kind: "action_required" });
+    expect(
+      useGenerationStatusStore.getState().statusByChatId["task-chat"],
+    ).toBeUndefined();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Upload selected files" }),
+    );
+    expect(await result).toEqual(new Set(files));
+    expect(
+      useConfirmationRegistryStore.getState().hasPending("owner-chat"),
+    ).toBe(false);
+    expect(
+      useGenerationStatusStore.getState().statusByChatId["owner-chat"],
+    ).toMatchObject({ kind: "cleared" });
+  });
+
+  it("shows on the message that started the task and names the task", async () => {
+    const { rerender } = render(<Harness messageId="task-message" />);
+    let result!: Promise<ReadonlySet<File>>;
+    await act(async () => {
+      result = approveFiles(files, taskCall);
+    });
+    expect(
+      screen.queryByTestId("client-tool-file-approval"),
+    ).not.toBeInTheDocument();
+    rerender(
+      <Harness
+        messageId="owner-message"
+        taskBriefsByChatId={new Map([["task-chat", "Search Jane's mail"]])}
+      />,
+    );
+    expect(
+      screen.getByTestId("client-tool-file-approval-task"),
+    ).toHaveTextContent("Requested by a task: Search Jane's mail");
+    expect(
+      screen.getByTestId("client-tool-file-approval-open-task"),
+    ).toHaveAttribute("href", expect.stringContaining("task-chat"));
+    rerender(<Harness messageId="owner-message" />);
+    expect(
+      screen.getByTestId("client-tool-file-approval-task"),
+    ).toHaveTextContent("Requested by a task: A task this response started");
+    fireEvent.click(screen.getByRole("button", { name: "Reject all" }));
+    expect(await result).toEqual(new Set());
+  });
+
+  it("names no task on the user's own call", async () => {
+    render(<Harness />);
+    await act(async () => {
+      void approveFiles(files, context);
+    });
+    expect(
+      screen.queryByTestId("client-tool-file-approval-task"),
+    ).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Reject all" }));
+  });
 });

@@ -29,9 +29,12 @@ export function useClientToolFileApproval() {
       context: ClientToolCallContext,
       outlookProvenance?: ClientToolFileApprovalRequest["outlookProvenance"],
     ): Promise<ReadonlySet<File>> => {
-      const { signal, chatId } = context;
+      const { signal, chatId, hostGrant } = context;
       signal?.throwIfAborted();
       if (!chatId || !context.messageId) return new Set();
+      // A task's call asks in the chat the user works in, the owner of the
+      // grant, not in the task's own chat that nobody watches.
+      const target = hostGrant?.ownerChatId ?? chatId;
       // Read the backend preference at each gate, including changes in other tabs.
       const profile = await fetchProfile({}, signal);
       signal?.throwIfAborted();
@@ -53,15 +56,16 @@ export function useClientToolFileApproval() {
             useClientToolFileApprovalStore.setState((state) => ({
               requests: state.requests.filter((item) => item.id !== request.id),
             }));
-            if (chatId) {
-              useConfirmationRegistryStore
-                .getState()
-                .unregisterConfirmation(chatId, String(request.id));
-              if (!useConfirmationRegistryStore.getState().hasPending(chatId)) {
-                const status = useGenerationStatusStore.getState();
-                if (signal?.aborted) status.markApprovalDecided(chatId);
-                else status.seedRunning(chatId, new Date().toISOString());
-              }
+            useConfirmationRegistryStore
+              .getState()
+              .unregisterConfirmation(target, String(request.id));
+            if (!useConfirmationRegistryStore.getState().hasPending(target)) {
+              const status = useGenerationStatusStore.getState();
+              // The owner turn may be parked on its tasks; the poller restores
+              // what the server says instead of guessing it runs.
+              if (signal?.aborted || hostGrant)
+                status.markApprovalDecided(target);
+              else status.seedRunning(target, new Date().toISOString());
             }
             resolve(approved);
           },
@@ -71,14 +75,12 @@ export function useClientToolFileApproval() {
         useClientToolFileApprovalStore.setState((state) => ({
           requests: [...state.requests, request],
         }));
-        if (chatId) {
-          useConfirmationRegistryStore
-            .getState()
-            .registerConfirmation(chatId, String(request.id));
-          useGenerationStatusStore
-            .getState()
-            .seedActionRequired(chatId, new Date().toISOString());
-        }
+        useConfirmationRegistryStore
+          .getState()
+          .registerConfirmation(target, String(request.id));
+        useGenerationStatusStore
+          .getState()
+          .seedActionRequired(target, new Date().toISOString());
       });
     },
     [],
