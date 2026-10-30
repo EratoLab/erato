@@ -10,6 +10,7 @@ use crate::test_utils::build_openai_delayed_text_streaming_response;
 use futures::StreamExt;
 use rows::HostRow;
 
+mod approval_scope;
 mod conformance;
 mod rows;
 mod slow_path;
