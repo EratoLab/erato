@@ -742,6 +742,7 @@ mod tests {
             requesting_chat_id: request.chat_id,
             requesting_message_id: request.message_id,
             context_ref: None,
+            approval_scope: None,
         });
         let validated = kind.validate_result(&request, &declined(&request)).unwrap();
         assert!(!validated.succeeded);

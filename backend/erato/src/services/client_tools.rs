@@ -330,6 +330,14 @@ pub fn child_client_tools(headers: &axum::http::HeaderMap) -> Vec<String> {
     names
 }
 
+/// The child tools whose handlers check a covered call's approval scope
+/// before reading. Like the child tools, never part of the binding.
+pub fn scoped_client_tools(headers: &axum::http::HeaderMap, child: &[String]) -> Vec<String> {
+    let mut names = client_tool_names(headers, "X-Erato-Scoped-Client-Tools");
+    names.retain(|name| child.contains(name));
+    names
+}
+
 fn client_tool_names(headers: &axum::http::HeaderMap, header: &str) -> Vec<String> {
     let Some(value) = headers.get(header).and_then(|v| v.to_str().ok()) else {
         return Vec::new();
@@ -791,6 +799,35 @@ mod tests {
             HeaderValue::from_static("read_document_blocks, unregistered, bad/name"),
         );
         assert_eq!(child_client_tools(&headers), vec!["read_document_blocks"]);
+    }
+
+    #[test]
+    fn scoped_client_tools_are_a_subset_of_the_child_tools() {
+        use axum::http::{HeaderMap, HeaderValue};
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            "X-Erato-Client-Tools",
+            HeaderValue::from_static("read_document_blocks,submit_plan"),
+        );
+        headers.insert(
+            "X-Erato-Scoped-Client-Tools",
+            HeaderValue::from_static("read_document_blocks"),
+        );
+        assert!(scoped_client_tools(&headers, &child_client_tools(&headers)).is_empty());
+        headers.insert(
+            "X-Erato-Child-Client-Tools",
+            HeaderValue::from_static("read_document_blocks"),
+        );
+        headers.insert(
+            "X-Erato-Scoped-Client-Tools",
+            HeaderValue::from_static("read_document_blocks, submit_plan, bad/name"),
+        );
+        assert_eq!(
+            scoped_client_tools(&headers, &child_client_tools(&headers)),
+            vec!["read_document_blocks"]
+        );
+        headers.remove("X-Erato-Scoped-Client-Tools");
+        assert!(scoped_client_tools(&headers, &child_client_tools(&headers)).is_empty());
     }
 
     #[test]

@@ -1234,11 +1234,14 @@ pub(crate) async fn route_executor_call(
     binding: &crate::services::client_operations::ExecutorBinding,
     tool_name: &str,
     grant_call: bool,
+    scoped: bool,
 ) -> Option<executor_stream::LiveCallRoute> {
     let account_id = Uuid::parse_str(user_id).ok()?;
     let attached = !grant_call && task.client_stream_attached().await;
-    match executor_stream::route_live_call(db, account_id, binding, tool_name, attached, grant_call)
-        .await
+    match executor_stream::route_live_call(
+        db, account_id, binding, tool_name, attached, grant_call, scoped,
+    )
+    .await
     {
         Ok(route) => Some(route),
         Err(error) => {
@@ -8152,6 +8155,7 @@ async fn stream_generate_chat_completion<'a>(
                                     requesting_chat_id: chat_id,
                                     requesting_message_id: assistant_message_id,
                                     context_ref: grant.context_ref.clone(),
+                                    approval_scope: None,
                                 }),
                             }
                         })
@@ -8201,6 +8205,7 @@ async fn stream_generate_chat_completion<'a>(
                                 binding,
                                 &tool_name,
                                 true,
+                                false,
                             )
                             .await
                         }
@@ -8239,6 +8244,7 @@ async fn stream_generate_chat_completion<'a>(
                         &user_id,
                         binding,
                         &tool_name,
+                        false,
                         false,
                     )
                     .await
@@ -8302,6 +8308,7 @@ async fn stream_generate_chat_completion<'a>(
                                 requesting_chat_id: chat_id,
                                 requesting_message_id: assistant_message_id,
                                 context_ref: grant.context_ref.clone(),
+                                approval_scope: None,
                             }),
                             expires_at: i64::try_from(park_timeout_ms)
                                 .ok()
