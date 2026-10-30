@@ -373,6 +373,21 @@ async fn approvals(state: &erato::state::AppState, chat_id: Uuid) -> Vec<Stored>
         .collect()
 }
 
+/// Every approval in the database, in any chat.
+async fn approval_count(state: &erato::state::AppState) -> i64 {
+    state
+        .db
+        .query_one_raw(sea_orm::Statement::from_string(
+            sea_orm::DatabaseBackend::Postgres,
+            "SELECT count(*) AS stored FROM client_tool_approval_scopes",
+        ))
+        .await
+        .unwrap()
+        .unwrap()
+        .try_get::<i64>("", "stored")
+        .unwrap()
+}
+
 async fn wait_no_scoped_stream(state: &erato::state::AppState) {
     tokio::time::timeout(Duration::from_secs(5), async {
         loop {
@@ -450,9 +465,26 @@ pub(super) async fn a_context_approval_covers_every_task_reading_the_scope(
 
     let stored = chat.approvals().await;
     assert_eq!(stored.len(), 1, "one approval for the decision: {stored:?}");
+    assert_eq!(
+        approval_count(&chat.state).await,
+        1,
+        "no task chat keeps an approval of its own"
+    );
     assert_eq!(stored[0].decided_in, parent.id);
     assert_eq!(stored[0].end_reason, None);
     assert_eq!(stored[0].position, document(row).then(|| position.clone()));
+    let decided = assistant_row(&chat.state.db, chat.chat_id).await;
+    for item in &items {
+        assert!(
+            content(&decided)
+                .iter()
+                .any(|part| part["content_type"] == "tool_approval"
+                    && part["approval_id"] == item["approval_id"]
+                    && part["scope_approval_id"] == json!(stored[0].id)),
+            "every item names the one approval: {}",
+            decided.raw_message
+        );
+    }
     let task_chats: HashSet<&str> = calls
         .iter()
         .map(|event| event["chat_id"].as_str().unwrap())
