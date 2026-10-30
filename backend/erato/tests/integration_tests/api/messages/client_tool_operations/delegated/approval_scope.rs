@@ -1317,6 +1317,61 @@ async fn a_crash_retry_after_a_context_decision_keeps_one_approval(pool: Pool<Po
 }
 
 #[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_new_click_after_a_crash_makes_a_new_approval(pool: Pool<Postgres>) {
+    let row = &rows::fake_host(ClientToolHostContext::WordDocument);
+    for lost_ended in [true, false] {
+        let mut chat = scope_chat(row, pool.clone(), 1, true, |_, _| {}, |_| {}).await;
+        let parent = chat.ask(row).await;
+        let stop = content(&parent)
+            .iter()
+            .rposition(|part| part["content_type"] == "tool_approval_request")
+            .unwrap();
+        let lost = scope::approve_for_decision(
+            &chat.state.db,
+            chat.chat_id,
+            &document_key(row, &row.binding()),
+            parent.id,
+            i32::try_from(stop).unwrap(),
+            Some(&position(4)),
+        )
+        .await
+        .unwrap();
+        if lost_ended {
+            scope::end(&chat.state.db, lost, scope::END_SCOPE_CHANGED)
+                .await
+                .unwrap();
+        }
+        let crashed = reload(&chat.state.db, chat.chat_id).await;
+        let mut active: chats::ActiveModel = crashed.into();
+        active.generation_state = ActiveValue::Set(Some("errored".to_string()));
+        active.update(&chat.state.db).await.unwrap();
+
+        let fresh = position(6);
+        let decided = allow_for_scope(row, &chat.base, parent.id, &stop_items(&parent), &fresh);
+        let event = answer_calls(row, &mut chat, 1).await.remove(0);
+        assert!(finish(decided).await.contains(PARENT_FINAL));
+        let stored = chat.approvals().await;
+        assert_eq!(stored.len(), 2, "{stored:?}");
+        assert_eq!(stored[0].id, lost);
+        assert_eq!(
+            stored[0].end_reason.as_deref(),
+            Some(if lost_ended {
+                "scope_changed"
+            } else {
+                "superseded"
+            })
+        );
+        assert_eq!(stored[1].position, Some(fresh.clone()));
+        assert_eq!(stored[1].end_reason, None);
+        assert_eq!(
+            event["lineage"]["approval_scope"],
+            lineage_scope(stored[1].id, row.identity, &fresh)
+        );
+        chat.server.abort();
+    }
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
 async fn a_stale_scope_changed_never_ends_a_newer_approval(pool: Pool<Postgres>) {
     let row = &rows::fake_host(ClientToolHostContext::WordDocument);
     let state = test_app_state(hermetic_app_config(None, None), pool).await;
@@ -1342,7 +1397,7 @@ async fn a_stale_scope_changed_never_ends_a_newer_approval(pool: Pool<Postgres>)
             .unwrap()
     );
     assert_eq!(
-        scope::approve_for_decision(db, chat_id, &key, decided_in, 0, Some(&position(3)))
+        scope::approve_for_decision(db, chat_id, &key, decided_in, 0, Some(&position(1)))
             .await
             .unwrap(),
         older,

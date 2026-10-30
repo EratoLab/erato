@@ -25,9 +25,12 @@ CREATE UNIQUE INDEX client_tool_approval_scopes_live_key
     ON public.client_tool_approval_scopes (chat_id, binding_digest, host_context, scope_id, tool_name)
     WHERE ended_at IS NULL;
 
+-- A decision is its stop and the position taken at its click, so a new click on
+-- the same stop after a crash is a decision of its own.
 CREATE UNIQUE INDEX client_tool_approval_scopes_decision
     ON public.client_tool_approval_scopes
-    (chat_id, binding_digest, host_context, scope_id, tool_name, decided_in_message_id, decided_stop);
+    (chat_id, binding_digest, host_context, scope_id, tool_name, decided_in_message_id, decided_stop,
+     (COALESCE(position, 'null'::jsonb)));
 
 CREATE INDEX client_tool_approval_scopes_latest
     ON public.client_tool_approval_scopes
