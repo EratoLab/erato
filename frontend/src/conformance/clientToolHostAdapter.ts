@@ -8,11 +8,15 @@
  * `acceptsGrantCalls`: `runClientToolCall`, which the live dispatcher and the
  * parked-operation handler both use, answers a grant call to such a tool with
  * an error and never runs it, and it is the only place a `hostGrant` is made.
- * Waits use `setTimeout`, so run it with real timers.
+ * Waits use `setTimeout`, so run it with real timers. A host whose read
+ * checks a document approval (contract §16) gives `approvalScope`; one without
+ * it must not advertise the check.
  */
 /* eslint-disable lingui/no-unlocalized-strings -- failure text for a test run, never shown to a user */
 import {
+  CLIENT_TOOL_SCOPE_CHANGED,
   clientToolAcceptsGrantCalls,
+  clientToolApprovalScopeAnchor,
   getChildClientToolHeaders,
   getClientToolExecutor,
   isClientToolResultLocalOnly,
@@ -20,6 +24,7 @@ import {
 import { useConfirmationRegistryStore } from "@/hooks/chat/store/confirmationRegistryStore";
 
 import type {
+  ClientToolApprovalScopeRef,
   ClientToolExecutionResult,
   ClientToolHostGrant,
 } from "@/hooks/chat/clientToolExecutors";
@@ -85,6 +90,24 @@ export interface ClientToolHostConformanceHarness {
   deviceApproval?: {
     read: ClientToolHostCall;
     answer: (approved: boolean) => void | Promise<void>;
+  };
+  /**
+   * The read whose handler checks a document approval (contract §16): before
+   * it reads, it compares `hostGrant.approvalScope.position` with the changes
+   * since, and answers `scope_changed` after an outside one.
+   */
+  approvalScope?: {
+    read: ClientToolHostCall;
+    /** How many reads of the context the host has made so far. */
+    readCount: () => number;
+    /** The scope id the server derives for this pane (Word: the binding identity). */
+    scopeId: () => string;
+    /** A change from outside the chat: the user typing, a co-author. */
+    changeFromOutside: () => void | Promise<void>;
+    /** A change by the chat's own write, which never ends an approval. */
+    changeOwn: () => void | Promise<void>;
+    /** Reloads the pane, after which no earlier position may pass. */
+    reload?: () => void | Promise<void>;
   };
 }
 
@@ -546,9 +569,11 @@ export const clientToolHostAdapterConformanceFailures = async (
     fail("harness", "lists no read, so no rule is checked");
   }
 
-  const advertised = (
-    getChildClientToolHeaders()["X-Erato-Child-Client-Tools"] ?? ""
-  )
+  const childHeaders = getChildClientToolHeaders();
+  const advertised = (childHeaders["X-Erato-Child-Client-Tools"] ?? "")
+    .split(",")
+    .filter(Boolean);
+  const scopedAdvertised = (childHeaders["X-Erato-Scoped-Client-Tools"] ?? "")
     .split(",")
     .filter(Boolean);
   const readTools = new Set([
@@ -613,6 +638,209 @@ export const clientToolHostAdapterConformanceFailures = async (
         },
       )
     ).outcome;
+
+  /**
+   * Contract §16: a covered call carries the position the pane took when the
+   * user allowed the document, and the pane reads only if nothing changed
+   * from outside the chat since.
+   */
+  async function approvalScopeRules(): Promise<void> {
+    const rule = "approval scope";
+    const scope = harness.approvalScope;
+    const scopeRef = (scopeId: string): ClientToolApprovalScopeRef => ({
+      hostContext: harness.hostContext,
+      scopeId,
+      covers: "document",
+    });
+    if (!scope) {
+      for (const tool of readTools) {
+        if (scopedAdvertised.includes(tool)) {
+          fail(
+            rule,
+            `"${tool}" is listed in X-Erato-Scoped-Client-Tools, but the harness has no approval scope`,
+          );
+        }
+        if (
+          clientToolApprovalScopeAnchor(tool, scopeRef("conformance-scope"))
+        ) {
+          fail(
+            rule,
+            `"${tool}" takes a position for a scope, but the harness has no approval scope`,
+          );
+        }
+      }
+      return;
+    }
+    const tool = scope.read.tool;
+    const name = `"${tool}"`;
+    if (!scopedAdvertised.includes(tool)) {
+      fail(rule, `${name} is missing from X-Erato-Scoped-Client-Tools`);
+    }
+    const own = scopeRef(scope.scopeId());
+    if (clientToolApprovalScopeAnchor(tool, scopeRef(`${own.scopeId}-other`))) {
+      fail(rule, `${name} takes a position for another scope id`);
+    }
+    // Like a click on the card: each call takes a fresh position.
+    const click = () => clientToolApprovalScopeAnchor(tool, own)?.();
+    if (!clientToolApprovalScopeAnchor(tool, own)) {
+      fail(rule, `${name} takes no position for its own scope`);
+      return;
+    }
+    const earlier = await harness.startTurn();
+    const turnNow = await harness.startTurn();
+
+    const scopedCall = async (
+      label: string,
+      position: unknown,
+      grantTurn: ClientToolHostTurn = turnNow,
+      change: GrantChange = (grant) => grant,
+    ) => {
+      const before = scope.readCount();
+      const { outcome } = await grantCall(
+        label,
+        scope.read,
+        grantTurn,
+        (grant, forTurn) => ({
+          ...change(grant, forTurn),
+          approvalScope: {
+            approvalId: "conformance-approval",
+            scopeId: own.scopeId,
+            position,
+          },
+        }),
+      );
+      return { label, outcome, reads: scope.readCount() - before };
+    };
+    type ScopedOutcome = Awaited<ReturnType<typeof scopedCall>>;
+
+    const expectScopedRead = (
+      grantTurn: ClientToolHostTurn,
+      { label, outcome, reads: made }: ScopedOutcome,
+    ) => {
+      expectRead(rule, label, grantTurn, outcome);
+      if (outcome.kind === "settled" && outcome.result.ok && made === 0) {
+        fail(rule, `${label} succeeds without reading`);
+      }
+    };
+    const expectScopeChanged = ({
+      label,
+      outcome,
+      reads: made,
+    }: ScopedOutcome) => {
+      if (!hasCode(outcome, CLIENT_TOOL_SCOPE_CHANGED)) {
+        fail(
+          rule,
+          `${label} ${describeOutcome(outcome)}, expected the "${CLIENT_TOOL_SCOPE_CHANGED}" code`,
+        );
+      } else if (isTerminal(outcome)) {
+        fail(
+          rule,
+          `${label} answers ${CLIENT_TOOL_SCOPE_CHANGED} as terminal, so the user is never asked again`,
+        );
+      }
+      if (hasCode(outcome, harness.lossCode)) {
+        fail(rule, `${label} answers the loss code`);
+      }
+      if (made > 0) {
+        fail(
+          rule,
+          `${label} reads before it answers ${CLIENT_TOOL_SCOPE_CHANGED}`,
+        );
+      }
+    };
+
+    const allowed = click();
+    expectScopedRead(
+      turnNow,
+      await scopedCall(`${name} under a document approval`, allowed),
+    );
+    await scope.changeOwn();
+    expectScopedRead(
+      turnNow,
+      await scopedCall(
+        `${name} under a document approval after the chat's own change`,
+        allowed,
+      ),
+    );
+    await scope.changeFromOutside();
+    expectScopeChanged(
+      await scopedCall(
+        `${name} under a document approval after a change from outside`,
+        allowed,
+      ),
+    );
+    const plainLabel = `${name} without an approval after a change from outside`;
+    const plainBefore = scope.readCount();
+    expectScopedRead(turnNow, {
+      label: plainLabel,
+      outcome: (await grantCall(plainLabel, scope.read, turnNow)).outcome,
+      reads: scope.readCount() - plainBefore,
+    });
+    // The grant is checked first: a foreign or stale call learns nothing,
+    // not even that the document changed.
+    const refused = [
+      ...FOREIGN_GRANTS.filter(({ applies }) => applies(turnNow)).map(
+        (foreign) => ({
+          what: `a grant with ${foreign.name}`,
+          grantTurn: turnNow,
+          change: foreign.change,
+        }),
+      ),
+      {
+        what: "the grant of an earlier turn",
+        grantTurn: earlier,
+        change: undefined,
+      },
+    ];
+    for (const { what, grantTurn, change } of refused) {
+      const { label, outcome } = await scopedCall(
+        `${name} under a document approval and ${what}`,
+        allowed,
+        grantTurn,
+        change,
+      );
+      if (hasCode(outcome, CLIENT_TOOL_SCOPE_CHANGED)) {
+        fail(
+          rule,
+          `${label} answers ${CLIENT_TOOL_SCOPE_CHANGED} before it checks the grant`,
+        );
+      } else {
+        expectLoss(label, outcome);
+      }
+    }
+    expectScopedRead(
+      turnNow,
+      await scopedCall(
+        `${name} under a document approval given after the change`,
+        click(),
+      ),
+    );
+    for (const [what, position] of [
+      ["no position", undefined],
+      ["a null position", null],
+      ["a position that is not an object", "conformance-position"],
+      ["an empty position", {}],
+    ] as const) {
+      expectScopeChanged(
+        await scopedCall(
+          `${name} under a document approval with ${what}`,
+          position,
+        ),
+      );
+    }
+    if (scope.reload) {
+      const beforeReload = click();
+      await scope.reload();
+      const reloadedTurn = await harness.startTurn();
+      expectScopeChanged(
+        await scopedCall(
+          `${name} under a new turn's grant with a position from before a reload`,
+          beforeReload,
+          reloadedTurn,
+        ),
+      );
+    }
+  }
 
   const stale = await harness.startTurn();
   let turn = await harness.startTurn();
@@ -711,6 +939,8 @@ export const clientToolHostAdapterConformanceFailures = async (
       );
     }
   }
+
+  await approvalScopeRules();
 
   for (const read of reads) {
     for (const failure of writeMarkerFailures(read, harness.writeMarkers)) {
