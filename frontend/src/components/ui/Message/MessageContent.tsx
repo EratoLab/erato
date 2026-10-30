@@ -1399,6 +1399,26 @@ export const MessageContent = memo(function MessageContent({
     });
   }, [content, isStreaming, lastStop]);
 
+  // Every task this message started, also while it streams and whatever the
+  // task's status: a task's file approval names the task it came from.
+  const taskBriefsByChatId = React.useMemo(() => {
+    const briefs = new Map<string, string | undefined>();
+    for (const part of content) {
+      if (
+        part.content_type !== "tool_use" ||
+        part.tool_name !== DELEGATE_TASK_TOOL_NAME
+      )
+        continue;
+      const childChatId = parseDelegationEnvelope(part.output)?.delegateChatId;
+      if (childChatId !== undefined)
+        briefs.set(
+          childChatId,
+          taskBriefFromInput(part.input, TASK_BRIEF_PREVIEW_CHARS),
+        );
+    }
+    return briefs;
+  }, [content]);
+
   const generatedImageFileIds = React.useMemo(() => {
     const fileIds = new Set<string>();
 
@@ -1655,7 +1675,12 @@ export const MessageContent = memo(function MessageContent({
         <pre className="message-content-raw-block whitespace-pre-wrap">
           <code>{rawText}</code>
         </pre>
-        {messageId && <ClientToolFileApprovals messageId={messageId} />}
+        {messageId && (
+          <ClientToolFileApprovals
+            messageId={messageId}
+            taskBriefsByChatId={taskBriefsByChatId}
+          />
+        )}
         <LocalSearchCoverageNotice content={content} />
         <WordCommentReadNotice content={content} />
       </article>
@@ -1855,7 +1880,12 @@ export const MessageContent = memo(function MessageContent({
           reason={task.reason}
         />
       ))}
-      {messageId && <ClientToolFileApprovals messageId={messageId} />}
+      {messageId && (
+        <ClientToolFileApprovals
+          messageId={messageId}
+          taskBriefsByChatId={taskBriefsByChatId}
+        />
+      )}
       <LocalSearchCoverageNotice content={content} />
       <WordCommentReadNotice content={content} />
     </article>

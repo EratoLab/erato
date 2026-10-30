@@ -1961,8 +1961,18 @@ msgstr "Selected files will be uploaded to Erato and their contents shared with 
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/ClientToolFileApproval.tsx
+msgid "chat.fileApproval.openTask"
+msgstr "Open the task"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ClientToolFileApproval.tsx
 msgid "chat.fileApproval.reject"
 msgstr "Reject all"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ClientToolFileApproval.tsx
+msgid "chat.fileApproval.requestedByTask"
+msgstr "Requested by a task: {brief}"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/ClientToolFileApproval.tsx
@@ -3781,6 +3791,7 @@ msgstr "Allow this task to make the call?"
 #~ msgstr "{itemCount, plural, one {A task is waiting on your decision} other {Tasks are waiting on your decision}}"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Message/ClientToolFileApproval.tsx
 #: src/components/ui/Message/ParkedChildItem.tsx
 #: src/components/ui/Message/WaitingTaskItem.tsx
 msgid "delegatedTaskApproval.unnamedTask"
