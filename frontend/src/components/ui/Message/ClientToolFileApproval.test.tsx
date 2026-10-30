@@ -273,7 +273,12 @@ describe("a delegated task's file approval", () => {
     useGenerationStatusStore.getState().reset();
   });
 
-  it("asks in the owner chat and leaves its state to the server once answered", async () => {
+  const ownerStatus = () =>
+    useGenerationStatusStore.getState().statusByChatId["owner-chat"];
+
+  it("asks in the owner chat and gives back its running turn once answered", async () => {
+    const startedAt = "2026-10-30T10:00:00.000Z";
+    useGenerationStatusStore.getState().seedRunning("owner-chat", startedAt);
     render(<Harness messageId="owner-message" />);
     let result!: Promise<ReadonlySet<File>>;
     await act(async () => {
@@ -295,9 +300,70 @@ describe("a delegated task's file approval", () => {
     expect(
       useConfirmationRegistryStore.getState().hasPending("owner-chat"),
     ).toBe(false);
-    expect(
-      useGenerationStatusStore.getState().statusByChatId["owner-chat"],
-    ).toMatchObject({ kind: "cleared" });
+    expect(ownerStatus()).toMatchObject({ kind: "running", startedAt });
+    // The poll keeps reporting the generation the prompt interrupted.
+    useGenerationStatusStore
+      .getState()
+      .applyPollSnapshot([
+        { chat_id: "owner-chat", state: "running", started_at: startedAt },
+      ]);
+    expect(ownerStatus()).toMatchObject({ kind: "running", startedAt });
+  });
+
+  it("leaves a parked owner parked and an unknown one unknown once answered", async () => {
+    render(<Harness messageId="owner-message" />);
+    await act(async () => {
+      void approveFiles(files, taskCall);
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Reject all" }));
+    expect(ownerStatus()).toBeUndefined();
+
+    const parkedAt = "2026-10-30T10:00:00.000Z";
+    useGenerationStatusStore
+      .getState()
+      .seedActionRequired("owner-chat", parkedAt);
+    let result!: Promise<ReadonlySet<File>>;
+    await act(async () => {
+      result = approveFiles(files, taskCall);
+    });
+    expect(ownerStatus()).not.toMatchObject({ startedAt: parkedAt });
+    fireEvent.click(screen.getByRole("button", { name: "Reject all" }));
+    expect(await result).toEqual(new Set());
+    expect(ownerStatus()).toMatchObject({
+      kind: "action_required",
+      startedAt: parkedAt,
+    });
+  });
+
+  it("gives the owner back its turn only after the last of two task prompts", async () => {
+    const startedAt = "2026-10-30T10:00:00.000Z";
+    useGenerationStatusStore.getState().seedRunning("owner-chat", startedAt);
+    render(<Harness messageId="owner-message" />);
+    let first!: Promise<ReadonlySet<File>>;
+    await act(async () => {
+      first = approveFiles(files, taskCall);
+    });
+    await new Promise((resolve) => setTimeout(resolve, 2));
+    let second!: Promise<ReadonlySet<File>>;
+    await act(async () => {
+      second = approveFiles(files, {
+        ...taskCall,
+        chatId: "task-chat-2",
+        toolCallId: "task-call-2",
+        hostGrant: {
+          ...taskCall.hostGrant,
+          requestingChatId: "task-chat-2",
+        },
+      });
+    });
+    const rejectButtons = () =>
+      screen.getAllByRole("button", { name: "Reject all" });
+    fireEvent.click(rejectButtons()[0]);
+    await first;
+    expect(ownerStatus()).toMatchObject({ kind: "action_required" });
+    fireEvent.click(rejectButtons()[0]);
+    await second;
+    expect(ownerStatus()).toMatchObject({ kind: "running", startedAt });
   });
 
   it("shows on the message that started the task and names the task", async () => {

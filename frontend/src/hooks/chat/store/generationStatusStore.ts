@@ -73,6 +73,14 @@ interface GenerationStatusStore {
   /** The user decided; tombstone the entry so stale rows and in-flight polls
    * carrying the same marker cannot resurrect it. */
   markApprovalDecided: (chatId: string) => void;
+  /** Puts `saved` back while the entry is still `expected`, the one a prompt
+   * seeded over it, so a prompt that ends leaves no tombstone newer than the
+   * generation it interrupted. */
+  restoreStatus: (
+    chatId: string,
+    expected: ChatGenerationStatus | undefined,
+    saved: ChatGenerationStatus | undefined,
+  ) => void;
   applyPollSnapshot: (entries: GeneratingChat[]) => void;
   markTerminalLocal: (chatId: string, kind: "finished" | "error") => void;
   /** The user acknowledged a finished/error outcome without opening the chat
@@ -230,6 +238,19 @@ export const useGenerationStatusStore = create<GenerationStatusStore>()(
           },
           false,
           "generationStatus/markApprovalDecided",
+        ),
+
+      restoreStatus: (chatId, expected, saved) =>
+        set(
+          (prev) => {
+            if (prev.statusByChatId[chatId] !== expected) return prev;
+            const next = { ...prev.statusByChatId };
+            if (saved) next[chatId] = saved;
+            else delete next[chatId];
+            return { statusByChatId: next };
+          },
+          false,
+          "generationStatus/restoreStatus",
         ),
 
       applyPollSnapshot: (entries) =>
