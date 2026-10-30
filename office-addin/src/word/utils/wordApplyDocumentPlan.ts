@@ -15,6 +15,7 @@ import {
 } from "./wordApplyDiagnostics";
 import { wordApplyPolicy } from "./wordApplyPolicy";
 import { trackWordApply, yieldToPaint } from "./wordApplyProgress";
+import { beginWordOwnWrite, markWordOwnImport } from "./wordChangeJournal";
 import {
   unlockWordContentControlsForImport,
   restoreWordContentControlLocks,
@@ -262,6 +263,7 @@ export async function applyWordDocumentPlan(
   const routing: { reason?: WordRouteReason } = {};
   const watch: CommentWatch = {};
   let result: WordDocumentApplyResult | undefined;
+  const own = beginWordOwnWrite("ids");
   try {
     result = await applyPlan(
       content,
@@ -276,6 +278,7 @@ export async function applyWordDocumentPlan(
     result = await withCommentCheck(result, watch);
     return result;
   } finally {
+    own.end();
     const details = result?.diagnostic?.details;
     progress.finish(result?.status ?? "error", {
       route: result?.outcome?.route ?? details?.route,
@@ -648,6 +651,7 @@ async function applyPlan(
       stage = "write";
       progress.stage("writing");
       writing = true;
+      markWordOwnImport();
       context.document.body.insertOoxml(compiled, "Replace");
       await context.sync();
       stage = "verify";
@@ -709,7 +713,10 @@ export async function revertWordDocumentPlan(
   before: string,
   expectedAfter: string,
 ): Promise<WordDocumentRevertResult> {
-  const result = await revertPlan(before, expectedAfter);
+  const own = beginWordOwnWrite("ids");
+  const result = await revertPlan(before, expectedAfter).finally(() =>
+    own.end(),
+  );
   if (result.diagnostic)
     logWordDiagnostic("revert", result.status, result.diagnostic);
   return result;
@@ -823,6 +830,7 @@ async function revertPlan(
         return { status: "stale", diagnostic: diagnostic("preflight", reason) };
       writing = true;
       stage = "restore";
+      markWordOwnImport();
       context.document.body.insertOoxml(before, "Replace");
       await context.sync();
       stage = "verify";
@@ -964,6 +972,7 @@ async function applyFullDocument(
       snapshot.used = true;
       stage = "write";
       progress.stage("writing");
+      markWordOwnImport();
       await unlockWordContentControlsForImport(context, {
         onLocksCaptured: (value) => {
           locks = value;
@@ -1121,6 +1130,7 @@ async function revertFullDocument(
           ),
         };
       stage = "restore";
+      markWordOwnImport();
       await unlockWordContentControlsForImport(context, {
         onLocksCaptured: (value) => {
           locks = value;

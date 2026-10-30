@@ -214,6 +214,41 @@ export function installMockWordDocument(
           }),
       });
 
+      /** The paragraph `step` places from `uniqueLocalId` once the batch runs; a null object past
+       * either end. */
+      const neighbourProxy = (
+        uniqueLocalId: string,
+        step: number,
+      ): Record<string, unknown> => {
+        const id = () => {
+          const index = body.findIndex(
+            (entry) => entry.uniqueLocalId === uniqueLocalId,
+          );
+          return index < 0 ? undefined : body[index + step]?.uniqueLocalId;
+        };
+        return {
+          load: () => {},
+          get isNullObject() {
+            return id() === undefined;
+          },
+          get uniqueLocalId() {
+            return idsHidden ? null : (id() ?? null);
+          },
+          getPreviousOrNullObject: () => {
+            const at = id();
+            return at === undefined
+              ? neighbourProxy("", 0)
+              : neighbourProxy(at, -1);
+          },
+          getNextOrNullObject: () => {
+            const at = id();
+            return at === undefined
+              ? neighbourProxy("", 0)
+              : neighbourProxy(at, 1);
+          },
+        };
+      };
+
       const paragraphProxy = (uniqueLocalId: string) => {
         const state = () =>
           body.find((entry) => entry.uniqueLocalId === uniqueLocalId);
@@ -221,6 +256,8 @@ export function installMockWordDocument(
           get uniqueLocalId() {
             return idsHidden ? null : uniqueLocalId;
           },
+          getPreviousOrNullObject: () => neighbourProxy(uniqueLocalId, -1),
+          getNextOrNullObject: () => neighbourProxy(uniqueLocalId, 1),
           getRange: () => rangeProxy(uniqueLocalId),
           get styleBuiltIn() {
             return state()?.styleBuiltIn ?? "Normal";
@@ -354,7 +391,14 @@ export function installMockWordDocument(
           },
           body: bodyProxy,
           getSelection: () => selection,
-          getParagraphByUniqueLocalId: (id: string) => paragraphProxy(id),
+          // Word rejects the batch's sync for an id the body does not have.
+          getParagraphByUniqueLocalId: (id: string) => {
+            queue.push(() => {
+              if (!body.some((entry) => entry.uniqueLocalId === id))
+                throw new Error("ItemNotFound");
+            });
+            return paragraphProxy(id);
+          },
         },
         sync: () => {
           syncCount += 1;

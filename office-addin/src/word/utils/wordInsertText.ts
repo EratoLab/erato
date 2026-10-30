@@ -1,9 +1,11 @@
+import { beginWordOwnWrite } from "./wordChangeJournal";
 import { wordWriteHost } from "./wordWriteHost";
 
 /** After inserts beyond a selection; Replace would delete the highlighted content. */
 export async function insertWordTextAtCursor(text: string): Promise<boolean> {
   const word = wordWriteHost();
   if (!word) return false;
+  const own = beginWordOwnWrite("anchor");
   try {
     return await word.run(async (context) => {
       const selection = context.document.getSelection();
@@ -18,5 +20,7 @@ export async function insertWordTextAtCursor(text: string): Promise<boolean> {
   } catch (error) {
     console.warn("Failed to insert text into the Word document:", error);
     return false;
+  } finally {
+    own.end();
   }
 }

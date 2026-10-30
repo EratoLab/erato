@@ -316,6 +316,7 @@ describe("WordChatInput prepared send", () => {
       build.authoring,
       undefined,
       expect.any(Function),
+      { capture: { changes: build.changes, ordinalMap: build.ordinalMap } },
     );
     expect(staged.at(-1)?.identity).toBe(IDENTITY);
   });
@@ -746,6 +747,7 @@ describe("WordChatInput prepared send", () => {
       earlier.authoring,
       undefined,
       expect.any(Function),
+      { capture: { changes: earlier.changes, ordinalMap: earlier.ordinalMap } },
     );
     expect(staged.at(-1)?.identity).toBe(IDENTITY);
     expect(noticeOf("word.send.previousCapture")).toHaveTextContent(
@@ -817,6 +819,7 @@ describe("WordChatInput prepared send", () => {
       expect(prepared?.actionFacet?.id).toBe("word_document_review");
       expect(prepared?.hostContextIdentity).toBe(IDENTITY);
       expect(host.session.activate).toHaveBeenCalledWith(
+        undefined,
         undefined,
         undefined,
         undefined,
@@ -1006,6 +1009,7 @@ describe("WordChatInput prepared send", () => {
       build.authoring,
       undefined,
       expect.any(Function),
+      { capture: { changes: build.changes, ordinalMap: build.ordinalMap } },
     );
     expect(build.authoring?.assets).toEqual([{ id: "asset-1" }]);
     expect(staged.at(-1)?.authoring).toBe(build.authoring);

@@ -1,11 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { buildWordDocumentArgs } from "../utils/buildWordDocumentArgs";
+import {
+  buildWordDocumentArgs,
+  withoutParagraphMark,
+} from "../utils/buildWordDocumentArgs";
 import { readWordDocument } from "../utils/readWordDocument";
 import { wordErrorText } from "../utils/wordApplyDiagnostics";
 import {
+  noteWordCapturedIds,
+  wordChangePosition,
+} from "../utils/wordChangeJournal";
+import {
   readWordChangeTrackingMode,
   subscribeWordDocumentChanged,
+  wordParagraphEventsPending,
   wordParagraphEventsActive,
 } from "../utils/wordDocumentChangeSignal";
 import { captureWordAuthoringSnapshot } from "../utils/wordDocumentXml";
@@ -18,6 +26,7 @@ import type {
   WordParagraphRead,
 } from "../utils/buildWordDocumentArgs";
 import type { WordDocumentReadNote } from "../utils/readWordDocument";
+import type { WordCaptureChanges } from "../utils/wordReadFreshness";
 import type { WordAuthoringSnapshot } from "@erato/frontend/word-review";
 
 export type WordDocumentStatus =
@@ -67,6 +76,8 @@ export const WORD_CAPTURE_SLOW_MS = 300;
 /** Above every Office.js timeout in the read, so only a capture that hangs elsewhere hits it. */
 export const WORD_CAPTURE_CEILING_MS = 90_000;
 const LARGE_DOCUMENT_PARAGRAPHS = 1500;
+/** Registering the paragraph events took up to 2.4 s on a cold Word for Mac (ERMAIN-1005 F1). */
+const EVENTS_READY_WAIT_MS = 3_000;
 
 interface CachedCapture {
   build: WordDocumentBuild | null;
@@ -126,9 +137,10 @@ function assignParagraphOrdinals(
 ): void {
   const ordinalsByText = new Map<string, number[]>();
   for (const paragraph of paragraphs) {
-    const ordinals = ordinalsByText.get(paragraph.text);
+    const text = withoutParagraphMark(paragraph.text);
+    const ordinals = ordinalsByText.get(text);
     if (ordinals) ordinals.push(paragraph.ordinal);
-    else ordinalsByText.set(paragraph.text, [paragraph.ordinal]);
+    else ordinalsByText.set(text, [paragraph.ordinal]);
   }
   const blocksByText = new Map<string, number>();
   for (const block of authoring.blocks)
@@ -149,9 +161,22 @@ async function captureDocument(
   error?: string;
   retry?: boolean;
 }> {
+  const registering = wordParagraphEventsPending();
+  if (registering)
+    await withWordTimeout(
+      registering,
+      EVENTS_READY_WAIT_MS,
+      () => new Error("paragraph events not registered"),
+    ).catch(() => {});
+  const changes: WordCaptureChanges = {
+    position: wordChangePosition(),
+    capturedAt: new Date().toISOString(),
+  };
   const result = await readWordDocument(includeAuthoring);
   if (!result.ok) return { build: null, error: result.error };
+  noteWordCapturedIds(result.paragraphs.map((p) => p.uniqueLocalId));
   const build = buildWordDocumentArgs(result.paragraphs);
+  build.changes = changes;
   if (result.tracking !== undefined) build.trackingMode = result.tracking;
   if (isWordTrackingMode(result.tracking)) build.trackChanges = true;
   if (result.authoring) {
@@ -209,7 +234,10 @@ export function useWordDocumentSource({
       !!entry &&
       !entry.retry &&
       entry.generation === generationRef.current &&
-      entry.authoring === authoringRef.current
+      entry.authoring === authoringRef.current &&
+      // Taken before the paragraph events registered, it could never tell what changed since.
+      (entry.build?.changes?.position.events !== false ||
+        !wordParagraphEventsActive())
     );
   }, []);
 
@@ -327,8 +355,9 @@ export function useWordDocumentSource({
     [],
   );
 
-  // A Track Changes toggle fires no event, and without paragraph events neither does typing.
-  // Formatting-only edits still go unnoticed; apply refuses the stale plan and marks a change.
+  // A Track Changes toggle fires no event, and without paragraph events neither does typing, so
+  // the next send captures again. A toggle changes no text, so freshness does not count it, and
+  // neither does it count formatting-only edits; Apply re-checks the live document before it writes.
   useEffect(() => {
     const leave = () => {
       leftPaneRef.current = true;

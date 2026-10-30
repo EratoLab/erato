@@ -1,4 +1,5 @@
 import type { WordDocumentReadNote } from "./readWordDocument";
+import type { WordCaptureChanges } from "./wordReadFreshness";
 import type { WordAuthoringSnapshot } from "@erato/frontend/word-review";
 
 export interface WordParagraphRead {
@@ -40,6 +41,7 @@ export interface WordDocumentBuild {
   trackingMode?: string;
   /** Track Changes was on at the read. */
   trackChanges?: boolean;
+  changes?: WordCaptureChanges;
   args: WordDocumentArgs;
   coverage: WordDocumentCoverage;
   ordinalMap: Map<number, { uniqueLocalId: string | null; text: string }>;
@@ -49,6 +51,11 @@ export interface WordDocumentBuild {
   renderedOrdinals: ReadonlySet<number>;
   /** A truncated paragraph is known but not writable: replacing it would delete its unseen tail. */
   partialOrdinal: number | null;
+}
+
+/** Word for Windows and Mac end getText with the paragraph mark, which block texts never have. */
+export function withoutParagraphMark(text: string): string {
+  return text.replace(/\r$/, "");
 }
 
 /** Stay below the backend’s 64 KiB argument cap, measured in UTF-8 bytes. */

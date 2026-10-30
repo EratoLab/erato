@@ -1,5 +1,13 @@
+import {
+  noteWordChangeEventsActive,
+  recordWordParagraphEvent,
+  resetWordChangeJournalForTests,
+  wordChangeEventsActive,
+} from "./wordChangeJournal";
 import { withWordTimeout } from "./wordTimeout";
 import { wordWriteHost } from "./wordWriteHost";
+
+import type { WordParagraphEvent } from "./wordChangeJournal";
 
 type Listener = () => void;
 
@@ -7,7 +15,7 @@ const TRACKING_PROBE_TIMEOUT_MS = 2_000;
 
 const listeners = new Set<Listener>();
 let installed = false;
-let paragraphEventsActive = false;
+let registering: Promise<void> | undefined;
 
 export function subscribeWordDocumentChanged(listener: Listener): () => void {
   listeners.add(listener);
@@ -29,7 +37,12 @@ export function markWordDocumentChanged(): void {
 
 /** Without these events a text edit in Word reaches the pane by no other signal. */
 export function wordParagraphEventsActive(): boolean {
-  return paragraphEventsActive;
+  return wordChangeEventsActive();
+}
+
+/** While the paragraph events are being registered: settles once they are or cannot be. */
+export function wordParagraphEventsPending(): Promise<void> | undefined {
+  return registering;
 }
 
 /** One property, so returning to the pane can notice a Track Changes toggle without a full read. */
@@ -54,7 +67,9 @@ export async function readWordChangeTrackingMode(): Promise<string | null> {
 function install(): void {
   if (installed) return;
   installed = true;
-  void installParagraphEvents();
+  registering = installParagraphEvents().finally(() => {
+    registering = undefined;
+  });
 }
 
 async function installParagraphEvents(): Promise<void> {
@@ -69,13 +84,16 @@ async function installParagraphEvents(): Promise<void> {
     return;
   try {
     await word.run(async (context) => {
-      const handler = async () => markWordDocumentChanged();
+      const handler = async (event: WordParagraphEvent) => {
+        recordWordParagraphEvent(event);
+        markWordDocumentChanged();
+      };
       context.document.onParagraphAdded.add(handler);
       context.document.onParagraphChanged.add(handler);
       context.document.onParagraphDeleted.add(handler);
       await context.sync();
     });
-    paragraphEventsActive = true;
+    noteWordChangeEventsActive();
   } catch {
     // Callers then treat every return to the pane as a change.
   }
@@ -84,5 +102,6 @@ async function installParagraphEvents(): Promise<void> {
 export function resetWordDocumentChangeSignalForTests(): void {
   listeners.clear();
   installed = false;
-  paragraphEventsActive = false;
+  registering = undefined;
+  resetWordChangeJournalForTests();
 }

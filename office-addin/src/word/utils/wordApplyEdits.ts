@@ -5,6 +5,12 @@ import {
 
 import { wordErrorText } from "./wordApplyDiagnostics";
 import { trackWordApply } from "./wordApplyProgress";
+import {
+  beginWordOwnWrite,
+  markWordOwnAnchor,
+  markWordOwnImport,
+  nameWordOwnWriteIds,
+} from "./wordChangeJournal";
 import { WORD_COMMENT_ORDER_PAIRS_PER_SYNC } from "./wordCommentReader";
 import { wordBodyFingerprint } from "./wordDocumentXml";
 import {
@@ -237,10 +243,12 @@ export async function applyWordEdits(args: {
 }): Promise<WordApplyResult> {
   const progress = trackWordApply("edits", args.onStage);
   let result: WordApplyResult | undefined;
+  const own = beginWordOwnWrite("ids");
   try {
     result = await applyEdits(args.edits, args.capture, progress);
     return result;
   } finally {
+    own.end();
     progress.finish(
       !result ? "error" : result.hostFailed ? "host-failed" : "completed",
     );
@@ -307,6 +315,14 @@ async function applyEdits(
         snapshotOoxml = snapshot.value;
 
         progress.stage("writing");
+        nameWordOwnWriteIds(
+          verified.applicable.flatMap((edit) =>
+            edit.positions.map((position) => entries[position].id),
+          ),
+        );
+        // A line break makes new paragraphs, whose ids no one knows before Word reports them.
+        if (verified.applicable.some((edit) => /[\r\n\v\f]/u.test(edit.text)))
+          markWordOwnAnchor();
         for (const edit of verified.applicable) {
           writeReplacement(items, edit.positions, edit.text);
         }
@@ -437,6 +453,7 @@ export async function revertWordEdits(
   const word = wordWriteHost();
   if (!word) return "failed";
   if (!expectedAfter) return "stale";
+  const own = beginWordOwnWrite("ids");
   try {
     return await word.run(async (context) => {
       context.document.load("changeTrackingMode");
@@ -444,6 +461,7 @@ export async function revertWordEdits(
       await context.sync();
       if (context.document.changeTrackingMode !== "Off") return "tracking";
       if (bodyFingerprintOrRaw(live.value) !== expectedAfter) return "stale";
+      markWordOwnImport();
       context.document.body.insertOoxml(snapshotOoxml, "Replace");
       await context.sync();
       return "reverted";
@@ -451,5 +469,7 @@ export async function revertWordEdits(
   } catch (error) {
     console.warn("Failed to revert Word edits:", wordErrorText(error));
     return "failed";
+  } finally {
+    own.end();
   }
 }
