@@ -141,9 +141,7 @@ pub(crate) async fn resolve_grant(
     }
     let binding = context
         .request_context
-        .executor
-        .as_ref()
-        .filter(|binding| binding_host(binding) == Some(host.as_str()))
+        .executor_for_host(host.as_str())
         .ok_or(NOT_FROM_HOST)?;
     let candidates: Vec<&OfferedClientTool> = context
         .parent_client_tools

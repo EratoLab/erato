@@ -56,7 +56,60 @@ impl ExecutorBinding {
         let binding: Self = serde_json::from_str(value).ok()?;
         binding.validate().then_some(binding)
     }
+
+    /// Further bindings beside `X-Erato-Executor`, one per host context kind.
+    /// Each element is parsed on its own, so an entry a newer client shapes
+    /// differently drops only itself; an older backend ignores the header,
+    /// which is why `X-Erato-Executor` keeps its strict shape.
+    pub fn additional_from_headers(
+        headers: &axum::http::HeaderMap,
+        primary: Option<&Self>,
+    ) -> Vec<Self> {
+        let Some(value) = headers
+            .get(ADDITIONAL_EXECUTORS_HEADER)
+            .and_then(|value| value.to_str().ok())
+            .filter(|value| value.len() <= MAX_ADDITIONAL_EXECUTORS_BYTES)
+        else {
+            return Vec::new();
+        };
+        let Ok(entries) = serde_json::from_str::<Vec<Value>>(value) else {
+            return Vec::new();
+        };
+        let primary_kind = primary
+            .and_then(|binding| binding.host_context.as_ref())
+            .map(|host| host.kind.as_str());
+        let mut bindings: Vec<Self> = Vec::new();
+        for entry in entries {
+            if bindings.len() == MAX_ADDITIONAL_EXECUTORS {
+                break;
+            }
+            let Ok(binding) = serde_json::from_value::<Self>(entry) else {
+                continue;
+            };
+            let Some(kind) = binding.host_context.as_ref().map(|host| host.kind.as_str()) else {
+                continue;
+            };
+            if !binding.validate()
+                || primary_kind == Some(kind)
+                || bindings.iter().any(|known| {
+                    known
+                        .host_context
+                        .as_ref()
+                        .is_some_and(|host| host.kind == kind)
+                })
+            {
+                continue;
+            }
+            bindings.push(binding);
+        }
+        bindings
+    }
 }
+
+/// Submit header listing the bindings beside `X-Erato-Executor`.
+pub const ADDITIONAL_EXECUTORS_HEADER: &str = "X-Erato-Additional-Executors";
+pub const MAX_ADDITIONAL_EXECUTORS: usize = 4;
+const MAX_ADDITIONAL_EXECUTORS_BYTES: usize = 4096;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
@@ -468,6 +521,85 @@ pub fn fast_result_or_refusal(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use axum::http::{HeaderMap, HeaderValue};
+    use serde_json::json;
+
+    fn binding_json(kind: &str, device: &str) -> Value {
+        json!({"device_id": device, "realm": "desktop-sidecar",
+            "host_context": {"kind": kind, "identity": "local"}})
+    }
+
+    fn additional(value: &str, primary: Option<&ExecutorBinding>) -> Vec<ExecutorBinding> {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            ADDITIONAL_EXECUTORS_HEADER,
+            HeaderValue::from_str(value).unwrap(),
+        );
+        ExecutorBinding::additional_from_headers(&headers, primary)
+    }
+
+    fn kinds(bindings: &[ExecutorBinding]) -> Vec<&str> {
+        bindings
+            .iter()
+            .map(|binding| binding.host_context.as_ref().unwrap().kind.as_str())
+            .collect()
+    }
+
+    #[test]
+    fn additional_executors_are_parsed_one_entry_at_a_time() {
+        let office = ExecutorBinding {
+            device_id: "office".into(),
+            realm: ExecutionRealm::OfficeAddin,
+            host_context: Some(HostContext {
+                kind: "outlook_mailbox".into(),
+                identity: "mailbox".into(),
+            }),
+        };
+        assert!(ExecutorBinding::additional_from_headers(&HeaderMap::new(), None).is_empty());
+
+        let sidecar = binding_json("desktop_sidecar", "client");
+        let parsed = additional(&json!([sidecar]).to_string(), Some(&office));
+        assert_eq!(parsed.len(), 1);
+        assert_eq!(parsed[0].realm, ExecutionRealm::DesktopSidecar);
+        assert_eq!(parsed[0].device_id, "client");
+
+        let mut future = binding_json("future_host", "client");
+        future["capabilities"] = json!(["x"]);
+        let no_host = json!({"device_id": "client", "realm": "desktop-sidecar"});
+        let empty_device = binding_json("empty_device", "");
+        let mixed = json!([future, no_host, empty_device, 7, sidecar]).to_string();
+        assert_eq!(kinds(&additional(&mixed, None)), ["desktop_sidecar"]);
+
+        let duplicate = json!([
+            binding_json("desktop_sidecar", "first"),
+            binding_json("desktop_sidecar", "second")
+        ]);
+        let parsed = additional(&duplicate.to_string(), None);
+        assert_eq!(parsed.len(), 1);
+        assert_eq!(parsed[0].device_id, "first");
+
+        let primary_kind = json!([binding_json("outlook_mailbox", "client"), sidecar]);
+        assert_eq!(
+            kinds(&additional(&primary_kind.to_string(), Some(&office))),
+            ["desktop_sidecar"]
+        );
+
+        let many: Vec<Value> = (0..6)
+            .map(|index| binding_json(&format!("kind_{index}"), "client"))
+            .collect();
+        assert_eq!(
+            additional(&json!(many).to_string(), None).len(),
+            MAX_ADDITIONAL_EXECUTORS
+        );
+
+        assert!(additional(&sidecar.to_string(), None).is_empty());
+        assert!(additional("not json", None).is_empty());
+        let padded = json!([
+            binding_json("desktop_sidecar", "client"),
+            {"pad": "x".repeat(MAX_ADDITIONAL_EXECUTORS_BYTES)}
+        ]);
+        assert!(additional(&padded.to_string(), None).is_empty());
+    }
 
     #[test]
     fn fast_errors_keep_a_cleaned_bounded_message() {
