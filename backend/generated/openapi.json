@@ -8662,6 +8662,11 @@
             "type": "string",
             "format": "uuid"
           },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the server stops waiting for this call's result, by the server's\nclock."
+          },
           "input": {
             "$ref": "#/components/schemas/OperationPayload"
           },
@@ -8671,6 +8676,12 @@
           "message_id": {
             "type": "string",
             "format": "uuid"
+          },
+          "timeout_ms": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Milliseconds left until `expires_at` when this event was delivered.\nA client times the call from this, not from `expires_at`, so its own\nclock does not matter.",
+            "minimum": 0
           },
           "tool_call_id": {
             "type": "string"
