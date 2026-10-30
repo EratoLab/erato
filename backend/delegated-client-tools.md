@@ -318,16 +318,18 @@ and asks nothing of the user.
 `erato/tests/integration_tests/api/messages/client_tool_operations/delegated/conformance.rs`
 runs the host-facing cases once for each row in `delegated/rows.rs`, against a
 test-driven pane: a fake host with a context version on `word_document`, the
-same fake host without one on `outlook_mailbox`, the `desktop_sidecar` row
-(ERMAIN-1034), and the `word_document` and `outlook_mailbox` rows, which stay
-ignored until ERMAIN-1003 and ERMAIN-1006 enable them. A row marked `slow_path`
-also runs the slow-path cases (`delegated/slow_path.rs`): the fake host on
-`outlook_mailbox`, the `desktop_sidecar` row and the ignored `outlook_mailbox`
-row. A row may name a `primary` binding: every parent-side request of the
-harness (submit, regenerate, retry) then sends that primary as
-`X-Erato-Executor` and the row's own binding in `X-Erato-Additional-Executors`,
-as the shells send them; the `desktop_sidecar` row does so with a fake Office
-binding, so every case runs through the envelope. Every row has a guard case that holds `slow_path` to
+same fake host without one on `outlook_mailbox`, the `desktop_sidecar` and
+`desktop_sidecar_web` rows (ERMAIN-1034), and the `word_document` and
+`outlook_mailbox` rows, which stay ignored until ERMAIN-1003 and ERMAIN-1006
+enable them. A row marked `slow_path` also runs the slow-path cases
+(`delegated/slow_path.rs`): the fake host on `outlook_mailbox`, both sidecar
+rows and the ignored `outlook_mailbox` row. A row's `envelope` says how every
+parent-side request of the harness (submit, regenerate, retry) sends its
+binding, as the shells send it: as `X-Erato-Executor`, in
+`X-Erato-Additional-Executors` beside another `X-Erato-Executor` (the
+`desktop_sidecar` row, with a fake Office binding, as an add-in sends it), or
+there alone (the `desktop_sidecar_web` row, as the web app sends it), so every
+case runs through both shapes of the envelope. Every row has a guard case that holds `slow_path` to
 whether its host's context outlives the pane session, so the `word_document`
 rows never take it. Four cases of the core alone stay in `delegated.rs` on the fake
 host: Always allow under a strict MCP policy, Never allow stored as the
