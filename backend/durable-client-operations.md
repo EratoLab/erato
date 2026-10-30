@@ -491,7 +491,7 @@ merges onto the overlay's tool. That file is not gitignored; never commit it.
 calls. With it off, the stream endpoint answers 404 and no row is written.
 
 - **Stream.** `GET /me/client-operations/stream` (SSE, 1 s keep-alive), one per
-  pane. It needs a valid `X-Erato-Executor` and a non-empty `X-Erato-Client-Tools`
+  pane and binding. It needs a valid `X-Erato-Executor` and a non-empty `X-Erato-Client-Tools`
   (else 400). `X-Erato-Child-Client-Tools` names the tools whose handlers accept
   grant calls; it is intersected with `X-Erato-Client-Tools` and never part of the
   binding, so older backends that refuse unknown binding fields are unaffected.
@@ -547,10 +547,21 @@ calls. With it off, the stream endpoint answers 404 and no row is written.
   inbox at once; the 10 s poll stays the fallback. A grant operation's nudge
   (`grant_call`, with the bare `tool_name`) goes only to a stream that lists the
   tool in `X-Erato-Child-Client-Tools`, and waits until one connects.
-- **Frontend.** `ClientOperationCoordinator` opens the stream when
-  `ListClientOperationsResponse.executor_stream_enabled` is set and the pane has a
-  binding, reopens it when the binding or tools change, and dispatches calls
-  through the client tool executor registry with the stream's binding.
+- **Frontend.** `ClientOperationCoordinator` opens the streams when
+  `ListClientOperationsResponse.executor_stream_enabled` is set, one per binding
+  the pane serves, reopens one when its binding or tools change, and dispatches
+  calls through the client tool executor registry with that stream's binding.
+  The first stream is the primary binding's, with exactly the headers it had
+  before additional executors (`X-Erato-Additional-Executors` is a submit header
+  and never part of a stream). Each additional binding (the desktop sidecar's,
+  ERMAIN-1034) gets its own stream listing only its own tools; tabs of one
+  browser profile share that binding, so its stream runs under the Web Lock
+  `erato.executor-stream:<binding>` and one tab holds it at a time, keeping
+  HTTP/1.1 deployments clear of the browser's connection limit. A pushed call's
+  `timeout_ms` starts a local timer that aborts the call's work and any prompt it
+  raised when the server stops waiting. The user's own claimed calls renew their
+  claim while they run, as task calls do, so a device prompt never outlives the
+  claim its result needs.
 
 ## Local evidence integration
 
