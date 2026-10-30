@@ -78,9 +78,18 @@ export interface ClientToolHostConformanceHarness {
     apply: () => void | Promise<void>;
   }[];
   /**
+   * Who compares the grant's owner turn with the turn the host holds
+   * (contract §7). `"host"` (the default): the host refuses a foreign owner
+   * and an earlier turn's grant itself. `"server"`: a host whose context
+   * outlives the pane (the desktop sidecar) has no owner turn of its own; the
+   * server checks the owner at offer, dispatch, claim and every renewal, and
+   * the host checks only the requesting ids and the context version.
+   */
+  ownerCheck?: "host" | "server";
+  /**
    * A read that asks on the device, and how the user answers it. A decline
-   * answers with the `declined` code, which the durable path reports as the
-   * `declined` outcome; the live path does not map it yet (ERMAIN-1034).
+   * answers with the `declined` code, which both the live and the durable
+   * path report as the `declined` outcome.
    */
   deviceApproval?: {
     read: ClientToolHostCall;
@@ -351,11 +360,13 @@ type GrantChange = (
   turn: ClientToolHostTurn,
 ) => ClientToolHostGrant;
 
-/** Grants a host must refuse, each against a valid one for the turn. */
+/** Grants a host must refuse, each against a valid one for the turn.
+ * `owner` marks a refusal the server makes instead for `ownerCheck: "server"`. */
 const FOREIGN_GRANTS: readonly {
   name: string;
   applies: (turn: ClientToolHostTurn) => boolean;
   change: GrantChange;
+  owner?: true;
 }[] = [
   {
     name: "a requesting chat other than the call's",
@@ -377,6 +388,7 @@ const FOREIGN_GRANTS: readonly {
     name: "a foreign owner chat",
     applies: () => true,
     change: (grant) => ({ ...grant, ownerChatId: "conformance-foreign-chat" }),
+    owner: true,
   },
   {
     name: "a foreign owner message",
@@ -385,6 +397,7 @@ const FOREIGN_GRANTS: readonly {
       ...grant,
       ownerMessageId: "conformance-foreign-message",
     }),
+    owner: true,
   },
   {
     name: "a forged context version",
@@ -414,6 +427,7 @@ export const clientToolHostAdapterConformanceFailures = async (
   const failures: string[] = [];
   const fail = (rule: string, message: string) =>
     failures.push(`${rule} (${harness.hostContext}): ${message}`);
+  const hostChecksOwner = (harness.ownerCheck ?? "host") === "host";
   const reads: Read[] = [];
   let calls = 0;
 
@@ -659,8 +673,8 @@ export const clientToolHostAdapterConformanceFailures = async (
       }
       expectLoss(label, outcome);
     };
-    for (const foreign of FOREIGN_GRANTS.filter(({ applies }) =>
-      applies(turn),
+    for (const foreign of FOREIGN_GRANTS.filter(
+      ({ applies, owner }) => applies(turn) && (hostChecksOwner || !owner),
     )) {
       await expectRefused(
         `${name} under a grant with ${foreign.name}`,
@@ -668,7 +682,9 @@ export const clientToolHostAdapterConformanceFailures = async (
         foreign.change,
       );
     }
-    await expectRefused(`${name} under the grant of an earlier turn`, stale);
+    if (hostChecksOwner) {
+      await expectRefused(`${name} under the grant of an earlier turn`, stale);
+    }
   }
 
   if (approval) {
