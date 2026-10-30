@@ -8,7 +8,6 @@ import { readWordDocument } from "../utils/readWordDocument";
 import { wordErrorText } from "../utils/wordApplyDiagnostics";
 import {
   noteWordCapturedIds,
-  recordWordUnknownChange,
   wordChangePosition,
 } from "../utils/wordChangeJournal";
 import {
@@ -191,7 +190,6 @@ async function captureDocument(
     assignParagraphOrdinals(build.authoring, result.paragraphs);
     if (result.note) build.readNote = result.note;
     if (result.authoring.proofingPending) {
-      changes.proofingPending = true;
       if (result.authoring.proofingPending === "tagging")
         build.authoring.proofingPending = true;
       // Word adds its tags without a change event, so only a send can pick them up.
@@ -357,8 +355,9 @@ export function useWordDocumentSource({
     [],
   );
 
-  // A Track Changes toggle fires no event, and without paragraph events neither does typing.
-  // Formatting-only edits still go unnoticed; apply refuses the stale plan and marks a change.
+  // A Track Changes toggle fires no event, and without paragraph events neither does typing, so
+  // the next send captures again. A toggle changes no text, so freshness does not count it, and
+  // neither does it count formatting-only edits; Apply re-checks the live document before it writes.
   useEffect(() => {
     const leave = () => {
       leftPaneRef.current = true;
@@ -384,10 +383,7 @@ export function useWordDocumentSource({
         return;
       }
       void readWordChangeTrackingMode().then((mode) => {
-        if (mode !== captured) {
-          recordWordUnknownChange("tracking-mode");
-          generationRef.current += 1;
-        }
+        if (mode !== captured) generationRef.current += 1;
         refresh();
       });
     };

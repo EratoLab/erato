@@ -5,8 +5,9 @@ export type WordChangeKind = "added" | "changed" | "deleted" | "unknown";
 /** own: the pane's own writes; local: the user here, or on the web a desktop co-author (Word for
  * the web reports those as Local); remote: a co-author as Word reports it. */
 export type WordChangeSource = "own" | "local" | "remote" | "unknown";
-/** A change the journal knows happened but not where. */
-export type WordUnknownChange = "tracking-mode" | "ids-replaced";
+/** A change the journal knows happened but not where. A Track Changes toggle changes no text, so it
+ * gets no entry. */
+export type WordUnknownChange = "ids-replaced";
 
 export interface WordChangeEntry {
   seq: number;
@@ -129,7 +130,7 @@ export function noteWordCapturedIds(ids: Iterable<string | null>): void {
   live = new Set(captured);
 }
 
-export function recordWordUnknownChange(reason: WordUnknownChange): void {
+function recordWordUnknownChange(reason: WordUnknownChange): void {
   append({ kind: "unknown", source: "unknown", ids: [], reason });
 }
 

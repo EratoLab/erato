@@ -662,7 +662,7 @@ describe("useWordDocumentSource", () => {
     expect(read).toHaveBeenCalledTimes(1);
   });
 
-  it("reads again on a return after Track Changes was toggled", async () => {
+  it("reads again on a return after Track Changes was toggled, which is no change to the text", async () => {
     signal.eventsActive = true;
     readsAuthoring("Off");
     const { result } = renderSource({ authoringEnabled: true });
@@ -674,9 +674,7 @@ describe("useWordDocumentSource", () => {
     focusPane();
 
     await waitFor(() => expect(read).toHaveBeenCalledTimes(2));
-    expect(journalSince(captured)).toEqual([
-      { source: "unknown", reason: "tracking-mode" },
-    ]);
+    expect(journalSince(captured)).toEqual([]);
   });
 
   const reads = {
@@ -790,7 +788,8 @@ describe("useWordDocumentSource", () => {
       expect(sent!.authoring?.proofingPending).toBe(
         pending === "tagging" ? true : undefined,
       );
-      expect(sent!.changes?.proofingPending).toBe(true);
+      // Word's proofing changes no text, so freshness reads the capture as any other.
+      expect(journalSince(sent!)).toEqual([]);
     },
   );
 

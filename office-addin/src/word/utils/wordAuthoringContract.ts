@@ -1,9 +1,9 @@
 export const WORD_SECTION_PROPERTIES =
   "headers/footers:{default?:storyId|null,first?:storyId|null,even?:storyId|null}; null removes that reference. layout:{orientation:portrait|landscape,width?,height?,margins?:{top,right,bottom,left,header,footer,gutter},columns?,columnSpacing?,break:nextPage|continuous|evenPage|oddPage,pageNumberStart?,differentFirstPage?,differentOddEvenPages?}. All dimensions are points.";
 
-/** The blind spots of every read's freshness, per host (ERMAIN-1005 F1). */
+/** What every read's freshness leaves out, per host (ERMAIN-1005 F1; owner decision 2026-10-30). */
 export const WORD_FRESHNESS_NOTICE =
-  'freshness says what Word reported changed since capturedAt. Word\'s own changes fire no events, nor do formatting-only edits on Windows and Mac (on the web they may come late), so changes:"none" means no text change was observed.';
+  'freshness tracks the text this read returned. changes:"none" means no text change was seen since capturedAt; formatting-only edits, Track Changes toggles and Word\'s own proofing are not text changes (Word for the web does report formatting edits, so there they count), and Apply re-checks the live document before it changes anything.';
 
 /** Protocol vocabulary belongs here; model behavior instructions come from deployment configuration. */
 export const WORD_AUTHORING_CONTRACT = {

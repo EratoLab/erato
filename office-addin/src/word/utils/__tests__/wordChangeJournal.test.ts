@@ -12,7 +12,6 @@ import {
   noteWordCapturedIds,
   noteWordChangeEventsActive,
   recordWordParagraphEvent,
-  recordWordUnknownChange,
   resetWordChangeJournalForTests,
   wordChangePosition,
   wordChangesSince,
@@ -192,14 +191,6 @@ describe("wordChangeJournal", () => {
 
     expect(since(middle).map((e) => e.ids)).toEqual([["p2"]]);
     expect(since().map((e) => e.ids)).toEqual([["p1"], ["p2"]]);
-  });
-
-  it("keeps a blind spot the pane noticed as an unknown entry", () => {
-    recordWordUnknownChange("tracking-mode");
-
-    expect(since().map(({ source, reason }) => ({ source, reason }))).toEqual([
-      { source: "unknown", reason: "tracking-mode" },
-    ]);
   });
 
   describe("the pane's own writes", () => {

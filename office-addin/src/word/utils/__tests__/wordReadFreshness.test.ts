@@ -20,7 +20,6 @@ import {
   noteWordCapturedIds,
   noteWordChangeEventsActive,
   recordWordParagraphEvent,
-  recordWordUnknownChange,
   resetWordChangeJournalForTests,
   wordChangePosition,
 } from "../wordChangeJournal";
@@ -465,24 +464,6 @@ describe("read freshness", () => {
       });
     });
 
-    it("after the pane noticed a Track Changes toggle", async () => {
-      recordWordUnknownChange("tracking-mode");
-
-      expect(await sectionRead()).toMatchObject({
-        changes: "unknown",
-        counts: { own: 0, local: 0, remote: 0, unknown: 1 },
-      });
-    });
-
-    it("for a capture taken while Word was still tagging languages, which fires no events", async () => {
-      const freshness = await open(doc.snapshot, {
-        ...capture,
-        changes: { ...capture.changes!, proofingPending: true },
-      }).section(refOf(doc.snapshot, "1. Chapter 1"));
-
-      expect(freshness.changes).toBe("unknown");
-    });
-
     it("for a capture without paragraph ids", async () => {
       const ordinalMap = new Map(
         [...doc.ordinalMap].map(([k, p]) => [k, { ...p, uniqueLocalId: null }]),
@@ -540,7 +521,12 @@ describe("read freshness", () => {
     });
 
     it("for a capture older than the journal keeps", async () => {
-      for (let k = 0; k < 1_001; k++) recordWordUnknownChange("tracking-mode");
+      vi.useFakeTimers();
+      const id = doc.ids.get(firstBody(doc.snapshot, 3).ref)![0];
+      for (let k = 0; k < 1_001; k++) {
+        vi.advanceTimersByTime(300);
+        event("ParagraphChanged", [id]);
+      }
 
       expect(await sectionRead()).toMatchObject({
         changes: "unknown",
