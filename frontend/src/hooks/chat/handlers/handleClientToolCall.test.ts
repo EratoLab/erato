@@ -611,6 +611,42 @@ describe("handleClientToolCall", () => {
     expect(lastPostBody(fetchMock)).toMatchObject({ result: 1 });
   });
 
+  it.each([10, -10])(
+    "closes a pushed call's prompt when the server stops waiting, with the client clock %i minutes off",
+    async (minutesOff) => {
+      vi.useFakeTimers();
+      vi.setSystemTime(Date.now() + minutesOff * 60_000);
+      try {
+        const signals: AbortSignal[] = [];
+        registerClientToolExecutor(
+          "get_sidecar_document",
+          (_input, context) =>
+            new Promise((resolve) => {
+              if (context?.signal) signals.push(context.signal);
+              context?.signal?.addEventListener("abort", () =>
+                resolve({ ok: false, error: "The prompt closed." }),
+              );
+            }),
+        );
+        const done = handleClientToolCall(
+          makeEvent({ tool_name: "get_sidecar_document", tool_call_id: "c" }),
+          { ...deps, timeoutMs: 90_000 },
+        );
+        await vi.advanceTimersByTimeAsync(89_999);
+        expect(signals[0]?.aborted).toBe(false);
+        await vi.advanceTimersByTimeAsync(1);
+        expect(signals[0]?.aborted).toBe(true);
+        await done;
+        expect(lastPostBody(fetchMock)).toMatchObject({
+          tool_call_id: "c",
+          error: "The prompt closed.",
+        });
+      } finally {
+        vi.useRealTimers();
+      }
+    },
+  );
+
   it("releases the controller once the execution settles", async () => {
     let seenSignal: AbortSignal | undefined;
     registerClientToolExecutor(

@@ -562,6 +562,140 @@ describe("ClientOperationCoordinator executor stream", () => {
     }
   });
 
+  const desktop: ExecutorBinding = {
+    device_id: "device-one-0000000",
+    realm: "desktop-sidecar",
+    host_context: { kind: "desktop_sidecar", identity: "local" },
+  };
+  const registerDesktop = (ready: () => boolean) => {
+    registerClientToolExecutor(
+      "search_sidecar_index",
+      vi.fn<ClientToolExecutor>(),
+      ready,
+      { acceptsGrantCalls: true },
+    );
+    return registerOperationExecutor(
+      "search_sidecar_index",
+      () => (ready() ? desktop : undefined),
+      { additional: true },
+    );
+  };
+
+  /** Web Locks where a request waits until the holder's callback settles. */
+  function queuedWebLocks() {
+    const held = new Set<string>();
+    const waiting = new Map<string, (() => void)[]>();
+    const request = (
+      name: string,
+      options: LockOptions,
+      callback: LockGrantedCallback,
+    ) =>
+      new Promise<unknown>((resolve, reject) => {
+        const grant = () => {
+          options.signal?.removeEventListener("abort", abandon);
+          held.add(name);
+          void Promise.resolve(callback({ name, mode: "exclusive" }))
+            .then(resolve, reject)
+            .finally(() => {
+              held.delete(name);
+              waiting.get(name)?.shift()?.();
+            });
+        };
+        const abandon = () => {
+          const queue = waiting.get(name) ?? [];
+          waiting.set(
+            name,
+            queue.filter((entry) => entry !== grant),
+          );
+          reject(options.signal?.reason);
+        };
+        if (!held.has(name)) {
+          grant();
+          return;
+        }
+        options.signal?.addEventListener("abort", abandon, { once: true });
+        waiting.set(name, [...(waiting.get(name) ?? []), grant]);
+      });
+    Object.defineProperty(globalThis.navigator, "locks", {
+      configurable: true,
+      value: { request },
+    });
+    return () => {
+      Reflect.deleteProperty(globalThis.navigator, "locks");
+    };
+  }
+
+  it("opens a stream per binding and closes only the one that goes away", async () => {
+    let desktopReady = false;
+    const unregister = [
+      registerOperationExecutor("fetch_availability", () => binding, {
+        yields: true,
+      }),
+      registerDesktop(() => desktopReady),
+    ];
+    const { api, stream, signals } = streamApi();
+    const { coordinator } = coordinatorWith(api);
+    try {
+      await coordinator.reconcile();
+      expect(stream).toHaveBeenCalledOnce();
+      desktopReady = true;
+      await coordinator.reconcile();
+      await vi.waitFor(() => expect(stream).toHaveBeenCalledTimes(3));
+      // The primary set is keyed by its own headers, which changed only by
+      // the sidecar tool becoming available, as before.
+      expect(signals[0]?.aborted).toBe(true);
+      expect(stream.mock.calls[1]?.[0]).toEqual({
+        "X-Erato-Executor": JSON.stringify(binding),
+        "X-Erato-Client-Tools": "fetch_availability,search_sidecar_index",
+        "X-Erato-Child-Client-Tools": "search_sidecar_index",
+      });
+      expect(stream.mock.calls[2]?.[0]).toEqual({
+        "X-Erato-Executor": JSON.stringify(desktop),
+        "X-Erato-Client-Tools": "search_sidecar_index",
+        "X-Erato-Child-Client-Tools": "search_sidecar_index",
+      });
+      desktopReady = false;
+      await coordinator.reconcile();
+      expect(signals[2]?.aborted).toBe(true);
+      await vi.waitFor(() => expect(stream).toHaveBeenCalledTimes(4));
+      expect(stream.mock.calls[3]?.[0]).toEqual({
+        "X-Erato-Executor": JSON.stringify(binding),
+        "X-Erato-Client-Tools": "fetch_availability",
+      });
+    } finally {
+      coordinator.dispose();
+      unregister.forEach((cleanup) => cleanup());
+    }
+  });
+
+  it("holds a shared binding's stream in one pane of the browser at a time", async () => {
+    const restore = queuedWebLocks();
+    const unregister = registerDesktop(() => true);
+    const first = streamApi();
+    const second = streamApi();
+    const one = coordinatorWith(first.api).coordinator;
+    const two = coordinatorWith(second.api).coordinator;
+    try {
+      await one.reconcile();
+      await two.reconcile();
+      await vi.waitFor(() => expect(first.stream).toHaveBeenCalledOnce());
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      expect(second.stream).not.toHaveBeenCalled();
+      await two.reconcile();
+      expect(second.stream).not.toHaveBeenCalled();
+      one.dispose();
+      await vi.waitFor(() => expect(second.stream).toHaveBeenCalledOnce());
+      expect(second.stream.mock.calls[0]?.[0]).toMatchObject({
+        "X-Erato-Executor": JSON.stringify(desktop),
+      });
+    } finally {
+      one.dispose();
+      two.dispose();
+      unregister();
+      restore();
+    }
+  });
+
   it("sweeps the inbox when the stream announces an operation", async () => {
     const unregister = registerOperationExecutor(
       "fetch_availability",
@@ -1074,6 +1208,52 @@ describe("ClientOperationCoordinator task calls", () => {
     }
   });
 
+  it("leaves a task's call waiting while the app is gone and finishes it once the app is back", async () => {
+    takesGrantCalls();
+    const { api } = fakeApi(operation({ lineage }));
+    let ready = true;
+    let lost = true;
+    const run = vi.fn<ClientToolExecutor>(async () =>
+      lost
+        ? {
+            ok: false,
+            error: "The app went away.",
+            validationErrors: [
+              { path: "", code: "context_unavailable", message: "Gone" },
+            ],
+            submissionFeedback: { terminal: true, recovery: "cannot_continue" },
+          }
+        : { ok: true, result: { hits: [] } },
+    );
+    const handler = new ClientToolOperationHandler(
+      "fetch_availability",
+      run,
+      () => binding,
+      () => ready,
+    );
+    const { coordinator } = coordinatorWith(api, [], [handler]);
+    try {
+      await coordinator.reconcile();
+      await vi.waitFor(() => expect(run).toHaveBeenCalledOnce());
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(api.complete).not.toHaveBeenCalled();
+      expect(api.continue).not.toHaveBeenCalled();
+      ready = false;
+      lost = false;
+      await coordinator.reconcile();
+      expect(run).toHaveBeenCalledOnce();
+      ready = true;
+      await coordinator.reconcile();
+      await vi.waitFor(() => expect(api.complete).toHaveBeenCalledOnce());
+      // The cached claim was dropped, so the call was claimed afresh.
+      expect(api.claim).toHaveBeenCalledTimes(2);
+      expect(run).toHaveBeenCalledTimes(2);
+      await vi.waitFor(() => expect(api.continue).toHaveBeenCalledOnce());
+    } finally {
+      coordinator.dispose();
+    }
+  });
+
   it("stops the device when the attempt ends", async () => {
     vi.useFakeTimers();
     takesGrantCalls();
@@ -1099,6 +1279,88 @@ describe("ClientOperationCoordinator task calls", () => {
       expect(signals[0]?.aborted).toBe(true);
       expect(api.claim).toHaveBeenCalledOnce();
       expect(api.complete).not.toHaveBeenCalled();
+    } finally {
+      coordinator.dispose();
+    }
+  });
+});
+
+describe("ClientOperationCoordinator calls of the user's own turn", () => {
+  afterEach(() => vi.useRealTimers());
+
+  it("renews the claim while the device waits and stops it when a renewal is refused", async () => {
+    vi.useFakeTimers();
+    const { api } = fakeApi();
+    let token = 0;
+    api.claim.mockImplementation(async () => {
+      token += 1;
+      if (token === 3)
+        throw { status: 409, payload: "Operation is not claimable" };
+      return {
+        claim_token: `claim-${token}`,
+        expires_at: new Date(Date.now() + 10_000).toISOString(),
+      };
+    });
+    const signals: AbortSignal[] = [];
+    const run = vi.fn<ClientToolExecutor>(
+      (_input, context) =>
+        new Promise((_resolve, reject) => {
+          if (context?.signal) signals.push(context.signal);
+          context?.signal?.addEventListener("abort", () =>
+            reject(new Error("aborted")),
+          );
+        }),
+    );
+    const handler = new ClientToolOperationHandler(
+      "fetch_availability",
+      run,
+      () => binding,
+    );
+    const { coordinator } = coordinatorWith(api, [], [handler]);
+    try {
+      void coordinator.reconcile();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(signals).toHaveLength(1);
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect(api.claim).toHaveBeenCalledTimes(2);
+      expect(signals[0]?.aborted).toBe(false);
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect(api.claim).toHaveBeenCalledTimes(3);
+      expect(signals[0]?.aborted).toBe(true);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(api.complete).not.toHaveBeenCalled();
+    } finally {
+      coordinator.dispose();
+    }
+  });
+
+  it("completes with the token of the latest renewal", async () => {
+    vi.useFakeTimers();
+    const { api } = fakeApi();
+    let token = 0;
+    api.claim.mockImplementation(async () => ({
+      claim_token: `claim-${++token}`,
+      expires_at: new Date(Date.now() + 10_000).toISOString(),
+    }));
+    let finish: ((value: { ok: true; result: unknown }) => void) | undefined;
+    const handler = new ClientToolOperationHandler(
+      "fetch_availability",
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+      () => binding,
+    );
+    const { coordinator } = coordinatorWith(api, [], [handler]);
+    try {
+      void coordinator.reconcile();
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect(api.claim).toHaveBeenCalledTimes(2);
+      finish?.({ ok: true, result: null });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(api.complete.mock.calls[0]?.[1]).toBe("claim-2");
+      await vi.advanceTimersByTimeAsync(20_000);
+      expect(api.claim).toHaveBeenCalledTimes(2);
     } finally {
       coordinator.dispose();
     }
