@@ -232,6 +232,37 @@ describe("handleClientToolCall", () => {
       expect(context.hostGrant).not.toHaveProperty("contextRef");
     });
 
+    it("ends as a context loss when its tool is registered but unavailable", async () => {
+      const execute = vi.fn(async () => ({ ok: true as const, result: null }));
+      registerClientToolExecutor("fetch_availability", execute, () => false, {
+        acceptsGrantCalls: true,
+      });
+      await handleClientToolCall(makeEvent(), { ...deps, executor, lineage });
+
+      expect(execute).not.toHaveBeenCalled();
+      const message =
+        'The client tool "fetch_availability" is not available on this device right now, so nothing was read.';
+      expect(lastPostBody(fetchMock)).toEqual({
+        chat_id: "chat-1",
+        message_id: "msg-1",
+        tool_call_id: "call-1",
+        error: message,
+        validation_errors: [{ path: "", code: "context_unavailable", message }],
+        submission_feedback: { terminal: true, recovery: "cannot_continue" },
+      });
+    });
+
+    it("keeps the plain error for a tool this client never registered", async () => {
+      await handleClientToolCall(makeEvent(), { ...deps, executor, lineage });
+
+      expect(lastPostBody(fetchMock)).toEqual({
+        chat_id: "chat-1",
+        message_id: "msg-1",
+        tool_call_id: "call-1",
+        error: 'No client-tool executor registered for "fetch_availability"',
+      });
+    });
+
     it("is refused without running a handler that did not opt in", async () => {
       const execute = vi.fn(async () => ({ ok: true as const, result: null }));
       registerClientToolExecutor("fetch_availability", execute);
@@ -436,6 +467,23 @@ describe("handleClientToolCall", () => {
     await handleClientToolCall(makeEvent(), deps);
 
     expect(lastPostBody(fetchMock).error).toContain("No client-tool executor");
+  });
+
+  it("POSTs the plain error for the user's own call to an unavailable tool", async () => {
+    registerClientToolExecutor(
+      "fetch_availability",
+      async () => ({ ok: true as const, result: 1 }),
+      () => false,
+      { acceptsGrantCalls: true },
+    );
+    await handleClientToolCall(makeEvent(), deps);
+
+    expect(lastPostBody(fetchMock)).toEqual({
+      chat_id: "chat-1",
+      message_id: "msg-1",
+      tool_call_id: "call-1",
+      error: 'No client-tool executor registered for "fetch_availability"',
+    });
   });
 
   it("preserves correction handles and terminal failures as rejections", async () => {

@@ -4,6 +4,7 @@ import { operationExecutorBinding } from "@/lib/clientOperations/registration";
 
 import {
   abortClientToolCall,
+  clientToolAcceptsGrantCalls,
   getClientToolExecutor,
   isClientToolResultLocalOnly,
   hasClientToolCallBeenAnswered,
@@ -88,6 +89,21 @@ export async function handleClientToolCall(
   }
 }
 
+function unavailableForTask(
+  toolName: string,
+): Pick<
+  ClientToolResultRequest,
+  "error" | "validation_errors" | "submission_feedback"
+> {
+  // eslint-disable-next-line lingui/no-unlocalized-strings -- Read by the task's model, never shown.
+  const message = `The client tool "${toolName}" is not available on this device right now, so nothing was read.`;
+  return {
+    error: message,
+    validation_errors: [{ path: "", code: "context_unavailable", message }],
+    submission_feedback: { terminal: true, recovery: "cannot_continue" },
+  };
+}
+
 async function runAndPost(
   { tool_call_id, tool_name, message_id, input }: ClientToolCallEvent,
   deps: HandleClientToolCallDeps,
@@ -97,11 +113,16 @@ async function runAndPost(
   const chatId = base.chat_id;
   const executor = getClientToolExecutor(tool_name);
   if (!executor) {
+    // A task's call can arrive after its host went away but before the
+    // executor stream closed: that is a loss the task reports, not an error
+    // its model may retry.
     await postClientToolResult(
-      {
-        ...base,
-        error: `No client-tool executor registered for "${tool_name}"`,
-      },
+      deps.lineage && clientToolAcceptsGrantCalls(tool_name)
+        ? { ...base, ...unavailableForTask(tool_name) }
+        : {
+            ...base,
+            error: `No client-tool executor registered for "${tool_name}"`,
+          },
       tool_name,
       tool_call_id,
       deps,
