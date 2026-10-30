@@ -1610,7 +1610,7 @@ async fn a_file_result_delivered_while_the_call_parks_is_read_once(pool: Pool<Po
                     ))
                     .await
                     .unwrap();
-                tokio::time::sleep(Duration::from_millis(1_500)).await;
+                tokio::time::sleep(Duration::from_millis(3_000)).await;
                 assert!(chat_attempts(&setup.state, setup.chat_id).await.is_empty());
                 let answer = post_live(
                     &setup.state,
