@@ -92,6 +92,41 @@ msgid "approvalQueue.waitingTitle"
 msgstr "{waitingCount, plural, one {Diese Antwort wartet auf eine Aufgabe} other {Diese Antwort wartet auf # Aufgaben}}"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Message/ParkedChildItem.tsx
+msgid "approvalScope.allow"
+msgstr "{covers, select, turn {Für diese Antwort erlauben} other {Für dieses Dokument erlauben}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ParkedChildItem.tsx
+msgid "approvalScope.allowCall"
+msgstr "Diesen Aufruf erlauben"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ParkedChildItem.tsx
+msgid "approvalScope.changed"
+msgstr "Das Dokument wurde geändert, seit Sie es erlaubt haben."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ParkedChildItem.tsx
+msgid "approvalScope.elsewhere"
+msgstr "Um das ganze Dokument zu erlauben, entscheiden Sie in dem Bereich, in dem es geöffnet ist."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ParkedChildItem.tsx
+msgid "approvalScope.hint"
+msgstr "{covers, select, turn {Aufgaben dieser Antwort nutzen dieses Werkzeug ohne erneute Nachfrage, bis die Antwort fertig ist.} other {Aufgaben in diesem Chat lesen dieses Dokument ohne erneute Nachfrage, bis es außerhalb dieses Chats geändert wird.}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ParkedChildItem.tsx
+msgid "approvalScope.others"
+msgstr "{covers, select, turn {{others, plural, one {Gilt auch für # weitere Aufgabe dieser Antwort} other {Gilt auch für # weitere Aufgaben dieser Antwort}}} other {{others, plural, one {Gilt auch für # weitere Aufgabe, die dieses Dokument liest} other {Gilt auch für # weitere Aufgaben, die dieses Dokument lesen}}}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ApprovalDecisionActions.tsx
+msgid "approvalScope.staged"
+msgstr "{covers, select, turn {Für diese Antwort erlaubt. Wird gesendet, sobald alles entschieden ist.} other {Für dieses Dokument erlaubt. Wird gesendet, sobald alles entschieden ist.}}"
+
+#. js-lingui-explicit-id
 #: src/pages/AssistantEditPage.tsx
 msgid "assistant.action.backToAssistants"
 msgstr "Zurück zu Assistenten"

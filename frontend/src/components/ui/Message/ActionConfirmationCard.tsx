@@ -25,6 +25,14 @@ interface ActionConfirmationCardProps {
   /** Allow the action this one time; the card will ask again next time. */
   onAllowOnce: () => void;
   /**
+   * Allow this action and the like ones on the same scope, such as every read
+   * of one document, until the scope changes. Omit to hide the button.
+   */
+  onAllowScope?: () => void;
+  allowScopeLabel?: string;
+  /** What the scope covers and until when, shown below the buttons. */
+  allowScopeHint?: ReactNode;
+  /**
    * Persist the decision and allow the action. Omit to hide the button
    * entirely (e.g. the consumer has no persistence).
    */
@@ -111,6 +119,9 @@ export const ActionConfirmationCard: React.FC<ActionConfirmationCardProps> = ({
   title,
   description,
   onAllowOnce,
+  onAllowScope,
+  allowScopeLabel,
+  allowScopeHint,
   onAlwaysAllow,
   alwaysAllowDisabledReason,
   onDeny,
@@ -129,9 +140,14 @@ export const ActionConfirmationCard: React.FC<ActionConfirmationCardProps> = ({
 }) => {
   const cardRef = useRef<HTMLElement | null>(null);
   const alwaysAllowReasonId = useId();
+  const allowScopeHintId = useId();
   const isPending = status === "pending";
-  const [allowedWith, setAllowedWith] = useState<"once" | "always">("once");
+  const [allowedWith, setAllowedWith] = useState<"once" | "scope" | "always">(
+    "once",
+  );
   const onceInProgress = progressLabel !== undefined && allowedWith === "once";
+  const scopeInProgress =
+    progressLabel !== undefined && allowedWith === "scope";
   const alwaysInProgress =
     progressLabel !== undefined && allowedWith === "always";
 
@@ -243,6 +259,26 @@ export const ActionConfirmationCard: React.FC<ActionConfirmationCardProps> = ({
                     message: "Allow once",
                   }))}
             </Button>
+            {onAllowScope && (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={
+                  scopeInProgress
+                    ? undefined
+                    : () => {
+                        setAllowedWith("scope");
+                        onAllowScope();
+                      }
+                }
+                disabled={isBusy && !scopeInProgress}
+                busy={scopeInProgress}
+                aria-disabled={scopeInProgress || undefined}
+                aria-describedby={allowScopeHint ? allowScopeHintId : undefined}
+              >
+                {scopeInProgress ? progressLabel : allowScopeLabel}
+              </Button>
+            )}
             {onAlwaysAllow && (
               <Button
                 variant="secondary"
@@ -310,6 +346,14 @@ export const ActionConfirmationCard: React.FC<ActionConfirmationCardProps> = ({
               </Button>
             )}
           </div>
+          {onAllowScope && allowScopeHint && (
+            <div
+              id={allowScopeHintId}
+              className="space-y-1 text-xs text-theme-fg-muted"
+            >
+              {allowScopeHint}
+            </div>
+          )}
           {alwaysAllowDisabledReason && (
             <p id={alwaysAllowReasonId} className="text-xs text-theme-fg-muted">
               {alwaysAllowDisabledReason}

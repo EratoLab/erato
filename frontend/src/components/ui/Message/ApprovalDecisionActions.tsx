@@ -1,4 +1,4 @@
-import { t } from "@lingui/core/macro";
+import { select, t } from "@lingui/core/macro";
 
 import { archivedNoticeText } from "@/components/ui/Chat/chatArchiveActions";
 import { isApprovalDecision } from "@/lib/toolApprovalDecisions";
@@ -6,6 +6,7 @@ import { isApprovalDecision } from "@/lib/toolApprovalDecisions";
 import { Button } from "../Controls/Button";
 
 import type { ActionConfirmationStatus } from "./ActionConfirmationCard";
+import type { ApprovalScopeOffer } from "./approvalItems";
 import type { ToolApprovalDecision } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
 /**
@@ -24,8 +25,20 @@ export const APPROVAL_CARD_SHELL_CLASS =
  * just says "denied" would read as done and leave the user waiting for a turn
  * that has not been asked to continue yet.
  */
-export const stagedDecisionLabel = (decision: ToolApprovalDecision): string =>
-  isApprovalDecision(decision)
+export const stagedDecisionLabel = (
+  decision: ToolApprovalDecision,
+  covers?: ApprovalScopeOffer["covers"],
+): string => {
+  if (decision === "approve_context" && covers !== undefined) {
+    return t({
+      id: "approvalScope.staged",
+      message: select(covers, {
+        turn: "Allowed for this response. Sent once every item is decided.",
+        other: "Allowed for this document. Sent once every item is decided.",
+      }),
+    });
+  }
+  return isApprovalDecision(decision)
     ? t({
         id: "toolApproval.staged.allowed",
         message: "Allowed — sent once every item is decided",
@@ -34,6 +47,7 @@ export const stagedDecisionLabel = (decision: ToolApprovalDecision): string =>
         id: "toolApproval.staged.denied",
         message: "Denied — sent once every item is decided",
       });
+};
 
 /**
  * How one row of a per-item card reads: held answer first, then the archive
@@ -45,11 +59,12 @@ export const stagedDecisionLabel = (decision: ToolApprovalDecision): string =>
 export const stagedItemPresentation = (
   staged: ToolApprovalDecision | undefined,
   isArchived: boolean,
+  covers?: ApprovalScopeOffer["covers"],
 ): { status: ActionConfirmationStatus; resolvedLabel: string | undefined } => {
   if (staged !== undefined) {
     return {
       status: isApprovalDecision(staged) ? "confirmed" : "dismissed",
-      resolvedLabel: stagedDecisionLabel(staged),
+      resolvedLabel: stagedDecisionLabel(staged, covers),
     };
   }
   if (isArchived) {
