@@ -2453,6 +2453,77 @@ describe("document and response approvals", () => {
     }
   });
 
+  it("keeps the position already held when a waiting task joins the document", async () => {
+    const pane = anchorPane();
+    pane.take
+      .mockReturnValueOnce(position)
+      .mockReturnValue({ ...position, seq: 42 });
+    const mismatch = JSON.stringify({
+      code: "decisions_mismatch",
+      missing: ["task-3"],
+      unknown: [],
+    });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(mismatch, { status: 400 }))
+      .mockResolvedValue(new Response("", { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const refetchMessages = vi.fn(async () => undefined);
+    const unscoped = scopedTask(3, null);
+    const waiting = {
+      ...unscoped,
+      child: {
+        ...unscoped.child,
+        waiting_for: { host_context: "word_document", attempt_id: "attempt" },
+      },
+    };
+    const card = (
+      openItems: ReturnType<typeof scopedTask>[],
+      waitingItems: (typeof waiting)[],
+    ) =>
+      withChatContext(
+        <McpToolApprovalCard
+          messageId="message-1"
+          request={stopOf([scopedTask(1), scopedTask(2), waiting])}
+          openItems={openItems}
+          waitingItems={waitingItems}
+          resolution={null}
+        />,
+        "chat-1",
+        { refetchMessages },
+      );
+    try {
+      const { rerender } = renderCard(
+        card([scopedTask(1), scopedTask(2)], [waiting]),
+      );
+      fireEvent.click(screen.getByText("Allow for this document"));
+      await waitFor(() => expect(refetchMessages).toHaveBeenCalled());
+
+      rerender(
+        <QueryClientProvider client={new QueryClient()}>
+          {card([scopedTask(1), scopedTask(2), scopedTask(3)], [])}
+        </QueryClientProvider>,
+      );
+      expect(screen.getByText("Read chapter 3")).toBeInTheDocument();
+      fireEvent.click(screen.getByText("Allow for this document"));
+
+      await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+      const sent = JSON.parse(
+        (fetchMock.mock.calls[1][1] as { body: string }).body,
+      ) as { decisions: unknown[] };
+      expect(sent.decisions).toEqual(
+        [1, 2, 3].map((index) => ({
+          approval_id: `task-${index}`,
+          decision: "approve_context",
+          scope_position: position,
+        })),
+      );
+      expect(pane.take).toHaveBeenCalledTimes(1);
+    } finally {
+      pane.cleanup();
+    }
+  });
+
   it("holds a document approval on the last item while the stop is sent", async () => {
     const pane = anchorPane();
     vi.stubGlobal(

@@ -34,6 +34,7 @@ import { TaskPlanApprovalCard } from "./TaskPlanApprovalCard";
 import {
   approvalItemsOf,
   isWaitingItem,
+  sameScope,
   scopeGroup,
   scopeOf,
 } from "./approvalItems";
@@ -513,14 +514,22 @@ export const McpToolApprovalCard = ({
   /**
    * Allow an item for its whole document or response, together with every
    * open item of the same tool and scope: one decision for all of them. A
-   * document's position is taken once, now, so every item carries the same.
+   * document's position is taken once, at the first click, so every item
+   * carries the same: an item that joins later, such as a waiting task that
+   * started asking, keeps the position already held for its scope.
    */
   const decideScope = (item: ApprovalItemPart) => {
     const scope = scopeOf(item);
     if (!scope) return;
     const anchor = scopeAnchor(item);
     if (scope.ref.covers === "document" && !anchor) return;
-    const position = anchor?.();
+    const held = approvalItems.find(
+      (other) =>
+        staged[other.approval_id] === APPROVE_CONTEXT &&
+        stagedPositions[other.approval_id] !== undefined &&
+        sameScope(item, other),
+    );
+    const position = held ? stagedPositions[held.approval_id] : anchor?.();
     const answers: StagedDecisions = { ...staged };
     const positions = { ...stagedPositions };
     for (const member of scopeGroup(approvalItems, item, staged)) {
