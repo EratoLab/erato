@@ -77,6 +77,21 @@ msgid "approvalQueue.title"
 msgstr ""
 
 #. js-lingui-explicit-id
+#: src/components/ui/Message/ApprovalQueueCard.tsx
+msgid "approvalQueue.waitingDescription"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ApprovalQueueCard.tsx
+msgid "approvalQueue.waitingHeading"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ApprovalQueueCard.tsx
+msgid "approvalQueue.waitingTitle"
+msgstr ""
+
+#. js-lingui-explicit-id
 #: src/pages/AssistantEditPage.tsx
 msgid "assistant.action.backToAssistants"
 msgstr "Wróć do asystentów"
@@ -3767,7 +3782,18 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/ParkedChildItem.tsx
+#: src/components/ui/Message/WaitingTaskItem.tsx
 msgid "delegatedTaskApproval.unnamedTask"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/lib/delegation/delegationLabels.ts
+msgid "delegation.waitingFor.connectedApp"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/lib/delegation/delegationLabels.ts
+msgid "delegation.waitingFor.outlookMailbox"
 msgstr ""
 
 #. js-lingui-explicit-id
@@ -5315,6 +5341,11 @@ msgstr "Usuń {label}, zachowując zawartość"
 #: src/components/ui/WordReview/WordRichBlockPreview.tsx
 msgid "officeAddin.word.rich.updateObject"
 msgstr "Zaktualizuj: {label}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ParkedTaskNotice.tsx
+msgid "parkedTaskNotice.clientPending"
+msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/ParkedTaskNotice.tsx
@@ -7603,6 +7634,11 @@ msgstr "Zatrzymany na limicie wywołań narzędzi; odpowiedź może być niepeł
 
 #. js-lingui-explicit-id
 #: src/lib/delegation/delegationLabels.ts
+msgid "trace.delegation.reason.clientPending"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/lib/delegation/delegationLabels.ts
 msgid "trace.delegation.reason.interrupted"
 msgstr ""
 
@@ -7871,6 +7907,11 @@ msgstr "Nieobsługiwany typ(y) pliku: {filenames}"
 #: src/components/ui/FileUpload/FileUploadButton.tsx
 msgid "upload.maxSizeHint"
 msgstr "Maksymalny rozmiar pliku: {maxSizeFormatted}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/WaitingTaskItem.tsx
+msgid "waitingTask.open"
+msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/WordReview/WordHistoryCards.tsx
@@ -9276,6 +9317,10 @@ msgstr "W kolejce — zostanie wysłane, gdy odpowiesz na potwierdzenie"
 
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Queued — sends when response finishes"
+msgstr ""
+
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "Queued — sends when the waiting tasks finish"
 msgstr ""
 
 #: src/components/ui/Trace/SidecarLocalTraceView.tsx

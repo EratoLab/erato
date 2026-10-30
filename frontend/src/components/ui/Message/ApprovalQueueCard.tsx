@@ -7,6 +7,7 @@ import {
 } from "./ApprovalDecisionActions";
 import { OwnCallApprovalItem } from "./OwnCallApprovalItem";
 import { ParkedChildItem } from "./ParkedChildItem";
+import { WaitingTaskItem } from "./WaitingTaskItem";
 import {
   approvalQueueOf,
   isChildItem,
@@ -26,11 +27,13 @@ import type {
  * The server still takes one request covering every open item, so an answer
  * is held until the last one is in; the queue only decides what the user sees
  * next. The turn's own gated call keeps its MCP or client-tool layout, and each
- * parked child is named by its task.
+ * parked child is named by its task. Tasks that wait for a call on the device
+ * are listed below without decisions: the response goes on once they finish.
  */
 export const ApprovalQueueCard = ({
   request,
   items,
+  waiting = [],
   staged,
   isArchived,
   isBusy,
@@ -43,6 +46,8 @@ export const ApprovalQueueCard = ({
   >;
   /** The stop's open items, in row order. */
   items: ApprovalItemPart[];
+  /** The stop's task children that still wait on the device, in row order. */
+  waiting?: ApprovalItemPart[];
   staged: StagedDecisions;
   isArchived: boolean;
   isBusy: boolean;
@@ -62,6 +67,7 @@ export const ApprovalQueueCard = ({
   const current = queue[position] as ApprovalItemPart | undefined;
   const ordinal = position + 1;
   const remaining = itemCount - ordinal;
+  const waitingCount = waiting.length;
 
   return (
     <div
@@ -72,25 +78,50 @@ export const ApprovalQueueCard = ({
       className={`${APPROVAL_CARD_SHELL_CLASS} space-y-2`}
     >
       <div>
-        <p className="text-sm font-medium text-theme-fg-primary">
-          {t({
-            id: "approvalQueue.title",
-            message: plural(itemCount, {
-              one: "This response is waiting on your decision",
-              other: "This response is waiting on # decisions",
-            }),
-          })}
-        </p>
-        <p className="text-sm text-theme-fg-secondary">
-          {t({
-            id: "approvalQueue.description",
-            message: plural(itemCount, {
-              one: "The response continues once you decide.",
-              other:
-                "They are shown one at a time, oldest first. The response continues once all of them are decided.",
-            }),
-          })}
-        </p>
+        {itemCount > 0 ? (
+          <>
+            <p className="text-sm font-medium text-theme-fg-primary">
+              {t({
+                id: "approvalQueue.title",
+                message: plural(itemCount, {
+                  one: "This response is waiting on your decision",
+                  other: "This response is waiting on # decisions",
+                }),
+              })}
+            </p>
+            <p className="text-sm text-theme-fg-secondary">
+              {t({
+                id: "approvalQueue.description",
+                message: plural(itemCount, {
+                  one: "The response continues once you decide.",
+                  other:
+                    "They are shown one at a time, oldest first. The response continues once all of them are decided.",
+                }),
+              })}
+            </p>
+          </>
+        ) : (
+          <>
+            <p className="text-sm font-medium text-theme-fg-primary">
+              {t({
+                id: "approvalQueue.waitingTitle",
+                message: plural(waitingCount, {
+                  one: "This response is waiting on a task",
+                  other: "This response is waiting on # tasks",
+                }),
+              })}
+            </p>
+            <p className="text-sm text-theme-fg-secondary">
+              {t({
+                id: "approvalQueue.waitingDescription",
+                message: plural(waitingCount, {
+                  one: "It continues on its own once the task finishes.",
+                  other: "It continues on its own once they finish.",
+                }),
+              })}
+            </p>
+          </>
+        )}
         {itemCount > 1 && (
           <p
             className="text-xs text-theme-fg-muted"
@@ -155,13 +186,31 @@ export const ApprovalQueueCard = ({
             />
           </div>
         ))}
-      {!isArchived && (
+      {!isArchived && itemCount > 0 && (
         <ApprovalBulkActions
           itemCount={itemCount}
           onDecideAll={onDecideAll}
           isBusy={isBusy}
           testId="approval-queue-bulk"
         />
+      )}
+      {waitingCount > 0 && (
+        <div className="space-y-2" data-testid="approval-queue-waiting">
+          {itemCount > 0 && (
+            <p className="text-xs font-medium text-theme-fg-muted">
+              {t({
+                id: "approvalQueue.waitingHeading",
+                message: plural(waitingCount, {
+                  one: "Also waiting on a task",
+                  other: "Also waiting on # tasks",
+                }),
+              })}
+            </p>
+          )}
+          {waiting.map((item) => (
+            <WaitingTaskItem key={item.approval_id} item={item} />
+          ))}
+        </div>
       )}
     </div>
   );

@@ -1509,6 +1509,7 @@ async fn test_delegation_happy_path_runs_child_and_returns_envelope(pool: Pool<P
             child_context_arg: None,
             child_context_input: None,
             child_host_inputs: Vec::new(),
+            child_dispatch: None,
         },
     );
     app_config.facets.tool_call_allowlist = vec!["client/*".to_string()];
@@ -8410,6 +8411,7 @@ async fn a_task_planned_on_a_word_turn_gets_no_word_client_tools(pool: Pool<Post
                 child_context_arg: None,
                 child_context_input: None,
                 child_host_inputs: Vec::new(),
+                child_dispatch: None,
             },
         );
         let mut word_tools = config.facets.facets["files"].clone();
@@ -9648,6 +9650,9 @@ async fn a_placeholder_a_real_dispatch_wrote_is_settled_by_the_sweep(pool: Pool<
         delegated_run_auto_archive_after_days: 0,
         generation_stale_after_secs: app_state.config.generation_status.stale_after_secs,
         result_max_chars: app_state.config.delegation.result_max_chars,
+        durable_operations_enabled: false,
+        app_config: std::sync::Arc::new(app_state.config.clone()),
+        waiting_parents_cursor: Default::default(),
     };
     let tick = || erato::actors::cleanup_worker::run_cleanup_tick(&cleanup_args);
     let part_of = async |message_id: Uuid| -> Value {
@@ -13370,6 +13375,7 @@ async fn react_offers_optional_client_tools_only_when_registered(pool: Pool<Post
                 child_context_arg: None,
                 child_context_input: None,
                 child_host_inputs: Vec::new(),
+                child_dispatch: None,
             },
         );
     }
@@ -19684,7 +19690,16 @@ async fn cancelled_local_research_continues_without_reoffering_collection(pool: 
     local_research_roundtrip(pool, false, true).await;
 }
 
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_same_binding_reclaim_of_local_evidence_does_not_extend_the_lease(pool: Pool<Postgres>) {
+    local_research_case(pool, false, true, true).await;
+}
+
 async fn local_research_roundtrip(pool: Pool<Postgres>, repeated: bool, cancelled: bool) {
+    local_research_case(pool, repeated, cancelled, false).await;
+}
+
+async fn local_research_case(pool: Pool<Postgres>, repeated: bool, cancelled: bool, reclaim: bool) {
     use base64::{Engine as _, engine::general_purpose::STANDARD};
     use erato::db::entity::client_operation_attempts::AttemptState;
     use erato::services::client_operations::store as operations;
@@ -19912,6 +19927,34 @@ async fn local_research_roundtrip(pool: Pool<Postgres>, repeated: bool, cancelle
             .await;
         claimed.assert_status_ok();
         let token = claimed.json::<Value>()["claim_token"].clone();
+        if reclaim {
+            app_state
+                .db
+                .execute_unprepared(&format!(
+                    "UPDATE client_operation_attempts \
+                     SET claim_expires_at = now() + interval '5 seconds' WHERE attempt_id = '{id}'"
+                ))
+                .await
+                .unwrap();
+            let again = server
+                .post(&format!("{generic_path}/claim"))
+                .with_bearer_token(TEST_JWT_TOKEN)
+                .add_header("X-Erato-Client-Tools", "local_collect_evidence")
+                .json(&json!({"binding":binding}))
+                .await;
+            again.assert_status_ok();
+            assert_eq!(again.json::<Value>()["claim_token"], token);
+            let lease = operations::get(&app_state.db, owner, id)
+                .await
+                .unwrap()
+                .claim_expires_at
+                .unwrap()
+                .with_timezone(&chrono::Utc);
+            assert!(
+                lease <= chrono::Utc::now() + chrono::Duration::seconds(5),
+                "only a task's granted call renews its claim"
+            );
+        }
         let authorized = server
             .post(&format!("{native_path}/authorize"))
             .with_bearer_token(TEST_JWT_TOKEN)

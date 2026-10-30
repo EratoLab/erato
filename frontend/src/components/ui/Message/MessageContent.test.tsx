@@ -2172,6 +2172,106 @@ describe("tasks waiting in their own chat", () => {
   });
 });
 
+describe("tasks waiting on the device", () => {
+  const childChatId = "55555555-5555-5555-5555-555555555555";
+  const waitingSlot = (inProgress = true): ContentPart =>
+    ({
+      content_type: "tool_use",
+      tool_call_id: "call-wait",
+      tool_name: "delegate_task",
+      input: { task: "Check the calendar" },
+      status: inProgress ? "in_progress" : "success",
+      output: inProgress
+        ? {
+            status: "input_required",
+            reason: "client_pending",
+            child_run_id: childChatId,
+            delegate_chat_id: childChatId,
+          }
+        : {
+            status: "completed",
+            child_run_id: childChatId,
+            delegate_chat_id: childChatId,
+          },
+    }) as unknown as ContentPart;
+  const waitingItem = {
+    approval_id: "call-wait",
+    tool_call_id: "call-wait",
+    tool_name: "delegate_task",
+    input: { task: "Check the calendar" },
+    child: {
+      child_chat_id: childChatId,
+      child_message_id: "66666666-6666-6666-6666-666666666666",
+      child_tool_call_id: "child-read",
+      tool_name: "fetch_availability",
+      mcp_server_id: "outlook",
+      input: {},
+      annotations: {
+        destructiveHint: true,
+        idempotentHint: false,
+        openWorldHint: true,
+        readOnlyHint: false,
+      },
+      preset: "",
+      requested_at: "2026-08-06T00:00:00Z",
+      kind: "client_tool",
+      waiting_for: { host_context: "outlook_mailbox", attempt_id: "attempt" },
+    },
+  };
+  const stopWith = (approvals: unknown[]): ContentPart =>
+    ({
+      ...(childApprovalRequest() as unknown as Record<string, unknown>),
+      approvals,
+    }) as unknown as ContentPart;
+  const asking = (childApprovalRequest() as unknown as { approvals: unknown[] })
+    .approvals[0];
+
+  it("shows one waiting list when two stops carry the same waiting task", () => {
+    renderWithQueryClient(
+      <MessageContent
+        messageId="message-1"
+        content={[
+          waitingSlot(),
+          stopWith([asking, waitingItem]),
+          planDecision("call-task", "call-task"),
+          stopWith([waitingItem]),
+        ]}
+      />,
+    );
+
+    expect(screen.getAllByTestId("approval-queue")).toHaveLength(1);
+    expect(screen.getAllByTestId("waiting-task-item")).toHaveLength(1);
+    expect(screen.getByTestId("waiting-task-item")).toHaveTextContent(
+      "Waiting for Outlook on this device",
+    );
+    expect(screen.queryByTestId("parked-task-notice")).not.toBeInTheDocument();
+  });
+
+  it("hides the card once the waiting task's slot settled", () => {
+    renderWithQueryClient(
+      <MessageContent
+        messageId="message-1"
+        content={[waitingSlot(false), stopWith([waitingItem])]}
+      />,
+    );
+
+    expect(screen.queryByTestId("approval-queue")).not.toBeInTheDocument();
+  });
+
+  it("says a waiting task no stop shows waits on the device", () => {
+    renderWithQueryClient(
+      <MessageContent
+        messageId="message-1"
+        content={[waitingSlot(), ...textContent("Stopped.")]}
+      />,
+    );
+
+    expect(screen.getByTestId("parked-task-notice")).toHaveTextContent(
+      "This task is waiting for one of its calls to run on this device.",
+    );
+  });
+});
+
 it("renders local file consent alongside a submitted host card in the originating message", () => {
   const original = componentRegistry.HostCardCodeBlock;
   componentRegistry.HostCardCodeBlock = function SubmittedCardStub({

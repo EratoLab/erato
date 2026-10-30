@@ -26,6 +26,13 @@ pub struct CleanupWorkerArgs {
     /// here so the sweep reuses the awaited path's one truncation rule rather
     /// than growing a second.
     pub result_max_chars: usize,
+    /// Whether task children can wait for a client, so parked parents may
+    /// need their waiting items synced.
+    pub durable_operations_enabled: bool,
+    /// The configuration a synced task result is reported under.
+    pub app_config: std::sync::Arc<crate::config::AppConfig>,
+    /// Where the next tick's waiting-parents sweep starts.
+    pub waiting_parents_cursor: crate::services::delegated_client_tools::WaitingParentsCursor,
 }
 
 pub struct CleanupWorker;
@@ -152,6 +159,20 @@ pub async fn run_cleanup_tick(args: &CleanupWorkerArgs) -> Result<(), ActorProce
     .await;
     if settled.touched() {
         tracing::info!(?settled, "Backstop settled interrupted tool parts");
+    }
+
+    // Crash recovery too: a waiting task child that finished but whose tail
+    // never ran leaves its parent's item open until something reads it again.
+    if args.durable_operations_enabled {
+        let synced = crate::services::delegated_client_tools::sweep_waiting_parents(
+            &args.db,
+            &args.app_config,
+            &args.waiting_parents_cursor,
+        )
+        .await;
+        if synced > 0 {
+            tracing::info!(synced, "Backstop synced parents waiting for their tasks");
+        }
     }
 
     // The retention half is the operator's opt-in to deleting data. Anything in

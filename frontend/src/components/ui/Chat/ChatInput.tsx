@@ -34,6 +34,7 @@ import {
 import {
   useConfirmationRegistryStore,
   useHasPendingConfirmation,
+  useOnlyWaitingConfirmations,
 } from "@/hooks/chat/store/confirmationRegistryStore";
 import {
   useMessageQueueStore,
@@ -889,6 +890,7 @@ export const ChatInput = ({
     false | { runMode?: DelegationRunMode }
   >(false);
   const hasPendingConfirmation = useHasPendingConfirmation(chatId);
+  const onlyWaitingConfirmations = useOnlyWaitingConfirmations(chatId);
 
   // Enter-while-a-turn-is-generating queues the draft instead of sending.
   // Gated on isPendingResponse specifically (a turn is in flight) — not the
@@ -3024,9 +3026,11 @@ export const ChatInput = ({
             {/* flex-auto, not flex-1: a zero basis would collapse the message
                 to nothing in the add-in's ~320px pane. */}
             <span className="min-w-0 truncate text-theme-fg-muted">
-              {hasPendingConfirmation
-                ? t`Queued — sends after you respond to the confirmation`
-                : t`Queued — sends when response finishes`}
+              {onlyWaitingConfirmations
+                ? t`Queued — sends when the waiting tasks finish`
+                : hasPendingConfirmation
+                  ? t`Queued — sends after you respond to the confirmation`
+                  : t`Queued — sends when response finishes`}
             </span>
             <button
               type="button"

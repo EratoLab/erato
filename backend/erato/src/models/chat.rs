@@ -179,13 +179,17 @@ pub struct TaskSpec {
     pub client_task: Option<ClientTaskNote>,
 }
 
-/// A server-asserted grant: the tools a client task may call live on the
-/// executor that served the turn which planned it, for as long as that turn
-/// owns the client context. A grant without a dispatch mode is live-only.
+/// A server-asserted grant: the tools a client task may call on the executor
+/// that served the turn which planned it, for as long as that turn owns the
+/// client context. Calls are live unless their tool is in `durable_tools`.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ClientToolGrant {
     /// Qualified (`namespace/name`) names.
     pub tools: Vec<String>,
+    /// The qualified names among `tools` whose calls wait durably for a
+    /// client. Absent on every grant written before the slow path.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub durable_tools: Vec<String>,
     pub binding: crate::services::client_operations::ExecutorBinding,
     pub owner_chat_id: Uuid,
     /// The parent's assistant row; the grant holds while its generation runs.

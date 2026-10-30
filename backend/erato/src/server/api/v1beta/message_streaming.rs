@@ -621,6 +621,7 @@ fn cancelled_client_tool_text(reason: &str) -> String {
     let why = match reason {
         "context_unavailable" => "no connected client could run it",
         "withdrawn" => "the user no longer allows this tool",
+        "expired" => "no client ran it before it expired",
         _ => "the client did not return a result in time",
     };
     format!("Client tool was not completed (reason: {reason}); {why}.")
@@ -645,14 +646,7 @@ fn gate_client_tool_call(
             ToolApprovalKind::ClientTool,
             namespace,
             None,
-            // A client tool declares no MCP annotations; these are the
-            // pessimistic defaults a card reads for a tool without any.
-            crate::models::message::ToolApprovalAnnotations {
-                read_only_hint: false,
-                destructive_hint: true,
-                idempotent_hint: false,
-                open_world_hint: true,
-            },
+            client_tool_annotations(),
             "",
             // The decision is the user's own preference, so the MCP policy
             // switch for standing grants does not apply.
@@ -2542,6 +2536,18 @@ pub struct AlreadyContinuedError {
 
 pub(crate) const ALREADY_CONTINUED_CODE: &str = "already_continued";
 
+/// Body of the `409` `continuestream` answers to an empty body while the
+/// parked row waits only for task children that wait for a client: nothing is
+/// left to decide, and the turn continues on its own once they finish.
+#[derive(Debug, Serialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub struct ChildrenWaitingError {
+    /// Always `children_waiting`.
+    pub code: String,
+}
+
+pub(crate) const CHILDREN_WAITING_CODE: &str = "children_waiting";
+
 /// Body of the `409` `continuestream` answers on a delegated child whose
 /// request is currently being asked about in the chat that started it.
 ///
@@ -2591,6 +2597,9 @@ pub enum StreamRouteError {
     /// `continuestream` only: the chat that dispatched this child is asking the
     /// same question, and its card is the one that can act on the answer.
     CoveredByParent(Box<CoveredByParentError>),
+    /// `continuestream` only: nothing to decide while task children wait for a
+    /// client.
+    ChildrenWaiting(Box<ChildrenWaitingError>),
 }
 
 impl From<(axum::http::StatusCode, String)> for StreamRouteError {
@@ -2625,6 +2634,9 @@ impl axum::response::IntoResponse for StreamRouteError {
             // The row is answerable in principle, just not here and not yet — the
             // question is open somewhere else.
             StreamRouteError::CoveredByParent(body) => {
+                (axum::http::StatusCode::CONFLICT, Json(*body)).into_response()
+            }
+            StreamRouteError::ChildrenWaiting(body) => {
                 (axum::http::StatusCode::CONFLICT, Json(*body)).into_response()
             }
         }
@@ -3194,9 +3206,21 @@ async fn reconcile_orphaned_parent_slot(
     // limit, a durable client operation). A withdrawal or a settlement closes
     // the child's own copy, so those never run again.
     //
-    // A running lease means the dispatching turn may yet write the slot itself.
+    // A running lease on this message means the dispatching turn may yet write
+    // the slot itself. A newer turn the user started writes another row, and
+    // nothing comes back to this slot once the child's last tail has gone.
     if origin_chat.generation_state.as_deref() == Some("running") {
-        return;
+        let answers_another_row = app_state
+            .background_tasks
+            .try_active_generation(&origin_chat.id)
+            .await
+            .ok()
+            .flatten()
+            .and_then(|generation| generation.message_id())
+            .is_some_and(|message_id| message_id != parent_message_id);
+        if !answers_another_row {
+            return;
+        }
     }
     let Ok(parent) = get_message_by_id(&app_state.db, policy, &subject, &parent_message_id).await
     else {
@@ -3355,6 +3379,9 @@ pub(crate) async fn settle_tail_deliveries(
     }
     crate::services::task_delivery::drain_pending_deliveries(app_state, policy, me_user, chat_id)
         .await;
+    if app_state.config.client_tools.durable_operations_enabled {
+        settle_waiting_parent(app_state, policy, me_user, chat_id, task, outcome).await;
+    }
     // The `wait` half: no delivery row to re-arm, so the slot is settled directly.
     reconcile_orphaned_parent_slot(
         app_state,
@@ -3366,6 +3393,114 @@ pub(crate) async fn settle_tail_deliveries(
         task.tool_budget_exhausted(),
     )
     .await;
+}
+
+/// Brings a parked parent up to date with task children that waited for a
+/// client, and resumes it once nothing is left open.
+///
+/// Two roles, because either side can finish last: as a child, this chat's
+/// parent learns what the child's turn ended on; as a parent that just parked,
+/// it learns about a child that finished while its own join still ran, when
+/// the child's tail found it running and could not.
+async fn settle_waiting_parent(
+    app_state: &AppState,
+    policy: &PolicyEngine,
+    me_user: &MeProfile,
+    chat_id: Uuid,
+    task: &Arc<StreamingTask>,
+    outcome: TaskOutcome,
+) {
+    let mut parents = Vec::new();
+    if let Some(parent) = awaiting_parent_of(app_state, chat_id).await {
+        parents.push(parent);
+    }
+    if outcome == TaskOutcome::AwaitingApproval {
+        parents.push((chat_id, task.message_id()));
+    }
+    for (parent_chat_id, parent_message_id) in parents {
+        let synced = match crate::services::delegated_client_tools::sync_waiting_parent(
+            &app_state.db,
+            &app_state.config,
+            parent_chat_id,
+            parent_message_id,
+        )
+        .await
+        {
+            Ok(Some(synced)) => synced,
+            Ok(None) => continue,
+            Err(error) => {
+                warn_and_capture_error("sync a parent waiting for its tasks", &error);
+                continue;
+            }
+        };
+        if synced.resumable() {
+            resume_waiting_parent(
+                app_state.clone(),
+                policy.clone(),
+                me_user.clone(),
+                parent_message_id,
+            )
+            .await;
+        }
+    }
+}
+
+/// The origin turn an awaited delegated chat answers, as its provenance names
+/// it.
+async fn awaiting_parent_of(app_state: &AppState, chat_id: Uuid) -> Option<(Uuid, Uuid)> {
+    let chat = crate::db::entity::prelude::Chats::find_by_id(chat_id)
+        .one(&app_state.db)
+        .await
+        .ok()
+        .flatten()?;
+    let provenance = crate::models::chat::parse_chat_configuration(&chat)
+        .ok()
+        .flatten()?
+        .provenance?;
+    if provenance.kind != crate::models::chat::ChatProvenanceKind::Delegation
+        || provenance.run_mode == Some(crate::models::message::ProvenanceRunMode::Async)
+    {
+        return None;
+    }
+    Some((provenance.origin_chat_id?, provenance.parent_message_id?))
+}
+
+/// Starts a parked parent's continuation for the tail that settled what it
+/// waited for, under that tail's principal: a durable operation belongs to
+/// the account that owns both chats. A refusal means someone else resumed it
+/// or the parent moved on.
+///
+/// Boxed for the reason `run_child_approval_continuation` is: this is a tail
+/// reaching `start_continuation`, whose own tail reaches this again.
+fn resume_waiting_parent(
+    app_state: AppState,
+    policy: PolicyEngine,
+    me_user: MeProfile,
+    message_id: Uuid,
+) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send>> {
+    Box::pin(async move {
+        let request = ContinueStreamRequest::with_decisions(message_id, Vec::new());
+        match start_continuation(
+            &app_state,
+            &policy,
+            &me_user,
+            request,
+            detached_generation_event_sink(),
+        )
+        .await
+        {
+            Ok(started) => tracing::info!(
+                chat_id = %started.chat_id,
+                %message_id,
+                "Resumed a parent whose waiting tasks settled"
+            ),
+            Err(error) => tracing::debug!(
+                ?error,
+                %message_id,
+                "Did not resume a parent whose waiting tasks settled"
+            ),
+        }
+    })
 }
 
 /// Release a lease whose generation never started. Going through the
@@ -5328,6 +5463,7 @@ async fn settle_delegation_slot<
             assistant_id: child_assistant_id,
             assistant_name,
             model,
+            stop,
             trace,
             ..
         }) => {
@@ -5337,6 +5473,7 @@ async fn settle_delegation_slot<
                 assistant_name,
                 Some(model),
                 tool_call.call_id.clone(),
+                stop.reason(),
             );
             (
                 ToolCallStatus::Error,
@@ -5459,61 +5596,99 @@ async fn settle_delegation_slot<
     })
 }
 
-/// One awaited child that stopped to ask.
+/// One awaited child that stopped to ask, or to wait for a client.
 ///
 /// Held until the batch has finished so the requests can be carried up in ONE
 /// part: "parked" means "the last part is a `tool_approval_request`", so a
 /// second part would make the row unreadable to every check that relies on it.
-struct ParkedChild {
+pub(crate) struct ParkedChild {
     /// The origin call the child answers. Its id is the approval id, because
     /// that is the slot a decision settles.
-    tool_call: genai::chat::ToolCall,
-    child_chat_id: Uuid,
-    child_message_id: Uuid,
-    /// The child's own request, copied so the card renders without reading
+    pub(crate) tool_call: genai::chat::ToolCall,
+    pub(crate) child_chat_id: Uuid,
+    pub(crate) child_message_id: Uuid,
+    /// The child's own stop, copied so the card renders without reading
     /// another chat. The child's row stays the executable truth.
-    request: ContentPartToolApprovalRequest,
+    pub(crate) stop: crate::services::delegation::ChildStop,
+}
+
+/// What a card reads for a client tool, which declares no MCP annotations:
+/// the pessimistic defaults.
+fn client_tool_annotations() -> crate::models::message::ToolApprovalAnnotations {
+    crate::models::message::ToolApprovalAnnotations {
+        read_only_hint: false,
+        destructive_hint: true,
+        idempotent_hint: false,
+        open_world_hint: true,
+    }
 }
 
 /// The item a parked child adds to the stop that carries it up.
 ///
 /// Named after the origin call, because that is the slot a decision settles;
 /// the child's own gated call is copied onto `child` so a card renders without
-/// reading another chat.
-fn parked_child_approval_item(child: &ParkedChild) -> ApprovalItem {
-    // The child parked on exactly one call - its gate stops the batch at the
-    // first gated one - so the first item is that call.
-    let gated = child.request.approval_items().into_iter().next();
-    let (child_tool_call_id, child_tool_name, child_input, child_display) = gated
-        .map(|item| (item.tool_call_id, item.tool_name, item.input, item.display))
-        .unwrap_or_else(|| {
-            (
-                child.request.tool_call_id.clone(),
-                child.request.tool_name.clone(),
-                child.request.input.clone(),
-                child.request.display.clone(),
-            )
-        });
+/// reading another chat. A waiting child's item is never decided: it stays
+/// open while the origin slot is in progress.
+pub(crate) fn parked_child_approval_item(child: &ParkedChild) -> ApprovalItem {
+    let child_ref = match &child.stop {
+        crate::services::delegation::ChildStop::Approval(request) => {
+            // The child parked on exactly one call - its gate stops the batch
+            // at the first gated one - so the first item is that call.
+            let gated = request.approval_items().into_iter().next();
+            let (child_tool_call_id, child_tool_name, child_input, child_display) = gated
+                .map(|item| (item.tool_call_id, item.tool_name, item.input, item.display))
+                .unwrap_or_else(|| {
+                    (
+                        request.tool_call_id.clone(),
+                        request.tool_name.clone(),
+                        request.input.clone(),
+                        request.display.clone(),
+                    )
+                });
+            crate::models::message::ChildApprovalRef {
+                child_chat_id: child.child_chat_id,
+                child_message_id: child.child_message_id,
+                child_tool_call_id,
+                tool_name: child_tool_name,
+                display: child_display,
+                mcp_server_id: request.mcp_server_id.clone(),
+                input: child_input,
+                annotations: request.annotations.clone(),
+                preset: request.preset.clone(),
+                requested_at: request.requested_at.clone(),
+                allow_always: Some(request.allow_always),
+                kind: Some(request.kind),
+                waiting_for: None,
+            }
+        }
+        crate::services::delegation::ChildStop::Waiting(wait) => {
+            crate::models::message::ChildApprovalRef {
+                child_chat_id: child.child_chat_id,
+                child_message_id: child.child_message_id,
+                child_tool_call_id: wait.tool_call_id.clone(),
+                tool_name: wait.tool_name.clone(),
+                display: None,
+                mcp_server_id: wait.namespace.clone(),
+                input: wait.input.clone(),
+                annotations: client_tool_annotations(),
+                preset: String::new(),
+                requested_at: wait.requested_at.clone(),
+                allow_always: None,
+                kind: Some(ToolApprovalKind::ClientTool),
+                waiting_for: Some(crate::models::message::ChildWaitingFor {
+                    host_context: wait.host_context.clone(),
+                    attempt_id: wait.attempt_id,
+                }),
+            }
+        }
+    };
     ApprovalItem {
         approval_id: child.tool_call.call_id.clone(),
         tool_call_id: child.tool_call.call_id.clone(),
         tool_name: child.tool_call.fn_name.clone(),
         display: None,
         input: child.tool_call.fn_arguments.clone(),
-        child: Some(crate::models::message::ChildApprovalRef {
-            child_chat_id: child.child_chat_id,
-            child_message_id: child.child_message_id,
-            child_tool_call_id,
-            tool_name: child_tool_name,
-            display: child_display,
-            mcp_server_id: child.request.mcp_server_id.clone(),
-            input: child_input,
-            annotations: child.request.annotations.clone(),
-            preset: child.request.preset.clone(),
-            requested_at: child.request.requested_at.clone(),
-            allow_always: Some(child.request.allow_always),
-            kind: Some(child.request.kind),
-        }),
+        child: Some(child_ref),
     }
 }
 
@@ -5529,14 +5704,22 @@ fn delegated_task_approval_part(
 ) -> ContentPartToolApprovalRequest {
     let approvals: Vec<ApprovalItem> = parked.iter().map(parked_child_approval_item).collect();
     let head = &parked[0];
+    let (annotations, preset) = match &head.stop {
+        crate::services::delegation::ChildStop::Approval(request) => {
+            (request.annotations.clone(), request.preset.clone())
+        }
+        crate::services::delegation::ChildStop::Waiting(_) => {
+            (client_tool_annotations(), String::new())
+        }
+    };
     ContentPartToolApprovalRequest {
         tool_call_id: head.tool_call.call_id.clone(),
         tool_name: erato_config::config::DELEGATE_TASK_TOOL_NAME.to_string(),
         display: None,
         mcp_server_id: String::new(),
         input: head.tool_call.fn_arguments.clone(),
-        annotations: head.request.annotations.clone(),
-        preset: head.request.preset.clone(),
+        annotations,
+        preset,
         allow_always,
         requested_at: now_timestamp(),
         kind: crate::models::message::ToolApprovalKind::DelegatedTask,
@@ -5643,7 +5826,7 @@ async fn settle_or_park_delegation_slot<
             assistant_id: child_assistant_id,
             assistant_name,
             model,
-            request,
+            stop,
             trace,
         }) => {
             let output = crate::services::delegation::suspended_envelope(
@@ -5652,6 +5835,7 @@ async fn settle_or_park_delegation_slot<
                 assistant_name,
                 Some(model),
                 meta.tool_call.call_id.clone(),
+                stop.reason(),
             )
             .output_value(&trace);
             let slot = match content.get_mut(meta.slot) {
@@ -5701,7 +5885,7 @@ async fn settle_or_park_delegation_slot<
                 tool_call: meta.tool_call,
                 child_chat_id,
                 child_message_id,
-                request: *request,
+                stop,
             });
             return Ok(None);
         }
@@ -7836,13 +8020,16 @@ async fn stream_generate_chat_completion<'a>(
                     .get(&call_id)
                     .and_then(|charge| charge.submission_attempt)
                     .unwrap_or(0);
-                // A granted call never parks durably and never waits for the
-                // inbox: it is live on the grant's executor or it fails.
+                // A live granted call never parks durably and never waits for
+                // the inbox: it is live on the grant's executor or it fails. A
+                // durable one parks at once for the grant's binding.
                 let grant = tool_policy.and_then(|policy| policy.grant.as_ref());
+                let durable_grant = grant.is_some_and(|grant| grant.durable);
+                let live_grant = grant.filter(|grant| !grant.durable);
                 let operation_kind = tool_policy
                     .filter(|policy| {
                         app_state.config.client_tools.durable_operations_enabled
-                            && policy.grant.is_none()
+                            && policy.grant.as_ref().is_none_or(|grant| grant.durable)
                     })
                     .and_then(|policy| {
                         app_state
@@ -7891,16 +8078,25 @@ async fn stream_generate_chat_completion<'a>(
                         let kind = operation_kind?;
                         let binding = policy.executor.as_ref()?;
                         // An approval answered by another executor never parks
-                        // the call for the device that submitted the turn.
+                        // the call for the device that submitted the turn. A
+                        // granted call's binding is the grant's, whoever answered.
                         if kind.gated_by_user_decision()
+                            && !durable_grant
                             && approving_executor
                                 .as_ref()
                                 .is_some_and(|approving| approving.as_ref() != Some(binding))
                         {
                             return None;
                         }
+                        let input = match grant {
+                            Some(grant) => crate::services::delegated_client_tools::dispatch_input(
+                                &tool_input,
+                                grant,
+                            ),
+                            None => tool_input.clone(),
+                        };
                         (kind.realm() == binding.realm
-                            && kind.validate_input(&tool_input, binding).is_ok())
+                            && kind.validate_input(&input, binding).is_ok())
                         .then(|| {
                             let identity = tool_charges[&call_id]
                                 .operation_identity
@@ -7920,13 +8116,27 @@ async fn stream_generate_chat_completion<'a>(
                                 base_revision: None,
                                 consent: kind.consent(),
                                 expires_at: identity.expires_at,
-                                input: tool_input.clone(),
+                                input,
+                                lineage: grant.map(|grant| executor_stream::CallLineage {
+                                    owner_chat_id: grant.owner_chat_id,
+                                    owner_message_id: grant.owner_message_id,
+                                    requesting_chat_id: chat_id,
+                                    requesting_message_id: assistant_message_id,
+                                    context_ref: grant.context_ref.clone(),
+                                }),
                             }
                         })
                     })
                 } else {
                     None
                 };
+                // A durable granted call that cannot park has no live path to
+                // fall back on.
+                if durable_grant && durable_request.is_none() && validation_failure.is_none() {
+                    validation_failure = Some(ClientToolOutcome::Cancelled {
+                        reason: "context_unavailable".into(),
+                    });
+                }
                 // A configured durable tool without an eligible binding keeps
                 // today's in-memory path instead of failing.
                 if durable_request.is_none()
@@ -7951,7 +8161,7 @@ async fn stream_generate_chat_completion<'a>(
                     });
                 }
                 let mut executor_target = None;
-                if grant.is_some() && validation_failure.is_none() {
+                if live_grant.is_some() && validation_failure.is_none() {
                     let binding = tool_policy.and_then(|policy| policy.executor.as_ref());
                     let route = match binding {
                         Some(binding) if app_state.config.client_tools.executor_stream_enabled => {
@@ -8026,6 +8236,7 @@ async fn stream_generate_chat_completion<'a>(
                     let mut result_rx = task.register_client_tool_call(call_id.clone()).await;
 
                     let inbox_only = tool_policy.is_some_and(|policy| policy.inbox_only)
+                        || durable_grant
                         || durable_request.as_ref().is_some_and(|request| {
                             request.consent
                                 != crate::services::client_operations::ConsentPolicy::None
@@ -8040,7 +8251,7 @@ async fn stream_generate_chat_completion<'a>(
                             message_id: assistant_message_id,
                             tool_call_id: call_id.clone(),
                             tool_name: tool_name.clone(),
-                            input: match grant {
+                            input: match live_grant {
                                 Some(grant) => {
                                     crate::services::delegated_client_tools::dispatch_input(
                                         &tool_input,
@@ -8049,7 +8260,7 @@ async fn stream_generate_chat_completion<'a>(
                                 }
                                 None => tool_input.clone(),
                             },
-                            lineage: grant.map(|grant| executor_stream::CallLineage {
+                            lineage: live_grant.map(|grant| executor_stream::CallLineage {
                                 owner_chat_id: grant.owner_chat_id,
                                 owner_message_id: grant.owner_message_id,
                                 requesting_chat_id: chat_id,
@@ -8062,7 +8273,7 @@ async fn stream_generate_chat_completion<'a>(
                     // A handed-over call is neither broadcast nor logged, so no
                     // chat stream runs it a second time. A granted call has no
                     // chat path at all.
-                    let grant_unavailable = grant.is_some() && handed_over.is_none();
+                    let grant_unavailable = live_grant.is_some() && handed_over.is_none();
                     if !inbox_only && handed_over.is_none() && grant.is_none() {
                         // Signal the client to execute: broadcast (submit path + resume
                         // replay) AND the typed tx stream (regenerate/edit path).
@@ -9340,7 +9551,9 @@ async fn stream_generate_chat_completion<'a>(
                 tracing::warn!(%error, "Cannot announce a parked operation on its executor stream");
             }
             task.remove_pending_client_tool(&request.tool_call_id).await;
-            if let Ok(outcome) = result_rx.try_recv() {
+            if let Ok(outcome) = result_rx.try_recv()
+                && request.lineage.is_none()
+            {
                 let result =
                     crate::services::client_operations::fast_result_or_refusal(&request, outcome);
                 crate::services::client_operations::store::accept_fast(
@@ -12683,7 +12896,7 @@ mod tests {
                 },
                 child_chat_id: Uuid::new_v4(),
                 child_message_id: Uuid::new_v4(),
-                request: restored.clone(),
+                stop: crate::services::delegation::ChildStop::Approval(Box::new(restored.clone())),
             }],
             Vec::new(),
             false,
@@ -12779,7 +12992,17 @@ mod tests {
             },
             child_chat_id: Uuid::new_v4(),
             child_message_id: Uuid::new_v4(),
-            request: gated_request(&format!("{parent_call_id}-child"), requested_at),
+            stop: crate::services::delegation::ChildStop::Approval(Box::new(gated_request(
+                &format!("{parent_call_id}-child"),
+                requested_at,
+            ))),
+        }
+    }
+
+    fn parked_request(child: &super::ParkedChild) -> &super::ContentPartToolApprovalRequest {
+        match &child.stop {
+            crate::services::delegation::ChildStop::Approval(request) => request,
+            crate::services::delegation::ChildStop::Waiting(_) => panic!("an approval child"),
         }
     }
 
@@ -12818,7 +13041,7 @@ mod tests {
             assert_eq!(child.child_message_id, parked.child_message_id);
             assert_eq!(child.tool_name, "publish");
             assert_eq!(child.mcp_server_id, "server");
-            assert_eq!(child.requested_at, parked.request.requested_at);
+            assert_eq!(child.requested_at, parked_request(parked).requested_at);
             assert_eq!(child.allow_always, Some(false));
             assert_eq!(child.kind, Some(ToolApprovalKind::McpTool));
             assert_eq!(item.tool_name, "delegate_task");
@@ -12914,8 +13137,10 @@ mod tests {
         ));
 
         let mut client_child = parked_child("task-c", "2026-10-20T10:00:02Z");
-        client_child.request.kind = ToolApprovalKind::ClientTool;
-        client_child.request.allow_always = true;
+        if let crate::services::delegation::ChildStop::Approval(request) = &mut client_child.stop {
+            request.kind = ToolApprovalKind::ClientTool;
+            request.allow_always = true;
+        }
         let mut legacy_child = child_item("task-l");
         if let Some(child) = legacy_child.child.as_mut() {
             child.kind = None;
@@ -12944,6 +13169,135 @@ mod tests {
             super::approve_always_refused(&tasks, &open, &always("task-l"), false),
             "an item without a kind asked about an MCP tool"
         );
+    }
+
+    fn waiting_child(parent_call_id: &str) -> super::ParkedChild {
+        super::ParkedChild {
+            tool_call: ToolCall {
+                call_id: parent_call_id.to_string(),
+                fn_name: "delegate_task".to_string(),
+                fn_arguments: json!({"task": parent_call_id}),
+                thought_signatures: None,
+            },
+            child_chat_id: Uuid::new_v4(),
+            child_message_id: Uuid::new_v4(),
+            stop: crate::services::delegation::ChildStop::Waiting(
+                crate::services::delegation::ChildWait {
+                    attempt_id: Uuid::new_v4(),
+                    tool_call_id: format!("{parent_call_id}-read"),
+                    tool_name: "read_message".to_string(),
+                    namespace: "outlook".to_string(),
+                    host_context: "outlook_mailbox".to_string(),
+                    input: json!({"part": "intro"}),
+                    requested_at: "2026-10-29T10:00:00Z".to_string(),
+                },
+            ),
+        }
+    }
+
+    fn slot(call_id: &str, status: super::MessageToolCallStatus) -> super::ContentPart {
+        super::ContentPart::ToolUse(super::ToolUse {
+            tool_call_id: call_id.to_string(),
+            status,
+            tool_name: "delegate_task".to_string(),
+            output: Some(json!({"status": "input_required", "reason": "client_pending"})),
+            ..Default::default()
+        })
+    }
+
+    #[test]
+    fn a_waiting_item_is_open_while_its_slot_is_in_progress() {
+        use super::{ContentPart, MessageToolCallStatus};
+        let stop =
+            super::delegated_task_approval_part(&[waiting_child("task-w")], Vec::new(), false);
+        let item = &stop.approvals[0];
+        let child = item.child.as_ref().expect("a child item");
+        assert_eq!(item.approval_id, "task-w");
+        assert_eq!(child.child_tool_call_id, "task-w-read");
+        assert_eq!(child.mcp_server_id, "outlook");
+        assert_eq!(child.kind, Some(ToolApprovalKind::ClientTool));
+        assert_eq!(child.allow_always, None);
+        let waiting_for = child.waiting_for.as_ref().expect("a waiting item");
+        assert_eq!(waiting_for.host_context, "outlook_mailbox");
+
+        let open = |slot_status| {
+            super::parked_approval_state(&[
+                slot("task-w", slot_status),
+                ContentPart::ToolApprovalRequest(stop.clone()),
+            ])
+            .expect("a parked row")
+            .open
+            .len()
+        };
+        assert_eq!(open(MessageToolCallStatus::InProgress), 1);
+        assert_eq!(open(MessageToolCallStatus::Success), 0);
+        assert_eq!(open(MessageToolCallStatus::Error), 0);
+        let without_slot =
+            super::parked_approval_state(&[ContentPart::ToolApprovalRequest(stop.clone())])
+                .expect("a parked row");
+        assert!(without_slot.open.is_empty());
+    }
+
+    #[test]
+    fn waiting_items_are_not_part_of_the_decision_set() {
+        use super::{ContentPart, MessageToolCallStatus};
+        let mut own = gated_request("own", "2026-10-20T10:00:01Z");
+        super::fold_parked_children(
+            &mut own,
+            &[
+                parked_child("task-a", "2026-10-20T10:00:02Z"),
+                waiting_child("task-w"),
+            ],
+        );
+        let state = super::parked_approval_state(&[
+            slot("task-a", MessageToolCallStatus::InProgress),
+            slot("task-w", MessageToolCallStatus::InProgress),
+            ContentPart::ToolApprovalRequest(own),
+        ])
+        .expect("a parked row");
+        let ids = |items: Vec<ApprovalItem>| -> Vec<String> {
+            items.into_iter().map(|item| item.approval_id).collect()
+        };
+        assert_eq!(ids(state.open.clone()), ["own", "task-a", "task-w"]);
+        assert_eq!(ids(state.decidable()), ["own", "task-a"]);
+        assert_eq!(ids(state.waiting()), ["task-w"]);
+        let decide = |approval_id: &str| ApprovalDecisionItem {
+            approval_id: approval_id.to_string(),
+            decision: ToolApprovalDecision::Approve,
+        };
+        let request = |decisions| super::ContinueStreamRequest {
+            message_id: Uuid::new_v4(),
+            decisions,
+            decision: None,
+            shows_child_items: true,
+            registered_client_tools: None,
+            executor: None,
+        };
+        assert!(
+            super::resolve_submitted_decisions(
+                &request(vec![decide("own"), decide("task-a")]),
+                &state.decidable()
+            )
+            .is_ok()
+        );
+        assert!(
+            super::resolve_submitted_decisions(
+                &request(vec![decide("own"), decide("task-a"), decide("task-w")]),
+                &state.decidable()
+            )
+            .is_err()
+        );
+
+        let only_waiting =
+            super::delegated_task_approval_part(&[waiting_child("task-w")], Vec::new(), false);
+        let state = super::parked_approval_state(&[
+            slot("task-w", MessageToolCallStatus::InProgress),
+            ContentPart::ToolApprovalRequest(only_waiting),
+        ])
+        .expect("a parked row");
+        assert!(state.decidable().is_empty());
+        assert_eq!(state.waiting().len(), 1);
+        assert!(!super::decision_needs_child_items(&state));
     }
 
     #[test]
@@ -17551,6 +17905,12 @@ pub async fn client_tool_result(
             if let (Some(operation), Some(task)) = (&operation, &task)
                 && task.message_id() == request.message_id
             {
+                if operation.lineage.is_some() {
+                    return Err((
+                        axum::http::StatusCode::CONFLICT,
+                        "Operation requires a claim".into(),
+                    ));
+                }
                 if operation.consent != crate::services::client_operations::ConsentPolicy::None {
                     return Err((
                         axum::http::StatusCode::CONFLICT,
@@ -17610,6 +17970,13 @@ pub async fn client_tool_result(
                 })?
                 .or(operation);
             if let Some(operation) = durable_request {
+                // A task's granted call is the claimed executor's to answer.
+                if operation.lineage.is_some() {
+                    return Err((
+                        axum::http::StatusCode::CONFLICT,
+                        "Operation requires a claim".into(),
+                    ));
+                }
                 if operation.consent != crate::services::client_operations::ConsentPolicy::None {
                     return Err((
                         axum::http::StatusCode::CONFLICT,
@@ -18251,16 +18618,43 @@ pub async fn react_to_task_result_sse(
 }
 
 /// What a parked turn still has open.
-struct ParkedApprovalState {
-    request: ContentPartToolApprovalRequest,
-    /// The approvals no decision part after the request answers.
-    open: Vec<ApprovalItem>,
+pub(crate) struct ParkedApprovalState {
+    pub(crate) request: ContentPartToolApprovalRequest,
+    /// The approvals no decision part after the request answers, and the
+    /// waiting children whose slot is still in progress.
+    pub(crate) open: Vec<ApprovalItem>,
     /// Whether the row shows nothing but decisions and tool output after the
     /// request. Sufficient to admit a crash retry, not necessary: a turn that
     /// says something before its next tool call commits that text mid-turn, so
     /// a `text` part is no proof of an answer. That case is admitted by
     /// `GenerationMetadata::continuation_in_flight` instead.
-    unanswered: bool,
+    pub(crate) unanswered: bool,
+}
+
+pub(crate) fn is_waiting_item(item: &ApprovalItem) -> bool {
+    item.child
+        .as_ref()
+        .is_some_and(|child| child.waiting_for.is_some())
+}
+
+impl ParkedApprovalState {
+    /// The open items a decision answers.
+    pub(crate) fn decidable(&self) -> Vec<ApprovalItem> {
+        self.open
+            .iter()
+            .filter(|item| !is_waiting_item(item))
+            .cloned()
+            .collect()
+    }
+
+    /// The open items that wait for a client; no decision answers them.
+    pub(crate) fn waiting(&self) -> Vec<ApprovalItem> {
+        self.open
+            .iter()
+            .filter(|item| is_waiting_item(item))
+            .cloned()
+            .collect()
+    }
 }
 
 /// Derive the open set from the whole row rather than from its tail part.
@@ -18269,7 +18663,7 @@ struct ParkedApprovalState {
 /// between persisting the outcome and finishing the turn carries the same
 /// approval request as one nobody has decided yet, and answering the first with
 /// a `400` is what makes a `continuestream` retry after a restart impossible.
-fn parked_approval_state(content: &[ContentPart]) -> Option<ParkedApprovalState> {
+pub(crate) fn parked_approval_state(content: &[ContentPart]) -> Option<ParkedApprovalState> {
     let (request_index, request) =
         content
             .iter()
@@ -18304,9 +18698,28 @@ fn parked_approval_state(content: &[ContentPart]) -> Option<ParkedApprovalState>
             }
         })
     };
+    // A waiting item is never decided; settling the slot settles it.
+    let slot_in_progress = |item: &ApprovalItem| {
+        content
+            .iter()
+            .rev()
+            .find_map(|part| match part {
+                ContentPart::ToolUse(slot) if slot.tool_call_id == item.tool_call_id => {
+                    Some(slot.status == MessageToolCallStatus::InProgress)
+                }
+                _ => None,
+            })
+            .unwrap_or(false)
+    };
     let open = items
         .iter()
-        .filter(|item| !decided(item))
+        .filter(|item| {
+            if is_waiting_item(item) {
+                slot_in_progress(item)
+            } else {
+                !decided(item)
+            }
+        })
         .cloned()
         .collect();
     let unanswered = settled.iter().all(|part| {
@@ -18333,7 +18746,7 @@ fn parked_approval_state(content: &[ContentPart]) -> Option<ParkedApprovalState>
 ///
 /// Unreadable metadata is treated as no marker: an unparseable column must not
 /// be the reason a turn is resumed a second time.
-fn continuation_owes_an_answer(message: &messages::Model) -> bool {
+pub(crate) fn continuation_owes_an_answer(message: &messages::Model) -> bool {
     message
         .generation_metadata
         .as_ref()
@@ -18405,6 +18818,14 @@ async fn origin_approval_covering_child(
         .await
         .ok()?;
     if origin_chat.archived_at.is_some() {
+        return None;
+    }
+    // A parent that moved on to a newer message no longer carries the child.
+    let tip = crate::models::message::get_active_thread_tip(&app_state.db, &origin_chat.id)
+        .await
+        .ok()
+        .flatten()?;
+    if tip.id != parent_message_id {
         return None;
     }
     let open =
@@ -18530,7 +18951,7 @@ fn decision_needs_child_items(state: &ParkedApprovalState) -> bool {
     matches!(
         state.request.kind,
         ToolApprovalKind::McpTool | ToolApprovalKind::ClientTool
-    ) && state.open.iter().any(|item| item.child.is_some())
+    ) && state.decidable().iter().any(|item| item.child.is_some())
 }
 
 /// Whether a set of decisions asks for an "always allow" the MCP policy
@@ -18623,6 +19044,38 @@ pub(crate) async fn start_continuation(
             },
         )));
     }
+    let empty_body = request.decision.is_none() && request.decisions.is_empty();
+    // A card's backstop: what its waiting children finished is applied even
+    // when no tail ran for them.
+    let synced = if empty_body && app_state.config.client_tools.durable_operations_enabled {
+        crate::services::delegated_client_tools::sync_waiting_parent(
+            &app_state.db,
+            &app_state.config,
+            chat.id,
+            message.id,
+        )
+        .await
+        .inspect_err(|error| warn_and_capture_error("sync a parent waiting for its tasks", error))
+        .ok()
+        .flatten()
+    } else {
+        None
+    };
+    let (message, parsed) = if synced.as_ref().is_some_and(|synced| synced.outcome.changed) {
+        let message = get_message_by_id(
+            &app_state.db,
+            policy,
+            &me_user.to_subject(),
+            &request.message_id,
+        )
+        .await
+        .map_err(|error| (axum::http::StatusCode::NOT_FOUND, error.to_string()))?;
+        let parsed = MessageSchema::validate(&message.raw_message)
+            .map_err(|error| (axum::http::StatusCode::BAD_REQUEST, error.to_string()))?;
+        (message, parsed)
+    } else {
+        (message, parsed)
+    };
     let Some(state) = parked_approval_state(&parsed.content) else {
         return Err((
             axum::http::StatusCode::BAD_REQUEST,
@@ -18630,57 +19083,107 @@ pub(crate) async fn start_continuation(
         )
             .into());
     };
+    let awaiting_approval = chat.generation_state.as_deref() == Some("awaiting_approval");
+    let has_waiting_items = state.request.approval_items().iter().any(is_waiting_item);
+    // Only a continuation that died before the model answered may run again,
+    // and `chats.generation_state` alone cannot say which those are: it is
+    // written by every generation on the chat, so a later turn that failed
+    // would otherwise reopen a settled row and append a second answer to a
+    // message that already has one. Either the row shows no answer or the
+    // message still carries a continuation's claim on it. The heartbeat
+    // cleanup clears an ended turn's state a minute later, and a turn waiting
+    // on its tasks outlives that, so for one the claim alone is enough.
+    let crashed = match chat.generation_state.as_deref() {
+        Some("errored") => state.unanswered || continuation_owes_an_answer(&message),
+        None => has_waiting_items && continuation_owes_an_answer(&message),
+        _ => false,
+    };
+    // A turn resumed for its waiting children takes only the lease it parked
+    // under, never a newer turn's.
+    let parked_generation = synced.as_ref().map_or(chat.active_generation_id, |synced| {
+        synced.expected_generation
+    });
+    let mut resume_parked = false;
     let entry = if state.open.is_empty() {
-        // Only a continuation that died before the model answered may run
-        // again, and `chats.generation_state` alone cannot say which those are:
-        // it is written by every generation on the chat, so a later turn that
-        // failed would otherwise reopen a settled row and append a second
-        // answer to a message that already has one. Either the row shows no
-        // answer or the message still carries a continuation's claim on it.
-        let crashed = (state.unanswered || continuation_owes_an_answer(&message))
-            && chat.generation_state.as_deref() == Some("errored");
-        if !crashed {
+        if has_waiting_items && empty_body && awaiting_approval && state.unanswered {
+            resume_parked = true;
+            ContinuationEntry::WaitingSettled
+        } else if crashed {
+            resume_parked = has_waiting_items;
+            ContinuationEntry::ResumeCrashed
+        } else {
             return Err(already_continued());
         }
-        ContinuationEntry::ResumeCrashed
     } else {
-        if !request.shows_child_items && decision_needs_child_items(&state) {
+        let decidable = state.decidable();
+        let waiting = state.waiting();
+        // Only a client that predates waiting children names one or sends a
+        // lone legacy decision for a stop that has nothing else to decide.
+        let names_waiting = request.decisions.iter().any(|decision| {
+            waiting
+                .iter()
+                .any(|item| item.approval_id == decision.approval_id)
+        });
+        // A client that shows waiting children and still sends a lone decision
+        // here answered a stop someone else already decided.
+        if request.decision.is_some() && decidable.is_empty() && request.shows_child_items {
+            return Err(already_continued());
+        }
+        if names_waiting
+            || (request.decision.is_some() && decidable.is_empty())
+            || (!request.shows_child_items && decision_needs_child_items(&state))
+        {
             return Err((
                 axum::http::StatusCode::CONFLICT,
                 "This decision also covers tasks this version of the app cannot show. Reload the page to see and decide each of them.".to_string(),
             )
                 .into());
         }
-        // Validated here as well as in the worker: a body that does not answer
-        // the turn should be an HTTP status, not a stream that opens and dies.
-        let submitted_decisions = resolve_submitted_decisions(&request, &state.open)?;
-        if state.request.kind == ToolApprovalKind::ToolCallLimit
-            && submitted_decisions.iter().any(|(_, decision)| {
-                matches!(
-                    decision,
-                    ToolApprovalDecision::ApproveAlways | ToolApprovalDecision::RejectAlways
+        if decidable.is_empty() && empty_body {
+            if awaiting_approval {
+                return Err(StreamRouteError::ChildrenWaiting(Box::new(
+                    ChildrenWaitingError {
+                        code: CHILDREN_WAITING_CODE.to_string(),
+                    },
+                )));
+            }
+            if !crashed {
+                return Err(already_continued());
+            }
+            resume_parked = true;
+            ContinuationEntry::ResumeCrashed
+        } else {
+            // Validated here as well as in the worker: a body that does not answer
+            // the turn should be an HTTP status, not a stream that opens and dies.
+            let submitted_decisions = resolve_submitted_decisions(&request, &decidable)?;
+            if state.request.kind == ToolApprovalKind::ToolCallLimit
+                && submitted_decisions.iter().any(|(_, decision)| {
+                    matches!(
+                        decision,
+                        ToolApprovalDecision::ApproveAlways | ToolApprovalDecision::RejectAlways
+                    )
+                })
+            {
+                return Err((
+                    axum::http::StatusCode::BAD_REQUEST,
+                    "Tool budget decisions cannot be saved as standing permissions".to_string(),
                 )
-            })
-        {
-            return Err((
-                axum::http::StatusCode::BAD_REQUEST,
-                "Tool budget decisions cannot be saved as standing permissions".to_string(),
-            )
-                .into());
+                    .into());
+            }
+            if approve_always_refused(
+                &state.request,
+                &decidable,
+                &submitted_decisions,
+                mcp.config.mcp_servers_global.approval.allow_always,
+            ) {
+                return Err((
+                    axum::http::StatusCode::BAD_REQUEST,
+                    "Always allow is disabled by MCP approval policy".to_string(),
+                )
+                    .into());
+            }
+            ContinuationEntry::Decide
         }
-        if approve_always_refused(
-            &state.request,
-            &state.open,
-            &submitted_decisions,
-            mcp.config.mcp_servers_global.approval.allow_always,
-        ) {
-            return Err((
-                axum::http::StatusCode::BAD_REQUEST,
-                "Always allow is disabled by MCP approval policy".to_string(),
-            )
-                .into());
-        }
-        ContinuationEntry::Decide
     };
 
     let app_state_for_worker = app_state.clone();
@@ -18698,8 +19201,22 @@ pub(crate) async fn start_continuation(
     // parked generation instead of starting a second one" — stops being true
     // once a user write can take a parked lease: the card can still be mounted
     // while another turn already owns the chat.
-    let (events, task) =
-        acquire_user_generation_lease(app_state, chat_id, request.message_id).await?;
+    let (events, task) = if resume_parked {
+        app_state
+            .background_tasks
+            .try_start_task(
+                chat_id,
+                request.message_id,
+                Takeover::ResumeParked {
+                    expected_generation: parked_generation,
+                },
+                app_state.config.generation_status.stale_after_secs,
+            )
+            .await
+            .map_err(|held| lease_held_error(chat_id, held))?
+    } else {
+        acquire_user_generation_lease(app_state, chat_id, request.message_id).await?
+    };
 
     let client_stream_guard = task.client_stream_guard();
 
@@ -18769,7 +19286,7 @@ pub(crate) async fn start_continuation(
         (status = OK, content_type = "text/event-stream", body = MessageSubmitStreamingResponseMessage),
         (status = BAD_REQUEST, body = ApprovalDecisionsError, description = "The message has no pending approval, the decision is invalid, or the submitted decisions do not cover the open approvals (JSON, code = decisions_mismatch)"),
         (status = NOT_FOUND, description = "When the chat does not exist or is not accessible"),
-        (status = CONFLICT, body = GenerationRunningError, description = "When the chat is archived (plain text), the chat's generation lease is already held and delegation.tasks.enabled is on (JSON, code = generation_running), every approval the row opened is already decided (JSON, code = already_continued, body = AlreadyContinuedError), the chat that dispatched this delegated run is still asking the same question (JSON, code = covered_by_parent, body = CoveredByParentError), or the stop carries open task children and the request did not set `shows_child_items` (plain text)"),
+        (status = CONFLICT, body = GenerationRunningError, description = "When the chat is archived (plain text), the chat's generation lease is already held and delegation.tasks.enabled is on (JSON, code = generation_running), every approval the row opened is already decided (JSON, code = already_continued, body = AlreadyContinuedError), the chat that dispatched this delegated run is still asking the same question (JSON, code = covered_by_parent, body = CoveredByParentError), an empty body names a parked row whose only open items are task children waiting for a client (JSON, code = children_waiting, body = ChildrenWaitingError), or the stop carries open task children and the request did not set `shows_child_items`, names a waiting child, or sends a single `decision` while only waiting children are open (plain text)"),
         (status = UNAUTHORIZED, description = "When no valid JWT token is provided"),
         (status = INTERNAL_SERVER_ERROR, description = "When an internal server error occurs")
     ),
@@ -18846,9 +19363,13 @@ pub(crate) enum ContinuationEntry {
     /// The caller found approvals open and is submitting decisions for them.
     Decide,
     /// The caller found every approval already decided on a generation that had
-    /// been swept to `errored`: the outcomes are on the row and the only thing
-    /// missing is the model call.
+    /// been swept to `errored`, or cleared after that while its tasks waited:
+    /// the outcomes are on the row and the only thing missing is the model call. Task children that still wait for a client
+    /// may be open; the continuation parks on them again.
     ResumeCrashed,
+    /// Every task child the parked turn waited for has finished, and nothing
+    /// was left to decide: the turn goes on with their answers.
+    WaitingSettled,
 }
 
 /// The `Sender` a continuation with no SSE client of its own writes to.
@@ -19355,15 +19876,28 @@ async fn settle_parked_children(
             }
             Err(error) => (json!({ "status": "failed", "error": error }), false, true),
         };
-        if still_parked
-            && let Some(child) = child.as_ref()
-            && let Some(request) = crate::services::delegation::read_child_approval_request(
+        let restopped = match child.as_ref().filter(|_| still_parked) {
+            Some(child) => match crate::services::delegation::read_child_approval_request(
                 &app_state.db,
                 child.child_chat_id,
                 child.child_message_id,
             )
             .await
-        {
+            {
+                Some(request) => Some(crate::services::delegation::ChildStop::Approval(Box::new(
+                    request,
+                ))),
+                None => crate::services::delegation::read_child_wait(
+                    &app_state.db,
+                    child.child_chat_id,
+                    child.child_message_id,
+                )
+                .await
+                .map(crate::services::delegation::ChildStop::Waiting),
+            },
+            None => None,
+        };
+        if let (Some(stop), Some(child)) = (restopped, child.as_ref()) {
             reparked.push(ParkedChild {
                 tool_call: genai::chat::ToolCall {
                     call_id: item.tool_call_id.clone(),
@@ -19373,7 +19907,7 @@ async fn settle_parked_children(
                 },
                 child_chat_id: child.child_chat_id,
                 child_message_id: child.child_message_id,
-                request,
+                stop,
             });
         }
         // A client that has gone away must not stop the loop: the items before
@@ -19407,6 +19941,78 @@ async fn settle_parked_children(
         .await?;
     }
     Ok(reparked)
+}
+
+/// Everything a continuation's new stop carries, in the old stop's order: the
+/// decided children that stopped again, the waiting children still open, and
+/// the waiting children that now ask.
+fn reparked_with_waiting_children(
+    content: &[ContentPart],
+    stop: &ContentPartToolApprovalRequest,
+    reparked: Vec<ParkedChild>,
+    mut converted: HashMap<String, Box<ContentPartToolApprovalRequest>>,
+) -> Vec<ParkedChild> {
+    let still_waiting = parked_approval_state(content)
+        .map(|state| state.waiting())
+        .unwrap_or_default();
+    let mut reparked: Vec<Option<ParkedChild>> = reparked.into_iter().map(Some).collect();
+    let mut carried = Vec::new();
+    for item in stop.approval_items() {
+        if let Some(child) = reparked
+            .iter_mut()
+            .find(|child| {
+                child
+                    .as_ref()
+                    .is_some_and(|child| child.tool_call.call_id == item.tool_call_id)
+            })
+            .and_then(Option::take)
+        {
+            carried.push(child);
+            continue;
+        }
+        let Some(waiting) = still_waiting
+            .iter()
+            .find(|waiting| waiting.approval_id == item.approval_id)
+        else {
+            continue;
+        };
+        let (Some(child), Some(waiting_for)) = (
+            waiting.child.as_ref(),
+            waiting
+                .child
+                .as_ref()
+                .and_then(|child| child.waiting_for.as_ref()),
+        ) else {
+            continue;
+        };
+        let stop = match converted.remove(&waiting.approval_id) {
+            Some(request) => crate::services::delegation::ChildStop::Approval(request),
+            None => crate::services::delegation::ChildStop::Waiting(
+                crate::services::delegation::ChildWait {
+                    attempt_id: waiting_for.attempt_id,
+                    tool_call_id: child.child_tool_call_id.clone(),
+                    tool_name: child.tool_name.clone(),
+                    namespace: child.mcp_server_id.clone(),
+                    host_context: waiting_for.host_context.clone(),
+                    input: child.input.clone(),
+                    requested_at: child.requested_at.clone(),
+                },
+            ),
+        };
+        carried.push(ParkedChild {
+            tool_call: genai::chat::ToolCall {
+                call_id: waiting.tool_call_id.clone(),
+                fn_name: waiting.tool_name.clone(),
+                fn_arguments: waiting.input.clone(),
+                thought_signatures: None,
+            },
+            child_chat_id: child.child_chat_id,
+            child_message_id: child.child_message_id,
+            stop,
+        });
+    }
+    carried.extend(reparked.into_iter().flatten());
+    carried
 }
 
 /// The calls of a park the row already approved that have not run yet, and
@@ -19533,7 +20139,7 @@ pub(crate) async fn run_continuation(
     let Some(state) = parked_approval_state(&parsed.content) else {
         return Err(eyre!("Message generation is not awaiting tool approval"));
     };
-    let approval_request = state.request;
+    let approval_request = state.request.clone();
     let chat = get_or_create_chat(
         &app_state.db,
         policy,
@@ -19556,29 +20162,19 @@ pub(crate) async fn run_continuation(
     // Resolved again against the row as re-read here, so a body that raced
     // another continuation is refused on current state rather than on the state
     // the handler saw.
-    let submitted_decisions = if state.open.is_empty() {
-        // A crash retry is allowed to find nothing open — that is what it came
-        // for. A continuation that was given decisions to apply is not: the
-        // approvals were settled between the handler's read and this one, so
-        // another continuation owns the model call and making a second one
-        // would append a duplicate answer to the same row.
-        if entry != ContinuationEntry::ResumeCrashed {
+    let decidable = state.decidable();
+    let has_waiting_items = state.request.approval_items().iter().any(is_waiting_item);
+    let submitted_decisions = match entry {
+        // A continuation that was given decisions to apply finds them settled
+        // when another one got there between the handler's read and this one:
+        // that one owns the model call, and making a second would append a
+        // duplicate answer to the same row.
+        ContinuationEntry::Decide if decidable.is_empty() => {
             return Err(eyre!(
                 "Another continuation already settled this generation's approvals"
             ));
         }
-        // The same admission test the handler applied, against the row as it is
-        // now: a predecessor that finished in between has written the answer
-        // this retry came to produce, and producing a second one would leave
-        // the message with two.
-        if !state.unanswered && !continuation_owes_an_answer(&message) {
-            return Err(eyre!(
-                "This generation has already produced its answer; nothing to resume"
-            ));
-        }
-        Vec::new()
-    } else {
-        resolve_submitted_decisions(&request, &state.open).map_err(
+        ContinuationEntry::Decide => resolve_submitted_decisions(&request, &decidable).map_err(
             |error| match error {
                 StreamRouteError::PlainText(_, message) => eyre!(message),
                 StreamRouteError::DecisionsMismatch(body) => eyre!(
@@ -19588,7 +20184,33 @@ pub(crate) async fn run_continuation(
                 ),
                 _ => eyre!("The approval decision could not be applied"),
             },
-        )?
+        )?,
+        // A crash retry is allowed to find nothing to decide — that is what it
+        // came for. The same admission test the handler applied, against the
+        // row as it is now: a predecessor that finished in between has written
+        // the answer this retry came to produce, and producing a second one
+        // would leave the message with two.
+        ContinuationEntry::ResumeCrashed => {
+            if !decidable.is_empty() {
+                return Err(eyre!(
+                    "This generation has approvals open again; a crash retry does not decide them"
+                ));
+            }
+            if !state.unanswered && !continuation_owes_an_answer(&message) {
+                return Err(eyre!(
+                    "This generation has already produced its answer; nothing to resume"
+                ));
+            }
+            Vec::new()
+        }
+        ContinuationEntry::WaitingSettled => {
+            if !state.open.is_empty() || !has_waiting_items || !state.unanswered {
+                return Err(eyre!(
+                    "This generation is not a settled wait for its tasks; nothing to resume"
+                ));
+            }
+            Vec::new()
+        }
     };
 
     mark_continuation_in_flight(app_state, policy, me_user, &message).await?;
@@ -20206,14 +20828,7 @@ pub(crate) async fn run_continuation(
             // has none for it, and "the user said no" is not a run outcome. A
             // task's client call does: its result counts what was declined.
             output: Some(if declines_client_calls {
-                json!({
-                    "status": "cancelled",
-                    "reason": crate::services::delegated_client_tools::DECLINED,
-                    "error": format!(
-                        "The user declined this call, so the task has no result from '{}'; say in the answer what is missing because of it.",
-                        item.tool_name
-                    ),
-                })
+                crate::services::delegated_client_tools::declined_output(&item.tool_name)
             } else {
                 json!({
                     "status": "rejected",
@@ -20288,6 +20903,49 @@ pub(crate) async fn run_continuation(
         )
         .await?
     };
+
+    // Children that waited for a client may have finished, asked or called
+    // again while this ran. Read into this row rather than through the
+    // database: the writes below replace the whole content.
+    let mut converted: HashMap<String, Box<ContentPartToolApprovalRequest>> = HashMap::new();
+    if has_waiting_items {
+        let states = crate::services::delegated_client_tools::read_waiting_children(
+            &app_state.db,
+            &app_state.config,
+            &parsed.content,
+        )
+        .await;
+        // A child that now asks moves onto the new stop as an approval item;
+        // rewriting it on this stop would leave two open requests for one
+        // slot.
+        let synced = crate::services::delegated_client_tools::apply_waiting_sync(
+            &mut parsed.content,
+            &states,
+            false,
+        );
+        for (approval_id, state) in states {
+            if let crate::services::delegated_client_tools::ChildWaitState::Convert(request) = state
+            {
+                converted.insert(approval_id, request);
+            }
+        }
+        if synced.changed {
+            update_message_content(
+                &app_state.db,
+                policy,
+                &me_user.to_subject(),
+                &message.id,
+                parsed.content.clone(),
+            )
+            .await?;
+        }
+    }
+    let reparked_children = reparked_with_waiting_children(
+        &parsed.content,
+        &approval_request,
+        reparked_children,
+        converted,
+    );
 
     let (mut approved_calls, pending_from_park) =
         previously_approved_pending(&parsed.content, &approval_request);

@@ -46,6 +46,9 @@ pub struct GrantedCall {
     pub context_input: Option<String>,
     /// Input fields the host fills from its own context; dropped from the call.
     pub host_inputs: Vec<String>,
+    /// The call parks as a durable operation for the grant's binding instead
+    /// of going live.
+    pub durable: bool,
 }
 
 #[derive(Clone)]
@@ -841,6 +844,7 @@ mod tests {
             child_context_arg: None,
             child_context_input: None,
             child_host_inputs: Vec::new(),
+            child_dispatch: None,
         }
     }
 

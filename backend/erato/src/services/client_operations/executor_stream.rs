@@ -318,10 +318,12 @@ pub async fn nudge(db: &DatabaseConnection, request: &OperationRequest) -> Resul
     let event = ExecutorStreamEvent::ClientOperationAvailable(ExecutorStreamOperationAvailable {
         attempt_id: request.attempt_id,
     });
+    let tool_name = request.operation_id.rsplit('/').next().unwrap_or_default();
     db.execute_raw(statement(
         r#"INSERT INTO client_executor_calls
-             (account_id, binding, chat_id, message_id, tool_call_id, attempt_id, event)
-           VALUES ($1, $2, $3, $4, $5, $6, $7)"#,
+             (account_id, binding, chat_id, message_id, tool_call_id, attempt_id, tool_name,
+              grant_call, event)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)"#,
         vec![
             request.account_id.into(),
             serde_json::to_value(&request.binding)?.into(),
@@ -329,6 +331,8 @@ pub async fn nudge(db: &DatabaseConnection, request: &OperationRequest) -> Resul
             request.message_id.into(),
             request.tool_call_id.clone().into(),
             request.attempt_id.into(),
+            tool_name.into(),
+            request.lineage.is_some().into(),
             serde_json::to_value(event)?.into(),
         ],
     ))
@@ -400,12 +404,14 @@ pub async fn cleanup(db: &DatabaseConnection) -> Result<(), Report> {
 }
 
 /// The streams `p` that may answer call `q`, the newest pane first: a nudge any
-/// stream of its binding; a delivered call only a stream of the pane it went
-/// to, so it never runs twice or in a pane the user left open elsewhere; any
-/// other call a stream that serves its tool.
+/// stream of its binding, or for a task's granted operation one that takes its
+/// tool's grant calls; a delivered call only a stream of the pane it went to,
+/// so it never runs twice or in a pane the user left open elsewhere; any other
+/// call a stream that serves its tool.
 const ANSWERING_STREAMS: &str = r#"p.account_id = q.account_id AND p.binding = q.binding
       AND p.expires_at > now()
-      AND CASE WHEN q.attempt_id IS NOT NULL THEN true
+      AND CASE WHEN q.attempt_id IS NOT NULL
+              THEN NOT q.grant_call OR p.child_client_tools @> jsonb_build_array(q.tool_name)
             WHEN q.delivered_instance IS NOT NULL THEN p.instance_id = q.delivered_instance
             WHEN q.delivered_to IS NOT NULL THEN p.stream_id = q.delivered_to
             WHEN q.grant_call THEN p.child_client_tools @> jsonb_build_array(q.tool_name)

@@ -463,6 +463,21 @@ pub struct ChildApprovalRef {
     /// items recorded before client tasks could park, which were all MCP.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub kind: Option<ToolApprovalKind>,
+    /// Set when the child waits for a client to run its granted call rather
+    /// than for a decision. Such an item is never decided: it stays open while
+    /// the parent's slot for the child is in progress.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub waiting_for: Option<ChildWaitingFor>,
+}
+
+/// The durable client operation a waiting child is parked on.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema, erato_memory::HeapSize)]
+pub struct ChildWaitingFor {
+    /// The `host_context.kind` of the binding the call waits for, e.g.
+    /// `outlook_mailbox`.
+    pub host_context: String,
+    /// The child's parked attempt; the item settles only once it completed.
+    pub attempt_id: Uuid,
 }
 
 /// One decision the user owes on a parked turn. A stop carries several of
@@ -842,6 +857,9 @@ impl MessageSchema {
         #[derive(Clone, Copy)]
         enum State {
             Requested,
+            /// A child waiting for a client: carried onto later stops, never
+            /// decided.
+            Waiting,
             Resolved,
         }
 
@@ -852,14 +870,23 @@ impl MessageSchema {
                     // A batch park asks about more than one call, and its
                     // per-item decisions have to be able to land on the row.
                     for item in request.approval_items() {
+                        let waiting = item
+                            .child
+                            .as_ref()
+                            .is_some_and(|child| child.waiting_for.is_some());
                         let tool_call_id = item.tool_call_id;
                         // Only an UNANSWERED duplicate is a broken row. A
                         // delegated child that stops again puts its origin slot
                         // on a second card, and the slot never moves, so there
                         // is no later `ToolUse` closing the first question.
-                        if let Some(State::Requested) =
-                            pending.insert(tool_call_id.clone(), State::Requested)
-                        {
+                        if let Some(State::Requested) = pending.insert(
+                            tool_call_id.clone(),
+                            if waiting {
+                                State::Waiting
+                            } else {
+                                State::Requested
+                            },
+                        ) {
                             return Err(eyre!(
                                 "Duplicate tool approval request for {}",
                                 tool_call_id
@@ -2264,8 +2291,67 @@ mod task_result_marker_tests {
 
 #[cfg(test)]
 mod tool_approval_part_tests {
-    use super::{ContentPart, ContentPartToolRejection, ToolApprovalKind};
+    use super::{ContentPart, ContentPartToolRejection, MessageSchema, ToolApprovalKind};
     use serde_json::json;
+
+    #[test]
+    fn a_waiting_item_can_be_asked_again_but_never_decided() {
+        let child = |waiting: bool| {
+            let mut child = json!({
+                "child_chat_id": uuid::Uuid::nil(), "child_message_id": uuid::Uuid::nil(),
+                "child_tool_call_id": "child-call", "tool_name": "read_message",
+                "mcp_server_id": "outlook", "input": {},
+                "annotations": {"readOnlyHint": false, "destructiveHint": true,
+                                "idempotentHint": false, "openWorldHint": true},
+                "preset": "", "requested_at": "2026-10-29T00:00:00Z", "kind": "client_tool",
+            });
+            if waiting {
+                child["waiting_for"] =
+                    json!({"host_context": "outlook_mailbox", "attempt_id": uuid::Uuid::nil()});
+            }
+            child
+        };
+        let item = |call: &str, waiting: bool| {
+            json!({"approval_id": call, "tool_call_id": call, "tool_name": "delegate_task",
+                   "input": {}, "child": child(waiting)})
+        };
+        let stop = |items: Vec<serde_json::Value>| {
+            json!({"content_type": "tool_approval_request", "tool_call_id": "task-w",
+                   "tool_name": "delegate_task", "mcp_server_id": "", "input": {},
+                   "annotations": {"readOnlyHint": false, "destructiveHint": true,
+                                   "idempotentHint": false, "openWorldHint": true},
+                   "preset": "", "allow_always": false,
+                   "requested_at": "2026-10-29T00:00:00Z", "kind": "delegated_task",
+                   "approvals": items})
+        };
+        let approval = |call: &str| {
+            json!({"content_type": "tool_approval", "tool_call_id": call,
+                   "approved_at": "2026-10-29T00:00:01Z", "approval_id": call})
+        };
+        let row = |content: Vec<serde_json::Value>| {
+            MessageSchema::validate(&json!({"role": "assistant", "content": content}))
+        };
+        let first = stop(vec![item("task-w", true), item("task-d", false)]);
+        row(vec![
+            first.clone(),
+            approval("task-d"),
+            stop(vec![item("task-w", true)]),
+        ])
+        .expect("a re-park carries the waiting item again");
+        row(vec![
+            stop(vec![item("task-w", true)]),
+            stop(vec![item("task-w", false)]),
+        ])
+        .expect("a waiting item may become an approval on a later stop");
+        assert!(row(vec![first.clone(), approval("task-w")]).is_err());
+        assert!(
+            row(vec![
+                stop(vec![item("task-a", false)]),
+                stop(vec![item("task-a", false)]),
+            ])
+            .is_err()
+        );
+    }
 
     /// Approval rows are durable and predate every field this stop now carries,
     /// so a row written by an older release has to keep resuming — as an

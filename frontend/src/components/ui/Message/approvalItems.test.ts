@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { approvalQueueOf, itemAllowsAlways } from "./approvalItems";
+import {
+  approvalQueueOf,
+  approvalStopState,
+  itemAllowsAlways,
+} from "./approvalItems";
 
 import type { ApprovalItemPart } from "./approvalItems";
 
@@ -107,5 +111,104 @@ describe("itemAllowsAlways", () => {
         allow_always: false,
       }),
     ).toBe(false);
+  });
+});
+
+const waitingItem = (approvalId: string): ApprovalItemPart => {
+  const item = childItem(approvalId, "2026-10-20T10:00:00Z");
+  return {
+    ...item,
+    child: item.child && {
+      ...item.child,
+      kind: "client_tool",
+      waiting_for: { host_context: "outlook_mailbox", attempt_id: "attempt" },
+    },
+  };
+};
+
+const stop = (approvals: ApprovalItemPart[]) => ({
+  tool_call_id: approvals[0]?.tool_call_id ?? "call",
+  tool_name: "delegate_task",
+  input: {},
+  approvals,
+});
+
+const approved = (approvalId: string) => ({
+  content_type: "tool_approval",
+  tool_call_id: approvalId,
+  approval_id: approvalId,
+});
+
+describe("approvalStopState", () => {
+  it("never asks for a decision on a waiting item", () => {
+    const state = approvalStopState(
+      stop([childItem("asks", "2026-10-20T10:00:00Z"), waitingItem("waits")]),
+      [],
+      {
+        slots: { asks: "in_progress", waits: "in_progress" },
+        isLastStop: true,
+      },
+    );
+    expect(ids(state.open)).toEqual(["asks"]);
+    expect(ids(state.waiting)).toEqual(["waits"]);
+    expect(state.resolution).toBeNull();
+  });
+
+  it("keeps a stop open while a waiting item's slot is in progress, even once every decision is in", () => {
+    const request = stop([
+      childItem("asks", "2026-10-20T10:00:00Z"),
+      waitingItem("waits"),
+    ]);
+    const state = approvalStopState(request, [approved("asks")], {
+      slots: { waits: "in_progress" },
+      isLastStop: true,
+    });
+    expect(state.open).toEqual([]);
+    expect(ids(state.waiting)).toEqual(["waits"]);
+    expect(state.resolution).toBeNull();
+  });
+
+  it("settles a waiting item with its slot", () => {
+    const state = approvalStopState(stop([waitingItem("waits")]), [], {
+      slots: { waits: "success" },
+      isLastStop: true,
+    });
+    expect(state.waiting).toEqual([]);
+    expect(state.resolution).toBe("approved");
+  });
+
+  it("settles a waiting item whose slot is missing", () => {
+    expect(
+      approvalStopState(stop([waitingItem("waits")]), [], {
+        slots: {},
+        isLastStop: true,
+      }).waiting,
+    ).toEqual([]);
+  });
+
+  it("ignores the waiting items of an earlier stop and resolves it on its decisions", () => {
+    const request = stop([
+      childItem("asks", "2026-10-20T10:00:00Z"),
+      waitingItem("waits"),
+    ]);
+    const slots = { waits: "in_progress" };
+    const decided = approvalStopState(request, [approved("asks")], {
+      slots,
+      isLastStop: false,
+    });
+    expect(decided.waiting).toEqual([]);
+    expect(decided.resolution).toBe("approved");
+    const denied = approvalStopState(
+      request,
+      [{ ...approved("asks"), content_type: "tool_rejection" }],
+      { slots, isLastStop: false },
+    );
+    expect(denied.resolution).toBe("denied");
+  });
+
+  it("counts every waiting item of the last stop as open when the slots are unknown", () => {
+    const state = approvalStopState(stop([waitingItem("waits")]), []);
+    expect(ids(state.waiting)).toEqual(["waits"]);
+    expect(state.resolution).toBeNull();
   });
 });

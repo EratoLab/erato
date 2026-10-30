@@ -526,6 +526,12 @@ chat_provider_ids = ["test-token-limit"]
 # # Turning this off refuses the child's gated call instead, which means the
 # # child finishes without it (default: true)
 # propagate_child_mcp_approvals = true
+# # How a client task's calls reach the device, for client tools that set no
+# # child_dispatch of their own. "durable" lets a call wait for the device, and
+# # applies only to tools that can: child_access = "read", a host context that
+# # outlives the pane (outlook_mailbox, not word_document), a durable table and
+# # client_tools.durable_operations_enabled. Others stay live (default: "live")
+# child_dispatch = "live"
 #
 # # When the user is asked before the model's planned tasks are dispatched. The
 # # whole batch is shown as one card with one item per task, so a plan can be
@@ -732,6 +738,13 @@ chat_provider_ids = ["test-token-limit"]
 # # Input fields the host fills on a task's call from the context it holds; the
 # # task's model is not asked for them (Word: "documentIdentity").
 # # child_host_inputs = ["documentIdentity"]
+# # How a task's calls reach the device (default: [delegation.tasks]
+# # child_dispatch). "durable" parks the task until a client of the user runs
+# # the call, so it waits for a pane that is not open yet and for an approval on
+# # the device until the durable table's attempt_expiry_secs. Needs child_access,
+# # a durable table and a host context that outlives the pane: outlook_mailbox,
+# # never word_document.
+# # child_dispatch = "durable"
 #
 # # Optional: replay this tool's calls from EARLIER user turns as bounded
 # # receipts instead of full arguments/results (default mode = "full"). The

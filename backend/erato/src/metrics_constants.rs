@@ -41,6 +41,8 @@ pub const POSTGRES_QUERY_DELIVERY_SWEEP_CLAIM: &str = "delivery_sweep_claim";
 pub const POSTGRES_QUERY_INTERRUPTED_PARTS_SCAN: &str = "interrupted_parts_scan";
 pub const POSTGRES_QUERY_INTERRUPTED_PARTS_SETTLE: &str = "interrupted_parts_settle";
 pub const POSTGRES_QUERY_INTERRUPTED_PARTS_LIVE_CHILDREN: &str = "interrupted_parts_live_children";
+pub const POSTGRES_QUERY_WAITING_PARENTS_SCAN: &str = "waiting_parents_scan";
+pub const POSTGRES_QUERY_WAITING_PARENT_SYNC: &str = "waiting_parent_sync";
 pub const POSTGRES_QUERY_DELIVERY_REARM: &str = "delivery_rearm";
 /// Terminal outcome of ONE delegated run, using the listing's own expression.
 pub const POSTGRES_QUERY_DELEGATED_RUN_OUTCOME: &str = "delegated_run_outcome";

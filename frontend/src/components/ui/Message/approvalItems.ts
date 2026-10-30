@@ -67,6 +67,14 @@ export const isChildItem = (
 ): boolean => item.child != null || kind === "delegated_task";
 
 /**
+ * Whether an item names a task child that waits for a client on the device
+ * rather than for a decision. Nobody decides it: it settles once the child's
+ * call ran and the child stopped again.
+ */
+export const isWaitingItem = (item: ApprovalItemPart): boolean =>
+  item.child?.waiting_for != null;
+
+/**
  * The digits below the millisecond of an RFC 3339 time. `Date.parse` stops at
  * the millisecond, and the server writes microseconds. Anchored, so matching
  * stays linear on any input.
@@ -112,8 +120,26 @@ export const itemAllowsAlways = (
 export interface ApprovalStopState {
   /** The items still waiting on the user; a decision must cover exactly these. */
   open: ApprovalItemPart[];
+  /** The task children this stop still waits for on the device. */
+  waiting: ApprovalItemPart[];
   /** How the stop settled, or `null` while any item is still open. */
   resolution: ToolApprovalStatus | null;
+}
+
+/** Where a stop sits in its message, which decides its waiting items. */
+export interface ApprovalStopPlacement {
+  /**
+   * The status of the message's last `tool_use` for each tool call id. A
+   * waiting item is open while its task's slot is `in_progress`. Without it,
+   * every waiting item of the last stop counts as open.
+   */
+  slots?: Readonly<Record<string, string | undefined>>;
+  /**
+   * Whether this is the message's last `tool_approval_request`. An earlier
+   * stop's waiting items were carried onto a later one or settled, so they
+   * never count.
+   */
+  isLastStop?: boolean;
 }
 
 /**
@@ -128,8 +154,17 @@ export interface ApprovalStopState {
 export const approvalStopState = (
   request: ApprovalRequestSummary,
   partsAfter: readonly { content_type: string }[],
+  { slots, isLastStop = true }: ApprovalStopPlacement = {},
 ): ApprovalStopState => {
-  const items = approvalItemsOf(request);
+  const all = approvalItemsOf(request);
+  const items = all.filter((item) => !isWaitingItem(item));
+  const waiting = isLastStop
+    ? all.filter(
+        (item) =>
+          isWaitingItem(item) &&
+          (slots === undefined || slots[item.tool_call_id] === "in_progress"),
+      )
+    : [];
   const decisions = partsAfter.flatMap((part) => {
     if (
       part.content_type !== "tool_approval" &&
@@ -170,10 +205,14 @@ export const approvalStopState = (
   );
   return {
     open: items.filter((_item, index) => settled[index] === undefined),
-    resolution: settled.some((status) => status === undefined)
-      ? null
-      : settled.every((status) => status === "approved")
-        ? "approved"
-        : "denied",
+    waiting,
+    // A stop of waiting children alone is settled by their slots, and nothing
+    // on it was ever denied.
+    resolution:
+      waiting.length > 0 || settled.some((status) => status === undefined)
+        ? null
+        : settled.every((status) => status === "approved")
+          ? "approved"
+          : "denied",
   };
 };

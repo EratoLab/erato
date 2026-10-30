@@ -119,7 +119,19 @@ pub(super) async fn authorize_open_operation(
                 && offer.binding == request.binding
         }));
     }
-    if crate::models::chat::chat_is_delegated_run(&chat) {
+    // In a task, only a granted call while its grant holds; the user's
+    // standing Never below still applies to it.
+    let delegated = crate::models::chat::chat_is_delegated_run(&chat);
+    if delegated != request.lineage.is_some()
+        || delegated
+            && !crate::services::delegated_client_tools::authorize_grant_operation(
+                state,
+                &chat,
+                request,
+                request.account_id,
+            )
+            .await?
+    {
         return Ok(false);
     }
     // A configured tool's call is never offered or dispatched under Never, so a
@@ -128,6 +140,11 @@ pub(super) async fn authorize_open_operation(
         == Some(&crate::models::user_preference::ClientToolDecision::NeverAllow)
     {
         return Ok(false);
+    }
+    // The grant, not the task turn's allowlist or registration, decides what
+    // a task may call.
+    if delegated {
+        return Ok(true);
     }
     Ok(state.config.client_tools.tools.values().any(|tool| {
         tool.qualified_name() == request.operation_id
@@ -274,6 +291,7 @@ pub async fn claim_client_operation(
         id,
         &request.binding,
         &registered,
+        &crate::services::client_tools::child_client_tools(&headers),
         request.user_confirmed,
     )
     .await
@@ -392,6 +410,19 @@ pub async fn continue_client_operation(
         .then(|| super::message_streaming::generation_request_context_from_headers(&headers));
     let request: OperationRequest =
         serde_json::from_value(row.request.clone()).map_err(|error| self::error(error.into()))?;
+    let lineage = request.lineage.is_some();
+    // A crashed continuation is reaped to `awaiting_approval`; an `errored`
+    // chat means it failed, and running it again would fail the same way.
+    if lineage && row.state == store::AttemptState::Continuing {
+        use sea_orm::EntityTrait;
+        let chat = crate::db::entity::prelude::Chats::find_by_id(row.chat_id)
+            .one(&state.db)
+            .await
+            .map_err(|error| self::error(error.into()))?;
+        if chat.is_some_and(|chat| chat.generation_state.as_deref() == Some("errored")) {
+            return Err((StatusCode::CONFLICT, "Operation continuation failed".into()));
+        }
+    }
     if let Some(context) = &context
         && (request.consent != crate::services::client_operations::ConsentPolicy::None
             || context.executor.as_ref() != Some(&request.binding)
@@ -428,13 +459,25 @@ pub async fn continue_client_operation(
         return Err(self::error(error));
     }
     tokio::spawn(async move {
+        let run = async {
+            let result = super::message_streaming::run_client_operation_continuation(
+                &task, &state, &policy, &me, id, context,
+            )
+            .await;
+            if result.is_err()
+                && lineage
+                && let Err(error) =
+                    store::end_failed_continuation(&state.db, id, task.generation_id).await
+            {
+                tracing::warn!(%error, attempt_id = %id, "Could not end a failed task call");
+            }
+            result
+        };
         let result = super::message_streaming::with_generation_task_lifecycle(
             &state.background_tasks,
             &task,
             row.chat_id,
-            super::message_streaming::run_client_operation_continuation(
-                &task, &state, &policy, &me, id, context,
-            ),
+            run,
         )
         .await;
         if let Err(error) = &result {

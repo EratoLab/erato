@@ -1,19 +1,32 @@
-//! Client tools in delegated tasks (ERMAIN-1001). A task that names a child
-//! facet is a client task for that facet's host. At launch it gets a grant for
-//! the read tools its parent turn was offered for that host; every later turn
-//! of the task is offered, and dispatches, exactly those tools while the grant
-//! holds, live over the executor stream of the grant's binding.
+//! Client tools in delegated tasks (ERMAIN-1001, ERMAIN-1032). A task that
+//! names a child facet is a client task for that facet's host. At launch it
+//! gets a grant for the read tools its parent turn was offered for that host;
+//! every later turn of the task is offered, and dispatches, exactly those tools
+//! while the grant holds: live over the executor stream of the grant's binding,
+//! or, for the grant's durable tools, as durable operations for that binding.
 
-use crate::config::{ClientToolChildAccess, ClientToolConfig, ClientToolHostContext, FacetsConfig};
+use crate::config::{
+    AppConfig, ChildDispatch, ClientToolChildAccess, ClientToolConfig, ClientToolHostContext,
+    FacetsConfig,
+};
+use crate::db::entity::messages;
 use crate::db::entity_ext::chats;
 use crate::models::chat::{ChatProvenance, ClientToolGrant};
+use crate::models::message::{
+    ApprovalItem, ChildApprovalRef, ChildWaitingFor, ContentPart, ContentPartToolApprovalRequest,
+    ToolCallStatus as MessageToolCallStatus, ToolUse,
+};
 use crate::models::user_preference::ClientToolDecision;
 use crate::server::api::v1beta::message_streaming::DelegationDispatchContext;
-use crate::services::client_operations::{ExecutorBinding, executor_stream};
+use crate::services::client_operations::{
+    ExecutorBinding, OperationRegistry, OperationRequest, executor_stream,
+};
 use crate::services::client_tools::{GrantedCall, OfferedClientTool};
+use crate::services::delegation::ChildWait;
 use crate::state::AppState;
+use eyre::Report;
 use sea_orm::prelude::Uuid;
-use serde_json::Value;
+use serde_json::{Value, json};
 
 /// The host a task is a client task for: that of the first facet it names
 /// with a `child_host_context`.
@@ -67,6 +80,30 @@ fn grantable(config: &ClientToolConfig, host: &str) -> bool {
         && config
             .host_context
             .is_some_and(|context| context.as_str() == host)
+}
+
+/// Whether a granted call of this tool waits durably for a client: the tool or
+/// the deployment asks for it, its host context outlives the pane session, it
+/// has a `[durable]` table and durable operations are on, so its kind exists.
+pub(crate) fn durable_dispatch(
+    config: &AppConfig,
+    registry: &OperationRegistry,
+    tool: &ClientToolConfig,
+) -> bool {
+    config.client_tools.durable_operations_enabled
+        && tool
+            .child_dispatch
+            .unwrap_or(config.delegation.tasks.child_dispatch)
+            == ChildDispatch::Durable
+        && tool
+            .host_context
+            .is_some_and(|host| host.outlives_pane_session())
+        && tool.durable.is_some()
+        && registry.for_operation(&tool.qualified_name()).is_some()
+}
+
+pub(crate) fn durable_eligible(app_state: &AppState, tool: &ClientToolConfig) -> bool {
+    durable_dispatch(&app_state.config, &app_state.client_operations, tool)
 }
 
 fn binding_host(binding: &ExecutorBinding) -> Option<&str> {
@@ -160,8 +197,15 @@ pub(crate) async fn resolve_grant(
         .map(|tool| tool.config.qualified_name())
         .collect();
     tools.sort();
+    let mut durable_tools: Vec<String> = granted
+        .iter()
+        .filter(|tool| durable_eligible(app_state, &tool.config))
+        .map(|tool| tool.config.qualified_name())
+        .collect();
+    durable_tools.sort();
     Ok(ClientToolGrant {
         tools,
+        durable_tools,
         binding: binding.clone(),
         owner_chat_id: context.origin_chat.id,
         owner_message_id,
@@ -171,14 +215,14 @@ pub(crate) async fn resolve_grant(
 
 /// The grant-level half of the offer predicate (contract §4): the run is on
 /// the grant's binding, nobody took it over, and the turn that owns the client
-/// context is still the one running in the parent chat.
+/// context still holds it: it runs, or it is parked on this task.
 pub fn grant_offer_allowed(
     grant: &ClientToolGrant,
     provenance: &ChatProvenance,
     executor: Option<&ExecutorBinding>,
-    owner_running: bool,
+    owner_holds: bool,
 ) -> bool {
-    executor == Some(&grant.binding) && provenance.adopted_at.is_none() && owner_running
+    executor == Some(&grant.binding) && provenance.adopted_at.is_none() && owner_holds
 }
 
 /// The tool-level half: listed in the grant, still `read` for the grant's
@@ -207,13 +251,14 @@ pub(crate) async fn granted_tools(
         .flatten()?;
     let provenance = configuration.provenance?;
     let grant = configuration.task?.client_grant?;
-    let owner_running = app_state
-        .background_tasks
-        .active_generation(&grant.owner_chat_id)
-        .await
-        .and_then(|generation| generation.message_id())
-        == Some(grant.owner_message_id);
-    if !grant_offer_allowed(&grant, &provenance, executor, owner_running) {
+    let owner_holds = match owner_holds_context(app_state, &grant, chat.id).await {
+        Ok(holds) => holds,
+        Err(error) => {
+            tracing::warn!(%error, "Cannot tell whether a grant's owner turn holds its context");
+            false
+        }
+    };
+    if !grant_offer_allowed(&grant, &provenance, executor, owner_holds) {
         return None;
     }
     let account_id = account_id?;
@@ -242,11 +287,165 @@ pub(crate) async fn granted_tools(
                     context_ref: grant.context_ref.clone(),
                     context_input: config.child_context_input.clone(),
                     host_inputs: config.child_host_inputs.clone(),
+                    durable: grant.durable_tools.contains(&qualified_name)
+                        && durable_eligible(app_state, config),
                 },
             ));
         }
     }
     Some((grant.binding, tools))
+}
+
+async fn owner_running(app_state: &AppState, grant: &ClientToolGrant) -> Result<bool, Report> {
+    Ok(app_state
+        .background_tasks
+        .try_active_generation(&grant.owner_chat_id)
+        .await?
+        .and_then(|generation| generation.message_id())
+        == Some(grant.owner_message_id))
+}
+
+/// The owner clause of the offer predicate: the grant's owner turn runs, or it
+/// is parked on this task.
+async fn owner_holds_context(
+    app_state: &AppState,
+    grant: &ClientToolGrant,
+    child_chat_id: Uuid,
+) -> Result<bool, Report> {
+    use sea_orm::EntityTrait;
+    if owner_running(app_state, grant).await? {
+        return Ok(true);
+    }
+    let Some(origin_chat) = chats::Entity::find_by_id(grant.owner_chat_id)
+        .one(&app_state.db)
+        .await?
+    else {
+        return Ok(false);
+    };
+    let Some(parent_message) = messages::Entity::find_by_id(grant.owner_message_id)
+        .one(&app_state.db)
+        .await?
+    else {
+        return Ok(false);
+    };
+    parked_on_child(&app_state.db, &origin_chat, &parent_message, child_chat_id).await
+}
+
+/// Whether the parent turn is parked on this child: its chat is not archived,
+/// it is the chat's latest message, and either its stop has an open item for
+/// the child or the child's slot still waits for a client outside any stop.
+/// Decision parts after the stop do not end it, so a decision continuation
+/// that is running or crashed keeps the calls it waits for.
+pub(crate) async fn parked_on_child<C: sea_orm::ConnectionTrait>(
+    conn: &C,
+    origin_chat: &chats::Model,
+    parent_message: &messages::Model,
+    child_chat_id: Uuid,
+) -> Result<bool, Report> {
+    if origin_chat.archived_at.is_some() || parent_message.chat_id != origin_chat.id {
+        return Ok(false);
+    }
+    let tip = crate::models::message::get_active_thread_tip(conn, &origin_chat.id).await?;
+    if tip.is_none_or(|tip| tip.id != parent_message.id) {
+        return Ok(false);
+    }
+    let content = crate::models::message::MessageSchema::validate(&parent_message.raw_message)?;
+    let on_stop =
+        crate::server::api::v1beta::message_streaming::parked_approval_state(&content.content)
+            .is_some_and(|state| {
+                state.open.iter().any(|item| {
+                    item.child
+                        .as_ref()
+                        .is_some_and(|child| child.child_chat_id == child_chat_id)
+                })
+            });
+    Ok(on_stop || slot_waits_for_client(&content.content, child_chat_id))
+}
+
+/// A child the turn could not carry on its stop (it ended on the tool-call
+/// limit, on its own durable operation, or on an error, or the user stopped
+/// the turn) still waits for its client: the slot says so until the child's
+/// own tail settles it.
+fn slot_waits_for_client(content: &[ContentPart], child_chat_id: Uuid) -> bool {
+    use crate::services::delegation::{DelegationRunReason, DelegationRunStatus};
+    content
+        .iter()
+        .rev()
+        .find_map(|part| match part {
+            ContentPart::ToolUse(tool_use)
+                if tool_use
+                    .output
+                    .as_ref()
+                    .is_some_and(|output| output["delegate_chat_id"] == json!(child_chat_id)) =>
+            {
+                Some(tool_use)
+            }
+            _ => None,
+        })
+        .is_some_and(|slot| {
+            let output = slot.output.as_ref().unwrap_or(&Value::Null);
+            slot.status == MessageToolCallStatus::InProgress
+                && output["status"] == DelegationRunStatus::InputRequired.as_str()
+                && output["reason"] == DelegationRunReason::ClientPending.as_str()
+        })
+}
+
+/// Whether a delegated chat's durable operation may still be handed to a
+/// client or settled by one. `Err` when something could not be read, so the
+/// caller answers without withdrawing; `Ok(false)` only on a definite refusal.
+pub(crate) async fn authorize_grant_operation(
+    app_state: &AppState,
+    chat: &chats::Model,
+    request: &OperationRequest,
+    account_id: Uuid,
+) -> Result<bool, Report> {
+    let Some(lineage) = request.lineage.as_ref().filter(|_| {
+        request.kind == crate::services::client_operations::client_tool::CLIENT_TOOL_KIND
+    }) else {
+        return Ok(false);
+    };
+    let Some(configuration) = crate::models::chat::parse_chat_configuration(chat)? else {
+        return Ok(false);
+    };
+    let (Some(provenance), Some(grant)) = (
+        configuration.provenance,
+        configuration.task.and_then(|task| task.client_grant),
+    ) else {
+        return Ok(false);
+    };
+    let Some(tool) = app_state
+        .config
+        .client_tools
+        .tools
+        .values()
+        .find(|tool| tool.qualified_name() == request.operation_id)
+    else {
+        return Ok(false);
+    };
+    let host_allows = binding_host(&grant.binding).is_some_and(|host| grantable(tool, host));
+    if request.binding != grant.binding
+        || provenance.adopted_at.is_some()
+        || !grant.tools.contains(&request.operation_id)
+        || !grant.durable_tools.contains(&request.operation_id)
+        || !host_allows
+        || !durable_eligible(app_state, tool)
+        || lineage.owner_chat_id != grant.owner_chat_id
+        || lineage.owner_message_id != grant.owner_message_id
+        || lineage.requesting_chat_id != request.chat_id
+        || lineage.requesting_message_id != request.message_id
+    {
+        return Ok(false);
+    }
+    let decision = crate::models::user_preference::find_client_tool_decision(
+        &app_state.db,
+        &account_id,
+        &request.operation_id,
+    )
+    .await?;
+    if decision == Some(ClientToolDecision::NeverAllow) {
+        return Ok(false);
+    }
+    owner_holds_context(app_state, &grant, chat.id).await
 }
 
 /// What the parent's trace reports as the part each granted read asked for:
@@ -291,6 +490,8 @@ pub struct GrantedCallSummary {
     pub freshness: Option<Value>,
     /// Granted calls the user declined.
     pub declined: u32,
+    /// Durable granted calls no client ran before they expired.
+    pub expired: u32,
 }
 
 /// Reads the granted calls off a child's stored answer parts.
@@ -314,9 +515,11 @@ pub fn granted_call_summary(grant: &ClientToolGrant, content: &[Value]) -> Grant
                     summary.freshness = Some(freshness);
                 }
             }
-            Some("cancelled") if output.get("reason").and_then(Value::as_str) == Some(DECLINED) => {
-                summary.declined += 1;
-            }
+            Some("cancelled") => match output.get("reason").and_then(Value::as_str) {
+                Some(DECLINED) => summary.declined += 1,
+                Some(EXPIRED) => summary.expired += 1,
+                _ => {}
+            },
             _ => {}
         }
     }
@@ -376,6 +579,33 @@ fn contract_freshness(freshness: &Value) -> Option<Value> {
 
 /// The outcome of a granted call the user declined.
 pub const DECLINED: &str = "declined";
+/// The outcome of a durable granted call no client ran in time.
+const EXPIRED: &str = "expired";
+
+/// The stored output of a granted call the user declined, on either path.
+pub fn declined_output(tool_name: &str) -> Value {
+    json!({
+        "status": "cancelled",
+        "reason": DECLINED,
+        "error": format!(
+            "The user declined this call, so the task has no result from '{tool_name}'; say in the answer what is missing because of it."
+        ),
+    })
+}
+
+/// What a task's model reads for a durable granted call that ended without a
+/// client's result. The child's continuation reads the stored output only.
+pub fn unanswered_grant_call_text(code: &str, tool_name: &str) -> Option<String> {
+    match code {
+        EXPIRED => Some(format!(
+            "No client ran this call before it expired, so the task has no result from '{tool_name}'; say in the answer what is missing because of it."
+        )),
+        "withdrawn" => Some(format!(
+            "This call was withdrawn because the task's parent turn moved on or the tool is no longer allowed, so the task has no result from '{tool_name}'; say in the answer what is missing."
+        )),
+        _ => None,
+    }
+}
 
 /// The input a granted call is dispatched with: the grant's context version
 /// in place of whatever the model put there, or nothing when the grant has
@@ -436,6 +666,603 @@ fn hide_inputs(schema: &mut Value, hidden: &[&str]) {
     }
 }
 
+/// What a waiting child's own rows say about its item on the parent's stop.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) enum ChildWaitState {
+    /// The child still runs, or its call has not completed.
+    Open,
+    /// The child stopped on an approval only the user can answer.
+    Convert(Box<ContentPartToolApprovalRequest>),
+    /// The child waits for a client again, on another call.
+    Rewait(ChildWait),
+    /// The child's turn is over: the slot's final output.
+    Settle { output: Value, failed: bool },
+}
+
+/// What applying a sync left open on the parent's stop.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub(crate) struct SyncOutcome {
+    pub changed: bool,
+    pub open_decidable: usize,
+    pub open_waiting: usize,
+}
+
+/// A parked parent after a sync, with what admission needs to resume it.
+#[derive(Debug, Clone)]
+pub(crate) struct Synced {
+    pub outcome: SyncOutcome,
+    pub generation_state: String,
+    pub expected_generation: Option<Uuid>,
+    pub unanswered: bool,
+    /// A continuation crashed before it answered: the message still carries
+    /// its in-flight marker, which a continuation that stops on purpose (the
+    /// content filter) clears. Read from the marker because the chat's
+    /// `errored` lasts only until the heartbeat cleanup clears an ended turn's
+    /// state, a minute later, and a task may wait far longer.
+    pub crashed: bool,
+}
+
+impl Synced {
+    /// Whether the parent can go on without the user: nothing is left to
+    /// decide, and either everything it waited for settled or a crashed
+    /// continuation has to re-park on what is still open. A turn that ended
+    /// and cleared its marker runs again only when the user asks.
+    pub(crate) fn resumable(&self) -> bool {
+        self.outcome.open_decidable == 0
+            && ((self.generation_state == "awaiting_approval"
+                && self.unanswered
+                && self.outcome.open_waiting == 0)
+                || self.crashed)
+    }
+}
+
+/// Reads, for every open waiting item of `content`'s stop, what its child's
+/// chat, call and row say now. Database reads only; a read that fails keeps
+/// the item open rather than settling it.
+pub(crate) async fn read_waiting_children<C: sea_orm::ConnectionTrait>(
+    conn: &C,
+    config: &AppConfig,
+    content: &[ContentPart],
+) -> Vec<(String, ChildWaitState)> {
+    let Some(state) = crate::server::api::v1beta::message_streaming::parked_approval_state(content)
+    else {
+        return Vec::new();
+    };
+    let mut states = Vec::new();
+    for item in state.waiting() {
+        let Some(child) = item.child.as_ref() else {
+            continue;
+        };
+        let Some(waiting_for) = child.waiting_for.as_ref() else {
+            continue;
+        };
+        let parked_output = slot(content, &item.tool_call_id).and_then(|slot| slot.output.clone());
+        let child_state = read_waiting_child(
+            conn,
+            config,
+            &item.tool_call_id,
+            child,
+            waiting_for.attempt_id,
+            parked_output.as_ref(),
+        )
+        .await;
+        states.push((item.approval_id.clone(), child_state));
+    }
+    states
+}
+
+async fn read_waiting_child<C: sea_orm::ConnectionTrait>(
+    conn: &C,
+    config: &AppConfig,
+    parent_tool_call_id: &str,
+    child: &ChildApprovalRef,
+    attempt_id: Uuid,
+    parked_output: Option<&Value>,
+) -> ChildWaitState {
+    use crate::db::entity::client_operation_attempts as attempts;
+    use crate::services::delegation::DelegationRunStatus;
+    use sea_orm::EntityTrait;
+
+    let gone = |error: &str| ChildWaitState::Settle {
+        output: json!({ "status": "failed", "error": error }),
+        failed: true,
+    };
+    let child_chat = match chats::Entity::find_by_id(child.child_chat_id)
+        .one(conn)
+        .await
+    {
+        Ok(Some(chat)) => chat,
+        Ok(None) => return gone("The delegated run no longer exists."),
+        Err(error) => {
+            tracing::warn!(%error, child_chat_id = %child.child_chat_id, "Failed to read a waiting child");
+            return ChildWaitState::Open;
+        }
+    };
+    // Nothing claims, continues or expires an archived chat's call, so its
+    // item would wait for ever. The run still exists, so the park's envelope
+    // is kept for its ids and the slot still links to it.
+    if child_chat.archived_at.is_some() {
+        let mut output = parked_output
+            .filter(|output| output.is_object())
+            .cloned()
+            .unwrap_or_else(|| json!({}));
+        if let Some(object) = output.as_object_mut() {
+            object.insert(
+                "status".to_string(),
+                json!(DelegationRunStatus::Failed.as_str()),
+            );
+            object.remove("reason");
+            object.insert(
+                "error".to_string(),
+                json!("The delegated run was archived."),
+            );
+        }
+        return ChildWaitState::Settle {
+            output,
+            failed: true,
+        };
+    }
+    // A running child may still be between two calls of its continuation:
+    // its row can end on anything until its turn is over.
+    if child_chat.generation_state.as_deref() == Some("running") {
+        return ChildWaitState::Open;
+    }
+    let errored = child_chat.generation_state.as_deref() == Some("errored");
+    match attempts::Entity::find_by_id(attempt_id).one(conn).await {
+        Ok(Some(attempt)) if attempt.chat_id == child.child_chat_id => {
+            // A crashed continuation is reaped to `awaiting_approval` and runs
+            // again; one that failed leaves its chat `errored`, and nothing
+            // continues it any more.
+            let failed_continuation =
+                attempt.state == attempts::AttemptState::Continuing && errored;
+            if attempt.state != attempts::AttemptState::Completed && !failed_continuation {
+                return ChildWaitState::Open;
+            }
+        }
+        Ok(_) => return gone("The delegated run's call no longer exists."),
+        Err(error) => {
+            tracing::warn!(%error, %attempt_id, "Failed to read a waiting child's call");
+            return ChildWaitState::Open;
+        }
+    }
+    let row = match messages::Entity::find_by_id(child.child_message_id)
+        .one(conn)
+        .await
+    {
+        Ok(Some(row)) if row.chat_id == child.child_chat_id => row,
+        Ok(_) => return gone("The delegated run's answer no longer exists."),
+        Err(error) => {
+            tracing::warn!(%error, child_chat_id = %child.child_chat_id, "Failed to read a waiting child's row");
+            return ChildWaitState::Open;
+        }
+    };
+    let Ok(parsed) = crate::models::message::MessageSchema::validate(&row.raw_message) else {
+        return gone("The delegated run's answer could not be read.");
+    };
+    let parked = child_chat.generation_state.as_deref() == Some("awaiting_approval");
+    let stopped = match parsed.content.last() {
+        Some(ContentPart::ToolApprovalRequest(request)) => {
+            if parked {
+                return ChildWaitState::Convert(Box::new(request.clone()));
+            }
+            true
+        }
+        Some(ContentPart::ClientToolPending(_)) => {
+            if parked
+                && let Some(wait) = crate::services::delegation::read_child_wait(
+                    conn,
+                    child.child_chat_id,
+                    child.child_message_id,
+                )
+                .await
+                && wait.attempt_id != attempt_id
+            {
+                return ChildWaitState::Rewait(wait);
+            }
+            true
+        }
+        _ => false,
+    };
+    // Only a completed continuation drops its call's pending part, so a row
+    // that still holds it never got an answer. An `errored` chat alone does
+    // not say that: a replica that died after the completion is reaped to it.
+    let answered = !parsed.content.iter().any(|part| {
+        matches!(part, ContentPart::ClientToolPending(pending) if pending.attempt_id == attempt_id)
+    });
+    // A stop nobody can carry on from is the run's end, not a result.
+    let requested = if stopped || (errored && !answered) {
+        DelegationRunStatus::Failed
+    } else {
+        DelegationRunStatus::Completed
+    };
+    let spawned_at = crate::models::chat::parse_chat_configuration(&child_chat)
+        .ok()
+        .flatten()
+        .and_then(|configuration| configuration.provenance)
+        .and_then(|provenance| provenance.rebase_cutoff)
+        .unwrap_or(child_chat.created_at);
+    let envelope = crate::services::delegation::build_result_envelope(
+        conn,
+        child.child_chat_id,
+        child.child_message_id,
+        spawned_at,
+        child_chat.assistant_id,
+        None,
+        crate::services::delegation::task_model_report_for_chat(config, &child_chat),
+        parent_tool_call_id.to_string(),
+        requested,
+        None,
+        false,
+        config.delegation.result_max_chars,
+    )
+    .await;
+    ChildWaitState::Settle {
+        failed: envelope.status != DelegationRunStatus::Completed,
+        output: crate::services::delegation::resumed_slot_output(&envelope, parked_output, None),
+    }
+}
+
+/// The slot an item settles: the last tool part with its call id.
+fn slot<'a>(content: &'a [ContentPart], tool_call_id: &str) -> Option<&'a ToolUse> {
+    content.iter().rev().find_map(|part| match part {
+        ContentPart::ToolUse(tool_use) if tool_use.tool_call_id == tool_call_id => Some(tool_use),
+        _ => None,
+    })
+}
+
+fn slot_mut<'a>(content: &'a mut [ContentPart], tool_call_id: &str) -> Option<&'a mut ToolUse> {
+    content.iter_mut().rev().find_map(|part| match part {
+        ContentPart::ToolUse(tool_use) if tool_use.tool_call_id == tool_call_id => Some(tool_use),
+        _ => None,
+    })
+}
+
+/// Applies what [`read_waiting_children`] read to the parent's row. With
+/// `convert_in_place` an item whose child now asks becomes an approval item
+/// on the same stop; without it the item stays as it is, for a caller that
+/// carries the child onto a new stop.
+pub(crate) fn apply_waiting_sync(
+    content: &mut [ContentPart],
+    states: &[(String, ChildWaitState)],
+    convert_in_place: bool,
+) -> SyncOutcome {
+    use crate::server::api::v1beta::message_streaming::{ParkedChild, parked_child_approval_item};
+    use crate::services::delegation::{ChildStop, DelegationRunReason};
+
+    let mut changed = false;
+    let Some(stop_index) = content
+        .iter()
+        .rposition(|part| matches!(part, ContentPart::ToolApprovalRequest(_)))
+    else {
+        return SyncOutcome::default();
+    };
+    for (approval_id, state) in states {
+        let item = match &content[stop_index] {
+            ContentPart::ToolApprovalRequest(request) => request
+                .approval_items()
+                .into_iter()
+                .find(|item| &item.approval_id == approval_id),
+            _ => None,
+        };
+        let Some(item) = item else {
+            continue;
+        };
+        match state {
+            ChildWaitState::Open => {}
+            ChildWaitState::Settle { output, failed } => {
+                if let Some(slot) = slot_mut(content, &item.tool_call_id) {
+                    slot.status = if *failed {
+                        MessageToolCallStatus::Error
+                    } else {
+                        MessageToolCallStatus::Success
+                    };
+                    slot.output = Some(output.clone());
+                    slot.ended_at = Some(chrono::Utc::now().to_rfc3339());
+                    changed = true;
+                }
+            }
+            ChildWaitState::Convert(request) => {
+                if let Some(slot) = slot_mut(content, &item.tool_call_id)
+                    && let Some(output) = slot.output.as_mut().and_then(Value::as_object_mut)
+                {
+                    output.insert(
+                        "reason".to_string(),
+                        json!(DelegationRunReason::ApprovalPending.as_str()),
+                    );
+                    changed = true;
+                }
+                if convert_in_place && let Some(child) = item.child.as_ref() {
+                    let converted = parked_child_approval_item(&ParkedChild {
+                        tool_call: genai::chat::ToolCall {
+                            call_id: item.tool_call_id.clone(),
+                            fn_name: item.tool_name.clone(),
+                            fn_arguments: item.input.clone(),
+                            thought_signatures: None,
+                        },
+                        child_chat_id: child.child_chat_id,
+                        child_message_id: child.child_message_id,
+                        stop: ChildStop::Approval(request.clone()),
+                    });
+                    replace_item(&mut content[stop_index], approval_id, converted);
+                    changed = true;
+                }
+            }
+            ChildWaitState::Rewait(wait) => {
+                let mut rewritten = item.clone();
+                if let Some(child) = rewritten.child.as_mut() {
+                    child.child_tool_call_id = wait.tool_call_id.clone();
+                    child.tool_name = wait.tool_name.clone();
+                    child.mcp_server_id = wait.namespace.clone();
+                    child.input = wait.input.clone();
+                    child.requested_at = wait.requested_at.clone();
+                    child.waiting_for = Some(ChildWaitingFor {
+                        host_context: wait.host_context.clone(),
+                        attempt_id: wait.attempt_id,
+                    });
+                }
+                if rewritten != item {
+                    replace_item(&mut content[stop_index], approval_id, rewritten);
+                    changed = true;
+                }
+            }
+        }
+    }
+    let (open_decidable, open_waiting) =
+        crate::server::api::v1beta::message_streaming::parked_approval_state(content)
+            .map(|state| (state.decidable().len(), state.waiting().len()))
+            .unwrap_or_default();
+    SyncOutcome {
+        changed,
+        open_decidable,
+        open_waiting,
+    }
+}
+
+fn replace_item(part: &mut ContentPart, approval_id: &str, replacement: ApprovalItem) {
+    let ContentPart::ToolApprovalRequest(request) = part else {
+        return;
+    };
+    if request.approvals.is_empty() {
+        request.approvals = request.approval_items();
+    }
+    if let Some(item) = request
+        .approvals
+        .iter_mut()
+        .find(|item| item.approval_id == approval_id)
+    {
+        *item = replacement;
+    }
+}
+
+/// Brings a parked parent's waiting items up to date with their children,
+/// under the parent chat's advisory lock, and says whether it can go on.
+///
+/// Only a parent whose latest message still waits on its tasks is touched:
+/// the chat is not archived, no generation runs on it, and the message's last
+/// stop has waiting items. Its state says nothing more: a turn that ended
+/// without re-parking is cleared by the heartbeat cleanup a minute later, and
+/// its slots still have to settle. Idempotent, and safe to run from any tail,
+/// any replica and the cleanup sweep.
+pub(crate) async fn sync_waiting_parent(
+    db: &sea_orm::DatabaseConnection,
+    config: &AppConfig,
+    parent_chat_id: Uuid,
+    parent_message_id: Uuid,
+) -> Result<Option<Synced>, Report> {
+    use crate::query_metrics::named_statement_from_sql_and_values;
+    use sea_orm::{ConnectionTrait, EntityTrait, TransactionTrait};
+
+    let tx = db.begin().await?;
+    tx.query_one_raw(named_statement_from_sql_and_values(
+        sea_orm::DatabaseBackend::Postgres,
+        crate::metrics_constants::POSTGRES_QUERY_WAITING_PARENT_SYNC,
+        "SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))",
+        [parent_chat_id.to_string().into()],
+    ))
+    .await?;
+    let Some(chat) = chats::Entity::find_by_id(parent_chat_id).one(&tx).await? else {
+        return Ok(None);
+    };
+    let generation_state = chat.generation_state.clone().unwrap_or_default();
+    if chat.archived_at.is_some() || generation_state == "running" {
+        return Ok(None);
+    }
+    let tip = crate::models::message::get_active_thread_tip(&tx, &parent_chat_id).await?;
+    if tip.as_ref().is_none_or(|tip| tip.id != parent_message_id) {
+        return Ok(None);
+    }
+    let Some(message) = messages::Entity::find_by_id(parent_message_id)
+        .one(&tx)
+        .await?
+        .filter(|message| message.chat_id == parent_chat_id)
+    else {
+        return Ok(None);
+    };
+    let mut parsed = crate::models::message::MessageSchema::validate(&message.raw_message)?;
+    let Some(state) =
+        crate::server::api::v1beta::message_streaming::parked_approval_state(&parsed.content)
+    else {
+        return Ok(None);
+    };
+    let has_waiting_items = state
+        .request
+        .approval_items()
+        .iter()
+        .any(crate::server::api::v1beta::message_streaming::is_waiting_item);
+    if !has_waiting_items {
+        return Ok(None);
+    }
+    let crashed = matches!(generation_state.as_str(), "errored" | "")
+        && crate::server::api::v1beta::message_streaming::continuation_owes_an_answer(&message);
+    let states = read_waiting_children(&tx, config, &parsed.content).await;
+    let outcome = apply_waiting_sync(&mut parsed.content, &states, true);
+    if outcome.changed {
+        let raw_message = parsed.to_json()?;
+        // A row that no longer reads is worse than one that waits a little
+        // longer: the next tail or sweep tries again.
+        crate::models::message::MessageSchema::validate(&raw_message)?;
+        tx.execute_raw(named_statement_from_sql_and_values(
+            sea_orm::DatabaseBackend::Postgres,
+            crate::metrics_constants::POSTGRES_QUERY_WAITING_PARENT_SYNC,
+            r#"UPDATE messages SET raw_message = $1::jsonb, updated_at = now() WHERE id = $2"#,
+            [raw_message.to_string().into(), parent_message_id.into()],
+        ))
+        .await?;
+    }
+    tx.commit().await?;
+    Ok(Some(Synced {
+        outcome,
+        generation_state,
+        expected_generation: chat.active_generation_id,
+        unanswered: state.unanswered,
+        crashed,
+    }))
+}
+
+/// How many parked parents one sweep looks at.
+const WAITING_PARENTS_BATCH: i64 = 100;
+
+/// Where the next waiting-parents sweep starts. Parents are visited in chat
+/// order and the sweep wraps around, so a batch that keeps matching cannot
+/// hide the parents after it.
+#[derive(Debug, Clone, Default)]
+pub struct WaitingParentsCursor(std::sync::Arc<std::sync::Mutex<Option<Uuid>>>);
+
+impl WaitingParentsCursor {
+    fn get(&self) -> Option<Uuid> {
+        *self
+            .0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+
+    fn set(&self, after: Option<Uuid>) {
+        *self
+            .0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = after;
+    }
+}
+
+/// The parked parents a sync is expected to move, after `after` in chat
+/// order, at most one sweep's batch: a waiting item on the tip's last stop,
+/// the only one a sync reads, whose slot is still open while its call has
+/// completed, or failed in a continuation, or whose child was archived, on a
+/// child that no longer runs. A sync can still leave one as it was (a row it
+/// cannot read, a read that fails), which is why the sweep pages.
+pub async fn scan_waiting_parents(
+    db: &sea_orm::DatabaseConnection,
+    after: Option<Uuid>,
+) -> Result<Vec<(Uuid, Uuid)>, sea_orm::DbErr> {
+    use crate::query_metrics::named_statement_from_sql_and_values;
+    use sea_orm::{ConnectionTrait, TryGetable};
+
+    let statement = named_statement_from_sql_and_values(
+        sea_orm::DatabaseBackend::Postgres,
+        crate::metrics_constants::POSTGRES_QUERY_WAITING_PARENTS_SCAN,
+        r#"
+        SELECT c.id AS chat_id, tip.id AS message_id
+        FROM chats c
+        CROSS JOIN LATERAL (
+            SELECT m.id, m.raw_message
+            FROM messages m
+            WHERE m.chat_id = c.id AND m.is_message_in_active_thread
+            ORDER BY m.created_at DESC, m.id DESC
+            LIMIT 1
+        ) tip
+        WHERE c.archived_at IS NULL
+          AND c.generation_state IS DISTINCT FROM 'running'
+          AND ($2::uuid IS NULL OR c.id > $2)
+          AND tip.raw_message -> 'content'
+            @> '[{"content_type":"tool_approval_request","approvals":[{"child":{"waiting_for":{}}}]}]'::jsonb
+          AND EXISTS (
+            SELECT 1
+            FROM jsonb_array_elements(tip.raw_message -> 'content')
+                WITH ORDINALITY AS stop(part, position)
+            CROSS JOIN LATERAL jsonb_array_elements(
+                CASE WHEN jsonb_typeof(stop.part -> 'approvals') = 'array'
+                     THEN stop.part -> 'approvals' ELSE '[]'::jsonb END
+            ) AS item(value)
+            JOIN client_operation_attempts a ON a.attempt_id = CASE
+                WHEN item.value #>> '{child,waiting_for,attempt_id}'
+                    ~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+                THEN (item.value #>> '{child,waiting_for,attempt_id}')::uuid
+            END
+            JOIN chats child ON child.id = a.chat_id
+            WHERE stop.part ->> 'content_type' = 'tool_approval_request'
+              AND stop.position = (
+                SELECT max(last_stop.position)
+                FROM jsonb_array_elements(tip.raw_message -> 'content')
+                    WITH ORDINALITY AS last_stop(part, position)
+                WHERE last_stop.part ->> 'content_type' = 'tool_approval_request'
+              )
+              AND child.generation_state IS DISTINCT FROM 'running'
+              AND (a.state = 'completed'
+                OR (a.state = 'continuing' AND child.generation_state = 'errored')
+                OR child.archived_at IS NOT NULL)
+              AND (
+                SELECT slot.part ->> 'status'
+                FROM jsonb_array_elements(tip.raw_message -> 'content')
+                    WITH ORDINALITY AS slot(part, position)
+                WHERE slot.part ->> 'content_type' = 'tool_use'
+                  AND slot.part ->> 'tool_call_id' = item.value ->> 'tool_call_id'
+                ORDER BY slot.position DESC
+                LIMIT 1
+              ) = 'in_progress'
+          )
+        ORDER BY c.id
+        LIMIT $1
+        "#,
+        [WAITING_PARENTS_BATCH.into(), after.into()],
+    );
+    Ok(db
+        .query_all_raw(statement)
+        .await?
+        .iter()
+        .filter_map(|row| {
+            Some((
+                Uuid::try_get(row, "", "chat_id").ok()?,
+                Uuid::try_get(row, "", "message_id").ok()?,
+            ))
+        })
+        .collect())
+}
+
+/// Syncs the parents [`scan_waiting_parents`] finds, for a child whose tail
+/// never ran (a crash between its completion and its tail). Starts no
+/// generation: a parent left with nothing open is resumed by the next tail or
+/// by the open parent chat. Returns how many parents changed.
+pub async fn sweep_waiting_parents(
+    db: &sea_orm::DatabaseConnection,
+    config: &AppConfig,
+    cursor: &WaitingParentsCursor,
+) -> usize {
+    let parents = match scan_waiting_parents(db, cursor.get()).await {
+        Ok(parents) => parents,
+        Err(error) => {
+            tracing::warn!(%error, "The waiting-parents sweep could not scan");
+            return 0;
+        }
+    };
+    let full = parents.len() as i64 >= WAITING_PARENTS_BATCH;
+    let mut changed = 0;
+    for &(chat_id, message_id) in &parents {
+        match sync_waiting_parent(db, config, chat_id, message_id).await {
+            Ok(Some(synced)) if synced.outcome.changed => changed += 1,
+            Ok(_) => {}
+            Err(error) => {
+                tracing::warn!(%error, %chat_id, "Could not sync a parent waiting for its tasks");
+            }
+        }
+    }
+    cursor.set(if full {
+        parents.last().map(|&(chat_id, _)| chat_id)
+    } else {
+        None
+    });
+    changed
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -459,6 +1286,7 @@ mod tests {
     fn grant() -> ClientToolGrant {
         ClientToolGrant {
             tools: vec!["word/read_document_blocks".into()],
+            durable_tools: Vec::new(),
             binding: binding("word_document", "pane-one"),
             owner_chat_id: Uuid::new_v4(),
             owner_message_id: Uuid::new_v4(),
@@ -563,6 +1391,7 @@ mod tests {
             context_ref: Some("server-token".into()),
             context_input: Some("snapshot".into()),
             host_inputs: Vec::new(),
+            durable: false,
         };
         let input = json!({"snapshot": "forged", "part": "intro"});
         assert_eq!(
@@ -607,6 +1436,7 @@ mod tests {
             context_ref: Some("server-token".into()),
             context_input: Some("snapshot".into()),
             host_inputs: vec!["documentIdentity".into()],
+            durable: false,
         };
         let variant = |extra: &str| {
             json!({"type": "object",
@@ -717,7 +1547,7 @@ mod tests {
     }
 
     #[test]
-    fn the_summary_keeps_the_last_freshness_and_counts_declined_granted_calls() {
+    fn the_summary_keeps_the_last_freshness_and_counts_declined_and_expired_granted_calls() {
         let part = |tool: &str, output: Value| {
             json!({"content_type": "tool_use", "tool_call_id": "c", "tool_name": tool,
                    "status": "success", "output": output})
@@ -739,6 +1569,14 @@ mod tests {
             part("search_web", fresh("elsewhere")),
             part("search_web", declined.clone()),
             part(READ_NAME, declined),
+            part(
+                READ_NAME,
+                json!({"status": "cancelled", "reason": "expired", "error": "e"}),
+            ),
+            part(
+                "search_web",
+                json!({"status": "cancelled", "reason": "expired"}),
+            ),
             json!({"content_type": "text", "text": "answer"}),
         ];
         assert_eq!(
@@ -746,6 +1584,7 @@ mod tests {
             GrantedCallSummary {
                 freshness: Some(json!({"changes": "in-scope"})),
                 declined: 2,
+                expired: 1,
             }
         );
         assert_eq!(
@@ -775,6 +1614,93 @@ mod tests {
                 vec![vec!["range".to_string(), "start".to_string()]],
             )])
         );
+    }
+
+    #[test]
+    fn a_grant_without_durable_tools_reads_as_live() {
+        let grant = grant();
+        let mut stored = serde_json::to_value(&grant).unwrap();
+        assert!(stored.get("durable_tools").is_none());
+        stored.as_object_mut().unwrap().remove("durable_tools");
+        let read: ClientToolGrant = serde_json::from_value(stored).unwrap();
+        assert!(read.durable_tools.is_empty());
+        assert_eq!(read, grant);
+        let durable = ClientToolGrant {
+            durable_tools: vec!["word/read_document_blocks".into()],
+            ..grant
+        };
+        assert_eq!(
+            serde_json::to_value(&durable).unwrap()["durable_tools"],
+            json!(["word/read_document_blocks"])
+        );
+    }
+
+    #[test]
+    fn durable_eligible_needs_flag_table_host_and_kind() {
+        let mail_read = ClientToolConfig {
+            name: "read_message".into(),
+            namespace: Some("outlook".into()),
+            parameters: r#"{"type":"object"}"#.into(),
+            child_access: ClientToolChildAccess::Read,
+            host_context: Some(ClientToolHostContext::OutlookMailbox),
+            child_dispatch: Some(ChildDispatch::Durable),
+            durable: Some(crate::config::ClientToolDurableConfig {
+                host_context: ClientToolHostContext::OutlookMailbox,
+                result_schema: None,
+                attempt_expiry_secs: 3600,
+                claim_lease_secs: 120,
+            }),
+            ..Default::default()
+        };
+        let eligible = |config: &mut AppConfig, tool: &ClientToolConfig| {
+            config.client_tools.tools.clear();
+            config
+                .client_tools
+                .tools
+                .insert("tool".into(), tool.clone());
+            let registry =
+                crate::services::client_operations::registry(config, None).expect("registry");
+            durable_dispatch(config, &registry, tool)
+        };
+        let mut config = AppConfig::default();
+        config.client_tools.durable_operations_enabled = true;
+        assert!(eligible(&mut config, &mail_read));
+
+        config.client_tools.durable_operations_enabled = false;
+        assert!(!eligible(&mut config, &mail_read));
+        config.client_tools.durable_operations_enabled = true;
+
+        let live = ClientToolConfig {
+            child_dispatch: Some(ChildDispatch::Live),
+            ..mail_read.clone()
+        };
+        assert!(!eligible(&mut config, &live));
+        let by_default = ClientToolConfig {
+            child_dispatch: None,
+            ..mail_read.clone()
+        };
+        assert!(!eligible(&mut config, &by_default));
+        config.delegation.tasks.child_dispatch = ChildDispatch::Durable;
+        assert!(eligible(&mut config, &by_default));
+        assert!(!eligible(&mut config, &live));
+
+        let without_table = ClientToolConfig {
+            durable: None,
+            ..mail_read.clone()
+        };
+        assert!(!eligible(&mut config, &without_table));
+        let word = ClientToolConfig {
+            host_context: Some(ClientToolHostContext::WordDocument),
+            durable: Some(crate::config::ClientToolDurableConfig {
+                host_context: ClientToolHostContext::WordDocument,
+                ..mail_read.durable.clone().unwrap()
+            }),
+            ..mail_read.clone()
+        };
+        assert!(!eligible(&mut config, &word));
+
+        let registry = crate::services::client_operations::OperationRegistry::default();
+        assert!(!durable_dispatch(&config, &registry, &mail_read));
     }
 
     #[test]

@@ -3982,6 +3982,96 @@ child_context_input = "snapshot""#,
     );
 }
 
+fn migrate_mail_read_tool(tool_toml: &str) -> AppConfig {
+    migrate_config_with_action_facets(&format!(
+        r#"
+[client_tools.tools.read_mail]
+name = "read_message"
+namespace = "outlook"
+description = "Read a message"
+parameters = '{{"type":"object"}}'
+{tool_toml}
+"#
+    ))
+}
+
+#[test]
+#[should_panic(expected = "word_document does not")]
+fn child_dispatch_durable_is_refused_for_word_document() {
+    migrate_child_read_tool(
+        r#"child_access = "read"
+host_context = "word_document"
+child_dispatch = "durable"
+[client_tools.tools.read_blocks.durable]
+host_context = "word_document""#,
+    );
+}
+
+#[test]
+#[should_panic(expected = "sets child_dispatch, which requires child_access = \"read\"")]
+fn child_dispatch_requires_child_access_read() {
+    migrate_mail_read_tool(
+        r#"host_context = "outlook_mailbox"
+child_dispatch = "live""#,
+    );
+}
+
+#[test]
+#[should_panic(expected = "child_dispatch = \"durable\", which requires a [durable] table")]
+fn child_dispatch_durable_requires_a_durable_table() {
+    migrate_mail_read_tool(
+        r#"child_access = "read"
+host_context = "outlook_mailbox"
+child_dispatch = "durable""#,
+    );
+}
+
+#[test]
+fn child_dispatch_durable_loads_for_outlook_mailbox_with_a_durable_table() {
+    let config = migrate_mail_read_tool(
+        r#"child_access = "read"
+host_context = "outlook_mailbox"
+child_dispatch = "durable"
+[client_tools.tools.read_mail.durable]
+host_context = "outlook_mailbox"
+attempt_expiry_secs = 86400"#,
+    );
+    let tool = &config.client_tools.tools["read_mail"];
+    assert_eq!(
+        tool.child_dispatch,
+        Some(erato::config::ChildDispatch::Durable)
+    );
+    assert_eq!(
+        config.delegation.tasks.child_dispatch,
+        erato::config::ChildDispatch::Live
+    );
+    assert_eq!(
+        migrate_mail_read_tool("").client_tools.tools["read_mail"].child_dispatch,
+        None
+    );
+}
+
+#[test]
+fn a_durable_deployment_default_loads_beside_word_read_tools() {
+    let config = migrate_child_read_tool(
+        r#"child_access = "read"
+host_context = "word_document"
+[client_tools.tools.read_blocks.durable]
+host_context = "word_document"
+
+[delegation.tasks]
+child_dispatch = "durable""#,
+    );
+    assert_eq!(
+        config.delegation.tasks.child_dispatch,
+        erato::config::ChildDispatch::Durable
+    );
+    assert_eq!(
+        config.client_tools.tools["read_blocks"].child_dispatch,
+        None
+    );
+}
+
 fn migrate_child_facet(facet_toml: &str) -> AppConfig {
     migrate_config_with_action_facets(&format!(
         r#"

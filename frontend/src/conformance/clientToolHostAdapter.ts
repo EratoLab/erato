@@ -3,9 +3,10 @@
  * a grant (contract §7, §9 and §10). A host runs it against its own handlers.
  * It reports failures rather than asserting: each side ends with one
  * `expect(failures).toEqual([])`. Executors are looked up in the shared
- * registry and called with a `hostGrant` built as `handleClientToolCall`
- * builds it. Write tools are only checked to be registered without
- * `acceptsGrantCalls`: the dispatcher answers a grant call to such a tool with
+ * registry and called with a `hostGrant` built as `runClientToolCall` builds
+ * it. Write tools are only checked to be registered without
+ * `acceptsGrantCalls`: `runClientToolCall`, which the live dispatcher and the
+ * parked-operation handler both use, answers a grant call to such a tool with
  * an error and never runs it, and it is the only place a `hostGrant` is made.
  * Waits use `setTimeout`, so run it with real timers.
  */
@@ -78,8 +79,8 @@ export interface ClientToolHostConformanceHarness {
   }[];
   /**
    * A read that asks on the device, and how the user answers it. A decline
-   * answers with the `declined` code; the backend does not map that code to
-   * the `declined` outcome yet (ERMAIN-1034).
+   * answers with the `declined` code, which the durable path reports as the
+   * `declined` outcome; the live path does not map it yet (ERMAIN-1034).
    */
   deviceApproval?: {
     read: ClientToolHostCall;

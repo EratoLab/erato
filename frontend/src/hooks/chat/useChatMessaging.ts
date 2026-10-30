@@ -98,6 +98,7 @@ import {
 } from "./useChatHistory";
 import { useExplicitNavigation } from "./useExplicitNavigation";
 import { useReactToTaskResult } from "./useReactToTaskResult";
+import { useResumeSettledWaitingStop } from "./useResumeSettledWaitingStop";
 
 import type { SeedableApprovalItem, SettledApproval } from "./approvalSeeding";
 import type { SendMessagePreparation } from "./sendMessagePreparation";
@@ -149,6 +150,11 @@ export interface ContinueToolApprovalInput {
    * answer a uniform card gave the whole stop.
    */
   itemDecisions?: DecidedApproval[];
+  /**
+   * Name every decided item even when there is one: set while tasks on the
+   * stop still wait, so one that turns into a question is reported back.
+   */
+  enumerate?: boolean;
   /**
    * The stop's open items, so the seeded parts can be numbered the way the
    * server numbers them. Without them only the flat fields are seeded, which is
@@ -2669,9 +2675,17 @@ export function useChatMessaging(
       mcpServerId,
       approvalIds,
       itemDecisions,
+      enumerate,
       items,
       kind,
-    }: ContinueToolApprovalInput): Promise<void> => {
+      nothingToDecide = false,
+    }: ContinueToolApprovalInput & {
+      /**
+       * Resumes a stop whose waiting tasks all finished and that has nothing
+       * left to decide: no decision is seeded or sent.
+       */
+      nothingToDecide?: boolean;
+    }): Promise<void> => {
       // A park settles through the same completion refetch as any turn, and
       // that refetch resets the streaming buffer when it lands. A decision
       // taken inside that window would seed a buffer the refetch then wipes,
@@ -2705,8 +2719,9 @@ export function useChatMessaging(
       // In the row's order, which is the order the server settles them in.
       // Without the items only the flat fields are known, which describes
       // exactly one.
-      const settled: SettledApproval[] =
-        items && items.length > 0
+      const settled: SettledApproval[] = nothingToDecide
+        ? []
+        : items && items.length > 0
           ? items.map((item) => ({
               item,
               decision:
@@ -2920,12 +2935,19 @@ export function useChatMessaging(
               ...getClientToolHeaders(),
             },
             body: JSON.stringify(
-              buildContinueStreamBody({
-                messageId,
-                decision,
-                approvalIds,
-                itemDecisions,
-              }),
+              nothingToDecide
+                ? {
+                    message_id: messageId,
+                    decisions: [],
+                    shows_child_items: true,
+                  }
+                : buildContinueStreamBody({
+                    messageId,
+                    decision,
+                    approvalIds,
+                    itemDecisions,
+                    enumerate,
+                  }),
             ),
           },
         );
@@ -2974,6 +2996,43 @@ export function useChatMessaging(
     handoffSubmitKey === streamKey ||
     streaming.isStreaming ||
     streaming.isFinalizing;
+
+  const resumeSettledStop = useCallback(
+    (messageId: string, toolCallId: string) =>
+      continueToolApproval({
+        messageId,
+        decision: "approve",
+        toolCallId,
+        toolName: "",
+        mcpServerId: "",
+        nothingToDecide: true,
+      }),
+    [continueToolApproval],
+  );
+  const attachToResumedTurn = useCallback(
+    (targetChatId: string) => {
+      attachToServerGeneration({
+        reason: "settled-waiting-stop",
+        chatId: targetChatId,
+        dedupe: false,
+      });
+    },
+    [attachToServerGeneration],
+  );
+  const refetchSettledStop = useCallback(
+    () =>
+      handleRefetchAndClear({ logContext: "Settled waiting stop moved on" }),
+    [handleRefetchAndClear],
+  );
+  useResumeSettledWaitingStop({
+    chatId,
+    messages,
+    messageOrder,
+    isBusy: isPendingResponse,
+    resume: resumeSettledStop,
+    attach: attachToResumedTurn,
+    refetch: refetchSettledStop,
+  });
 
   return {
     messages,

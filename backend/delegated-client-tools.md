@@ -2,11 +2,13 @@
 
 A delegated task can read through the client its parent turn was sent from,
 for example the Word pane, under a grant the server writes when the task
-launches. This record describes the host-neutral core (ERMAIN-1001). The
+launches. This record describes the host-neutral core (ERMAIN-1001) and the
+slow path, where a task's call waits durably for a client (ERMAIN-1032). The
 contract is the Linear document "Contract: delegated tasks with client tools",
 sections 2 to 10. Hosts implement their side separately (Word ERMAIN-1003,
-Outlook ERMAIN-1006). Nothing is enabled by default: no shipped configuration
-sets `child_access` or `child_host_context`.
+Outlook ERMAIN-1006, the desktop sidecar ERMAIN-1034). Nothing is enabled by
+default: no shipped configuration sets `child_access`, `child_host_context` or
+`child_dispatch`, and `client_tools.durable_operations_enabled` is off.
 
 ## Eligibility
 
@@ -20,7 +22,15 @@ sets `child_access` or `child_host_context`.
   - two `read` tools of one host that name different `child_context_arg` values,
     because a grant carries one context version;
   - `child_host_inputs` without `read`, or with an empty, untrimmed or repeated
-    entry, or one that is the `child_context_input`.
+    entry, or one that is the `child_context_input`;
+  - `child_dispatch` without `read`, and `child_dispatch = "durable"` on a tool
+    without a `durable` table or whose `host_context` does not outlive the pane
+    session (`ClientToolHostContext::outlives_pane_session`: `outlook_mailbox`
+    does, `word_document` does not).
+- `client_tools.tools.<key>.child_dispatch = "live" | "durable"` says how a
+  task's calls reach the device. Unset, the tool follows
+  `delegation.tasks.child_dispatch` (default `live`), which applies `durable`
+  only where it can, so it never fails a configuration.
 - `facets.facets.<key>.child_host_context` marks a child facet. It is refused on
   a `hidden` facet and on one with a `tool_call_allowlist`. It restricts no tools;
   it carries the read instructions.
@@ -33,9 +43,16 @@ A task is a client task for host `H` when its `facet_ids` name a facet with
 
 `launch_prepared_task` resolves the grant (`delegated_client_tools::resolve_grant`)
 and `launch_delegation` writes it to `TaskSpec.client_grant` as
-`{tools, binding, owner_chat_id, owner_message_id, context_ref}`. `tools` are
-qualified names; `owner_message_id` is the parent's assistant row. There is no
-`dispatch` field yet: ERMAIN-1032 adds it, and a grant without one is live-only.
+`{tools, durable_tools, binding, owner_chat_id, owner_message_id, context_ref}`.
+`tools` are qualified names; `owner_message_id` is the parent's assistant row.
+`durable_tools` lists the granted tools whose calls wait durably: those for which
+`durable_eligible` holds at launch (`durable_operations_enabled`, an effective
+`child_dispatch` of `durable`, a host context that outlives the pane session, a
+`durable` table and a registered `client_tool.v1` kind). It is per tool because
+one grant may mix live and durable tools of a host. Absent or empty means every
+call is live, so grants written before it read as live. A listed tool whose
+eligibility lapsed later (the flag turned off, the table removed) dispatches
+live.
 
 The grant is written only when all of these hold, checked in this order. The
 first that fails becomes the fixed reason in `TaskSpec.client_task.unavailable`:
@@ -64,21 +81,35 @@ gets no client tools"; a mention run gets none.
 - the run's executor equals the grant's binding. On a continuation that is the
   child's own persisted binding, never the deciding client's;
 - the run is not adopted (`provenance.adopted_at` unset);
-- the parent chat's running generation is `owner_message_id`, on this replica or
-  on another (`background_tasks.active_generation`);
+- the parent's turn holds the grant's context: the parent chat's running
+  generation is `owner_message_id`, on this replica or on another
+  (`background_tasks.try_active_generation`), or the turn is parked on this child
+  (`parked_on_child`, below);
 - the grant lists the tool, the current configuration still says `read` for host
   `H`, and the user's decision, read from the database, is not Never.
 
-The "parent is parked on this child" clause of the contract is left to ERMAIN-1032:
-on the fast path the parent is running again whenever a child resumes. Grant offers
-skip the facet allowlists and `requires_client_registration`, which the grant
-implies, and give way to an MCP tool of the same name. Every other delegated-run
-suppression stays.
+`parked_on_child` holds while the parent chat is not archived, `owner_message_id`
+is its active-thread tip, and either the last stop has an open item for the child
+or the child's slot still waits for a client outside any stop. Decision parts
+after the stop do not end it, so a decision continuation that runs on another
+replica, or crashed, keeps the calls it waits for. The slot clause covers a turn
+that ended on a stop no child item can share (the tool-call limit, its own durable
+operation) or on an error, or the user stopped the turn. The same owner clause
+authorizes a claimed grant operation (Slow path), and
+`origin_approval_covering_child` uses the tip check too, so once the parent moved
+on a child's own card is answerable. An owner check that cannot read the shared
+lease is an error, never "not running": the offer logs it and offers nothing, the
+authorization answers without withdrawing.
+
+Grant offers skip the facet allowlists and `requires_client_registration`, which
+the grant implies, and give way to an MCP tool of the same name. Every other
+delegated-run suppression stays.
 
 ## Dispatch and outcomes
 
-A granted call is never a durable operation and never waits for the inbox, also
-with `durable_operations_enabled` on and a tool that has a `durable` table. It is
+A granted call to a tool that is not durable for the grant goes live and never
+waits for the inbox, also with `durable_operations_enabled` on and a tool that
+has a `durable` table. A durable one takes the slow path (below). A live call is
 routed with `route_executor_call(grant_call = true)` and handed over with lineage
 `{owner_chat_id, owner_message_id, requesting_chat_id, requesting_message_id,
 context_ref}`. Before the hand-over the backend writes `context_ref` into the
@@ -95,9 +126,118 @@ the context version. The schema offered to the task leaves both out, in every
 | No answer | `timeout`, after the tool's own timeout |
 | Not granted, not offered, or set to Never | refused per call |
 | The user declined an Ask (Reject, Never allow or Withdraw) | `{"status":"cancelled","reason":"declined","error":…}` |
+| Durable: the user declined on the device | `{"status":"cancelled","reason":"declined","error":…}` |
+| Durable: no client ran it before the attempt ended | `{"status":"cancelled","reason":"expired","error":…}` |
+| Durable: the parent moved on, or the tool became Never or lost its grant | `{"status":"cancelled","reason":"withdrawn","error":…}` |
 
 The host's own outcomes, such as Word's `capture-unavailable`, come back as tool
-results.
+results. The durable texts tell the child's model that the task has no result
+from the tool and to say in the answer what is missing.
+
+## Slow path
+
+A durable granted call parks the child at once (ERMAIN-1032). There is no live
+first try and no 15 s grace.
+
+- **The operation.** The call becomes a `client_tool.v1` operation for the
+  grant's binding, whose realm comes from the tool's host context. The request
+  carries `lineage {owner_chat_id, owner_message_id, requesting_chat_id,
+  requesting_message_id, context_ref?}`, which only grant operations have, and the
+  input the live hand-over would send (`context_ref` filled in, host inputs
+  dropped). The stored call keeps the model's input.
+- **Pickup.** The nudge goes only to an executor stream that lists the tool in
+  `X-Erato-Child-Client-Tools`, and waits until one connects; the inbox poll is
+  the fallback. A claim needs the same header (else 409 "Executor binding
+  mismatch", nothing withdrawn). Every claim, renewal and result runs
+  `authorize_grant_operation`: the grant still holds (binding, not adopted, the
+  tool in `tools` and `durable_tools`, still `read` and durable-eligible, lineage
+  ids match), the user's decision is not Never, and the owner clause holds. A
+  definite refusal settles the call `withdrawn` (409 "Operation authorization
+  withdrawn"); a read failure answers 500 and withdraws nothing. A result without
+  a claim is refused (409 "Operation requires a claim").
+- **Device prompts last the attempt.** A same-binding claim of a live claim
+  renews it (same token, never past the attempt's end); a claim after it lapsed
+  gets a new token. The claiming pane renews at half the remaining lease, retries
+  a renewal lost on the way while the claim still holds, and aborts the prompt
+  when a renewal is refused, the attempt ends or its coordinator goes away.
+- **Continuing the child.** Any of the user's clients sends `/continue` for a
+  ready or continuing grant operation, and for a pending or claimed one past its
+  attempt end, which settles it `expired` first. Expiry therefore waits until a
+  client next reads its inbox. A continuation that fails ends its call there
+  (`completed`, the child chat `errored`), and `/continue` refuses a call left
+  `continuing` on an errored child (409 "Operation continuation failed"). A
+  crashed one is reaped to `awaiting_approval` and is continued again.
+- **The waiting item.** The parent's join parks with one item per waiting child
+  on the same `tool_approval_request` part as approval items (ERMAIN-1050 queue),
+  marked `child.waiting_for {host_context, attempt_id}`. It is never decided: it
+  is open while the parent's slot (the last `tool_use` with its id) is
+  `in_progress`, and only on the last stop. The slot holds the suspended envelope
+  (`input_required`, reason `client_pending`), so the interrupted-parts sweep
+  leaves it alone. A turn that ends on a stop no child item can share leaves the
+  child out; its slot still waits, `parked_on_child` still holds, and the child's
+  own tail settles the slot (`reconcile_orphaned_parent_slot`).
+- **Sync.** `sync_waiting_parent` brings the parent's last stop up to date under
+  the parent chat's advisory lock, only while the message is the active-thread
+  tip, its last stop has waiting items, and the chat is not archived and runs no
+  generation. The chat's state is not asked beyond that: the heartbeat cleanup
+  clears an ended turn's state a minute later, and a task may wait far longer.
+  Per open waiting item: the child chat was archived, so the slot settles failed
+  (nothing claims, continues or expires an archived chat's call); the child still
+  runs or its call is not completed, so the item stays open (a call left
+  `continuing` on an errored child counts as failed); the child parked on an Ask, so the item becomes an approval
+  item in place (slot reason `approval_pending`); the child parked on another
+  grant call, so the item is rewritten to that call and attempt; otherwise the
+  slot settles with the task result. It is failed when the child's row still
+  holds the call's pending part, which only a completed continuation drops, or
+  ends on a stop; else completed, downgraded on a metadata error. An `errored`
+  child chat alone does not mean failed: the stale-generation reap writes it for
+  a replica that died after the answer was committed.
+- **Who syncs.** Every tail of the child, whatever it ended on; the parent's own
+  parking tail, for a child that finished while the parent's join still ran; an
+  empty `continuestream` body; and the cleanup tick (`sweep_waiting_parents`),
+  for a child whose tail never ran. The sweep scans the parents a sync is
+  expected to move, on the tip's last stop only, the one a sync reads: a waiting
+  item whose slot is open while its call completed, or failed on an errored
+  child, or whose child was archived, on a child that no longer runs. A sync can
+  still leave one as it was (a row it cannot read, a read that fails), so the
+  sweep visits them in chat order, 100 a tick, and carries a cursor to the next
+  tick.
+- **Resume.** Once nothing is left to decide and every waiting item settled, the
+  tail starts the parent's continuation in process (`WaitingSettled`) under
+  `Takeover::ResumeParked {expected_generation}`, which takes only the generation
+  that parked and only while the message is still the tip. A parent whose
+  continuation crashed, so its message still carries the in-flight marker,
+  resumes the same way (`ResumeCrashed`) and re-parks on what is still open. The
+  marker says so, not the chat's `errored`: once the cleanup cleared the state,
+  `ResumeParked` takes a chat with no state and no generation instead, under the
+  same tip check. One that ended without answering on purpose (the content filter
+  clears the marker) still has its slots settled, and runs again only when the
+  user asks. The open parent chat sends the empty
+  `continuestream` itself 5 s after it sees a settled stop no resume picked up,
+  and holds its message queue until the turn answers.
+- **Admission** (`continuestream`). A body naming a waiting item, or a lone
+  legacy `decision` from a client that does not show child items while only
+  waiting items are open, gets the plain-text 409 asking to reload. The same lone
+  decision from a client that does (`shows_child_items`) gets 409
+  `already_continued`: it answered a stop decided elsewhere. Decisions cover the
+  decidable items only (400 `decisions_mismatch` otherwise). An empty body while
+  only waiting items are open on a parked chat gets 409 `children_waiting`. A card
+  on a stop with waiting items names even a single answer in `decisions`, so an
+  item converted meanwhile comes back as `decisions_mismatch` and the card asks
+  only the new question.
+- **Mixed stops.** Decisions take effect at once; the continuation re-parks on a
+  new stop with the items still open (re-stopped decided children, still waiting
+  children, converted children), or calls the model when nothing waits. A child
+  that finishes while approvals are open settles its slot and keeps the parent
+  parked.
+- **Moving on.** A new user turn makes the parked message no longer the tip. A
+  waiting call is withdrawn at its next claim, renewal or result, the child
+  answers without it, and its old slot is settled by
+  `reconcile_orphaned_parent_slot` when the child finishes, also while the newer
+  turn still runs: that check stands down only for a running turn that answers
+  the old message.
+- **Task result.** `client_tools` counts `declined` and `expired` granted calls,
+  each left out when 0.
 
 ## Run mode
 
@@ -150,12 +290,21 @@ into the trace its park left behind.
 
 ## Frontend
 
-The executor stream hands a grant call to its executor with
+The executor stream hands a live grant call to its executor with
 `ClientToolCallContext.hostGrant {ownerChatId, ownerMessageId, requestingChatId,
-requestingMessageId, contextRef?}`. A call that carries a grant is refused with an
-error, without running the handler, when the executor was not registered with
-`acceptsGrantCalls`. Calls of the user's own turn are unchanged. The host checks
-`hostGrant` against its local context (contract §7).
+requestingMessageId, contextRef?}`; the coordinator's durable handler runs a
+claimed grant operation with the same `hostGrant`, built from its `lineage`. Both
+go through `runClientToolCall`, the only place a `hostGrant` is made. A call that
+carries a grant is refused with an error, without running the handler, when the
+executor was not registered with `acceptsGrantCalls`. Calls of the user's own
+turn are unchanged. The host checks `hostGrant` against its local context
+(contract §7). On the durable path a host's `declined` validation code becomes the
+`rejected` outcome with error code `declined`.
+
+The parent chat lists waiting items below the decisions, naming the host
+("Waiting for Outlook on this device"), and reads the row again every 5 s while
+one shows. A stop that only waits holds the chat's message queue as waiting only
+and asks nothing of the user.
 
 ## Conformance
 
@@ -164,7 +313,11 @@ runs the host-facing cases once for each row in `delegated/rows.rs`, against a
 test-driven pane: a fake host with a context version on `word_document`, the
 same fake host without one on `outlook_mailbox`, and the `word_document` and
 `outlook_mailbox` rows, which stay ignored until ERMAIN-1003 and ERMAIN-1006
-enable them. Four cases of the core alone stay in `delegated.rs` on the fake
+enable them. A row marked `slow_path` also runs the slow-path cases
+(`delegated/slow_path.rs`): the fake host on `outlook_mailbox` and the ignored
+`outlook_mailbox` row. Every row has a guard case that holds `slow_path` to
+whether its host's context outlives the pane session, so the `word_document`
+rows never take it. Four cases of the core alone stay in `delegated.rs` on the fake
 host: Always allow under a strict MCP policy, Never allow stored as the
 client-tool preference, adoption by regenerate, and a turn without the context
 version whose read is dispatched without one. No integration case covers the
@@ -176,9 +329,10 @@ A host's handlers pass `clientToolHostAdapterConformanceFailures` from
 
 ## Not in this record
 
-- ERMAIN-1032: the slow path, where a child's call waits durably for a client
-  and for an approval on the device, the grant's `dispatch` field and the
-  "parked on this child" owner clause.
 - ERMAIN-1033: approving once per document or thread.
-- ERMAIN-1034: the desktop sidecar host context.
+- ERMAIN-1034: the desktop sidecar host context; showing a device prompt of a
+  grant call in the parent chat (registering it under `hostGrant.ownerChatId`);
+  mapping a device decline on the live path; and a multi-executor envelope
+  (ERMAIN-911), which a second host family with its own binding in one message
+  needs.
 - ERMAIN-1031: the child's model.

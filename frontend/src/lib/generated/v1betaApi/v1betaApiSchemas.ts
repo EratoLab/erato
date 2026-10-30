@@ -1144,6 +1144,36 @@ export type ChildApprovalRef = {
   preset: string;
   requested_at: string;
   tool_name: string;
+  waiting_for?: null | ChildWaitingFor;
+};
+
+/**
+ * The durable client operation a waiting child is parked on.
+ */
+export type ChildWaitingFor = {
+  /**
+   * The child's parked attempt; the item settles only once it completed.
+   *
+   * @format uuid
+   */
+  attempt_id: string;
+  /**
+   * The `host_context.kind` of the binding the call waits for, e.g.
+   * `outlook_mailbox`.
+   */
+  host_context: string;
+};
+
+/**
+ * Body of the `409` `continuestream` answers to an empty body while the
+ * parked row waits only for task children that wait for a client: nothing is
+ * left to decide, and the turn continues on its own once they finish.
+ */
+export type ChildrenWaitingError = {
+  /**
+   * Always `children_waiting`.
+   */
+  code: string;
 };
 
 export type ClaimClientOperationRequest = {
@@ -3097,6 +3127,7 @@ export type OperationRequest = {
   expires_at: string;
   input: OperationPayload;
   kind: string;
+  lineage?: CallLineage;
   /**
    * @format uuid
    */

@@ -9,6 +9,7 @@ import { operationExecutorHeaders } from "@/lib/clientOperations/registration";
  */
 
 import type {
+  CallLineage,
   ClientToolSubmissionFeedback,
   ClientToolValidationIssue,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
@@ -75,9 +76,9 @@ export interface ClientToolCallContext {
    */
   signal?: AbortSignal;
   /**
-   * Set only on a delegated task's call, pushed over the executor stream, and
-   * only to an executor registered with `acceptsGrantCalls`. Absent on every
-   * call of the user's own turn.
+   * Set only on a delegated task's call, pushed over the executor stream or
+   * claimed as a parked operation, and only to an executor registered with
+   * `acceptsGrantCalls`. Absent on every call of the user's own turn.
    */
   hostGrant?: ClientToolHostGrant;
 }
@@ -161,6 +162,40 @@ export function getClientToolHeaders(): Record<string, string> {
     .sort()
     .slice(0, 128);
   return { ...operations, "X-Erato-Client-Tools": allNames.join(",") };
+}
+
+const hostGrantFromLineage = (lineage: CallLineage): ClientToolHostGrant => ({
+  ownerChatId: lineage.owner_chat_id,
+  ownerMessageId: lineage.owner_message_id,
+  requestingChatId: lineage.requesting_chat_id,
+  requestingMessageId: lineage.requesting_message_id,
+  ...(lineage.context_ref ? { contextRef: lineage.context_ref } : {}),
+});
+
+/**
+ * Runs one call of a client tool, for the live dispatcher and the parked
+ * operation handler alike: the only place a `hostGrant` is made. The server
+ * only hands a task's call to a tool advertised as taking them; a handler that
+ * did not opt in has no grant check and must not run it.
+ */
+export async function runClientToolCall(
+  toolName: string,
+  executor: ClientToolExecutor,
+  input: unknown,
+  context: Omit<ClientToolCallContext, "hostGrant">,
+  lineage?: CallLineage | null,
+): Promise<ClientToolExecutionResult> {
+  if (!lineage) return executor(input, context);
+  if (!clientToolAcceptsGrantCalls(toolName))
+    return {
+      ok: false,
+      // eslint-disable-next-line lingui/no-unlocalized-strings -- Read by the task's model, never shown.
+      error: `The client tool "${toolName}" does not take calls from delegated tasks`,
+    };
+  return executor(input, {
+    ...context,
+    hostGrant: hostGrantFromLineage(lineage),
+  });
 }
 
 /** The tools whose handlers accept grant calls, for the executor stream only. */

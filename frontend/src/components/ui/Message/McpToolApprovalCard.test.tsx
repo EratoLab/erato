@@ -830,6 +830,7 @@ describe("McpToolApprovalCard", () => {
         // item, keyed by the gated call.
         approvalIds: [approvalRequest.tool_call_id],
         itemDecisions: undefined,
+        enumerate: false,
         items: [
           {
             approval_id: approvalRequest.tool_call_id,
@@ -2033,4 +2034,285 @@ describe("approval queue", () => {
       });
     });
   });
+});
+
+describe("tasks waiting on the device", () => {
+  const waitingItem = (approvalId: string, task: string) => ({
+    approval_id: approvalId,
+    tool_call_id: approvalId,
+    tool_name: "delegate_task",
+    input: { task },
+    child: {
+      ...childApprovalRef,
+      child_chat_id: `child-${approvalId}`,
+      tool_name: "fetch_availability",
+      mcp_server_id: "outlook",
+      kind: "client_tool" as const,
+      waiting_for: { host_context: "outlook_mailbox", attempt_id: "attempt" },
+    },
+  });
+  const asking = {
+    approval_id: "task-ask",
+    tool_call_id: "task-ask",
+    tool_name: "delegate_task",
+    input: { task: "Publish the notes" },
+    child: { ...childApprovalRef, child_chat_id: "child-ask" },
+  };
+  const askingTwo = {
+    ...asking,
+    approval_id: "task-ask-2",
+    tool_call_id: "task-ask-2",
+    input: { task: "Publish the summary" },
+    child: { ...childApprovalRef, child_chat_id: "child-ask-2" },
+  };
+  const waits = waitingItem("task-wait", "Check the calendar");
+  const mixedStop = {
+    ...delegatedTaskRequest,
+    approvals: [asking, askingTwo, waits],
+  };
+  const waitingStop = { ...delegatedTaskRequest, approvals: [waits] };
+  const sentBody = (fetchMock: ReturnType<typeof vi.fn>, call = 0) =>
+    JSON.parse((fetchMock.mock.calls[call][1] as { body: string }).body) as {
+      decisions?: { approval_id: string; decision: string }[];
+    };
+
+  it("lists a waiting task with its host and no decision", () => {
+    renderCard(
+      withChatContext(
+        <McpToolApprovalCard
+          messageId="message-1"
+          request={waitingStop}
+          openItems={[]}
+          waitingItems={[waits]}
+          resolution={null}
+        />,
+      ),
+    );
+
+    expect(
+      screen.getByText("This response is waiting on a task"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("It continues on its own once the task finishes."),
+    ).toBeInTheDocument();
+    const item = screen.getByTestId("waiting-task-item");
+    expect(item).toHaveAttribute("data-child-chat-id", "child-task-wait");
+    expect(item).toHaveTextContent("Check the calendar");
+    expect(item).toHaveTextContent("Waiting for Outlook on this device");
+    expect(screen.queryByRole("button", { name: /Allow/ })).toBeNull();
+    expect(screen.queryByTestId("approval-queue-bulk")).toBeNull();
+  });
+
+  it("holds the queue as waiting only and seeds no action required", () => {
+    renderCard(
+      withChatContext(
+        <McpToolApprovalCard
+          messageId="message-1"
+          request={waitingStop}
+          openItems={[]}
+          waitingItems={[waits]}
+          resolution={null}
+        />,
+      ),
+    );
+
+    const ids =
+      useConfirmationRegistryStore.getState().pendingIdsByChatId["chat-1"];
+    expect(ids).toHaveLength(1);
+    expect(
+      useConfirmationRegistryStore.getState().waitingOnlyIds[ids?.[0] ?? ""],
+    ).toBe(true);
+    expect(
+      useGenerationStatusStore.getState().statusByChatId["chat-1"],
+    ).toBeUndefined();
+  });
+
+  it("reads the row again while a task waits", () => {
+    vi.useFakeTimers();
+    try {
+      const refetchMessages = vi.fn(async () => undefined);
+      renderCard(
+        withChatContext(
+          <McpToolApprovalCard
+            messageId="message-1"
+            request={waitingStop}
+            openItems={[]}
+            waitingItems={[waits]}
+            resolution={null}
+          />,
+          "chat-1",
+          { refetchMessages },
+        ),
+      );
+      act(() => {
+        vi.advanceTimersByTime(4_999);
+      });
+      expect(refetchMessages).not.toHaveBeenCalled();
+      act(() => {
+        vi.advanceTimersByTime(1);
+      });
+      expect(refetchMessages).toHaveBeenCalledOnce();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("sends the decisions once the asking tasks are answered, while a task still waits", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(new Response("", { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    renderCard(
+      <McpToolApprovalCard
+        messageId="message-1"
+        request={mixedStop}
+        openItems={[asking, askingTwo]}
+        waitingItems={[waits]}
+        resolution={null}
+      />,
+    );
+
+    expect(screen.getByTestId("approval-queue")).toHaveAttribute(
+      "data-item-count",
+      "2",
+    );
+    expect(screen.getByText("Also waiting on a task")).toBeInTheDocument();
+    expect(screen.getByTestId("waiting-task-item")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText("Allow once"));
+    fireEvent.click(screen.getByText("Allow once"));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledOnce());
+    expect(sentBody(fetchMock).decisions).toEqual([
+      { approval_id: "task-ask", decision: "approve" },
+      { approval_id: "task-ask-2", decision: "approve" },
+    ]);
+  });
+
+  it("keeps the answers given and asks only the new question when a waiting task stopped on one", async () => {
+    const mismatch = JSON.stringify({
+      code: "decisions_mismatch",
+      missing: ["task-wait"],
+      unknown: [],
+    });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(mismatch, { status: 400 }))
+      .mockResolvedValue(new Response("", { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const refetchMessages = vi.fn(async () => undefined);
+    const card = (props: {
+      openItems: (typeof asking)[];
+      waitingItems: (typeof waits)[];
+    }) =>
+      withChatContext(
+        <McpToolApprovalCard
+          messageId="message-1"
+          request={mixedStop}
+          resolution={null}
+          {...props}
+        />,
+        "chat-1",
+        { refetchMessages },
+      );
+    const { rerender } = renderCard(
+      card({ openItems: [asking, askingTwo], waitingItems: [waits] }),
+    );
+
+    fireEvent.click(screen.getByText("Allow once"));
+    fireEvent.click(screen.getByText("Allow once"));
+    await waitFor(() => expect(refetchMessages).toHaveBeenCalled());
+    expect(screen.queryByText(/decisions_mismatch/)).toBeNull();
+
+    // The refetched row: the waiting task became an ordinary child approval.
+    const converted = {
+      ...waits,
+      child: { ...waits.child, waiting_for: undefined },
+    };
+    rerender(
+      <QueryClientProvider client={new QueryClient()}>
+        {card({ openItems: [asking, askingTwo, converted], waitingItems: [] })}
+      </QueryClientProvider>,
+    );
+    expect(screen.getByTestId("approval-queue")).toHaveAttribute(
+      "data-position",
+      "3",
+    );
+    expect(screen.getByText("Check the calendar")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText("Allow once"));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    expect(sentBody(fetchMock, 1).decisions).toEqual([
+      { approval_id: "task-ask", decision: "approve" },
+      { approval_id: "task-ask-2", decision: "approve" },
+      { approval_id: "task-wait", decision: "approve" },
+    ]);
+  });
+
+  it("names a single answer while a task waits, so a question it turned into comes back", async () => {
+    const mismatch = JSON.stringify({
+      code: "decisions_mismatch",
+      missing: ["task-wait"],
+      unknown: [],
+    });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(mismatch, { status: 400 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const refetchMessages = vi.fn(async () => undefined);
+    renderCard(
+      withChatContext(
+        <McpToolApprovalCard
+          messageId="message-1"
+          request={{ ...delegatedTaskRequest, approvals: [asking, waits] }}
+          openItems={[asking]}
+          waitingItems={[waits]}
+          resolution={null}
+        />,
+        "chat-1",
+        { refetchMessages },
+      ),
+    );
+
+    fireEvent.click(screen.getByText("Allow once"));
+
+    await waitFor(() => expect(refetchMessages).toHaveBeenCalled());
+    expect(sentBody(fetchMock).decisions).toEqual([
+      { approval_id: "task-ask", decision: "approve" },
+    ]);
+    expect(screen.queryByText(/decisions_mismatch/)).toBeNull();
+  });
+
+  it.each(["children_waiting", "generation_running"])(
+    "settles silently off the row on a 409 %s",
+    async (code) => {
+      vi.stubGlobal(
+        "fetch",
+        vi
+          .fn()
+          .mockResolvedValue(
+            new Response(JSON.stringify({ code }), { status: 409 }),
+          ),
+      );
+      const refetchMessages = vi.fn(async () => undefined);
+      renderCard(
+        withChatContext(
+          <McpToolApprovalCard
+            messageId="message-1"
+            request={mixedStop}
+            openItems={[asking]}
+            waitingItems={[waits]}
+            resolution={null}
+          />,
+          "chat-1",
+          { refetchMessages },
+        ),
+      );
+
+      fireEvent.click(screen.getByText("Allow once"));
+
+      await waitFor(() => expect(refetchMessages).toHaveBeenCalled());
+      expect(screen.queryByText(new RegExp(code))).toBeNull();
+    },
+  );
 });

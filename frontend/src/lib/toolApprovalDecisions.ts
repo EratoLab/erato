@@ -31,23 +31,29 @@ export const isApprovalDecision = (decision: ToolApprovalDecision): boolean =>
  * `shows_child_items` tells the server this client shows each parked child as
  * an item of its own; without it, a stop that carries children beside the
  * turn's own call is refused.
+ *
+ * `enumerate` names even a single item: a stop with tasks still waiting can
+ * gain a question while the card is open, and only an enumerated body comes
+ * back as `decisions_mismatch` naming it.
  */
 export const buildContinueStreamBody = ({
   messageId,
   decision,
   approvalIds,
   itemDecisions,
+  enumerate = false,
 }: {
   messageId: string;
   decision: ToolApprovalDecision;
   approvalIds?: string[];
   itemDecisions?: DecidedApproval[];
+  enumerate?: boolean;
 }): ContinueStreamRequest => {
   const decided: DecidedApproval[] =
     itemDecisions && itemDecisions.length > 0
       ? itemDecisions
       : (approvalIds ?? []).map((approvalId) => ({ approvalId, decision }));
-  if (decided.length > 1) {
+  if (decided.length > 1 || (enumerate && decided.length > 0)) {
     const decisions: ApprovalDecisionItem[] = decided.map((item) => ({
       approval_id: item.approvalId,
       decision: item.decision,

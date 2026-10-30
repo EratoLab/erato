@@ -12,6 +12,7 @@ use rows::HostRow;
 
 mod conformance;
 mod rows;
+mod slow_path;
 
 /// Stands in for the host's writes in the row's namespace: offered to the
 /// parent, never child-eligible.
@@ -41,6 +42,9 @@ const ALL_NEVER: &str = "the user does not allow these client tools";
 const PANE_NOT_CONNECTED: &str = "the pane is not connected";
 const PANE_REFUSES_TASKS: &str = "the pane does not take calls from tasks";
 const RETRIED: &str = "a retried task gets no client tools";
+/// The child narrates, pauses long enough for the test to close the pane,
+/// and then calls the read tool.
+const DISPATCH_PAUSE: Duration = Duration::from_secs(6);
 
 fn fake_host() -> HostRow {
     rows::fake_host(erato::config::ClientToolHostContext::WordDocument)
@@ -89,7 +93,7 @@ async fn delegated_state(
     config
         .client_tools
         .tools
-        .insert(READ_KEY.into(), row.read_config(false));
+        .insert(READ_KEY.into(), row.read_config(false, None));
     config.client_tools.tools.insert(
         WRITE_KEY.into(),
         ClientToolConfig {
@@ -753,7 +757,7 @@ async fn ask_in_a_client_task(
 
 /// The read tool keeps its part in replay receipts, so the trace shows it.
 fn read_keeps_its_part(row: &HostRow, config: &mut erato::config::AppConfig) {
-    let mut tool = row.read_config(false);
+    let mut tool = row.read_config(false, None);
     let context_input = row
         .context
         .as_ref()
@@ -994,5 +998,83 @@ async fn a_regenerate_in_a_finished_client_child_is_not_offered_the_granted_tool
         "the user's own turn adopts the run"
     );
     assert!(finish(run).await.contains(PARENT_FINAL));
+    server.abort();
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_durable_grant_call_fills_the_context_version_and_drops_host_inputs(
+    pool: Pool<Postgres>,
+) {
+    let base_row = rows::fake_host(erato::config::ClientToolHostContext::OutlookMailbox);
+    let row = &HostRow {
+        read_parameters: json!({"type": "object", "properties": {
+            "context": {"type": "string"}, "part": {"type": "string"},
+            "session": {"type": "string"}}}),
+        model_input: json!({"context": "forged", "part": "intro", "session": "guessed"}),
+        ..base_row
+    };
+    let waiting = slow_path::park_a_waiting_child(row, pool, false, |config| {
+        config
+            .client_tools
+            .tools
+            .get_mut(READ_KEY)
+            .unwrap()
+            .child_host_inputs = vec!["session".into()];
+    })
+    .await;
+    assert_eq!(
+        waiting.request.input,
+        json!({"context": rows::fake_host(row.host).context.unwrap().value, "part": "intro"}),
+        "the claimed call carries the grant's context version and no host-filled input"
+    );
+    let inbox = app_server(waiting.state.clone())
+        .get("/api/v1beta/me/client-operations")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await;
+    inbox.assert_status_ok();
+    assert_eq!(
+        inbox.json::<Value>()["operations"][0]["request"]["input"],
+        waiting.request.input
+    );
+    let read = part_for(
+        &assistant_row(&waiting.state.db, waiting.child.id).await,
+        CHILD_READ_CALL,
+    );
+    assert_eq!(
+        read["input"], row.model_input,
+        "the stored call keeps the model's input"
+    );
+    waiting.server.abort();
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_durable_deployment_default_keeps_word_document_calls_live(pool: Pool<Postgres>) {
+    let row = &fake_host();
+    let (parent, child) = (RequestBodyRecorder::new(), RequestBodyRecorder::new());
+    let mut mocks = MockSet::new();
+    mock_parent(&mut mocks, &parent, vec![client_task(None)]);
+    mock_client_child_reads(row, &mut mocks, &child);
+    let (state, _llm) = delegated_state(row, pool, mocks, |config| {
+        config.client_tools.durable_operations_enabled = true;
+        config.delegation.tasks.child_dispatch = erato::config::ChildDispatch::Durable;
+        config
+            .client_tools
+            .tools
+            .insert(READ_KEY.into(), row.read_config(true, None));
+    })
+    .await;
+    let (base, server) = serve(&state).await;
+    let mut pane = open_pane(row, &base).await;
+    let chat_id = seed_origin_chat(&state.db).await;
+    let run = spawn_parent(row, &base, chat_id, ACTION_FACET, Some(row.binding()));
+    let event = pane.call().await;
+    assert!(event["lineage"].is_object(), "{event}");
+    answer_call(row, &state, &event).await;
+    assert!(finish(run).await.contains(PARENT_FINAL));
+    let client_child = child_chat(&state.db, chat_id, CHILD_FACET).await.unwrap();
+    let grant = &task_spec(&client_child)["client_grant"];
+    assert_eq!(grant["tools"], json!([row.qualified()]));
+    assert!(grant.get("durable_tools").is_none(), "{grant}");
+    assert_eq!(row_count(&state, "client_operation_attempts").await, 0);
     server.abort();
 }

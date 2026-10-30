@@ -1,10 +1,17 @@
+import { renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { useConfirmationRegistryStore } from "../confirmationRegistryStore";
+import {
+  useConfirmationRegistryStore,
+  useOnlyWaitingConfirmations,
+} from "../confirmationRegistryStore";
 
 describe("confirmationRegistryStore", () => {
   beforeEach(() => {
-    useConfirmationRegistryStore.setState({ pendingIdsByChatId: {} });
+    useConfirmationRegistryStore.setState({
+      pendingIdsByChatId: {},
+      waitingOnlyIds: {},
+    });
   });
 
   const store = () => useConfirmationRegistryStore.getState();
@@ -41,5 +48,29 @@ describe("confirmationRegistryStore", () => {
     // Unregistering an unknown id is a no-op.
     store().unregisterConfirmation("chat-a", "card-1");
     expect(store().hasPending("chat-a")).toBe(false);
+  });
+
+  it("tells a hold of waiting tasks alone from one that asks something", () => {
+    const onlyWaiting = () =>
+      renderHook(() => useOnlyWaitingConfirmations("chat-a")).result.current;
+    expect(onlyWaiting()).toBe(false);
+
+    store().registerConfirmation("chat-a", "card-1", { waitingOnly: true });
+    expect(store().hasPending("chat-a")).toBe(true);
+    expect(onlyWaiting()).toBe(true);
+
+    store().registerConfirmation("chat-a", "card-2");
+    expect(onlyWaiting()).toBe(false);
+
+    store().unregisterConfirmation("chat-a", "card-2");
+    expect(onlyWaiting()).toBe(true);
+
+    // A waiting task that stopped on a question turns its card into one that asks.
+    store().registerConfirmation("chat-a", "card-1");
+    expect(onlyWaiting()).toBe(false);
+    expect(store().pendingIdsByChatId["chat-a"]).toEqual(["card-1"]);
+
+    store().unregisterConfirmation("chat-a", "card-1");
+    expect(store().waitingOnlyIds).toEqual({});
   });
 });

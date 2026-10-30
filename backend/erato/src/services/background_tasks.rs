@@ -90,6 +90,13 @@ pub enum Takeover {
     TakeParked,
     /// A system-initiated turn: leaves a parked lease alone.
     RefuseParked,
+    /// Resumes the parked turn itself once nothing it waits for is open. Only
+    /// the generation that parked is taken: any newer turn has written a new
+    /// `active_generation_id`, and superseding it would cancel its operations.
+    /// `None` takes only a chat whose ended generation the heartbeat cleanup
+    /// has cleared, with no state and no generation; a newer turn would have
+    /// written one, or a message below this one.
+    ResumeParked { expected_generation: Option<Uuid> },
 }
 
 /// Why a lease acquisition was refused, with enough about the holder for the
@@ -325,7 +332,6 @@ impl BackgroundTaskManager {
         };
 
         let generation_id = Uuid::new_v4();
-        let take_parked = matches!(takeover, Takeover::TakeParked);
 
         let txn = match db.begin().await {
             Ok(txn) => txn,
@@ -343,7 +349,7 @@ impl BackgroundTaskManager {
             chat_id,
             message_id,
             generation_id,
-            take_parked,
+            takeover,
             stale_after_secs,
         )
         .await;
@@ -418,7 +424,7 @@ impl BackgroundTaskManager {
         chat_id: Uuid,
         message_id: Uuid,
         generation_id: Uuid,
-        take_parked: bool,
+        takeover: Takeover,
         stale_after_secs: u64,
     ) -> Result<bool, sea_orm::DbErr> {
         // Serialize same-chat contenders. Transaction-scoped, so it is
@@ -430,6 +436,53 @@ impl BackgroundTaskManager {
             [chat_id.to_string().into()],
         );
         txn.query_one_raw(lock_statement).await?;
+
+        if let Takeover::ResumeParked {
+            expected_generation,
+        } = takeover
+        {
+            let resume_statement = named_statement_from_sql_and_values(
+                sea_orm::DatabaseBackend::Postgres,
+                POSTGRES_QUERY_GENERATION_TRY_START,
+                r#"
+                UPDATE chats
+                SET active_generation_id = $1,
+                    generation_state = 'running',
+                    generation_started_at = now(),
+                    generation_heartbeat_at = now(),
+                    generation_ended_at = NULL
+                WHERE id = $2
+                  AND (
+                    (active_generation_id = $3
+                        AND generation_state IN ('awaiting_approval', 'errored'))
+                    OR ($3::uuid IS NULL
+                        AND active_generation_id IS NULL
+                        AND generation_state IS NULL)
+                  )
+                RETURNING id
+                "#,
+                [
+                    generation_id.into(),
+                    chat_id.into(),
+                    expected_generation.into(),
+                ],
+            );
+            if txn.query_one_raw(resume_statement).await?.is_none() {
+                return Ok(false);
+            }
+            // A turn written below the parked message is the user's: the
+            // parked one is no longer the chat's to resume.
+            let tip = crate::models::message::get_active_thread_tip(txn, &chat_id)
+                .await
+                .map_err(|error| sea_orm::DbErr::Custom(error.to_string()))?;
+            if tip.is_none_or(|tip| tip.id != message_id) {
+                return Ok(false);
+            }
+            return Self::finish_lease_claim(txn, chat_id, message_id, generation_id)
+                .await
+                .map(|()| true);
+        }
+        let take_parked = matches!(takeover, Takeover::TakeParked);
 
         // `generation_heartbeat_at` is nullable, and NULL compares to NULL
         // rather than to false, so a row left 'running' without one would
@@ -469,6 +522,17 @@ impl BackgroundTaskManager {
             return Ok(false);
         }
 
+        Self::finish_lease_claim(txn, chat_id, message_id, generation_id).await?;
+        Ok(true)
+    }
+
+    /// What every claimed lease does inside the CAS transaction.
+    async fn finish_lease_claim<C: ConnectionTrait>(
+        txn: &C,
+        chat_id: Uuid,
+        message_id: Uuid,
+        generation_id: Uuid,
+    ) -> Result<(), sea_orm::DbErr> {
         crate::services::client_operations::store::supersede_other_attempts(
             txn, chat_id, message_id,
         )
@@ -502,7 +566,7 @@ impl BackgroundTaskManager {
         );
         txn.execute_raw(shared_statement).await?;
 
-        Ok(true)
+        Ok(())
     }
 
     /// Read who holds the lease, for the refusal body. Best-effort: a missing
@@ -696,12 +760,14 @@ impl BackgroundTaskManager {
                             >(
                                 payload["operation_executor"].clone()
                             );
+                            // A task's granted operation settles only through a claim.
                             let bound = match task.client_operation(&tool_call_id).await {
                                 Some(operation) => executor
                                     .as_ref()
                                     .is_ok_and(|binding| *binding == operation.binding)
                                     && operation.consent
-                                        == crate::services::client_operations::ConsentPolicy::None,
+                                        == crate::services::client_operations::ConsentPolicy::None
+                                    && operation.lineage.is_none(),
                                 None => true,
                             } && task.executor_call(&tool_call_id).await.is_none_or(
                                 |handed_over| {
@@ -745,31 +811,54 @@ impl BackgroundTaskManager {
 
     /// Return the active shared generation for a chat, if one is registered.
     pub async fn get_shared_generation(&self, chat_id: &Uuid) -> Option<(Uuid, Option<Uuid>)> {
-        let db = self.db.as_ref()?;
+        self.try_get_shared_generation(chat_id).await.ok().flatten()
+    }
+
+    /// [`Self::get_shared_generation`] for a caller that must not read a
+    /// failed query as "nothing runs".
+    pub async fn try_get_shared_generation(
+        &self,
+        chat_id: &Uuid,
+    ) -> Result<Option<(Uuid, Option<Uuid>)>, sea_orm::DbErr> {
+        let Some(db) = self.db.as_ref() else {
+            return Ok(None);
+        };
         let statement = named_statement_from_sql_and_values(
             sea_orm::DatabaseBackend::Postgres,
             POSTGRES_QUERY_GENERATION_SHARED_START,
             "SELECT generation_id, message_id FROM temp_chat_generations WHERE chat_id = $1 AND state = 'running'",
             [(*chat_id).into()],
         );
-        let row = db.query_one_raw(statement).await.ok().flatten()?;
-        Some((
-            row.try_get("", "generation_id").ok()?,
-            row.try_get("", "message_id").ok()?,
-        ))
+        let Some(row) = db.query_one_raw(statement).await? else {
+            return Ok(None);
+        };
+        Ok(Some((
+            row.try_get("", "generation_id")?,
+            row.try_get("", "message_id")?,
+        )))
     }
 
     /// This replica's task for the chat, else a generation leased elsewhere.
     pub async fn active_generation(&self, chat_id: &Uuid) -> Option<ActiveGeneration> {
+        self.try_active_generation(chat_id).await.ok().flatten()
+    }
+
+    /// [`Self::active_generation`], with a failed read of the shared lease as
+    /// an error.
+    pub async fn try_active_generation(
+        &self,
+        chat_id: &Uuid,
+    ) -> Result<Option<ActiveGeneration>, sea_orm::DbErr> {
         if let Some(task) = self.get_task(chat_id).await {
-            return Some(ActiveGeneration::Local(task));
+            return Ok(Some(ActiveGeneration::Local(task)));
         }
-        self.get_shared_generation(chat_id)
-            .await
+        Ok(self
+            .try_get_shared_generation(chat_id)
+            .await?
             .map(|(generation_id, message_id)| ActiveGeneration::Shared {
                 generation_id,
                 message_id,
-            })
+            }))
     }
 
     pub async fn abort_generation(&self, generation: &ActiveGeneration) -> Result<(), String> {

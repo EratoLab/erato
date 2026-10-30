@@ -5664,6 +5664,35 @@ This only takes effect when `delegation.tasks.enabled` is `true`.
 propagate_child_mcp_approvals = true
 ```
 
+#### `delegation.tasks.child_dispatch`
+
+{/* erato_toml_config_key: delegation.tasks.child_dispatch */}
+
+How a client task's calls reach the device, for client tools that do not set
+[`child_dispatch`](#client_toolstoolskeychild_dispatch) themselves.
+
+- `live` hands each call to the executor stream at once. Without a connected
+  pane that takes it, the call ends as `context_unavailable`.
+- `durable` lets the call wait for the device: see
+  [`client_tools.tools.<key>.child_dispatch`](#client_toolstoolskeychild_dispatch).
+
+`durable` applies only to the tools it can apply to: `child_access = "read"`, a
+`host_context` whose client state outlives the pane session (`outlook_mailbox`,
+not `word_document`), a `durable` table, and
+`client_tools.durable_operations_enabled` on. Every other tool stays live, so this
+key never makes a configuration invalid.
+
+**Default value:** `"live"`
+
+**Type:** `"live"` | `"durable"`
+
+**Example:**
+
+```toml
+[delegation.tasks]
+child_dispatch = "live"
+```
+
 #### `delegation.tasks.approval.mode`
 
 {/* erato_toml_config_key: delegation.tasks.approval.mode */}
@@ -6102,9 +6131,55 @@ When no tool qualifies, the task runs without client tools and its result says
 why. The task is offered only the granted tools, and only while the planning turn
 is still running and the task runs on the grant's binding. A task the user took
 over and a retried task get none. Its calls go live to the executor stream with
-the grant's lineage and never park durably, even for a tool with a `durable`
-table. Without a stream that takes the call, or once its stream goes away, the
-call ends as `context_unavailable` after 15 seconds.
+the grant's lineage, unless the tool dispatches durably (see
+[`child_dispatch`](#client_toolstoolskeychild_dispatch)). Without a stream that
+takes a live call, or once its stream goes away, the call ends as
+`context_unavailable` after 15 seconds.
+
+#### `client_tools.tools.<key>.child_dispatch`
+
+{/* erato_toml_config_key: client_tools.tools.<key>.child_dispatch */}
+
+How a client task's calls of this tool reach the device. Unset, the tool follows
+[`delegation.tasks.child_dispatch`](#delegationtaskschild_dispatch).
+
+```toml
+[client_tools.tools.outlook_fetch_availability]
+# name, namespace, description and parameters as usual
+child_access = "read"
+host_context = "outlook_mailbox"
+child_dispatch = "durable"
+
+[client_tools.tools.outlook_fetch_availability.durable]
+host_context = "outlook_mailbox"
+attempt_expiry_secs = 86400
+```
+
+- `live` hands each call to the executor stream at once, as described under
+  [`child_access`](#client_toolstoolskeychild_access).
+- `durable` turns each call into a durable operation for the grant's binding. The
+  task parks at once, and the turn that planned it waits, showing the task as
+  waiting for the device. A client of the user that serves the binding and takes
+  delegated calls picks the operation up: at once when one is connected, otherwise
+  when one connects or next reads its inbox. It runs the call and the task goes
+  on. An approval on the device may stay open until the operation's attempt ends
+  (`durable.attempt_expiry_secs`). The call ends as `expired` when no client ran
+  it before then; the expiry is applied the next time one of the user's Erato
+  clients is open. It ends as `declined` when the user declined it on the device,
+  and as `withdrawn` once the planning turn moved on (the user wrote again or
+  archived the chat) or the tool was set to never allow. The task then answers
+  without the data and says what is missing. The planning turn goes on by itself
+  once every task it waits for has finished.
+
+Refused at load time: `child_dispatch` without `child_access = "read"`, and
+`durable` on a tool without a `durable` table or whose `host_context` does not
+outlive the pane session. `outlook_mailbox` outlives it; `word_document` does not,
+so Word tools always stay live. A durable tool's calls are durable only while
+`client_tools.durable_operations_enabled` is on; otherwise they go live.
+
+**Default value:** unset (follows `delegation.tasks.child_dispatch`)
+
+**Type:** `"live"` | `"durable"`
 
 #### `client_tools.tools.<key>.requires_client_registration`
 

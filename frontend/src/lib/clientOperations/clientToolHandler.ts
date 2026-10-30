@@ -1,7 +1,9 @@
 /* eslint-disable lingui/no-unlocalized-strings -- Fixed protocol codes. */
 import {
+  clientToolAcceptsGrantCalls,
   isClientToolCallInFlight,
   markClientToolCallAnswered,
+  runClientToolCall,
 } from "@/hooks/chat/clientToolExecutors";
 
 import type { ClientOperationHandler } from "./coordinator";
@@ -71,6 +73,16 @@ export function toOperationResult(
       },
     });
   }
+  // Only a task's call reports a decline on the device as such; the user's own
+  // call keeps the validation shape its host family already reads.
+  if (
+    request.lineage &&
+    outcome.validationErrors?.some((issue) => issue.code === "declined")
+  )
+    return settle(request, {
+      outcome: "rejected",
+      error: { code: "declined" },
+    });
   if (outcome.validationErrors?.length)
     return settle(request, {
       outcome: "rejected",
@@ -109,7 +121,8 @@ export class ClientToolOperationHandler implements ClientOperationHandler {
   matches(request: OperationRequest): boolean {
     return (
       request.kind === this.kind &&
-      request.operation_id.split("/").at(-1) === this.toolName
+      request.operation_id.split("/").at(-1) === this.toolName &&
+      (!request.lineage || clientToolAcceptsGrantCalls(this.toolName))
     );
   }
   defer(request: OperationRequest): boolean {
@@ -127,12 +140,18 @@ export class ClientToolOperationHandler implements ClientOperationHandler {
     markClientToolCallAnswered(request.tool_call_id);
     let outcome: ClientToolExecutionResult | undefined;
     try {
-      outcome = await this.run(request.input, {
-        toolCallId: request.tool_call_id,
-        messageId: request.message_id,
-        chatId: request.chat_id,
-        signal,
-      });
+      outcome = await runClientToolCall(
+        this.toolName,
+        this.run,
+        request.input,
+        {
+          toolCallId: request.tool_call_id,
+          messageId: request.message_id,
+          chatId: request.chat_id,
+          signal,
+        },
+        request.lineage,
+      );
     } catch {
       outcome = undefined;
     }

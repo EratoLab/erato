@@ -1099,6 +1099,9 @@ pub enum DelegationRunReason {
     CapExceeded,
     /// Parked on an approval the user has not answered yet.
     ApprovalPending,
+    /// Parked on a durable client operation that waits for a client to run
+    /// it: a granted call, or local evidence.
+    ClientPending,
     /// Hit a gated call it could not ask about, so it could not continue.
     ///
     /// Not emitted on any path today: a run with nowhere to ask has the CALL
@@ -1145,6 +1148,7 @@ impl DelegationRunReason {
             DelegationRunReason::ParentAbort => "parent_abort",
             DelegationRunReason::CapExceeded => "cap_exceeded",
             DelegationRunReason::ApprovalPending => "approval_pending",
+            DelegationRunReason::ClientPending => "client_pending",
             DelegationRunReason::ApprovalUnavailable => "approval_unavailable",
             DelegationRunReason::ResultMissing => "result_missing",
             DelegationRunReason::Interrupted => "interrupted",
@@ -1380,6 +1384,10 @@ pub struct TaskClientTools {
     /// Granted calls the user declined, so their results are missing.
     #[serde(skip_serializing_if = "is_zero")]
     pub declined: u32,
+    /// Durable granted calls no client ran before they expired, so their
+    /// results are missing.
+    #[serde(skip_serializing_if = "is_zero")]
+    pub expired: u32,
 }
 
 fn is_zero(count: &u32) -> bool {
@@ -1396,11 +1404,13 @@ impl TaskClientTools {
             unavailable: note.unavailable.clone(),
             freshness: calls.freshness,
             declined: calls.declined,
+            expired: calls.expired,
         };
         (tools.run_mode.is_some()
             || tools.unavailable.is_some()
             || tools.freshness.is_some()
-            || tools.declined > 0)
+            || tools.declined > 0
+            || tools.expired > 0)
             .then_some(tools)
     }
 }
@@ -1486,9 +1496,69 @@ pub(crate) enum DelegationDispatchOutcome {
         assistant_id: Option<Uuid>,
         assistant_name: Option<String>,
         model: TaskModelReport,
-        request: Box<crate::models::message::ContentPartToolApprovalRequest>,
+        stop: ChildStop,
         trace: DelegationTrace,
     },
+}
+
+/// What a parked child stopped on, copied off its own row.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) enum ChildStop {
+    /// An approval only the user can answer.
+    Approval(Box<crate::models::message::ContentPartToolApprovalRequest>),
+    /// A granted call that waits for a client to run it.
+    Waiting(ChildWait),
+}
+
+/// A child's granted call parked as a durable operation, as the parent's
+/// waiting item describes it.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct ChildWait {
+    pub attempt_id: Uuid,
+    /// The child's call.
+    pub tool_call_id: String,
+    /// The model-facing name of the granted tool.
+    pub tool_name: String,
+    pub namespace: String,
+    /// The `host_context.kind` of the grant's binding.
+    pub host_context: String,
+    /// The model's input, as the child's row stores it.
+    pub input: serde_json::Value,
+    pub requested_at: String,
+}
+
+async fn read_child_content<C: sea_orm::ConnectionTrait>(
+    conn: &C,
+    child_chat_id: Uuid,
+    child_message_id: Uuid,
+) -> Option<Vec<crate::models::message::ContentPart>> {
+    use sea_orm::EntityTrait;
+
+    let row = crate::db::entity::messages::Entity::find_by_id(child_message_id)
+        .one(conn)
+        .await
+        .map_err(|error| {
+            tracing::warn!(%error, %child_chat_id, "Failed to read a parked child's row");
+        })
+        .ok()
+        .flatten()
+        .filter(|row| row.chat_id == child_chat_id)?;
+    Some(
+        crate::models::message::MessageSchema::validate(&row.raw_message)
+            .ok()?
+            .content,
+    )
+}
+
+/// The request a child's row ends on. An approved request is still on the row
+/// after its decision, so only the last part tells what the child stopped on.
+fn last_approval_request(
+    content: Vec<crate::models::message::ContentPart>,
+) -> Option<crate::models::message::ContentPartToolApprovalRequest> {
+    match content.into_iter().last() {
+        Some(crate::models::message::ContentPart::ToolApprovalRequest(request)) => Some(request),
+        _ => None,
+    }
 }
 
 /// The approval request a parked child is waiting on, read off its own row.
@@ -1501,26 +1571,68 @@ pub(crate) async fn read_child_approval_request<C: sea_orm::ConnectionTrait>(
     child_chat_id: Uuid,
     child_message_id: Uuid,
 ) -> Option<crate::models::message::ContentPartToolApprovalRequest> {
+    last_approval_request(read_child_content(conn, child_chat_id, child_message_id).await?)
+}
+
+/// The granted call a parked child waits for a client to run: its row ends on
+/// a pending `client_tool.v1` operation with call lineage. Other durable stops,
+/// such as local evidence, are never a waiting child.
+pub(crate) async fn read_child_wait<C: sea_orm::ConnectionTrait>(
+    conn: &C,
+    child_chat_id: Uuid,
+    child_message_id: Uuid,
+) -> Option<ChildWait> {
     use sea_orm::EntityTrait;
 
-    let row = crate::db::entity::messages::Entity::find_by_id(child_message_id)
-        .one(conn)
-        .await
-        .map_err(|error| {
-            tracing::warn!(%error, %child_chat_id, "Failed to read a parked child's approval");
-        })
-        .ok()
-        .flatten()
-        .filter(|row| row.chat_id == child_chat_id)?;
-    crate::models::message::MessageSchema::validate(&row.raw_message)
-        .ok()?
-        .content
-        .into_iter()
+    let content = read_child_content(conn, child_chat_id, child_message_id).await?;
+    let pending = crate::services::client_operations::pending(&content)?;
+    let attempt =
+        crate::db::entity::client_operation_attempts::Entity::find_by_id(pending.attempt_id)
+            .one(conn)
+            .await
+            .map_err(|error| {
+                tracing::warn!(%error, %child_chat_id, "Failed to read a waiting child's call");
+            })
+            .ok()
+            .flatten()
+            .filter(|attempt| attempt.chat_id == child_chat_id)?;
+    let request: crate::services::client_operations::OperationRequest =
+        serde_json::from_value(attempt.request).ok()?;
+    if request.lineage.is_none()
+        || request.kind != crate::services::client_operations::client_tool::CLIENT_TOOL_KIND
+    {
+        return None;
+    }
+    let (namespace, tool_name) = request
+        .operation_id
+        .rsplit_once('/')
+        .unwrap_or(("", request.operation_id.as_str()));
+    let input = content
+        .iter()
         .rev()
         .find_map(|part| match part {
-            crate::models::message::ContentPart::ToolApprovalRequest(request) => Some(request),
+            crate::models::message::ContentPart::ToolUse(tool_use)
+                if tool_use.tool_call_id == request.tool_call_id =>
+            {
+                tool_use.input.clone()
+            }
             _ => None,
         })
+        .unwrap_or_else(|| request.input.clone());
+    Some(ChildWait {
+        attempt_id: attempt.attempt_id,
+        tool_call_id: request.tool_call_id.clone(),
+        tool_name: tool_name.to_string(),
+        namespace: namespace.to_string(),
+        host_context: request
+            .binding
+            .host_context
+            .as_ref()
+            .map(|context| context.kind.clone())
+            .unwrap_or_default(),
+        input,
+        requested_at: attempt.created_at.with_timezone(&chrono::Utc).to_rfc3339(),
+    })
 }
 
 /// The parent generation's stream, and where on it the delegation tool part
@@ -1929,16 +2041,19 @@ pub(crate) async fn build_result_envelope<C: sea_orm::ConnectionTrait>(
         .unwrap_or_default();
 
     if let Some(row) = assistant_row {
-        let stopped_on_approval = crate::models::message::MessageSchema::validate(&row.raw_message)
-            .is_ok_and(|message| crate::models::message::is_durable_stop(&message.content));
-        if stopped_on_approval && status == DelegationRunStatus::Completed {
+        let stop_reason = crate::models::message::MessageSchema::validate(&row.raw_message)
+            .ok()
+            .and_then(|message| durable_stop_reason(&message.content));
+        if let Some(stop_reason) = stop_reason
+            && status == DelegationRunStatus::Completed
+        {
             // The child stopped to ask, which is not a result and not a
             // failure. The awaited path normally never gets here — it hands
             // the request to the origin turn before building an envelope —
             // but the continuation that settles the slot afterwards does,
             // when the resumed child parks a second time.
             status = DelegationRunStatus::InputRequired;
-            reason = Some(DelegationRunReason::ApprovalPending);
+            reason = Some(stop_reason);
         }
         let has_metadata_error = row
             .generation_metadata
@@ -2698,18 +2813,30 @@ pub(crate) async fn await_delegation(
     if status == DelegationRunStatus::Completed
         && child_task.derive_outcome(false)
             == crate::services::background_tasks::TaskOutcome::AwaitingApproval
-        && let Some(request) =
-            read_child_approval_request(&app_state.db, child_chat_id, child_task.message_id()).await
     {
-        return DelegationDispatchOutcome::Suspended {
+        let stop = match read_child_approval_request(
+            &app_state.db,
             child_chat_id,
-            child_message_id: child_task.message_id(),
-            assistant_id,
-            assistant_name: target_name,
-            model,
-            request: Box::new(request),
-            trace: trace.snapshot(),
+            child_task.message_id(),
+        )
+        .await
+        {
+            Some(request) => Some(ChildStop::Approval(Box::new(request))),
+            None => read_child_wait(&app_state.db, child_chat_id, child_task.message_id())
+                .await
+                .map(ChildStop::Waiting),
         };
+        if let Some(stop) = stop {
+            return DelegationDispatchOutcome::Suspended {
+                child_chat_id,
+                child_message_id: child_task.message_id(),
+                assistant_id,
+                assistant_name: target_name,
+                model,
+                stop,
+                trace: trace.snapshot(),
+            };
+        }
     }
 
     DelegationDispatchOutcome::Completed {
@@ -2899,6 +3026,32 @@ pub(crate) fn queued_placeholder_output() -> serde_json::Value {
     serde_json::json!({ "status": "queued" })
 }
 
+/// Why a row that ends on a durable stop is not moving: a request waits for
+/// the user, a pending client operation for a client.
+fn durable_stop_reason(
+    content: &[crate::models::message::ContentPart],
+) -> Option<DelegationRunReason> {
+    match content.last() {
+        Some(crate::models::message::ContentPart::ToolApprovalRequest(_)) => {
+            Some(DelegationRunReason::ApprovalPending)
+        }
+        Some(crate::models::message::ContentPart::ClientToolPending(_)) => {
+            Some(DelegationRunReason::ClientPending)
+        }
+        _ => None,
+    }
+}
+
+impl ChildStop {
+    /// The reason a suspended slot carries for this stop.
+    pub(crate) fn reason(&self) -> DelegationRunReason {
+        match self {
+            ChildStop::Approval(_) => DelegationRunReason::ApprovalPending,
+            ChildStop::Waiting(_) => DelegationRunReason::ClientPending,
+        }
+    }
+}
+
 /// The envelope of a run that has stopped to ask.
 ///
 /// A real envelope rather than a bespoke object so the slot reads the same
@@ -2911,10 +3064,11 @@ pub(crate) fn suspended_envelope(
     assistant_name: Option<String>,
     model: Option<TaskModelReport>,
     parent_tool_call_id: String,
+    reason: DelegationRunReason,
 ) -> DelegationResultEnvelope {
     DelegationResultEnvelope {
         status: DelegationRunStatus::InputRequired,
-        reason: Some(DelegationRunReason::ApprovalPending),
+        reason: Some(reason),
         assistant_id,
         assistant_name,
         model,
@@ -3142,6 +3296,48 @@ pub(crate) fn validate_task_tool_call(
 mod tests {
     use super::*;
     use erato_config::config::DelegationAssistantsConfig;
+
+    #[test]
+    fn an_approved_request_that_is_not_the_last_part_is_not_read_as_the_childs_stop() {
+        use crate::models::message::ContentPart;
+        let request: ContentPart = serde_json::from_value(json!({
+            "content_type": "tool_approval_request", "tool_call_id": "call-read",
+            "tool_name": "read_message", "mcp_server_id": "outlook", "input": {},
+            "annotations": {"readOnlyHint": false, "destructiveHint": true,
+                            "idempotentHint": false, "openWorldHint": true},
+            "preset": "", "allow_always": true, "requested_at": "2026-10-29T00:00:00Z",
+            "kind": "client_tool",
+        }))
+        .unwrap();
+        let approval: ContentPart = serde_json::from_value(json!({
+            "content_type": "tool_approval", "tool_call_id": "call-read",
+            "approved_at": "2026-10-29T00:00:01Z",
+        }))
+        .unwrap();
+        let tool_use: ContentPart = serde_json::from_value(json!({
+            "content_type": "tool_use", "tool_call_id": "call-read", "status": "in_progress",
+            "tool_name": "read_message", "input": {}, "output": {"status": "input_required"},
+        }))
+        .unwrap();
+        let pending: ContentPart = serde_json::from_value(json!({
+            "content_type": "client_tool_pending", "attempt_id": Uuid::nil(),
+            "tool_call_id": "call-read", "pending_tool_calls": [],
+        }))
+        .unwrap();
+        let parked = vec![request.clone()];
+        assert!(last_approval_request(parked.clone()).is_some());
+        assert_eq!(
+            durable_stop_reason(&parked),
+            Some(DelegationRunReason::ApprovalPending)
+        );
+        let waiting = vec![request, approval, tool_use, pending];
+        assert!(last_approval_request(waiting.clone()).is_none());
+        assert_eq!(
+            durable_stop_reason(&waiting),
+            Some(DelegationRunReason::ClientPending)
+        );
+        assert_eq!(durable_stop_reason(&waiting[..3]), None);
+    }
 
     /// Payloads are built from the tag the offer actually emits, so renaming it
     /// cannot quietly turn the escape attempts below into inert text.
@@ -3622,6 +3818,7 @@ mod tests {
             scheduling: erato_config::config::TaskScheduling::default(),
             propagate_child_mcp_approvals: true,
             approval: erato_config::config::DelegationTasksApprovalConfig::default(),
+            child_dispatch: Default::default(),
         }
     }
 

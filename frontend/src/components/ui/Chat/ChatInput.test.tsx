@@ -4153,6 +4153,52 @@ describe("ChatInput", () => {
       ).toBeInTheDocument();
     });
 
+    it("says the queue waits for tasks when only waiting tasks hold it", async () => {
+      const { i18n } = await import("@lingui/core");
+      const onSendMessage = vi.fn();
+      const rerender = renderQueue(
+        { isPendingResponse: true },
+        onSendMessage,
+        i18n,
+      );
+
+      const textarea = screen.getByPlaceholderText("Type a message...");
+      fireEvent.change(textarea, { target: { value: "next message" } });
+      fireEvent.keyDown(textarea, { key: "Enter", shiftKey: false });
+
+      act(() => {
+        useConfirmationRegistryStore
+          .getState()
+          .registerConfirmation(CHAT_ID, "card-1", { waitingOnly: true });
+      });
+      rerender({ isPendingResponse: false });
+      await flushTimers();
+      expect(onSendMessage).not.toHaveBeenCalled();
+      expect(
+        screen.getByText("Queued — sends when the waiting tasks finish"),
+      ).toBeInTheDocument();
+
+      // A card that asks something brings the confirmation wording back.
+      act(() => {
+        useConfirmationRegistryStore
+          .getState()
+          .registerConfirmation(CHAT_ID, "card-2");
+      });
+      expect(
+        screen.getByText(
+          "Queued — sends after you respond to the confirmation",
+        ),
+      ).toBeInTheDocument();
+      act(() => {
+        useConfirmationRegistryStore
+          .getState()
+          .unregisterConfirmation(CHAT_ID, "card-1");
+        useConfirmationRegistryStore
+          .getState()
+          .unregisterConfirmation(CHAT_ID, "card-2");
+      });
+    });
+
     it("queues the draft on Enter while generating instead of sending", async () => {
       const { i18n } = await import("@lingui/core");
       const onSendMessage = vi.fn();
