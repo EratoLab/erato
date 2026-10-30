@@ -692,29 +692,26 @@ pub(crate) struct Synced {
     pub outcome: SyncOutcome,
     pub generation_state: String,
     pub expected_generation: Option<Uuid>,
-    pub has_waiting_items: bool,
     pub unanswered: bool,
-    /// `errored` with nothing answered after the stop: a continuation crashed,
-    /// or ended without answering on purpose.
+    /// A continuation crashed before it answered: the message still carries
+    /// its in-flight marker, which a continuation that stops on purpose (the
+    /// content filter) clears. Read from the marker because the chat's
+    /// `errored` lasts only until the heartbeat cleanup clears an ended turn's
+    /// state, a minute later, and a task may wait far longer.
     pub crashed: bool,
-    /// The message still carries a continuation's in-flight marker, which only
-    /// a crash leaves behind; a continuation that stops on purpose (the content
-    /// filter) clears it.
-    pub owes_answer: bool,
 }
 
 impl Synced {
     /// Whether the parent can go on without the user: nothing is left to
     /// decide, and either everything it waited for settled or a crashed
-    /// continuation has to re-park on what is still open. An errored turn
-    /// that cleared its marker runs again only when the user asks.
+    /// continuation has to re-park on what is still open. A turn that ended
+    /// and cleared its marker runs again only when the user asks.
     pub(crate) fn resumable(&self) -> bool {
-        self.has_waiting_items
-            && self.outcome.open_decidable == 0
+        self.outcome.open_decidable == 0
             && ((self.generation_state == "awaiting_approval"
                 && self.unanswered
                 && self.outcome.open_waiting == 0)
-                || (self.crashed && self.owes_answer))
+                || self.crashed)
     }
 }
 
@@ -1015,10 +1012,12 @@ fn replace_item(part: &mut ContentPart, approval_id: &str, replacement: Approval
 /// Brings a parked parent's waiting items up to date with their children,
 /// under the parent chat's advisory lock, and says whether it can go on.
 ///
-/// Only a parent that is still parked on this message is touched: the chat is
-/// not archived, the message is its latest, and it is `awaiting_approval`, or
-/// `errored` by a continuation that crashed before answering. Idempotent, and
-/// safe to run from any tail, any replica and the cleanup sweep.
+/// Only a parent whose latest message still waits on its tasks is touched:
+/// the chat is not archived, no generation runs on it, and the message's last
+/// stop has waiting items. Its state says nothing more: a turn that ended
+/// without re-parking is cleared by the heartbeat cleanup a minute later, and
+/// its slots still have to settle. Idempotent, and safe to run from any tail,
+/// any replica and the cleanup sweep.
 pub(crate) async fn sync_waiting_parent(
     db: &sea_orm::DatabaseConnection,
     config: &AppConfig,
@@ -1040,9 +1039,7 @@ pub(crate) async fn sync_waiting_parent(
         return Ok(None);
     };
     let generation_state = chat.generation_state.clone().unwrap_or_default();
-    if chat.archived_at.is_some()
-        || !matches!(generation_state.as_str(), "awaiting_approval" | "errored")
-    {
+    if chat.archived_at.is_some() || generation_state == "running" {
         return Ok(None);
     }
     let tip = crate::models::message::get_active_thread_tip(&tx, &parent_chat_id).await?;
@@ -1062,17 +1059,16 @@ pub(crate) async fn sync_waiting_parent(
     else {
         return Ok(None);
     };
-    let owes_answer =
-        crate::server::api::v1beta::message_streaming::continuation_owes_an_answer(&message);
-    let crashed = generation_state == "errored" && (state.unanswered || owes_answer);
-    if generation_state == "errored" && !crashed {
-        return Ok(None);
-    }
     let has_waiting_items = state
         .request
         .approval_items()
         .iter()
         .any(crate::server::api::v1beta::message_streaming::is_waiting_item);
+    if !has_waiting_items {
+        return Ok(None);
+    }
+    let crashed = matches!(generation_state.as_str(), "errored" | "")
+        && crate::server::api::v1beta::message_streaming::continuation_owes_an_answer(&message);
     let states = read_waiting_children(&tx, config, &parsed.content).await;
     let outcome = apply_waiting_sync(&mut parsed.content, &states, true);
     if outcome.changed {
@@ -1093,10 +1089,8 @@ pub(crate) async fn sync_waiting_parent(
         outcome,
         generation_state,
         expected_generation: chat.active_generation_id,
-        has_waiting_items,
         unanswered: state.unanswered,
         crashed,
-        owes_answer,
     }))
 }
 
@@ -1155,7 +1149,7 @@ pub async fn sweep_waiting_parents(
             LIMIT 1
         ) tip
         WHERE c.archived_at IS NULL
-          AND c.generation_state IN ('awaiting_approval', 'errored')
+          AND c.generation_state IS DISTINCT FROM 'running'
           AND ($2::uuid IS NULL OR c.id > $2)
           AND tip.raw_message -> 'content'
             @> '[{"content_type":"tool_approval_request","approvals":[{"child":{"waiting_for":{}}}]}]'::jsonb

@@ -177,8 +177,10 @@ first try and no 15 s grace.
   own tail settles the slot (`reconcile_orphaned_parent_slot`).
 - **Sync.** `sync_waiting_parent` brings the parent's last stop up to date under
   the parent chat's advisory lock, only while the message is the active-thread
-  tip and the chat is `awaiting_approval`, or `errored` without an answer after
-  the stop. Per open waiting item: the child still runs or its call is not
+  tip, its last stop has waiting items, and the chat is not archived and runs no
+  generation. The chat's state is not asked beyond that: the heartbeat cleanup
+  clears an ended turn's state a minute later, and a task may wait far longer.
+  Per open waiting item: the child still runs or its call is not
   completed, so the item stays open (a call left `continuing` on an errored child
   counts as failed); the child parked on an Ask, so the item becomes an approval
   item in place (slot reason `approval_pending`); the child parked on another
@@ -200,9 +202,12 @@ first try and no 15 s grace.
   `Takeover::ResumeParked {expected_generation}`, which takes only the generation
   that parked and only while the message is still the tip. A parent whose
   continuation crashed, so its message still carries the in-flight marker,
-  resumes the same way (`ResumeCrashed`) and re-parks on what is still open. One
-  that ended without answering on purpose (the content filter clears the marker)
-  runs again only when the user asks. The open parent chat sends the empty
+  resumes the same way (`ResumeCrashed`) and re-parks on what is still open. The
+  marker says so, not the chat's `errored`: once the cleanup cleared the state,
+  `ResumeParked` takes a chat with no state and no generation instead, under the
+  same tip check. One that ended without answering on purpose (the content filter
+  clears the marker) still has its slots settled, and runs again only when the
+  user asks. The open parent chat sends the empty
   `continuestream` itself 5 s after it sees a settled stop no resume picked up,
   and holds its message queue until the turn answers.
 - **Admission** (`continuestream`). A body naming a waiting item, or a lone

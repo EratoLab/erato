@@ -93,7 +93,10 @@ pub enum Takeover {
     /// Resumes the parked turn itself once nothing it waits for is open. Only
     /// the generation that parked is taken: any newer turn has written a new
     /// `active_generation_id`, and superseding it would cancel its operations.
-    ResumeParked { expected_generation: Uuid },
+    /// `None` takes only a chat whose ended generation the heartbeat cleanup
+    /// has cleared, with no state and no generation; a newer turn would have
+    /// written one, or a message below this one.
+    ResumeParked { expected_generation: Option<Uuid> },
 }
 
 /// Why a lease acquisition was refused, with enough about the holder for the
@@ -449,8 +452,13 @@ impl BackgroundTaskManager {
                     generation_heartbeat_at = now(),
                     generation_ended_at = NULL
                 WHERE id = $2
-                  AND active_generation_id = $3
-                  AND generation_state IN ('awaiting_approval', 'errored')
+                  AND (
+                    (active_generation_id = $3
+                        AND generation_state IN ('awaiting_approval', 'errored'))
+                    OR ($3::uuid IS NULL
+                        AND active_generation_id IS NULL
+                        AND generation_state IS NULL)
+                  )
                 RETURNING id
                 "#,
                 [

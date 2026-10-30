@@ -19084,15 +19084,20 @@ pub(crate) async fn start_continuation(
             .into());
     };
     let awaiting_approval = chat.generation_state.as_deref() == Some("awaiting_approval");
+    let has_waiting_items = state.request.approval_items().iter().any(is_waiting_item);
     // Only a continuation that died before the model answered may run again,
     // and `chats.generation_state` alone cannot say which those are: it is
     // written by every generation on the chat, so a later turn that failed
     // would otherwise reopen a settled row and append a second answer to a
     // message that already has one. Either the row shows no answer or the
-    // message still carries a continuation's claim on it.
-    let crashed = (state.unanswered || continuation_owes_an_answer(&message))
-        && chat.generation_state.as_deref() == Some("errored");
-    let has_waiting_items = state.request.approval_items().iter().any(is_waiting_item);
+    // message still carries a continuation's claim on it. The heartbeat
+    // cleanup clears an ended turn's state a minute later, and a turn waiting
+    // on its tasks outlives that, so for one the claim alone is enough.
+    let crashed = match chat.generation_state.as_deref() {
+        Some("errored") => state.unanswered || continuation_owes_an_answer(&message),
+        None => has_waiting_items && continuation_owes_an_answer(&message),
+        _ => false,
+    };
     // A turn resumed for its waiting children takes only the lease it parked
     // under, never a newer turn's.
     let parked_generation = synced.as_ref().map_or(chat.active_generation_id, |synced| {
@@ -19197,16 +19202,13 @@ pub(crate) async fn start_continuation(
     // once a user write can take a parked lease: the card can still be mounted
     // while another turn already owns the chat.
     let (events, task) = if resume_parked {
-        let Some(expected_generation) = parked_generation else {
-            return Err(already_continued());
-        };
         app_state
             .background_tasks
             .try_start_task(
                 chat_id,
                 request.message_id,
                 Takeover::ResumeParked {
-                    expected_generation,
+                    expected_generation: parked_generation,
                 },
                 app_state.config.generation_status.stale_after_secs,
             )
@@ -19361,8 +19363,8 @@ pub(crate) enum ContinuationEntry {
     /// The caller found approvals open and is submitting decisions for them.
     Decide,
     /// The caller found every approval already decided on a generation that had
-    /// been swept to `errored`: the outcomes are on the row and the only thing
-    /// missing is the model call. Task children that still wait for a client
+    /// been swept to `errored`, or cleared after that while its tasks waited:
+    /// the outcomes are on the row and the only thing missing is the model call. Task children that still wait for a client
     /// may be open; the continuation parks on them again.
     ResumeCrashed,
     /// Every task child the parked turn waited for has finished, and nothing

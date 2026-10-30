@@ -5,6 +5,7 @@ use super::slow_path::{
     a_child_that_finishes_while_approvals_are_open_keeps_the_parent_parked,
     a_child_that_parks_on_a_second_grant_call_updates_its_waiting_item,
     a_claimed_grant_operation_is_authorized_while_the_parent_is_parked_on_the_child,
+    a_crashed_parent_the_cleanup_cleared_resumes_once_when_the_waiting_child_finishes,
     a_device_decline_ends_the_durable_call_as_declined,
     a_device_prompt_answered_after_the_tool_timeout_completes_within_the_attempt,
     a_durable_and_a_live_child_only_the_durable_one_waits,
@@ -19,6 +20,7 @@ use super::slow_path::{
     a_grant_operation_result_is_refused_without_a_claim,
     a_pane_without_grant_support_cannot_claim_a_grant_operation,
     a_parent_errored_after_its_decisions_resumes_once_when_the_waiting_child_finishes,
+    a_parent_the_cleanup_cleared_without_its_marker_settles_and_is_not_resumed,
     a_restart_while_parked_gives_one_continuation_and_no_duplicate_calls,
     a_task_call_left_continuing_on_an_errored_child_is_refused_and_settles_as_failed,
     a_waiting_call_is_withdrawn_once_the_parent_moved_on,
@@ -149,6 +151,8 @@ macro_rules! host_conformance {
             a_failed_owner_lookup_withdraws_nothing
             an_errored_parent_that_cleared_its_marker_is_not_resumed_by_its_child
             a_child_reaped_errored_after_its_answer_reads_as_completed
+            a_crashed_parent_the_cleanup_cleared_resumes_once_when_the_waiting_child_finishes
+            a_parent_the_cleanup_cleared_without_its_marker_settles_and_is_not_resumed
         ]);
     };
     ($name:ident: $row:ident($($arg:expr),*) $(, ignore = $why:literal)?) => {

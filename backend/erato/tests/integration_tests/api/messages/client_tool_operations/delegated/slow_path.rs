@@ -1805,6 +1805,35 @@ pub(super) async fn a_parent_errored_after_its_decisions_resumes_once_when_the_w
     pool: Pool<Postgres>,
     row: &HostRow,
 ) {
+    resume_after_a_crashed_decision(row, pool, false).await;
+}
+
+pub(super) async fn a_crashed_parent_the_cleanup_cleared_resumes_once_when_the_waiting_child_finishes(
+    pool: Pool<Postgres>,
+    row: &HostRow,
+) {
+    resume_after_a_crashed_decision(row, pool, true).await;
+}
+
+/// What the heartbeat cleanup does to a chat whose generation ended a minute
+/// ago.
+async fn clear_the_generation(state: &erato::state::AppState, chat_id: Uuid) {
+    sql(
+        state,
+        format!(
+            "UPDATE chats SET active_generation_id = NULL, generation_state = NULL, \
+                 generation_started_at = NULL, generation_heartbeat_at = NULL, \
+                 generation_ended_at = NULL \
+             WHERE id = '{chat_id}'"
+        ),
+    )
+    .await;
+}
+
+/// A decision continuation crashed after settling the asking item while the
+/// durable child still waits; with `cleared`, the cleanup ran before the child
+/// finished.
+async fn resume_after_a_crashed_decision(row: &HostRow, pool: Pool<Postgres>, cleared: bool) {
     use sea_orm::ConnectionTrait;
     let (mut launched, parked) = park_mixed(row, pool, |_| {}).await;
     let resumed = record_parent_resumes(&mut launched.llm);
@@ -1855,6 +1884,9 @@ pub(super) async fn a_parent_errored_after_its_decisions_resumes_once_when_the_w
         ))
         .await
         .unwrap();
+    if cleared {
+        clear_the_generation(&launched.state, launched.chat_id).await;
+    }
     assert_row_reads(&assistant_row(&launched.state.db, launched.chat_id).await);
 
     let first = child_for(&launched.state, launched.chat_id, CLIENT_TASK_CALL).await;
@@ -1890,6 +1922,8 @@ pub(super) async fn resume_parked_refuses_a_chat_whose_generation_moved_on(
         )
     };
 
+    // Only a chat whose generation was cleared is taken without one.
+    assert!(resume(None).await.is_err());
     let newer = Uuid::new_v4();
     let set_generation = async |generation: Uuid| {
         waiting
@@ -1903,7 +1937,7 @@ pub(super) async fn resume_parked_refuses_a_chat_whose_generation_moved_on(
             .unwrap();
     };
     set_generation(newer).await;
-    assert!(resume(parked_generation).await.is_err());
+    assert!(resume(Some(parked_generation)).await.is_err());
     let chat = reload(&waiting.state.db, waiting.chat_id).await;
     assert_eq!(chat.active_generation_id, Some(newer));
     assert_eq!(chat.generation_state.as_deref(), Some("awaiting_approval"));
@@ -1921,7 +1955,7 @@ pub(super) async fn resume_parked_refuses_a_chat_whose_generation_moved_on(
         ))
         .await
         .unwrap();
-    assert!(resume(parked_generation).await.is_err());
+    assert!(resume(Some(parked_generation)).await.is_err());
     let chat = reload(&waiting.state.db, waiting.chat_id).await;
     assert_eq!(chat.active_generation_id, Some(parked_generation));
     assert_eq!(chat.generation_state.as_deref(), Some("awaiting_approval"));
@@ -1937,7 +1971,7 @@ pub(super) async fn resume_parked_refuses_a_chat_whose_generation_moved_on(
         .execute_unprepared(&format!("DELETE FROM messages WHERE id = '{later}'"))
         .await
         .unwrap();
-    let (_events, task) = resume(parked_generation)
+    let (_events, task) = resume(Some(parked_generation))
         .await
         .expect("the parked generation is resumable");
     assert_eq!(
@@ -2529,14 +2563,14 @@ pub(super) async fn the_sweep_reaches_a_parent_behind_a_full_batch_that_never_ch
 ) {
     let waiting = park_a_waiting_child(row, pool, false, |_| {}).await;
     lose_the_tail(&waiting, "completed").await;
-    // Parents that answered after their stop and then errored keep matching
-    // the scan, and no sync changes them. Their ids sort before the real one.
-    let mut answered = waiting.parent_message.raw_message.clone();
-    answered["content"]
+    // Parents whose row this release cannot read keep matching the scan, and
+    // every sync of them fails. Their ids sort before the real one.
+    let mut unreadable = waiting.parent_message.raw_message.clone();
+    unreadable["content"]
         .as_array_mut()
         .unwrap()
-        .push(json!({"content_type": "text", "text": "answered"}));
-    let answered = serde_json::to_string(&answered)
+        .push(json!({"content_type": "from_a_newer_release"}));
+    let unreadable = serde_json::to_string(&unreadable)
         .unwrap()
         .replace('\'', "''");
     sql(
@@ -2556,7 +2590,7 @@ pub(super) async fn the_sweep_reaches_a_parent_behind_a_full_batch_that_never_ch
             "INSERT INTO messages (id, chat_id, raw_message, generation_parameters, is_message_in_active_thread) \
              SELECT ('00000000-0000-4000-9000-' || lpad(g::text, 12, '0'))::uuid, \
                     ('00000000-0000-4000-8000-' || lpad(g::text, 12, '0'))::uuid, \
-                    '{answered}'::jsonb, generation_parameters, true \
+                    '{unreadable}'::jsonb, generation_parameters, true \
              FROM messages, generate_series(1, 100) g WHERE id = '{}'",
             waiting.parent_message.id
         ),
@@ -2636,6 +2670,18 @@ pub(super) async fn an_errored_parent_that_cleared_its_marker_is_not_resumed_by_
     pool: Pool<Postgres>,
     row: &HostRow,
 ) {
+    settle_without_the_marker(row, pool, false).await;
+}
+
+pub(super) async fn a_parent_the_cleanup_cleared_without_its_marker_settles_and_is_not_resumed(
+    pool: Pool<Postgres>,
+    row: &HostRow,
+) {
+    settle_without_the_marker(row, pool, true).await;
+}
+
+/// With `cleared`, the cleanup ran before the child finished.
+async fn settle_without_the_marker(row: &HostRow, pool: Pool<Postgres>, cleared: bool) {
     let mut waiting = park_a_waiting_child(row, pool, false, |_| {}).await;
     let resumed = record_parent_resumes(&mut waiting.llm);
     after_the_read(
@@ -2653,6 +2699,9 @@ pub(super) async fn an_errored_parent_that_cleared_its_marker_is_not_resumed_by_
         ),
     )
     .await;
+    if cleared {
+        clear_the_generation(&waiting.state, waiting.chat_id).await;
+    }
 
     answer_as_pane(
         row,
@@ -2668,6 +2717,15 @@ pub(super) async fn an_errored_parent_that_cleared_its_marker_is_not_resumed_by_
     })
     .await;
     assert_eq!(part_for(&settled, CLIENT_TASK_CALL)["status"], "success");
+    if cleared {
+        let refused = continuestream(
+            &waiting,
+            json!({ "decisions": [], "shows_child_items": true }),
+        )
+        .await;
+        refused.assert_status_conflict();
+        assert_eq!(refused.json::<Value>()["code"], "already_continued");
+    }
     tokio::time::sleep(Duration::from_millis(500)).await;
     assert!(
         turn_bodies(&resumed).is_empty(),
@@ -2678,7 +2736,7 @@ pub(super) async fn an_errored_parent_that_cleared_its_marker_is_not_resumed_by_
             .await
             .generation_state
             .as_deref(),
-        Some("errored")
+        (!cleared).then_some("errored")
     );
     waiting.server.abort();
 }
