@@ -105,6 +105,21 @@ export const scopeOf = (
   };
 };
 
+/** Whether two items offer the same tool on the same scope: one decision. */
+export const sameScope = (
+  item: ApprovalItemPart,
+  other: ApprovalItemPart,
+): boolean => {
+  const scope = scopeOf(item);
+  const otherScope = scopeOf(other);
+  return (
+    !!scope &&
+    otherScope?.toolName === scope.toolName &&
+    otherScope.ref.hostContext === scope.ref.hostContext &&
+    otherScope.ref.scopeId === scope.ref.scopeId
+  );
+};
+
 /**
  * The open items one scope decision on `item` answers: the item itself and
  * every item not answered yet with the same tool on the same scope.
@@ -114,18 +129,12 @@ export const scopeGroup = (
   item: ApprovalItemPart,
   staged: StagedDecisions,
 ): ApprovalItemPart[] => {
-  const scope = scopeOf(item);
-  if (!scope) return [];
-  return items.filter((other) => {
-    if (other.approval_id === item.approval_id) return true;
-    if (staged[other.approval_id] !== undefined) return false;
-    const otherScope = scopeOf(other);
-    return (
-      otherScope?.toolName === scope.toolName &&
-      otherScope.ref.hostContext === scope.ref.hostContext &&
-      otherScope.ref.scopeId === scope.ref.scopeId
-    );
-  });
+  if (!scopeOf(item)) return [];
+  return items.filter(
+    (other) =>
+      other.approval_id === item.approval_id ||
+      (staged[other.approval_id] === undefined && sameScope(item, other)),
+  );
 };
 
 /** How the card offers an item's scope. */
