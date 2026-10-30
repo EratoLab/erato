@@ -6026,6 +6026,9 @@ pub enum ClientToolHostContext {
     OutlookMailbox,
     /// A Word document and the pane instance holding its capture.
     WordDocument,
+    /// The desktop sidecar's local index on this device, served by the Erato
+    /// app the user runs.
+    DesktopSidecar,
 }
 
 impl ClientToolHostContext {
@@ -6034,6 +6037,7 @@ impl ClientToolHostContext {
         match self {
             Self::OutlookMailbox => "outlook_mailbox",
             Self::WordDocument => "word_document",
+            Self::DesktopSidecar => "desktop_sidecar",
         }
     }
 
@@ -6042,7 +6046,7 @@ impl ClientToolHostContext {
     /// capture belongs to one pane instance.
     pub fn outlives_pane_session(&self) -> bool {
         match self {
-            Self::OutlookMailbox => true,
+            Self::OutlookMailbox | Self::DesktopSidecar => true,
             Self::WordDocument => false,
         }
     }
