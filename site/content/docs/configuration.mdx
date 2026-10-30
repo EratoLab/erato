@@ -682,8 +682,12 @@ explicitly configured asynchronous delegated leaf task. It requires
 task's frozen tool budget; ordinary chats,
 Office actions, arbitrary scripts and local inference are outside this profile.
 
-`backend_origin` is the canonical HTTPS issuer, for example
-`https://erato.example.com`. `signing_key_id` selects an Ed25519 key in
+`backend_origin` is the canonical issuer origin, for example
+`https://erato.example.com`. Use `https` in production; a plaintext `http`
+origin is accepted for development setups and logs a startup warning. The value
+must be exactly `https://host[:port]` or `http://host[:port]` with no path, query
+or trailing slash; other schemes are rejected.
+`signing_key_id` selects an Ed25519 key in
 `verification_keys`, a map of 1–8 key IDs to Ed25519 public keys encoded as
 base64url without padding (32 decoded bytes per key).
 `signing_private_key_pem` is the matching PKCS#8 PEM secret, held only by the single

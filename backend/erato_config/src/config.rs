@@ -853,7 +853,11 @@ pub struct LocalDelegationConfig {
     /// Enable the authenticated local-evidence workflow. Defaults to false.
     #[serde(default)]
     pub enabled: bool,
-    /// Canonical HTTPS backend origin pinned in the native installation.
+    /// Canonical backend origin (https in production) pinned in the native
+    /// installation as the assertion issuer. It must be exactly
+    /// `https://host[:port]` or `http://host[:port]`; a plaintext `http`
+    /// origin is accepted for development setups and logs a startup warning.
+    /// Other schemes are rejected, matching the sidecar's trust policy.
     pub backend_origin: Option<String>,
     /// Identifier of the active Ed25519 signing key.
     pub signing_key_id: Option<String>,
@@ -913,10 +917,19 @@ impl DesktopSidecarConfig {
                 .backend_origin
                 .as_deref()
                 .ok_or_else(|| eyre::eyre!("Local delegation backend origin required"))?;
+            // The sidecar compares `iss` against this value with exact string
+            // equality, so the pinned value must already be the canonical
+            // `scheme://host[:port]` serialization. Integrity comes from the
+            // installed public key and that exact match, not from the scheme,
+            // which is why a plaintext development origin is allowed here.
+            // Only http and https are accepted: the sidecar rejects other
+            // schemes at startup, so refusing them here surfaces the mistake
+            // as a clear configuration error instead of a failed sidecar start.
             let parsed = url::Url::parse(origin)?;
             eyre::ensure!(
-                parsed.scheme() == "https" && parsed.origin().ascii_serialization() == origin,
-                "Local delegation requires a canonical HTTPS backend origin"
+                matches!(parsed.scheme(), "http" | "https")
+                    && parsed.origin().ascii_serialization() == origin,
+                "Local delegation requires a canonical http or https backend origin"
             );
             eyre::ensure!(
                 !policy.verification_keys.is_empty() && policy.verification_keys.len() <= 8,
@@ -2059,6 +2072,23 @@ impl AppConfig {
             panic!(
                 "Langfuse prompt sources are configured but Langfuse integration is not enabled. Please set integrations.langfuse.enabled = true and configure the required Langfuse settings."
             );
+        }
+
+        // A plaintext backend origin loads and the sidecar still pins it by
+        // exact equality, so this is a warning for development setups (local
+        // or non-loopback dev hosts), not an error. bootstrap_fields() rejects
+        // an origin that is not canonical.
+        let local_delegation = &config.desktop_sidecar.local_delegation;
+        if local_delegation.enabled
+            && let Some(origin) = local_delegation.backend_origin.as_deref()
+            && let Ok(parsed) = url::Url::parse(origin)
+            && parsed.scheme() != "https"
+        {
+            startup_log::warn_preinit(format!(
+                "`desktop_sidecar.local_delegation.backend_origin` is `{origin}`, which is not \
+                 an https origin. Strict local delegation over plaintext http is for \
+                 development only; production deployments must pin an https origin."
+            ));
         }
 
         config
@@ -9412,6 +9442,59 @@ mod desktop_sidecar_installation_tests {
         let encoded = serde_json::to_string(&fields).unwrap();
         assert!(!encoded.contains("PRIVATE_KEY_MARKER"));
         assert!(!encoded.contains("signing_private_key_pem"));
+    }
+
+    fn strict_config_with_origin(origin: &str) -> DesktopSidecarConfig {
+        serde_json::from_value(serde_json::json!({
+            "local_delegation": {"enabled":true,"backend_origin":origin, "signing_key_id":"key", "verification_keys":{"key":"public"}}
+        }))
+        .unwrap()
+    }
+
+    #[test]
+    fn strict_bootstrap_pins_canonical_https_and_plaintext_development_origins() {
+        // Integrity rests on the pinned key and exact origin equality, so a
+        // plaintext origin (loopback or a non-loopback dev host) is pinned as
+        // written. The scheme itself is not what the sidecar trusts.
+        for origin in [
+            "https://erato.example",
+            "https://erato.example:8443",
+            "http://localhost:3130",
+            "http://devhost:3130",
+            "http://127.0.0.1:3130",
+        ] {
+            let fields = strict_config_with_origin(origin)
+                .bootstrap_fields()
+                .unwrap_or_else(|error| panic!("{origin}: {error}"));
+            assert_eq!(fields["local_delegation"]["backend_origin"], origin);
+        }
+    }
+
+    #[test]
+    fn strict_bootstrap_rejects_non_canonical_origins() {
+        for origin in [
+            "https://erato.example/",
+            "https://erato.example/path",
+            "https://erato.example?query=1",
+            "https://erato.example#fragment",
+            "https://user@erato.example",
+            "https://erato.example:443",
+            "HTTPS://erato.example",
+            "http://devhost:3130/",
+            // Canonical tuple origins, but not web schemes.
+            "ws://devhost:3130",
+            "wss://devhost:3130",
+            "ftp://erato.example",
+            "erato.example",
+            "",
+        ] {
+            assert!(
+                strict_config_with_origin(origin)
+                    .bootstrap_fields()
+                    .is_err(),
+                "{origin:?} was accepted"
+            );
+        }
     }
 
     #[test]
