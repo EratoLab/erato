@@ -893,6 +893,7 @@ async fn a_pane_lost_in_flight_is_context_unavailable_after_the_grace(
         connected_at: chrono::Utc::now(),
         client_tools: vec![row.read_tool.to_string(), WRITE_TOOL.to_string()],
         child_client_tools: vec![row.child_pane_tools().to_string()],
+        scoped_client_tools: Vec::new(),
     };
     executor_stream::announce(&state.db, &claim, Uuid::new_v4())
         .await
