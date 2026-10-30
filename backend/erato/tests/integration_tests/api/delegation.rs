@@ -19883,6 +19883,28 @@ async fn local_research_case(pool: Pool<Postgres>, repeated: bool, cancelled: bo
             }),
             "the parent must not receive final delivery while its child is parked"
         );
+        if collection == 0 {
+            // What the parent's task card shows for a task waiting on its
+            // review in the desktop app.
+            let origin = Uuid::parse_str(&chat).unwrap();
+            let results = tokio::time::timeout(std::time::Duration::from_secs(15), async {
+                loop {
+                    let results = task_result_rows(&app_state.db, origin).await;
+                    if !results.is_empty() {
+                        break results;
+                    }
+                    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+                }
+            })
+            .await
+            .expect("the parked task notifies its parent");
+            assert_eq!(results.len(), 1, "one notification for the parked task");
+            let part = &results[0].raw_message["content"][0];
+            assert_eq!(part["content_type"], "task_result");
+            assert_eq!(part["status"], "input_required");
+            assert_eq!(part["reason"], "client_pending");
+            assert_eq!(part["child_chat_id"], json!(job.chat_id));
+        }
         use sea_orm::TransactionTrait;
         let locked = app_state.db.begin().await.unwrap();
         locked
