@@ -366,7 +366,10 @@ Decided open questions:
   succeeded value may carry at most 20 distinct ids; any other outcome with ids
   is malformed. The stored result keeps the tool's own value and the raw ids
   (`ValidatedResult.file_ids`); nothing is read at `/result` or when a late live
-  result is stored. The server reads the files as the user, with the policy
+  result is stored. A live result that reached the turn after its wait ran out,
+  while the call was being stored, was already read for the turn: it is stored
+  as the tool's own value and the readable ids. The server reads the files as
+  the user, with the policy
   engine and the same 80,000-character bound as a live result, where it writes
   the tool's output: on live receipt of a durable-tracked call, after the
   binding check, and at the continuation, inside `begin_continuation`'s
