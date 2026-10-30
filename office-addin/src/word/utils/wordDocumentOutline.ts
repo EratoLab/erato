@@ -24,7 +24,8 @@ const TOP_LEVEL_NUMBER = /^(§\s*)?(\d+)\.?\s+\S/u;
 const CLAUSE_NUMBER = /^(§\s*)?\d+(\.\d+)*\.?\s+\S/u;
 /** The capture's own fallback for a heading style it finds no outline level for. */
 const HEADING_STYLE_ID = /^Heading([1-9])$/i;
-const START_OF_DOCUMENT = "(start of document)";
+/** The title of the part before the first heading, which has none of its own. */
+export const START_OF_DOCUMENT = "(start of document)";
 
 /** H: a heading; S: a numbered section; P: a part of about 20 KiB where nothing else structures a span. */
 export type WordOutlineTag = "H" | "S" | "P";

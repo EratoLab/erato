@@ -131,6 +131,49 @@ function blocksOfId(
   return null;
 }
 
+export interface WordWrittenChanges {
+  /** The written blocks the changes lie in, ascending; for a whole-document plan, every block a
+   * placed change lies in. */
+  blocks: number[];
+  /** Whether one of them came from this pane's user (or, on the web, a desktop co-author). */
+  local: boolean;
+}
+
+/** The local or remote changes since the capture that lie in blocks a plan writes, or anywhere for
+ * a whole-document plan. Own changes, unknown entries and ids the journal cannot place count for
+ * nothing here: Apply's check of the live document guards those. */
+export function wordWrittenChanges(
+  snapshot: WordAuthoringSnapshot,
+  capture: WordReadCapture | undefined,
+  written: ReadonlySet<number> | "document",
+): WordWrittenChanges | undefined {
+  if (!capture?.changes) return undefined;
+  const since = wordChangesSince(capture.changes.position);
+  if (!since.ok) return undefined;
+  const mapping = mappingOf(snapshot, capture);
+  const blockCount = snapshot.blocks.length;
+  const hit = new Set<number>();
+  let found = false;
+  let local = false;
+  for (const entry of since.entries) {
+    if (entry.source !== "local" && entry.source !== "remote") continue;
+    let inWritten = written === "document";
+    for (const id of entry.ids) {
+      const blocks = blocksOfId(id, mapping, since.entries, blockCount);
+      if (!blocks) continue;
+      for (let block = blocks[0]; block <= blocks[1]; block++)
+        if (written === "document" || written.has(block)) {
+          hit.add(block);
+          inWritten = true;
+        }
+    }
+    if (!inWritten) continue;
+    found = true;
+    local ||= entry.source === "local";
+  }
+  return found ? { blocks: [...hit].sort((a, b) => a - b), local } : undefined;
+}
+
 /** changes: "in-scope" when a local or remote change lies in what the response read; otherwise
  * "unknown" when the journal cannot tell, "elsewhere" when such a change lies outside, else "none".
  * The pane's own writes never change it. */

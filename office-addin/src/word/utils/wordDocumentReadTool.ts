@@ -84,6 +84,10 @@ export class WordDocumentReadSession {
     session.chatId = request.chatId;
     return true;
   }
+  /** Where the change journal stood when the session's capture was taken. */
+  get capture(): WordReadCapture | undefined {
+    return this.readCapture;
+  }
   snapshotForSubmission(
     context: ClientToolCallContext,
   ): WordAuthoringSnapshot | undefined {
