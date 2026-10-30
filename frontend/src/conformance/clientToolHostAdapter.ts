@@ -636,13 +636,14 @@ export const clientToolHostAdapterConformanceFailures = async (
     label: string,
     turn: ClientToolHostTurn,
     approved: boolean,
+    change?: GrantChange,
   ): Promise<CallOutcome> =>
     (
       await grantCall(
         label,
         device.read,
         turn,
-        undefined,
+        change,
         async (approvalsBefore) => {
           const chatId = await waitForApprovalSince(approvalsBefore);
           if (chatId === undefined) {
@@ -844,6 +845,27 @@ export const clientToolHostAdapterConformanceFailures = async (
         click(),
       ),
     );
+    // CT-9: a document approval stands for the server's ask, never the host's own.
+    const deviceAnchor =
+      approval && scopedAdvertised.includes(approval.read.tool)
+        ? clientToolApprovalScopeAnchor(approval.read.tool, own)
+        : undefined;
+    if (approval && deviceAnchor) {
+      const label = `"${approval.read.tool}" asking on the device under a document approval`;
+      expectRead(
+        rule,
+        label,
+        turnNow,
+        await readUnderApproval(approval, label, turnNow, true, (grant) => ({
+          ...grant,
+          approvalScope: {
+            approvalId: "conformance-approval",
+            scopeId: own.scopeId,
+            position: deviceAnchor(),
+          },
+        })),
+      );
+    }
     for (const [what, position] of [
       ["no position", undefined],
       ["a null position", null],
