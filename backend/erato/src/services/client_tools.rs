@@ -49,6 +49,9 @@ pub struct GrantedCall {
     /// The call parks as a durable operation for the grant's binding instead
     /// of going live.
     pub durable: bool,
+    /// The key one decision may approve this tool's calls under, for a tool
+    /// with `approval_scope = "context"` on a host that has a scope.
+    pub approval_scope: Option<crate::services::approval_scope::ScopeKey>,
 }
 
 #[derive(Clone)]

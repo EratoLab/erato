@@ -2519,6 +2519,104 @@ mod tool_approval_part_tests {
     }
 
     #[test]
+    fn approval_scope_fields_round_trip_and_old_rows_parse() {
+        use super::{ApprovalScope, ApprovalScopeCovers, ContentPartToolApproval};
+        let annotations = json!({"readOnlyHint": false, "destructiveHint": true,
+                                 "idempotentHint": false, "openWorldHint": true});
+        let child = json!({
+            "child_chat_id": uuid::Uuid::nil(), "child_message_id": uuid::Uuid::nil(),
+            "child_tool_call_id": "child-call", "tool_name": "read_document_blocks",
+            "mcp_server_id": "word", "input": {}, "annotations": annotations,
+            "preset": "", "requested_at": "2026-10-30T00:00:00Z", "kind": "client_tool",
+            "approval_scope": {"host_context": "word_document", "covers": "document",
+                               "scope_id": "identity", "changed": true},
+        });
+        let stop = json!({"content_type": "tool_approval_request", "tool_call_id": "task-a",
+            "tool_name": "delegate_task", "mcp_server_id": "", "input": {},
+            "annotations": annotations, "preset": "", "allow_always": false,
+            "requested_at": "2026-10-30T00:00:00Z", "kind": "delegated_task",
+            "approvals": [{"approval_id": "task-a", "tool_call_id": "task-a",
+                           "tool_name": "delegate_task", "input": {}, "child": child}],
+            "approval_scope": {"host_context": "outlook_mailbox", "covers": "turn",
+                               "scope_id": "turn-1"}});
+        let ContentPart::ToolApprovalRequest(request) =
+            serde_json::from_value::<ContentPart>(stop.clone()).expect("a scoped stop parses")
+        else {
+            panic!("expected an approval request");
+        };
+        assert_eq!(
+            request.approval_scope,
+            Some(ApprovalScope {
+                host_context: "outlook_mailbox".into(),
+                covers: ApprovalScopeCovers::Turn,
+                scope_id: "turn-1".into(),
+                changed: false,
+            })
+        );
+        let item_scope = request.approvals[0]
+            .child
+            .as_ref()
+            .and_then(|child| child.approval_scope.clone())
+            .expect("the child's scope parses");
+        assert_eq!(item_scope.covers, ApprovalScopeCovers::Document);
+        assert!(item_scope.changed);
+        let written = serde_json::to_value(ContentPart::ToolApprovalRequest(request)).unwrap();
+        assert_eq!(written["approval_scope"], stop["approval_scope"]);
+        assert!(written["approval_scope"].get("changed").is_none());
+        assert_eq!(
+            written["approvals"][0]["child"]["approval_scope"]["changed"],
+            true
+        );
+
+        let approval = json!({"content_type": "tool_approval", "tool_call_id": "call-1",
+            "approved_at": "2026-10-30T00:00:01Z", "approval_id": "call-1",
+            "covers": "document", "scope_approval_id": uuid::Uuid::nil()});
+        let ContentPart::ToolApproval(parsed) =
+            serde_json::from_value::<ContentPart>(approval.clone()).unwrap()
+        else {
+            panic!("expected an approval");
+        };
+        assert_eq!(parsed.covers, Some(ApprovalScopeCovers::Document));
+        assert_eq!(parsed.scope_approval_id, Some(uuid::Uuid::nil()));
+        assert_eq!(
+            serde_json::to_value(ContentPart::ToolApproval(parsed)).unwrap(),
+            approval
+        );
+
+        let ContentPart::ToolApproval(ContentPartToolApproval {
+            covers,
+            scope_approval_id,
+            ..
+        }) = serde_json::from_value::<ContentPart>(json!({"content_type": "tool_approval",
+            "tool_call_id": "call-1", "approved_at": "2026-10-30T00:00:01Z"}))
+        .expect("an old approval still parses")
+        else {
+            panic!("expected an approval");
+        };
+        assert!(covers.is_none() && scope_approval_id.is_none());
+        let mut old_stop = stop;
+        old_stop.as_object_mut().unwrap().remove("approval_scope");
+        old_stop["approvals"][0]["child"]
+            .as_object_mut()
+            .unwrap()
+            .remove("approval_scope");
+        let ContentPart::ToolApprovalRequest(old) =
+            serde_json::from_value::<ContentPart>(old_stop).expect("an old stop still parses")
+        else {
+            panic!("expected an approval request");
+        };
+        assert!(old.approval_scope.is_none());
+        assert!(
+            old.approvals[0]
+                .child
+                .as_ref()
+                .unwrap()
+                .approval_scope
+                .is_none()
+        );
+    }
+
+    #[test]
     fn rejection_row_without_the_new_fields_parses() {
         let row = json!({
             "content_type": "tool_rejection",
