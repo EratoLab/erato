@@ -1586,6 +1586,69 @@ async fn a_stored_live_result_with_files_is_read_at_continuation(pool: Pool<Post
     assert!(linked_to_chat(&setup.state, setup.chat_id, file_id).await);
 }
 
+/// A file result that reaches the turn after its wait ran out, while the call
+/// is still being stored, is stored as the tool's own value, so the
+/// continuation reads its file once.
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_file_result_delivered_while_the_call_parks_is_read_once(pool: Pool<Postgres>) {
+    use sea_orm::{ConnectionTrait, TransactionTrait};
+    let setup = setup(pool, 1_000, true, true).await;
+    let file_id = upload_file(&setup.state, TEST_JWT_TOKEN, "RACED-FILE-TEXT").await;
+    let value = json!({"document": "RACED-VALUE"});
+    let (response, answer) = tokio::time::timeout(Duration::from_secs(20), async {
+        tokio::join!(
+            submit(&setup.state, setup.chat_id, Some(&mailbox())),
+            async {
+                let call = live_call(&setup.state, setup.chat_id).await;
+                // The chat's operation fence: the timed-out call waits for it
+                // to be stored, and its waiter stays registered meanwhile.
+                let fence = setup.state.db.begin().await.unwrap();
+                fence
+                    .execute_unprepared(&format!(
+                        "SELECT pg_advisory_xact_lock(hashtextextended('{}'::text, 0))",
+                        setup.chat_id
+                    ))
+                    .await
+                    .unwrap();
+                tokio::time::sleep(Duration::from_millis(1_500)).await;
+                assert!(chat_attempts(&setup.state, setup.chat_id).await.is_empty());
+                let answer = post_live(
+                    &setup.state,
+                    setup.chat_id,
+                    &call,
+                    json!({"result": value.clone(), "file_upload_ids": [file_id]}),
+                    Some(&mailbox()),
+                )
+                .await;
+                fence.rollback().await.unwrap();
+                answer
+            }
+        )
+    })
+    .await
+    .expect("turn did not finish");
+    response.assert_status_ok();
+    answer.assert_status_ok();
+    assert_eq!(answer.json::<Value>()["delivered"], true);
+    assert_eq!(answer.json::<Value>()["stored"], false);
+    let request = parked(&setup).await;
+    let row = attempt(&setup.state, request.attempt_id).await;
+    assert_eq!(row.state, AttemptState::Ready);
+    assert_eq!(
+        row.result.unwrap()["result"],
+        json!({"type": "value", "value": value, "file_upload_ids": [file_id]})
+    );
+    continue_turn(&setup.state, request.attempt_id).await;
+    let message = assistant_message(&setup).await;
+    let output = call_output(&message);
+    assert_eq!(output["result"]["result"], value);
+    assert_eq!(output["result"]["files"][0]["fileId"], json!(file_id));
+    assert_eq!(file_pointers_after_call(&message).len(), 1);
+    let seen = last_tool_results(&setup.recorder);
+    assert_eq!(seen.len(), 1);
+    assert_eq!(seen[0].to_string().matches("RACED-FILE-TEXT").count(), 1);
+}
+
 #[sqlx::test(migrator = "crate::MIGRATOR")]
 async fn a_file_the_user_cannot_read_is_not_attached_at_continuation(pool: Pool<Postgres>) {
     let setup = setup(pool, 10, true, true).await;

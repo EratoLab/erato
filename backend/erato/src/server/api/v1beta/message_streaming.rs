@@ -9595,8 +9595,10 @@ async fn stream_generate_chat_completion<'a>(
             if let Ok(outcome) = result_rx.try_recv()
                 && request.lineage.is_none()
             {
-                let result =
-                    crate::services::client_operations::fast_result_or_refusal(&request, outcome);
+                let result = crate::services::client_operations::fast_result_or_refusal(
+                    &request,
+                    super::file_resolution::delivered_result_for_storage(outcome),
+                );
                 crate::services::client_operations::store::accept_fast(
                     &app_state.db,
                     &app_state.client_operations,
