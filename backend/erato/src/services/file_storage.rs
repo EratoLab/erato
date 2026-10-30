@@ -47,7 +47,7 @@ const AZBLOB_SERVICE_SAS_VERSION: &str = "2023-11-03";
 /// - `Sharepoint`: Uses MS Graph API for Sharepoint/OneDrive (requires access token at request time)
 #[derive(Debug, Clone, erato_memory::HeapSize)]
 pub enum FileStorage {
-    OpenDal(OpenDalStorage),
+    OpenDal(Box<OpenDalStorage>),
     Sharepoint(SharepointStorage),
 }
 
@@ -98,11 +98,11 @@ impl FileStorage {
     pub fn from_config(config: &FileStorageProviderConfig) -> Result<Self, Report> {
         let (opendal_operator, provider_kind) =
             OpenDalStorage::access_from_config_tuple(&config.specific_config()?)?;
-        Ok(Self::OpenDal(OpenDalStorage {
+        Ok(Self::OpenDal(Box::new(OpenDalStorage {
             opendal_operator,
             provider_kind,
             azblob_config: config.azblob_config(),
-        }))
+        })))
     }
 
     /// Create a Sharepoint FileStorage instance.
@@ -379,7 +379,7 @@ impl OpenDalStorage {
             builder = builder.secret_access_key(val.expose_secret());
         }
 
-        let op: Operator = Operator::new(builder)?.finish();
+        let op: Operator = Operator::new(builder)?;
         Ok((op, OpenDalProviderKind::S3))
     }
 
@@ -399,7 +399,7 @@ impl OpenDalStorage {
             builder = builder.account_key(val.expose_secret());
         }
 
-        let op: Operator = Operator::new(builder)?.finish();
+        let op: Operator = Operator::new(builder)?;
         Ok((op, OpenDalProviderKind::AzBlob))
     }
 

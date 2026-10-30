@@ -2,7 +2,7 @@
 source: erato/tests/integration_test_file_processor_snapshots.rs
 expression: extracted
 ---
-**Subject**: Re: Kickoff Kundenportal 2.0 – Lastenheft im Anhang
+<page number="1">**Subject**: Re: Kickoff Kundenportal 2.0 – Lastenheft im Anhang
 
 **Date**: Tue, 19 May 2026 17:29:38 GMT
 
@@ -38,13 +38,15 @@ Attachments:
 
 MIME type: message/rfc822
 
-**Subject**: Kickoff Kundenportal 2.0 – Lastenheft im Anhang
+<page number="1">**Subject**: Kickoff Kundenportal 2.0 – Lastenheft im Anhang
 
-**From**: mail@dfiebig.de
+**From**: Daniel Person \<mail@dfiebig.de\>
 
 **To**: testuser@maxgoisser.onmicrosoft.com
 
 **Date**: Tue, 19 May 2026 16:58:51 GMT
+
+**Message-ID**: CAJj3nakGKSxUo4gb5aQEVfi9QiuWWB8oZ5S=8qZe5j4e8gfkQQ@mail.gmail.com
 
 Hallo Herr Klein,
 
@@ -64,7 +66,7 @@ Attachments:
 
 MIME type: application/pdf
 
-# Lastenheft – Kundenportal 2.0
+<page number="1"># Lastenheft – Kundenportal 2.0
 
 Dokumentversion 1.0 | Erstellt: 02. Juni 2025 | Vertraulich
 
@@ -94,15 +96,15 @@ Performance: Ladezeit der Hauptseite unter 2 Sekunden (P95). Verfügbarkeit: 99,
 
 ## 5\. Technische Rahmenbedingungen
 
-### 5.1 Frontend
+## 5.1 Frontend
 
 React 18+ mit TypeScript. Komponentenbibliothek nach Absprache (bevorzugt MUI oder shadcn/ui). Responsives Design (Mobile-first).
 
-### 5.2 Backend
+## 5.2 Backend
 
-REST-API oder GraphQL. Bevorzugte Sprache: Node.js (NestJS) oder Java (Spring Boot). Datenbankanbindung: PostgreSQL. Caching: Redis.
+<page number="2">REST-API oder GraphQL. Bevorzugte Sprache: Node.js (NestJS) oder Java (Spring Boot). Datenbankanbindung: PostgreSQL. Caching: Redis.
 
-### 5.3 Infrastruktur
+## 5.3 Infrastruktur
 
 Deployment via Docker / Kubernetes auf Azure. CI/CD-Pipeline erforderlich. Staging- und Produktionsumgebung getrennt.
 
@@ -128,13 +130,15 @@ Erstellt von: Anna Berger, Firma A GmbH | Freigegeben: ausstehend
 
 MIME type: message/rfc822
 
-**Subject**: AW: Kickoff Kundenportal 2.0 – Lastenheft im Anhang
+<page number="1">**Subject**: AW: Kickoff Kundenportal 2.0 – Lastenheft im Anhang
 
-**From**: testuser@maxgoisser.onmicrosoft.com
+**From**: Max Token \<testuser@maxgoisser.onmicrosoft.com\>
 
 **To**: mail@dfiebig.de
 
 **Date**: Tue, 19 May 2026 17:00:16 GMT
+
+**Message-ID**: BEZP281MB33615F8D7C79183E240864A2EB002@BEZP281MB3361.DEUP281.PROD.OUTLOOK.COM
 
 Hallo Frau Berger,
 
@@ -164,13 +168,15 @@ Mit freundlichen Grüßen Anna Berger | Projektleiterin | Firma A GmbH
 
 MIME type: message/rfc822
 
-**Subject**: Re: Kickoff Kundenportal 2.0 – Lastenheft im Anhang
+<page number="1">**Subject**: Re: Kickoff Kundenportal 2.0 – Lastenheft im Anhang
 
-**From**: mail@dfiebig.de
+**From**: Daniel Person \<mail@dfiebig.de\>
 
 **To**: testuser@maxgoisser.onmicrosoft.com
 
 **Date**: Tue, 19 May 2026 17:00:49 GMT
+
+**Message-ID**: CAJj3na=tyt+Rnd13J+gw9Z2cL3NQbOYcu7dtHuZE=UJtfRrxbw@mail.gmail.com
 
 Hallo Herr Klein,
 
@@ -218,13 +224,15 @@ Daniel
 
 MIME type: message/rfc822
 
-**Subject**: AW: Kickoff Kundenportal 2.0 – Lastenheft im Anhang
+<page number="1">**Subject**: AW: Kickoff Kundenportal 2.0 – Lastenheft im Anhang
 
-**From**: testuser@maxgoisser.onmicrosoft.com
+**From**: Max Token \<testuser@maxgoisser.onmicrosoft.com\>
 
 **To**: mail@dfiebig.de
 
 **Date**: Tue, 19 May 2026 17:02:28 GMT
+
+**Message-ID**: BEZP281MB3361ABFC64194D7F34334E23EB002@BEZP281MB3361.DEUP281.PROD.OUTLOOK.COM
 
 Hallo Frau Berger,
 
@@ -288,7 +296,7 @@ Attachments:
 
 MIME type: application/vnd.openxmlformats-officedocument.wordprocessingml.document
 
-**Projektspezifikation – Kundenportal 2.0**
+<page number="1">**Projektspezifikation – Kundenportal 2.0**
 
 Firma A GmbH × Firma B Software GmbH
 
@@ -327,13 +335,15 @@ Dieses Dokument beschreibt die technische und fachliche Spezifikation des Kunden
 
 MIME type: message/rfc822
 
-**Subject**: Re: Kickoff Kundenportal 2.0 – Lastenheft im Anhang
+<page number="1">**Subject**: Re: Kickoff Kundenportal 2.0 – Lastenheft im Anhang
 
-**From**: mail@dfiebig.de
+**From**: Daniel Person \<mail@dfiebig.de\>
 
 **To**: testuser@maxgoisser.onmicrosoft.com
 
 **Date**: Tue, 19 May 2026 17:21:44 GMT
+
+**Message-ID**: CAJj3namLRDkyuVSUJ0ktJPecH1-TuZ629sQbAiTkgFuUZJ5TTg@mail.gmail.com
 
 Hallo Herr Klein,
 
@@ -411,13 +421,15 @@ Daniel
 
 MIME type: message/rfc822
 
-**Subject**: AW: Kickoff Kundenportal 2.0 – Lastenheft im Anhang
+<page number="1">**Subject**: AW: Kickoff Kundenportal 2.0 – Lastenheft im Anhang
 
-**From**: testuser@maxgoisser.onmicrosoft.com
+**From**: Max Token \<testuser@maxgoisser.onmicrosoft.com\>
 
 **To**: mail@dfiebig.de
 
 **Date**: Tue, 19 May 2026 17:22:11 GMT
+
+**Message-ID**: BEZP281MB3361B3B832CF7A68F75C7DD8EB002@BEZP281MB3361.DEUP281.PROD.OUTLOOK.COM
 
 Hallo Frau Berger,
 
@@ -507,13 +519,15 @@ Daniel
 
 MIME type: message/rfc822
 
-**Subject**: Re: Kickoff Kundenportal 2.0 – Lastenheft im Anhang
+<page number="1">**Subject**: Re: Kickoff Kundenportal 2.0 – Lastenheft im Anhang
 
-**From**: mail@dfiebig.de
+**From**: Daniel Person \<mail@dfiebig.de\>
 
 **To**: testuser@maxgoisser.onmicrosoft.com
 
 **Date**: Tue, 19 May 2026 17:22:33 GMT
+
+**Message-ID**: CAJj3nam-4qoEgS9kRG4zzOBMtgnRsua71RFZSjptOZaxTmdn=g@mail.gmail.com
 
 Hallo Herr Klein,
 
@@ -621,13 +635,15 @@ Daniel
 
 MIME type: message/rfc822
 
-**Subject**: AW: Kickoff Kundenportal 2.0 – Lastenheft im Anhang
+<page number="1">**Subject**: AW: Kickoff Kundenportal 2.0 – Lastenheft im Anhang
 
-**From**: testuser@maxgoisser.onmicrosoft.com
+**From**: Max Token \<testuser@maxgoisser.onmicrosoft.com\>
 
 **To**: mail@dfiebig.de
 
 **Date**: Tue, 19 May 2026 17:24:42 GMT
+
+**Message-ID**: BEZP281MB33617DC4E01B9A26DDEDA6FBEB002@BEZP281MB3361.DEUP281.PROD.OUTLOOK.COM
 
 Hallo Frau Berger,
 
@@ -751,7 +767,7 @@ Attachments:
 
 MIME type: application/vnd.openxmlformats-officedocument.wordprocessingml.document
 
-**Projektspezifikation – Kundenportal 2.0**
+<page number="1">**Projektspezifikation – Kundenportal 2.0**
 
 Firma A GmbH × Firma B Software GmbH
 
@@ -805,13 +821,15 @@ Das System folgt einer klassischen 3-Schicht-Architektur:
 
 MIME type: message/rfc822
 
-**Subject**: Re: Kickoff Kundenportal 2.0 – Lastenheft im Anhang
+<page number="1">**Subject**: Re: Kickoff Kundenportal 2.0 – Lastenheft im Anhang
 
-**From**: mail@dfiebig.de
+**From**: Daniel Person \<mail@dfiebig.de\>
 
 **To**: testuser@maxgoisser.onmicrosoft.com
 
 **Date**: Tue, 19 May 2026 17:24:59 GMT
+
+**Message-ID**: CAJj3na=Mxp7VZ2wkkkntEDUdfEM8BNHqqfUT-pownTM6YWagXw@mail.gmail.com
 
 Hallo Herr Klein,
 
@@ -947,13 +965,15 @@ Daniel
 
 MIME type: message/rfc822
 
-**Subject**: AW: Kickoff Kundenportal 2.0 – Lastenheft im Anhang
+<page number="1">**Subject**: AW: Kickoff Kundenportal 2.0 – Lastenheft im Anhang
 
-**From**: testuser@maxgoisser.onmicrosoft.com
+**From**: Max Token \<testuser@maxgoisser.onmicrosoft.com\>
 
 **To**: mail@dfiebig.de
 
 **Date**: Tue, 19 May 2026 17:28:02 GMT
+
+**Message-ID**: FR2P281MB3376CE813203F5248D4A1301EB002@FR2P281MB3376.DEUP281.PROD.OUTLOOK.COM
 
 Hallo Frau Berger,
 
@@ -1101,13 +1121,15 @@ Daniel
 
 MIME type: message/rfc822
 
-**Subject**: Re: Kickoff Kundenportal 2.0 – Lastenheft im Anhang
+<page number="1">**Subject**: Re: Kickoff Kundenportal 2.0 – Lastenheft im Anhang
 
-**From**: mail@dfiebig.de
+**From**: Daniel Person \<mail@dfiebig.de\>
 
 **To**: testuser@maxgoisser.onmicrosoft.com
 
 **Date**: Tue, 19 May 2026 17:28:25 GMT
+
+**Message-ID**: CAJj3nakac69A4knEjUW1WZcX_ZSGD=rcdoqx8+Hth6Tdw7HTyw@mail.gmail.com
 
 Hallo Herr Klein,
 
@@ -1271,13 +1293,15 @@ Daniel
 
 MIME type: message/rfc822
 
-**Subject**: AW: Kickoff Kundenportal 2.0 – Lastenheft im Anhang
+<page number="1">**Subject**: AW: Kickoff Kundenportal 2.0 – Lastenheft im Anhang
 
-**From**: testuser@maxgoisser.onmicrosoft.com
+**From**: Max Token \<testuser@maxgoisser.onmicrosoft.com\>
 
 **To**: mail@dfiebig.de
 
 **Date**: Tue, 19 May 2026 17:29:10 GMT
+
+**Message-ID**: FR2P281MB337660F8D8D9DB2623A2B134EB002@FR2P281MB3376.DEUP281.PROD.OUTLOOK.COM
 
 Hallo Frau Berger,
 
@@ -1461,7 +1485,7 @@ Attachments:
 
 MIME type: application/vnd.openxmlformats-officedocument.wordprocessingml.document
 
-**Projektspezifikation – Kundenportal 2.0**
+<page number="1">**Projektspezifikation – Kundenportal 2.0**
 
 Firma A GmbH × Firma B Software GmbH
 
@@ -1536,13 +1560,15 @@ Weitere Massnahmen: OWASP Top 10 als Entwicklungsrichtlinie; Penetrationstest vo
 
 MIME type: message/rfc822
 
-**Subject**: Re: Kickoff Kundenportal 2.0 – Lastenheft im Anhang
+<page number="1">**Subject**: Re: Kickoff Kundenportal 2.0 – Lastenheft im Anhang
 
-**From**: mail@dfiebig.de
+**From**: Daniel Person \<mail@dfiebig.de\>
 
 **To**: testuser@maxgoisser.onmicrosoft.com
 
 **Date**: Tue, 19 May 2026 17:29:38 GMT
+
+**Message-ID**: CAJj3nanQRckZujVV-Pd5vRadTgeGOXeYYLRnRCQofW0HSCC0Tg@mail.gmail.com
 
 Hallo Herr Klein,
 

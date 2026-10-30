@@ -1493,6 +1493,12 @@ fn append_extraction_children(
     let Some(children) = children else {
         return 0;
     };
+    // New xberg versions also inline attachments as escaped paragraphs at the
+    // end of their parent. Remove those copies before appending the structured
+    // children, whose Markdown and nested attachments we preserve below.
+    for child in children.iter().rev() {
+        remove_inlined_child(content, child);
+    }
     let mut appended_children = 0;
 
     let has_parsed_nested_message = children
@@ -1521,6 +1527,39 @@ fn append_extraction_children(
     appended_children
 }
 
+fn remove_inlined_child(content: &mut String, child: &xberg::ArchiveEntry) {
+    let Some((start, section)) = content
+        .rmatch_indices("\n\n## ")
+        .next()
+        .map(|(start, _)| (start, &content[start + "\n\n## ".len()..]))
+    else {
+        return;
+    };
+    let Some((heading, paragraph)) = section.split_once("\n\n") else {
+        return;
+    };
+    if unescape_markdown(heading) == child.path
+        && unescape_markdown(paragraph)
+            .split_whitespace()
+            .eq(child.result.content.split_whitespace())
+    {
+        content.truncate(start);
+    }
+}
+
+fn unescape_markdown(text: &str) -> String {
+    let mut result = String::with_capacity(text.len());
+    let mut chars = text.chars().peekable();
+    while let Some(ch) = chars.next() {
+        if ch == '\\' && chars.peek().is_some_and(char::is_ascii_punctuation) {
+            result.push(chars.next().expect("peeked character"));
+        } else {
+            result.push(ch);
+        }
+    }
+    result
+}
+
 fn is_raw_nested_message_attachment_duplicate(child: &xberg::ArchiveEntry) -> bool {
     child.path.to_ascii_lowercase().ends_with(".eml")
         && child.mime_type.eq_ignore_ascii_case("text/plain")
@@ -1533,28 +1572,32 @@ pub(crate) fn content_with_page_markers(
     pages: Option<Vec<xberg::PageContent>>,
     marker_format: &str,
 ) -> String {
-    if marker_format.contains("{page_num}") {
-        let marker_probe = marker_format.replace("{page_num}", "1");
-        if content.contains(&marker_probe) {
-            return content;
-        }
+    let Some(pages) = pages else {
+        return content;
+    };
 
-        let escaped_marker_probe = marker_probe.replace('<', "\\<").replace('>', "\\>");
-        if content.contains(&escaped_marker_probe) {
+    if pages.is_empty() {
+        return content;
+    }
+
+    if marker_format.contains("{page_num}") {
+        // Some extractors mark only the first page in the combined document.
+        // Accept that output only when every nonempty page has its marker.
+        if pages
+            .iter()
+            .filter(|page| !page.content.trim().is_empty())
+            .all(|page| {
+                let marker = marker_format.replace("{page_num}", &page.page_number.to_string());
+                let escaped_marker = marker.replace('<', "\\<").replace('>', "\\>");
+                content.contains(&marker) || content.contains(&escaped_marker)
+            })
+        {
             return content;
         }
     }
 
     let marker_placeholder = marker_format.replace("{page_num}", "");
     if marker_placeholder.is_empty() || content.contains(&marker_placeholder) {
-        return content;
-    }
-
-    let Some(pages) = pages else {
-        return content;
-    };
-
-    if pages.is_empty() {
         return content;
     }
 
@@ -1725,6 +1768,7 @@ impl FileProcessor for XbergProcessor {
                     extract_pages: true,
                     insert_page_markers: true,
                     marker_format: "<page number=\"{page_num}\">".to_string(),
+                    ..Default::default()
                 };
                 let marker_format = page_config.marker_format.clone();
 
@@ -1938,6 +1982,29 @@ mod tests {
     use std::fs;
     use std::path::PathBuf;
 
+    #[test]
+    fn inlined_attachment_removal_preserves_body_and_structured_markdown() {
+        let mut result = xberg::ExtractedDocument::default();
+        result.content = "# Heading\n\n**Important** <tag> C:\\path".into();
+        let child = xberg::ArchiveEntry {
+            path: "note_file.txt".into(),
+            mime_type: "text/plain".into(),
+            result: Box::new(result),
+        };
+        let mut body = "Email body\n\n## note_file.txt\n\nDifferent content".to_string();
+        let original = body.clone();
+        remove_inlined_child(&mut body, &child);
+        assert_eq!(body, original);
+
+        body.push_str(
+            "\n\n## note\\_file.txt\n\n\\# Heading \\*\\*Important\\*\\* \\<tag\\> C:\\\\path",
+        );
+        append_extraction_children(&mut body, Some(vec![child]));
+        assert!(body.starts_with(&original));
+        assert_eq!(body.matches("Important").count(), 1);
+        assert!(body.ends_with("# Heading\n\n**Important** <tag> C:\\path"));
+    }
+
     fn token_count(text: &str) -> usize {
         let bpe = tiktoken_rs::o200k_base().expect("o200k_base tokenizer");
         bpe.encode_with_special_tokens(text).len()
@@ -2027,6 +2094,7 @@ mod tests {
                 extract_pages: true,
                 insert_page_markers: true,
                 marker_format,
+                ..Default::default()
             }),
             ..Default::default()
         };
@@ -2098,6 +2166,10 @@ mod tests {
         assert!(
             extracted.contains("<page number=\""),
             "Expected page marker in extracted text, but none was found"
+        );
+        assert!(
+            extracted.contains("porttitor aliquam nec ut velit."),
+            "The last page's visible body text must survive PDF coordinate filtering"
         );
     }
 
@@ -2378,6 +2450,12 @@ mod tests {
         }
         assert!(extracted.contains("## Attachment: sample_compressed.pdf"));
         assert!(extracted.contains(expected_text));
+        assert_eq!(
+            extracted
+                .matches("A comprehensive and content-heavy report")
+                .count(),
+            1
+        );
     }
 
     #[tokio::test]
@@ -2548,6 +2626,7 @@ Content-Type: text/html; charset=utf-8
                 extract_pages: true,
                 insert_page_markers: true,
                 marker_format: marker_format.clone(),
+                ..Default::default()
             }),
             ..Default::default()
         };
@@ -2612,6 +2691,9 @@ Content-Type: text/html; charset=utf-8
 
         assert!(extracted.contains("Alice"));
         assert!(extracted.contains("Johnson"));
+        for page in 1..=4 {
+            assert!(extracted.contains(&format!("<page number=\"{page}\">")));
+        }
     }
 
     /// Token ceiling for the malformed/adversarial MIME cases below. The real content in each is a

@@ -47,7 +47,7 @@ csv = "1.4"
 image = { version = "0.25.10", default-features = false, features = ["png", "jpeg", "gif", "webp", "bmp", "tiff", "ico"] }
 cab = "0.6.0"
 msi = "0.10.0"
-zip = { version = "8.6.0", default-features = false, features = ["deflate"] }
+zip = { version = "9.1.0", default-features = false, features = ["deflate"] }
 
 # Dependencies: Outgoing HTTP
 reqwest = { version = "0.13.1", default-features = false, features = ["rustls", "charset", "http2", "system-proxy", "multipart", "stream", "json"] }
@@ -110,11 +110,11 @@ eyre = "0.6.12"
 color-eyre = "0.6.3"
 
 # Dependencies: File storage & file handling
-opendal = { version = "0.56.0", features = ["services-s3", "services-azblob"] }
+opendal = { version = "0.59.5", features = ["services-s3", "services-azblob"] }
 infer = "0.19.0"
 magika = "1.1.0"
 ort = { version = "=2.0.0-rc.12", default-features = false, features = ["std", "ndarray", "tracing", "download-binaries", "tls-rustls", "api-24"] }
-xberg = { version = "1.0.0-rc.29", features = ["pdf", "excel", "office", "email", "html", "archives"] }
+xberg = { version = "1.3.10", features = ["pdf", "excel", "office", "email", "html", "archives"] }
 html-to-markdown-rs = { version = "3.8.3" }
 pulldown-cmark = { version = "0.13.0", default-features = false }
 ical = "0.11.0"

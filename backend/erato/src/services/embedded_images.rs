@@ -98,6 +98,7 @@ fn extraction_config() -> xberg::ExtractionConfig {
             extract_pages: true,
             insert_page_markers: true,
             marker_format: "<page number=\"{page_num}\">".to_string(),
+            ..Default::default()
         }),
         ..Default::default()
     }

@@ -2,13 +2,15 @@
 source: erato/tests/integration_test_file_processor_snapshots.rs
 expression: extracted
 ---
-**Subject**: Please review attached draft
+<page number="1">**Subject**: Please review attached draft
 
-**From**: daniel@eratolabs.com
+**From**: Daniel Person \<daniel@eratolabs.com\>
 
 **To**: testuser@maxgoisser.onmicrosoft.com
 
 **Date**: Fri, 20 Mar 2026 13:28:03 +0100
+
+**Message-ID**: sample-review@eratolabs.com
 
 Hi Max,
 
