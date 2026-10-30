@@ -4117,6 +4117,24 @@ approval_scope = "context""#,
     );
 }
 
+/// CT-9: local evidence runs its own release review and no configured tool can
+/// take its name, so no context approval ever covers it.
+#[test]
+#[should_panic(expected = "Client tool named 'local_collect_evidence' is reserved.")]
+fn approval_scope_context_never_covers_local_evidence() {
+    migrate_config_with_action_facets(
+        r#"
+[client_tools.tools.evidence]
+name = "local_collect_evidence"
+description = "Collect local evidence"
+parameters = '{ "type": "object" }'
+child_access = "read"
+host_context = "word_document"
+approval_scope = "context"
+"#,
+    );
+}
+
 fn migrate_child_facet(facet_toml: &str) -> AppConfig {
     migrate_config_with_action_facets(&format!(
         r#"
