@@ -14,6 +14,8 @@ export interface WordChangeEntry {
   at: number;
   kind: WordChangeKind;
   source: WordChangeSource;
+  /** On an own entry: the chat open in the pane when the write began, if any. */
+  chat?: string;
   ids: readonly string[];
   /** Ids named beyond the first 64 an entry keeps; no read can place them. */
   moreIds?: number;
@@ -69,6 +71,7 @@ type MergedEntry = WordChangeEntry & { ids: string[] };
 
 interface OpenWrite {
   kind: WordOwnWriteKind;
+  chat: string | null;
   ids: Set<string>;
   begin: number;
   /** When an anchor or import write starts claiming Local events by kind: at its write, not
@@ -97,6 +100,12 @@ let bursts = new Map<string, { entry: MergedEntry; at: number }>();
 let writes: OpenWrite[] = [];
 let pendingNeighbours = new Map<string, WordChangeEntry>();
 let neighbourTimer: ReturnType<typeof setTimeout> | undefined;
+let activeChat: string | null = null;
+
+/** The chat the pane shows now; its writes are recorded as that chat's own. */
+export function noteWordActiveChat(chatId: string | null): void {
+  activeChat = chatId;
+}
 
 export function noteWordChangeEventsActive(): void {
   eventsActive = true;
@@ -146,6 +155,7 @@ export function beginWordOwnWrite(kind: WordOwnWriteKind): WordOwnWrite {
   prune(now);
   const write: OpenWrite = {
     kind,
+    chat: activeChat,
     ids: new Set(),
     begin: now,
     from: now,
@@ -221,8 +231,12 @@ export function recordWordParagraphEvent(event?: WordParagraphEvent): void {
   if (owner) {
     for (const write of owners) write.lastEvent = now;
     const open = owner.entries[kind];
-    if (!open || !merge(open, ids))
-      owner.entries[kind] = record(kind, "own", ids);
+    if (!open || !merge(open, ids)) {
+      const chat = owners.every((write) => write.chat === owner.chat)
+        ? owner.chat
+        : null;
+      owner.entries[kind] = record(kind, "own", ids, chat);
+    }
     return;
   }
   prune(now);
@@ -329,8 +343,14 @@ function record(
   kind: WordChangeKind,
   source: WordChangeSource,
   ids: readonly string[],
+  chat: string | null = null,
 ): MergedEntry {
-  const entry = append({ kind, source, ids: [] as string[] });
+  const entry = append({
+    kind,
+    source,
+    ...(chat ? { chat } : {}),
+    ids: [] as string[],
+  });
   merge(entry, ids);
   return entry;
 }
@@ -444,4 +464,5 @@ export function resetWordChangeJournalForTests(): void {
   pendingNeighbours = new Map();
   clearTimeout(neighbourTimer);
   neighbourTimer = undefined;
+  activeChat = null;
 }
