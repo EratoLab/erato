@@ -22,6 +22,10 @@ import {
   isClientToolResultLocalOnly,
 } from "@/hooks/chat/clientToolExecutors";
 import { useConfirmationRegistryStore } from "@/hooks/chat/store/confirmationRegistryStore";
+import {
+  operationExecutorBinding,
+  operationExecutorHeaders,
+} from "@/lib/clientOperations/registration";
 
 import type {
   ClientToolApprovalScopeRef,
@@ -103,7 +107,8 @@ export interface ClientToolHostConformanceHarness {
   /**
    * The read whose handler checks a document approval (contract §16): before
    * it reads, it compares `hostGrant.approvalScope.position` with the changes
-   * since, and answers `scope_changed` after an outside one.
+   * since, and answers `scope_changed` after an outside one. Its binding is
+   * registered with `registerOperationExecutor`, so the decision carries it.
    */
   approvalScope?: {
     read: ClientToolHostCall;
@@ -689,6 +694,16 @@ export const clientToolHostAdapterConformanceFailures = async (
     const name = `"${tool}"`;
     if (!scopedAdvertised.includes(tool)) {
       fail(rule, `${name} is missing from X-Erato-Scoped-Client-Tools`);
+    }
+    const binding = operationExecutorBinding(tool);
+    if (
+      !binding ||
+      operationExecutorHeaders()["X-Erato-Executor"] !== JSON.stringify(binding)
+    ) {
+      fail(
+        rule,
+        `${name} has no binding of its own as X-Erato-Executor, which a document decision must carry`,
+      );
     }
     const own = scopeRef(scope.scopeId());
     if (clientToolApprovalScopeAnchor(tool, scopeRef(`${own.scopeId}-other`))) {

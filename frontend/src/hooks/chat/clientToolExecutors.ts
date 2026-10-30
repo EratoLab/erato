@@ -1,4 +1,7 @@
-import { operationExecutorHeaders } from "@/lib/clientOperations/registration";
+import {
+  operationExecutorBinding,
+  operationExecutorHeaders,
+} from "@/lib/clientOperations/registration";
 
 /**
  * Registry for client-executed tools. The host (e.g. the Outlook add-in)
@@ -268,8 +271,10 @@ export function getChildClientToolHeaders(): Record<string, string> {
 
 /**
  * The host's position-taker for `scope` on this client, or `undefined` where
- * the client cannot check that scope later: it does not hold the context, or
- * its handler does not check scopes now.
+ * the client cannot check that scope later: it does not hold the context, its
+ * handler does not check scopes now, or its decisions would not carry the
+ * tool's binding as `X-Erato-Executor`, which the server compares with the
+ * grant's.
  */
 export function clientToolApprovalScopeAnchor(
   name: string,
@@ -277,6 +282,12 @@ export function clientToolApprovalScopeAnchor(
 ): (() => unknown) | undefined {
   const entry = executors.get(name);
   if (!entry?.isAvailable() || !checksScope(entry)) return undefined;
+  const binding = operationExecutorBinding(name);
+  if (
+    !binding ||
+    operationExecutorHeaders()["X-Erato-Executor"] !== JSON.stringify(binding)
+  )
+    return undefined;
   return entry.anchorsApprovalScope?.(scope);
 }
 
