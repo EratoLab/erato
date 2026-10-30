@@ -117,6 +117,19 @@ function sameBinding(a: ExecutorBinding, b: ExecutorBinding): boolean {
     a.host_context?.identity === b.host_context?.identity
   );
 }
+/** Delay before the one early retry of a refused claim; the shell's poll stays
+ * the fallback. */
+const CLAIM_RETRY_MS = 1_500;
+/** The server answers 409 for every unclaimable attempt, including one whose
+ * chat still generates right after the park; the reason is not distinguishable. */
+function isClaimRefusal(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "status" in error &&
+    error.status === 409
+  );
+}
 
 /** One account-scoped shell coordinator. Claims/results/continuations are
  * durable server authority; maps only avoid redundant work within this view. */
@@ -125,9 +138,12 @@ export class ClientOperationCoordinator {
   readonly #operations = new Map<string, ClientOperationView>();
   readonly #claims = new Map<string, ClaimClientOperationResponse>();
   readonly #attached = new Set<string>();
+  /** Attempts whose refused claim already had its early retry. */
+  readonly #retried = new Set<string>();
   readonly #builtIns: readonly ClientOperationHandler[];
   readonly #unsubscribe: () => void;
   #stream: { key: string; controller: AbortController } | undefined;
+  #retry: ReturnType<typeof setTimeout> | undefined;
   #running: Promise<void> | undefined;
   #refresh = false;
   enabled = true;
@@ -147,9 +163,12 @@ export class ClientOperationCoordinator {
     this.#abort.abort();
     this.#closeStream();
     this.#unsubscribe();
+    clearTimeout(this.#retry);
+    this.#retry = undefined;
     this.#operations.clear();
     this.#claims.clear();
     this.#attached.clear();
+    this.#retried.clear();
     this.#builtIns.forEach((handler) => handler.dispose?.());
   }
   #handlers(): readonly ClientOperationHandler[] {
@@ -257,7 +276,20 @@ export class ClientOperationCoordinator {
     const claim = await this.api.claim(request, executor, this.#abort.signal);
     this.#check();
     this.#claims.set(request.attempt_id, claim);
+    this.#retried.delete(request.attempt_id);
     return claim;
+  }
+  /** The stream-end nudge can beat the generation's release after the park,
+   * and the server refuses the claim until it lands. One early retry replaces
+   * a wait for the poll; a claim refused again (another pane holds it, the
+   * chat is archived) is the poll's to recover. */
+  #retryClaim(id: string): void {
+    if (this.#retried.has(id) || this.#abort.signal.aborted) return;
+    this.#retried.add(id);
+    this.#retry ??= setTimeout(() => {
+      this.#retry = undefined;
+      void this.reconcile();
+    }, CLAIM_RETRY_MS);
   }
   async #sweep(): Promise<void> {
     const seen = new Set<string>();
@@ -278,6 +310,7 @@ export class ClientOperationCoordinator {
       if (!page.enabled) {
         this.#operations.clear();
         this.#claims.clear();
+        this.#retried.clear();
         this.#handlers().forEach((handler) => handler.reset?.());
         return;
       }
@@ -352,6 +385,7 @@ export class ClientOperationCoordinator {
       if (!seen.has(id)) {
         this.#operations.delete(id);
         this.#claims.delete(id);
+        this.#retried.delete(id);
       }
     for (const handler of this.#handlers()) {
       handler.retain?.(seen);
@@ -367,8 +401,15 @@ export class ClientOperationCoordinator {
     request: OperationRequest,
     handler: ClientOperationHandler,
   ): Promise<void> {
+    let claim: ClaimClientOperationResponse;
     try {
-      const claim = await this.#claim(request, handler);
+      claim = await this.#claim(request, handler);
+    } catch (error) {
+      this.#claims.delete(request.attempt_id);
+      if (isClaimRefusal(error)) this.#retryClaim(request.attempt_id);
+      return;
+    }
+    try {
       const result = await handler.execute(request, claim, this.#abort.signal);
       this.#check();
       if (!result) return;
