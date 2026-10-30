@@ -27,12 +27,14 @@ use super::slow_path::{
     a_pane_without_grant_support_cannot_claim_a_grant_operation,
     a_parent_errored_after_its_decisions_resumes_once_when_the_waiting_child_finishes,
     a_parent_the_cleanup_cleared_without_its_marker_settles_and_is_not_resumed,
+    a_response_approval_lets_a_durable_task_call_park_without_asking,
     a_restart_while_parked_gives_one_continuation_and_no_duplicate_calls,
     a_task_call_left_continuing_on_an_errored_child_is_refused_and_settles_as_failed,
     a_waiting_call_is_withdrawn_once_the_parent_moved_on,
     a_waiting_child_left_out_of_the_stop_keeps_its_call_and_its_slot_settles,
     a_waiting_child_that_parks_on_an_ask_during_the_decision_continuation_reparks_as_an_approval,
     a_waiting_childs_continuation_is_offered_its_granted_tools_while_the_parent_is_parked,
+    a_waiting_task_that_starts_asking_offers_the_response_scope,
     a_withdrawn_childs_ask_is_answerable_in_its_own_chat,
     an_approved_child_call_on_a_durable_tool_waits_and_the_parent_shows_it,
     an_archived_waiting_child_settles_as_failed_and_the_parent_resumes_once,
@@ -150,6 +152,8 @@ macro_rules! host_conformance {
             a_child_that_finishes_while_approvals_are_open_keeps_the_parent_parked
             a_waiting_child_that_parks_on_an_ask_during_the_decision_continuation_reparks_as_an_approval
             an_approved_child_call_on_a_durable_tool_waits_and_the_parent_shows_it
+            a_response_approval_lets_a_durable_task_call_park_without_asking
+            a_waiting_task_that_starts_asking_offers_the_response_scope
             a_child_that_parks_on_a_second_grant_call_updates_its_waiting_item
             a_parent_errored_after_its_decisions_resumes_once_when_the_waiting_child_finishes
             resume_parked_refuses_a_chat_whose_generation_moved_on
