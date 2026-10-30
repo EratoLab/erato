@@ -3804,6 +3804,11 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/lib/delegation/delegationLabels.ts
+msgid "delegation.waitingFor.desktopSidecar"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/lib/delegation/delegationLabels.ts
 msgid "delegation.waitingFor.outlookMailbox"
 msgstr ""
 
@@ -7798,8 +7803,18 @@ msgstr "Myślę"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Trace/steps/TaskResultStep.tsx
+msgid "trace.taskResult.followInTaskChat"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/TaskResultStep.tsx
 msgid "trace.taskResult.inputRequired"
 msgstr "Odpowiedz na nie w czacie zadania:"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/TaskResultStep.tsx
+msgid "trace.taskResult.localReviewPending"
+msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/Trace/steps/TaskResultStep.tsx
@@ -8255,7 +8270,7 @@ msgstr "Zbliżanie się do limitu budżetowego"
 msgid "Approaching Token Limit"
 msgstr "Zbliżanie się do limitu tokenów"
 
-#: src/providers/LocalTaskCoordinator.tsx
+#: src/lib/desktopSidecar/localTaskLabels.ts
 msgid "Approved evidence is ready to upload"
 msgstr "Zatwierdzone materiały źródłowe są gotowe do przesłania"
 
@@ -8574,7 +8589,7 @@ msgstr ""
 msgid "collapse sidebar"
 msgstr "zwiń pasek boczny"
 
-#: src/providers/LocalTaskCoordinator.tsx
+#: src/lib/desktopSidecar/localTaskLabels.ts
 msgid "Collecting evidence on this device"
 msgstr "Zbieranie materiałów źródłowych na tym urządzeniu"
 
@@ -8620,7 +8635,7 @@ msgstr "Wykorzystanie kontekstu"
 msgid "Context usage exceeds model capacity. The assistant can't be created like this."
 msgstr "Wykorzystanie kontekstu przekracza pojemność modelu. Asystent nie może zostać utworzony w tej formie."
 
-#: src/providers/LocalTaskCoordinator.tsx
+#: src/lib/desktopSidecar/localTaskLabels.ts
 msgid "Continuing the original task"
 msgstr "Kontynuowanie pierwotnego zadania"
 
@@ -9074,7 +9089,7 @@ msgstr "Wczytywanie konwersacji…"
 msgid "Loading..."
 msgstr "Ładowanie..."
 
-#: src/providers/LocalTaskCoordinator.tsx
+#: src/lib/desktopSidecar/localTaskLabels.ts
 msgid "Local collection could not finish"
 msgstr "Nie udało się ukończyć lokalnego zbierania materiałów"
 
@@ -9086,11 +9101,11 @@ msgstr "Lokalne wyszukiwanie informacji"
 msgid "Local research tasks"
 msgstr "Zadania lokalnego wyszukiwania informacji"
 
-#: src/providers/LocalTaskCoordinator.tsx
+#: src/lib/desktopSidecar/localTaskLabels.ts
 msgid "Local task cancelled"
 msgstr "Zadanie lokalne anulowane"
 
-#: src/providers/LocalTaskCoordinator.tsx
+#: src/lib/desktopSidecar/localTaskLabels.ts
 msgid "Local task expired"
 msgstr "Zadanie lokalne wygasło"
 
@@ -9338,7 +9353,7 @@ msgstr ""
 msgid "Read local mailbox"
 msgstr "Odczyt lokalnej skrzynki pocztowej"
 
-#: src/providers/LocalTaskCoordinator.tsx
+#: src/lib/desktopSidecar/localTaskLabels.ts
 msgid "Ready for review in the desktop app"
 msgstr "Gotowe do sprawdzenia w aplikacji komputerowej"
 
@@ -9498,7 +9513,7 @@ msgstr ""
 #~ msgid "Shared Chat - {sharedChatTitle}"
 #~ msgstr "Udostępniony czat - {sharedChatTitle}"
 
-#: src/providers/LocalTaskCoordinator.tsx
+#: src/lib/desktopSidecar/localTaskLabels.ts
 msgid "Sharing declined on this device"
 msgstr "Udostępnianie odrzucone na tym urządzeniu"
 
@@ -9945,11 +9960,11 @@ msgstr "Używam narzędzi"
 #~ msgid "View all assistants"
 #~ msgstr ""
 
-#: src/providers/LocalTaskCoordinator.tsx
+#: src/lib/desktopSidecar/localTaskLabels.ts
 msgid "Waiting for the desktop app to reconnect"
 msgstr "Oczekiwanie na ponowne połączenie aplikacji komputerowej"
 
-#: src/providers/LocalTaskCoordinator.tsx
+#: src/lib/desktopSidecar/localTaskLabels.ts
 msgid "Waiting for the device that accepted this task"
 msgstr "Oczekiwanie na urządzenie, które przyjęło to zadanie"
 

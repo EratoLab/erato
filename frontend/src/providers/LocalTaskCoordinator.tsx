@@ -8,15 +8,14 @@ import {
   LocalTaskCoordinator as Coordinator,
   localTaskApi,
 } from "@/lib/desktopSidecar/localTaskCoordinator";
+import { localTaskLabel } from "@/lib/desktopSidecar/localTaskLabels";
+import { publishLocalTaskViews } from "@/lib/desktopSidecar/localTaskViewsStore";
 import { getChatUrl } from "@/utils/chat/urlUtils";
 
 import { useDelegatedRunOpener } from "./DelegatedRunOpenProvider";
 import { useDesktopSidecar } from "./DesktopSidecarProvider";
 
-import type {
-  LocalTaskView,
-  LocalTaskViewState,
-} from "@/lib/desktopSidecar/localTaskCoordinator";
+import type { LocalTaskView } from "@/lib/desktopSidecar/localTaskCoordinator";
 
 /** Steady-state inbox cadence; the idle load of an authenticated shell. */
 const SWEEP_INTERVAL_MS = 10_000;
@@ -49,33 +48,6 @@ export function sweepIntervalFor(
   return active ? ACTIVE_SWEEP_INTERVAL_MS : SWEEP_INTERVAL_MS;
 }
 
-function label(state: LocalTaskViewState): string {
-  switch (state) {
-    case "queued":
-    case "running":
-      return t`Collecting evidence on this device`;
-    case "ready_for_review":
-      return t`Ready for review in the desktop app`;
-    case "approved":
-      return t`Approved evidence is ready to upload`;
-    case "awaiting_authenticated_resume":
-    case "continuing":
-    case "acknowledged":
-      return t`Continuing the original task`;
-    case "declined":
-      return t`Sharing declined on this device`;
-    case "cancelled":
-      return t`Local task cancelled`;
-    case "expired":
-      return t`Local task expired`;
-    case "failed":
-      return t`Local collection could not finish`;
-    case "another_device":
-      return t`Waiting for the device that accepted this task`;
-    case "unavailable":
-      return t`Waiting for the desktop app to reconnect`;
-  }
-}
 /** Shared authenticated shell UI. Views contain cloud IDs and fixed local state
  * only; the native app owns previews, selection and the approval decision. */
 export function LocalTaskCoordinator() {
@@ -136,6 +108,11 @@ export function LocalTaskCoordinator() {
     retry: false,
     gcTime: 0,
   });
+  // The parent's task card shows what this device knows of its local tasks.
+  useEffect(() => {
+    publishLocalTaskViews(views);
+  }, [views]);
+  useEffect(() => () => publishLocalTaskViews([]), []);
   useEffect(() => {
     if (snapshot.state === "ready" && coordinator?.enabled)
       void coordinator.reconcile();
@@ -174,7 +151,7 @@ export function LocalTaskCoordinator() {
             </a>
           )}
           <p className="my-2 text-sm" role="status">
-            {label(view.state)}
+            {localTaskLabel(view.state)}
           </p>
           <div className="flex gap-2">
             {view.state === "ready_for_review" && (

@@ -2,6 +2,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { useLocalTaskViewsStore } from "@/lib/desktopSidecar/localTaskViewsStore";
+
 import { DelegatedRunOpenProvider } from "../DelegatedRunOpenProvider";
 import {
   LocalTaskCoordinator,
@@ -109,6 +111,17 @@ describe("authenticated local task shell", () => {
     expect(
       screen.queryByRole("link", { name: "Open original task" }),
     ).toBeNull();
+  });
+
+  it("tells the parent's task card what this device knows of each job", async () => {
+    fixture.state = "ready_for_review";
+    const view = mount();
+    await flush();
+    expect(useLocalTaskViewsStore.getState().byChatId).toEqual(
+      new Map([["child", "ready_for_review"]]),
+    );
+    view.unmount();
+    expect(useLocalTaskViewsStore.getState().byChatId.size).toBe(0);
   });
 
   it("stops interval polling when the backend disables delegation", async () => {

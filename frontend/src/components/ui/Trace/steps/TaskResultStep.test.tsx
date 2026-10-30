@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { TaskResultStep } from "@/components/ui/Trace/steps/TaskResultStep";
 import { useGenerationStatusStore } from "@/hooks/chat/store/generationStatusStore";
+import { publishLocalTaskViews } from "@/lib/desktopSidecar/localTaskViewsStore";
 import { StaticFeatureConfigProvider } from "@/providers/FeatureConfigProvider";
 
 import type { ContentPartTaskResult } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
@@ -255,5 +256,78 @@ describe("TaskResultStep", () => {
         />,
       ),
     ).toBe("true");
+  });
+
+  describe("a local-evidence task waiting for its review", () => {
+    const waiting = part({
+      status: "input_required",
+      reason: "client_pending",
+      summary: "",
+    });
+    afterEach(() => publishLocalTaskViews([]));
+
+    it("shows the state this device knows of the job", () => {
+      publishLocalTaskViews([
+        {
+          id: "job",
+          chatId: waiting.child_chat_id,
+          messageId: "task-message",
+          state: "ready_for_review",
+        },
+      ]);
+      render(<TaskResultStep part={waiting} />);
+      const pill = screen.getByTestId("task-result-status");
+      expect(pill).toHaveTextContent("Ready for review in the desktop app");
+      expect(pill.firstElementChild).toHaveClass("bg-theme-warning-bg");
+      expect(
+        screen.getByTestId("task-result-input-required"),
+      ).toHaveTextContent("Follow it in the task's own chat:");
+    });
+
+    it("says only where the review happens on a device that does not know the job", () => {
+      publishLocalTaskViews([
+        {
+          id: "other",
+          chatId: "another-task",
+          messageId: "m",
+          state: "ready_for_review",
+        },
+      ]);
+      render(<TaskResultStep part={waiting} />);
+      const card = screen.getByTestId("task-result-step");
+      expect(screen.getByTestId("task-result-status")).toHaveTextContent(
+        "Waiting for review in the desktop app",
+      );
+      expect(
+        screen.getByTestId("task-result-status").firstElementChild,
+      ).not.toHaveClass("bg-theme-warning-bg");
+      expect(card).not.toHaveTextContent("Needs your decision");
+      expect(card).not.toHaveTextContent("on this device");
+      expect(
+        screen.queryByTestId("task-result-reason"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("keeps the decision wording for a task that waits on a question", () => {
+      publishLocalTaskViews([
+        {
+          id: "job",
+          chatId: waiting.child_chat_id,
+          messageId: "m",
+          state: "ready_for_review",
+        },
+      ]);
+      render(
+        <TaskResultStep
+          part={part({ status: "input_required", reason: "approval_pending" })}
+        />,
+      );
+      expect(screen.getByTestId("task-result-status")).toHaveTextContent(
+        "Needs your decision",
+      );
+      expect(
+        screen.getByTestId("task-result-input-required"),
+      ).toHaveTextContent("Answer it in the task's own chat:");
+    });
   });
 });
