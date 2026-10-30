@@ -230,9 +230,9 @@ pub async fn claim(
         let token = row
             .claim_token
             .ok_or_else(|| eyre!("Operation claim missing"))?;
-        // A task's granted call may wait on a prompt on the device for as long
-        // as the attempt lives, so its executor renews the claim it holds.
-        if request.lineage.is_some() {
+        // A call may wait on a prompt on the device for as long as the attempt
+        // lives, so its executor renews the claim it holds.
+        if request.lineage.is_some() || kind.renews_claim() {
             let renewed = tx
                 .query_one_raw(statement(
                     "client_operations.claim",

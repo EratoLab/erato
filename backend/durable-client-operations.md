@@ -429,7 +429,8 @@ own durable calls, all keyed on `OperationRequest.lineage` (set only for these):
   (else 409 "Executor binding mismatch"). A same-binding claim of a live claim
   renews it: same token, `claim_expires_at = LEAST(expires_at, now() + lease)`.
   After it lapsed a claim gets a new token, and a result posted with the old one
-  is refused. Other kinds keep a same-binding re-claim as it was.
+  is refused. The user's own `client_tool.v1` calls renew the same way
+  (ERMAIN-1034); local evidence keeps a same-binding re-claim as it was.
 - **Results** arrive only through a claim: `clienttoolresult` answers 409
   "Operation requires a claim", the cross-replica command path drops them, and the
   park tail never accepts a raced-in fast result for them.
@@ -561,7 +562,9 @@ calls. With it off, the stream endpoint answers 404 and no row is written.
   `timeout_ms` starts a local timer that aborts the call's work and any prompt it
   raised when the server stops waiting. The user's own claimed calls renew their
   claim while they run, as task calls do, so a device prompt never outlives the
-  claim its result needs.
+  claim its result needs. A renewal that does not move the claim's end (local
+  evidence, or a replica without ERMAIN-1034) ends the renewals, and that claim
+  lapses as before.
 
 ## Local evidence integration
 
