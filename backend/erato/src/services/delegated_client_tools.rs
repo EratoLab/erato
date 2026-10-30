@@ -363,8 +363,9 @@ pub(crate) async fn parked_on_child<C: sea_orm::ConnectionTrait>(
 }
 
 /// A child the turn could not carry on its stop (it ended on the tool-call
-/// limit, on its own durable operation, or on an error) still waits for its
-/// client: the slot says so until the child's own tail settles it.
+/// limit, on its own durable operation, or on an error, or the user stopped
+/// the turn) still waits for its client: the slot says so until the child's
+/// own tail settles it.
 fn slot_waits_for_client(content: &[ContentPart], child_chat_id: Uuid) -> bool {
     use crate::services::delegation::{DelegationRunReason, DelegationRunStatus};
     content

@@ -1099,7 +1099,8 @@ pub enum DelegationRunReason {
     CapExceeded,
     /// Parked on an approval the user has not answered yet.
     ApprovalPending,
-    /// Parked on a granted call that waits for a client to run it.
+    /// Parked on a durable client operation that waits for a client to run
+    /// it: a granted call, or local evidence.
     ClientPending,
     /// Hit a gated call it could not ask about, so it could not continue.
     ///

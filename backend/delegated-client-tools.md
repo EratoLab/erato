@@ -94,11 +94,12 @@ or the child's slot still waits for a client outside any stop. Decision parts
 after the stop do not end it, so a decision continuation that runs on another
 replica, or crashed, keeps the calls it waits for. The slot clause covers a turn
 that ended on a stop no child item can share (the tool-call limit, its own durable
-operation) or on an error. The same owner clause authorizes a claimed grant
-operation (Slow path), and `origin_approval_covering_child` uses the tip check
-too, so once the parent moved on a child's own card is answerable. An owner check
-that cannot read the shared lease is an error, never "not running": the offer
-logs it and offers nothing, the authorization answers without withdrawing.
+operation) or on an error, or the user stopped the turn. The same owner clause
+authorizes a claimed grant operation (Slow path), and
+`origin_approval_covering_child` uses the tip check too, so once the parent moved
+on a child's own card is answerable. An owner check that cannot read the shared
+lease is an error, never "not running": the offer logs it and offers nothing, the
+authorization answers without withdrawing.
 
 Grant offers skip the facet allowlists and `requires_client_registration`, which
 the grant implies, and give way to an MCP tool of the same name. Every other

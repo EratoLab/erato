@@ -6160,11 +6160,12 @@ attempt_expiry_secs = 86400
   when one connects or next reads its inbox. It runs the call and the task goes
   on. An approval on the device may stay open until the operation's attempt ends
   (`durable.attempt_expiry_secs`). The call ends as `expired` when no client ran
-  it before then, as `declined` when the user declined it on the device, and as
-  `withdrawn` once the planning turn moved on (the user wrote again or archived
-  the chat) or the tool was set to never allow. The task then answers without the
-  data and says what is missing. The planning turn goes on by itself once every
-  task it waits for has finished.
+  it before then; the expiry is applied the next time one of the user's Erato
+  clients is open. It ends as `declined` when the user declined it on the device,
+  and as `withdrawn` once the planning turn moved on (the user wrote again or
+  archived the chat) or the tool was set to never allow. The task then answers
+  without the data and says what is missing. The planning turn goes on by itself
+  once every task it waits for has finished.
 
 Refused at load time: `child_dispatch` without `child_access = "read"`, and
 `durable` on a tool without a `durable` table or whose `host_context` does not
