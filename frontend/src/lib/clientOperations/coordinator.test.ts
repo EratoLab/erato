@@ -1334,6 +1334,38 @@ describe("ClientOperationCoordinator calls of the user's own turn", () => {
     }
   });
 
+  it("stops renewing a claim the server does not extend", async () => {
+    vi.useFakeTimers();
+    const { api } = fakeApi();
+    const expiresAt = new Date(Date.now() + 10_000).toISOString();
+    api.claim.mockImplementation(async () => ({
+      claim_token: "claim-1",
+      expires_at: expiresAt,
+    }));
+    let finish: ((value: { ok: true; result: unknown }) => void) | undefined;
+    const handler = new ClientToolOperationHandler(
+      "fetch_availability",
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+      () => binding,
+    );
+    const { coordinator } = coordinatorWith(api, [], [handler]);
+    try {
+      void coordinator.reconcile();
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect(api.claim).toHaveBeenCalledTimes(2);
+      await vi.advanceTimersByTimeAsync(4_000);
+      expect(api.claim).toHaveBeenCalledTimes(2);
+      finish?.({ ok: true, result: null });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(api.complete.mock.calls[0]?.[1]).toBe("claim-1");
+    } finally {
+      coordinator.dispose();
+    }
+  });
+
   it("completes with the token of the latest renewal", async () => {
     vi.useFakeTimers();
     const { api } = fakeApi();

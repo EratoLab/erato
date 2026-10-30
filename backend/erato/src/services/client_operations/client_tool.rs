@@ -92,6 +92,10 @@ impl OperationKind for ConfiguredClientToolKind {
     fn claim_lease(&self) -> chrono::Duration {
         self.claim_lease
     }
+    /// A file approval on the device may outlast the lease.
+    fn renews_claim(&self) -> bool {
+        true
+    }
     fn gated_by_user_decision(&self) -> bool {
         true
     }

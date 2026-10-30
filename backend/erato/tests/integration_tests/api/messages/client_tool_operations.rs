@@ -1322,12 +1322,13 @@ async fn a_same_binding_claim_renews_a_grant_operation_up_to_the_expiry(pool: Po
     assert_eq!(capped.claim_expires_at, Some(capped.expires_at));
 }
 
+/// The user's own call may wait on a file approval on the device as long as
+/// a task's call may.
 #[sqlx::test(migrator = "crate::MIGRATOR")]
-async fn a_same_binding_reclaim_of_a_plain_client_tool_operation_does_not_extend_the_lease(
-    pool: Pool<Postgres>,
-) {
+async fn a_same_binding_claim_renews_the_users_own_call_up_to_the_expiry(pool: Pool<Postgres>) {
     let setup = setup(pool, 10, true, true).await;
     let request = park(&setup).await;
+    assert!(request.lineage.is_none());
     let token = store_claim(&setup.state, &request, &[]).await.unwrap();
     set_attempt_times(
         &setup.state,
@@ -1339,8 +1340,23 @@ async fn a_same_binding_reclaim_of_a_plain_client_tool_operation_does_not_extend
         store_claim(&setup.state, &request, &[]).await.unwrap(),
         token
     );
-    let row = attempt(&setup.state, request.attempt_id).await;
-    assert!(seconds_from_now(row.claim_expires_at.unwrap()) <= 5);
+    let renewed = attempt(&setup.state, request.attempt_id).await;
+    assert!(
+        (85..=90).contains(&seconds_from_now(renewed.claim_expires_at.unwrap())),
+        "the renewal grants a full lease again"
+    );
+    set_attempt_times(
+        &setup.state,
+        request.attempt_id,
+        "expires_at = now() + interval '20 seconds'",
+    )
+    .await;
+    assert_eq!(
+        store_claim(&setup.state, &request, &[]).await.unwrap(),
+        token
+    );
+    let capped = attempt(&setup.state, request.attempt_id).await;
+    assert_eq!(capped.claim_expires_at, Some(capped.expires_at));
 }
 
 #[sqlx::test(migrator = "crate::MIGRATOR")]

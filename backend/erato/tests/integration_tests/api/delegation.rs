@@ -19974,7 +19974,7 @@ async fn local_research_case(pool: Pool<Postgres>, repeated: bool, cancelled: bo
                 .with_timezone(&chrono::Utc);
             assert!(
                 lease <= chrono::Utc::now() + chrono::Duration::seconds(5),
-                "only a task's granted call renews its claim"
+                "a local evidence claim keeps its lease"
             );
         }
         let authorized = server

@@ -301,6 +301,11 @@ pub trait OperationKind: Send + Sync {
     fn claim_lease(&self) -> chrono::Duration {
         chrono::Duration::minutes(5)
     }
+    /// Whether a same-binding claim of a live claim extends it for a call of
+    /// the user's own turn. A task's granted call is always extended.
+    fn renews_claim(&self) -> bool {
+        false
+    }
     /// Configured tools keep the user's per-tool decision (the approval card)
     /// before dispatch; compiled kinds ask through their own consent policy.
     fn gated_by_user_decision(&self) -> bool {

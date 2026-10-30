@@ -514,7 +514,9 @@ export class ClientOperationCoordinator {
    * is the one the result must carry. A renewal lost on the way (a sleeping
    * laptop, a dropped network) or failed on the server is tried again while
    * the claim still holds; a refusal, a lapse or the attempt's end aborts the
-   * returned signal at once.
+   * returned signal at once. A renewal that does not move the claim's end (a
+   * kind that keeps its lease, or a server without renewals) ends renewing,
+   * and the claim lapses as it did before renewals.
    */
   #holdClaim(
     request: OperationRequest,
@@ -541,8 +543,10 @@ export class ClientOperationCoordinator {
         setTimeout(() => {
           void this.#claim(request, handler, true).then(
             (renewed) => {
+              const extended =
+                Date.parse(renewed.expires_at) > Date.parse(claim.expires_at);
               claim = renewed;
-              renewLater();
+              if (extended) renewLater();
             },
             (error: unknown) => {
               const holds = Date.parse(claim.expires_at) - Date.now();
