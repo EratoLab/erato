@@ -258,6 +258,7 @@ impl LocalEvidenceKind {
         Ok(ValidatedResult {
             succeeded: true,
             output: json!({"status":"approved","exportId":package["exportId"],"evidence":evidence}),
+            file_ids: Vec::new(),
         })
     }
 }

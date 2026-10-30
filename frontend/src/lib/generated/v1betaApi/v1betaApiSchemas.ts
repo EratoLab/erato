@@ -3164,6 +3164,11 @@ export type OperationValidation = {
 
 export type OperationValue =
   | {
+      /**
+       * Files the tool uploaded for its result, sent only when there are
+       * any so that a result without files keeps its earlier shape.
+       */
+      file_upload_ids?: string[];
       type: "value";
       value: OperationPayload;
     }
