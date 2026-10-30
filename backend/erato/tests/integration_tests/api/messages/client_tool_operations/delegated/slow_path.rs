@@ -949,7 +949,14 @@ async fn launch(
     )
     .await;
     let chat_id = seed_origin_chat(&state.db).await;
-    let run = spawn_parent(row, &base, chat_id, ACTION_FACET, Some(row.binding()));
+    let run = spawn_parent_registering(
+        row,
+        &base,
+        chat_id,
+        ACTION_FACET,
+        Some(row.binding()),
+        &pane_tools(row),
+    );
     Launched {
         state,
         base,

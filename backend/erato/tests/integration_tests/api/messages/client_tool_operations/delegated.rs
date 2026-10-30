@@ -287,7 +287,8 @@ async fn open_pane(row: &HostRow, base: &str) -> Pane {
 }
 
 /// Submits the parent turn over a real connection, as the host's pane does,
-/// and hands back its full SSE body once it ends.
+/// and hands back its full SSE body once it ends. `executor` is the row's
+/// binding, sent the way the row's shell sends it.
 fn spawn_parent(
     row: &HostRow,
     base: &str,
@@ -295,21 +296,54 @@ fn spawn_parent(
     action_facet: &str,
     executor: Option<ExecutorBinding>,
 ) -> tokio::task::JoinHandle<String> {
-    let mut request = reqwest::Client::new()
-        .post(format!("{base}/me/messages/submitstream"))
-        .bearer_auth(TEST_JWT_TOKEN)
-        .header("X-Erato-Platform", row.platform)
-        .header("X-Erato-Client-Tools", row.pane_tools())
-        .json(&json!({
+    spawn_parent_registering(
+        row,
+        base,
+        chat_id,
+        action_facet,
+        executor,
+        &row.pane_tools(),
+    )
+}
+
+/// [`spawn_parent`] from a shell that registers `client_tools`.
+fn spawn_parent_registering(
+    row: &HostRow,
+    base: &str,
+    chat_id: Uuid,
+    action_facet: &str,
+    executor: Option<ExecutorBinding>,
+    client_tools: &str,
+) -> tokio::task::JoinHandle<String> {
+    spawn_submit(
+        base,
+        row.platform,
+        client_tools,
+        row.executor_headers(executor.as_ref()),
+        json!({
             "existing_chat_id": chat_id,
             "user_message": USER_MESSAGE,
             "action_facet": { "id": action_facet, "args": row.turn_action_args() },
-        }));
-    if let Some(executor) = executor {
-        request = request.header(
-            "X-Erato-Executor",
-            serde_json::to_string(&executor).unwrap(),
-        );
+        }),
+    )
+}
+
+/// A submit over a real connection with the given client headers and body.
+fn spawn_submit(
+    base: &str,
+    platform: &str,
+    client_tools: &str,
+    executor_headers: Vec<(&'static str, String)>,
+    body: Value,
+) -> tokio::task::JoinHandle<String> {
+    let mut request = reqwest::Client::new()
+        .post(format!("{base}/me/messages/submitstream"))
+        .bearer_auth(TEST_JWT_TOKEN)
+        .header("X-Erato-Platform", platform)
+        .header("X-Erato-Client-Tools", client_tools)
+        .json(&body);
+    for (name, value) in executor_headers {
+        request = request.header(name, value);
     }
     tokio::spawn(async move {
         let response = request.send().await.unwrap();
@@ -978,14 +1012,14 @@ async fn a_regenerate_in_a_finished_client_child_is_not_offered_the_granted_tool
     .expect("the client task finishes");
 
     let answer = assistant_row(&state.db, client_child.id).await;
-    app_server(state.clone())
+    let mut regenerate = app_server(state.clone())
         .post("/api/v1beta/me/messages/regeneratestream")
         .with_bearer_token(TEST_JWT_TOKEN)
-        .add_header(
-            "X-Erato-Executor",
-            serde_json::to_string(&row.binding()).unwrap(),
-        )
-        .add_header("X-Erato-Client-Tools", row.pane_tools())
+        .add_header("X-Erato-Client-Tools", row.pane_tools());
+    for (name, value) in row.executor_headers(Some(&row.binding())) {
+        regenerate = regenerate.add_header(name, value);
+    }
+    regenerate
         .json(&json!({ "current_message_id": answer.id }))
         .await
         .assert_status_ok();
