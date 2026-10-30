@@ -116,6 +116,7 @@ describe("scope signal", () => {
 
   it("names a thread export by the thread its search hit is in", async () => {
     const hit = {
+      kind: "email",
       sourceId: "11111111-2222-4333-8444-555555555555",
       mailboxId: "a".repeat(32),
       conversationKey: "conversation-1",
@@ -134,6 +135,7 @@ describe("scope signal", () => {
     expect(
       (
         await documentScope("doc", "subject_with_thread", {
+          kind: "email",
           mailboxId: null,
           conversationKey: "conversation-1",
         })
@@ -145,14 +147,44 @@ describe("scope signal", () => {
 
   it.each([
     ["no search hit", undefined],
-    ["no conversation key", { mailboxId: null, conversationKey: null }],
-    ["an empty conversation key", { mailboxId: null, conversationKey: "" }],
+    [
+      "no conversation key",
+      { kind: "email", mailboxId: null, conversationKey: null },
+    ],
+    [
+      "an empty conversation key",
+      { kind: "email", mailboxId: null, conversationKey: "" },
+    ],
+    // The hit carries the chat's or channel's key, wider than what the read
+    // returns.
+    [
+      "a Teams message",
+      {
+        kind: "teams_message",
+        sourceId: "11111111-2222-4333-8444-555555555555",
+        mailboxId: null,
+        conversationKey: "19:channel@thread.tacv2",
+      },
+    ],
   ])("leaves a thread export unknown with %s", async (_name, hit) => {
     expect(await documentScope("doc", "subject_with_thread", hit)).toEqual({
       kind: "thread",
       id: "unknown",
       ...unknownPosition,
     });
+  });
+
+  it("names a file by its own id even when its thread was asked for", async () => {
+    // An attachment's hit carries its email's thread, which its export never
+    // includes.
+    expect(
+      await documentScope("FILE-DOC", "subject_with_thread", {
+        kind: "file",
+        sourceId: "11111111-2222-4333-8444-555555555555",
+        mailboxId: "a".repeat(32),
+        conversationKey: "conversation-1",
+      }),
+    ).toEqual({ kind: "document", id: "doc:file-doc", ...unknownPosition });
   });
 
   const guid = "0123456789abcdef0123456789abcdef";

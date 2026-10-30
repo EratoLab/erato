@@ -752,6 +752,7 @@ export function createSidecarChatTools(
         }
         const hits = result.hits.map((hit) => {
           remember(documentThreads, hit.documentId, {
+            kind: hit.kind,
             ...(hit.sourceId === undefined ? {} : { sourceId: hit.sourceId }),
             mailboxId: hit.mailboxId,
             conversationKey: hit.conversationKey,
