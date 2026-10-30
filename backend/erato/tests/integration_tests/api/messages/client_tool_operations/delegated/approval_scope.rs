@@ -345,14 +345,14 @@ fn stops(row: &erato::db::entity::messages::Model) -> usize {
 }
 
 #[derive(Debug, PartialEq)]
-struct Stored {
-    id: Uuid,
-    position: Option<Value>,
-    decided_in: Uuid,
-    end_reason: Option<String>,
+pub(super) struct Stored {
+    pub id: Uuid,
+    pub position: Option<Value>,
+    pub decided_in: Uuid,
+    pub end_reason: Option<String>,
 }
 
-async fn approvals(state: &erato::state::AppState, chat_id: Uuid) -> Vec<Stored> {
+pub(super) async fn approvals(state: &erato::state::AppState, chat_id: Uuid) -> Vec<Stored> {
     state
         .db
         .query_all_raw(sea_orm::Statement::from_sql_and_values(
@@ -1274,6 +1274,35 @@ async fn never_in_settings_ends_the_tools_approvals(pool: Pool<Postgres>) {
             .live
             .is_some()
     );
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_response_approval_is_accepted_from_any_client(pool: Pool<Postgres>) {
+    let row = &rows::fake_live_host(ClientToolHostContext::OutlookMailbox);
+    let mut other_device = row.binding();
+    other_device.device_id = "another-device".into();
+    for executor in [None, Some(other_device)] {
+        let mut chat = scope_chat(row, pool.clone(), 1, false, |_, _| {}, |_| {}).await;
+        let parent = chat.ask(row).await;
+        let body = json!({
+            "message_id": parent.id,
+            "decisions": [{"approval_id": stop_items(&parent)[0]["approval_id"],
+                           "decision": "approve_context", "scope_position": position(1)}],
+            "shows_child_items": true,
+        });
+        let decided = match &executor {
+            Some(executor) => spawn_decision_from(&chat.base, body, executor),
+            None => spawn_decision(&chat.base, body),
+        };
+        let event = answer_calls(row, &mut chat, 1).await.remove(0);
+        assert!(event["lineage"].get("approval_scope").is_none(), "{event}");
+        assert!(finish(decided).await.contains(PARENT_FINAL));
+        let stored = chat.approvals().await;
+        assert_eq!(stored.len(), 1, "{executor:?}: {stored:?}");
+        assert_eq!(stored[0].position, None, "a response takes no position");
+        assert_eq!(stored[0].end_reason, None);
+        chat.server.abort();
+    }
 }
 
 #[sqlx::test(migrator = "crate::MIGRATOR")]
