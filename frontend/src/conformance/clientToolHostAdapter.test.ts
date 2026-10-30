@@ -7,6 +7,7 @@ import {
   resetClientToolRegistryForTests,
 } from "@/hooks/chat/clientToolExecutors";
 import { useConfirmationRegistryStore } from "@/hooks/chat/store/confirmationRegistryStore";
+import { registerOperationExecutor } from "@/lib/clientOperations/registration";
 
 import { clientToolHostAdapterConformanceFailures } from "./clientToolHostAdapter";
 
@@ -61,10 +62,12 @@ type Flaw =
   | "checks the scope before the grant"
   | "trusts an unreadable position"
   | "keeps positions across a reload"
-  | "refuses a call without an approval after an outside change";
+  | "refuses a call without an approval after an outside change"
+  | "registers no binding for its read";
 
 const READ = "fake_read";
 const WRITE = "fake_write";
+const unregister: (() => void)[] = [];
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null;
@@ -360,6 +363,15 @@ const fakeHost = ({
   if (flaw === "keeps its results on the device") {
     registerLocalOnlyClientTools([READ], () => true);
   }
+  if (flaw !== "registers no binding for its read") {
+    unregister.push(
+      registerOperationExecutor(READ, () => ({
+        device_id: "fake-device-000000",
+        realm: "frontend",
+        host_context: { kind: "fake_host", identity: `pane-${pane}` },
+      })),
+    );
+  }
 
   return {
     hostContext: "fake_host",
@@ -430,6 +442,7 @@ it("reports a host that lists its scope check without the section", async () => 
 });
 
 afterEach(() => {
+  unregister.splice(0).forEach((undo) => undo());
   resetClientToolRegistryForTests();
   useConfirmationRegistryStore.setState({ pendingIdsByChatId: {} });
 });
@@ -644,6 +657,14 @@ describe("clientToolHostAdapterConformanceFailures", () => {
       "does not list its scope check",
       [
         'approval scope (fake_host): "fake_read" is missing from X-Erato-Scoped-Client-Tools',
+        'approval scope (fake_host): "fake_read" takes no position for its own scope',
+      ],
+      true,
+    ],
+    [
+      "registers no binding for its read",
+      [
+        'approval scope (fake_host): "fake_read" has no binding of its own as X-Erato-Executor, which a document decision must carry',
         'approval scope (fake_host): "fake_read" takes no position for its own scope',
       ],
       true,

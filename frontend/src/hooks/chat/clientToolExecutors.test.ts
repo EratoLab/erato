@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { registerOperationExecutor } from "@/lib/clientOperations/registration";
+
 import {
   clientToolApprovalScopeAnchor,
   getChildClientToolHeaders,
@@ -54,6 +56,13 @@ it("keeps legacy registrations available and prevents older cleanup removing a r
 
 describe("approval scopes", () => {
   const read = async () => ({ ok: true as const, result: null });
+  const paneBinding = {
+    device_id: "pane-device-000000",
+    realm: "office-addin" as const,
+    host_context: { kind: "word_document", identity: "identity-1" },
+  };
+  const cleanup: (() => void)[] = [];
+  afterEach(() => cleanup.splice(0).forEach((undo) => undo()));
   const documentScope: ClientToolApprovalScopeRef = {
     hostContext: "word_document",
     scopeId: "identity-1",
@@ -104,6 +113,11 @@ describe("approval scopes", () => {
       checksApprovalScope: () => checks,
       anchorsApprovalScope,
     });
+    cleanup.push(
+      registerOperationExecutor("read_document_blocks", () => paneBinding, {
+        yields: true,
+      }),
+    );
     expect(
       clientToolApprovalScopeAnchor("read_document_blocks", documentScope),
     ).toBe(anchor);
@@ -118,6 +132,31 @@ describe("approval scopes", () => {
       clientToolApprovalScopeAnchor("read_comments", documentScope),
     ).toBeUndefined();
     checks = false;
+    expect(
+      clientToolApprovalScopeAnchor("read_document_blocks", documentScope),
+    ).toBeUndefined();
+  });
+
+  it("anchors no scope where a decision would carry another binding", () => {
+    registerClientToolExecutor("read_document_blocks", read, undefined, {
+      acceptsGrantCalls: true,
+      checksApprovalScope: () => true,
+      anchorsApprovalScope: () => () => ({ journal: "j", seq: 1 }),
+    });
+    expect(
+      clientToolApprovalScopeAnchor("read_document_blocks", documentScope),
+    ).toBeUndefined();
+    cleanup.push(
+      registerOperationExecutor("read_document_blocks", () => paneBinding, {
+        yields: true,
+      }),
+      // A strict executor leads the routing context over a yielding one.
+      registerOperationExecutor("local_collect_evidence", () => ({
+        ...paneBinding,
+        realm: "desktop-sidecar" as const,
+        host_context: undefined,
+      })),
+    );
     expect(
       clientToolApprovalScopeAnchor("read_document_blocks", documentScope),
     ).toBeUndefined();
