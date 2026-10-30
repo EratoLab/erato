@@ -6193,18 +6193,22 @@ call to this tool asks, the approval card in the planning chat also offers
 chat run without asking:
 
 - on the same document in the same pane session, until the document changes
-  outside the chat. The chat's own edits do not count, and neither do
-  formatting-only edits in Word on Windows and Mac, turning Track Changes on or
-  off, or Word's proofing; in Word for the web a formatting edit counts. After an
-  outside change the next call asks again, marked as changed. A document can
+  outside the chat. The chat's own edits do not count (another chat's Apply in
+  the same pane does), and neither do formatting-only edits in Word on Windows
+  and Mac, turning Track Changes on or off, or Word's proofing; in Word for the
+  web a formatting edit counts. An edit the user makes while one of the chat's
+  own inserts or a whole-document Apply is still settling is taken as the
+  chat's own. After an outside change the next call asks again, marked as
+  changed. A document can
   only be allowed in the pane that has it open, and only while that pane checks
   for outside changes; elsewhere the card offers the usual choices.
 - in the same response, until it is done; the next response asks again.
 
 A reloaded pane or another device asks again, and unarchiving the chat ends what
 was allowed. The planning turn's own calls are always asked one by one. Always allow
-and Never allow keep their meaning. It is a tool approval only: the host's own
-prompts and any release review still run.
+and Never allow keep their meaning; setting a tool to Never allow ends what was
+allowed for it, so setting it back to Ask asks again. It is a tool approval only:
+the host's own prompts and any release review still run.
 
 ```toml
 [client_tools.tools.word_read_document_blocks]

@@ -131,6 +131,7 @@ the context version. The schema offered to the task leaves both out, in every
 | Durable: the user declined on the device | `{"status":"cancelled","reason":"declined","error":…}` |
 | Durable: no client ran it before the attempt ended | `{"status":"cancelled","reason":"expired","error":…}` |
 | Durable: the parent moved on, or the tool became Never or lost its grant | `{"status":"cancelled","reason":"withdrawn","error":…}` |
+| A call under a document approval whose document changed, and no one can be asked (`propagate_child_mcp_approvals` off) | `{"status":"cancelled","reason":"scope_changed","error":…}` |
 
 The host's own outcomes, such as Word's `capture-unavailable`, come back as tool
 results. The durable texts tell the child's model that the task has no result
@@ -286,7 +287,11 @@ item of the same tool and scope. The coordinator's own calls never offer it,
 since only grant calls carry the lineage the scope travels in. `approve_context`
 is a 400 on the coordinator's own item, an MCP task, an item without a scope and
 a task's own card. Always allow and Never allow keep their meaning, and Never
-refuses a call an approval covered.
+refuses a call an approval covered. Storing Never for a tool, on a card or in
+the settings, ends the user's live approvals of that tool (`end_reason =
+never_allowed`), so setting it back to Ask asks again. A tool that is set to
+Never, or that the same decision sets to Never on another item, gets no
+approval: `approve_context` on its item allows that call once.
 
 The store is `client_tool_approval_scopes` (`services/approval_scope.rs`). The
 key is the parent chat, the SHA-256 of the grant's executor binding, the host
@@ -295,8 +300,10 @@ live. The server derives the scope id from the grant, never from the call: Word'
 is the binding's `host_context.identity`, which is new on every pane load, and
 Outlook's is the grant's `owner_message_id`. The parent's continuation makes the
 row once per decision, before any task resumes. The decision is identified by the
-parent message and the index of the stop's request part, so a crash retry finds
-the same row and a decision never makes a second one. Each item's approval part
+parent message, the index of the stop's request part and the position sent with
+it, so a crash retry of the same body finds the same row and a decision never
+makes a second one, while a new click on the same stop after a crash, with a
+position taken after an edit, makes a new row that replaces a live one. Each item's approval part
 records `covers` and `scope_approval_id`; the task's continuation gets the row id
 and its call passes the gate again under that row. Any later granted call of the
 same key, in any task of the chat, runs without asking while the row is live.
@@ -318,9 +325,14 @@ A document scope is checked on the device:
 - Every covered call carries `lineage.approval_scope {approval_id, scope_id,
   position}`. The host answers `ok: false` with the validation code
   `scope_changed`, without reading, when the document changed since the position.
-  Word's journal leaves out the chat's own writes, formatting-only edits on
-  Windows and Mac, Track Changes toggles and proofing; on Word for the web a
-  formatting edit counts.
+  Word's journal records the pane's writes as own, tagged with the chat shown
+  when each began; only the approving chat's own writes are left out, so another
+  chat's Apply in the same pane ends the approval. Formatting-only edits on
+  Windows and Mac, Track Changes toggles and proofing make no entry; on Word for
+  the web a formatting edit counts. Known gap: a user's edit that lands while
+  one of the chat's own anchor or import writes is still settling (up to 3 s
+  after an insert or comment, up to 120 s for an import on Word PC) is recorded
+  as own and does not end the approval.
 - On `scope_changed` the server ends the row by its id (`end_reason =
   scope_changed`), so a late answer for an older approval never ends a newer one.
   The task parks on a new Ask for the same call with `changed: true`. No tool
@@ -414,6 +426,10 @@ A host's handlers pass `clientToolHostAdapterConformanceFailures` from
   thread and count the items added since a position (ERMAIN-1034's follow-up
   N2).
 - Showing a live document approval in the parent chat, or ending it early.
+- Whether storing Always, or Ask again after Always, should also end live
+  approvals (only Never does).
+- Telling a user's edit apart from the chat's own anchor or import write while
+  that write settles (the known gap above).
 - ERMAIN-1034: the desktop sidecar host context; showing a device prompt of a
   grant call in the parent chat (registering it under `hostGrant.ownerChatId`);
   mapping a device decline on the live path; and a multi-executor envelope
