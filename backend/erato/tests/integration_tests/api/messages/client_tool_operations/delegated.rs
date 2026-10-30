@@ -12,6 +12,7 @@ use rows::HostRow;
 
 mod conformance;
 mod rows;
+mod sidecar;
 mod slow_path;
 
 /// Stands in for the host's writes in the row's namespace: offered to the

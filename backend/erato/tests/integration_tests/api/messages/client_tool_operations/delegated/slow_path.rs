@@ -156,7 +156,7 @@ async fn claim(
     request.json(&json!({ "binding": row.binding() })).await
 }
 
-fn pane_result(row: &HostRow, request: &OperationRequest) -> OperationResult {
+pub(super) fn pane_result(row: &HostRow, request: &OperationRequest) -> OperationResult {
     OperationResult {
         attempt_id: request.attempt_id,
         operation_id: request.operation_id.clone(),
@@ -171,7 +171,7 @@ fn pane_result(row: &HostRow, request: &OperationRequest) -> OperationResult {
     }
 }
 
-async fn attempt_row(waiting: &Waiting) -> attempts::Model {
+pub(super) async fn attempt_row(waiting: &Waiting) -> attempts::Model {
     attempts::Entity::find_by_id(waiting.request.attempt_id)
         .one(&waiting.state.db)
         .await
@@ -617,7 +617,7 @@ fn mock_child(
 }
 
 /// From now on the parent's turns after its tasks are back are recorded.
-fn record_parent_resumes(llm: &mut MockServer) -> RequestBodyRecorder {
+pub(super) fn record_parent_resumes(llm: &mut MockServer) -> RequestBodyRecorder {
     let recorder = RequestBodyRecorder::new();
     let capture = recorder.clone();
     llm.mock_with_options(OVERRIDE, None, move |when, then| {
@@ -672,13 +672,17 @@ async fn live_call(pane: &mut Pane) -> Value {
     }
 }
 
-async fn claim_token(row: &HostRow, state: &erato::state::AppState, attempt_id: Uuid) -> Value {
+pub(super) async fn claim_token(
+    row: &HostRow,
+    state: &erato::state::AppState,
+    attempt_id: Uuid,
+) -> Value {
     let claimed = claim(row, state, attempt_id, true).await;
     claimed.assert_status_ok();
     claimed.json::<Value>()["claim_token"].clone()
 }
 
-async fn post_result(
+pub(super) async fn post_result(
     row: &HostRow,
     state: &erato::state::AppState,
     token: &Value,
@@ -696,7 +700,7 @@ async fn post_result(
 }
 
 /// Any of the user's clients continuing a grant operation, without a stream.
-async fn continue_operation(
+pub(super) async fn continue_operation(
     state: &erato::state::AppState,
     attempt_id: Uuid,
 ) -> axum_test::TestResponse {
@@ -766,7 +770,7 @@ fn text_of(row: &erato::db::entity::messages::Model) -> String {
 }
 
 /// The parent's turn, once it has answered and its lease is free.
-async fn wait_answered(
+pub(super) async fn wait_answered(
     state: &erato::state::AppState,
     chat_id: Uuid,
 ) -> erato::db::entity::messages::Model {
@@ -812,7 +816,11 @@ async fn operation_of(
 }
 
 /// The delegated child answering the parent's `call`.
-async fn child_for(state: &erato::state::AppState, chat_id: Uuid, call: &str) -> chats::Model {
+pub(super) async fn child_for(
+    state: &erato::state::AppState,
+    chat_id: Uuid,
+    call: &str,
+) -> chats::Model {
     let suffix = format!(":{call}");
     eventually("the task's child chat", || async {
         chats::Entity::find()
@@ -859,7 +867,7 @@ fn item_for(row: &erato::db::entity::messages::Model, call: &str) -> Value {
 }
 
 /// The result of the task `call` as the parent's model read it in `body`.
-fn task_result_in(body: &Value, call: &str) -> Value {
+pub(super) fn task_result_in(body: &Value, call: &str) -> Value {
     let suffix = format!(":{call}");
     let content = &body["messages"]
         .as_array()
