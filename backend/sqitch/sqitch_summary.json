@@ -61,7 +61,8 @@
     "deploy/0059_add_interrupted_parts_index.sql",
     "deploy/0060_add_audio_synthesis.sql",
     "deploy/0061_add_assistant_welcome.sql",
-    "deploy/0062_add_client_executor_streams.sql"
+    "deploy/0062_add_client_executor_streams.sql",
+    "deploy/0063_add_client_tool_approval_scopes.sql"
   ],
-  "latest_change": "8dc51e4469b74e78f0aa01f91d2703f0aa48260a"
+  "latest_change": "dbdea6cd080a6c37e7b23ffdea1374ab36335918"
 }
