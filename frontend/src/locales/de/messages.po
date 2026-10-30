@@ -114,7 +114,7 @@ msgstr "Um das ganze Dokument zu erlauben, entscheiden Sie in dem Bereich, in de
 #. js-lingui-explicit-id
 #: src/components/ui/Message/ParkedChildItem.tsx
 msgid "approvalScope.hint"
-msgstr "{covers, select, turn {Aufgaben dieser Antwort nutzen dieses Werkzeug ohne erneute Nachfrage, bis die Antwort fertig ist.} other {Aufgaben in diesem Chat lesen dieses Dokument ohne erneute Nachfrage, bis es außerhalb dieses Chats geändert wird.}}"
+msgstr "{covers, select, turn {Aufgaben dieser Antwort nutzen dieses Tool ohne erneute Nachfrage, bis die Antwort fertig ist.} other {Aufgaben in diesem Chat lesen dieses Dokument ohne erneute Nachfrage, bis es außerhalb dieses Chats geändert wird.}}"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/ParkedChildItem.tsx
