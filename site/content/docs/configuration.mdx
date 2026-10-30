@@ -6190,6 +6190,34 @@ cannot continue them and ends the task or the chat with an error. A backend
 older than ERMAIN-1034 refuses to load a configuration that names
 `desktop_sidecar`.
 
+The desktop sidecar's search as a durable task read, with a child facet and a
+planning facet that may start such tasks:
+
+```toml
+[client_tools.tools.desktop_search_index]
+# name = "search_sidecar_index", namespace = "desktop", description and parameters as usual
+child_access = "read"
+host_context = "desktop_sidecar"
+child_dispatch = "durable"
+
+[client_tools.tools.desktop_search_index.durable]
+host_context = "desktop_sidecar"
+attempt_expiry_secs = 86400
+
+[facets.facets.desktop_delegated_search]
+display_name = "Local search task"
+child_host_context = "desktop_sidecar"
+
+[facets.facets.desktop_local.delegation]
+child_facet_ids = ["desktop_delegated_search"]
+run_modes = ["wait"]
+```
+
+A sidecar task gets the tools only when its turn was sent with the sidecar's
+binding, which an add-in sends beside its own in `X-Erato-Additional-Executors`.
+Its calls then go to the Erato app on the device, and a file the read returns
+(for example from `get_sidecar_document`) reaches the task's chat.
+
 **Default value:** unset (follows `delegation.tasks.child_dispatch`)
 
 **Type:** `"live"` | `"durable"`

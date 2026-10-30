@@ -526,7 +526,11 @@ calls. With it off, the stream endpoint answers 404 and no row is written.
   A handed-over call is neither broadcast nor written to the shared event log, so
   no chat stream runs it twice; proposal and status updates still are. The event
   is `client_tool_call {chat_id, message_id, tool_call_id, tool_name, input,
-  lineage?}`. `lineage` is set only for grant calls (ERMAIN-1001). A live grant
+  lineage?, expires_at?, timeout_ms?}`. `lineage` is set only for grant calls
+  (ERMAIN-1001). `expires_at` is when the run stops waiting for the result (the
+  hand-over plus the tool's timeout), stored with the queued event; `timeout_ms`
+  is filled at each delivery with the milliseconds left until then, floored at
+  0, so a client times the call without comparing clocks (ERMAIN-1034). A live grant
   call always uses the executor stream; a durable one becomes a grant operation
   instead (ERMAIN-1032).
 - **Results** use `clienttoolresult` with the calling chat and message ids. A
