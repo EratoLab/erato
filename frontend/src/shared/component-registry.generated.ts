@@ -397,7 +397,6 @@ export { SyntaxHighlightedCode } from "@/components/ui/Message/SyntaxHighlighted
 export { useCodeBlockSurfaceStyle } from "@/components/ui/Message/SyntaxHighlightedCode";
 export type { SyntaxHighlightedCodeProps } from "@/components/ui/Message/SyntaxHighlightedCode";
 export { TaskPlanApprovalCard } from "@/components/ui/Message/TaskPlanApprovalCard";
-export { TaskResultCard } from "@/components/ui/Message/TaskResultCard";
 export { ConfirmationDialog } from "@/components/ui/Modal/ConfirmationDialog";
 export { ModalBase } from "@/components/ui/Modal/ModalBase";
 export { messageStyles } from "@/components/ui/styles/chatMessageStyles";
@@ -434,6 +433,8 @@ export { SidecarLocalTraceView } from "@/components/ui/Trace/SidecarLocalTraceVi
 export type { SidecarLocalTraceViewProps } from "@/components/ui/Trace/SidecarLocalTraceView";
 export { DelegationStep } from "@/components/ui/Trace/steps/DelegationStep";
 export { ReasoningStep } from "@/components/ui/Trace/steps/ReasoningStep";
+export { TaskResultCard } from "@/components/ui/Trace/steps/TaskResultStep";
+export { TaskResultStep } from "@/components/ui/Trace/steps/TaskResultStep";
 export { SettledInfoPill } from "@/components/ui/Trace/steps/ToolStatusPill";
 export { ToolStatusPill } from "@/components/ui/Trace/steps/ToolStatusPill";
 export { ToolUseStep } from "@/components/ui/Trace/steps/ToolUseStep";

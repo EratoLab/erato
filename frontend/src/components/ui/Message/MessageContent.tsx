@@ -10,13 +10,13 @@ import remarkMath from "remark-math";
 import "katex/dist/katex.min.css";
 
 import { Alert } from "@/components/ui/Feedback/Alert";
-import { TaskResultCard } from "@/components/ui/Message/TaskResultCard";
 import {
   Trace,
   durationFromTraceParts,
   durationFromTracePartsOrLegacyMessageTimestamps,
   groupIntoTraceClusters,
 } from "@/components/ui/Trace";
+import { TaskResultStep } from "@/components/ui/Trace/steps/TaskResultStep";
 import { WordCommentReadNotice } from "@/components/ui/WordReview/WordCommentReadNotice";
 import {
   isWordPlanToolPart,
@@ -68,6 +68,7 @@ import type { WordHistoryMessage } from "@/components/ui/WordReview/useWordHisto
 import type { HostCardCodeBlockProps } from "@/config/componentRegistry";
 import type {
   ContentPart,
+  ContentPartTaskResult,
   FileUploadItem,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { HostArtifact } from "@/types/chat";
@@ -134,6 +135,8 @@ interface MessageContentProps {
    * not resolve are never passed in, so their tokens stay plain text.
    */
   mentionedAssistants?: AssistantMention[];
+  /** The delegated task result this reply answers, drawn above the reply. */
+  taskResult?: ContentPartTaskResult;
 }
 
 /**
@@ -1258,6 +1261,7 @@ export const MessageContent = memo(function MessageContent({
   hostArtifact: hostArtifactProp,
   outlookArtifact,
   mentionedAssistants,
+  taskResult,
 }: MessageContentProps) {
   // The deprecated prop is honored as a fallback for one release; every
   // artifact-driven path below reads this single resolved value.
@@ -1605,6 +1609,7 @@ export const MessageContent = memo(function MessageContent({
 
     return (
       <article className="max-w-none font-sans text-base">
+        {taskResult && <TaskResultStep part={taskResult} hasReply />}
         <pre className="message-content-raw-block whitespace-pre-wrap">
           <code>{rawText}</code>
         </pre>
@@ -1622,6 +1627,7 @@ export const MessageContent = memo(function MessageContent({
         preserveSoftLineBreaks && "whitespace-pre-wrap",
       )}
     >
+      {taskResult && <TaskResultStep part={taskResult} hasReply />}
       {clusters.map((cluster) => {
         if (cluster.kind === "trace") {
           // The trace block is the "current writer" while no later renderable
@@ -1654,7 +1660,7 @@ export const MessageContent = memo(function MessageContent({
         const isLastRenderablePart = index === lastRenderableIndex;
 
         if (part.content_type === "task_result") {
-          return <TaskResultCard key={`task-result-${index}`} part={part} />;
+          return <TaskResultStep key={`task-result-${index}`} part={part} />;
         }
 
         if (part.content_type === "client_tool_pending") {

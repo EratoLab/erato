@@ -4402,73 +4402,73 @@ msgstr "Rohes Markdown anzeigen"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/TaskResultCard.tsx
-msgid "message.taskResult.inputRequired"
-msgstr ""
+#~ msgid "message.taskResult.inputRequired"
+#~ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/TaskResultCard.tsx
-msgid "message.taskResult.model"
-msgstr "Modell: {modelName}"
+#~ msgid "message.taskResult.model"
+#~ msgstr "Modell: {modelName}"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/TaskResultCard.tsx
-msgid "message.taskResult.model.unavailable"
-msgstr "Das für diese Aufgabe vorgesehene Modell steht Ihnen nicht zur Verfügung, daher wurde sie mit {modelName} ausgeführt."
+#~ msgid "message.taskResult.model.unavailable"
+#~ msgstr "Das für diese Aufgabe vorgesehene Modell steht Ihnen nicht zur Verfügung, daher wurde sie mit {modelName} ausgeführt."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/TaskResultCard.tsx
-msgid "message.taskResult.openRun"
-msgstr ""
+#~ msgid "message.taskResult.openRun"
+#~ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/TaskResultCard.tsx
-msgid "message.taskResult.retried"
-msgstr ""
+#~ msgid "message.taskResult.retried"
+#~ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/TaskResultCard.tsx
-msgid "message.taskResult.retry"
-msgstr ""
+#~ msgid "message.taskResult.retry"
+#~ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/TaskResultCard.tsx
-msgid "message.taskResult.retry.background"
-msgstr ""
+#~ msgid "message.taskResult.retry.background"
+#~ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/TaskResultCard.tsx
-msgid "message.taskResult.retry.failed"
-msgstr ""
+#~ msgid "message.taskResult.retry.failed"
+#~ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/TaskResultCard.tsx
-msgid "message.taskResult.sequence"
-msgstr ""
+#~ msgid "message.taskResult.sequence"
+#~ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/TaskResultCard.tsx
-msgid "message.taskResult.status.cancelled"
-msgstr ""
+#~ msgid "message.taskResult.status.cancelled"
+#~ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/TaskResultCard.tsx
-msgid "message.taskResult.status.failed"
-msgstr ""
+#~ msgid "message.taskResult.status.failed"
+#~ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/TaskResultCard.tsx
-msgid "message.taskResult.status.inputRequired"
-msgstr ""
+#~ msgid "message.taskResult.status.inputRequired"
+#~ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/TaskResultCard.tsx
-msgid "message.taskResult.title"
-msgstr ""
+#~ msgid "message.taskResult.title"
+#~ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/TaskResultCard.tsx
-msgid "message.taskResult.truncated"
-msgstr ""
+#~ msgid "message.taskResult.truncated"
+#~ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/MessageList/ScrollToBottomButton.tsx
@@ -7571,11 +7571,13 @@ msgstr "An einen Assistenten delegiert"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Trace/steps/DelegationStep.tsx
+#: src/components/ui/Trace/steps/TaskResultStep.tsx
 msgid "trace.delegation.model"
 msgstr "Modell: {modelName}"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Trace/steps/DelegationStep.tsx
+#: src/components/ui/Trace/steps/TaskResultStep.tsx
 msgid "trace.delegation.model.unavailable"
 msgstr "Das für diese Aufgabe vorgesehene Modell steht Ihnen nicht zur Verfügung, daher wurde sie mit {modelName} ausgeführt."
 
@@ -7621,28 +7623,29 @@ msgstr "Der Lauf hat zu lange gedauert"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Trace/steps/DelegationStep.tsx
+#: src/components/ui/Trace/steps/TaskResultStep.tsx
 msgid "trace.delegation.result.truncated"
 msgstr "Ergebnis gekürzt"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Trace/steps/DelegationStep.tsx
+#: src/lib/delegation/delegatedRunControls.tsx
 msgid "trace.delegation.retried"
-msgstr ""
+msgstr "Als Hintergrundaufgabe erneut gestartet."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Trace/steps/DelegationStep.tsx
+#: src/lib/delegation/delegatedRunControls.tsx
 msgid "trace.delegation.retry"
-msgstr ""
+msgstr "Aufgabe wiederholen"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Trace/steps/DelegationStep.tsx
+#: src/lib/delegation/delegatedRunControls.tsx
 msgid "trace.delegation.retry.background"
-msgstr ""
+msgstr "Die Wiederholung läuft als Hintergrundaufgabe; ihre Antwort kommt separat, nicht in diesem Schritt."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Trace/steps/DelegationStep.tsx
+#: src/lib/delegation/delegatedRunControls.tsx
 msgid "trace.delegation.retry.failed"
-msgstr ""
+msgstr "Diese Aufgabe kann nicht wiederholt werden"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Trace/steps/DelegationStep.tsx
@@ -7656,11 +7659,13 @@ msgstr "Delegiert an einen Assistenten"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Trace/steps/DelegationStep.tsx
+#: src/components/ui/Trace/steps/TaskResultStep.tsx
 msgid "trace.delegation.status.cancelled"
 msgstr "Abgebrochen"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Trace/steps/DelegationStep.tsx
+#: src/components/ui/Trace/steps/TaskResultStep.tsx
 msgid "trace.delegation.status.inputRequired"
 msgstr "Ihre Entscheidung erforderlich"
 
@@ -7745,6 +7750,26 @@ msgid "trace.reasoning.title"
 msgstr "Denkt nach"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/TaskResultStep.tsx
+msgid "trace.taskResult.inputRequired"
+msgstr "Beantworten Sie sie im Chat der Aufgabe:"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/TaskResultStep.tsx
+msgid "trace.taskResult.openRun"
+msgstr "Lauf der Aufgabe öffnen"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/TaskResultStep.tsx
+msgid "trace.taskResult.redelivered"
+msgstr "Erneut zugestellt"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/TaskResultStep.tsx
+msgid "trace.taskResult.title"
+msgstr "Aufgabe hat sich zurückgemeldet"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Trace/TraceThinkingPlaceholder.tsx
 msgid "trace.thinking.placeholder"
 msgstr "Denkt nach…"
@@ -7767,6 +7792,7 @@ msgstr ""
 #. js-lingui-explicit-id
 #: src/components/ui/Trace/NestedTraceView.tsx
 #: src/components/ui/Trace/steps/DelegationStep.tsx
+#: src/components/ui/Trace/steps/TaskResultStep.tsx
 #: src/components/ui/Trace/steps/ToolStatusPill.tsx
 msgid "trace.tool.failed"
 msgstr "Fehlgeschlagen"

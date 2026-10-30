@@ -4402,73 +4402,73 @@ msgstr "Afficher le markdown brut"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/TaskResultCard.tsx
-msgid "message.taskResult.inputRequired"
-msgstr ""
+#~ msgid "message.taskResult.inputRequired"
+#~ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/TaskResultCard.tsx
-msgid "message.taskResult.model"
-msgstr ""
+#~ msgid "message.taskResult.model"
+#~ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/TaskResultCard.tsx
-msgid "message.taskResult.model.unavailable"
-msgstr ""
+#~ msgid "message.taskResult.model.unavailable"
+#~ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/TaskResultCard.tsx
-msgid "message.taskResult.openRun"
-msgstr ""
+#~ msgid "message.taskResult.openRun"
+#~ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/TaskResultCard.tsx
-msgid "message.taskResult.retried"
-msgstr ""
+#~ msgid "message.taskResult.retried"
+#~ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/TaskResultCard.tsx
-msgid "message.taskResult.retry"
-msgstr ""
+#~ msgid "message.taskResult.retry"
+#~ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/TaskResultCard.tsx
-msgid "message.taskResult.retry.background"
-msgstr ""
+#~ msgid "message.taskResult.retry.background"
+#~ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/TaskResultCard.tsx
-msgid "message.taskResult.retry.failed"
-msgstr ""
+#~ msgid "message.taskResult.retry.failed"
+#~ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/TaskResultCard.tsx
-msgid "message.taskResult.sequence"
-msgstr ""
+#~ msgid "message.taskResult.sequence"
+#~ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/TaskResultCard.tsx
-msgid "message.taskResult.status.cancelled"
-msgstr ""
+#~ msgid "message.taskResult.status.cancelled"
+#~ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/TaskResultCard.tsx
-msgid "message.taskResult.status.failed"
-msgstr ""
+#~ msgid "message.taskResult.status.failed"
+#~ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/TaskResultCard.tsx
-msgid "message.taskResult.status.inputRequired"
-msgstr ""
+#~ msgid "message.taskResult.status.inputRequired"
+#~ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/TaskResultCard.tsx
-msgid "message.taskResult.title"
-msgstr ""
+#~ msgid "message.taskResult.title"
+#~ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/TaskResultCard.tsx
-msgid "message.taskResult.truncated"
-msgstr ""
+#~ msgid "message.taskResult.truncated"
+#~ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/MessageList/ScrollToBottomButton.tsx
@@ -7571,13 +7571,15 @@ msgstr "Délégué à un assistant"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Trace/steps/DelegationStep.tsx
+#: src/components/ui/Trace/steps/TaskResultStep.tsx
 msgid "trace.delegation.model"
-msgstr ""
+msgstr "Modèle : {modelName}"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Trace/steps/DelegationStep.tsx
+#: src/components/ui/Trace/steps/TaskResultStep.tsx
 msgid "trace.delegation.model.unavailable"
-msgstr ""
+msgstr "Le modèle prévu pour cette tâche ne vous est pas accessible ; elle a donc été exécutée avec {modelName}."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Trace/steps/DelegationStep.tsx
@@ -7621,28 +7623,29 @@ msgstr "L'exécution a pris trop de temps"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Trace/steps/DelegationStep.tsx
+#: src/components/ui/Trace/steps/TaskResultStep.tsx
 msgid "trace.delegation.result.truncated"
 msgstr "Résultat tronqué"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Trace/steps/DelegationStep.tsx
+#: src/lib/delegation/delegatedRunControls.tsx
 msgid "trace.delegation.retried"
-msgstr ""
+msgstr "Relancée comme tâche en arrière-plan."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Trace/steps/DelegationStep.tsx
+#: src/lib/delegation/delegatedRunControls.tsx
 msgid "trace.delegation.retry"
-msgstr ""
+msgstr "Relancer la tâche"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Trace/steps/DelegationStep.tsx
+#: src/lib/delegation/delegatedRunControls.tsx
 msgid "trace.delegation.retry.background"
-msgstr ""
+msgstr "La relance s'exécute comme tâche en arrière-plan ; sa réponse arrive séparément, pas dans cette étape."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Trace/steps/DelegationStep.tsx
+#: src/lib/delegation/delegatedRunControls.tsx
 msgid "trace.delegation.retry.failed"
-msgstr ""
+msgstr "Cette tâche ne peut pas être relancée"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Trace/steps/DelegationStep.tsx
@@ -7656,11 +7659,13 @@ msgstr "Délégation à un assistant"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Trace/steps/DelegationStep.tsx
+#: src/components/ui/Trace/steps/TaskResultStep.tsx
 msgid "trace.delegation.status.cancelled"
 msgstr "Annulé"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Trace/steps/DelegationStep.tsx
+#: src/components/ui/Trace/steps/TaskResultStep.tsx
 msgid "trace.delegation.status.inputRequired"
 msgstr "Votre décision est requise"
 
@@ -7745,6 +7750,26 @@ msgid "trace.reasoning.title"
 msgstr "Réflexion"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/TaskResultStep.tsx
+msgid "trace.taskResult.inputRequired"
+msgstr "Répondez-y dans le chat de la tâche :"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/TaskResultStep.tsx
+msgid "trace.taskResult.openRun"
+msgstr "Ouvrir l'exécution de la tâche"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/TaskResultStep.tsx
+msgid "trace.taskResult.redelivered"
+msgstr "Remis à nouveau"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/TaskResultStep.tsx
+msgid "trace.taskResult.title"
+msgstr "La tâche a répondu"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Trace/TraceThinkingPlaceholder.tsx
 msgid "trace.thinking.placeholder"
 msgstr "Réflexion…"
@@ -7767,6 +7792,7 @@ msgstr ""
 #. js-lingui-explicit-id
 #: src/components/ui/Trace/NestedTraceView.tsx
 #: src/components/ui/Trace/steps/DelegationStep.tsx
+#: src/components/ui/Trace/steps/TaskResultStep.tsx
 #: src/components/ui/Trace/steps/ToolStatusPill.tsx
 msgid "trace.tool.failed"
 msgstr "Échec"

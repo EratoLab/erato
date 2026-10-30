@@ -1,4 +1,8 @@
+import clsx from "clsx";
 import { useCallback } from "react";
+
+import { NO_ASSISTANT_TURNS } from "@/utils/chat/assistantTurns";
+import { NO_TASK_RESULT_FOLDS } from "@/utils/chat/taskResultFolds";
 
 import { MessageItem } from "./MessageItem";
 
@@ -14,7 +18,9 @@ import type {
   MessageControlsComponent,
   MessageControlsContext,
 } from "@/types/message-controls";
+import type { AssistantTurns } from "@/utils/chat/assistantTurns";
 import type { ModelSwitch } from "@/utils/chat/modelSwitches";
+import type { TaskResultFolds } from "@/utils/chat/taskResultFolds";
 import type { ComponentType } from "react";
 import type React from "react";
 
@@ -37,6 +43,8 @@ interface VirtualizedMessageListProps {
   onViewFeedback?: (messageId: string, feedback: MessageFeedback) => void;
   allFilesById: Record<string, FileUploadItem>;
   modelSwitches?: Record<string, ModelSwitch>;
+  taskResultFolds?: TaskResultFolds;
+  assistantTurns?: AssistantTurns;
 }
 
 export const VirtualizedMessageList: React.FC<VirtualizedMessageListProps> = ({
@@ -57,12 +65,21 @@ export const VirtualizedMessageList: React.FC<VirtualizedMessageListProps> = ({
   onViewFeedback,
   allFilesById,
   modelSwitches,
+  taskResultFolds = NO_TASK_RESULT_FOLDS,
+  assistantTurns = NO_ASSISTANT_TURNS,
 }) => {
   // Message renderer
   const renderMessages = useCallback(() => {
+    // The first drawn message heads its turn even when an older page holds the rest.
+    let drawnAbove = false;
     return visibleData.map((messageId, index) => {
+      if (taskResultFolds.foldedRowIds.has(messageId)) return null;
       const message = messages[messageId];
       const isNew = isNewlyLoaded(index);
+      const fold = taskResultFolds.byReplyId[messageId];
+      const continuesTurn =
+        drawnAbove && assistantTurns.continuing.has(messageId);
+      drawnAbove = true;
 
       return (
         <MessageItem
@@ -81,9 +98,17 @@ export const VirtualizedMessageList: React.FC<VirtualizedMessageListProps> = ({
           onMessageAction={onMessageAction}
           onFilePreview={onFilePreview}
           onViewFeedback={onViewFeedback}
-          className={getMessageClassName(isNew)}
+          className={clsx(
+            getMessageClassName(isNew),
+            continuesTurn && "pt-0",
+            assistantTurns.continued.has(messageId) && "pb-0",
+          )}
+          continuesTurn={continuesTurn}
           allFilesById={allFilesById}
-          modelSwitch={modelSwitches?.[messageId]}
+          modelSwitch={
+            modelSwitches?.[messageId] ?? (fold && modelSwitches?.[fold.rowId])
+          }
+          taskResult={fold?.part}
         />
       );
     });
@@ -105,6 +130,8 @@ export const VirtualizedMessageList: React.FC<VirtualizedMessageListProps> = ({
     onViewFeedback,
     allFilesById,
     modelSwitches,
+    taskResultFolds,
+    assistantTurns,
   ]);
 
   return (
