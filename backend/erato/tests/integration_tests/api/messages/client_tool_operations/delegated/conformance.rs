@@ -108,6 +108,7 @@ macro_rules! host_conformance {
                 a_child_client_ask_is_refused_when_child_approvals_are_off
                 an_approved_child_call_reaches_the_pane_under_the_same_grant
                 a_denied_child_call_is_declined_and_the_task_result_says_so
+                a_device_decline_of_a_live_grant_call_is_declined
                 freshness_reaches_the_task_result_and_the_parent_trace
                 freshness_after_an_approval_reaches_the_task_result_and_the_trace
             );
@@ -1357,6 +1358,69 @@ async fn a_denied_child_call_is_declined_and_the_task_result_says_so(
     assert_eq!(slot["output"]["status"], "completed", "{slot}");
     assert_eq!(slot["output"]["client_tools"], json!({"declined": 1}));
     asked.server.abort();
+}
+
+async fn a_device_decline_of_a_live_grant_call_is_declined(pool: Pool<Postgres>, row: &HostRow) {
+    let (parent, child) = (RequestBodyRecorder::new(), RequestBodyRecorder::new());
+    let mut mocks = MockSet::new();
+    mock_parent(&mut mocks, &parent, vec![client_task(None)]);
+    mock_client_child_reads(row, &mut mocks, &child);
+    let (state, _llm) = delegated_state(row, pool, mocks, |_| {}).await;
+    let (base, server) = serve(&state).await;
+    let mut pane = open_pane(row, &base).await;
+    let chat_id = seed_origin_chat(&state.db).await;
+    let run = spawn_parent(row, &base, chat_id, ACTION_FACET, Some(row.binding()));
+    let event = pane.call().await;
+    let declined = post_live(
+        &state,
+        event["chat_id"].as_str().unwrap().parse().unwrap(),
+        &(
+            event["message_id"].as_str().unwrap().parse().unwrap(),
+            event["tool_call_id"].as_str().unwrap().to_string(),
+        ),
+        json!({"validation_errors": [{
+            "path": "", "code": "declined", "message": "The user declined on the device.",
+        }]}),
+        Some(&row.binding()),
+    )
+    .await;
+    declined.assert_status_ok();
+    assert_eq!(declined.json::<Value>()["delivered"], true);
+    assert!(finish(run).await.contains(PARENT_FINAL));
+
+    let client_child = child_chat(&state.db, chat_id, CHILD_FACET).await.unwrap();
+    let read = part_for(
+        &assistant_row(&state.db, client_child.id).await,
+        CHILD_READ_CALL,
+    );
+    assert_eq!(read["status"], "error", "{read}");
+    assert_eq!(read["output"]["status"], "cancelled", "{read}");
+    assert_eq!(read["output"]["reason"], "declined");
+    assert!(
+        read["output"]["error"]
+            .as_str()
+            .unwrap()
+            .contains(row.read_tool)
+    );
+    let child_turns = turn_bodies(&child);
+    assert_eq!(child_turns.len(), 2);
+    assert!(
+        child_turns[1]
+            .to_string()
+            .contains("The user declined this call")
+    );
+    let parent_message = assistant_row(&state.db, chat_id).await;
+    let slot = part_for(&parent_message, CLIENT_TASK_CALL);
+    assert_eq!(slot["output"]["status"], "completed", "{slot}");
+    assert_eq!(slot["output"]["client_tools"], json!({"declined": 1}));
+    let answered: String = parent_message.raw_message["content"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|part| part["text"].as_str())
+        .collect();
+    assert_eq!(answered.matches(PARENT_FINAL).count(), 1, "{answered}");
+    server.abort();
 }
 
 async fn freshness_reaches_the_task_result_and_the_parent_trace(
