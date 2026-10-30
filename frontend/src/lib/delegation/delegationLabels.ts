@@ -70,6 +70,11 @@ export const waitingForHostLabel = (
         id: "delegation.waitingFor.outlookMailbox",
         message: "Waiting for Outlook on this device",
       });
+    case "desktop_sidecar":
+      return t({
+        id: "delegation.waitingFor.desktopSidecar",
+        message: "Waiting for the Erato app on this device",
+      });
     default:
       return t({
         id: "delegation.waitingFor.connectedApp",
