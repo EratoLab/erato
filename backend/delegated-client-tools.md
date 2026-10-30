@@ -376,14 +376,56 @@ A host's handlers pass `clientToolHostAdapterConformanceFailures` from
 - The sidecar's lineage check on the device compares only the requesting chat
   and message: its index has no owner context, and a parked call is often
   claimed by a client that never saw the owner turn. The server checks the owner
-  at offer, dispatch, claim and every renewal.
+  at offer, dispatch, claim and every renewal. The device also refuses a grant
+  that carries a context version or no owner. The conformance kit runs it with
+  `ownerCheck: "server"`.
+- The binding the shells send (the web app and every add-in host, from
+  `DesktopSidecarClientTools`) is `{device_id: <this Erato client's routing id>,
+  realm: "desktop-sidecar", host_context: {kind: "desktop_sidecar", identity:
+  "local"}}`. The sidecar reports only a per-process instance id, which a restart
+  would change under every parked call, so the binding names the Erato client,
+  not the sidecar installation: a parked call is picked up by the same client
+  (the same browser profile, or the same add-in) while the app runs. A shell
+  sends it only while the app is ready, declares no local delegation and offers
+  one of the six tools, so a turn sent while the app is not running gives its
+  tasks no sidecar tools. The six tools are registered for grant calls; each
+  binding gets its own executor stream (see `durable-client-operations.md`,
+  "Executor streams").
+- A loss on the device (a grant that does not hold, the app not ready or gone
+  during the read) answers `context_unavailable`, terminal. On the live path the
+  call ends with it; on the slow path the device returns no result, drops its
+  claim and lets it lapse, so the call waits for the next claim once the app is
+  back. A device file approval of a task's call is registered under
+  `hostGrant.ownerChatId` and shown on the owner message with the task's brief;
+  it closes with the attempt (slow path) or the pushed call's `timeout_ms` (live
+  path). `get_sidecar_document` answers a decline with the `declined` code;
+  `read_sidecar_conversation` keeps the bodies and marks declined attachments
+  `rejected`.
+- Every sidecar read reports `freshness {readAt, changes, counts}` with zero
+  counts and no `context_ref`. `changes` is `none` only for a search whose every
+  source is available, has nothing newer queued and was observed no earlier than
+  the read began; otherwise `unknown`. Thread and document reads add the scope
+  signal for ERMAIN-1033, `freshness.scope = {kind, id, position, added}`: `id`
+  is `doc:<documentId>`, `index-thread:<sha256 of [sourceId, mailboxId,
+  conversationKey]>` from the search hit this client saw, or
+  `outlook-thread:<sha256 of [mailboxId, thread GUID]>` from the messages'
+  conversation index, else `unknown`; `position` and `added` stay `unknown`
+  until the sidecar reports an index position and the items added since. The
+  server copies only the contract keys into the task result, so `scope` stays in
+  the task chat's tool output.
+- Strict mode is unchanged: any local delegation declaration keeps the six tools
+  unavailable and the binding unsent, so no task of such a turn gets a grant
+  (`NOT_FROM_HOST`). A declaration made while a call waits for the user's
+  approval keeps the files on the device on both paths. A local-evidence task's
+  card in the parent shows its review state from this device's local tasks, or
+  "Waiting for review in the desktop app" elsewhere.
 
 ## Not in this record
 
 - ERMAIN-1033: approving once per document or thread.
-- ERMAIN-1034, still to come: showing a device prompt of a grant call in the
-  parent chat (registering it under `hostGrant.ownerChatId`); the desktop
-  sidecar's shells (its binding, one executor stream per binding, the lineage
-  check, freshness and the scope signal on its reads, losses on the slow path,
-  strict mode).
+- Sidecar follow-ups (the sidecar repository): a stable installation id in
+  discovery, so any client on the device can pick up a parked call; one thread
+  key on hits, exports and conversations, an index position and a count of items
+  added since one, so `scope.position` and `scope.added` become values; a live
+  "nothing new since" signal per source.
 - ERMAIN-1031: the child's model.
