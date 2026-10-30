@@ -293,6 +293,7 @@ describe("source capabilities in the chat tools", () => {
         notice: expect.stringMatching(
           /^Folders aren't available for Outlook · jane@example.com \(new Outlook for Mac\): .*does not mean the mailbox has no folders/,
         ),
+        freshness: expect.objectContaining({ changes: "unknown" }),
       },
     });
   });
