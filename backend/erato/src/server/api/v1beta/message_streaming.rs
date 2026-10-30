@@ -13965,6 +13965,52 @@ mod tests {
     }
 
     #[test]
+    fn never_on_a_client_tool_item_names_its_tool_for_the_decision() {
+        let mut stop = gated_request("own", "2026-10-20T10:00:00Z");
+        stop.kind = ToolApprovalKind::ClientTool;
+        stop.mcp_server_id = "word".to_string();
+        let mut own = stop.approval_items().remove(0);
+        own.tool_name = "read_document_blocks".to_string();
+        let mut client_task = child_item("client-task");
+        let child = client_task.child.as_mut().unwrap();
+        child.kind = Some(ToolApprovalKind::ClientTool);
+        child.mcp_server_id = "word".to_string();
+        child.tool_name = "read_other".to_string();
+        let mcp_task = child_item("mcp-task");
+        let open = vec![own, client_task, mcp_task];
+        let never = |ids: &[&str]| {
+            ids.iter()
+                .map(|id| (id.to_string(), ToolApprovalDecision::RejectAlways))
+                .collect::<Vec<_>>()
+        };
+
+        assert_eq!(
+            super::client_tools_set_to_never(
+                &stop,
+                &open,
+                &never(&["own", "client-task", "mcp-task"])
+            ),
+            HashSet::from([
+                "word/read_document_blocks".to_string(),
+                "word/read_other".to_string()
+            ])
+        );
+        assert!(
+            super::client_tools_set_to_never(
+                &stop,
+                &open,
+                &[("own".to_string(), ToolApprovalDecision::Reject)]
+            )
+            .is_empty()
+        );
+        stop.kind = ToolApprovalKind::McpTool;
+        assert_eq!(
+            super::client_tools_set_to_never(&stop, &open, &never(&["own", "client-task"])),
+            HashSet::from(["word/read_other".to_string()])
+        );
+    }
+
+    #[test]
     fn approve_context_deserializes_with_its_position() {
         let request: super::ContinueStreamRequest = serde_json::from_value(json!({
             "message_id": Uuid::nil(),
@@ -19585,16 +19631,40 @@ fn context_decision_refused(
         })
 }
 
+/// The client tools a stop's decisions set to Never allow: a task's client tool
+/// item names its own tool, the turn's own item the tool its stop asked about.
+fn client_tools_set_to_never(
+    stop: &ContentPartToolApprovalRequest,
+    open: &[ApprovalItem],
+    decisions: &[(String, ToolApprovalDecision)],
+) -> HashSet<String> {
+    decisions
+        .iter()
+        .filter(|(_, decision)| *decision == ToolApprovalDecision::RejectAlways)
+        .filter_map(|(approval_id, _)| {
+            let item = open.iter().find(|item| &item.approval_id == approval_id)?;
+            match &item.child {
+                Some(child) => (child.kind == Some(ToolApprovalKind::ClientTool))
+                    .then(|| format!("{}/{}", child.mcp_server_id, child.tool_name)),
+                None => (stop.kind == ToolApprovalKind::ClientTool)
+                    .then(|| format!("{}/{}", stop.mcp_server_id, item.tool_name)),
+            }
+        })
+        .collect()
+}
+
 /// Validates every `approve_context` decision against the task's grant as it
 /// holds now and derives the approval key it is made under. A scope the host
 /// checks on the device needs the position taken at the click, sent by the
 /// client that holds the context with that host's executor binding, and one
-/// position per scope.
+/// position per scope. A tool the user set to Never allow, before or in this
+/// decision, gets no approval: its items are allowed once.
 async fn context_decisions(
     app_state: &AppState,
     me_user: &MeProfile,
     request: &ContinueStreamRequest,
     chat: &crate::db::entity::chats::Model,
+    stop: &ContentPartToolApprovalRequest,
     open: &[ApprovalItem],
     decisions: &[(String, ToolApprovalDecision)],
 ) -> Result<HashMap<String, crate::services::approval_scope::ContextDecision>, String> {
@@ -19670,6 +19740,26 @@ async fn context_decisions(
         }
         context.insert(approval_id.clone(), ContextDecision { key, position });
     }
+    let mut never = client_tools_set_to_never(stop, open, decisions);
+    if let Ok(user_id) = Uuid::parse_str(&me_user.id) {
+        let tools: HashSet<&str> = context
+            .values()
+            .map(|decided| decided.key.tool_name.as_str())
+            .collect();
+        for tool_name in tools {
+            let stored = crate::models::user_preference::find_client_tool_decision(
+                &app_state.db,
+                &user_id,
+                tool_name,
+            )
+            .await
+            .map_err(|error| error.to_string())?;
+            if stored == Some(crate::models::user_preference::ClientToolDecision::NeverAllow) {
+                never.insert(tool_name.to_string());
+            }
+        }
+    }
+    context.retain(|_, decided| !never.contains(&decided.key.tool_name));
     Ok(context)
 }
 
@@ -19880,6 +19970,7 @@ pub(crate) async fn start_continuation(
                 me_user,
                 &request,
                 &chat,
+                &state.request,
                 &decidable,
                 &submitted_decisions,
             )

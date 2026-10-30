@@ -20,6 +20,7 @@ pub const SCOPE_CHANGED: &str = "scope_changed";
 pub const END_SCOPE_CHANGED: &str = SCOPE_CHANGED;
 pub const END_CHAT_ARCHIVED: &str = "chat_archived";
 pub const END_SUPERSEDED: &str = "superseded";
+pub const END_NEVER_ALLOWED: &str = "never_allowed";
 
 const MAX_POSITION_BYTES: usize = 1024;
 const MAX_SCOPE_ID_CHARS: usize = 256;
@@ -354,6 +355,33 @@ pub async fn end(db: &DatabaseConnection, approval_id: Uuid, reason: &str) -> Re
         ))
         .await?;
     Ok(result.rows_affected() > 0)
+}
+
+/// Ends the user's live approvals of these tools in every chat they own, so a
+/// later Ask never brings back an approval given before Never.
+pub async fn end_for_tools(
+    db: &DatabaseConnection,
+    owner_user_id: Uuid,
+    tool_names: &[String],
+    reason: &str,
+) -> Result<u64, Report> {
+    if tool_names.is_empty() {
+        return Ok(0);
+    }
+    let result = db
+        .execute_raw(statement(
+            r#"UPDATE client_tool_approval_scopes s SET ended_at = now(), end_reason = $3
+               FROM chats c
+               WHERE c.id = s.chat_id AND c.owner_user_id = $1 AND s.ended_at IS NULL
+                 AND s.tool_name IN (SELECT jsonb_array_elements_text($2))"#,
+            vec![
+                owner_user_id.to_string().into(),
+                serde_json::json!(tool_names).into(),
+                reason.into(),
+            ],
+        ))
+        .await?;
+    Ok(result.rows_affected())
 }
 
 /// Ends every live approval of a chat.
