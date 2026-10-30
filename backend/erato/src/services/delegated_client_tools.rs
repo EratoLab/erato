@@ -777,6 +777,30 @@ async fn read_waiting_child<C: sea_orm::ConnectionTrait>(
             return ChildWaitState::Open;
         }
     };
+    // Nothing claims, continues or expires an archived chat's call, so its
+    // item would wait for ever. The run still exists, so the park's envelope
+    // is kept for its ids and the slot still links to it.
+    if child_chat.archived_at.is_some() {
+        let mut output = parked_output
+            .filter(|output| output.is_object())
+            .cloned()
+            .unwrap_or_else(|| json!({}));
+        if let Some(object) = output.as_object_mut() {
+            object.insert(
+                "status".to_string(),
+                json!(DelegationRunStatus::Failed.as_str()),
+            );
+            object.remove("reason");
+            object.insert(
+                "error".to_string(),
+                json!("The delegated run was archived."),
+            );
+        }
+        return ChildWaitState::Settle {
+            output,
+            failed: true,
+        };
+    }
     // A running child may still be between two calls of its continuation:
     // its row can end on anything until its turn is over.
     if child_chat.generation_state.as_deref() == Some("running") {
@@ -1125,8 +1149,8 @@ impl WaitingParentsCursor {
 /// or by the open parent chat. Returns how many parents changed.
 ///
 /// Only parents a sync can move are scanned: a waiting item whose slot is
-/// still open while its call has completed, or failed in a continuation, on a
-/// child that no longer runs.
+/// still open while its call has completed, or failed in a continuation, or
+/// whose child was archived, on a child that no longer runs.
 pub async fn sweep_waiting_parents(
     db: &sea_orm::DatabaseConnection,
     config: &AppConfig,
@@ -1169,7 +1193,8 @@ pub async fn sweep_waiting_parents(
             WHERE stop.part ->> 'content_type' = 'tool_approval_request'
               AND child.generation_state IS DISTINCT FROM 'running'
               AND (a.state = 'completed'
-                OR (a.state = 'continuing' AND child.generation_state = 'errored'))
+                OR (a.state = 'continuing' AND child.generation_state = 'errored')
+                OR child.archived_at IS NOT NULL)
               AND (
                 SELECT slot.part ->> 'status'
                 FROM jsonb_array_elements(tip.raw_message -> 'content')

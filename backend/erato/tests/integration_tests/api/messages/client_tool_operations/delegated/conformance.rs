@@ -29,6 +29,7 @@ use super::slow_path::{
     a_waiting_childs_continuation_is_offered_its_granted_tools_while_the_parent_is_parked,
     a_withdrawn_childs_ask_is_answerable_in_its_own_chat,
     an_approved_child_call_on_a_durable_tool_waits_and_the_parent_shows_it,
+    an_archived_waiting_child_settles_as_failed_and_the_parent_resumes_once,
     an_empty_continuestream_while_children_wait_is_children_waiting,
     an_errored_parent_that_cleared_its_marker_is_not_resumed_by_its_child,
     approvals_decided_while_a_child_waits_repark_on_the_waiting_child,
@@ -153,6 +154,7 @@ macro_rules! host_conformance {
             a_child_reaped_errored_after_its_answer_reads_as_completed
             a_crashed_parent_the_cleanup_cleared_resumes_once_when_the_waiting_child_finishes
             a_parent_the_cleanup_cleared_without_its_marker_settles_and_is_not_resumed
+            an_archived_waiting_child_settles_as_failed_and_the_parent_resumes_once
         ]);
     };
     ($name:ident: $row:ident($($arg:expr),*) $(, ignore = $why:literal)?) => {

@@ -180,9 +180,10 @@ first try and no 15 s grace.
   tip, its last stop has waiting items, and the chat is not archived and runs no
   generation. The chat's state is not asked beyond that: the heartbeat cleanup
   clears an ended turn's state a minute later, and a task may wait far longer.
-  Per open waiting item: the child still runs or its call is not
-  completed, so the item stays open (a call left `continuing` on an errored child
-  counts as failed); the child parked on an Ask, so the item becomes an approval
+  Per open waiting item: the child chat was archived, so the slot settles failed
+  (nothing claims, continues or expires an archived chat's call); the child still
+  runs or its call is not completed, so the item stays open (a call left
+  `continuing` on an errored child counts as failed); the child parked on an Ask, so the item becomes an approval
   item in place (slot reason `approval_pending`); the child parked on another
   grant call, so the item is rewritten to that call and attempt; otherwise the
   slot settles with the task result. It is failed when the child's row still
@@ -195,7 +196,7 @@ first try and no 15 s grace.
   empty `continuestream` body; and the cleanup tick (`sweep_waiting_parents`),
   for a child whose tail never ran. The sweep scans only parents a sync can move:
   a waiting item whose slot is open while its call completed, or failed on an
-  errored child, on a child that no longer runs. It visits them in chat order,
+  errored child, or whose child was archived, on a child that no longer runs. It visits them in chat order,
   100 a tick, and carries a cursor to the next tick.
 - **Resume.** Once nothing is left to decide and every waiting item settled, the
   tail starts the parent's continuation in process (`WaitingSettled`) under

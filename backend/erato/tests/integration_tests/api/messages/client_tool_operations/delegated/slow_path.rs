@@ -2422,6 +2422,50 @@ pub(super) async fn a_task_call_left_continuing_on_an_errored_child_is_refused_a
     waiting.server.abort();
 }
 
+pub(super) async fn an_archived_waiting_child_settles_as_failed_and_the_parent_resumes_once(
+    pool: Pool<Postgres>,
+    row: &HostRow,
+) {
+    let mut waiting = park_a_waiting_child(row, pool, false, |_| {}).await;
+    let resumed = record_parent_resumes(&mut waiting.llm);
+    app_server(waiting.state.clone())
+        .post(&format!("/api/v1beta/chats/{}/archive", waiting.child.id))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({}))
+        .await
+        .assert_status_ok();
+
+    erato::actors::cleanup_worker::run_cleanup_tick(&cleanup_args(&waiting.state))
+        .await
+        .unwrap();
+    let swept = assistant_row(&waiting.state.db, waiting.chat_id).await;
+    let slot = part_for(&swept, CLIENT_TASK_CALL);
+    assert_eq!(slot["status"], "error", "{slot}");
+    assert_eq!(slot["output"]["status"], "failed");
+    assert_eq!(slot["output"]["error"], "The delegated run was archived.");
+    assert_eq!(
+        slot["output"]["child_run_id"],
+        json!(waiting.child.id),
+        "the slot still links to the run"
+    );
+    let continued = continuestream(
+        &waiting,
+        json!({ "decisions": [], "shows_child_items": true }),
+    )
+    .await;
+    continued.assert_status_ok();
+    assert!(extract_full_text(&parse_sse_events(&continued)).contains(PARENT_FINAL));
+    let parent_turns = turn_bodies(&resumed);
+    assert_eq!(parent_turns.len(), 1, "one parent continuation");
+    assert_failed_task_result(&parent_turns[0]);
+    assert!(
+        task_result_in(&parent_turns[0], CLIENT_TASK_CALL)
+            .to_string()
+            .contains("archived")
+    );
+    waiting.server.abort();
+}
+
 pub(super) async fn the_old_slot_settles_while_a_newer_parent_turn_runs(
     pool: Pool<Postgres>,
     row: &HostRow,
