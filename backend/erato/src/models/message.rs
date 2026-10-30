@@ -2569,7 +2569,7 @@ mod tool_approval_part_tests {
         );
 
         let approval = json!({"content_type": "tool_approval", "tool_call_id": "call-1",
-            "approved_at": "2026-10-30T00:00:01Z", "approval_id": "call-1",
+            "always_allow": false, "approved_at": "2026-10-30T00:00:01Z", "approval_id": "call-1",
             "covers": "document", "scope_approval_id": uuid::Uuid::nil()});
         let ContentPart::ToolApproval(parsed) =
             serde_json::from_value::<ContentPart>(approval.clone()).unwrap()
