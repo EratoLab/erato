@@ -37,6 +37,10 @@ It preserves source Outlook data and configuration. See [full reset semantics](S
 
 ## Quick start
 
+Package 0.1.41 documents the settings that stay available under the strict
+profile: the methods, their account-level results and the configuration keys a
+strict sidecar ignores. See [settings under the strict profile](DELEGATION.md#settings-under-the-strict-profile).
+
 Package 0.1.40 adds typed organization policy guides to the existing configuration
 contract. Configuration delivery is independent of `localDelegation`; the sidecar
 decides whether it trusts and applies outside settings. Definitions and metadata

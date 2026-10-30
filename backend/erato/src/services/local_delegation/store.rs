@@ -247,15 +247,17 @@ pub async fn receipts(
     db: &DatabaseConnection,
     owner: Uuid,
     after: Option<Uuid>,
+    backend_origin: &str,
 ) -> Result<Vec<NativeJob>> {
     let rows = attempts::Model::find_by_statement(statement(
         r#"
         SELECT a.* FROM client_operation_attempts a JOIN local_evidence_exports e USING(attempt_id)
         WHERE a.account_id=$1 AND a.result IS NOT NULL AND a.expires_at > now() - interval '7 days'
           AND ($2::uuid IS NULL OR a.attempt_id > $2)
+          AND e.binding->>'backendOrigin' = $3
         ORDER BY a.attempt_id LIMIT 100
     "#,
-        vec![owner.into(), after.into()],
+        vec![owner.into(), after.into(), backend_origin.into()],
     ))
     .all(db)
     .await?;

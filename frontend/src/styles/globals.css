@@ -1012,6 +1012,10 @@ body {
     var(--theme-spacing-message-padding-x);
 }
 
+.chat-message-skin[data-continues-turn] {
+  padding-top: 0;
+}
+
 .modal-overlay-skin {
   background-color: var(--theme-overlay-modal);
   backdrop-filter: blur(var(--theme-layout-modal-backdrop-blur));

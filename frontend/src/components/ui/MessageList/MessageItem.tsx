@@ -1,6 +1,7 @@
 import { memo, useState } from "react";
 
 import { mapMessageToUiMessage } from "@/utils/adapters/messageAdapter";
+import { taskResultOf } from "@/utils/chat/taskResultFolds";
 
 import { useMessageEdit } from "./MessageEditContext";
 import { MessageEditor } from "./MessageEditor";
@@ -12,6 +13,7 @@ import { ModelSwitchMarker } from "../Message/ModelSwitchMarker";
 import type { MessageEditContextValue } from "./MessageEditContext";
 import type { ChatMessageProps } from "../Chat/ChatMessage";
 import type {
+  ContentPartTaskResult,
   UserProfile,
   FileUploadItem,
   MessageFeedback,
@@ -44,7 +46,21 @@ export interface MessageItemProps {
   onViewFeedback?: (messageId: string, feedback: MessageFeedback) => void;
   allFilesById: Record<string, FileUploadItem>;
   modelSwitch?: ModelSwitch;
+  /** The delegated task result this assistant reply answers. */
+  taskResult?: ContentPartTaskResult;
+  /** Drawn as part of the assistant turn above it. */
+  continuesTurn?: boolean;
 }
+
+// A delivered result rides a user-role row only because the model must read it
+// there; it is the task reporting back into the assistant's turn.
+const onAssistantSide = (message: UiChatMessage): UiChatMessage => ({
+  ...message,
+  role: "assistant",
+  sender: "assistant",
+  // eslint-disable-next-line lingui/no-unlocalized-strings -- internal id
+  authorId: "assistant_id",
+});
 
 // Memoized message item component with custom comparison
 export const MessageItem = memo<MessageItemProps>(
@@ -67,6 +83,8 @@ export const MessageItem = memo<MessageItemProps>(
     onViewFeedback,
     allFilesById,
     modelSwitch,
+    taskResult,
+    continuesTurn,
   }) => {
     const messageEdit = useMessageEdit();
     const compaction = message.content.find(
@@ -102,13 +120,16 @@ export const MessageItem = memo<MessageItemProps>(
       );
     }
 
+    const isTaskResultRow = taskResultOf(message) !== undefined;
+    const uiMessage = mapMessageToUiMessage(message);
+
     return (
       <div className={className}>
         {modelSwitch && <ModelSwitchMarker {...modelSwitch} />}
         <Renderer
           key={messageId}
-          message={mapMessageToUiMessage(message)}
-          showTimestamp={showTimestamp}
+          message={isTaskResultRow ? onAssistantSide(uiMessage) : uiMessage}
+          showTimestamp={showTimestamp && !isTaskResultRow}
           showAvatar={showAvatar}
           maxWidth={maxWidth}
           userProfile={userProfile}
@@ -120,6 +141,8 @@ export const MessageItem = memo<MessageItemProps>(
           onViewFeedback={onViewFeedback}
           allFilesById={allFilesById}
           hostComponents={CHAT_MESSAGE_HOST_COMPONENTS}
+          taskResult={taskResult}
+          continuesTurn={continuesTurn}
         />
       </div>
     );

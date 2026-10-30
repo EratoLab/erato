@@ -2,7 +2,8 @@
 
 Status: reserved, disabled. Package 0.1.28 extends
 main's 0.1.27 contract, preserving Outlook provenance and the data-directory
-action. Transport protocol remains 1.0. This document is the
+action; 0.1.41 adds the settings methods that stay available. Transport
+protocol remains 1.0. This document is the
 shared design record. It does not certify a security implementation.
 
 ## Execution scope
@@ -53,10 +54,11 @@ No platform is qualified by this contract change.
 A strict-required installation refuses startup if native consent is unavailable.
 It must never downgrade to legacy on a command-line mode, reset, restart,
 missing helper, signature failure or unsupported OS. The RPC boundary denies
-legacy content, metadata, progress and diagnostic methods before
-running them. Native code must route every public path through these checks, including
-alternate modes and diagnostic serialization. Origin allowlisting or a frontend
-approval boolean does not authorize an export.
+legacy content, progress, benchmark and diagnostic methods, and every method
+outside the settings list below, before running them. Native code must route every
+public path through these checks, including alternate modes and diagnostic
+serialization. Origin allowlisting or a frontend approval boolean does not
+authorize an export.
 
 Configuration delivery is an exception: clients do not use `localDelegation` to
 gate `sidecar.configure.v1`. The installed sidecar decides whether it trusts outside
@@ -64,6 +66,37 @@ configuration calls and whether to take their values into account; it may reject
 or ignore them. Sending configuration does not weaken native content/export
 checks, and clients must respect sidecar rejection. See SPEC section 11 for
 configuration replacement and preservation of saved user settings.
+
+## Settings under the strict profile
+
+Settings stay available through their fixed methods, behind the same Origin
+allowlist: `sidecar.configure.v1`, `indexing.status.v1`, `indexing.reset.v1`,
+`sources.list.v1`, `outlook.list_mailboxes.v1`, `sidecar.status.v1`,
+`sidecar.request_permission.v1` and `sidecar.open_data_directory.v1`. A strict
+sidecar marks exactly these enabled in its live catalogue. Clients gate each
+settings view on that availability, so an earlier strict sidecar that refuses
+them keeps a connection-only view. The calls are not bound to a local context.
+
+Their results carry account-level data only: account and store names and
+addresses, Teams tenant and user identities, on/off, priority, indexing progress,
+coverage counts and dates, permission status and codes. Message subjects,
+senders, bodies, folder names, search results, documents and conversations never
+appear. Local paths and free-text errors stay native: `indexing.status.v1` omits
+`indexingDirectory` and returns only the documented discovery fields;
+`sources.list.v1` returns the source ID as `sourceKey`, a null `discoveryCursor`
+and a locator reduced to `mailboxId`, `tenantId` and `userId`;
+`outlook.list_mailboxes.v1` reports an unreadable data file with a fixed message
+and no path.
+
+Configuration cannot relax the profile. Allowed origins, TLS, the content release
+and the delegation trust policy come only from the installed bootstrap; a strict
+sidecar drops these keys from submitted configuration rather than persisting
+them. `signed_in_user` still selects the work-account defaults. `search.*`,
+`sources.get_document.v1`, `sources.get_folder_hierarchy.v1`,
+`outlook.get_conversation.v1`, `outlook.list_emails.v1`,
+`outlook.search_emails.v1`, `sidecar.progress.v1`, `indexing.benchmark.*` and
+`diagnostics.echo.v1` remain refused, as do the unused `indexing.start.v1`,
+`indexing.stop.v1`, `sidecar.restart.v1` and `erato.cancel`.
 
 ## Account and device authentication
 

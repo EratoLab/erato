@@ -173,14 +173,14 @@ test("brings a detached run's result and the turn reacting to it into an open co
   // The starting state of the transition this test is about, asserted before
   // anything can have arrived: nothing has been delivered into this
   // conversation, and the origin has said nothing but its dispatch line.
-  await expect(page.getByTestId("task-result-card")).toHaveCount(0);
+  await expect(page.getByTestId("task-result-step")).toHaveCount(0);
   await expect(page.getByText(NOTIFIED_REACTION)).toHaveCount(0);
 
   // TRANSITION 1 — the child parked, the origin was told, and the row plus the
   // turn reacting to it appeared here with nothing navigating. A client that
   // stopped polling would leave this conversation showing the dispatch step and
   // nothing else, for as long as it was looked at.
-  const notification = page.getByTestId("task-result-card");
+  const notification = page.getByTestId("task-result-step");
   await expect(notification).toHaveCount(1, { timeout: POLL_TIMEOUT_MS });
   await expect(notification).toHaveAttribute(
     "data-task-result-status",
@@ -230,7 +230,7 @@ test("brings a detached run's result and the turn reacting to it into an open co
   // TRANSITION 2 — the run finished elsewhere, and its answer reached this page.
   // The second card is the assertion: the first one was already here, so a count
   // of two is a change this document observed rather than a state it loaded.
-  const cards = page.getByTestId("task-result-card");
+  const cards = page.getByTestId("task-result-step");
   await expect(cards).toHaveCount(2, { timeout: POLL_TIMEOUT_MS });
   await expect(cards.nth(1)).toHaveAttribute(
     "data-task-result-status",

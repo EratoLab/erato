@@ -66,6 +66,7 @@ export const ChatMessageBubble = memo(function ChatMessageBubble({
   onFilePreview,
   onViewFeedback,
   allFilesById = {},
+  taskResult,
 }: ChatMessageProps) {
   const isUser = message.role === "user";
 
@@ -92,7 +93,12 @@ export const ChatMessageBubble = memo(function ChatMessageBubble({
   const filesById = allFilesById;
 
   // Content validation
-  if (message.content.length === 0 && !message.loading && !message.error) {
+  if (
+    message.content.length === 0 &&
+    !message.loading &&
+    !message.error &&
+    !taskResult
+  ) {
     return null;
   }
 
@@ -266,6 +272,7 @@ export const ChatMessageBubble = memo(function ChatMessageBubble({
           createdAt={message.createdAt}
           updatedAt={message.updatedAt}
           hasError={!!message.error}
+          taskResult={taskResult}
         />
 
         {message.input_files_ids && message.input_files_ids.length > 0 && (

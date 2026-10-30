@@ -222,7 +222,10 @@ pub async fn export_context(
         .await
         .map_err(conflict)?;
     let origin = origin(&state, &headers)?;
-    if job.origin != origin || (job.receipt.is_none() && job.server_outcome.is_none()) {
+    if job.origin != origin
+        || job.binding["backendOrigin"] != signer.origin
+        || (job.receipt.is_none() && job.server_outcome.is_none())
+    {
         return Err(conflict("No durable outcome"));
     }
     let authorization = signer
@@ -241,8 +244,8 @@ pub async fn receipts(
     Extension(me): Extension<MeProfile>,
     Query(query): Query<ReceiptQuery>,
 ) -> Result<Json<ReceiptsResponse>, ApiError> {
-    signer(&state)?;
-    let jobs = store::receipts(&state.db, account(&me)?, query.after)
+    let signer = signer(&state)?;
+    let jobs = store::receipts(&state.db, account(&me)?, query.after, &signer.origin)
         .await
         .map_err(unavailable)?;
     let after = (jobs.len() == 100).then(|| jobs.last().expect("nonempty").request.attempt_id);

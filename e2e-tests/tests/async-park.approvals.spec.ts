@@ -288,7 +288,7 @@ test("delivers a detached task's answer into the origin chat as one result row",
   // The row was loaded into a page that had already rendered, so the transcript
   // is re-read rather than watched.
   await gotoAppPage(page, `/chat/${originChatId}`);
-  const card = page.getByTestId("task-result-card");
+  const card = page.getByTestId("task-result-step");
   await expect(card).toHaveCount(1, { timeout: DELIVERY_TIMEOUT_MS });
   await expect(card).toHaveAttribute("data-task-result-status", "completed");
   await expect(card.getByTestId("task-result-summary")).toContainText(
@@ -341,7 +341,7 @@ const parkDetachedChild = async (
   expect(notification.summary).not.toContain(PARK_CHILD_TRACE);
 
   await gotoAppPage(page, `/chat/${originChatId}`);
-  const card = page.getByTestId("task-result-card");
+  const card = page.getByTestId("task-result-step");
   await expect(card).toHaveCount(1, { timeout: DELIVERY_TIMEOUT_MS });
   await expect(card).toHaveAttribute(
     "data-task-result-status",
@@ -465,7 +465,7 @@ test("delivers a second result carrying the answer once a parked detached child'
   expect(answer.redeliveries ?? 0).toBe(0);
 
   await gotoAppPage(page, `/chat/${originChatId}`);
-  const cards = page.getByTestId("task-result-card");
+  const cards = page.getByTestId("task-result-step");
   await expect(cards).toHaveCount(2, { timeout: DELIVERY_TIMEOUT_MS });
   await expect(cards.nth(0)).toHaveAttribute(
     "data-task-result-status",
@@ -534,7 +534,7 @@ test("delivers a denied detached child's second result, reporting the refusal it
   expect(answer.summary).not.toContain(PROBE_RESULT);
 
   await gotoAppPage(page, `/chat/${originChatId}`);
-  const cards = page.getByTestId("task-result-card");
+  const cards = page.getByTestId("task-result-step");
   await expect(cards).toHaveCount(2, { timeout: DELIVERY_TIMEOUT_MS });
   await expect(cards.nth(1)).toHaveAttribute(
     "data-task-result-status",

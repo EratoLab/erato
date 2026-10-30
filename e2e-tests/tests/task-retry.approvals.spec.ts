@@ -181,7 +181,7 @@ test("retries a failed detached task as a new run carrying the same brief, leave
   // all: a `cancelled` timeout or a `completed` run with a bad answer offers
   // nothing here.
   await gotoAppPage(page, `/chat/${originChatId}`);
-  const card = page.getByTestId("task-result-card");
+  const card = page.getByTestId("task-result-step");
   await expect(card).toHaveCount(1, { timeout: DELIVERY_TIMEOUT_MS });
   await expect(card).toHaveAttribute("data-task-result-status", "failed");
   await expect(card.getByTestId("task-result-status")).toContainText("Failed");
@@ -211,10 +211,10 @@ test("retries a failed detached task as a new run carrying the same brief, leave
 
   const retry = card.getByTestId("task-result-retry");
   await expect(retry).toBeVisible();
-  // The copy has to state the retry's shape and not just offer it: this slot was
-  // frozen at dispatch, so the answer arrives as a result of its own.
+  // The copy has to state the retry's shape and not just offer it: this step is
+  // never rewritten, so the answer arrives as a result of its own.
   await expect(retry).toContainText(
-    "The retry runs as a background task; its answer arrives as its own result, not in this card.",
+    "The retry runs as a background task; its answer arrives separately, not in this step.",
   );
   await expect(card.getByTestId("task-result-retry-refused")).toHaveCount(0);
 
@@ -315,7 +315,7 @@ test("retries a failed detached task as a new run carrying the same brief, leave
   // row. The first row is untouched: a retry does not rewrite the result it was
   // started from, and the reader keeps both attempts.
   await gotoAppPage(page, `/chat/${originChatId}`);
-  const cards = page.getByTestId("task-result-card");
+  const cards = page.getByTestId("task-result-step");
   await expect(cards).toHaveCount(2, { timeout: DELIVERY_TIMEOUT_MS });
   await expect(cards.nth(0)).toHaveAttribute(
     "data-task-result-status",
@@ -339,7 +339,7 @@ test("offers no retry on a detached run that completed", async ({ page }) => {
   const originChatId = await dispatchDetachedTask(page, PLAIN_PROMPT);
 
   await gotoAppPage(page, `/chat/${originChatId}`);
-  const card = page.getByTestId("task-result-card");
+  const card = page.getByTestId("task-result-step");
   await expect(card).toHaveCount(1, { timeout: DELIVERY_TIMEOUT_MS });
   await expect(card).toHaveAttribute("data-task-result-status", "completed");
   await expect(card.getByTestId("task-result-retry")).toHaveCount(0);

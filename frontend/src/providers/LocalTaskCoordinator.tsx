@@ -18,6 +18,37 @@ import type {
   LocalTaskViewState,
 } from "@/lib/desktopSidecar/localTaskCoordinator";
 
+/** Steady-state inbox cadence; the idle load of an authenticated shell. */
+const SWEEP_INTERVAL_MS = 10_000;
+/** Cadence while a native job is expected to change state soon. */
+const ACTIVE_SWEEP_INTERVAL_MS = 1_500;
+/** How long an opened review window keeps the active cadence. The native app
+ * never reports a closed window, so an abandoned review falls back to idle. */
+const REVIEW_ATTENTION_MS = 5 * 60_000;
+
+/**
+ * Exported for unit testing. The sidecar has no push channel: a job's
+ * `ready_for_review` and `approved` transitions are observed only by a sweep,
+ * so the poll runs fast while collection is under way or a review window has
+ * just been opened, and idles otherwise.
+ */
+export function sweepIntervalFor(
+  views: readonly LocalTaskView[],
+  reviewOpenedAt: ReadonlyMap<string, number>,
+  now: number,
+): number {
+  const active = views.some((view) => {
+    if (view.state === "queued" || view.state === "running") return true;
+    const openedAt = reviewOpenedAt.get(view.id);
+    return (
+      view.state === "ready_for_review" &&
+      openedAt !== undefined &&
+      now - openedAt < REVIEW_ATTENTION_MS
+    );
+  });
+  return active ? ACTIVE_SWEEP_INTERVAL_MS : SWEEP_INTERVAL_MS;
+}
+
 function label(state: LocalTaskViewState): string {
   switch (state) {
     case "queued":
@@ -52,6 +83,10 @@ export function LocalTaskCoordinator() {
   const openRun = useDelegatedRunOpener();
   const { profile, error, refreshProfile } = useProfileApi();
   const [views, setViews] = useState<LocalTaskView[]>([]);
+  // Review windows this shell opened, by job id, as `Date.now()` at the click.
+  const [reviewOpenedAt, setReviewOpenedAt] = useState<
+    ReadonlyMap<string, number>
+  >(() => new Map());
   const [coordinator, setCoordinator] = useState<Coordinator | null>(null);
   const status =
     error && typeof error === "object" && "status" in error
@@ -62,6 +97,7 @@ export function LocalTaskCoordinator() {
   const accountId = status === 401 || status === 403 ? undefined : profile?.id;
   useEffect(() => {
     setViews([]);
+    setReviewOpenedAt(new Map());
     if (!accountId) {
       setCoordinator(null);
       return;
@@ -90,7 +126,9 @@ export function LocalTaskCoordinator() {
       return { enabled: coordinator?.enabled ?? false };
     },
     refetchInterval: (query) =>
-      query.state.data?.enabled === false ? false : 10_000,
+      query.state.data?.enabled === false
+        ? false
+        : sweepIntervalFor(views, reviewOpenedAt, Date.now()),
     refetchOnWindowFocus: (query) =>
       query.state.data?.enabled === false ? false : "always",
     refetchOnReconnect: (query) =>
@@ -144,6 +182,9 @@ export function LocalTaskCoordinator() {
                 variant="primary"
                 size="sm"
                 onClick={() => {
+                  setReviewOpenedAt((opened) =>
+                    new Map(opened).set(view.id, Date.now()),
+                  );
                   void coordinator?.review(view.id);
                 }}
               >{t`Review in desktop app`}</Button>

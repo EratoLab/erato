@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   registerClientToolExecutor,
@@ -581,5 +581,71 @@ describe("ClientOperationCoordinator executor stream", () => {
       coordinator.dispose();
       unregister();
     }
+  });
+});
+
+describe("ClientOperationCoordinator refused claims", () => {
+  const refusal = { status: 409, payload: "Operation is not claimable" };
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  it("retries once ahead of the poll when the park's release has not landed yet", async () => {
+    const { api } = fakeApi();
+    api.claim.mockRejectedValueOnce(refusal);
+    const { run, handler } = toolHandler();
+    const { coordinator } = coordinatorWith(api, [], [handler]);
+    try {
+      await coordinator.reconcile();
+      expect(api.claim).toHaveBeenCalledTimes(1);
+      expect(run).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(1_400);
+      expect(api.list).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(100);
+      expect(api.list).toHaveBeenCalledTimes(2);
+      expect(api.claim).toHaveBeenCalledTimes(2);
+      expect(run).toHaveBeenCalledTimes(1);
+      expect(api.complete).toHaveBeenCalledTimes(1);
+      expect(api.continue).toHaveBeenCalledTimes(1);
+    } finally {
+      coordinator.dispose();
+    }
+  });
+
+  it("does not stack retries while the claim stays refused", async () => {
+    const { api } = fakeApi();
+    api.claim.mockRejectedValue(refusal);
+    const { coordinator } = coordinatorWith(api, [], [toolHandler().handler]);
+    try {
+      await coordinator.reconcile();
+      await vi.advanceTimersByTimeAsync(2_000);
+      expect(api.list).toHaveBeenCalledTimes(2);
+      expect(api.claim).toHaveBeenCalledTimes(2);
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(api.list).toHaveBeenCalledTimes(2);
+      // A nudge in between is not a second early retry either.
+      coordinator.reconcile();
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(api.list).toHaveBeenCalledTimes(3);
+    } finally {
+      coordinator.dispose();
+    }
+  });
+
+  it("leaves other claim failures and a disposed coordinator to the poll", async () => {
+    const failed = fakeApi();
+    failed.api.claim.mockRejectedValue(new Error("Network error"));
+    const first = coordinatorWith(failed.api, [], [toolHandler().handler]);
+    await first.coordinator.reconcile();
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(failed.api.list).toHaveBeenCalledTimes(1);
+    first.coordinator.dispose();
+
+    const refused = fakeApi();
+    refused.api.claim.mockRejectedValueOnce(refusal);
+    const second = coordinatorWith(refused.api, [], [toolHandler().handler]);
+    await second.coordinator.reconcile();
+    second.coordinator.dispose();
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(refused.api.list).toHaveBeenCalledTimes(1);
   });
 });
