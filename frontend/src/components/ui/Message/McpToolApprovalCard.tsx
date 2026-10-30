@@ -5,7 +5,10 @@ import { useContext, useEffect, useRef, useState } from "react";
 import { getIdToken } from "@/auth/tokenStore";
 import { archivedNoticeText } from "@/components/ui/Chat/chatArchiveActions";
 import { standingAnswerTargets } from "@/hooks/chat/approvalSeeding";
-import { getClientToolHeaders } from "@/hooks/chat/clientToolExecutors";
+import {
+  clientToolApprovalScopeAnchor,
+  getClientToolHeaders,
+} from "@/hooks/chat/clientToolExecutors";
 import { readConflictRefusal } from "@/hooks/chat/conflictRefusal";
 import { useConfirmationRegistryStore } from "@/hooks/chat/store/confirmationRegistryStore";
 import { useGenerationStatusStore } from "@/hooks/chat/store/generationStatusStore";
@@ -28,9 +31,18 @@ import { ApprovalQueueCard } from "./ApprovalQueueCard";
 import { OriginApprovalLink } from "./OriginApprovalLink";
 import { OwnCallApprovalItem } from "./OwnCallApprovalItem";
 import { TaskPlanApprovalCard } from "./TaskPlanApprovalCard";
-import { approvalItemsOf, isWaitingItem } from "./approvalItems";
+import {
+  approvalItemsOf,
+  isWaitingItem,
+  scopeGroup,
+  scopeOf,
+} from "./approvalItems";
 
-import type { ApprovalItemPart, StagedDecisions } from "./approvalItems";
+import type {
+  ApprovalItemPart,
+  ApprovalScopeOffer,
+  StagedDecisions,
+} from "./approvalItems";
 import type { ToolApprovalStatus } from "../Trace/Trace";
 import type {
   ContentPartToolApprovalRequest,
@@ -61,6 +73,9 @@ const SILENT_REFUSALS: ReadonlySet<string | undefined> = new Set([
 
 // eslint-disable-next-line lingui/no-unlocalized-strings -- API refusal code
 const DECISIONS_MISMATCH = "decisions_mismatch";
+
+// eslint-disable-next-line lingui/no-unlocalized-strings -- API decision value
+const APPROVE_CONTEXT: ToolApprovalDecision = "approve_context";
 
 /** How often a card that shows waiting tasks reads the row again. */
 const WAITING_REFRESH_MS = 5_000;
@@ -169,6 +184,11 @@ export const McpToolApprovalCard = ({
   // settles the whole stop in one request, so they are held until it is fully
   // answered.
   const [staged, setStaged] = useState<StagedDecisions>({});
+  // The host's position taken when an item was allowed for its document, by
+  // `approval_id`; sent with the held `approve_context` answers.
+  const [stagedPositions, setStagedPositions] = useState<
+    Record<string, unknown>
+  >({});
   const [isCoveredByParent, setIsCoveredByParent] = useState(false);
 
   // While the decision is pending, hold the chat's message-queue auto-send
@@ -313,7 +333,7 @@ export const McpToolApprovalCard = ({
     decision: ToolApprovalDecision,
     itemDecisions?: DecidedApproval[],
   ) => {
-    const answers =
+    const answers: DecidedApproval[] =
       itemDecisions ??
       approvalItems.map((item) => ({
         approvalId: item.approval_id,
@@ -383,6 +403,13 @@ export const McpToolApprovalCard = ({
             answers.map((answer) => [answer.approvalId, answer.decision]),
           ),
         );
+        setStagedPositions(
+          Object.fromEntries(
+            answers
+              .filter((answer) => answer.scopePosition !== undefined)
+              .map((answer) => [answer.approvalId, answer.scopePosition]),
+          ),
+        );
         await chatContext?.refetchMessages();
         return;
       }
@@ -411,6 +438,7 @@ export const McpToolApprovalCard = ({
       // Held answers would otherwise leave every row looking decided with no
       // way to send them again.
       setStaged({});
+      setStagedPositions({});
       if (alreadyContinued) {
         await chatContext?.refetchMessages();
       }
@@ -425,16 +453,25 @@ export const McpToolApprovalCard = ({
    * withdrawing all overrides them, so nothing the user can no longer see
    * still runs.
    */
+  /** Every open item's answer, a held document approval with its position. */
+  const itemAnswers = (
+    answers: StagedDecisions,
+    positions: Record<string, unknown>,
+    fallback: ToolApprovalDecision,
+  ): DecidedApproval[] =>
+    approvalItems.map((item) => {
+      const decision = answers[item.approval_id] ?? fallback;
+      const scopePosition = positions[item.approval_id];
+      return decision === "approve_context" && scopePosition !== undefined
+        ? { approvalId: item.approval_id, decision, scopePosition }
+        : { approvalId: item.approval_id, decision };
+    });
+
   const decideAll = (decision: ToolApprovalDecision) => {
     const held = isApprovalDecision(decision) ? staged : {};
     setStaged({});
-    void decide(
-      decision,
-      approvalItems.map((item) => ({
-        approvalId: item.approval_id,
-        decision: held[item.approval_id] ?? decision,
-      })),
-    );
+    setStagedPositions({});
+    void decide(decision, itemAnswers(held, stagedPositions, decision));
   };
 
   /**
@@ -448,12 +485,59 @@ export const McpToolApprovalCard = ({
     if (approvalItems.some((item) => answers[item.approval_id] === undefined)) {
       return;
     }
+    void decide(decision, itemAnswers(answers, stagedPositions, decision));
+  };
+
+  /** The position-taker for a document scope, where this client holds it. */
+  const scopeAnchor = (item: ApprovalItemPart) => {
+    const scope = scopeOf(item);
+    return scope?.ref.covers === "document"
+      ? clientToolApprovalScopeAnchor(scope.toolName, scope.ref)
+      : undefined;
+  };
+
+  const scopeOffer = (
+    item: ApprovalItemPart,
+  ): ApprovalScopeOffer | undefined => {
+    const scope = scopeOf(item);
+    if (!scope) return undefined;
+    return {
+      covers: scope.ref.covers,
+      others: scopeGroup(approvalItems, item, staged).length - 1,
+      anchorable:
+        scope.ref.covers !== "document" || scopeAnchor(item) !== undefined,
+      changed: scope.changed,
+    };
+  };
+
+  /**
+   * Allow an item for its whole document or response, together with every
+   * open item of the same tool and scope: one decision for all of them. A
+   * document's position is taken once, now, so every item carries the same.
+   */
+  const decideScope = (item: ApprovalItemPart) => {
+    const scope = scopeOf(item);
+    if (!scope) return;
+    const anchor = scopeAnchor(item);
+    if (scope.ref.covers === "document" && !anchor) return;
+    const position = anchor?.();
+    const answers: StagedDecisions = { ...staged };
+    const positions = { ...stagedPositions };
+    for (const member of scopeGroup(approvalItems, item, staged)) {
+      answers[member.approval_id] = APPROVE_CONTEXT;
+      if (position === undefined) delete positions[member.approval_id];
+      else positions[member.approval_id] = position;
+    }
+    setStaged(answers);
+    setStagedPositions(positions);
+    if (
+      approvalItems.some((other) => answers[other.approval_id] === undefined)
+    ) {
+      return;
+    }
     void decide(
-      decision,
-      approvalItems.map((item) => ({
-        approvalId: item.approval_id,
-        decision: answers[item.approval_id] ?? decision,
-      })),
+      APPROVE_CONTEXT,
+      itemAnswers(answers, positions, APPROVE_CONTEXT),
     );
   };
 
@@ -538,6 +622,8 @@ export const McpToolApprovalCard = ({
           isBusy={cardIsBusy}
           onDecideItem={decideItem}
           onDecideAll={decideAll}
+          scopeOffer={scopeOffer}
+          onDecideScope={decideScope}
         />
         {refusal}
       </>

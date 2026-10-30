@@ -1,4 +1,4 @@
-import { t } from "@lingui/core/macro";
+import { plural, select, t } from "@lingui/core/macro";
 
 import { ToolCallInput } from "@/components/ui/ToolCall";
 import {
@@ -11,8 +11,53 @@ import { ActionConfirmationCard } from "./ActionConfirmationCard";
 import { stagedItemPresentation } from "./ApprovalDecisionActions";
 import { ApprovalToolHeading } from "./ApprovalToolHeading";
 
-import type { ApprovalItemPart } from "./approvalItems";
+import type { ApprovalItemPart, ApprovalScopeOffer } from "./approvalItems";
 import type { ToolApprovalDecision } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+
+const allowScopeLabel = ({ covers }: ApprovalScopeOffer) =>
+  t({
+    id: "approvalScope.allow",
+    message: select(covers, {
+      turn: "Allow for this response",
+      other: "Allow for this document",
+    }),
+  });
+
+/**
+ * The lines under the scope button: what one decision allows and until when,
+ * and the other tasks it answers with this one.
+ */
+const scopeHint = ({ covers, others }: ApprovalScopeOffer) => (
+  <>
+    <p>
+      {t({
+        id: "approvalScope.hint",
+        message: select(covers, {
+          turn: "Tasks of this response use this tool without asking again until the response is done.",
+          other:
+            "Tasks in this chat read this document without asking again until it changes outside this chat.",
+        }),
+      })}
+    </p>
+    {others > 0 && (
+      <p data-testid="approval-scope-others">
+        {t({
+          id: "approvalScope.others",
+          message: select(covers, {
+            turn: plural(others, {
+              one: "Also covers # other task of this response",
+              other: "Also covers # other tasks of this response",
+            }),
+            other: plural(others, {
+              one: "Also covers # other task reading this document",
+              other: "Also covers # other tasks reading this document",
+            }),
+          }),
+        })}
+      </p>
+    )}
+  </>
+);
 
 /**
  * One parked child: which task it is, and the call it stopped on.
@@ -31,6 +76,8 @@ export const ParkedChildItem = ({
   isArchived,
   isBusy,
   onDecide,
+  scopeOffer,
+  onDecideScope,
 }: {
   item: ApprovalItemPart;
   scrollIntoViewOnMount: boolean;
@@ -39,11 +86,57 @@ export const ParkedChildItem = ({
   isArchived: boolean;
   isBusy: boolean;
   onDecide: (decision: ToolApprovalDecision) => void;
+  /** Set when the task's call may be allowed for its whole document or response. */
+  scopeOffer?: ApprovalScopeOffer;
+  onDecideScope?: () => void;
 }) => {
   const child = item.child ?? undefined;
   const isClientTool = child?.kind === "client_tool";
   const brief = taskBriefFromInput(item.input, TASK_BRIEF_PREVIEW_CHARS);
-  const { status, resolvedLabel } = stagedItemPresentation(staged, isArchived);
+  const { status, resolvedLabel } = stagedItemPresentation(
+    staged,
+    isArchived,
+    scopeOffer?.covers,
+  );
+  const scopeButton =
+    scopeOffer?.anchorable && onDecideScope
+      ? {
+          allowOnceLabel: t({
+            id: "approvalScope.allowCall",
+            message: "Allow this call",
+          }),
+          onAllowScope: onDecideScope,
+          allowScopeLabel: allowScopeLabel(scopeOffer),
+          allowScopeHint: scopeHint(scopeOffer),
+        }
+      : {};
+  // The server marks a change, and needs a position, only for a document.
+  const scopeNotices =
+    scopeOffer?.covers === "document" &&
+    (scopeOffer.changed || !scopeOffer.anchorable) ? (
+      <div className="space-y-1 text-sm text-theme-fg-secondary">
+        {scopeOffer.changed && (
+          <p data-testid="approval-scope-changed">
+            {t({
+              id: "approvalScope.changed",
+              message: "The document changed since you allowed it.",
+            })}
+          </p>
+        )}
+        {!scopeOffer.anchorable && (
+          <p
+            className="text-xs text-theme-fg-muted"
+            data-testid="approval-scope-elsewhere"
+          >
+            {t({
+              id: "approvalScope.elsewhere",
+              message:
+                "To allow the whole document, decide in the pane that has it open.",
+            })}
+          </p>
+        )}
+      </div>
+    ) : undefined;
 
   return (
     <div
@@ -114,7 +207,9 @@ export const ParkedChildItem = ({
           id: "delegatedTaskApproval.itemTitle",
           message: "Allow this task to make the call?",
         })}
+        description={scopeNotices}
         onAllowOnce={() => onDecide("approve")}
+        {...scopeButton}
         // Standing decisions are keyed on the CHILD's server and tool — the
         // parent's `delegate_task` is a synthetic name no grant can name — so
         // they are offered only for an item that names a child. Disabled
