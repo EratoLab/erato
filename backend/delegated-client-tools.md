@@ -194,10 +194,13 @@ first try and no 15 s grace.
 - **Who syncs.** Every tail of the child, whatever it ended on; the parent's own
   parking tail, for a child that finished while the parent's join still ran; an
   empty `continuestream` body; and the cleanup tick (`sweep_waiting_parents`),
-  for a child whose tail never ran. The sweep scans only parents a sync can move:
-  a waiting item whose slot is open while its call completed, or failed on an
-  errored child, or whose child was archived, on a child that no longer runs. It visits them in chat order,
-  100 a tick, and carries a cursor to the next tick.
+  for a child whose tail never ran. The sweep scans the parents a sync is
+  expected to move, on the tip's last stop only, the one a sync reads: a waiting
+  item whose slot is open while its call completed, or failed on an errored
+  child, or whose child was archived, on a child that no longer runs. A sync can
+  still leave one as it was (a row it cannot read, a read that fails), so the
+  sweep visits them in chat order, 100 a tick, and carries a cursor to the next
+  tick.
 - **Resume.** Once nothing is left to decide and every waiting item settled, the
   tail starts the parent's continuation in process (`WaitingSettled`) under
   `Takeover::ResumeParked {expected_generation}`, which takes only the generation

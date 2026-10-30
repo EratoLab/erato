@@ -2664,6 +2664,72 @@ pub(super) async fn the_sweep_reaches_a_parent_behind_a_full_batch_that_never_ch
     waiting.server.abort();
 }
 
+pub(super) async fn the_sweep_scans_only_the_last_stop_of_a_reparked_parent(
+    pool: Pool<Postgres>,
+    row: &HostRow,
+) {
+    let mut waiting = park_a_waiting_child(row, pool, false, |_| {}).await;
+    after_the_read(
+        &mut waiting.llm,
+        calls(row, LATER_READ_CALL, row.read_tool),
+        &[LATER_READ_CALL],
+    );
+    answer_as_pane(
+        row,
+        &waiting.state,
+        &waiting.request,
+        pane_result(row, &waiting.request),
+    )
+    .await;
+    let later = operation_of(&waiting.state, waiting.child.id, 1).await;
+    let rewritten = eventually("the item to name the second call", || async {
+        let row = assistant_row(&waiting.state.db, waiting.chat_id).await;
+        (item_for(&row, CLIENT_TASK_CALL)["child"]["waiting_for"]["attempt_id"]
+            == json!(later.attempt_id))
+        .then_some(row)
+    })
+    .await;
+    wait_idle(&waiting.state, waiting.child.id, "awaiting_approval").await;
+    assert_eq!(
+        attempt_row(&waiting).await.state,
+        attempts::AttemptState::Completed
+    );
+    // A stop a decision re-parked from keeps naming the call that completed.
+    let stop = parked_part(&rewritten);
+    let mut earlier = stop.clone();
+    earlier["approvals"][0]["child"]["waiting_for"]["attempt_id"] =
+        json!(waiting.request.attempt_id);
+    let with_stops = async |stops: [&Value; 2]| {
+        let mut raw = rewritten.raw_message.clone();
+        let content = raw["content"].as_array_mut().unwrap();
+        content.pop();
+        content.extend(stops.into_iter().cloned());
+        let raw = serde_json::to_string(&raw).unwrap().replace('\'', "''");
+        sql(
+            &waiting.state,
+            format!(
+                "UPDATE messages SET raw_message = '{raw}'::jsonb WHERE id = '{}'",
+                rewritten.id
+            ),
+        )
+        .await;
+    };
+    let scanned = async || {
+        erato::services::delegated_client_tools::scan_waiting_parents(&waiting.state.db, None)
+            .await
+            .unwrap()
+            .iter()
+            .any(|&(chat_id, _)| chat_id == waiting.chat_id)
+    };
+
+    with_stops([&earlier, &stop]).await;
+    assert_row_reads(&assistant_row(&waiting.state.db, waiting.chat_id).await);
+    assert!(!scanned().await, "the last stop's call is still pending");
+    with_stops([&stop, &earlier]).await;
+    assert!(scanned().await, "the last stop's call completed");
+    waiting.server.abort();
+}
+
 pub(super) async fn a_failed_owner_lookup_withdraws_nothing(pool: Pool<Postgres>, row: &HostRow) {
     let waiting = park_a_waiting_child(row, pool, false, |_| {}).await;
     // The parent's turn holds the grant's context only by running elsewhere:

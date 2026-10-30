@@ -39,6 +39,7 @@ use super::slow_path::{
     resume_parked_refuses_a_chat_whose_generation_moved_on,
     the_old_slot_settles_while_a_newer_parent_turn_runs,
     the_sweep_reaches_a_parent_behind_a_full_batch_that_never_changes,
+    the_sweep_scans_only_the_last_stop_of_a_reparked_parent,
     the_sweep_settles_a_waiting_child_whose_tail_never_ran_and_an_empty_continue_resumes_the_parent,
     two_waiting_children_one_still_running_give_one_parent_continuation_with_both_answers,
 };
@@ -155,6 +156,7 @@ macro_rules! host_conformance {
             a_crashed_parent_the_cleanup_cleared_resumes_once_when_the_waiting_child_finishes
             a_parent_the_cleanup_cleared_without_its_marker_settles_and_is_not_resumed
             an_archived_waiting_child_settles_as_failed_and_the_parent_resumes_once
+            the_sweep_scans_only_the_last_stop_of_a_reparked_parent
         ]);
     };
     ($name:ident: $row:ident($($arg:expr),*) $(, ignore = $why:literal)?) => {
