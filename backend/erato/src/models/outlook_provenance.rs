@@ -91,6 +91,61 @@ impl OutlookFileProvenance {
         }
         Ok(parsed)
     }
+
+    /// A provenance already decoded as JSON, under the same rules as [`Self::parse`].
+    pub fn from_value(value: &serde_json::Value) -> Result<Self, &'static str> {
+        Self::parse(&serde_json::to_vec(value).map_err(|_| "Invalid Outlook provenance JSON")?)
+    }
+
+    /// The uploaded document's own message, from the first origin that names one.
+    pub fn document(&self) -> Option<&OutlookMessageReference> {
+        self.origins
+            .iter()
+            .find_map(|origin| origin.document.as_ref())
+    }
+
+    /// The EWS ID of the document's own message, as uploads record it beside
+    /// the provenance.
+    pub fn document_ews_id(&self) -> Option<&str> {
+        self.document()?
+            .external_ids
+            .iter()
+            .find(|id| id.key == "ews_id")
+            .map(|id| id.value.as_str())
+    }
+
+    /// What a model may cite: the external identifiers of the document's own
+    /// message as `source`, and of every distinct containing message as
+    /// `containingMessages`. Catalog UUIDs and mailbox identity stay out, and
+    /// a reference known only by a catalog UUID is not cited.
+    pub fn citation(&self) -> serde_json::Map<String, serde_json::Value> {
+        let identifiers = |reference: &OutlookMessageReference| {
+            (!reference.external_ids.is_empty())
+                .then(|| serde_json::json!({ "external_ids": reference.external_ids }))
+        };
+        let mut citation = serde_json::Map::new();
+        if let Some(source) = self.document().and_then(identifiers) {
+            citation.insert("source".into(), source);
+        }
+        let mut parents = Vec::new();
+        for parent in self
+            .origins
+            .iter()
+            .filter_map(|origin| origin.top_level_parent.as_ref())
+            .filter_map(identifiers)
+        {
+            if !parents.contains(&parent) {
+                parents.push(parent);
+            }
+        }
+        if !parents.is_empty() {
+            citation.insert(
+                "containingMessages".into(),
+                serde_json::Value::Array(parents),
+            );
+        }
+        citation
+    }
 }
 
 fn reject_null_optional_fields(value: &serde_json::Value) -> Result<(), &'static str> {
@@ -292,5 +347,43 @@ mod tests {
         assert!(OutlookFileProvenance::parse(b"not json").is_err());
         let oversized = vec![b' '; MAX_OUTLOOK_PROVENANCE_BYTES + 1];
         assert!(OutlookFileProvenance::parse(&oversized).is_err());
+    }
+
+    #[test]
+    fn citations_name_identifiers_of_every_origin_and_nothing_local() {
+        let reference = |ids: Value, mailbox: bool| {
+            let mut reference =
+                json!({"documentId": "0f5a8a48-1b2c-4d3e-9f10-a1b2c3d4e5f6", "external_ids": ids});
+            if mailbox {
+                reference["mailbox"] = json!({"mailboxId": "0123456789abcdef0123456789abcdef", "emailAddress": "owner@example.test"});
+            }
+            reference
+        };
+        let own = json!([{"key": "email_message_id", "value": "<inner@example.test>"}, {"key": "ews_id", "value": "AQMk/Inner=="}]);
+        let first = json!([{"key": "email_message_id", "value": "<first@example.test>"}]);
+        let second = json!([{"key": "email_message_id", "value": "<second@example.test>"}]);
+        // Identical bytes in two emails: both containing messages are cited, once each.
+        let provenance = OutlookFileProvenance::from_value(&json!({"version": 1, "origins": [
+            {"topLevelParent": reference(first.clone(), true)},
+            {"document": reference(own.clone(), true), "topLevelParent": reference(second.clone(), false)},
+            {"topLevelParent": reference(first.clone(), false)},
+        ]}))
+        .unwrap();
+        assert_eq!(provenance.document_ews_id(), Some("AQMk/Inner=="));
+        assert_eq!(
+            Value::Object(provenance.citation()),
+            json!({
+                "source": {"external_ids": own},
+                "containingMessages": [{"external_ids": first}, {"external_ids": second}]
+            })
+        );
+        // A message known only by its catalog UUID is stored but not cited.
+        let local_only = OutlookFileProvenance::from_value(&json!({"version": 1, "origins": [
+            {"document": {"documentId": "0f5a8a48-1b2c-4d3e-9f10-a1b2c3d4e5f6", "external_ids": []}}
+        ]}))
+        .unwrap();
+        assert!(local_only.document_ews_id().is_none());
+        assert!(local_only.citation().is_empty());
+        assert!(OutlookFileProvenance::from_value(&json!({"version": 2, "origins": []})).is_err());
     }
 }

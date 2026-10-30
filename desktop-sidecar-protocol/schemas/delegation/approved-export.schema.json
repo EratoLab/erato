@@ -69,6 +69,14 @@
             "type": "string",
             "maxLength": 16777216,
             "pattern": "^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$"
+          },
+          "outlookProvenance": {
+            "description": "Where the artifact came from: the message's own reference as `document`, or an attachment's containing message as `topLevelParent`. A navigation hint for opening the original, never a grant.",
+            "allOf": [
+              {
+                "$ref": "../outlook/file-provenance.schema.json"
+              }
+            ]
           }
         },
         "required": [

@@ -9,21 +9,25 @@ const output = path.join(
   root,
   "../backend/generated/local_delegation_schemas.json",
 );
+// The approved export references the Outlook provenance contract, so the
+// bundle carries that schema and the ones it references, under their names.
 const names = [
-  "binding",
-  "plan",
-  "context-claims",
-  "job-claims",
-  "receipt-claims",
-  "approved-export",
+  "delegation/binding",
+  "delegation/plan",
+  "delegation/context-claims",
+  "delegation/job-claims",
+  "delegation/receipt-claims",
+  "delegation/approved-export",
+  "outlook/file-provenance",
+  "outlook/message-reference",
+  "outlook/mailbox-reference",
+  "source/external-ids",
 ];
 const documents = Object.fromEntries(
   await Promise.all(
     names.map(async (name) => [
-      name,
-      await readJson(
-        path.join(root, "schemas/delegation", `${name}.schema.json`),
-      ),
+      path.basename(name),
+      await readJson(path.join(root, "schemas", `${name}.schema.json`)),
     ]),
   ),
 );

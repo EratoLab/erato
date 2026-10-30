@@ -222,8 +222,13 @@ pub async fn accept_files(
             file.filename,
             file.provider,
             file.path,
-            None,
-            None,
+            file.provenance
+                .as_ref()
+                .and_then(|provenance| provenance.document_ews_id().map(str::to_owned)),
+            file.provenance
+                .as_ref()
+                .map(serde_json::to_value)
+                .transpose()?,
         )
         .await?;
     }

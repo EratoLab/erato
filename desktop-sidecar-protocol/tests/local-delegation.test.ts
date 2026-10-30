@@ -11,6 +11,7 @@ import {
   validateLocalExportsReadV1Params,
   validateLocalExportsAckV1Params,
   validateLocalContextClaims,
+  validateApprovedLocalExport,
 } from "../typescript/src/generated/validators.mjs";
 import type { DiscoverResult } from "../typescript/src/generated/index.js";
 
@@ -23,6 +24,19 @@ const start = JSON.parse(
     "utf8",
   ),
 );
+const evidenceExport = JSON.parse(
+  await readFile(
+    new URL(
+      "../conformance/fixtures/local-evidence-export.json",
+      import.meta.url,
+    ),
+    "utf8",
+  ),
+) as {
+  outlookProvenance: unknown;
+  attachmentProvenance: unknown;
+  invalidProvenance: { name: string; value: unknown }[];
+};
 const handle = "h".repeat(43);
 const contextHandle = "c".repeat(43);
 const security = {
@@ -247,5 +261,47 @@ describe("strict local delegation contract", () => {
     } finally {
       await server.stop();
     }
+  });
+});
+
+describe("approved export provenance", () => {
+  const artifact = {
+    artifactId: "a".repeat(43),
+    filename: "evidence.txt",
+    mediaType: "text/plain",
+    sha256: `sha256:${"0".repeat(64)}`,
+    byteLength: 4,
+    contentBase64: "dGV4dA==",
+  };
+  const exportWith = (fields: Record<string, unknown>) => ({
+    binding: start.binding,
+    exportId: "e".repeat(43),
+    snapshotId: "s".repeat(43),
+    grantId: "g".repeat(43),
+    manifestDigest: `sha256:${"0".repeat(64)}`,
+    approvedAt: 1,
+    expiresAt: 2,
+    artifacts: [{ ...artifact, ...fields }],
+  });
+
+  it("accepts artifacts from a previous sidecar without the member", () => {
+    expect(validateApprovedLocalExport(exportWith({}))).toBe(true);
+  });
+
+  it("accepts the message's own reference and an attachment's containing message", () => {
+    for (const outlookProvenance of [
+      evidenceExport.outlookProvenance,
+      evidenceExport.attachmentProvenance,
+    ]) {
+      expect(
+        validateApprovedLocalExport(exportWith({ outlookProvenance })),
+      ).toBe(true);
+    }
+  });
+
+  it.each(evidenceExport.invalidProvenance)("rejects $name", ({ value }) => {
+    expect(
+      validateApprovedLocalExport(exportWith({ outlookProvenance: value })),
+    ).toBe(false);
   });
 });
