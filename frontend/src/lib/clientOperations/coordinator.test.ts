@@ -822,6 +822,37 @@ describe("ClientOperationCoordinator task calls", () => {
     }
   });
 
+  it("claims a task's call again ahead of the poll when the park's release has not landed yet", async () => {
+    vi.useFakeTimers();
+    takesGrantCalls();
+    const { api } = fakeApi(operation({ lineage }));
+    api.claim.mockRejectedValueOnce({
+      status: 409,
+      payload: "Operation is not claimable",
+    });
+    const { handler, run } = toolHandler();
+    const { coordinator } = coordinatorWith(api, [], [handler]);
+    try {
+      await coordinator.reconcile();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(api.claim).toHaveBeenCalledTimes(1);
+      expect(run).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(1_400);
+      expect(api.list).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(100);
+      expect(api.list).toHaveBeenCalledTimes(2);
+      expect(api.claim).toHaveBeenCalledTimes(2);
+      expect(run).toHaveBeenCalledTimes(1);
+      expect(api.complete).toHaveBeenCalledTimes(1);
+      expect(api.continue).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(api.claim).toHaveBeenCalledTimes(2);
+      expect(run).toHaveBeenCalledTimes(1);
+    } finally {
+      coordinator.dispose();
+    }
+  });
+
   it("does not hold the sweep while a task's call waits on the device", async () => {
     takesGrantCalls();
     const first = operation({ lineage });

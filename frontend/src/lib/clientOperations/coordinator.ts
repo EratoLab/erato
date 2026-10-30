@@ -526,7 +526,14 @@ export class ClientOperationCoordinator {
     ];
     let done = false;
     try {
-      let claim = await this.#claim(request, handler);
+      // The nudge after a task parks can beat the release of its generation,
+      // as it can for a call of the user's own turn.
+      let claim = await this.#claim(request, handler).catch(
+        (error: unknown) => {
+          if (isClaimRefusal(error)) this.#retryClaim(request.attempt_id);
+          throw error;
+        },
+      );
       // Re-claiming with the same binding extends a live claim; a lapsed one
       // comes back with a new token, which is the one the result must carry.
       // A renewal lost on the way (a sleeping laptop, a dropped network) or
