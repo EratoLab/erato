@@ -1053,6 +1053,7 @@ mod tests {
             kind,
             approvals: Vec::new(),
             pending_tool_calls: Vec::new(),
+            approval_scope: None,
         })
     }
 
@@ -1139,6 +1140,7 @@ mod tests {
                     allow_always: Some(false),
                     kind: Some(ToolApprovalKind::McpTool),
                     waiting_for: None,
+                    approval_scope: None,
                 }),
             });
         ContentPart::ToolApprovalRequest(request)
