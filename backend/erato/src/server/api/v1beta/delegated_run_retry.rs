@@ -671,12 +671,21 @@ pub async fn retry_delegated_run(
     };
 
     let context = crate::server::api::v1beta::message_streaming::DelegationDispatchContext {
-        request_context: crate::models::message::GenerationRequestContext {
-            executor: crate::services::client_operations::ExecutorBinding::from_headers(&headers),
-            registered_client_tools: crate::services::client_tools::registered_client_tools(
-                &headers,
-            ),
-            ..Default::default()
+        request_context: {
+            let executor =
+                crate::services::client_operations::ExecutorBinding::from_headers(&headers);
+            crate::models::message::GenerationRequestContext {
+                registered_client_tools: crate::services::client_tools::registered_client_tools(
+                    &headers,
+                ),
+                additional_executors:
+                    crate::services::client_operations::ExecutorBinding::additional_from_headers(
+                        &headers,
+                        executor.as_ref(),
+                    ),
+                executor,
+                ..Default::default()
+            }
         },
         me_user: &me_user,
         // Empty: targets are the mention route's, and a task run names none.
