@@ -392,7 +392,8 @@ A host's handlers pass `clientToolHostAdapterConformanceFailures` from
   binding gets its own executor stream (see `durable-client-operations.md`,
   "Executor streams").
 - A loss on the device (a grant that does not hold, the app not ready or gone
-  during the read) answers `context_unavailable`, terminal. On the live path the
+  during the read, or a pushed call that finds its tool unavailable before the
+  stream closes) answers `context_unavailable`, terminal. On the live path the
   call ends with it; on the slow path the device returns no result, drops its
   claim and lets it lapse, so the call waits for the next claim once the app is
   back. A device file approval of a task's call is registered under
