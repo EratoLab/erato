@@ -28,9 +28,11 @@ impl Signer {
         // The issuer is pinned by the sidecar with exact string equality, so it
         // must be the canonical `scheme://host[:port]` serialization. The
         // scheme is not a trust input (the installed public key is), which
-        // lets a plaintext development backend issue assertions.
+        // lets a plaintext development backend issue assertions. Only http
+        // and https are accepted, matching the sidecar's trust policy.
         let url = url::Url::parse(origin).map_err(|_| eyre!("Invalid delegation issuer"))?;
-        if url.origin().ascii_serialization() != origin
+        if !matches!(url.scheme(), "http" | "https")
+            || url.origin().ascii_serialization() != origin
             || config.verification_keys.is_empty()
             || config.verification_keys.len() > 8
         {
@@ -242,6 +244,10 @@ mod tests {
             "https://erato.example:443",
             "HTTPS://erato.example",
             "http://devhost:3130/",
+            // Canonical tuple origins, but not web schemes.
+            "ws://devhost:3130",
+            "wss://devhost:3130",
+            "ftp://erato.example",
             "erato.example",
         ] {
             let mut config = fixture();

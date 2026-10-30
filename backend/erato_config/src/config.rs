@@ -855,8 +855,9 @@ pub struct LocalDelegationConfig {
     pub enabled: bool,
     /// Canonical backend origin (https in production) pinned in the native
     /// installation as the assertion issuer. It must be exactly
-    /// `scheme://host[:port]`; a plaintext `http` origin is accepted for
-    /// development setups and logs a startup warning.
+    /// `https://host[:port]` or `http://host[:port]`; a plaintext `http`
+    /// origin is accepted for development setups and logs a startup warning.
+    /// Other schemes are rejected, matching the sidecar's trust policy.
     pub backend_origin: Option<String>,
     /// Identifier of the active Ed25519 signing key.
     pub signing_key_id: Option<String>,
@@ -921,10 +922,14 @@ impl DesktopSidecarConfig {
             // `scheme://host[:port]` serialization. Integrity comes from the
             // installed public key and that exact match, not from the scheme,
             // which is why a plaintext development origin is allowed here.
+            // Only http and https are accepted: the sidecar rejects other
+            // schemes at startup, so refusing them here surfaces the mistake
+            // as a clear configuration error instead of a failed sidecar start.
             let parsed = url::Url::parse(origin)?;
             eyre::ensure!(
-                parsed.origin().ascii_serialization() == origin,
-                "Local delegation requires a canonical backend origin"
+                matches!(parsed.scheme(), "http" | "https")
+                    && parsed.origin().ascii_serialization() == origin,
+                "Local delegation requires a canonical http or https backend origin"
             );
             eyre::ensure!(
                 !policy.verification_keys.is_empty() && policy.verification_keys.len() <= 8,
@@ -9476,6 +9481,10 @@ mod desktop_sidecar_installation_tests {
             "https://erato.example:443",
             "HTTPS://erato.example",
             "http://devhost:3130/",
+            // Canonical tuple origins, but not web schemes.
+            "ws://devhost:3130",
+            "wss://devhost:3130",
+            "ftp://erato.example",
             "erato.example",
             "",
         ] {

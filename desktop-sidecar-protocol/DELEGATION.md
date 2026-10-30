@@ -114,8 +114,9 @@ Binding is not evidence-export approval. Binding returns a random
 JWS profile: EdDSA/Ed25519 only, `kid` selects an exact public key installed in
 installed organization bootstrap; reject unknown keys, algorithms, headers, remote
 key URLs and duplicate JSON keys. Never fetch a JWK URL from native. Claims use
-`LocalContextClaims`, with canonical `iss` and Origin, stable backend
-subject `sub` (not email), exact audience, device, single-use challenge and `jti`.
+`LocalContextClaims`, with canonical `http` or `https` `iss` and Origin, stable
+backend subject `sub` (not email), exact audience, device, single-use challenge
+and `jti`.
 Check all bindings and `iat <= now < exp <= iat + 300`. Consume the challenge
 atomically with context issuance. Handles expire no later than the assertion;
 renew through fresh authentication, and revoke on unpairing. Lost bind responses
