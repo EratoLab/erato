@@ -289,6 +289,7 @@ pub(crate) async fn granted_tools(
                     host_inputs: config.child_host_inputs.clone(),
                     durable: grant.durable_tools.contains(&qualified_name)
                         && durable_eligible(app_state, config),
+                    approval_scope: crate::services::approval_scope::key_for_grant(config, &grant),
                 },
             ));
         }
@@ -1392,6 +1393,7 @@ mod tests {
             context_input: Some("snapshot".into()),
             host_inputs: Vec::new(),
             durable: false,
+            approval_scope: None,
         };
         let input = json!({"snapshot": "forged", "part": "intro"});
         assert_eq!(
@@ -1437,6 +1439,7 @@ mod tests {
             context_input: Some("snapshot".into()),
             host_inputs: vec!["documentIdentity".into()],
             durable: false,
+            approval_scope: None,
         };
         let variant = |extra: &str| {
             json!({"type": "object",
