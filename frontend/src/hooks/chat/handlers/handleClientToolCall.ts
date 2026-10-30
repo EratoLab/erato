@@ -3,6 +3,7 @@ import { withClientCallLock } from "@/lib/clientOperations/operationLock";
 import { operationExecutorBinding } from "@/lib/clientOperations/registration";
 
 import {
+  abortClientToolCall,
   getClientToolExecutor,
   isClientToolResultLocalOnly,
   hasClientToolCallBeenAnswered,
@@ -30,6 +31,12 @@ interface HandleClientToolCallDeps {
   executor?: ExecutorBinding;
   /** Set on a delegated task's call, under the grant the server asserted. */
   lineage?: CallLineage;
+  /**
+   * How long the server still waits for this call, from its arrival. Timed on
+   * this device, never against the server's clock, so a prompt the call raised
+   * closes when the server stops waiting.
+   */
+  timeoutMs?: number;
 }
 
 /** A chat stream's event, or a call pushed over the executor stream. */
@@ -50,7 +57,7 @@ export async function handleClientToolCall(
   responseData: ClientToolCallEvent,
   deps: HandleClientToolCallDeps,
 ): Promise<void> {
-  const { message_id, tool_call_id, tool_name, input } = responseData;
+  const { message_id, tool_call_id, tool_name } = responseData;
   const { chatId } = deps;
   if (isClientToolResultLocalOnly(tool_name)) return;
 
@@ -66,7 +73,28 @@ export async function handleClientToolCall(
   markClientToolCallAnswered(tool_call_id);
 
   const base = { chat_id: chatId, message_id, tool_call_id };
+  let expired = false;
+  const deadline =
+    deps.timeoutMs === undefined
+      ? undefined
+      : setTimeout(() => {
+          expired = true;
+          abortClientToolCall(tool_call_id);
+        }, deps.timeoutMs);
+  try {
+    await runAndPost(responseData, deps, base, () => expired);
+  } finally {
+    clearTimeout(deadline);
+  }
+}
 
+async function runAndPost(
+  { tool_call_id, tool_name, message_id, input }: ClientToolCallEvent,
+  deps: HandleClientToolCallDeps,
+  base: { chat_id: string; message_id: string; tool_call_id: string },
+  expired: () => boolean,
+): Promise<void> {
+  const chatId = base.chat_id;
   const executor = getClientToolExecutor(tool_name);
   if (!executor) {
     await postClientToolResult(
@@ -85,6 +113,7 @@ export async function handleClientToolCall(
     // an aborted executor settles like any failure and POSTs its error. Held
     // until the POST settles, so a parked operation's handler defers its claim.
     const signal = trackClientToolCallAbort(tool_call_id, chatId);
+    if (expired()) abortClientToolCall(tool_call_id);
     try {
       let body: ClientToolResultRequest;
       try {
