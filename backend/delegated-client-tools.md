@@ -392,7 +392,8 @@ A host's handlers pass `clientToolHostAdapterConformanceFailures` from
   one of the six tools, so a turn sent while the app is not running gives its
   tasks no sidecar tools. The six tools are registered for grant calls; each
   binding gets its own executor stream (see `durable-client-operations.md`,
-  "Executor streams").
+  "Executor streams"). The sidecar's stream moves to the tab the user uses, so
+  a pushed call and its file prompt land there.
 - A loss on the device (a grant that does not hold, the app not ready or gone
   during the read, or a pushed call that finds its tool unavailable before the
   stream closes) answers `context_unavailable`, terminal. On the live path the

@@ -89,14 +89,16 @@ export function executorStreamHeaderSets(): ExecutorStreamHeaderSet[] {
 
 /**
  * The pane's executor stream. It runs live calls pushed from any of the
- * account's chats through the client tool executors, and reports new durable
- * operations for its binding. It reconnects with backoff, and ends on abort or
- * when the server has executor streams disabled (404).
+ * account's chats through the client tool executors, hands each to `onCall`
+ * until its result is posted, and reports new durable operations for its
+ * binding. It reconnects with backoff, and ends on abort or when the server
+ * has executor streams disabled (404).
  */
 export function openExecutorStream(
   headers: Record<string, string>,
   onNudge: () => void,
   signal: AbortSignal,
+  onCall?: (call: Promise<unknown>) => void,
 ): Promise<void> {
   const executor = JSON.parse(headers["X-Erato-Executor"]) as ExecutorBinding;
   return new Promise((resolve) => {
@@ -143,7 +145,7 @@ export function openExecutorStream(
         onMessage: (event) => {
           const message = JSON.parse(event.data) as ExecutorStreamEvent;
           if (message.message_type === "client_tool_call") {
-            void handleClientToolCall(
+            const call = handleClientToolCall(
               {
                 message_type: "client_tool_call",
                 message_id: message.message_id,
@@ -159,6 +161,7 @@ export function openExecutorStream(
                 timeoutMs: message.timeout_ms,
               },
             );
+            onCall?.(call);
           } else {
             onNudge();
           }

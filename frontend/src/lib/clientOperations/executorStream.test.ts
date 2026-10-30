@@ -196,9 +196,15 @@ describe("openExecutorStream", () => {
       context_ref: "capture-1",
     };
     const onNudge = vi.fn();
+    const onCall = vi.fn<(call: Promise<unknown>) => void>();
     const controller = new AbortController();
     try {
-      const done = openExecutorStream(headers, onNudge, controller.signal);
+      const done = openExecutorStream(
+        headers,
+        onNudge,
+        controller.signal,
+        onCall,
+      );
       expect(createSSEConnection).toHaveBeenCalledWith(
         EXECUTOR_STREAM_URL,
         expect.objectContaining({
@@ -222,7 +228,10 @@ describe("openExecutorStream", () => {
           lineage,
         }),
       });
-      await vi.waitFor(() => expect(fetch).toHaveBeenCalledOnce());
+      // The call is reported while it runs and settles once its result is posted.
+      expect(onCall).toHaveBeenCalledOnce();
+      await onCall.mock.calls[0]?.[0];
+      expect(fetch).toHaveBeenCalledOnce();
       expect(execute).toHaveBeenCalledWith(
         { lookahead_days: 7 },
         expect.objectContaining({
@@ -256,6 +265,7 @@ describe("openExecutorStream", () => {
         }),
       });
       expect(onNudge).toHaveBeenCalledOnce();
+      expect(onCall).toHaveBeenCalledOnce();
 
       controller.abort();
       await done;

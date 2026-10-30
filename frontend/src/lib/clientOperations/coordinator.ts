@@ -12,8 +12,10 @@ import { continueAttachedOperation } from "./attachedContinuation";
 import { executorStreamHeaderSets, openExecutorStream } from "./executorStream";
 import { clientOperationHandlerRegistry } from "./handlers";
 import { withClientCallLock } from "./operationLock";
+import { browserTabSignals, holdSharedStream } from "./sharedStream";
 
 import type { ClientOperationHandlerRegistry } from "./handlers";
+import type { TabSignals } from "./sharedStream";
 import type {
   ClientOperationView,
   ClaimClientOperationResponse,
@@ -41,11 +43,13 @@ export interface ClientOperationApi {
   ): Promise<unknown>;
   continue(id: string, signal: AbortSignal): Promise<unknown>;
   attach?(request: OperationRequest, signal: AbortSignal): Promise<unknown>;
-  /** Holds one of the pane's executor streams open until `signal` aborts. */
+  /** Holds one of the pane's executor streams open until `signal` aborts;
+   * `onCall` gets each call it delivers while that call runs. */
   stream?(
     headers: Record<string, string>,
     onNudge: () => void,
     signal: AbortSignal,
+    onCall?: (call: Promise<unknown>) => void,
   ): Promise<unknown>;
   cancel(id: string, signal: AbortSignal): Promise<unknown>;
 }
@@ -200,6 +204,7 @@ export class ClientOperationCoordinator {
     builtIns: readonly ClientOperationHandler[],
     private readonly accountChanged: () => void,
     private readonly registry: ClientOperationHandlerRegistry = clientOperationHandlerRegistry,
+    private readonly tabSignals: TabSignals = browserTabSignals,
   ) {
     this.#builtIns = builtIns;
     this.#unsubscribe = registry.subscribe(() => {
@@ -241,8 +246,8 @@ export class ClientOperationCoordinator {
       }
   }
   /** Keeps one executor stream open per binding the pane serves. A shared
-   * binding's stream waits for its Web Lock, so one pane of the browser
-   * profile holds it and another takes over when that one closes. */
+   * binding's stream is held by one tab of the browser profile at a time and
+   * follows the tab the user uses. */
   #syncStreams(enabled: boolean): void {
     const sets = enabled && this.api.stream ? executorStreamHeaderSets() : [];
     const keys = new Map(sets.map((set) => [JSON.stringify(set), set]));
@@ -251,24 +256,30 @@ export class ClientOperationCoordinator {
       if (this.#streams.has(key)) continue;
       const controller = new AbortController();
       this.#streams.set(key, controller);
-      const open = async () => {
+      const open = async (
+        signal: AbortSignal,
+        onCall?: (call: Promise<unknown>) => void,
+      ) => {
         await this.api.stream?.(
           headers,
           () => {
             void this.reconcile();
           },
-          controller.signal,
+          signal,
+          onCall,
         );
       };
       const locks = globalThis.navigator.locks as LockManager | undefined;
       void (
         shared && locks
-          ? locks.request(
-              `erato.executor-stream:${headers["X-Erato-Executor"]}`,
-              { signal: controller.signal },
+          ? holdSharedStream({
+              locks,
+              key: headers["X-Erato-Executor"],
               open,
-            )
-          : open()
+              signals: this.tabSignals,
+              signal: controller.signal,
+            })
+          : open(controller.signal)
       )
         .catch(() => {
           /* The next sweep reopens it. */

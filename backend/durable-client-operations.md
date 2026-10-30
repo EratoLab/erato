@@ -571,7 +571,18 @@ calls. With it off, the stream endpoint answers 404 and no row is written.
   ERMAIN-1034) gets its own stream listing only its own tools; tabs of one
   browser profile share that binding, so its stream runs under the Web Lock
   `erato.executor-stream:<binding>` and one tab holds it at a time, keeping
-  HTTP/1.1 deployments clear of the browser's connection limit. A pushed call's
+  HTTP/1.1 deployments clear of the browser's connection limit. Every tab
+  queues for that lock, so another takes over when the holder closes. The
+  stream follows the tab the user uses, and a forgotten tab does not keep the
+  calls and file prompts meant for the one in use: a visible tab that waits
+  holds the shared lock `erato.executor-stream-wanted:<binding>` and announces
+  it on the `erato.executor-stream` BroadcastChannel; a hidden holder hands the
+  stream over once such a tab waits and no call it delivered still runs, since
+  a delivered call, with the device prompt it may hold, goes again only to a
+  later stream of the same pane; a hidden tab granted the lock while a visible
+  one waits passes it on unopened. Between two visible tabs the holder keeps
+  it. A tab counts as shown or hidden after one second, so a quick switch moves
+  nothing. Without Web Locks every tab opens its own stream. A pushed call's
   `timeout_ms` starts a local timer that aborts the call's work and any prompt it
   raised when the server stops waiting. The user's own claimed calls renew their
   claim while they run, as task calls do, so a device prompt never outlives the
