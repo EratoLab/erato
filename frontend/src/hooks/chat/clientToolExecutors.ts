@@ -56,6 +56,29 @@ export interface ClientToolHostGrant {
   requestingMessageId: string;
   /** The context version the owner turn captured, when the tool has one. */
   contextRef?: string;
+  /**
+   * Set when the user allowed this tool for the whole document instead of per
+   * call (contract §16). The handler checks it after the grant and before it
+   * reads, and answers `clientToolScopeChanged` if the context changed from
+   * outside the chat since `position`.
+   */
+  approvalScope?: ClientToolApprovalScope;
+}
+
+/** The approval a covered grant call runs under, as the server sent it. */
+export interface ClientToolApprovalScope {
+  approvalId: string;
+  scopeId: string;
+  /** The host's position at the decision, opaque to everyone but the host. */
+  position: unknown;
+}
+
+/** A scope as the approval card shows it, before any approval exists. */
+export interface ClientToolApprovalScopeRef {
+  /** The binding's host context kind, e.g. `word_document`. */
+  hostContext: string;
+  scopeId: string;
+  covers: "document" | "turn";
 }
 
 /**
@@ -88,19 +111,34 @@ export type ClientToolExecutor = (
   context?: ClientToolCallContext,
 ) => Promise<ClientToolExecutionResult>;
 
-const executors = new Map<
-  string,
-  {
-    execute: ClientToolExecutor;
-    isAvailable: () => boolean;
-    acceptsGrantCalls: boolean;
-  }
->();
+interface RegisteredExecutor {
+  execute: ClientToolExecutor;
+  isAvailable: () => boolean;
+  acceptsGrantCalls: boolean;
+  checksApprovalScope: () => boolean;
+  anchorsApprovalScope?: ClientToolExecutorOptions["anchorsApprovalScope"];
+}
+
+const executors = new Map<string, RegisteredExecutor>();
 
 export interface ClientToolExecutorOptions {
   /** The handler checks `hostGrant` and reads without side effects, so a
    * delegated task may call it under a grant. */
   acceptsGrantCalls?: boolean;
+  /**
+   * The handler checks `hostGrant.approvalScope` right now, so the server may
+   * hand it calls covered by a document approval. Only grant-capable tools
+   * count; the tool is listed in `X-Erato-Scoped-Client-Tools`.
+   */
+  checksApprovalScope?: () => boolean;
+  /**
+   * When this client holds the scope's context and can check it later, a
+   * function that takes the host's position at the moment the user allows
+   * the scope. A document approval is offered only where one exists.
+   */
+  anchorsApprovalScope?: (
+    scope: ClientToolApprovalScopeRef,
+  ) => (() => unknown) | undefined;
 }
 
 /** Register an executor by tool name; returns an unregister function. */
@@ -110,10 +148,12 @@ export function registerClientToolExecutor(
   isAvailable: () => boolean = () => true,
   options: ClientToolExecutorOptions = {},
 ): () => void {
-  const entry = {
+  const entry: RegisteredExecutor = {
     execute: executor,
     isAvailable,
     acceptsGrantCalls: options.acceptsGrantCalls ?? false,
+    checksApprovalScope: options.checksApprovalScope ?? (() => false),
+    anchorsApprovalScope: options.anchorsApprovalScope,
   };
   executors.set(name, entry);
   return () => {
@@ -135,7 +175,7 @@ export function clientToolAcceptsGrantCalls(name: string): boolean {
 }
 
 function availableToolNames(
-  accepts: (entry: { acceptsGrantCalls: boolean }) => boolean,
+  accepts: (entry: RegisteredExecutor) => boolean,
 ): string[] {
   return [...executors.entries()]
     .filter(
@@ -170,6 +210,15 @@ const hostGrantFromLineage = (lineage: CallLineage): ClientToolHostGrant => ({
   requestingChatId: lineage.requesting_chat_id,
   requestingMessageId: lineage.requesting_message_id,
   ...(lineage.context_ref ? { contextRef: lineage.context_ref } : {}),
+  ...(lineage.approval_scope
+    ? {
+        approvalScope: {
+          approvalId: lineage.approval_scope.approval_id,
+          scopeId: lineage.approval_scope.scope_id,
+          position: lineage.approval_scope.position,
+        },
+      }
+    : {}),
 });
 
 /**
@@ -198,11 +247,62 @@ export async function runClientToolCall(
   });
 }
 
-/** The tools whose handlers accept grant calls, for the executor stream only. */
+const checksScope = (entry: RegisteredExecutor): boolean =>
+  entry.acceptsGrantCalls && entry.checksApprovalScope();
+
+/**
+ * The tools whose handlers accept grant calls, and those of them that check an
+ * approval scope now, for the executor stream only.
+ */
 export function getChildClientToolHeaders(): Record<string, string> {
   const names = availableToolNames((entry) => entry.acceptsGrantCalls);
-  return names.length ? { "X-Erato-Child-Client-Tools": names.join(",") } : {};
+  if (!names.length) return {};
+  const scoped = availableToolNames(checksScope);
+  return {
+    "X-Erato-Child-Client-Tools": names.join(","),
+    ...(scoped.length
+      ? { "X-Erato-Scoped-Client-Tools": scoped.join(",") }
+      : {}),
+  };
 }
+
+/**
+ * The host's position-taker for `scope` on this client, or `undefined` where
+ * the client cannot check that scope later: it does not hold the context, or
+ * its handler does not check scopes now.
+ */
+export function clientToolApprovalScopeAnchor(
+  name: string,
+  scope: ClientToolApprovalScopeRef,
+): (() => unknown) | undefined {
+  const entry = executors.get(name);
+  if (!entry?.isAvailable() || !checksScope(entry)) return undefined;
+  return entry.anchorsApprovalScope?.(scope);
+}
+
+/** The validation code of a covered call whose scope changed from outside. */
+// eslint-disable-next-line lingui/no-unlocalized-strings -- API validation code
+export const CLIENT_TOOL_SCOPE_CHANGED = "scope_changed";
+
+/**
+ * What a handler answers, without reading, when the context changed from
+ * outside the chat since the user allowed the scope. Not terminal: the server
+ * ends the approval and asks the user about the same call again.
+ */
+export function clientToolScopeChanged(
+  message: string,
+): ClientToolExecutionResult {
+  return {
+    ok: false,
+    error: message,
+    validationErrors: [{ path: "", code: CLIENT_TOOL_SCOPE_CHANGED, message }],
+  };
+}
+
+export const answersScopeChanged = (
+  issues: readonly ClientToolValidationIssue[] | null | undefined,
+): boolean =>
+  (issues ?? []).some((issue) => issue.code === CLIENT_TOOL_SCOPE_CHANGED);
 
 // tool_call_ids handled this session, so a resumestream replay never re-runs a
 // tool. Capped — idempotent executors make evicting the oldest safe.

@@ -3,6 +3,7 @@ import { withClientCallLock } from "@/lib/clientOperations/operationLock";
 import { operationExecutorBinding } from "@/lib/clientOperations/registration";
 
 import {
+  answersScopeChanged,
   getClientToolExecutor,
   isClientToolResultLocalOnly,
   hasClientToolCallBeenAnswered,
@@ -117,6 +118,10 @@ export async function handleClientToolCall(
         };
       }
       await postClientToolResult(body, tool_name, tool_call_id, deps);
+      // The server asks the user again and sends the same call once they
+      // allow it, which must not be skipped as already answered.
+      if (answersScopeChanged(body.validation_errors))
+        unmarkClientToolCallAnswered(tool_call_id);
     } finally {
       releaseClientToolCallAbort(tool_call_id);
     }
