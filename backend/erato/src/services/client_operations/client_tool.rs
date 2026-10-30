@@ -54,6 +54,7 @@ fn realm_for(host: ClientToolHostContext) -> ExecutionRealm {
         ClientToolHostContext::OutlookMailbox | ClientToolHostContext::WordDocument => {
             ExecutionRealm::OfficeAddin
         }
+        ClientToolHostContext::DesktopSidecar => ExecutionRealm::DesktopSidecar,
     }
 }
 
@@ -548,6 +549,28 @@ mod tests {
             realm_for(ClientToolHostContext::OutlookMailbox),
             ExecutionRealm::OfficeAddin
         );
+        kind.host = ClientToolHostContext::DesktopSidecar;
+        assert_eq!(kind.realm(), ExecutionRealm::DesktopSidecar);
+        let input = json!({"text":"contract"});
+        let sidecar = ExecutorBinding {
+            device_id: "client-one".into(),
+            realm: ExecutionRealm::DesktopSidecar,
+            host_context: Some(HostContext {
+                kind: "desktop_sidecar".into(),
+                identity: "local".into(),
+            }),
+        };
+        assert!(kind.validate_input(&input, &sidecar).is_ok());
+        let mut office_realm = sidecar.clone();
+        office_realm.realm = ExecutionRealm::OfficeAddin;
+        let mut origin = sidecar.clone();
+        origin.host_context.as_mut().unwrap().kind = "origin".into();
+        for binding in [office_realm, origin, binding()] {
+            assert!(
+                kind.validate_input(&input, &binding).is_err(),
+                "{binding:?}"
+            );
+        }
     }
 
     #[test]
