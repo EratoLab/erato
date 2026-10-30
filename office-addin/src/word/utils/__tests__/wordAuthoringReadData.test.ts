@@ -66,6 +66,47 @@ describe("model-facing Word source projection", () => {
     expect(result.text).toBe(original.text);
   });
 
+  it("reads a paragraph Word split into identical runs as one run, folded into the format", () => {
+    const original = source();
+    original.runs = [
+      { text: "The ", language: "en-US", italic: true },
+      { text: "complete", italic: true, language: "en-US" },
+      { text: " paragraph.", language: "en-US", italic: true },
+    ];
+    const untouched = globalThis.structuredClone(original);
+    const result = wordReadableSourceBlock(original);
+    expect(result).not.toHaveProperty("runs");
+    expect(result.format?.font).toEqual({
+      bold: true,
+      color: "112233",
+      fontFamily: "Arial",
+      italic: true,
+      language: "en-US",
+    });
+    expect(original).toEqual(untouched);
+  });
+
+  it("joins only identical neighbours; differing runs keep their boundaries and explicit false marks", () => {
+    const original = source();
+    original.text = "Bold, bolder, plain and default.";
+    original.runs = [
+      { text: "Bold, ", bold: true },
+      { text: "bolder", bold: true },
+      { text: ", plain", bold: false },
+      { text: " and" },
+      { text: " default." },
+    ];
+    const untouched = globalThis.structuredClone(original);
+    const result = wordReadableSourceBlock(original);
+    expect(result.runs).toEqual([
+      { text: "Bold, bolder", bold: true },
+      { text: ", plain", bold: false },
+      { text: " and default." },
+    ]);
+    expect(result.format).toEqual(original.format);
+    expect(original).toEqual(untouched);
+  });
+
   it("does not compact an incomplete run or native object's text into paragraph formatting", () => {
     const original = source();
     original.runs = [{ text: "The complete", bold: false }];

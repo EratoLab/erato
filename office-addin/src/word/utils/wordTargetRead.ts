@@ -10,12 +10,23 @@ import {
 } from "@erato/frontend/word-review";
 
 import { cutToUtf8Bytes } from "./buildWordDocumentArgs";
-import { wordReadableSourceBlock } from "./wordAuthoringReadData";
+import {
+  wordReadableSourceBlock,
+  wordReadableStyles,
+} from "./wordAuthoringReadData";
+import { wordBlockIndex } from "./wordDocumentOutline";
+import {
+  WORD_READ_ONLY_FIELDS,
+  wordReadRefusedByIssue,
+} from "./wordReadAccess";
+import { MAX_WORD_FRESHNESS_BYTES } from "./wordReadFreshness";
 import {
   WORD_SCOPED_GUIDANCE,
   wordScopedReadContract,
 } from "./wordScopedReadContract";
 
+import type { WordReadAccess } from "./wordReadAccess";
+import type { WordReadOutcome } from "./wordReadFreshness";
 import type { WordScopedGuidance } from "./wordScopedReadContract";
 import type { ClientToolExecutionResult } from "@erato/frontend/library";
 import type {
@@ -32,7 +43,12 @@ const inventories = new WeakMap<
   WordAuthoringSnapshot,
   { fingerprint: string; targets: WordScopeTarget[] }
 >();
-const attempts = new WeakMap<WordAuthoringSnapshot, Map<string, number>>();
+/** Read-only readers, such as calls under a grant, count their own searches, so the coordinator's
+ * repeatedQuery reflects only its own. */
+const attempts: Record<
+  WordReadAccess,
+  WeakMap<WordAuthoringSnapshot, Map<string, number>>
+> = { write: new WeakMap(), "read-only": new WeakMap() };
 const snippet = (s: string) => ({
   text: cutToUtf8Bytes(s, 256),
   truncated: encoder.encode(s).length > 256,
@@ -205,21 +221,25 @@ function selectTargets(
       ),
     };
   const inventory = wordTargetInventory(snapshot);
+  const positions = wordBlockIndex(snapshot);
+  const position = (ref: string | undefined) =>
+    ref === undefined ? -1 : (positions.get(ref) ?? -1);
   let matches = inventory.filter((t) => {
-    const position = snapshot.blocks.findIndex((b) => b.ref === t.bodyRef);
+    if (
+      (query.kind !== undefined && t.kind !== query.kind) ||
+      (query.ref !== undefined && t.ref !== query.ref) ||
+      (query.refs !== undefined && !(query.refs as string[]).includes(t.ref)) ||
+      (query.text !== undefined &&
+        !normalized(t.text).includes(normalized(query.text as string)))
+    )
+      return false;
+    if (query.nearbyText === undefined) return true;
+    const i = position(t.bodyRef);
     const nearby =
-      position < 0
+      i < 0
         ? ""
-        : `${snapshot.blocks[position - 1]?.text ?? ""}\n${snapshot.blocks[position + 1]?.text ?? ""}`;
-    return (
-      (query.kind === undefined || t.kind === query.kind) &&
-      (query.ref === undefined || t.ref === query.ref) &&
-      (query.refs === undefined || (query.refs as string[]).includes(t.ref)) &&
-      (query.text === undefined ||
-        normalized(t.text).includes(normalized(query.text as string))) &&
-      (query.nearbyText === undefined ||
-        normalized(nearby).includes(normalized(query.nearbyText as string)))
-    );
+        : `${snapshot.blocks[i - 1]?.text ?? ""}\n${snapshot.blocks[i + 1]?.text ?? ""}`;
+    return normalized(nearby).includes(normalized(query.nearbyText as string));
   });
   let explicit = Array.isArray(query.refs);
   if (explicit && matches.length !== (query.refs as string[]).length)
@@ -232,9 +252,9 @@ function selectTargets(
   if (query.throughRef !== undefined) {
     const start =
       matches.length === 1 && !matches[0].objectTarget
-        ? snapshot.blocks.findIndex((b) => b.ref === matches[0].bodyRef)
+        ? position(matches[0].bodyRef)
         : -1;
-    const end = snapshot.blocks.findIndex((b) => b.ref === query.throughRef);
+    const end = position(query.throughRef as string);
     if (start < 0 || end < start || end - start >= MAX_WORD_SCOPE_TARGETS)
       return {
         error: targetReadFailure(
@@ -264,7 +284,7 @@ function selectTargets(
     scope: "objects",
     totalMatches: matches.length,
     candidates: matches.slice(offset, offset + candidateLimit).map((t) => {
-      const i = snapshot.blocks.findIndex((b) => b.ref === t.bodyRef);
+      const i = position(t.bodyRef);
       return {
         ref: t.ref,
         kind: t.kind,
@@ -280,12 +300,22 @@ function selectTargets(
   return { matches, base, ready };
 }
 
+/** Read-only reads return the same targets but grant no scope, carry no write contract and may
+ * read a capture under Track Changes. */
 export function readWordTargets(
   snapshot: WordAuthoringSnapshot,
   input: Record<string, unknown>,
-): ClientToolExecutionResult {
-  const fail = targetReadFailure;
-  if (snapshot.revoked || snapshot.used || snapshot.issue)
+  access: WordReadAccess = "write",
+): WordReadOutcome {
+  const fail = (code: string, message: string) => ({
+    result: targetReadFailure(code, message),
+  });
+  const readOnly = access === "read-only";
+  if (
+    snapshot.revoked ||
+    snapshot.used ||
+    wordReadRefusedByIssue(snapshot, access)
+  )
     return fail("snapshot-unavailable", "Use an active, available capture.");
   if (
     input.snapshot !== snapshot.token ||
@@ -336,7 +366,7 @@ export function readWordTargets(
   let remainingCandidates = 5;
   for (const query of queries) {
     const selection = selectTargets(snapshot, query, remainingCandidates);
-    if (selection.error) return selection.error;
+    if (selection.error) return { result: selection.error };
     if (!batch || !selection.ready)
       remainingCandidates -= selection.base.candidates.length;
     selections.push(selection);
@@ -369,21 +399,26 @@ export function readWordTargets(
       }
     : selections[0].base;
   if (selections.some((s) => !s.ready)) {
-    const counts = attempts.get(snapshot) ?? new Map<string, number>();
+    const counts = attempts[access].get(snapshot) ?? new Map<string, number>();
     const key = JSON.stringify(input.target);
     const count = (counts.get(key) ?? 0) + 1;
     if (counts.size < 64 || counts.has(key)) counts.set(key, count);
-    attempts.set(snapshot, counts);
+    attempts[access].set(snapshot, counts);
+    // A search that found no single target looked through the whole capture.
     return {
-      ok: true,
+      scope: { kind: "document" },
       result: {
-        ...base,
-        status: selections.some((s) => !s.ready && s.matches.length)
-          ? "ambiguous"
-          : "not-found",
-        repeatedQuery: count > 1,
-        recovery:
-          "No write authorized, including unique matches in this batch. Refine unresolved selectors using their candidate context, page them individually, or ask for clarification. Then read all needed refs/queries together. Repeating the same query cannot reveal a new target.",
+        ok: true,
+        result: {
+          ...base,
+          status: selections.some((s) => !s.ready && s.matches.length)
+            ? "ambiguous"
+            : "not-found",
+          repeatedQuery: count > 1,
+          recovery: readOnly
+            ? "Refine unresolved selectors using their candidate context, page them individually, or ask for clarification. Repeating the same query cannot reveal a new target."
+            : "No write authorized, including unique matches in this batch. Refine unresolved selectors using their candidate context, page them individually, or ask for clarification. Then read all needed refs/queries together. Repeating the same query cannot reveal a new target.",
+        },
       },
     };
   }
@@ -392,15 +427,27 @@ export function readWordTargets(
       "target-limit",
       "A combined scope may contain at most 16 distinct targets.",
     );
+  const positions = wordBlockIndex(snapshot);
+  const scope = {
+    kind: "blocks" as const,
+    blocks: new Set(
+      matches.flatMap((t) => {
+        const at =
+          t.bodyRef === undefined ? undefined : positions.get(t.bodyRef);
+        return at === undefined ? [] : [at];
+      }),
+    ),
+  };
+  const include = input.include as WordScopedGuidance[] | undefined;
   // Scope includes exact target data plus bounded identifying neighbors. Neighbors
   // and references mentioned in properties are context, never implicit write grants.
   const context = {
     targets: matches.map(({ detail, ...t }) => ({ ...t, content: detail })),
-    ...wordScopedReadContract(
-      snapshot,
-      matches,
-      input.include as WordScopedGuidance[] | undefined,
-    ),
+    ...(readOnly
+      ? include?.includes("formatting")
+        ? { styles: wordReadableStyles(snapshot.styles) }
+        : {}
+      : wordScopedReadContract(snapshot, matches, include)),
     sectionsUsingTargets: (snapshot.sections ?? [])
       .filter((s) =>
         matches.some(
@@ -419,29 +466,50 @@ export function readWordTargets(
         ...base,
         ...context,
         status: "ready",
-        readToken: "0".repeat(36),
+        ...(readOnly ? WORD_READ_ONLY_FIELDS : { readToken: "0".repeat(36) }),
         maxContextBytes: MAX_WORD_SCOPE_BYTES,
         fullDocument: !!snapshot.fullDocument,
+        freshness: "0".repeat(MAX_WORD_FRESHNESS_BYTES - 2),
       }),
     ).length > MAX_WORD_SCOPE_BYTES
   )
     return {
-      ok: true,
+      scope,
       result: {
-        ...base,
-        status: "unsupported",
-        reason: "scope-context-limit",
-        fallback: snapshot.completeReadIssue
-          ? "narrow-target"
-          : "narrow-target-or-complete-read",
-        maxContextBytes: MAX_WORD_SCOPE_BYTES,
+        ok: true,
+        result: {
+          ...base,
+          status: "unsupported",
+          reason: "scope-context-limit",
+          fallback:
+            readOnly || snapshot.completeReadIssue
+              ? "narrow-target-or-section"
+              : "narrow-target-or-complete-read",
+          maxContextBytes: MAX_WORD_SCOPE_BYTES,
+        },
+      },
+    };
+  if (readOnly)
+    return {
+      scope,
+      result: {
+        ok: true,
+        result: {
+          ...base,
+          status: "ready",
+          ...context,
+          maxContextBytes: MAX_WORD_SCOPE_BYTES,
+          fullDocument: !!snapshot.fullDocument,
+        },
       },
     };
   snapshot.readScopes ??= new Map();
   if (snapshot.readScopes.size >= MAX_WORD_SCOPES)
     return fail(
       "scope-limit",
-      "Scoped read limit reached; use a fresh request or complete read.",
+      snapshot.completeReadIssue
+        ? "Scoped read limit reached; read further sections with section:{ref} pages, which use no write scope, or use a fresh request."
+        : "Scoped read limit reached; use a fresh request or complete read.",
     );
   const readToken = globalThis.crypto.randomUUID();
   snapshot.readScopes.set(readToken, {
@@ -453,14 +521,17 @@ export function readWordTargets(
     plans: new Set(),
   });
   return {
-    ok: true,
+    scope,
     result: {
-      ...base,
-      status: "ready",
-      readToken,
-      ...context,
-      maxContextBytes: MAX_WORD_SCOPE_BYTES,
-      fullDocument: !!snapshot.fullDocument,
+      ok: true,
+      result: {
+        ...base,
+        status: "ready",
+        readToken,
+        ...context,
+        maxContextBytes: MAX_WORD_SCOPE_BYTES,
+        fullDocument: !!snapshot.fullDocument,
+      },
     },
   };
 }

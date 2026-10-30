@@ -17,41 +17,38 @@ import {
 } from "./wordAuthoringReadData";
 import { WordDocumentDraftStore } from "./wordDocumentDrafts";
 import { MAX_WORD_DOCX_BYTES } from "./wordDocumentPackageCodec";
+import { withReadOnlyFields, wordReadRefusedByIssue } from "./wordReadAccess";
+import {
+  wordReadFragments,
+  wordReadJsonBytes,
+  wordReadPageStarts,
+  wordReadRecord,
+} from "./wordReadFragments";
+import { wordReadFreshness } from "./wordReadFreshness";
+import { readWordSection } from "./wordSectionRead";
 import { readWordTableCell } from "./wordTableCellRead";
 import { readWordTargets } from "./wordTargetRead";
 
+import type { WordReadAccess } from "./wordReadAccess";
+import type { WordReadFragment, WordReadRecord } from "./wordReadFragments";
+import type {
+  WordFreshnessScope,
+  WordReadCapture,
+  WordReadOutcome,
+} from "./wordReadFreshness";
 import type {
   ClientToolCallContext,
+  ClientToolExecutionResult,
   ClientToolExecutor,
 } from "@erato/frontend/library";
-import type {
-  WordAuthoringSnapshot,
-  WordPlanRun,
-} from "@erato/frontend/word-review";
+import type { WordAuthoringSnapshot } from "@erato/frontend/word-review";
 
 export { WORD_READ_TOOL };
-const PAGE_BYTES = 20 * 1024;
+export type { WordReadAccess };
 const MAX_PAGES = 12;
-interface Fragment {
-  ref: string;
-  type: string;
-  level?: number;
-  styleRef?: string;
-  protected: boolean;
-  part: number;
-  parts: number;
-  text: string;
-  runs?: WordPlanRun[];
-  nativeKind?: string;
-  description?: string;
-  sectionBoundary?: boolean;
-  structureJson?: string;
-  structurePart?: number;
-  structureParts?: number;
-}
 interface Session {
   snapshot: WordAuthoringSnapshot;
-  pages: Fragment[][];
+  pages: WordReadFragment[][];
   cursors: string[];
   next: number;
   chatId: string | null;
@@ -63,6 +60,8 @@ export type WordDocumentReadRequest = Pick<
 
 export class WordDocumentReadSession {
   private session: Session | null = null;
+  private access: WordReadAccess = "write";
+  private readCapture?: WordReadCapture;
   private completeBudgetCheck?: () => Promise<string | undefined>;
   private completeBudget?: Promise<string | undefined>;
   readonly drafts = new WordDocumentDraftStore();
@@ -85,6 +84,10 @@ export class WordDocumentReadSession {
     session.chatId = request.chatId;
     return true;
   }
+  /** Where the change journal stood when the session's capture was taken. */
+  get capture(): WordReadCapture | undefined {
+    return this.readCapture;
+  }
   snapshotForSubmission(
     context: ClientToolCallContext,
   ): WordAuthoringSnapshot | undefined {
@@ -95,6 +98,8 @@ export class WordDocumentReadSession {
       : undefined;
   }
   clear(): void {
+    this.access = "write";
+    this.readCapture = undefined;
     this.completeBudgetCheck = undefined;
     this.completeBudget = undefined;
     this.drafts.clear();
@@ -105,32 +110,25 @@ export class WordDocumentReadSession {
     snapshot?: WordAuthoringSnapshot,
     request?: WordDocumentReadRequest,
     completeBudgetCheck?: () => Promise<string | undefined>,
+    options?: { access?: WordReadAccess; capture?: WordReadCapture },
   ): void {
     this.clear();
     if (!snapshot || isWordHistorySnapshot(snapshot)) return;
+    this.access = options?.access ?? "write";
+    this.readCapture = options?.capture;
     this.completeBudgetCheck = completeBudgetCheck;
     snapshot.revoked = false;
     snapshot.read.clear();
     snapshot.readScopes = new Map();
     snapshot.readToken = undefined;
     snapshot.ownerMessageId = undefined;
-    const pages: Fragment[][] = [[]];
-    const records = [
-      ...snapshot.blocks
-        .map(wordReadableSourceBlock)
-        .map(({ content, objects, format, ...b }) => ({
-          ...b,
-          structure: {
-            ...(content ? { content } : {}),
-            ...(objects ? { objects } : {}),
-            ...(format ? { format } : {}),
-          },
-        })),
+    const records: WordReadRecord[] = [
+      ...snapshot.blocks.map(wordReadableSourceBlock).map(wordReadRecord),
       ...(snapshot.fullDocument
         ? (snapshot.stories ?? []).map(
             ({ xml, part: _part, nativeId: _nativeId, ...story }) => ({
               ref: `story_${story.id}`,
-              type: "story",
+              type: "story" as const,
               protected: false,
               text: story.text,
               runs: undefined,
@@ -145,7 +143,7 @@ export class WordDocumentReadSession {
         ? [
             {
               ref: "document_sections",
-              type: "sections",
+              type: "sections" as const,
               protected: false,
               text: "",
               runs: undefined,
@@ -163,77 +161,11 @@ export class WordDocumentReadSession {
       MAX_SOURCE_BYTES
     )
       snapshot.completeReadIssue = "too-large";
-    for (const { text, runs, structure, ...block } of records) {
-      const chars = Array.from(text);
-      const fragments: Fragment[] = [];
-      let offset = 0,
-        codeUnitOffset = 0;
-      do {
-        let end = Math.min(chars.length, offset + 4096);
-        let fragment: Fragment;
-        while (true) {
-          const piece = chars.slice(offset, end).join("");
-          let position = 0;
-          const pieceRuns = runs?.flatMap((r) => {
-            const start = Math.max(0, codeUnitOffset - position);
-            const until = Math.min(
-              r.text.length,
-              codeUnitOffset + piece.length - position,
-            );
-            position += r.text.length;
-            return until > start
-              ? [{ ...r, text: r.text.slice(start, until) }]
-              : [];
-          });
-          fragment = {
-            ...block,
-            text: piece,
-            ...(pieceRuns ? { runs: pieceRuns } : {}),
-            part: fragments.length + 1,
-            parts: 0,
-          };
-          if (
-            new TextEncoder().encode(JSON.stringify(fragment)).length <=
-              PAGE_BYTES ||
-            end <= offset + 1
-          )
-            break;
-          end = offset + Math.max(1, Math.floor((end - offset) / 2));
-        }
-        fragments.push(fragment);
-        codeUnitOffset += fragment.text.length;
-        offset = end;
-      } while (offset < chars.length);
-      if (Object.keys(structure).length) {
-        const data = Array.from(JSON.stringify(structure));
-        const count = Math.ceil(data.length / 2048);
-        for (let part = 0; part < count; part++)
-          fragments.push({
-            ref: block.ref,
-            type: block.type,
-            protected: false,
-            text: "",
-            part: fragments.length + 1,
-            parts: 0,
-            structureJson: data.slice(part * 2048, (part + 1) * 2048).join(""),
-            structurePart: part + 1,
-            structureParts: count,
-          });
-      }
-      for (const fragment of fragments) {
-        fragment.parts = fragments.length;
-        let page = pages[pages.length - 1];
-        if (
-          new TextEncoder().encode(JSON.stringify([...page, fragment])).length >
-            PAGE_BYTES &&
-          page.length
-        ) {
-          page = [];
-          pages.push(page);
-        }
-        page.push(fragment);
-      }
-    }
+    const fragments = records.flatMap(wordReadFragments);
+    const starts = wordReadPageStarts(fragments.map(wordReadJsonBytes));
+    const pages: WordReadFragment[][] = starts.length
+      ? starts.map((start, k) => fragments.slice(start, starts[k + 1]))
+      : [[]];
     if (wordStyleNamesBytes(snapshot.styles) > 16384)
       snapshot.completeReadIssue = "too-large";
     if (pages.length > MAX_PAGES) snapshot.completeReadIssue = "too-large";
@@ -247,9 +179,24 @@ export class WordDocumentReadSession {
     if (request) this.bindRequest(snapshot.token, request);
   }
 
-  execute: ClientToolExecutor = async (input, context) => {
+  execute: ClientToolExecutor = (input, context) =>
+    this.run(input, context, this.access);
+
+  /** Reads read-only whatever the session's access, as a call under a host grant must. */
+  executeReadOnly: ClientToolExecutor = (input, context) =>
+    this.run(input, context, "read-only");
+
+  private async run(
+    input: unknown,
+    context: ClientToolCallContext | undefined,
+    sessionAccess: WordReadAccess,
+  ): Promise<ClientToolExecutionResult> {
+    const access =
+      input && typeof input === "object" && "section" in input
+        ? "read-only"
+        : sessionAccess;
     const capture = context && this.snapshotForSubmission(context);
-    const result = await this.executeRead(input, context);
+    const { result, scope } = await this.executeRead(input, context, access);
     if (result.ok) {
       if (
         capture &&
@@ -258,8 +205,12 @@ export class WordDocumentReadSession {
         !capture.used &&
         !capture.revoked &&
         !context.signal?.aborted
-      )
-        return result;
+      ) {
+        const fresh = scope
+          ? this.withFreshness(result, capture, scope)
+          : result;
+        return access === "read-only" ? withReadOnlyFields(fresh) : fresh;
+      }
       return {
         ok: false,
         error: "The document capture is no longer available.",
@@ -278,7 +229,7 @@ export class WordDocumentReadSession {
       !snapshot ||
       snapshot.used ||
       snapshot.revoked ||
-      snapshot.issue ||
+      wordReadRefusedByIssue(snapshot, access) ||
       context?.signal?.aborted
     ) {
       return {
@@ -287,14 +238,43 @@ export class WordDocumentReadSession {
       };
     }
     return result;
-  };
+  }
 
-  private executeRead: ClientToolExecutor = async (input, context) => {
+  /** Every read response says which capture it read and what Word reported changed since. */
+  private withFreshness(
+    result: ClientToolExecutionResult,
+    snapshot: WordAuthoringSnapshot,
+    scope: WordFreshnessScope,
+  ): ClientToolExecutionResult {
+    if (
+      !result.ok ||
+      result.disposition === "local_only" ||
+      !result.result ||
+      typeof result.result !== "object" ||
+      Array.isArray(result.result)
+    )
+      return result;
+    return {
+      ...result,
+      result: {
+        ...result.result,
+        freshness: wordReadFreshness(snapshot, this.readCapture, scope),
+      },
+    };
+  }
+
+  private async executeRead(
+    input: unknown,
+    context: ClientToolCallContext | undefined,
+    access: WordReadAccess,
+  ): Promise<WordReadOutcome> {
     const session = this.session;
     const fail = (error: string, code: string, path = "/snapshot") => ({
-      ok: false as const,
-      error,
-      validationErrors: [{ path, code, message: error }],
+      result: {
+        ok: false as const,
+        error,
+        validationErrors: [{ path, code, message: error }],
+      },
     });
     if (!session || !context || context.signal?.aborted)
       return fail("Document read unavailable or stopped.", "read-unavailable");
@@ -316,16 +296,26 @@ export class WordDocumentReadSession {
         "",
       );
     const args = input as Record<string, unknown>;
-    if ("target" in args) return readWordTargets(snapshot, args);
+    if ("section" in args) return readWordSection(snapshot, args);
+    if ("target" in args) return readWordTargets(snapshot, args, access);
     if ("table_cell" in args) {
-      if (snapshot.revoked || snapshot.used || snapshot.issue)
+      if (
+        snapshot.revoked ||
+        snapshot.used ||
+        wordReadRefusedByIssue(snapshot, access)
+      )
         return fail(
           "This capture is unavailable; use a fresh request or the existing complete-read workflow.",
           snapshot.issue ??
             (snapshot.used ? "snapshot-used" : "snapshot-revoked"),
         );
-      return readWordTableCell(snapshot, args);
+      return readWordTableCell(snapshot, args, access);
     }
+    if (access === "read-only")
+      return fail(
+        "A read-only read cannot page the complete document. Read its parts with section:{ref} pages, following nextCursor, or with target, target.queries or table_cell.",
+        "read-only-complete",
+      );
 
     if (
       Object.keys(args).some((k) => k !== "snapshot" && k !== "cursor") ||
@@ -353,7 +343,7 @@ export class WordDocumentReadSession {
       );
     if (snapshot.completeReadIssue)
       return fail(
-        "This document is too large for a complete read, so whole-document plans and repairs are unavailable. Read the parts the request needs with target, target.queries or table_cell, and submit scoped_edit or table_cell changes. No document changes were made.",
+        "This document is too large for a complete read, so whole-document plans and repairs are unavailable. Read the sections the request needs with section:{ref} pages from the Outline, following nextCursor; use target, target.queries or table_cell only for what you edit, and submit scoped_edit or table_cell changes. No document changes were made.",
         snapshot.completeReadIssue,
       );
     if (this.completeBudgetCheck) {
@@ -389,63 +379,66 @@ export class WordDocumentReadSession {
     const complete = session.next === session.pages.length;
     if (complete) snapshot.readToken ??= globalThis.crypto.randomUUID();
     return {
-      ok: true,
+      scope: { kind: "document" },
       result: {
-        snapshot: snapshot.token,
-        ...(snapshotChanged
-          ? {
-              snapshotRecovery: {
-                requestedSnapshot: args.snapshot,
-                restarted: true,
-              },
-            }
-          : {}),
-        scope: snapshot.fullDocument ? "document" : "body",
-        blocks: session.pages[index],
-        ...(index === 0
-          ? {
-              styles: wordReadableStyles(snapshot.styles),
-              limits: {
-                maxSourceBytes: MAX_SOURCE_BYTES,
-                maxPages: MAX_PAGES,
-                maxPlanBytes: MAX_PLAN_BYTES,
-                maxOutputBlocks: MAX_DOCUMENT_BLOCKS,
-                maxNestedDepth: 12,
-                ...(snapshot.fullDocument
-                  ? { maxDocumentFileBytes: MAX_WORD_DOCX_BYTES }
-                  : {}),
-              },
-              supportedBlocks: [
-                "paragraph",
-                "heading",
-                "list-item",
-                "table",
-                "image",
-                "drawing",
-                "field",
-                "bookmark",
-                "content-control",
-                "native-edit",
-              ],
-              contract: WORD_AUTHORING_CONTRACT,
-              fullDocument: !!snapshot.fullDocument,
-              assets: (snapshot.assets ?? []).map(wordImageAssetMetadata),
-              imageAssetIssues: (snapshot.imageAssetIssues ?? []).map(
-                ({ name, reason }) => ({ name, reason }),
-              ),
-              nativeContent:
-                "Native body source operations: keep, replace, deleted. Object metadata is JSON fragmented into structureJson, ordered by structurePart for each ref. Object selectors and sourceRef identify captured content. Explicit sections replaces section boundaries. Story and section edits require scope=document and fullDocument=true. Source XML and binary data remain on the host.",
-              preservedStories: snapshot.preservedStories ?? [],
-            }
-          : {}),
-        blocksRead: snapshot.read.size,
-        blocksTotal: wordSourceReadRefs(snapshot).length,
-        nextCursor: session.cursors[index + 1] ?? null,
-        complete,
-        ...(complete ? { readToken: snapshot.readToken } : {}),
+        ok: true,
+        result: {
+          snapshot: snapshot.token,
+          ...(snapshotChanged
+            ? {
+                snapshotRecovery: {
+                  requestedSnapshot: args.snapshot,
+                  restarted: true,
+                },
+              }
+            : {}),
+          scope: snapshot.fullDocument ? "document" : "body",
+          blocks: session.pages[index],
+          ...(index === 0
+            ? {
+                styles: wordReadableStyles(snapshot.styles),
+                limits: {
+                  maxSourceBytes: MAX_SOURCE_BYTES,
+                  maxPages: MAX_PAGES,
+                  maxPlanBytes: MAX_PLAN_BYTES,
+                  maxOutputBlocks: MAX_DOCUMENT_BLOCKS,
+                  maxNestedDepth: 12,
+                  ...(snapshot.fullDocument
+                    ? { maxDocumentFileBytes: MAX_WORD_DOCX_BYTES }
+                    : {}),
+                },
+                supportedBlocks: [
+                  "paragraph",
+                  "heading",
+                  "list-item",
+                  "table",
+                  "image",
+                  "drawing",
+                  "field",
+                  "bookmark",
+                  "content-control",
+                  "native-edit",
+                ],
+                contract: WORD_AUTHORING_CONTRACT,
+                fullDocument: !!snapshot.fullDocument,
+                assets: (snapshot.assets ?? []).map(wordImageAssetMetadata),
+                imageAssetIssues: (snapshot.imageAssetIssues ?? []).map(
+                  ({ name, reason }) => ({ name, reason }),
+                ),
+                nativeContent:
+                  "Native body source operations: keep, replace, deleted. Object metadata is JSON fragmented into structureJson, ordered by structurePart for each ref. Object selectors and sourceRef identify captured content. Explicit sections replaces section boundaries. Story and section edits require scope=document and fullDocument=true. Source XML and binary data remain on the host.",
+                preservedStories: snapshot.preservedStories ?? [],
+              }
+            : {}),
+          blocksRead: snapshot.read.size,
+          blocksTotal: wordSourceReadRefs(snapshot).length,
+          nextCursor: session.cursors[index + 1] ?? null,
+          complete,
+          ...(complete ? { readToken: snapshot.readToken } : {}),
+        },
       },
     };
-  };
+  }
 }
 
 export const wordDocumentReadSession = new WordDocumentReadSession();

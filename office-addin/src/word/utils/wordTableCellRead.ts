@@ -6,7 +6,11 @@ import {
 
 import { cutToUtf8Bytes } from "./buildWordDocumentArgs";
 import { WORD_AUTHORING_CONTRACT } from "./wordAuthoringContract";
+import { wordBlockIndex } from "./wordDocumentOutline";
+import { wordReadRefusedByIssue } from "./wordReadAccess";
 
+import type { WordReadAccess } from "./wordReadAccess";
+import type { WordReadOutcome } from "./wordReadFreshness";
 import type { ClientToolExecutionResult } from "@erato/frontend/library";
 import type {
   WordAuthoringSnapshot,
@@ -34,17 +38,26 @@ const snippet = (text: string) => {
   return { text: bounded, truncated: bounded !== text };
 };
 
-/** Snapshot-only discovery and authorization: no Office, network or live-document access. */
+/** Snapshot-only discovery and authorization: no Office, network or live-document access. A
+ * read-only read returns the cell without a scope and may read a capture under Track Changes. */
 export function readWordTableCell(
   snapshot: WordAuthoringSnapshot,
   input: Record<string, unknown>,
-): ClientToolExecutionResult {
-  const fail = (code: string, message: string): ClientToolExecutionResult => ({
-    ok: false,
-    error: message,
-    validationErrors: [{ path: "/table_cell", code, message }],
+  access: WordReadAccess = "write",
+): WordReadOutcome {
+  const fail = (code: string, message: string): WordReadOutcome => ({
+    result: {
+      ok: false,
+      error: message,
+      validationErrors: [{ path: "/table_cell", code, message }],
+    },
   });
-  if (snapshot.revoked || snapshot.used || snapshot.issue)
+  const readOnly = access === "read-only";
+  if (
+    snapshot.revoked ||
+    snapshot.used ||
+    wordReadRefusedByIssue(snapshot, access)
+  )
     return fail(
       "snapshot-unavailable",
       "Use the current request's active, available snapshot.",
@@ -164,15 +177,31 @@ export function readWordTableCell(
       cellBytes: CELL_BYTES,
     },
   };
+  // A search that found no single cell looked through every table of the capture.
   if (matches.length !== 1)
     return {
-      ok: true,
-      result: { ...result, status: matches.length ? "ambiguous" : "not-found" },
+      scope: { kind: "document" },
+      result: {
+        ok: true,
+        result: {
+          ...result,
+          status: matches.length ? "ambiguous" : "not-found",
+        },
+      },
     };
   const match = matches[0];
-  const fallback = snapshot.completeReadIssue ? "target" : "complete-read";
+  const at = wordBlockIndex(snapshot).get(match.sourceRef);
+  const read = (response: ClientToolExecutionResult): WordReadOutcome => ({
+    scope: { kind: "blocks", blocks: new Set(at === undefined ? [] : [at]) },
+    result: response,
+  });
+  const fallback = readOnly
+    ? "section"
+    : snapshot.completeReadIssue
+      ? "target"
+      : "complete-read";
   if (encoder.encode(match.text).length > CELL_BYTES)
-    return {
+    return read({
       ok: true,
       result: {
         ...result,
@@ -180,7 +209,21 @@ export function readWordTableCell(
         reason: "cell-context-limit",
         fallback,
       },
-    };
+    });
+  if (readOnly)
+    return read({
+      ok: true,
+      result: {
+        ...result,
+        status: "ready",
+        cell: {
+          sourceRef: match.sourceRef,
+          rowIndex: match.rowIndex,
+          cellIndex: match.cellIndex,
+          text: match.text,
+        },
+      },
+    });
   const scope: WordTableCellScope = {
     kind: "table-cell",
     snapshot: snapshot.token,
@@ -211,7 +254,7 @@ export function readWordTableCell(
     );
   } catch (error) {
     if (!(error instanceof WordTableCellSubmissionError)) throw error;
-    return {
+    return read({
       ok: true,
       result: {
         ...result,
@@ -219,7 +262,7 @@ export function readWordTableCell(
         reason: error.code,
         fallback,
       },
-    };
+    });
   }
   snapshot.readScopes ??= new Map();
   if (snapshot.readScopes.size >= MAX_WORD_SCOPES)
@@ -228,7 +271,7 @@ export function readWordTableCell(
       "This request has reached its scoped-read capability limit; use a complete read or a fresh request.",
     );
   snapshot.readScopes.set(readToken, scope);
-  return {
+  return read({
     ok: true,
     result: {
       ...result,
@@ -242,5 +285,5 @@ export function readWordTableCell(
       },
       contract: { tableCell: WORD_AUTHORING_CONTRACT.tableCell },
     },
-  };
+  });
 }

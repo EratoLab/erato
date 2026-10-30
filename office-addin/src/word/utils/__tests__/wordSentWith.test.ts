@@ -346,7 +346,9 @@ describe("Word sent-with descriptors", () => {
           authoring: {
             token: "t",
             completeReadIssue: "too-large",
-          } as WordAuthoringSnapshot,
+            blocks: [],
+            styles: [],
+          } as unknown as WordAuthoringSnapshot,
         }),
       );
       expect(chip.meta).toBe("Read in parts · 86 ¶");

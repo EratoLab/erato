@@ -15,6 +15,7 @@ import {
   realisticWordPackageXml,
 } from "../../../test/mocks/word/realisticWordFixtures";
 import { escapeXml } from "../../../utils/escapeXml";
+import { wordReadableSourceBlock } from "../wordAuthoringReadData";
 import { WordDocumentReadSession } from "../wordDocumentReadTool";
 import { createWordDocumentSubmissionExecutor } from "../wordDocumentSubmission";
 import {
@@ -30,6 +31,7 @@ import {
   classifyWordInPlacePlan,
   sameWordInPlaceProgram,
 } from "../wordInPlacePlan";
+import { routeWordDocumentPlan } from "../wordInPlaceRoute";
 
 import type { WordInPlaceFallback, WordInPlaceOp } from "../wordInPlacePlan";
 import type {
@@ -903,6 +905,39 @@ describe("in-place classification", () => {
 });
 
 describe("in-place program equivalence", () => {
+  const context = {
+    chatId: "chat",
+    messageId: "message",
+    toolCallId: "read",
+  };
+  const scoped = async (
+    s: WordAuthoringSnapshot,
+    target: Record<string, unknown>,
+    scoped_edit: Record<string, unknown>,
+  ) => {
+    const session = new WordDocumentReadSession();
+    session.activate(s, context);
+    const read = await session.execute(
+      {
+        snapshot: s.token,
+        documentIdentity: s.identity,
+        target,
+      },
+      context,
+    );
+    if (!read.ok) throw new Error(read.error);
+    const result = await createWordDocumentSubmissionExecutor(session)(
+      {
+        snapshot: s.token,
+        readToken: (read.result as { readToken: string }).readToken,
+        scoped_edit,
+      },
+      { ...context, toolCallId: "edit" },
+    );
+    if (!result.ok) throw new Error(JSON.stringify(result));
+    return (result.result as { plan: WordDocumentPlan }).plan;
+  };
+
   it("detects a tampered op list and an import result that disagrees", () => {
     const s = snapshot();
     const p = plan(s, { b2: text("Changed") });
@@ -924,38 +959,6 @@ describe("in-place program equivalence", () => {
   });
 
   it("matches wordPlanOutput for every eligible scoped edit and names the rule for the rest", async () => {
-    const context = {
-      chatId: "chat",
-      messageId: "message",
-      toolCallId: "read",
-    };
-    const scoped = async (
-      s: WordAuthoringSnapshot,
-      target: Record<string, unknown>,
-      scoped_edit: Record<string, unknown>,
-    ) => {
-      const session = new WordDocumentReadSession();
-      session.activate(s, context);
-      const read = await session.execute(
-        {
-          snapshot: s.token,
-          documentIdentity: s.identity,
-          target,
-        },
-        context,
-      );
-      if (!read.ok) throw new Error(read.error);
-      const result = await createWordDocumentSubmissionExecutor(session)(
-        {
-          snapshot: s.token,
-          readToken: (read.result as { readToken: string }).readToken,
-          scoped_edit,
-        },
-        { ...context, toolCallId: "edit" },
-      );
-      if (!result.ok) throw new Error(JSON.stringify(result));
-      return (result.result as { plan: WordDocumentPlan }).plan;
-    };
     const fresh = () =>
       readySnapshot(
         packageXml(
@@ -1123,5 +1126,75 @@ describe("in-place program equivalence", () => {
           expect(sameWordInPlaceProgram(p, s, result.ops)).toBe(true);
       }
     }
+  });
+
+  it("keeps a paragraph Word split at proofing marks in place when the edit sends its joined read form", async () => {
+    const lang = '<w:lang w:val="en-US"/>';
+    const s = snapshot(
+      p(run("Before")) +
+        p(
+          run("Forward events to the operations ", lang) +
+            '<w:proofErr w:type="spellStart"/>' +
+            run("centre", lang) +
+            '<w:proofErr w:type="spellEnd"/>' +
+            run(" every quarter.", lang),
+          `<w:rPr>${lang}</w:rPr>`,
+        ) +
+        p(run("Tail")),
+    );
+    expect(s.blocks[1].runs).toHaveLength(3);
+    const read = wordReadableSourceBlock(s.blocks[1]);
+    expect(read).not.toHaveProperty("runs");
+    expect(read.format).toEqual({ font: { language: "en-US" } });
+
+    const edited = await scoped(
+      s,
+      { ref: "b2" },
+      {
+        body: [
+          {
+            operation: "replace",
+            source: ["b2"],
+            blocks: [
+              text("Forward events to the operations centre every month.", {
+                format: read.format,
+              }),
+            ],
+          },
+        ],
+      },
+    );
+    const plain = { bold: false, italic: false, underline: false };
+    expect(
+      routeWordDocumentPlan(
+        edited,
+        s,
+        { enabled: true },
+        wordInPlaceCapabilities("PC"),
+        compiledOf(s, edited),
+      ),
+    ).toEqual({
+      route: "in-place",
+      tracked: false,
+      ops: [
+        {
+          kind: "text",
+          ref: "b2",
+          paragraph: 0,
+          runs: [
+            {
+              text: "Forward events to the operations centre every month.",
+              ...plain,
+            },
+          ],
+          original: [
+            {
+              text: "Forward events to the operations centre every quarter.",
+              ...plain,
+            },
+          ],
+        },
+      ],
+    });
   });
 });

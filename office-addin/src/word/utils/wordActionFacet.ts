@@ -7,6 +7,8 @@ import {
   WORD_THREAD_JSON_ARG,
 } from "@erato/frontend/word-review";
 
+import { wordDocumentOutlineText } from "./wordDocumentOutline";
+import { WORD_READ_PAGE_BYTES } from "./wordReadFragments";
 import { wordSelectionWithoutKeptItems } from "./wordSelectionAnchor";
 import { wordSelectionFacetArgs } from "./wordSelectionArgs";
 import { advertisedFacetArgs } from "../../core/clientActions/actionFacetArgs";
@@ -211,10 +213,7 @@ export function resolveWordActionFacet(
       args: {
         document_name: input.documentName,
         document_identity: input.documentIdentity,
-        ...wordAuthoringDocumentArgs(
-          input.documentArgs,
-          input.authoring.completeReadIssue,
-        ),
+        ...wordAuthoringDocumentArgs(input.documentArgs, input.authoring),
         document_snapshot: input.authoring.token,
         authoring_status: wordAuthoringStatus(input.authoring),
         ...commentMap(WORD_AUTHORING_FACET_ID),
@@ -296,24 +295,26 @@ function wordAuthoringStatus(authoring: WordAuthoringSnapshot): string {
     return `${authoring.issue}${authoring.issueDetails?.length ? ` (${authoring.issueDetails.join(", ")})` : ""}`;
   // Starts with "available" because the facet prompt only submits plans when the status is available.
   if (authoring.completeReadIssue)
-    return `available for scoped reads and scoped edits only. Complete reads, whole-document plans and repairs are unavailable (${authoring.completeReadIssue}: the document exceeds the complete-read limit). target, target.queries and table_cell reads work, up to ${MAX_WORD_SCOPE_TARGETS} targets and ${MAX_WORD_SCOPE_BYTES / 1024} KiB per response; submit scoped_edit or table_cell changes.`;
+    return `available for scoped reads and scoped edits only. Complete reads, whole-document plans and repairs are unavailable (${authoring.completeReadIssue}: the document exceeds the complete-read limit). Read the sections the request needs from the Outline with read_document_blocks section:{ref}, in pages of up to ${WORD_READ_PAGE_BYTES / 1024} KiB that use no write scope. Use target, target.queries and table_cell reads only for what you edit, up to ${MAX_WORD_SCOPE_TARGETS} targets and ${MAX_WORD_SCOPE_BYTES / 1024} KiB per response; submit scoped_edit or table_cell changes.`;
   return "available";
 }
 
-/** Authoring starts with identity and counts only. Tools explicitly deliver content.
+/** Authoring starts with identity and counts only. Tools explicitly deliver content; a capture
+ * too large for a complete read also sends the outline its section reads go by.
  * Used by hosts independently of Office.js; review-only captures keep their excerpt.
  */
 export function wordAuthoringDocumentArgs(
   args: WordDocumentArgs,
-  completeReadIssue?: WordAuthoringSnapshot["completeReadIssue"],
+  authoring?: WordAuthoringSnapshot,
 ): WordDocumentArgs {
+  const tooLarge = !!authoring?.completeReadIssue;
   return {
     ...args,
     document_text: "",
-    heading_outline: "",
+    heading_outline: tooLarge ? wordDocumentOutlineText(authoring) : "",
     paragraphs_sent: "0",
-    truncation_note: completeReadIssue
-      ? "No paragraphs are included in this initial context. The document is too large to read completely: read only the parts the request needs with read_document_blocks target, target.queries or table_cell, and say which parts an answer covers."
+    truncation_note: tooLarge
+      ? "No paragraphs are included in this initial context. The document is too large to read completely: read the sections the request needs from the Outline with section:{ref} pages, and say which parts an answer covers."
       : "Document content is available through read_document_blocks; no paragraphs are included in this initial context.",
   };
 }

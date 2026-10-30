@@ -26,6 +26,7 @@ import {
   wordInPlaceAvailability,
   wordInPlaceCapabilitiesUnder,
 } from "./wordInPlaceSwitch";
+import { wordDocumentChangedRefusal } from "./wordPlanDocumentChanges";
 import { expandWordScopedSubmission } from "./wordScopedSubmission";
 
 import type { WordDocumentReadSession } from "./wordDocumentReadTool";
@@ -77,9 +78,8 @@ export function createWordDocumentSubmissionExecutor(
         terminal: unavailable || result.submissionFeedback?.terminal || false,
         recovery: unavailable
           ? "cannot_continue"
-          : needsRead
-            ? "read_current_context"
-            : "repair_arguments",
+          : (result.submissionFeedback?.recovery ??
+            (needsRead ? "read_current_context" : "repair_arguments")),
       },
     };
   };
@@ -185,6 +185,13 @@ function createSubmissionExecutor(
         return { ok: false, error: "Document submission stopped." };
       const redelivery = session.drafts.replay(context.toolCallId, serialized);
       if (redelivery) return redelivery;
+      const changed = wordDocumentChangedRefusal(
+        snapshot,
+        session.capture,
+        kind ? (value as WordDocumentPlan) : "document",
+      );
+      if (changed)
+        return session.drafts.remember(context.toolCallId, serialized, changed);
       let result = prepared;
       if (prepared.ok) {
         session.drafts.accepted = true;

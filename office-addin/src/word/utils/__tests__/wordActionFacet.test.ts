@@ -417,7 +417,12 @@ describe("authoring arguments", () => {
   const authoring = (
     snapshot: Partial<WordAuthoringSnapshot>,
   ): WordAuthoringSnapshot =>
-    ({ token: "snapshot-1", ...snapshot }) as WordAuthoringSnapshot;
+    ({
+      token: "snapshot-1",
+      blocks: [],
+      styles: [],
+      ...snapshot,
+    }) as WordAuthoringSnapshot;
   const args = (snapshot: Partial<WordAuthoringSnapshot>) =>
     resolveWordActionFacet(
       input({
@@ -444,7 +449,7 @@ describe("authoring arguments", () => {
     );
     expect(sent?.authoring_status).toContain("16 targets and 24 KiB");
     expect(sent?.truncation_note).toContain("too large to read completely");
-    expect(sent?.truncation_note).toContain("target.queries or table_cell");
+    expect(sent?.truncation_note).toContain("section:{ref} pages");
     expect(sent?.document_text).toBe("");
   });
 

@@ -1048,6 +1048,14 @@ export function WordChatInput({
                   return budget.ok ? undefined : budget.issue;
                 }
               : undefined,
+            build && authoringSnapshot
+              ? {
+                  capture: {
+                    changes: build.changes,
+                    ordinalMap: build.ordinalMap,
+                  },
+                }
+              : undefined,
           );
           setAuthoringNotice({
             authoringIssue: capturedIssue,

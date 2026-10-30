@@ -8,6 +8,12 @@ import {
 import { mixedAuthoringXml } from "../../../test/mocks/word/mixedAuthoringFixtures";
 import { readWordDocument } from "../../utils/readWordDocument";
 import {
+  noteWordChangeEventsActive,
+  recordWordParagraphEvent,
+  resetWordChangeJournalForTests,
+  wordChangesSince,
+} from "../../utils/wordChangeJournal";
+import {
   useWordDocumentSource,
   WORD_CAPTURE_CEILING_MS,
   WORD_CAPTURE_SLOW_MS,
@@ -19,6 +25,7 @@ import type { WordDocumentReadResult } from "../../utils/readWordDocument";
 const changes = vi.hoisted(() => new Set<() => void>());
 const signal = vi.hoisted(() => ({
   eventsActive: false,
+  registering: undefined as Promise<void> | undefined,
   trackingMode: vi.fn<() => Promise<string | null>>(),
 }));
 
@@ -32,6 +39,7 @@ vi.mock("../../utils/wordDocumentChangeSignal", () => ({
     return () => changes.delete(listener);
   },
   wordParagraphEventsActive: () => signal.eventsActive,
+  wordParagraphEventsPending: () => signal.registering,
   readWordChangeTrackingMode: () => signal.trackingMode(),
 }));
 
@@ -61,6 +69,13 @@ const deferred = <T,>() => {
   return { promise, resolve };
 };
 
+function journalSince(build: WordDocumentBuild) {
+  const since = wordChangesSince(build.changes!.position);
+  return since.ok
+    ? since.entries.map(({ source, reason }) => ({ source, reason }))
+    : since.reason;
+}
+
 const changeDocument = () =>
   act(() => {
     for (const listener of changes) listener();
@@ -82,9 +97,12 @@ function renderSource({
 
 describe("useWordDocumentSource", () => {
   beforeEach(() => {
+    resetWordChangeJournalForTests();
+    noteWordChangeEventsActive();
     read.mockReset();
     changes.clear();
     signal.eventsActive = false;
+    signal.registering = undefined;
     signal.trackingMode.mockReset().mockResolvedValue("Off");
   });
 
@@ -285,6 +303,63 @@ describe("useWordDocumentSource", () => {
       undefined,
       undefined,
     ]);
+  });
+
+  it("records where the change journal stood before the paragraph read, kept by every send's copy", async () => {
+    read.mockImplementation(async () => {
+      recordWordParagraphEvent({
+        type: "ParagraphChanged",
+        source: "Local",
+        uniqueLocalIds: ["p1"],
+      });
+      return { ok: true, tracking: "Off", paragraphs: paragraphs(["Alpha"]) };
+    });
+    const before = Date.now();
+    const { result } = renderSource();
+    await waitFor(() => expect(result.current.preview.status).toBe("included"));
+
+    const first = (await result.current.capture())!;
+    const second = (await result.current.capture())!;
+
+    expect(Date.parse(first.changes!.capturedAt)).toBeGreaterThanOrEqual(
+      before,
+    );
+    expect(second.changes).toEqual(first.changes);
+    expect(wordChangesSince(first.changes!.position)).toMatchObject({
+      ok: true,
+      entries: [{ source: "local", ids: ["p1"] }],
+    });
+  });
+
+  it("waits for the paragraph events to register before it takes the journal position", async () => {
+    resetWordChangeJournalForTests();
+    const registered = deferred<void>();
+    signal.registering = registered.promise;
+    readsText(["Alpha"]);
+    const { result } = renderSource();
+    await act(async () => {});
+    expect(read).not.toHaveBeenCalled();
+
+    noteWordChangeEventsActive();
+    registered.resolve();
+    await waitFor(() => expect(result.current.preview.status).toBe("included"));
+
+    expect(journalSince((await result.current.capture())!)).toEqual([]);
+  });
+
+  it("replaces a capture taken before the paragraph events registered once they have", async () => {
+    resetWordChangeJournalForTests();
+    readsText(["Alpha"]);
+    const { result } = renderSource();
+    await waitFor(() => expect(result.current.preview.status).toBe("included"));
+    expect(journalSince((await result.current.capture())!)).toBe("no-events");
+
+    noteWordChangeEventsActive();
+    signal.eventsActive = true;
+    const sent = (await result.current.capture())!;
+
+    expect(read).toHaveBeenCalledTimes(2);
+    expect(journalSince(sent)).toEqual([]);
   });
 
   it("keeps the text but no authoring when Word did not hand over the full document", async () => {
@@ -587,17 +662,19 @@ describe("useWordDocumentSource", () => {
     expect(read).toHaveBeenCalledTimes(1);
   });
 
-  it("reads again on a return after Track Changes was toggled", async () => {
+  it("reads again on a return after Track Changes was toggled, which is no change to the text", async () => {
     signal.eventsActive = true;
     readsAuthoring("Off");
     const { result } = renderSource({ authoringEnabled: true });
     await waitFor(() => expect(result.current.preview.status).toBe("included"));
+    const captured = (await result.current.capture())!;
     signal.trackingMode.mockResolvedValue("TrackAll");
 
     leavePane();
     focusPane();
 
     await waitFor(() => expect(read).toHaveBeenCalledTimes(2));
+    expect(journalSince(captured)).toEqual([]);
   });
 
   const reads = {
@@ -711,6 +788,8 @@ describe("useWordDocumentSource", () => {
       expect(sent!.authoring?.proofingPending).toBe(
         pending === "tagging" ? true : undefined,
       );
+      // Word's proofing changes no text, so freshness reads the capture as any other.
+      expect(journalSince(sent!)).toEqual([]);
     },
   );
 
