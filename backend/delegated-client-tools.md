@@ -2,13 +2,15 @@
 
 A delegated task can read through the client its parent turn was sent from,
 for example the Word pane, under a grant the server writes when the task
-launches. This record describes the host-neutral core (ERMAIN-1001) and the
-slow path, where a task's call waits durably for a client (ERMAIN-1032). The
-contract is the Linear document "Contract: delegated tasks with client tools",
-sections 2 to 10. Hosts implement their side separately (Word ERMAIN-1003,
-Outlook ERMAIN-1006, the desktop sidecar ERMAIN-1034). Nothing is enabled by
-default: no shipped configuration sets `child_access`, `child_host_context` or
-`child_dispatch`, and `client_tools.durable_operations_enabled` is off.
+launches. This record describes the host-neutral core (ERMAIN-1001), the slow
+path, where a task's call waits durably for a client (ERMAIN-1032), and approval
+per document or response (ERMAIN-1033). The contract is the Linear document
+"Contract: delegated tasks with client tools", sections 2 to 10 and 16. Hosts
+implement their side separately (Word ERMAIN-1003, Outlook ERMAIN-1006, the
+desktop sidecar ERMAIN-1034). Nothing is enabled by default: no shipped
+configuration sets `child_access`, `child_host_context`, `child_dispatch` or
+`approval_scope = "context"`, and `client_tools.durable_operations_enabled` is
+off.
 
 ## Eligibility
 
@@ -272,6 +274,77 @@ grant, because the parent's continuation is the running generation on
 `owner_message_id`. A child decided from its own chat after the parent's turn is
 over gets no granted tools: the approved call is refused as not offered.
 
+## Approval scope
+
+A client tool may set `approval_scope = "context"` (default `call`). It loads
+only on a `child_access = "read"` tool whose host context has an approval scope,
+`ClientToolHostContext::supports_approval_scope()`: `word_document`, whose scope
+is the document in one pane session, and `outlook_mailbox`, whose scope is the
+parent turn. The desktop sidecar stays per call until it can name a thread and
+count the items added since a position (ERMAIN-1034's follow-up N2).
+
+When a task's granted call to such a tool asks (the user's decision is Ask), its
+item on the parent's card carries `child.approval_scope {host_context, covers,
+scope_id, changed}` (`covers` is `document` or `turn`; `changed` only when set),
+and the card may answer it with `approve_context`. One click answers every open
+item of the same tool and scope. The coordinator's own calls never offer it,
+since only grant calls carry the lineage the scope travels in. `approve_context`
+is a 400 on the coordinator's own item, an MCP task, an item without a scope and
+a task's own card. Always allow and Never allow keep their meaning, and Never
+refuses a call an approval covered.
+
+The store is `client_tool_approval_scopes` (`services/approval_scope.rs`). The
+key is the parent chat, the SHA-256 of the grant's executor binding, the host
+context, a scope id and the tool's qualified name, and at most one row per key is
+live. The server derives the scope id from the grant, never from the call: Word's
+is the binding's `host_context.identity`, which is new on every pane load, and
+Outlook's is the grant's `owner_message_id`. The parent's continuation makes the
+row once per decision, before any task resumes. The decision is identified by the
+parent message and the index of the stop's request part, so a crash retry finds
+the same row and a decision never makes a second one. Each item's approval part
+records `covers` and `scope_approval_id`; the task's continuation gets the row id
+and its call passes the gate again under that row. Any later granted call of the
+same key, in any task of the chat, runs without asking while the row is live.
+
+A document scope is checked on the device:
+
+- The approval is given only in the pane that holds the document. The decision
+  item carries `scope_position`, the change-journal position the pane took at the
+  click (`{journal, seq, events: true}`, at most 1 KiB), and the request's
+  `X-Erato-Executor` must be the grant's binding. All items of one scope carry
+  the same position. Otherwise `approve_context` is a 400.
+- A pane lists the tools whose scope it checks in `X-Erato-Scoped-Client-Tools`,
+  a subset of `X-Erato-Child-Client-Tools`. The scope is offered and used only
+  while one stream of the binding lists the tool in both. A covered call
+  (`client_executor_calls.scoped`) goes only to such a stream, re-delivery
+  included, and ends as `context_unavailable` after the 15 s grace when none is
+  left. A call the user allowed for the document is never turned into a plain
+  Ask for want of such a stream.
+- Every covered call carries `lineage.approval_scope {approval_id, scope_id,
+  position}`. The host answers `ok: false` with the validation code
+  `scope_changed`, without reading, when the document changed since the position.
+  Word's journal leaves out the chat's own writes, formatting-only edits on
+  Windows and Mac, Track Changes toggles and proofing; on Word for the web a
+  formatting edit counts.
+- On `scope_changed` the server ends the row by its id (`end_reason =
+  scope_changed`), so a late answer for an older approval never ends a newer one.
+  The task parks on a new Ask for the same call with `changed: true`. No tool
+  part is written for the call, so it runs after the next decision. Tasks of the
+  same decision that had not run yet find the row ended and ask again, marked
+  changed, and no row is made from the old decision. A task that cannot park
+  (`propagate_child_mcp_approvals` off) ends the call as `cancelled` with reason
+  `scope_changed`. A `scope_changed` answer to a call without a scope is a plain
+  validation failure.
+
+Outlook's turn scope is kept by the server alone: no header, no position, no
+`approval_scope` in the lineage, and the next turn asks again. Unarchiving the
+parent chat ends its live rows (`chat_archived`); an archived chat's rows are
+never used, and deleting the chat deletes them.
+
+A context approval replaces the server's Ask for covered calls and nothing else
+(CT-9): the host's own prompts, a native release review and local evidence never
+pass through it.
+
 ## Freshness and the task result
 
 `build_result_envelope` reads the child's `TaskSpec` and answer row and adds
@@ -336,6 +409,14 @@ host: Always allow under a strict MCP policy, Never allow stored as the
 client-tool preference, adoption by regenerate, and a turn without the context
 version whose read is dispatched without one. No integration case covers the
 @-mention route, which launches no client task and so never gets a grant.
+
+`delegated/approval_scope.rs` adds five approval-scope cases to every row: a
+document row takes the document scope and a turn row the turn scope. They cover
+one approval for many tasks, a later turn, a new pane session, `scope_changed`
+and a decision made before an outside change. The cases that need one host only
+(refusals, routing to a stream that checks, Always and Never, crash retry, a
+stale end, no surface, unarchive, the key's binding and tool) run once on the
+fake host.
 
 A host's handlers pass `clientToolHostAdapterConformanceFailures` from
 `@erato/frontend/conformance`. The adapter checklist and templates are in
@@ -435,7 +516,10 @@ A host's handlers pass `clientToolHostAdapterConformanceFailures` from
 
 ## Not in this record
 
-- ERMAIN-1033: approving once per document or thread.
+- The desktop sidecar's thread approval, which needs the sidecar to name a
+  thread and count the items added since a position (ERMAIN-1034's follow-up
+  N2).
+- Showing a live document approval in the parent chat, or ending it early.
 - Sidecar follow-ups (the sidecar repository): a stable installation id in
   discovery, so any client on the device can pick up a parked call; one thread
   key on hits, exports and conversations, an index position and a count of items
