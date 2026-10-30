@@ -110,6 +110,11 @@ async function runAndPost(
   expired: () => boolean,
 ): Promise<void> {
   const chatId = base.chat_id;
+  // Taken as the call starts: the server accepts the result only with the
+  // binding it tracks the call under, and the app may quit or restart while a
+  // prompt is open or the files upload.
+  const submitBinding = operationExecutorBinding(tool_name);
+  const binding = deps.executor ?? submitBinding;
   const executor = getClientToolExecutor(tool_name);
   if (!executor) {
     // A task's call can arrive after its host went away but before the
@@ -125,6 +130,7 @@ async function runAndPost(
       tool_name,
       tool_call_id,
       deps,
+      binding,
     );
     return;
   }
@@ -165,14 +171,13 @@ async function runAndPost(
           error: error instanceof Error ? error.message : String(error),
         };
       }
-      await postClientToolResult(body, tool_name, tool_call_id, deps);
+      await postClientToolResult(body, tool_name, tool_call_id, deps, binding);
     } finally {
       releaseClientToolCallAbort(tool_call_id);
     }
   };
   // A call that can park may already run in another pane of this browser.
-  if (operationExecutorBinding(tool_name))
-    await withClientCallLock(message_id, tool_call_id, run);
+  if (submitBinding) await withClientCallLock(message_id, tool_call_id, run);
   else await run();
 }
 
@@ -201,11 +206,11 @@ async function postClientToolResult(
   toolName: string,
   toolCallId: string,
   deps: HandleClientToolCallDeps,
+  /** A call with a durable operation identity only accepts its submit binding;
+   * a call from the executor stream only accepts the stream's binding. */
+  binding: ExecutorBinding | undefined,
 ): Promise<void> {
   if (isClientToolResultLocalOnly(toolName)) return;
-  // A call with a durable operation identity only accepts its submit binding;
-  // a call from the executor stream only accepts the stream's binding.
-  const binding = deps.executor ?? operationExecutorBinding(toolName);
   try {
     const response = await sendWithRetries(
       () =>

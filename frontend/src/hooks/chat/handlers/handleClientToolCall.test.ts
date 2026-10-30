@@ -160,6 +160,44 @@ describe("handleClientToolCall", () => {
     }
   });
 
+  it("answers with the binding the call started under after the app went away during the call", async () => {
+    const binding = {
+      device_id: "pane-device-000000",
+      realm: "desktop-sidecar" as const,
+      host_context: { kind: "desktop_sidecar", identity: "local" },
+    };
+    let ready = true;
+    const unregister = registerOperationExecutor(
+      "get_sidecar_document",
+      () => (ready ? binding : undefined),
+      { additional: true },
+    );
+    registerClientToolExecutor("get_sidecar_document", async () => {
+      ready = false;
+      return { ok: true, result: null, fileUploadIds: ["file-1"] };
+    });
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({ delivered: true, stored: false }),
+    });
+    try {
+      await handleClientToolCall(
+        makeEvent({ tool_name: "get_sidecar_document" }),
+        deps,
+      );
+      const init = fetchMock.mock.calls[0][1] as RequestInit;
+      expect((init.headers as Record<string, string>)["X-Erato-Executor"]).toBe(
+        JSON.stringify(binding),
+      );
+      expect(lastPostBody(fetchMock)).toMatchObject({
+        file_upload_ids: ["file-1"],
+      });
+    } finally {
+      unregister();
+    }
+  });
+
   describe("a delegated task's call", () => {
     const executor = {
       device_id: "pane-device-000000",
