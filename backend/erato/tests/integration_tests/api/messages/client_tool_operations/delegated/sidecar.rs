@@ -564,13 +564,15 @@ const SEARCH_B_CALL: &str = "call_search_b";
 const ANSWER_A: &str = "ANSWER-A-SENTINEL";
 const ANSWER_B: &str = "ANSWER-B-SENTINEL";
 
-/// A sidecar task that searches its part once and then answers `answer`.
+/// A sidecar task that searches its part once and then answers `answer`;
+/// `answering` records the turn that reads the search result.
 fn mock_searching_child(
     mocks: &mut MockSet,
     brief: &'static str,
     call: &'static str,
     input: Value,
     answer: &'static str,
+    answering: &RequestBodyRecorder,
 ) {
     mocks.mock(move |when, then| {
         when.post()
@@ -585,10 +587,12 @@ fn mock_searching_child(
             )]),
         );
     });
+    let capture = answering.clone();
     mocks.mock(move |when, then| {
         when.post()
             .path("/v1/chat/completions")
-            .matcher(BodyContainsMatcher::new(&[brief, call], &[USER_MESSAGE]));
+            .matcher(BodyContainsMatcher::new(&[brief, call], &[USER_MESSAGE]))
+            .matcher(capture);
         mock_llm_sse_response(then, build_openai_text_streaming_response(&[answer]));
     });
 }
@@ -597,6 +601,7 @@ fn mock_searching_child(
 async fn two_sidecar_tasks_search_their_parts_and_the_parent_receives_both(pool: Pool<Postgres>) {
     let row = &desktop_sidecar();
     let (planning, resumed) = (RequestBodyRecorder::new(), RequestBodyRecorder::new());
+    let (answering_a, answering_b) = (RequestBodyRecorder::new(), RequestBodyRecorder::new());
     let mut mocks = MockSet::new();
     let capture = planning.clone();
     mocks.mock(move |when, then| {
@@ -636,6 +641,7 @@ async fn two_sidecar_tasks_search_their_parts_and_the_parent_receives_both(pool:
         SEARCH_A_CALL,
         json!({"text": "contract Anna", "filters": quarter}),
         ANSWER_A,
+        &answering_a,
     );
     mock_searching_child(
         &mut mocks,
@@ -643,6 +649,7 @@ async fn two_sidecar_tasks_search_their_parts_and_the_parent_receives_both(pool:
         SEARCH_B_CALL,
         json!({"text": "contract Ben", "filters": quarter}),
         ANSWER_B,
+        &answering_b,
     );
     let (state, _llm) = delegated_state(row, pool, mocks, |config| {
         // A regular facet, as the overlay's desktop_local is.
@@ -692,6 +699,17 @@ async fn two_sidecar_tasks_search_their_parts_and_the_parent_receives_both(pool:
         assert_eq!(
             task_spec(&child)["client_grant"]["binding"],
             json!(row.binding())
+        );
+    }
+    // Each task's model reads the period its search covered, the one it is
+    // asked to report.
+    for answering in [&answering_a, &answering_b] {
+        let turns = turn_bodies(answering);
+        assert_eq!(turns.len(), 1);
+        let read = turns[0].to_string();
+        assert!(
+            read.contains("2024-07-01T00:00:00Z") && read.contains("2024-10-01T00:00:00Z"),
+            "{read}"
         );
     }
     let parent_turns = turn_bodies(&resumed);
@@ -744,19 +762,83 @@ async fn upload_into(state: &erato::state::AppState, chat_id: Uuid, text: &str) 
     Uuid::parse_str(response.json::<Value>()["files"][0]["id"].as_str().unwrap()).unwrap()
 }
 
+/// The tool's own value for the document read, with its scope signal.
+fn document_value(row: &HostRow) -> Value {
+    let mut freshness = row.freshness.clone();
+    freshness["scope"] = json!({
+        "kind": "document", "id": format!("doc:{DOCUMENT_ID}"),
+        "position": "unknown", "added": "unknown",
+    });
+    json!({"documentId": DOCUMENT_ID, "fileName": "minutes.eml", "freshness": freshness})
+}
+
+/// The device answers a task's document read before the tool's timeout, as
+/// where the read stays live: the file reaches the task, and the read's
+/// freshness inside the file wrapper reaches the task result and the trace.
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_live_document_read_returns_its_file_to_the_task(pool: Pool<Postgres>) {
+    let row = &document_row();
+    let (parent, child) = (RequestBodyRecorder::new(), RequestBodyRecorder::new());
+    let mut mocks = MockSet::new();
+    mock_parent(&mut mocks, &parent, vec![client_task(None)]);
+    mock_client_child_reads(row, &mut mocks, &child);
+    let (state, _llm) =
+        delegated_state(row, pool, mocks, |config| read_keeps_its_part(row, config)).await;
+    let (base, server) = serve(&state).await;
+    let mut pane = open_pane(row, &base).await;
+    let chat_id = seed_origin_chat(&state.db).await;
+    let run = spawn_parent(row, &base, chat_id, ACTION_FACET, Some(row.binding()));
+    let event = pane.call().await;
+    let task_chat: Uuid = event["chat_id"].as_str().unwrap().parse().unwrap();
+    let file_id = upload_into(&state, task_chat, DOCUMENT_TEXT).await;
+    let value = document_value(row);
+    let answered = post_live(
+        &state,
+        task_chat,
+        &(
+            event["message_id"].as_str().unwrap().parse().unwrap(),
+            event["tool_call_id"].as_str().unwrap().to_string(),
+        ),
+        json!({"result": value, "file_upload_ids": [file_id]}),
+        Some(&row.binding()),
+    )
+    .await;
+    answered.assert_status_ok();
+    assert_eq!(answered.json::<Value>()["delivered"], true);
+    assert!(finish(run).await.contains(PARENT_FINAL));
+
+    let child_row = assistant_row(&state.db, task_chat).await;
+    let read = part_for(&child_row, CHILD_READ_CALL);
+    assert_eq!(read["status"], "success", "{read}");
+    assert_eq!(read["output"]["result"]["result"], value);
+    assert_eq!(
+        read["output"]["result"]["files"][0]["fileId"],
+        json!(file_id)
+    );
+    let child_turns = turn_bodies(&child);
+    assert_eq!(child_turns.len(), 2);
+    assert!(
+        child_turns[1].to_string().contains(DOCUMENT_TEXT),
+        "the task's model reads the file"
+    );
+    assert!(
+        !linked_to_chat(&state, chat_id, file_id).await,
+        "the file stays in the task's chat"
+    );
+    assert_freshness_reported(
+        row,
+        &part_for(&assistant_row(&state.db, chat_id).await, CLIENT_TASK_CALL),
+    );
+    server.abort();
+}
+
 #[sqlx::test(migrator = "crate::MIGRATOR")]
 async fn a_durable_document_read_returns_its_file_to_the_task(pool: Pool<Postgres>) {
     let row = &document_row();
     let mut waiting: Waiting = park_a_waiting_child(row, pool, false, |_| {}).await;
     let resumed = record_parent_resumes(&mut waiting.llm);
     let file_id = upload_into(&waiting.state, waiting.child.id, DOCUMENT_TEXT).await;
-    let mut freshness = row.freshness.clone();
-    freshness["scope"] = json!({
-        "kind": "document", "id": format!("doc:{DOCUMENT_ID}"),
-        "position": "unknown", "added": "unknown",
-    });
-    let value =
-        json!({"documentId": DOCUMENT_ID, "fileName": "minutes.eml", "freshness": freshness});
+    let value = document_value(row);
     let attempt_id = waiting.request.attempt_id;
     let token = claim_token(row, &waiting.state, attempt_id).await;
     let mut result = pane_result(row, &waiting.request);
