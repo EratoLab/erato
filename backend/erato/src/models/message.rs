@@ -440,6 +440,32 @@ pub enum ToolApprovalKind {
     ClientTool,
 }
 
+/// What a context approval covers besides the call it was given on.
+#[derive(
+    Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, ToSchema, erato_memory::HeapSize,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum ApprovalScopeCovers {
+    /// Every task call of the tool on the document in this pane session.
+    Document,
+    /// Every task call of the tool in the parent turn.
+    Turn,
+}
+
+/// What one decision on this item may cover besides the call itself.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema, erato_memory::HeapSize)]
+pub struct ApprovalScope {
+    /// The binding's host context kind, e.g. `word_document`.
+    pub host_context: String,
+    pub covers: ApprovalScopeCovers,
+    /// Server-derived; items with the same host context, scope id and tool
+    /// share a decision.
+    pub scope_id: String,
+    /// The scope's last approval ended because the host saw an outside change.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub changed: bool,
+}
+
 /// The gated call a delegated child parked on, copied onto the parent's
 /// approval item so the card renders without reading the child's chat.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema, erato_memory::HeapSize)]
@@ -468,6 +494,10 @@ pub struct ChildApprovalRef {
     /// the parent's slot for the child is in progress.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub waiting_for: Option<ChildWaitingFor>,
+    /// The child's own request's scope: set when one decision may also cover
+    /// the child's later calls of the tool on the same document or turn.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub approval_scope: Option<ApprovalScope>,
 }
 
 /// The durable client operation a waiting child is parked on.
@@ -528,6 +558,10 @@ pub struct ContentPartToolApprovalRequest {
     pub approvals: Vec<ApprovalItem>,
     #[serde(default)]
     pub pending_tool_calls: Vec<PendingToolCall>,
+    /// Set on a delegated task's client tool stop when its decision may cover
+    /// the task calls of the tool on the same document or turn.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub approval_scope: Option<ApprovalScope>,
 }
 
 impl ContentPartToolApprovalRequest {
@@ -564,6 +598,12 @@ pub struct ContentPartToolApproval {
     pub approval_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub child_chat_id: Option<Uuid>,
+    /// Set when the user allowed the call for its whole document or turn.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub covers: Option<ApprovalScopeCovers>,
+    /// The approval row that decision made.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scope_approval_id: Option<Uuid>,
 }
 
 /// Records a user rejection in the assistant message lifecycle.

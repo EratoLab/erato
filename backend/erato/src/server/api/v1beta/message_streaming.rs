@@ -613,6 +613,7 @@ fn ask_for_tool_call(
         // The rest of the parked batch is recorded by the caller that owns the
         // queue, not by this per-call gate.
         pending_tool_calls: Vec::new(),
+        approval_scope: None,
     }))
 }
 
@@ -5659,6 +5660,7 @@ pub(crate) fn parked_child_approval_item(child: &ParkedChild) -> ApprovalItem {
                 allow_always: Some(request.allow_always),
                 kind: Some(request.kind),
                 waiting_for: None,
+                approval_scope: request.approval_scope.clone(),
             }
         }
         crate::services::delegation::ChildStop::Waiting(wait) => {
@@ -5679,6 +5681,7 @@ pub(crate) fn parked_child_approval_item(child: &ParkedChild) -> ApprovalItem {
                     host_context: wait.host_context.clone(),
                     attempt_id: wait.attempt_id,
                 }),
+                approval_scope: None,
             }
         }
     };
@@ -5725,6 +5728,7 @@ fn delegated_task_approval_part(
         kind: crate::models::message::ToolApprovalKind::DelegatedTask,
         approvals,
         pending_tool_calls,
+        approval_scope: None,
     }
 }
 
@@ -5791,6 +5795,7 @@ fn task_plan_approval_part(
         kind: crate::models::message::ToolApprovalKind::TaskPlan,
         approvals,
         pending_tool_calls,
+        approval_scope: None,
     }
 }
 
@@ -13352,6 +13357,8 @@ mod tests {
                 approved_at: "2026-10-20T10:01:00Z".to_string(),
                 approval_id: Some(approval_id.to_string()),
                 child_chat_id: None,
+                covers: None,
+                scope_approval_id: None,
             })
         };
         let own_ran = ContentPart::ToolUse(ToolUse {
@@ -13401,6 +13408,8 @@ mod tests {
                 approved_at: "2026-10-20T10:01:00Z".to_string(),
                 approval_id: Some(call_id.to_string()),
                 child_chat_id: None,
+                covers: None,
+                scope_approval_id: None,
             })
         };
         let own_ran = ContentPart::ToolUse(ToolUse {
@@ -19818,6 +19827,8 @@ async fn settle_parked_children(
                 approved_at: now_timestamp(),
                 approval_id: Some(item.approval_id.clone()),
                 child_chat_id: child.as_ref().map(|child| child.child_chat_id),
+                covers: None,
+                scope_approval_id: None,
             }));
         } else {
             content.push(ContentPart::ToolRejection(ContentPartToolRejection {
@@ -20239,6 +20250,8 @@ pub(crate) async fn run_continuation(
                             approved_at: now_timestamp(),
                             approval_id: Some(item.approval_id.clone()),
                             child_chat_id: None,
+                            covers: None,
+                            scope_approval_id: None,
                         }))
                 }
                 ToolApprovalDecision::Reject | ToolApprovalDecision::Withdraw => parsed
@@ -20516,6 +20529,8 @@ pub(crate) async fn run_continuation(
                     approved_at: now_timestamp(),
                     approval_id: Some(item.approval_id.clone()),
                     child_chat_id: None,
+                    covers: None,
+                    scope_approval_id: None,
                 }));
         } else {
             parsed
@@ -20796,6 +20811,8 @@ pub(crate) async fn run_continuation(
                     approved_at: now_timestamp(),
                     approval_id: Some(item.approval_id.clone()),
                     child_chat_id: None,
+                    covers: None,
+                    scope_approval_id: None,
                 }));
             approved_plan_calls.push(crate::models::message::PendingToolCall {
                 call_id: item.tool_call_id.clone(),
