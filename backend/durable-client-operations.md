@@ -174,6 +174,24 @@ through their server-owned offer policy; they must derive it from authenticated
 context, never model arguments. Kind registration is not permission to invent an
 unbound device.
 
+A shell that serves more than one host context sends the further bindings in
+`X-Erato-Additional-Executors` (ERMAIN-1034), a JSON array of bindings, one per
+host context kind. `X-Erato-Executor` keeps its meaning and its strict shape, so
+an older backend, which does not read the new header, routes exactly as before.
+The server reads at most 4096 bytes and keeps at most four entries; each entry
+is parsed on its own (an entry with an unknown field or without a host context
+is skipped, not the whole header), and an entry whose kind repeats an earlier
+one or the primary's is dropped. The turn's request context stores them as
+`additional_executors`. A configured tool's call is routed to the binding whose
+kind matches the tool's `host_context` (else `durable.host_context`); a tool
+without a matching binding keeps the primary, which is how every tool was routed
+before. The approval continuation, the attached `/continue` and `resumestream`
+accept any binding of the answering client: an approval keeps a call durable
+when the call's binding is among the approving client's bindings, and
+`resumestream` tries the transport with each binding, the primary first. A chat
+has one transport row, so the generation picks its binding deterministically:
+tools bound to the primary first, then by qualified name.
+
 `user_confirmed` consent and device/host identifiers are client assertions, at the
 same trust level as existing client actions. Kinds requiring stronger proof must
 validate it themselves, as the native kind does with signed binding and receipts.
@@ -342,10 +360,24 @@ feature flag and host qualification (Word PC followed by Word on the web).
 
 Decided open questions:
 
-- **File results.** The generic kind carries only `OperationValue::Value`. Tools
-  that return files (`fileUploadIds`) must not opt in. A future
-  `References { Vec<Uuid> }` would need an ownership check at acceptance and
-  attachment at `begin_continuation`. `OperationValue::Reference` stays unused.
+- **File results (ERMAIN-1034).** `OperationValue::Value` carries the files the
+  tool uploaded in `file_upload_ids`, sent only when non-empty, so a result
+  without files keeps its earlier bytes on the wire and in stored rows. A
+  succeeded value may carry at most 20 distinct ids; any other outcome with ids
+  is malformed. The stored result keeps the tool's own value and the raw ids
+  (`ValidatedResult.file_ids`); nothing is read at `/result` or when a late live
+  result is stored. The server reads the files as the user, with the policy
+  engine and the same 80,000-character bound as a live result, where it writes
+  the tool's output: on live receipt of a durable-tracked call, after the
+  binding check, and at the continuation, inside `begin_continuation`'s
+  transaction while the row is still `ready`. There the tool part's
+  `output.result` becomes the wrapper `{result, files, filesTruncated,
+  contentNotice}`, the readable files are linked to the chat and one file
+  pointer part per file follows the tool part, as on the live path. An
+  unreadable or foreign file becomes an entry with `unavailableReason` and is
+  neither linked nor pointed at. `result_schema` describes the tool's own value
+  and applies only to results without files. `OperationValue::Reference` stays
+  unused.
 - **Teams-originated calls (`needs_client`).** Teams sends no `X-Erato-Executor`,
   so its calls never escalate and `needs_client` is unchanged.
 - **Approval from another executor.** The continuation captures the answering
@@ -358,6 +390,24 @@ Decided open questions:
 
 Every replica must load the same `durable` tables. A replica without the tool's
 kind treats its open attempts as unauthorized and withdraws them at claim.
+
+Rolling deploys (ERMAIN-1034). `OperationRequest` is server-authored and only
+read back, so it accepts keys a newer release adds. A continuation reads only
+the stored result's `outcome` (`stored_result_outcome`, which is all
+`reoffer_after_result` needs), so a row written by a newer release with extra
+keys still continues; `/result` and `clienttoolresult` keep refusing unknown keys
+in client-posted bodies. Every new field on `OperationResult`, `OperationValue`,
+`OperationRequest` or `ValidatedResult` must be optional and skipped when unset,
+so rows and bodies without it stay byte-identical. What older replicas still
+cannot do: a replica below ERMAIN-1032 cannot parse a request with `lineage`, and
+a replica below ERMAIN-1034 cannot parse a stored result whose value carries
+`file_upload_ids` and refuses such a `/result` body with 422. In both cases the
+continuation fails: a task call's chat ends errored and its `/continue` answers
+409; a user's own call's chat ends errored. So enable `child_dispatch = "durable"`
+and the desktop sidecar's `[durable]` tables only once every replica runs a
+release with ERMAIN-1032 and ERMAIN-1034, and do not roll back below it while
+such operations may be parked. A configuration naming `host_context =
+"desktop_sidecar"` does not load on a backend older than ERMAIN-1034 at all.
 
 ### Grant operations (ERMAIN-1032)
 
