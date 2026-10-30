@@ -181,6 +181,7 @@ host_conformance!(
     slow_path,
     ignore = "ERMAIN-1006: enabled once the Outlook pane takes grant calls"
 );
+host_conformance!(desktop_sidecar: desktop_sidecar(), slow_path);
 
 /// Long enough for the pane to receive the call, short enough that a durable
 /// escalation would happen inside the test.
@@ -446,19 +447,17 @@ async fn a_retried_client_task_gets_no_grant(pool: Pool<Postgres>, row: &HostRow
     assert!(task_spec(&failed)["client_grant"].is_object());
     assert!(offers(&turn_bodies(&child)[0], row.read_tool));
 
-    let retried = app_server(state.clone())
+    let mut retry = app_server(state.clone())
         .post(&format!(
             "/api/v1beta/me/chats/{chat_id}/delegated_runs/{}/retry",
             failed.id
         ))
         .with_bearer_token(TEST_JWT_TOKEN)
-        .add_header(
-            "X-Erato-Executor",
-            serde_json::to_string(&row.binding()).unwrap(),
-        )
-        .add_header("X-Erato-Client-Tools", row.pane_tools())
-        .json(&json!({"kind": "task"}))
-        .await;
+        .add_header("X-Erato-Client-Tools", row.pane_tools());
+    for (name, value) in row.executor_headers(Some(&row.binding())) {
+        retry = retry.add_header(name, value);
+    }
+    let retried = retry.json(&json!({"kind": "task"})).await;
     retried.assert_status(http::StatusCode::ACCEPTED);
     let replacement: Uuid = retried.json::<Value>()["child_chat_id"]
         .as_str()

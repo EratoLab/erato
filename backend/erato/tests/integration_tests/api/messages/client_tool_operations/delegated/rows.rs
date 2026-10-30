@@ -21,6 +21,10 @@ pub(super) struct HostRow {
     pub host: ClientToolHostContext,
     pub device: &'static str,
     pub identity: &'static str,
+    /// The shell's `X-Erato-Executor` when the row's own binding travels in
+    /// `X-Erato-Additional-Executors`, as a sidecar binding beside an Office
+    /// add-in's does. `None` sends the row's binding as the primary.
+    pub primary: Option<ExecutorBinding>,
     /// Sent as `X-Erato-Platform` and required by the action facet.
     pub platform: &'static str,
     pub namespace: &'static str,
@@ -45,11 +49,41 @@ impl HostRow {
     pub fn binding(&self) -> ExecutorBinding {
         ExecutorBinding {
             device_id: self.device.into(),
-            realm: ExecutionRealm::OfficeAddin,
+            realm: match self.host {
+                ClientToolHostContext::DesktopSidecar => ExecutionRealm::DesktopSidecar,
+                ClientToolHostContext::OutlookMailbox | ClientToolHostContext::WordDocument => {
+                    ExecutionRealm::OfficeAddin
+                }
+            },
             host_context: Some(HostContext {
                 kind: self.host.as_str().into(),
                 identity: self.identity.into(),
             }),
+        }
+    }
+
+    /// The executor headers of a parent-side request that sends `executor`
+    /// as the row's binding, the way the host's shell sends them. Without
+    /// `executor` a row with a primary still sends that primary.
+    pub fn executor_headers(
+        &self,
+        executor: Option<&ExecutorBinding>,
+    ) -> Vec<(&'static str, String)> {
+        match &self.primary {
+            None => executor
+                .map(|binding| ("X-Erato-Executor", serde_json::to_string(binding).unwrap()))
+                .into_iter()
+                .collect(),
+            Some(primary) => {
+                std::iter::once(("X-Erato-Executor", serde_json::to_string(primary).unwrap()))
+                    .chain(executor.map(|binding| {
+                        (
+                            "X-Erato-Additional-Executors",
+                            serde_json::to_string(&[binding]).unwrap(),
+                        )
+                    }))
+                    .collect()
+            }
         }
     }
 
@@ -135,6 +169,7 @@ pub(super) fn fake_host(host: ClientToolHostContext) -> HostRow {
         host,
         device: "fake-device",
         identity: "fake-session-1",
+        primary: None,
         platform: "fake",
         namespace: "fake",
         read_tool: "read_part",
@@ -186,6 +221,7 @@ pub(super) fn word_document() -> HostRow {
         host: ClientToolHostContext::WordDocument,
         device: "word-device",
         identity: "pane-session-1",
+        primary: None,
         platform: "word",
         namespace: "word",
         read_tool: "read_document_blocks",
@@ -224,6 +260,7 @@ pub(super) fn outlook_mailbox() -> HostRow {
         host: ClientToolHostContext::OutlookMailbox,
         device: "outlook-device",
         identity: "mailbox-digest-1",
+        primary: None,
         platform: "outlook",
         namespace: "outlook",
         read_tool: "fetch_availability",
@@ -243,5 +280,55 @@ pub(super) fn outlook_mailbox() -> HostRow {
             "counts": counts(),
         }),
         wait_note: wait_note(ClientToolHostContext::OutlookMailbox),
+    }
+}
+
+/// The fake Office binding the sidecar row's shell sends as its primary: the
+/// Outlook add-in a sidecar binding travels beside.
+pub(super) fn office_primary() -> ExecutorBinding {
+    ExecutorBinding {
+        device_id: "office-device".into(),
+        realm: ExecutionRealm::OfficeAddin,
+        host_context: Some(HostContext {
+            kind: ClientToolHostContext::OutlookMailbox.as_str().into(),
+            identity: "office-mailbox".into(),
+        }),
+    }
+}
+
+/// The overlay's `search_sidecar_index` as it ships with ERMAIN-1034. Its
+/// binding travels in `X-Erato-Additional-Executors` beside an Office
+/// primary, as the add-in shells send it.
+pub(super) fn desktop_sidecar() -> HostRow {
+    HostRow {
+        host: ClientToolHostContext::DesktopSidecar,
+        device: "sidecar-device",
+        identity: "local",
+        primary: Some(office_primary()),
+        // The action facet needs a platform; any value does.
+        platform: "sidecar",
+        namespace: "desktop",
+        read_tool: "search_sidecar_index",
+        read_parameters: json!({"type": "object", "properties": {
+            "text": {"type": "string", "maxLength": 4096},
+            "limit": {"type": "integer", "minimum": 1, "maximum": 100},
+            "filters": {"type": "object", "properties": {
+                "kind": {"type": "string", "enum": ["email", "file", "teams_message"]},
+                "mailboxId": {"type": "string"},
+                "dateFrom": {"type": "integer"},
+                "dateTo": {"type": "integer"}},
+                "additionalProperties": false}},
+            "additionalProperties": false}),
+        requires_client_registration: true,
+        model_input: json!({"text": "contract", "filters": {"dateFrom": 1719792000, "dateTo": 1727740800}}),
+        turn_args: json!({}),
+        context: None,
+        part: ("$.text", "contract"),
+        freshness: json!({
+            "readAt": "2026-10-30T12:00:00Z",
+            "changes": "unknown",
+            "counts": {"own": 0, "local": 0, "remote": 0, "unknown": 0},
+        }),
+        wait_note: wait_note(ClientToolHostContext::DesktopSidecar),
     }
 }
