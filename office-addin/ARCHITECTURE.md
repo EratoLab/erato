@@ -504,7 +504,8 @@ Each cell holds "date · build · result". Windows first, then Mac and the web.
 Known gap (owner decision pending): a user's edit that lands while the chat's
 own insert, comment or import Apply is still settling counts as the chat's own,
 so it does not end a document approval (ERMAIN-1010's time windows: 3 s after an
-insert or comment, up to 120 s for a Word PC import).
+insert or comment, up to 120 s for a Word PC import). So does an edit to a
+paragraph an in-place Apply changed, while the Apply runs and up to 6 s after.
 
 Desktop sidecar: every check is pending for classic Outlook on Windows, Mac (Full
 Disk Access per build), the web app and the Teams personal app, plus two of its

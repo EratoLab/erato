@@ -19,7 +19,8 @@ import type {
  * made while the chat that holds the approval was open. Formatting-only edits on Windows and Mac,
  * Track Changes toggles and Word's proofing make no entry, so they never end one; Apply re-checks
  * the live document. On Word for the web a formatting edit is a `local` entry and ends it. A
- * user's edit that lands while one of the chat's own anchor or import writes is still settling is
+ * user's edit that lands while one of the chat's own anchor or import writes is still settling, or
+ * that touches only paragraphs an in-place Apply changed while it runs or up to 6 s after, is
  * recorded as own, so it does not end the approval either.
  */
 export type WordApprovalScopeCheck =

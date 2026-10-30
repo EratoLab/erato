@@ -295,8 +295,9 @@ a task's own card. Always allow and Never allow keep their meaning, and Never
 refuses a call an approval covered. Storing Never for a tool, on a card or in
 the settings, ends the user's live approvals of that tool (`end_reason =
 never_allowed`), so setting it back to Ask asks again. A tool that is set to
-Never, or that the same decision sets to Never on another item, gets no
-approval: `approve_context` on its item allows that call once.
+Never gets no approval. When the same decision sets the tool to Never on
+another item, `approve_context` on its item allows that call once; a tool set to
+Never before the decision is not offered to the task, so the call is refused.
 
 The store is `client_tool_approval_scopes` (`services/approval_scope.rs`). The
 key is the parent chat, the SHA-256 of the grant's executor binding, the host
@@ -335,9 +336,10 @@ A document scope is checked on the device:
   chat's Apply in the same pane ends the approval. Formatting-only edits on
   Windows and Mac, Track Changes toggles and proofing make no entry; on Word for
   the web a formatting edit counts. Known gap: a user's edit that lands while
-  one of the chat's own anchor or import writes is still settling (up to 3 s
-  after an insert or comment, up to 120 s for an import on Word PC) is recorded
-  as own and does not end the approval.
+  one of the chat's own writes is still settling is recorded as own and does not
+  end the approval: any edit up to 3 s after an insert or comment, up to 120 s
+  for an import on Word PC, and an edit to a paragraph an in-place Apply changed,
+  while it runs and up to 6 s after.
 - On `scope_changed` the server ends the row by its id (`end_reason =
   scope_changed`), so a late answer for an older approval never ends a newer one.
   The task parks on a new Ask for the same call with `changed: true`. No tool
