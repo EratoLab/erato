@@ -2,6 +2,7 @@
 import {
   clientToolAcceptsGrantCalls,
   isClientToolCallInFlight,
+  isClientToolResultLocalOnly,
   markClientToolCallAnswered,
   runClientToolCall,
 } from "@/hooks/chat/clientToolExecutors";
@@ -57,19 +58,23 @@ function failed(request: OperationRequest, message?: string): OperationResult {
 }
 
 /** Maps a client-tool executor outcome onto the `client_tool.v1` result shape.
- * The generic kind carries JSON values only, so file results fail. */
+ * Uploaded files travel as their ids beside the value; the server reads them
+ * as the user when it writes the tool's output. */
 export function toOperationResult(
   request: OperationRequest,
   outcome: ClientToolExecutionResult,
 ): OperationResult {
   if (outcome.ok) {
-    if (outcome.disposition === "local_only" || outcome.fileUploadIds?.length)
-      return failed(request);
+    if (outcome.disposition === "local_only") return failed(request);
+    const files = outcome.fileUploadIds ?? [];
     return settle(request, {
       outcome: "succeeded",
       result: {
         type: "value",
         value: (outcome.result ?? null) as OperationPayload,
+        // Only when there are any, so a result without files keeps the shape
+        // an older server accepts.
+        ...(files.length ? { file_upload_ids: files } : {}),
       },
     });
   }
@@ -135,7 +140,7 @@ export class ClientToolOperationHandler implements ClientOperationHandler {
     request: OperationRequest,
     _claim: unknown,
     signal: AbortSignal,
-  ): Promise<OperationResult> {
+  ): Promise<OperationResult | undefined> {
     // A resumestream replay of the live call must not run the tool again.
     markClientToolCallAnswered(request.tool_call_id);
     let outcome: ClientToolExecutionResult | undefined;
@@ -156,6 +161,20 @@ export class ClientToolOperationHandler implements ClientOperationHandler {
       outcome = undefined;
     }
     signal.throwIfAborted();
+    // A declaration that arrived while the tool ran keeps everything on the
+    // device, and the mode will not change back soon enough to wait for it.
+    if (isClientToolResultLocalOnly(this.toolName)) return failed(request);
+    // A task's call whose context this device cannot serve right now keeps
+    // waiting for a client that can, rather than ending the task's call.
+    if (
+      request.lineage &&
+      outcome &&
+      !outcome.ok &&
+      outcome.validationErrors?.some(
+        (issue) => issue.code === "context_unavailable",
+      )
+    )
+      return undefined;
     return outcome ? toOperationResult(request, outcome) : failed(request);
   }
 }
