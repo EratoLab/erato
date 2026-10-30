@@ -845,6 +845,7 @@ mod tests {
             child_context_input: None,
             child_host_inputs: Vec::new(),
             child_dispatch: None,
+            approval_scope: Default::default(),
         }
     }
 
