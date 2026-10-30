@@ -13,7 +13,11 @@ use sea_orm::{ConnectionTrait, DatabaseBackend, DatabaseConnection};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
-pub const END_SCOPE_CHANGED: &str = "scope_changed";
+/// The validation code a host answers a covered call with, without reading,
+/// when the scope changed outside the chat since the decision (contract §6).
+pub const SCOPE_CHANGED: &str = "scope_changed";
+
+pub const END_SCOPE_CHANGED: &str = SCOPE_CHANGED;
 pub const END_CHAT_ARCHIVED: &str = "chat_archived";
 pub const END_SUPERSEDED: &str = "superseded";
 

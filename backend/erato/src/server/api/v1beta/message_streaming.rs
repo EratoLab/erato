@@ -623,9 +623,49 @@ fn cancelled_client_tool_text(reason: &str) -> String {
         "context_unavailable" => "no connected client could run it",
         "withdrawn" => "the user no longer allows this tool",
         "expired" => "no client ran it before it expired",
+        crate::services::approval_scope::SCOPE_CHANGED => {
+            "the user's approval for this document ended because it changed outside the chat; say in the answer what is missing because of it"
+        }
         _ => "the client did not return a result in time",
     };
     format!("Client tool was not completed (reason: {reason}); {why}.")
+}
+
+/// Whether the host answered a covered call, without reading, that the
+/// approval's scope changed since the decision.
+fn reports_scope_changed(outcome: &ClientToolOutcome) -> bool {
+    matches!(outcome, ClientToolOutcome::ValidationFailed(issues, _)
+        if issues.iter().any(|issue| issue.code == crate::services::approval_scope::SCOPE_CHANGED))
+}
+
+/// The Ask a covered call leaves on once its host saw the scope change: the
+/// same call, the scope offered again and marked changed, and the rest of the
+/// batch after it. `None`, leaving `rest` alone, when the call cannot be shown
+/// for approval.
+fn scope_changed_request(
+    namespace: &str,
+    tool_call: &genai::chat::ToolCall,
+    key: &crate::services::approval_scope::ScopeKey,
+    rest: &mut std::collections::VecDeque<genai::chat::ToolCall>,
+) -> Option<ContentPartToolApprovalRequest> {
+    let ToolCallGate::Ask(request) = gate_client_tool_call(
+        namespace,
+        tool_call,
+        Some(crate::models::user_preference::ClientToolDecision::Ask),
+    ) else {
+        return None;
+    };
+    let mut request = *request;
+    request.approval_scope = Some(key.approval_scope(true));
+    request.pending_tool_calls = rest
+        .drain(..)
+        .map(|call| crate::models::message::PendingToolCall {
+            call_id: call.call_id,
+            fn_name: call.fn_name,
+            fn_arguments: call.fn_arguments,
+        })
+        .collect();
+    Some(request)
 }
 
 /// The client-tool counterpart of [`gate_mcp_tool_call`]. There is no policy
@@ -8676,6 +8716,69 @@ async fn stream_generate_chat_completion<'a>(
                 } else {
                     outcome
                 };
+                // The host saw the covered call's scope change since the
+                // decision: that approval ends and the user is asked for the
+                // same call again. No tool part is written for it, so the
+                // continuation re-seeds it.
+                let outcome = match (&scope_lineage, grant) {
+                    (Some(lineage), Some(grant))
+                        if !server_refused && reports_scope_changed(&outcome) =>
+                    {
+                        crate::services::approval_scope::end(
+                            &app_state.db,
+                            lineage.approval_id,
+                            crate::services::approval_scope::END_SCOPE_CHANGED,
+                        )
+                        .await?;
+                        let request = match (&grant.approval_scope, tool_policy) {
+                            (Some(key), Some(policy)) if !is_delegated_run || child_may_park => {
+                                scope_changed_request(
+                                    policy.config.namespace_or_default(),
+                                    &unfinished_tool_call,
+                                    key,
+                                    &mut unfinished_tool_calls,
+                                )
+                            }
+                            _ => None,
+                        };
+                        if let Some(request) = request {
+                            persist_otel_tool_call(
+                                tracing_client.as_ref(),
+                                &unfinished_tool_call,
+                                Some(json!({
+                                    "status": "cancelled",
+                                    "reason": crate::services::approval_scope::SCOPE_CHANGED,
+                                })),
+                                otel_tool_call_start_time,
+                                Some(SystemTime::now()),
+                                tool_call_parent_observation_id,
+                                assistant_id,
+                                &langfuse_trace_enrichment.platform,
+                                None,
+                            )
+                            .await;
+                            pending_approval_part = Some(request);
+                            exit_metadata = build_generation_metadata(
+                                total_prompt_tokens,
+                                total_completion_tokens,
+                                total_total_tokens,
+                                total_reasoning_tokens,
+                                langfuse_trace_id.clone(),
+                                false,
+                                None,
+                                non_empty_string(&captured_reasoning_summary),
+                                non_empty_vec(&captured_reasoning_items),
+                                non_empty_vec(&captured_reasoning_item_encrypted_content),
+                            );
+                            exit_after_join = true;
+                            break 'pop_calls;
+                        }
+                        ClientToolOutcome::Cancelled {
+                            reason: crate::services::approval_scope::SCOPE_CHANGED.into(),
+                        }
+                    }
+                    _ => outcome,
+                };
                 let (status, bg_status, message_status, mut output_value, mut response_text) =
                     match &outcome {
                         ClientToolOutcome::Result(result, _) => (
@@ -13710,6 +13813,81 @@ mod tests {
         );
         let (approved, _) = super::previously_approved_pending(&content, &ask);
         assert_eq!(approved, vec![read]);
+    }
+
+    #[test]
+    fn a_scope_change_asks_for_the_same_call_with_the_rest_of_the_batch_after_it() {
+        use crate::models::message::{ApprovalScope, ApprovalScopeCovers, PendingToolCall};
+        use crate::services::approval_scope::{ApprovalScopeKind, ScopeKey};
+        use crate::services::client_tools::{ClientToolOutcome, ClientToolValidationIssue};
+
+        let call = |id: &str| ToolCall {
+            call_id: id.to_string(),
+            fn_name: "read_part".to_string(),
+            fn_arguments: json!({"part": id}),
+            thought_signatures: None,
+        };
+        let key = ScopeKey {
+            host_context: crate::config::ClientToolHostContext::WordDocument,
+            kind: ApprovalScopeKind::PaneDocument,
+            binding_digest: "0".repeat(64),
+            scope_id: "pane-session".to_string(),
+            tool_name: "fake/read_part".to_string(),
+        };
+        let mut rest = std::collections::VecDeque::from([call("second"), call("third")]);
+        let request =
+            super::scope_changed_request("fake", &call("first"), &key, &mut rest).expect("an ask");
+        assert!(rest.is_empty());
+        assert_eq!(request.kind, ToolApprovalKind::ClientTool);
+        assert_eq!(request.tool_call_id, "first");
+        assert_eq!(request.approvals.len(), 1);
+        assert_eq!(request.approvals[0].approval_id, "first");
+        assert_eq!(request.approvals[0].input, json!({"part": "first"}));
+        assert!(request.allow_always);
+        assert_eq!(
+            request.approval_scope,
+            Some(ApprovalScope {
+                host_context: "word_document".to_string(),
+                covers: ApprovalScopeCovers::Document,
+                scope_id: "pane-session".to_string(),
+                changed: true,
+            })
+        );
+        assert_eq!(
+            request.pending_tool_calls,
+            ["second", "third"]
+                .map(|id| PendingToolCall {
+                    call_id: id.to_string(),
+                    fn_name: "read_part".to_string(),
+                    fn_arguments: json!({"part": id}),
+                })
+                .to_vec()
+        );
+
+        let mut unshowable = call("first");
+        unshowable.fn_name = "read\u{202e}part".to_string();
+        let mut rest = std::collections::VecDeque::from([call("second")]);
+        assert!(super::scope_changed_request("fake", &unshowable, &key, &mut rest).is_none());
+        assert_eq!(rest.len(), 1, "the batch stays for the model's answer");
+
+        let issue = |code: &str| ClientToolValidationIssue {
+            path: String::new(),
+            code: code.to_string(),
+            message: "m".to_string(),
+        };
+        assert!(super::reports_scope_changed(
+            &ClientToolOutcome::ValidationFailed(
+                vec![issue("other"), issue("scope_changed")],
+                None,
+            )
+        ));
+        assert!(!super::reports_scope_changed(
+            &ClientToolOutcome::ValidationFailed(vec![issue("declined")], None)
+        ));
+        assert!(!super::reports_scope_changed(&ClientToolOutcome::Error(
+            "scope_changed".to_string()
+        )));
+        assert!(super::cancelled_client_tool_text("scope_changed").contains("changed outside"));
     }
 
     #[test]
