@@ -366,20 +366,27 @@ Decided open questions:
   succeeded value may carry at most 20 distinct ids; any other outcome with ids
   is malformed. The stored result keeps the tool's own value and the raw ids
   (`ValidatedResult.file_ids`); nothing is read at `/result` or when a late live
-  result is stored. A live result that reached the turn after its wait ran out,
-  while the call was being stored, was already read for the turn: it is stored
-  as the tool's own value and the readable ids. The server reads the files as
-  the user, with the policy
+  result is stored. The server reads the files as the user, with the policy
   engine and the same 80,000-character bound as a live result, where it writes
   the tool's output: on live receipt of a durable-tracked call, after the
-  binding check, and at the continuation, inside `begin_continuation`'s
-  transaction while the row is still `ready`. There the tool part's
+  binding check, and at the continuation. There the tool part's
   `output.result` becomes the wrapper `{result, files, filesTruncated,
   contentNotice}`, the readable files are linked to the chat and one file
-  pointer part per file follows the tool part, as on the live path. An
-  unreadable or foreign file becomes an entry with `unavailableReason` and is
-  neither linked nor pointed at. `result_schema` describes the tool's own value
-  and applies only to results without files. `OperationValue::Reference` stays
+  pointer part per file follows the tool part, as on the live path. A file the
+  user cannot read (missing or foreign) becomes an entry with
+  `unavailableReason` and is neither linked nor pointed at. At the
+  continuation the files are read before `begin_continuation`'s transaction,
+  once a read of the row outside it finds the row `ready`; the transaction
+  locks the chat and the row and writes the wrapper and links the files only
+  while the row is still `ready`, so a crash retry keeps what the first
+  continuation wrote, and a file deleted after the read keeps its entry but is
+  neither linked nor pointed at. A live result that reached the turn after its
+  wait ran out, while the call was being stored, was already read for the
+  turn: it is stored as the tool's own value and only the ids the user could
+  read, so the continuation reads those files once more and its wrapper carries
+  no entry for a file the user could not read at the first read, and
+  `filesTruncated` is false. `result_schema` describes the tool's own value and
+  applies only to results without files. `OperationValue::Reference` stays
   unused.
 - **Teams-originated calls (`needs_client`).** Teams sends no `X-Erato-Executor`,
   so its calls never escalate and `needs_client` is unchanged.
