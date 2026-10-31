@@ -3,5 +3,6 @@
 pub mod client_tool_schema;
 pub mod config;
 pub mod config_facet_attrs;
+mod config_metadata;
 pub mod config_reference;
 pub mod startup_log;

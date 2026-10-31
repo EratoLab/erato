@@ -30,6 +30,34 @@ Configuration can also be provided via environment variables.
 Though it is not recommended, values for nested configuration can also be provided via environment variables.
 In that case, each nesting level is separated by double underscores (`__`). E.g. `CHAT_PROVIDER__BASE_URL` is equivalent to `chat_provider.base_url`.
 
+## Configuration lifecycle
+
+Each documented key shows its stability and the Erato release in which that exact
+key first appeared:
+
+| Stability | Meaning |
+| --- | --- |
+| `stable` | Suitable for general adoption. |
+| `alpha` | Available to eager testers; may be rough around the edges. |
+| `beta` | Available to eager testers; expected to be ready for stabilization in the next release. |
+| `unstable` | Not ready for adoption. May be intended only for development and never stabilized. |
+| `deprecated` | Should no longer be adopted; follow the replacement guidance where provided. |
+
+Stability labels are initially conservative: existing deprecated keys remain
+`deprecated`, and other keys start as `unstable` pending review. These labels
+communicate maturity; they do not change which configuration values are accepted.
+
+**Introduced in** identifies the first release containing the key in the generated
+configuration reference. Keys that predate that reference use **0.6.0**, the first
+release containing it. `unreleased` means the key has not appeared in a release;
+release preparation replaces this marker with the release version. Renamed keys
+and their deprecated aliases can have different introduction versions.
+
+Both metadata properties can be declared on a parent section. Children inherit
+each property independently unless they specify their own value. Labels beside
+individual keys show the resolved values; a section may contain keys with
+different stability levels or introduction versions.
+
 ## Common config options
 
 ### `prompt`

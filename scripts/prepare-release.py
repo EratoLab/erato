@@ -14,6 +14,8 @@ import subprocess
 from pathlib import Path
 import semver
 
+from config_metadata import prepare_config_release
+
 def main():
     if len(sys.argv) != 2:
         print("Usage: ./prepare-release.py <version>", file=sys.stderr)
@@ -115,8 +117,14 @@ def main():
         sys.exit(1)
 
     try:
+        config_paths = prepare_config_release(Path(__file__).resolve().parents[1], new_version)
+    except (OSError, ValueError, subprocess.CalledProcessError) as error:
+        print(f"Error preparing config metadata: {error}", file=sys.stderr)
+        sys.exit(1)
+
+    try:
         cargo_lock_path = backend_workspace_dir / "Cargo.lock"
-        subprocess.run(["git", "add", str(cargo_toml_path), str(cargo_lock_path), str(chart_yaml_path)], check=True)
+        subprocess.run(["git", "add", str(cargo_toml_path), str(cargo_lock_path), str(chart_yaml_path), *map(str, config_paths)], check=True)
         subprocess.run(["git", "commit", "-m", f"Prepare release {new_version}"], check=True)
         print(f"Committed changes with message 'Prepare release {new_version}'")
     except FileNotFoundError:

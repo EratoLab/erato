@@ -4,6 +4,10 @@ facet::define_attr_grammar! {
 
     /// Erato-specific facet extension attributes for config documentation metadata.
 pub enum Attr {
+        /// Sets the stability of a field and its descendants.
+        Stability(Stability),
+        /// Sets the first release containing a field and its descendants.
+        IntroducedIn(IntroducedIn),
         /// Marks a config field as deprecated and provides transition metadata.
         Deprecated(Deprecated),
         /// Documents a deprecated Serde alias without deprecating the canonical field.
@@ -12,6 +16,20 @@ pub enum Attr {
         HideInDocs(HideInDocs),
         /// Marks a config field as requiring scoped replacement.
         NeedsScopedReplacement(NeedsScopedReplacement),
+    }
+
+    pub struct Stability {
+        /// One of stable, alpha, beta, unstable, or deprecated.
+        pub level: &'static str,
+        /// Restrict this declaration to a public config path (for shared types).
+        pub under: Option<&'static str>,
+    }
+
+    pub struct IntroducedIn {
+        /// An Erato release version, or "unreleased" until release preparation.
+        pub version: &'static str,
+        /// Restrict this declaration to a public config path (for shared types).
+        pub under: Option<&'static str>,
     }
 
     /// Additional metadata for fields that should not appear in docs.

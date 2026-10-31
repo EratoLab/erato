@@ -2905,6 +2905,7 @@ dependencies = [
  "png",
  "regex",
  "secrecy",
+ "semver",
  "serde",
  "serde_json",
  "tracing",
