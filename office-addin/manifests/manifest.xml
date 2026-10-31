@@ -18,7 +18,7 @@
   </Hosts>
   <Requirements>
     <Sets>
-      <Set Name="Mailbox" MinVersion="1.1" />
+      <Set Name="Mailbox" MinVersion="{{OFFICE_ADDIN_MANIFEST_MAILBOX_MIN_VERSION}}" />
     </Sets>
   </Requirements>
   <FormSettings>
@@ -38,7 +38,7 @@
   <DisableEntityHighlighting>false</DisableEntityHighlighting>
   <VersionOverrides xmlns="http://schemas.microsoft.com/office/mailappversionoverrides" xsi:type="VersionOverridesV1_0">
     <Requirements>
-      <bt:Sets DefaultMinVersion="1.3">
+      <bt:Sets DefaultMinVersion="{{OFFICE_ADDIN_MANIFEST_V1_0_MAILBOX_MIN_VERSION}}">
         <bt:Set Name="Mailbox" />
       </bt:Sets>
     </Requirements>
@@ -133,7 +133,7 @@
     </Resources>
     <VersionOverrides xmlns="http://schemas.microsoft.com/office/mailappversionoverrides/1.1" xsi:type="VersionOverridesV1_1">
       <Requirements>
-        <bt:Sets DefaultMinVersion="1.13">
+        <bt:Sets DefaultMinVersion="{{OFFICE_ADDIN_MANIFEST_V1_1_MAILBOX_MIN_VERSION}}">
           <bt:Set Name="Mailbox" />
         </bt:Sets>
       </Requirements>

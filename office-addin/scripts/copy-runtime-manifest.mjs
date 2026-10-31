@@ -13,8 +13,14 @@ const manifestNames = [
 fs.mkdirSync(outputDir, { recursive: true });
 
 for (const manifestName of manifestNames) {
+  // Both Outlook endpoints use one template; the backend selects requirement
+  // levels and launch event support by the requested manifest name.
+  const templateName =
+    manifestName === "manifest-exchange-server.xml"
+      ? "manifest.xml"
+      : manifestName;
   fs.copyFileSync(
-    path.join(officeAddinDir, "manifests", manifestName),
+    path.join(officeAddinDir, "manifests", templateName),
     path.join(outputDir, manifestName),
   );
 }
