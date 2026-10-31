@@ -2916,11 +2916,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "erato-config-schema"
+version = "0.1.0"
+dependencies = [
+ "eyre",
+ "facet",
+ "semver",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "erato_config"
 version = "0.6.2"
 dependencies = [
  "base64 0.22.1",
  "config",
+ "erato-config-schema",
  "erato_memory",
  "eyre",
  "facet",
@@ -2928,7 +2940,6 @@ dependencies = [
  "png",
  "regex",
  "secrecy",
- "semver",
  "serde",
  "serde_json",
  "tracing",
