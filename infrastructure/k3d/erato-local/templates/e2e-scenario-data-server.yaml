@@ -25,6 +25,7 @@ spec:
         app.kubernetes.io/instance: {{ .Release.Name }}
         app.kubernetes.io/component: e2e-scenario-data-server
     spec:
+      {{- include "erato-local.imagePullSecrets" . | nindent 6 }}
       containers:
       - name: nginx
         image: nginx:alpine
@@ -43,7 +44,11 @@ spec:
         secret:
           secretName: {{ .Release.Name }}-erato-scenario-{{ .Values.scenarioSecretsConfig.scenario | replace "_" "-" }}-secrets
           items:
+          {{- if $.Values.scenarioSecretsConfig.remoteData }}
+          - key: scenario-data.toml
+          {{- else }}
           - key: erato.scenario.auto.toml
+          {{- end }}
             path: scenario-data.toml
       - name: nginx-config
         configMap:
