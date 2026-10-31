@@ -45,8 +45,9 @@ fn open_template(template: &[u8]) -> Result<ZipArchive<Cursor<&[u8]>>> {
     let mut names = HashSet::new();
     for index in 0..archive.len() {
         let entry = archive.by_index(index)?;
+        let name = entry.name()?;
         ensure!(
-            matches!(entry.name(), EXECUTABLE | INFO_PLIST | BOOTSTRAP),
+            matches!(name.as_ref(), EXECUTABLE | INFO_PLIST | BOOTSTRAP),
             "macOS sidecar template must contain only the canonical executable, Info.plist and optional bootstrap.json"
         );
         ensure!(
@@ -54,7 +55,7 @@ fn open_template(template: &[u8]) -> Result<ZipArchive<Cursor<&[u8]>>> {
             "macOS sidecar template entries must be unencrypted regular files"
         );
         ensure!(
-            names.insert(entry.name().to_owned()),
+            names.insert(name.into_owned()),
             "macOS sidecar template contains duplicate ZIP entries"
         );
     }
@@ -93,7 +94,7 @@ pub(super) fn inject(template: &[u8], bootstrap: &[u8]) -> Result<Vec<u8>> {
     let mut output = ZipWriter::new(Cursor::new(Vec::new()));
     for index in 0..archive.len() {
         let entry = archive.by_index(index)?;
-        if entry.name() != BOOTSTRAP {
+        if entry.name()? != BOOTSTRAP {
             // Copy compressed bytes and metadata, including Mach-O permissions.
             output.raw_copy_file(entry)?;
         }

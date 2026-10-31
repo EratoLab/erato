@@ -543,9 +543,10 @@ mod tests {
             extracted.contains("Method: REQUEST"),
             "missing method:\n{extracted}"
         );
-        assert!(
-            extracted.contains("Summary: Project sync"),
-            "missing summary:\n{extracted}"
+        assert_eq!(
+            extracted.matches("Summary: Project sync").count(),
+            1,
+            "{extracted}"
         );
         assert!(
             extracted.contains("Location: Conference Room B"),
