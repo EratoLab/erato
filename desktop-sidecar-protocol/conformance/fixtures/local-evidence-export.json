@@ -1,0 +1,132 @@
+{
+  "outlookProvenance": {
+    "version": 1,
+    "origins": [
+      {
+        "document": {
+          "documentId": "0f5a8a48-1b2c-4d3e-9f10-a1b2c3d4e5f6",
+          "external_ids": [
+            {
+              "key": "email_message_id",
+              "value": "<minutes@example.test>"
+            },
+            {
+              "key": "ews_id",
+              "value": "AQMk/CaseSensitive+EwsId=="
+            }
+          ],
+          "mailbox": {
+            "mailboxId": "0123456789abcdef0123456789abcdef",
+            "emailAddress": "owner@example.test"
+          }
+        }
+      }
+    ]
+  },
+  "attachmentProvenance": {
+    "version": 1,
+    "origins": [
+      {
+        "topLevelParent": {
+          "documentId": "0f5a8a48-1b2c-4d3e-9f10-a1b2c3d4e5f6",
+          "external_ids": [
+            {
+              "key": "email_message_id",
+              "value": "<minutes@example.test>"
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "invalidProvenance": [
+    {
+      "name": "unsupported version",
+      "value": {
+        "version": 2,
+        "origins": [
+          {
+            "document": {
+              "external_ids": [
+                {
+                  "key": "ews_id",
+                  "value": "x"
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "no origins",
+      "value": {
+        "version": 1,
+        "origins": []
+      }
+    },
+    {
+      "name": "empty origin",
+      "value": {
+        "version": 1,
+        "origins": [{}]
+      }
+    },
+    {
+      "name": "reference without identity",
+      "value": {
+        "version": 1,
+        "origins": [
+          {
+            "document": {
+              "external_ids": []
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "native id that is not hex bytes",
+      "value": {
+        "version": 1,
+        "origins": [
+          {
+            "document": {
+              "external_ids": [
+                {
+                  "key": "outlook_entry_id",
+                  "value": "xyz"
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "mailbox id that is not local",
+      "value": {
+        "version": 1,
+        "origins": [
+          {
+            "document": {
+              "external_ids": [
+                {
+                  "key": "ews_id",
+                  "value": "x"
+                }
+              ],
+              "mailbox": {
+                "mailboxId": "local-node"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "not an object",
+      "value": "provenance"
+    }
+  ]
+}

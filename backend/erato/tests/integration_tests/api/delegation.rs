@@ -19999,11 +19999,22 @@ async fn local_research_case(pool: Pool<Postgres>, repeated: bool, cancelled: bo
         } else {
             b"SECOND_APPROVED_MARKER"
         };
+        // The first collection is an email; the second an attachment, which
+        // knows only its containing message.
+        let provenance = if collection == 0 {
+            json!({"version":1,"origins":[{"document":{"documentId":"0f5a8a48-1b2c-4d3e-9f10-a1b2c3d4e5f6",
+                "external_ids":[{"key":"email_message_id","value":"<minutes@example.test>"},{"key":"ews_id","value":"AQMk/CaseSensitive+EwsId=="}],
+                "mailbox":{"mailboxId":"0123456789abcdef0123456789abcdef","emailAddress":"owner@example.test"}}}]})
+        } else {
+            json!({"version":1,"origins":[{"topLevelParent":{"documentId":"0f5a8a48-1b2c-4d3e-9f10-a1b2c3d4e5f6",
+                "external_ids":[{"key":"email_message_id","value":"<minutes@example.test>"}]}}]})
+        };
         let mut package = json!({"binding":authorization["job"]["binding"],"exportId":if collection == 0 {"e".repeat(43)} else {"f".repeat(43)},
             "snapshotId":"s".repeat(43),"grantId":"g".repeat(43),"approvedAt":chrono::Utc::now().timestamp(),
             "expiresAt":authorization["job"]["plan"]["expiresAt"],"artifacts":[{"artifactId":"a".repeat(43),
                 "filename":"approved.txt","mediaType":"text/plain","byteLength":bytes.len(),
-                "sha256":contract::digest(bytes),"contentBase64":STANDARD.encode(bytes)}]});
+                "sha256":contract::digest(bytes),"contentBase64":STANDARD.encode(bytes),
+                "outlookProvenance":provenance}]});
         package["manifestDigest"] = json!(contract::manifest_digest(&package).unwrap());
         // Direct generic results cannot bypass the backend's validated, signed receipt.
         server.post(&format!("{generic_path}/result")).with_bearer_token(TEST_JWT_TOKEN)
@@ -20020,6 +20031,29 @@ async fn local_research_case(pool: Pool<Postgres>, repeated: bool, cancelled: bo
             .await;
         accepted.assert_status_ok();
         let accepted = accepted.json::<Value>();
+        // The sidecar's provenance lands on the stored file, so the file
+        // preview can offer the original message.
+        let stored = erato::db::entity::file_uploads::Entity::find_by_id(
+            erato::services::local_delegation::uploads::file_id(
+                id,
+                package["exportId"].as_str().unwrap(),
+                &"a".repeat(43),
+                package["artifacts"][0]["sha256"].as_str().unwrap(),
+            ),
+        )
+        .one(&app_state.db)
+        .await
+        .unwrap()
+        .expect("an approved artifact is stored as a file");
+        assert_eq!(
+            stored.outlook_provenance,
+            Some(package["artifacts"][0]["outlookProvenance"].clone())
+        );
+        assert_eq!(
+            stored.external_id_ews_id.as_deref(),
+            (collection == 0).then_some("AQMk/CaseSensitive+EwsId=="),
+            "only a message of its own has an EWS ID"
+        );
         let retry = server
             .post(&format!("{native_path}/complete"))
             .with_bearer_token(TEST_JWT_TOKEN)
@@ -20128,6 +20162,43 @@ async fn local_research_case(pool: Pool<Postgres>, repeated: bool, cancelled: bo
             .to_string()
             .contains("LOCAL-RESEARCH-FINISHED")
     );
+    if !cancelled {
+        // The evidence the model received cites the message it came from by
+        // identifiers only: the message's own for an email, the containing
+        // message's for an attachment, never catalog UUIDs or mailbox identity.
+        let mut entries = Vec::new();
+        for body in recorder.bodies() {
+            evidence_entries(&serde_json::from_str::<Value>(&body).unwrap(), &mut entries);
+        }
+        assert!(
+            !entries.is_empty(),
+            "the approved evidence reaches the model"
+        );
+        let key = if repeated {
+            "containingMessages"
+        } else {
+            "source"
+        };
+        let cited = |entry: &Value| {
+            let reference = if repeated {
+                &entry[key][0]
+            } else {
+                &entry[key]
+            };
+            reference["external_ids"]
+                .as_array()
+                .is_some_and(|ids| ids.iter().any(|id| id["value"] == "<minutes@example.test>"))
+        };
+        assert!(entries.iter().any(cited), "{key} in {entries:?}");
+        for entry in &entries {
+            for reference in [&entry["source"], &entry["containingMessages"][0]] {
+                assert!(
+                    reference.get("documentId").is_none() && reference.get("mailbox").is_none(),
+                    "identifiers only: {entry}"
+                );
+            }
+        }
+    }
     assert_eq!(
         store::receipts(&app_state.db, owner, None, "https://erato.example")
             .await
@@ -21413,4 +21484,26 @@ async fn a_mentioned_assistants_unusable_default_falls_back_to_the_parent_turns_
     );
     assert_eq!(reported["chat_provider_id"], MODEL_C.0);
     assert_eq!(reported["unavailable_chat_provider_id"], MODEL_X.0);
+}
+
+/// Every entry of a local evidence tool result embedded anywhere in a recorded
+/// model request, including inside JSON-encoded string content.
+fn evidence_entries(value: &Value, out: &mut Vec<Value>) {
+    match value {
+        Value::Object(map) => {
+            if let Some(entries) = map.get("evidence").and_then(Value::as_array) {
+                out.extend(entries.iter().cloned());
+            }
+            for nested in map.values() {
+                evidence_entries(nested, out);
+            }
+        }
+        Value::Array(items) => items.iter().for_each(|item| evidence_entries(item, out)),
+        Value::String(text) if text.contains("\"evidence\"") => {
+            if let Ok(parsed) = serde_json::from_str::<Value>(text) {
+                evidence_entries(&parsed, out);
+            }
+        }
+        _ => {}
+    }
 }

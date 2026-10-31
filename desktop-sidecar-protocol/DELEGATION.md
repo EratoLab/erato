@@ -169,6 +169,17 @@ bytes. Manifest digest covers the complete approved-export object with only
 Validate byte lengths, digests, unique artifact IDs and total decoded size in
 addition to schema validation. Generated Rust types are not schema validators.
 
+An artifact may carry `outlookProvenance`: the version 1 `OutlookFileProvenance`
+of the message it came from, the email itself as `document` or an attachment's
+containing message as `topLevelParent`. Native builds it from the hit's catalog
+ID, external IDs and mailbox. The backend validates it as that contract, stores
+it on the uploaded file so clients can offer **Open in Outlook**, and gives the
+model the reference with the evidence, by identifiers only. It is a navigation
+hint, never a grant. The approved-export schema declares it as an optional
+artifact member referencing `outlook/file-provenance.schema.json`, so a malformed
+member fails validation like any other; a member that passes the schema but names
+no usable identity is dropped and the export stays valid.
+
 ## Native state and consent
 
 Persist acceptance transactionally before returning a handle. Store job records

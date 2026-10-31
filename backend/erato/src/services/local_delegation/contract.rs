@@ -283,6 +283,34 @@ mod tests {
         }
     }
     #[test]
+    fn artifacts_carry_outlook_provenance_only_in_the_shared_shape() {
+        let (package, binding, plan) = fixture();
+        let export: Value = serde_json::from_str(include_str!(
+            "../../../../../desktop-sidecar-protocol/conformance/fixtures/local-evidence-export.json"
+        ))
+        .unwrap();
+        for provenance in [
+            &export["outlookProvenance"],
+            &export["attachmentProvenance"],
+        ] {
+            let mut with = package.clone();
+            with["artifacts"][0]["outlookProvenance"] = provenance.clone();
+            with["manifestDigest"] = json!(manifest_digest(&with).unwrap());
+            assert_eq!(validate_export(&with, &binding, &plan, 101), Ok(()));
+        }
+        for invalid in export["invalidProvenance"].as_array().unwrap() {
+            let mut altered = package.clone();
+            altered["artifacts"][0]["outlookProvenance"] = invalid["value"].clone();
+            altered["manifestDigest"] = json!(manifest_digest(&altered).unwrap());
+            assert_eq!(
+                validate_export(&altered, &binding, &plan, 101),
+                Err(Invalid),
+                "{}",
+                invalid["name"]
+            );
+        }
+    }
+    #[test]
     fn rejects_duplicates_unknown_fields_expiry_and_budget_overflow() {
         let (package, binding, mut plan) = fixture();
         let mut duplicate = package.clone();

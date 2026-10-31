@@ -242,10 +242,18 @@ impl LocalEvidenceKind {
             let text = String::from_utf8(
                 STANDARD.decode(item["contentBase64"].as_str().ok_or(contract::Invalid)?)?,
             )?;
-            evidence.push(json!({"artifactId":item["artifactId"],
+            let mut entry = json!({"artifactId":item["artifactId"],
                 "file_id":super::uploads::file_id(request.attempt_id, package["exportId"].as_str().ok_or(contract::Invalid)?,
                     item["artifactId"].as_str().ok_or(contract::Invalid)?, item["sha256"].as_str().ok_or(contract::Invalid)?),
-                "filename":item["filename"],"text":text}));
+                "filename":item["filename"],"text":text});
+            // Where the evidence came from, for citations: identifiers only, of
+            // the message itself and of every containing message of an attachment.
+            if let Some(provenance) = super::uploads::provenance_of(item) {
+                for (key, value) in provenance.citation() {
+                    entry[key] = value;
+                }
+            }
+            evidence.push(entry);
         }
         Ok(ValidatedResult {
             succeeded: true,

@@ -43,7 +43,12 @@ The native handler reads plaintext only after native approval. It uploads throug
 the authenticated export adapter; the adapter validates schema, hashes, size,
 expiry and the frozen binding before staging immutable content-addressed blobs.
 One logged transaction commits attachment records, the exact generic operation
-result, the backend-signed native receipt and ready-to-continue state. The kind's
+result, the backend-signed native receipt and ready-to-continue state. An
+attachment record carries the artifact's `outlookProvenance` and the document's
+EWS ID when the sidecar supplied a valid version 1 `OutlookFileProvenance`, as
+the frontend's own uploads do, so the file preview can open the original
+message; the evidence given to the model cites that message's identifiers as
+`source`, and an attachment's containing messages as `containingMessages`. The kind's
 typed result validator requires that signed receipt and its exact approved package;
 the generic result endpoint cannot bypass upload validation with arbitrary JSON.
 This backend receipt attests durable acceptance, not an independent native-device
