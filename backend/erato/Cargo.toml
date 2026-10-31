@@ -10,10 +10,6 @@ name = "gen-openapi"
 path = "./src/gen_openapi.rs"
 
 [[bin]]
-name = "gen-config-reference"
-path = "./src/gen_config_reference.rs"
-
-[[bin]]
 name = "record-chat-provider-reqwest"
 path = "./src/record_chat_provider_reqwest.rs"
 

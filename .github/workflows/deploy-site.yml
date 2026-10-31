@@ -8,6 +8,7 @@ on:
     branches: [ main ]
     paths:
       - 'site/**'
+      - 'backend/generated/config_reference.json'
   workflow_dispatch:
 
 permissions:
@@ -43,6 +44,10 @@ jobs:
       - name: Install dependencies
         working-directory: ./site
         run: pnpm install
+
+      - name: Test configuration metadata rendering
+        working-directory: ./site
+        run: pnpm test
 
       - name: Build site
         working-directory: ./site

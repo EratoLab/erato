@@ -124,3 +124,10 @@
     @apply text-white dark:text-black;
   }
 }
+
+/* Generated configuration lifecycle labels stay subordinate to field headings. */
+.config-lifecycle {
+  font-size: 0.875rem;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}

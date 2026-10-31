@@ -38,7 +38,7 @@ generate_config_reference:
 generate_open_api_check:
     cargo run --bin gen-openapi -- --check
 
-# Generates the config reference based on the source and check if it's up to date
+# Validates metadata for every config key and checks reference freshness
 generate_config_reference_check:
     cargo run --bin gen-config-reference -- --check
 

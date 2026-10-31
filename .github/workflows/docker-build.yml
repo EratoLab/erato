@@ -11,6 +11,10 @@ on:
     paths:
       - '.github/workflows/docker-build.yml' 
       - 'backend/**'
+      - 'scripts/config_metadata.py'
+      - 'scripts/prepare-release.py'
+      - 'scripts/tag-release.py'
+      - 'scripts/tests/**'
       - 'component-kit-example/**'
       - 'desktop-sidecar-protocol/**'
       - 'frontend/**'
@@ -27,6 +31,10 @@ on:
     paths:
       - '.github/workflows/docker-build.yml' 
       - 'backend/**'
+      - 'scripts/config_metadata.py'
+      - 'scripts/prepare-release.py'
+      - 'scripts/tag-release.py'
+      - 'scripts/tests/**'
       - 'component-kit-example/**'
       - 'desktop-sidecar-protocol/**'
       - 'frontend/**'
@@ -487,6 +495,9 @@ jobs:
         with:
           enable-cache: true
 
+      - name: "Test config metadata history and release preparation"
+        run: python3 -m unittest discover -s scripts/tests -v
+
       - name: "Check config documentation coverage"
         if: success() || failure()
         run: uv run site/scripts/check_config_reference_coverage.py
@@ -587,9 +598,9 @@ jobs:
       - name: "Check if OpenAPI spec is up to date"
         working-directory: backend
         run: cargo run --bin gen-openapi -- --check
-      - name: "Check if config reference is up to date"
+      - name: "Validate config reference metadata and freshness"
         working-directory: backend
-        run: cargo run --bin gen-config-reference -- --check
+        run: cargo run -p erato_config --bin gen-config-reference -- --check
 
   test-frontend:
     timeout-minutes: 10

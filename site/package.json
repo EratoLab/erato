@@ -1,6 +1,7 @@
 {
   "private": true,
   "scripts": {
+    "test": "node --test scripts/*.test.mjs",
     "dev": "next --turbopack",
     "build": "next build",
     "start": "next start",

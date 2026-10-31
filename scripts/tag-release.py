@@ -11,6 +11,8 @@ import tomlkit
 import subprocess
 from pathlib import Path
 
+from config_metadata import validate_released_reference
+
 def run_git_command(args, check=True):
     try:
         result = subprocess.run(["git"] + args, capture_output=True, text=True, check=check)
@@ -69,6 +71,19 @@ def main():
     tag_check_result = run_git_command(["rev-parse", version], check=False)
     if tag_check_result.returncode == 0:
         print(f"Error: Tag {version} already exists.", file=sys.stderr)
+        sys.exit(1)
+
+    # Check source/reference agreement as well as the release marker before any
+    # tag is created or pushed. A stale JSON file must not hide new config keys.
+    repo = Path(__file__).resolve().parents[1]
+    try:
+        subprocess.run(
+            ["cargo", "run", "-p", "erato_config", "--bin", "gen-config-reference", "--", "--check"],
+            cwd=repo / "backend", check=True,
+        )
+        validate_released_reference(repo)
+    except (OSError, ValueError, subprocess.CalledProcessError) as error:
+        print(f"Error validating release config metadata: {error}", file=sys.stderr)
         sys.exit(1)
 
     print(f"Tag {version} does not exist yet. Creating it.")

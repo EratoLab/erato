@@ -1,1182 +1,3168 @@
 {
-  "action_facets.enable_builtin_ms_office_addin": {},
-  "action_facets.facets.<facet-id>.allowed_args.[]": {},
-  "action_facets.facets.<facet-id>.client_actions.[]": {},
-  "action_facets.facets.<facet-id>.client_actions_always_ask.[]": {},
-  "action_facets.facets.<facet-id>.delegation.approval.mode": {},
-  "action_facets.facets.<facet-id>.delegation.approval.plan_min_tasks": {},
-  "action_facets.facets.<facet-id>.delegation.child_chat_providers.[]": {},
-  "action_facets.facets.<facet-id>.delegation.child_facet_ids.[]": {},
-  "action_facets.facets.<facet-id>.delegation.max_client_tool_calls_per_task": {},
-  "action_facets.facets.<facet-id>.delegation.max_parallel": {},
-  "action_facets.facets.<facet-id>.delegation.max_server_tool_calls_per_task": {},
-  "action_facets.facets.<facet-id>.delegation.max_tasks_per_turn": {},
-  "action_facets.facets.<facet-id>.delegation.persona": {},
-  "action_facets.facets.<facet-id>.delegation.run_modes.[]": {},
-  "action_facets.facets.<facet-id>.delegation.scheduling": {},
-  "action_facets.facets.<facet-id>.display_name": {},
-  "action_facets.facets.<facet-id>.grant_scope.<key>": {},
-  "action_facets.facets.<facet-id>.platform": {},
-  "action_facets.facets.<facet-id>.presentation": {},
-  "action_facets.facets.<facet-id>.template": {},
-  "action_facets.facets.<facet-id>.tool_call_allowlist.[]": {},
+  "action_facets.enable_builtin_ms_office_addin": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "action_facets.facets.<facet-id>.allowed_args.[]": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "action_facets.facets.<facet-id>.client_actions.[]": {
+    "introduced_in": "0.6.2",
+    "stability": "unstable"
+  },
+  "action_facets.facets.<facet-id>.client_actions_always_ask.[]": {
+    "introduced_in": "0.6.2",
+    "stability": "unstable"
+  },
+  "action_facets.facets.<facet-id>.delegation.approval.mode": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "action_facets.facets.<facet-id>.delegation.approval.plan_min_tasks": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "action_facets.facets.<facet-id>.delegation.child_chat_providers.[]": {
+    "introduced_in": "unreleased",
+    "stability": "unstable"
+  },
+  "action_facets.facets.<facet-id>.delegation.child_facet_ids.[]": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "action_facets.facets.<facet-id>.delegation.max_client_tool_calls_per_task": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "action_facets.facets.<facet-id>.delegation.max_parallel": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "action_facets.facets.<facet-id>.delegation.max_server_tool_calls_per_task": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "action_facets.facets.<facet-id>.delegation.max_tasks_per_turn": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "action_facets.facets.<facet-id>.delegation.persona": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "action_facets.facets.<facet-id>.delegation.run_modes.[]": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "action_facets.facets.<facet-id>.delegation.scheduling": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "action_facets.facets.<facet-id>.display_name": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "action_facets.facets.<facet-id>.grant_scope.<key>": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "action_facets.facets.<facet-id>.platform": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "action_facets.facets.<facet-id>.presentation": {
+    "introduced_in": "0.6.2",
+    "stability": "unstable"
+  },
+  "action_facets.facets.<facet-id>.template": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "action_facets.facets.<facet-id>.tool_call_allowlist.[]": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
   "additional_frontend_environment": {
-    "hide_in_docs": true,
     "deprecated": {
       "note": "Please use `frontend.additional_environment` instead.",
-      "replacement_key": "frontend.additional_environment",
-      "planned_removal_version": "0.6.0"
-    }
+      "planned_removal_version": "0.6.0",
+      "replacement_key": "frontend.additional_environment"
+    },
+    "hide_in_docs": true,
+    "introduced_in": "0.6.0",
+    "stability": "deprecated"
   },
-  "assistant_hub.categories.<key>.display_name": {},
-  "assistant_hub.categories.<key>.icon": {},
-  "assistant_hub.default_share_with_whole_organization": {},
-  "assistant_hub.enable_categories": {},
-  "assistant_hub.enabled": {},
-  "assistant_hub.rating_mode": {},
-  "assistant_hub.reviewers.rules.<rule-name>.groups.[]": {},
-  "assistant_hub.reviewers.rules.<rule-name>.rule_type": {},
-  "assistants.context_file_contributor_threshold": {},
-  "assistants.context_warning_threshold": {},
+  "assistant_hub.categories.<key>.display_name": {
+    "introduced_in": "0.6.2",
+    "stability": "unstable"
+  },
+  "assistant_hub.categories.<key>.icon": {
+    "introduced_in": "0.6.2",
+    "stability": "unstable"
+  },
+  "assistant_hub.default_share_with_whole_organization": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "assistant_hub.enable_categories": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "assistant_hub.enabled": {
+    "introduced_in": "0.6.2",
+    "stability": "unstable"
+  },
+  "assistant_hub.rating_mode": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "assistant_hub.reviewers.rules.<rule-name>.groups.[]": {
+    "introduced_in": "0.6.2",
+    "stability": "unstable"
+  },
+  "assistant_hub.reviewers.rules.<rule-name>.rule_type": {
+    "introduced_in": "0.6.2",
+    "stability": "unstable"
+  },
+  "assistants.context_file_contributor_threshold": {
+    "introduced_in": "0.6.2",
+    "stability": "unstable"
+  },
+  "assistants.context_warning_threshold": {
+    "introduced_in": "0.6.2",
+    "stability": "unstable"
+  },
   "assistants.delegation.allow_background": {
     "deprecated": {
       "note": "Please use `delegation.allow_background` instead.",
-      "replacement_key": "delegation.allow_background",
-      "planned_removal_version": "0.8.0"
+      "planned_removal_version": "0.8.0",
+      "replacement_key": "delegation.allow_background"
     },
-    "hide_in_docs": true
+    "hide_in_docs": true,
+    "introduced_in": "0.7.0",
+    "stability": "deprecated"
   },
   "assistants.delegation.auto_archive_after_days": {
     "deprecated": {
       "note": "Please use `delegation.auto_archive_after_days` instead.",
-      "replacement_key": "delegation.auto_archive_after_days",
-      "planned_removal_version": "0.8.0"
+      "planned_removal_version": "0.8.0",
+      "replacement_key": "delegation.auto_archive_after_days"
     },
-    "hide_in_docs": true
+    "hide_in_docs": true,
+    "introduced_in": "0.7.0",
+    "stability": "deprecated"
   },
   "assistants.delegation.enabled": {
     "deprecated": {
       "note": "Please use `delegation.assistants.enabled` instead.",
-      "replacement_key": "delegation.assistants.enabled",
-      "planned_removal_version": "0.8.0"
+      "planned_removal_version": "0.8.0",
+      "replacement_key": "delegation.assistants.enabled"
     },
-    "hide_in_docs": true
+    "hide_in_docs": true,
+    "introduced_in": "0.7.0",
+    "stability": "deprecated"
   },
   "assistants.delegation.max_concurrent_background_runs": {
     "deprecated": {
       "note": "Please use `delegation.max_concurrent_background_runs` instead.",
-      "replacement_key": "delegation.max_concurrent_background_runs",
-      "planned_removal_version": "0.8.0"
+      "planned_removal_version": "0.8.0",
+      "replacement_key": "delegation.max_concurrent_background_runs"
     },
-    "hide_in_docs": true
+    "hide_in_docs": true,
+    "introduced_in": "0.7.0",
+    "stability": "deprecated"
   },
   "assistants.delegation.max_mentions_per_message": {
     "deprecated": {
       "note": "Please use `delegation.assistants.max_mentions_per_message` instead.",
-      "replacement_key": "delegation.assistants.max_mentions_per_message",
-      "planned_removal_version": "0.8.0"
+      "planned_removal_version": "0.8.0",
+      "replacement_key": "delegation.assistants.max_mentions_per_message"
     },
-    "hide_in_docs": true
+    "hide_in_docs": true,
+    "introduced_in": "0.7.0",
+    "stability": "deprecated"
   },
   "assistants.delegation.preamble": {
     "deprecated": {
       "note": "Please use `delegation.preamble` instead.",
-      "replacement_key": "delegation.preamble",
-      "planned_removal_version": "0.8.0"
+      "planned_removal_version": "0.8.0",
+      "replacement_key": "delegation.preamble"
     },
-    "hide_in_docs": true
+    "hide_in_docs": true,
+    "introduced_in": "0.7.0",
+    "stability": "deprecated"
   },
   "assistants.delegation.result_max_chars": {
     "deprecated": {
       "note": "Please use `delegation.result_max_chars` instead.",
-      "replacement_key": "delegation.result_max_chars",
-      "planned_removal_version": "0.8.0"
+      "planned_removal_version": "0.8.0",
+      "replacement_key": "delegation.result_max_chars"
     },
-    "hide_in_docs": true
+    "hide_in_docs": true,
+    "introduced_in": "0.7.0",
+    "stability": "deprecated"
   },
   "assistants.delegation.run_timeout_seconds": {
     "deprecated": {
       "note": "Please use `delegation.run_timeout_seconds` instead.",
-      "replacement_key": "delegation.run_timeout_seconds",
-      "planned_removal_version": "0.8.0"
+      "planned_removal_version": "0.8.0",
+      "replacement_key": "delegation.run_timeout_seconds"
     },
-    "hide_in_docs": true
+    "hide_in_docs": true,
+    "introduced_in": "0.7.0",
+    "stability": "deprecated"
   },
-  "assistants.enable_edit_sharing": {},
-  "assistants.enabled": {},
-  "assistants.max_files": {},
-  "assistants.max_system_prompt_length": {},
-  "assistants.show_recent_items": {},
-  "assistants.show_recent_items_collapsible": {},
-  "assistants.tools_menu_description_display": {},
-  "assistants.usage_view_enabled": {},
-  "audio_conversational.chat_provider_id": {},
-  "audio_conversational.chunk_duration_seconds": {},
-  "audio_conversational.enabled": {},
-  "audio_conversational.fixed_output_token_budget": {},
-  "audio_conversational.initial_backoff_ms": {},
-  "audio_conversational.max_attempts": {},
-  "audio_conversational.max_backoff_ms": {},
-  "audio_conversational.max_output_tokens": {},
-  "audio_conversational.max_recording_duration_seconds": {},
-  "audio_conversational.max_words_per_minute": {},
-  "audio_conversational.min_output_tokens": {},
-  "audio_conversational.min_unique_word_ratio": {},
-  "audio_conversational.min_words_for_loop_check": {},
-  "audio_conversational.output_token_buffer_factor": {},
-  "audio_conversational.speech_provider": {},
-  "audio_conversational.tokens_per_word": {},
-  "audio_dictation.chat_provider_id": {},
-  "audio_dictation.chunk_duration_seconds": {},
-  "audio_dictation.enabled": {},
-  "audio_dictation.fixed_output_token_budget": {},
-  "audio_dictation.initial_backoff_ms": {},
-  "audio_dictation.max_attempts": {},
-  "audio_dictation.max_backoff_ms": {},
-  "audio_dictation.max_output_tokens": {},
-  "audio_dictation.max_recording_duration_seconds": {},
-  "audio_dictation.max_words_per_minute": {},
-  "audio_dictation.min_output_tokens": {},
-  "audio_dictation.min_unique_word_ratio": {},
-  "audio_dictation.min_words_for_loop_check": {},
-  "audio_dictation.output_token_buffer_factor": {},
-  "audio_dictation.tokens_per_word": {},
-  "audio_transcription.chat_provider_id": {},
-  "audio_transcription.chunk_duration_seconds": {},
-  "audio_transcription.enabled": {},
-  "audio_transcription.fixed_output_token_budget": {},
-  "audio_transcription.initial_backoff_ms": {},
-  "audio_transcription.max_attempts": {},
-  "audio_transcription.max_backoff_ms": {},
-  "audio_transcription.max_output_tokens": {},
-  "audio_transcription.max_recording_duration_seconds": {},
-  "audio_transcription.max_words_per_minute": {},
-  "audio_transcription.min_output_tokens": {},
-  "audio_transcription.min_unique_word_ratio": {},
-  "audio_transcription.min_words_for_loop_check": {},
-  "audio_transcription.output_token_buffer_factor": {},
-  "audio_transcription.tokens_per_word": {},
-  "budget.budget_currency": {},
-  "budget.budget_period_days": {},
-  "budget.enabled": {},
-  "budget.max_budget": {},
-  "budget.warn_threshold": {},
-  "caches.file_bytes_cache_mb": {},
-  "caches.file_contents_cache_mb": {},
-  "caches.file_processing_parallelism": {},
-  "caches.token_count_cache_mb": {},
-  "chat_history_compaction.chat_provider_id": {},
-  "chat_history_compaction.enabled": {},
-  "chat_history_compaction.mode": {},
-  "chat_history_compaction.target_compaction_token_limit_percentage": {},
-  "chat_history_compaction.trigger_mode": {},
-  "chat_history_compaction.trigger_on_token_limit_threshold_percentage": {},
+  "assistants.enable_edit_sharing": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "assistants.enabled": {
+    "introduced_in": "0.6.2",
+    "stability": "unstable"
+  },
+  "assistants.max_files": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "assistants.max_system_prompt_length": {
+    "introduced_in": "0.6.2",
+    "stability": "unstable"
+  },
+  "assistants.show_recent_items": {
+    "introduced_in": "0.6.2",
+    "stability": "unstable"
+  },
+  "assistants.show_recent_items_collapsible": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "assistants.tools_menu_description_display": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "assistants.usage_view_enabled": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "audio_conversational.chat_provider_id": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "audio_conversational.chunk_duration_seconds": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "audio_conversational.enabled": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "audio_conversational.fixed_output_token_budget": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "audio_conversational.initial_backoff_ms": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "audio_conversational.max_attempts": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "audio_conversational.max_backoff_ms": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "audio_conversational.max_output_tokens": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "audio_conversational.max_recording_duration_seconds": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "audio_conversational.max_words_per_minute": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "audio_conversational.min_output_tokens": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "audio_conversational.min_unique_word_ratio": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "audio_conversational.min_words_for_loop_check": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "audio_conversational.output_token_buffer_factor": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "audio_conversational.speech_provider": {
+    "introduced_in": "unreleased",
+    "stability": "unstable"
+  },
+  "audio_conversational.tokens_per_word": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "audio_dictation.chat_provider_id": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "audio_dictation.chunk_duration_seconds": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "audio_dictation.enabled": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "audio_dictation.fixed_output_token_budget": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "audio_dictation.initial_backoff_ms": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "audio_dictation.max_attempts": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "audio_dictation.max_backoff_ms": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "audio_dictation.max_output_tokens": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "audio_dictation.max_recording_duration_seconds": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "audio_dictation.max_words_per_minute": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "audio_dictation.min_output_tokens": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "audio_dictation.min_unique_word_ratio": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "audio_dictation.min_words_for_loop_check": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "audio_dictation.output_token_buffer_factor": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "audio_dictation.tokens_per_word": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "audio_transcription.chat_provider_id": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "audio_transcription.chunk_duration_seconds": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "audio_transcription.enabled": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "audio_transcription.fixed_output_token_budget": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "audio_transcription.initial_backoff_ms": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "audio_transcription.max_attempts": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "audio_transcription.max_backoff_ms": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "audio_transcription.max_output_tokens": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "audio_transcription.max_recording_duration_seconds": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "audio_transcription.max_words_per_minute": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "audio_transcription.min_output_tokens": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "audio_transcription.min_unique_word_ratio": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "audio_transcription.min_words_for_loop_check": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "audio_transcription.output_token_buffer_factor": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "audio_transcription.tokens_per_word": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "budget.budget_currency": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "budget.budget_period_days": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "budget.enabled": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "budget.max_budget": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "budget.warn_threshold": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "caches.file_bytes_cache_mb": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "caches.file_contents_cache_mb": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "caches.file_processing_parallelism": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "caches.token_count_cache_mb": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "chat_history_compaction.chat_provider_id": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "chat_history_compaction.enabled": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "chat_history_compaction.mode": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "chat_history_compaction.target_compaction_token_limit_percentage": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "chat_history_compaction.trigger_mode": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "chat_history_compaction.trigger_on_token_limit_threshold_percentage": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
   "chat_provider.additional_request_headers.[]": {
-    "hide_in_docs": true
+    "hide_in_docs": true,
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
   },
   "chat_provider.additional_request_parameters.[]": {
-    "hide_in_docs": true
+    "hide_in_docs": true,
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
   },
   "chat_provider.api_key": {
-    "hide_in_docs": true
+    "hide_in_docs": true,
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
   },
   "chat_provider.api_version": {
-    "hide_in_docs": true
+    "hide_in_docs": true,
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
   },
   "chat_provider.archived": {
-    "hide_in_docs": true
+    "hide_in_docs": true,
+    "introduced_in": "unreleased",
+    "stability": "unstable"
   },
   "chat_provider.base_url": {
-    "hide_in_docs": true
+    "hide_in_docs": true,
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
   },
   "chat_provider.enable_embedded_image_retrieval_tool": {
-    "hide_in_docs": true
+    "hide_in_docs": true,
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
   },
   "chat_provider.guardrails.filter_input_prompt_injection.enabled": {
-    "hide_in_docs": true
+    "hide_in_docs": true,
+    "introduced_in": "0.6.1",
+    "stability": "unstable"
   },
   "chat_provider.guardrails.filter_input_prompt_injection.exclude_pattern_ids.[]": {
-    "hide_in_docs": true
+    "hide_in_docs": true,
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
   },
   "chat_provider.guardrails.filter_input_prompt_injection.filter_pattern_ids.[]": {
-    "hide_in_docs": true
+    "hide_in_docs": true,
+    "introduced_in": "0.6.1",
+    "stability": "unstable"
   },
   "chat_provider.guardrails.filter_input_prompt_injection.filter_pattern_tags.[]": {
-    "hide_in_docs": true
+    "hide_in_docs": true,
+    "introduced_in": "0.6.1",
+    "stability": "unstable"
   },
   "chat_provider.hallucination_suppression.enabled": {
-    "hide_in_docs": true
+    "hide_in_docs": true,
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
   },
   "chat_provider.hallucination_suppression.whitespace_delta_threshold": {
-    "hide_in_docs": true
+    "hide_in_docs": true,
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
   },
   "chat_provider.model_capabilities.context_size_tokens": {
-    "hide_in_docs": true
+    "hide_in_docs": true,
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
   },
   "chat_provider.model_capabilities.cost_input_tokens_per_1m": {
-    "hide_in_docs": true
+    "hide_in_docs": true,
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
   },
   "chat_provider.model_capabilities.cost_output_tokens_per_1m": {
-    "hide_in_docs": true
+    "hide_in_docs": true,
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
   },
   "chat_provider.model_capabilities.supports_audio_input": {
-    "hide_in_docs": true
+    "hide_in_docs": true,
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
   },
   "chat_provider.model_capabilities.supports_encrypted_reasoning_content": {
-    "hide_in_docs": true
+    "hide_in_docs": true,
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
   },
   "chat_provider.model_capabilities.supports_image_understanding": {
-    "hide_in_docs": true
+    "hide_in_docs": true,
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
   },
   "chat_provider.model_capabilities.supports_reasoning": {
-    "hide_in_docs": true
+    "hide_in_docs": true,
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
   },
   "chat_provider.model_capabilities.supports_reasoning_summary": {
-    "hide_in_docs": true
+    "hide_in_docs": true,
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
   },
   "chat_provider.model_capabilities.supports_strict_tool_calling": {
-    "hide_in_docs": true
+    "hide_in_docs": true,
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
   },
   "chat_provider.model_capabilities.supports_verbosity": {
-    "hide_in_docs": true
+    "hide_in_docs": true,
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
   },
   "chat_provider.model_description": {
-    "hide_in_docs": true
+    "hide_in_docs": true,
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
   },
   "chat_provider.model_display_name": {
-    "hide_in_docs": true
+    "hide_in_docs": true,
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
   },
   "chat_provider.model_icon": {
-    "hide_in_docs": true
+    "hide_in_docs": true,
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
   },
   "chat_provider.model_name": {
-    "hide_in_docs": true
+    "hide_in_docs": true,
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
   },
   "chat_provider.model_name_langfuse": {
-    "hide_in_docs": true
+    "hide_in_docs": true,
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
   },
   "chat_provider.model_settings.compat_no_replay_summary": {
-    "hide_in_docs": true
+    "hide_in_docs": true,
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
   },
   "chat_provider.model_settings.compat_omit_strict": {
-    "hide_in_docs": true
+    "hide_in_docs": true,
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
   },
   "chat_provider.model_settings.reasoning_effort": {
-    "hide_in_docs": true
+    "hide_in_docs": true,
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
   },
   "chat_provider.model_settings.temperature": {
-    "hide_in_docs": true
+    "hide_in_docs": true,
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
   },
   "chat_provider.model_settings.top_p": {
-    "hide_in_docs": true
+    "hide_in_docs": true,
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
   },
   "chat_provider.model_settings.verbosity": {
-    "hide_in_docs": true
+    "hide_in_docs": true,
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
   },
   "chat_provider.provider_kind": {
-    "hide_in_docs": true
+    "hide_in_docs": true,
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
   },
   "chat_provider.region": {
-    "hide_in_docs": true
+    "hide_in_docs": true,
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
   },
   "chat_provider.system_prompt": {
-    "hide_in_docs": true
+    "hide_in_docs": true,
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
   },
   "chat_provider.system_prompt.fallback": {
-    "hide_in_docs": true
+    "hide_in_docs": true,
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
   },
   "chat_provider.system_prompt.label": {
-    "hide_in_docs": true
+    "hide_in_docs": true,
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
   },
   "chat_provider.system_prompt.prompt": {
-    "hide_in_docs": true
+    "hide_in_docs": true,
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
   },
   "chat_provider.system_prompt.prompt_name": {
-    "hide_in_docs": true
+    "hide_in_docs": true,
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
   },
   "chat_provider.system_prompt.source": {
-    "hide_in_docs": true
+    "hide_in_docs": true,
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
   },
   "chat_provider.system_prompt_langfuse.prompt_name": {
-    "hide_in_docs": true
+    "hide_in_docs": true,
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
   },
   "chat_provider.validate_availability": {
-    "hide_in_docs": true
+    "hide_in_docs": true,
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
   },
-  "chat_providers.all_providers.enable_embedded_image_retrieval_tool": {},
-  "chat_providers.all_providers.guardrails.filter_input_prompt_injection.enabled": {},
-  "chat_providers.all_providers.guardrails.filter_input_prompt_injection.exclude_pattern_ids.[]": {},
-  "chat_providers.all_providers.guardrails.filter_input_prompt_injection.filter_pattern_ids.[]": {},
-  "chat_providers.all_providers.guardrails.filter_input_prompt_injection.filter_pattern_tags.[]": {},
-  "chat_providers.priority_order.[]": {},
-  "chat_providers.providers.<provider-id>.additional_request_headers.[]": {},
-  "chat_providers.providers.<provider-id>.additional_request_parameters.[]": {},
-  "chat_providers.providers.<provider-id>.api_key": {},
-  "chat_providers.providers.<provider-id>.api_version": {},
-  "chat_providers.providers.<provider-id>.archived": {},
-  "chat_providers.providers.<provider-id>.base_url": {},
-  "chat_providers.providers.<provider-id>.enable_embedded_image_retrieval_tool": {},
-  "chat_providers.providers.<provider-id>.guardrails.filter_input_prompt_injection.enabled": {},
-  "chat_providers.providers.<provider-id>.guardrails.filter_input_prompt_injection.exclude_pattern_ids.[]": {},
-  "chat_providers.providers.<provider-id>.guardrails.filter_input_prompt_injection.filter_pattern_ids.[]": {},
-  "chat_providers.providers.<provider-id>.guardrails.filter_input_prompt_injection.filter_pattern_tags.[]": {},
-  "chat_providers.providers.<provider-id>.hallucination_suppression.enabled": {},
-  "chat_providers.providers.<provider-id>.hallucination_suppression.whitespace_delta_threshold": {},
-  "chat_providers.providers.<provider-id>.model_capabilities.context_size_tokens": {},
-  "chat_providers.providers.<provider-id>.model_capabilities.cost_input_tokens_per_1m": {},
-  "chat_providers.providers.<provider-id>.model_capabilities.cost_output_tokens_per_1m": {},
-  "chat_providers.providers.<provider-id>.model_capabilities.supports_audio_input": {},
-  "chat_providers.providers.<provider-id>.model_capabilities.supports_encrypted_reasoning_content": {},
-  "chat_providers.providers.<provider-id>.model_capabilities.supports_image_understanding": {},
-  "chat_providers.providers.<provider-id>.model_capabilities.supports_reasoning": {},
-  "chat_providers.providers.<provider-id>.model_capabilities.supports_reasoning_summary": {},
-  "chat_providers.providers.<provider-id>.model_capabilities.supports_strict_tool_calling": {},
-  "chat_providers.providers.<provider-id>.model_capabilities.supports_verbosity": {},
-  "chat_providers.providers.<provider-id>.model_description": {},
-  "chat_providers.providers.<provider-id>.model_display_name": {},
-  "chat_providers.providers.<provider-id>.model_icon": {},
-  "chat_providers.providers.<provider-id>.model_name": {},
-  "chat_providers.providers.<provider-id>.model_name_langfuse": {},
-  "chat_providers.providers.<provider-id>.model_settings.compat_no_replay_summary": {},
-  "chat_providers.providers.<provider-id>.model_settings.compat_omit_strict": {},
-  "chat_providers.providers.<provider-id>.model_settings.reasoning_effort": {},
-  "chat_providers.providers.<provider-id>.model_settings.temperature": {},
-  "chat_providers.providers.<provider-id>.model_settings.top_p": {},
-  "chat_providers.providers.<provider-id>.model_settings.verbosity": {},
-  "chat_providers.providers.<provider-id>.provider_kind": {},
-  "chat_providers.providers.<provider-id>.region": {},
-  "chat_providers.providers.<provider-id>.system_prompt": {},
-  "chat_providers.providers.<provider-id>.system_prompt.fallback": {},
-  "chat_providers.providers.<provider-id>.system_prompt.label": {},
-  "chat_providers.providers.<provider-id>.system_prompt.prompt": {},
-  "chat_providers.providers.<provider-id>.system_prompt.prompt_name": {},
-  "chat_providers.providers.<provider-id>.system_prompt.source": {},
-  "chat_providers.providers.<provider-id>.system_prompt_langfuse.prompt_name": {},
-  "chat_providers.providers.<provider-id>.validate_availability": {},
-  "chat_providers.replacement_providers.[].new": {},
-  "chat_providers.replacement_providers.[].old": {},
-  "chat_providers.summary.max_tokens": {},
-  "chat_providers.summary.summary_chat_provider_id": {},
-  "chat_providers.summary.system_prompt": {},
-  "chat_providers.summary.system_prompt.fallback": {},
-  "chat_providers.summary.system_prompt.label": {},
-  "chat_providers.summary.system_prompt.prompt": {},
-  "chat_providers.summary.system_prompt.prompt_name": {},
-  "chat_providers.summary.system_prompt.source": {},
-  "chat_sharing.enabled": {},
+  "chat_providers.all_providers.enable_embedded_image_retrieval_tool": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "chat_providers.all_providers.guardrails.filter_input_prompt_injection.enabled": {
+    "introduced_in": "0.6.1",
+    "stability": "unstable"
+  },
+  "chat_providers.all_providers.guardrails.filter_input_prompt_injection.exclude_pattern_ids.[]": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "chat_providers.all_providers.guardrails.filter_input_prompt_injection.filter_pattern_ids.[]": {
+    "introduced_in": "0.6.1",
+    "stability": "unstable"
+  },
+  "chat_providers.all_providers.guardrails.filter_input_prompt_injection.filter_pattern_tags.[]": {
+    "introduced_in": "0.6.1",
+    "stability": "unstable"
+  },
+  "chat_providers.priority_order.[]": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "chat_providers.providers.<provider-id>.additional_request_headers.[]": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "chat_providers.providers.<provider-id>.additional_request_parameters.[]": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "chat_providers.providers.<provider-id>.api_key": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "chat_providers.providers.<provider-id>.api_version": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "chat_providers.providers.<provider-id>.archived": {
+    "introduced_in": "unreleased",
+    "stability": "unstable"
+  },
+  "chat_providers.providers.<provider-id>.base_url": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "chat_providers.providers.<provider-id>.enable_embedded_image_retrieval_tool": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "chat_providers.providers.<provider-id>.guardrails.filter_input_prompt_injection.enabled": {
+    "introduced_in": "0.6.1",
+    "stability": "unstable"
+  },
+  "chat_providers.providers.<provider-id>.guardrails.filter_input_prompt_injection.exclude_pattern_ids.[]": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "chat_providers.providers.<provider-id>.guardrails.filter_input_prompt_injection.filter_pattern_ids.[]": {
+    "introduced_in": "0.6.1",
+    "stability": "unstable"
+  },
+  "chat_providers.providers.<provider-id>.guardrails.filter_input_prompt_injection.filter_pattern_tags.[]": {
+    "introduced_in": "0.6.1",
+    "stability": "unstable"
+  },
+  "chat_providers.providers.<provider-id>.hallucination_suppression.enabled": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "chat_providers.providers.<provider-id>.hallucination_suppression.whitespace_delta_threshold": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "chat_providers.providers.<provider-id>.model_capabilities.context_size_tokens": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "chat_providers.providers.<provider-id>.model_capabilities.cost_input_tokens_per_1m": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "chat_providers.providers.<provider-id>.model_capabilities.cost_output_tokens_per_1m": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "chat_providers.providers.<provider-id>.model_capabilities.supports_audio_input": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "chat_providers.providers.<provider-id>.model_capabilities.supports_encrypted_reasoning_content": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "chat_providers.providers.<provider-id>.model_capabilities.supports_image_understanding": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "chat_providers.providers.<provider-id>.model_capabilities.supports_reasoning": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "chat_providers.providers.<provider-id>.model_capabilities.supports_reasoning_summary": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "chat_providers.providers.<provider-id>.model_capabilities.supports_strict_tool_calling": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "chat_providers.providers.<provider-id>.model_capabilities.supports_verbosity": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "chat_providers.providers.<provider-id>.model_description": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "chat_providers.providers.<provider-id>.model_display_name": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "chat_providers.providers.<provider-id>.model_icon": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "chat_providers.providers.<provider-id>.model_name": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "chat_providers.providers.<provider-id>.model_name_langfuse": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "chat_providers.providers.<provider-id>.model_settings.compat_no_replay_summary": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "chat_providers.providers.<provider-id>.model_settings.compat_omit_strict": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "chat_providers.providers.<provider-id>.model_settings.reasoning_effort": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "chat_providers.providers.<provider-id>.model_settings.temperature": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "chat_providers.providers.<provider-id>.model_settings.top_p": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "chat_providers.providers.<provider-id>.model_settings.verbosity": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "chat_providers.providers.<provider-id>.provider_kind": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "chat_providers.providers.<provider-id>.region": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "chat_providers.providers.<provider-id>.system_prompt": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "chat_providers.providers.<provider-id>.system_prompt.fallback": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "chat_providers.providers.<provider-id>.system_prompt.label": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "chat_providers.providers.<provider-id>.system_prompt.prompt": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "chat_providers.providers.<provider-id>.system_prompt.prompt_name": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "chat_providers.providers.<provider-id>.system_prompt.source": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "chat_providers.providers.<provider-id>.system_prompt_langfuse.prompt_name": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "chat_providers.providers.<provider-id>.validate_availability": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "chat_providers.replacement_providers.[].new": {
+    "introduced_in": "unreleased",
+    "stability": "unstable"
+  },
+  "chat_providers.replacement_providers.[].old": {
+    "introduced_in": "unreleased",
+    "stability": "unstable"
+  },
+  "chat_providers.summary.max_tokens": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "chat_providers.summary.summary_chat_provider_id": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "chat_providers.summary.system_prompt": {
+    "introduced_in": "0.6.1",
+    "stability": "unstable"
+  },
+  "chat_providers.summary.system_prompt.fallback": {
+    "introduced_in": "0.6.1",
+    "stability": "unstable"
+  },
+  "chat_providers.summary.system_prompt.label": {
+    "introduced_in": "0.6.1",
+    "stability": "unstable"
+  },
+  "chat_providers.summary.system_prompt.prompt": {
+    "introduced_in": "0.6.1",
+    "stability": "unstable"
+  },
+  "chat_providers.summary.system_prompt.prompt_name": {
+    "introduced_in": "0.6.1",
+    "stability": "unstable"
+  },
+  "chat_providers.summary.system_prompt.source": {
+    "introduced_in": "0.6.1",
+    "stability": "unstable"
+  },
+  "chat_sharing.enabled": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
   "cleanup_archived_max_age_days": {
-    "needs_scoped_replacement": true
+    "introduced_in": "0.6.0",
+    "needs_scoped_replacement": true,
+    "stability": "unstable"
   },
   "cleanup_enabled": {
-    "needs_scoped_replacement": true
+    "introduced_in": "0.6.0",
+    "needs_scoped_replacement": true,
+    "stability": "unstable"
   },
-  "client_tools.durable_operations_enabled": {},
-  "client_tools.executor_stream_enabled": {},
-  "client_tools.tools.<key>.child_access": {},
-  "client_tools.tools.<key>.child_context_arg": {},
-  "client_tools.tools.<key>.child_context_input": {},
-  "client_tools.tools.<key>.child_dispatch": {},
-  "client_tools.tools.<key>.child_host_inputs.[]": {},
-  "client_tools.tools.<key>.description": {},
-  "client_tools.tools.<key>.durable.attempt_expiry_secs": {},
-  "client_tools.tools.<key>.durable.claim_lease_secs": {},
-  "client_tools.tools.<key>.durable.host_context": {},
-  "client_tools.tools.<key>.durable.result_schema": {},
-  "client_tools.tools.<key>.host_context": {},
-  "client_tools.tools.<key>.name": {},
-  "client_tools.tools.<key>.namespace": {},
-  "client_tools.tools.<key>.parameters": {},
-  "client_tools.tools.<key>.replay.keep_input_fields.[]": {},
-  "client_tools.tools.<key>.replay.keep_output_fields.[]": {},
-  "client_tools.tools.<key>.replay.mode": {},
-  "client_tools.tools.<key>.requires_client_registration": {},
-  "client_tools.tools.<key>.submission.max_attempts": {},
-  "client_tools.tools.<key>.submission.max_recovery_reads": {},
-  "client_tools.tools.<key>.submission.native_schema": {},
-  "client_tools.tools.<key>.submission.recovery_read_tools.[]": {},
-  "client_tools.tools.<key>.timeout_ms": {},
-  "database_url": {},
-  "decision_providers.provider.<provider-id>.api_key": {},
-  "decision_providers.provider.<provider-id>.archived": {},
-  "decision_providers.provider.<provider-id>.base_url": {},
-  "decision_providers.provider.<provider-id>.model_name": {},
-  "decision_providers.provider.<provider-id>.provider_kind": {},
-  "decision_providers.replacement_providers.[].new": {},
-  "decision_providers.replacement_providers.[].old": {},
-  "default_file_storage_provider": {},
-  "delegation.allow_background": {},
-  "delegation.assistants.enabled": {},
-  "delegation.assistants.max_mentions_per_message": {},
-  "delegation.auto_archive_after_days": {},
-  "delegation.max_concurrent_background_runs": {},
-  "delegation.preamble": {},
-  "delegation.result_max_chars": {},
-  "delegation.run_timeout_seconds": {},
-  "delegation.tasks.approval.mode": {},
-  "delegation.tasks.approval.plan_min_tasks": {},
-  "delegation.tasks.child_dispatch": {},
-  "delegation.tasks.child_facet_ids.[]": {},
-  "delegation.tasks.enabled": {},
-  "delegation.tasks.max_client_tool_calls_per_task": {},
-  "delegation.tasks.max_parallel": {},
-  "delegation.tasks.max_server_tool_calls_per_task": {},
-  "delegation.tasks.max_tasks_per_turn": {},
-  "delegation.tasks.multitask_strategy": {},
-  "delegation.tasks.persona": {},
-  "delegation.tasks.propagate_child_mcp_approvals": {},
-  "delegation.tasks.result_template": {},
-  "delegation.tasks.run_modes.[]": {},
-  "delegation.tasks.scheduling": {},
-  "desktop_sidecar.allowed_origins.[]": {},
-  "desktop_sidecar.directory_suffix": {},
-  "desktop_sidecar.display_name": {},
-  "desktop_sidecar.distribution.directory": {},
-  "desktop_sidecar.distribution.enabled": {},
-  "desktop_sidecar.file_upload_approval": {},
-  "desktop_sidecar.icon": {},
-  "desktop_sidecar.launch_suffix": {},
-  "desktop_sidecar.local_delegation.backend_origin": {},
-  "desktop_sidecar.local_delegation.enabled": {},
-  "desktop_sidecar.local_delegation.signing_key_id": {},
-  "desktop_sidecar.local_delegation.signing_private_key_pem": {},
-  "desktop_sidecar.local_delegation.verification_keys.<key>": {},
-  "desktop_sidecar.organization_configuration.outlook_addin_autopin": {},
-  "desktop_sidecar.organization_configuration.outlook_addin_autopin_panes": {},
-  "desktop_sidecar.organization_configuration.outlook_addin_id": {},
-  "desktop_sidecar.organization_configuration.show_tray_icon": {},
-  "desktop_sidecar.port": {},
-  "desktop_sidecar.product_code": {},
-  "desktop_sidecar.show_settings_tab": {},
-  "desktop_sidecar.show_settings_tab_office_addin": {},
-  "desktop_sidecar.tls.certificate_pem": {},
-  "desktop_sidecar.tls.intermediate_certificate_pem": {},
-  "desktop_sidecar.tls.intermediate_private_key_pem": {},
-  "desktop_sidecar.tls.private_key_pem": {},
-  "desktop_sidecar.tls.validity_days": {},
-  "desktop_sidecar.upgrade_code": {},
+  "client_tools.durable_operations_enabled": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "client_tools.executor_stream_enabled": {
+    "introduced_in": "unreleased",
+    "stability": "unstable"
+  },
+  "client_tools.tools.<key>.child_access": {
+    "introduced_in": "unreleased",
+    "stability": "unstable"
+  },
+  "client_tools.tools.<key>.child_context_arg": {
+    "introduced_in": "unreleased",
+    "stability": "unstable"
+  },
+  "client_tools.tools.<key>.child_context_input": {
+    "introduced_in": "unreleased",
+    "stability": "unstable"
+  },
+  "client_tools.tools.<key>.child_dispatch": {
+    "introduced_in": "unreleased",
+    "stability": "unstable"
+  },
+  "client_tools.tools.<key>.child_host_inputs.[]": {
+    "introduced_in": "unreleased",
+    "stability": "unstable"
+  },
+  "client_tools.tools.<key>.description": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "client_tools.tools.<key>.durable.attempt_expiry_secs": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "client_tools.tools.<key>.durable.claim_lease_secs": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "client_tools.tools.<key>.durable.host_context": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "client_tools.tools.<key>.durable.result_schema": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "client_tools.tools.<key>.host_context": {
+    "introduced_in": "unreleased",
+    "stability": "unstable"
+  },
+  "client_tools.tools.<key>.name": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "client_tools.tools.<key>.namespace": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "client_tools.tools.<key>.parameters": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "client_tools.tools.<key>.replay.keep_input_fields.[]": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "client_tools.tools.<key>.replay.keep_output_fields.[]": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "client_tools.tools.<key>.replay.mode": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "client_tools.tools.<key>.requires_client_registration": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "client_tools.tools.<key>.submission.max_attempts": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "client_tools.tools.<key>.submission.max_recovery_reads": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "client_tools.tools.<key>.submission.native_schema": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "client_tools.tools.<key>.submission.recovery_read_tools.[]": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "client_tools.tools.<key>.timeout_ms": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "database_url": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "decision_providers.provider.<provider-id>.api_key": {
+    "introduced_in": "unreleased",
+    "stability": "unstable"
+  },
+  "decision_providers.provider.<provider-id>.archived": {
+    "introduced_in": "unreleased",
+    "stability": "unstable"
+  },
+  "decision_providers.provider.<provider-id>.base_url": {
+    "introduced_in": "unreleased",
+    "stability": "unstable"
+  },
+  "decision_providers.provider.<provider-id>.model_name": {
+    "introduced_in": "unreleased",
+    "stability": "unstable"
+  },
+  "decision_providers.provider.<provider-id>.provider_kind": {
+    "introduced_in": "unreleased",
+    "stability": "unstable"
+  },
+  "decision_providers.replacement_providers.[].new": {
+    "introduced_in": "unreleased",
+    "stability": "unstable"
+  },
+  "decision_providers.replacement_providers.[].old": {
+    "introduced_in": "unreleased",
+    "stability": "unstable"
+  },
+  "default_file_storage_provider": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "delegation.allow_background": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "delegation.assistants.enabled": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "delegation.assistants.max_mentions_per_message": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "delegation.auto_archive_after_days": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "delegation.max_concurrent_background_runs": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "delegation.preamble": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "delegation.result_max_chars": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "delegation.run_timeout_seconds": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "delegation.tasks.approval.mode": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "delegation.tasks.approval.plan_min_tasks": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "delegation.tasks.child_dispatch": {
+    "introduced_in": "unreleased",
+    "stability": "unstable"
+  },
+  "delegation.tasks.child_facet_ids.[]": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "delegation.tasks.enabled": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "delegation.tasks.max_client_tool_calls_per_task": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "delegation.tasks.max_parallel": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "delegation.tasks.max_server_tool_calls_per_task": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "delegation.tasks.max_tasks_per_turn": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "delegation.tasks.multitask_strategy": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "delegation.tasks.persona": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "delegation.tasks.propagate_child_mcp_approvals": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "delegation.tasks.result_template": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "delegation.tasks.run_modes.[]": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "delegation.tasks.scheduling": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "desktop_sidecar.allowed_origins.[]": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "desktop_sidecar.directory_suffix": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "desktop_sidecar.display_name": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "desktop_sidecar.distribution.directory": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "desktop_sidecar.distribution.enabled": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "desktop_sidecar.file_upload_approval": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "desktop_sidecar.icon": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "desktop_sidecar.launch_suffix": {
+    "introduced_in": "unreleased",
+    "stability": "unstable"
+  },
+  "desktop_sidecar.local_delegation.backend_origin": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "desktop_sidecar.local_delegation.enabled": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "desktop_sidecar.local_delegation.signing_key_id": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "desktop_sidecar.local_delegation.signing_private_key_pem": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "desktop_sidecar.local_delegation.verification_keys.<key>": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "desktop_sidecar.organization_configuration.outlook_addin_autopin": {
+    "introduced_in": "unreleased",
+    "stability": "unstable"
+  },
+  "desktop_sidecar.organization_configuration.outlook_addin_autopin_panes": {
+    "introduced_in": "unreleased",
+    "stability": "unstable"
+  },
+  "desktop_sidecar.organization_configuration.outlook_addin_id": {
+    "introduced_in": "unreleased",
+    "stability": "unstable"
+  },
+  "desktop_sidecar.organization_configuration.show_tray_icon": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "desktop_sidecar.port": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "desktop_sidecar.product_code": {
+    "introduced_in": "unreleased",
+    "stability": "unstable"
+  },
+  "desktop_sidecar.show_settings_tab": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "desktop_sidecar.show_settings_tab_office_addin": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "desktop_sidecar.tls.certificate_pem": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "desktop_sidecar.tls.intermediate_certificate_pem": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "desktop_sidecar.tls.intermediate_private_key_pem": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "desktop_sidecar.tls.private_key_pem": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "desktop_sidecar.tls.validity_days": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "desktop_sidecar.upgrade_code": {
+    "introduced_in": "unreleased",
+    "stability": "unstable"
+  },
   "environment": {
-    "hide_in_docs": true
+    "hide_in_docs": true,
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
   },
   "experimental_facets.default_selected_facets.[]": {
-    "hide_in_docs": true,
     "deprecated": {
       "note": "Please use `facets.default_selected_facets.[]` instead.",
       "replacement_key": "facets.default_selected_facets.[]"
-    }
+    },
+    "hide_in_docs": true,
+    "introduced_in": "0.6.0",
+    "stability": "deprecated"
   },
   "experimental_facets.facet_prompt_template": {
-    "hide_in_docs": true,
     "deprecated": {
       "note": "Please use `facets.facet_prompt_template` instead.",
       "replacement_key": "facets.facet_prompt_template"
-    }
+    },
+    "hide_in_docs": true,
+    "introduced_in": "0.6.0",
+    "stability": "deprecated"
   },
   "experimental_facets.facet_prompt_template.fallback": {
-    "hide_in_docs": true,
     "deprecated": {
       "note": "Please use `facets.facet_prompt_template.fallback` instead.",
       "replacement_key": "facets.facet_prompt_template.fallback"
-    }
+    },
+    "hide_in_docs": true,
+    "introduced_in": "0.6.0",
+    "stability": "deprecated"
   },
   "experimental_facets.facet_prompt_template.label": {
-    "hide_in_docs": true,
     "deprecated": {
       "note": "Please use `facets.facet_prompt_template.label` instead.",
       "replacement_key": "facets.facet_prompt_template.label"
-    }
+    },
+    "hide_in_docs": true,
+    "introduced_in": "0.6.0",
+    "stability": "deprecated"
   },
   "experimental_facets.facet_prompt_template.prompt": {
-    "hide_in_docs": true,
     "deprecated": {
       "note": "Please use `facets.facet_prompt_template.prompt` instead.",
       "replacement_key": "facets.facet_prompt_template.prompt"
-    }
+    },
+    "hide_in_docs": true,
+    "introduced_in": "0.6.0",
+    "stability": "deprecated"
   },
   "experimental_facets.facet_prompt_template.prompt_name": {
-    "hide_in_docs": true,
     "deprecated": {
       "note": "Please use `facets.facet_prompt_template.prompt_name` instead.",
       "replacement_key": "facets.facet_prompt_template.prompt_name"
-    }
+    },
+    "hide_in_docs": true,
+    "introduced_in": "0.6.0",
+    "stability": "deprecated"
   },
   "experimental_facets.facet_prompt_template.source": {
-    "hide_in_docs": true,
     "deprecated": {
       "note": "Please use `facets.facet_prompt_template.source` instead.",
       "replacement_key": "facets.facet_prompt_template.source"
-    }
+    },
+    "hide_in_docs": true,
+    "introduced_in": "0.6.0",
+    "stability": "deprecated"
   },
   "experimental_facets.facets.<facet-id>.additional_system_prompt": {
-    "hide_in_docs": true,
     "deprecated": {
       "note": "Please use `facets.facets.<facet-id>.additional_system_prompt` instead.",
       "replacement_key": "facets.facets.<facet-id>.additional_system_prompt"
-    }
+    },
+    "hide_in_docs": true,
+    "introduced_in": "0.6.0",
+    "stability": "deprecated"
   },
   "experimental_facets.facets.<facet-id>.additional_system_prompt.fallback": {
-    "hide_in_docs": true,
     "deprecated": {
       "note": "Please use `facets.facets.<facet-id>.additional_system_prompt.fallback` instead.",
       "replacement_key": "facets.facets.<facet-id>.additional_system_prompt.fallback"
-    }
+    },
+    "hide_in_docs": true,
+    "introduced_in": "0.6.0",
+    "stability": "deprecated"
   },
   "experimental_facets.facets.<facet-id>.additional_system_prompt.label": {
-    "hide_in_docs": true,
     "deprecated": {
       "note": "Please use `facets.facets.<facet-id>.additional_system_prompt.label` instead.",
       "replacement_key": "facets.facets.<facet-id>.additional_system_prompt.label"
-    }
+    },
+    "hide_in_docs": true,
+    "introduced_in": "0.6.0",
+    "stability": "deprecated"
   },
   "experimental_facets.facets.<facet-id>.additional_system_prompt.prompt": {
-    "hide_in_docs": true,
     "deprecated": {
       "note": "Please use `facets.facets.<facet-id>.additional_system_prompt.prompt` instead.",
       "replacement_key": "facets.facets.<facet-id>.additional_system_prompt.prompt"
-    }
+    },
+    "hide_in_docs": true,
+    "introduced_in": "0.6.0",
+    "stability": "deprecated"
   },
   "experimental_facets.facets.<facet-id>.additional_system_prompt.prompt_name": {
-    "hide_in_docs": true,
     "deprecated": {
       "note": "Please use `facets.facets.<facet-id>.additional_system_prompt.prompt_name` instead.",
       "replacement_key": "facets.facets.<facet-id>.additional_system_prompt.prompt_name"
-    }
+    },
+    "hide_in_docs": true,
+    "introduced_in": "0.6.0",
+    "stability": "deprecated"
   },
   "experimental_facets.facets.<facet-id>.additional_system_prompt.source": {
-    "hide_in_docs": true,
     "deprecated": {
       "note": "Please use `facets.facets.<facet-id>.additional_system_prompt.source` instead.",
       "replacement_key": "facets.facets.<facet-id>.additional_system_prompt.source"
-    }
+    },
+    "hide_in_docs": true,
+    "introduced_in": "0.6.0",
+    "stability": "deprecated"
   },
   "experimental_facets.facets.<facet-id>.child_chat_provider": {
-    "hide_in_docs": true,
     "deprecated": {
       "note": "Please use `facets.facets.<facet-id>.child_chat_provider` instead.",
       "replacement_key": "facets.facets.<facet-id>.child_chat_provider"
-    }
+    },
+    "hide_in_docs": true,
+    "introduced_in": "unreleased",
+    "stability": "deprecated"
   },
   "experimental_facets.facets.<facet-id>.child_host_context": {
-    "hide_in_docs": true,
     "deprecated": {
       "note": "Please use `facets.facets.<facet-id>.child_host_context` instead.",
       "replacement_key": "facets.facets.<facet-id>.child_host_context"
-    }
+    },
+    "hide_in_docs": true,
+    "introduced_in": "unreleased",
+    "stability": "deprecated"
   },
   "experimental_facets.facets.<facet-id>.delegation.approval.mode": {
-    "hide_in_docs": true,
     "deprecated": {
       "note": "Please use `facets.facets.<facet-id>.delegation.approval.mode` instead.",
       "replacement_key": "facets.facets.<facet-id>.delegation.approval.mode"
-    }
+    },
+    "hide_in_docs": true,
+    "introduced_in": "0.7.0",
+    "stability": "deprecated"
   },
   "experimental_facets.facets.<facet-id>.delegation.approval.plan_min_tasks": {
-    "hide_in_docs": true,
     "deprecated": {
       "note": "Please use `facets.facets.<facet-id>.delegation.approval.plan_min_tasks` instead.",
       "replacement_key": "facets.facets.<facet-id>.delegation.approval.plan_min_tasks"
-    }
+    },
+    "hide_in_docs": true,
+    "introduced_in": "0.7.0",
+    "stability": "deprecated"
   },
   "experimental_facets.facets.<facet-id>.delegation.child_chat_providers.[]": {
-    "hide_in_docs": true,
     "deprecated": {
       "note": "Please use `facets.facets.<facet-id>.delegation.child_chat_providers.[]` instead.",
       "replacement_key": "facets.facets.<facet-id>.delegation.child_chat_providers.[]"
-    }
+    },
+    "hide_in_docs": true,
+    "introduced_in": "unreleased",
+    "stability": "deprecated"
   },
   "experimental_facets.facets.<facet-id>.delegation.child_facet_ids.[]": {
-    "hide_in_docs": true,
     "deprecated": {
       "note": "Please use `facets.facets.<facet-id>.delegation.child_facet_ids.[]` instead.",
       "replacement_key": "facets.facets.<facet-id>.delegation.child_facet_ids.[]"
-    }
+    },
+    "hide_in_docs": true,
+    "introduced_in": "0.7.0",
+    "stability": "deprecated"
   },
   "experimental_facets.facets.<facet-id>.delegation.max_client_tool_calls_per_task": {
-    "hide_in_docs": true,
     "deprecated": {
       "note": "Please use `facets.facets.<facet-id>.delegation.max_client_tool_calls_per_task` instead.",
       "replacement_key": "facets.facets.<facet-id>.delegation.max_client_tool_calls_per_task"
-    }
+    },
+    "hide_in_docs": true,
+    "introduced_in": "0.7.0",
+    "stability": "deprecated"
   },
   "experimental_facets.facets.<facet-id>.delegation.max_parallel": {
-    "hide_in_docs": true,
     "deprecated": {
       "note": "Please use `facets.facets.<facet-id>.delegation.max_parallel` instead.",
       "replacement_key": "facets.facets.<facet-id>.delegation.max_parallel"
-    }
+    },
+    "hide_in_docs": true,
+    "introduced_in": "0.7.0",
+    "stability": "deprecated"
   },
   "experimental_facets.facets.<facet-id>.delegation.max_server_tool_calls_per_task": {
-    "hide_in_docs": true,
     "deprecated": {
       "note": "Please use `facets.facets.<facet-id>.delegation.max_server_tool_calls_per_task` instead.",
       "replacement_key": "facets.facets.<facet-id>.delegation.max_server_tool_calls_per_task"
-    }
+    },
+    "hide_in_docs": true,
+    "introduced_in": "0.7.0",
+    "stability": "deprecated"
   },
   "experimental_facets.facets.<facet-id>.delegation.max_tasks_per_turn": {
-    "hide_in_docs": true,
     "deprecated": {
       "note": "Please use `facets.facets.<facet-id>.delegation.max_tasks_per_turn` instead.",
       "replacement_key": "facets.facets.<facet-id>.delegation.max_tasks_per_turn"
-    }
+    },
+    "hide_in_docs": true,
+    "introduced_in": "0.7.0",
+    "stability": "deprecated"
   },
   "experimental_facets.facets.<facet-id>.delegation.persona": {
-    "hide_in_docs": true,
     "deprecated": {
       "note": "Please use `facets.facets.<facet-id>.delegation.persona` instead.",
       "replacement_key": "facets.facets.<facet-id>.delegation.persona"
-    }
+    },
+    "hide_in_docs": true,
+    "introduced_in": "0.7.0",
+    "stability": "deprecated"
   },
   "experimental_facets.facets.<facet-id>.delegation.run_modes.[]": {
-    "hide_in_docs": true,
     "deprecated": {
       "note": "Please use `facets.facets.<facet-id>.delegation.run_modes.[]` instead.",
       "replacement_key": "facets.facets.<facet-id>.delegation.run_modes.[]"
-    }
+    },
+    "hide_in_docs": true,
+    "introduced_in": "0.7.0",
+    "stability": "deprecated"
   },
   "experimental_facets.facets.<facet-id>.delegation.scheduling": {
-    "hide_in_docs": true,
     "deprecated": {
       "note": "Please use `facets.facets.<facet-id>.delegation.scheduling` instead.",
       "replacement_key": "facets.facets.<facet-id>.delegation.scheduling"
-    }
+    },
+    "hide_in_docs": true,
+    "introduced_in": "0.7.0",
+    "stability": "deprecated"
   },
   "experimental_facets.facets.<facet-id>.disable_facet_prompt_template": {
-    "hide_in_docs": true,
     "deprecated": {
       "note": "Please use `facets.facets.<facet-id>.disable_facet_prompt_template` instead.",
       "replacement_key": "facets.facets.<facet-id>.disable_facet_prompt_template"
-    }
+    },
+    "hide_in_docs": true,
+    "introduced_in": "0.6.0",
+    "stability": "deprecated"
   },
   "experimental_facets.facets.<facet-id>.display_name": {
-    "hide_in_docs": true,
     "deprecated": {
       "note": "Please use `facets.facets.<facet-id>.display_name` instead.",
       "replacement_key": "facets.facets.<facet-id>.display_name"
-    }
+    },
+    "hide_in_docs": true,
+    "introduced_in": "0.6.0",
+    "stability": "deprecated"
   },
   "experimental_facets.facets.<facet-id>.hidden": {
-    "hide_in_docs": true,
     "deprecated": {
       "note": "Please use `facets.facets.<facet-id>.hidden` instead.",
       "replacement_key": "facets.facets.<facet-id>.hidden"
-    }
+    },
+    "hide_in_docs": true,
+    "introduced_in": "0.7.0",
+    "stability": "deprecated"
   },
   "experimental_facets.facets.<facet-id>.hidden_always_active_for_platform": {
-    "hide_in_docs": true,
     "deprecated": {
       "note": "Please use `facets.facets.<facet-id>.hidden_always_active_for_platform` instead.",
       "replacement_key": "facets.facets.<facet-id>.hidden_always_active_for_platform"
-    }
+    },
+    "hide_in_docs": true,
+    "introduced_in": "0.7.0",
+    "stability": "deprecated"
   },
   "experimental_facets.facets.<facet-id>.icon": {
-    "hide_in_docs": true,
     "deprecated": {
       "note": "Please use `facets.facets.<facet-id>.icon` instead.",
       "replacement_key": "facets.facets.<facet-id>.icon"
-    }
+    },
+    "hide_in_docs": true,
+    "introduced_in": "0.6.0",
+    "stability": "deprecated"
   },
   "experimental_facets.facets.<facet-id>.model_settings.compat_no_replay_summary": {
-    "hide_in_docs": true,
     "deprecated": {
       "note": "Please use `facets.facets.<facet-id>.model_settings.compat_no_replay_summary` instead.",
       "replacement_key": "facets.facets.<facet-id>.model_settings.compat_no_replay_summary"
-    }
+    },
+    "hide_in_docs": true,
+    "introduced_in": "0.7.0",
+    "stability": "deprecated"
   },
   "experimental_facets.facets.<facet-id>.model_settings.compat_omit_strict": {
-    "hide_in_docs": true,
     "deprecated": {
       "note": "Please use `facets.facets.<facet-id>.model_settings.compat_omit_strict` instead.",
       "replacement_key": "facets.facets.<facet-id>.model_settings.compat_omit_strict"
-    }
+    },
+    "hide_in_docs": true,
+    "introduced_in": "0.6.0",
+    "stability": "deprecated"
   },
   "experimental_facets.facets.<facet-id>.model_settings.reasoning_effort": {
-    "hide_in_docs": true,
     "deprecated": {
       "note": "Please use `facets.facets.<facet-id>.model_settings.reasoning_effort` instead.",
       "replacement_key": "facets.facets.<facet-id>.model_settings.reasoning_effort"
-    }
+    },
+    "hide_in_docs": true,
+    "introduced_in": "0.6.0",
+    "stability": "deprecated"
   },
   "experimental_facets.facets.<facet-id>.model_settings.temperature": {
-    "hide_in_docs": true,
     "deprecated": {
       "note": "Please use `facets.facets.<facet-id>.model_settings.temperature` instead.",
       "replacement_key": "facets.facets.<facet-id>.model_settings.temperature"
-    }
+    },
+    "hide_in_docs": true,
+    "introduced_in": "0.6.0",
+    "stability": "deprecated"
   },
   "experimental_facets.facets.<facet-id>.model_settings.top_p": {
-    "hide_in_docs": true,
     "deprecated": {
       "note": "Please use `facets.facets.<facet-id>.model_settings.top_p` instead.",
       "replacement_key": "facets.facets.<facet-id>.model_settings.top_p"
-    }
+    },
+    "hide_in_docs": true,
+    "introduced_in": "0.6.0",
+    "stability": "deprecated"
   },
   "experimental_facets.facets.<facet-id>.model_settings.verbosity": {
-    "hide_in_docs": true,
     "deprecated": {
       "note": "Please use `facets.facets.<facet-id>.model_settings.verbosity` instead.",
       "replacement_key": "facets.facets.<facet-id>.model_settings.verbosity"
-    }
+    },
+    "hide_in_docs": true,
+    "introduced_in": "0.6.0",
+    "stability": "deprecated"
   },
   "experimental_facets.facets.<facet-id>.tool_call_allowlist.[]": {
-    "hide_in_docs": true,
     "deprecated": {
       "note": "Please use `facets.facets.<facet-id>.tool_call_allowlist.[]` instead.",
       "replacement_key": "facets.facets.<facet-id>.tool_call_allowlist.[]"
-    }
+    },
+    "hide_in_docs": true,
+    "introduced_in": "0.6.0",
+    "stability": "deprecated"
   },
   "experimental_facets.only_single_facet": {
-    "hide_in_docs": true,
     "deprecated": {
       "note": "Please use `facets.only_single_facet` instead.",
       "replacement_key": "facets.only_single_facet"
-    }
+    },
+    "hide_in_docs": true,
+    "introduced_in": "0.6.0",
+    "stability": "deprecated"
   },
   "experimental_facets.priority_order.[]": {
-    "hide_in_docs": true,
     "deprecated": {
       "note": "Please use `facets.priority_order.[]` instead.",
       "replacement_key": "facets.priority_order.[]"
-    }
+    },
+    "hide_in_docs": true,
+    "introduced_in": "0.6.0",
+    "stability": "deprecated"
   },
   "experimental_facets.show_facet_indicator_with_display_name": {
-    "hide_in_docs": true,
     "deprecated": {
       "note": "Please use `facets.show_facet_indicator_with_display_name` instead.",
       "replacement_key": "facets.show_facet_indicator_with_display_name"
-    }
+    },
+    "hide_in_docs": true,
+    "introduced_in": "0.6.0",
+    "stability": "deprecated"
   },
   "experimental_facets.tool_call_allowlist.[]": {
-    "hide_in_docs": true,
     "deprecated": {
       "note": "Please use `facets.tool_call_allowlist.[]` instead.",
       "replacement_key": "facets.tool_call_allowlist.[]"
-    }
-  },
-  "facet_permissions.rules.<rule-name>.facet_ids.[]": {},
-  "facet_permissions.rules.<rule-name>.groups.[]": {},
-  "facet_permissions.rules.<rule-name>.rule_type": {},
-  "facets.default_selected_facets.[]": {},
-  "facets.facet_prompt_template": {},
-  "facets.facet_prompt_template.fallback": {},
-  "facets.facet_prompt_template.label": {},
-  "facets.facet_prompt_template.prompt": {},
-  "facets.facet_prompt_template.prompt_name": {},
-  "facets.facet_prompt_template.source": {},
-  "facets.facets.<facet-id>.additional_system_prompt": {},
-  "facets.facets.<facet-id>.additional_system_prompt.fallback": {},
-  "facets.facets.<facet-id>.additional_system_prompt.label": {},
-  "facets.facets.<facet-id>.additional_system_prompt.prompt": {},
-  "facets.facets.<facet-id>.additional_system_prompt.prompt_name": {},
-  "facets.facets.<facet-id>.additional_system_prompt.source": {},
-  "facets.facets.<facet-id>.child_chat_provider": {},
-  "facets.facets.<facet-id>.child_host_context": {},
-  "facets.facets.<facet-id>.delegation.approval.mode": {},
-  "facets.facets.<facet-id>.delegation.approval.plan_min_tasks": {},
-  "facets.facets.<facet-id>.delegation.child_chat_providers.[]": {},
-  "facets.facets.<facet-id>.delegation.child_facet_ids.[]": {},
-  "facets.facets.<facet-id>.delegation.max_client_tool_calls_per_task": {},
-  "facets.facets.<facet-id>.delegation.max_parallel": {},
-  "facets.facets.<facet-id>.delegation.max_server_tool_calls_per_task": {},
-  "facets.facets.<facet-id>.delegation.max_tasks_per_turn": {},
-  "facets.facets.<facet-id>.delegation.persona": {},
-  "facets.facets.<facet-id>.delegation.run_modes.[]": {},
-  "facets.facets.<facet-id>.delegation.scheduling": {},
-  "facets.facets.<facet-id>.disable_facet_prompt_template": {},
-  "facets.facets.<facet-id>.display_name": {},
-  "facets.facets.<facet-id>.hidden": {},
-  "facets.facets.<facet-id>.hidden_always_active_for_platform": {},
-  "facets.facets.<facet-id>.icon": {},
-  "facets.facets.<facet-id>.model_settings.compat_no_replay_summary": {},
-  "facets.facets.<facet-id>.model_settings.compat_omit_strict": {},
-  "facets.facets.<facet-id>.model_settings.reasoning_effort": {},
-  "facets.facets.<facet-id>.model_settings.temperature": {},
-  "facets.facets.<facet-id>.model_settings.top_p": {},
-  "facets.facets.<facet-id>.model_settings.verbosity": {},
-  "facets.facets.<facet-id>.tool_call_allowlist.[]": {},
-  "facets.only_single_facet": {},
-  "facets.priority_order.[]": {},
-  "facets.show_facet_indicator_with_display_name": {},
-  "facets.tool_call_allowlist.[]": {},
-  "file_context.max_context_fraction": {},
-  "file_context.max_inline_tokens_per_file": {},
-  "file_context.max_preview_tokens_per_file": {},
-  "file_context.max_total_attachment_tokens": {},
-  "file_context.native_file_formats_bypass_limit": {},
-  "file_context.preview.csv_max_columns": {},
-  "file_context.preview.csv_max_field_chars": {},
-  "file_context.preview.csv_max_sample_rows": {},
-  "file_context.preview.text_max_chars": {},
-  "file_context.retrieve_file_contents_enabled": {},
-  "file_processor.limits.bounded_text_preview": {},
-  "file_processor.limits.max_extracted_chars": {},
-  "file_processor.limits.max_input_bytes": {},
-  "file_processor.limits.timeout_ms": {},
-  "file_processor.processor": {},
-  "file_storage_providers.<provider-id>.config.access_key_id": {},
-  "file_storage_providers.<provider-id>.config.account_key": {},
-  "file_storage_providers.<provider-id>.config.account_name": {},
-  "file_storage_providers.<provider-id>.config.bucket": {},
-  "file_storage_providers.<provider-id>.config.container": {},
-  "file_storage_providers.<provider-id>.config.endpoint": {},
-  "file_storage_providers.<provider-id>.config.region": {},
-  "file_storage_providers.<provider-id>.config.root": {},
-  "file_storage_providers.<provider-id>.config.secret_access_key": {},
-  "file_storage_providers.<provider-id>.display_name": {},
-  "file_storage_providers.<provider-id>.max_upload_size_kb": {},
-  "file_storage_providers.<provider-id>.provider_kind": {},
-  "file_type_detection.mode": {},
-  "file_uploads.upload_allowed_if_supports.[]": {},
-  "frontend.additional_environment": {},
-  "frontend.allow_any_frame_ancestor": {},
-  "frontend.assistant_avatar_path": {},
-  "frontend.chat_input_empty_state_layout": {},
-  "frontend.component_kits.directory": {},
-  "frontend.disable_chat_input_autofocus": {},
-  "frontend.disable_logout": {},
-  "frontend.disable_upload": {},
-  "frontend.enable_chat_history_filters": {},
-  "frontend.enable_message_editing": {},
-  "frontend.enable_message_feedback": {},
-  "frontend.enable_message_feedback_comments": {},
-  "frontend.enable_message_regeneration": {},
-  "frontend.enable_pinned_chats": {},
-  "frontend.error_report.error_report_template": {},
-  "frontend.error_report.show_copy_error_report": {},
-  "frontend.error_report.show_verbose_assistant_errors": {},
-  "frontend.extra_frame_ancestors.[]": {},
-  "frontend.favicon_path": {},
-  "frontend.logo_dark_path": {},
-  "frontend.logo_path": {},
-  "frontend.mask_reasoning_trace_text": {},
-  "frontend.max_files": {},
-  "frontend.message_feedback_edit_time_limit_seconds": {},
-  "frontend.pinned_chats_limit": {},
-  "frontend.sidebar_chat_history_show_metadata": {},
-  "frontend.sidebar_collapsed_mode": {},
-  "frontend.sidebar_logo_dark_path": {},
-  "frontend.sidebar_logo_path": {},
-  "frontend.theme": {},
-  "frontend.translation_po_compilation_mode": {},
-  "frontend.web_frontend_bundle_path": {},
-  "frontend_bundle_path": {
+    },
     "hide_in_docs": true,
+    "introduced_in": "0.6.0",
+    "stability": "deprecated"
+  },
+  "facet_permissions.rules.<rule-name>.facet_ids.[]": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "facet_permissions.rules.<rule-name>.groups.[]": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "facet_permissions.rules.<rule-name>.rule_type": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "facets.default_selected_facets.[]": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "facets.facet_prompt_template": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "facets.facet_prompt_template.fallback": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "facets.facet_prompt_template.label": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "facets.facet_prompt_template.prompt": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "facets.facet_prompt_template.prompt_name": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "facets.facet_prompt_template.source": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "facets.facets.<facet-id>.additional_system_prompt": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "facets.facets.<facet-id>.additional_system_prompt.fallback": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "facets.facets.<facet-id>.additional_system_prompt.label": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "facets.facets.<facet-id>.additional_system_prompt.prompt": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "facets.facets.<facet-id>.additional_system_prompt.prompt_name": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "facets.facets.<facet-id>.additional_system_prompt.source": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "facets.facets.<facet-id>.child_chat_provider": {
+    "introduced_in": "unreleased",
+    "stability": "unstable"
+  },
+  "facets.facets.<facet-id>.child_host_context": {
+    "introduced_in": "unreleased",
+    "stability": "unstable"
+  },
+  "facets.facets.<facet-id>.delegation.approval.mode": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "facets.facets.<facet-id>.delegation.approval.plan_min_tasks": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "facets.facets.<facet-id>.delegation.child_chat_providers.[]": {
+    "introduced_in": "unreleased",
+    "stability": "unstable"
+  },
+  "facets.facets.<facet-id>.delegation.child_facet_ids.[]": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "facets.facets.<facet-id>.delegation.max_client_tool_calls_per_task": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "facets.facets.<facet-id>.delegation.max_parallel": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "facets.facets.<facet-id>.delegation.max_server_tool_calls_per_task": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "facets.facets.<facet-id>.delegation.max_tasks_per_turn": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "facets.facets.<facet-id>.delegation.persona": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "facets.facets.<facet-id>.delegation.run_modes.[]": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "facets.facets.<facet-id>.delegation.scheduling": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "facets.facets.<facet-id>.disable_facet_prompt_template": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "facets.facets.<facet-id>.display_name": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "facets.facets.<facet-id>.hidden": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "facets.facets.<facet-id>.hidden_always_active_for_platform": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "facets.facets.<facet-id>.icon": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "facets.facets.<facet-id>.model_settings.compat_no_replay_summary": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "facets.facets.<facet-id>.model_settings.compat_omit_strict": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "facets.facets.<facet-id>.model_settings.reasoning_effort": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "facets.facets.<facet-id>.model_settings.temperature": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "facets.facets.<facet-id>.model_settings.top_p": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "facets.facets.<facet-id>.model_settings.verbosity": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "facets.facets.<facet-id>.tool_call_allowlist.[]": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "facets.only_single_facet": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "facets.priority_order.[]": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "facets.show_facet_indicator_with_display_name": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "facets.tool_call_allowlist.[]": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "file_context.max_context_fraction": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "file_context.max_inline_tokens_per_file": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "file_context.max_preview_tokens_per_file": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "file_context.max_total_attachment_tokens": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "file_context.native_file_formats_bypass_limit": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "file_context.preview.csv_max_columns": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "file_context.preview.csv_max_field_chars": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "file_context.preview.csv_max_sample_rows": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "file_context.preview.text_max_chars": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "file_context.retrieve_file_contents_enabled": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "file_processor.limits.bounded_text_preview": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "file_processor.limits.max_extracted_chars": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "file_processor.limits.max_input_bytes": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "file_processor.limits.timeout_ms": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "file_processor.processor": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "file_storage_providers.<provider-id>.config.access_key_id": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "file_storage_providers.<provider-id>.config.account_key": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "file_storage_providers.<provider-id>.config.account_name": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "file_storage_providers.<provider-id>.config.bucket": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "file_storage_providers.<provider-id>.config.container": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "file_storage_providers.<provider-id>.config.endpoint": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "file_storage_providers.<provider-id>.config.region": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "file_storage_providers.<provider-id>.config.root": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "file_storage_providers.<provider-id>.config.secret_access_key": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "file_storage_providers.<provider-id>.display_name": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "file_storage_providers.<provider-id>.max_upload_size_kb": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "file_storage_providers.<provider-id>.provider_kind": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "file_type_detection.mode": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "file_uploads.upload_allowed_if_supports.[]": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "frontend.additional_environment": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "frontend.allow_any_frame_ancestor": {
+    "introduced_in": "0.6.2",
+    "stability": "unstable"
+  },
+  "frontend.assistant_avatar_path": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "frontend.chat_input_empty_state_layout": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "frontend.component_kits.directory": {
+    "introduced_in": "0.6.2",
+    "stability": "unstable"
+  },
+  "frontend.disable_chat_input_autofocus": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "frontend.disable_logout": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "frontend.disable_upload": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "frontend.enable_chat_history_filters": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "frontend.enable_message_editing": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "frontend.enable_message_feedback": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "frontend.enable_message_feedback_comments": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "frontend.enable_message_regeneration": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "frontend.enable_pinned_chats": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "frontend.error_report.error_report_template": {
+    "introduced_in": "0.6.2",
+    "stability": "unstable"
+  },
+  "frontend.error_report.show_copy_error_report": {
+    "introduced_in": "0.6.2",
+    "stability": "unstable"
+  },
+  "frontend.error_report.show_verbose_assistant_errors": {
+    "introduced_in": "0.6.2",
+    "stability": "unstable"
+  },
+  "frontend.extra_frame_ancestors.[]": {
+    "introduced_in": "0.6.2",
+    "stability": "unstable"
+  },
+  "frontend.favicon_path": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "frontend.logo_dark_path": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "frontend.logo_path": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "frontend.mask_reasoning_trace_text": {
+    "introduced_in": "0.6.2",
+    "stability": "unstable"
+  },
+  "frontend.max_files": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "frontend.message_feedback_edit_time_limit_seconds": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "frontend.pinned_chats_limit": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "frontend.sidebar_chat_history_show_metadata": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "frontend.sidebar_collapsed_mode": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "frontend.sidebar_logo_dark_path": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "frontend.sidebar_logo_path": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "frontend.theme": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "frontend.translation_po_compilation_mode": {
+    "introduced_in": "0.6.2",
+    "stability": "unstable"
+  },
+  "frontend.web_frontend_bundle_path": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "frontend_bundle_path": {
     "deprecated": {
       "note": "Please use `frontend.web_frontend_bundle_path` instead.",
-      "replacement_key": "frontend.web_frontend_bundle_path",
-      "planned_removal_version": "0.6.0"
-    }
+      "planned_removal_version": "0.6.0",
+      "replacement_key": "frontend.web_frontend_bundle_path"
+    },
+    "hide_in_docs": true,
+    "introduced_in": "0.6.0",
+    "stability": "deprecated"
   },
-  "generation.max_tool_calls_per_message": {},
-  "generation_status.heartbeat_interval_secs": {},
-  "generation_status.provider_idle_timeout_secs": {},
-  "generation_status.shutdown_drain_secs": {},
-  "generation_status.stale_after_secs": {},
-  "generation_status.terminal_retention_secs": {},
-  "guardrails.prompt_patterns.<pattern-id>.language": {},
-  "guardrails.prompt_patterns.<pattern-id>.pattern": {},
-  "guardrails.prompt_patterns.<pattern-id>.tags.[]": {},
-  "guardrails.prompt_patterns.<pattern-id>.type": {},
+  "generation.max_tool_calls_per_message": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "generation_status.heartbeat_interval_secs": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "generation_status.provider_idle_timeout_secs": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "generation_status.shutdown_drain_secs": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "generation_status.stale_after_secs": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "generation_status.terminal_retention_secs": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "guardrails.prompt_patterns.<pattern-id>.language": {
+    "introduced_in": "0.6.1",
+    "stability": "unstable"
+  },
+  "guardrails.prompt_patterns.<pattern-id>.pattern": {
+    "introduced_in": "0.6.1",
+    "stability": "unstable"
+  },
+  "guardrails.prompt_patterns.<pattern-id>.tags.[]": {
+    "introduced_in": "0.6.1",
+    "stability": "unstable"
+  },
+  "guardrails.prompt_patterns.<pattern-id>.type": {
+    "introduced_in": "0.6.1",
+    "stability": "unstable"
+  },
   "http_host": {
-    "hide_in_docs": true
+    "hide_in_docs": true,
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
   },
   "http_port": {
-    "hide_in_docs": true
-  },
-  "i18n.language.default_language": {},
-  "i18n.language.language_detection_priority.[]": {},
-  "integrations.entra_id.auth_via_access_token": {},
-  "integrations.entra_id.enabled": {},
-  "integrations.entra_id.group_overage.enabled": {},
-  "integrations.experimental_entra_id.auth_via_access_token": {
     "hide_in_docs": true,
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "i18n.language.default_language": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "i18n.language.language_detection_priority.[]": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "integrations.entra_id.auth_via_access_token": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "integrations.entra_id.enabled": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "integrations.entra_id.group_overage.enabled": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "integrations.experimental_entra_id.auth_via_access_token": {
     "deprecated": {
       "note": "Please use `integrations.entra_id.auth_via_access_token` instead.",
       "replacement_key": "integrations.entra_id.auth_via_access_token"
-    }
+    },
+    "hide_in_docs": true,
+    "introduced_in": "0.6.0",
+    "stability": "deprecated"
   },
   "integrations.experimental_entra_id.enabled": {
-    "hide_in_docs": true,
     "deprecated": {
       "note": "Please use `integrations.entra_id.enabled` instead.",
       "replacement_key": "integrations.entra_id.enabled"
-    }
+    },
+    "hide_in_docs": true,
+    "introduced_in": "0.6.0",
+    "stability": "deprecated"
   },
   "integrations.experimental_entra_id.group_overage.enabled": {
-    "hide_in_docs": true,
     "deprecated": {
       "note": "Please use `integrations.entra_id.group_overage.enabled` instead.",
       "replacement_key": "integrations.entra_id.group_overage.enabled"
-    }
+    },
+    "hide_in_docs": true,
+    "introduced_in": "0.7.0",
+    "stability": "deprecated"
   },
   "integrations.experimental_sharepoint.all_drives_sources.[]": {
-    "hide_in_docs": true,
     "deprecated": {
       "note": "Please use `integrations.sharepoint.all_drives_sources.[]` instead.",
       "replacement_key": "integrations.sharepoint.all_drives_sources.[]"
-    }
+    },
+    "hide_in_docs": true,
+    "introduced_in": "0.6.0",
+    "stability": "deprecated"
   },
   "integrations.experimental_sharepoint.auth_via_access_token": {
-    "hide_in_docs": true,
     "deprecated": {
       "note": "Please use `integrations.sharepoint.auth_via_access_token` instead.",
       "replacement_key": "integrations.sharepoint.auth_via_access_token"
-    }
+    },
+    "hide_in_docs": true,
+    "introduced_in": "0.6.0",
+    "stability": "deprecated"
   },
   "integrations.experimental_sharepoint.enabled": {
-    "hide_in_docs": true,
     "deprecated": {
       "note": "Please use `integrations.sharepoint.enabled` instead.",
       "replacement_key": "integrations.sharepoint.enabled"
-    }
+    },
+    "hide_in_docs": true,
+    "introduced_in": "0.6.0",
+    "stability": "deprecated"
   },
   "integrations.experimental_sharepoint.file_search_enabled": {
-    "hide_in_docs": true,
     "deprecated": {
       "note": "Please use `integrations.sharepoint.file_search_enabled` instead.",
       "replacement_key": "integrations.sharepoint.file_search_enabled"
-    }
+    },
+    "hide_in_docs": true,
+    "introduced_in": "unreleased",
+    "stability": "deprecated"
   },
   "integrations.experimental_sharepoint.file_upload_enabled": {
-    "hide_in_docs": true,
     "deprecated": {
       "note": "Please use `integrations.sharepoint.file_upload_enabled` instead.",
       "replacement_key": "integrations.sharepoint.file_upload_enabled"
-    }
+    },
+    "hide_in_docs": true,
+    "introduced_in": "0.6.0",
+    "stability": "deprecated"
   },
   "integrations.experimental_sharepoint.show_disclaimer": {
-    "hide_in_docs": true,
     "deprecated": {
       "note": "Please use `integrations.sharepoint.show_disclaimer` instead.",
       "replacement_key": "integrations.sharepoint.show_disclaimer"
-    }
-  },
-  "integrations.langfuse.base_url": {},
-  "integrations.langfuse.enable_feedback": {},
-  "integrations.langfuse.enabled": {},
-  "integrations.langfuse.public_key": {},
-  "integrations.langfuse.secret_key": {},
-  "integrations.langfuse.summary_tracing_enabled": {},
-  "integrations.langfuse.tracing_enabled": {},
-  "integrations.langfuse.use_otel": {},
-  "integrations.ms_office.addin.addin_id": {},
-  "integrations.ms_office.addin.default_settings.comment_assistant_author": {},
-  "integrations.ms_office.addin.default_settings.comment_author": {},
-  "integrations.ms_office.addin.default_settings.comment_author_enforced": {},
-  "integrations.ms_office.addin.default_settings.comment_label": {},
-  "integrations.ms_office.addin.default_settings.comment_writes.add": {},
-  "integrations.ms_office.addin.default_settings.comment_writes.assistant_author": {},
-  "integrations.ms_office.addin.default_settings.comment_writes.max_rows.add": {},
-  "integrations.ms_office.addin.default_settings.comment_writes.max_rows.modify": {},
-  "integrations.ms_office.addin.default_settings.comment_writes.max_rows.respond": {},
-  "integrations.ms_office.addin.default_settings.comment_writes.modify": {},
-  "integrations.ms_office.addin.default_settings.comment_writes.respond": {},
-  "integrations.ms_office.addin.default_settings.compose_inherits_from_read": {},
-  "integrations.ms_office.addin.default_settings.mode": {},
-  "integrations.ms_office.addin.default_settings.word_apply.mac.in_place": {},
-  "integrations.ms_office.addin.default_settings.word_apply.mac.package_read": {},
-  "integrations.ms_office.addin.default_settings.word_apply.mac.whole_document_import": {},
-  "integrations.ms_office.addin.default_settings.word_apply.pc.in_place": {},
-  "integrations.ms_office.addin.default_settings.word_apply.pc.package_read": {},
-  "integrations.ms_office.addin.default_settings.word_apply.pc.whole_document_import": {},
-  "integrations.ms_office.addin.default_settings.word_apply.web.in_place": {},
-  "integrations.ms_office.addin.default_settings.word_apply.web.package_read": {},
-  "integrations.ms_office.addin.default_settings.word_apply.web.whole_document_import": {},
-  "integrations.ms_office.addin.default_settings.word_include_document": {},
-  "integrations.ms_office.addin.document.addin_id": {},
-  "integrations.ms_office.addin.document.manifest.description": {},
-  "integrations.ms_office.addin.document.manifest.display_name": {},
-  "integrations.ms_office.addin.enabled": {},
-  "integrations.ms_office.addin.favicon_path": {},
-  "integrations.ms_office.addin.frontend_bundle_path": {},
-  "integrations.ms_office.addin.launch_event_runtime.page_path": {},
-  "integrations.ms_office.addin.launch_event_runtime.script_path": {},
-  "integrations.ms_office.addin.launch_events.[].event": {},
-  "integrations.ms_office.addin.launch_events.[].function_name": {},
-  "integrations.ms_office.addin.manifest.button_description": {},
-  "integrations.ms_office.addin.manifest.button_label": {},
-  "integrations.ms_office.addin.manifest.description": {},
-  "integrations.ms_office.addin.manifest.display_name": {},
-  "integrations.ms_office.addin.manifest.group_label": {},
-  "integrations.ms_office.addin.manifest.high_resolution_icon_path": {},
-  "integrations.ms_office.addin.manifest.high_resolution_icon_source_path": {},
-  "integrations.ms_office.addin.manifest.icon_16_path": {},
-  "integrations.ms_office.addin.manifest.icon_16_source_path": {},
-  "integrations.ms_office.addin.manifest.icon_32_path": {},
-  "integrations.ms_office.addin.manifest.icon_32_source_path": {},
-  "integrations.ms_office.addin.manifest.icon_80_path": {},
-  "integrations.ms_office.addin.manifest.icon_80_source_path": {},
-  "integrations.ms_office.addin.manifest.icon_path": {},
-  "integrations.ms_office.addin.manifest.icon_source_path": {},
-  "integrations.ms_office.addin.manifest.provider_name": {},
-  "integrations.ms_office.addin.manifest.support_url": {},
-  "integrations.ms_office.addin.msal_authority": {},
-  "integrations.ms_office.addin.msal_client_id": {},
-  "integrations.ms_office.addin.serve_bundle_legacy_path": {},
-  "integrations.ms_office.ews_api_endpoint": {},
-  "integrations.ms_office.ews_skip_tls_validation": {},
-  "integrations.ms_office.teams.app_id": {},
-  "integrations.ms_office.teams.bot.app_id": {},
-  "integrations.ms_office.teams.bot.app_password": {},
-  "integrations.ms_office.teams.bot.assistant_id": {},
-  "integrations.ms_office.teams.bot.context_message_count": {},
-  "integrations.ms_office.teams.bot.enabled": {},
-  "integrations.ms_office.teams.bot.messaging_endpoint": {},
-  "integrations.ms_office.teams.bot.oauth_connection_name": {},
-  "integrations.ms_office.teams.bot.public_base_url": {},
-  "integrations.ms_office.teams.bot.security_groups_only": {},
-  "integrations.ms_office.teams.bot.sso_app_id": {},
-  "integrations.ms_office.teams.bot.sso_enabled": {},
-  "integrations.ms_office.teams.bot.sso_resource": {},
-  "integrations.ms_office.teams.bot.streaming": {},
-  "integrations.ms_office.teams.bot.tenant_id": {},
-  "integrations.ms_office.teams.bot.token_service_url": {},
-  "integrations.ms_office.teams.enabled": {},
-  "integrations.ms_office.teams.manifest.color_icon": {},
-  "integrations.ms_office.teams.manifest.color_icon_source_path": {},
-  "integrations.ms_office.teams.manifest.developer_name": {},
-  "integrations.ms_office.teams.manifest.full_description": {},
-  "integrations.ms_office.teams.manifest.full_name": {},
-  "integrations.ms_office.teams.manifest.outline_icon": {},
-  "integrations.ms_office.teams.manifest.outline_icon_source_path": {},
-  "integrations.ms_office.teams.manifest.privacy_url": {},
-  "integrations.ms_office.teams.manifest.short_description": {},
-  "integrations.ms_office.teams.manifest.short_name": {},
-  "integrations.ms_office.teams.manifest.small_color_icon": {},
-  "integrations.ms_office.teams.manifest.small_color_icon_source_path": {},
-  "integrations.ms_office.teams.manifest.tab_name": {},
-  "integrations.ms_office.teams.manifest.terms_url": {},
-  "integrations.ms_office.teams.manifest.version": {},
-  "integrations.ms_office.teams.manifest.website_url": {},
-  "integrations.otel.enabled": {},
-  "integrations.otel.endpoint": {},
-  "integrations.otel.protocol": {},
-  "integrations.otel.service_name": {},
-  "integrations.prometheus.enabled": {},
-  "integrations.prometheus.host": {},
-  "integrations.prometheus.port": {},
-  "integrations.sentry.sentry_dsn": {},
-  "integrations.sharepoint.all_drives_sources.[]": {},
-  "integrations.sharepoint.auth_via_access_token": {},
-  "integrations.sharepoint.enabled": {},
-  "integrations.sharepoint.file_search_enabled": {},
-  "integrations.sharepoint.file_upload_enabled": {},
-  "integrations.sharepoint.show_disclaimer": {},
-  "logging.format": {},
-  "mcp_server_permissions.rules.<rule-name>.groups.[]": {},
-  "mcp_server_permissions.rules.<rule-name>.mcp_server_ids.[]": {},
-  "mcp_server_permissions.rules.<rule-name>.rule_type": {},
-  "mcp_servers.<server-id>.allow_tools.[]": {},
-  "mcp_servers.<server-id>.authentication": {},
-  "mcp_servers.<server-id>.authentication.fixed.api_key": {},
-  "mcp_servers.<server-id>.authentication.fixed.header_name": {},
-  "mcp_servers.<server-id>.authentication.fixed.prefix": {},
-  "mcp_servers.<server-id>.authentication.forwarded.credential": {},
-  "mcp_servers.<server-id>.authentication.forwarded.header_name": {},
-  "mcp_servers.<server-id>.authentication.forwarded.prefix": {},
-  "mcp_servers.<server-id>.authentication.oauth2.authorization_params.<key>": {},
-  "mcp_servers.<server-id>.authentication.oauth2.client_id": {},
-  "mcp_servers.<server-id>.authentication.oauth2.client_name": {},
-  "mcp_servers.<server-id>.authentication.oauth2.client_secret": {},
-  "mcp_servers.<server-id>.authentication.oauth2.resource": {},
-  "mcp_servers.<server-id>.authentication.oauth2.scopes.[]": {},
-  "mcp_servers.<server-id>.default_tool_annotations.destructive_hint": {},
-  "mcp_servers.<server-id>.default_tool_annotations.idempotent_hint": {},
-  "mcp_servers.<server-id>.default_tool_annotations.open_world_hint": {},
-  "mcp_servers.<server-id>.default_tool_annotations.read_only_hint": {},
-  "mcp_servers.<server-id>.exclude_tools.[]": {},
-  "mcp_servers.<server-id>.http_headers.<key>": {},
-  "mcp_servers.<server-id>.max_session_idle_seconds": {},
-  "mcp_servers.<server-id>.override_tool_annotations.destructive_hint": {},
-  "mcp_servers.<server-id>.override_tool_annotations.idempotent_hint": {},
-  "mcp_servers.<server-id>.override_tool_annotations.open_world_hint": {},
-  "mcp_servers.<server-id>.override_tool_annotations.read_only_hint": {},
-  "mcp_servers.<server-id>.protocol_mode": {},
-  "mcp_servers.<server-id>.tools.<tool-name>.default_tool_annotations.destructive_hint": {},
-  "mcp_servers.<server-id>.tools.<tool-name>.default_tool_annotations.idempotent_hint": {},
-  "mcp_servers.<server-id>.tools.<tool-name>.default_tool_annotations.open_world_hint": {},
-  "mcp_servers.<server-id>.tools.<tool-name>.default_tool_annotations.read_only_hint": {},
-  "mcp_servers.<server-id>.tools.<tool-name>.override_tool_annotations.destructive_hint": {},
-  "mcp_servers.<server-id>.tools.<tool-name>.override_tool_annotations.idempotent_hint": {},
-  "mcp_servers.<server-id>.tools.<tool-name>.override_tool_annotations.open_world_hint": {},
-  "mcp_servers.<server-id>.tools.<tool-name>.override_tool_annotations.read_only_hint": {},
-  "mcp_servers.<server-id>.transport_type": {},
-  "mcp_servers.<server-id>.url": {},
-  "mcp_servers.<server-id>.wait_tools.[]": {},
-  "mcp_servers_global.approval.allow_always": {},
-  "mcp_servers_global.approval.enabled": {},
-  "mcp_servers_global.approval.preset": {},
-  "mcp_servers_global.default_tool_annotations.destructive_hint": {},
-  "mcp_servers_global.default_tool_annotations.idempotent_hint": {},
-  "mcp_servers_global.default_tool_annotations.open_world_hint": {},
-  "mcp_servers_global.default_tool_annotations.read_only_hint": {},
-  "mcp_servers_global.enable_wait": {},
-  "mcp_servers_global.max_session_idle_seconds": {},
-  "mcp_servers_global.max_wait_seconds": {},
-  "mcp_servers_global.override_tool_annotations.destructive_hint": {},
-  "mcp_servers_global.override_tool_annotations.idempotent_hint": {},
-  "mcp_servers_global.override_tool_annotations.open_world_hint": {},
-  "mcp_servers_global.override_tool_annotations.read_only_hint": {},
-  "mcp_servers_global.show_frontend_tab": {},
-  "mcp_servers_global.show_in_assistant_editor": {},
-  "mcp_servers_global.show_in_chat_input": {},
-  "model_permissions.rules.<rule-name>.chat_provider_ids.[]": {},
-  "model_permissions.rules.<rule-name>.groups.[]": {},
-  "model_permissions.rules.<rule-name>.rule_type": {},
-  "policy_guides.policies.<policy-id>.choice_allow": {},
-  "policy_guides.policies.<policy-id>.choice_refuse": {},
-  "policy_guides.policies.<policy-id>.decision_providers.[]": {},
-  "policy_guides.policies.<policy-id>.enabled": {},
-  "policy_guides.policies.<policy-id>.metadata": {},
-  "policy_guides.policies.<policy-id>.question": {},
-  "prompt_optimizer.chat_provider_id": {},
-  "prompt_optimizer.enabled": {},
-  "prompt_optimizer.prompt": {},
-  "prompt_optimizer.prompt.fallback": {},
-  "prompt_optimizer.prompt.label": {},
-  "prompt_optimizer.prompt.prompt": {},
-  "prompt_optimizer.prompt.prompt_name": {},
-  "prompt_optimizer.prompt.source": {},
-  "runtime_configuration.enabled": {},
-  "sentry_dsn": {
+    },
     "hide_in_docs": true,
+    "introduced_in": "0.6.1",
+    "stability": "deprecated"
+  },
+  "integrations.langfuse.base_url": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "integrations.langfuse.enable_feedback": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "integrations.langfuse.enabled": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "integrations.langfuse.public_key": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "integrations.langfuse.secret_key": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "integrations.langfuse.summary_tracing_enabled": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "integrations.langfuse.tracing_enabled": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "integrations.langfuse.use_otel": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "integrations.ms_office.addin.addin_id": {
+    "introduced_in": "0.6.1",
+    "stability": "unstable"
+  },
+  "integrations.ms_office.addin.default_settings.comment_assistant_author": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "integrations.ms_office.addin.default_settings.comment_author": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "integrations.ms_office.addin.default_settings.comment_author_enforced": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "integrations.ms_office.addin.default_settings.comment_label": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "integrations.ms_office.addin.default_settings.comment_writes.add": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "integrations.ms_office.addin.default_settings.comment_writes.assistant_author": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "integrations.ms_office.addin.default_settings.comment_writes.max_rows.add": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "integrations.ms_office.addin.default_settings.comment_writes.max_rows.modify": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "integrations.ms_office.addin.default_settings.comment_writes.max_rows.respond": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "integrations.ms_office.addin.default_settings.comment_writes.modify": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "integrations.ms_office.addin.default_settings.comment_writes.respond": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "integrations.ms_office.addin.default_settings.compose_inherits_from_read": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "integrations.ms_office.addin.default_settings.mode": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "integrations.ms_office.addin.default_settings.word_apply.mac.in_place": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "integrations.ms_office.addin.default_settings.word_apply.mac.package_read": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "integrations.ms_office.addin.default_settings.word_apply.mac.whole_document_import": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "integrations.ms_office.addin.default_settings.word_apply.pc.in_place": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "integrations.ms_office.addin.default_settings.word_apply.pc.package_read": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "integrations.ms_office.addin.default_settings.word_apply.pc.whole_document_import": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "integrations.ms_office.addin.default_settings.word_apply.web.in_place": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "integrations.ms_office.addin.default_settings.word_apply.web.package_read": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "integrations.ms_office.addin.default_settings.word_apply.web.whole_document_import": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "integrations.ms_office.addin.default_settings.word_include_document": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "integrations.ms_office.addin.document.addin_id": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "integrations.ms_office.addin.document.manifest.description": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "integrations.ms_office.addin.document.manifest.display_name": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "integrations.ms_office.addin.enabled": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "integrations.ms_office.addin.favicon_path": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "integrations.ms_office.addin.frontend_bundle_path": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "integrations.ms_office.addin.launch_event_runtime.page_path": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "integrations.ms_office.addin.launch_event_runtime.script_path": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "integrations.ms_office.addin.launch_events.[].event": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "integrations.ms_office.addin.launch_events.[].function_name": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "integrations.ms_office.addin.manifest.button_description": {
+    "introduced_in": "0.6.2",
+    "stability": "unstable"
+  },
+  "integrations.ms_office.addin.manifest.button_label": {
+    "introduced_in": "0.6.2",
+    "stability": "unstable"
+  },
+  "integrations.ms_office.addin.manifest.description": {
+    "introduced_in": "0.6.2",
+    "stability": "unstable"
+  },
+  "integrations.ms_office.addin.manifest.display_name": {
+    "introduced_in": "0.6.2",
+    "stability": "unstable"
+  },
+  "integrations.ms_office.addin.manifest.group_label": {
+    "introduced_in": "0.6.2",
+    "stability": "unstable"
+  },
+  "integrations.ms_office.addin.manifest.high_resolution_icon_path": {
+    "introduced_in": "0.6.2",
+    "stability": "unstable"
+  },
+  "integrations.ms_office.addin.manifest.high_resolution_icon_source_path": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "integrations.ms_office.addin.manifest.icon_16_path": {
+    "introduced_in": "0.6.2",
+    "stability": "unstable"
+  },
+  "integrations.ms_office.addin.manifest.icon_16_source_path": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "integrations.ms_office.addin.manifest.icon_32_path": {
+    "introduced_in": "0.6.2",
+    "stability": "unstable"
+  },
+  "integrations.ms_office.addin.manifest.icon_32_source_path": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "integrations.ms_office.addin.manifest.icon_80_path": {
+    "introduced_in": "0.6.2",
+    "stability": "unstable"
+  },
+  "integrations.ms_office.addin.manifest.icon_80_source_path": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "integrations.ms_office.addin.manifest.icon_path": {
+    "introduced_in": "0.6.2",
+    "stability": "unstable"
+  },
+  "integrations.ms_office.addin.manifest.icon_source_path": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "integrations.ms_office.addin.manifest.provider_name": {
+    "introduced_in": "0.6.2",
+    "stability": "unstable"
+  },
+  "integrations.ms_office.addin.manifest.support_url": {
+    "introduced_in": "0.6.2",
+    "stability": "unstable"
+  },
+  "integrations.ms_office.addin.msal_authority": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "integrations.ms_office.addin.msal_client_id": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "integrations.ms_office.addin.serve_bundle_legacy_path": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "integrations.ms_office.ews_api_endpoint": {
+    "introduced_in": "0.6.2",
+    "stability": "unstable"
+  },
+  "integrations.ms_office.ews_skip_tls_validation": {
+    "introduced_in": "0.6.2",
+    "stability": "unstable"
+  },
+  "integrations.ms_office.teams.app_id": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "integrations.ms_office.teams.bot.app_id": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "integrations.ms_office.teams.bot.app_password": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "integrations.ms_office.teams.bot.assistant_id": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "integrations.ms_office.teams.bot.context_message_count": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "integrations.ms_office.teams.bot.enabled": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "integrations.ms_office.teams.bot.messaging_endpoint": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "integrations.ms_office.teams.bot.oauth_connection_name": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "integrations.ms_office.teams.bot.public_base_url": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "integrations.ms_office.teams.bot.security_groups_only": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "integrations.ms_office.teams.bot.sso_app_id": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "integrations.ms_office.teams.bot.sso_enabled": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "integrations.ms_office.teams.bot.sso_resource": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "integrations.ms_office.teams.bot.streaming": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "integrations.ms_office.teams.bot.tenant_id": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "integrations.ms_office.teams.bot.token_service_url": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "integrations.ms_office.teams.enabled": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "integrations.ms_office.teams.manifest.color_icon": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "integrations.ms_office.teams.manifest.color_icon_source_path": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "integrations.ms_office.teams.manifest.developer_name": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "integrations.ms_office.teams.manifest.full_description": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "integrations.ms_office.teams.manifest.full_name": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "integrations.ms_office.teams.manifest.outline_icon": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "integrations.ms_office.teams.manifest.outline_icon_source_path": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "integrations.ms_office.teams.manifest.privacy_url": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "integrations.ms_office.teams.manifest.short_description": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "integrations.ms_office.teams.manifest.short_name": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "integrations.ms_office.teams.manifest.small_color_icon": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "integrations.ms_office.teams.manifest.small_color_icon_source_path": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "integrations.ms_office.teams.manifest.tab_name": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "integrations.ms_office.teams.manifest.terms_url": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "integrations.ms_office.teams.manifest.version": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "integrations.ms_office.teams.manifest.website_url": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "integrations.otel.enabled": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "integrations.otel.endpoint": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "integrations.otel.protocol": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "integrations.otel.service_name": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "integrations.prometheus.enabled": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "integrations.prometheus.host": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "integrations.prometheus.port": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "integrations.sentry.sentry_dsn": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "integrations.sharepoint.all_drives_sources.[]": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "integrations.sharepoint.auth_via_access_token": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "integrations.sharepoint.enabled": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "integrations.sharepoint.file_search_enabled": {
+    "introduced_in": "unreleased",
+    "stability": "unstable"
+  },
+  "integrations.sharepoint.file_upload_enabled": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "integrations.sharepoint.show_disclaimer": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "logging.format": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "mcp_server_permissions.rules.<rule-name>.groups.[]": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "mcp_server_permissions.rules.<rule-name>.mcp_server_ids.[]": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "mcp_server_permissions.rules.<rule-name>.rule_type": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "mcp_servers.<server-id>.allow_tools.[]": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "mcp_servers.<server-id>.authentication": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "mcp_servers.<server-id>.authentication.fixed.api_key": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "mcp_servers.<server-id>.authentication.fixed.header_name": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "mcp_servers.<server-id>.authentication.fixed.prefix": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "mcp_servers.<server-id>.authentication.forwarded.credential": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "mcp_servers.<server-id>.authentication.forwarded.header_name": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "mcp_servers.<server-id>.authentication.forwarded.prefix": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "mcp_servers.<server-id>.authentication.oauth2.authorization_params.<key>": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "mcp_servers.<server-id>.authentication.oauth2.client_id": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "mcp_servers.<server-id>.authentication.oauth2.client_name": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "mcp_servers.<server-id>.authentication.oauth2.client_secret": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "mcp_servers.<server-id>.authentication.oauth2.resource": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "mcp_servers.<server-id>.authentication.oauth2.scopes.[]": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "mcp_servers.<server-id>.default_tool_annotations.destructive_hint": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "mcp_servers.<server-id>.default_tool_annotations.idempotent_hint": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "mcp_servers.<server-id>.default_tool_annotations.open_world_hint": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "mcp_servers.<server-id>.default_tool_annotations.read_only_hint": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "mcp_servers.<server-id>.exclude_tools.[]": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "mcp_servers.<server-id>.http_headers.<key>": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "mcp_servers.<server-id>.max_session_idle_seconds": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "mcp_servers.<server-id>.override_tool_annotations.destructive_hint": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "mcp_servers.<server-id>.override_tool_annotations.idempotent_hint": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "mcp_servers.<server-id>.override_tool_annotations.open_world_hint": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "mcp_servers.<server-id>.override_tool_annotations.read_only_hint": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "mcp_servers.<server-id>.protocol_mode": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "mcp_servers.<server-id>.tools.<tool-name>.default_tool_annotations.destructive_hint": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "mcp_servers.<server-id>.tools.<tool-name>.default_tool_annotations.idempotent_hint": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "mcp_servers.<server-id>.tools.<tool-name>.default_tool_annotations.open_world_hint": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "mcp_servers.<server-id>.tools.<tool-name>.default_tool_annotations.read_only_hint": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "mcp_servers.<server-id>.tools.<tool-name>.override_tool_annotations.destructive_hint": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "mcp_servers.<server-id>.tools.<tool-name>.override_tool_annotations.idempotent_hint": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "mcp_servers.<server-id>.tools.<tool-name>.override_tool_annotations.open_world_hint": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "mcp_servers.<server-id>.tools.<tool-name>.override_tool_annotations.read_only_hint": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "mcp_servers.<server-id>.transport_type": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "mcp_servers.<server-id>.url": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "mcp_servers.<server-id>.wait_tools.[]": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "mcp_servers_global.approval.allow_always": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "mcp_servers_global.approval.enabled": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "mcp_servers_global.approval.preset": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "mcp_servers_global.default_tool_annotations.destructive_hint": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "mcp_servers_global.default_tool_annotations.idempotent_hint": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "mcp_servers_global.default_tool_annotations.open_world_hint": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "mcp_servers_global.default_tool_annotations.read_only_hint": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "mcp_servers_global.enable_wait": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "mcp_servers_global.max_session_idle_seconds": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "mcp_servers_global.max_wait_seconds": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "mcp_servers_global.override_tool_annotations.destructive_hint": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "mcp_servers_global.override_tool_annotations.idempotent_hint": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "mcp_servers_global.override_tool_annotations.open_world_hint": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "mcp_servers_global.override_tool_annotations.read_only_hint": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "mcp_servers_global.show_frontend_tab": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "mcp_servers_global.show_in_assistant_editor": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "mcp_servers_global.show_in_chat_input": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "model_permissions.rules.<rule-name>.chat_provider_ids.[]": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "model_permissions.rules.<rule-name>.groups.[]": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "model_permissions.rules.<rule-name>.rule_type": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "policy_guides.policies.<policy-id>.choice_allow": {
+    "introduced_in": "unreleased",
+    "stability": "unstable"
+  },
+  "policy_guides.policies.<policy-id>.choice_refuse": {
+    "introduced_in": "unreleased",
+    "stability": "unstable"
+  },
+  "policy_guides.policies.<policy-id>.decision_providers.[]": {
+    "introduced_in": "unreleased",
+    "stability": "unstable"
+  },
+  "policy_guides.policies.<policy-id>.enabled": {
+    "introduced_in": "unreleased",
+    "stability": "unstable"
+  },
+  "policy_guides.policies.<policy-id>.metadata": {
+    "introduced_in": "unreleased",
+    "stability": "unstable"
+  },
+  "policy_guides.policies.<policy-id>.question": {
+    "introduced_in": "unreleased",
+    "stability": "unstable"
+  },
+  "prompt_optimizer.chat_provider_id": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "prompt_optimizer.enabled": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "prompt_optimizer.prompt": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "prompt_optimizer.prompt.fallback": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "prompt_optimizer.prompt.label": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "prompt_optimizer.prompt.prompt": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "prompt_optimizer.prompt.prompt_name": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "prompt_optimizer.prompt.source": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "runtime_configuration.enabled": {
+    "introduced_in": "0.7.0",
+    "stability": "unstable"
+  },
+  "sentry_dsn": {
     "deprecated": {
       "note": "Please use `integrations.sentry.sentry_dsn` instead.",
-      "replacement_key": "integrations.sentry.sentry_dsn",
-      "planned_removal_version": "0.6.0"
-    }
+      "planned_removal_version": "0.6.0",
+      "replacement_key": "integrations.sentry.sentry_dsn"
+    },
+    "hide_in_docs": true,
+    "introduced_in": "0.6.0",
+    "stability": "deprecated"
   },
-  "server.encryption_key": {},
-  "speech_providers.provider.<provider-id>.access_token": {},
-  "speech_providers.provider.<provider-id>.api_key": {},
-  "speech_providers.provider.<provider-id>.archived": {},
-  "speech_providers.provider.<provider-id>.base_url": {},
-  "speech_providers.provider.<provider-id>.instructions": {},
-  "speech_providers.provider.<provider-id>.location": {},
-  "speech_providers.provider.<provider-id>.model_name": {},
-  "speech_providers.provider.<provider-id>.project_id": {},
-  "speech_providers.provider.<provider-id>.provider_kind": {},
-  "speech_providers.provider.<provider-id>.sample_rate": {},
-  "speech_providers.provider.<provider-id>.voice": {},
-  "speech_providers.replacement_providers.[].new": {},
-  "speech_providers.replacement_providers.[].old": {},
-  "starter_prompts.enabled": {},
-  "starter_prompts.priority_order.[]": {},
-  "starter_prompts.prompts.<prompt-id>.chat_provider": {},
-  "starter_prompts.prompts.<prompt-id>.icon": {},
-  "starter_prompts.prompts.<prompt-id>.localized_prompts.<locale>": {},
-  "starter_prompts.prompts.<prompt-id>.localized_prompts.<locale>.fallback": {},
-  "starter_prompts.prompts.<prompt-id>.localized_prompts.<locale>.label": {},
-  "starter_prompts.prompts.<prompt-id>.localized_prompts.<locale>.prompt": {},
-  "starter_prompts.prompts.<prompt-id>.localized_prompts.<locale>.prompt_name": {},
-  "starter_prompts.prompts.<prompt-id>.localized_prompts.<locale>.source": {},
-  "starter_prompts.prompts.<prompt-id>.prompt": {},
-  "starter_prompts.prompts.<prompt-id>.prompt.fallback": {},
-  "starter_prompts.prompts.<prompt-id>.prompt.label": {},
-  "starter_prompts.prompts.<prompt-id>.prompt.prompt": {},
-  "starter_prompts.prompts.<prompt-id>.prompt.prompt_name": {},
-  "starter_prompts.prompts.<prompt-id>.prompt.source": {},
-  "starter_prompts.prompts.<prompt-id>.selected_facets.[]": {},
-  "starter_prompts.prompts.<prompt-id>.subtitle": {},
-  "starter_prompts.prompts.<prompt-id>.title": {},
-  "user_preferences.data_tab_enabled": {},
-  "user_preferences.enabled": {}
+  "server.encryption_key": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "speech_providers.provider.<provider-id>.access_token": {
+    "introduced_in": "unreleased",
+    "stability": "unstable"
+  },
+  "speech_providers.provider.<provider-id>.api_key": {
+    "introduced_in": "unreleased",
+    "stability": "unstable"
+  },
+  "speech_providers.provider.<provider-id>.archived": {
+    "introduced_in": "unreleased",
+    "stability": "unstable"
+  },
+  "speech_providers.provider.<provider-id>.base_url": {
+    "introduced_in": "unreleased",
+    "stability": "unstable"
+  },
+  "speech_providers.provider.<provider-id>.instructions": {
+    "introduced_in": "unreleased",
+    "stability": "unstable"
+  },
+  "speech_providers.provider.<provider-id>.location": {
+    "introduced_in": "unreleased",
+    "stability": "unstable"
+  },
+  "speech_providers.provider.<provider-id>.model_name": {
+    "introduced_in": "unreleased",
+    "stability": "unstable"
+  },
+  "speech_providers.provider.<provider-id>.project_id": {
+    "introduced_in": "unreleased",
+    "stability": "unstable"
+  },
+  "speech_providers.provider.<provider-id>.provider_kind": {
+    "introduced_in": "unreleased",
+    "stability": "unstable"
+  },
+  "speech_providers.provider.<provider-id>.sample_rate": {
+    "introduced_in": "unreleased",
+    "stability": "unstable"
+  },
+  "speech_providers.provider.<provider-id>.voice": {
+    "introduced_in": "unreleased",
+    "stability": "unstable"
+  },
+  "speech_providers.replacement_providers.[].new": {
+    "introduced_in": "unreleased",
+    "stability": "unstable"
+  },
+  "speech_providers.replacement_providers.[].old": {
+    "introduced_in": "unreleased",
+    "stability": "unstable"
+  },
+  "starter_prompts.enabled": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "starter_prompts.priority_order.[]": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "starter_prompts.prompts.<prompt-id>.chat_provider": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "starter_prompts.prompts.<prompt-id>.icon": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "starter_prompts.prompts.<prompt-id>.localized_prompts.<locale>": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "starter_prompts.prompts.<prompt-id>.localized_prompts.<locale>.fallback": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "starter_prompts.prompts.<prompt-id>.localized_prompts.<locale>.label": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "starter_prompts.prompts.<prompt-id>.localized_prompts.<locale>.prompt": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "starter_prompts.prompts.<prompt-id>.localized_prompts.<locale>.prompt_name": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "starter_prompts.prompts.<prompt-id>.localized_prompts.<locale>.source": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "starter_prompts.prompts.<prompt-id>.prompt": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "starter_prompts.prompts.<prompt-id>.prompt.fallback": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "starter_prompts.prompts.<prompt-id>.prompt.label": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "starter_prompts.prompts.<prompt-id>.prompt.prompt": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "starter_prompts.prompts.<prompt-id>.prompt.prompt_name": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "starter_prompts.prompts.<prompt-id>.prompt.source": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "starter_prompts.prompts.<prompt-id>.selected_facets.[]": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "starter_prompts.prompts.<prompt-id>.subtitle": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "starter_prompts.prompts.<prompt-id>.title": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  },
+  "user_preferences.data_tab_enabled": {
+    "introduced_in": "0.6.2",
+    "stability": "unstable"
+  },
+  "user_preferences.enabled": {
+    "introduced_in": "0.6.0",
+    "stability": "unstable"
+  }
 }
