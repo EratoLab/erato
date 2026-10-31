@@ -92,6 +92,41 @@ msgid "approvalQueue.waitingTitle"
 msgstr "{waitingCount, plural, one {This response is waiting on a task} other {This response is waiting on # tasks}}"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Message/ParkedChildItem.tsx
+msgid "approvalScope.allow"
+msgstr "{covers, select, turn {Allow for this response} other {Allow for this document}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ParkedChildItem.tsx
+msgid "approvalScope.allowCall"
+msgstr "Allow this call"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ParkedChildItem.tsx
+msgid "approvalScope.changed"
+msgstr "The document changed since you allowed it."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ParkedChildItem.tsx
+msgid "approvalScope.elsewhere"
+msgstr "To allow the whole document, decide in the pane that has it open."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ParkedChildItem.tsx
+msgid "approvalScope.hint"
+msgstr "{covers, select, turn {Tasks of this response use this tool without asking again until the response is done.} other {Tasks in this chat read this document without asking again until it changes outside this chat.}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ParkedChildItem.tsx
+msgid "approvalScope.others"
+msgstr "{covers, select, turn {{others, plural, one {Also covers # other task of this response} other {Also covers # other tasks of this response}}} other {{others, plural, one {Also covers # other task reading this document} other {Also covers # other tasks reading this document}}}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ApprovalDecisionActions.tsx
+msgid "approvalScope.staged"
+msgstr "{covers, select, turn {Allowed for this response. Sent once every item is decided.} other {Allowed for this document. Sent once every item is decided.}}"
+
+#. js-lingui-explicit-id
 #: src/pages/AssistantEditPage.tsx
 msgid "assistant.action.backToAssistants"
 msgstr "Back to Assistants"

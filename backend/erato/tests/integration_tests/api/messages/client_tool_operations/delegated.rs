@@ -10,6 +10,7 @@ use crate::test_utils::build_openai_delayed_text_streaming_response;
 use futures::StreamExt;
 use rows::HostRow;
 
+mod approval_scope;
 mod conformance;
 mod rows;
 mod slow_path;
@@ -90,10 +91,10 @@ async fn delegated_state(
     config.delegation.tasks.approval.mode = erato_config::config::TaskApprovalMode::Never;
     config.delegation.tasks.scheduling = erato_config::config::TaskScheduling::Silent;
     config.client_tools.executor_stream_enabled = true;
-    config
-        .client_tools
-        .tools
-        .insert(READ_KEY.into(), row.read_config(false, None));
+    config.client_tools.tools.insert(
+        READ_KEY.into(),
+        row.read_config(false, None, erato::config::ClientToolApprovalScope::Call),
+    );
     config.client_tools.tools.insert(
         WRITE_KEY.into(),
         ClientToolConfig {
@@ -295,6 +296,18 @@ fn spawn_parent(
     action_facet: &str,
     executor: Option<ExecutorBinding>,
 ) -> tokio::task::JoinHandle<String> {
+    spawn_parent_saying(row, base, chat_id, USER_MESSAGE, action_facet, executor)
+}
+
+/// [`spawn_parent`] for a turn whose user message is `user_message`.
+fn spawn_parent_saying(
+    row: &HostRow,
+    base: &str,
+    chat_id: Uuid,
+    user_message: &str,
+    action_facet: &str,
+    executor: Option<ExecutorBinding>,
+) -> tokio::task::JoinHandle<String> {
     let mut request = reqwest::Client::new()
         .post(format!("{base}/me/messages/submitstream"))
         .bearer_auth(TEST_JWT_TOKEN)
@@ -302,7 +315,7 @@ fn spawn_parent(
         .header("X-Erato-Client-Tools", row.pane_tools())
         .json(&json!({
             "existing_chat_id": chat_id,
-            "user_message": USER_MESSAGE,
+            "user_message": user_message,
             "action_facet": { "id": action_facet, "args": row.turn_action_args() },
         }));
     if let Some(executor) = executor {
@@ -757,7 +770,7 @@ async fn ask_in_a_client_task(
 
 /// The read tool keeps its part in replay receipts, so the trace shows it.
 fn read_keeps_its_part(row: &HostRow, config: &mut erato::config::AppConfig) {
-    let mut tool = row.read_config(false, None);
+    let mut tool = row.read_config(false, None, erato::config::ClientToolApprovalScope::Call);
     let context_input = row
         .context
         .as_ref()
@@ -1057,10 +1070,10 @@ async fn a_durable_deployment_default_keeps_word_document_calls_live(pool: Pool<
     let (state, _llm) = delegated_state(row, pool, mocks, |config| {
         config.client_tools.durable_operations_enabled = true;
         config.delegation.tasks.child_dispatch = erato::config::ChildDispatch::Durable;
-        config
-            .client_tools
-            .tools
-            .insert(READ_KEY.into(), row.read_config(true, None));
+        config.client_tools.tools.insert(
+            READ_KEY.into(),
+            row.read_config(true, None, erato::config::ClientToolApprovalScope::Call),
+        );
     })
     .await;
     let (base, server) = serve(&state).await;

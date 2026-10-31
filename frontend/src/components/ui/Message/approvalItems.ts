@@ -1,4 +1,5 @@
 import type { ToolApprovalStatus } from "../Trace/Trace";
+import type { ClientToolApprovalScopeRef } from "@/hooks/chat/clientToolExecutors";
 import type {
   ApprovalItem,
   ChildApprovalRef,
@@ -73,6 +74,81 @@ export const isChildItem = (
  */
 export const isWaitingItem = (item: ApprovalItemPart): boolean =>
   item.child?.waiting_for != null;
+
+/** The scope a task's client call may be allowed for instead of per call. */
+export interface ItemApprovalScope {
+  ref: ClientToolApprovalScopeRef;
+  /** The task's client tool: one decision allows one tool on one scope. */
+  toolName: string;
+  /** The scope's last approval ended because it changed outside the chat. */
+  changed: boolean;
+}
+
+/**
+ * The scope an item offers. Only a task's client call carries one; the
+ * server refuses `approve_context` anywhere else.
+ */
+export const scopeOf = (
+  item: ApprovalItemPart,
+): ItemApprovalScope | undefined => {
+  const child = item.child;
+  const scope = child?.approval_scope;
+  if (child?.kind !== "client_tool" || !scope) return undefined;
+  return {
+    ref: {
+      hostContext: scope.host_context,
+      scopeId: scope.scope_id,
+      covers: scope.covers,
+    },
+    toolName: child.tool_name,
+    changed: scope.changed === true,
+  };
+};
+
+/** Whether two items offer the same tool on the same scope: one decision. */
+export const sameScope = (
+  item: ApprovalItemPart,
+  other: ApprovalItemPart,
+): boolean => {
+  const scope = scopeOf(item);
+  const otherScope = scopeOf(other);
+  return (
+    !!scope &&
+    otherScope?.toolName === scope.toolName &&
+    otherScope.ref.hostContext === scope.ref.hostContext &&
+    otherScope.ref.scopeId === scope.ref.scopeId
+  );
+};
+
+/**
+ * The open items one scope decision on `item` answers: the item itself and
+ * every item not answered yet with the same tool on the same scope.
+ */
+export const scopeGroup = (
+  items: readonly ApprovalItemPart[],
+  item: ApprovalItemPart,
+  staged: StagedDecisions,
+): ApprovalItemPart[] => {
+  if (!scopeOf(item)) return [];
+  return items.filter(
+    (other) =>
+      other.approval_id === item.approval_id ||
+      (staged[other.approval_id] === undefined && sameScope(item, other)),
+  );
+};
+
+/** How the card offers an item's scope. */
+export interface ApprovalScopeOffer {
+  covers: ClientToolApprovalScopeRef["covers"];
+  /** The other open items the same decision answers. */
+  others: number;
+  /**
+   * Whether this client can take the scope's position: a document is allowed
+   * only in the pane that has it open, a response anywhere.
+   */
+  anchorable: boolean;
+  changed: boolean;
+}
 
 /**
  * The digits below the millisecond of an RFC 3339 time. `Date.parse` stops at

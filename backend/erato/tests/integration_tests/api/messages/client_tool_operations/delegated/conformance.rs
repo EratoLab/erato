@@ -1,5 +1,11 @@
 //! The cases every host context must pass, run once per row of `rows`.
 use super::super::executor_stream::wait_released;
+use super::approval_scope::{
+    a_context_approval_covers_every_task_reading_the_scope,
+    a_decision_before_an_outside_change_never_makes_a_new_approval,
+    a_later_turn_reuses_a_document_approval_and_a_turn_approval_asks_again,
+    a_new_pane_session_asks_again, scope_changed_ends_the_approval_and_asks_again,
+};
 use super::slow_path::{
     a_child_reaped_errored_after_its_answer_reads_as_completed,
     a_child_that_finishes_while_approvals_are_open_keeps_the_parent_parked,
@@ -21,12 +27,14 @@ use super::slow_path::{
     a_pane_without_grant_support_cannot_claim_a_grant_operation,
     a_parent_errored_after_its_decisions_resumes_once_when_the_waiting_child_finishes,
     a_parent_the_cleanup_cleared_without_its_marker_settles_and_is_not_resumed,
+    a_response_approval_lets_a_durable_task_call_park_without_asking,
     a_restart_while_parked_gives_one_continuation_and_no_duplicate_calls,
     a_task_call_left_continuing_on_an_errored_child_is_refused_and_settles_as_failed,
     a_waiting_call_is_withdrawn_once_the_parent_moved_on,
     a_waiting_child_left_out_of_the_stop_keeps_its_call_and_its_slot_settles,
     a_waiting_child_that_parks_on_an_ask_during_the_decision_continuation_reparks_as_an_approval,
     a_waiting_childs_continuation_is_offered_its_granted_tools_while_the_parent_is_parked,
+    a_waiting_task_that_starts_asking_offers_the_response_scope,
     a_withdrawn_childs_ask_is_answerable_in_its_own_chat,
     an_approved_child_call_on_a_durable_tool_waits_and_the_parent_shows_it,
     an_archived_waiting_child_settles_as_failed_and_the_parent_resumes_once,
@@ -110,6 +118,11 @@ macro_rules! host_conformance {
                 a_denied_child_call_is_declined_and_the_task_result_says_so
                 freshness_reaches_the_task_result_and_the_parent_trace
                 freshness_after_an_approval_reaches_the_task_result_and_the_trace
+                a_context_approval_covers_every_task_reading_the_scope
+                a_later_turn_reuses_a_document_approval_and_a_turn_approval_asks_again
+                a_new_pane_session_asks_again
+                scope_changed_ends_the_approval_and_asks_again
+                a_decision_before_an_outside_change_never_makes_a_new_approval
             );
             host_conformance!(@cases [$($why)?] $($slow_case)*);
         }
@@ -138,6 +151,8 @@ macro_rules! host_conformance {
             a_child_that_finishes_while_approvals_are_open_keeps_the_parent_parked
             a_waiting_child_that_parks_on_an_ask_during_the_decision_continuation_reparks_as_an_approval
             an_approved_child_call_on_a_durable_tool_waits_and_the_parent_shows_it
+            a_response_approval_lets_a_durable_task_call_park_without_asking
+            a_waiting_task_that_starts_asking_offers_the_response_scope
             a_child_that_parks_on_a_second_grant_call_updates_its_waiting_item
             a_parent_errored_after_its_decisions_resumes_once_when_the_waiting_child_finishes
             resume_parked_refuses_a_chat_whose_generation_moved_on
@@ -893,6 +908,7 @@ async fn a_pane_lost_in_flight_is_context_unavailable_after_the_grace(
         connected_at: chrono::Utc::now(),
         client_tools: vec![row.read_tool.to_string(), WRITE_TOOL.to_string()],
         child_client_tools: vec![row.child_pane_tools().to_string()],
+        scoped_client_tools: Vec::new(),
     };
     executor_stream::announce(&state.db, &claim, Uuid::new_v4())
         .await
@@ -943,7 +959,7 @@ async fn a_child_call_never_waits_for_the_inbox_even_for_a_durable_tool(
     mock_client_child_reads(row, &mut mocks, &child);
     let (state, _llm) = delegated_state(row, pool, mocks, |config| {
         config.client_tools.durable_operations_enabled = true;
-        let mut tool = row.read_config(true, None);
+        let mut tool = row.read_config(true, None, erato::config::ClientToolApprovalScope::Call);
         tool.timeout_ms = Some(UNANSWERED_TIMEOUT_MS);
         config.client_tools.tools.insert(READ_KEY.into(), tool);
     })

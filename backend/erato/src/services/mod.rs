@@ -1,3 +1,4 @@
+pub mod approval_scope;
 pub(crate) mod audio_transcription;
 pub mod background_tasks;
 pub mod chat_history_compaction;

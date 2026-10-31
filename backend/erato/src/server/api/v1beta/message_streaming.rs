@@ -613,6 +613,7 @@ fn ask_for_tool_call(
         // The rest of the parked batch is recorded by the caller that owns the
         // queue, not by this per-call gate.
         pending_tool_calls: Vec::new(),
+        approval_scope: None,
     }))
 }
 
@@ -622,9 +623,49 @@ fn cancelled_client_tool_text(reason: &str) -> String {
         "context_unavailable" => "no connected client could run it",
         "withdrawn" => "the user no longer allows this tool",
         "expired" => "no client ran it before it expired",
+        crate::services::approval_scope::SCOPE_CHANGED => {
+            "the user's approval for this document ended because it changed outside the chat; say in the answer what is missing because of it"
+        }
         _ => "the client did not return a result in time",
     };
     format!("Client tool was not completed (reason: {reason}); {why}.")
+}
+
+/// Whether the host answered a covered call, without reading, that the
+/// approval's scope changed since the decision.
+fn reports_scope_changed(outcome: &ClientToolOutcome) -> bool {
+    matches!(outcome, ClientToolOutcome::ValidationFailed(issues, _)
+        if issues.iter().any(|issue| issue.code == crate::services::approval_scope::SCOPE_CHANGED))
+}
+
+/// The Ask a covered call leaves on once its host saw the scope change: the
+/// same call, the scope offered again and marked changed, and the rest of the
+/// batch after it. `None`, leaving `rest` alone, when the call cannot be shown
+/// for approval.
+fn scope_changed_request(
+    namespace: &str,
+    tool_call: &genai::chat::ToolCall,
+    key: &crate::services::approval_scope::ScopeKey,
+    rest: &mut std::collections::VecDeque<genai::chat::ToolCall>,
+) -> Option<ContentPartToolApprovalRequest> {
+    let ToolCallGate::Ask(request) = gate_client_tool_call(
+        namespace,
+        tool_call,
+        Some(crate::models::user_preference::ClientToolDecision::Ask),
+    ) else {
+        return None;
+    };
+    let mut request = *request;
+    request.approval_scope = Some(key.approval_scope(true));
+    request.pending_tool_calls = rest
+        .drain(..)
+        .map(|call| crate::models::message::PendingToolCall {
+            call_id: call.call_id,
+            fn_name: call.fn_name,
+            fn_arguments: call.fn_arguments,
+        })
+        .collect();
+    Some(request)
 }
 
 /// The client-tool counterpart of [`gate_mcp_tool_call`]. There is no policy
@@ -653,6 +694,80 @@ fn gate_client_tool_call(
             true,
         ),
     }
+}
+
+/// What a granted call's context approval decides once the user's decision
+/// for its tool asks.
+enum ContextScopeGate {
+    /// Run under a live approval. A scope the host checks carries the
+    /// approval's lineage and goes only to a stream that checks it.
+    Covered {
+        lineage: Option<executor_stream::ApprovalScopeLineage>,
+        scoped: bool,
+    },
+    /// Ask for the call, offering the scope when one may be offered.
+    Ask(Option<crate::models::message::ApprovalScope>),
+}
+
+/// A call the user allowed for its document or turn (`decided_under`) runs
+/// while that approval is live and asks again once it ended, never as a plain
+/// call. Any other call runs under the key's live approval in the parent chat;
+/// a scope the host checks is offered and used only while one stream of the
+/// binding checks it.
+async fn context_scope_gate(
+    db: &sea_orm::DatabaseConnection,
+    user_id: &str,
+    executor: Option<&crate::services::client_operations::ExecutorBinding>,
+    tool_name: &str,
+    parent_chat_id: Uuid,
+    key: &crate::services::approval_scope::ScopeKey,
+    decided_under: Option<Uuid>,
+) -> Result<ContextScopeGate, Report> {
+    use crate::services::approval_scope::{self, ApprovalState, END_SCOPE_CHANGED, LiveApproval};
+    let covered = |approval: LiveApproval| -> Option<ContextScopeGate> {
+        if !key.device_checked() {
+            return Some(ContextScopeGate::Covered {
+                lineage: None,
+                scoped: false,
+            });
+        }
+        Some(ContextScopeGate::Covered {
+            lineage: Some(executor_stream::ApprovalScopeLineage {
+                approval_id: approval.id,
+                scope_id: key.scope_id.clone(),
+                position: approval.position?,
+            }),
+            scoped: true,
+        })
+    };
+    if let Some(approval_id) = decided_under {
+        return Ok(match approval_scope::by_id(db, approval_id).await? {
+            Some(ApprovalState::Live(approval)) => covered(approval)
+                .unwrap_or_else(|| ContextScopeGate::Ask(Some(key.approval_scope(false)))),
+            Some(ApprovalState::Ended { reason }) => {
+                ContextScopeGate::Ask(Some(key.approval_scope(reason == END_SCOPE_CHANGED)))
+            }
+            None => ContextScopeGate::Ask(Some(key.approval_scope(false))),
+        });
+    }
+    if key.device_checked() {
+        let checks = match (executor, Uuid::parse_str(user_id)) {
+            (Some(binding), Ok(account_id)) => {
+                executor_stream::serves_scoped_grant_call(db, account_id, binding, tool_name)
+                    .await?
+            }
+            _ => false,
+        };
+        if !checks {
+            return Ok(ContextScopeGate::Ask(None));
+        }
+    }
+    let lookup = approval_scope::lookup(db, parent_chat_id, key).await?;
+    let changed = lookup.ended_by_change();
+    Ok(match lookup.live.and_then(covered) {
+        Some(gate) => gate,
+        None => ContextScopeGate::Ask(Some(key.approval_scope(changed))),
+    })
 }
 
 fn build_openai_responses_reasoning_replay_parts(
@@ -1233,11 +1348,14 @@ pub(crate) async fn route_executor_call(
     binding: &crate::services::client_operations::ExecutorBinding,
     tool_name: &str,
     grant_call: bool,
+    scoped: bool,
 ) -> Option<executor_stream::LiveCallRoute> {
     let account_id = Uuid::parse_str(user_id).ok()?;
     let attached = !grant_call && task.client_stream_attached().await;
-    match executor_stream::route_live_call(db, account_id, binding, tool_name, attached, grant_call)
-        .await
+    match executor_stream::route_live_call(
+        db, account_id, binding, tool_name, attached, grant_call, scoped,
+    )
+    .await
     {
         Ok(route) => Some(route),
         Err(error) => {
@@ -2370,6 +2488,10 @@ pub enum ToolApprovalDecision {
     /// decision value rather than an endpoint, so it travels the same
     /// validation and lease path as a real answer.
     Withdraw,
+    /// Allow the call and every later task call of the same tool on the same
+    /// document or turn, until it changes from outside the chat. Valid only on
+    /// a task's client tool item that carries `approval_scope`.
+    ApproveContext,
 }
 
 impl ToolApprovalDecision {
@@ -2377,7 +2499,9 @@ impl ToolApprovalDecision {
     fn is_approval(self) -> bool {
         matches!(
             self,
-            ToolApprovalDecision::Approve | ToolApprovalDecision::ApproveAlways
+            ToolApprovalDecision::Approve
+                | ToolApprovalDecision::ApproveAlways
+                | ToolApprovalDecision::ApproveContext
         )
     }
 }
@@ -2389,6 +2513,12 @@ pub struct ApprovalDecisionItem {
     #[schema(example = "call_abc123")]
     pub approval_id: String,
     pub decision: ToolApprovalDecision,
+    /// The host's position at the click, for `approve_context` on a scope the
+    /// host checks on the device. Only the client that holds the document can
+    /// take it; it sends the decision with that host's `X-Erato-Executor`.
+    #[serde(default)]
+    #[schema(nullable = false, value_type = Object)]
+    pub scope_position: Option<Value>,
 }
 
 /// Rehydrates a generation that was deliberately stopped for tool approval.
@@ -2418,6 +2548,13 @@ pub struct ContinueStreamRequest {
     /// The `X-Erato-Executor` of the device answering, when it sent a valid one.
     #[serde(skip)]
     executor: Option<crate::services::client_operations::ExecutorBinding>,
+    /// The validated `approve_context` decisions, by approval id.
+    #[serde(skip)]
+    context: HashMap<String, crate::services::approval_scope::ContextDecision>,
+    /// On a task's continuation: the approval row its parent made for the
+    /// task's `approve_context` decision.
+    #[serde(skip)]
+    scope_approval: Option<Uuid>,
 }
 
 impl ContinueStreamRequest {
@@ -2435,12 +2572,15 @@ impl ContinueStreamRequest {
                 .map(|(approval_id, decision)| ApprovalDecisionItem {
                     approval_id,
                     decision,
+                    scope_position: None,
                 })
                 .collect(),
             decision: None,
             shows_child_items: true,
             registered_client_tools: None,
             executor: None,
+            context: Default::default(),
+            scope_approval: None,
         }
     }
 }
@@ -5659,6 +5799,7 @@ pub(crate) fn parked_child_approval_item(child: &ParkedChild) -> ApprovalItem {
                 allow_always: Some(request.allow_always),
                 kind: Some(request.kind),
                 waiting_for: None,
+                approval_scope: request.approval_scope.clone(),
             }
         }
         crate::services::delegation::ChildStop::Waiting(wait) => {
@@ -5679,6 +5820,7 @@ pub(crate) fn parked_child_approval_item(child: &ParkedChild) -> ApprovalItem {
                     host_context: wait.host_context.clone(),
                     attempt_id: wait.attempt_id,
                 }),
+                approval_scope: None,
             }
         }
     };
@@ -5725,6 +5867,7 @@ fn delegated_task_approval_part(
         kind: crate::models::message::ToolApprovalKind::DelegatedTask,
         approvals,
         pending_tool_calls,
+        approval_scope: None,
     }
 }
 
@@ -5791,6 +5934,7 @@ fn task_plan_approval_part(
         kind: crate::models::message::ToolApprovalKind::TaskPlan,
         approvals,
         pending_tool_calls,
+        approval_scope: None,
     }
 }
 
@@ -6501,15 +6645,23 @@ async fn stream_generate_chat_completion<'a>(
             }
         }
     }
-    let (mut unfinished_tool_calls, approved_task_call_ids): (
+    let (mut unfinished_tool_calls, approved_task_call_ids, context_approved_calls): (
         std::collections::VecDeque<genai::chat::ToolCall>,
         HashSet<String>,
+        HashMap<String, Uuid>,
     ) = resume.map_or_else(
-        || (std::collections::VecDeque::new(), HashSet::new()),
+        || {
+            (
+                std::collections::VecDeque::new(),
+                HashSet::new(),
+                HashMap::new(),
+            )
+        },
         |resume| {
             (
                 resume.initial_unfinished_tool_calls.into(),
                 resume.approved_task_call_ids,
+                resume.context_approved_calls,
             )
         },
     );
@@ -7867,6 +8019,11 @@ async fn stream_generate_chat_completion<'a>(
                     tool_call_parent_observation_ids.remove(&call_id);
 
                 let tool_policy = offered_client_tools.get(&tool_name);
+                // Set when a context approval covers the call: the lineage a
+                // host that checks the scope gets, and whether the call needs
+                // a stream that checks it.
+                let mut scope_lineage: Option<executor_stream::ApprovalScopeLineage> = None;
+                let mut scoped_call = false;
                 // Read on every call like an MCP decision, so one stored while
                 // the turn runs holds. A call the user just approved on a card
                 // is not asked about again. A compiled operation kind asks
@@ -7892,11 +8049,44 @@ async fn stream_generate_chat_completion<'a>(
                                     .client_operations
                                     .for_operation(&qualified_name)
                                     .is_some_and(|kind| !kind.gated_by_user_decision());
-                        match gate_client_tool_call(
+                        let scope_key = policy.grant.as_ref().and_then(|grant| {
+                            grant.approval_scope.as_ref().map(|key| (grant, key))
+                        });
+                        let gate = gate_client_tool_call(
                             policy.config.namespace_or_default(),
                             &unfinished_tool_call,
                             decision,
-                        ) {
+                        );
+                        let gate = match (gate, scope_key) {
+                            (ToolCallGate::Ask(request), Some((grant, key)))
+                                if !registered_kind =>
+                            {
+                                match context_scope_gate(
+                                    &app_state.db,
+                                    &user_id,
+                                    policy.executor.as_ref(),
+                                    &tool_name,
+                                    grant.owner_chat_id,
+                                    key,
+                                    context_approved_calls.get(&call_id).copied(),
+                                )
+                                .await?
+                                {
+                                    ContextScopeGate::Covered { lineage, scoped } => {
+                                        scope_lineage = lineage;
+                                        scoped_call = scoped;
+                                        ToolCallGate::Run
+                                    }
+                                    ContextScopeGate::Ask(scope) => {
+                                        let mut request = request;
+                                        request.approval_scope = scope;
+                                        ToolCallGate::Ask(request)
+                                    }
+                                }
+                            }
+                            (gate, _) => gate,
+                        };
+                        match gate {
                             ToolCallGate::Ask(_) if registered_kind => ToolCallGate::Run,
                             // The MCP arm's rule: a child with nowhere to ask
                             // finishes without the call instead of parking.
@@ -8123,6 +8313,7 @@ async fn stream_generate_chat_completion<'a>(
                                     requesting_chat_id: chat_id,
                                     requesting_message_id: assistant_message_id,
                                     context_ref: grant.context_ref.clone(),
+                                    approval_scope: None,
                                 }),
                             }
                         })
@@ -8172,6 +8363,7 @@ async fn stream_generate_chat_completion<'a>(
                                 binding,
                                 &tool_name,
                                 true,
+                                scoped_call,
                             )
                             .await
                         }
@@ -8210,6 +8402,7 @@ async fn stream_generate_chat_completion<'a>(
                         &user_id,
                         binding,
                         &tool_name,
+                        false,
                         false,
                     )
                     .await
@@ -8266,6 +8459,7 @@ async fn stream_generate_chat_completion<'a>(
                                 requesting_chat_id: chat_id,
                                 requesting_message_id: assistant_message_id,
                                 context_ref: grant.context_ref.clone(),
+                                approval_scope: scope_lineage.clone(),
                             }),
                         };
                         handed_over = hand_over_executor_call(&app_state.db, task, call).await;
@@ -8493,6 +8687,69 @@ async fn stream_generate_chat_completion<'a>(
                     }
                 } else {
                     outcome
+                };
+                // The host saw the covered call's scope change since the
+                // decision: that approval ends and the user is asked for the
+                // same call again. No tool part is written for it, so the
+                // continuation re-seeds it.
+                let outcome = match (&scope_lineage, grant) {
+                    (Some(lineage), Some(grant))
+                        if !server_refused && reports_scope_changed(&outcome) =>
+                    {
+                        crate::services::approval_scope::end(
+                            &app_state.db,
+                            lineage.approval_id,
+                            crate::services::approval_scope::END_SCOPE_CHANGED,
+                        )
+                        .await?;
+                        let request = match (&grant.approval_scope, tool_policy) {
+                            (Some(key), Some(policy)) if !is_delegated_run || child_may_park => {
+                                scope_changed_request(
+                                    policy.config.namespace_or_default(),
+                                    &unfinished_tool_call,
+                                    key,
+                                    &mut unfinished_tool_calls,
+                                )
+                            }
+                            _ => None,
+                        };
+                        if let Some(request) = request {
+                            persist_otel_tool_call(
+                                tracing_client.as_ref(),
+                                &unfinished_tool_call,
+                                Some(json!({
+                                    "status": "cancelled",
+                                    "reason": crate::services::approval_scope::SCOPE_CHANGED,
+                                })),
+                                otel_tool_call_start_time,
+                                Some(SystemTime::now()),
+                                tool_call_parent_observation_id,
+                                assistant_id,
+                                &langfuse_trace_enrichment.platform,
+                                None,
+                            )
+                            .await;
+                            pending_approval_part = Some(request);
+                            exit_metadata = build_generation_metadata(
+                                total_prompt_tokens,
+                                total_completion_tokens,
+                                total_total_tokens,
+                                total_reasoning_tokens,
+                                langfuse_trace_id.clone(),
+                                false,
+                                None,
+                                non_empty_string(&captured_reasoning_summary),
+                                non_empty_vec(&captured_reasoning_items),
+                                non_empty_vec(&captured_reasoning_item_encrypted_content),
+                            );
+                            exit_after_join = true;
+                            break 'pop_calls;
+                        }
+                        ClientToolOutcome::Cancelled {
+                            reason: crate::services::approval_scope::SCOPE_CHANGED.into(),
+                        }
+                    }
+                    _ => outcome,
                 };
                 let (status, bg_status, message_status, mut output_value, mut response_text) =
                     match &outcome {
@@ -12939,6 +13196,8 @@ mod tests {
             shows_child_items: false,
             registered_client_tools: None,
             executor: None,
+            context: Default::default(),
+            scope_approval: None,
         }
     }
 
@@ -12950,12 +13209,15 @@ mod tests {
                 .map(|(approval_id, decision)| ApprovalDecisionItem {
                     approval_id: approval_id.to_string(),
                     decision,
+                    scope_position: None,
                 })
                 .collect(),
             decision: None,
             shows_child_items: false,
             registered_client_tools: None,
             executor: None,
+            context: Default::default(),
+            scope_approval: None,
         }
     }
 
@@ -13264,6 +13526,7 @@ mod tests {
         let decide = |approval_id: &str| ApprovalDecisionItem {
             approval_id: approval_id.to_string(),
             decision: ToolApprovalDecision::Approve,
+            scope_position: None,
         };
         let request = |decisions| super::ContinueStreamRequest {
             message_id: Uuid::new_v4(),
@@ -13272,6 +13535,8 @@ mod tests {
             shows_child_items: true,
             registered_client_tools: None,
             executor: None,
+            context: Default::default(),
+            scope_approval: None,
         };
         assert!(
             super::resolve_submitted_decisions(
@@ -13352,6 +13617,8 @@ mod tests {
                 approved_at: "2026-10-20T10:01:00Z".to_string(),
                 approval_id: Some(approval_id.to_string()),
                 child_chat_id: None,
+                covers: None,
+                scope_approval_id: None,
             })
         };
         let own_ran = ContentPart::ToolUse(ToolUse {
@@ -13401,6 +13668,8 @@ mod tests {
                 approved_at: "2026-10-20T10:01:00Z".to_string(),
                 approval_id: Some(call_id.to_string()),
                 child_chat_id: None,
+                covers: None,
+                scope_approval_id: None,
             })
         };
         let own_ran = ContentPart::ToolUse(ToolUse {
@@ -13448,6 +13717,278 @@ mod tests {
         assert_eq!(rest, vec![pending("later")]);
         let (carried, _) = super::previously_approved_pending(&[approval("own"), own_ran], &client);
         assert!(carried.is_empty());
+    }
+
+    #[test]
+    fn a_call_asked_again_after_its_scope_changed_follows_the_latest_decision() {
+        use crate::models::message::{
+            ApprovalScopeCovers, ContentPart, ContentPartToolApproval, PendingToolCall,
+        };
+
+        let approval = |scope_approval_id: Option<Uuid>| {
+            ContentPart::ToolApproval(ContentPartToolApproval {
+                tool_call_id: "read".to_string(),
+                always_allow: false,
+                user_tool_approval_setting_id: None,
+                approved_at: "2026-10-30T10:01:00Z".to_string(),
+                approval_id: Some("read".to_string()),
+                child_chat_id: None,
+                covers: scope_approval_id.map(|_| ApprovalScopeCovers::Document),
+                scope_approval_id,
+            })
+        };
+        let mut ask = gated_request("read", "2026-10-30T10:00:00Z");
+        ask.kind = ToolApprovalKind::ClientTool;
+        let (first, second) = (Uuid::new_v4(), Uuid::new_v4());
+        let read = PendingToolCall {
+            call_id: "read".to_string(),
+            fn_name: "publish".to_string(),
+            fn_arguments: json!({"topic": "read"}),
+        };
+
+        // Allowed for the document, then asked again once it changed and
+        // allowed once: the call runs once, outside any approval.
+        let mut content = vec![
+            ContentPart::ToolApprovalRequest(ask.clone()),
+            approval(Some(first)),
+            ContentPart::ToolApprovalRequest(ask.clone()),
+            approval(None),
+        ];
+        assert!(super::context_approved_calls(&content).is_empty());
+        let (approved, _) = super::previously_approved_pending(&content, &ask);
+        assert_eq!(approved, vec![read.clone()]);
+
+        // Allowed for the document again: the new approval counts.
+        content.push(ContentPart::ToolApprovalRequest(ask.clone()));
+        content.push(approval(Some(second)));
+        assert_eq!(
+            super::context_approved_calls(&content),
+            std::collections::HashMap::from([("read".to_string(), second)])
+        );
+        let (approved, _) = super::previously_approved_pending(&content, &ask);
+        assert_eq!(approved, vec![read]);
+    }
+
+    #[test]
+    fn a_scope_change_asks_for_the_same_call_with_the_rest_of_the_batch_after_it() {
+        use crate::models::message::{ApprovalScope, ApprovalScopeCovers, PendingToolCall};
+        use crate::services::approval_scope::{ApprovalScopeKind, ScopeKey};
+        use crate::services::client_tools::{ClientToolOutcome, ClientToolValidationIssue};
+
+        let call = |id: &str| ToolCall {
+            call_id: id.to_string(),
+            fn_name: "read_part".to_string(),
+            fn_arguments: json!({"part": id}),
+            thought_signatures: None,
+        };
+        let key = ScopeKey {
+            host_context: crate::config::ClientToolHostContext::WordDocument,
+            kind: ApprovalScopeKind::PaneDocument,
+            binding_digest: "0".repeat(64),
+            scope_id: "pane-session".to_string(),
+            tool_name: "fake/read_part".to_string(),
+        };
+        let mut rest = std::collections::VecDeque::from([call("second"), call("third")]);
+        let request =
+            super::scope_changed_request("fake", &call("first"), &key, &mut rest).expect("an ask");
+        assert!(rest.is_empty());
+        assert_eq!(request.kind, ToolApprovalKind::ClientTool);
+        assert_eq!(request.tool_call_id, "first");
+        assert_eq!(request.approvals.len(), 1);
+        assert_eq!(request.approvals[0].approval_id, "first");
+        assert_eq!(request.approvals[0].input, json!({"part": "first"}));
+        assert!(request.allow_always);
+        assert_eq!(
+            request.approval_scope,
+            Some(ApprovalScope {
+                host_context: "word_document".to_string(),
+                covers: ApprovalScopeCovers::Document,
+                scope_id: "pane-session".to_string(),
+                changed: true,
+            })
+        );
+        assert_eq!(
+            request.pending_tool_calls,
+            ["second", "third"]
+                .map(|id| PendingToolCall {
+                    call_id: id.to_string(),
+                    fn_name: "read_part".to_string(),
+                    fn_arguments: json!({"part": id}),
+                })
+                .to_vec()
+        );
+
+        let mut unshowable = call("first");
+        unshowable.fn_name = "read\u{202e}part".to_string();
+        let mut rest = std::collections::VecDeque::from([call("second")]);
+        assert!(super::scope_changed_request("fake", &unshowable, &key, &mut rest).is_none());
+        assert_eq!(rest.len(), 1, "the batch stays for the model's answer");
+
+        let issue = |code: &str| ClientToolValidationIssue {
+            path: String::new(),
+            code: code.to_string(),
+            message: "m".to_string(),
+        };
+        assert!(super::reports_scope_changed(
+            &ClientToolOutcome::ValidationFailed(
+                vec![issue("other"), issue("scope_changed")],
+                None,
+            )
+        ));
+        assert!(!super::reports_scope_changed(
+            &ClientToolOutcome::ValidationFailed(vec![issue("declined")], None)
+        ));
+        assert!(!super::reports_scope_changed(&ClientToolOutcome::Error(
+            "scope_changed".to_string()
+        )));
+        assert!(super::cancelled_client_tool_text("scope_changed").contains("changed outside"));
+    }
+
+    #[test]
+    fn approve_context_applies_only_to_a_task_client_call_that_offers_a_scope() {
+        use crate::models::message::{
+            ApprovalItem, ApprovalScope, ApprovalScopeCovers, ChildApprovalRef,
+            ToolApprovalAnnotations,
+        };
+        let child = |kind: ToolApprovalKind, scoped: bool| ChildApprovalRef {
+            child_chat_id: Uuid::nil(),
+            child_message_id: Uuid::nil(),
+            child_tool_call_id: "child-call".to_string(),
+            tool_name: "read_document_blocks".to_string(),
+            display: None,
+            mcp_server_id: "word".to_string(),
+            input: json!({}),
+            annotations: ToolApprovalAnnotations {
+                read_only_hint: false,
+                destructive_hint: true,
+                idempotent_hint: false,
+                open_world_hint: true,
+            },
+            preset: String::new(),
+            requested_at: String::new(),
+            allow_always: Some(true),
+            kind: Some(kind),
+            waiting_for: None,
+            approval_scope: scoped.then(|| ApprovalScope {
+                host_context: "word_document".to_string(),
+                covers: ApprovalScopeCovers::Document,
+                scope_id: "identity".to_string(),
+                changed: false,
+            }),
+        };
+        let item = |approval_id: &str, child: Option<ChildApprovalRef>| ApprovalItem {
+            approval_id: approval_id.to_string(),
+            tool_call_id: approval_id.to_string(),
+            tool_name: "delegate_task".to_string(),
+            display: None,
+            input: json!({}),
+            child,
+        };
+        let open = vec![
+            item("own", None),
+            item("mcp", Some(child(ToolApprovalKind::McpTool, true))),
+            item("unscoped", Some(child(ToolApprovalKind::ClientTool, false))),
+            item("scoped", Some(child(ToolApprovalKind::ClientTool, true))),
+        ];
+        let decide = |approval_id: &str| {
+            vec![(
+                approval_id.to_string(),
+                ToolApprovalDecision::ApproveContext,
+            )]
+        };
+        for refused in ["own", "mcp", "unscoped"] {
+            assert!(
+                super::context_decision_refused(false, &open, &decide(refused)).is_some(),
+                "{refused}"
+            );
+        }
+        assert_eq!(
+            super::context_decision_refused(false, &open, &decide("scoped")),
+            None
+        );
+        assert!(super::context_decision_refused(true, &open, &decide("own")).is_some());
+        assert!(super::context_decision_refused(true, &open, &decide("scoped")).is_some());
+        assert_eq!(
+            super::context_decision_refused(
+                true,
+                &open,
+                &[("own".to_string(), ToolApprovalDecision::Approve)]
+            ),
+            None
+        );
+    }
+
+    #[test]
+    fn never_on_a_client_tool_item_names_its_tool_for_the_decision() {
+        let mut stop = gated_request("own", "2026-10-20T10:00:00Z");
+        stop.kind = ToolApprovalKind::ClientTool;
+        stop.mcp_server_id = "word".to_string();
+        let mut own = stop.approval_items().remove(0);
+        own.tool_name = "read_document_blocks".to_string();
+        let mut client_task = child_item("client-task");
+        let child = client_task.child.as_mut().unwrap();
+        child.kind = Some(ToolApprovalKind::ClientTool);
+        child.mcp_server_id = "word".to_string();
+        child.tool_name = "read_other".to_string();
+        let mcp_task = child_item("mcp-task");
+        let open = vec![own, client_task, mcp_task];
+        let never = |ids: &[&str]| {
+            ids.iter()
+                .map(|id| (id.to_string(), ToolApprovalDecision::RejectAlways))
+                .collect::<Vec<_>>()
+        };
+
+        assert_eq!(
+            super::client_tools_set_to_never(
+                &stop,
+                &open,
+                &never(&["own", "client-task", "mcp-task"])
+            ),
+            HashSet::from([
+                "word/read_document_blocks".to_string(),
+                "word/read_other".to_string()
+            ])
+        );
+        assert!(
+            super::client_tools_set_to_never(
+                &stop,
+                &open,
+                &[("own".to_string(), ToolApprovalDecision::Reject)]
+            )
+            .is_empty()
+        );
+        stop.kind = ToolApprovalKind::McpTool;
+        assert_eq!(
+            super::client_tools_set_to_never(&stop, &open, &never(&["own", "client-task"])),
+            HashSet::from(["word/read_other".to_string()])
+        );
+    }
+
+    #[test]
+    fn approve_context_deserializes_with_its_position() {
+        let request: super::ContinueStreamRequest = serde_json::from_value(json!({
+            "message_id": Uuid::nil(),
+            "decisions": [
+                {"approval_id": "a", "decision": "approve_context",
+                 "scope_position": {"journal": "j", "seq": 41, "events": true}},
+                {"approval_id": "b", "decision": "approve_context"},
+                {"approval_id": "c", "decision": "approve"},
+            ],
+            "shows_child_items": true,
+        }))
+        .expect("approve_context is a decision");
+        assert_eq!(
+            request.decisions[0].decision,
+            ToolApprovalDecision::ApproveContext
+        );
+        assert!(request.decisions[0].decision.is_approval());
+        assert_eq!(
+            request.decisions[0].scope_position,
+            Some(json!({"journal": "j", "seq": 41, "events": true}))
+        );
+        assert_eq!(request.decisions[1].scope_position, None);
+        assert_eq!(request.decisions[2].scope_position, None);
+        assert!(request.context.is_empty() && request.scope_approval.is_none());
     }
 
     #[test]
@@ -13647,6 +14188,8 @@ mod tests {
             shows_child_items: false,
             registered_client_tools: None,
             executor: None,
+            context: Default::default(),
+            scope_approval: None,
         };
         assert!(matches!(
             resolve_submitted_decisions(&empty, &open),
@@ -18620,6 +19163,9 @@ pub async fn react_to_task_result_sse(
 /// What a parked turn still has open.
 pub(crate) struct ParkedApprovalState {
     pub(crate) request: ContentPartToolApprovalRequest,
+    /// The request part's index in the message's content: with the message id,
+    /// the identity of the stop a decision answers.
+    pub(crate) request_index: usize,
     /// The approvals no decision part after the request answers, and the
     /// waiting children whose slot is still in progress.
     pub(crate) open: Vec<ApprovalItem>,
@@ -18736,6 +19282,7 @@ pub(crate) fn parked_approval_state(content: &[ContentPart]) -> Option<ParkedApp
     });
     Some(ParkedApprovalState {
         request,
+        request_index,
         open,
         unanswered,
     })
@@ -18981,6 +19528,171 @@ fn approve_always_refused(
     })
 }
 
+/// Why an `approve_context` decision cannot apply to its item, judged from the
+/// stop alone: only a task's client tool call that offers a scope can be
+/// allowed for its document or turn. The coordinator's own call, an MCP task,
+/// a call without a scope and a task's own card all keep the usual choices.
+fn context_decision_refused(
+    delegated_chat: bool,
+    open: &[ApprovalItem],
+    decisions: &[(String, ToolApprovalDecision)],
+) -> Option<&'static str> {
+    decisions
+        .iter()
+        .filter(|(_, decision)| *decision == ToolApprovalDecision::ApproveContext)
+        .find_map(|(approval_id, _)| {
+            if delegated_chat {
+                return Some("A task's own card cannot allow a call for its whole document or response");
+            }
+            let child = open
+                .iter()
+                .find(|item| &item.approval_id == approval_id)
+                .and_then(|item| item.child.as_ref());
+            match child {
+                None => Some("Only a task's call can be allowed for its whole document or response"),
+                Some(child) if child.kind != Some(ToolApprovalKind::ClientTool) => {
+                    Some("Only a task's client tool call can be allowed for its whole document or response")
+                }
+                Some(child) if child.approval_scope.is_none() => {
+                    Some("This call cannot be allowed for its whole document or response")
+                }
+                Some(_) => None,
+            }
+        })
+}
+
+/// The client tools a stop's decisions set to Never allow: a task's client tool
+/// item names its own tool, the turn's own item the tool its stop asked about.
+fn client_tools_set_to_never(
+    stop: &ContentPartToolApprovalRequest,
+    open: &[ApprovalItem],
+    decisions: &[(String, ToolApprovalDecision)],
+) -> HashSet<String> {
+    decisions
+        .iter()
+        .filter(|(_, decision)| *decision == ToolApprovalDecision::RejectAlways)
+        .filter_map(|(approval_id, _)| {
+            let item = open.iter().find(|item| &item.approval_id == approval_id)?;
+            match &item.child {
+                Some(child) => (child.kind == Some(ToolApprovalKind::ClientTool))
+                    .then(|| format!("{}/{}", child.mcp_server_id, child.tool_name)),
+                None => (stop.kind == ToolApprovalKind::ClientTool)
+                    .then(|| format!("{}/{}", stop.mcp_server_id, item.tool_name)),
+            }
+        })
+        .collect()
+}
+
+/// Validates every `approve_context` decision against the task's grant as it
+/// holds now and derives the approval key it is made under. A scope the host
+/// checks on the device needs the position taken at the click, sent by the
+/// client that holds the context with that host's executor binding, and one
+/// position per scope. A tool the user set to Never allow, before or in this
+/// decision, gets no approval: its items are allowed once.
+async fn context_decisions(
+    app_state: &AppState,
+    me_user: &MeProfile,
+    request: &ContinueStreamRequest,
+    chat: &crate::db::entity::chats::Model,
+    stop: &ContentPartToolApprovalRequest,
+    open: &[ApprovalItem],
+    decisions: &[(String, ToolApprovalDecision)],
+) -> Result<HashMap<String, crate::services::approval_scope::ContextDecision>, String> {
+    use crate::services::approval_scope::{ContextDecision, position_acceptable};
+    use sea_orm::EntityTrait;
+    if let Some(refusal) = context_decision_refused(
+        crate::models::chat::chat_is_delegated_run(chat),
+        open,
+        decisions,
+    ) {
+        return Err(refusal.to_string());
+    }
+    let mut context: HashMap<String, ContextDecision> = HashMap::new();
+    for (approval_id, decision) in decisions {
+        if *decision != ToolApprovalDecision::ApproveContext {
+            continue;
+        }
+        let Some(child) = open
+            .iter()
+            .find(|item| &item.approval_id == approval_id)
+            .and_then(|item| item.child.as_ref())
+        else {
+            continue;
+        };
+        let offered = child.approval_scope.as_ref().expect("checked above");
+        let unavailable =
+            || "This task can no longer be allowed for its whole document or response".to_string();
+        let child_chat = crate::db::entity::chats::Entity::find_by_id(child.child_chat_id)
+            .one(&app_state.db)
+            .await
+            .map_err(|error| error.to_string())?
+            .filter(|child_chat| child_chat.owner_user_id == me_user.id)
+            .ok_or_else(unavailable)?;
+        let (key, grant) = crate::services::delegated_client_tools::decision_scope_key(
+            app_state,
+            &child_chat,
+            &format!("{}/{}", child.mcp_server_id, child.tool_name),
+        )
+        .await
+        .map_err(|error| error.to_string())?
+        .filter(|(key, grant)| {
+            grant.owner_chat_id == chat.id
+                && grant.owner_message_id == request.message_id
+                && key.scope_id == offered.scope_id
+                && key.host_context.as_str() == offered.host_context
+        })
+        .ok_or_else(unavailable)?;
+        let position = if key.device_checked() {
+            let position = request
+                .decisions
+                .iter()
+                .find(|item| &item.approval_id == approval_id)
+                .and_then(|item| item.scope_position.clone())
+                .filter(|position| position_acceptable(&key, position))
+                .ok_or_else(|| {
+                    "Allowing the whole document needs the position the pane that has it open took at the decision".to_string()
+                })?;
+            if request.executor.as_ref() != Some(&grant.binding) {
+                return Err("Allow the whole document in the pane that has it open".to_string());
+            }
+            Some(position)
+        } else {
+            None
+        };
+        if context
+            .values()
+            .any(|other| other.key == key && other.position != position)
+        {
+            return Err(
+                "All decisions for one document or response must carry the same position"
+                    .to_string(),
+            );
+        }
+        context.insert(approval_id.clone(), ContextDecision { key, position });
+    }
+    let mut never = client_tools_set_to_never(stop, open, decisions);
+    if let Ok(user_id) = Uuid::parse_str(&me_user.id) {
+        let tools: HashSet<&str> = context
+            .values()
+            .map(|decided| decided.key.tool_name.as_str())
+            .collect();
+        for tool_name in tools {
+            let stored = crate::models::user_preference::find_client_tool_decision(
+                &app_state.db,
+                &user_id,
+                tool_name,
+            )
+            .await
+            .map_err(|error| error.to_string())?;
+            if stored == Some(crate::models::user_preference::ClientToolDecision::NeverAllow) {
+                never.insert(tool_name.to_string());
+            }
+        }
+    }
+    context.retain(|_, decided| !never.contains(&decided.key.tool_name));
+    Ok(context)
+}
+
 /// A continuation running in the background, and its event feed.
 pub(crate) struct StartedContinuation {
     pub chat_id: Uuid,
@@ -18995,7 +19707,7 @@ pub(crate) async fn start_continuation(
     app_state: &AppState,
     policy: &PolicyEngine,
     me_user: &MeProfile,
-    request: ContinueStreamRequest,
+    mut request: ContinueStreamRequest,
     tx: Sender<Result<Event, Report>>,
 ) -> Result<StartedContinuation, StreamRouteError> {
     let mcp = app_state.mcp_state().await;
@@ -19104,6 +19816,7 @@ pub(crate) async fn start_continuation(
         synced.expected_generation
     });
     let mut resume_parked = false;
+    let mut context = HashMap::new();
     let entry = if state.open.is_empty() {
         if has_waiting_items && empty_body && awaiting_approval && state.unanswered {
             resume_parked = true;
@@ -19182,9 +19895,21 @@ pub(crate) async fn start_continuation(
                 )
                     .into());
             }
+            context = context_decisions(
+                app_state,
+                me_user,
+                &request,
+                &chat,
+                &state.request,
+                &decidable,
+                &submitted_decisions,
+            )
+            .await
+            .map_err(|message| (axum::http::StatusCode::BAD_REQUEST, message))?;
             ContinuationEntry::Decide
         }
     };
+    request.context = context;
 
     let app_state_for_worker = app_state.clone();
     let policy_for_worker = policy.clone();
@@ -19339,6 +20064,11 @@ pub(crate) struct ParkedTurnResume {
     pub continuing_client_tools: Option<Vec<String>>,
     /// The executor binding of the device answering an approval, if it sent one.
     pub continuing_executor: Option<crate::services::client_operations::ExecutorBinding>,
+    /// Granted calls the user allowed for their whole document or turn, with
+    /// the approval that decision made. Unlike `approved_task_call_ids` they
+    /// pass the gate again, which runs them under that approval while it is
+    /// live and asks again once it ended.
+    pub context_approved_calls: HashMap<String, Uuid>,
 }
 
 /// How a continuation reached the worker, decided before the generation lease
@@ -19481,6 +20211,7 @@ fn run_child_approval_continuation(
 /// truth, and a card can name a request its owner has since answered from the
 /// child's own chat. Nothing open means there is nothing to run — the answer,
 /// if there is one, is already on the row.
+#[allow(clippy::too_many_arguments)]
 async fn resume_parked_child(
     app_state: &AppState,
     policy: &PolicyEngine,
@@ -19488,6 +20219,7 @@ async fn resume_parked_child(
     child: &crate::models::message::ChildApprovalRef,
     parent_tool_call_id: String,
     decision: ToolApprovalDecision,
+    scope_approval: Option<Uuid>,
     parked_output: Option<&JsonValue>,
 ) -> Result<
     (
@@ -19558,6 +20290,7 @@ async fn resume_parked_child(
                 .map(|item| ApprovalDecisionItem {
                     approval_id: item.approval_id.clone(),
                     decision,
+                    scope_position: None,
                 })
                 .collect(),
             decision: None,
@@ -19566,6 +20299,8 @@ async fn resume_parked_child(
             // launched on, which its grant names, not the deciding client's.
             registered_client_tools: None,
             executor: None,
+            context: Default::default(),
+            scope_approval,
         };
         let client_reads = configuration
             .as_ref()
@@ -19734,11 +20469,39 @@ async fn settle_parked_children(
     user_id: Uuid,
     task: &Arc<StreamingTask>,
     tx: &Sender<Result<Event, Report>>,
+    chat_id: Uuid,
     message_id: Uuid,
+    request_index: usize,
     open: &[ApprovalItem],
     decisions: &[(String, ToolApprovalDecision)],
+    context: &HashMap<String, crate::services::approval_scope::ContextDecision>,
     content: &mut Vec<ContentPart>,
 ) -> Result<Vec<ParkedChild>, Report> {
+    // One approval per decision, made before any task resumes: a task that
+    // finds it ended by an outside change asks again instead of making
+    // another one from the same decision.
+    let mut approvals: Vec<(&crate::services::approval_scope::ScopeKey, Uuid)> = Vec::new();
+    for (approval_id, decision) in decisions {
+        let Some(decided) = context
+            .get(approval_id)
+            .filter(|_| *decision == ToolApprovalDecision::ApproveContext)
+        else {
+            continue;
+        };
+        if approvals.iter().any(|(key, _)| **key == decided.key) {
+            continue;
+        }
+        let approval = crate::services::approval_scope::approve_for_decision(
+            &app_state.db,
+            chat_id,
+            &decided.key,
+            message_id,
+            i32::try_from(request_index)?,
+            decided.position.as_ref(),
+        )
+        .await?;
+        approvals.push((&decided.key, approval));
+    }
     let mut reparked: Vec<ParkedChild> = Vec::new();
     for (approval_id, decision) in decisions {
         let decision = *decision;
@@ -19748,6 +20511,17 @@ async fn settle_parked_children(
             ));
         };
         let child = item.child.clone();
+        let scope_approval = context
+            .get(approval_id)
+            .filter(|_| decision == ToolApprovalDecision::ApproveContext)
+            .and_then(|decided| {
+                approvals
+                    .iter()
+                    .find(|(key, _)| **key == decided.key)
+                    .map(|(key, approval)| {
+                        (crate::services::approval_scope::covers(key.kind), *approval)
+                    })
+            });
 
         // A child asking about a client tool keeps its standing answer as the
         // user's client-tool preference, as its own card would.
@@ -19818,6 +20592,8 @@ async fn settle_parked_children(
                 approved_at: now_timestamp(),
                 approval_id: Some(item.approval_id.clone()),
                 child_chat_id: child.as_ref().map(|child| child.child_chat_id),
+                covers: scope_approval.map(|(covers, _)| covers),
+                scope_approval_id: scope_approval.map(|(_, approval)| approval),
             }));
         } else {
             content.push(ContentPart::ToolRejection(ContentPartToolRejection {
@@ -19849,6 +20625,7 @@ async fn settle_parked_children(
                     child,
                     item.tool_call_id.clone(),
                     decision,
+                    scope_approval.map(|(_, approval)| approval),
                     parked_output.as_ref(),
                 )
                 .await
@@ -20032,9 +20809,21 @@ fn previously_approved_pending(
     Vec<crate::models::message::PendingToolCall>,
 ) {
     let approved_unrun = |call: &crate::models::message::PendingToolCall| {
-        let approved = content.iter().any(|part| {
-            matches!(part, ContentPart::ToolApproval(approval) if approval.tool_call_id == call.call_id)
-        });
+        // The latest decision on the call counts, so a call asked again after
+        // an earlier approval is classified by the user's answer to that ask.
+        let approved = content
+            .iter()
+            .rev()
+            .find_map(|part| match part {
+                ContentPart::ToolApproval(approval) if approval.tool_call_id == call.call_id => {
+                    Some(true)
+                }
+                ContentPart::ToolRejection(rejection) if rejection.tool_call_id == call.call_id => {
+                    Some(false)
+                }
+                _ => None,
+            })
+            .unwrap_or(false);
         let ran = content.iter().any(|part| {
             matches!(part, ContentPart::ToolUse(tool_use) if tool_use.tool_call_id == call.call_id)
         });
@@ -20065,6 +20854,29 @@ fn previously_approved_pending(
         .chain(carried)
         .collect();
     (approved, rest)
+}
+
+/// The row's own calls whose latest decision allowed them for their whole
+/// document or turn, with the approval that decision made. An earlier decision
+/// on the same call never counts: after the scope changed and the user allowed
+/// the call once, it runs once outside any approval.
+fn context_approved_calls(content: &[ContentPart]) -> HashMap<String, Uuid> {
+    let mut latest: HashMap<&str, Option<Uuid>> = HashMap::new();
+    for part in content {
+        match part {
+            ContentPart::ToolApproval(approval) if approval.child_chat_id.is_none() => {
+                latest.insert(&approval.tool_call_id, approval.scope_approval_id);
+            }
+            ContentPart::ToolRejection(rejection) if rejection.child_chat_id.is_none() => {
+                latest.insert(&rejection.tool_call_id, None);
+            }
+            _ => {}
+        }
+    }
+    latest
+        .into_iter()
+        .filter_map(|(call_id, approval)| Some((call_id.to_string(), approval?)))
+        .collect()
 }
 
 /// Split a stop's decisions into the lanes that settle them, keeping row order
@@ -20239,6 +21051,8 @@ pub(crate) async fn run_continuation(
                             approved_at: now_timestamp(),
                             approval_id: Some(item.approval_id.clone()),
                             child_chat_id: None,
+                            covers: None,
+                            scope_approval_id: None,
                         }))
                 }
                 ToolApprovalDecision::Reject | ToolApprovalDecision::Withdraw => parsed
@@ -20516,6 +21330,8 @@ pub(crate) async fn run_continuation(
                     approved_at: now_timestamp(),
                     approval_id: Some(item.approval_id.clone()),
                     child_chat_id: None,
+                    covers: None,
+                    scope_approval_id: None,
                 }));
         } else {
             parsed
@@ -20784,6 +21600,21 @@ pub(crate) async fn run_continuation(
             .await?;
         }
         if decision.is_approval() {
+            // A task's call its parent allowed for the whole document or turn
+            // keeps the approval the parent made; the gate runs it under that
+            // approval. Without one, `approve_context` allows the call once.
+            let scope_approval = request
+                .scope_approval
+                .filter(|_| {
+                    decision == ToolApprovalDecision::ApproveContext
+                        && approval_request.kind == ToolApprovalKind::ClientTool
+                })
+                .zip(
+                    approval_request
+                        .approval_scope
+                        .as_ref()
+                        .map(|scope| scope.covers),
+                );
             parsed
                 .content
                 .push(ContentPart::ToolApproval(ContentPartToolApproval {
@@ -20796,6 +21627,8 @@ pub(crate) async fn run_continuation(
                     approved_at: now_timestamp(),
                     approval_id: Some(item.approval_id.clone()),
                     child_chat_id: None,
+                    covers: scope_approval.map(|(_, covers)| covers),
+                    scope_approval_id: scope_approval.map(|(approval, _)| approval),
                 }));
             approved_plan_calls.push(crate::models::message::PendingToolCall {
                 call_id: item.tool_call_id.clone(),
@@ -20896,9 +21729,12 @@ pub(crate) async fn run_continuation(
             user_id,
             task,
             &tx,
+            chat.id,
             message.id,
+            state.request_index,
             &state.open,
             &child_decisions,
+            &request.context,
             &mut parsed.content,
         )
         .await?
@@ -21711,6 +22547,13 @@ async fn resume_parked_generation(
             options: None,
         });
     }
+    let mut context_approved_calls = context_approved_calls(&parsed.content);
+    context_approved_calls.retain(|call_id, _| {
+        pending_tool_calls
+            .iter()
+            .any(|call| &call.call_id == call_id)
+    });
+    approved_task_call_ids.retain(|call_id| !context_approved_calls.contains_key(call_id));
     let resume = Some(ParkedTurnResume {
         operation_attempt,
         consumption: generation_parameters.turn_consumption.clone(),
@@ -21718,6 +22561,7 @@ async fn resume_parked_generation(
         approved_task_call_ids,
         continuing_client_tools,
         continuing_executor,
+        context_approved_calls,
     });
 
     let chat_options =

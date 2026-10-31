@@ -14,7 +14,11 @@ import {
   itemAllowsAlways,
 } from "./approvalItems";
 
-import type { ApprovalItemPart, StagedDecisions } from "./approvalItems";
+import type {
+  ApprovalItemPart,
+  ApprovalScopeOffer,
+  StagedDecisions,
+} from "./approvalItems";
 import type {
   ContentPartToolApprovalRequest,
   ToolApprovalDecision,
@@ -39,6 +43,8 @@ export const ApprovalQueueCard = ({
   isBusy,
   onDecideItem,
   onDecideAll,
+  scopeOffer,
+  onDecideScope,
 }: {
   request: Pick<
     ContentPartToolApprovalRequest,
@@ -53,6 +59,10 @@ export const ApprovalQueueCard = ({
   isBusy: boolean;
   onDecideItem: (approvalId: string, decision: ToolApprovalDecision) => void;
   onDecideAll: (decision: ToolApprovalDecision) => void;
+  /** How an item's document or response scope is offered, if it has one. */
+  scopeOffer?: (item: ApprovalItemPart) => ApprovalScopeOffer | undefined;
+  /** Allow an item, and every open item of its tool and scope, for that scope. */
+  onDecideScope?: (item: ApprovalItemPart) => void;
 }) => {
   // eslint-disable-next-line lingui/no-unlocalized-strings -- API kind value
   const kind = request.kind ?? "mcp_tool";
@@ -157,6 +167,10 @@ export const ApprovalQueueCard = ({
             isArchived={isArchived}
             isBusy={isBusy}
             onDecide={(decision) => onDecideItem(current.approval_id, decision)}
+            scopeOffer={scopeOffer?.(current)}
+            onDecideScope={
+              onDecideScope ? () => onDecideScope(current) : undefined
+            }
           />
         ) : (
           <div

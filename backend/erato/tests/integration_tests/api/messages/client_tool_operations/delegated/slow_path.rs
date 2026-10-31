@@ -16,7 +16,11 @@ pub(super) fn dispatch_durably(row: &HostRow, config: &mut erato::config::AppCon
     config.client_tools.durable_operations_enabled = true;
     config.client_tools.tools.insert(
         READ_KEY.into(),
-        row.read_config(true, Some(ChildDispatch::Durable)),
+        row.read_config(
+            true,
+            Some(ChildDispatch::Durable),
+            erato::config::ClientToolApprovalScope::Call,
+        ),
     );
 }
 
@@ -566,7 +570,7 @@ fn child_pane_tools(row: &HostRow) -> String {
 }
 
 fn add_live_read(row: &HostRow, config: &mut erato::config::AppConfig) {
-    let mut tool = row.read_config(false, None);
+    let mut tool = row.read_config(false, None, erato::config::ClientToolApprovalScope::Call);
     tool.name = LIVE_TOOL.into();
     config.client_tools.tools.insert(LIVE_KEY.into(), tool);
 }
@@ -1731,6 +1735,191 @@ pub(super) async fn an_approved_child_call_on_a_durable_tool_waits_and_the_paren
     answer_as_pane(row, &launched.state, &request, pane_result(row, &request)).await;
     wait_answered(&launched.state, launched.chat_id).await;
     assert_eq!(turn_bodies(&resumed).len(), 1, "one parent continuation");
+    launched.server.abort();
+}
+
+pub(super) async fn a_response_approval_lets_a_durable_task_call_park_without_asking(
+    pool: Pool<Postgres>,
+    row: &HostRow,
+) {
+    let mut launched = launch(
+        row,
+        pool,
+        vec![client_task(None)],
+        |mocks| {
+            mock_child(
+                mocks,
+                CLIENT_BRIEF,
+                read_call(row),
+                CHILD_READ_CALL,
+                CHILD_ANSWER,
+            )
+        },
+        |config| {
+            config.client_tools.tools.insert(
+                READ_KEY.into(),
+                row.read_config(
+                    true,
+                    Some(ChildDispatch::Durable),
+                    erato::config::ClientToolApprovalScope::Context,
+                ),
+            );
+        },
+        &[row.qualified()],
+    )
+    .await;
+    let parked = launched.parked().await;
+    let asking = item_for(&parked, CLIENT_TASK_CALL);
+    assert_eq!(
+        asking["child"]["approval_scope"],
+        json!({"host_context": row.host.as_str(), "covers": "turn", "scope_id": parked.id.to_string()})
+    );
+    let resumed = record_parent_resumes(&mut launched.llm);
+    after_the_read(
+        &mut launched.llm,
+        calls(row, LATER_READ_CALL, row.read_tool),
+        &[LATER_READ_CALL],
+    );
+    let later_matcher = BodyContainsMatcher::new(&[CLIENT_BRIEF, LATER_READ_CALL], &[USER_MESSAGE]);
+    launched
+        .llm
+        .mock_with_options(OVERRIDE, None, move |when, then| {
+            when.post()
+                .path("/v1/chat/completions")
+                .matcher(later_matcher);
+            mock_llm_sse_response(then, build_openai_text_streaming_response(&[CHILD_ANSWER]));
+        });
+
+    let decided = launched.decide(
+        parked.id,
+        vec![(asking["approval_id"].clone(), "approve_context")],
+    );
+    assert!(!finish(decided).await.contains(PARENT_FINAL));
+    wait_idle(&launched.state, launched.chat_id, "awaiting_approval").await;
+    let reparked = assistant_row(&launched.state.db, launched.chat_id).await;
+    assert_row_reads(&reparked);
+    let stored = super::approval_scope::approvals(&launched.state, launched.chat_id).await;
+    assert_eq!(stored.len(), 1, "{stored:?}");
+    assert_eq!(stored[0].position, None);
+    let child = child_for(&launched.state, launched.chat_id, CLIENT_TASK_CALL).await;
+    let request = operation_of(&launched.state, child.id, 0).await;
+    let lineage = &serde_json::to_value(&request).unwrap()["lineage"];
+    assert!(
+        lineage.is_object() && lineage.get("approval_scope").is_none(),
+        "{lineage}"
+    );
+    assert_eq!(
+        item_for(&reparked, CLIENT_TASK_CALL)["child"]["waiting_for"]["attempt_id"],
+        json!(request.attempt_id)
+    );
+
+    answer_as_pane(row, &launched.state, &request, pane_result(row, &request)).await;
+    let later = operation_of(&launched.state, child.id, 1).await;
+    let rewritten = eventually("the item to name the second call", || async {
+        let row = assistant_row(&launched.state.db, launched.chat_id).await;
+        (item_for(&row, CLIENT_TASK_CALL)["child"]["waiting_for"]["attempt_id"]
+            == json!(later.attempt_id))
+        .then_some(row)
+    })
+    .await;
+    assert_row_reads(&rewritten);
+    assert_eq!(
+        stops(&rewritten).len(),
+        stops(&reparked).len(),
+        "the second call parks under the turn's approval without a new ask"
+    );
+    assert_eq!(
+        stops(&assistant_row(&launched.state.db, child.id).await).len(),
+        1,
+        "the task asked once"
+    );
+
+    answer_as_pane(row, &launched.state, &later, pane_result(row, &later)).await;
+    wait_answered(&launched.state, launched.chat_id).await;
+    assert_eq!(turn_bodies(&resumed).len(), 1, "one parent continuation");
+    assert_eq!(
+        super::approval_scope::approvals(&launched.state, launched.chat_id).await,
+        stored
+    );
+    launched.server.abort();
+}
+
+pub(super) async fn a_waiting_task_that_starts_asking_offers_the_response_scope(
+    pool: Pool<Postgres>,
+    row: &HostRow,
+) {
+    let mut launched = launch(
+        row,
+        pool,
+        vec![client_task(None)],
+        |mocks| {
+            mock_child(
+                mocks,
+                CLIENT_BRIEF,
+                read_call(row),
+                CHILD_READ_CALL,
+                CHILD_ANSWER,
+            )
+        },
+        |config| {
+            let mut tool =
+                row.read_config(false, None, erato::config::ClientToolApprovalScope::Context);
+            tool.name = LIVE_TOOL.into();
+            config.client_tools.tools.insert(LIVE_KEY.into(), tool);
+        },
+        &[live_tool(row)],
+    )
+    .await;
+    let parked = launched.parked().await;
+    assert!(item_for(&parked, CLIENT_TASK_CALL)["child"]["waiting_for"].is_object());
+    let resumed = record_parent_resumes(&mut launched.llm);
+    after_the_read(
+        &mut launched.llm,
+        calls(row, LATER_READ_CALL, LIVE_TOOL),
+        &[LATER_READ_CALL],
+    );
+    let later_matcher = BodyContainsMatcher::new(&[CLIENT_BRIEF, LATER_READ_CALL], &[USER_MESSAGE]);
+    launched
+        .llm
+        .mock_with_options(OVERRIDE, None, move |when, then| {
+            when.post()
+                .path("/v1/chat/completions")
+                .matcher(later_matcher);
+            mock_llm_sse_response(then, build_openai_text_streaming_response(&[CHILD_ANSWER]));
+        });
+    let child = child_for(&launched.state, launched.chat_id, CLIENT_TASK_CALL).await;
+    let request = operation_of(&launched.state, child.id, 0).await;
+    answer_as_pane(row, &launched.state, &request, pane_result(row, &request)).await;
+
+    let asking = eventually("the waiting item to ask", || async {
+        let row = assistant_row(&launched.state.db, launched.chat_id).await;
+        let item = item_for(&row, CLIENT_TASK_CALL);
+        item["child"]
+            .get("waiting_for")
+            .is_none()
+            .then_some((row, item))
+    })
+    .await;
+    assert_row_reads(&asking.0);
+    assert_eq!(asking.1["child"]["tool_name"], LIVE_TOOL);
+    assert_eq!(
+        asking.1["child"]["approval_scope"],
+        json!({"host_context": row.host.as_str(), "covers": "turn", "scope_id": parked.id.to_string()})
+    );
+    wait_idle(&launched.state, launched.chat_id, "awaiting_approval").await;
+
+    let decided = launched.decide(
+        asking.0.id,
+        vec![(asking.1["approval_id"].clone(), "approve_context")],
+    );
+    let live = live_call(&mut launched.pane).await;
+    assert!(live["lineage"].get("approval_scope").is_none(), "{live}");
+    answer_call(row, &launched.state, &live).await;
+    assert!(finish(decided).await.contains(PARENT_FINAL));
+    assert_eq!(turn_bodies(&resumed).len(), 1, "one parent answer");
+    let stored = super::approval_scope::approvals(&launched.state, launched.chat_id).await;
+    assert_eq!(stored.len(), 1, "{stored:?}");
+    assert_eq!(stored[0].decided_in, parked.id);
     launched.server.abort();
 }
 

@@ -2135,7 +2135,7 @@
     "/api/v1beta/me/client-operations/stream": {
       "get": {
         "tags": [],
-        "summary": "A pane's stream for its executor binding. It receives live client tool calls\nfrom any of the account's chats that no stream of the calling chat can take,\nand announces new durable operations for the binding. Of a binding's panes,\nthe newest that serves a call's tool gets it. A pane sends one\n`X-Erato-Executor-Instance`, a UUIDv7 made when it opened, on all its\nstreams: a delivered call is sent again only to a later stream of that pane.",
+        "summary": "A pane's stream for its executor binding. It receives live client tool calls\nfrom any of the account's chats that no stream of the calling chat can take,\nand announces new durable operations for the binding. Of a binding's panes,\nthe newest that serves a call's tool gets it. A pane sends one\n`X-Erato-Executor-Instance`, a UUIDv7 made when it opened, on all its\nstreams: a delivered call is sent again only to a later stream of that pane.\n`X-Erato-Scoped-Client-Tools` names the child tools whose handlers check a\ncovered call's approval scope; a covered call goes only to such a stream.",
         "operationId": "clientOperationStream",
         "responses": {
           "200": {
@@ -4878,6 +4878,10 @@
           },
           "decision": {
             "$ref": "#/components/schemas/ToolApprovalDecision"
+          },
+          "scope_position": {
+            "type": "object",
+            "description": "The host's position at the click, for `approve_context` on a scope the\nhost checks on the device. Only the client that holds the document can\ntake it; it sends the decision with that host's `X-Erato-Executor`."
           }
         }
       },
@@ -4950,6 +4954,62 @@
             "type": "string"
           },
           "tool_name": {
+            "type": "string"
+          }
+        }
+      },
+      "ApprovalScope": {
+        "type": "object",
+        "description": "What one decision on this item may cover besides the call itself.",
+        "required": [
+          "host_context",
+          "covers",
+          "scope_id"
+        ],
+        "properties": {
+          "changed": {
+            "type": "boolean",
+            "description": "The scope's last approval ended because the host saw an outside change."
+          },
+          "covers": {
+            "$ref": "#/components/schemas/ApprovalScopeCovers"
+          },
+          "host_context": {
+            "type": "string",
+            "description": "The binding's host context kind, e.g. `word_document`."
+          },
+          "scope_id": {
+            "type": "string",
+            "description": "Server-derived; items with the same host context, scope id and tool\nshare a decision."
+          }
+        }
+      },
+      "ApprovalScopeCovers": {
+        "type": "string",
+        "description": "What a context approval covers besides the call it was given on.",
+        "enum": [
+          "document",
+          "turn"
+        ]
+      },
+      "ApprovalScopeLineage": {
+        "type": "object",
+        "description": "The context approval a covered call runs under.",
+        "required": [
+          "approval_id",
+          "scope_id",
+          "position"
+        ],
+        "properties": {
+          "approval_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "position": {
+            "type": "object",
+            "description": "The host's position at the decision, opaque to everyone but the host."
+          },
+          "scope_id": {
             "type": "string"
           }
         }
@@ -6183,6 +6243,10 @@
           "requesting_message_id"
         ],
         "properties": {
+          "approval_scope": {
+            "$ref": "#/components/schemas/ApprovalScopeLineage",
+            "description": "Set when the call runs under a context approval the host checks: it\nanswers `scope_changed` without reading if the scope changed from\noutside since `position`."
+          },
           "context_ref": {
             "type": "string",
             "description": "Opaque client context version, from the owner turn's action-facet arguments."
@@ -6605,6 +6669,17 @@
           },
           "annotations": {
             "$ref": "#/components/schemas/ToolApprovalAnnotations"
+          },
+          "approval_scope": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ApprovalScope",
+                "description": "The child's own request's scope: set when one decision may also cover\nthe child's later calls of the tool on the same document or turn."
+              }
+            ]
           },
           "child_chat_id": {
             "type": "string",
@@ -7661,6 +7736,25 @@
             ],
             "format": "uuid"
           },
+          "covers": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ApprovalScopeCovers",
+                "description": "Set when the user allowed the call for its whole document or turn."
+              }
+            ]
+          },
+          "scope_approval_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "The approval row that decision made."
+          },
           "tool_call_id": {
             "type": "string"
           },
@@ -7693,6 +7787,17 @@
           },
           "annotations": {
             "$ref": "#/components/schemas/ToolApprovalAnnotations"
+          },
+          "approval_scope": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ApprovalScope",
+                "description": "Set on a delegated task's client tool stop when its decision may cover\nthe task calls of the tool on the same document or turn."
+              }
+            ]
           },
           "approvals": {
             "type": "array",
@@ -12543,7 +12648,8 @@
           "reject",
           "approve_always",
           "reject_always",
-          "withdraw"
+          "withdraw",
+          "approve_context"
         ]
       },
       "ToolApprovalKind": {

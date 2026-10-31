@@ -372,6 +372,7 @@
   },
   "client_tools.durable_operations_enabled": {},
   "client_tools.executor_stream_enabled": {},
+  "client_tools.tools.<key>.approval_scope": {},
   "client_tools.tools.<key>.child_access": {},
   "client_tools.tools.<key>.child_context_arg": {},
   "client_tools.tools.<key>.child_context_input": {},

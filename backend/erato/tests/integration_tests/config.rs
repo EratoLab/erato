@@ -4072,6 +4072,69 @@ child_dispatch = "durable""#,
     );
 }
 
+#[test]
+fn approval_scope_defaults_to_call() {
+    let config = migrate_child_read_tool(
+        r#"child_access = "read"
+host_context = "word_document""#,
+    );
+    assert_eq!(
+        config.client_tools.tools["read_blocks"].approval_scope,
+        erato::config::ClientToolApprovalScope::Call
+    );
+}
+
+#[test]
+#[should_panic(
+    expected = "sets approval_scope = \"context\", which requires child_access = \"read\""
+)]
+fn approval_scope_context_requires_child_access_read() {
+    migrate_child_read_tool(
+        r#"host_context = "word_document"
+approval_scope = "context""#,
+    );
+}
+
+#[test]
+fn approval_scope_context_loads_on_word_and_outlook_read_tools() {
+    let word = migrate_child_read_tool(
+        r#"child_access = "read"
+host_context = "word_document"
+approval_scope = "context""#,
+    );
+    assert_eq!(
+        word.client_tools.tools["read_blocks"].approval_scope,
+        erato::config::ClientToolApprovalScope::Context
+    );
+    let outlook = migrate_mail_read_tool(
+        r#"child_access = "read"
+host_context = "outlook_mailbox"
+approval_scope = "context""#,
+    );
+    assert_eq!(
+        outlook.client_tools.tools["read_mail"].approval_scope,
+        erato::config::ClientToolApprovalScope::Context
+    );
+}
+
+/// CT-9: local evidence runs its own release review and no configured tool can
+/// take its name, so no context approval ever covers it.
+#[test]
+#[should_panic(expected = "Client tool named 'local_collect_evidence' is reserved.")]
+fn approval_scope_context_never_covers_local_evidence() {
+    migrate_config_with_action_facets(
+        r#"
+[client_tools.tools.evidence]
+name = "local_collect_evidence"
+description = "Collect local evidence"
+parameters = '{ "type": "object" }'
+child_access = "read"
+host_context = "word_document"
+approval_scope = "context"
+"#,
+    );
+}
+
 fn migrate_child_facet(facet_toml: &str) -> AppConfig {
     migrate_config_with_action_facets(&format!(
         r#"

@@ -153,6 +153,22 @@ impl Pane {
         .await
     }
 
+    /// [`Pane::open_serving`] whose handlers also check covered calls'
+    /// approval scope for `scoped_client_tools`.
+    pub(super) async fn open_scoped(
+        base: &str,
+        binding: &ExecutorBinding,
+        client_tools: &str,
+        child_client_tools: &str,
+        scoped_client_tools: &str,
+    ) -> Self {
+        Self::open_request(
+            serving_request(base, binding, client_tools, Some(child_client_tools))
+                .header("X-Erato-Scoped-Client-Tools", scoped_client_tools),
+        )
+        .await
+    }
+
     async fn open_request(request: reqwest::RequestBuilder) -> Self {
         let response = request.send().await.unwrap();
         assert_eq!(response.status(), 200);
@@ -355,6 +371,7 @@ fn presence_claim(
         connected_at: chrono::Utc::now(),
         client_tools: vec![TOOL.to_string()],
         child_client_tools: child_client_tools.to_vec(),
+        scoped_client_tools: Vec::new(),
     }
 }
 
@@ -962,7 +979,7 @@ async fn grant_calls_need_a_pane_that_takes_them(pool: Pool<Postgres>) {
     let account = account(&state).await;
     let binding = mailbox();
     let route = |attached, grant| {
-        executor_stream::route_live_call(db, account, &binding, TOOL, attached, grant)
+        executor_stream::route_live_call(db, account, &binding, TOOL, attached, grant, false)
     };
     assert_eq!(
         route(false, true).await.unwrap(),
@@ -1000,6 +1017,62 @@ async fn grant_calls_need_a_pane_that_takes_them(pool: Pool<Postgres>) {
         route(false, false).await.unwrap(),
         LiveCallRoute::Executor(presence) if presence.stream_id == older
     ));
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn covered_grant_calls_need_one_stream_that_checks_their_scope(pool: Pool<Postgres>) {
+    let state = test_app_state(hermetic_app_config(None, None), pool).await;
+    let db = &state.db;
+    let account = account(&state).await;
+    let binding = mailbox();
+    let route =
+        |scoped| executor_stream::route_live_call(db, account, &binding, TOOL, false, true, scoped);
+    let tools = vec![TOOL.to_string()];
+    let (checking, older_plain, newer_plain) = (Uuid::new_v4(), Uuid::new_v4(), Uuid::new_v4());
+    // One stream takes grant calls, another only checks scopes: no single
+    // stream does both.
+    let mut scoped_only = presence_claim(account, &binding, &[]);
+    scoped_only.scoped_client_tools = tools.clone();
+    executor_stream::announce(db, &scoped_only, older_plain)
+        .await
+        .unwrap();
+    executor_stream::announce(db, &presence_claim(account, &binding, &tools), newer_plain)
+        .await
+        .unwrap();
+    assert!(
+        !executor_stream::serves_scoped_grant_call(db, account, &binding, TOOL)
+            .await
+            .unwrap()
+    );
+    assert_eq!(route(true).await.unwrap(), LiveCallRoute::Unavailable);
+
+    tokio::time::sleep(Duration::from_millis(5)).await;
+    let mut checks = presence_claim(account, &binding, &tools);
+    checks.scoped_client_tools = tools.clone();
+    executor_stream::announce(db, &checks, checking)
+        .await
+        .unwrap();
+    tokio::time::sleep(Duration::from_millis(5)).await;
+    let newest = Uuid::new_v4();
+    executor_stream::announce(db, &presence_claim(account, &binding, &tools), newest)
+        .await
+        .unwrap();
+    assert!(
+        executor_stream::serves_scoped_grant_call(db, account, &binding, TOOL)
+            .await
+            .unwrap()
+    );
+    assert!(matches!(
+        route(false).await.unwrap(),
+        LiveCallRoute::Executor(presence) if presence.stream_id == newest
+    ));
+    assert!(matches!(
+        route(true).await.unwrap(),
+        LiveCallRoute::Executor(presence) if presence.stream_id == checking
+    ));
+
+    executor_stream::release(db, checking).await.unwrap();
+    assert_eq!(route(true).await.unwrap(), LiveCallRoute::Unavailable);
 }
 
 /// A pending attempt for the mailbox binding, nudged on its stream.
@@ -1075,6 +1148,7 @@ async fn a_grant_operation_nudge_goes_only_to_a_stream_that_takes_grant_calls(
             requesting_chat_id: chat_id,
             requesting_message_id: Uuid::new_v4(),
             context_ref: None,
+            approval_scope: None,
         }),
     )
     .await;
