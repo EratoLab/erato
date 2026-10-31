@@ -1,89 +1,132 @@
 {
   "action_facets.enable_builtin_ms_office_addin": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "action_facets.facets.<facet-id>.allowed_args.[]": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "action_facets.facets.<facet-id>.client_actions.[]": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.2",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "action_facets.facets.<facet-id>.client_actions_always_ask.[]": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.2",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "action_facets.facets.<facet-id>.delegation.approval.mode": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "action_facets.facets.<facet-id>.delegation.approval.plan_min_tasks": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "action_facets.facets.<facet-id>.delegation.child_chat_providers.[]": {
+    "default_value_security": "unknown",
     "introduced_in": "unreleased",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "action_facets.facets.<facet-id>.delegation.child_facet_ids.[]": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "action_facets.facets.<facet-id>.delegation.max_client_tool_calls_per_task": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "action_facets.facets.<facet-id>.delegation.max_parallel": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "action_facets.facets.<facet-id>.delegation.max_server_tool_calls_per_task": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "action_facets.facets.<facet-id>.delegation.max_tasks_per_turn": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "action_facets.facets.<facet-id>.delegation.persona": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "action_facets.facets.<facet-id>.delegation.run_modes.[]": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "action_facets.facets.<facet-id>.delegation.scheduling": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "action_facets.facets.<facet-id>.display_name": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "action_facets.facets.<facet-id>.grant_scope.<key>": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "action_facets.facets.<facet-id>.platform": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "action_facets.facets.<facet-id>.presentation": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.2",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "action_facets.facets.<facet-id>.template": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "action_facets.facets.<facet-id>.tool_call_allowlist.[]": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "additional_frontend_environment": {
+    "default_value_security": "unknown",
     "deprecated": {
       "note": "Please use `frontend.additional_environment` instead.",
       "planned_removal_version": "0.6.0",
@@ -91,49 +134,71 @@
     },
     "hide_in_docs": true,
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "deprecated"
   },
   "assistant_hub.categories.<key>.display_name": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.2",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "assistant_hub.categories.<key>.icon": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.2",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "assistant_hub.default_share_with_whole_organization": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "assistant_hub.enable_categories": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "assistant_hub.enabled": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.2",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "assistant_hub.rating_mode": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "assistant_hub.reviewers.rules.<rule-name>.groups.[]": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.2",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "assistant_hub.reviewers.rules.<rule-name>.rule_type": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.2",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "assistants.context_file_contributor_threshold": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.2",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "assistants.context_warning_threshold": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.2",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "assistants.delegation.allow_background": {
+    "default_value_security": "unknown",
     "deprecated": {
       "note": "Please use `delegation.allow_background` instead.",
       "planned_removal_version": "0.8.0",
@@ -141,9 +206,11 @@
     },
     "hide_in_docs": true,
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "deprecated"
   },
   "assistants.delegation.auto_archive_after_days": {
+    "default_value_security": "unknown",
     "deprecated": {
       "note": "Please use `delegation.auto_archive_after_days` instead.",
       "planned_removal_version": "0.8.0",
@@ -151,9 +218,11 @@
     },
     "hide_in_docs": true,
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "deprecated"
   },
   "assistants.delegation.enabled": {
+    "default_value_security": "unknown",
     "deprecated": {
       "note": "Please use `delegation.assistants.enabled` instead.",
       "planned_removal_version": "0.8.0",
@@ -161,9 +230,11 @@
     },
     "hide_in_docs": true,
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "deprecated"
   },
   "assistants.delegation.max_concurrent_background_runs": {
+    "default_value_security": "unknown",
     "deprecated": {
       "note": "Please use `delegation.max_concurrent_background_runs` instead.",
       "planned_removal_version": "0.8.0",
@@ -171,9 +242,11 @@
     },
     "hide_in_docs": true,
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "deprecated"
   },
   "assistants.delegation.max_mentions_per_message": {
+    "default_value_security": "unknown",
     "deprecated": {
       "note": "Please use `delegation.assistants.max_mentions_per_message` instead.",
       "planned_removal_version": "0.8.0",
@@ -181,9 +254,11 @@
     },
     "hide_in_docs": true,
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "deprecated"
   },
   "assistants.delegation.preamble": {
+    "default_value_security": "unknown",
     "deprecated": {
       "note": "Please use `delegation.preamble` instead.",
       "planned_removal_version": "0.8.0",
@@ -191,9 +266,11 @@
     },
     "hide_in_docs": true,
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "deprecated"
   },
   "assistants.delegation.result_max_chars": {
+    "default_value_security": "unknown",
     "deprecated": {
       "note": "Please use `delegation.result_max_chars` instead.",
       "planned_removal_version": "0.8.0",
@@ -201,9 +278,11 @@
     },
     "hide_in_docs": true,
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "deprecated"
   },
   "assistants.delegation.run_timeout_seconds": {
+    "default_value_security": "unknown",
     "deprecated": {
       "note": "Please use `delegation.run_timeout_seconds` instead.",
       "planned_removal_version": "0.8.0",
@@ -211,1902 +290,2722 @@
     },
     "hide_in_docs": true,
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "deprecated"
   },
   "assistants.enable_edit_sharing": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "assistants.enabled": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.2",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "assistants.max_files": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "assistants.max_system_prompt_length": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.2",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "assistants.show_recent_items": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.2",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "assistants.show_recent_items_collapsible": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "assistants.tools_menu_description_display": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "assistants.usage_view_enabled": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "audio_conversational.chat_provider_id": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "audio_conversational.chunk_duration_seconds": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "audio_conversational.enabled": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "audio_conversational.fixed_output_token_budget": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "audio_conversational.initial_backoff_ms": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "audio_conversational.max_attempts": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "audio_conversational.max_backoff_ms": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "audio_conversational.max_output_tokens": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "audio_conversational.max_recording_duration_seconds": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "audio_conversational.max_words_per_minute": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "audio_conversational.min_output_tokens": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "audio_conversational.min_unique_word_ratio": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "audio_conversational.min_words_for_loop_check": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "audio_conversational.output_token_buffer_factor": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "audio_conversational.speech_provider": {
+    "default_value_security": "unknown",
     "introduced_in": "unreleased",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "audio_conversational.tokens_per_word": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "audio_dictation.chat_provider_id": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "audio_dictation.chunk_duration_seconds": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "audio_dictation.enabled": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "audio_dictation.fixed_output_token_budget": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "audio_dictation.initial_backoff_ms": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "audio_dictation.max_attempts": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "audio_dictation.max_backoff_ms": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "audio_dictation.max_output_tokens": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "audio_dictation.max_recording_duration_seconds": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "audio_dictation.max_words_per_minute": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "audio_dictation.min_output_tokens": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "audio_dictation.min_unique_word_ratio": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "audio_dictation.min_words_for_loop_check": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "audio_dictation.output_token_buffer_factor": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "audio_dictation.tokens_per_word": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "audio_transcription.chat_provider_id": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "audio_transcription.chunk_duration_seconds": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "audio_transcription.enabled": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "audio_transcription.fixed_output_token_budget": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "audio_transcription.initial_backoff_ms": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "audio_transcription.max_attempts": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "audio_transcription.max_backoff_ms": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "audio_transcription.max_output_tokens": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "audio_transcription.max_recording_duration_seconds": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "audio_transcription.max_words_per_minute": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "audio_transcription.min_output_tokens": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "audio_transcription.min_unique_word_ratio": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "audio_transcription.min_words_for_loop_check": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "audio_transcription.output_token_buffer_factor": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "audio_transcription.tokens_per_word": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "budget.budget_currency": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "budget.budget_period_days": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "budget.enabled": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "budget.max_budget": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "budget.warn_threshold": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "caches.file_bytes_cache_mb": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "caches.file_contents_cache_mb": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "caches.file_processing_parallelism": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "caches.token_count_cache_mb": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "chat_history_compaction.chat_provider_id": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "chat_history_compaction.enabled": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "chat_history_compaction.mode": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "chat_history_compaction.target_compaction_token_limit_percentage": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "chat_history_compaction.trigger_mode": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "chat_history_compaction.trigger_on_token_limit_threshold_percentage": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "chat_provider.additional_request_headers.[]": {
+    "default_value_security": "unknown",
     "hide_in_docs": true,
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "chat_provider.additional_request_parameters.[]": {
+    "default_value_security": "unknown",
     "hide_in_docs": true,
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "chat_provider.api_key": {
+    "default_value_security": "unknown",
     "hide_in_docs": true,
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "chat_provider.api_version": {
+    "default_value_security": "unknown",
     "hide_in_docs": true,
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "chat_provider.archived": {
+    "default_value_security": "unknown",
     "hide_in_docs": true,
     "introduced_in": "unreleased",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "chat_provider.base_url": {
+    "default_value_security": "unknown",
     "hide_in_docs": true,
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "chat_provider.enable_embedded_image_retrieval_tool": {
+    "default_value_security": "unknown",
     "hide_in_docs": true,
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "chat_provider.guardrails.filter_input_prompt_injection.enabled": {
+    "default_value_security": "unknown",
     "hide_in_docs": true,
     "introduced_in": "0.6.1",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "chat_provider.guardrails.filter_input_prompt_injection.exclude_pattern_ids.[]": {
+    "default_value_security": "unknown",
     "hide_in_docs": true,
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "chat_provider.guardrails.filter_input_prompt_injection.filter_pattern_ids.[]": {
+    "default_value_security": "unknown",
     "hide_in_docs": true,
     "introduced_in": "0.6.1",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "chat_provider.guardrails.filter_input_prompt_injection.filter_pattern_tags.[]": {
+    "default_value_security": "unknown",
     "hide_in_docs": true,
     "introduced_in": "0.6.1",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "chat_provider.hallucination_suppression.enabled": {
+    "default_value_security": "unknown",
     "hide_in_docs": true,
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "chat_provider.hallucination_suppression.whitespace_delta_threshold": {
+    "default_value_security": "unknown",
     "hide_in_docs": true,
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "chat_provider.model_capabilities.context_size_tokens": {
+    "default_value_security": "unknown",
     "hide_in_docs": true,
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "chat_provider.model_capabilities.cost_input_tokens_per_1m": {
+    "default_value_security": "unknown",
     "hide_in_docs": true,
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "chat_provider.model_capabilities.cost_output_tokens_per_1m": {
+    "default_value_security": "unknown",
     "hide_in_docs": true,
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "chat_provider.model_capabilities.supports_audio_input": {
+    "default_value_security": "unknown",
     "hide_in_docs": true,
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "chat_provider.model_capabilities.supports_encrypted_reasoning_content": {
+    "default_value_security": "unknown",
     "hide_in_docs": true,
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "chat_provider.model_capabilities.supports_image_understanding": {
+    "default_value_security": "unknown",
     "hide_in_docs": true,
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "chat_provider.model_capabilities.supports_reasoning": {
+    "default_value_security": "unknown",
     "hide_in_docs": true,
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "chat_provider.model_capabilities.supports_reasoning_summary": {
+    "default_value_security": "unknown",
     "hide_in_docs": true,
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "chat_provider.model_capabilities.supports_strict_tool_calling": {
+    "default_value_security": "unknown",
     "hide_in_docs": true,
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "chat_provider.model_capabilities.supports_verbosity": {
+    "default_value_security": "unknown",
     "hide_in_docs": true,
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "chat_provider.model_description": {
+    "default_value_security": "unknown",
     "hide_in_docs": true,
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "chat_provider.model_display_name": {
+    "default_value_security": "unknown",
     "hide_in_docs": true,
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "chat_provider.model_icon": {
+    "default_value_security": "unknown",
     "hide_in_docs": true,
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "chat_provider.model_name": {
+    "default_value_security": "unknown",
     "hide_in_docs": true,
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "chat_provider.model_name_langfuse": {
+    "default_value_security": "unknown",
     "hide_in_docs": true,
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "chat_provider.model_settings.compat_no_replay_summary": {
+    "default_value_security": "unknown",
     "hide_in_docs": true,
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "chat_provider.model_settings.compat_omit_strict": {
+    "default_value_security": "unknown",
     "hide_in_docs": true,
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "chat_provider.model_settings.reasoning_effort": {
+    "default_value_security": "unknown",
     "hide_in_docs": true,
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "chat_provider.model_settings.temperature": {
+    "default_value_security": "unknown",
     "hide_in_docs": true,
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "chat_provider.model_settings.top_p": {
+    "default_value_security": "unknown",
     "hide_in_docs": true,
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "chat_provider.model_settings.verbosity": {
+    "default_value_security": "unknown",
     "hide_in_docs": true,
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "chat_provider.provider_kind": {
+    "default_value_security": "unknown",
     "hide_in_docs": true,
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "chat_provider.region": {
+    "default_value_security": "unknown",
     "hide_in_docs": true,
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "chat_provider.system_prompt": {
+    "default_value_security": "unknown",
     "hide_in_docs": true,
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "chat_provider.system_prompt.fallback": {
+    "default_value_security": "unknown",
     "hide_in_docs": true,
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "chat_provider.system_prompt.label": {
+    "default_value_security": "unknown",
     "hide_in_docs": true,
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "chat_provider.system_prompt.prompt": {
+    "default_value_security": "unknown",
     "hide_in_docs": true,
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "chat_provider.system_prompt.prompt_name": {
+    "default_value_security": "unknown",
     "hide_in_docs": true,
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "chat_provider.system_prompt.source": {
+    "default_value_security": "unknown",
     "hide_in_docs": true,
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "chat_provider.system_prompt_langfuse.prompt_name": {
+    "default_value_security": "unknown",
     "hide_in_docs": true,
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "chat_provider.validate_availability": {
+    "default_value_security": "unknown",
     "hide_in_docs": true,
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "chat_providers.all_providers.enable_embedded_image_retrieval_tool": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "chat_providers.all_providers.guardrails.filter_input_prompt_injection.enabled": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.1",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "chat_providers.all_providers.guardrails.filter_input_prompt_injection.exclude_pattern_ids.[]": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "chat_providers.all_providers.guardrails.filter_input_prompt_injection.filter_pattern_ids.[]": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.1",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "chat_providers.all_providers.guardrails.filter_input_prompt_injection.filter_pattern_tags.[]": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.1",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "chat_providers.priority_order.[]": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "chat_providers.providers.<provider-id>.additional_request_headers.[]": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "chat_providers.providers.<provider-id>.additional_request_parameters.[]": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "chat_providers.providers.<provider-id>.api_key": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "chat_providers.providers.<provider-id>.api_version": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "chat_providers.providers.<provider-id>.archived": {
+    "default_value_security": "unknown",
     "introduced_in": "unreleased",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "chat_providers.providers.<provider-id>.base_url": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "chat_providers.providers.<provider-id>.enable_embedded_image_retrieval_tool": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "chat_providers.providers.<provider-id>.guardrails.filter_input_prompt_injection.enabled": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.1",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "chat_providers.providers.<provider-id>.guardrails.filter_input_prompt_injection.exclude_pattern_ids.[]": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "chat_providers.providers.<provider-id>.guardrails.filter_input_prompt_injection.filter_pattern_ids.[]": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.1",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "chat_providers.providers.<provider-id>.guardrails.filter_input_prompt_injection.filter_pattern_tags.[]": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.1",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "chat_providers.providers.<provider-id>.hallucination_suppression.enabled": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "chat_providers.providers.<provider-id>.hallucination_suppression.whitespace_delta_threshold": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "chat_providers.providers.<provider-id>.model_capabilities.context_size_tokens": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "chat_providers.providers.<provider-id>.model_capabilities.cost_input_tokens_per_1m": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "chat_providers.providers.<provider-id>.model_capabilities.cost_output_tokens_per_1m": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "chat_providers.providers.<provider-id>.model_capabilities.supports_audio_input": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "chat_providers.providers.<provider-id>.model_capabilities.supports_encrypted_reasoning_content": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "chat_providers.providers.<provider-id>.model_capabilities.supports_image_understanding": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "chat_providers.providers.<provider-id>.model_capabilities.supports_reasoning": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "chat_providers.providers.<provider-id>.model_capabilities.supports_reasoning_summary": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "chat_providers.providers.<provider-id>.model_capabilities.supports_strict_tool_calling": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "chat_providers.providers.<provider-id>.model_capabilities.supports_verbosity": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "chat_providers.providers.<provider-id>.model_description": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "chat_providers.providers.<provider-id>.model_display_name": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "chat_providers.providers.<provider-id>.model_icon": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "chat_providers.providers.<provider-id>.model_name": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "chat_providers.providers.<provider-id>.model_name_langfuse": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "chat_providers.providers.<provider-id>.model_settings.compat_no_replay_summary": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "chat_providers.providers.<provider-id>.model_settings.compat_omit_strict": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "chat_providers.providers.<provider-id>.model_settings.reasoning_effort": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "chat_providers.providers.<provider-id>.model_settings.temperature": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "chat_providers.providers.<provider-id>.model_settings.top_p": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "chat_providers.providers.<provider-id>.model_settings.verbosity": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "chat_providers.providers.<provider-id>.provider_kind": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "chat_providers.providers.<provider-id>.region": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "chat_providers.providers.<provider-id>.system_prompt": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "chat_providers.providers.<provider-id>.system_prompt.fallback": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "chat_providers.providers.<provider-id>.system_prompt.label": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "chat_providers.providers.<provider-id>.system_prompt.prompt": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "chat_providers.providers.<provider-id>.system_prompt.prompt_name": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "chat_providers.providers.<provider-id>.system_prompt.source": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "chat_providers.providers.<provider-id>.system_prompt_langfuse.prompt_name": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "chat_providers.providers.<provider-id>.validate_availability": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "chat_providers.replacement_providers.[].new": {
+    "default_value_security": "unknown",
     "introduced_in": "unreleased",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "chat_providers.replacement_providers.[].old": {
+    "default_value_security": "unknown",
     "introduced_in": "unreleased",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "chat_providers.summary.max_tokens": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "chat_providers.summary.summary_chat_provider_id": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "chat_providers.summary.system_prompt": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.1",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "chat_providers.summary.system_prompt.fallback": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.1",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "chat_providers.summary.system_prompt.label": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.1",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "chat_providers.summary.system_prompt.prompt": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.1",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "chat_providers.summary.system_prompt.prompt_name": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.1",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "chat_providers.summary.system_prompt.source": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.1",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "chat_sharing.enabled": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "cleanup_archived_max_age_days": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
     "needs_scoped_replacement": true,
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "cleanup_enabled": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
     "needs_scoped_replacement": true,
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "client_tools.durable_operations_enabled": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "client_tools.executor_stream_enabled": {
+    "default_value_security": "unknown",
     "introduced_in": "unreleased",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "client_tools.tools.<key>.child_access": {
+    "default_value_security": "unknown",
     "introduced_in": "unreleased",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "client_tools.tools.<key>.child_context_arg": {
+    "default_value_security": "unknown",
     "introduced_in": "unreleased",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "client_tools.tools.<key>.child_context_input": {
+    "default_value_security": "unknown",
     "introduced_in": "unreleased",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "client_tools.tools.<key>.child_dispatch": {
+    "default_value_security": "unknown",
     "introduced_in": "unreleased",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "client_tools.tools.<key>.child_host_inputs.[]": {
+    "default_value_security": "unknown",
     "introduced_in": "unreleased",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "client_tools.tools.<key>.description": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "client_tools.tools.<key>.durable.attempt_expiry_secs": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "client_tools.tools.<key>.durable.claim_lease_secs": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "client_tools.tools.<key>.durable.host_context": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "client_tools.tools.<key>.durable.result_schema": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "client_tools.tools.<key>.host_context": {
+    "default_value_security": "unknown",
     "introduced_in": "unreleased",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "client_tools.tools.<key>.name": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "client_tools.tools.<key>.namespace": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "client_tools.tools.<key>.parameters": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "client_tools.tools.<key>.replay.keep_input_fields.[]": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "client_tools.tools.<key>.replay.keep_output_fields.[]": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "client_tools.tools.<key>.replay.mode": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "client_tools.tools.<key>.requires_client_registration": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "client_tools.tools.<key>.submission.max_attempts": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "client_tools.tools.<key>.submission.max_recovery_reads": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "client_tools.tools.<key>.submission.native_schema": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "client_tools.tools.<key>.submission.recovery_read_tools.[]": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "client_tools.tools.<key>.timeout_ms": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "database_url": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "decision_providers.provider.<provider-id>.api_key": {
+    "default_value_security": "unknown",
     "introduced_in": "unreleased",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "decision_providers.provider.<provider-id>.archived": {
+    "default_value_security": "unknown",
     "introduced_in": "unreleased",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "decision_providers.provider.<provider-id>.base_url": {
+    "default_value_security": "unknown",
     "introduced_in": "unreleased",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "decision_providers.provider.<provider-id>.model_name": {
+    "default_value_security": "unknown",
     "introduced_in": "unreleased",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "decision_providers.provider.<provider-id>.provider_kind": {
+    "default_value_security": "unknown",
     "introduced_in": "unreleased",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "decision_providers.replacement_providers.[].new": {
+    "default_value_security": "unknown",
     "introduced_in": "unreleased",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "decision_providers.replacement_providers.[].old": {
+    "default_value_security": "unknown",
     "introduced_in": "unreleased",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "default_file_storage_provider": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "delegation.allow_background": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "delegation.assistants.enabled": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "delegation.assistants.max_mentions_per_message": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "delegation.auto_archive_after_days": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "delegation.max_concurrent_background_runs": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "delegation.preamble": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "delegation.result_max_chars": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "delegation.run_timeout_seconds": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "delegation.tasks.approval.mode": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "delegation.tasks.approval.plan_min_tasks": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "delegation.tasks.child_dispatch": {
+    "default_value_security": "unknown",
     "introduced_in": "unreleased",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "delegation.tasks.child_facet_ids.[]": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "delegation.tasks.enabled": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "delegation.tasks.max_client_tool_calls_per_task": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "delegation.tasks.max_parallel": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "delegation.tasks.max_server_tool_calls_per_task": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "delegation.tasks.max_tasks_per_turn": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "delegation.tasks.multitask_strategy": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "delegation.tasks.persona": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "delegation.tasks.propagate_child_mcp_approvals": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "delegation.tasks.result_template": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "delegation.tasks.run_modes.[]": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "delegation.tasks.scheduling": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "desktop_sidecar.allowed_origins.[]": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "desktop_sidecar.directory_suffix": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "desktop_sidecar.display_name": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "desktop_sidecar.distribution.directory": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "desktop_sidecar.distribution.enabled": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "desktop_sidecar.file_upload_approval": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "desktop_sidecar.icon": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "desktop_sidecar.launch_suffix": {
+    "default_value_security": "unknown",
     "introduced_in": "unreleased",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "desktop_sidecar.local_delegation.backend_origin": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "desktop_sidecar.local_delegation.enabled": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "desktop_sidecar.local_delegation.signing_key_id": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "desktop_sidecar.local_delegation.signing_private_key_pem": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "desktop_sidecar.local_delegation.verification_keys.<key>": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "desktop_sidecar.organization_configuration.outlook_addin_autopin": {
+    "default_value_security": "unknown",
     "introduced_in": "unreleased",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "desktop_sidecar.organization_configuration.outlook_addin_autopin_panes": {
+    "default_value_security": "unknown",
     "introduced_in": "unreleased",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "desktop_sidecar.organization_configuration.outlook_addin_id": {
+    "default_value_security": "unknown",
     "introduced_in": "unreleased",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "desktop_sidecar.organization_configuration.show_tray_icon": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "desktop_sidecar.port": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "desktop_sidecar.product_code": {
+    "default_value_security": "unknown",
     "introduced_in": "unreleased",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "desktop_sidecar.show_settings_tab": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "desktop_sidecar.show_settings_tab_office_addin": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "desktop_sidecar.tls.certificate_pem": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "desktop_sidecar.tls.intermediate_certificate_pem": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "desktop_sidecar.tls.intermediate_private_key_pem": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "desktop_sidecar.tls.private_key_pem": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "desktop_sidecar.tls.validity_days": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "desktop_sidecar.upgrade_code": {
+    "default_value_security": "unknown",
     "introduced_in": "unreleased",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "environment": {
+    "default_value_security": "unknown",
     "hide_in_docs": true,
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "experimental_facets.default_selected_facets.[]": {
+    "default_value_security": "unknown",
     "deprecated": {
       "note": "Please use `facets.default_selected_facets.[]` instead.",
       "replacement_key": "facets.default_selected_facets.[]"
     },
     "hide_in_docs": true,
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "deprecated"
   },
   "experimental_facets.facet_prompt_template": {
+    "default_value_security": "unknown",
     "deprecated": {
       "note": "Please use `facets.facet_prompt_template` instead.",
       "replacement_key": "facets.facet_prompt_template"
     },
     "hide_in_docs": true,
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "deprecated"
   },
   "experimental_facets.facet_prompt_template.fallback": {
+    "default_value_security": "unknown",
     "deprecated": {
       "note": "Please use `facets.facet_prompt_template.fallback` instead.",
       "replacement_key": "facets.facet_prompt_template.fallback"
     },
     "hide_in_docs": true,
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "deprecated"
   },
   "experimental_facets.facet_prompt_template.label": {
+    "default_value_security": "unknown",
     "deprecated": {
       "note": "Please use `facets.facet_prompt_template.label` instead.",
       "replacement_key": "facets.facet_prompt_template.label"
     },
     "hide_in_docs": true,
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "deprecated"
   },
   "experimental_facets.facet_prompt_template.prompt": {
+    "default_value_security": "unknown",
     "deprecated": {
       "note": "Please use `facets.facet_prompt_template.prompt` instead.",
       "replacement_key": "facets.facet_prompt_template.prompt"
     },
     "hide_in_docs": true,
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "deprecated"
   },
   "experimental_facets.facet_prompt_template.prompt_name": {
+    "default_value_security": "unknown",
     "deprecated": {
       "note": "Please use `facets.facet_prompt_template.prompt_name` instead.",
       "replacement_key": "facets.facet_prompt_template.prompt_name"
     },
     "hide_in_docs": true,
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "deprecated"
   },
   "experimental_facets.facet_prompt_template.source": {
+    "default_value_security": "unknown",
     "deprecated": {
       "note": "Please use `facets.facet_prompt_template.source` instead.",
       "replacement_key": "facets.facet_prompt_template.source"
     },
     "hide_in_docs": true,
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "deprecated"
   },
   "experimental_facets.facets.<facet-id>.additional_system_prompt": {
+    "default_value_security": "unknown",
     "deprecated": {
       "note": "Please use `facets.facets.<facet-id>.additional_system_prompt` instead.",
       "replacement_key": "facets.facets.<facet-id>.additional_system_prompt"
     },
     "hide_in_docs": true,
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "deprecated"
   },
   "experimental_facets.facets.<facet-id>.additional_system_prompt.fallback": {
+    "default_value_security": "unknown",
     "deprecated": {
       "note": "Please use `facets.facets.<facet-id>.additional_system_prompt.fallback` instead.",
       "replacement_key": "facets.facets.<facet-id>.additional_system_prompt.fallback"
     },
     "hide_in_docs": true,
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "deprecated"
   },
   "experimental_facets.facets.<facet-id>.additional_system_prompt.label": {
+    "default_value_security": "unknown",
     "deprecated": {
       "note": "Please use `facets.facets.<facet-id>.additional_system_prompt.label` instead.",
       "replacement_key": "facets.facets.<facet-id>.additional_system_prompt.label"
     },
     "hide_in_docs": true,
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "deprecated"
   },
   "experimental_facets.facets.<facet-id>.additional_system_prompt.prompt": {
+    "default_value_security": "unknown",
     "deprecated": {
       "note": "Please use `facets.facets.<facet-id>.additional_system_prompt.prompt` instead.",
       "replacement_key": "facets.facets.<facet-id>.additional_system_prompt.prompt"
     },
     "hide_in_docs": true,
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "deprecated"
   },
   "experimental_facets.facets.<facet-id>.additional_system_prompt.prompt_name": {
+    "default_value_security": "unknown",
     "deprecated": {
       "note": "Please use `facets.facets.<facet-id>.additional_system_prompt.prompt_name` instead.",
       "replacement_key": "facets.facets.<facet-id>.additional_system_prompt.prompt_name"
     },
     "hide_in_docs": true,
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "deprecated"
   },
   "experimental_facets.facets.<facet-id>.additional_system_prompt.source": {
+    "default_value_security": "unknown",
     "deprecated": {
       "note": "Please use `facets.facets.<facet-id>.additional_system_prompt.source` instead.",
       "replacement_key": "facets.facets.<facet-id>.additional_system_prompt.source"
     },
     "hide_in_docs": true,
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "deprecated"
   },
   "experimental_facets.facets.<facet-id>.child_chat_provider": {
+    "default_value_security": "unknown",
     "deprecated": {
       "note": "Please use `facets.facets.<facet-id>.child_chat_provider` instead.",
       "replacement_key": "facets.facets.<facet-id>.child_chat_provider"
     },
     "hide_in_docs": true,
     "introduced_in": "unreleased",
+    "security_relevance": "unknown",
     "stability": "deprecated"
   },
   "experimental_facets.facets.<facet-id>.child_host_context": {
+    "default_value_security": "unknown",
     "deprecated": {
       "note": "Please use `facets.facets.<facet-id>.child_host_context` instead.",
       "replacement_key": "facets.facets.<facet-id>.child_host_context"
     },
     "hide_in_docs": true,
     "introduced_in": "unreleased",
+    "security_relevance": "unknown",
     "stability": "deprecated"
   },
   "experimental_facets.facets.<facet-id>.delegation.approval.mode": {
+    "default_value_security": "unknown",
     "deprecated": {
       "note": "Please use `facets.facets.<facet-id>.delegation.approval.mode` instead.",
       "replacement_key": "facets.facets.<facet-id>.delegation.approval.mode"
     },
     "hide_in_docs": true,
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "deprecated"
   },
   "experimental_facets.facets.<facet-id>.delegation.approval.plan_min_tasks": {
+    "default_value_security": "unknown",
     "deprecated": {
       "note": "Please use `facets.facets.<facet-id>.delegation.approval.plan_min_tasks` instead.",
       "replacement_key": "facets.facets.<facet-id>.delegation.approval.plan_min_tasks"
     },
     "hide_in_docs": true,
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "deprecated"
   },
   "experimental_facets.facets.<facet-id>.delegation.child_chat_providers.[]": {
+    "default_value_security": "unknown",
     "deprecated": {
       "note": "Please use `facets.facets.<facet-id>.delegation.child_chat_providers.[]` instead.",
       "replacement_key": "facets.facets.<facet-id>.delegation.child_chat_providers.[]"
     },
     "hide_in_docs": true,
     "introduced_in": "unreleased",
+    "security_relevance": "unknown",
     "stability": "deprecated"
   },
   "experimental_facets.facets.<facet-id>.delegation.child_facet_ids.[]": {
+    "default_value_security": "unknown",
     "deprecated": {
       "note": "Please use `facets.facets.<facet-id>.delegation.child_facet_ids.[]` instead.",
       "replacement_key": "facets.facets.<facet-id>.delegation.child_facet_ids.[]"
     },
     "hide_in_docs": true,
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "deprecated"
   },
   "experimental_facets.facets.<facet-id>.delegation.max_client_tool_calls_per_task": {
+    "default_value_security": "unknown",
     "deprecated": {
       "note": "Please use `facets.facets.<facet-id>.delegation.max_client_tool_calls_per_task` instead.",
       "replacement_key": "facets.facets.<facet-id>.delegation.max_client_tool_calls_per_task"
     },
     "hide_in_docs": true,
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "deprecated"
   },
   "experimental_facets.facets.<facet-id>.delegation.max_parallel": {
+    "default_value_security": "unknown",
     "deprecated": {
       "note": "Please use `facets.facets.<facet-id>.delegation.max_parallel` instead.",
       "replacement_key": "facets.facets.<facet-id>.delegation.max_parallel"
     },
     "hide_in_docs": true,
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "deprecated"
   },
   "experimental_facets.facets.<facet-id>.delegation.max_server_tool_calls_per_task": {
+    "default_value_security": "unknown",
     "deprecated": {
       "note": "Please use `facets.facets.<facet-id>.delegation.max_server_tool_calls_per_task` instead.",
       "replacement_key": "facets.facets.<facet-id>.delegation.max_server_tool_calls_per_task"
     },
     "hide_in_docs": true,
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "deprecated"
   },
   "experimental_facets.facets.<facet-id>.delegation.max_tasks_per_turn": {
+    "default_value_security": "unknown",
     "deprecated": {
       "note": "Please use `facets.facets.<facet-id>.delegation.max_tasks_per_turn` instead.",
       "replacement_key": "facets.facets.<facet-id>.delegation.max_tasks_per_turn"
     },
     "hide_in_docs": true,
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "deprecated"
   },
   "experimental_facets.facets.<facet-id>.delegation.persona": {
+    "default_value_security": "unknown",
     "deprecated": {
       "note": "Please use `facets.facets.<facet-id>.delegation.persona` instead.",
       "replacement_key": "facets.facets.<facet-id>.delegation.persona"
     },
     "hide_in_docs": true,
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "deprecated"
   },
   "experimental_facets.facets.<facet-id>.delegation.run_modes.[]": {
+    "default_value_security": "unknown",
     "deprecated": {
       "note": "Please use `facets.facets.<facet-id>.delegation.run_modes.[]` instead.",
       "replacement_key": "facets.facets.<facet-id>.delegation.run_modes.[]"
     },
     "hide_in_docs": true,
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "deprecated"
   },
   "experimental_facets.facets.<facet-id>.delegation.scheduling": {
+    "default_value_security": "unknown",
     "deprecated": {
       "note": "Please use `facets.facets.<facet-id>.delegation.scheduling` instead.",
       "replacement_key": "facets.facets.<facet-id>.delegation.scheduling"
     },
     "hide_in_docs": true,
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "deprecated"
   },
   "experimental_facets.facets.<facet-id>.disable_facet_prompt_template": {
+    "default_value_security": "unknown",
     "deprecated": {
       "note": "Please use `facets.facets.<facet-id>.disable_facet_prompt_template` instead.",
       "replacement_key": "facets.facets.<facet-id>.disable_facet_prompt_template"
     },
     "hide_in_docs": true,
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "deprecated"
   },
   "experimental_facets.facets.<facet-id>.display_name": {
+    "default_value_security": "unknown",
     "deprecated": {
       "note": "Please use `facets.facets.<facet-id>.display_name` instead.",
       "replacement_key": "facets.facets.<facet-id>.display_name"
     },
     "hide_in_docs": true,
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "deprecated"
   },
   "experimental_facets.facets.<facet-id>.hidden": {
+    "default_value_security": "unknown",
     "deprecated": {
       "note": "Please use `facets.facets.<facet-id>.hidden` instead.",
       "replacement_key": "facets.facets.<facet-id>.hidden"
     },
     "hide_in_docs": true,
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "deprecated"
   },
   "experimental_facets.facets.<facet-id>.hidden_always_active_for_platform": {
+    "default_value_security": "unknown",
     "deprecated": {
       "note": "Please use `facets.facets.<facet-id>.hidden_always_active_for_platform` instead.",
       "replacement_key": "facets.facets.<facet-id>.hidden_always_active_for_platform"
     },
     "hide_in_docs": true,
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "deprecated"
   },
   "experimental_facets.facets.<facet-id>.icon": {
+    "default_value_security": "unknown",
     "deprecated": {
       "note": "Please use `facets.facets.<facet-id>.icon` instead.",
       "replacement_key": "facets.facets.<facet-id>.icon"
     },
     "hide_in_docs": true,
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "deprecated"
   },
   "experimental_facets.facets.<facet-id>.model_settings.compat_no_replay_summary": {
+    "default_value_security": "unknown",
     "deprecated": {
       "note": "Please use `facets.facets.<facet-id>.model_settings.compat_no_replay_summary` instead.",
       "replacement_key": "facets.facets.<facet-id>.model_settings.compat_no_replay_summary"
     },
     "hide_in_docs": true,
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "deprecated"
   },
   "experimental_facets.facets.<facet-id>.model_settings.compat_omit_strict": {
+    "default_value_security": "unknown",
     "deprecated": {
       "note": "Please use `facets.facets.<facet-id>.model_settings.compat_omit_strict` instead.",
       "replacement_key": "facets.facets.<facet-id>.model_settings.compat_omit_strict"
     },
     "hide_in_docs": true,
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "deprecated"
   },
   "experimental_facets.facets.<facet-id>.model_settings.reasoning_effort": {
+    "default_value_security": "unknown",
     "deprecated": {
       "note": "Please use `facets.facets.<facet-id>.model_settings.reasoning_effort` instead.",
       "replacement_key": "facets.facets.<facet-id>.model_settings.reasoning_effort"
     },
     "hide_in_docs": true,
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "deprecated"
   },
   "experimental_facets.facets.<facet-id>.model_settings.temperature": {
+    "default_value_security": "unknown",
     "deprecated": {
       "note": "Please use `facets.facets.<facet-id>.model_settings.temperature` instead.",
       "replacement_key": "facets.facets.<facet-id>.model_settings.temperature"
     },
     "hide_in_docs": true,
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "deprecated"
   },
   "experimental_facets.facets.<facet-id>.model_settings.top_p": {
+    "default_value_security": "unknown",
     "deprecated": {
       "note": "Please use `facets.facets.<facet-id>.model_settings.top_p` instead.",
       "replacement_key": "facets.facets.<facet-id>.model_settings.top_p"
     },
     "hide_in_docs": true,
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "deprecated"
   },
   "experimental_facets.facets.<facet-id>.model_settings.verbosity": {
+    "default_value_security": "unknown",
     "deprecated": {
       "note": "Please use `facets.facets.<facet-id>.model_settings.verbosity` instead.",
       "replacement_key": "facets.facets.<facet-id>.model_settings.verbosity"
     },
     "hide_in_docs": true,
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "deprecated"
   },
   "experimental_facets.facets.<facet-id>.tool_call_allowlist.[]": {
+    "default_value_security": "unknown",
     "deprecated": {
       "note": "Please use `facets.facets.<facet-id>.tool_call_allowlist.[]` instead.",
       "replacement_key": "facets.facets.<facet-id>.tool_call_allowlist.[]"
     },
     "hide_in_docs": true,
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "deprecated"
   },
   "experimental_facets.only_single_facet": {
+    "default_value_security": "unknown",
     "deprecated": {
       "note": "Please use `facets.only_single_facet` instead.",
       "replacement_key": "facets.only_single_facet"
     },
     "hide_in_docs": true,
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "deprecated"
   },
   "experimental_facets.priority_order.[]": {
+    "default_value_security": "unknown",
     "deprecated": {
       "note": "Please use `facets.priority_order.[]` instead.",
       "replacement_key": "facets.priority_order.[]"
     },
     "hide_in_docs": true,
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "deprecated"
   },
   "experimental_facets.show_facet_indicator_with_display_name": {
+    "default_value_security": "unknown",
     "deprecated": {
       "note": "Please use `facets.show_facet_indicator_with_display_name` instead.",
       "replacement_key": "facets.show_facet_indicator_with_display_name"
     },
     "hide_in_docs": true,
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "deprecated"
   },
   "experimental_facets.tool_call_allowlist.[]": {
+    "default_value_security": "unknown",
     "deprecated": {
       "note": "Please use `facets.tool_call_allowlist.[]` instead.",
       "replacement_key": "facets.tool_call_allowlist.[]"
     },
     "hide_in_docs": true,
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "deprecated"
   },
   "facet_permissions.rules.<rule-name>.facet_ids.[]": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "facet_permissions.rules.<rule-name>.groups.[]": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "facet_permissions.rules.<rule-name>.rule_type": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "facets.default_selected_facets.[]": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "facets.facet_prompt_template": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "facets.facet_prompt_template.fallback": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "facets.facet_prompt_template.label": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "facets.facet_prompt_template.prompt": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "facets.facet_prompt_template.prompt_name": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "facets.facet_prompt_template.source": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "facets.facets.<facet-id>.additional_system_prompt": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "facets.facets.<facet-id>.additional_system_prompt.fallback": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "facets.facets.<facet-id>.additional_system_prompt.label": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "facets.facets.<facet-id>.additional_system_prompt.prompt": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "facets.facets.<facet-id>.additional_system_prompt.prompt_name": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "facets.facets.<facet-id>.additional_system_prompt.source": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "facets.facets.<facet-id>.child_chat_provider": {
+    "default_value_security": "unknown",
     "introduced_in": "unreleased",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "facets.facets.<facet-id>.child_host_context": {
+    "default_value_security": "unknown",
     "introduced_in": "unreleased",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "facets.facets.<facet-id>.delegation.approval.mode": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "facets.facets.<facet-id>.delegation.approval.plan_min_tasks": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "facets.facets.<facet-id>.delegation.child_chat_providers.[]": {
+    "default_value_security": "unknown",
     "introduced_in": "unreleased",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "facets.facets.<facet-id>.delegation.child_facet_ids.[]": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "facets.facets.<facet-id>.delegation.max_client_tool_calls_per_task": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "facets.facets.<facet-id>.delegation.max_parallel": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "facets.facets.<facet-id>.delegation.max_server_tool_calls_per_task": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "facets.facets.<facet-id>.delegation.max_tasks_per_turn": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "facets.facets.<facet-id>.delegation.persona": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "facets.facets.<facet-id>.delegation.run_modes.[]": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "facets.facets.<facet-id>.delegation.scheduling": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "facets.facets.<facet-id>.disable_facet_prompt_template": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "facets.facets.<facet-id>.display_name": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "facets.facets.<facet-id>.hidden": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "facets.facets.<facet-id>.hidden_always_active_for_platform": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "facets.facets.<facet-id>.icon": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "facets.facets.<facet-id>.model_settings.compat_no_replay_summary": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "facets.facets.<facet-id>.model_settings.compat_omit_strict": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "facets.facets.<facet-id>.model_settings.reasoning_effort": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "facets.facets.<facet-id>.model_settings.temperature": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "facets.facets.<facet-id>.model_settings.top_p": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "facets.facets.<facet-id>.model_settings.verbosity": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "facets.facets.<facet-id>.tool_call_allowlist.[]": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "facets.only_single_facet": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "facets.priority_order.[]": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "facets.show_facet_indicator_with_display_name": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "facets.tool_call_allowlist.[]": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "file_context.max_context_fraction": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "file_context.max_inline_tokens_per_file": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "file_context.max_preview_tokens_per_file": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "file_context.max_total_attachment_tokens": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "file_context.native_file_formats_bypass_limit": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "file_context.preview.csv_max_columns": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "file_context.preview.csv_max_field_chars": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "file_context.preview.csv_max_sample_rows": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "file_context.preview.text_max_chars": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "file_context.retrieve_file_contents_enabled": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "file_processor.limits.bounded_text_preview": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "file_processor.limits.max_extracted_chars": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "file_processor.limits.max_input_bytes": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "file_processor.limits.timeout_ms": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "file_processor.processor": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "file_storage_providers.<provider-id>.config.access_key_id": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "file_storage_providers.<provider-id>.config.account_key": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "file_storage_providers.<provider-id>.config.account_name": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "file_storage_providers.<provider-id>.config.bucket": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "file_storage_providers.<provider-id>.config.container": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "file_storage_providers.<provider-id>.config.endpoint": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "file_storage_providers.<provider-id>.config.region": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "file_storage_providers.<provider-id>.config.root": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "file_storage_providers.<provider-id>.config.secret_access_key": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "file_storage_providers.<provider-id>.display_name": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "file_storage_providers.<provider-id>.max_upload_size_kb": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "file_storage_providers.<provider-id>.provider_kind": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "file_type_detection.mode": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "file_uploads.upload_allowed_if_supports.[]": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "frontend.additional_environment": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "frontend.allow_any_frame_ancestor": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.2",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "frontend.assistant_avatar_path": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "frontend.chat_input_empty_state_layout": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "frontend.component_kits.directory": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.2",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "frontend.disable_chat_input_autofocus": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "frontend.disable_logout": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "frontend.disable_upload": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "frontend.enable_chat_history_filters": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "frontend.enable_message_editing": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "frontend.enable_message_feedback": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "frontend.enable_message_feedback_comments": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "frontend.enable_message_regeneration": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "frontend.enable_pinned_chats": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "frontend.error_report.error_report_template": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.2",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "frontend.error_report.show_copy_error_report": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.2",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "frontend.error_report.show_verbose_assistant_errors": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.2",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "frontend.extra_frame_ancestors.[]": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.2",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "frontend.favicon_path": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "frontend.logo_dark_path": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "frontend.logo_path": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "frontend.mask_reasoning_trace_text": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.2",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "frontend.max_files": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "frontend.message_feedback_edit_time_limit_seconds": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "frontend.pinned_chats_limit": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "frontend.sidebar_chat_history_show_metadata": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "frontend.sidebar_collapsed_mode": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "frontend.sidebar_logo_dark_path": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "frontend.sidebar_logo_path": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "frontend.theme": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "frontend.translation_po_compilation_mode": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.2",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "frontend.web_frontend_bundle_path": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "frontend_bundle_path": {
+    "default_value_security": "unknown",
     "deprecated": {
       "note": "Please use `frontend.web_frontend_bundle_path` instead.",
       "planned_removal_version": "0.6.0",
@@ -2114,908 +3013,1336 @@
     },
     "hide_in_docs": true,
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "deprecated"
   },
   "generation.max_tool_calls_per_message": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "generation_status.heartbeat_interval_secs": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "generation_status.provider_idle_timeout_secs": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "generation_status.shutdown_drain_secs": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "generation_status.stale_after_secs": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "generation_status.terminal_retention_secs": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "guardrails.prompt_patterns.<pattern-id>.language": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.1",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "guardrails.prompt_patterns.<pattern-id>.pattern": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.1",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "guardrails.prompt_patterns.<pattern-id>.tags.[]": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.1",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "guardrails.prompt_patterns.<pattern-id>.type": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.1",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "http_host": {
+    "default_value_security": "unknown",
     "hide_in_docs": true,
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "http_port": {
+    "default_value_security": "unknown",
     "hide_in_docs": true,
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "i18n.language.default_language": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "i18n.language.language_detection_priority.[]": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.entra_id.auth_via_access_token": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.entra_id.enabled": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.entra_id.group_overage.enabled": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.experimental_entra_id.auth_via_access_token": {
+    "default_value_security": "unknown",
     "deprecated": {
       "note": "Please use `integrations.entra_id.auth_via_access_token` instead.",
       "replacement_key": "integrations.entra_id.auth_via_access_token"
     },
     "hide_in_docs": true,
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "deprecated"
   },
   "integrations.experimental_entra_id.enabled": {
+    "default_value_security": "unknown",
     "deprecated": {
       "note": "Please use `integrations.entra_id.enabled` instead.",
       "replacement_key": "integrations.entra_id.enabled"
     },
     "hide_in_docs": true,
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "deprecated"
   },
   "integrations.experimental_entra_id.group_overage.enabled": {
+    "default_value_security": "unknown",
     "deprecated": {
       "note": "Please use `integrations.entra_id.group_overage.enabled` instead.",
       "replacement_key": "integrations.entra_id.group_overage.enabled"
     },
     "hide_in_docs": true,
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "deprecated"
   },
   "integrations.experimental_sharepoint.all_drives_sources.[]": {
+    "default_value_security": "unknown",
     "deprecated": {
       "note": "Please use `integrations.sharepoint.all_drives_sources.[]` instead.",
       "replacement_key": "integrations.sharepoint.all_drives_sources.[]"
     },
     "hide_in_docs": true,
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "deprecated"
   },
   "integrations.experimental_sharepoint.auth_via_access_token": {
+    "default_value_security": "unknown",
     "deprecated": {
       "note": "Please use `integrations.sharepoint.auth_via_access_token` instead.",
       "replacement_key": "integrations.sharepoint.auth_via_access_token"
     },
     "hide_in_docs": true,
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "deprecated"
   },
   "integrations.experimental_sharepoint.enabled": {
+    "default_value_security": "unknown",
     "deprecated": {
       "note": "Please use `integrations.sharepoint.enabled` instead.",
       "replacement_key": "integrations.sharepoint.enabled"
     },
     "hide_in_docs": true,
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "deprecated"
   },
   "integrations.experimental_sharepoint.file_search_enabled": {
+    "default_value_security": "unknown",
     "deprecated": {
       "note": "Please use `integrations.sharepoint.file_search_enabled` instead.",
       "replacement_key": "integrations.sharepoint.file_search_enabled"
     },
     "hide_in_docs": true,
     "introduced_in": "unreleased",
+    "security_relevance": "unknown",
     "stability": "deprecated"
   },
   "integrations.experimental_sharepoint.file_upload_enabled": {
+    "default_value_security": "unknown",
     "deprecated": {
       "note": "Please use `integrations.sharepoint.file_upload_enabled` instead.",
       "replacement_key": "integrations.sharepoint.file_upload_enabled"
     },
     "hide_in_docs": true,
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "deprecated"
   },
   "integrations.experimental_sharepoint.show_disclaimer": {
+    "default_value_security": "unknown",
     "deprecated": {
       "note": "Please use `integrations.sharepoint.show_disclaimer` instead.",
       "replacement_key": "integrations.sharepoint.show_disclaimer"
     },
     "hide_in_docs": true,
     "introduced_in": "0.6.1",
+    "security_relevance": "unknown",
     "stability": "deprecated"
   },
   "integrations.langfuse.base_url": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.langfuse.enable_feedback": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.langfuse.enabled": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.langfuse.public_key": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.langfuse.secret_key": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.langfuse.summary_tracing_enabled": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.langfuse.tracing_enabled": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.langfuse.use_otel": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.ms_office.addin.addin_id": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.1",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.ms_office.addin.default_settings.comment_assistant_author": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.ms_office.addin.default_settings.comment_author": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.ms_office.addin.default_settings.comment_author_enforced": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.ms_office.addin.default_settings.comment_label": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.ms_office.addin.default_settings.comment_writes.add": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.ms_office.addin.default_settings.comment_writes.assistant_author": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.ms_office.addin.default_settings.comment_writes.max_rows.add": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.ms_office.addin.default_settings.comment_writes.max_rows.modify": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.ms_office.addin.default_settings.comment_writes.max_rows.respond": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.ms_office.addin.default_settings.comment_writes.modify": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.ms_office.addin.default_settings.comment_writes.respond": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.ms_office.addin.default_settings.compose_inherits_from_read": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.ms_office.addin.default_settings.mode": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.ms_office.addin.default_settings.word_apply.mac.in_place": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.ms_office.addin.default_settings.word_apply.mac.package_read": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.ms_office.addin.default_settings.word_apply.mac.whole_document_import": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.ms_office.addin.default_settings.word_apply.pc.in_place": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.ms_office.addin.default_settings.word_apply.pc.package_read": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.ms_office.addin.default_settings.word_apply.pc.whole_document_import": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.ms_office.addin.default_settings.word_apply.web.in_place": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.ms_office.addin.default_settings.word_apply.web.package_read": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.ms_office.addin.default_settings.word_apply.web.whole_document_import": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.ms_office.addin.default_settings.word_include_document": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.ms_office.addin.document.addin_id": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.ms_office.addin.document.manifest.description": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.ms_office.addin.document.manifest.display_name": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.ms_office.addin.enabled": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.ms_office.addin.favicon_path": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.ms_office.addin.frontend_bundle_path": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.ms_office.addin.launch_event_runtime.page_path": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.ms_office.addin.launch_event_runtime.script_path": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.ms_office.addin.launch_events.[].event": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.ms_office.addin.launch_events.[].function_name": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.ms_office.addin.manifest.button_description": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.2",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.ms_office.addin.manifest.button_label": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.2",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.ms_office.addin.manifest.description": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.2",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.ms_office.addin.manifest.display_name": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.2",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.ms_office.addin.manifest.group_label": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.2",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.ms_office.addin.manifest.high_resolution_icon_path": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.2",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.ms_office.addin.manifest.high_resolution_icon_source_path": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.ms_office.addin.manifest.icon_16_path": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.2",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.ms_office.addin.manifest.icon_16_source_path": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.ms_office.addin.manifest.icon_32_path": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.2",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.ms_office.addin.manifest.icon_32_source_path": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.ms_office.addin.manifest.icon_80_path": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.2",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.ms_office.addin.manifest.icon_80_source_path": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.ms_office.addin.manifest.icon_path": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.2",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.ms_office.addin.manifest.icon_source_path": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.ms_office.addin.manifest.provider_name": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.2",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.ms_office.addin.manifest.support_url": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.2",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.ms_office.addin.msal_authority": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.ms_office.addin.msal_client_id": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.ms_office.addin.serve_bundle_legacy_path": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.ms_office.ews_api_endpoint": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.2",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.ms_office.ews_skip_tls_validation": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.2",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.ms_office.teams.app_id": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.ms_office.teams.bot.app_id": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.ms_office.teams.bot.app_password": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.ms_office.teams.bot.assistant_id": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.ms_office.teams.bot.context_message_count": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.ms_office.teams.bot.enabled": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.ms_office.teams.bot.messaging_endpoint": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.ms_office.teams.bot.oauth_connection_name": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.ms_office.teams.bot.public_base_url": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.ms_office.teams.bot.security_groups_only": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.ms_office.teams.bot.sso_app_id": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.ms_office.teams.bot.sso_enabled": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.ms_office.teams.bot.sso_resource": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.ms_office.teams.bot.streaming": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.ms_office.teams.bot.tenant_id": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.ms_office.teams.bot.token_service_url": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.ms_office.teams.enabled": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.ms_office.teams.manifest.color_icon": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.ms_office.teams.manifest.color_icon_source_path": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.ms_office.teams.manifest.developer_name": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.ms_office.teams.manifest.full_description": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.ms_office.teams.manifest.full_name": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.ms_office.teams.manifest.outline_icon": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.ms_office.teams.manifest.outline_icon_source_path": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.ms_office.teams.manifest.privacy_url": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.ms_office.teams.manifest.short_description": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.ms_office.teams.manifest.short_name": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.ms_office.teams.manifest.small_color_icon": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.ms_office.teams.manifest.small_color_icon_source_path": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.ms_office.teams.manifest.tab_name": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.ms_office.teams.manifest.terms_url": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.ms_office.teams.manifest.version": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.ms_office.teams.manifest.website_url": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.otel.enabled": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.otel.endpoint": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.otel.protocol": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.otel.service_name": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.prometheus.enabled": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.prometheus.host": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.prometheus.port": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.sentry.sentry_dsn": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.sharepoint.all_drives_sources.[]": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.sharepoint.auth_via_access_token": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.sharepoint.enabled": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.sharepoint.file_search_enabled": {
+    "default_value_security": "unknown",
     "introduced_in": "unreleased",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.sharepoint.file_upload_enabled": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "integrations.sharepoint.show_disclaimer": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "logging.format": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "mcp_server_permissions.rules.<rule-name>.groups.[]": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "mcp_server_permissions.rules.<rule-name>.mcp_server_ids.[]": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "mcp_server_permissions.rules.<rule-name>.rule_type": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "mcp_servers.<server-id>.allow_tools.[]": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "mcp_servers.<server-id>.authentication": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "mcp_servers.<server-id>.authentication.fixed.api_key": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "mcp_servers.<server-id>.authentication.fixed.header_name": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "mcp_servers.<server-id>.authentication.fixed.prefix": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "mcp_servers.<server-id>.authentication.forwarded.credential": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "mcp_servers.<server-id>.authentication.forwarded.header_name": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "mcp_servers.<server-id>.authentication.forwarded.prefix": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "mcp_servers.<server-id>.authentication.oauth2.authorization_params.<key>": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "mcp_servers.<server-id>.authentication.oauth2.client_id": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "mcp_servers.<server-id>.authentication.oauth2.client_name": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "mcp_servers.<server-id>.authentication.oauth2.client_secret": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "mcp_servers.<server-id>.authentication.oauth2.resource": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "mcp_servers.<server-id>.authentication.oauth2.scopes.[]": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "mcp_servers.<server-id>.default_tool_annotations.destructive_hint": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "mcp_servers.<server-id>.default_tool_annotations.idempotent_hint": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "mcp_servers.<server-id>.default_tool_annotations.open_world_hint": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "mcp_servers.<server-id>.default_tool_annotations.read_only_hint": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "mcp_servers.<server-id>.exclude_tools.[]": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "mcp_servers.<server-id>.http_headers.<key>": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "mcp_servers.<server-id>.max_session_idle_seconds": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "mcp_servers.<server-id>.override_tool_annotations.destructive_hint": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "mcp_servers.<server-id>.override_tool_annotations.idempotent_hint": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "mcp_servers.<server-id>.override_tool_annotations.open_world_hint": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "mcp_servers.<server-id>.override_tool_annotations.read_only_hint": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "mcp_servers.<server-id>.protocol_mode": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "mcp_servers.<server-id>.tools.<tool-name>.default_tool_annotations.destructive_hint": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "mcp_servers.<server-id>.tools.<tool-name>.default_tool_annotations.idempotent_hint": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "mcp_servers.<server-id>.tools.<tool-name>.default_tool_annotations.open_world_hint": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "mcp_servers.<server-id>.tools.<tool-name>.default_tool_annotations.read_only_hint": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "mcp_servers.<server-id>.tools.<tool-name>.override_tool_annotations.destructive_hint": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "mcp_servers.<server-id>.tools.<tool-name>.override_tool_annotations.idempotent_hint": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "mcp_servers.<server-id>.tools.<tool-name>.override_tool_annotations.open_world_hint": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "mcp_servers.<server-id>.tools.<tool-name>.override_tool_annotations.read_only_hint": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "mcp_servers.<server-id>.transport_type": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "mcp_servers.<server-id>.url": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "mcp_servers.<server-id>.wait_tools.[]": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "mcp_servers_global.approval.allow_always": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "mcp_servers_global.approval.enabled": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "mcp_servers_global.approval.preset": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "mcp_servers_global.default_tool_annotations.destructive_hint": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "mcp_servers_global.default_tool_annotations.idempotent_hint": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "mcp_servers_global.default_tool_annotations.open_world_hint": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "mcp_servers_global.default_tool_annotations.read_only_hint": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "mcp_servers_global.enable_wait": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "mcp_servers_global.max_session_idle_seconds": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "mcp_servers_global.max_wait_seconds": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "mcp_servers_global.override_tool_annotations.destructive_hint": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "mcp_servers_global.override_tool_annotations.idempotent_hint": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "mcp_servers_global.override_tool_annotations.open_world_hint": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "mcp_servers_global.override_tool_annotations.read_only_hint": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "mcp_servers_global.show_frontend_tab": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "mcp_servers_global.show_in_assistant_editor": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "mcp_servers_global.show_in_chat_input": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "model_permissions.rules.<rule-name>.chat_provider_ids.[]": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "model_permissions.rules.<rule-name>.groups.[]": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "model_permissions.rules.<rule-name>.rule_type": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "policy_guides.policies.<policy-id>.choice_allow": {
+    "default_value_security": "unknown",
     "introduced_in": "unreleased",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "policy_guides.policies.<policy-id>.choice_refuse": {
+    "default_value_security": "unknown",
     "introduced_in": "unreleased",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "policy_guides.policies.<policy-id>.decision_providers.[]": {
+    "default_value_security": "unknown",
     "introduced_in": "unreleased",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "policy_guides.policies.<policy-id>.enabled": {
+    "default_value_security": "unknown",
     "introduced_in": "unreleased",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "policy_guides.policies.<policy-id>.metadata": {
+    "default_value_security": "unknown",
     "introduced_in": "unreleased",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "policy_guides.policies.<policy-id>.question": {
+    "default_value_security": "unknown",
     "introduced_in": "unreleased",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "prompt_optimizer.chat_provider_id": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "prompt_optimizer.enabled": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "prompt_optimizer.prompt": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "prompt_optimizer.prompt.fallback": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "prompt_optimizer.prompt.label": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "prompt_optimizer.prompt.prompt": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "prompt_optimizer.prompt.prompt_name": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "prompt_optimizer.prompt.source": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "runtime_configuration.enabled": {
+    "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "sentry_dsn": {
+    "default_value_security": "unknown",
     "deprecated": {
       "note": "Please use `integrations.sentry.sentry_dsn` instead.",
       "planned_removal_version": "0.6.0",
@@ -3023,146 +4350,217 @@
     },
     "hide_in_docs": true,
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "deprecated"
   },
   "server.encryption_key": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "speech_providers.provider.<provider-id>.access_token": {
+    "default_value_security": "unknown",
     "introduced_in": "unreleased",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "speech_providers.provider.<provider-id>.api_key": {
+    "default_value_security": "unknown",
     "introduced_in": "unreleased",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "speech_providers.provider.<provider-id>.archived": {
+    "default_value_security": "unknown",
     "introduced_in": "unreleased",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "speech_providers.provider.<provider-id>.base_url": {
+    "default_value_security": "unknown",
     "introduced_in": "unreleased",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "speech_providers.provider.<provider-id>.instructions": {
+    "default_value_security": "unknown",
     "introduced_in": "unreleased",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "speech_providers.provider.<provider-id>.location": {
+    "default_value_security": "unknown",
     "introduced_in": "unreleased",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "speech_providers.provider.<provider-id>.model_name": {
+    "default_value_security": "unknown",
     "introduced_in": "unreleased",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "speech_providers.provider.<provider-id>.project_id": {
+    "default_value_security": "unknown",
     "introduced_in": "unreleased",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "speech_providers.provider.<provider-id>.provider_kind": {
+    "default_value_security": "unknown",
     "introduced_in": "unreleased",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "speech_providers.provider.<provider-id>.sample_rate": {
+    "default_value_security": "unknown",
     "introduced_in": "unreleased",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "speech_providers.provider.<provider-id>.voice": {
+    "default_value_security": "unknown",
     "introduced_in": "unreleased",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "speech_providers.replacement_providers.[].new": {
+    "default_value_security": "unknown",
     "introduced_in": "unreleased",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "speech_providers.replacement_providers.[].old": {
+    "default_value_security": "unknown",
     "introduced_in": "unreleased",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "starter_prompts.enabled": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "starter_prompts.priority_order.[]": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "starter_prompts.prompts.<prompt-id>.chat_provider": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "starter_prompts.prompts.<prompt-id>.icon": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "starter_prompts.prompts.<prompt-id>.localized_prompts.<locale>": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "starter_prompts.prompts.<prompt-id>.localized_prompts.<locale>.fallback": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "starter_prompts.prompts.<prompt-id>.localized_prompts.<locale>.label": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "starter_prompts.prompts.<prompt-id>.localized_prompts.<locale>.prompt": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "starter_prompts.prompts.<prompt-id>.localized_prompts.<locale>.prompt_name": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "starter_prompts.prompts.<prompt-id>.localized_prompts.<locale>.source": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "starter_prompts.prompts.<prompt-id>.prompt": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "starter_prompts.prompts.<prompt-id>.prompt.fallback": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "starter_prompts.prompts.<prompt-id>.prompt.label": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "starter_prompts.prompts.<prompt-id>.prompt.prompt": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "starter_prompts.prompts.<prompt-id>.prompt.prompt_name": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "starter_prompts.prompts.<prompt-id>.prompt.source": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "starter_prompts.prompts.<prompt-id>.selected_facets.[]": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "starter_prompts.prompts.<prompt-id>.subtitle": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "starter_prompts.prompts.<prompt-id>.title": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "user_preferences.data_tab_enabled": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.2",
+    "security_relevance": "unknown",
     "stability": "unstable"
   },
   "user_preferences.enabled": {
+    "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
     "stability": "unstable"
   }
 }

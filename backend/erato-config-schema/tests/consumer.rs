@@ -99,8 +99,8 @@ fn freshness_check_rejects_missing_keys_even_with_valid_remaining_metadata() {
 #[test]
 fn document_serialization_validates_and_sorts_metadata() {
     let reference = json!({
-        "z": {"stability": "stable", "introduced_in": "1.0.0"},
-        "a": {"stability": "alpha", "introduced_in": "unreleased"}
+        "z": {"security_relevance": "unknown", "default_value_security": "unknown", "stability": "stable", "introduced_in": "1.0.0"},
+        "a": {"security_relevance": "unknown", "default_value_security": "unknown", "stability": "alpha", "introduced_in": "unreleased"}
     });
     let document = config_reference_document(&reference).unwrap();
     assert!(document.ends_with('\n'));

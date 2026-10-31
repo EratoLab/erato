@@ -5,12 +5,14 @@ use facet::{Def, Field, Shape, StructType, Type, UserType};
 use serde_json::{Map, Value, json};
 
 use crate::config_facet_attrs;
-use crate::config_metadata::{Lifecycle, Stability, validate_version};
+use crate::config_metadata::{
+    ConfigMetadata, DefaultValueSecurity, SecurityRelevance, Stability, validate_version,
+};
 
 #[derive(Clone, Default)]
 struct Entry {
     documentation: Map<String, Value>,
-    lifecycle: Lifecycle,
+    config_metadata: ConfigMetadata,
 }
 
 type Entries = BTreeMap<String, Entry>;
@@ -51,22 +53,36 @@ pub fn generate_reference_with_options(
         shape,
         &mut Vec::new(),
         &mut entries,
-        &Lifecycle::for_root(shape)?,
+        &ConfigMetadata::for_root(shape)?,
         options,
     )?;
     let mut reference = Map::new();
     for (key, entry) in entries {
-        let mut lifecycle = entry.lifecycle;
+        let mut config_metadata = entry.config_metadata;
         let mut metadata = entry.documentation;
         if metadata.contains_key("deprecated") {
-            lifecycle.stability = Some(Stability::Deprecated);
+            config_metadata.stability = Some(Stability::Deprecated);
         }
-        if let Some(stability) = lifecycle.stability {
+        if let Some(stability) = config_metadata.stability {
             metadata.insert("stability".into(), serde_json::to_value(stability)?);
         }
-        if let Some(version) = lifecycle.introduced_in {
+        if let Some(version) = config_metadata.introduced_in {
             metadata.insert("introduced_in".into(), json!(version));
         }
+        metadata.insert(
+            "security_relevance".into(),
+            serde_json::to_value(config_metadata.security_relevance)?,
+        );
+        let default_value_security =
+            if config_metadata.security_relevance == SecurityRelevance::None {
+                DefaultValueSecurity::UnknownNone
+            } else {
+                config_metadata.default_value_security
+            };
+        metadata.insert(
+            "default_value_security".into(),
+            serde_json::to_value(default_value_security)?,
+        );
         reference.insert(key, Value::Object(metadata));
     }
     let mut reference = Value::Object(reference);
@@ -77,7 +93,7 @@ pub fn generate_reference_with_options(
     Ok(reference)
 }
 
-/// Validate lifecycle completeness, versions, and deprecation replacement keys.
+/// Validate metadata completeness, security classifications, versions, and replacements.
 /// This checks every entry, including hidden keys and deprecated aliases.
 pub fn validate_config_reference(reference: &Value) -> Result<()> {
     let object = reference
@@ -99,6 +115,31 @@ pub fn validate_config_reference(reference: &Value) -> Result<()> {
             return Err(eyre!(
                 "Config key '{key}' has deprecation metadata but stability is not deprecated"
             ));
+        }
+        let security_relevance: SecurityRelevance = serde_json::from_value(
+            entry
+                .get("security_relevance")
+                .cloned()
+                .unwrap_or(Value::Null),
+        )
+        .map_err(|err| {
+            eyre!("Config key '{key}' has invalid or missing security_relevance: {err}")
+        })?;
+        let default_value_security: DefaultValueSecurity = serde_json::from_value(
+            entry
+                .get("default_value_security")
+                .cloned()
+                .unwrap_or(Value::Null),
+        )
+        .map_err(|err| {
+            eyre!("Config key '{key}' has invalid or missing default_value_security: {err}")
+        })?;
+        if (security_relevance == SecurityRelevance::None)
+            != (default_value_security == DefaultValueSecurity::UnknownNone)
+        {
+            bail!(
+                "Config key '{key}': default_value_security must be 'unknown_none' if and only if security_relevance is 'none'"
+            );
         }
         let replacement_key = entry
             .get("deprecated")
@@ -124,7 +165,7 @@ fn collect_paths(
     shape: &'static Shape,
     path: &mut Vec<String>,
     entries: &mut Entries,
-    lifecycle: &Lifecycle,
+    config_metadata: &ConfigMetadata,
     options: &ReferenceOptions,
 ) -> Result<()> {
     if let Some(leaves) = (options.custom_leaf_paths)(shape) {
@@ -134,53 +175,55 @@ fn collect_paths(
                 segments.extend(leaf.split('.').map(str::to_owned));
             }
             if !segments.is_empty() {
-                ensure_entry(entries, segments.join("."), lifecycle)?;
+                ensure_entry(entries, segments.join("."), config_metadata)?;
             }
         }
         return Ok(());
     }
 
     match &shape.def {
-        Def::Option(option_def) => collect_paths(option_def.t, path, entries, lifecycle, options)?,
+        Def::Option(option_def) => {
+            collect_paths(option_def.t, path, entries, config_metadata, options)?
+        }
         Def::List(list_def) => {
             path.push("[]".to_string());
-            collect_paths(list_def.t, path, entries, lifecycle, options)?;
+            collect_paths(list_def.t, path, entries, config_metadata, options)?;
             path.pop();
         }
         Def::Array(array_def) => {
             path.push("[]".to_string());
-            collect_paths(array_def.t, path, entries, lifecycle, options)?;
+            collect_paths(array_def.t, path, entries, config_metadata, options)?;
             path.pop();
         }
         Def::Map(map_def) => {
             path.push((options.map_key_placeholder)(path));
-            collect_paths(map_def.v, path, entries, lifecycle, options)?;
+            collect_paths(map_def.v, path, entries, config_metadata, options)?;
             path.pop();
         }
         Def::Set(set_def) => {
             path.push("[]".to_string());
-            collect_paths(set_def.t, path, entries, lifecycle, options)?;
+            collect_paths(set_def.t, path, entries, config_metadata, options)?;
             path.pop();
         }
         Def::Pointer(pointer_def) => {
             if let Some(pointee) = pointer_def.pointee {
-                collect_paths(pointee, path, entries, lifecycle, options)?;
+                collect_paths(pointee, path, entries, config_metadata, options)?;
             } else if !path.is_empty() {
-                ensure_entry(entries, path.join("."), lifecycle)?;
+                ensure_entry(entries, path.join("."), config_metadata)?;
             }
         }
         Def::DynamicValue(_) | Def::Scalar | Def::Undefined | Def::Slice(_) | Def::NdArray(_) => {
-            collect_from_type(shape, path, entries, lifecycle, options)?;
+            collect_from_type(shape, path, entries, config_metadata, options)?;
         }
         Def::Result(result_def) => {
-            collect_paths(result_def.t, path, entries, lifecycle, options)?;
-            collect_paths(result_def.e, path, entries, lifecycle, options)?;
+            collect_paths(result_def.t, path, entries, config_metadata, options)?;
+            collect_paths(result_def.e, path, entries, config_metadata, options)?;
         }
         _ => {
             if let Some(inner) = shape.inner {
-                collect_paths(inner, path, entries, lifecycle, options)?;
+                collect_paths(inner, path, entries, config_metadata, options)?;
             } else {
-                collect_from_type(shape, path, entries, lifecycle, options)?;
+                collect_from_type(shape, path, entries, config_metadata, options)?;
             }
         }
     }
@@ -191,40 +234,40 @@ fn collect_from_type(
     shape: &'static Shape,
     path: &mut Vec<String>,
     entries: &mut Entries,
-    lifecycle: &Lifecycle,
+    config_metadata: &ConfigMetadata,
     options: &ReferenceOptions,
 ) -> Result<()> {
     match shape.ty {
         Type::User(UserType::Struct(struct_type)) => {
-            collect_struct_fields(&struct_type, path, entries, lifecycle, options)?
+            collect_struct_fields(&struct_type, path, entries, config_metadata, options)?
         }
         Type::User(UserType::Enum(enum_type)) => {
             if shape.is_untagged() {
                 for variant in enum_type.variants {
-                    collect_struct_fields(&variant.data, path, entries, lifecycle, options)?;
+                    collect_struct_fields(&variant.data, path, entries, config_metadata, options)?;
                 }
                 return Ok(());
             }
 
             if let Some(tag) = shape.tag {
                 path.push(tag.to_string());
-                ensure_entry(entries, path.join("."), lifecycle)?;
+                ensure_entry(entries, path.join("."), config_metadata)?;
                 path.pop();
             }
 
             if let Some(content) = shape.content {
                 path.push(content.to_string());
-                ensure_entry(entries, path.join("."), lifecycle)?;
+                ensure_entry(entries, path.join("."), config_metadata)?;
                 path.pop();
             }
 
             for variant in enum_type.variants {
-                collect_struct_fields(&variant.data, path, entries, lifecycle, options)?;
+                collect_struct_fields(&variant.data, path, entries, config_metadata, options)?;
             }
         }
         _ => {
             if !path.is_empty() {
-                ensure_entry(entries, path.join("."), lifecycle)?;
+                ensure_entry(entries, path.join("."), config_metadata)?;
             }
         }
     }
@@ -235,18 +278,18 @@ fn collect_struct_fields(
     struct_type: &StructType,
     path: &mut Vec<String>,
     entries: &mut Entries,
-    lifecycle: &Lifecycle,
+    config_metadata: &ConfigMetadata,
     options: &ReferenceOptions,
 ) -> Result<()> {
     if struct_type.fields.is_empty() {
         if !path.is_empty() {
-            ensure_entry(entries, path.join("."), lifecycle)?;
+            ensure_entry(entries, path.join("."), config_metadata)?;
         }
         return Ok(());
     }
 
     for field in struct_type.fields {
-        collect_field(field, path, entries, lifecycle, options)?;
+        collect_field(field, path, entries, config_metadata, options)?;
     }
     Ok(())
 }
@@ -255,22 +298,22 @@ fn collect_field(
     field: &Field,
     path: &mut Vec<String>,
     entries: &mut Entries,
-    lifecycle: &Lifecycle,
+    config_metadata: &ConfigMetadata,
     options: &ReferenceOptions,
 ) -> Result<()> {
     let field_shape = field.shape.get();
 
     if field.is_flattened() {
-        let lifecycle = lifecycle.for_field(field, path)?;
-        collect_paths(field_shape, path, entries, &lifecycle, options)?;
+        let config_metadata = config_metadata.for_field(field, path)?;
+        collect_paths(field_shape, path, entries, &config_metadata, options)?;
         return Ok(());
     }
 
     path.push(field.rename.unwrap_or(field.name).to_string());
-    let field_lifecycle = lifecycle.for_field(field, path)?;
-    collect_paths(field_shape, path, entries, &field_lifecycle, options)?;
+    let field_config_metadata = config_metadata.for_field(field, path)?;
+    collect_paths(field_shape, path, entries, &field_config_metadata, options)?;
     apply_field_metadata(field, path, entries);
-    collect_deprecated_alias(field, path, entries, lifecycle, options)?;
+    collect_deprecated_alias(field, path, entries, config_metadata, options)?;
     path.pop();
     Ok(())
 }
@@ -279,7 +322,7 @@ fn collect_deprecated_alias(
     field: &Field,
     path: &[String],
     entries: &mut Entries,
-    inherited: &Lifecycle,
+    inherited: &ConfigMetadata,
     options: &ReferenceOptions,
 ) -> Result<()> {
     let Some(config_facet_attrs::Attr::DeprecatedAlias(alias)) = field
@@ -295,13 +338,13 @@ fn collect_deprecated_alias(
     let alias_key = alias_path.join(".");
     // Traverse the alias independently: the same Rust fields can have different
     // introduction dates under their old and canonical public names.
-    let lifecycle = inherited.for_field(field, &alias_path)?;
+    let config_metadata = inherited.for_field(field, &alias_path)?;
     let mut aliases = BTreeMap::new();
     collect_paths(
         field.shape.get(),
         &mut alias_path,
         &mut aliases,
-        &lifecycle,
+        &config_metadata,
         options,
     )?;
     for (key, metadata) in &mut aliases {
@@ -315,7 +358,7 @@ fn collect_deprecated_alias(
             })?
             .documentation
             .clone();
-        metadata.lifecycle.stability = Some(Stability::Deprecated);
+        metadata.config_metadata.stability = Some(Stability::Deprecated);
         metadata
             .documentation
             .insert("hide_in_docs".into(), json!(true));
@@ -412,19 +455,21 @@ fn mark_descendant_keys_hidden(entries: &mut Entries, key: &str) {
     }
 }
 
-fn ensure_entry(entries: &mut Entries, key: String, lifecycle: &Lifecycle) -> Result<()> {
+fn ensure_entry(
+    entries: &mut Entries,
+    key: String,
+    config_metadata: &ConfigMetadata,
+) -> Result<()> {
     if let Some(existing) = entries.get(&key) {
-        if existing.lifecycle != *lifecycle {
-            return Err(eyre!(
-                "Conflicting lifecycle metadata for config key '{key}'"
-            ));
+        if existing.config_metadata != *config_metadata {
+            return Err(eyre!("Conflicting config metadata for config key '{key}'"));
         }
     } else {
         entries.insert(
             key,
             Entry {
                 documentation: Map::new(),
-                lifecycle: lifecycle.clone(),
+                config_metadata: config_metadata.clone(),
             },
         );
     }
@@ -510,15 +555,15 @@ mod tests {
     }
 
     #[test]
-    fn lifecycle_inherits_independently_across_shared_flattened_and_collection_fields() {
+    fn config_metadata_inherits_independently_across_shared_flattened_and_collection_fields() {
         let reference = generate_reference(Sections::SHAPE).unwrap();
         assert_eq!(
             reference["first.inherited"],
-            json!({"stability":"alpha", "introduced_in":"0.6.0"})
+            json!({"security_relevance":"unknown", "default_value_security":"unknown", "stability":"alpha", "introduced_in":"0.6.0"})
         );
         assert_eq!(
             reference["first.beta"],
-            json!({"stability":"beta", "introduced_in":"0.6.0"})
+            json!({"security_relevance":"unknown", "default_value_security":"unknown", "stability":"beta", "introduced_in":"0.6.0"})
         );
         assert_eq!(reference["first.later"]["introduced_in"], "0.7.0");
         assert_eq!(
@@ -536,15 +581,15 @@ mod tests {
         let reference = generate_reference(Sections::SHAPE).unwrap();
         assert_eq!(
             reference["second.<key>.beta"],
-            json!({"stability":"stable", "introduced_in":"0.6.2"})
+            json!({"security_relevance":"unknown", "default_value_security":"unknown", "stability":"stable", "introduced_in":"0.6.2"})
         );
         assert_eq!(
             reference["second.<key>.later"],
-            json!({"stability":"alpha", "introduced_in":"0.8.1"})
+            json!({"security_relevance":"unknown", "default_value_security":"unknown", "stability":"alpha", "introduced_in":"0.8.1"})
         );
         assert_eq!(
             reference["second_extra.inherited"],
-            json!({"stability":"unstable", "introduced_in":"0.6.1"})
+            json!({"security_relevance":"unknown", "default_value_security":"unknown", "stability":"unstable", "introduced_in":"0.6.1"})
         );
         assert_eq!(reference["second_extra.beta"]["stability"], "beta");
     }
@@ -610,19 +655,19 @@ mod tests {
         assert!(
             error
                 .to_string()
-                .contains("Conflicting lifecycle metadata for config key 'field'")
+                .contains("Conflicting config metadata for config key 'field'")
         );
     }
 
     #[test]
-    fn lifecycle_validation_names_the_key() {
+    fn config_metadata_validation_names_the_key() {
         for metadata in [
             json!({}),
-            json!({"stability":"preview", "introduced_in":"0.6.0"}),
-            json!({"stability":"stable"}),
-            json!({"stability":"stable", "introduced_in":"v0.6.0"}),
-            json!({"stability":"stable", "introduced_in":"0.6"}),
-            json!({"stability":"stable", "introduced_in":"0.6.0", "deprecated":{}}),
+            json!({"security_relevance":"unknown", "default_value_security":"unknown", "stability":"preview", "introduced_in":"0.6.0"}),
+            json!({"security_relevance":"unknown", "default_value_security":"unknown", "stability":"stable"}),
+            json!({"security_relevance":"unknown", "default_value_security":"unknown", "stability":"stable", "introduced_in":"v0.6.0"}),
+            json!({"security_relevance":"unknown", "default_value_security":"unknown", "stability":"stable", "introduced_in":"0.6"}),
+            json!({"security_relevance":"unknown", "default_value_security":"unknown", "stability":"stable", "introduced_in":"0.6.0", "deprecated":{}}),
         ] {
             assert!(
                 validate_config_reference(&json!({"example": metadata}))
@@ -633,7 +678,7 @@ mod tests {
         }
         for version in ["0.6.0", "0.8.0-rc.1", "unreleased"] {
             validate_config_reference(
-                &json!({"example":{"stability":"alpha", "introduced_in":version}}),
+                &json!({"example":{"stability":"alpha", "introduced_in":version, "security_relevance":"unknown", "default_value_security":"unknown"}}),
             )
             .unwrap();
         }

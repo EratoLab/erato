@@ -28,7 +28,7 @@ fn run() -> Result<()> {
             .wrap_err("Could not read config reference. Run without --check to generate it.")?;
         check_config_reference(&existing_doc, &generated_doc)?;
         println!(
-            "Config reference is up to date; every key has valid introduced_in and stability metadata."
+            "Config reference is up to date; every key has valid lifecycle and security metadata."
         );
     } else {
         fs::write(output_path, generated_doc).wrap_err("Could not write config reference")?;
