@@ -220,9 +220,9 @@ fn office_addin_manifest_asset_url(base_url: &str, path_or_url: &str) -> String 
     )
 }
 
-/// Whether a manifest variant has the `VersionOverridesV1_1` container that can
-/// host Outlook launch events. The Exchange Server variant is limited to
-/// `VersionOverridesV1_0` and structurally cannot express them.
+/// Only the Exchange Online distribution supports launch events. The Exchange
+/// Server variant shares its V1.1 template but targets Mailbox 1.5 and must omit
+/// launch events and their runtime resources.
 fn manifest_supports_launch_events(manifest_name: &str) -> bool {
     manifest_name == OFFICE_ADDIN_MANIFEST_FILE_NAME
 }
@@ -386,8 +386,26 @@ fn render_office_addin_manifest(
         addin_config,
         manifest_name,
     );
+    let (mailbox_min_version, v1_0_mailbox_min_version, v1_1_mailbox_min_version) =
+        if manifest_name == OFFICE_ADDIN_EXCHANGE_SERVER_MANIFEST_FILE_NAME {
+            ("1.5", "1.5", "1.5")
+        } else {
+            ("1.1", "1.3", "1.13")
+        };
 
     let rendered = template
+        .replace(
+            "{{OFFICE_ADDIN_MANIFEST_MAILBOX_MIN_VERSION}}",
+            mailbox_min_version,
+        )
+        .replace(
+            "{{OFFICE_ADDIN_MANIFEST_V1_0_MAILBOX_MIN_VERSION}}",
+            v1_0_mailbox_min_version,
+        )
+        .replace(
+            "{{OFFICE_ADDIN_MANIFEST_V1_1_MAILBOX_MIN_VERSION}}",
+            v1_1_mailbox_min_version,
+        )
         .replace("{{BASE_URL}}", base_url)
         .replace("{{OFFICE_ADDIN_BASE_URL}}", &office_addin_base_url)
         .replace(OFFICE_ADDIN_ID_PLACEHOLDER, addin_id)
@@ -1087,9 +1105,15 @@ mod tests {
 
     /// The manifest template as it ships in the Office add-in bundle.
     fn stock_manifest_template(manifest_name: &str) -> String {
+        // copy-runtime-manifest.mjs stages the shared Outlook template under both names.
+        let template_name = if manifest_name == OFFICE_ADDIN_EXCHANGE_SERVER_MANIFEST_FILE_NAME {
+            OFFICE_ADDIN_MANIFEST_FILE_NAME
+        } else {
+            manifest_name
+        };
         let manifest_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("../../office-addin/manifests")
-            .join(manifest_name);
+            .join(template_name);
 
         std::fs::read_to_string(&manifest_path).expect("stock manifest template should be readable")
     }
@@ -1113,8 +1137,12 @@ mod tests {
     /// Anywhere else, Outlook rejects the manifest at upload time — and the
     /// served manifest is never run through the schema validator in CI.
     #[test]
-    fn supports_shared_folders_leads_the_v1_1_desktop_form_factor_in_every_cloud_manifest() {
-        for manifest_name in [OFFICE_ADDIN_MANIFEST_FILE_NAME, "manifest-local.xml"] {
+    fn supports_shared_folders_leads_the_v1_1_desktop_form_factor_in_every_outlook_manifest() {
+        for manifest_name in [
+            OFFICE_ADDIN_MANIFEST_FILE_NAME,
+            OFFICE_ADDIN_EXCHANGE_SERVER_MANIFEST_FILE_NAME,
+            "manifest-local.xml",
+        ] {
             let template = stock_manifest_template(manifest_name);
             let v1_1 = template
                 .find("xsi:type=\"VersionOverridesV1_1\"")
@@ -1134,13 +1162,49 @@ mod tests {
                 "{manifest_name}: SupportsSharedFolders must be the first child of the V1_1 DesktopFormFactor"
             );
         }
+    }
 
-        // The on-prem variant is V1_0 only, where the element is a schema error.
-        assert!(
-            !stock_manifest_template(OFFICE_ADDIN_EXCHANGE_SERVER_MANIFEST_FILE_NAME)
-                .contains("SupportsSharedFolders"),
-            "the Exchange Server manifest cannot carry SupportsSharedFolders"
-        );
+    #[test]
+    fn render_outlook_manifest_selects_requirements_by_distribution() {
+        let template = stock_manifest_template(OFFICE_ADDIN_MANIFEST_FILE_NAME);
+        for (manifest_name, base_version, v1_0_version, v1_1_version) in [
+            (OFFICE_ADDIN_MANIFEST_FILE_NAME, "1.1", "1.3", "1.13"),
+            (
+                OFFICE_ADDIN_EXCHANGE_SERVER_MANIFEST_FILE_NAME,
+                "1.5",
+                "1.5",
+                "1.5",
+            ),
+        ] {
+            let rendered = render_office_addin_manifest(
+                &template,
+                "https://app.example.com/base",
+                &addin_config_with_launch_events(&["onNewMessageComposeHandler"]),
+                manifest_name,
+                None,
+            );
+            assert!(rendered.contains(&format!(
+                r#"<Set Name="Mailbox" MinVersion="{base_version}" />"#
+            )));
+            let (v1_0, v1_1) = rendered
+                .split_once(r#"xsi:type="VersionOverridesV1_1""#)
+                .expect("both distributions must carry nested V1.1 overrides");
+            assert!(v1_0.contains(&format!(r#"<bt:Sets DefaultMinVersion="{v1_0_version}">"#)));
+            assert!(v1_1.contains(&format!(r#"<bt:Sets DefaultMinVersion="{v1_1_version}">"#)));
+            assert_eq!(
+                rendered
+                    .matches("<SupportsPinning>true</SupportsPinning>")
+                    .count(),
+                2
+            );
+            assert!(v1_1.contains("<SupportsSharedFolders>true</SupportsSharedFolders>"));
+            assert!(v1_1.contains("<SupportsNoItemContext>true</SupportsNoItemContext>"));
+            assert!(!rendered.contains("{{"));
+            assert_eq!(
+                rendered.contains("<Runtimes>"),
+                manifest_name == OFFICE_ADDIN_MANIFEST_FILE_NAME
+            );
+        }
     }
 
     #[test]
@@ -1151,13 +1215,6 @@ mod tests {
         ] {
             let template = stock_manifest_template(manifest_name);
             let previous_template = manifest_template_without_launch_event_placeholders(&template);
-            if !manifest_supports_launch_events(manifest_name) {
-                assert_eq!(
-                    previous_template, template,
-                    "{manifest_name} must not carry launch event placeholders"
-                );
-            }
-
             let rendered = render_office_addin_manifest(
                 &template,
                 "https://app.example.com/base",
@@ -1676,7 +1733,7 @@ mod tests {
             ),
             (
                 "manifest-exchange-server.xml",
-                include_str!("../../../../office-addin/manifests/manifest-exchange-server.xml"),
+                include_str!("../../../../office-addin/manifests/manifest.xml"),
             ),
         ] {
             assert_eq!(

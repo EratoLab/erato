@@ -31,10 +31,9 @@ interface OfficeContextValue {
    * True when the task pane only follows mail navigation while pinned AND a
    * pin control actually exists. New Outlook on Mac never delivers
    * `ItemChanged` to an unpinned pane (office-js #5575), so pinning is the
-   * only tracking mechanism there — but the Exchange SE manifest declares no
-   * `SupportsPinning` (a V1_1 block gated at Mailbox 1.5 would be needed), so
-   * on-prem mailboxes have no pin to point at. Windows/OWA panes track
-   * without pinning.
+   * only tracking mechanism there. The Exchange SE manifest also opts into
+   * pinning, but the on-prem hint stays disabled until the pin control is
+   * verified on supported clients. Windows/OWA panes track without pinning.
    */
   itemTrackingRequiresPin: boolean;
 }

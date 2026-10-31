@@ -47,6 +47,32 @@ implement the seams listed below, and never modify the core itself.
   `EntraNaaAuthSource.ts`, `isNestedAppAuthSupported.ts`,
   `UnsupportedAuthSource.ts`), consumed by host auth roots.
 
+## Outlook manifest variants
+
+`manifests/manifest.xml` is the shared source for Exchange Online and Exchange
+Server/SE. `scripts/copy-runtime-manifest.mjs` stages it under both
+`manifest.xml` and `manifest-exchange-server.xml`; the backend renders the
+requirements and launch events according to the requested filename.
+The nested V1.1 block repeats all three command surfaces and resources,
+because nested overrides do not inherit them. Both declare pinning for message
+read/compose, shared folders, and no-item-context activation for message read.
+Online retains Mailbox 1.1 in the base manifest, 1.3 in V1.0, and 1.13 in V1.1.
+SE requires Mailbox 1.5 at all three levels and excludes launch events and their
+runtime resources.
+
+The SE override options follow the experimental manifest attached to
+[ERMAIN-1056](https://linear.app/erato-labs/issue/ERMAIN-1056).
+Structural comparison with the staging distribution found the sample equivalent
+to the Online manifest apart from deployed values and requirement levels. The
+rendered SE variant preserves that structure and all three 1.5 requirements.
+These declarations allow compatibility testing, but do not establish
+client support: Microsoft documents [pinning at Mailbox 1.5](https://learn.microsoft.com/en-us/office/dev/add-ins/outlook/pinnable-taskpane),
+[shared folders at 1.8/shared mailboxes at 1.13](https://learn.microsoft.com/en-us/javascript/api/manifest/supportssharedfolders),
+and [no-item-context at 1.13](https://learn.microsoft.com/en-us/office/dev/add-ins/outlook/contextless).
+Verify installation, pinning, and item changes on the target Exchange SE/Outlook
+combination before enabling the on-prem pinning hint in `OfficeProvider`.
+`pnpm run office:validate:rendered` includes both distribution variants.
+
 ## The six host seams
 
 1. **Host component slot** — `AddinChatCore` (`src/core/AddinChatCore.tsx`)

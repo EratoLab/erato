@@ -11,6 +11,11 @@ const root = fileURLToPath(new URL("..", import.meta.url));
 
 const MANIFESTS = [
   { name: "manifest.xml", launchEvents: true },
+  {
+    name: "manifest-exchange-server.xml",
+    templateName: "manifest.xml",
+    launchEvents: false,
+  },
   { name: "manifest-document.xml", launchEvents: false },
   { name: "manifest-document.xml", launchEvents: false, sharepoint: true },
 ];
@@ -55,6 +60,9 @@ const LAUNCH_EVENT_BLOCKS = {
 };
 
 function render({ manifest, template, withLaunchEvents }) {
+  const isExchangeServer = manifest.name === "manifest-exchange-server.xml";
+  const isOutlookManifest =
+    (manifest.templateName ?? manifest.name) === "manifest.xml";
   let rendered = template.replaceAll(
     "https://localhost:3002",
     "https://example.com",
@@ -78,14 +86,14 @@ function render({ manifest, template, withLaunchEvents }) {
       `^([ \\t]*)<!--\\{\\{${name}\\}\\}-->[ \\t]*\\n`,
       "m",
     );
-    if (line.test(rendered) !== manifest.launchEvents) {
+    if (line.test(rendered) !== isOutlookManifest) {
       throw new Error(
-        manifest.launchEvents
+        isOutlookManifest
           ? `${manifest.name} no longer carries the ${name} placeholder`
           : `${manifest.name} must not carry the ${name} placeholder`,
       );
     }
-    if (!manifest.launchEvents) {
+    if (!isOutlookManifest) {
       continue;
     }
     rendered = rendered.replace(line, (_match, indent) =>
@@ -97,7 +105,17 @@ function render({ manifest, template, withLaunchEvents }) {
         : "",
     );
   }
-  for (const [name, value] of Object.entries(PLACEHOLDER_VALUES)) {
+  const placeholderValues = {
+    ...PLACEHOLDER_VALUES,
+    OFFICE_ADDIN_MANIFEST_MAILBOX_MIN_VERSION: isExchangeServer ? "1.5" : "1.1",
+    OFFICE_ADDIN_MANIFEST_V1_0_MAILBOX_MIN_VERSION: isExchangeServer
+      ? "1.5"
+      : "1.3",
+    OFFICE_ADDIN_MANIFEST_V1_1_MAILBOX_MIN_VERSION: isExchangeServer
+      ? "1.5"
+      : "1.13",
+  };
+  for (const [name, value] of Object.entries(placeholderValues)) {
     rendered = rendered.replaceAll(`{{${name}}}`, value);
   }
   const leftovers = [...rendered.matchAll(/\{\{[A-Z0-9_]+\}\}/g)].map(
@@ -115,7 +133,10 @@ const outDir = mkdtempSync(join(tmpdir(), "erato-manifest-"));
 const validator = join(root, "node_modules/.bin/office-addin-manifest");
 let failed = false;
 for (const manifest of MANIFESTS) {
-  const template = readFileSync(join(root, "manifests", manifest.name), "utf8");
+  const template = readFileSync(
+    join(root, "manifests", manifest.templateName ?? manifest.name),
+    "utf8",
+  );
   const variants = manifest.launchEvents ? [false, true] : [false];
   for (const withLaunchEvents of variants) {
     const file = join(
