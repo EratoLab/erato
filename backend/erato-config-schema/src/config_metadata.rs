@@ -1,4 +1,4 @@
-//! Lifecycle metadata comes exclusively from facet attributes on config types
+//! Configuration metadata comes exclusively from facet attributes on config types
 //! and fields. Each property inherits independently; child fields override parents.
 use eyre::{Result, bail, eyre};
 use facet::{Field, Shape};
@@ -16,13 +16,37 @@ pub(crate) enum Stability {
     Deprecated,
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub(crate) struct Lifecycle {
-    pub stability: Option<Stability>,
-    pub introduced_in: Option<String>,
+#[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum SecurityRelevance {
+    High,
+    Medium,
+    Low,
+    None,
+    #[default]
+    Unknown,
 }
 
-impl Lifecycle {
+#[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum DefaultValueSecurity {
+    LessSecure,
+    MoreSecure,
+    #[default]
+    Unknown,
+    // Only emitted in the reference; never accepted as a source attribute.
+    UnknownNone,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(crate) struct ConfigMetadata {
+    pub stability: Option<Stability>,
+    pub introduced_in: Option<String>,
+    pub security_relevance: SecurityRelevance,
+    pub default_value_security: DefaultValueSecurity,
+}
+
+impl ConfigMetadata {
     pub fn for_root(shape: &Shape) -> Result<Self> {
         Self::default().for_attributes(shape.attributes, "")
     }
@@ -35,6 +59,8 @@ impl Lifecycle {
         let mut result = self.clone();
         let mut stability = None;
         let mut introduced_in = None;
+        let mut security_relevance = None;
+        let mut default_value_security = None;
         let mut deprecated = false;
         for attr in attributes {
             match attr.get_as::<Attr>() {
@@ -53,6 +79,37 @@ impl Lifecycle {
                         "introduced_in",
                     )?;
                 }
+                Some(Attr::SecurityRelevance(value)) => {
+                    let level =
+                        serde_json::from_value(serde_json::json!(value.level)).map_err(|err| {
+                            eyre!("Config key '{key}' has invalid security_relevance: {err}")
+                        })?;
+                    select(
+                        &mut security_relevance,
+                        level,
+                        value.under,
+                        key,
+                        "security_relevance",
+                    )?;
+                }
+                Some(Attr::DefaultValueSecurity(value)) => {
+                    let level =
+                        serde_json::from_value(serde_json::json!(value.level)).map_err(|err| {
+                            eyre!("Config key '{key}' has invalid default_value_security: {err}")
+                        })?;
+                    if level == DefaultValueSecurity::UnknownNone {
+                        bail!(
+                            "Config key '{key}': default_value_security 'unknown_none' is derived from security_relevance 'none' and cannot be declared"
+                        );
+                    }
+                    select(
+                        &mut default_value_security,
+                        level,
+                        value.under,
+                        key,
+                        "default_value_security",
+                    )?;
+                }
                 Some(Attr::Deprecated(_)) => deprecated = true,
                 _ => {}
             }
@@ -62,6 +119,12 @@ impl Lifecycle {
         }
         if let Some((_, value)) = introduced_in {
             result.introduced_in = Some(value);
+        }
+        if let Some((_, value)) = security_relevance {
+            result.security_relevance = value;
+        }
+        if let Some((_, value)) = default_value_security {
+            result.default_value_security = value;
         }
         if deprecated {
             result.stability = Some(Stability::Deprecated);

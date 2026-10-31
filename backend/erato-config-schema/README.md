@@ -1,6 +1,6 @@
 # erato-config-schema
 
-Reusable configuration lifecycle metadata and reference generation for
+Reusable configuration lifecycle and security metadata and reference generation for
 [Facet](https://facet.rs) types. This crate has no dependency on Erato's application
 configuration or runtime.
 
@@ -55,6 +55,8 @@ Use `#[facet(erato_config_schema::ATTRIBUTE(...))]` with:
 
 - `stability(level = "stable")`: set the stability of a field and its descendants.
 - `introduced_in(version = "1.0.0")`: set the first release containing a field.
+- `security_relevance(level = "unknown")`: set the security review priority.
+- `default_value_security(level = "unknown")`: classify the security of the default.
 - `deprecated(note = "Use new_key", replacement_key = "new_key",
   planned_removal_version = "2.0.0")`: deprecate a key. Only `note` is required;
   a replacement must exist in the generated reference.
@@ -63,12 +65,67 @@ Use `#[facet(erato_config_schema::ATTRIBUTE(...))]` with:
 - `hide_in_docs(hidden = true)`: hide a field and its descendants from docs.
 - `needs_scoped_replacement(enabled = true)`: flag a key for scoped replacement.
 
-Root type lifecycle attributes supply defaults. Field attributes override each
-property independently and propagate to descendants. Both lifecycle attributes
+Root type lifecycle and security attributes supply defaults. Field attributes override each
+property independently and propagate to descendants. All four attributes
 accept an optional `under = "section.<key>"` scope for shared types. Scopes match
 whole path segments; the most specific matching scope wins. Conflicting values
 with equal specificity are errors. Deprecated aliases are traversed independently
 so they can have different introduction dates from canonical keys.
+
+## Security review metadata
+
+Every generated entry includes `security_relevance` and `default_value_security`,
+including hidden fields and deprecated aliases. Omitted security attributes
+default to `unknown`; they do not assert that a setting is secure. The reference
+validator rejects missing or invalid classifications in JSON documents.
+
+`security_relevance` describes audit priority rather than whether a particular
+configuration is secure:
+
+- `high`: review first during a security audit.
+- `medium`: intermediate review priority.
+- `low`: review last during a security audit.
+- `none`: no known related attack paths; considered secure independently of the
+  chosen value, such as a purely visual UI variant.
+- `unknown`: security relevance has not yet been evaluated.
+
+`default_value_security` describes the chosen default:
+
+- `less_secure`: the default favors usability or another tradeoff over the more
+  secure option. Include a security context section in the field's comment,
+  explaining the tradeoff and any instance-specific mitigation.
+- `more_secure`: the default is the more secure option. Related settings still
+  need review according to their security relevance.
+- `unknown`: the default has not yet been evaluated.
+- `unknown_none`: generated only when the effective `security_relevance` is
+  `none`; the default cannot be classified as more or less secure. This value
+  cannot be declared in a source attribute.
+
+When emitting a field with relevance `none`, the generator replaces its default
+classification with `unknown_none`. The two attributes inherit independently:
+a child overriding relevance to another level uses its declared or inherited
+default classification again. Shared types can use `under` scopes for either
+attribute, just as they can for lifecycle metadata.
+
+```rust
+use facet::Facet;
+
+#[derive(Facet)]
+#[facet(erato_config_schema::stability(level = "stable"))]
+#[facet(erato_config_schema::introduced_in(version = "1.0.0"))]
+struct Config {
+    /// Security context: anonymous access improves onboarding. Public instances
+    /// should disable it and configure authentication for their organization.
+    #[facet(erato_config_schema::security_relevance(level = "high"))]
+    #[facet(erato_config_schema::default_value_security(level = "less_secure"))]
+    allow_anonymous_access: bool,
+    #[facet(erato_config_schema::security_relevance(level = "none"))]
+    compact_layout: bool,
+}
+
+let reference = erato_config_schema::generate_reference(Config::SHAPE).unwrap();
+assert_eq!(reference["compact_layout"]["default_value_security"], "unknown_none");
+```
 
 ## Serialization conventions
 
@@ -82,7 +139,7 @@ For application-specific map placeholders or custom serialized types, use
 `map_key_placeholder` callback receives the containing public path; its
 `custom_leaf_paths` callback can replace a type's traversal with relative paths
 (including `""` for the current key). Returned leaves inherit the containing
-field's lifecycle metadata. These callbacks also apply when traversing aliases.
+field's lifecycle and security metadata. These callbacks also apply when traversing aliases.
 
 For example, another application can name service map entries and document a
 custom serialized value without adding any rules to this crate:

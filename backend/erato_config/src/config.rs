@@ -517,6 +517,8 @@ fn validate_prompt_injection_filter_config(
 
 #[derive(Debug, Default, Deserialize, PartialEq, Clone, Facet, HeapSize)]
 #[facet(erato_config::stability(level = "unstable"))]
+#[facet(erato_config::security_relevance(level = "unknown"))]
+#[facet(erato_config::default_value_security(level = "unknown"))]
 pub struct AppConfig {
     // A opaque marker to signify the environment. This may be forwarded to diagnostic/observability tools to signify the environment,
     // but is never parsed/interpreted by the application to trigger environment-specific behavior.

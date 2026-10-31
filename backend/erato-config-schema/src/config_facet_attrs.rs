@@ -8,6 +8,10 @@ pub enum Attr {
         Stability(Stability),
         /// Sets the first release containing a field and its descendants.
         IntroducedIn(IntroducedIn),
+        /// Sets the security review priority of a field and its descendants.
+        SecurityRelevance(SecurityRelevance),
+        /// Classifies the security of a field's default value and its descendants.
+        DefaultValueSecurity(DefaultValueSecurity),
         /// Marks a config field as deprecated and provides transition metadata.
         Deprecated(Deprecated),
         /// Documents a deprecated Serde alias without deprecating the canonical field.
@@ -28,6 +32,21 @@ pub enum Attr {
     pub struct IntroducedIn {
         /// A project release version, or "unreleased" until release preparation.
         pub version: &'static str,
+        /// Restrict this declaration to a public config path (for shared types).
+        pub under: Option<&'static str>,
+    }
+
+    pub struct SecurityRelevance {
+        /// One of high, medium, low, none, or unknown.
+        pub level: &'static str,
+        /// Restrict this declaration to a public config path (for shared types).
+        pub under: Option<&'static str>,
+    }
+
+    pub struct DefaultValueSecurity {
+        /// One of less_secure, more_secure, or unknown. unknown_none is derived.
+        /// For less_secure, explain the security context in the field's comment.
+        pub level: &'static str,
         /// Restrict this declaration to a public config path (for shared types).
         pub under: Option<&'static str>,
     }

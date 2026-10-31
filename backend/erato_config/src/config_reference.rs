@@ -70,6 +70,8 @@ mod tests {
             }
             assert!(metadata["introduced_in"].is_string());
             assert!(metadata["stability"].is_string());
+            assert_eq!(metadata["security_relevance"], "unknown");
+            assert_eq!(metadata["default_value_security"], "unknown");
         }
         for suffix in [
             "",
