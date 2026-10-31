@@ -28,8 +28,7 @@ RUN if [ -n "$ERATO_FEATURES" ]; then \
 RUN mkdir -p /app/sbom && cargo about generate --manifest-path erato/Cargo.toml --config about.toml --locked about.hbs > /app/sbom/backend.txt
 
 # Pinned for security & build performance reasons
-FROM registry.eratolabs.com/erato/chainguard-glibc-dynamic:2026-06-25-dev
-
+FROM registry.eratolabs.com/erato/chainguard-glibc-dynamic:2026-10-30-dev@sha256:6fb1a88c68a9898d70760d1670581aa70717426c332d09f5dc81116fe7bc8e99
 WORKDIR /app
 
 # Copy the binary from builder
