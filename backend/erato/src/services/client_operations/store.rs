@@ -230,9 +230,9 @@ pub async fn claim(
         let token = row
             .claim_token
             .ok_or_else(|| eyre!("Operation claim missing"))?;
-        // A task's granted call may wait on a prompt on the device for as long
-        // as the attempt lives, so its executor renews the claim it holds.
-        if request.lineage.is_some() {
+        // A call may wait on a prompt on the device for as long as the attempt
+        // lives, so its executor renews the claim it holds.
+        if request.lineage.is_some() || kind.renews_claim() {
             let renewed = tx
                 .query_one_raw(statement(
                     "client_operations.claim",
@@ -510,6 +510,7 @@ async fn settle_server_outcome(
     let validated = ValidatedResult {
         output,
         succeeded: false,
+        file_ids: Vec::new(),
     };
     let changed = tx
         .execute_raw(statement(
@@ -534,6 +535,14 @@ async fn settle_server_outcome(
     Ok(())
 }
 
+/// A stored result's files, read as the user before the continuation starts:
+/// the model-visible wrapper around the tool's value and the ids the user may
+/// read.
+pub struct ResolvedFiles {
+    pub result: Value,
+    pub file_ids: Vec<Uuid>,
+}
+
 /// Called only after the existing generation CAS. Applying the result and
 /// claiming continuation commit together, so a retry can replay the message.
 pub async fn begin_continuation(
@@ -541,6 +550,7 @@ pub async fn begin_continuation(
     account_id: Uuid,
     attempt_id: Uuid,
     generation_id: Uuid,
+    files: Option<ResolvedFiles>,
 ) -> Result<attempts::Model, Report> {
     let initial = get(db, account_id, attempt_id).await?;
     let tx = db.begin().await?;
@@ -583,6 +593,10 @@ pub async fn begin_continuation(
             .ok_or_else(|| eyre!("Missing generation parameters"))?;
         let mut parameters: crate::models::message::GenerationParameters =
             serde_json::from_value(saved_parameters.clone())?;
+        let files = files.filter(|_| validated.succeeded);
+        if let Some(files) = &files {
+            validated.output["result"] = files.result.clone();
+        }
         let request: OperationRequest = serde_json::from_value(row.request.clone())?;
         if let Some(saved) = parameters
             .client_tools
@@ -639,19 +653,24 @@ pub async fn begin_continuation(
             saved_parameters["turn_consumption"]["submission_correction"] =
                 serde_json::to_value(correction)?;
         }
-        let Some(tool) = parsed.content.iter_mut().find_map(|part| match part {
-            ContentPart::ToolUse(tool) if tool.tool_call_id == row.tool_call_id => Some(tool),
-            _ => None,
+        let Some(position) = parsed.content.iter().position(|part| {
+            matches!(part, ContentPart::ToolUse(tool) if tool.tool_call_id == row.tool_call_id)
         }) else {
             return Err(eyre!("Operation tool part missing"));
         };
-        tool.status = if validated.succeeded {
-            MessageToolCallStatus::Success
-        } else {
-            MessageToolCallStatus::Error
-        };
-        tool.output = Some(validated.output);
-        tool.ended_at = Some(Utc::now().to_rfc3339());
+        if let ContentPart::ToolUse(tool) = &mut parsed.content[position] {
+            tool.status = if validated.succeeded {
+                MessageToolCallStatus::Success
+            } else {
+                MessageToolCallStatus::Error
+            };
+            tool.output = Some(validated.output);
+            tool.ended_at = Some(Utc::now().to_rfc3339());
+        }
+        if let Some(files) = files {
+            let pointers = link_result_files(&tx, row.chat_id, &files.file_ids).await?;
+            parsed.content.splice(position + 1..position + 1, pointers);
+        }
         tx.execute_raw(statement(
             "client_operations.continue",
             "UPDATE messages SET raw_message = $2, generation_parameters = $3 WHERE id = $1",
@@ -666,6 +685,44 @@ pub async fn begin_continuation(
     tx.execute_raw(statement("client_operations.continue", "UPDATE client_operation_attempts SET state = 'continuing', generation_id = $3 WHERE account_id = $1 AND attempt_id = $2", vec![account_id.into(), attempt_id.into(), generation_id.into()])).await?;
     tx.commit().await?;
     Ok(row)
+}
+
+/// The parts and chat links the live path makes for a result's files, inside
+/// the continuation's transaction. A file deleted since it was read is skipped.
+async fn link_result_files(
+    tx: &DatabaseTransaction,
+    chat_id: Uuid,
+    file_ids: &[Uuid],
+) -> Result<Vec<ContentPart>, Report> {
+    use crate::db::entity::{chat_file_uploads, file_uploads};
+    use crate::models::message::{ContentPartImageFilePointer, ContentPartTextFilePointer};
+    use sea_orm::ActiveValue::Set;
+    let mut parts = Vec::new();
+    for id in file_ids {
+        let Some(file) = file_uploads::Entity::find_by_id(*id).one(tx).await? else {
+            continue;
+        };
+        chat_file_uploads::Entity::insert(chat_file_uploads::ActiveModel {
+            chat_id: Set(chat_id),
+            file_upload_id: Set(*id),
+            ..Default::default()
+        })
+        .on_conflict_do_nothing()
+        .exec_without_returning(tx)
+        .await?;
+        parts.push(if crate::models::message::is_image_file(&file.filename) {
+            ContentPart::ImageFilePointer(ContentPartImageFilePointer {
+                file_upload_id: *id,
+                download_url: None,
+                preview_url: None,
+            })
+        } else {
+            ContentPart::TextFilePointer(ContentPartTextFilePointer {
+                file_upload_id: *id,
+            })
+        });
+    }
+    Ok(parts)
 }
 
 pub async fn complete_continuation(

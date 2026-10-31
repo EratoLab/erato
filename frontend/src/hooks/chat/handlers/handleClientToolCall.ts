@@ -3,6 +3,8 @@ import { withClientCallLock } from "@/lib/clientOperations/operationLock";
 import { operationExecutorBinding } from "@/lib/clientOperations/registration";
 
 import {
+  abortClientToolCall,
+  clientToolAcceptsGrantCalls,
   getClientToolExecutor,
   isClientToolResultLocalOnly,
   hasClientToolCallBeenAnswered,
@@ -30,6 +32,12 @@ interface HandleClientToolCallDeps {
   executor?: ExecutorBinding;
   /** Set on a delegated task's call, under the grant the server asserted. */
   lineage?: CallLineage;
+  /**
+   * How long the server still waits for this call, from its arrival. Timed on
+   * this device, never against the server's clock, so a prompt the call raised
+   * closes when the server stops waiting.
+   */
+  timeoutMs?: number;
 }
 
 /** A chat stream's event, or a call pushed over the executor stream. */
@@ -50,7 +58,7 @@ export async function handleClientToolCall(
   responseData: ClientToolCallEvent,
   deps: HandleClientToolCallDeps,
 ): Promise<void> {
-  const { message_id, tool_call_id, tool_name, input } = responseData;
+  const { message_id, tool_call_id, tool_name } = responseData;
   const { chatId } = deps;
   if (isClientToolResultLocalOnly(tool_name)) return;
 
@@ -66,17 +74,63 @@ export async function handleClientToolCall(
   markClientToolCallAnswered(tool_call_id);
 
   const base = { chat_id: chatId, message_id, tool_call_id };
+  let expired = false;
+  const deadline =
+    deps.timeoutMs === undefined
+      ? undefined
+      : setTimeout(() => {
+          expired = true;
+          abortClientToolCall(tool_call_id);
+        }, deps.timeoutMs);
+  try {
+    await runAndPost(responseData, deps, base, () => expired);
+  } finally {
+    clearTimeout(deadline);
+  }
+}
 
+function unavailableForTask(
+  toolName: string,
+): Pick<
+  ClientToolResultRequest,
+  "error" | "validation_errors" | "submission_feedback"
+> {
+  const message = `The client tool "${toolName}" is not available on this device right now, so nothing was read.`;
+  return {
+    error: message,
+    validation_errors: [{ path: "", code: "context_unavailable", message }],
+    submission_feedback: { terminal: true, recovery: "cannot_continue" },
+  };
+}
+
+async function runAndPost(
+  { tool_call_id, tool_name, message_id, input }: ClientToolCallEvent,
+  deps: HandleClientToolCallDeps,
+  base: { chat_id: string; message_id: string; tool_call_id: string },
+  expired: () => boolean,
+): Promise<void> {
+  const chatId = base.chat_id;
+  // Taken as the call starts: the server accepts the result only with the
+  // binding it tracks the call under, and the app may quit or restart while a
+  // prompt is open or the files upload.
+  const submitBinding = operationExecutorBinding(tool_name);
+  const binding = deps.executor ?? submitBinding;
   const executor = getClientToolExecutor(tool_name);
   if (!executor) {
+    // A task's call can arrive after its host went away but before the
+    // executor stream closed: that is a loss the task reports, not an error
+    // its model may retry.
     await postClientToolResult(
-      {
-        ...base,
-        error: `No client-tool executor registered for "${tool_name}"`,
-      },
+      deps.lineage && clientToolAcceptsGrantCalls(tool_name)
+        ? { ...base, ...unavailableForTask(tool_name) }
+        : {
+            ...base,
+            error: `No client-tool executor registered for "${tool_name}"`,
+          },
       tool_name,
       tool_call_id,
       deps,
+      binding,
     );
     return;
   }
@@ -85,6 +139,7 @@ export async function handleClientToolCall(
     // an aborted executor settles like any failure and POSTs its error. Held
     // until the POST settles, so a parked operation's handler defers its claim.
     const signal = trackClientToolCallAbort(tool_call_id, chatId);
+    if (expired()) abortClientToolCall(tool_call_id);
     try {
       let body: ClientToolResultRequest;
       try {
@@ -116,14 +171,13 @@ export async function handleClientToolCall(
           error: error instanceof Error ? error.message : String(error),
         };
       }
-      await postClientToolResult(body, tool_name, tool_call_id, deps);
+      await postClientToolResult(body, tool_name, tool_call_id, deps, binding);
     } finally {
       releaseClientToolCallAbort(tool_call_id);
     }
   };
   // A call that can park may already run in another pane of this browser.
-  if (operationExecutorBinding(tool_name))
-    await withClientCallLock(message_id, tool_call_id, run);
+  if (submitBinding) await withClientCallLock(message_id, tool_call_id, run);
   else await run();
 }
 
@@ -152,11 +206,11 @@ async function postClientToolResult(
   toolName: string,
   toolCallId: string,
   deps: HandleClientToolCallDeps,
+  /** A call with a durable operation identity only accepts its submit binding;
+   * a call from the executor stream only accepts the stream's binding. */
+  binding: ExecutorBinding | undefined,
 ): Promise<void> {
   if (isClientToolResultLocalOnly(toolName)) return;
-  // A call with a durable operation identity only accepts its submit binding;
-  // a call from the executor stream only accepts the stream's binding.
-  const binding = deps.executor ?? operationExecutorBinding(toolName);
   try {
     const response = await sendWithRetries(
       () =>

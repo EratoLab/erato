@@ -393,6 +393,7 @@ fn handed_call(
         tool_name: TOOL.into(),
         input: json!({}),
         lineage: None,
+        expires_at: None,
     }
 }
 

@@ -7,6 +7,8 @@ import {
   resultPreview,
 } from "@/lib/delegation/delegatedRunControls";
 import { delegationReasonLabel } from "@/lib/delegation/delegationLabels";
+import { localTaskLabel } from "@/lib/desktopSidecar/localTaskLabels";
+import { useLocalTaskViewsStore } from "@/lib/desktopSidecar/localTaskViewsStore";
 import { useDelegatedRunOpener } from "@/providers/DelegatedRunOpenProvider";
 import { getChatUrl } from "@/utils/chat/urlUtils";
 
@@ -15,7 +17,10 @@ import { railIconFor } from "../icons";
 import { SettledInfoPill, ToolStatusPill } from "./ToolStatusPill";
 
 import type { TraceStepStatus } from "../types";
+import type { LocalTaskViewState } from "@/lib/desktopSidecar/localTaskCoordinator";
 import type { ContentPartTaskResult } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+
+const WARNING_TONE = "bg-theme-warning-bg text-theme-warning-fg";
 
 const railStatusFor = (status: string): TraceStepStatus => {
   switch (status) {
@@ -41,7 +46,7 @@ const statusPill = (status: string) => {
             id: "trace.delegation.status.inputRequired",
             message: "Needs your decision",
           })}
-          toneClassName="bg-theme-warning-bg text-theme-warning-fg"
+          toneClassName={WARNING_TONE}
         />
       );
     case "failed":
@@ -65,6 +70,25 @@ const statusPill = (status: string) => {
       return <SettledInfoPill label={status} />;
   }
 };
+
+/**
+ * A local-evidence task waits for its review in the desktop app, not for an
+ * answer in its chat. This device names the native state when it knows the
+ * job; any other device says only where the review happens.
+ */
+const localReviewPill = (state: LocalTaskViewState | undefined) => (
+  <SettledInfoPill
+    label={
+      state === undefined
+        ? t({
+            id: "trace.taskResult.localReviewPending",
+            message: "Waiting for review in the desktop app",
+          })
+        : localTaskLabel(state)
+    }
+    toneClassName={state === "ready_for_review" ? WARNING_TONE : undefined}
+  />
+);
 
 interface TaskResultStepProps {
   part: ContentPartTaskResult;
@@ -99,7 +123,16 @@ export const TaskResultStep = ({
     part.redeliveries === undefined ? part.sequence > 0 : part.redeliveries > 0;
   const modelName = part.model?.display_name ?? part.model?.chat_provider_id;
   const summary = hasReply ? resultPreview(part.summary) : part.summary.trim();
-  const pill = statusPill(part.status);
+  // Client tasks always wait for their calls inside the parent's turn, so an
+  // async result that waits on the client comes from a local-evidence task.
+  const localReview =
+    part.status === "input_required" && part.reason === "client_pending";
+  const localState = useLocalTaskViewsStore((state) =>
+    localReview ? state.byChatId.get(part.child_chat_id) : undefined,
+  );
+  const pill = localReview
+    ? localReviewPill(localState)
+    : statusPill(part.status);
   const needsAttention = part.status !== "completed";
 
   return (
@@ -149,7 +182,7 @@ export const TaskResultStep = ({
           className="space-y-0.5 pb-1 pl-2.5 pt-0.5 text-xs text-theme-fg-muted"
           data-testid="task-result-body"
         >
-          {part.reason !== undefined && (
+          {part.reason !== undefined && !localReview && (
             <p data-testid="task-result-reason">
               {delegationReasonLabel(part.reason)}
             </p>
@@ -173,10 +206,15 @@ export const TaskResultStep = ({
           {/* The question waits in the run's own chat; nothing here can answer it. */}
           {part.status === "input_required" && (
             <p data-testid="task-result-input-required">
-              {t({
-                id: "trace.taskResult.inputRequired",
-                message: "Answer it in the task's own chat:",
-              })}{" "}
+              {localReview
+                ? t({
+                    id: "trace.taskResult.followInTaskChat",
+                    message: "Follow it in the task's own chat:",
+                  })
+                : t({
+                    id: "trace.taskResult.inputRequired",
+                    message: "Answer it in the task's own chat:",
+                  })}{" "}
               {openRun ? (
                 <Button
                   variant="link"

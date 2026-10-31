@@ -26,7 +26,7 @@ default: no shipped configuration sets `child_access`, `child_host_context` or
   - `child_dispatch` without `read`, and `child_dispatch = "durable"` on a tool
     without a `durable` table or whose `host_context` does not outlive the pane
     session (`ClientToolHostContext::outlives_pane_session`: `outlook_mailbox`
-    does, `word_document` does not).
+    and `desktop_sidecar` do, `word_document` does not).
 - `client_tools.tools.<key>.child_dispatch = "live" | "durable"` says how a
   task's calls reach the device. Unset, the tool follows
   `delegation.tasks.child_dispatch` (default `live`), which applies `durable`
@@ -60,11 +60,16 @@ first that fails becomes the fixed reason in `TaskSpec.client_task.unavailable`:
 | Check | Reason when it fails |
 | -- | -- |
 | `client_tools.executor_stream_enabled` is on | client tools are not enabled for tasks |
-| the parent's binding has host context `H` | the turn was not sent from the pane this task needs |
+| one of the parent's bindings has host context `H` | the turn was not sent from the pane this task needs |
 | the parent offered a `read` tool of host `H` on that binding | the turn offered no client tools that tasks may use |
 | the user's decision for it is not Never | the user does not allow these client tools |
 | an executor stream is present for the binding | the pane is not connected |
 | the stream lists the tool in `X-Erato-Child-Client-Tools` | the pane does not take calls from tasks |
+
+The parent's bindings are its `X-Erato-Executor` binding and those it sent in
+`X-Erato-Additional-Executors` (see "Desktop sidecar"); the grant takes the one
+whose host context is `H`, and a granted task runs on that binding, not on the
+parent's primary. A task without a grant keeps the primary.
 
 The grant lists exactly the tools that pass. `context_ref` is the parent turn's
 persisted `action_facet_args[child_context_arg]`, opaque to the backend.
@@ -126,7 +131,7 @@ the context version. The schema offered to the task leaves both out, in every
 | No answer | `timeout`, after the tool's own timeout |
 | Not granted, not offered, or set to Never | refused per call |
 | The user declined an Ask (Reject, Never allow or Withdraw) | `{"status":"cancelled","reason":"declined","error":…}` |
-| Durable: the user declined on the device | `{"status":"cancelled","reason":"declined","error":…}` |
+| The user declined on the device (a validation code `declined`, live or durable) | `{"status":"cancelled","reason":"declined","error":…}` |
 | Durable: no client ran it before the attempt ended | `{"status":"cancelled","reason":"expired","error":…}` |
 | Durable: the parent moved on, or the tool became Never or lost its grant | `{"status":"cancelled","reason":"withdrawn","error":…}` |
 
@@ -273,15 +278,16 @@ over gets no granted tools: the approved call is refused as not offered.
 `client_tools` to the task result, left out when empty:
 
 - `run_mode` and `unavailable` from the note;
-- `freshness`: the last `result.freshness` a successful granted call reported,
-  cut to the contract's keys (`context_ref`, `capturedAt`, `readAt`, `changes`
+- `freshness`: the last `result.freshness` a successful granted call reported
+  (`result.result.freshness` for a read that returned files, whose own result
+  sits inside the server's file wrapper), cut to the contract's keys (`context_ref`, `capturedAt`, `readAt`, `changes`
   from its four values, integer `counts`, `sections`), each string at most 256
   characters and at most 64 sections, because the task result reaches the parent's
   model outside the untrusted framing;
 - `declined`: the number of granted calls the user declined.
 
 The parent's trace steps (`localTrace`) for granted reads carry the part read and
-the freshness: `detail` is the call's receipt input fields
+the freshness, read from the same place: `detail` is the call's receipt input fields
 (`replay.keep_input_fields` without `child_context_input`) and the reported
 `changes`, and `counts` are the freshness counts. Only short tokens and integers
 are copied from the host. For Word the part stays empty until the overlay keeps a
@@ -299,7 +305,8 @@ carries a grant is refused with an error, without running the handler, when the
 executor was not registered with `acceptsGrantCalls`. Calls of the user's own
 turn are unchanged. The host checks `hostGrant` against its local context
 (contract §7). On the durable path a host's `declined` validation code becomes the
-`rejected` outcome with error code `declined`.
+`rejected` outcome with error code `declined`; on the live path the server maps
+the same code to the declined output itself.
 
 The parent chat lists waiting items below the decisions, naming the host
 ("Waiting for Outlook on this device"), and reads the row again every 5 s while
@@ -311,11 +318,18 @@ and asks nothing of the user.
 `erato/tests/integration_tests/api/messages/client_tool_operations/delegated/conformance.rs`
 runs the host-facing cases once for each row in `delegated/rows.rs`, against a
 test-driven pane: a fake host with a context version on `word_document`, the
-same fake host without one on `outlook_mailbox`, and the `word_document` and
+same fake host without one on `outlook_mailbox`, the `desktop_sidecar` and
+`desktop_sidecar_web` rows (ERMAIN-1034), and the `word_document` and
 `outlook_mailbox` rows, which stay ignored until ERMAIN-1003 and ERMAIN-1006
 enable them. A row marked `slow_path` also runs the slow-path cases
-(`delegated/slow_path.rs`): the fake host on `outlook_mailbox` and the ignored
-`outlook_mailbox` row. Every row has a guard case that holds `slow_path` to
+(`delegated/slow_path.rs`): the fake host on `outlook_mailbox`, both sidecar
+rows and the ignored `outlook_mailbox` row. A row's `envelope` says how every
+parent-side request of the harness (submit, regenerate, retry) sends its
+binding, as the shells send it: as `X-Erato-Executor`, in
+`X-Erato-Additional-Executors` beside another `X-Erato-Executor` (the
+`desktop_sidecar` row, with a fake Office binding, as an add-in sends it), or
+there alone (the `desktop_sidecar_web` row, as the web app sends it), so every
+case runs through both shapes of the envelope. Every row has a guard case that holds `slow_path` to
 whether its host's context outlives the pane session, so the `word_document`
 rows never take it. Four cases of the core alone stay in `delegated.rs` on the fake
 host: Always allow under a strict MCP policy, Never allow stored as the
@@ -327,12 +341,97 @@ A host's handlers pass `clientToolHostAdapterConformanceFailures` from
 `@erato/frontend/conformance`. The adapter checklist and templates are in
 `office-addin/ARCHITECTURE.md`, "Client tools in delegated tasks".
 
+## Desktop sidecar (ERMAIN-1034)
+
+- Host context `desktop_sidecar`: the local index of the Erato desktop app on the
+  user's device. Its calls run in the `desktop-sidecar` realm, so a binding must
+  carry that realm and `host_context.kind = "desktop_sidecar"`. It outlives the
+  pane, so its tools may set `child_dispatch = "durable"`. Wait note: "wait (uses
+  the Erato app on this device)".
+- The add-in shells already send an Office binding in `X-Erato-Executor`, so a
+  shell sends the sidecar binding in the submit header
+  `X-Erato-Additional-Executors`, a JSON array with one binding per host context
+  kind (at most four, at most 4096 bytes, each entry parsed on its own; an entry
+  with an unknown field, without a host context, or repeating a kind is
+  dropped). `X-Erato-Executor` keeps its shape, so an older backend ignores the
+  new header and routes as before. The request context stores the further
+  bindings as `additional_executors`; each configured tool's offer takes the
+  binding of its `host_context` (else `durable.host_context`), and a tool
+  without a matching binding keeps the primary.
+- A continuation re-offers with the persisted context the same way. The approval
+  continuation, the attached `/continue` and `resumestream` accept any of the
+  answering client's bindings.
+- File results: a durable call's result may carry the ids of the files the tool
+  uploaded; the server reads them as the user where it writes the tool's output
+  (see `durable-client-operations.md`, "File results"). The task result and the
+  parent's trace read such a read's freshness inside the file wrapper.
+- A task with a grant runs on the grant's binding, which may be one the parent
+  sent beside its primary, so a sidecar task of an Outlook turn reaches the
+  sidecar's stream and an Outlook task of the same turn the add-in's.
+- A device decline on the live path (the pane answers with a validation code
+  `declined`) ends a granted call with the declined output, as on the durable
+  path, so the task result counts it. The user's own calls keep their outcome.
+- A call handed to an executor stream carries `expires_at`, when the run stops
+  waiting (the hand-over plus the tool's timeout), and on delivery `timeout_ms`,
+  the time left by the server's clock, so a device prompt can close with the
+  call whatever the device's clock says.
+- The sidecar's lineage check on the device compares only the requesting chat
+  and message: its index has no owner context, and a parked call is often
+  claimed by a client that never saw the owner turn. The server checks the owner
+  at offer, dispatch, claim and every renewal. The device also refuses a grant
+  that carries a context version or no owner. The conformance kit runs it with
+  `ownerCheck: "server"`.
+- The binding the shells send (the web app and every add-in host, from
+  `DesktopSidecarClientTools`) is `{device_id: <this Erato client's routing id>,
+  realm: "desktop-sidecar", host_context: {kind: "desktop_sidecar", identity:
+  "local"}}`. The sidecar reports only a per-process instance id, which a restart
+  would change under every parked call, so the binding names the Erato client,
+  not the sidecar installation: a parked call is picked up by the same client
+  (the same browser profile, or the same add-in) while the app runs. A shell
+  sends it only while the app is ready, declares no local delegation and offers
+  one of the six tools, so a turn sent while the app is not running gives its
+  tasks no sidecar tools. The six tools are registered for grant calls; each
+  binding gets its own executor stream (see `durable-client-operations.md`,
+  "Executor streams"). The sidecar's stream moves to the tab the user uses, so
+  a pushed call and its file prompt land there.
+- A loss on the device (a grant that does not hold, the app not ready or gone
+  during the read, or a pushed call that finds its tool unavailable before the
+  stream closes) answers `context_unavailable`, terminal. On the live path the
+  call ends with it; on the slow path the device returns no result, drops its
+  claim and lets it lapse, so the call waits for the next claim once the app is
+  back. A device file approval of a task's call is registered under
+  `hostGrant.ownerChatId` and shown on the owner message with the task's brief;
+  it closes with the attempt (slow path) or the pushed call's `timeout_ms` (live
+  path). `get_sidecar_document` answers a decline with the `declined` code;
+  `read_sidecar_conversation` keeps the bodies and marks declined attachments
+  `rejected`.
+- Every sidecar read reports `freshness {readAt, changes, counts}` with zero
+  counts and no `context_ref`. `changes` is `none` only for a search whose every
+  source is available, has nothing newer queued and was observed no earlier than
+  the read began; otherwise `unknown`. Thread and document reads add the scope
+  signal for ERMAIN-1033, `freshness.scope = {kind, id, position, added}`: `id`
+  is `doc:<documentId>` (also for a file read with its thread, which never
+  widens), `index-thread:<sha256 of [sourceId, mailboxId, conversationKey]>`
+  from the email search hit this client saw, or `outlook-thread:<sha256 of
+  [mailboxId, thread GUID]>` from the messages' conversation index, else
+  `unknown` (a Teams message read with its thread, whose hit names the whole
+  chat or channel); `position` and `added` stay `unknown`
+  until the sidecar reports an index position and the items added since. The
+  server copies only the contract keys into the task result, so `scope` stays in
+  the task chat's tool output.
+- Strict mode is unchanged: any local delegation declaration keeps the six tools
+  unavailable and the binding unsent, so no task of such a turn gets a grant
+  (`NOT_FROM_HOST`). A declaration made while a call waits for the user's
+  approval keeps the files on the device on both paths. A local-evidence task's
+  card in the parent shows its review state from this device's local tasks, or
+  "Waiting for review in the desktop app" elsewhere.
+
 ## Not in this record
 
 - ERMAIN-1033: approving once per document or thread.
-- ERMAIN-1034: the desktop sidecar host context; showing a device prompt of a
-  grant call in the parent chat (registering it under `hostGrant.ownerChatId`);
-  mapping a device decline on the live path; and a multi-executor envelope
-  (ERMAIN-911), which a second host family with its own binding in one message
-  needs.
+- Sidecar follow-ups (the sidecar repository): a stable installation id in
+  discovery, so any client on the device can pick up a parked call; one thread
+  key on hits, exports and conversations, an index position and a count of items
+  added since one, so `scope.position` and `scope.added` become values; a live
+  "nothing new since" signal per source.
 - ERMAIN-1031: the child's model.

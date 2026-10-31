@@ -5,7 +5,10 @@ import {
   createSidecarChatTools,
   GET_SIDECAR_SEARCH_FIELDS_TOOL,
   GET_SIDECAR_DOCUMENT_TOOL,
+  LIST_SIDECAR_MAILBOXES_TOOL,
   numberedLabel,
+  READ_SIDECAR_CONVERSATION_TOOL,
+  SEARCH_SIDECAR_INDEX_TOOL,
   SIDECAR_CHAT_TOOL_METHODS,
 } from "./chatTools";
 import { resolveSidecarMailboxId } from "./mailboxAccess";
@@ -40,6 +43,12 @@ const externalIdCases = [
     expected: "AaM+opaque/id==",
   },
 ];
+
+const unknownFreshness = {
+  readAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
+  changes: "unknown",
+  counts: { own: 0, local: 0, remote: 0, unknown: 0 },
+};
 
 function setup(responses: Record<string, unknown>) {
   const request = vi.fn(async (body: string) => {
@@ -383,7 +392,7 @@ describe("shared desktop sidecar tools", () => {
       .find((item) => item.name === GET_SIDECAR_SEARCH_FIELDS_TOOL)!;
     expect(await tool.execute({}, context)).toEqual({
       ok: true,
-      result: { fields },
+      result: { fields, freshness: unknownFreshness },
     });
     expect(JSON.parse(env.request.mock.calls[0][0])).toMatchObject({
       method: "search.metadata_fields.v1",
@@ -1063,6 +1072,347 @@ it("blocks legacy tool execution for a present but unavailable delegation declar
   }
   expect(f.request).not.toHaveBeenCalled();
   expect(f.uploadAttachment).not.toHaveBeenCalled();
+});
+
+describe("a delegated task's calls", () => {
+  const grantContext = (overrides: object = {}) => ({
+    ...context,
+    hostGrant: {
+      ownerChatId: "owner-chat",
+      ownerMessageId: "owner-message",
+      requestingChatId: context.chatId,
+      requestingMessageId: context.messageId,
+    },
+    ...overrides,
+  });
+  const documentId = "AAAAAAAA-1111-4111-8111-111111111111";
+  const searchHit = {
+    documentId,
+    sourceId: "11111111-2222-4333-8444-555555555555",
+    mailboxId,
+    chunkId: null,
+    score: 1,
+    kind: "email",
+    title: null,
+    sender: null,
+    date: null,
+    mimeType: "message/rfc822",
+    conversationKey: "conversation-1",
+  };
+  const search = {
+    hits: [searchHit],
+    elapsedMs: 0,
+    blocksRead: 0,
+    candidatesScored: 0,
+  };
+  const document = {
+    filename: "message.eml",
+    mimeType: "message/rfc822",
+    contentBase64: globalThis.btoa("document bytes"),
+  };
+  const byToolName = (env: ReturnType<typeof setup>, name: string) =>
+    env.tools().find((tool) => tool.name === name)!;
+  const isLoss = {
+    ok: false,
+    validationErrors: [
+      expect.objectContaining({ code: "context_unavailable" }),
+    ],
+    submissionFeedback: { terminal: true, recovery: "cannot_continue" },
+  };
+
+  it("searches under a valid grant and reports coverage and freshness", async () => {
+    const env = setup({ "search.query.v1": search });
+    const outcome = await byToolName(env, SEARCH_SIDECAR_INDEX_TOOL).execute(
+      { text: "contract" },
+      grantContext(),
+    );
+    expect(outcome).toMatchObject({
+      ok: true,
+      result: {
+        coverage: { v: 1, status: "unknown" },
+        freshness: unknownFreshness,
+      },
+    });
+    expect(outcome).not.toHaveProperty("result.freshness.scope");
+  });
+
+  it("reports each source's searched period, and no changes only for an index caught up since the read", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-09-15T11:00:00Z"));
+    try {
+      const run = async (source: Partial<RawCoverageSource>) =>
+        byToolName(
+          setup({ "search.query.v1": withCoverage([coverageSource(source)]) }),
+          SEARCH_SIDECAR_INDEX_TOOL,
+        ).execute({ text: "contract" }, grantContext());
+      expect(await run({})).toMatchObject({
+        ok: true,
+        result: {
+          coverage: {
+            sources: [
+              {
+                from: "2026-01-01T00:00:00Z",
+                to: "2026-09-15T12:00:00Z",
+                status: "complete",
+              },
+            ],
+          },
+          freshness: {
+            ...unknownFreshness,
+            readAt: "2026-09-15T11:00:00.000Z",
+            changes: "none",
+          },
+        },
+      });
+      expect(await run({ observedAt: "2026-09-15T10:59:59Z" })).toMatchObject({
+        result: { freshness: { changes: "unknown" } },
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it.each<[string, object]>([
+    ["another requesting chat", { chatId: "other-chat" }],
+    ["another requesting message", { messageId: "other-message" }],
+    [
+      "a context version",
+      {
+        hostGrant: {
+          ownerChatId: "owner-chat",
+          ownerMessageId: "owner-message",
+          requestingChatId: context.chatId,
+          requestingMessageId: context.messageId,
+          contextRef: "v1",
+        },
+      },
+    ],
+    [
+      "no owner",
+      {
+        hostGrant: {
+          ownerChatId: "",
+          ownerMessageId: "owner-message",
+          requestingChatId: context.chatId,
+          requestingMessageId: context.messageId,
+        },
+      },
+    ],
+  ])(
+    "refuses a grant with %s before reading or asking",
+    async (_name, overrides) => {
+      const env = setup({ "sources.get_document.v1": document });
+      for (const tool of env.tools()) {
+        expect(
+          await tool.execute({ documentId }, grantContext(overrides)),
+        ).toMatchObject(isLoss);
+      }
+      expect(env.request).not.toHaveBeenCalled();
+      expect(env.options.approveFiles).not.toHaveBeenCalled();
+    },
+  );
+
+  it("loses the call while the app is not ready, and runs it again once it is", async () => {
+    const env = setup({
+      "outlook.list_mailboxes.v1": { mailboxes: [], warnings: [] },
+    });
+    env.supports.mockReturnValue(false);
+    const tool = byToolName(env, LIST_SIDECAR_MAILBOXES_TOOL);
+    expect(await tool.execute({}, grantContext())).toMatchObject(isLoss);
+    expect(env.request).not.toHaveBeenCalled();
+    env.supports.mockReturnValue(true);
+    expect(await tool.execute({}, grantContext())).toMatchObject({ ok: true });
+  });
+
+  it("loses a task's call when the app goes away during the read, but not the user's own", async () => {
+    const env = setup({});
+    env.request.mockRejectedValue(new Error("connection refused"));
+    const tool = byToolName(env, SEARCH_SIDECAR_INDEX_TOOL);
+    expect(await tool.execute({ text: "a" }, grantContext())).toMatchObject(
+      isLoss,
+    );
+    // The loss is not kept for a replay: the next claim reads again.
+    expect(await tool.execute({ text: "a" }, grantContext())).toMatchObject(
+      isLoss,
+    );
+    expect(env.request).toHaveBeenCalledTimes(2);
+    const own = await tool.execute(
+      { text: "a" },
+      { ...context, toolCallId: "own" },
+    );
+    expect(own).toEqual({ ok: false, error: "Sidecar communication failed." });
+  });
+
+  it("reads again after a run its signal stopped", async () => {
+    const env = setup({ "search.query.v1": search });
+    const tool = byToolName(env, SEARCH_SIDECAR_INDEX_TOOL);
+    expect(
+      await tool.execute(
+        { text: "a" },
+        grantContext({ signal: AbortSignal.abort() }),
+      ),
+    ).toMatchObject({ ok: false });
+    expect(await tool.execute({ text: "a" }, grantContext())).toMatchObject({
+      ok: true,
+    });
+    const methods = env.request.mock.calls.map(
+      ([body]) => (JSON.parse(body) as { method: string }).method,
+    );
+    expect(methods.filter((method) => method === "search.query.v1")).toEqual([
+      "search.query.v1",
+    ]);
+  });
+
+  it("asks under the task's grant, uploads to the task's chat and names the document", async () => {
+    const env = setup({ "sources.get_document.v1": document });
+    const call = grantContext();
+    const outcome = await byToolName(env, GET_SIDECAR_DOCUMENT_TOOL).execute(
+      { documentId },
+      call,
+    );
+    expect(env.options.approveFiles.mock.calls[0]?.[1]).toMatchObject({
+      hostGrant: call.hostGrant,
+    });
+    expect(env.uploadAttachment.mock.calls[0]?.[1]).toBe("chat");
+    expect(outcome).toMatchObject({
+      ok: true,
+      fileUploadIds: ["uploaded-file"],
+      result: {
+        freshness: {
+          ...unknownFreshness,
+          scope: {
+            kind: "document",
+            id: `doc:${documentId.toLowerCase()}`,
+            position: "unknown",
+            added: "unknown",
+          },
+        },
+      },
+    });
+  });
+
+  it("names a thread export by the thread its search hit placed it in", async () => {
+    const env = setup({
+      "search.query.v1": search,
+      "sources.get_document.v1": document,
+    });
+    const tools = env.tools();
+    const getDocument = tools.find(
+      (tool) => tool.name === GET_SIDECAR_DOCUMENT_TOOL,
+    )!;
+    const before = await getDocument.execute(
+      { documentId, subject_scope: "subject_with_thread" },
+      { ...context, toolCallId: "before" },
+    );
+    expect(before).toMatchObject({
+      result: { freshness: { scope: { kind: "thread", id: "unknown" } } },
+    });
+    await tools
+      .find((tool) => tool.name === SEARCH_SIDECAR_INDEX_TOOL)!
+      .execute({ text: "a" }, context);
+    const after = await getDocument.execute(
+      { documentId, subject_scope: "subject_with_thread" },
+      { ...context, toolCallId: "after" },
+    );
+    expect(after).toMatchObject({
+      result: {
+        freshness: {
+          scope: {
+            kind: "thread",
+            id: expect.stringMatching(/^index-thread:[0-9a-f]{64}$/),
+          },
+        },
+      },
+    });
+  });
+
+  it("answers a decline on the device with the declined code for a task, as before for the user", async () => {
+    const env = setup({ "sources.get_document.v1": document });
+    env.options.approveFiles.mockResolvedValue(new Set());
+    const tool = byToolName(env, GET_SIDECAR_DOCUMENT_TOOL);
+    expect(await tool.execute({ documentId }, grantContext())).toMatchObject({
+      ok: false,
+      validationErrors: [{ path: "", code: "declined" }],
+    });
+    const own = await tool.execute(
+      { documentId },
+      { ...context, toolCallId: "own" },
+    );
+    expect(own).toEqual({
+      ok: false,
+      error:
+        "The user rejected uploading this file. Do not retry without their permission.",
+    });
+    expect(env.uploadAttachment).not.toHaveBeenCalled();
+  });
+
+  it("keeps a task's thread read when its attachments are declined", async () => {
+    const env = setup({ "outlook.get_conversation.v1": conversation() });
+    env.options.approveFiles.mockResolvedValue(new Set());
+    const outcome = await byToolName(
+      env,
+      READ_SIDECAR_CONVERSATION_TOOL,
+    ).execute({ ...anchor, includeAttachments: true }, grantContext());
+    expect(outcome).toMatchObject({
+      ok: true,
+      fileUploadIds: [],
+      result: {
+        state: "partial",
+        messages: [
+          { bodyText: "Hello\n\nworld", attachments: [{ status: "rejected" }] },
+        ],
+      },
+    });
+  });
+
+  it("names a conversation by the thread its messages agree on", async () => {
+    const data = conversation();
+    data.messages[0].conversationIndex = `01d7a1b2c3d4${"ab".repeat(16)}`;
+    const env = setup({ "outlook.get_conversation.v1": data });
+    const outcome = await byToolName(
+      env,
+      READ_SIDECAR_CONVERSATION_TOOL,
+    ).execute(anchor, grantContext());
+    expect(outcome).toMatchObject({
+      result: {
+        freshness: {
+          ...unknownFreshness,
+          scope: {
+            kind: "thread",
+            id: expect.stringMatching(/^outlook-thread:[0-9a-f]{64}$/),
+            position: "unknown",
+            added: "unknown",
+          },
+        },
+      },
+    });
+  });
+
+  it.each([GET_SIDECAR_DOCUMENT_TOOL, READ_SIDECAR_CONVERSATION_TOOL])(
+    "%s uploads nothing when strict mode is declared while the user decides",
+    async (name) => {
+      const env = setup({
+        "sources.get_document.v1": document,
+        "outlook.get_conversation.v1": conversation(),
+      });
+      const snapshot = env.client.getSnapshot();
+      env.options.approveFiles.mockImplementation(async (files) => {
+        vi.spyOn(env.client, "getSnapshot").mockReturnValue({
+          ...snapshot,
+          localDelegation: { enforcement: "unavailable" },
+          strictLocalDelegation: false,
+        });
+        return new Set(files);
+      });
+      const tool = byToolName(env, name);
+      const input = { documentId, ...anchor, includeAttachments: true };
+      expect(await tool.execute(input, grantContext())).toEqual({
+        ok: true,
+        disposition: "local_only",
+      });
+      expect(env.uploadAttachment).not.toHaveBeenCalled();
+    },
+  );
 });
 
 const byName = (a: { name: string }, b: { name: string }) =>

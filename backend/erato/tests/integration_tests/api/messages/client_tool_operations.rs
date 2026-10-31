@@ -174,7 +174,10 @@ fn value_result(request: &OperationRequest, value: Value) -> OperationResult {
         operation_id: request.operation_id.clone(),
         base_revision: None,
         outcome: OperationOutcome::Succeeded,
-        result: Some(OperationValue::Value { value }),
+        result: Some(OperationValue::Value {
+            value,
+            file_upload_ids: Vec::new(),
+        }),
         error: None,
         executor: request.binding.clone(),
     }
@@ -1319,12 +1322,13 @@ async fn a_same_binding_claim_renews_a_grant_operation_up_to_the_expiry(pool: Po
     assert_eq!(capped.claim_expires_at, Some(capped.expires_at));
 }
 
+/// The user's own call may wait on a file approval on the device as long as
+/// a task's call may.
 #[sqlx::test(migrator = "crate::MIGRATOR")]
-async fn a_same_binding_reclaim_of_a_plain_client_tool_operation_does_not_extend_the_lease(
-    pool: Pool<Postgres>,
-) {
+async fn a_same_binding_claim_renews_the_users_own_call_up_to_the_expiry(pool: Pool<Postgres>) {
     let setup = setup(pool, 10, true, true).await;
     let request = park(&setup).await;
+    assert!(request.lineage.is_none());
     let token = store_claim(&setup.state, &request, &[]).await.unwrap();
     set_attempt_times(
         &setup.state,
@@ -1336,8 +1340,23 @@ async fn a_same_binding_reclaim_of_a_plain_client_tool_operation_does_not_extend
         store_claim(&setup.state, &request, &[]).await.unwrap(),
         token
     );
-    let row = attempt(&setup.state, request.attempt_id).await;
-    assert!(seconds_from_now(row.claim_expires_at.unwrap()) <= 5);
+    let renewed = attempt(&setup.state, request.attempt_id).await;
+    assert!(
+        (85..=90).contains(&seconds_from_now(renewed.claim_expires_at.unwrap())),
+        "the renewal grants a full lease again"
+    );
+    set_attempt_times(
+        &setup.state,
+        request.attempt_id,
+        "expires_at = now() + interval '20 seconds'",
+    )
+    .await;
+    assert_eq!(
+        store_claim(&setup.state, &request, &[]).await.unwrap(),
+        token
+    );
+    let capped = attempt(&setup.state, request.attempt_id).await;
+    assert_eq!(capped.claim_expires_at, Some(capped.expires_at));
 }
 
 #[sqlx::test(migrator = "crate::MIGRATOR")]
@@ -1392,3 +1411,307 @@ mod word;
 mod executor_stream;
 
 mod delegated;
+
+async fn upload_file(state: &erato::state::AppState, token: &str, text: &str) -> Uuid {
+    use axum_test::multipart::{MultipartForm, Part};
+    let response = app_server(state.clone())
+        .post("/api/v1beta/me/files")
+        .with_bearer_token(token)
+        .multipart(
+            MultipartForm::new().add_part(
+                "file",
+                Part::bytes(text.as_bytes().to_vec())
+                    .file_name("minutes.txt")
+                    .mime_type("text/plain"),
+            ),
+        )
+        .await;
+    response.assert_status_ok();
+    Uuid::parse_str(response.json::<Value>()["files"][0]["id"].as_str().unwrap()).unwrap()
+}
+
+fn file_result(request: &OperationRequest, value: Value, files: Vec<Uuid>) -> OperationResult {
+    OperationResult {
+        result: Some(OperationValue::Value {
+            value,
+            file_upload_ids: files,
+        }),
+        ..value_result(request, Value::Null)
+    }
+}
+
+/// The parts after the call's tool part that point at files.
+fn file_pointers_after_call(message: &erato::db::entity::messages::Model) -> Vec<Value> {
+    message.raw_message["content"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .skip_while(|part| {
+            !(part["content_type"] == "tool_use"
+                && part["tool_call_id"]
+                    .as_str()
+                    .is_some_and(|id| id.ends_with(&format!(":{CALL}"))))
+        })
+        .skip(1)
+        .take_while(|part| part["content_type"] == "text_file_pointer")
+        .cloned()
+        .collect()
+}
+
+async fn linked_to_chat(state: &erato::state::AppState, chat_id: Uuid, file_id: Uuid) -> bool {
+    chat_file_uploads::Entity::find()
+        .filter(chat_file_uploads::Column::ChatId.eq(chat_id))
+        .filter(chat_file_uploads::Column::FileUploadId.eq(file_id))
+        .one(&state.db)
+        .await
+        .unwrap()
+        .is_some()
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_claimed_result_with_files_is_read_at_continuation(pool: Pool<Postgres>) {
+    let setup = setup(pool, 10, true, true).await;
+    let request = park(&setup).await;
+    let file_id = upload_file(&setup.state, TEST_JWT_TOKEN, "CLAIMED-FILE-TEXT").await;
+    let token = claim_token(&setup.state, &request).await;
+    // Not the configured result schema: a result with files is not checked
+    // against it.
+    let value = json!({"document": "CLAIMED-VALUE"});
+    post_result(
+        &setup.state,
+        &token,
+        &file_result(&request, value.clone(), vec![file_id]),
+    )
+    .await
+    .assert_status_ok();
+    let row = attempt(&setup.state, request.attempt_id).await;
+    assert_eq!(
+        row.result.unwrap()["result"],
+        json!({"type": "value", "value": value, "file_upload_ids": [file_id]})
+    );
+    assert_eq!(row.validated_result.unwrap()["file_ids"], json!([file_id]));
+    assert!(!linked_to_chat(&setup.state, setup.chat_id, file_id).await);
+
+    continue_turn(&setup.state, request.attempt_id).await;
+    let message = assistant_message(&setup).await;
+    let output = call_output(&message);
+    assert_eq!(output["status"], "success");
+    assert_eq!(output["result"]["result"], value);
+    assert_eq!(output["result"]["files"][0]["fileId"], json!(file_id));
+    assert!(
+        output["result"]["files"][0]["text"]
+            .as_str()
+            .unwrap()
+            .contains("CLAIMED-FILE-TEXT")
+    );
+    let pointers = file_pointers_after_call(&message);
+    assert_eq!(pointers.len(), 1);
+    assert_eq!(pointers[0]["file_upload_id"], json!(file_id));
+    assert!(linked_to_chat(&setup.state, setup.chat_id, file_id).await);
+    let seen = last_tool_results(&setup.recorder);
+    assert_eq!(seen.len(), 1);
+    assert!(seen[0].to_string().contains("CLAIMED-FILE-TEXT"));
+    assert!(message.raw_message.to_string().contains(ANSWER));
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_live_result_with_files_on_a_durable_tool_keeps_its_text(pool: Pool<Postgres>) {
+    let setup = setup(pool, 60_000, true, true).await;
+    let file_id = upload_file(&setup.state, TEST_JWT_TOKEN, "LIVE-FILE-TEXT").await;
+    let value = json!({"document": "LIVE-VALUE"});
+    let (response, answer) = submit_and_answer(
+        &setup,
+        Some(&mailbox()),
+        json!({"result": value, "file_upload_ids": [file_id]}),
+        Some(&mailbox()),
+    )
+    .await;
+    response.assert_status_ok();
+    answer.assert_status_ok();
+    assert_eq!(answer.json::<Value>()["stored"], false);
+    assert!(chat_attempts(&setup.state, setup.chat_id).await.is_empty());
+    let message = assistant_message(&setup).await;
+    let output = call_output(&message);
+    assert_eq!(output["status"], "success");
+    assert_eq!(output["result"]["result"], value);
+    assert!(
+        output["result"]["files"][0]["text"]
+            .as_str()
+            .unwrap()
+            .contains("LIVE-FILE-TEXT")
+    );
+    assert_eq!(file_pointers_after_call(&message).len(), 1);
+    assert!(linked_to_chat(&setup.state, setup.chat_id, file_id).await);
+    assert!(
+        last_tool_results(&setup.recorder)[0]
+            .to_string()
+            .contains("LIVE-FILE-TEXT")
+    );
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_stored_live_result_with_files_is_read_at_continuation(pool: Pool<Postgres>) {
+    let setup = setup(pool, 10, true, true).await;
+    let request = park(&setup).await;
+    let file_id = upload_file(&setup.state, TEST_JWT_TOKEN, "LATE-FILE-TEXT").await;
+    let value = json!({"document": "LATE-VALUE"});
+    let call = (request.message_id, request.tool_call_id.clone());
+    let late = post_live(
+        &setup.state,
+        setup.chat_id,
+        &call,
+        json!({"result": value, "file_upload_ids": [file_id]}),
+        Some(&mailbox()),
+    )
+    .await;
+    late.assert_status_ok();
+    assert_eq!(late.json::<Value>()["stored"], true);
+    let row = attempt(&setup.state, request.attempt_id).await;
+    assert_eq!(row.state, AttemptState::Ready);
+    assert_eq!(
+        row.result.unwrap()["result"],
+        json!({"type": "value", "value": value, "file_upload_ids": [file_id]})
+    );
+    continue_turn(&setup.state, request.attempt_id).await;
+    let message = assistant_message(&setup).await;
+    let output = call_output(&message);
+    assert_eq!(output["result"]["result"], value);
+    assert!(
+        output["result"]["files"][0]["text"]
+            .as_str()
+            .unwrap()
+            .contains("LATE-FILE-TEXT")
+    );
+    assert_eq!(file_pointers_after_call(&message).len(), 1);
+    assert!(linked_to_chat(&setup.state, setup.chat_id, file_id).await);
+}
+
+/// A file result that reaches the turn after its wait ran out, while the call
+/// is still being stored, is stored as the tool's own value, so the
+/// continuation reads its file once.
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_file_result_delivered_while_the_call_parks_is_read_once(pool: Pool<Postgres>) {
+    use sea_orm::{ConnectionTrait, TransactionTrait};
+    let setup = setup(pool, 1_000, true, true).await;
+    let file_id = upload_file(&setup.state, TEST_JWT_TOKEN, "RACED-FILE-TEXT").await;
+    let value = json!({"document": "RACED-VALUE"});
+    let (response, answer) = tokio::time::timeout(Duration::from_secs(20), async {
+        tokio::join!(
+            submit(&setup.state, setup.chat_id, Some(&mailbox())),
+            async {
+                let call = live_call(&setup.state, setup.chat_id).await;
+                // The chat's operation fence: the timed-out call waits for it
+                // to be stored, and its waiter stays registered meanwhile.
+                let fence = setup.state.db.begin().await.unwrap();
+                fence
+                    .execute_unprepared(&format!(
+                        "SELECT pg_advisory_xact_lock(hashtextextended('{}'::text, 0))",
+                        setup.chat_id
+                    ))
+                    .await
+                    .unwrap();
+                tokio::time::sleep(Duration::from_millis(3_000)).await;
+                assert!(chat_attempts(&setup.state, setup.chat_id).await.is_empty());
+                let answer = post_live(
+                    &setup.state,
+                    setup.chat_id,
+                    &call,
+                    json!({"result": value.clone(), "file_upload_ids": [file_id]}),
+                    Some(&mailbox()),
+                )
+                .await;
+                fence.rollback().await.unwrap();
+                answer
+            }
+        )
+    })
+    .await
+    .expect("turn did not finish");
+    response.assert_status_ok();
+    answer.assert_status_ok();
+    assert_eq!(answer.json::<Value>()["delivered"], true);
+    assert_eq!(answer.json::<Value>()["stored"], false);
+    let request = parked(&setup).await;
+    let row = attempt(&setup.state, request.attempt_id).await;
+    assert_eq!(row.state, AttemptState::Ready);
+    assert_eq!(
+        row.result.unwrap()["result"],
+        json!({"type": "value", "value": value, "file_upload_ids": [file_id]})
+    );
+    continue_turn(&setup.state, request.attempt_id).await;
+    let message = assistant_message(&setup).await;
+    let output = call_output(&message);
+    assert_eq!(output["result"]["result"], value);
+    assert_eq!(output["result"]["files"][0]["fileId"], json!(file_id));
+    assert_eq!(file_pointers_after_call(&message).len(), 1);
+    let seen = last_tool_results(&setup.recorder);
+    assert_eq!(seen.len(), 1);
+    assert_eq!(seen[0].to_string().matches("RACED-FILE-TEXT").count(), 1);
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_file_the_user_cannot_read_is_not_attached_at_continuation(pool: Pool<Postgres>) {
+    let setup = setup(pool, 10, true, true).await;
+    let request = park(&setup).await;
+    let foreign_token = crate::test_utils::JwtTokenBuilder::new()
+        .subject("another-file-owner")
+        .build();
+    let foreign_id = upload_file(&setup.state, &foreign_token, "FOREIGN-FILE-TEXT").await;
+    let token = claim_token(&setup.state, &request).await;
+    post_result(
+        &setup.state,
+        &token,
+        &file_result(&request, json!({"document": "VALUE"}), vec![foreign_id]),
+    )
+    .await
+    .assert_status_ok();
+    continue_turn(&setup.state, request.attempt_id).await;
+    let message = assistant_message(&setup).await;
+    let output = call_output(&message);
+    assert_eq!(output["status"], "success");
+    assert_eq!(output["result"]["files"][0]["fileId"], json!(foreign_id));
+    assert!(output["result"]["files"][0]["unavailableReason"].is_string());
+    assert!(file_pointers_after_call(&message).is_empty());
+    assert!(!linked_to_chat(&setup.state, setup.chat_id, foreign_id).await);
+    assert!(
+        !message
+            .raw_message
+            .to_string()
+            .contains("FOREIGN-FILE-TEXT")
+    );
+    assert!(message.raw_message.to_string().contains(ANSWER));
+}
+
+/// A replica of this release continues a row a newer release wrote, with
+/// keys it does not know in the stored request and result.
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_stored_result_with_a_newer_field_still_continues(pool: Pool<Postgres>) {
+    let setup = setup(pool, 10, true, true).await;
+    let request = park(&setup).await;
+    let token = claim_token(&setup.state, &request).await;
+    post_result(
+        &setup.state,
+        &token,
+        &value_result(&request, availability()),
+    )
+    .await
+    .assert_status_ok();
+    let row = attempt(&setup.state, request.attempt_id).await;
+    let mut stored_request = row.request.clone();
+    stored_request["future"] = json!(1);
+    let mut stored_result = row.result.clone().unwrap();
+    stored_result["future"] = json!(1);
+    stored_result["result"]["future"] = json!(1);
+    let mut newer: attempts::ActiveModel = row.into();
+    newer.request = ActiveValue::Set(stored_request);
+    newer.result = ActiveValue::Set(Some(stored_result));
+    newer.update(&setup.state.db).await.unwrap();
+    continue_turn(&setup.state, request.attempt_id).await;
+    let message = assistant_message(&setup).await;
+    assert!(message.raw_message.to_string().contains(ANSWER));
+    assert!(
+        call_output(&message)["result"]
+            .to_string()
+            .contains("AVAIL-SLOT-MARKER")
+    );
+}

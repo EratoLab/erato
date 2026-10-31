@@ -9,11 +9,13 @@ import {
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 
 import { continueAttachedOperation } from "./attachedContinuation";
-import { executorStreamHeaders, openExecutorStream } from "./executorStream";
+import { executorStreamHeaderSets, openExecutorStream } from "./executorStream";
 import { clientOperationHandlerRegistry } from "./handlers";
 import { withClientCallLock } from "./operationLock";
+import { browserTabSignals, holdSharedStream } from "./sharedStream";
 
 import type { ClientOperationHandlerRegistry } from "./handlers";
+import type { TabSignals } from "./sharedStream";
 import type {
   ClientOperationView,
   ClaimClientOperationResponse,
@@ -41,11 +43,13 @@ export interface ClientOperationApi {
   ): Promise<unknown>;
   continue(id: string, signal: AbortSignal): Promise<unknown>;
   attach?(request: OperationRequest, signal: AbortSignal): Promise<unknown>;
-  /** Holds the pane's executor stream open until `signal` aborts. */
+  /** Holds one of the pane's executor streams open until `signal` aborts;
+   * `onCall` gets each call it delivers while that call runs. */
   stream?(
     headers: Record<string, string>,
     onNudge: () => void,
     signal: AbortSignal,
+    onCall?: (call: Promise<unknown>) => void,
   ): Promise<unknown>;
   cancel(id: string, signal: AbortSignal): Promise<unknown>;
 }
@@ -152,6 +156,14 @@ function sameBinding(a: ExecutorBinding, b: ExecutorBinding): boolean {
     a.host_context?.identity === b.host_context?.identity
   );
 }
+/** A claim kept alive while its handler works. */
+interface HeldClaim {
+  /** Aborts when the claim is refused or lapses, or the attempt ends. */
+  signal: AbortSignal;
+  /** The latest token, which the result must carry. */
+  claim: () => ClaimClientOperationResponse;
+  release: () => void;
+}
 /** Delay before the one early retry of a refused claim; the shell's poll stays
  * the fallback. */
 const CLAIM_RETRY_MS = 1_500;
@@ -176,9 +188,12 @@ export class ClientOperationCoordinator {
   /** Attempts whose refused claim already had its early retry. */
   readonly #retried = new Set<string>();
   readonly #grantRuns = new Set<string>();
+  /** Calls of the user's own turn queued or running beside the sweep. */
+  readonly #ownRuns = new Set<string>();
+  #ownQueue: Promise<void> = Promise.resolve();
   readonly #builtIns: readonly ClientOperationHandler[];
   readonly #unsubscribe: () => void;
-  #stream: { key: string; controller: AbortController } | undefined;
+  readonly #streams = new Map<string, AbortController>();
   #retry: ReturnType<typeof setTimeout> | undefined;
   #running: Promise<void> | undefined;
   #refresh = false;
@@ -189,6 +204,7 @@ export class ClientOperationCoordinator {
     builtIns: readonly ClientOperationHandler[],
     private readonly accountChanged: () => void,
     private readonly registry: ClientOperationHandlerRegistry = clientOperationHandlerRegistry,
+    private readonly tabSignals: TabSignals = browserTabSignals,
   ) {
     this.#builtIns = builtIns;
     this.#unsubscribe = registry.subscribe(() => {
@@ -197,7 +213,7 @@ export class ClientOperationCoordinator {
   }
   dispose(): void {
     this.#abort.abort();
-    this.#closeStream();
+    this.#closeStreams();
     this.#unsubscribe();
     clearTimeout(this.#retry);
     this.#retry = undefined;
@@ -206,6 +222,7 @@ export class ClientOperationCoordinator {
     this.#attached.clear();
     this.#retried.clear();
     this.#grantRuns.clear();
+    this.#ownRuns.clear();
     this.#builtIns.forEach((handler) => handler.dispose?.());
   }
   #handlers(): readonly ClientOperationHandler[] {
@@ -221,34 +238,56 @@ export class ClientOperationCoordinator {
   #check(): void {
     this.#abort.signal.throwIfAborted();
   }
-  #closeStream(): void {
-    this.#stream?.controller.abort();
-    this.#stream = undefined;
+  #closeStreams(keep: ReadonlySet<string> = new Set()): void {
+    for (const [key, controller] of this.#streams)
+      if (!keep.has(key)) {
+        controller.abort();
+        this.#streams.delete(key);
+      }
   }
-  /** Keeps one executor stream open for the pane's current binding and tools. */
-  #syncStream(enabled: boolean): void {
-    const headers =
-      enabled && this.api.stream ? executorStreamHeaders() : undefined;
-    const key = headers && JSON.stringify(headers);
-    if (key === this.#stream?.key) return;
-    this.#closeStream();
-    if (!headers || !key || !this.api.stream) return;
-    const stream = { key, controller: new AbortController() };
-    this.#stream = stream;
-    void this.api
-      .stream(
-        headers,
-        () => {
-          void this.reconcile();
-        },
-        stream.controller.signal,
+  /** Keeps one executor stream open per binding the pane serves. A shared
+   * binding's stream is held by one tab of the browser profile at a time and
+   * follows the tab the user uses. */
+  #syncStreams(enabled: boolean): void {
+    const sets = enabled && this.api.stream ? executorStreamHeaderSets() : [];
+    const keys = new Map(sets.map((set) => [JSON.stringify(set), set]));
+    this.#closeStreams(new Set(keys.keys()));
+    for (const [key, { headers, shared }] of keys) {
+      if (this.#streams.has(key)) continue;
+      const controller = new AbortController();
+      this.#streams.set(key, controller);
+      const open = async (
+        signal: AbortSignal,
+        onCall?: (call: Promise<unknown>) => void,
+      ) => {
+        await this.api.stream?.(
+          headers,
+          () => {
+            void this.reconcile();
+          },
+          signal,
+          onCall,
+        );
+      };
+      const locks = globalThis.navigator.locks as LockManager | undefined;
+      void (
+        shared && locks
+          ? holdSharedStream({
+              locks,
+              key: headers["X-Erato-Executor"],
+              open,
+              signals: this.tabSignals,
+              signal: controller.signal,
+            })
+          : open(controller.signal)
       )
-      .catch(() => {
-        /* The next sweep reopens it. */
-      })
-      .finally(() => {
-        if (this.#stream === stream) this.#stream = undefined;
-      });
+        .catch(() => {
+          /* The next sweep reopens it. */
+        })
+        .finally(() => {
+          if (this.#streams.get(key) === controller) this.#streams.delete(key);
+        });
+    }
   }
   #continue(
     request: OperationRequest,
@@ -342,7 +381,7 @@ export class ClientOperationCoordinator {
         return;
       }
       // Before the durable early return: a stream may serve live calls alone.
-      if (after === undefined) this.#syncStream(page.executor_stream_enabled);
+      if (after === undefined) this.#syncStreams(page.executor_stream_enabled);
       this.enabled = page.enabled || page.executor_stream_enabled;
       if (!page.enabled) {
         this.#operations.clear();
@@ -420,6 +459,10 @@ export class ClientOperationCoordinator {
           this.#startGrantRun(request, handler);
           continue;
         }
+        if (request.kind === "client_tool.v1") {
+          this.#queueOwnRun(request, handler);
+          continue;
+        }
         await withClientCallLock(request.message_id, request.tool_call_id, () =>
           this.#run(request, handler),
         );
@@ -454,13 +497,16 @@ export class ClientOperationCoordinator {
       if (isClaimRefusal(error)) this.#retryClaim(request.attempt_id);
       return;
     }
+    // A prompt on the device can outlast a claim lease; it must never outlive
+    // the claim its result needs.
+    const held = this.#holdClaim(request, handler, claim);
     try {
-      const result = await handler.execute(request, claim, this.#abort.signal);
-      this.#check();
+      const result = await handler.execute(request, claim, held.signal);
+      held.signal.throwIfAborted();
       if (!result) return;
       await this.api.complete(
         request,
-        claim.claim_token,
+        held.claim().claim_token,
         result,
         this.#abort.signal,
       );
@@ -477,7 +523,70 @@ export class ClientOperationCoordinator {
       this.#claims.delete(
         request.attempt_id,
       ); /* Never upload executor exceptions. */
+    } finally {
+      held.release();
     }
+  }
+  /**
+   * Keeps `claim` while the handler works: re-claiming with the same binding
+   * extends a live claim, and a lapsed one comes back with a new token, which
+   * is the one the result must carry. A renewal lost on the way (a sleeping
+   * laptop, a dropped network) or failed on the server is tried again while
+   * the claim still holds; a refusal, a lapse or the attempt's end aborts the
+   * returned signal at once. A renewal that does not move the claim's end (a
+   * kind that keeps its lease, or a server without renewals) ends renewing,
+   * and the claim lapses as it did before renewals.
+   */
+  #holdClaim(
+    request: OperationRequest,
+    handler: ClientOperationHandler,
+    first: ClaimClientOperationResponse,
+  ): HeldClaim {
+    const controller = new AbortController();
+    const stop = () => controller.abort();
+    this.#abort.signal.addEventListener("abort", stop, { once: true });
+    const attemptEnds = Date.parse(request.expires_at);
+    const timers: ReturnType<typeof setTimeout>[] = [
+      setTimeout(stop, Math.max(0, attemptEnds - Date.now())),
+    ];
+    let claim = first;
+    let done = false;
+    const renewLater = (retry = false) => {
+      const claimEnds = Date.parse(claim.expires_at);
+      if (done || claimEnds >= attemptEnds) return;
+      const left = claimEnds - Date.now();
+      const delay = retry
+        ? Math.max(MIN_RENEWAL_MS, Math.min(RENEWAL_RETRY_MS, left / 2))
+        : Math.max(MIN_RENEWAL_MS, left / 2);
+      timers.push(
+        setTimeout(() => {
+          void this.#claim(request, handler, true).then(
+            (renewed) => {
+              const extended =
+                Date.parse(renewed.expires_at) > Date.parse(claim.expires_at);
+              claim = renewed;
+              if (extended) renewLater();
+            },
+            (error: unknown) => {
+              const holds = Date.parse(claim.expires_at) - Date.now();
+              if (isRenewalNotRefused(error) && holds > MIN_RENEWAL_MS)
+                renewLater(true);
+              else stop();
+            },
+          );
+        }, delay),
+      );
+    };
+    renewLater();
+    return {
+      signal: controller.signal,
+      claim: () => claim,
+      release: () => {
+        done = true;
+        timers.forEach(clearTimeout);
+        this.#abort.signal.removeEventListener("abort", stop);
+      },
+    };
   }
   /** Continues a task's call that has a result or has expired; true when
    * nothing is left for a handler to do. */
@@ -513,63 +622,64 @@ export class ClientOperationCoordinator {
       })
       .finally(() => this.#grantRuns.delete(id));
   }
+  /** A client tool call of the user's own turn can hold a prompt on the
+   * device for as long as its claim is renewed, so it waits in a queue beside
+   * the sweep, which runs them one at a time. Local evidence never waits on
+   * the user and stays in the sweep, ahead of its receipt recovery. */
+  #queueOwnRun(
+    request: OperationRequest,
+    handler: ClientOperationHandler,
+  ): void {
+    const id = request.attempt_id;
+    if (this.#ownRuns.has(id)) return;
+    this.#ownRuns.add(id);
+    this.#ownQueue = this.#ownQueue
+      .then(async () => {
+        // Sweeps went on while it waited: the call may be settled or live
+        // here, or its tool gone.
+        const state = this.#operations.get(id)?.state;
+        if (
+          this.#abort.signal.aborted ||
+          (state !== "pending" && state !== "claimed") ||
+          this.#handlerFor(request) !== handler ||
+          handler.defer?.(request)
+        )
+          return;
+        await withClientCallLock(request.message_id, request.tool_call_id, () =>
+          this.#run(request, handler),
+        );
+      })
+      .catch(() => {
+        /* Retried on the next sweep. */
+      })
+      .finally(() => this.#ownRuns.delete(id));
+  }
   async #runGrantCall(
     request: OperationRequest,
     handler: ClientOperationHandler,
   ): Promise<void> {
-    const controller = new AbortController();
-    const stop = () => controller.abort();
-    this.#abort.signal.addEventListener("abort", stop, { once: true });
-    const attemptEnds = Date.parse(request.expires_at);
-    const timers: ReturnType<typeof setTimeout>[] = [
-      setTimeout(stop, Math.max(0, attemptEnds - Date.now())),
-    ];
-    let done = false;
+    let held: HeldClaim | undefined;
     try {
       // The nudge after a task parks can beat the release of its generation,
       // as it can for a call of the user's own turn.
-      let claim = await this.#claim(request, handler).catch(
+      const claim = await this.#claim(request, handler).catch(
         (error: unknown) => {
           if (isClaimRefusal(error)) this.#retryClaim(request.attempt_id);
           throw error;
         },
       );
-      // Re-claiming with the same binding extends a live claim; a lapsed one
-      // comes back with a new token, which is the one the result must carry.
-      // A renewal lost on the way (a sleeping laptop, a dropped network) or
-      // failed on the server is tried again while the claim still holds; only
-      // a refusal stops the device at once.
-      const renewLater = (retry = false) => {
-        const claimEnds = Date.parse(claim.expires_at);
-        if (done || claimEnds >= attemptEnds) return;
-        const left = claimEnds - Date.now();
-        const delay = retry
-          ? Math.max(MIN_RENEWAL_MS, Math.min(RENEWAL_RETRY_MS, left / 2))
-          : Math.max(MIN_RENEWAL_MS, left / 2);
-        timers.push(
-          setTimeout(() => {
-            void this.#claim(request, handler, true).then(
-              (renewed) => {
-                claim = renewed;
-                renewLater();
-              },
-              (error: unknown) => {
-                const holds = Date.parse(claim.expires_at) - Date.now();
-                if (isRenewalNotRefused(error) && holds > MIN_RENEWAL_MS)
-                  renewLater(true);
-                else stop();
-              },
-            );
-          }, delay),
-        );
-      };
-      renewLater();
-      const result = await handler.execute(request, claim, controller.signal);
-      controller.signal.throwIfAborted();
-      if (!result) return;
+      held = this.#holdClaim(request, handler, claim);
+      const result = await handler.execute(request, claim, held.signal);
+      held.signal.throwIfAborted();
+      if (!result) {
+        // The device could not serve the call (the app went away): the claim
+        // lapses and a later sweep claims it afresh, so the call keeps waiting.
+        this.#claims.delete(request.attempt_id);
+        return;
+      }
       await this.api.complete(
         request,
-        claim.claim_token,
+        held.claim().claim_token,
         result,
         this.#abort.signal,
       );
@@ -578,9 +688,7 @@ export class ClientOperationCoordinator {
     } catch {
       this.#claims.delete(request.attempt_id);
     } finally {
-      done = true;
-      timers.forEach(clearTimeout);
-      this.#abort.signal.removeEventListener("abort", stop);
+      held?.release();
     }
   }
   async review(id: string): Promise<void> {

@@ -1,12 +1,16 @@
 /* eslint-disable lingui/no-unlocalized-strings -- HTTP and SSE protocol identifiers. */
 import { mergeApiAuthHeaders } from "@/auth/apiRequestAuth";
 import {
+  clientToolAcceptsGrantCalls,
   getChildClientToolHeaders,
+  getClientToolExecutor,
   getClientToolHeaders,
 } from "@/hooks/chat/clientToolExecutors";
 import { handleClientToolCall } from "@/hooks/chat/handlers/handleClientToolCall";
 import { FrontendRequestError } from "@/utils/errorReport";
 import { createSSEConnection } from "@/utils/sse/sseClient";
+
+import { additionalOperationBindings } from "./registration";
 
 import type {
   ExecutorBinding,
@@ -40,22 +44,61 @@ const PANE_INSTANCE = uuidV7();
 /** The headers this pane would open its stream with, or `undefined` while it
  * has no binding or no tools. A change means the stream must reopen. */
 export function executorStreamHeaders(): Record<string, string> | undefined {
-  const headers = { ...getClientToolHeaders(), ...getChildClientToolHeaders() };
+  const { "X-Erato-Additional-Executors": _submitOnly, ...headers } = {
+    ...getClientToolHeaders(),
+    ...getChildClientToolHeaders(),
+  };
   if (!headers["X-Erato-Executor"] || !headers["X-Erato-Client-Tools"])
     return undefined;
   return headers;
 }
 
+export interface ExecutorStreamHeaderSet {
+  headers: Record<string, string>;
+  /** Held by one pane of the browser profile (Web Locks) instead of one per pane. */
+  shared: boolean;
+}
+
+/** One header set per binding the pane serves; the first is the primary,
+ * computed as before. Tabs of one browser profile share an additional binding,
+ * so one of them holds its stream. */
+export function executorStreamHeaderSets(): ExecutorStreamHeaderSet[] {
+  const primary = executorStreamHeaders();
+  const sets: ExecutorStreamHeaderSet[] = primary
+    ? [{ headers: primary, shared: false }]
+    : [];
+  for (const { binding, names } of additionalOperationBindings()) {
+    const serialized = JSON.stringify(binding);
+    if (serialized === primary?.["X-Erato-Executor"]) continue;
+    const available = names.filter((name) => getClientToolExecutor(name));
+    if (!available.length) continue;
+    const children = available.filter(clientToolAcceptsGrantCalls);
+    sets.push({
+      headers: {
+        "X-Erato-Executor": serialized,
+        "X-Erato-Client-Tools": available.join(","),
+        ...(children.length
+          ? { "X-Erato-Child-Client-Tools": children.join(",") }
+          : {}),
+      },
+      shared: true,
+    });
+  }
+  return sets;
+}
+
 /**
  * The pane's executor stream. It runs live calls pushed from any of the
- * account's chats through the client tool executors, and reports new durable
- * operations for its binding. It reconnects with backoff, and ends on abort or
- * when the server has executor streams disabled (404).
+ * account's chats through the client tool executors, hands each to `onCall`
+ * until its result is posted, and reports new durable operations for its
+ * binding. It reconnects with backoff, and ends on abort or when the server
+ * has executor streams disabled (404).
  */
 export function openExecutorStream(
   headers: Record<string, string>,
   onNudge: () => void,
   signal: AbortSignal,
+  onCall?: (call: Promise<unknown>) => void,
 ): Promise<void> {
   const executor = JSON.parse(headers["X-Erato-Executor"]) as ExecutorBinding;
   return new Promise((resolve) => {
@@ -102,7 +145,7 @@ export function openExecutorStream(
         onMessage: (event) => {
           const message = JSON.parse(event.data) as ExecutorStreamEvent;
           if (message.message_type === "client_tool_call") {
-            void handleClientToolCall(
+            const call = handleClientToolCall(
               {
                 message_type: "client_tool_call",
                 message_id: message.message_id,
@@ -115,8 +158,10 @@ export function openExecutorStream(
                 getAuthHeaders: mergeApiAuthHeaders,
                 executor,
                 lineage: message.lineage,
+                timeoutMs: message.timeout_ms,
               },
             );
+            onCall?.(call);
           } else {
             onNudge();
           }

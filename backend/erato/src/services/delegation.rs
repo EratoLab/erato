@@ -2549,6 +2549,10 @@ pub(crate) async fn launch_delegation(
             .and_then(|client_task| client_task.grant.clone()),
         client_task: run.client_task.map(|client_task| client_task.note),
     };
+    let grant_binding = task
+        .client_grant
+        .as_ref()
+        .map(|grant| grant.binding.clone());
     let client_reads = task
         .client_grant
         .as_ref()
@@ -2625,9 +2629,10 @@ pub(crate) async fn launch_delegation(
         // child. This grants no tool by itself: a delegated run is offered
         // client tools only through the grant written above, which must name
         // this same binding, and a synthetic kind must independently authorize
-        // this exact scope.
+        // this exact scope. A granted task runs on the grant's binding, which
+        // may be one the parent sent beside its primary.
         crate::models::message::GenerationRequestContext {
-            executor: context.request_context.executor.clone(),
+            executor: grant_binding.or_else(|| context.request_context.executor.clone()),
             registered_client_tools: context.request_context.registered_client_tools.clone(),
             ..Default::default()
         },

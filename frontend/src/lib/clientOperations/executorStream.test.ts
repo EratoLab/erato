@@ -9,6 +9,7 @@ import { createSSEConnection } from "@/utils/sse/sseClient";
 
 import {
   EXECUTOR_STREAM_URL,
+  executorStreamHeaderSets,
   executorStreamHeaders,
   openExecutorStream,
 } from "./executorStream";
@@ -63,6 +64,103 @@ describe("executorStreamHeaders", () => {
   });
 });
 
+describe("executorStreamHeaderSets", () => {
+  const desktop: ExecutorBinding = {
+    device_id: "pane-device-000000",
+    realm: "desktop-sidecar",
+    host_context: { kind: "desktop_sidecar", identity: "local" },
+  };
+  const sidecarTools = ["get_sidecar_document", "search_sidecar_index"];
+
+  it("keeps the primary set as before and gives an additional binding its own shared set", () => {
+    let desktopReady = true;
+    const cleanups = [
+      registerOperationExecutor("fetch_availability", () => binding, {
+        yields: true,
+      }),
+    ];
+    registerClientToolExecutor("fetch_availability", run);
+    sidecarTools.forEach((name) =>
+      registerClientToolExecutor(name, run, () => desktopReady, {
+        acceptsGrantCalls: true,
+      }),
+    );
+    // What the pane opened before additional executors existed.
+    const before = executorStreamHeaders();
+    sidecarTools.forEach((name) =>
+      cleanups.push(
+        registerOperationExecutor(
+          name,
+          () => (desktopReady ? desktop : undefined),
+          { additional: true },
+        ),
+      ),
+    );
+    try {
+      const sets = executorStreamHeaderSets();
+      expect(sets).toEqual([
+        { headers: before, shared: false },
+        {
+          headers: {
+            "X-Erato-Executor": JSON.stringify(desktop),
+            "X-Erato-Client-Tools": sidecarTools.join(","),
+            "X-Erato-Child-Client-Tools": sidecarTools.join(","),
+          },
+          shared: true,
+        },
+      ]);
+      expect(before).toEqual({
+        "X-Erato-Executor": JSON.stringify(binding),
+        "X-Erato-Client-Tools": ["fetch_availability", ...sidecarTools].join(
+          ",",
+        ),
+        "X-Erato-Child-Client-Tools": sidecarTools.join(","),
+      });
+      expect(sets[0]?.headers).not.toHaveProperty(
+        "X-Erato-Additional-Executors",
+      );
+      desktopReady = false;
+      expect(executorStreamHeaderSets()).toEqual([
+        {
+          headers: {
+            "X-Erato-Executor": JSON.stringify(binding),
+            "X-Erato-Client-Tools": "fetch_availability",
+          },
+          shared: false,
+        },
+      ]);
+    } finally {
+      cleanups.forEach((cleanup) => cleanup());
+    }
+  });
+
+  it("serves an additional binding without a primary one", () => {
+    registerClientToolExecutor("search_sidecar_index", run, () => true, {
+      acceptsGrantCalls: true,
+    });
+    const unregister = registerOperationExecutor(
+      "search_sidecar_index",
+      () => desktop,
+      { additional: true },
+    );
+    try {
+      expect(executorStreamHeaders()).toBeUndefined();
+      expect(executorStreamHeaderSets()).toEqual([
+        {
+          headers: {
+            "X-Erato-Executor": JSON.stringify(desktop),
+            "X-Erato-Client-Tools": "search_sidecar_index",
+            "X-Erato-Child-Client-Tools": "search_sidecar_index",
+          },
+          shared: true,
+        },
+      ]);
+    } finally {
+      unregister();
+    }
+  });
+});
+
 describe("openExecutorStream", () => {
   it("runs a pushed call for its chat and answers with the stream's binding", async () => {
     let options: SSEOptions | undefined;
@@ -98,9 +196,15 @@ describe("openExecutorStream", () => {
       context_ref: "capture-1",
     };
     const onNudge = vi.fn();
+    const onCall = vi.fn<(call: Promise<unknown>) => void>();
     const controller = new AbortController();
     try {
-      const done = openExecutorStream(headers, onNudge, controller.signal);
+      const done = openExecutorStream(
+        headers,
+        onNudge,
+        controller.signal,
+        onCall,
+      );
       expect(createSSEConnection).toHaveBeenCalledWith(
         EXECUTOR_STREAM_URL,
         expect.objectContaining({
@@ -124,7 +228,10 @@ describe("openExecutorStream", () => {
           lineage,
         }),
       });
-      await vi.waitFor(() => expect(fetch).toHaveBeenCalledOnce());
+      // The call is reported while it runs and settles once its result is posted.
+      expect(onCall).toHaveBeenCalledOnce();
+      await onCall.mock.calls[0]?.[0];
+      expect(fetch).toHaveBeenCalledOnce();
       expect(execute).toHaveBeenCalledWith(
         { lookahead_days: 7 },
         expect.objectContaining({
@@ -158,6 +265,7 @@ describe("openExecutorStream", () => {
         }),
       });
       expect(onNudge).toHaveBeenCalledOnce();
+      expect(onCall).toHaveBeenCalledOnce();
 
       controller.abort();
       await done;
@@ -165,6 +273,53 @@ describe("openExecutorStream", () => {
     } finally {
       unregister();
     }
+  });
+
+  it("closes a pushed call when the server stops waiting, by the time left on delivery", async () => {
+    vi.useFakeTimers();
+    let options: SSEOptions | undefined;
+    vi.mocked(createSSEConnection).mockImplementation((_url, current) => {
+      options = current;
+      return vi.fn();
+    });
+    const signals: AbortSignal[] = [];
+    registerClientToolExecutor(
+      "fetch_availability",
+      (_input, context) =>
+        new Promise((resolve) => {
+          if (context?.signal) signals.push(context.signal);
+          context?.signal?.addEventListener("abort", () =>
+            resolve({ ok: false, error: "Stopped" }),
+          );
+        }),
+    );
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("{}", { status: 409 })),
+    );
+    const controller = new AbortController();
+    const done = openExecutorStream(headers, vi.fn(), controller.signal);
+    options?.onMessage?.({
+      type: "client_tool_call",
+      data: JSON.stringify({
+        message_type: "client_tool_call",
+        chat_id: "chat-b",
+        message_id: "message-b",
+        tool_call_id: "call-deadline",
+        tool_name: "fetch_availability",
+        input: {},
+        expires_at: "2000-01-01T00:00:00Z",
+        timeout_ms: 30_000,
+      }),
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(signals).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(29_999);
+    expect(signals[0]?.aborted).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(signals[0]?.aborted).toBe(true);
+    controller.abort();
+    await done;
   });
 
   it("reconnects as its pane with backoff and stops when the server has streams disabled", async () => {

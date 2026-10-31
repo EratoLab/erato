@@ -61,6 +61,7 @@ pub fn wait_note(host: ClientToolHostContext) -> String {
     match host {
         ClientToolHostContext::WordDocument => "wait (uses the open document)",
         ClientToolHostContext::OutlookMailbox => "wait (uses the open mailbox)",
+        ClientToolHostContext::DesktopSidecar => "wait (uses the Erato app on this device)",
     }
     .to_string()
 }
@@ -140,9 +141,7 @@ pub(crate) async fn resolve_grant(
     }
     let binding = context
         .request_context
-        .executor
-        .as_ref()
-        .filter(|binding| binding_host(binding) == Some(host.as_str()))
+        .executor_for_host(host.as_str())
         .ok_or(NOT_FROM_HOST)?;
     let candidates: Vec<&OfferedClientTool> = context
         .parent_client_tools
@@ -508,9 +507,7 @@ pub fn granted_call_summary(grant: &ClientToolGrant, content: &[Value]) -> Grant
         };
         match output.get("status").and_then(Value::as_str) {
             Some("success") => {
-                if let Some(freshness) = output
-                    .pointer("/result/freshness")
-                    .and_then(contract_freshness)
+                if let Some(freshness) = granted_read_freshness(output).and_then(contract_freshness)
                 {
                     summary.freshness = Some(freshness);
                 }
@@ -524,6 +521,17 @@ pub fn granted_call_summary(grant: &ClientToolGrant, content: &[Value]) -> Grant
         }
     }
     summary
+}
+
+/// The `freshness` a successful granted read reported. A read that returned
+/// files has its own result inside the server's file wrapper.
+pub fn granted_read_freshness(output: &Value) -> Option<&Value> {
+    output.pointer("/result/freshness").or_else(|| {
+        output
+            .pointer("/result/files")
+            .filter(|files| files.is_array())
+            .and(output.pointer("/result/result/freshness"))
+    })
 }
 
 const FRESHNESS_CHANGES: [&str; 4] = ["none", "elsewhere", "in-scope", "unknown"];
@@ -1590,6 +1598,34 @@ mod tests {
         assert_eq!(
             granted_call_summary(&grant(), &[]),
             GrantedCallSummary::default()
+        );
+    }
+
+    #[test]
+    fn the_summary_reads_the_freshness_of_a_read_that_returned_files() {
+        let part = |output: Value| {
+            json!({"content_type": "tool_use", "tool_call_id": "c", "tool_name": READ_NAME,
+                   "status": "success", "output": output})
+        };
+        let freshness = json!({"readAt": "2026-10-30T12:00:00Z", "changes": "unknown"});
+        let wrapped = json!({"status": "success", "result": {
+            "result": {"text": "t", "freshness": freshness},
+            "files": [{"fileId": "f"}], "filesTruncated": false, "contentNotice": "n"}});
+        assert_eq!(
+            granted_call_summary(&grant(), &[part(wrapped)]).freshness,
+            Some(freshness.clone())
+        );
+        let plain = json!({"status": "success", "result": {"text": "t", "freshness": freshness}});
+        assert_eq!(
+            granted_call_summary(&grant(), &[part(plain)]).freshness,
+            Some(freshness.clone())
+        );
+        let nested_without_files =
+            json!({"status": "success", "result": {"result": {"freshness": freshness}}});
+        assert_eq!(
+            granted_call_summary(&grant(), &[part(nested_without_files)]).freshness,
+            None,
+            "only the server's file wrapper nests the read's own result"
         );
     }
 

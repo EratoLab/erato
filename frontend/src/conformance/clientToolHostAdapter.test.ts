@@ -67,11 +67,14 @@ const fakeHost = ({
   versioned = true,
   late = false,
   deviceOnly = false,
+  serverOwner = false,
 }: {
   flaw?: Flaw;
   versioned?: boolean;
   late?: boolean;
   deviceOnly?: boolean;
+  /** Leaves the owner turn to the server, as a context that outlives the pane. */
+  serverOwner?: boolean;
 } = {}): ClientToolHostConformanceHarness => {
   const turns: ClientToolHostTurn[] = [];
   const edits: string[] = [];
@@ -122,8 +125,9 @@ const fakeHost = ({
       flaw === "accepts an earlier turn's grant" ? turns : turns.slice(-1);
     return candidates.find(
       (turn) =>
-        turn.ownerChatId === grant.ownerChatId &&
-        turn.ownerMessageId === grant.ownerMessageId &&
+        (serverOwner ||
+          (turn.ownerChatId === grant.ownerChatId &&
+            turn.ownerMessageId === grant.ownerMessageId)) &&
         contextMatches(turn),
     );
   };
@@ -354,6 +358,35 @@ describe("clientToolHostAdapterConformanceFailures", () => {
       ),
     ).toContain(
       'freshness (fake_host): "fake_read" approved after its change events dropping out reports changes "none", expected "unknown"',
+    );
+  });
+
+  it("passes a host that leaves the owner check to the server, when the harness says so", async () => {
+    const host = () => fakeHost({ versioned: false, serverOwner: true });
+    expect(
+      await clientToolHostAdapterConformanceFailures({
+        ...host(),
+        ownerCheck: "server",
+      }),
+    ).toEqual([]);
+    resetClientToolRegistryForTests();
+    expect(await clientToolHostAdapterConformanceFailures(host())).toContain(
+      `lineage (fake_host): "fake_read" under a grant with a foreign owner chat succeeds, expected the "context_unavailable" code`,
+    );
+  });
+
+  it("still checks the requesting ids and the context version of a host that leaves the owner to the server", async () => {
+    expect(
+      await clientToolHostAdapterConformanceFailures({
+        ...fakeHost({
+          versioned: false,
+          serverOwner: true,
+          flaw: "accepts mismatched requesting ids",
+        }),
+        ownerCheck: "server",
+      }),
+    ).toContain(
+      `lineage (fake_host): "fake_read" under a grant with a requesting message other than the call's succeeds, expected the "context_unavailable" code`,
     );
   });
 

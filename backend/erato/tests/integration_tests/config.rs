@@ -4052,6 +4052,55 @@ attempt_expiry_secs = 86400"#,
 }
 
 #[test]
+fn child_dispatch_durable_loads_for_the_desktop_sidecar() {
+    let config = migrate_config_with_action_facets(
+        r#"
+[client_tools.tools.desktop_search_index]
+name = "search_sidecar_index"
+namespace = "desktop"
+description = "Search the local index"
+parameters = '{"type":"object"}'
+child_access = "read"
+host_context = "desktop_sidecar"
+child_dispatch = "durable"
+[client_tools.tools.desktop_search_index.durable]
+host_context = "desktop_sidecar"
+attempt_expiry_secs = 86400
+"#,
+    );
+    let tool = &config.client_tools.tools["desktop_search_index"];
+    assert_eq!(
+        tool.host_context,
+        Some(erato::config::ClientToolHostContext::DesktopSidecar)
+    );
+    assert_eq!(
+        tool.child_dispatch,
+        Some(erato::config::ChildDispatch::Durable)
+    );
+    let durable = tool.durable.as_ref().unwrap();
+    assert_eq!(
+        durable.host_context,
+        erato::config::ClientToolHostContext::DesktopSidecar
+    );
+    assert_eq!(durable.attempt_expiry_secs, 86400);
+}
+
+#[test]
+fn a_child_facet_may_name_the_desktop_sidecar() {
+    let config = migrate_config_with_action_facets(
+        r#"
+[facets.facets.desktop_delegated_search]
+display_name = "Local search task"
+child_host_context = "desktop_sidecar"
+"#,
+    );
+    assert_eq!(
+        config.facets.facets["desktop_delegated_search"].child_host_context,
+        Some(erato::config::ClientToolHostContext::DesktopSidecar)
+    );
+}
+
+#[test]
 fn a_durable_deployment_default_loads_beside_word_read_tools() {
     let config = migrate_child_read_tool(
         r#"child_access = "read"

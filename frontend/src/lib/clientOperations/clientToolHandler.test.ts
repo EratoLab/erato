@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   hasClientToolCallBeenAnswered,
   registerClientToolExecutor,
+  registerLocalOnlyClientTools,
   resetClientToolRegistryForTests,
   trackClientToolCallAbort,
 } from "@/hooks/chat/clientToolExecutors";
@@ -149,7 +150,14 @@ describe("toOperationResult", () => {
     [
       "uploaded files",
       { ok: true, result: { busy: [] }, fileUploadIds: ["file"] },
-      { outcome: "failed", error: { code: "execution_failed" } },
+      {
+        outcome: "succeeded",
+        result: {
+          type: "value",
+          value: { busy: [] },
+          file_upload_ids: ["file"],
+        },
+      },
     ],
   ])("maps %s", (_name, outcome, expected) => {
     expect(toOperationResult(request, outcome)).toEqual({
@@ -182,6 +190,27 @@ describe("toOperationResult", () => {
       outcome: "rejected",
       error: { code: "validation_failed" },
     });
+  });
+
+  it("sends a result without files exactly as before", () => {
+    expect(
+      JSON.stringify(toOperationResult(request, { ok: true, result: [1] })),
+    ).toBe(
+      JSON.stringify({
+        ...identity,
+        outcome: "succeeded",
+        result: { type: "value", value: [1] },
+      }),
+    );
+    expect(
+      JSON.stringify(
+        toOperationResult(request, {
+          ok: true,
+          result: [1],
+          fileUploadIds: [],
+        }),
+      ),
+    ).not.toContain("file_upload_ids");
   });
 
   it("carries the request's base revision only when it has one", () => {
@@ -258,8 +287,8 @@ describe("ClientToolOperationHandler", () => {
         signal,
       },
     );
-    expect(result.executor).toBe(request.binding);
-    expect(result.outcome).toBe("succeeded");
+    expect(result?.executor).toBe(request.binding);
+    expect(result?.outcome).toBe("succeeded");
     expect(hasClientToolCallBeenAnswered(request.tool_call_id)).toBe(true);
   });
 
@@ -339,5 +368,44 @@ describe("ClientToolOperationHandler", () => {
       return { ok: true, result: 1 };
     }).execute(request, claim, controller.signal);
     await expect(pending).rejects.toThrow();
+  });
+
+  const lost: ClientToolExecutionResult = {
+    ok: false,
+    error: "The app went away.",
+    validationErrors: [
+      { path: "", code: "context_unavailable", message: "Gone" },
+    ],
+    submissionFeedback: { terminal: true, recovery: "cannot_continue" },
+  };
+
+  it("leaves a task's call waiting when this device cannot serve its context", async () => {
+    registerClientToolExecutor("fetch_availability", vi.fn(), undefined, {
+      acceptsGrantCalls: true,
+    });
+    const subject = handler(async () => lost);
+    expect(
+      await subject.execute(grantRequest, claim, new AbortController().signal),
+    ).toBeUndefined();
+    expect(
+      await subject.execute(request, claim, new AbortController().signal),
+    ).toMatchObject({
+      outcome: "rejected",
+      error: { code: "validation_failed" },
+    });
+  });
+
+  it("completes without content when strict mode was declared during the prompt", async () => {
+    let declared = false;
+    registerLocalOnlyClientTools(["fetch_availability"], () => declared);
+    const result = await handler(async () => {
+      declared = true;
+      return { ok: true, result: { private: "local" }, fileUploadIds: ["f"] };
+    }).execute(request, claim, new AbortController().signal);
+    expect(result).toEqual({
+      ...identity,
+      outcome: "failed",
+      error: { code: "execution_failed" },
+    });
   });
 });
