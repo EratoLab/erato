@@ -9,6 +9,13 @@ bypass missing metadata.
 The generator lives in this crate so reference generation does not compile the
 server or require its runtime dependencies.
 
+The reusable attributes, traversal, metadata validation, and freshness checks
+live in [`erato-config-schema`](../erato-config-schema). This crate retains
+`AppConfig`, loading and runtime validation, and the reference generator command.
+It supplies Erato's descriptive map placeholders and the custom serialized prompt
+paths to the shared generator. `config_facet_attrs` re-exports the shared
+attributes so existing declarations and release tooling remain compatible.
+
 Every emitted key, including hidden keys, has `stability` and `introduced_in`.
 Stability is one of `stable`, `alpha`, `beta`, `unstable`, or `deprecated`.
 Introduction is a semantic Erato release version or `unreleased`.

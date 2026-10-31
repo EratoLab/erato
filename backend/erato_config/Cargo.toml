@@ -10,6 +10,7 @@ name = "gen-config-reference"
 path = "src/bin/gen_config_reference.rs"
 
 [dependencies]
+erato-config-schema.workspace = true
 erato_memory = { path = "../erato_memory" }
 base64 = "0.22.1"
 png = "0.18.0"
@@ -20,7 +21,6 @@ regex = "1.12.3"
 secrecy = "0.10.3"
 serde = { version = "1.0.217", features = ["derive"] }
 serde_json = "1.0.138"
-semver = "1"
 jsonschema = { version = "0.30.0", default-features = false }
 tracing = "0.1.41"
 utoipa = { version = "5.3.1", features = ["uuid", "chrono"] }
