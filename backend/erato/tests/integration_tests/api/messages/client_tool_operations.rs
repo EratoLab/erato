@@ -1278,7 +1278,8 @@ async fn claim_as(
 }
 
 /// Windows of one installation share a binding; the claim belongs to the
-/// client that made it until it lapses.
+/// client that made it until it lapses. An older page names no client and a
+/// row claimed through an older replica names no holder; both renew.
 #[sqlx::test(migrator = "crate::MIGRATOR")]
 async fn a_live_claim_is_renewed_only_by_the_client_that_holds_it(pool: Pool<Postgres>) {
     let setup = setup(pool, 10, true, true).await;
@@ -1288,37 +1289,52 @@ async fn a_live_claim_is_renewed_only_by_the_client_that_holds_it(pool: Pool<Pos
     held.assert_status_ok();
     let token = held.json::<Value>()["claim_token"].clone();
     assert_eq!(
-        attempt(state, request.attempt_id)
-            .await
-            .claim_claimant
-            .as_deref(),
-        Some("browser-profile")
+        claimant_of(state, &request).await,
+        Some("browser-profile".into())
     );
     let other = claim_as(state, &request, "outlook-pane").await;
     other.assert_status_conflict();
     assert_eq!(other.text(), "Operation claimed by another client");
-    let nobody = claim(state, &request, &mailbox(), false).await;
-    nobody.assert_status_conflict();
-    assert_eq!(nobody.text(), "Operation claimed by another client");
+    let older_page = claim(state, &request, &mailbox(), false).await;
+    older_page.assert_status_ok();
+    assert_eq!(older_page.json::<Value>()["claim_token"], token);
     let renewed = claim_as(state, &request, "browser-profile").await;
     renewed.assert_status_ok();
     assert_eq!(renewed.json::<Value>()["claim_token"], token);
+    assert_eq!(
+        claimant_of(state, &request).await,
+        Some("browser-profile".into())
+    );
+
+    set_attempt_times(state, request.attempt_id, "claim_claimant = NULL").await;
+    let adopted = claim_as(state, &request, "outlook-pane").await;
+    adopted.assert_status_ok();
+    assert_eq!(adopted.json::<Value>()["claim_token"], token);
+    assert_eq!(
+        claimant_of(state, &request).await,
+        Some("outlook-pane".into())
+    );
+    claim_as(state, &request, "browser-profile")
+        .await
+        .assert_status_conflict();
+
     set_attempt_times(
         state,
         request.attempt_id,
         "claim_expires_at = now() - interval '1 second'",
     )
     .await;
-    let taken = claim_as(state, &request, "outlook-pane").await;
+    let taken = claim_as(state, &request, "browser-profile").await;
     taken.assert_status_ok();
     assert_ne!(taken.json::<Value>()["claim_token"], token);
     assert_eq!(
-        attempt(state, request.attempt_id)
-            .await
-            .claim_claimant
-            .as_deref(),
-        Some("outlook-pane")
+        claimant_of(state, &request).await,
+        Some("browser-profile".into())
     );
+}
+
+async fn claimant_of(state: &erato::state::AppState, request: &OperationRequest) -> Option<String> {
+    attempt(state, request.attempt_id).await.claim_claimant
 }
 
 async fn set_attempt_times(state: &erato::state::AppState, id: Uuid, assignments: &str) {

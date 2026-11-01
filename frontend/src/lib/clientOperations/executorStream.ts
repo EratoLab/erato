@@ -41,6 +41,11 @@ function uuidV7(): string {
  * again only to the same pane, and new calls to the newest pane. */
 const PANE_INSTANCE = uuidV7();
 
+/** The pane's instance, which a page without storage claims as. */
+export function paneInstance(): string {
+  return PANE_INSTANCE;
+}
+
 /** The headers this pane would open its stream with, or `undefined` while it
  * has no binding or no tools. A change means the stream must reopen. */
 export function executorStreamHeaders(): Record<string, string> | undefined {

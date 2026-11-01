@@ -10,7 +10,11 @@ import {
 
 import { continueAttachedOperation } from "./attachedContinuation";
 import { clientOperationDeviceId } from "./deviceId";
-import { executorStreamHeaderSets, openExecutorStream } from "./executorStream";
+import {
+  executorStreamHeaderSets,
+  openExecutorStream,
+  paneInstance,
+} from "./executorStream";
 import { clientOperationHandlerRegistry } from "./handlers";
 import { withClientCallLock } from "./operationLock";
 import { browserTabSignals, holdSharedStream } from "./sharedStream";
@@ -57,13 +61,13 @@ export interface ClientOperationApi {
 function headers(request: OperationRequest): Record<string, string> {
   const tool = request.operation_id.split("/").at(-1) ?? "";
   // The windows of one Erato desktop app installation share its binding; a
-  // claim names the client that holds it, so another window waits for it to
-  // lapse instead of running the same call.
-  const claimant = clientOperationDeviceId();
+  // claim names the client that holds it (this client's id, else this pane),
+  // so another window waits for it to lapse instead of running the same call.
+  const claimant = clientOperationDeviceId() ?? paneInstance();
   return {
     "X-Erato-Client-Tools": tool,
     "X-Erato-Executor": JSON.stringify(request.binding),
-    ...(claimant ? { "X-Erato-Executor-Claimant": claimant } : {}),
+    "X-Erato-Executor-Claimant": claimant,
     // A task's call is claimed only by a pane whose handler checks its grant.
     ...(request.lineage && clientToolAcceptsGrantCalls(tool)
       ? { "X-Erato-Child-Client-Tools": tool }

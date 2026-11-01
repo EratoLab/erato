@@ -230,21 +230,29 @@ pub async fn claim(
             .claim_expires_at
             .is_some_and(|expiry| expiry > Utc::now())
     {
-        if row.claim_claimant.as_deref() != claimant {
-            return Err(eyre!("Operation claimed by another client"));
-        }
         let token = row
             .claim_token
             .ok_or_else(|| eyre!("Operation claim missing"))?;
         // A call may wait on a prompt on the device for as long as the attempt
-        // lives, so its executor renews the claim it holds.
+        // lives, so its executor renews the claim it holds. Only the client
+        // that made the claim renews it; a row without a holder (claimed
+        // through an older replica) and a request without a claimant (an
+        // older page) count as the holder's.
         if request.lineage.is_some() || kind.renews_claim() {
+            if claimant.is_some_and(|claimant| {
+                row.claim_claimant
+                    .as_deref()
+                    .is_some_and(|holder| holder != claimant)
+            }) {
+                return Err(eyre!("Operation claimed by another client"));
+            }
             let renewed = tx
                 .query_one_raw(statement(
                     "client_operations.claim",
                     r#"
         UPDATE client_operation_attempts
-        SET claim_expires_at = LEAST(expires_at, now() + make_interval(secs => $3))
+        SET claim_expires_at = LEAST(expires_at, now() + make_interval(secs => $3)),
+            claim_claimant = COALESCE(claim_claimant, $4)
         WHERE attempt_id = $1 AND state = 'claimed' AND claim_token = $2
           AND claim_expires_at > now()
         RETURNING attempt_id
@@ -253,6 +261,7 @@ pub async fn claim(
                         attempt_id.into(),
                         token.into(),
                         (kind.claim_lease().num_seconds() as f64).into(),
+                        claimant.into(),
                     ],
                 ))
                 .await?;

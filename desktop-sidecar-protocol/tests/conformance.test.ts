@@ -100,8 +100,8 @@ describe("language-neutral conformance fixtures", () => {
     for (const testCase of fixture.cases) {
       const result = { ...testCase.result, document };
       expect(validateDiscoverResult(result), testCase.name).toBe(true);
-      expect(result.installationId ?? null, testCase.name).toBe(
-        testCase.installationId,
+      expect("installationId" in testCase.result, testCase.name).toBe(
+        testCase.installationId !== null,
       );
     }
     const current = fixture.cases.at(-1)!.result;

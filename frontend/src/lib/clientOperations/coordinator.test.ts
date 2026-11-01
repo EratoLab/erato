@@ -8,6 +8,7 @@ import { fakeWebLocks } from "@/test/webLocks";
 
 import { ClientToolOperationHandler } from "./clientToolHandler";
 import { ClientOperationCoordinator, clientOperationApi } from "./coordinator";
+import { paneInstance } from "./executorStream";
 import { createClientOperationHandlerRegistry } from "./handlers";
 import { registerOperationExecutor } from "./registration";
 
@@ -1054,7 +1055,7 @@ describe("ClientOperationCoordinator task calls", () => {
     }
   });
 
-  it("claims and completes as this client, and as no one without storage", async () => {
+  it("claims and completes as this client, or as this pane without storage", async () => {
     const fetchMock = vi.fn(async (_url: string, _init: RequestInit) => ({
       ok: true,
       headers: new Headers({ "content-type": "application/json" }),
@@ -1091,7 +1092,7 @@ describe("ClientOperationCoordinator task calls", () => {
           throw new DOMException("denied", "SecurityError");
         });
       await clientOperationApi.claim(operation(), binding, signal);
-      expect(headersOf(2)).not.toHaveProperty("X-Erato-Executor-Claimant");
+      expect(headersOf(2)["X-Erato-Executor-Claimant"]).toBe(paneInstance());
       denied.mockRestore();
     } finally {
       globalThis.localStorage.clear();

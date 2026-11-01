@@ -103,8 +103,10 @@ them. `signed_in_user` still selects the work-account defaults. `search.*`,
 `local_contexts.challenge.v1` creates a random 256-bit challenge with a five-minute
 expiry and returns the opaque stable installation device ID: the value discovery
 reports as `installationId` since package 0.1.43, not its restart-specific
-instance ID. Device ID and challenge remain local except for
-the authenticated pairing API's explicitly user-initiated device registration.
+instance ID. The challenge remains local. The device ID leaves the device as the
+routing device of the executor bindings an Erato client sends its backend in
+normal mode (ERMAIN-1086) and through the authenticated pairing API's explicitly
+user-initiated device registration.
 The challenge is bound to the caller's exact canonical Origin and OS user. The
 frontend obtains a compact JWS assertion from its authenticated backend session.
 It calls `local_contexts.bind.v1`; the installed backend key authenticates the

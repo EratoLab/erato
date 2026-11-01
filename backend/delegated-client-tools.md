@@ -398,7 +398,10 @@ A host's handlers pass `clientToolHostAdapterConformanceFailures` from
   same binding, a claim names its client (`X-Erato-Executor-Claimant`, see
   `durable-client-operations.md`, "Grant operations"): the window that claimed
   a call renews it, the others wait for the claim to lapse, and a live call
-  still goes to the newest pane that serves its tool. The six tools are registered for grant calls; each
+  still goes to the newest pane that serves its tool. A call parked while the
+  app reported no installation id names the client that sent it and waits for
+  that client until its attempt ends; this happens once, at the app update
+  that first reports the id. The six tools are registered for grant calls; each
   binding gets its own executor stream (see `durable-client-operations.md`,
   "Executor streams"). The sidecar's stream moves to the tab the user uses, so
   a pushed call and its file prompt land there.

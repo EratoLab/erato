@@ -1,8 +1,9 @@
 const STORAGE_KEY = "erato.clientOperations.deviceId";
 const VALID_DEVICE_ID = /^[A-Za-z0-9_-]{16,128}$/;
 
-/** Per-origin routing id for client-asserted executor bindings. Without
- * storage there is no stable id, so callers advertise no binding at all. */
+/** Per-origin routing id for client-asserted executor bindings, and the
+ * client a claim names. Without storage there is no stable id: a binding
+ * whose device is this id is not advertised, and a claim names the pane. */
 export function clientOperationDeviceId(): string | undefined {
   try {
     const stored = globalThis.localStorage.getItem(STORAGE_KEY);
