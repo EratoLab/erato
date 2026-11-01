@@ -19948,6 +19948,7 @@ async fn local_research_case(pool: Pool<Postgres>, repeated: bool, cancelled: bo
             .post(&format!("{generic_path}/claim"))
             .with_bearer_token(TEST_JWT_TOKEN)
             .add_header("X-Erato-Client-Tools", "local_collect_evidence")
+            .add_header("X-Erato-Executor-Claimant", "outlook-pane")
             .json(&json!({"binding":binding}))
             .await;
         claimed.assert_status_ok();
@@ -19961,10 +19962,12 @@ async fn local_research_case(pool: Pool<Postgres>, repeated: bool, cancelled: bo
                 ))
                 .await
                 .unwrap();
+            // Another window of the installation: local evidence ignores claimants.
             let again = server
                 .post(&format!("{generic_path}/claim"))
                 .with_bearer_token(TEST_JWT_TOKEN)
                 .add_header("X-Erato-Client-Tools", "local_collect_evidence")
+                .add_header("X-Erato-Executor-Claimant", "browser-tab")
                 .json(&json!({"binding":binding}))
                 .await;
             again.assert_status_ok();

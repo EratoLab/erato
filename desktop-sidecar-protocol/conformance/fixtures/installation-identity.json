@@ -1,0 +1,36 @@
+{
+  "description": "Discovery results for both rollout directions of the installation id (package 0.1.43). Each result takes the live OpenRPC document as its `document`.",
+  "cases": [
+    {
+      "name": "previous sidecar without an installation id",
+      "result": {
+        "protocolVersion": "1.0",
+        "serverInfo": {
+          "name": "erato-desktop-sidecar",
+          "version": "0.1.42"
+        },
+        "instanceId": "sidecar-instance-id"
+      },
+      "installationId": null
+    },
+    {
+      "name": "current sidecar with an installation id",
+      "result": {
+        "protocolVersion": "1.0",
+        "serverInfo": {
+          "name": "erato-desktop-sidecar",
+          "version": "0.1.43"
+        },
+        "instanceId": "sidecar-instance-id",
+        "installationId": "sidecar-installation-id-0123456789abcdef"
+      },
+      "installationId": "sidecar-installation-id-0123456789abcdef"
+    }
+  ],
+  "invalidInstallationIds": [
+    "",
+    "short",
+    "has spaces but is otherwise long enough 0123",
+    "with/slash-but-otherwise-long-enough-0123456789"
+  ]
+}

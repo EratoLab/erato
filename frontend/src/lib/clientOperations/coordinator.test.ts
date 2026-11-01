@@ -8,6 +8,7 @@ import { fakeWebLocks } from "@/test/webLocks";
 
 import { ClientToolOperationHandler } from "./clientToolHandler";
 import { ClientOperationCoordinator, clientOperationApi } from "./coordinator";
+import { paneInstance } from "./executorStream";
 import { createClientOperationHandlerRegistry } from "./handlers";
 import { registerOperationExecutor } from "./registration";
 
@@ -1050,6 +1051,51 @@ describe("ClientOperationCoordinator task calls", () => {
       await clientOperationApi.claim(operation(), binding, signal);
       expect(headersOf(2)).not.toHaveProperty("X-Erato-Child-Client-Tools");
     } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("claims and completes as this client, or as this pane without storage", async () => {
+    const fetchMock = vi.fn(async (_url: string, _init: RequestInit) => ({
+      ok: true,
+      headers: new Headers({ "content-type": "application/json" }),
+      json: async () => ({
+        claim_token: "claim",
+        expires_at: new Date(Date.now() + 120_000).toISOString(),
+      }),
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+    const signal = new AbortController().signal;
+    const headersOf = (call: number) =>
+      (fetchMock.mock.calls[call]?.[1].headers ?? {}) as Record<string, string>;
+    try {
+      globalThis.localStorage.setItem(
+        "erato.clientOperations.deviceId",
+        "this-client-0123456789abcdef",
+      );
+      await clientOperationApi.claim(operation(), binding, signal);
+      expect(headersOf(0)["X-Erato-Executor-Claimant"]).toBe(
+        "this-client-0123456789abcdef",
+      );
+      await clientOperationApi.complete(
+        operation(),
+        "claim",
+        { attempt_id: "attempt" } as never,
+        signal,
+      );
+      expect(headersOf(1)["X-Erato-Executor-Claimant"]).toBe(
+        "this-client-0123456789abcdef",
+      );
+      const denied = vi
+        .spyOn(Storage.prototype, "getItem")
+        .mockImplementation(() => {
+          throw new DOMException("denied", "SecurityError");
+        });
+      await clientOperationApi.claim(operation(), binding, signal);
+      expect(headersOf(2)["X-Erato-Executor-Claimant"]).toBe(paneInstance());
+      denied.mockRestore();
+    } finally {
+      globalThis.localStorage.clear();
       vi.unstubAllGlobals();
     }
   });

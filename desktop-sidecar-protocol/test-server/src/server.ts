@@ -58,6 +58,11 @@ export interface MockSidecarOptions {
    * released sidecar for additive-rollout tests.
    */
   omitMethods?: readonly string[];
+  /**
+   * The installation id discovery reports; `null` omits it, as a sidecar
+   * built before package 0.1.43 does.
+   */
+  installationId?: string | null;
 }
 
 export interface MockSidecarAddress {
@@ -89,6 +94,7 @@ interface MockProgressEntry {
 const MAX_PROGRESS_ENTRIES = 256;
 
 const INSTANCE_ID = "mock-sidecar-instance";
+const INSTALLATION_ID = "mock-sidecar-installation-id-0123456789";
 const MOCK_OUTLOOK_MAILBOX = {
   id: "8b7d2f4a6c9e1035d8a1b2c3e4f50617",
   displayName: "Mock Outlook mailbox",
@@ -427,10 +433,15 @@ export class MockSidecar {
           },
         );
       }
+      const installationId =
+        this.#options.installationId === undefined
+          ? INSTALLATION_ID
+          : this.#options.installationId;
       return rpcResult(message.id, {
         protocolVersion,
         serverInfo: { name: "erato-mock-sidecar", version: "0.1.0" },
         instanceId: INSTANCE_ID,
+        ...(installationId === null ? {} : { installationId }),
         document: this.#discoveryDocument(),
       });
     }

@@ -26,6 +26,7 @@ const snapshot: SidecarSnapshot = {
   protocolVersion: "1.0",
   serverInfo: null,
   instanceId: "test",
+  installationId: null,
   catalogue: null,
   capabilities: new Map(),
   error: null,

@@ -101,9 +101,12 @@ them. `signed_in_user` still selects the work-account defaults. `search.*`,
 ## Account and device authentication
 
 `local_contexts.challenge.v1` creates a random 256-bit challenge with a five-minute
-expiry and returns an opaque stable installation device ID (not discovery's
-restart-specific instance ID). Device ID and challenge remain local except for
-the authenticated pairing API's explicitly user-initiated device registration.
+expiry and returns the opaque stable installation device ID: the value discovery
+reports as `installationId` since package 0.1.43, not its restart-specific
+instance ID. The challenge remains local. The device ID leaves the device as the
+routing device of the executor bindings an Erato client sends its backend in
+normal mode (ERMAIN-1086) and through the authenticated pairing API's explicitly
+user-initiated device registration.
 The challenge is bound to the caller's exact canonical Origin and OS user. The
 frontend obtains a compact JWS assertion from its authenticated backend session.
 It calls `local_contexts.bind.v1`; the installed backend key authenticates the
@@ -121,7 +124,8 @@ Check all bindings and `iat <= now < exp <= iat + 300`. Consume the challenge
 atomically with context issuance. Handles expire no later than the assertion;
 renew through fresh authentication, and revoke on unpairing. Lost bind responses
 require a new challenge. Persist device identity in protected per-OS-user storage;
-never clone it via a shared index or include it in general discovery telemetry.
+never clone it via a shared index, and keep it out of logs and diagnostics.
+Discovery reports it to allowed origins only, as every discovery field.
 
 Account changes discard frontend handles immediately. A newly authenticated
 context can recover only its own backend/account/device jobs. Native must check

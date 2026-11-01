@@ -73,10 +73,10 @@ export function DesktopSidecarClientTools() {
     );
     // A turn sent while the app is not running carries no binding, so none of
     // its tasks waits for the app.
-    const deviceId = clientOperationDeviceId();
+    const clientId = clientOperationDeviceId();
     const binding = () =>
       tools.some((tool) => tool.isAvailable())
-        ? desktopSidecarBinding(client.getSnapshot(), deviceId)
+        ? desktopSidecarBinding(client.getSnapshot(), clientId)
         : undefined;
     const unregister = tools.flatMap((tool) => [
       registerClientToolExecutor(tool.name, tool.execute, tool.isAvailable, {
@@ -102,6 +102,11 @@ export function DesktopSidecarClientTools() {
   // instead of on the next poll.
   useEffect(() => {
     requestClientOperationSweep();
-  }, [snapshot.state, snapshot.instanceId, snapshot.localDelegation]);
+  }, [
+    snapshot.state,
+    snapshot.instanceId,
+    snapshot.installationId,
+    snapshot.localDelegation,
+  ]);
   return null;
 }

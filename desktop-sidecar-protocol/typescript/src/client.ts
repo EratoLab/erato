@@ -177,6 +177,8 @@ export interface SidecarSnapshot {
   protocolVersion: string | null;
   serverInfo: { name: string; version: string } | null;
   instanceId: string | null;
+  /** The installation's stable id; `null` while unknown or for a sidecar that reports none. */
+  installationId: string | null;
   catalogue: { revision: string; digest: string } | null;
   /** Discovery extensions, exposed only after schema and digest validation. */
   discoveryExtensions?: Readonly<Record<string, unknown>>;
@@ -621,6 +623,7 @@ export class DesktopSidecarClient {
       protocolVersion: null,
       serverInfo: null,
       instanceId: null,
+      installationId: null,
       catalogue: null,
       capabilities: EMPTY_CAPABILITIES,
       error: null,
@@ -675,6 +678,7 @@ export class DesktopSidecarClient {
         protocolVersion: result.protocolVersion,
         serverInfo: result.serverInfo,
         instanceId: result.instanceId,
+        installationId: result.installationId ?? null,
         catalogue,
         discoveryExtensions: Object.fromEntries(
           Object.entries(result.document).filter(([key]) =>
@@ -976,6 +980,7 @@ function emptySnapshot(): SidecarSnapshot {
     protocolVersion: null,
     serverInfo: null,
     instanceId: null,
+    installationId: null,
     catalogue: null,
     capabilities: EMPTY_CAPABILITIES,
     error: null,

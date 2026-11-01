@@ -184,7 +184,9 @@ pub async fn park(
 }
 
 /// `child_tools` are the registered tools whose handlers accept grant calls;
-/// a delegated task's operation goes only to one of those.
+/// a delegated task's operation goes only to one of those. `claimant` is the
+/// client behind the binding: a live claim is renewed only by its holder, and
+/// another client of the same binding waits for it to lapse.
 #[allow(clippy::too_many_arguments)]
 pub async fn claim(
     db: &DatabaseConnection,
@@ -192,6 +194,7 @@ pub async fn claim(
     account_id: Uuid,
     attempt_id: Uuid,
     binding: &ExecutorBinding,
+    claimant: Option<&str>,
     registered: &[String],
     child_tools: &[String],
     confirmed: bool,
@@ -231,14 +234,25 @@ pub async fn claim(
             .claim_token
             .ok_or_else(|| eyre!("Operation claim missing"))?;
         // A call may wait on a prompt on the device for as long as the attempt
-        // lives, so its executor renews the claim it holds.
+        // lives, so its executor renews the claim it holds. Only the client
+        // that made the claim renews it; a row without a holder (claimed
+        // through an older replica) and a request without a claimant (an
+        // older page) count as the holder's.
         if request.lineage.is_some() || kind.renews_claim() {
+            if claimant.is_some_and(|claimant| {
+                row.claim_claimant
+                    .as_deref()
+                    .is_some_and(|holder| holder != claimant)
+            }) {
+                return Err(eyre!("Operation claimed by another client"));
+            }
             let renewed = tx
                 .query_one_raw(statement(
                     "client_operations.claim",
                     r#"
         UPDATE client_operation_attempts
-        SET claim_expires_at = LEAST(expires_at, now() + make_interval(secs => $3))
+        SET claim_expires_at = LEAST(expires_at, now() + make_interval(secs => $3)),
+            claim_claimant = COALESCE(claim_claimant, $4)
         WHERE attempt_id = $1 AND state = 'claimed' AND claim_token = $2
           AND claim_expires_at > now()
         RETURNING attempt_id
@@ -247,6 +261,7 @@ pub async fn claim(
                         attempt_id.into(),
                         token.into(),
                         (kind.claim_lease().num_seconds() as f64).into(),
+                        claimant.into(),
                     ],
                 ))
                 .await?;
@@ -263,7 +278,7 @@ pub async fn claim(
             "client_operations.claim",
             r#"
         UPDATE client_operation_attempts a
-        SET state = 'claimed', claim_token = $3, claim_binding = $4,
+        SET state = 'claimed', claim_token = $3, claim_binding = $4, claim_claimant = $6,
             claim_expires_at = LEAST(expires_at, now() + make_interval(secs => $5))
         FROM chats c WHERE a.attempt_id = $1 AND a.account_id = $2 AND c.id = a.chat_id
           AND c.archived_at IS NULL AND c.generation_state <> 'running' AND a.expires_at > now()
@@ -276,6 +291,7 @@ pub async fn claim(
                 token.into(),
                 serde_json::to_value(binding)?.into(),
                 (kind.claim_lease().num_seconds() as f64).into(),
+                claimant.into(),
             ],
         ))
         .await?;

@@ -62,7 +62,8 @@
     "deploy/0060_add_audio_synthesis.sql",
     "deploy/0061_add_assistant_welcome.sql",
     "deploy/0062_add_client_executor_streams.sql",
-    "deploy/0063_add_client_tool_approval_scopes.sql"
+    "deploy/0063_add_client_tool_approval_scopes.sql",
+    "deploy/0064_add_client_operation_claimant.sql"
   ],
-  "latest_change": "dbdea6cd080a6c37e7b23ffdea1374ab36335918"
+  "latest_change": "66876944be27617a29e7f0867faa15896a8298fb"
 }

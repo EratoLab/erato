@@ -43,6 +43,7 @@ const emptySnapshot: SidecarSnapshot = {
   protocolVersion: null,
   serverInfo: null,
   instanceId: null,
+  installationId: null,
   catalogue: null,
   capabilities: new Map(),
   error: null,

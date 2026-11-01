@@ -121,6 +121,7 @@ describe("DesktopSidecarClient", () => {
       protocolVersion: "1.0",
       serverInfo: { name: "erato-mock-sidecar", version: "0.1.0" },
       instanceId: "mock-sidecar-instance",
+      installationId: "mock-sidecar-installation-id-0123456789",
     });
     expect(client.supports("diagnostics.echo.v1")).toBe(true);
     expect(client.supports("diagnostics.echo", 1)).toBe(true);
@@ -130,6 +131,24 @@ describe("DesktopSidecarClient", () => {
       message: "hello",
       sidecarInstanceId: "mock-sidecar-instance",
     });
+  });
+
+  it("reports no installation id for a sidecar from before package 0.1.43", async () => {
+    const { client } = await setup({ installationId: null });
+    expect(client.getSnapshot().installationId).toBeNull();
+    await client.discover();
+    expect(client.getSnapshot()).toMatchObject({
+      state: "ready",
+      installationId: null,
+    });
+  });
+
+  it("refuses a discovery result whose installation id is malformed", async () => {
+    const { client } = await setup({ installationId: "short" });
+    await expect(client.discover()).rejects.toMatchObject({
+      kind: "invalid_result",
+    });
+    expect(client.getSnapshot().state).toBe("error");
   });
 
   it("supports outlook.get_conversation.v1 with inline body and attachment bytes", async () => {

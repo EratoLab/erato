@@ -8,6 +8,7 @@ import type { SearchQueryV1Result } from "../typescript/src/index.js";
 
 import {
   validateDiagnosticsEchoV1Params,
+  validateDiscoverResult,
   validateDiscoveryDocument,
   validateJsonRpcEnvelope,
   validateLocalTasksStartV1Params,
@@ -27,6 +28,15 @@ type CoverageSource = NonNullable<
 
 interface InvalidMessageFixture {
   cases: { name: string; message: unknown; error: string }[];
+}
+
+interface InstallationIdentityFixture {
+  cases: {
+    name: string;
+    result: Record<string, unknown>;
+    installationId: string | null;
+  }[];
+  invalidInstallationIds: string[];
 }
 
 interface LocalDelegationFixture {
@@ -78,6 +88,29 @@ describe("language-neutral conformance fixtures", () => {
         futureStatusField: { revision: 2 },
       }),
     ).toBe(true);
+  });
+
+  it("accepts discovery results with and without an installation id (both rollout directions)", async () => {
+    const document = JSON.parse(
+      await readFile(new URL("../openrpc.json", import.meta.url), "utf8"),
+    );
+    const fixture = await readFixture<InstallationIdentityFixture>(
+      "installation-identity.json",
+    );
+    for (const testCase of fixture.cases) {
+      const result = { ...testCase.result, document };
+      expect(validateDiscoverResult(result), testCase.name).toBe(true);
+      expect("installationId" in testCase.result, testCase.name).toBe(
+        testCase.installationId !== null,
+      );
+    }
+    const current = fixture.cases.at(-1)!.result;
+    for (const installationId of fixture.invalidInstallationIds) {
+      expect(
+        validateDiscoverResult({ ...current, document, installationId }),
+        installationId,
+      ).toBe(false);
+    }
   });
 
   it("accepts unknown future availability values without enabling them", async () => {
