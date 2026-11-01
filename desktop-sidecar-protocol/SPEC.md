@@ -75,8 +75,8 @@ when their JSON library exposes that distinction.
    If there is no overlap, it returns error `-32010` with
    `kind: "incompatible_protocol"` and its supported versions.
 3. The result contains the selected protocol, sidecar name/build, opaque
-   sidecar instance ID, and live OpenRPC document for the current user and
-   organization.
+   sidecar instance ID, the installation ID when the sidecar has one, and the
+   live OpenRPC document for the current user and organization.
 4. Implemented application methods in the document carry an
    `x-erato-capability` descriptor whose availability is `enabled` or
    `disabled`. A missing capability is not implemented.
@@ -91,6 +91,14 @@ The catalogue digest is `sha256:` followed by lowercase SHA-256 of RFC 8785
 canonical JSON for the discovery document after omitting
 `x-erato-catalogue.digest`. The revision is an opaque non-empty string and MUST
 change whenever effective capability availability or schemas change.
+
+The instance ID is new on every start. The installation ID (`installationId`,
+package 0.1.43) is stable for one sidecar installation and OS user profile:
+every page of that installation receives the same value, in any browser or
+Office host, and it survives restarts and updates. Clients use it as the
+routing device of executor bindings they share across their windows on that
+computer. It is not a credential and proves nothing about the caller. A sidecar
+MAY omit it; a client then falls back to an id of its own.
 
 ## 4. Capability changes
 

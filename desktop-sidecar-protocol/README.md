@@ -37,6 +37,13 @@ It preserves source Outlook data and configuration. See [full reset semantics](S
 
 ## Quick start
 
+Package 0.1.43 adds the optional `installationId` to the discovery result: one
+stable id per sidecar installation and OS user profile, the same for every page
+and every restart, so the Erato clients on one computer can share one executor
+binding and any of them can continue a waiting call. It is the strict profile's
+device ID. Older sidecars omit it. See [discovery](SPEC.md#3-discovery-and-protocol-negotiation)
+and the [rollout fixture](conformance/fixtures/installation-identity.json).
+
 Package 0.1.41 documents the settings that stay available under the strict
 profile: the methods, their account-level results and the configuration keys a
 strict sidecar ignores. See [settings under the strict profile](DELEGATION.md#settings-under-the-strict-profile).

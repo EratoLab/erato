@@ -4,6 +4,10 @@ export interface DiscoverResult {
   protocolVersion: string;
   serverInfo: ProductInfo;
   instanceId: string;
+  /**
+   * Opaque id of this sidecar installation for the current OS user profile: the same for every page and every restart, different on another computer or user profile. Routing identity for Erato clients, not a credential. Absent from sidecars built before package 0.1.43.
+   */
+  installationId?: string;
   document: DiscoveryDocument;
   /**
    * Opaque security declaration. Unknown profiles remain discoverable but cannot enable delegation or legacy content access.

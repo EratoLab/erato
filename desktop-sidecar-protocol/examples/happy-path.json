@@ -103,6 +103,7 @@
             "version": "0.1.0"
           },
           "instanceId": "sidecar-instance-id",
+          "installationId": "sidecar-installation-id-0123456789abcdef",
           "documentFrom": "../openrpc.json"
         }
       }
