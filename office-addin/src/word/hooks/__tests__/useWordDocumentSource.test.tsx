@@ -8,6 +8,10 @@ import {
 import { mixedAuthoringXml } from "../../../test/mocks/word/mixedAuthoringFixtures";
 import { readWordDocument } from "../../utils/readWordDocument";
 import {
+  checkWordApprovalScope,
+  wordApprovalScopeOptions,
+} from "../../utils/wordApprovalScope";
+import {
   noteWordChangeEventsActive,
   recordWordParagraphEvent,
   resetWordChangeJournalForTests,
@@ -675,6 +679,51 @@ describe("useWordDocumentSource", () => {
 
     await waitFor(() => expect(read).toHaveBeenCalledTimes(2));
     expect(journalSince(captured)).toEqual([]);
+  });
+
+  it("keeps a document approval across returns to the pane, a Track Changes toggle included, until the user types", async () => {
+    signal.eventsActive = true;
+    readsAuthoring("Off");
+    const { result } = renderSource({ authoringEnabled: true });
+    await waitFor(() => expect(result.current.preview.status).toBe("included"));
+    const identity = "pane-identity";
+    const anchor = wordApprovalScopeOptions(
+      () => identity,
+    ).anchorsApprovalScope?.({
+      hostContext: "word_document",
+      scopeId: identity,
+      covers: "document",
+    });
+    const grant = {
+      ownerChatId: "chat-1",
+      approvalScope: {
+        approvalId: "approval-1",
+        scopeId: identity,
+        position: anchor?.(),
+      },
+    };
+
+    // A formatting-only edit on Windows or Mac sends no paragraph event.
+    leavePane();
+    focusPane();
+    await act(async () => {
+      await result.current.capture();
+    });
+    expect(read).toHaveBeenCalledTimes(1);
+    expect(checkWordApprovalScope(grant)).toEqual({ read: true });
+
+    signal.trackingMode.mockResolvedValue("TrackAll");
+    leavePane();
+    focusPane();
+    await waitFor(() => expect(read).toHaveBeenCalledTimes(2));
+    expect(checkWordApprovalScope(grant)).toEqual({ read: true });
+
+    recordWordParagraphEvent({
+      type: "ParagraphChanged",
+      source: "Local",
+      uniqueLocalIds: ["p1"],
+    });
+    expect(checkWordApprovalScope(grant)).toMatchObject({ read: false });
   });
 
   const reads = {

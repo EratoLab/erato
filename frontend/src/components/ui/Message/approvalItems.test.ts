@@ -4,6 +4,8 @@ import {
   approvalQueueOf,
   approvalStopState,
   itemAllowsAlways,
+  scopeGroup,
+  scopeOf,
 } from "./approvalItems";
 
 import type { ApprovalItemPart } from "./approvalItems";
@@ -210,5 +212,69 @@ describe("approvalStopState", () => {
     const state = approvalStopState(stop([waitingItem("waits")]), []);
     expect(ids(state.waiting)).toEqual(["waits"]);
     expect(state.resolution).toBeNull();
+  });
+});
+
+describe("scopeGroup", () => {
+  const scoped = (
+    approvalId: string,
+    {
+      tool = "read_document_blocks",
+      scopeId = "identity-1",
+      hostContext = "word_document",
+      kind = "client_tool" as const,
+    }: {
+      tool?: string;
+      scopeId?: string;
+      hostContext?: string;
+      kind?: "client_tool" | "mcp_tool";
+    } = {},
+  ): ApprovalItemPart => {
+    const item = childItem(approvalId, "2026-10-20T10:00:00Z");
+    return {
+      ...item,
+      child: {
+        ...item.child!,
+        tool_name: tool,
+        kind,
+        approval_scope: {
+          host_context: hostContext,
+          covers: "document",
+          scope_id: scopeId,
+        },
+      },
+    };
+  };
+
+  it("answers the open items of the same tool on the same scope", () => {
+    const items = [
+      scoped("a"),
+      scoped("b"),
+      scoped("answered"),
+      scoped("other-tool", { tool: "read_comments" }),
+      scoped("other-scope", { scopeId: "identity-2" }),
+      scoped("other-host", { hostContext: "outlook_mailbox" }),
+      ownItem("own"),
+      childItem("mcp", "2026-10-20T10:00:00Z"),
+    ];
+    expect(ids(scopeGroup(items, items[0], { answered: "approve" }))).toEqual([
+      "a",
+      "b",
+    ]);
+  });
+
+  it("offers a scope only on a task's client call", () => {
+    expect(scopeOf(scoped("a"))).toEqual({
+      ref: {
+        hostContext: "word_document",
+        scopeId: "identity-1",
+        covers: "document",
+      },
+      toolName: "read_document_blocks",
+      changed: false,
+    });
+    expect(scopeOf(scoped("mcp", { kind: "mcp_tool" }))).toBeUndefined();
+    expect(scopeOf(childItem("plain", "2026-10-20T10:00:00Z"))).toBeUndefined();
+    expect(scopeGroup([ownItem("own")], ownItem("own"), {})).toEqual([]);
   });
 });

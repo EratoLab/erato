@@ -63,3 +63,4 @@
 0060_add_audio_synthesis [0059_add_interrupted_parts_index] 2026-10-27T12:00:00Z Codex <codex@openai.com> # Persist generated speech input and format metadata
 0061_add_assistant_welcome [0060_add_audio_synthesis] 2026-10-28T22:00:00Z Codex <codex@openai.com> # Assistant welcome content
 0062_add_client_executor_streams [0061_add_assistant_welcome] 2026-10-29T11:49:44Z Daniel Fiebig <daniel@MacBook-Pro-7.localdomain> # Add client executor streams
+0063_add_client_tool_approval_scopes [0062_add_client_executor_streams] 2026-10-30T12:00:00Z bdart <dfiebig@bdart.de> # Add client tool approval scopes

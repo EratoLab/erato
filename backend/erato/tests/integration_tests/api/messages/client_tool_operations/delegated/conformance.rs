@@ -1,5 +1,11 @@
 //! The cases every host context must pass, run once per row of `rows`.
 use super::super::executor_stream::wait_released;
+use super::approval_scope::{
+    a_context_approval_covers_every_task_reading_the_scope,
+    a_decision_before_an_outside_change_never_makes_a_new_approval,
+    a_later_turn_reuses_a_document_approval_and_a_turn_approval_asks_again,
+    a_new_pane_session_asks_again, scope_changed_ends_the_approval_and_asks_again,
+};
 use super::slow_path::{
     a_child_reaped_errored_after_its_answer_reads_as_completed,
     a_child_that_finishes_while_approvals_are_open_keeps_the_parent_parked,
@@ -21,12 +27,14 @@ use super::slow_path::{
     a_pane_without_grant_support_cannot_claim_a_grant_operation,
     a_parent_errored_after_its_decisions_resumes_once_when_the_waiting_child_finishes,
     a_parent_the_cleanup_cleared_without_its_marker_settles_and_is_not_resumed,
+    a_response_approval_lets_a_durable_task_call_park_without_asking,
     a_restart_while_parked_gives_one_continuation_and_no_duplicate_calls,
     a_task_call_left_continuing_on_an_errored_child_is_refused_and_settles_as_failed,
     a_waiting_call_is_withdrawn_once_the_parent_moved_on,
     a_waiting_child_left_out_of_the_stop_keeps_its_call_and_its_slot_settles,
     a_waiting_child_that_parks_on_an_ask_during_the_decision_continuation_reparks_as_an_approval,
     a_waiting_childs_continuation_is_offered_its_granted_tools_while_the_parent_is_parked,
+    a_waiting_task_that_starts_asking_offers_the_response_scope,
     a_withdrawn_childs_ask_is_answerable_in_its_own_chat,
     an_approved_child_call_on_a_durable_tool_waits_and_the_parent_shows_it,
     an_archived_waiting_child_settles_as_failed_and_the_parent_resumes_once,
@@ -52,8 +60,29 @@ use std::collections::BTreeSet;
 
 /// One module per row, named before the colon, with one test per case. A row
 /// marked `slow_path` also runs the slow-path cases; a guard case holds every
-/// row to whether its host's context outlives the pane session.
+/// row to whether its host's context outlives the pane session. A row marked
+/// `per_call` runs no approval scope case, since its host refuses
+/// `approval_scope = "context"` at load; a second guard case holds every row to
+/// whether its host supports one.
 macro_rules! host_conformance {
+    (@scope_cases false $slow_path:tt [$($why:literal)?]) => {};
+    (@scope_cases true $slow_path:tt [$($why:literal)?]) => {
+        host_conformance!(@cases [$($why)?]
+            a_context_approval_covers_every_task_reading_the_scope
+            a_later_turn_reuses_a_document_approval_and_a_turn_approval_asks_again
+            a_new_pane_session_asks_again
+            scope_changed_ends_the_approval_and_asks_again
+            a_decision_before_an_outside_change_never_makes_a_new_approval
+        );
+        host_conformance!(@slow_scope_cases $slow_path [$($why)?]);
+    };
+    (@slow_scope_cases false [$($why:literal)?]) => {};
+    (@slow_scope_cases true [$($why:literal)?]) => {
+        host_conformance!(@cases [$($why)?]
+            a_response_approval_lets_a_durable_task_call_park_without_asking
+            a_waiting_task_that_starts_asking_offers_the_response_scope
+        );
+    };
     (@cases [$($why:literal)?]) => {};
     (@cases [$($why:literal)?] $case:ident $($rest:ident)*) => {
         #[sqlx::test(migrator = "crate::MIGRATOR")]
@@ -64,12 +93,13 @@ macro_rules! host_conformance {
 
         host_conformance!(@cases [$($why)?] $($rest)*);
     };
-    (@row $name:ident, $row:ident($($arg:expr),*), $slow_path:literal, [$($why:literal)?],
-        [$($slow_case:ident)*]) => {
+    (@row $name:ident, $row:ident($($arg:expr),*), $slow_path:tt, $scope:tt,
+        [$($why:literal)?], [$($slow_case:ident)*]) => {
         mod $name {
             use super::*;
 
             const SLOW_PATH: bool = $slow_path;
+            const APPROVAL_SCOPE: bool = $scope;
 
             fn row() -> HostRow {
                 rows::$row($($arg),*)
@@ -78,6 +108,11 @@ macro_rules! host_conformance {
             #[test]
             fn slow_path_rows_are_the_hosts_that_outlive_the_pane() {
                 assert_eq!(row().host.outlives_pane_session(), SLOW_PATH);
+            }
+
+            #[test]
+            fn scope_rows_are_the_hosts_with_an_approval_scope() {
+                assert_eq!(row().host.supports_approval_scope(), APPROVAL_SCOPE);
             }
 
             host_conformance!(@cases [$($why)?]
@@ -113,10 +148,17 @@ macro_rules! host_conformance {
                 freshness_after_an_approval_reaches_the_task_result_and_the_trace
             );
             host_conformance!(@cases [$($why)?] $($slow_case)*);
+            host_conformance!(@scope_cases $scope $slow_path [$($why)?]);
         }
     };
+    ($name:ident: $row:ident($($arg:expr),*), slow_path, per_call $(, ignore = $why:literal)?) => {
+        host_conformance!(@slow_row $name, $row($($arg),*), false, [$($why)?]);
+    };
     ($name:ident: $row:ident($($arg:expr),*), slow_path $(, ignore = $why:literal)?) => {
-        host_conformance!(@row $name, $row($($arg),*), true, [$($why)?], [
+        host_conformance!(@slow_row $name, $row($($arg),*), true, [$($why)?]);
+    };
+    (@slow_row $name:ident, $row:ident($($arg:expr),*), $scope:tt, [$($why:literal)?]) => {
+        host_conformance!(@row $name, $row($($arg),*), true, $scope, [$($why)?], [
             a_durable_child_call_parks_and_the_parent_shows_what_it_waits_for
             a_pane_without_grant_support_cannot_claim_a_grant_operation
             a_claimed_grant_operation_is_authorized_while_the_parent_is_parked_on_the_child
@@ -161,7 +203,7 @@ macro_rules! host_conformance {
         ]);
     };
     ($name:ident: $row:ident($($arg:expr),*) $(, ignore = $why:literal)?) => {
-        host_conformance!(@row $name, $row($($arg),*), false, [$($why)?], []);
+        host_conformance!(@row $name, $row($($arg),*), false, true, [$($why)?], []);
     };
 }
 
@@ -181,8 +223,8 @@ host_conformance!(
     slow_path,
     ignore = "ERMAIN-1006: enabled once the Outlook pane takes grant calls"
 );
-host_conformance!(desktop_sidecar: desktop_sidecar(), slow_path);
-host_conformance!(desktop_sidecar_web: desktop_sidecar_web(), slow_path);
+host_conformance!(desktop_sidecar: desktop_sidecar(), slow_path, per_call);
+host_conformance!(desktop_sidecar_web: desktop_sidecar_web(), slow_path, per_call);
 
 /// Long enough for the pane to receive the call, short enough that a durable
 /// escalation would happen inside the test.
@@ -899,6 +941,7 @@ async fn a_pane_lost_in_flight_is_context_unavailable_after_the_grace(
         connected_at: chrono::Utc::now(),
         client_tools: vec![row.read_tool.to_string(), WRITE_TOOL.to_string()],
         child_client_tools: vec![row.child_pane_tools().to_string()],
+        scoped_client_tools: Vec::new(),
     };
     executor_stream::announce(&state.db, &claim, Uuid::new_v4())
         .await
@@ -949,7 +992,7 @@ async fn a_child_call_never_waits_for_the_inbox_even_for_a_durable_tool(
     mock_client_child_reads(row, &mut mocks, &child);
     let (state, _llm) = delegated_state(row, pool, mocks, |config| {
         config.client_tools.durable_operations_enabled = true;
-        let mut tool = row.read_config(true, None);
+        let mut tool = row.read_config(true, None, erato::config::ClientToolApprovalScope::Call);
         tool.timeout_ms = Some(UNANSWERED_TIMEOUT_MS);
         config.client_tools.tools.insert(READ_KEY.into(), tool);
     })

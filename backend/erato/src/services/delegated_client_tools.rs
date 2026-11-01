@@ -288,11 +288,54 @@ pub(crate) async fn granted_tools(
                     host_inputs: config.child_host_inputs.clone(),
                     durable: grant.durable_tools.contains(&qualified_name)
                         && durable_eligible(app_state, config),
+                    approval_scope: crate::services::approval_scope::key_for_grant(config, &grant),
                 },
             ));
         }
     }
     Some((grant.binding, tools))
+}
+
+/// The approval key a decision on a task's asked call of this tool is made
+/// under, with the grant's binding. `None` unless the task's grant holds now
+/// (its parent turn runs or is parked on it, and nobody took the task over),
+/// lists the tool, still allows it by the current configuration, and the tool
+/// offers a context scope on the grant's host.
+pub(crate) async fn decision_scope_key(
+    app_state: &AppState,
+    child_chat: &chats::Model,
+    qualified_name: &str,
+) -> Result<Option<(crate::services::approval_scope::ScopeKey, ClientToolGrant)>, Report> {
+    let Some(configuration) = crate::models::chat::parse_chat_configuration(child_chat)
+        .ok()
+        .flatten()
+    else {
+        return Ok(None);
+    };
+    let (Some(provenance), Some(grant)) = (
+        configuration.provenance,
+        configuration.task.and_then(|task| task.client_grant),
+    ) else {
+        return Ok(None);
+    };
+    if provenance.adopted_at.is_some()
+        || !owner_holds_context(app_state, &grant, child_chat.id).await?
+    {
+        return Ok(None);
+    }
+    let Some(config) = app_state
+        .config
+        .client_tools
+        .tools
+        .values()
+        .find(|config| config.qualified_name() == qualified_name)
+    else {
+        return Ok(None);
+    };
+    if !granted_tool_allowed(&grant, config, None) {
+        return Ok(None);
+    }
+    Ok(crate::services::approval_scope::key_for_grant(config, &grant).map(|key| (key, grant)))
 }
 
 async fn owner_running(app_state: &AppState, grant: &ClientToolGrant) -> Result<bool, Report> {
@@ -1400,6 +1443,7 @@ mod tests {
             context_input: Some("snapshot".into()),
             host_inputs: Vec::new(),
             durable: false,
+            approval_scope: None,
         };
         let input = json!({"snapshot": "forged", "part": "intro"});
         assert_eq!(
@@ -1445,6 +1489,7 @@ mod tests {
             context_input: Some("snapshot".into()),
             host_inputs: vec!["documentIdentity".into()],
             durable: false,
+            approval_scope: None,
         };
         let variant = |extra: &str| {
             json!({"type": "object",

@@ -92,6 +92,41 @@ msgid "approvalQueue.waitingTitle"
 msgstr ""
 
 #. js-lingui-explicit-id
+#: src/components/ui/Message/ParkedChildItem.tsx
+msgid "approvalScope.allow"
+msgstr "{covers, select, turn {Permitir para esta respuesta} other {Permitir para este documento}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ParkedChildItem.tsx
+msgid "approvalScope.allowCall"
+msgstr "Permitir esta llamada"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ParkedChildItem.tsx
+msgid "approvalScope.changed"
+msgstr "El documento ha cambiado desde que lo permitiste."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ParkedChildItem.tsx
+msgid "approvalScope.elsewhere"
+msgstr "Para permitir todo el documento, decide en el panel que lo tiene abierto."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ParkedChildItem.tsx
+msgid "approvalScope.hint"
+msgstr "{covers, select, turn {Las tareas de esta respuesta usan esta herramienta sin volver a preguntar hasta que la respuesta termine.} other {Las tareas de este chat leen este documento sin volver a preguntar hasta que cambie fuera de este chat.}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ParkedChildItem.tsx
+msgid "approvalScope.others"
+msgstr "{covers, select, turn {{others, plural, one {También cubre # tarea más de esta respuesta} other {También cubre # tareas más de esta respuesta}}} other {{others, plural, one {También cubre # tarea más que lee este documento} other {También cubre # tareas más que leen este documento}}}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ApprovalDecisionActions.tsx
+msgid "approvalScope.staged"
+msgstr "{covers, select, turn {Permitido para esta respuesta. Se envía cuando todo esté decidido.} other {Permitido para este documento. Se envía cuando todo esté decidido.}}"
+
+#. js-lingui-explicit-id
 #: src/pages/AssistantEditPage.tsx
 msgid "assistant.action.backToAssistants"
 msgstr "Volver a Asistentes"

@@ -596,8 +596,13 @@ export {
   type AddinStartViewProps,
 } from "@/config/componentRegistry";
 export {
+  CLIENT_TOOL_SCOPE_CHANGED,
+  clientToolScopeChanged,
   registerClientToolExecutor,
+  type ClientToolApprovalScope,
+  type ClientToolApprovalScopeRef,
   type ClientToolExecutor,
+  type ClientToolExecutorOptions,
   type ClientToolExecutionResult,
   type ClientToolValidationIssue,
   type ClientToolCallContext,

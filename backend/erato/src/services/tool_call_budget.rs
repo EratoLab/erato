@@ -78,5 +78,6 @@ pub(crate) fn request(
         kind: ToolApprovalKind::ToolCallLimit,
         approvals: Vec::new(),
         pending_tool_calls,
+        approval_scope: None,
     }
 }

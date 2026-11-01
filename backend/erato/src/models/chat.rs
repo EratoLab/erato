@@ -2767,6 +2767,13 @@ pub async fn unarchive_chat(
         return Ok(chat);
     }
 
+    // Archiving ended the chat's context approvals; an unarchived chat asks again.
+    crate::services::approval_scope::end_for_chat(
+        conn,
+        chat.id,
+        crate::services::approval_scope::END_CHAT_ARCHIVED,
+    )
+    .await?;
     let mut chat_active: chats::ActiveModel = chat.into();
     chat_active.archived_at = ActiveValue::Set(None);
 
