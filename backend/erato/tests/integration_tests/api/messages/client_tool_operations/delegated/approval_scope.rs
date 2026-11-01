@@ -1,7 +1,8 @@
 //! Context approvals (ERMAIN-1033): one decision on the parent's card lets a
 //! task's granted read run under an approval for the document (checked by the
 //! pane) or the response (kept by the server alone). The `pub(super)` cases
-//! run once per host row; the others run on a fake host.
+//! run once per host row that supports an approval scope; the others run on a
+//! fake host.
 use super::*;
 use crate::test_utils::{archive_chat_via_api, unarchive_chat_via_api};
 use erato::config::{ClientToolApprovalScope, ClientToolHostContext};

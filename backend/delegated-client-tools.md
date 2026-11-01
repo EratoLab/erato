@@ -429,10 +429,14 @@ client-tool preference, adoption by regenerate, and a turn without the context
 version whose read is dispatched without one. No integration case covers the
 @-mention route, which launches no client task and so never gets a grant.
 
-`delegated/approval_scope.rs` adds five approval-scope cases to every row: a
-document row takes the document scope and a turn row the turn scope. They cover
-one approval for many tasks, a later turn, a new pane session, `scope_changed`
-and a decision made before an outside change. The cases that need one host only
+`delegated/approval_scope.rs` adds five approval-scope cases to every row whose
+host supports an approval scope, and two more to such a row marked `slow_path`:
+a document row takes the document scope and a turn row the turn scope. They
+cover one approval for many tasks, a later turn, a new pane session,
+`scope_changed` and a decision made before an outside change. The sidecar rows
+are marked `per_call` and run none, since `context` on a `desktop_sidecar` tool
+is refused at load; a second guard case holds every row's marking to
+`supports_approval_scope()`. The cases that need one host only
 (refusals, routing to a stream that checks, Always and Never, crash retry, a
 stale end, no surface, unarchive, the key's binding and tool) run once on the
 fake host.
