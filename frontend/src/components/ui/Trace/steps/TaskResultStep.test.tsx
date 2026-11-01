@@ -279,7 +279,9 @@ describe("TaskResultStep", () => {
       ]);
       render(<TaskResultStep part={waiting} />);
       const pill = screen.getByTestId("task-result-status");
-      expect(pill).toHaveTextContent("Ready for review in the desktop app");
+      expect(pill).toHaveTextContent(
+        "Ready for review in the Erato desktop app",
+      );
       expect(pill.firstElementChild).toHaveClass("bg-theme-warning-bg");
       expect(
         screen.getByTestId("task-result-input-required"),

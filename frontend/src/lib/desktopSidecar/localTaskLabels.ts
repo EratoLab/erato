@@ -9,7 +9,7 @@ export function localTaskLabel(state: LocalTaskViewState): string {
     case "running":
       return t`Collecting evidence on this device`;
     case "ready_for_review":
-      return t`Ready for review in the desktop app`;
+      return t`Ready for review in the Erato desktop app`;
     case "approved":
       return t`Approved evidence is ready to upload`;
     case "awaiting_authenticated_resume":
@@ -27,6 +27,6 @@ export function localTaskLabel(state: LocalTaskViewState): string {
     case "another_device":
       return t`Waiting for the device that accepted this task`;
     case "unavailable":
-      return t`Waiting for the desktop app to reconnect`;
+      return t`Waiting for the Erato desktop app to reconnect`;
   }
 }

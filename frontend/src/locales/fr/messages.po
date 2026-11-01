@@ -9359,8 +9359,12 @@ msgid "Read local mailbox"
 msgstr "Lire la boîte aux lettres locale"
 
 #: src/lib/desktopSidecar/localTaskLabels.ts
-msgid "Ready for review in the desktop app"
-msgstr "Prêt pour vérification dans l’application de bureau"
+#~ msgid "Ready for review in the desktop app"
+#~ msgstr "Prêt pour vérification dans l’application de bureau"
+
+#: src/lib/desktopSidecar/localTaskLabels.ts
+msgid "Ready for review in the Erato desktop app"
+msgstr ""
 
 #: src/components/ui/Message/MessageContent.tsx
 #~ msgid "Reasoning"
@@ -9966,12 +9970,16 @@ msgstr "Utilisation d'outils"
 #~ msgstr ""
 
 #: src/lib/desktopSidecar/localTaskLabels.ts
-msgid "Waiting for the desktop app to reconnect"
-msgstr "En attente de la reconnexion de l’application de bureau"
+#~ msgid "Waiting for the desktop app to reconnect"
+#~ msgstr "En attente de la reconnexion de l’application de bureau"
 
 #: src/lib/desktopSidecar/localTaskLabels.ts
 msgid "Waiting for the device that accepted this task"
 msgstr "En attente de l’appareil qui a accepté cette tâche"
+
+#: src/lib/desktopSidecar/localTaskLabels.ts
+msgid "Waiting for the Erato desktop app to reconnect"
+msgstr ""
 
 #: src/pages/assistantHubUtils.tsx
 #~ msgid "Yes"
