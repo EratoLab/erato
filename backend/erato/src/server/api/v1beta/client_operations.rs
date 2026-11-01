@@ -290,6 +290,7 @@ pub async fn claim_client_operation(
         account(&state, &me)?,
         id,
         &request.binding,
+        crate::services::client_tools::executor_claimant(&headers).as_deref(),
         &registered,
         &crate::services::client_tools::child_client_tools(&headers),
         request.user_confirmed,

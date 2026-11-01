@@ -6,18 +6,19 @@ export const DESKTOP_SIDECAR_HOST_CONTEXT = "desktop_sidecar";
 
 /**
  * The binding a delegated task's sidecar calls wait for, in normal mode only.
- * The sidecar reports no installation id (discovery has only a per-process
- * instance id, which a restart would change under every parked call), so the
- * device is this Erato client's routing id and the identity a constant.
- * Strict mode never gets one: any delegation declaration keeps the sidecar's
- * reads on the device.
+ * Its device is the app's installation id, so every Erato window on the
+ * computer serves the same binding and any of them continues a waiting call.
+ * An app from before protocol 0.1.43 reports none; the binding then names
+ * this client alone, as before. Strict mode never gets one: any delegation
+ * declaration keeps the sidecar's reads on the device.
  */
 export function desktopSidecarBinding(
   snapshot: SidecarSnapshot,
-  deviceId: string | undefined,
+  clientId: string | undefined,
 ): ExecutorBinding | undefined {
-  if (!deviceId || snapshot.state !== "ready" || snapshot.localDelegation)
-    return undefined;
+  if (snapshot.state !== "ready" || snapshot.localDelegation) return undefined;
+  const deviceId = snapshot.installationId ?? clientId;
+  if (!deviceId) return undefined;
   return {
     device_id: deviceId,
     realm: "desktop-sidecar",

@@ -1252,11 +1252,73 @@ async fn store_claim(
         request.account_id,
         request.attempt_id,
         &mailbox(),
+        None,
         &[TOOL.to_string()],
         child_tools,
         false,
     )
     .await
+}
+
+async fn claim_as(
+    state: &erato::state::AppState,
+    request: &OperationRequest,
+    claimant: &str,
+) -> axum_test::TestResponse {
+    app_server(state.clone())
+        .post(&format!(
+            "/api/v1beta/me/client-operations/{}/claim",
+            request.attempt_id
+        ))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .add_header("X-Erato-Client-Tools", TOOL)
+        .add_header("X-Erato-Executor-Claimant", claimant)
+        .json(&json!({"binding":mailbox(),"user_confirmed":false}))
+        .await
+}
+
+/// Windows of one installation share a binding; the claim belongs to the
+/// client that made it until it lapses.
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_live_claim_is_renewed_only_by_the_client_that_holds_it(pool: Pool<Postgres>) {
+    let setup = setup(pool, 10, true, true).await;
+    let request = park(&setup).await;
+    let state = &setup.state;
+    let held = claim_as(state, &request, "browser-profile").await;
+    held.assert_status_ok();
+    let token = held.json::<Value>()["claim_token"].clone();
+    assert_eq!(
+        attempt(state, request.attempt_id)
+            .await
+            .claim_claimant
+            .as_deref(),
+        Some("browser-profile")
+    );
+    let other = claim_as(state, &request, "outlook-pane").await;
+    other.assert_status_conflict();
+    assert_eq!(other.text(), "Operation claimed by another client");
+    let nobody = claim(state, &request, &mailbox(), false).await;
+    nobody.assert_status_conflict();
+    assert_eq!(nobody.text(), "Operation claimed by another client");
+    let renewed = claim_as(state, &request, "browser-profile").await;
+    renewed.assert_status_ok();
+    assert_eq!(renewed.json::<Value>()["claim_token"], token);
+    set_attempt_times(
+        state,
+        request.attempt_id,
+        "claim_expires_at = now() - interval '1 second'",
+    )
+    .await;
+    let taken = claim_as(state, &request, "outlook-pane").await;
+    taken.assert_status_ok();
+    assert_ne!(taken.json::<Value>()["claim_token"], token);
+    assert_eq!(
+        attempt(state, request.attempt_id)
+            .await
+            .claim_claimant
+            .as_deref(),
+        Some("outlook-pane")
+    );
 }
 
 async fn set_attempt_times(state: &erato::state::AppState, id: Uuid, assignments: &str) {

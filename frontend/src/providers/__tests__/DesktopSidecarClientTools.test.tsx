@@ -183,6 +183,24 @@ describe("DesktopSidecarClientTools for delegated tasks", () => {
     expect(clientOperationHandlerRegistry.handlers()).toEqual([]);
   });
 
+  it("names the app's installation when it reports one, so every window on the computer shares the binding", () => {
+    sidecar.snapshot = {
+      state: "ready",
+      installationId: "installation-0123456789abcdef0123456789",
+    };
+    const { unmount } = render(<DesktopSidecarClientTools />);
+    const [sent] = JSON.parse(
+      getClientToolHeaders()["X-Erato-Additional-Executors"],
+    ) as { device_id: string }[];
+    expect(sent.device_id).toBe("installation-0123456789abcdef0123456789");
+    expect(
+      clientOperationHandlerRegistry
+        .handlers()
+        .map((handler) => handler.executor()?.device_id),
+    ).toEqual(names.map(() => "installation-0123456789abcdef0123456789"));
+    unmount();
+  });
+
   it.each<[string, Partial<SidecarSnapshot>]>([
     ["is not running when the user sends", { state: "unavailable" }],
     [

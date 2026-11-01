@@ -184,7 +184,9 @@ pub async fn park(
 }
 
 /// `child_tools` are the registered tools whose handlers accept grant calls;
-/// a delegated task's operation goes only to one of those.
+/// a delegated task's operation goes only to one of those. `claimant` is the
+/// client behind the binding: a live claim is renewed only by its holder, and
+/// another client of the same binding waits for it to lapse.
 #[allow(clippy::too_many_arguments)]
 pub async fn claim(
     db: &DatabaseConnection,
@@ -192,6 +194,7 @@ pub async fn claim(
     account_id: Uuid,
     attempt_id: Uuid,
     binding: &ExecutorBinding,
+    claimant: Option<&str>,
     registered: &[String],
     child_tools: &[String],
     confirmed: bool,
@@ -227,6 +230,9 @@ pub async fn claim(
             .claim_expires_at
             .is_some_and(|expiry| expiry > Utc::now())
     {
+        if row.claim_claimant.as_deref() != claimant {
+            return Err(eyre!("Operation claimed by another client"));
+        }
         let token = row
             .claim_token
             .ok_or_else(|| eyre!("Operation claim missing"))?;
@@ -263,7 +269,7 @@ pub async fn claim(
             "client_operations.claim",
             r#"
         UPDATE client_operation_attempts a
-        SET state = 'claimed', claim_token = $3, claim_binding = $4,
+        SET state = 'claimed', claim_token = $3, claim_binding = $4, claim_claimant = $6,
             claim_expires_at = LEAST(expires_at, now() + make_interval(secs => $5))
         FROM chats c WHERE a.attempt_id = $1 AND a.account_id = $2 AND c.id = a.chat_id
           AND c.archived_at IS NULL AND c.generation_state <> 'running' AND a.expires_at > now()
@@ -276,6 +282,7 @@ pub async fn claim(
                 token.into(),
                 serde_json::to_value(binding)?.into(),
                 (kind.claim_lease().num_seconds() as f64).into(),
+                claimant.into(),
             ],
         ))
         .await?;

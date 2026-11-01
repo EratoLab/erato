@@ -437,9 +437,15 @@ own durable calls, all keyed on `OperationRequest.lineage` (set only for these):
   answers 500 and withdraws nothing. Other delegated operations stay refused.
 - **Claims.** A claim needs `X-Erato-Child-Client-Tools` naming the bare tool
   (else 409 "Executor binding mismatch"). A same-binding claim of a live claim
-  renews it: same token, `claim_expires_at = LEAST(expires_at, now() + lease)`.
-  After it lapsed a claim gets a new token, and a result posted with the old one
-  is refused. The user's own `client_tool.v1` calls renew the same way
+  by the client that holds it renews it: same token, `claim_expires_at =
+  LEAST(expires_at, now() + lease)`. The holder is the `X-Erato-Executor-Claimant`
+  the claim was made with (the client's per-profile id, stored as
+  `claim_claimant`), because the windows of one Erato desktop app installation
+  share the sidecar binding (ERMAIN-1086); another client of the same binding
+  gets 409 "Operation claimed by another client" until the claim lapses, and a
+  client that sends no claimant renews only a claim made without one. After it
+  lapsed a claim gets a new token, and a result posted with the old one is
+  refused. The user's own `client_tool.v1` calls renew the same way
   (ERMAIN-1034); local evidence keeps a same-binding re-claim as it was.
 - **Results** arrive only through a claim: `clienttoolresult` answers 409
   "Operation requires a claim", the cross-replica command path drops them, and the

@@ -34,6 +34,7 @@ pub struct Model {
     pub state: AttemptState,
     pub claim_token: Option<Uuid>,
     pub claim_binding: Option<Json>,
+    pub claim_claimant: Option<String>,
     pub claim_expires_at: Option<DateTimeWithTimeZone>,
     pub result: Option<Json>,
     pub validated_result: Option<Json>,

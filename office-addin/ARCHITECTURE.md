@@ -452,9 +452,11 @@ Conformance:           backend row; frontend handler test; enabling issue
 Desktop sidecar (ERMAIN-1034):
 
 ```text
-Host context:          desktop_sidecar; identity "local", device = this Erato
-                       client's routing id (the sidecar reports no installation
-                       id yet); realm desktop-sidecar; sent in
+Host context:          desktop_sidecar; identity "local", device = the app's
+                       installation id (discovery's installationId, protocol
+                       0.1.43, shared by every Erato window on the computer),
+                       else this client's routing id for an older app; realm
+                       desktop-sidecar; sent in
                        X-Erato-Additional-Executors only while the app is ready
                        in normal mode
 Context version:       none

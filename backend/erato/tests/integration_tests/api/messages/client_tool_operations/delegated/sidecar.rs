@@ -11,6 +11,7 @@ use super::slow_path::{
 use super::*;
 use crate::test_utils::build_openai_paused_tool_calls_streaming_response;
 use erato::config::{ClientToolChildAccess, ClientToolHostContext};
+use erato::services::client_operations::ExecutorBinding;
 use sea_orm::ConnectionTrait;
 
 const OFFICE_KEY: &str = "office_read";
@@ -972,5 +973,116 @@ async fn a_stored_task_result_with_a_newer_field_still_continues(pool: Pool<Post
     let slot = part_for(&answered, CLIENT_TASK_CALL);
     assert_eq!(slot["output"]["status"], "completed", "{slot}");
     assert_eq!(turn_bodies(&resumed).len(), 1, "one parent continuation");
+    waiting.server.abort();
+}
+
+/// A claim as one window of the computer: the row's binding (the app's
+/// installation id) or another computer's, with the client that makes it.
+async fn claim_as_window(
+    state: &erato::state::AppState,
+    row: &HostRow,
+    attempt_id: Uuid,
+    binding: &ExecutorBinding,
+    claimant: &str,
+) -> axum_test::TestResponse {
+    app_server(state.clone())
+        .post(&format!(
+            "/api/v1beta/me/client-operations/{attempt_id}/claim"
+        ))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .add_header("X-Erato-Client-Tools", row.pane_tools())
+        .add_header("X-Erato-Child-Client-Tools", row.child_pane_tools())
+        .add_header("X-Erato-Executor-Claimant", claimant)
+        .json(&json!({ "binding": binding }))
+        .await
+}
+
+/// Every Erato window on the computer sends the app's installation id as the
+/// binding's device (ERMAIN-1086): a task's call that waits after the sending
+/// window closed is picked up by another window of the same installation,
+/// one window at a time, and never by a window on another computer.
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_waiting_task_call_is_picked_up_by_another_window_of_the_installation(
+    pool: Pool<Postgres>,
+) {
+    let row = &desktop_sidecar_web();
+    let mut waiting = park_a_waiting_child(row, pool, true, |_| {}).await;
+    let resumed = record_parent_resumes(&mut waiting.llm);
+    let attempt_id = waiting.request.attempt_id;
+
+    let other_computer = ExecutorBinding {
+        device_id: "another-installation".into(),
+        ..row.binding()
+    };
+    let mut elsewhere = Pane::open_serving(
+        &waiting.base,
+        &other_computer,
+        &row.pane_tools(),
+        Some(row.child_pane_tools()),
+    )
+    .await;
+    assert!(
+        elsewhere.next(Duration::from_secs(2)).await.is_none(),
+        "another installation is never told about the call"
+    );
+    let refused = claim_as_window(
+        &waiting.state,
+        row,
+        attempt_id,
+        &other_computer,
+        "browser-elsewhere",
+    )
+    .await;
+    refused.assert_status_conflict();
+    assert_eq!(refused.text(), "Operation consent required");
+
+    let mut outlook_pane = Pane::open_serving(
+        &waiting.base,
+        &row.binding(),
+        &row.pane_tools(),
+        Some(row.child_pane_tools()),
+    )
+    .await;
+    let nudge = outlook_pane
+        .next(Duration::from_secs(3))
+        .await
+        .expect("another window of the installation is told about the call");
+    assert_eq!(nudge["message_type"], "client_operation_available");
+    assert_eq!(nudge["attempt_id"], json!(attempt_id));
+    let claimed = claim_as_window(
+        &waiting.state,
+        row,
+        attempt_id,
+        &row.binding(),
+        "outlook-pane",
+    )
+    .await;
+    claimed.assert_status_ok();
+    let token = claimed.json::<Value>()["claim_token"].clone();
+    let word_pane =
+        claim_as_window(&waiting.state, row, attempt_id, &row.binding(), "word-pane").await;
+    word_pane.assert_status_conflict();
+    assert_eq!(word_pane.text(), "Operation claimed by another client");
+    post_result(
+        row,
+        &waiting.state,
+        &token,
+        &pane_result(row, &waiting.request),
+    )
+    .await
+    .assert_status_ok();
+    continue_operation(&waiting.state, attempt_id)
+        .await
+        .assert_status_ok();
+
+    let answered = wait_answered(&waiting.state, waiting.chat_id).await;
+    assert_eq!(answered.id, waiting.parent_message.id);
+    assert_eq!(turn_bodies(&resumed).len(), 1, "the parent continues once");
+    let slot = part_for(&answered, CLIENT_TASK_CALL);
+    assert_eq!(slot["output"]["status"], "completed", "{slot}");
+    assert_eq!(
+        attempt_row(&waiting).await.state,
+        attempts::AttemptState::Completed
+    );
     waiting.server.abort();
 }

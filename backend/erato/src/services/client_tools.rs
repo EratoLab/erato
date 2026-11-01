@@ -330,6 +330,19 @@ pub fn child_client_tools(headers: &axum::http::HeaderMap) -> Vec<String> {
     names
 }
 
+/// The client that holds a claim (`X-Erato-Executor-Claimant`): one browser
+/// profile or Office pane. Windows of one Erato desktop app installation share
+/// its binding, so the binding alone no longer names the holder.
+pub fn executor_claimant(headers: &axum::http::HeaderMap) -> Option<String> {
+    let value = headers
+        .get("X-Erato-Executor-Claimant")?
+        .to_str()
+        .ok()?
+        .trim();
+    (!value.is_empty() && value.len() <= 256 && !value.chars().any(char::is_control))
+        .then(|| value.to_owned())
+}
+
 fn client_tool_names(headers: &axum::http::HeaderMap, header: &str) -> Vec<String> {
     let Some(value) = headers.get(header).and_then(|v| v.to_str().ok()) else {
         return Vec::new();

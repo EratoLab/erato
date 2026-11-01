@@ -382,15 +382,23 @@ A host's handlers pass `clientToolHostAdapterConformanceFailures` from
   that carries a context version or no owner. The conformance kit runs it with
   `ownerCheck: "server"`.
 - The binding the shells send (the web app and every add-in host, from
-  `DesktopSidecarClientTools`) is `{device_id: <this Erato client's routing id>,
+  `DesktopSidecarClientTools`) is `{device_id: <the app's installation id>,
   realm: "desktop-sidecar", host_context: {kind: "desktop_sidecar", identity:
-  "local"}}`. The sidecar reports only a per-process instance id, which a restart
-  would change under every parked call, so the binding names the Erato client,
-  not the sidecar installation: a parked call is picked up by the same client
-  (the same browser profile, or the same add-in) while the app runs. A shell
+  "local"}}`. The installation id comes from discovery (`installationId`,
+  protocol 0.1.43, ERMAIN-1086): one stable id per Erato desktop app
+  installation and OS user profile, so every Erato window on that computer (a
+  browser tab, the Outlook or Word pane, the Teams personal app) serves the
+  same binding and any of them picks up a parked call; another computer never
+  does. An app from before 0.1.43 reports none, and the binding then names this
+  Erato client's routing id, as before: a parked call is then picked up only
+  by the same browser profile or add-in. A shell
   sends it only while the app is ready, declares no local delegation and offers
   one of the six tools, so a turn sent while the app is not running gives its
-  tasks no sidecar tools. The six tools are registered for grant calls; each
+  tasks no sidecar tools. Because several windows may hold a stream for the
+  same binding, a claim names its client (`X-Erato-Executor-Claimant`, see
+  `durable-client-operations.md`, "Grant operations"): the window that claimed
+  a call renews it, the others wait for the claim to lapse, and a live call
+  still goes to the newest pane that serves its tool. The six tools are registered for grant calls; each
   binding gets its own executor stream (see `durable-client-operations.md`,
   "Executor streams"). The sidecar's stream moves to the tab the user uses, so
   a pushed call and its file prompt land there.
@@ -436,9 +444,9 @@ A host's handlers pass `clientToolHostAdapterConformanceFailures` from
 ## Not in this record
 
 - ERMAIN-1033: approving once per document or thread.
-- Sidecar follow-ups (the sidecar repository): a stable installation id in
-  discovery, so any client on the device can pick up a parked call; one thread
-  key on hits, exports and conversations, an index position and a count of items
-  added since one, so `scope.position` and `scope.added` become values; a live
-  "nothing new since" signal per source.
+- Sidecar follow-ups (the sidecar repository): one thread key on hits, exports
+  and conversations, an index position and a count of items added since one, so
+  `scope.position` and `scope.added` become values; a live "nothing new since"
+  signal per source. The stable installation id in discovery is done
+  (ERMAIN-1086, ERDSCAR-79).
 - ERMAIN-1031: the child's model.
