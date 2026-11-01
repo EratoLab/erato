@@ -1961,8 +1961,18 @@ msgstr "Ausgewählte Dateien werden zu Erato hochgeladen und ihre Inhalte mit de
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/ClientToolFileApproval.tsx
+msgid "chat.fileApproval.openTask"
+msgstr "Aufgabe öffnen"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ClientToolFileApproval.tsx
 msgid "chat.fileApproval.reject"
 msgstr "Alle ablehnen"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ClientToolFileApproval.tsx
+msgid "chat.fileApproval.requestedByTask"
+msgstr "Angefordert von einer Aufgabe: {brief}"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/ClientToolFileApproval.tsx
@@ -3781,6 +3791,7 @@ msgstr ""
 #~ msgstr ""
 
 #. js-lingui-explicit-id
+#: src/components/ui/Message/ClientToolFileApproval.tsx
 #: src/components/ui/Message/ParkedChildItem.tsx
 #: src/components/ui/Message/WaitingTaskItem.tsx
 msgid "delegatedTaskApproval.unnamedTask"
@@ -3790,6 +3801,11 @@ msgstr ""
 #: src/lib/delegation/delegationLabels.ts
 msgid "delegation.waitingFor.connectedApp"
 msgstr "Wartet auf eine verbundene App auf diesem Gerät"
+
+#. js-lingui-explicit-id
+#: src/lib/delegation/delegationLabels.ts
+msgid "delegation.waitingFor.desktopSidecar"
+msgstr "Wartet auf die Erato-Desktop-App auf diesem Gerät"
 
 #. js-lingui-explicit-id
 #: src/lib/delegation/delegationLabels.ts
@@ -7787,8 +7803,18 @@ msgstr "Denkt nach"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Trace/steps/TaskResultStep.tsx
+msgid "trace.taskResult.followInTaskChat"
+msgstr "Verfolgen Sie sie im Chat der Aufgabe:"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/TaskResultStep.tsx
 msgid "trace.taskResult.inputRequired"
 msgstr "Beantworten Sie sie im Chat der Aufgabe:"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/TaskResultStep.tsx
+msgid "trace.taskResult.localReview"
+msgstr "In der Erato-Desktop-App prüfen"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Trace/steps/TaskResultStep.tsx
@@ -7799,6 +7825,11 @@ msgstr "Lauf der Aufgabe öffnen"
 #: src/components/ui/Trace/steps/TaskResultStep.tsx
 msgid "trace.taskResult.redelivered"
 msgstr "Erneut zugestellt"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/TaskResultStep.tsx
+msgid "trace.taskResult.replacedByLaterReport"
+msgstr "Durch eine spätere Rückmeldung ersetzt"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Trace/steps/TaskResultStep.tsx
@@ -8244,7 +8275,7 @@ msgstr "Budgetlimit wird erreicht"
 msgid "Approaching Token Limit"
 msgstr "Token-Limit wird erreicht"
 
-#: src/providers/LocalTaskCoordinator.tsx
+#: src/lib/desktopSidecar/localTaskLabels.ts
 msgid "Approved evidence is ready to upload"
 msgstr "Freigegebene Belege können hochgeladen werden"
 
@@ -8563,7 +8594,7 @@ msgstr ""
 msgid "collapse sidebar"
 msgstr "Seitenleiste einklappen"
 
-#: src/providers/LocalTaskCoordinator.tsx
+#: src/lib/desktopSidecar/localTaskLabels.ts
 msgid "Collecting evidence on this device"
 msgstr "Belege werden auf diesem Gerät gesammelt"
 
@@ -8609,7 +8640,7 @@ msgstr "Kontextnutzung"
 msgid "Context usage exceeds model capacity. The assistant can't be created like this."
 msgstr "Die Kontextnutzung überschreitet die Modellkapazität. Der Assistent kann so nicht erstellt werden."
 
-#: src/providers/LocalTaskCoordinator.tsx
+#: src/lib/desktopSidecar/localTaskLabels.ts
 msgid "Continuing the original task"
 msgstr "Die ursprüngliche Aufgabe wird fortgesetzt"
 
@@ -9063,7 +9094,7 @@ msgstr "Unterhaltung wird geladen …"
 msgid "Loading..."
 msgstr "Laden..."
 
-#: src/providers/LocalTaskCoordinator.tsx
+#: src/lib/desktopSidecar/localTaskLabels.ts
 msgid "Local collection could not finish"
 msgstr "Das lokale Sammeln der Belege konnte nicht abgeschlossen werden"
 
@@ -9075,11 +9106,11 @@ msgstr "Lokale Recherche"
 msgid "Local research tasks"
 msgstr "Lokale Rechercheaufgaben"
 
-#: src/providers/LocalTaskCoordinator.tsx
+#: src/lib/desktopSidecar/localTaskLabels.ts
 msgid "Local task cancelled"
 msgstr "Lokale Aufgabe abgebrochen"
 
-#: src/providers/LocalTaskCoordinator.tsx
+#: src/lib/desktopSidecar/localTaskLabels.ts
 msgid "Local task expired"
 msgstr "Lokale Aufgabe abgelaufen"
 
@@ -9327,9 +9358,13 @@ msgstr "In Warteschlange – wird gesendet, sobald die wartenden Aufgaben fertig
 msgid "Read local mailbox"
 msgstr "Lokales Postfach lesen"
 
-#: src/providers/LocalTaskCoordinator.tsx
-msgid "Ready for review in the desktop app"
-msgstr "Bereit zur Prüfung in der Desktop-App"
+#: src/lib/desktopSidecar/localTaskLabels.ts
+#~ msgid "Ready for review in the desktop app"
+#~ msgstr "Bereit zur Prüfung in der Desktop-App"
+
+#: src/lib/desktopSidecar/localTaskLabels.ts
+msgid "Ready for review in the Erato desktop app"
+msgstr "Bereit zur Prüfung in der Erato-Desktop-App"
 
 #: src/components/ui/Message/MessageContent.tsx
 #~ msgid "Reasoning"
@@ -9487,7 +9522,7 @@ msgstr ""
 #~ msgid "Shared Chat - {sharedChatTitle}"
 #~ msgstr "Geteilter Chat - {sharedChatTitle}"
 
-#: src/providers/LocalTaskCoordinator.tsx
+#: src/lib/desktopSidecar/localTaskLabels.ts
 msgid "Sharing declined on this device"
 msgstr "Freigabe auf diesem Gerät abgelehnt"
 
@@ -9934,13 +9969,17 @@ msgstr "Tools werden verwendet"
 #~ msgid "View all assistants"
 #~ msgstr ""
 
-#: src/providers/LocalTaskCoordinator.tsx
-msgid "Waiting for the desktop app to reconnect"
-msgstr "Warten auf die erneute Verbindung mit der Desktop-App"
+#: src/lib/desktopSidecar/localTaskLabels.ts
+#~ msgid "Waiting for the desktop app to reconnect"
+#~ msgstr "Warten auf die erneute Verbindung mit der Desktop-App"
 
-#: src/providers/LocalTaskCoordinator.tsx
+#: src/lib/desktopSidecar/localTaskLabels.ts
 msgid "Waiting for the device that accepted this task"
 msgstr "Warten auf das Gerät, das diese Aufgabe angenommen hat"
+
+#: src/lib/desktopSidecar/localTaskLabels.ts
+msgid "Waiting for the Erato desktop app to reconnect"
+msgstr "Warten auf die erneute Verbindung mit der Erato-Desktop-App"
 
 #: src/pages/assistantHubUtils.tsx
 #~ msgid "Yes"

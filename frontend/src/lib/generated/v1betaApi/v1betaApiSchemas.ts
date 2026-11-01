@@ -2079,12 +2079,28 @@ export type ExecutorStreamClientToolCall = {
    * @format uuid
    */
   chat_id: string;
+  /**
+   * When the server stops waiting for this call's result, by the server's
+   * clock.
+   *
+   * @format date-time
+   */
+  expires_at?: string;
   input: OperationPayload;
   lineage?: CallLineage;
   /**
    * @format uuid
    */
   message_id: string;
+  /**
+   * Milliseconds left until `expires_at` when this event was delivered.
+   * A client times the call from this, not from `expires_at`, so its own
+   * clock does not matter.
+   *
+   * @format int64
+   * @minimum 0
+   */
+  timeout_ms?: number;
   tool_call_id: string;
   tool_name: string;
 };
@@ -3101,6 +3117,11 @@ export type OperationPayload =
       [key: string]: OperationPayload;
     };
 
+/**
+ * A parked call as the server stored it. Clients only receive it; it is read
+ * leniently so that a key a newer release adds does not break a replica that
+ * still runs this one.
+ */
 export type OperationRequest = {
   /**
    * @format uuid
@@ -3164,6 +3185,11 @@ export type OperationValidation = {
 
 export type OperationValue =
   | {
+      /**
+       * Files the tool uploaded for its result, sent only when there are
+       * any so that a result without files keeps its earlier shape.
+       */
+      file_upload_ids?: string[];
       type: "value";
       value: OperationPayload;
     }

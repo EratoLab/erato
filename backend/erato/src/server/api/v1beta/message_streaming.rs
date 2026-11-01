@@ -2418,6 +2418,9 @@ pub struct ContinueStreamRequest {
     /// The `X-Erato-Executor` of the device answering, when it sent a valid one.
     #[serde(skip)]
     executor: Option<crate::services::client_operations::ExecutorBinding>,
+    /// The `X-Erato-Additional-Executors` of the device answering.
+    #[serde(skip)]
+    additional_executors: Vec<crate::services::client_operations::ExecutorBinding>,
 }
 
 impl ContinueStreamRequest {
@@ -2441,6 +2444,7 @@ impl ContinueStreamRequest {
             shows_child_items: true,
             registered_client_tools: None,
             executor: None,
+            additional_executors: Vec::new(),
         }
     }
 }
@@ -3870,10 +3874,16 @@ pub(crate) fn platform_from_headers(headers: &HeaderMap) -> String {
 pub(crate) fn generation_request_context_from_headers(
     headers: &HeaderMap,
 ) -> GenerationRequestContext {
+    let executor = crate::services::client_operations::ExecutorBinding::from_headers(headers);
     GenerationRequestContext {
         platform: Some(platform_from_headers(headers)),
         registered_client_tools: crate::services::client_tools::registered_client_tools(headers),
-        executor: crate::services::client_operations::ExecutorBinding::from_headers(headers),
+        additional_executors:
+            crate::services::client_operations::ExecutorBinding::additional_from_headers(
+                headers,
+                executor.as_ref(),
+            ),
+        executor,
     }
 }
 
@@ -4828,7 +4838,9 @@ async fn prepare_chat_request_with_adapters_memory_inner(
                 effective_model_settings.compat_omit_strict,
             )
             .map_err(|error| eyre!(error))?;
-            policy.executor = generation_request_context.executor.clone();
+            policy.executor = generation_request_context
+                .executor_for_tool(client_tool)
+                .cloned();
             offered_client_tools.insert(name.to_string(), policy);
             chat_request_tools.push(crate::services::client_tools::build_client_tool(
                 name,
@@ -6313,6 +6325,9 @@ async fn stream_generate_chat_completion<'a>(
     mut allowed_tool_names: HashSet<String>,
     available_mcp_tools: Vec<crate::services::mcp_session_manager::ManagedTool>,
     offered_client_tools: HashMap<String, crate::services::client_tools::OfferedClientTool>,
+    // The turn's `X-Erato-Executor` binding, which an attached transport
+    // prefers over the bindings sent beside it.
+    primary_executor: Option<&crate::services::client_operations::ExecutorBinding>,
     chat_provider_headers_context: &'a ChatProviderHeadersContext<'a>,
     streaming_task: Option<&Arc<StreamingTask>>,
     assistant_id: Option<Uuid>,
@@ -6463,15 +6478,24 @@ async fn stream_generate_chat_completion<'a>(
     let approving_executor = resume
         .as_ref()
         .filter(|resume| resume.operation_attempt.is_none())
-        .map(|resume| resume.continuing_executor.clone());
+        .map(|resume| resume.continuing_executors.clone());
     if app_state.config.client_tools.durable_operations_enabled
         && let Some(task) = streaming_task
     {
-        // Granted tools are live-only: no transport is set up for them.
-        for offered in offered_client_tools
-            .values()
-            .filter(|offered| offered.grant.is_none())
-        {
+        // Granted tools are live-only: no transport is set up for them. A
+        // chat has one transport, so the choice must not depend on map order.
+        let mut candidates: Vec<&crate::services::client_tools::OfferedClientTool> =
+            offered_client_tools
+                .values()
+                .filter(|offered| offered.grant.is_none())
+                .collect();
+        candidates.sort_by_cached_key(|offered| {
+            (
+                offered.executor.as_ref() != primary_executor,
+                offered.config.qualified_name(),
+            )
+        });
+        for offered in candidates {
             let Some(durable) = &offered.config.durable else {
                 continue;
             };
@@ -6487,7 +6511,7 @@ async fn stream_generate_chat_completion<'a>(
             if kind.consent() == crate::services::client_operations::ConsentPolicy::None
                 && approving_executor
                     .as_ref()
-                    .is_none_or(|executor| executor.as_ref() == Some(binding))
+                    .is_none_or(|executors| executors.contains(binding))
                 && binding.validate()
                 && binding.realm == kind.realm()
                 && binding
@@ -8084,7 +8108,7 @@ async fn stream_generate_chat_completion<'a>(
                             && !durable_grant
                             && approving_executor
                                 .as_ref()
-                                .is_some_and(|approving| approving.as_ref() != Some(binding))
+                                .is_some_and(|approving| !approving.contains(binding))
                         {
                             return None;
                         }
@@ -8235,6 +8259,13 @@ async fn stream_generate_chat_completion<'a>(
                     // POSTed immediately cannot race ahead of the registered waiter.
                     let mut result_rx = task.register_client_tool_call(call_id.clone()).await;
 
+                    // Resolve this tool's park budget from the entry that was
+                    // OFFERED to this request (a bare-name config scan would be
+                    // ambiguous when namespaces reuse a name), else the default.
+                    let park_timeout_ms = tool_policy
+                        .and_then(|policy| policy.timeout_ms)
+                        .unwrap_or(DEFAULT_CLIENT_TOOL_PARK_TIMEOUT_MS);
+
                     let inbox_only = tool_policy.is_some_and(|policy| policy.inbox_only)
                         || durable_grant
                         || durable_request.as_ref().is_some_and(|request| {
@@ -8267,6 +8298,10 @@ async fn stream_generate_chat_completion<'a>(
                                 requesting_message_id: assistant_message_id,
                                 context_ref: grant.context_ref.clone(),
                             }),
+                            expires_at: i64::try_from(park_timeout_ms)
+                                .ok()
+                                .and_then(chrono::Duration::try_milliseconds)
+                                .and_then(|timeout| chrono::Utc::now().checked_add_signed(timeout)),
                         };
                         handed_over = hand_over_executor_call(&app_state.db, task, call).await;
                     }
@@ -8314,13 +8349,6 @@ async fn stream_generate_chat_completion<'a>(
                             );
                         }
                     }
-
-                    // Resolve this tool's park budget from the entry that was
-                    // OFFERED to this request (a bare-name config scan would be
-                    // ambiguous when namespaces reuse a name), else the default.
-                    let park_timeout_ms = tool_policy
-                        .and_then(|policy| policy.timeout_ms)
-                        .unwrap_or(DEFAULT_CLIENT_TOOL_PARK_TIMEOUT_MS);
 
                     // Park until the client POSTs a result, an abort arrives, or the
                     // bounded timeout fires.
@@ -8538,6 +8566,19 @@ async fn stream_generate_chat_completion<'a>(
                     };
                 if let Some(output) = validated_output {
                     output_value = output;
+                    response_text = output_value.to_string();
+                }
+                // A device prompt the user declined ends a task's live call as
+                // the durable path and the server's own Ask end it, so the
+                // task result counts it.
+                if live_grant.is_some()
+                    && matches!(&outcome, ClientToolOutcome::ValidationFailed(issues, _)
+                    if issues.iter().any(|issue| {
+                        issue.code == crate::services::delegated_client_tools::DECLINED
+                    }))
+                {
+                    output_value =
+                        crate::services::delegated_client_tools::declined_output(&tool_name);
                     response_text = output_value.to_string();
                 }
                 if tool_charges
@@ -9554,8 +9595,10 @@ async fn stream_generate_chat_completion<'a>(
             if let Ok(outcome) = result_rx.try_recv()
                 && request.lineage.is_none()
             {
-                let result =
-                    crate::services::client_operations::fast_result_or_refusal(&request, outcome);
+                let result = crate::services::client_operations::fast_result_or_refusal(
+                    &request,
+                    super::file_resolution::delivered_result_for_storage(outcome),
+                );
                 crate::services::client_operations::store::accept_fast(
                     &app_state.db,
                     &app_state.client_operations,
@@ -12939,6 +12982,7 @@ mod tests {
             shows_child_items: false,
             registered_client_tools: None,
             executor: None,
+            additional_executors: Vec::new(),
         }
     }
 
@@ -12956,6 +13000,7 @@ mod tests {
             shows_child_items: false,
             registered_client_tools: None,
             executor: None,
+            additional_executors: Vec::new(),
         }
     }
 
@@ -13272,6 +13317,7 @@ mod tests {
             shows_child_items: true,
             registered_client_tools: None,
             executor: None,
+            additional_executors: Vec::new(),
         };
         assert!(
             super::resolve_submitted_decisions(
@@ -13647,6 +13693,7 @@ mod tests {
             shows_child_items: false,
             registered_client_tools: None,
             executor: None,
+            additional_executors: Vec::new(),
         };
         assert!(matches!(
             resolve_submitted_decisions(&empty, &open),
@@ -16240,6 +16287,7 @@ async fn run_generation_after_user_message_memory_inner(
         allowed_tool_names,
         available_mcp_tools,
         offered_client_tools,
+        generation_request_context.executor.as_ref(),
         &chat_provider_headers_context,
         Some(task),
         chat.assistant_id,
@@ -16987,6 +17035,7 @@ pub(crate) async fn start_regeneration(
                 allowed_tool_names,
                 available_mcp_tools,
                 offered_client_tools,
+                generation_request_context.executor.as_ref(),
                 &chat_provider_headers_context,
                 Some(&task_for_stream),
                 chat.assistant_id,
@@ -17615,6 +17664,7 @@ pub(crate) async fn start_edit(
                 allowed_tool_names,
                 available_mcp_tools,
                 offered_client_tools,
+                generation_request_context.executor.as_ref(),
                 &chat_provider_headers_context,
                 Some(&task_for_stream),
                 chat.assistant_id,
@@ -17927,7 +17977,27 @@ pub async fn client_tool_result(
                         "Operation binding mismatch".into(),
                     ));
                 }
-                let outcome = ClientToolOutcome::from_payload(&operation_payload);
+                // The loop writes the tool's output from this delivery, so it
+                // gets the files read as the plain path reads them. A result
+                // stored below keeps its raw ids for the continuation to read.
+                let mut delivered_payload = operation_payload.clone();
+                if resolve_files
+                    && !request.file_upload_ids.is_empty()
+                    && let Some((result, file_ids)) =
+                        super::file_resolution::resolve_client_tool_files(
+                            &app_state,
+                            &policy,
+                            &me_user.to_subject(),
+                            me_user.access_token.as_deref(),
+                            payload.get("result").cloned(),
+                            &request.file_upload_ids,
+                        )
+                        .await
+                {
+                    delivered_payload["result"] = result;
+                    delivered_payload["file_upload_ids"] = json!(file_ids);
+                }
+                let outcome = ClientToolOutcome::from_payload(&delivered_payload);
                 // Delivery acknowledges receipt, not validity. The loop turns an
                 // invalid payload into fixed per-call feedback instead of timing out.
                 if matches!(
@@ -19307,6 +19377,11 @@ pub async fn continue_message_sse(
         .contains_key("X-Erato-Client-Tools")
         .then(|| crate::services::client_tools::registered_client_tools(&headers));
     request.executor = crate::services::client_operations::ExecutorBinding::from_headers(&headers);
+    request.additional_executors =
+        crate::services::client_operations::ExecutorBinding::additional_from_headers(
+            &headers,
+            request.executor.as_ref(),
+        );
     let (tx, rx) = tokio::sync::mpsc::channel::<Result<Event, Report>>(100);
     let started = start_continuation(&app_state, &policy, &me_user, request, tx).await?;
     let stream: SseEventStream = Box::pin(futures::StreamExt::inspect(
@@ -19337,8 +19412,9 @@ pub(crate) struct ParkedTurnResume {
     /// The client tools the device continuing this turn registered, when it
     /// said. `None` keeps the registration the turn started with.
     pub continuing_client_tools: Option<Vec<String>>,
-    /// The executor binding of the device answering an approval, if it sent one.
-    pub continuing_executor: Option<crate::services::client_operations::ExecutorBinding>,
+    /// The executor bindings of the device answering an approval, its
+    /// `X-Erato-Executor` first; empty when it sent none.
+    pub continuing_executors: Vec<crate::services::client_operations::ExecutorBinding>,
 }
 
 /// How a continuation reached the worker, decided before the generation lease
@@ -19566,6 +19642,7 @@ async fn resume_parked_child(
             // launched on, which its grant names, not the deciding client's.
             registered_client_tools: None,
             executor: None,
+            additional_executors: Vec::new(),
         };
         let client_reads = configuration
             .as_ref()
@@ -21099,7 +21176,12 @@ pub(crate) async fn run_continuation(
         pending_from_park,
         None,
         request.registered_client_tools.clone(),
-        request.executor.clone(),
+        request
+            .executor
+            .iter()
+            .chain(&request.additional_executors)
+            .cloned()
+            .collect(),
         assistant_config.and_then(|assistant| assistant.mcp_server_ids),
     )
     .await
@@ -21274,7 +21356,7 @@ async fn resume_parked_generation(
     pending_from_park: Vec<crate::models::message::PendingToolCall>,
     operation_attempt: Option<Uuid>,
     continuing_client_tools: Option<Vec<String>>,
-    continuing_executor: Option<crate::services::client_operations::ExecutorBinding>,
+    continuing_executors: Vec<crate::services::client_operations::ExecutorBinding>,
     assistant_mcp_server_ids: Option<Vec<String>>,
 ) -> Result<(), Report> {
     let mcp = app_state.mcp_state().await;
@@ -21452,7 +21534,7 @@ async fn resume_parked_generation(
             policy.executor = generation_parameters
                 .request_context
                 .as_ref()
-                .and_then(|context| context.executor.clone());
+                .and_then(|context| context.executor_for_tool(&current).cloned());
             let strict = crate::services::client_tools::native_strict_for_submission(
                 &current,
                 &schema,
@@ -21717,7 +21799,7 @@ async fn resume_parked_generation(
         initial_unfinished_tool_calls: pending_tool_calls,
         approved_task_call_ids,
         continuing_client_tools,
-        continuing_executor,
+        continuing_executors,
     });
 
     let chat_options =
@@ -21780,6 +21862,10 @@ async fn resume_parked_generation(
         allowed_tool_names,
         available_mcp_tools,
         offered_client_tools,
+        generation_parameters
+            .request_context
+            .as_ref()
+            .and_then(|context| context.executor.as_ref()),
         &headers_context,
         Some(task),
         chat.assistant_id,
@@ -21875,6 +21961,53 @@ async fn complete_client_operation_generation(
     Ok(())
 }
 
+/// The files a stored client tool result reported, read with this user's
+/// permissions as a live result's files are. Only a result not yet applied
+/// needs them; a crash retry keeps what the first continuation wrote.
+async fn stored_result_files(
+    app_state: &AppState,
+    policy: &PolicyEngine,
+    me_user: &MeProfile,
+    account_id: Uuid,
+    attempt_id: Uuid,
+) -> Result<Option<crate::services::client_operations::store::ResolvedFiles>, Report> {
+    let row = crate::services::client_operations::store::get(&app_state.db, account_id, attempt_id)
+        .await?;
+    if row.state != crate::services::client_operations::store::AttemptState::Ready {
+        return Ok(None);
+    }
+    let Some(validated) = row
+        .validated_result
+        .map(serde_json::from_value::<crate::services::client_operations::ValidatedResult>)
+        .transpose()?
+        .filter(|validated| validated.succeeded && !validated.file_ids.is_empty())
+    else {
+        return Ok(None);
+    };
+    let subject = me_user.to_subject();
+    authorize!(
+        policy,
+        &subject,
+        &Resource::Chat(row.chat_id.to_string()),
+        Action::Update
+    )?;
+    Ok(super::file_resolution::resolve_client_tool_files(
+        app_state,
+        policy,
+        &subject,
+        me_user.access_token.as_deref(),
+        validated.output.get("result").cloned(),
+        &validated.file_ids,
+    )
+    .await
+    .map(
+        |(result, file_ids)| crate::services::client_operations::store::ResolvedFiles {
+            result,
+            file_ids,
+        },
+    ))
+}
+
 /// Authenticated requests may run on any replica. Generation ownership is
 /// acquired by the API before entry; no credential or principal is persisted.
 pub(crate) async fn run_client_operation_continuation(
@@ -21886,11 +22019,13 @@ pub(crate) async fn run_client_operation_continuation(
     context: Option<GenerationRequestContext>,
 ) -> Result<(), Report> {
     let account_id = Uuid::parse_str(&me_user.id)?;
+    let files = stored_result_files(app_state, policy, me_user, account_id, attempt_id).await?;
     let row = crate::services::client_operations::store::begin_continuation(
         &app_state.db,
         account_id,
         attempt_id,
         task.generation_id,
+        files,
     )
     .await?;
     let message = get_message_by_id(
@@ -21924,7 +22059,9 @@ pub(crate) async fn run_client_operation_continuation(
         serde_json::from_value(row.request.clone())?;
     if let Some(kind) = app_state.client_operations.for_request(&request)
         && let Some(result) = row.result.as_ref()
-        && !kind.reoffer_after_result(&serde_json::from_value(result.clone())?)
+        && !kind.reoffer_after_result(crate::services::client_operations::stored_result_outcome(
+            result,
+        )?)
     {
         parameters
             .client_tools
@@ -22016,7 +22153,9 @@ pub(crate) async fn run_client_operation_continuation(
         context
             .as_ref()
             .map(|context| context.registered_client_tools.clone()),
-        context.and_then(|context| context.executor),
+        context
+            .map(|context| context.executors().cloned().collect())
+            .unwrap_or_default(),
         assistant.and_then(|assistant| assistant.mcp_server_ids),
     )
     .await
@@ -22086,11 +22225,16 @@ pub async fn resume_message_sse(
         .client_tools
         .durable_operations_enabled
         .then(|| app_state.db.clone());
+    let primary = crate::services::client_operations::ExecutorBinding::from_headers(&headers);
+    let additional = crate::services::client_operations::ExecutorBinding::additional_from_headers(
+        &headers,
+        primary.as_ref(),
+    );
     let guard = ClientStreamGuard::resume(
         db,
         request.chat_id,
         generation_id,
-        crate::services::client_operations::ExecutorBinding::from_headers(&headers),
+        primary.into_iter().chain(additional).collect(),
         crate::services::client_tools::registered_client_tools(&headers),
     )
     .await;

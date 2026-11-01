@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useClientToolFileApprovalStore } from "@/hooks/chat/store/clientToolFileApprovalStore";
 
 import { ActionConfirmationCard } from "./ActionConfirmationCard";
+import { TaskChatLink } from "./TaskChatLink";
 import { Card } from "../Container/Card";
 import { FilePreviewContent } from "../FilePreview/FilePreviewContent";
 import { OutlookSourceAction } from "../FilePreview/OutlookSourceAction";
@@ -12,21 +13,52 @@ import { ModalBase } from "../Modal/ModalBase";
 
 import type { ClientToolFileApprovalRequest } from "@/hooks/chat/store/clientToolFileApprovalStore";
 
-/** The same inline consent component as MCP, attached to the originating message. */
-export function ClientToolFileApprovals({ messageId }: { messageId: string }) {
+/** The same inline consent component as MCP, attached to the originating
+ * message: for a delegated task's call, the message whose turn started it. */
+export function ClientToolFileApprovals({
+  messageId,
+  taskBriefsByChatId,
+}: {
+  messageId: string;
+  /** The brief of each task this message started, by the task's chat. */
+  taskBriefsByChatId?: ReadonlyMap<string, string | undefined>;
+}) {
   const requests = useClientToolFileApprovalStore((state) => state.requests);
   return requests
-    .filter((request) => request.context.messageId === messageId)
+    .filter(
+      (request) =>
+        (request.context.hostGrant?.ownerMessageId ??
+          request.context.messageId) === messageId,
+    )
     .map((request) => (
-      <ClientToolFileApprovalCard key={request.id} request={request} />
+      <ClientToolFileApprovalCard
+        key={request.id}
+        request={request}
+        taskBrief={
+          request.context.hostGrant
+            ? taskBriefsByChatId?.get(
+                request.context.hostGrant.requestingChatId,
+              )
+            : undefined
+        }
+      />
     ));
 }
 
 function ClientToolFileApprovalCard({
   request,
+  taskBrief,
 }: {
   request: ClientToolFileApprovalRequest;
+  taskBrief?: string;
 }) {
+  const task = request.context.hostGrant?.requestingChatId;
+  const brief =
+    taskBrief ??
+    t({
+      id: "delegatedTaskApproval.unnamedTask",
+      message: "A task this response started",
+    });
   const selected = request.selected;
   const toggleFile = (file: File) => {
     useClientToolFileApprovalStore.setState((state) => ({
@@ -58,6 +90,26 @@ function ClientToolFileApprovalCard({
       })}
       description={
         <>
+          {task !== undefined && (
+            <p
+              className="text-sm text-theme-fg-secondary"
+              data-testid="client-tool-file-approval-task"
+            >
+              {t({
+                id: "chat.fileApproval.requestedByTask",
+                message: `Requested by a task: ${brief}`,
+              })}{" "}
+              <TaskChatLink
+                childChatId={task}
+                testId="client-tool-file-approval-open-task"
+              >
+                {t({
+                  id: "chat.fileApproval.openTask",
+                  message: "Open the task",
+                })}
+              </TaskChatLink>
+            </p>
+          )}
           <p className="text-sm text-theme-fg-secondary">
             {t({
               id: "chat.fileApproval.description",

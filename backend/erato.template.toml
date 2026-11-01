@@ -529,8 +529,9 @@ chat_provider_ids = ["test-token-limit"]
 # # How a client task's calls reach the device, for client tools that set no
 # # child_dispatch of their own. "durable" lets a call wait for the device, and
 # # applies only to tools that can: child_access = "read", a host context that
-# # outlives the pane (outlook_mailbox, not word_document), a durable table and
-# # client_tools.durable_operations_enabled. Others stay live (default: "live")
+# # outlives the pane (outlook_mailbox or desktop_sidecar, not word_document), a
+# # durable table and client_tools.durable_operations_enabled. Others stay live
+# # (default: "live")
 # child_dispatch = "live"
 #
 # # When the user is asked before the model's planned tasks are dispatched. The
@@ -728,6 +729,7 @@ chat_provider_ids = ["test-token-limit"]
 # # (see `child_host_context` under [facets] below) read through this tool on the
 # # device of the turn that planned it. Needs executor_stream_enabled; not
 # # allowed with `submission`. Must equal the durable table's host_context.
+# # Host contexts: outlook_mailbox, word_document, desktop_sidecar.
 # # child_access = "read"
 # # host_context = "outlook_mailbox"
 # # For a tool that reads a captured context version, name the planning turn's
@@ -742,8 +744,10 @@ chat_provider_ids = ["test-token-limit"]
 # # child_dispatch). "durable" parks the task until a client of the user runs
 # # the call, so it waits for a pane that is not open yet and for an approval on
 # # the device until the durable table's attempt_expiry_secs. Needs child_access,
-# # a durable table and a host context that outlives the pane: outlook_mailbox,
-# # never word_document.
+# # a durable table and a host context that outlives the pane: outlook_mailbox
+# # or desktop_sidecar, never word_document. Enable it only once every replica
+# # runs a release that supports it; do not roll back below it while calls may
+# # be parked.
 # # child_dispatch = "durable"
 #
 # # Optional: replay this tool's calls from EARLIER user turns as bounded

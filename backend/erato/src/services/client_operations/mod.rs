@@ -56,7 +56,60 @@ impl ExecutorBinding {
         let binding: Self = serde_json::from_str(value).ok()?;
         binding.validate().then_some(binding)
     }
+
+    /// Further bindings beside `X-Erato-Executor`, one per host context kind.
+    /// Each element is parsed on its own, so an entry a newer client shapes
+    /// differently drops only itself; an older backend ignores the header,
+    /// which is why `X-Erato-Executor` keeps its strict shape.
+    pub fn additional_from_headers(
+        headers: &axum::http::HeaderMap,
+        primary: Option<&Self>,
+    ) -> Vec<Self> {
+        let Some(value) = headers
+            .get(ADDITIONAL_EXECUTORS_HEADER)
+            .and_then(|value| value.to_str().ok())
+            .filter(|value| value.len() <= MAX_ADDITIONAL_EXECUTORS_BYTES)
+        else {
+            return Vec::new();
+        };
+        let Ok(entries) = serde_json::from_str::<Vec<Value>>(value) else {
+            return Vec::new();
+        };
+        let primary_kind = primary
+            .and_then(|binding| binding.host_context.as_ref())
+            .map(|host| host.kind.as_str());
+        let mut bindings: Vec<Self> = Vec::new();
+        for entry in entries {
+            if bindings.len() == MAX_ADDITIONAL_EXECUTORS {
+                break;
+            }
+            let Ok(binding) = serde_json::from_value::<Self>(entry) else {
+                continue;
+            };
+            let Some(kind) = binding.host_context.as_ref().map(|host| host.kind.as_str()) else {
+                continue;
+            };
+            if !binding.validate()
+                || primary_kind == Some(kind)
+                || bindings.iter().any(|known| {
+                    known
+                        .host_context
+                        .as_ref()
+                        .is_some_and(|host| host.kind == kind)
+                })
+            {
+                continue;
+            }
+            bindings.push(binding);
+        }
+        bindings
+    }
 }
+
+/// Submit header listing the bindings beside `X-Erato-Executor`.
+pub const ADDITIONAL_EXECUTORS_HEADER: &str = "X-Erato-Additional-Executors";
+pub const MAX_ADDITIONAL_EXECUTORS: usize = 4;
+const MAX_ADDITIONAL_EXECUTORS_BYTES: usize = 4096;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
@@ -66,8 +119,10 @@ pub enum ConsentPolicy {
     Native,
 }
 
+/// A parked call as the server stored it. Clients only receive it; it is read
+/// leniently so that a key a newer release adds does not break a replica that
+/// still runs this one.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
-#[serde(deny_unknown_fields)]
 pub struct OperationRequest {
     pub attempt_id: Uuid,
     pub operation_id: String,
@@ -108,6 +163,11 @@ pub enum OperationValue {
     Value {
         #[schema(value_type = OperationPayload)]
         value: Value,
+        /// Files the tool uploaded for its result, sent only when there are
+        /// any so that a result without files keeps its earlier shape.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        #[schema(nullable = false)]
+        file_upload_ids: Vec<Uuid>,
     },
     Reference {
         reference: Uuid,
@@ -191,6 +251,10 @@ pub struct OperationResult {
 pub struct ValidatedResult {
     pub output: Value,
     pub succeeded: bool,
+    /// Files the executor reported with a succeeded value. The server reads
+    /// them, as the user, where it writes the tool's output.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub file_ids: Vec<Uuid>,
 }
 
 /// Server-owned offer context. Kinds may authorize a bound synthetic operation
@@ -221,9 +285,10 @@ pub trait OperationKind: Send + Sync {
     fn tool_offer(&self, _context: &OperationOfferContext<'_>) -> Option<OperationToolOffer> {
         None
     }
-    /// Whether this logical turn may offer the operation again after its result.
-    /// For example, cancelling native collection must not start another search.
-    fn reoffer_after_result(&self, _result: &OperationResult) -> bool {
+    /// Whether this logical turn may offer the operation again after a result
+    /// with this outcome. For example, cancelling native collection must not
+    /// start another search.
+    fn reoffer_after_result(&self, _outcome: OperationOutcome) -> bool {
         true
     }
     fn allow_cross_device(&self) -> bool {
@@ -235,6 +300,11 @@ pub trait OperationKind: Send + Sync {
     /// Bounded by the attempt's expiry when claimed.
     fn claim_lease(&self) -> chrono::Duration {
         chrono::Duration::minutes(5)
+    }
+    /// Whether a same-binding claim of a live claim extends it for a call of
+    /// the user's own turn. A task's granted call is always extended.
+    fn renews_claim(&self) -> bool {
+        false
     }
     /// Configured tools keep the user's per-tool decision (the approval card)
     /// before dispatch; compiled kinds ask through their own consent policy.
@@ -366,15 +436,28 @@ pub fn pending(content: &[crate::models::message::ContentPart]) -> Option<&Clien
     }
 }
 
+/// The outcome of a stored result, whatever other keys a newer release wrote
+/// beside it. A continuation needs nothing else, and reading the whole result
+/// strictly would end a task for good on a key this release does not know.
+pub fn stored_result_outcome(result: &Value) -> Result<OperationOutcome, eyre::Report> {
+    let outcome = result
+        .get("outcome")
+        .ok_or_else(|| eyre::eyre!("Stored operation result has no outcome"))?;
+    Ok(serde_json::from_value(outcome.clone())?)
+}
+
 pub fn from_fast_result(
     request: &OperationRequest,
     outcome: crate::services::client_tools::ClientToolOutcome,
 ) -> Result<OperationResult, eyre::Report> {
     use crate::services::client_tools::ClientToolOutcome;
     let (outcome, result, error) = match outcome {
-        ClientToolOutcome::Result(value, files) if files.is_empty() => (
+        ClientToolOutcome::Result(value, file_upload_ids) => (
             OperationOutcome::Succeeded,
-            Some(OperationValue::Value { value }),
+            Some(OperationValue::Value {
+                value,
+                file_upload_ids,
+            }),
             None,
         ),
         ClientToolOutcome::ValidationFailed(issues, feedback) => (
@@ -441,6 +524,7 @@ pub fn invalid_result_feedback() -> ValidatedResult {
             "validation_errors": [{"path":"", "code":"invalid_operation_result",
                 "message":"The executor returned an invalid operation result."}]
         }),
+        file_ids: Vec::new(),
     }
 }
 
@@ -468,6 +552,135 @@ pub fn fast_result_or_refusal(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use axum::http::{HeaderMap, HeaderValue};
+    use serde_json::json;
+
+    fn binding_json(kind: &str, device: &str) -> Value {
+        json!({"device_id": device, "realm": "desktop-sidecar",
+            "host_context": {"kind": kind, "identity": "local"}})
+    }
+
+    fn additional(value: &str, primary: Option<&ExecutorBinding>) -> Vec<ExecutorBinding> {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            ADDITIONAL_EXECUTORS_HEADER,
+            HeaderValue::from_str(value).unwrap(),
+        );
+        ExecutorBinding::additional_from_headers(&headers, primary)
+    }
+
+    fn kinds(bindings: &[ExecutorBinding]) -> Vec<&str> {
+        bindings
+            .iter()
+            .map(|binding| binding.host_context.as_ref().unwrap().kind.as_str())
+            .collect()
+    }
+
+    #[test]
+    fn additional_executors_are_parsed_one_entry_at_a_time() {
+        let office = ExecutorBinding {
+            device_id: "office".into(),
+            realm: ExecutionRealm::OfficeAddin,
+            host_context: Some(HostContext {
+                kind: "outlook_mailbox".into(),
+                identity: "mailbox".into(),
+            }),
+        };
+        assert!(ExecutorBinding::additional_from_headers(&HeaderMap::new(), None).is_empty());
+
+        let sidecar = binding_json("desktop_sidecar", "client");
+        let parsed = additional(&json!([sidecar]).to_string(), Some(&office));
+        assert_eq!(parsed.len(), 1);
+        assert_eq!(parsed[0].realm, ExecutionRealm::DesktopSidecar);
+        assert_eq!(parsed[0].device_id, "client");
+
+        let mut future = binding_json("future_host", "client");
+        future["capabilities"] = json!(["x"]);
+        let no_host = json!({"device_id": "client", "realm": "desktop-sidecar"});
+        let empty_device = binding_json("empty_device", "");
+        let mixed = json!([future, no_host, empty_device, 7, sidecar]).to_string();
+        assert_eq!(kinds(&additional(&mixed, None)), ["desktop_sidecar"]);
+
+        let duplicate = json!([
+            binding_json("desktop_sidecar", "first"),
+            binding_json("desktop_sidecar", "second")
+        ]);
+        let parsed = additional(&duplicate.to_string(), None);
+        assert_eq!(parsed.len(), 1);
+        assert_eq!(parsed[0].device_id, "first");
+
+        let primary_kind = json!([binding_json("outlook_mailbox", "client"), sidecar]);
+        assert_eq!(
+            kinds(&additional(&primary_kind.to_string(), Some(&office))),
+            ["desktop_sidecar"]
+        );
+
+        let many: Vec<Value> = (0..6)
+            .map(|index| binding_json(&format!("kind_{index}"), "client"))
+            .collect();
+        assert_eq!(
+            additional(&json!(many).to_string(), None).len(),
+            MAX_ADDITIONAL_EXECUTORS
+        );
+
+        assert!(additional(&sidecar.to_string(), None).is_empty());
+        assert!(additional("not json", None).is_empty());
+        let padded = json!([
+            binding_json("desktop_sidecar", "client"),
+            {"pad": "x".repeat(MAX_ADDITIONAL_EXECUTORS_BYTES)}
+        ]);
+        assert!(additional(&padded.to_string(), None).is_empty());
+    }
+
+    fn stored_request() -> Value {
+        json!({
+            "attempt_id": Uuid::new_v4(), "operation_id": "desktop/search_sidecar_index",
+            "kind": client_tool::CLIENT_TOOL_KIND, "realm": "desktop-sidecar",
+            "chat_id": Uuid::new_v4(), "message_id": Uuid::new_v4(), "tool_call_id": "call",
+            "account_id": Uuid::new_v4(),
+            "binding": binding_json("desktop_sidecar", "client"),
+            "consent": "none", "expires_at": "2026-10-30T12:00:00Z", "input": {}
+        })
+    }
+
+    #[test]
+    fn a_stored_request_with_a_newer_field_still_parses() {
+        let mut stored = stored_request();
+        let plain: OperationRequest = serde_json::from_value(stored.clone()).unwrap();
+        assert_eq!(serde_json::to_value(&plain).unwrap(), stored);
+        stored["approval_scope"] = json!({"kind": "thread"});
+        let newer: OperationRequest = serde_json::from_value(stored).unwrap();
+        assert_eq!(newer, plain);
+    }
+
+    #[test]
+    fn a_stored_result_gives_its_outcome_whatever_else_it_carries() {
+        let stored = json!({
+            "attempt_id": Uuid::new_v4(), "operation_id": "desktop/search_sidecar_index",
+            "outcome": "succeeded",
+            "result": {"type": "value", "value": {"hits": []}, "future": 1},
+            "error": null,
+            "executor": binding_json("desktop_sidecar", "client"),
+            "approval_scope": {"kind": "thread"}
+        });
+        assert!(serde_json::from_value::<OperationResult>(stored.clone()).is_err());
+        assert_eq!(
+            stored_result_outcome(&stored).unwrap(),
+            OperationOutcome::Succeeded
+        );
+        let mut rejected = stored.clone();
+        rejected["outcome"] = json!("rejected");
+        assert_eq!(
+            stored_result_outcome(&rejected).unwrap(),
+            OperationOutcome::Rejected
+        );
+        let mut missing = stored.clone();
+        missing.as_object_mut().unwrap().remove("outcome");
+        assert!(stored_result_outcome(&missing).is_err());
+        let mut unknown = stored;
+        unknown["outcome"] = json!("postponed");
+        assert!(stored_result_outcome(&unknown).is_err());
+    }
 
     #[test]
     fn fast_errors_keep_a_cleaned_bounded_message() {

@@ -1,13 +1,18 @@
 import { t } from "@lingui/core/macro";
+import { useCallback } from "react";
 
 import { Button } from "@/components/ui/Controls/Button";
+import { useConversationSelector } from "@/components/ui/Message/ConversationMessages";
 import {
   OpenDelegatedRunLink,
   RetryTaskControl,
   resultPreview,
 } from "@/lib/delegation/delegatedRunControls";
 import { delegationReasonLabel } from "@/lib/delegation/delegationLabels";
+import { localTaskLabel } from "@/lib/desktopSidecar/localTaskLabels";
+import { useLocalTaskViewsStore } from "@/lib/desktopSidecar/localTaskViewsStore";
 import { useDelegatedRunOpener } from "@/providers/DelegatedRunOpenProvider";
+import { hasLaterTaskResult } from "@/utils/chat/taskResultFolds";
 import { getChatUrl } from "@/utils/chat/urlUtils";
 
 import { TraceStep } from "../TraceStep";
@@ -15,7 +20,10 @@ import { railIconFor } from "../icons";
 import { SettledInfoPill, ToolStatusPill } from "./ToolStatusPill";
 
 import type { TraceStepStatus } from "../types";
+import type { LocalTaskViewState } from "@/lib/desktopSidecar/localTaskCoordinator";
 import type { ContentPartTaskResult } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+
+const WARNING_TONE = "bg-theme-warning-bg text-theme-warning-fg";
 
 const railStatusFor = (status: string): TraceStepStatus => {
   switch (status) {
@@ -41,7 +49,7 @@ const statusPill = (status: string) => {
             id: "trace.delegation.status.inputRequired",
             message: "Needs your decision",
           })}
-          toneClassName="bg-theme-warning-bg text-theme-warning-fg"
+          toneClassName={WARNING_TONE}
         />
       );
     case "failed":
@@ -65,6 +73,34 @@ const statusPill = (status: string) => {
       return <SettledInfoPill label={status} />;
   }
 };
+
+/**
+ * A local-evidence task waits for its review in the Erato desktop app, not for
+ * an answer in its chat. This device names the native state while it knows
+ * the job, which it forgets once the job is acknowledged; otherwise the line
+ * claims no wait.
+ */
+const localReviewPill = (
+  state: LocalTaskViewState | undefined,
+  replaced: boolean,
+) => (
+  <SettledInfoPill
+    label={
+      state !== undefined
+        ? localTaskLabel(state)
+        : replaced
+          ? t({
+              id: "trace.taskResult.replacedByLaterReport",
+              message: "Replaced by a later report",
+            })
+          : t({
+              id: "trace.taskResult.localReview",
+              message: "Review in the Erato desktop app",
+            })
+    }
+    toneClassName={state === "ready_for_review" ? WARNING_TONE : undefined}
+  />
+);
 
 interface TaskResultStepProps {
   part: ContentPartTaskResult;
@@ -99,8 +135,26 @@ export const TaskResultStep = ({
     part.redeliveries === undefined ? part.sequence > 0 : part.redeliveries > 0;
   const modelName = part.model?.display_name ?? part.model?.chat_provider_id;
   const summary = hasReply ? resultPreview(part.summary) : part.summary.trim();
-  const pill = statusPill(part.status);
-  const needsAttention = part.status !== "completed";
+  // Client tasks always wait for their calls inside the parent's turn, so an
+  // async result that waits on the client comes from a local-evidence task.
+  const localReview =
+    part.status === "input_required" && part.reason === "client_pending";
+  const localState = useLocalTaskViewsStore((state) =>
+    localReview ? state.byChatId.get(part.child_chat_id) : undefined,
+  );
+  const { child_chat_id: childChatId, sequence } = part;
+  const selectReplaced = useCallback(
+    (messages: Parameters<typeof hasLaterTaskResult>[0]) =>
+      localReview && hasLaterTaskResult(messages, childChatId, sequence),
+    [localReview, childChatId, sequence],
+  );
+  const replaced = useConversationSelector(selectReplaced, Object.is);
+  const settled = replaced && localState === undefined;
+  const pill = localReview
+    ? localReviewPill(localState, replaced)
+    : statusPill(part.status);
+  const needsAttention = part.status !== "completed" && !settled;
+  const railStatus = settled ? "done" : railStatusFor(part.status);
 
   return (
     <div
@@ -110,7 +164,7 @@ export const TaskResultStep = ({
     >
       <TraceStep
         // eslint-disable-next-line lingui/no-unlocalized-strings -- content type
-        railIcon={railIconFor("task_result", railStatusFor(part.status))}
+        railIcon={railIconFor("task_result", railStatus)}
         hasTrailingRailLine={false}
         title={t({
           id: "trace.taskResult.title",
@@ -149,7 +203,7 @@ export const TaskResultStep = ({
           className="space-y-0.5 pb-1 pl-2.5 pt-0.5 text-xs text-theme-fg-muted"
           data-testid="task-result-body"
         >
-          {part.reason !== undefined && (
+          {part.reason !== undefined && !localReview && (
             <p data-testid="task-result-reason">
               {delegationReasonLabel(part.reason)}
             </p>
@@ -171,12 +225,17 @@ export const TaskResultStep = ({
             </p>
           )}
           {/* The question waits in the run's own chat; nothing here can answer it. */}
-          {part.status === "input_required" && (
+          {part.status === "input_required" && !settled && (
             <p data-testid="task-result-input-required">
-              {t({
-                id: "trace.taskResult.inputRequired",
-                message: "Answer it in the task's own chat:",
-              })}{" "}
+              {localReview
+                ? t({
+                    id: "trace.taskResult.followInTaskChat",
+                    message: "Follow it in the task's own chat:",
+                  })
+                : t({
+                    id: "trace.taskResult.inputRequired",
+                    message: "Answer it in the task's own chat:",
+                  })}{" "}
               {openRun ? (
                 <Button
                   variant="link"

@@ -2335,6 +2335,56 @@ it("renders local file consent alongside a submitted host card in the originatin
   }
 });
 
+it("names the task of a pending file approval while the parent streams", () => {
+  const taskChatId = "77777777-7777-7777-7777-777777777777";
+  const running = {
+    content_type: "tool_use",
+    tool_call_id: "call-task",
+    tool_name: "delegate_task",
+    input: { task: "Search Jane's mail for the contract" },
+    status: "in_progress",
+    output: { child_run_id: taskChatId, delegate_chat_id: taskChatId },
+  } as unknown as ContentPart;
+  const file = new File(["local contents"], "contract.eml");
+  useClientToolFileApprovalStore.setState({
+    requests: [
+      {
+        id: 1000,
+        files: [file],
+        selected: new Set([file]),
+        finish: vi.fn(),
+        context: {
+          chatId: taskChatId,
+          messageId: "task-message",
+          toolCallId: "task-call",
+          hostGrant: {
+            ownerChatId: "owner-chat",
+            ownerMessageId: "owner-message",
+            requestingChatId: taskChatId,
+            requestingMessageId: "task-message",
+          },
+        },
+      },
+    ],
+  });
+  try {
+    renderWithQueryClient(
+      <MessageContent
+        content={[running]}
+        messageId="owner-message"
+        isStreaming
+      />,
+    );
+    expect(
+      screen.getByTestId("client-tool-file-approval-task"),
+    ).toHaveTextContent(
+      "Requested by a task: Search Jane's mail for the contract",
+    );
+  } finally {
+    useClientToolFileApprovalStore.setState({ requests: [] });
+  }
+});
+
 it("shows a durable app wait in persisted history and hides a consumed marker", () => {
   const pending: ContentPart = {
     content_type: "client_tool_pending",

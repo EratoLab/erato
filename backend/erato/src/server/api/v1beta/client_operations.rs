@@ -425,7 +425,9 @@ pub async fn continue_client_operation(
     }
     if let Some(context) = &context
         && (request.consent != crate::services::client_operations::ConsentPolicy::None
-            || context.executor.as_ref() != Some(&request.binding)
+            || context
+                .executors()
+                .all(|binding| binding != &request.binding)
             || !context.registered_client_tools.iter().any(|tool| {
                 tool == &request.operation_id
                     || Some(tool.as_str()) == request.operation_id.rsplit('/').next()

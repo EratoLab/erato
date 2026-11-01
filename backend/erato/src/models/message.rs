@@ -222,6 +222,45 @@ pub struct GenerationRequestContext {
     pub registered_client_tools: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub executor: Option<crate::services::client_operations::ExecutorBinding>,
+    /// Bindings sent beside `executor`, one per host context kind, from
+    /// `X-Erato-Additional-Executors`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub additional_executors: Vec<crate::services::client_operations::ExecutorBinding>,
+}
+
+impl GenerationRequestContext {
+    /// Every binding of the turn, the primary first.
+    pub fn executors(
+        &self,
+    ) -> impl Iterator<Item = &crate::services::client_operations::ExecutorBinding> {
+        self.executor.iter().chain(&self.additional_executors)
+    }
+
+    /// The binding whose host context kind is `kind`, without falling back.
+    pub fn executor_for_host(
+        &self,
+        kind: &str,
+    ) -> Option<&crate::services::client_operations::ExecutorBinding> {
+        self.executors().find(|binding| {
+            binding
+                .host_context
+                .as_ref()
+                .is_some_and(|host| host.kind == kind)
+        })
+    }
+
+    /// The binding a call of `tool` is routed to: the one serving the tool's
+    /// host context, else the primary, as every tool was routed before
+    /// additional bindings existed.
+    pub fn executor_for_tool(
+        &self,
+        tool: &crate::config::ClientToolConfig,
+    ) -> Option<&crate::services::client_operations::ExecutorBinding> {
+        tool.host_context
+            .or(tool.durable.as_ref().map(|durable| durable.host_context))
+            .and_then(|host| self.executor_for_host(host.as_str()))
+            .or(self.executor.as_ref())
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
@@ -2458,5 +2497,88 @@ mod tool_approval_part_tests {
         assert!(approval_id.is_none());
         assert!(child_chat_id.is_none());
         assert!(reason.is_none());
+    }
+}
+
+#[cfg(test)]
+mod generation_request_context_tests {
+    use super::GenerationRequestContext;
+    use crate::config::{ClientToolConfig, ClientToolDurableConfig, ClientToolHostContext};
+    use crate::services::client_operations::{ExecutionRealm, ExecutorBinding, HostContext};
+
+    fn binding(realm: ExecutionRealm, kind: &str) -> ExecutorBinding {
+        ExecutorBinding {
+            device_id: format!("{kind}-device"),
+            realm,
+            host_context: Some(HostContext {
+                kind: kind.into(),
+                identity: "identity".into(),
+            }),
+        }
+    }
+
+    fn tool(
+        host: Option<ClientToolHostContext>,
+        durable: Option<ClientToolHostContext>,
+    ) -> ClientToolConfig {
+        ClientToolConfig {
+            name: "tool".into(),
+            host_context: host,
+            durable: durable.map(|host_context| ClientToolDurableConfig {
+                host_context,
+                result_schema: None,
+                attempt_expiry_secs: 3600,
+                claim_lease_secs: 120,
+            }),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn each_tool_is_routed_to_the_binding_of_its_host() {
+        let office = binding(ExecutionRealm::OfficeAddin, "outlook_mailbox");
+        let sidecar = binding(ExecutionRealm::DesktopSidecar, "desktop_sidecar");
+        let context = GenerationRequestContext {
+            executor: Some(office.clone()),
+            additional_executors: vec![sidecar.clone()],
+            ..Default::default()
+        };
+        assert_eq!(context.executors().collect::<Vec<_>>(), [&office, &sidecar]);
+        let sidecar_tool = tool(Some(ClientToolHostContext::DesktopSidecar), None);
+        assert_eq!(context.executor_for_tool(&sidecar_tool), Some(&sidecar));
+        let durable_only = tool(None, Some(ClientToolHostContext::DesktopSidecar));
+        assert_eq!(context.executor_for_tool(&durable_only), Some(&sidecar));
+        let mail_tool = tool(Some(ClientToolHostContext::OutlookMailbox), None);
+        assert_eq!(context.executor_for_tool(&mail_tool), Some(&office));
+        let word_tool = tool(Some(ClientToolHostContext::WordDocument), None);
+        assert_eq!(context.executor_for_tool(&word_tool), Some(&office));
+        assert_eq!(context.executor_for_tool(&tool(None, None)), Some(&office));
+
+        assert_eq!(context.executor_for_host("desktop_sidecar"), Some(&sidecar));
+        assert_eq!(context.executor_for_host("outlook_mailbox"), Some(&office));
+        assert_eq!(context.executor_for_host("word_document"), None);
+
+        let without_primary = GenerationRequestContext {
+            additional_executors: vec![sidecar.clone()],
+            ..Default::default()
+        };
+        assert_eq!(without_primary.executor_for_tool(&word_tool), None);
+        assert_eq!(
+            without_primary.executor_for_tool(&sidecar_tool),
+            Some(&sidecar)
+        );
+    }
+
+    #[test]
+    fn a_context_stored_before_additional_bindings_parses_and_serializes_as_before() {
+        let stored = serde_json::json!({
+            "platform": "outlook",
+            "registered_client_tools": ["outlook/read_message"],
+            "executor": {"device_id": "d", "realm": "office-addin",
+                "host_context": {"kind": "outlook_mailbox", "identity": "m"}}
+        });
+        let context: GenerationRequestContext = serde_json::from_value(stored.clone()).unwrap();
+        assert!(context.additional_executors.is_empty());
+        assert_eq!(serde_json::to_value(&context).unwrap(), stored);
     }
 }

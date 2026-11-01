@@ -157,6 +157,28 @@ pub(crate) async fn resolve_client_tool_files(
     ))
 }
 
+/// The tool's own value of a result delivered to a waiting turn, for a turn
+/// that parks before using it. Every path that delivers a result with files
+/// first reads them into the wrapper [`resolve_client_tool_files`] builds and
+/// keeps the ids the user may read; stored, the result keeps only the value
+/// and those ids, so the continuation reads the files once.
+pub(crate) fn delivered_result_for_storage(
+    outcome: crate::services::client_tools::ClientToolOutcome,
+) -> crate::services::client_tools::ClientToolOutcome {
+    use crate::services::client_tools::ClientToolOutcome;
+    match outcome {
+        ClientToolOutcome::Result(serde_json::Value::Object(mut wrapper), file_ids)
+            if !file_ids.is_empty() =>
+        {
+            ClientToolOutcome::Result(
+                wrapper.remove("result").unwrap_or(serde_json::Value::Null),
+                file_ids,
+            )
+        }
+        outcome => outcome,
+    }
+}
+
 fn bounded_tool_file_text(text: &str, remaining_chars: &mut usize) -> (String, bool) {
     let bounded: String = text.chars().take(*remaining_chars).collect();
     *remaining_chars -= bounded.chars().count();

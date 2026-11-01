@@ -115,9 +115,9 @@ impl crate::services::client_operations::OperationKind for LocalEvidenceKind {
     }
     fn reoffer_after_result(
         &self,
-        result: &crate::services::client_operations::OperationResult,
+        outcome: crate::services::client_operations::OperationOutcome,
     ) -> bool {
-        result.outcome == crate::services::client_operations::OperationOutcome::Succeeded
+        outcome == crate::services::client_operations::OperationOutcome::Succeeded
     }
     fn tool_offer(
         &self,
@@ -258,6 +258,7 @@ impl LocalEvidenceKind {
         Ok(ValidatedResult {
             succeeded: true,
             output: json!({"status":"approved","exportId":package["exportId"],"evidence":evidence}),
+            file_ids: Vec::new(),
         })
     }
 }

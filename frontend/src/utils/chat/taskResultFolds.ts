@@ -17,6 +17,23 @@ export const taskResultOf = (
   return part?.content_type === "task_result" ? part : undefined;
 };
 
+/**
+ * Whether the conversation holds a later delivery for the same task: each
+ * delivery of a run bumps `sequence`, so a higher one reported after it.
+ */
+export function hasLaterTaskResult(
+  messages: Readonly<
+    Record<string, Pick<Message, "role" | "content"> | undefined>
+  >,
+  childChatId: string,
+  sequence: number,
+): boolean {
+  return Object.values(messages).some((message) => {
+    const part = message ? taskResultOf(message) : undefined;
+    return part?.child_chat_id === childChatId && part.sequence > sequence;
+  });
+}
+
 interface TaskResultFold {
   rowId: string;
   part: ContentPartTaskResult;

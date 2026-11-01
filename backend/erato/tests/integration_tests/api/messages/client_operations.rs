@@ -57,9 +57,10 @@ impl OperationKind for DocumentPageKind {
             return Ok(ValidatedResult {
                 succeeded: false,
                 output: json!({"status":"error","error":"Validation failed"}),
+                file_ids: Vec::new(),
             });
         }
-        let Some(OperationValue::Value { value }) = &result.result else {
+        let Some(OperationValue::Value { value, .. }) = &result.result else {
             return Err("page required".into());
         };
         let page: Page =
@@ -73,6 +74,7 @@ impl OperationKind for DocumentPageKind {
         Ok(ValidatedResult {
             output: json!({"status":"success","result":value}),
             succeeded: true,
+            file_ids: Vec::new(),
         })
     }
 }
@@ -94,6 +96,7 @@ fn page_result(request: &OperationRequest, executor: ExecutorBinding) -> Operati
         outcome: OperationOutcome::Succeeded,
         result: Some(OperationValue::Value {
             value: json!({"document_identity":"doc-one","page":1,"text":"approved page"}),
+            file_upload_ids: Vec::new(),
         }),
         error: None,
         executor,
@@ -873,6 +876,7 @@ async fn crashed_continuation_is_replayed_and_old_generation_is_fenced(pool: Poo
         request.account_id,
         request.attempt_id,
         old_task.generation_id,
+        None,
     )
     .await
     .unwrap();
@@ -1851,6 +1855,7 @@ impl OperationKind for PlanKind {
             return Ok(ValidatedResult {
                 succeeded: false,
                 output: json!({"status":"error","error":"CURRENT-DIAGNOSTIC"}),
+                file_ids: Vec::new(),
             });
         }
         #[derive(Deserialize)]
@@ -1858,7 +1863,7 @@ impl OperationKind for PlanKind {
         struct PlanReceipt {
             accepted: bool,
         }
-        let Some(OperationValue::Value { value }) = &result.result else {
+        let Some(OperationValue::Value { value, .. }) = &result.result else {
             return Err("receipt required".into());
         };
         let receipt: PlanReceipt =
@@ -1869,6 +1874,7 @@ impl OperationKind for PlanKind {
         Ok(ValidatedResult {
             succeeded: true,
             output: json!({"status":"success","result":{"accepted":true}}),
+            file_ids: Vec::new(),
         })
     }
 }
@@ -1917,6 +1923,7 @@ async fn post_claimed_result(
     if request.operation_id == "client/submit_plan" {
         result.result = accepted.then(|| OperationValue::Value {
             value: json!({"accepted":true}),
+            file_upload_ids: Vec::new(),
         });
         if !accepted {
             result.outcome = OperationOutcome::Rejected;
@@ -1930,6 +1937,7 @@ async fn post_claimed_result(
         result.result = Some(OperationValue::Value {
             value: json!({"document_identity":"doc-one","page":1,
             "text":if request.tool_call_id=="read-A" {"PRIOR-PAGE-SECRET"} else {"CURRENT-PAGE"}}),
+            file_upload_ids: Vec::new(),
         });
     }
     let payload = json!({"claim_token":claim.json::<Value>()["claim_token"],"result":result});
@@ -2151,6 +2159,7 @@ async fn joint_replay_case(pool: Pool<Postgres>, withdraw: bool) {
         request.account_id,
         request.attempt_id,
         old_task.generation_id,
+        None,
     )
     .await
     .unwrap();

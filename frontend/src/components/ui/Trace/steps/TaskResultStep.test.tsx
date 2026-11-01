@@ -2,11 +2,14 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
+import { ConversationMessagesProvider } from "@/components/ui/Message/ConversationMessages";
 import { TaskResultStep } from "@/components/ui/Trace/steps/TaskResultStep";
 import { useGenerationStatusStore } from "@/hooks/chat/store/generationStatusStore";
+import { publishLocalTaskViews } from "@/lib/desktopSidecar/localTaskViewsStore";
 import { StaticFeatureConfigProvider } from "@/providers/FeatureConfigProvider";
 
 import type { ContentPartTaskResult } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type { Message } from "@/types/chat";
 import type { ReactElement } from "react";
 
 const part = (
@@ -255,5 +258,158 @@ describe("TaskResultStep", () => {
         />,
       ),
     ).toBe("true");
+  });
+
+  describe("a local-evidence task waiting for its review", () => {
+    const waiting = part({
+      status: "input_required",
+      reason: "client_pending",
+      summary: "",
+    });
+    afterEach(() => publishLocalTaskViews([]));
+
+    it("shows the state this device knows of the job", () => {
+      publishLocalTaskViews([
+        {
+          id: "job",
+          chatId: waiting.child_chat_id,
+          messageId: "task-message",
+          state: "ready_for_review",
+        },
+      ]);
+      render(<TaskResultStep part={waiting} />);
+      const pill = screen.getByTestId("task-result-status");
+      expect(pill).toHaveTextContent(
+        "Ready for review in the Erato desktop app",
+      );
+      expect(pill.firstElementChild).toHaveClass("bg-theme-warning-bg");
+      expect(
+        screen.getByTestId("task-result-input-required"),
+      ).toHaveTextContent("Follow it in the task's own chat:");
+    });
+
+    it("says only where the review happens on a device that does not know the job", () => {
+      publishLocalTaskViews([
+        {
+          id: "other",
+          chatId: "another-task",
+          messageId: "m",
+          state: "ready_for_review",
+        },
+      ]);
+      render(<TaskResultStep part={waiting} />);
+      const card = screen.getByTestId("task-result-step");
+      expect(screen.getByTestId("task-result-status")).toHaveTextContent(
+        "Review in the Erato desktop app",
+      );
+      expect(card).not.toHaveTextContent(/waiting/i);
+      expect(
+        screen.getByTestId("task-result-status").firstElementChild,
+      ).not.toHaveClass("bg-theme-warning-bg");
+      expect(card).not.toHaveTextContent("Needs your decision");
+      expect(card).not.toHaveTextContent("on this device");
+      expect(
+        screen.queryByTestId("task-result-reason"),
+      ).not.toBeInTheDocument();
+    });
+
+    // The device forgets a job once it is acknowledged, so after the task
+    // reported again only that later report says how it ended.
+    describe("once a later report of the same task is in the chat", () => {
+      const row = (id: string, result: ContentPartTaskResult): Message => ({
+        id,
+        role: "user",
+        createdAt: "2026-11-01T00:00:00Z",
+        content: [{ content_type: "task_result", ...result }],
+      });
+      const finished = row(
+        "later",
+        part({ status: "completed", sequence: 1, summary: "found it" }),
+      );
+      const renderBeside = (
+        others: Message[],
+        ui: ReactElement = <TaskResultStep part={waiting} />,
+      ) =>
+        render(
+          <ConversationMessagesProvider
+            messages={Object.fromEntries(
+              [row("earlier", waiting), ...others].map((message) => [
+                message.id,
+                message,
+              ]),
+            )}
+          >
+            {ui}
+          </ConversationMessagesProvider>,
+        );
+
+      it("shows the earlier line as replaced, not waiting", () => {
+        renderBeside([finished], <TaskResultStep part={waiting} hasReply />);
+
+        const card = screen.getByTestId("task-result-step");
+        expect(screen.getByTestId("task-result-status")).toHaveTextContent(
+          "Replaced by a later report",
+        );
+        expect(card).not.toHaveTextContent(/waiting|review/i);
+        expect(screen.queryByTestId("task-result-input-required")).toBeNull();
+        expect(
+          screen
+            .getByRole("button", { name: /task reported back/i })
+            .getAttribute("aria-expanded"),
+        ).toBe("false");
+      });
+
+      it("keeps the state this device still knows of the job", () => {
+        publishLocalTaskViews([
+          {
+            id: "job",
+            chatId: waiting.child_chat_id,
+            messageId: "task-message",
+            state: "continuing",
+          },
+        ]);
+        renderBeside([finished]);
+
+        expect(screen.getByTestId("task-result-status")).toHaveTextContent(
+          "Continuing the original task",
+        );
+      });
+
+      it("counts only a later delivery of the same task", () => {
+        renderBeside([
+          row(
+            "other-task",
+            part({ child_chat_id: "another-task", sequence: 1 }),
+          ),
+          row("same-delivery", part({ sequence: 0 })),
+        ]);
+
+        expect(screen.getByTestId("task-result-status")).toHaveTextContent(
+          "Review in the Erato desktop app",
+        );
+      });
+    });
+
+    it("keeps the decision wording for a task that waits on a question", () => {
+      publishLocalTaskViews([
+        {
+          id: "job",
+          chatId: waiting.child_chat_id,
+          messageId: "m",
+          state: "ready_for_review",
+        },
+      ]);
+      render(
+        <TaskResultStep
+          part={part({ status: "input_required", reason: "approval_pending" })}
+        />,
+      );
+      expect(screen.getByTestId("task-result-status")).toHaveTextContent(
+        "Needs your decision",
+      );
+      expect(
+        screen.getByTestId("task-result-input-required"),
+      ).toHaveTextContent("Answer it in the task's own chat:");
+    });
   });
 });

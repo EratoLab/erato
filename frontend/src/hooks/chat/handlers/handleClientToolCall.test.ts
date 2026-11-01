@@ -160,6 +160,44 @@ describe("handleClientToolCall", () => {
     }
   });
 
+  it("answers with the binding the call started under after the app went away during the call", async () => {
+    const binding = {
+      device_id: "pane-device-000000",
+      realm: "desktop-sidecar" as const,
+      host_context: { kind: "desktop_sidecar", identity: "local" },
+    };
+    let ready = true;
+    const unregister = registerOperationExecutor(
+      "get_sidecar_document",
+      () => (ready ? binding : undefined),
+      { additional: true },
+    );
+    registerClientToolExecutor("get_sidecar_document", async () => {
+      ready = false;
+      return { ok: true, result: null, fileUploadIds: ["file-1"] };
+    });
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({ delivered: true, stored: false }),
+    });
+    try {
+      await handleClientToolCall(
+        makeEvent({ tool_name: "get_sidecar_document" }),
+        deps,
+      );
+      const init = fetchMock.mock.calls[0][1] as RequestInit;
+      expect((init.headers as Record<string, string>)["X-Erato-Executor"]).toBe(
+        JSON.stringify(binding),
+      );
+      expect(lastPostBody(fetchMock)).toMatchObject({
+        file_upload_ids: ["file-1"],
+      });
+    } finally {
+      unregister();
+    }
+  });
+
   describe("a delegated task's call", () => {
     const executor = {
       device_id: "pane-device-000000",
@@ -230,6 +268,37 @@ describe("handleClientToolCall", () => {
         hostGrant: Record<string, string>;
       };
       expect(context.hostGrant).not.toHaveProperty("contextRef");
+    });
+
+    it("ends as a context loss when its tool is registered but unavailable", async () => {
+      const execute = vi.fn(async () => ({ ok: true as const, result: null }));
+      registerClientToolExecutor("fetch_availability", execute, () => false, {
+        acceptsGrantCalls: true,
+      });
+      await handleClientToolCall(makeEvent(), { ...deps, executor, lineage });
+
+      expect(execute).not.toHaveBeenCalled();
+      const message =
+        'The client tool "fetch_availability" is not available on this device right now, so nothing was read.';
+      expect(lastPostBody(fetchMock)).toEqual({
+        chat_id: "chat-1",
+        message_id: "msg-1",
+        tool_call_id: "call-1",
+        error: message,
+        validation_errors: [{ path: "", code: "context_unavailable", message }],
+        submission_feedback: { terminal: true, recovery: "cannot_continue" },
+      });
+    });
+
+    it("keeps the plain error for a tool this client never registered", async () => {
+      await handleClientToolCall(makeEvent(), { ...deps, executor, lineage });
+
+      expect(lastPostBody(fetchMock)).toEqual({
+        chat_id: "chat-1",
+        message_id: "msg-1",
+        tool_call_id: "call-1",
+        error: 'No client-tool executor registered for "fetch_availability"',
+      });
     });
 
     it("is refused without running a handler that did not opt in", async () => {
@@ -438,6 +507,23 @@ describe("handleClientToolCall", () => {
     expect(lastPostBody(fetchMock).error).toContain("No client-tool executor");
   });
 
+  it("POSTs the plain error for the user's own call to an unavailable tool", async () => {
+    registerClientToolExecutor(
+      "fetch_availability",
+      async () => ({ ok: true as const, result: 1 }),
+      () => false,
+      { acceptsGrantCalls: true },
+    );
+    await handleClientToolCall(makeEvent(), deps);
+
+    expect(lastPostBody(fetchMock)).toEqual({
+      chat_id: "chat-1",
+      message_id: "msg-1",
+      tool_call_id: "call-1",
+      error: 'No client-tool executor registered for "fetch_availability"',
+    });
+  });
+
   it("preserves correction handles and terminal failures as rejections", async () => {
     registerClientToolExecutor("fetch_availability", async () => ({
       ok: false,
@@ -610,6 +696,42 @@ describe("handleClientToolCall", () => {
     expect(seenSignal?.aborted).toBe(false);
     expect(lastPostBody(fetchMock)).toMatchObject({ result: 1 });
   });
+
+  it.each([10, -10])(
+    "closes a pushed call's prompt when the server stops waiting, with the client clock %i minutes off",
+    async (minutesOff) => {
+      vi.useFakeTimers();
+      vi.setSystemTime(Date.now() + minutesOff * 60_000);
+      try {
+        const signals: AbortSignal[] = [];
+        registerClientToolExecutor(
+          "get_sidecar_document",
+          (_input, context) =>
+            new Promise((resolve) => {
+              if (context?.signal) signals.push(context.signal);
+              context?.signal?.addEventListener("abort", () =>
+                resolve({ ok: false, error: "The prompt closed." }),
+              );
+            }),
+        );
+        const done = handleClientToolCall(
+          makeEvent({ tool_name: "get_sidecar_document", tool_call_id: "c" }),
+          { ...deps, timeoutMs: 90_000 },
+        );
+        await vi.advanceTimersByTimeAsync(89_999);
+        expect(signals[0]?.aborted).toBe(false);
+        await vi.advanceTimersByTimeAsync(1);
+        expect(signals[0]?.aborted).toBe(true);
+        await done;
+        expect(lastPostBody(fetchMock)).toMatchObject({
+          tool_call_id: "c",
+          error: "The prompt closed.",
+        });
+      } finally {
+        vi.useRealTimers();
+      }
+    },
+  );
 
   it("releases the controller once the execution settles", async () => {
     let seenSignal: AbortSignal | undefined;

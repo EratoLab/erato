@@ -82,6 +82,8 @@ pub struct ExecutorCall {
     pub tool_name: String,
     pub input: Value,
     pub lineage: Option<CallLineage>,
+    /// When the run stops waiting for this call's result, by the server's clock.
+    pub expires_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
@@ -95,6 +97,17 @@ pub struct ExecutorStreamClientToolCall {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false)]
     pub lineage: Option<CallLineage>,
+    /// When the server stops waiting for this call's result, by the server's
+    /// clock.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub expires_at: Option<DateTime<Utc>>,
+    /// Milliseconds left until `expires_at` when this event was delivered.
+    /// A client times the call from this, not from `expires_at`, so its own
+    /// clock does not matter.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub timeout_ms: Option<u64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
@@ -121,6 +134,17 @@ impl ExecutorStreamEvent {
             Self::ClientOperationAvailable(_) => "client_operation_available",
         }
     }
+
+    /// The event as delivered at `now`: a call carries the time left until its
+    /// `expires_at`, floored at zero.
+    fn delivered_at(mut self, now: DateTime<Utc>) -> Self {
+        if let Self::ClientToolCall(call) = &mut self {
+            call.timeout_ms = call.expires_at.map(|expires_at| {
+                u64::try_from((expires_at - now).num_milliseconds()).unwrap_or(0)
+            });
+        }
+        self
+    }
 }
 
 impl From<&ExecutorCall> for ExecutorStreamEvent {
@@ -132,6 +156,8 @@ impl From<&ExecutorCall> for ExecutorStreamEvent {
             tool_name: call.tool_name.clone(),
             input: call.input.clone(),
             lineage: call.lineage.clone(),
+            expires_at: call.expires_at,
+            timeout_ms: None,
         }))
     }
 }
@@ -524,10 +550,11 @@ async fn poll(db: DatabaseConnection, hub: Weak<HubInner>) {
         let mut undelivered = Vec::new();
         {
             let senders = hub.streams.lock().expect("executor streams lock poisoned");
+            let now = Utc::now();
             for (call_id, stream_id, event) in deliveries {
                 let sent = senders
                     .get(&stream_id)
-                    .is_some_and(|sender| sender.send(event).is_ok());
+                    .is_some_and(|sender| sender.send(event.delivered_at(now)).is_ok());
                 if !sent {
                     undelivered.push(call_id);
                 }
@@ -680,15 +707,72 @@ mod tests {
             tool_name: "read".into(),
             input: serde_json::json!({"a": 1}),
             lineage: None,
+            expires_at: None,
         };
         let event = ExecutorStreamEvent::from(&call);
         let value = serde_json::to_value(&event).unwrap();
         assert_eq!(value["message_type"], event.message_type());
         assert_eq!(value["tool_name"], "read");
         assert!(value.get("lineage").is_none());
+        assert!(value.get("expires_at").is_none());
+        assert!(value.get("timeout_ms").is_none());
         assert_eq!(
             serde_json::from_value::<ExecutorStreamEvent>(value).unwrap(),
             event
+        );
+    }
+
+    fn call_expiring(expires_at: Option<DateTime<Utc>>) -> ExecutorStreamEvent {
+        ExecutorStreamEvent::from(&ExecutorCall {
+            account_id: Uuid::nil(),
+            binding: ExecutorBinding {
+                device_id: "device".into(),
+                realm: super::super::ExecutionRealm::DesktopSidecar,
+                host_context: None,
+            },
+            chat_id: Uuid::nil(),
+            generation_id: Uuid::nil(),
+            message_id: Uuid::nil(),
+            tool_call_id: "call".into(),
+            tool_name: "read".into(),
+            input: serde_json::json!({}),
+            lineage: None,
+            expires_at,
+        })
+    }
+
+    fn timeout_ms(event: ExecutorStreamEvent) -> Option<u64> {
+        match event {
+            ExecutorStreamEvent::ClientToolCall(call) => call.timeout_ms,
+            ExecutorStreamEvent::ClientOperationAvailable(_) => None,
+        }
+    }
+
+    #[test]
+    fn a_delivered_call_carries_the_time_left_until_it_expires() {
+        let now = Utc::now();
+        let soon = call_expiring(Some(now + chrono::Duration::seconds(30)));
+        let stored = serde_json::to_value(&soon).unwrap();
+        assert!(stored["expires_at"].is_string());
+        assert!(stored.get("timeout_ms").is_none(), "set only at delivery");
+        let left = timeout_ms(
+            serde_json::from_value::<ExecutorStreamEvent>(stored)
+                .unwrap()
+                .delivered_at(now + chrono::Duration::milliseconds(1)),
+        )
+        .unwrap();
+        assert!(left > 0 && left <= 30_000, "{left}");
+
+        let past = call_expiring(Some(now - chrono::Duration::seconds(5)));
+        assert_eq!(timeout_ms(past.delivered_at(now)), Some(0));
+
+        let unbounded = call_expiring(None).delivered_at(now);
+        assert_eq!(timeout_ms(unbounded.clone()), None);
+        assert!(
+            serde_json::to_value(&unbounded)
+                .unwrap()
+                .get("timeout_ms")
+                .is_none()
         );
     }
 

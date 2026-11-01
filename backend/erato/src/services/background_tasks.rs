@@ -1971,8 +1971,38 @@ pub struct ClientStreamGuard {
 
 struct ClientTransportClaim {
     chat_id: Uuid,
-    binding: crate::services::client_operations::ExecutorBinding,
+    /// The client's bindings, its `X-Erato-Executor` first. The transport row
+    /// names one of them, whichever served the turn's first durable tool.
+    bindings: Vec<crate::services::client_operations::ExecutorBinding>,
     registered: Vec<String>,
+}
+
+impl ClientTransportClaim {
+    async fn acquire(
+        &self,
+        db: &DatabaseConnection,
+        generation_id: Uuid,
+        transport_id: Uuid,
+    ) -> Result<bool, eyre::Report> {
+        let mut failure = None;
+        for binding in &self.bindings {
+            match crate::services::client_operations::transport::acquire(
+                db,
+                self.chat_id,
+                generation_id,
+                binding,
+                &self.registered,
+                transport_id,
+            )
+            .await
+            {
+                Ok(true) => return Ok(true),
+                Ok(false) => {}
+                Err(error) => failure = Some(error),
+            }
+        }
+        failure.map_or(Ok(false), Err)
+    }
 }
 
 impl ClientStreamGuard {
@@ -2004,14 +2034,17 @@ impl ClientStreamGuard {
         db: Option<DatabaseConnection>,
         chat_id: Uuid,
         generation_id: Uuid,
-        binding: Option<crate::services::client_operations::ExecutorBinding>,
+        bindings: Vec<crate::services::client_operations::ExecutorBinding>,
         registered: Vec<String>,
     ) -> Self {
-        let claim = binding
-            .filter(|binding| binding.validate() && !registered.is_empty())
-            .map(|binding| ClientTransportClaim {
+        let bindings: Vec<_> = bindings
+            .into_iter()
+            .filter(|binding| binding.validate())
+            .collect();
+        let claim =
+            (!bindings.is_empty() && !registered.is_empty()).then_some(ClientTransportClaim {
                 chat_id,
-                binding,
+                bindings,
                 registered,
             });
         let mut guard = Self::new(
@@ -2021,16 +2054,7 @@ impl ClientStreamGuard {
             None,
         );
         if let (Some(db), Some(claim)) = (&guard.db, &claim) {
-            match crate::services::client_operations::transport::acquire(
-                db,
-                chat_id,
-                generation_id,
-                &claim.binding,
-                &claim.registered,
-                guard.transport_id,
-            )
-            .await
-            {
+            match claim.acquire(db, generation_id, guard.transport_id).await {
                 Ok(owned) => guard.owned.store(owned, Ordering::Release),
                 Err(error) => {
                     tracing::warn!(%error, "Client transport acquisition failed; will retry")
@@ -2097,16 +2121,7 @@ impl ClientStreamGuard {
                 if !owned.load(Ordering::Acquire)
                     && let Some(claim) = &claim
                 {
-                    match crate::services::client_operations::transport::acquire(
-                        &db,
-                        claim.chat_id,
-                        generation_id,
-                        &claim.binding,
-                        &claim.registered,
-                        transport_id,
-                    )
-                    .await
-                    {
+                    match claim.acquire(&db, generation_id, transport_id).await {
                         Ok(acquired) => owned.store(acquired, Ordering::Release),
                         Err(error) => {
                             tracing::warn!(%error, "Client transport acquisition failed; will retry")

@@ -571,36 +571,38 @@ describe("delegation step", () => {
     );
   });
 
-  it("names the host a waiting task waits for when the stop says it", () => {
-    render(
-      <QueryClientProvider client={queryClient}>
-        <StaticFeatureConfigProvider config={{}}>
-          <WaitingHostsContext.Provider
-            value={{ "call-delegate": "outlook_mailbox" }}
-          >
-            <ToolUseStep
-              part={part(
-                {
-                  ...IDENTITY,
-                  status: "input_required",
-                  reason: "client_pending",
-                },
-                "delegate_task",
-              )}
-              status="done"
-              isStreaming={false}
-              isCollapsed={false}
-              isLastStep
-            />
-          </WaitingHostsContext.Provider>
-        </StaticFeatureConfigProvider>
-      </QueryClientProvider>,
-    );
+  it.each([
+    ["outlook_mailbox", "Waiting for Outlook on this device"],
+    ["desktop_sidecar", "Waiting for the Erato desktop app on this device"],
+  ])(
+    "names the host %s a waiting task waits for when the stop says it",
+    (host, label) => {
+      render(
+        <QueryClientProvider client={queryClient}>
+          <StaticFeatureConfigProvider config={{}}>
+            <WaitingHostsContext.Provider value={{ "call-delegate": host }}>
+              <ToolUseStep
+                part={part(
+                  {
+                    ...IDENTITY,
+                    status: "input_required",
+                    reason: "client_pending",
+                  },
+                  "delegate_task",
+                )}
+                status="done"
+                isStreaming={false}
+                isCollapsed={false}
+                isLastStep
+              />
+            </WaitingHostsContext.Provider>
+          </StaticFeatureConfigProvider>
+        </QueryClientProvider>,
+      );
 
-    expect(
-      screen.getByText("Waiting for Outlook on this device"),
-    ).toBeInTheDocument();
-  });
+      expect(screen.getByText(label)).toBeInTheDocument();
+    },
+  );
 
   it("keeps the retired timeout status readable on replayed parts", () => {
     renderStep({ ...IDENTITY, status: "timeout" }, undefined, false);

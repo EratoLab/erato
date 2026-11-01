@@ -71,6 +71,11 @@ The sidecar handler owns challenge/bind/start/status/review/read/upload/ack only
 Account disposal aborts outstanding work; pane closure leaves accepted native jobs
 running. Another authenticated frontend may continue an accepted cloud result
 without the original device. Native receipt delivery can wait for that device.
+The parent's task card for such a task (`input_required`, `client_pending`) shows
+the job's native state while this device knows the job, which it forgets once the
+job is acknowledged; otherwise "Replaced by a later report" once a later report of
+the same task is in the chat, else "Review in the Erato desktop app"; never a
+decision to make (ERMAIN-1034).
 
 ## Rebase delta
 
