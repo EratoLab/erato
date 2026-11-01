@@ -325,7 +325,9 @@ A document scope is checked on the device:
   `X-Erato-Executor` must be the grant's binding. All items of one scope carry
   the same position. Otherwise `approve_context` is a 400.
 - A pane lists the tools whose scope it checks in `X-Erato-Scoped-Client-Tools`,
-  a subset of `X-Erato-Child-Client-Tools`. The scope is offered and used only
+  a subset of `X-Erato-Child-Client-Tools`, on the stream of its own binding
+  only; the stream of an additional binding, such as the desktop sidecar's,
+  lists none. The scope is offered and used only
   while one stream of the binding lists the tool in both. A covered call
   (`client_executor_calls.scoped`) goes only to such a stream, re-delivery
   included, and ends as `context_unavailable` after the 15 s grace when none is
