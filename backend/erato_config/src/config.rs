@@ -6204,6 +6204,7 @@ pub struct ClientToolConfig {
     /// `child_access = "read"` and a host context that supports it. Default:
     /// `call`.
     #[serde(default, skip_serializing_if = "ClientToolApprovalScope::is_call")]
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
     pub approval_scope: ClientToolApprovalScope,
 }
 
