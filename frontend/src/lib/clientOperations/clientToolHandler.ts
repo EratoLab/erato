@@ -161,8 +161,10 @@ export class ClientToolOperationHandler implements ClientOperationHandler {
       outcome = undefined;
     }
     signal.throwIfAborted();
-    // A declaration that arrived while the tool ran keeps everything on the
-    // device, and the mode will not change back soon enough to wait for it.
+    // Strict mode declared while the tool ran, before the renewal saw it (that
+    // aborts the run and lets the claim lapse until the attempt expires):
+    // fail without content. Files uploaded before the switch stay; the mode
+    // will not change back soon enough to wait for it.
     if (isClientToolResultLocalOnly(this.toolName)) return failed(request);
     // A task's call whose context this device cannot serve right now keeps
     // waiting for a client that can, rather than ending the task's call.

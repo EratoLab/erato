@@ -421,8 +421,13 @@ A host's handlers pass `clientToolHostAdapterConformanceFailures` from
   the task chat's tool output.
 - Strict mode is unchanged: any local delegation declaration keeps the six tools
   unavailable and the binding unsent, so no task of such a turn gets a grant
-  (`NOT_FROM_HOST`). A declaration made while a call waits for the user's
-  approval keeps the files on the device on both paths. A local-evidence task's
+  (`NOT_FROM_HOST`). A switch of the Erato desktop app to strict mode during a
+  call uploads nothing more; files the user approved that were uploaded before
+  the switch stay. On the slow path, if the user answers the device prompt
+  before the next claim renewal, the call fails without content; otherwise the
+  renewal stops, the prompt closes and the call waits until its attempt ends,
+  then expires. On the live path the device posts nothing and the call ends
+  when the run stops waiting for it. A local-evidence task's
   card in the parent shows its review state while this device knows the job (it
   forgets the job once acknowledged); otherwise "Replaced by a later report"
   once a later report of the same task is in the chat, else "Review in the
