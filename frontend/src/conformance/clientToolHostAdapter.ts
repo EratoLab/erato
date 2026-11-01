@@ -809,18 +809,22 @@ export const clientToolHostAdapterConformanceFailures = async (
     // The grant is checked first: a foreign or stale call learns nothing,
     // not even that the document changed.
     const refused = [
-      ...FOREIGN_GRANTS.filter(({ applies }) => applies(turnNow)).map(
-        (foreign) => ({
-          what: `a grant with ${foreign.name}`,
-          grantTurn: turnNow,
-          change: foreign.change,
-        }),
-      ),
-      {
-        what: "the grant of an earlier turn",
-        grantTurn: earlier,
-        change: undefined,
-      },
+      ...FOREIGN_GRANTS.filter(
+        ({ applies, owner }) => applies(turnNow) && (hostChecksOwner || !owner),
+      ).map((foreign) => ({
+        what: `a grant with ${foreign.name}`,
+        grantTurn: turnNow,
+        change: foreign.change,
+      })),
+      ...(hostChecksOwner
+        ? [
+            {
+              what: "the grant of an earlier turn",
+              grantTurn: earlier,
+              change: undefined,
+            },
+          ]
+        : []),
     ];
     for (const { what, grantTurn, change } of refused) {
       const { label, outcome } = await scopedCall(
