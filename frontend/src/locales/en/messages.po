@@ -7813,8 +7813,8 @@ msgstr "Answer it in the task's own chat:"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Trace/steps/TaskResultStep.tsx
-msgid "trace.taskResult.localReviewPending"
-msgstr "Waiting for review in the desktop app"
+msgid "trace.taskResult.localReview"
+msgstr "Review in the Erato desktop app"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Trace/steps/TaskResultStep.tsx
@@ -7825,6 +7825,11 @@ msgstr "Open the task's run"
 #: src/components/ui/Trace/steps/TaskResultStep.tsx
 msgid "trace.taskResult.redelivered"
 msgstr "Delivered again"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/TaskResultStep.tsx
+msgid "trace.taskResult.replacedByLaterReport"
+msgstr "Replaced by a later report"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Trace/steps/TaskResultStep.tsx

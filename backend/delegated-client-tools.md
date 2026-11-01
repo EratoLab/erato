@@ -423,8 +423,10 @@ A host's handlers pass `clientToolHostAdapterConformanceFailures` from
   unavailable and the binding unsent, so no task of such a turn gets a grant
   (`NOT_FROM_HOST`). A declaration made while a call waits for the user's
   approval keeps the files on the device on both paths. A local-evidence task's
-  card in the parent shows its review state from this device's local tasks, or
-  "Waiting for review in the desktop app" elsewhere.
+  card in the parent shows its review state while this device knows the job (it
+  forgets the job once acknowledged); otherwise "Replaced by a later report"
+  once a later report of the same task is in the chat, else "Review in the
+  Erato desktop app".
 
 ## Not in this record
 

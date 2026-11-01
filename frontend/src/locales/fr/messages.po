@@ -7813,7 +7813,7 @@ msgstr "Répondez-y dans le chat de la tâche :"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Trace/steps/TaskResultStep.tsx
-msgid "trace.taskResult.localReviewPending"
+msgid "trace.taskResult.localReview"
 msgstr ""
 
 #. js-lingui-explicit-id
@@ -7825,6 +7825,11 @@ msgstr "Ouvrir l'exécution de la tâche"
 #: src/components/ui/Trace/steps/TaskResultStep.tsx
 msgid "trace.taskResult.redelivered"
 msgstr "Remis à nouveau"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/TaskResultStep.tsx
+msgid "trace.taskResult.replacedByLaterReport"
+msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/Trace/steps/TaskResultStep.tsx

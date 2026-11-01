@@ -1,6 +1,8 @@
 import { t } from "@lingui/core/macro";
+import { useCallback } from "react";
 
 import { Button } from "@/components/ui/Controls/Button";
+import { useConversationSelector } from "@/components/ui/Message/ConversationMessages";
 import {
   OpenDelegatedRunLink,
   RetryTaskControl,
@@ -10,6 +12,7 @@ import { delegationReasonLabel } from "@/lib/delegation/delegationLabels";
 import { localTaskLabel } from "@/lib/desktopSidecar/localTaskLabels";
 import { useLocalTaskViewsStore } from "@/lib/desktopSidecar/localTaskViewsStore";
 import { useDelegatedRunOpener } from "@/providers/DelegatedRunOpenProvider";
+import { hasLaterTaskResult } from "@/utils/chat/taskResultFolds";
 import { getChatUrl } from "@/utils/chat/urlUtils";
 
 import { TraceStep } from "../TraceStep";
@@ -72,19 +75,28 @@ const statusPill = (status: string) => {
 };
 
 /**
- * A local-evidence task waits for its review in the desktop app, not for an
- * answer in its chat. This device names the native state when it knows the
- * job; any other device says only where the review happens.
+ * A local-evidence task waits for its review in the Erato desktop app, not for
+ * an answer in its chat. This device names the native state while it knows
+ * the job, which it forgets once the job is acknowledged; otherwise the line
+ * claims no wait.
  */
-const localReviewPill = (state: LocalTaskViewState | undefined) => (
+const localReviewPill = (
+  state: LocalTaskViewState | undefined,
+  replaced: boolean,
+) => (
   <SettledInfoPill
     label={
-      state === undefined
-        ? t({
-            id: "trace.taskResult.localReviewPending",
-            message: "Waiting for review in the desktop app",
-          })
-        : localTaskLabel(state)
+      state !== undefined
+        ? localTaskLabel(state)
+        : replaced
+          ? t({
+              id: "trace.taskResult.replacedByLaterReport",
+              message: "Replaced by a later report",
+            })
+          : t({
+              id: "trace.taskResult.localReview",
+              message: "Review in the Erato desktop app",
+            })
     }
     toneClassName={state === "ready_for_review" ? WARNING_TONE : undefined}
   />
@@ -130,10 +142,19 @@ export const TaskResultStep = ({
   const localState = useLocalTaskViewsStore((state) =>
     localReview ? state.byChatId.get(part.child_chat_id) : undefined,
   );
+  const { child_chat_id: childChatId, sequence } = part;
+  const selectReplaced = useCallback(
+    (messages: Parameters<typeof hasLaterTaskResult>[0]) =>
+      localReview && hasLaterTaskResult(messages, childChatId, sequence),
+    [localReview, childChatId, sequence],
+  );
+  const replaced = useConversationSelector(selectReplaced, Object.is);
+  const settled = replaced && localState === undefined;
   const pill = localReview
-    ? localReviewPill(localState)
+    ? localReviewPill(localState, replaced)
     : statusPill(part.status);
-  const needsAttention = part.status !== "completed";
+  const needsAttention = part.status !== "completed" && !settled;
+  const railStatus = settled ? "done" : railStatusFor(part.status);
 
   return (
     <div
@@ -143,7 +164,7 @@ export const TaskResultStep = ({
     >
       <TraceStep
         // eslint-disable-next-line lingui/no-unlocalized-strings -- content type
-        railIcon={railIconFor("task_result", railStatusFor(part.status))}
+        railIcon={railIconFor("task_result", railStatus)}
         hasTrailingRailLine={false}
         title={t({
           id: "trace.taskResult.title",
@@ -204,7 +225,7 @@ export const TaskResultStep = ({
             </p>
           )}
           {/* The question waits in the run's own chat; nothing here can answer it. */}
-          {part.status === "input_required" && (
+          {part.status === "input_required" && !settled && (
             <p data-testid="task-result-input-required">
               {localReview
                 ? t({

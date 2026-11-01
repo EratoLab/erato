@@ -7813,8 +7813,8 @@ msgstr "Beantworten Sie sie im Chat der Aufgabe:"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Trace/steps/TaskResultStep.tsx
-msgid "trace.taskResult.localReviewPending"
-msgstr "Wartet auf Prüfung in der Desktop-App"
+msgid "trace.taskResult.localReview"
+msgstr "In der Erato-Desktop-App prüfen"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Trace/steps/TaskResultStep.tsx
@@ -7825,6 +7825,11 @@ msgstr "Lauf der Aufgabe öffnen"
 #: src/components/ui/Trace/steps/TaskResultStep.tsx
 msgid "trace.taskResult.redelivered"
 msgstr "Erneut zugestellt"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/TaskResultStep.tsx
+msgid "trace.taskResult.replacedByLaterReport"
+msgstr "Durch eine spätere Rückmeldung ersetzt"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Trace/steps/TaskResultStep.tsx

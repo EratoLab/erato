@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { getTaskResultFolds } from "./taskResultFolds";
+import { getTaskResultFolds, hasLaterTaskResult } from "./taskResultFolds";
 
 import type { ContentPart } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { Message } from "@/types/chat";
@@ -50,5 +50,37 @@ describe("getTaskResultFolds", () => {
       getTaskResultFolds(messages, ["result", "typed"]).foldedRowIds.size,
     ).toBe(0);
     expect(getTaskResultFolds(messages, ["result"]).foldedRowIds.size).toBe(0);
+  });
+});
+
+describe("hasLaterTaskResult", () => {
+  const delivery = (
+    sequence: number,
+    childChatId = "child-1",
+  ): ContentPart => ({
+    ...part,
+    child_chat_id: childChatId,
+    sequence,
+  });
+
+  it("finds a later delivery of the same task", () => {
+    const messages = {
+      first: message("first", "user", [delivery(0)]),
+      second: message("second", "user", [delivery(1)]),
+    };
+
+    expect(hasLaterTaskResult(messages, "child-1", 0)).toBe(true);
+    expect(hasLaterTaskResult(messages, "child-1", 1)).toBe(false);
+  });
+
+  it("ignores other tasks and rows that are not delivered results", () => {
+    const messages = {
+      first: message("first", "user", [delivery(0)]),
+      other: message("other", "user", [delivery(3, "child-2")]),
+      reply: message("reply", "assistant", [delivery(4)]),
+      gone: undefined,
+    };
+
+    expect(hasLaterTaskResult(messages, "child-1", 0)).toBe(false);
   });
 });
