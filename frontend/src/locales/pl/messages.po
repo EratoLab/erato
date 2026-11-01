@@ -92,6 +92,41 @@ msgid "approvalQueue.waitingTitle"
 msgstr ""
 
 #. js-lingui-explicit-id
+#: src/components/ui/Message/ParkedChildItem.tsx
+msgid "approvalScope.allow"
+msgstr "{covers, select, turn {Zezwól dla tej odpowiedzi} other {Zezwól dla tego dokumentu}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ParkedChildItem.tsx
+msgid "approvalScope.allowCall"
+msgstr "Zezwól na to wywołanie"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ParkedChildItem.tsx
+msgid "approvalScope.changed"
+msgstr "Dokument zmienił się od czasu, gdy na to zezwolono."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ParkedChildItem.tsx
+msgid "approvalScope.elsewhere"
+msgstr "Aby zezwolić na cały dokument, zdecyduj w panelu, w którym jest otwarty."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ParkedChildItem.tsx
+msgid "approvalScope.hint"
+msgstr "{covers, select, turn {Zadania tej odpowiedzi używają tego narzędzia bez ponownego pytania, dopóki odpowiedź nie będzie gotowa.} other {Zadania w tym czacie czytają ten dokument bez ponownego pytania, dopóki nie zostanie zmieniony poza tym czatem.}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ParkedChildItem.tsx
+msgid "approvalScope.others"
+msgstr "{covers, select, turn {{others, plural, one {Obejmuje też # inne zadanie tej odpowiedzi} few {Obejmuje też # inne zadania tej odpowiedzi} many {Obejmuje też # innych zadań tej odpowiedzi} other {Obejmuje też # innego zadania tej odpowiedzi}}} other {{others, plural, one {Obejmuje też # inne zadanie, które czyta ten dokument} few {Obejmuje też # inne zadania, które czytają ten dokument} many {Obejmuje też # innych zadań, które czytają ten dokument} other {Obejmuje też # innego zadania, które czyta ten dokument}}}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ApprovalDecisionActions.tsx
+msgid "approvalScope.staged"
+msgstr "{covers, select, turn {Dozwolone dla tej odpowiedzi. Zostanie wysłane, gdy wszystko zostanie rozstrzygnięte.} other {Dozwolone dla tego dokumentu. Zostanie wysłane, gdy wszystko zostanie rozstrzygnięte.}}"
+
+#. js-lingui-explicit-id
 #: src/pages/AssistantEditPage.tsx
 msgid "assistant.action.backToAssistants"
 msgstr "Wróć do asystentów"

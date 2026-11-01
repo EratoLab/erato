@@ -576,7 +576,8 @@ calls. With it off, the stream endpoint answers 404 and no row is written.
   The first stream is the primary binding's, with exactly the headers it had
   before additional executors (`X-Erato-Additional-Executors` is a submit header
   and never part of a stream). Each additional binding (the desktop sidecar's,
-  ERMAIN-1034) gets its own stream listing only its own tools; tabs of one
+  ERMAIN-1034) gets its own stream listing only its own tools, and never
+  `X-Erato-Scoped-Client-Tools` (ERMAIN-1033); tabs of one
   browser profile share that binding, so its stream runs under the Web Lock
   `erato.executor-stream:<binding>` and one tab holds it at a time, keeping
   HTTP/1.1 deployments clear of the browser's connection limit. Every tab

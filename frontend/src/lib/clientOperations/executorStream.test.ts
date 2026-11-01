@@ -134,6 +134,44 @@ describe("executorStreamHeaderSets", () => {
     }
   });
 
+  it("lists the tools that check an approval scope only in the primary set", () => {
+    const word: ExecutorBinding = {
+      device_id: "pane-device-000000",
+      realm: "office-addin",
+      host_context: { kind: "word_document", identity: "identity-1" },
+    };
+    registerClientToolExecutor("read_document_blocks", run, () => true, {
+      acceptsGrantCalls: true,
+      checksApprovalScope: () => true,
+    });
+    sidecarTools.forEach((name) =>
+      registerClientToolExecutor(name, run, () => true, {
+        acceptsGrantCalls: true,
+      }),
+    );
+    const cleanups = [
+      registerOperationExecutor("read_document_blocks", () => word),
+      ...sidecarTools.map((name) =>
+        registerOperationExecutor(name, () => desktop, { additional: true }),
+      ),
+    ];
+    try {
+      const sets = executorStreamHeaderSets();
+      expect(sets.map((set) => set.headers["X-Erato-Executor"])).toEqual([
+        JSON.stringify(word),
+        JSON.stringify(desktop),
+      ]);
+      expect(sets[0]?.headers["X-Erato-Scoped-Client-Tools"]).toBe(
+        "read_document_blocks",
+      );
+      expect(sets[1]?.headers).not.toHaveProperty(
+        "X-Erato-Scoped-Client-Tools",
+      );
+    } finally {
+      cleanups.forEach((cleanup) => cleanup());
+    }
+  });
+
   it("serves an additional binding without a primary one", () => {
     registerClientToolExecutor("search_sidecar_index", run, () => true, {
       acceptsGrantCalls: true,

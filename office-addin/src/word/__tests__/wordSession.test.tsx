@@ -7,6 +7,15 @@ import {
   uninstallMockWordDocument,
 } from "../../test/mocks/word/document";
 import {
+  beginWordOwnWrite,
+  nameWordOwnWriteIds,
+  noteWordChangeEventsActive,
+  recordWordParagraphEvent,
+  resetWordChangeJournalForTests,
+  wordChangePosition,
+  wordChangesSince,
+} from "../utils/wordChangeJournal";
+import {
   getWordDocumentIdentity,
   resetWordDocumentIdentityForTests,
 } from "../utils/wordDocumentIdentity";
@@ -145,6 +154,35 @@ describe("Word session controller", () => {
     act(() => pane.session().selectChat("chat-picked"));
     expect(pane.session().currentChatId).toBe("chat-picked");
     await waitFor(() => expect(readWordDocumentChat(key)).toBe("chat-picked"));
+  });
+
+  it("records the pane's writes as the shown chat's own", async () => {
+    resetWordChangeJournalForTests();
+    noteWordChangeEventsActive();
+    recordWordDocumentChat(await keyOf(REPORT_URL), "chat-report");
+    let paragraph = 0;
+    const writer = () => {
+      const position = wordChangePosition();
+      const id = `p${(paragraph += 1)}`;
+      const write = beginWordOwnWrite("ids");
+      nameWordOwnWriteIds([id]);
+      recordWordParagraphEvent({
+        type: "ParagraphChanged",
+        source: "Local",
+        uniqueLocalIds: [id],
+      });
+      write.end();
+      const since = wordChangesSince(position);
+      return since.ok ? since.entries.map((entry) => entry.chat) : [];
+    };
+    const pane = await renderOpenedPane();
+
+    expect(writer()).toEqual(["chat-report"]);
+    act(() => pane.session().selectChat("chat-picked"));
+    expect(writer()).toEqual(["chat-picked"]);
+    act(() => pane.session().beginNewChat());
+    expect(writer()).toEqual([undefined]);
+    resetWordChangeJournalForTests();
   });
 
   it("begins a new chat without forgetting the document's last one", async () => {

@@ -49,6 +49,9 @@ pub struct GrantedCall {
     /// The call parks as a durable operation for the grant's binding instead
     /// of going live.
     pub durable: bool,
+    /// The key one decision may approve this tool's calls under, for a tool
+    /// with `approval_scope = "context"` on a host that has a scope.
+    pub approval_scope: Option<crate::services::approval_scope::ScopeKey>,
 }
 
 #[derive(Clone)]
@@ -327,6 +330,14 @@ pub fn child_client_tools(headers: &axum::http::HeaderMap) -> Vec<String> {
     let registered = registered_client_tools(headers);
     let mut names = client_tool_names(headers, "X-Erato-Child-Client-Tools");
     names.retain(|name| registered.contains(name));
+    names
+}
+
+/// The child tools whose handlers check a covered call's approval scope
+/// before reading. Like the child tools, never part of the binding.
+pub fn scoped_client_tools(headers: &axum::http::HeaderMap, child: &[String]) -> Vec<String> {
+    let mut names = client_tool_names(headers, "X-Erato-Scoped-Client-Tools");
+    names.retain(|name| child.contains(name));
     names
 }
 
@@ -807,6 +818,35 @@ mod tests {
     }
 
     #[test]
+    fn scoped_client_tools_are_a_subset_of_the_child_tools() {
+        use axum::http::{HeaderMap, HeaderValue};
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            "X-Erato-Client-Tools",
+            HeaderValue::from_static("read_document_blocks,submit_plan"),
+        );
+        headers.insert(
+            "X-Erato-Scoped-Client-Tools",
+            HeaderValue::from_static("read_document_blocks"),
+        );
+        assert!(scoped_client_tools(&headers, &child_client_tools(&headers)).is_empty());
+        headers.insert(
+            "X-Erato-Child-Client-Tools",
+            HeaderValue::from_static("read_document_blocks"),
+        );
+        headers.insert(
+            "X-Erato-Scoped-Client-Tools",
+            HeaderValue::from_static("read_document_blocks, submit_plan, bad/name"),
+        );
+        assert_eq!(
+            scoped_client_tools(&headers, &child_client_tools(&headers)),
+            vec!["read_document_blocks"]
+        );
+        headers.remove("X-Erato-Scoped-Client-Tools");
+        assert!(scoped_client_tools(&headers, &child_client_tools(&headers)).is_empty());
+    }
+
+    #[test]
     fn older_generation_contexts_have_no_optional_tools() {
         let context: crate::models::message::GenerationRequestContext =
             serde_json::from_str(r#"{"platform":"outlook"}"#).unwrap();
@@ -858,6 +898,7 @@ mod tests {
             child_context_input: None,
             child_host_inputs: Vec::new(),
             child_dispatch: None,
+            approval_scope: Default::default(),
         }
     }
 

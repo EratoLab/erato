@@ -7,6 +7,11 @@ import type {
 export interface DecidedApproval {
   approvalId: string;
   decision: ToolApprovalDecision;
+  /**
+   * For `approve_context` on a scope the host checks on the device: the host's
+   * position at the click, sent as `scope_position`.
+   */
+  scopePosition?: unknown;
 }
 
 /**
@@ -17,7 +22,9 @@ export interface DecidedApproval {
  * approval.
  */
 export const isApprovalDecision = (decision: ToolApprovalDecision): boolean =>
-  decision === "approve" || decision === "approve_always";
+  decision === "approve" ||
+  decision === "approve_always" ||
+  decision === "approve_context";
 
 /**
  * Body for `POST /me/messages/continuestream`.
@@ -34,7 +41,8 @@ export const isApprovalDecision = (decision: ToolApprovalDecision): boolean =>
  *
  * `enumerate` names even a single item: a stop with tasks still waiting can
  * gain a question while the card is open, and only an enumerated body comes
- * back as `decisions_mismatch` naming it.
+ * back as `decisions_mismatch` naming it. An `approve_context` answer is
+ * always enumerated, since only an item carries its position.
  */
 export const buildContinueStreamBody = ({
   messageId,
@@ -53,10 +61,21 @@ export const buildContinueStreamBody = ({
     itemDecisions && itemDecisions.length > 0
       ? itemDecisions
       : (approvalIds ?? []).map((approvalId) => ({ approvalId, decision }));
-  if (decided.length > 1 || (enumerate && decided.length > 0)) {
+  if (
+    decided.length > 1 ||
+    (enumerate && decided.length > 0) ||
+    decided.some((item) => item.decision === "approve_context")
+  ) {
     const decisions: ApprovalDecisionItem[] = decided.map((item) => ({
       approval_id: item.approvalId,
       decision: item.decision,
+      ...(item.scopePosition === undefined
+        ? {}
+        : {
+            scope_position: item.scopePosition as NonNullable<
+              ApprovalDecisionItem["scope_position"]
+            >,
+          }),
     }));
     return { message_id: messageId, decisions, shows_child_items: true };
   }

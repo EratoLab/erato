@@ -67,6 +67,22 @@ pub struct CallLineage {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false)]
     pub context_ref: Option<String>,
+    /// Set when the call runs under a context approval the host checks: it
+    /// answers `scope_changed` without reading if the scope changed from
+    /// outside since `position`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub approval_scope: Option<ApprovalScopeLineage>,
+}
+
+/// The context approval a covered call runs under.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+pub struct ApprovalScopeLineage {
+    pub approval_id: Uuid,
+    pub scope_id: String,
+    /// The host's position at the decision, opaque to everyone but the host.
+    #[schema(value_type = Object)]
+    pub position: Value,
 }
 
 /// A live call handed to the stream that serves `binding`.
@@ -84,6 +100,15 @@ pub struct ExecutorCall {
     pub lineage: Option<CallLineage>,
     /// When the run stops waiting for this call's result, by the server's clock.
     pub expires_at: Option<DateTime<Utc>>,
+}
+
+impl ExecutorCall {
+    /// A covered call, which only a stream that checks its scope may run.
+    pub fn scoped(&self) -> bool {
+        self.lineage
+            .as_ref()
+            .is_some_and(|lineage| lineage.approval_scope.is_some())
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
@@ -182,6 +207,8 @@ pub struct PresenceClaim {
     pub connected_at: DateTime<Utc>,
     pub client_tools: Vec<String>,
     pub child_client_tools: Vec<String>,
+    /// The child tools whose handlers check a covered call's approval scope.
+    pub scoped_client_tools: Vec<String>,
 }
 
 impl PresenceClaim {
@@ -214,8 +241,8 @@ pub async fn announce(
     db.execute_raw(statement(
         r#"INSERT INTO client_executor_presence
              (stream_id, account_id, binding, instance_id, opened_at, connected_at, client_tools,
-              child_client_tools, expires_at)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now() + interval '20 seconds')
+              child_client_tools, scoped_client_tools, expires_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, now() + interval '20 seconds')
            ON CONFLICT (stream_id) DO UPDATE SET expires_at = EXCLUDED.expires_at"#,
         vec![
             stream_id.into(),
@@ -226,6 +253,7 @@ pub async fn announce(
             claim.connected_at.into(),
             serde_json::to_value(&claim.client_tools)?.into(),
             serde_json::to_value(&claim.child_client_tools)?.into(),
+            serde_json::to_value(&claim.scoped_client_tools)?.into(),
         ],
     ))
     .await?;
@@ -281,9 +309,55 @@ pub async fn present(
     Ok(presence)
 }
 
+/// The binding's newest stream that takes grant calls of the tool and checks
+/// their approval scope. Unlike [`present`], one stream must do both.
+async fn scoped_presence(
+    db: &DatabaseConnection,
+    account_id: Uuid,
+    binding: &ExecutorBinding,
+    tool_name: &str,
+) -> Result<Option<ExecutorPresence>, Report> {
+    db.query_one_raw(statement(
+        r#"SELECT stream_id, client_tools, child_client_tools FROM client_executor_presence
+           WHERE account_id = $1 AND binding = $2 AND expires_at > now()
+             AND child_client_tools @> jsonb_build_array($3::text)
+             AND scoped_client_tools @> jsonb_build_array($3::text)
+           ORDER BY opened_at DESC, connected_at DESC
+           LIMIT 1"#,
+        vec![
+            account_id.into(),
+            serde_json::to_value(binding)?.into(),
+            tool_name.into(),
+        ],
+    ))
+    .await?
+    .map(|row| -> Result<ExecutorPresence, Report> {
+        Ok(ExecutorPresence {
+            stream_id: row.try_get("", "stream_id")?,
+            client_tools: serde_json::from_value(row.try_get("", "client_tools")?)?,
+            child_client_tools: serde_json::from_value(row.try_get("", "child_client_tools")?)?,
+        })
+    })
+    .transpose()
+}
+
+/// Whether one live stream of the binding takes grant calls of the tool and
+/// checks their approval scope before reading.
+pub async fn serves_scoped_grant_call(
+    db: &DatabaseConnection,
+    account_id: Uuid,
+    binding: &ExecutorBinding,
+    tool_name: &str,
+) -> Result<bool, Report> {
+    Ok(scoped_presence(db, account_id, binding, tool_name)
+        .await?
+        .is_some())
+}
+
 /// Precedence: a grant call always needs a stream that accepts grant calls for
-/// the tool. Any other call stays on the calling chat's attached stream, else
-/// goes to the binding's stream when it serves the tool.
+/// the tool, and a covered one a stream that also checks its scope. Any other
+/// call stays on the calling chat's attached stream, else goes to the
+/// binding's stream when it serves the tool.
 pub async fn route_live_call(
     db: &DatabaseConnection,
     account_id: Uuid,
@@ -291,7 +365,16 @@ pub async fn route_live_call(
     tool_name: &str,
     chat_stream_attached: bool,
     grant_call: bool,
+    scoped: bool,
 ) -> Result<LiveCallRoute, Report> {
+    if grant_call && scoped {
+        return Ok(
+            match scoped_presence(db, account_id, binding, tool_name).await? {
+                Some(presence) => LiveCallRoute::Executor(presence),
+                None => LiveCallRoute::Unavailable,
+            },
+        );
+    }
     if grant_call {
         return Ok(match present(db, account_id, binding).await? {
             Some(presence) if presence.serves_grant_call(tool_name) => {
@@ -314,14 +397,14 @@ pub async fn hand_over(db: &DatabaseConnection, call: &ExecutorCall) -> Result<(
     db.execute_raw(statement(
         r#"INSERT INTO client_executor_calls
              (account_id, binding, chat_id, message_id, tool_call_id, generation_id, tool_name,
-              grant_call, event)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+              grant_call, event, scoped)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
            ON CONFLICT (message_id, tool_call_id) WHERE attempt_id IS NULL
            DO UPDATE SET account_id = EXCLUDED.account_id, binding = EXCLUDED.binding,
              chat_id = EXCLUDED.chat_id, generation_id = EXCLUDED.generation_id,
              tool_name = EXCLUDED.tool_name, grant_call = EXCLUDED.grant_call,
-             event = EXCLUDED.event, created_at = now(), delivered_at = NULL, delivered_to = NULL,
-             delivered_instance = NULL"#,
+             event = EXCLUDED.event, scoped = EXCLUDED.scoped, created_at = now(),
+             delivered_at = NULL, delivered_to = NULL, delivered_instance = NULL"#,
         vec![
             call.account_id.into(),
             serde_json::to_value(&call.binding)?.into(),
@@ -332,6 +415,7 @@ pub async fn hand_over(db: &DatabaseConnection, call: &ExecutorCall) -> Result<(
             call.tool_name.clone().into(),
             call.lineage.is_some().into(),
             serde_json::to_value(ExecutorStreamEvent::from(call))?.into(),
+            call.scoped().into(),
         ],
     ))
     .await?;
@@ -433,9 +517,11 @@ pub async fn cleanup(db: &DatabaseConnection) -> Result<(), Report> {
 /// stream of its binding, or for a task's granted operation one that takes its
 /// tool's grant calls; a delivered call only a stream of the pane it went to,
 /// so it never runs twice or in a pane the user left open elsewhere; any other
-/// call a stream that serves its tool.
+/// call a stream that serves its tool. A covered call only ever goes to a
+/// stream that checks its approval scope, redelivery included.
 const ANSWERING_STREAMS: &str = r#"p.account_id = q.account_id AND p.binding = q.binding
       AND p.expires_at > now()
+      AND (NOT q.scoped OR p.scoped_client_tools @> jsonb_build_array(q.tool_name))
       AND CASE WHEN q.attempt_id IS NOT NULL
               THEN NOT q.grant_call OR p.child_client_tools @> jsonb_build_array(q.tool_name)
             WHEN q.delivered_instance IS NOT NULL THEN p.instance_id = q.delivered_instance
@@ -790,6 +876,7 @@ mod tests {
             connected_at,
             client_tools: Vec::new(),
             child_client_tools: Vec::new(),
+            scoped_client_tools: Vec::new(),
         };
         let v7 = Uuid::parse_str("019a2b3c-4d5e-7f00-8000-000000000000").unwrap();
         assert_eq!(

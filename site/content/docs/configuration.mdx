@@ -6251,6 +6251,55 @@ Its calls then go to the Erato desktop app on the device, and a file the read re
 
 **Type:** `"live"` | `"durable"`
 
+#### `client_tools.tools.<key>.approval_scope`
+
+{/* erato_toml_config_key: client_tools.tools.<key>.approval_scope */}
+
+What one approval of a client task's call may cover. With `call`, every call the
+user's decision asks for needs its own approval. With `context`, when a task's
+call to this tool asks, the approval card in the planning chat also offers
+"Allow for this document" (`word_document`) or "Allow for this response"
+(`outlook_mailbox`). One such decision lets every task call of this tool in that
+chat run without asking:
+
+- on the same document in the same pane session, until the document changes
+  outside the chat. The chat's own edits do not count (another chat's Apply in
+  the same pane does), and neither do formatting-only edits in Word on Windows
+  and Mac, turning Track Changes on or off, or Word's proofing; in Word for the
+  web a formatting edit counts. An edit the user makes while one of the chat's
+  own inserts or a whole-document Apply is still settling, or to a paragraph an
+  in-place Apply just changed, is taken as the chat's own. After an outside change the next call asks again, marked as
+  changed. A document can
+  only be allowed in the pane that has it open, and only while that pane checks
+  for outside changes; elsewhere the card offers the usual choices.
+- in the same response, until it is done; the next response asks again.
+
+A reloaded pane or another device asks again, and unarchiving the chat ends what
+was allowed. The planning turn's own calls are always asked one by one. Always allow
+and Never allow keep their meaning; setting a tool to Never allow ends what was
+allowed for it, so setting it back to Ask asks again. It is a tool approval only:
+the host's own prompts and any release review still run.
+
+```toml
+[client_tools.tools.word_read_document_blocks]
+# name, namespace, description and parameters as usual
+child_access = "read"
+host_context = "word_document"
+approval_scope = "context"
+```
+
+Refused at load time: `context` without `child_access = "read"`, and on a host
+context that does not support it (every host context other than `word_document`
+and `outlook_mailbox`). Calls of `desktop_sidecar` tools are always asked one by
+one: an approval there could cover only the server's tool approval, never the
+Erato desktop app's own consent on the device, and checking a thread has to wait
+until the app reports what changed in it. Needs
+`client_tools.executor_stream_enabled`, like `child_access`.
+
+**Default value:** `"call"`
+
+**Type:** `"call"` | `"context"`
+
 #### `client_tools.tools.<key>.requires_client_registration`
 
 {/* erato_toml_config_key: client_tools.tools.<key>.requires_client_registration */}

@@ -425,7 +425,7 @@ lineage check, read-only mode, freshness shape and loss outcomes.
 | 8   | Read results framed as untrusted data                                       | ERMAIN-946, before enablement.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | 9   | A native gate matrix                                                        | The template below, filled for the host.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | 10  | The conformance tests pass                                                  | A backend row and a frontend handler test, see "Adding a host".                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| 11  | An approval scope and its outside-change signal, or approval per call       | ERMAIN-1033.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| 11  | An approval scope and its outside-change signal, or approval per call       | Configuration sets `approval_scope = "context"` on a read tool (default `call`). The handler registers `checksApprovalScope` (listed in `X-Erato-Scoped-Client-Tools` while it can see changes) and `anchorsApprovalScope` (the position at the click, only in the pane that holds the context), and under `hostGrant.approvalScope` answers `clientToolScopeChanged` without reading when anything but the owner chat's own writes changed the context since the position. Word: `word/utils/wordApprovalScope.ts` on the change journal; Outlook's scope is the parent turn and needs nothing on the device.                                |
 | 12  | Pickup of durable calls after a reconnect, if the context outlives the pane | `child_dispatch = "durable"` (ERMAIN-1032): the call waits as an operation; a pane that takes grant calls gets the nudge when it connects or finds it in the inbox, claims it with `X-Erato-Child-Client-Tools`, runs it with `hostGrant` and continues the task; any client of the user continues or expires it. Word never takes the slow path.                                                                                                                                                                                                                                                                                             |
 | 13  | Device approvals for a grant call registered under the owner chat           | `useConfirmationRegistryStore` under `hostGrant.ownerChatId`. The shared file approval (`useClientToolFileApproval`) does so and shows on `hostGrant.ownerMessageId` with the task's brief; it closes with the attempt (slow path) or the pushed call's `timeout_ms` (live path).                                                                                                                                                                                                                                                                                                                                                             |
 | 14  | The release decision where a native component holds the data                | CT-9, in that component.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
@@ -442,7 +442,7 @@ Write tools:           qualified names, registered without acceptsGrantCalls
 Loss code:             capture-unavailable | context_unavailable
 Freshness:             producer; capturedAt | readAt; blind spots (each reports unknown)
 Child facet:           id; prompt text
-Approval scope:        call | context; the outside-change signal
+Approval scope:        call | context; covers document | turn; the outside-change signal, or none
 Outlives the pane:     no | yes (slow path, ERMAIN-1032)
 Device approvals:      none | which, under the owner chat; release decision (CT-9)
 Framing:               untrusted-data framing of read results (ERMAIN-946)
@@ -473,7 +473,11 @@ Freshness:             readAt; changes none only for a search whose every source
                        freshness.scope (position and added unknown until the
                        sidecar reports them)
 Child facet:           desktop_delegated_search (overlay)
-Approval scope:        call, until ERMAIN-1033 and the sidecar's thread counts
+Approval scope:        call only: context is refused at load, since one
+                       approval could cover only the server's tool approval,
+                       never the app's own consent on the device (CT-9, CT-11);
+                       a thread approval waits for the sidecar's thread counts
+                       (N2)
 Outlives the pane:     yes (search, get document, read conversation durable)
 Device approvals:      file uploads (get_sidecar_document, attachments of
                        read_sidecar_conversation), under the owner chat
@@ -488,16 +492,26 @@ Conformance:           backend rows desktop_sidecar (add-in) and
 
 Each cell holds "date · build · result". Windows first, then Mac and the web.
 
-| Check                                                          | Windows | Mac | Web |
-| -------------------------------------------------------------- | ------- | --- | --- |
-| A grant read reaches the pane and returns                      |         |     |     |
-| A foreign or stale grant gets the loss code                    |         |     |     |
-| After a new Send, the earlier turn's grant gets the loss code  |         |     |     |
-| A closed pane gives `context_unavailable`                      |         |     |     |
-| Ask on the parent's card: approve reads, deny gives `declined` |         |     |     |
-| A blind spot reports `unknown`                                 |         |     |     |
-| Write tools refuse grant calls                                 |         |     |     |
-| A device approval shows in the parent chat                     |         |     |     |
+| Check                                                             | Windows | Mac | Web |
+| ----------------------------------------------------------------- | ------- | --- | --- |
+| A grant read reaches the pane and returns                         |         |     |     |
+| A foreign or stale grant gets the loss code                       |         |     |     |
+| After a new Send, the earlier turn's grant gets the loss code     |         |     |     |
+| A closed pane gives `context_unavailable`                         |         |     |     |
+| Ask on the parent's card: approve reads, deny gives `declined`    |         |     |     |
+| A blind spot reports `unknown`                                    |         |     |     |
+| Write tools refuse grant calls                                    |         |     |     |
+| A device approval shows in the parent chat                        |         |     |     |
+| An outside edit after a document approval asks again              |         |     |     |
+| Own Apply or a Track Changes toggle asks nothing new              |         |     |     |
+| A formatting-only edit asks nothing new; on the web it asks again |         |     |     |
+| Another chat's Apply in the same pane asks again                  |         |     |     |
+
+Known gap (owner decision pending): a user's edit that lands while the chat's
+own insert, comment or import Apply is still settling counts as the chat's own,
+so it does not end a document approval (ERMAIN-1010's time windows: 3 s after an
+insert or comment, up to 120 s for a Word PC import). So does an edit to a
+paragraph an in-place Apply changed, while the Apply runs and up to 6 s after.
 
 Desktop sidecar: every check is pending for classic Outlook on Windows, Mac (Full
 Disk Access per build), the web app and the Teams personal app, plus two of its
@@ -522,14 +536,24 @@ one sidecar stream, which moves to the tab in use.
   per read tool, the write tools, the write markers, the blind spots and any
   device approval. A read that asks on the device also gets every bad grant and
   must refuse it before it asks; a host whose every read asks lists none and is
-  checked through that read.
+  checked through that read. A host whose read checks a document approval
+  gives `approvalScope` (the read, a read counter, its scope id, a change from
+  outside, its own change and optionally a reload): the read must be listed as
+  scoped, take a position only for its own scope, read after its own changes,
+  answer `scope_changed` without reading after an outside change or with an
+  unreadable or reloaded position, give a bad grant the loss code first (with
+  `ownerCheck: "server"`, only the grants the host checks itself), and a read
+  that asks on the device must still ask under the approval (CT-9). A host
+  without it must not list the check.
 
 Status:
 
 - fake host: passes on both sides, with and without a context version
   (`frontend/src/conformance/clientToolHostAdapter.test.ts`);
 - `word_document`: registered and skipped until ERMAIN-1003
-  (`word/utils/__tests__/wordGrantReadConformance.test.ts`);
+  (`word/utils/__tests__/wordGrantReadConformance.test.ts`); its approval scope
+  producer is tested on its own against the change journal
+  (`word/utils/__tests__/wordApprovalScope.test.ts`), the native gate is pending;
 - `outlook_mailbox`: registered and skipped until ERMAIN-1006
   (`outlook/hooks/__tests__/outlookGrantReadConformance.test.ts`);
 - `desktop_sidecar`: passes with the server checking the owner

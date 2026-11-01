@@ -749,6 +749,10 @@ chat_provider_ids = ["test-token-limit"]
 # # runs a release that supports it; do not roll back below it while calls may
 # # be parked.
 # # child_dispatch = "durable"
+# # "context" lets one approval on the parent's card cover every task call of
+# # this tool in the same response (Outlook), or on the same document until it
+# # changes outside the chat (Word). Needs child_access = "read". Default "call".
+# # approval_scope = "context"
 #
 # # Optional: replay this tool's calls from EARLIER user turns as bounded
 # # receipts instead of full arguments/results (default mode = "full"). The

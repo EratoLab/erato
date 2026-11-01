@@ -8,8 +8,13 @@ import {
 } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import {
+  registerClientToolExecutor,
+  resetClientToolRegistryForTests,
+} from "@/hooks/chat/clientToolExecutors";
 import { useConfirmationRegistryStore } from "@/hooks/chat/store/confirmationRegistryStore";
 import { useGenerationStatusStore } from "@/hooks/chat/store/generationStatusStore";
+import { registerOperationExecutor } from "@/lib/clientOperations/registration";
 import {
   listMcpServerToolsQuery,
   listUserToolApprovalSettingsQuery,
@@ -21,6 +26,7 @@ import { FrontendRequestError } from "@/utils/errorReport";
 import { McpToolApprovalCard } from "./McpToolApprovalCard";
 
 import type { ToolApprovalStatus } from "../Trace/Trace";
+import type { ApprovalScope } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { ChatContextValue } from "@/providers/ChatProvider";
 import type { ReactNode } from "react";
 
@@ -2315,4 +2321,366 @@ describe("tasks waiting on the device", () => {
       expect(screen.queryByText(new RegExp(code))).toBeNull();
     },
   );
+});
+
+describe("document and response approvals", () => {
+  const READ = "read_document_blocks";
+  const position = { journal: "journal-1", seq: 41, events: true };
+  const binding = {
+    device_id: "pane-device-000000",
+    realm: "office-addin" as const,
+    host_context: { kind: "word_document", identity: "identity-1" },
+  };
+  const documentScope = {
+    host_context: "word_document",
+    covers: "document" as const,
+    scope_id: "identity-1",
+  };
+
+  const scopedTask = (
+    index: number,
+    scope: ApprovalScope | null = documentScope,
+    toolName = READ,
+  ) => ({
+    approval_id: `task-${index}`,
+    tool_call_id: `task-${index}`,
+    tool_name: "delegate_task",
+    input: { task: `Read chapter ${index}` },
+    child: {
+      ...childApprovalRef,
+      child_chat_id: `child-${index}`,
+      child_tool_call_id: `child-call-${index}`,
+      tool_name: toolName,
+      mcp_server_id: "word",
+      input: { part: `chapter-${index}` },
+      preset: "",
+      allow_always: true,
+      kind: "client_tool" as const,
+      requested_at: `2026-08-06T00:00:${String(index).padStart(2, "0")}Z`,
+      ...(scope ? { approval_scope: scope } : {}),
+    },
+  });
+
+  const stopOf = (approvals: ReturnType<typeof scopedTask>[]) => ({
+    ...delegatedTaskRequest,
+    allow_always: false,
+    approvals,
+  });
+
+  const anchorPane = () => {
+    const take = vi.fn(() => position);
+    const cleanup = [
+      registerClientToolExecutor(
+        READ,
+        async () => ({ ok: true, result: null }),
+        undefined,
+        {
+          acceptsGrantCalls: true,
+          checksApprovalScope: () => true,
+          anchorsApprovalScope: (scope) =>
+            scope.hostContext === "word_document" &&
+            scope.scopeId === "identity-1"
+              ? take
+              : undefined,
+        },
+      ),
+      registerOperationExecutor(READ, () => binding, { yields: true }),
+    ];
+    return { take, cleanup: () => cleanup.forEach((undo) => undo()) };
+  };
+
+  const sentRequest = (fetchMock: ReturnType<typeof vi.fn>) => {
+    const init = fetchMock.mock.calls[0][1] as {
+      body: string;
+      headers: Record<string, string>;
+    };
+    return {
+      body: JSON.parse(init.body) as { decisions: unknown[] },
+      headers: init.headers,
+    };
+  };
+
+  afterEach(resetClientToolRegistryForTests);
+
+  it("allows ten tasks for their document with one click and sends one position", async () => {
+    const pane = anchorPane();
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(new Response("", { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const tasks = Array.from({ length: 10 }, (_, index) =>
+      scopedTask(index + 1),
+    );
+    // Another tool on the same document is its own decision.
+    const other = scopedTask(30, documentScope, "read_comments");
+    try {
+      renderCard(
+        <McpToolApprovalCard
+          messageId="message-1"
+          request={stopOf([...tasks, other])}
+          resolution={null}
+        />,
+      );
+
+      expect(screen.getByTestId("approval-scope-others")).toHaveTextContent(
+        "Also covers 9 other tasks reading this document",
+      );
+      expect(screen.getByText("Allow this call")).toBeInTheDocument();
+      fireEvent.click(screen.getByText("Allow for this document"));
+
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(pane.take).toHaveBeenCalledTimes(1);
+      expect(screen.getByTestId("approval-queue")).toHaveAttribute(
+        "data-position",
+        "11",
+      );
+      expect(screen.getByText("Read chapter 30")).toBeInTheDocument();
+      fireEvent.click(screen.getByText("Deny once"));
+
+      await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+      const { body, headers } = sentRequest(fetchMock);
+      expect(body.decisions).toEqual([
+        ...tasks.map((task) => ({
+          approval_id: task.approval_id,
+          decision: "approve_context",
+          scope_position: position,
+        })),
+        { approval_id: "task-30", decision: "reject" },
+      ]);
+      expect(headers["X-Erato-Executor"]).toBe(JSON.stringify(binding));
+    } finally {
+      pane.cleanup();
+    }
+  });
+
+  it("keeps the position already held when a waiting task joins the document", async () => {
+    const pane = anchorPane();
+    pane.take
+      .mockReturnValueOnce(position)
+      .mockReturnValue({ ...position, seq: 42 });
+    const mismatch = JSON.stringify({
+      code: "decisions_mismatch",
+      missing: ["task-3"],
+      unknown: [],
+    });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(mismatch, { status: 400 }))
+      .mockResolvedValue(new Response("", { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const refetchMessages = vi.fn(async () => undefined);
+    const unscoped = scopedTask(3, null);
+    const waiting = {
+      ...unscoped,
+      child: {
+        ...unscoped.child,
+        waiting_for: { host_context: "word_document", attempt_id: "attempt" },
+      },
+    };
+    const card = (
+      openItems: ReturnType<typeof scopedTask>[],
+      waitingItems: (typeof waiting)[],
+    ) =>
+      withChatContext(
+        <McpToolApprovalCard
+          messageId="message-1"
+          request={stopOf([scopedTask(1), scopedTask(2), waiting])}
+          openItems={openItems}
+          waitingItems={waitingItems}
+          resolution={null}
+        />,
+        "chat-1",
+        { refetchMessages },
+      );
+    try {
+      const { rerender } = renderCard(
+        card([scopedTask(1), scopedTask(2)], [waiting]),
+      );
+      fireEvent.click(screen.getByText("Allow for this document"));
+      await waitFor(() => expect(refetchMessages).toHaveBeenCalled());
+
+      rerender(
+        <QueryClientProvider client={new QueryClient()}>
+          {card([scopedTask(1), scopedTask(2), scopedTask(3)], [])}
+        </QueryClientProvider>,
+      );
+      expect(screen.getByText("Read chapter 3")).toBeInTheDocument();
+      fireEvent.click(screen.getByText("Allow for this document"));
+
+      await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+      const sent = JSON.parse(
+        (fetchMock.mock.calls[1][1] as { body: string }).body,
+      ) as { decisions: unknown[] };
+      expect(sent.decisions).toEqual(
+        [1, 2, 3].map((index) => ({
+          approval_id: `task-${index}`,
+          decision: "approve_context",
+          scope_position: position,
+        })),
+      );
+      expect(pane.take).toHaveBeenCalledTimes(1);
+    } finally {
+      pane.cleanup();
+    }
+  });
+
+  it("holds a document approval on the last item while the stop is sent", async () => {
+    const pane = anchorPane();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => new Promise<Response>(() => {})),
+    );
+    try {
+      renderCard(
+        <McpToolApprovalCard
+          messageId="message-1"
+          request={stopOf([scopedTask(1)])}
+          resolution={null}
+        />,
+      );
+
+      expect(
+        screen.queryByTestId("approval-scope-others"),
+      ).not.toBeInTheDocument();
+      fireEvent.click(screen.getByText("Allow for this document"));
+
+      expect(
+        screen.getByTestId("delegated-task-approval-item-card"),
+      ).toHaveTextContent(
+        "Allowed for this document. Sent once every item is decided.",
+      );
+    } finally {
+      pane.cleanup();
+    }
+  });
+
+  it("offers a document only in the pane that has it open, and says so", () => {
+    renderCard(
+      <McpToolApprovalCard
+        messageId="message-1"
+        request={stopOf([scopedTask(1), scopedTask(2)])}
+        resolution={null}
+      />,
+    );
+
+    expect(
+      screen.queryByText("Allow for this document"),
+    ).not.toBeInTheDocument();
+    expect(screen.getByText("Allow once")).toBeInTheDocument();
+    expect(screen.getByText("Always allow")).toBeInTheDocument();
+    expect(screen.getByTestId("approval-scope-elsewhere")).toHaveTextContent(
+      "To allow the whole document, decide in the pane that has it open.",
+    );
+  });
+
+  it("offers no document scope for another pane's document", () => {
+    const pane = anchorPane();
+    try {
+      renderCard(
+        <McpToolApprovalCard
+          messageId="message-1"
+          request={stopOf([
+            scopedTask(1, { ...documentScope, scope_id: "identity-2" }),
+          ])}
+          resolution={null}
+        />,
+      );
+
+      expect(
+        screen.queryByText("Allow for this document"),
+      ).not.toBeInTheDocument();
+      expect(screen.getByTestId("approval-scope-elsewhere")).toBeVisible();
+    } finally {
+      pane.cleanup();
+    }
+  });
+
+  it("allows a response from any client, without a position", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(new Response("", { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const turnScope = {
+      host_context: "outlook_mailbox",
+      covers: "turn" as const,
+      scope_id: "parent-message",
+    };
+    renderCard(
+      <McpToolApprovalCard
+        messageId="message-1"
+        request={stopOf([
+          scopedTask(1, turnScope, "fetch_availability"),
+          scopedTask(2, turnScope, "fetch_availability"),
+        ])}
+        resolution={null}
+      />,
+    );
+
+    expect(screen.getByTestId("approval-scope-others")).toHaveTextContent(
+      "Also covers 1 other task of this response",
+    );
+    expect(
+      screen.getByText(
+        "Tasks of this response use this tool without asking again until the response is done.",
+      ),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByText("Allow for this response"));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(sentRequest(fetchMock).body.decisions).toEqual([
+      { approval_id: "task-1", decision: "approve_context" },
+      { approval_id: "task-2", decision: "approve_context" },
+    ]);
+  });
+
+  it("says the document changed when it asks again after an outside change", () => {
+    const pane = anchorPane();
+    try {
+      renderCard(
+        <McpToolApprovalCard
+          messageId="message-1"
+          request={stopOf([scopedTask(1, { ...documentScope, changed: true })])}
+          resolution={null}
+        />,
+      );
+
+      expect(screen.getByTestId("approval-scope-changed")).toHaveTextContent(
+        "The document changed since you allowed it.",
+      );
+      expect(screen.getByText("Allow for this document")).toBeInTheDocument();
+    } finally {
+      pane.cleanup();
+    }
+  });
+
+  it("offers no scope on the turn's own call or a task's own card", () => {
+    const pane = anchorPane();
+    try {
+      // A task's own card carries the scope its gate asked with, but only the
+      // parent's card may allow it.
+      renderCard(
+        <McpToolApprovalCard
+          messageId="message-1"
+          request={{
+            ...approvalRequest,
+            tool_name: READ,
+            mcp_server_id: "word",
+            kind: "client_tool" as const,
+            approval_scope: documentScope,
+          }}
+          resolution={null}
+        />,
+      );
+
+      expect(screen.getByText("Allow once")).toBeInTheDocument();
+      expect(
+        screen.queryByText("Allow for this document"),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByTestId("approval-scope-elsewhere"),
+      ).not.toBeInTheDocument();
+    } finally {
+      pane.cleanup();
+    }
+  });
 });

@@ -2062,6 +2062,23 @@ impl AppConfig {
                     }
                 }
             }
+            if tool.approval_scope == ClientToolApprovalScope::Context {
+                if !child_read {
+                    panic!(
+                        "Client tool '{}' sets approval_scope = \"context\", which requires child_access = \"read\".",
+                        qualified
+                    );
+                }
+                let host = tool.host_context.expect("checked above");
+                if let Some(reason) = host.approval_scope_refusal() {
+                    panic!(
+                        "Client tool '{}' sets approval_scope = \"context\", which {} does not support: {}.",
+                        qualified,
+                        host.as_str(),
+                        reason
+                    );
+                }
+            }
         }
 
         config
@@ -6177,6 +6194,38 @@ pub struct ClientToolConfig {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[facet(erato_config::introduced_in(version = "unreleased"))]
     pub child_dispatch: Option<ChildDispatch>,
+
+    /// What one approval of a delegated task's call may cover. `call` asks for
+    /// every call. `context` lets the user allow every task call of this tool
+    /// on the same document (Word, in the pane holding it) or in the same
+    /// response (Outlook) with one decision in the parent chat, until it
+    /// changes from outside the chat. It is a tool approval only: the host's
+    /// own prompts and any release review still run. Requires
+    /// `child_access = "read"` and a host context that supports it. Default:
+    /// `call`.
+    #[serde(default, skip_serializing_if = "ClientToolApprovalScope::is_call")]
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub approval_scope: ClientToolApprovalScope,
+}
+
+/// `client_tools.tools.<id>.approval_scope`.
+#[derive(Debug, Deserialize, Serialize, PartialEq, Eq, Clone, Copy, Default, Facet, HeapSize)]
+#[facet(rename_all = "snake_case")]
+#[serde(rename_all = "snake_case")]
+#[repr(C)]
+pub enum ClientToolApprovalScope {
+    /// Every asked call needs its own decision.
+    #[default]
+    Call,
+    /// One decision may cover every task call of this tool on the same
+    /// document or response until it changes from outside the chat.
+    Context,
+}
+
+impl ClientToolApprovalScope {
+    pub fn is_call(&self) -> bool {
+        *self == Self::Call
+    }
 }
 
 /// `client_tools.tools.<id>.child_dispatch` and `delegation.tasks.child_dispatch`.
@@ -6276,6 +6325,29 @@ impl ClientToolHostContext {
         match self {
             Self::OutlookMailbox | Self::DesktopSidecar => true,
             Self::WordDocument => false,
+        }
+    }
+
+    /// Whether a tool of this family may set `approval_scope = "context"`: the
+    /// server knows the scope (Outlook: the parent turn) or the host checks it
+    /// on the device (Word: the pane's change journal). Not the desktop
+    /// sidecar, see [`Self::approval_scope_refusal`].
+    pub fn supports_approval_scope(&self) -> bool {
+        self.approval_scope_refusal().is_none()
+    }
+
+    /// Why a tool of this family may not set `approval_scope = "context"`, for
+    /// the refusal at load; `None` where it may. The desktop sidecar stays per
+    /// call: an approval there could cover only the server's tool approval,
+    /// never the Erato desktop app's own consent on the device (CT-9, CT-11),
+    /// and a thread check has to wait until the app reports what changed in a
+    /// thread since a position (ERMAIN-1034's follow-up N2).
+    pub fn approval_scope_refusal(&self) -> Option<&'static str> {
+        match self {
+            Self::OutlookMailbox | Self::WordDocument => None,
+            Self::DesktopSidecar => Some(
+                "one approval there could cover only the server's tool approval, never the Erato desktop app's own consent on the device, and a thread check has to wait until the app reports what changed in a thread",
+            ),
         }
     }
 }

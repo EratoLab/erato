@@ -521,6 +521,8 @@ pub async fn continue_client_operation(
 /// the newest that serves a call's tool gets it. A pane sends one
 /// `X-Erato-Executor-Instance`, a UUIDv7 made when it opened, on all its
 /// streams: a delivered call is sent again only to a later stream of that pane.
+/// `X-Erato-Scoped-Client-Tools` names the child tools whose handlers check a
+/// covered call's approval scope; a covered call goes only to such a stream.
 #[utoipa::path(get, path = "/me/client-operations/stream", operation_id = "clientOperationStream",
     responses((status = OK, content_type = "text/event-stream", body = ExecutorStreamEvent),
         (status = BAD_REQUEST, description = "No valid X-Erato-Executor binding or no X-Erato-Client-Tools"),
@@ -549,6 +551,7 @@ pub async fn executor_stream(
             "X-Erato-Client-Tools must name at least one tool".into(),
         ));
     }
+    let child_client_tools = crate::services::client_tools::child_client_tools(&headers);
     let claim = PresenceClaim {
         account_id,
         binding,
@@ -558,7 +561,11 @@ pub async fn executor_stream(
             .and_then(|value| Uuid::parse_str(value).ok()),
         connected_at: chrono::Utc::now(),
         client_tools,
-        child_client_tools: crate::services::client_tools::child_client_tools(&headers),
+        scoped_client_tools: crate::services::client_tools::scoped_client_tools(
+            &headers,
+            &child_client_tools,
+        ),
+        child_client_tools,
     };
     let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
     let guard = PresenceGuard::start(

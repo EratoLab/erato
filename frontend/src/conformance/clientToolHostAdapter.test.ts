@@ -1,11 +1,13 @@
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
+  clientToolScopeChanged,
   registerClientToolExecutor,
   registerLocalOnlyClientTools,
   resetClientToolRegistryForTests,
 } from "@/hooks/chat/clientToolExecutors";
 import { useConfirmationRegistryStore } from "@/hooks/chat/store/confirmationRegistryStore";
+import { registerOperationExecutor } from "@/lib/clientOperations/registration";
 
 import { clientToolHostAdapterConformanceFailures } from "./clientToolHostAdapter";
 
@@ -48,10 +50,25 @@ type Flaw =
   | "keeps its results on the device"
   | "answers local_only"
   | "reports a context_ref without a context version"
-  | "trusts the model's document identity";
+  | "trusts the model's document identity"
+  | "does not list its scope check"
+  | "lists its scope check without the section"
+  | "takes a position for any scope"
+  | "takes its position once, not at the click"
+  | "reads after an outside change"
+  | "ends its approval on its own change"
+  | "reads before it checks the scope"
+  | "answers scope_changed as terminal"
+  | "checks the scope before the grant"
+  | "trusts an unreadable position"
+  | "keeps positions across a reload"
+  | "refuses a call without an approval after an outside change"
+  | "registers no binding for its read"
+  | "skips its device prompt under a document approval";
 
 const READ = "fake_read";
 const WRITE = "fake_write";
+const unregister: (() => void)[] = [];
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null;
@@ -60,7 +77,8 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
  * The smallest host that keeps the contract, with one switch per way to break
  * it. Without `versioned` it has no context version, like a live read. With
  * `late` it registers and deregisters its approvals a tick late, as a React
- * effect does. With `deviceOnly` every read asks on the device.
+ * effect does. With `deviceOnly` every read asks on the device. With
+ * `scoped` its read checks a document approval against a change journal.
  */
 const fakeHost = ({
   flaw,
@@ -68,6 +86,7 @@ const fakeHost = ({
   late = false,
   deviceOnly = false,
   serverOwner = false,
+  scoped = !deviceOnly,
 }: {
   flaw?: Flaw;
   versioned?: boolean;
@@ -75,12 +94,59 @@ const fakeHost = ({
   deviceOnly?: boolean;
   /** Leaves the owner turn to the server, as a context that outlives the pane. */
   serverOwner?: boolean;
+  scoped?: boolean;
 } = {}): ClientToolHostConformanceHarness => {
   const turns: ClientToolHostTurn[] = [];
   const edits: string[] = [];
   const readCounts = new Map<string, number>();
   let blind = false;
   let answer: ((approved: boolean) => void) | undefined;
+  // The pane's change journal, one per pane load, like Word's.
+  let pane = 1;
+  let changeSeq = 0;
+  const changes: { seq: number; own: boolean }[] = [];
+  let contextReads = 0;
+  const position = () => ({ journal: `journal-${pane}`, seq: changeSeq });
+  const firstPosition = position();
+  const changedSince = (taken: unknown): boolean => {
+    if (
+      !isRecord(taken) ||
+      typeof taken.journal !== "string" ||
+      typeof taken.seq !== "number"
+    ) {
+      return flaw !== "trusts an unreadable position";
+    }
+    if (taken.journal !== `journal-${pane}`) return true;
+    return changes.some(
+      (change) =>
+        change.seq > (taken.seq as number) &&
+        (!change.own || flaw === "ends its approval on its own change"),
+    );
+  };
+  const scopeChanged = (): ClientToolExecutionResult => {
+    const result = clientToolScopeChanged(
+      "The document changed outside this chat since the user allowed it.",
+    );
+    return flaw === "answers scope_changed as terminal" && !result.ok
+      ? {
+          ...result,
+          submissionFeedback: { terminal: true, recovery: "cannot_continue" },
+        }
+      : result;
+  };
+  /** Whether a grant call must answer that its scope changed. */
+  const scopeEnded = (grant: ClientToolHostGrant): boolean => {
+    if (!grant.approvalScope) {
+      return (
+        flaw === "refuses a call without an approval after an outside change" &&
+        changes.some((change) => !change.own)
+      );
+    }
+    return (
+      flaw !== "reads after an outside change" &&
+      changedSince(grant.approvalScope.position)
+    );
+  };
 
   const lost: ClientToolExecutionResult = {
     ok: false,
@@ -198,9 +264,21 @@ const fakeHost = ({
     ) {
       return declined;
     }
+    if (flaw === "checks the scope before the grant" && scopeEnded(grant)) {
+      return scopeChanged();
+    }
     const turn = grantedTurn(grant, context, input);
     if (!turn) {
       return lost;
+    }
+    if (flaw === "reads before it checks the scope") {
+      contextReads += 1;
+    }
+    if (scopeEnded(grant)) {
+      return scopeChanged();
+    }
+    if (flaw !== "reads before it checks the scope") {
+      contextReads += 1;
     }
     if (
       flaw === "trusts the model's document identity" &&
@@ -215,7 +293,14 @@ const fakeHost = ({
     if (flaw === "answers local_only") {
       return { ok: true, disposition: "local_only" };
     }
-    if (asks && flaw !== "asks before checking the grant") {
+    if (
+      asks &&
+      flaw !== "asks before checking the grant" &&
+      !(
+        flaw === "skips its device prompt under a document approval" &&
+        grant.approvalScope
+      )
+    ) {
       if (!(await askOnDevice(grant, context))) {
         return declined;
       }
@@ -272,12 +357,32 @@ const fakeHost = ({
 
   registerClientToolExecutor(READ, read, () => true, {
     acceptsGrantCalls: flaw !== "does not advertise its read",
+    checksApprovalScope: () =>
+      (scoped || flaw === "lists its scope check without the section") &&
+      flaw !== "does not list its scope check",
+    anchorsApprovalScope: (scope) =>
+      scope.hostContext === "fake_host" &&
+      (scope.scopeId === `pane-${pane}` ||
+        flaw === "takes a position for any scope")
+        ? flaw === "takes its position once, not at the click"
+          ? () => firstPosition
+          : position
+        : undefined,
   });
   registerClientToolExecutor(WRITE, write, () => true, {
     acceptsGrantCalls: flaw === "advertises its write",
   });
   if (flaw === "keeps its results on the device") {
     registerLocalOnlyClientTools([READ], () => true);
+  }
+  if (flaw !== "registers no binding for its read") {
+    unregister.push(
+      registerOperationExecutor(READ, () => ({
+        device_id: "fake-device-000000",
+        realm: "frontend",
+        host_context: { kind: "fake_host", identity: `pane-${pane}` },
+      })),
+    );
   }
 
   return {
@@ -314,10 +419,42 @@ const fakeHost = ({
       read: { tool: READ, input: { part: "appendix", ask: true } },
       answer: (approved) => answer?.(approved),
     },
+    ...(scoped
+      ? {
+          approvalScope: {
+            read: { tool: READ, input: { part: "chapter" } },
+            readCount: () => contextReads,
+            scopeId: () => `pane-${pane}`,
+            changeFromOutside: () => {
+              changes.push({ seq: ++changeSeq, own: false });
+            },
+            changeOwn: () => {
+              changes.push({ seq: ++changeSeq, own: true });
+            },
+            reload: () => {
+              if (flaw !== "keeps positions across a reload") pane += 1;
+            },
+          },
+        }
+      : {}),
   };
 };
 
+it("reports a host that lists its scope check without the section", async () => {
+  expect(
+    await clientToolHostAdapterConformanceFailures(
+      fakeHost({
+        scoped: false,
+        flaw: "lists its scope check without the section",
+      }),
+    ),
+  ).toEqual([
+    'approval scope (fake_host): "fake_read" is listed in X-Erato-Scoped-Client-Tools, but the harness has no approval scope',
+  ]);
+});
+
 afterEach(() => {
+  unregister.splice(0).forEach((undo) => undo());
   resetClientToolRegistryForTests();
   useConfirmationRegistryStore.setState({ pendingIdsByChatId: {} });
 });
@@ -390,6 +527,14 @@ describe("clientToolHostAdapterConformanceFailures", () => {
     );
   });
 
+  it("passes a host whose read does not check a document approval", async () => {
+    expect(
+      await clientToolHostAdapterConformanceFailures(
+        fakeHost({ scoped: false }),
+      ),
+    ).toEqual([]);
+  });
+
   it("reports a harness that lists no read", async () => {
     const harness = fakeHost({ deviceOnly: true });
     expect(
@@ -402,6 +547,8 @@ describe("clientToolHostAdapterConformanceFailures", () => {
   });
 
   const lost = 'expected the "context_unavailable" code';
+  const SCOPE_CHANGED =
+    "The document changed outside this chat since the user allowed it.";
 
   it.each<[Flaw, string | readonly string[], boolean]>([
     [
@@ -545,6 +692,77 @@ describe("clientToolHostAdapterConformanceFailures", () => {
     [
       "trusts the model's document identity",
       'lineage (fake_host): "fake_read" under a valid grant fails with "No document identity." and codes []',
+      true,
+    ],
+    [
+      "does not list its scope check",
+      [
+        'approval scope (fake_host): "fake_read" is missing from X-Erato-Scoped-Client-Tools',
+        'approval scope (fake_host): "fake_read" takes no position for its own scope',
+      ],
+      true,
+    ],
+    [
+      "registers no binding for its read",
+      [
+        'approval scope (fake_host): "fake_read" has no binding of its own as X-Erato-Executor, which a document decision must carry',
+        'approval scope (fake_host): "fake_read" takes no position for its own scope',
+      ],
+      true,
+    ],
+    [
+      "takes a position for any scope",
+      'approval scope (fake_host): "fake_read" takes a position for another scope id',
+      true,
+    ],
+    [
+      "takes its position once, not at the click",
+      `approval scope (fake_host): "fake_read" under a document approval given after the change fails with "${SCOPE_CHANGED}" and codes [scope_changed]`,
+      true,
+    ],
+    [
+      "reads after an outside change",
+      'approval scope (fake_host): "fake_read" under a document approval after a change from outside succeeds, expected the "scope_changed" code',
+      true,
+    ],
+    [
+      "ends its approval on its own change",
+      `approval scope (fake_host): "fake_read" under a document approval after the chat's own change fails with "${SCOPE_CHANGED}" and codes [scope_changed]`,
+      true,
+    ],
+    [
+      "reads before it checks the scope",
+      'approval scope (fake_host): "fake_read" under a document approval after a change from outside reads before it answers scope_changed',
+      true,
+    ],
+    [
+      "answers scope_changed as terminal",
+      'approval scope (fake_host): "fake_read" under a document approval after a change from outside answers scope_changed as terminal, so the user is never asked again',
+      true,
+    ],
+    [
+      "checks the scope before the grant",
+      'approval scope (fake_host): "fake_read" under a document approval and a grant with a foreign owner chat answers scope_changed before it checks the grant',
+      true,
+    ],
+    [
+      "trusts an unreadable position",
+      'approval scope (fake_host): "fake_read" under a document approval with no position succeeds, expected the "scope_changed" code',
+      true,
+    ],
+    [
+      "keeps positions across a reload",
+      `approval scope (fake_host): "fake_read" under a new turn's grant with a position from before a reload succeeds, expected the "scope_changed" code`,
+      true,
+    ],
+    [
+      "refuses a call without an approval after an outside change",
+      `approval scope (fake_host): "fake_read" without an approval after a change from outside fails with "${SCOPE_CHANGED}" and codes [scope_changed]`,
+      true,
+    ],
+    [
+      "skips its device prompt under a document approval",
+      'device approval (fake_host): "fake_read" asking on the device under a document approval raises no approval',
       true,
     ],
   ])(
