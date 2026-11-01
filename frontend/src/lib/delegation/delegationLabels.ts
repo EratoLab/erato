@@ -73,7 +73,7 @@ export const waitingForHostLabel = (
     case "desktop_sidecar":
       return t({
         id: "delegation.waitingFor.desktopSidecar",
-        message: "Waiting for the Erato app on this device",
+        message: "Waiting for the Erato desktop app on this device",
       });
     default:
       return t({

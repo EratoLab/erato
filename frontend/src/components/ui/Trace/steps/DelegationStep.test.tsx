@@ -573,7 +573,7 @@ describe("delegation step", () => {
 
   it.each([
     ["outlook_mailbox", "Waiting for Outlook on this device"],
-    ["desktop_sidecar", "Waiting for the Erato app on this device"],
+    ["desktop_sidecar", "Waiting for the Erato desktop app on this device"],
   ])(
     "names the host %s a waiting task waits for when the stop says it",
     (host, label) => {

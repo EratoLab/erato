@@ -347,7 +347,7 @@ A host's handlers pass `clientToolHostAdapterConformanceFailures` from
   user's device. Its calls run in the `desktop-sidecar` realm, so a binding must
   carry that realm and `host_context.kind = "desktop_sidecar"`. It outlives the
   pane, so its tools may set `child_dispatch = "durable"`. Wait note: "wait (uses
-  the Erato app on this device)".
+  the Erato desktop app on this device)".
 - The add-in shells already send an Office binding in `X-Erato-Executor`, so a
   shell sends the sidecar binding in the submit header
   `X-Erato-Additional-Executors`, a JSON array with one binding per host context

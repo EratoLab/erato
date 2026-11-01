@@ -3805,7 +3805,7 @@ msgstr "Waiting for a connected app on this device"
 #. js-lingui-explicit-id
 #: src/lib/delegation/delegationLabels.ts
 msgid "delegation.waitingFor.desktopSidecar"
-msgstr "Waiting for the Erato app on this device"
+msgstr "Waiting for the Erato desktop app on this device"
 
 #. js-lingui-explicit-id
 #: src/lib/delegation/delegationLabels.ts

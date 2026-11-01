@@ -167,7 +167,7 @@ fn wait_note(host: ClientToolHostContext) -> &'static str {
     match host {
         ClientToolHostContext::WordDocument => "wait (uses the open document)",
         ClientToolHostContext::OutlookMailbox => "wait (uses the open mailbox)",
-        ClientToolHostContext::DesktopSidecar => "wait (uses the Erato app on this device)",
+        ClientToolHostContext::DesktopSidecar => "wait (uses the Erato desktop app on this device)",
     }
 }
 

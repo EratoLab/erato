@@ -132,7 +132,7 @@ const LOCAL_ONLY = { ok: true, disposition: "local_only" } as const;
 const GRANT_MISMATCH =
   "This call's grant does not belong to the task that made it, so nothing was read on this device.";
 const SIDECAR_UNAVAILABLE =
-  "The Erato app on this device cannot serve this task's call right now, so nothing was read.";
+  "The Erato desktop app on this device cannot serve this task's call right now, so nothing was read.";
 
 /** A task's call the device cannot serve. It is never retried as it stands;
  * a waiting call is picked up again by a client that can serve it. */
