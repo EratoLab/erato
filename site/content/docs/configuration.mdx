@@ -6290,8 +6290,11 @@ approval_scope = "context"
 
 Refused at load time: `context` without `child_access = "read"`, and on a host
 context that does not support it (every host context other than `word_document`
-and `outlook_mailbox`). Needs `client_tools.executor_stream_enabled`, like
-`child_access`.
+and `outlook_mailbox`). Calls of `desktop_sidecar` tools are always asked one by
+one: an approval there could cover only the server's tool approval, never the
+Erato desktop app's own consent on the device, and checking a thread has to wait
+until the app reports what changed in it. Needs
+`client_tools.executor_stream_enabled`, like `child_access`.
 
 **Default value:** `"call"`
 

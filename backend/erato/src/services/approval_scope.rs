@@ -42,11 +42,13 @@ pub enum ApprovalScopeKind {
     ParentTurn,
 }
 
-/// The scope a host context's tools may be approved for, if any.
+/// The scope a host context's tools may be approved for, if any. None for the
+/// desktop sidecar, whose calls always ask (config refuses `context` there).
 pub fn kind(host: ClientToolHostContext) -> Option<ApprovalScopeKind> {
     match host {
         ClientToolHostContext::WordDocument => Some(ApprovalScopeKind::PaneDocument),
         ClientToolHostContext::OutlookMailbox => Some(ApprovalScopeKind::ParentTurn),
+        ClientToolHostContext::DesktopSidecar => None,
     }
 }
 
@@ -149,7 +151,7 @@ pub fn position_acceptable(key: &ScopeKey, position: &Value) -> bool {
                     .is_some_and(|seq| seq.is_u64() || seq.is_i64())
                 && object.get("events") == Some(&Value::Bool(true))
         }
-        ClientToolHostContext::OutlookMailbox => false,
+        ClientToolHostContext::OutlookMailbox | ClientToolHostContext::DesktopSidecar => false,
     }
 }
 
@@ -469,6 +471,7 @@ mod tests {
             kind(ClientToolHostContext::OutlookMailbox),
             Some(ApprovalScopeKind::ParentTurn)
         );
+        assert_eq!(kind(ClientToolHostContext::DesktopSidecar), None);
         assert_eq!(
             covers(ApprovalScopeKind::PaneDocument),
             ApprovalScopeCovers::Document

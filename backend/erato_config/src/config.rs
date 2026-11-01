@@ -2070,11 +2070,12 @@ impl AppConfig {
                     );
                 }
                 let host = tool.host_context.expect("checked above");
-                if !host.supports_approval_scope() {
+                if let Some(reason) = host.approval_scope_refusal() {
                     panic!(
-                        "Client tool '{}' sets approval_scope = \"context\", which {} does not support.",
+                        "Client tool '{}' sets approval_scope = \"context\", which {} does not support: {}.",
                         qualified,
-                        host.as_str()
+                        host.as_str(),
+                        reason
                     );
                 }
             }
@@ -6328,11 +6329,24 @@ impl ClientToolHostContext {
 
     /// Whether a tool of this family may set `approval_scope = "context"`: the
     /// server knows the scope (Outlook: the parent turn) or the host checks it
-    /// on the device (Word: the pane's change journal).
+    /// on the device (Word: the pane's change journal). Not the desktop
+    /// sidecar, see [`Self::approval_scope_refusal`].
     pub fn supports_approval_scope(&self) -> bool {
+        self.approval_scope_refusal().is_none()
+    }
+
+    /// Why a tool of this family may not set `approval_scope = "context"`, for
+    /// the refusal at load; `None` where it may. The desktop sidecar stays per
+    /// call: an approval there could cover only the server's tool approval,
+    /// never the Erato desktop app's own consent on the device (CT-9, CT-11),
+    /// and a thread check has to wait until the app reports what changed in a
+    /// thread since a position (ERMAIN-1034's follow-up N2).
+    pub fn approval_scope_refusal(&self) -> Option<&'static str> {
         match self {
-            Self::OutlookMailbox => true,
-            Self::WordDocument => true,
+            Self::OutlookMailbox | Self::WordDocument => None,
+            Self::DesktopSidecar => Some(
+                "one approval there could cover only the server's tool approval, never the Erato desktop app's own consent on the device, and a thread check has to wait until the app reports what changed in a thread",
+            ),
         }
     }
 }

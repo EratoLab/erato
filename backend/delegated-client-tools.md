@@ -281,8 +281,11 @@ A client tool may set `approval_scope = "context"` (default `call`). It loads
 only on a `child_access = "read"` tool whose host context has an approval scope,
 `ClientToolHostContext::supports_approval_scope()`: `word_document`, whose scope
 is the document in one pane session, and `outlook_mailbox`, whose scope is the
-parent turn. The desktop sidecar stays per call until it can name a thread and
-count the items added since a position (ERMAIN-1034's follow-up N2).
+parent turn. `desktop_sidecar` stays per call (`kind()` is `None`), and
+`context` on its tools is refused at load: an approval there could cover only
+the server's tool approval, never the Erato desktop app's own consent on the
+device (CT-9, CT-11), and a thread check has to wait until the app can name a
+thread and count the items added since a position (ERMAIN-1034's follow-up N2).
 
 When a task's granted call to such a tool asks (the user's decision is Ask), its
 item on the parent's card carries `child.approval_scope {host_context, covers,

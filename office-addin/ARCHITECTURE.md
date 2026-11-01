@@ -471,7 +471,11 @@ Freshness:             readAt; changes none only for a search whose every source
                        freshness.scope (position and added unknown until the
                        sidecar reports them)
 Child facet:           desktop_delegated_search (overlay)
-Approval scope:        call, until ERMAIN-1033 and the sidecar's thread counts
+Approval scope:        call only: context is refused at load, since one
+                       approval could cover only the server's tool approval,
+                       never the app's own consent on the device (CT-9, CT-11);
+                       a thread approval waits for the sidecar's thread counts
+                       (N2)
 Outlives the pane:     yes (search, get document, read conversation durable)
 Device approvals:      file uploads (get_sidecar_document, attachments of
                        read_sidecar_conversation), under the owner chat

@@ -4166,6 +4166,25 @@ approval_scope = "context""#,
     );
 }
 
+#[test]
+#[should_panic(
+    expected = "Client tool 'desktop/search_sidecar_index' sets approval_scope = \"context\", which desktop_sidecar does not support: one approval there could cover only the server's tool approval, never the Erato desktop app's own consent on the device"
+)]
+fn approval_scope_context_is_refused_on_the_desktop_sidecar() {
+    migrate_config_with_action_facets(
+        r#"
+[client_tools.tools.desktop_search_index]
+name = "search_sidecar_index"
+namespace = "desktop"
+description = "Search the local index"
+parameters = '{"type":"object"}'
+child_access = "read"
+host_context = "desktop_sidecar"
+approval_scope = "context"
+"#,
+    );
+}
+
 /// CT-9: local evidence runs its own release review and no configured tool can
 /// take its name, so no context approval ever covers it.
 #[test]
