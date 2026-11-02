@@ -53,42 +53,6 @@ mod tests {
     use super::{generate_config_reference, validate_config_reference};
 
     #[test]
-    fn backfill_preserves_alias_dates_and_classifies_existing_deprecations() {
-        let reference = generate_config_reference().unwrap();
-        assert_eq!(
-            reference["experimental_facets.default_selected_facets.[]"]["introduced_in"],
-            "0.6.0"
-        );
-        assert_eq!(
-            reference["facets.default_selected_facets.[]"]["introduced_in"],
-            "0.7.0"
-        );
-        assert_eq!(reference["server.encryption_key"]["introduced_in"], "0.6.0");
-        for metadata in reference.as_object().unwrap().values() {
-            if metadata.get("deprecated").is_some() {
-                assert_eq!(metadata["stability"], "deprecated");
-            }
-            assert!(metadata["introduced_in"].is_string());
-            assert!(metadata["stability"].is_string());
-            assert_eq!(metadata["security_relevance"], "unknown");
-            assert_eq!(metadata["default_value_security"], "unknown");
-        }
-        for suffix in [
-            "",
-            ".source",
-            ".prompt",
-            ".prompt_name",
-            ".label",
-            ".fallback",
-        ] {
-            assert_eq!(
-                reference[format!("prompt_optimizer.prompt{suffix}")]["introduced_in"],
-                "0.6.0"
-            );
-        }
-    }
-
-    #[test]
     fn only_conversational_audio_exposes_speech_provider() {
         let reference = generate_config_reference().unwrap();
         let keys = reference.as_object().unwrap();

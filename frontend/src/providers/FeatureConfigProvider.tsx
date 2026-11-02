@@ -42,6 +42,8 @@ interface ChatInputFeatureConfig {
   mcpServersEnabled?: boolean;
   /** Whether the chat input should auto-focus on mount */
   autofocus: boolean;
+  /** Whether tool toggles leave the Tools dropdown open */
+  keepToolsDropdownOpen: boolean;
   /** Layout of the chat input before a conversation has started */
   emptyStateLayout: "bottom" | "centered";
   /** Whether to show the AI usage advisory below the chat input */
@@ -298,6 +300,7 @@ export const defaultStaticFeatureConfig: FeatureConfig = {
   },
   chatInput: {
     autofocus: true,
+    keepToolsDropdownOpen: false,
     emptyStateLayout: "centered",
     showUsageAdvisory: true,
     maxFiles: DEFAULT_MAX_FILES_PER_MESSAGE,
@@ -419,6 +422,7 @@ function createFeatureConfig(
         environment.mcpServersInChatInputEnabled ??
         environment.mcpServersTabEnabled,
       autofocus: !environment.disableChatInputAutofocus,
+      keepToolsDropdownOpen: environment.keepToolsDropdownOpen ?? false,
       emptyStateLayout: environment.chatInputEmptyStateLayout,
       showUsageAdvisory: true,
       maxFiles: environment.maxFilesPerMessage ?? DEFAULT_MAX_FILES_PER_MESSAGE,

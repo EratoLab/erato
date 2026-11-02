@@ -34,6 +34,7 @@ const FRONTEND_ENV_KEY_CHAT_HISTORY_FILTERS_ENABLED: &str = "CHAT_HISTORY_FILTER
 const FRONTEND_ENV_KEY_DISABLE_UPLOAD: &str = "DISABLE_UPLOAD";
 const FRONTEND_ENV_KEY_MAX_FILES_PER_MESSAGE: &str = "MAX_FILES_PER_MESSAGE";
 const FRONTEND_ENV_KEY_DISABLE_CHAT_INPUT_AUTOFOCUS: &str = "DISABLE_CHAT_INPUT_AUTOFOCUS";
+const FRONTEND_ENV_KEY_KEEP_TOOLS_DROPDOWN_OPEN: &str = "KEEP_TOOLS_DROPDOWN_OPEN";
 const FRONTEND_ENV_KEY_CHAT_INPUT_EMPTY_STATE_LAYOUT: &str = "CHAT_INPUT_EMPTY_STATE_LAYOUT";
 const FRONTEND_ENV_KEY_DISABLE_LOGOUT: &str = "DISABLE_LOGOUT";
 const FRONTEND_ENV_KEY_ASSISTANTS_ENABLED: &str = "ASSISTANTS_ENABLED";
@@ -390,6 +391,10 @@ fn build_frontend_environment(
     env.additional_environment.insert(
         FRONTEND_ENV_KEY_DISABLE_CHAT_INPUT_AUTOFOCUS.to_string(),
         Value::Bool(config.frontend.disable_chat_input_autofocus),
+    );
+    env.additional_environment.insert(
+        FRONTEND_ENV_KEY_KEEP_TOOLS_DROPDOWN_OPEN.to_string(),
+        Value::Bool(config.frontend.keep_tools_dropdown_open),
     );
     env.additional_environment.insert(
         FRONTEND_ENV_KEY_CHAT_INPUT_EMPTY_STATE_LAYOUT.to_string(),

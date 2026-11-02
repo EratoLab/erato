@@ -2,6 +2,27 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { env } from "@/app/env";
 
+describe("env keepToolsDropdownOpen", () => {
+  afterEach(() => {
+    delete window.KEEP_TOOLS_DROPDOWN_OPEN;
+    vi.unstubAllEnvs();
+  });
+
+  it("defaults to false", () => {
+    expect(env().keepToolsDropdownOpen).toBe(false);
+  });
+
+  it.each([true, false])(
+    "reads backend values and Vite overrides (%s)",
+    (value) => {
+      window.KEEP_TOOLS_DROPDOWN_OPEN = value;
+      expect(env().keepToolsDropdownOpen).toBe(value);
+      vi.stubEnv("VITE_KEEP_TOOLS_DROPDOWN_OPEN", String(!value));
+      expect(env().keepToolsDropdownOpen).toBe(!value);
+    },
+  );
+});
+
 describe("env faviconPath", () => {
   afterEach(() => {
     delete window.FAVICON_PATH;

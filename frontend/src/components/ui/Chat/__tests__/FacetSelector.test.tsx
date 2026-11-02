@@ -1,4 +1,12 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
+import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 
 import { FacetSelector } from "../FacetSelector";
@@ -21,6 +29,7 @@ const RESEARCHER = { id: "assistant-research", name: "Researcher" };
 function renderSelector({
   facets = [] as FacetInfo[],
   toolsDisabled = false,
+  keepOpenOnSelect = false,
   onSelect = vi.fn(),
   onBrowse = vi.fn(),
   onSelectionChange = vi.fn(),
@@ -40,6 +49,7 @@ function renderSelector({
       onlySingleFacet={false}
       showFacetIndicatorWithDisplayName={false}
       toolsDisabled={toolsDisabled}
+      keepOpenOnSelect={keepOpenOnSelect}
       assistantSection={
         withAssistants
           ? buildAssistantMentionSection({
@@ -73,6 +83,75 @@ function renderSelector({
 }
 
 describe("FacetSelector", () => {
+  it("closes after selecting a facet by default", async () => {
+    const { onSelectionChange } = renderSelector({ facets: [WEB_SEARCH] });
+    fireEvent.click(screen.getByRole("button", { name: "Open menu" }));
+    fireEvent.click(
+      await screen.findByRole("menuitem", { name: "Web search" }),
+    );
+    expect(onSelectionChange).toHaveBeenCalledWith([WEB_SEARCH.id]);
+    await waitFor(() =>
+      expect(screen.queryByRole("menu")).not.toBeInTheDocument(),
+    );
+  });
+
+  it.each([false, true])(
+    "keeps facet toggles open while respecting single selection = %s",
+    async (onlySingleFacet) => {
+      const secondFacet = {
+        ...WEB_SEARCH,
+        id: "facet-2",
+        display_name: "Research",
+      };
+      function Selector() {
+        const [selectedFacetIds, setSelectedFacetIds] = useState<string[]>([]);
+        return (
+          <FacetSelector
+            facets={[WEB_SEARCH, secondFacet]}
+            selectedFacetIds={selectedFacetIds}
+            onSelectionChange={setSelectedFacetIds}
+            onlySingleFacet={onlySingleFacet}
+            showFacetIndicatorWithDisplayName={false}
+            keepOpenOnSelect
+          />
+        );
+      }
+      render(<Selector />);
+      const trigger = screen.getByRole("button", { name: "Open menu" });
+      fireEvent.click(trigger);
+      const webSearch = await screen.findByRole("menuitem", {
+        name: "Web search",
+      });
+      vi.useFakeTimers();
+      try {
+        fireEvent.click(webSearch);
+        act(() => vi.advanceTimersByTime(200));
+        expect(trigger).toHaveAttribute("aria-expanded", "true");
+        expect(
+          screen.getByTestId(`selected-facet-${WEB_SEARCH.id}`),
+        ).toBeInTheDocument();
+        fireEvent.click(screen.getByRole("menuitem", { name: "Research" }));
+        act(() => vi.advanceTimersByTime(200));
+        expect(
+          screen.getByTestId(`selected-facet-${secondFacet.id}`),
+        ).toBeInTheDocument();
+        expect(
+          screen.queryByTestId(`selected-facet-${WEB_SEARCH.id}`) !== null,
+        ).toBe(!onlySingleFacet);
+        fireEvent.click(screen.getByRole("menuitem", { name: "Research" }));
+        act(() => vi.advanceTimersByTime(200));
+        expect(
+          screen.queryByTestId(`selected-facet-${secondFacet.id}`),
+        ).not.toBeInTheDocument();
+        expect(screen.getByRole("menu")).toBeInTheDocument();
+        fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" });
+        expect(trigger).toHaveAttribute("aria-expanded", "false");
+      } finally {
+        vi.useRealTimers();
+      }
+    },
+  );
+
   it("renders nothing without facets or assistants", () => {
     const { container } = render(
       <FacetSelector
@@ -106,7 +185,7 @@ describe("FacetSelector", () => {
   // The dialog focuses itself; the dropdown's usual delayed close would hand
   // focus back to the trigger behind the overlay.
   it("closes without the select delay when browse opens the dialog", async () => {
-    const { onBrowse } = renderSelector();
+    const { onBrowse } = renderSelector({ keepOpenOnSelect: true });
 
     fireEvent.click(screen.getByRole("button", { name: "Open menu" }));
     fireEvent.click(

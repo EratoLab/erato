@@ -19,6 +19,8 @@ interface FacetSelectorProps {
   onSelectionChange: (selectedFacetIds: string[]) => void;
   onlySingleFacet: boolean;
   showFacetIndicatorWithDisplayName: boolean;
+  /** Keep the dropdown open after toggling facets or connectors. */
+  keepOpenOnSelect?: boolean;
   /**
    * Extra group appended below the tools — the same section the mobile "+"
    * menu renders, so both hosts offer identical assistant rows.
@@ -48,6 +50,7 @@ export const FacetSelector = ({
   onSelectionChange,
   onlySingleFacet,
   showFacetIndicatorWithDisplayName,
+  keepOpenOnSelect = false,
   assistantSection,
   mcpToolsSection,
   disabled = false,
@@ -111,6 +114,7 @@ export const FacetSelector = ({
         label: getFacetDisplayName(facet),
         icon: <ResolvedIcon iconId={facet.icon} className="size-4" />,
         onClick: () => toggleFacetSelection(facet.id),
+        keepOpenOnSelect,
         checked: selectedFacetIdsSet.has(facet.id),
         disabled: toolsDisabled,
       };
@@ -134,6 +138,7 @@ export const FacetSelector = ({
                 description: item.description,
                 icon: item.icon,
                 onClick: item.onToggle,
+                keepOpenOnSelect,
                 checked: item.checked,
                 disabled: item.disabled,
                 sectionHeader,
@@ -157,6 +162,7 @@ export const FacetSelector = ({
     assistantSection,
     facets,
     mcpToolsSection,
+    keepOpenOnSelect,
     selectedFacetIdsSet,
     toggleFacetSelection,
     toolsDisabled,

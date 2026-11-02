@@ -35,6 +35,7 @@ export type Env = {
   disableUpload: boolean;
   maxFilesPerMessage?: number;
   disableChatInputAutofocus: boolean;
+  keepToolsDropdownOpen?: boolean;
   chatInputEmptyStateLayout: "bottom" | "centered";
   disableLogout: boolean;
   assistantsEnabled: boolean;
@@ -120,6 +121,7 @@ declare global {
     DISABLE_UPLOAD?: boolean;
     MAX_FILES_PER_MESSAGE?: number;
     DISABLE_CHAT_INPUT_AUTOFOCUS?: boolean;
+    KEEP_TOOLS_DROPDOWN_OPEN?: boolean;
     CHAT_INPUT_EMPTY_STATE_LAYOUT?: string;
     DISABLE_LOGOUT?: boolean;
     ASSISTANTS_ENABLED?: boolean;
@@ -291,6 +293,10 @@ export const env = (): Env => {
       window.CHAT_INPUT_EMPTY_STATE_LAYOUT ??
       "centered",
   );
+  const keepToolsDropdownOpen =
+    import.meta.env.VITE_KEEP_TOOLS_DROPDOWN_OPEN !== undefined
+      ? import.meta.env.VITE_KEEP_TOOLS_DROPDOWN_OPEN === "true"
+      : (window.KEEP_TOOLS_DROPDOWN_OPEN ?? false);
   const disableLogout =
     import.meta.env.VITE_DISABLE_LOGOUT === "true"
       ? true
@@ -544,6 +550,7 @@ export const env = (): Env => {
     disableUpload,
     maxFilesPerMessage,
     disableChatInputAutofocus,
+    keepToolsDropdownOpen,
     chatInputEmptyStateLayout,
     disableLogout,
     assistantsEnabled,
