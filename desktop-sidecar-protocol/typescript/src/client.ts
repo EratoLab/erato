@@ -390,6 +390,24 @@ const builtInContracts: Readonly<Record<string, SidecarMethodContract>> = {
   },
 };
 
+/**
+ * Checks `params` against `method`'s pinned contract and throws the
+ * `invalid_params` error `invoke` throws for them. For parameters a client
+ * composes but does not send itself, such as those of the RPCs a job's tool
+ * call composes on the sidecar.
+ */
+export function checkMethodParams(method: string, params: unknown): void {
+  const contract = builtInContracts[method];
+  if (!contract) throw new Error(`No pinned contract for ${method}.`);
+  if (!contract.validateParams(params)) {
+    throw validationError(
+      "invalid_params",
+      `Parameters for ${method} do not match the pinned contract.`,
+      contract.validateParams,
+    );
+  }
+}
+
 const EMPTY_CAPABILITIES = new Map<string, SidecarCapability>();
 
 export class DesktopSidecarClient {
@@ -660,7 +678,7 @@ export class DesktopSidecarClient {
       );
     }
     if (!contract.validateParams(params)) {
-      throw this.#validationError(
+      throw validationError(
         "invalid_params",
         `Parameters for ${method} do not match the pinned contract.`,
         contract.validateParams,
@@ -706,7 +724,7 @@ export class DesktopSidecarClient {
     }
 
     if (!contract.validateResult(result)) {
-      const error = this.#validationError(
+      const error = validationError(
         "invalid_result",
         `Result for ${method} does not match the pinned contract.`,
         contract.validateResult,
@@ -756,7 +774,7 @@ export class DesktopSidecarClient {
         cancelOnAbort: false,
       });
       if (!validateDiscoverResult(rawResult)) {
-        throw this.#validationError(
+        throw validationError(
           "invalid_result",
           "The sidecar returned an invalid discovery result.",
           validateDiscoverResult,
@@ -984,7 +1002,7 @@ export class DesktopSidecarClient {
       },
     );
     if (!validateCancelResult(rawResult)) {
-      throw this.#validationError(
+      throw validationError(
         "invalid_result",
         "The sidecar returned an invalid cancellation result.",
         validateCancelResult,
@@ -1004,7 +1022,7 @@ export class DesktopSidecarClient {
       );
     }
     if (!validateJsonRpcEnvelope(message)) {
-      throw this.#validationError(
+      throw validationError(
         "malformed_message",
         "The sidecar returned an invalid JSON-RPC response.",
         validateJsonRpcEnvelope,
@@ -1053,23 +1071,6 @@ export class DesktopSidecarClient {
     });
   }
 
-  #validationError(
-    kind: "invalid_params" | "invalid_result" | "malformed_message",
-    message: string,
-    validator: Validator,
-  ): SidecarClientError {
-    const details = (validator.errors ?? [])
-      .map(
-        (error) =>
-          `${error.instancePath || "/"} ${error.message ?? "is invalid"}`,
-      )
-      .join("; ");
-    return new SidecarClientError(
-      kind,
-      details ? `${message} ${details}` : message,
-    );
-  }
-
   #asClientError(error: unknown): SidecarClientError {
     return error instanceof SidecarClientError
       ? error
@@ -1084,6 +1085,23 @@ export class DesktopSidecarClient {
     this.#snapshot = snapshot;
     for (const listener of this.#listeners) listener();
   }
+}
+
+function validationError(
+  kind: "invalid_params" | "invalid_result" | "malformed_message",
+  message: string,
+  validator: Validator,
+): SidecarClientError {
+  const details = (validator.errors ?? [])
+    .map(
+      (error) =>
+        `${error.instancePath || "/"} ${error.message ?? "is invalid"}`,
+    )
+    .join("; ");
+  return new SidecarClientError(
+    kind,
+    details ? `${message} ${details}` : message,
+  );
 }
 
 function emptySnapshot(): SidecarSnapshot {

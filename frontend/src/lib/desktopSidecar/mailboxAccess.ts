@@ -71,6 +71,13 @@ export class SidecarConversationUnavailableError extends Error {
 export const NO_CONVERSATION_MESSAGES =
   "The local mailbox has no message with this Message-ID. Use get_sidecar_document with the search hit's documentId instead; do not retry this anchor.";
 
+/** The parameters readSidecarConversation sends for `params`. */
+export function conversationRequest(
+  params: OutlookGetConversationV1Params,
+): OutlookGetConversationV1Params {
+  return { ...params, mailboxId: outlookMailboxId(params.mailboxId) };
+}
+
 export async function readSidecarConversation(
   client: DesktopSidecarClient,
   params: OutlookGetConversationV1Params,
@@ -79,7 +86,7 @@ export async function readSidecarConversation(
   signal?.throwIfAborted();
   const result = await client.invoke(
     "outlook.get_conversation.v1",
-    { ...params, mailboxId: outlookMailboxId(params.mailboxId) },
+    conversationRequest(params),
     { signal },
   );
   if (result.messages.length === 0) {

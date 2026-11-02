@@ -1,4 +1,6 @@
 /* eslint-disable lingui/no-unlocalized-strings -- Protocol tool names, statuses, and model-facing results. */
+import { checkMethodParams } from "@erato/desktop-sidecar-protocol";
+
 import { htmlToPlainText } from "@/utils/emailClipboard";
 
 import {
@@ -9,6 +11,7 @@ import {
 } from "./freshness";
 import { indexingMailboxId } from "./indexingConfiguration";
 import {
+  conversationRequest,
   NO_CONVERSATION_MESSAGES,
   outlookMailboxId,
   readSidecarConversation,
@@ -49,6 +52,7 @@ import type {
 import type {
   CallToolResult,
   DesktopSidecarClient,
+  OutlookGetConversationV1Params,
   OutlookMailbox,
   SearchMetadataFieldsV1Result,
   SearchMetadataFilter,
@@ -99,6 +103,33 @@ export const SIDECAR_CHAT_TOOL_METHODS: readonly {
   },
 ];
 
+/**
+ * The tools that run as jobs on a sidecar that offers them. The document
+ * keeps its direct RPC: package 0.1.44 carries no identity for the upload's
+ * Outlook provenance.
+ */
+const SIDECAR_JOB_TOOLS: ReadonlySet<string> = new Set([
+  SEARCH_SIDECAR_INDEX_TOOL,
+  READ_SIDECAR_CONVERSATION_TOOL,
+  GET_SIDECAR_SEARCH_FIELDS_TOOL,
+  LIST_SIDECAR_MAILBOXES_TOOL,
+  GET_SIDECAR_FOLDER_HIERARCHY_TOOL,
+]);
+
+/**
+ * Whether the sidecar can run a tool, as a job or through its direct RPC.
+ * The chat and Settings offer the same tools.
+ */
+export function sidecarToolAvailable(
+  client: DesktopSidecarClient,
+  { name, method }: { name: string; method: string },
+): boolean {
+  return (
+    (SIDECAR_JOB_TOOLS.has(name) && runsAsSidecarJob(client, name)) ||
+    client.supports(method)
+  );
+}
+
 export interface SidecarAttachmentUpload {
   (
     file: File,
@@ -142,11 +173,16 @@ type SidecarRead = (
  */
 interface SidecarJobRead {
   /**
-   * Checks the input as the direct read does, so both fail alike, and returns
-   * the call's arguments; `undefined` keeps a call whose result a job cannot
-   * carry on the direct read.
+   * Checks the input as the direct read does, including the parameters of
+   * the RPC it composes, so both fail alike before anything is sent, and
+   * returns the call's arguments: the tool's input, unchanged.
    */
-  call: (input: unknown) => Record<string, unknown> | undefined;
+  call: (input: unknown) => Record<string, unknown>;
+  /**
+   * Whether a call keeps the direct read because a job cannot carry its
+   * result. Such a call needs the tool's direct RPC.
+   */
+  direct?: (input: unknown) => boolean;
   /**
    * The outcome for the job's result, as the direct read returns it, keeping
    * what later calls take from it. Defaults to the result alone.
@@ -283,6 +319,24 @@ function conversationInput(input: unknown) {
   };
 }
 
+/** What a conversation read asks readSidecarConversation for. */
+function conversationParams({
+  mailboxId,
+  internetMessageId,
+  maxMessages,
+}: ReturnType<typeof conversationInput>): OutlookGetConversationV1Params {
+  return { mailboxId, anchor: { internetMessageId }, maxMessages };
+}
+
+/** A call that asks for attachments, which a job cannot carry yet. */
+function asksForAttachments(input: unknown): boolean {
+  return (
+    typeof input === "object" &&
+    input !== null &&
+    (input as { includeAttachments?: unknown }).includeAttachments === true
+  );
+}
+
 function normalizeMailboxMetadataFilter(
   filter: SearchMetadataFilter,
 ): SearchMetadataFilter {
@@ -296,6 +350,46 @@ function normalizeMailboxMetadataFilter(
     return { ...filter, value: filter.value.map(normalize) };
   }
   return filter;
+}
+
+/** The search.query.v1 parameters for a search, with mailbox IDs as the index spells them. */
+function searchParams(input: unknown): SearchQueryV1Params {
+  // The pinned client validates the complete input, including filters.
+  const args = objectInput(input) as SearchQueryV1Params;
+  return {
+    ...args,
+    ...(typeof args.filters?.mailboxId === "string"
+      ? {
+          filters: {
+            ...args.filters,
+            mailboxId: indexingMailboxId(args.filters.mailboxId),
+          },
+        }
+      : {}),
+    ...(Array.isArray(args.metadata_filters)
+      ? {
+          metadata_filters: args.metadata_filters.map(
+            normalizeMailboxMetadataFilter,
+          ),
+        }
+      : {}),
+  };
+}
+
+/**
+ * A job read's `call`: checks the parameters the direct read would send to
+ * `method` against the pinned contract, so both paths reject the same input
+ * with the same error before anything is sent, and returns the tool's input
+ * unchanged as the job's arguments.
+ */
+function checkedCall(
+  method: string,
+  params: (input: unknown) => unknown,
+): SidecarJobRead["call"] {
+  return (input) => {
+    checkMethodParams(method, params(input));
+    return objectInput(input);
+  };
 }
 
 type SearchHit = SearchQueryV1Result["hits"][number];
@@ -705,12 +799,17 @@ export function createSidecarChatTools(
     execute: SidecarRead,
     job?: SidecarJobRead,
   ): SidecarChatTool => {
-    // `supports` holds only while the app is ready.
-    const asJob = () => job !== undefined && runsAsSidecarJob(client, name);
-    const available = () => asJob() || client.supports(method);
+    const asJob = (input: unknown) =>
+      job !== undefined &&
+      !job.direct?.(input) &&
+      runsAsSidecarJob(client, name);
+    // Whether this call can run here. `supports` holds only while the app is
+    // ready.
+    const available = (input: unknown) =>
+      asJob(input) || client.supports(method);
     const read: SidecarRead = async (input, context, readAt) => {
-      const args = job && asJob() ? job.call(input) : undefined;
-      if (!job || !args) return execute(input, context, readAt);
+      if (!job || !asJob(input)) return execute(input, context, readAt);
+      const args = job.call(input);
       const result = await runSidecarJob(client, name, args, context?.signal);
       context?.signal?.throwIfAborted();
       if (result.isError) return { ok: false, error: callErrorText(result) };
@@ -730,7 +829,7 @@ export function createSidecarChatTools(
       if (context?.hostGrant) {
         if (!grantHolds(context.hostGrant, context))
           return contextLoss(GRANT_MISMATCH);
-        if (!available()) return contextLoss(SIDECAR_UNAVAILABLE);
+        if (!available(input)) return contextLoss(SIDECAR_UNAVAILABLE);
       }
       const key = context
         ? `${name}:${context.messageId}:${context.toolCallId}`
@@ -741,7 +840,7 @@ export function createSidecarChatTools(
         const readAt = Date.now();
         try {
           context?.signal?.throwIfAborted();
-          if (!available()) {
+          if (!available(input)) {
             throw new Error(
               "This desktop sidecar capability is unavailable on this device.",
             );
@@ -796,7 +895,9 @@ export function createSidecarChatTools(
       // Any delegation declaration blocks legacy content, even if strict
       // support is unavailable or unknown. Fail closed; never fall back to raw
       // RPCs or jobs.
-      isAvailable: () => !client.getSnapshot().localDelegation && available(),
+      isAvailable: () =>
+        !client.getSnapshot().localDelegation &&
+        sidecarToolAvailable(client, { name, method }),
       execute: executeTool,
     };
   };
@@ -806,26 +907,7 @@ export function createSidecarChatTools(
       SEARCH_SIDECAR_INDEX_TOOL,
       "search.query.v1",
       async (input, context, readAt) => {
-        // The pinned client validates the complete input, including filters.
-        const args = objectInput(input) as SearchQueryV1Params;
-        const params = {
-          ...args,
-          ...(typeof args.filters?.mailboxId === "string"
-            ? {
-                filters: {
-                  ...args.filters,
-                  mailboxId: indexingMailboxId(args.filters.mailboxId),
-                },
-              }
-            : {}),
-          ...(Array.isArray(args.metadata_filters)
-            ? {
-                metadata_filters: args.metadata_filters.map(
-                  normalizeMailboxMetadataFilter,
-                ),
-              }
-            : {}),
-        };
+        const params = searchParams(input);
         const result = await client.invoke("search.query.v1", params, {
           signal: context?.signal,
         });
@@ -937,7 +1019,7 @@ export function createSidecarChatTools(
         };
       },
       {
-        call: objectInput,
+        call: checkedCall("search.query.v1", searchParams),
         outcome: (result) => {
           if (Array.isArray(result.hits)) {
             for (const hit of result.hits as (SearchHit | null)[]) {
@@ -952,15 +1034,11 @@ export function createSidecarChatTools(
       READ_SIDECAR_CONVERSATION_TOOL,
       "outlook.get_conversation.v1",
       async (input, context, readAt) => {
-        const { args, mailboxId, internetMessageId, maxMessages, names } =
-          conversationInput(input);
+        const parsed = conversationInput(input);
+        const { args, mailboxId, names } = parsed;
         const conversation = await readSidecarConversation(
           client,
-          {
-            mailboxId,
-            anchor: { internetMessageId },
-            maxMessages,
-          },
+          conversationParams(parsed),
           context?.signal,
         );
         const mailbox = outlookMailboxReference(
@@ -1183,12 +1261,10 @@ export function createSidecarChatTools(
         // Package 0.1.44 links no attachment to the embedded resource with
         // its bytes and carries no identity for the upload's Outlook
         // provenance, so a call that asks for attachments reads directly.
-        call: (input) => {
-          const { args, mailboxId, includeAttachments } =
-            conversationInput(input);
-          outlookMailboxId(mailboxId);
-          return includeAttachments === true ? undefined : args;
-        },
+        direct: asksForAttachments,
+        call: checkedCall("outlook.get_conversation.v1", (input) =>
+          conversationRequest(conversationParams(conversationInput(input))),
+        ),
         outcome: (result, args) => {
           const { mailbox, messages } = result as {
             mailbox?: OutlookMailbox;
@@ -1251,7 +1327,7 @@ export function createSidecarChatTools(
           },
         };
       },
-      { call: objectInput },
+      { call: checkedCall("search.metadata_fields.v1", objectInput) },
     ),
     tool(
       LIST_SIDECAR_MAILBOXES_TOOL,
@@ -1373,7 +1449,12 @@ export function createSidecarChatTools(
           },
         };
       },
-      { call: folderHierarchyInput },
+      {
+        call: checkedCall(
+          "sources.get_folder_hierarchy.v1",
+          folderHierarchyInput,
+        ),
+      },
     ),
     // No job read: package 0.1.44 carries the document's bytes as an embedded
     // resource, but not the external IDs and parent the upload's Outlook

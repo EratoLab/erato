@@ -16,6 +16,7 @@ import {
   READ_SIDECAR_CONVERSATION_TOOL,
   SEARCH_SIDECAR_INDEX_TOOL,
   SIDECAR_CHAT_TOOL_METHODS,
+  sidecarToolAvailable,
 } from "./chatTools";
 import jobEnvelope from "../../../../desktop-sidecar-protocol/conformance/fixtures/job-envelope.json";
 import jobsExample from "../../../../desktop-sidecar-protocol/examples/jobs.json";
@@ -504,12 +505,63 @@ describe("desktop sidecar tools run as jobs", () => {
         { ...INPUTS[READ_SIDECAR_CONVERSATION_TOOL], mailboxId: "not-an-id" },
       ],
     ] as const) {
-      const { legacy, viaJob, job } = await bothPaths(tool, input, RPC);
+      const { legacy, viaJob, direct, job } = await bothPaths(tool, input, RPC);
       expect(legacy.ok).toBe(false);
       expect(viaJob).toEqual(legacy);
+      expect(direct.methods()).toEqual([]);
       expect(job.methods()).toEqual([]);
     }
   });
+
+  it.each([
+    [
+      "a search limit above 100",
+      SEARCH_SIDECAR_INDEX_TOOL,
+      { text: "report", limit: 500 },
+      "/limit must be <= 100",
+    ],
+    [
+      "a date filter that is not a timestamp",
+      SEARCH_SIDECAR_INDEX_TOOL,
+      { text: "report", filters: { dateFrom: "2026-01-01" } },
+      "/filters/dateFrom must be integer",
+    ],
+    [
+      "a source ID that is not a UUID",
+      GET_SIDECAR_FOLDER_HIERARCHY_TOOL,
+      { sourceId: "not-a-uuid" },
+      '/sourceId must match format "uuid"',
+    ],
+    [
+      "an anchor longer than the contract allows",
+      READ_SIDECAR_CONVERSATION_TOOL,
+      {
+        ...INPUTS[READ_SIDECAR_CONVERSATION_TOOL],
+        internetMessageId: "x".repeat(32_769),
+      },
+      "/anchor/internetMessageId must NOT have more than 32768 characters",
+    ],
+  ])(
+    "rejects %s against the pinned contract before it starts a job",
+    async (_case, tool, input, detail) => {
+      for (const callContext of [context, grantContext]) {
+        const { legacy, viaJob, direct, job } = await bothPaths(
+          tool,
+          input,
+          RPC,
+          undefined,
+          callContext,
+        );
+        expect(legacy).toEqual({
+          ok: false,
+          error: `Parameters for ${methodOf(tool)} do not match the pinned contract. ${detail}`,
+        });
+        expect(viaJob).toEqual(legacy);
+        expect(direct.methods()).toEqual([]);
+        expect(job.methods()).toEqual([]);
+      }
+    },
+  );
 
   it.each([
     [[SEARCH_SIDECAR_INDEX_TOOL, READ_SIDECAR_CONVERSATION_TOOL]],
@@ -581,14 +633,57 @@ describe("desktop sidecar tools run as jobs", () => {
     );
   });
 
-  it("offers the job tools while their direct RPCs are not enabled", () => {
-    const job = jobSidecar(RPC, () => {
-      throw new Error("No job expected.");
-    });
+  it("offers the job tools while their direct RPCs are not enabled", async () => {
+    const job = jobSidecar(RPC, () => ({
+      result: { content: [], structuredContent: {} },
+    }));
     job.supports.mockImplementation((method) => method.startsWith("jobs."));
-    for (const tool of JOB_TOOLS)
+    for (const tool of JOB_TOOLS) {
       expect(job.tool(tool).isAvailable()).toBe(true);
+      await expect(
+        job.tool(tool).execute(INPUTS[tool], context),
+      ).resolves.toMatchObject({ ok: true });
+    }
     expect(job.tool(GET_SIDECAR_DOCUMENT_TOOL).isAvailable()).toBe(false);
+    // Settings lists the tools the chat offers.
+    for (const { name, method } of SIDECAR_CHAT_TOOL_METHODS) {
+      expect(sidecarToolAvailable(job.client, { name, method })).toBe(
+        job.tool(name).isAvailable(),
+      );
+    }
+  });
+
+  it("answers a call that needs a direct RPC the sidecar does not enable as unavailable", async () => {
+    const input = {
+      ...INPUTS[READ_SIDECAR_CONVERSATION_TOOL],
+      includeAttachments: true,
+    };
+    for (const callContext of [context, grantContext]) {
+      const job = jobSidecar(RPC, () => {
+        throw new Error("No job expected.");
+      });
+      job.supports.mockImplementation((method) => method.startsWith("jobs."));
+      const direct = sidecar(RPC);
+      direct.supports.mockReturnValue(false);
+      const viaJob = await job
+        .tool(READ_SIDECAR_CONVERSATION_TOOL)
+        .execute(input, callContext);
+      expect(viaJob).toEqual(
+        await direct
+          .tool(READ_SIDECAR_CONVERSATION_TOOL)
+          .execute(input, callContext),
+      );
+      expect(viaJob).toMatchObject(
+        callContext === grantContext
+          ? { ok: false, submissionFeedback: { terminal: true } }
+          : {
+              ok: false,
+              error:
+                "This desktop sidecar capability is unavailable on this device.",
+            },
+      );
+      expect(job.methods()).toEqual([]);
+    }
   });
 
   it("keeps everything on the device once the sidecar declares local delegation", async () => {

@@ -9,6 +9,10 @@ import {
 import { beforeEach, expect, it, vi } from "vitest";
 
 import {
+  fixtureDiscovery,
+  NORMAL_MODE,
+} from "@/lib/desktopSidecar/__tests__/sidecarJobTestUtils";
+import {
   fetchProfile,
   fetchUpdateProfilePreferences,
   useProfile,
@@ -17,7 +21,10 @@ import {
 import { SidecarToolDecisions } from "./SidecarToolDecisions";
 
 import type { UserProfile } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
-import type { DesktopSidecarClient } from "@erato/desktop-sidecar-protocol";
+import type {
+  DesktopSidecarClient,
+  SidecarSnapshot,
+} from "@erato/desktop-sidecar-protocol";
 
 vi.mock("@/lib/generated/v1betaApi/v1betaApiComponents", () => ({
   fetchProfile: vi.fn(),
@@ -41,11 +48,15 @@ beforeEach(() => {
   } as ReturnType<typeof useProfile>);
 });
 
-function setup(supported: string[]) {
+function setup(
+  supported: string[],
+  discovery: Partial<SidecarSnapshot> = {},
+) {
   const queryClient = new QueryClient();
   const invalidate = vi.spyOn(queryClient, "invalidateQueries");
   const client = {
     supports: (method: string) => supported.includes(method),
+    getSnapshot: () => ({ state: "ready", ...discovery }),
   } as unknown as DesktopSidecarClient;
   render(
     <QueryClientProvider client={queryClient}>
@@ -72,6 +83,17 @@ it("lists only the tools this sidecar supports, with their stored decision", () 
   ).toHaveAttribute("aria-checked", "true");
   expect(
     screen.queryByRole("radiogroup", { name: "List mailboxes on this device" }),
+  ).not.toBeInTheDocument();
+});
+
+it("lists the tools a sidecar runs as jobs, as the chat offers them", () => {
+  setup(["jobs.start.v1", "jobs.status.v1"], fixtureDiscovery(NORMAL_MODE));
+  expect(screen.getAllByRole("radiogroup")).toHaveLength(5);
+  // The document keeps its direct RPC, which this sidecar does not enable.
+  expect(
+    screen.queryByRole("radiogroup", {
+      name: "Retrieve a document or attachment",
+    }),
   ).not.toBeInTheDocument();
 });
 

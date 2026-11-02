@@ -119,9 +119,9 @@ export async function runSidecarJob(
       );
     }
   } catch (error) {
-    // A stopped call must stop the device too; the job would run on.
-    if (signal?.aborted)
-      void client.invoke("jobs.cancel.v1", { handle }).catch(() => undefined);
+    // A call that stops or fails must stop the device too: the job would run
+    // on and keep its results until they expire. Cancelling is idempotent.
+    void client.invoke("jobs.cancel.v1", { handle }).catch(() => undefined);
     throw error;
   }
   const outcome = status.results?.[0];

@@ -242,6 +242,31 @@ describe("runSidecarJob", () => {
     ).toEqual({ handle: JOB_HANDLE });
   });
 
+  it("cancels the job when a status request fails", async () => {
+    vi.useFakeTimers();
+    const { client, requests } = fakeSidecarClient(
+      (method) =>
+        method === "jobs.status.v1"
+          ? { error: { code: -32603, message: "Internal error." } }
+          : method === "jobs.start.v1"
+            ? pendingJob()
+            : { result: { handle: JOB_HANDLE, state: "cancelled" } },
+      normalMode,
+    );
+    const settled = runSidecarJob(client, "search_sidecar_index", {
+      query: "report",
+    }).catch((error: unknown) => error);
+    await vi.advanceTimersByTimeAsync(JOB_POLL_INTERVAL_MS);
+    await expect(settled).resolves.toBeInstanceOf(SidecarRpcError);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(requests.map(({ method }) => method)).toEqual([
+      "jobs.start.v1",
+      "jobs.status.v1",
+      "jobs.cancel.v1",
+    ]);
+    expect(requests[2].params).toEqual({ handle: JOB_HANDLE });
+  });
+
   it("stops a paused poll when the call is stopped", async () => {
     vi.useFakeTimers();
     const controller = new AbortController();

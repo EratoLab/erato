@@ -5,6 +5,7 @@ import {
   DesktopSidecarClient,
   HttpTransport,
   SidecarClientError,
+  checkMethodParams,
   type SidecarClientInfo,
   type SidecarProgressV1Result,
   type DiscoverResult,
@@ -597,6 +598,30 @@ describe("DesktopSidecarClient", () => {
       client.invoke("diagnostics.echo.v1", { message: 42 } as never),
     ).rejects.toBeInstanceOf(SidecarClientError);
     expect(client.getSnapshot().state).toBe("ready");
+  });
+
+  it("checks parameters it does not send with the error invoke throws", async () => {
+    const { client } = await setup();
+    await client.discover();
+    const params = { text: "report", limit: 500 };
+
+    const sent = await client
+      .invoke("search.query.v1", params)
+      .catch((error: unknown) => error);
+    let checked: unknown;
+    try {
+      checkMethodParams("search.query.v1", params);
+    } catch (error) {
+      checked = error;
+    }
+    expect(sent).toMatchObject({
+      kind: "invalid_params",
+      message: expect.stringContaining("/limit must be <= 100"),
+    });
+    expect(checked).toEqual(sent);
+    expect(() =>
+      checkMethodParams("search.query.v1", { text: "report" }),
+    ).not.toThrow();
   });
 
   it("observes progress steps while a delayed echo runs and after it settles", async () => {
