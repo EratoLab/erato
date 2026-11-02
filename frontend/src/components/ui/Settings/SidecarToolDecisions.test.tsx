@@ -48,10 +48,7 @@ beforeEach(() => {
   } as ReturnType<typeof useProfile>);
 });
 
-function setup(
-  supported: string[],
-  discovery: Partial<SidecarSnapshot> = {},
-) {
+function setup(supported: string[], discovery: Partial<SidecarSnapshot> = {}) {
   const queryClient = new QueryClient();
   const invalidate = vi.spyOn(queryClient, "invalidateQueries");
   const client = {
