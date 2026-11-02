@@ -51,6 +51,7 @@ async function setup(
     ...options,
   });
   activeSidecars.push(sidecar);
+  const { maxResponseBytes } = options;
   const client = new DesktopSidecarClient({
     transport: new HttpTransport(sidecar.address.url, {
       fetch: (input, init) => {
@@ -58,9 +59,11 @@ async function setup(
         headers.set("Origin", ORIGIN);
         return fetch(input, { ...init, headers });
       },
+      maxResponseBytes,
     }),
     clientInfo,
     requestTimeoutMs,
+    maxResponseBytes,
   });
   await client.discover();
   return client;
@@ -207,6 +210,42 @@ describe("job envelope", () => {
     expect(outcome(started.results, 1)).toEqual({
       error: { code: -32602, message: "Unknown Outlook mailbox." },
     });
+  });
+
+  it("keeps a job's results within the response cap and fails only the call that would exceed it", async () => {
+    // One export fits the cap; two together would not.
+    const client = await setup({
+      documentBytes: 400_000,
+      maxResponseBytes: 1_048_576,
+    });
+    const document = (documentId: string) => ({
+      server: "sidecar",
+      name: "get_sidecar_document",
+      arguments: { documentId },
+    });
+    const started = await client.invoke("jobs.start.v1", {
+      calls: [
+        document("2b0f6a43-8f5e-4c79-9d8e-0d6b5e7a9c11"),
+        document("7d4c1e9a-3b6f-4a2d-8c5e-9f0a1b2c3d4e"),
+      ],
+      wait_ms: 5_000,
+    });
+    expect(started.state).toBe("completed");
+    expect(outcome(started.results, 0)).toHaveProperty(
+      "result.content.0.resource.blob",
+    );
+    // The error an oversized direct export returns.
+    expect(outcome(started.results, 1)).toEqual({
+      error: {
+        code: -32016,
+        message: "The sidecar could not complete the request.",
+        data: { kind: "sidecar_internal", sourceError: "export_too_large" },
+      },
+    });
+    expect(client.getSnapshot().state).toBe("ready");
+    await expect(
+      client.invoke("jobs.read.v1", { handle: started.handle }),
+    ).resolves.toEqual({ results: started.results });
   });
 
   it("refuses tools outside the provider table per call", async () => {

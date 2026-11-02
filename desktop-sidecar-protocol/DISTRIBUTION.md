@@ -332,13 +332,13 @@ Development origins remain an explicit local development-mode option.
 
 The optional root installation fields are:
 
-| Field              | Contract                                                                                    | Default               |
-| ------------------ | ------------------------------------------------------------------------------------------- | --------------------- |
-| `port`             | Integer from 1 to 65535                                                                     | 23123                 |
-| `directory_suffix` | At most 64 ASCII letters, digits, hyphens or underscores; appended literally                | Empty                 |
-| `display_name`     | Nonempty string, at most 128 UTF-8 bytes, no control characters                             | Erato Desktop Sidecar |
-| `icon`             | Standard base64 PNG (no data URL prefix), 1–256 pixels per dimension, at most 1 MiB encoded | Bundled tray icon     |
-| `mode`             | `strict` or `standard`; strict mode as [DELEGATION.md](./DELEGATION.md) defines it          | `standard`            |
+| Field              | Contract                                                                                    | Default                                                                                        |
+| ------------------ | ------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `port`             | Integer from 1 to 65535                                                                     | 23123                                                                                          |
+| `directory_suffix` | At most 64 ASCII letters, digits, hyphens or underscores; appended literally                | Empty                                                                                          |
+| `display_name`     | Nonempty string, at most 128 UTF-8 bytes, no control characters                             | Erato Desktop Sidecar                                                                          |
+| `icon`             | Standard base64 PNG (no data URL prefix), 1–256 pixels per dimension, at most 1 MiB encoded | Bundled tray icon                                                                              |
+| `mode`             | `strict` or `standard`; strict mode as [DELEGATION.md](./DELEGATION.md) defines it          | `standard`, or strict when the transitional `content_release: "strict_snapshot_v1"` is present |
 
 Present invalid fields MUST be rejected before registering desktop integration or
 opening a listener. User configuration MUST NOT override these fields. Explicit

@@ -46,7 +46,9 @@ are RPCs, not tools. Opening an item in Outlook stays a human-initiated action.
 States: `queued -> running -> completed -> read -> acked`. Under strict, a
 read-only tool's job passes `ready_for_review -> approved` after running, and an
 effectful tool will wait in the reserved `awaiting_approval` before running.
-`declined`, `cancelled`, `expired` and `failed` are terminal. A response that
+`declined`, `cancelled`, `expired` and `failed` are terminal; `failed` is a
+failure of the job itself and carries no results, while a call that fails gets
+its own error in a `completed` job. A response that
 reports `completed` or `approved` carries `results`, one entry per call in call
 order, and the job is `read` from then on; `jobs.read.v1` returns them again
 until `jobs.ack.v1` discards them, and answers InvalidParams for a job without
@@ -60,19 +62,27 @@ response while the job is pending and answers as soon as it has results or ends,
 up to discovery's `jobs.maxWaitMs`. A normal-mode call keeps one round trip, and a
 status long-poll replaces polling quantization; adaptive polling remains the
 fallback. A call that fails gets an `error`, the JSON-RPC error object a direct
-RPC returns, and the other calls are unaffected. Same-turn sidecar calls may be
+RPC returns, and the other calls are unaffected. The sidecar keeps a job's
+serialized results within the client's response cap
+([TRANSPORT.md](TRANSPORT.md)): a call whose result would exceed the remaining
+budget gets the error an oversized direct export returns, `sidecar_internal`
+with `sourceError: "export_too_large"`. Same-turn sidecar calls may be
 coalesced into one job, with one review under strict. See
 [the example exchange](examples/jobs.json).
 
 Direct content RPCs stay served in normal mode for clients that are not a model
 (the add-in's message fetcher, the settings pane, the CLI). A client runs tools
-as jobs when discovery reports `jobs` and the `sidecar` provider; otherwise it
-keeps its direct-RPC mapping until the supported sidecar floor allows removing
-it. Until stage 2, a strict sidecar fails a call to a content tool (one with a
-selection, below) without running it, with `capability_unavailable` and
-`reasonCode: "strict_review_unavailable"`, and keeps `jobs.review.v1` disabled
-with that reason. Mailboxes and search fields run with the account-level
-reduction under "Settings under strict mode".
+as jobs when discovery reports `jobs`, a `sidecar` provider with
+`available: true`, and enabled `jobs.start.v1` and `jobs.status.v1`; otherwise
+it keeps its direct-RPC mapping until the supported sidecar floor allows
+removing it. Until stage 2, a strict sidecar fails a call to a content tool
+(one with a selection, below) without running it, with `capability_unavailable`
+and `reasonCode: "strict_review_unavailable"`, and keeps `jobs.review.v1`
+disabled with that reason. Mailboxes and search fields run: the refusals under "Settings
+under strict mode" apply to the direct RPCs, not to the executor's internal
+operations, so `get_sidecar_search_fields` returns its field definitions, which
+are account-level, and both tools reduce their `sources.list.v1` part as listed
+there.
 
 ## Results and selection
 
@@ -82,8 +92,9 @@ blocks (text, image, audio, embedded resource, resource link) with
 `structuredContent`, `isError` and `_meta`. `_meta` keys are reverse-DNS
 namespaced; MCP reserves its own prefixes such as `modelcontextprotocol.io/`, and
 Erato uses `ai.erato/`. For the built-ins, `structuredContent` is the tool's JSON
-result, byte-compatible with the normal-mode result, and `content` carries the
-plain-text review rendering and the files as embedded resources:
+result as the frontend returns it today, byte-compatible with the normal-mode
+result, except that the `fileId` an upload assigns is left out. `content`
+carries the plain-text review rendering and the files as embedded resources:
 `get_sidecar_document` bytes become a `resource {blob, mimeType}` block the
 frontend uploads, as it uploads `contentBase64` today.
 

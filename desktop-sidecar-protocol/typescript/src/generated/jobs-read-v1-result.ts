@@ -15,11 +15,14 @@ export type JobCallResult =
 export type ContentBlock = TextContent | ImageContent | AudioContent | EmbeddedResource | ResourceLink;
 
 export interface JobsReadV1Result {
+  /**
+   * The results `jobs.start.v1` or `jobs.status.v1` delivered, unchanged, so within the same response cap.
+   */
   results: JobCallResult[];
   [k: string]: unknown;
 }
 /**
- * A call's result as the MCP `CallToolResult`, for every provider. For the `sidecar` provider, `structuredContent` is the tool's JSON result, byte-compatible with the normal-mode result, and `content` carries its plain-text rendering and its files as embedded resources.
+ * A call's result as the MCP `CallToolResult`, for every provider. For the `sidecar` provider, `structuredContent` is the tool's JSON result as the frontend returns it today, byte-compatible with the normal-mode result except that the `fileId` an upload assigns is left out, and `content` carries its plain-text rendering and its files as embedded resources.
  */
 export interface CallToolResult {
   content: ContentBlock[];

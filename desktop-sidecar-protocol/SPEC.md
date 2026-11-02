@@ -63,7 +63,7 @@ prior exchange. The sidecar does not store or validate client readiness.
 Application requests are invalid in the client until `ready`. The sidecar still
 validates and authorizes every application request independently against its
 current state. Batching is disabled in 1.0; a top-level JSON array is an invalid
-request. A job's batch of tool calls is the parameters of one request. JSON request and response bodies MUST NOT exceed 262,144 bytes.
+request. A job's batch of tool calls is the parameters of one request. JSON request bodies MUST NOT exceed 262,144 bytes; response bodies are bounded by the larger response cap ([TRANSPORT.md](./TRANSPORT.md)).
 Implementations MUST reject duplicate object keys at their parsing boundary
 when their JSON library exposes that distinction.
 
@@ -103,8 +103,9 @@ MAY omit it; a client then falls back to an id of its own.
 Package 0.1.44 adds `strict`, whether the sidecar runs in strict mode as its
 bootstrap installed it; `jobs`, the job envelope's limits; and `providers`, the
 providers whose tools `jobs.start.v1` accepts ([DELEGATION.md](./DELEGATION.md)).
-A client runs tools as jobs only when `jobs` is present and the `jobs.*` methods
-it needs are enabled; earlier sidecars omit all three and serve the direct RPCs.
+A client runs tools as jobs only when `jobs` is present, a `sidecar` provider
+reports `available: true`, and `jobs.start.v1` and `jobs.status.v1` are
+enabled; earlier sidecars omit all three and serve the direct RPCs.
 
 ## 4. Capability changes
 

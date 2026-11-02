@@ -34,7 +34,7 @@
       "readOnly": true,
       "selection": {
         "items": "/hits",
-        "resultMetadata": ["/coverage", "/limitReached", "/filterNotice"]
+        "resultMetadata": ["/coverage", "/filterNotice"]
       }
     },
     {

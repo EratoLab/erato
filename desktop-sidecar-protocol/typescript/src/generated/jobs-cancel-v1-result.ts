@@ -33,13 +33,13 @@ export interface JobsCancelV1Result {
     | "expired"
     | "failed";
   /**
-   * One entry per call, in call order. Present whenever the reported state is `completed`, `approved` or `read`.
+   * One entry per call, in call order. Present whenever the reported state is `completed`, `approved` or `read`. Their serialized size stays within the client's response cap: a call whose result would exceed the remaining budget gets the `sidecar_internal` error with `sourceError: "export_too_large"`.
    */
   results?: JobCallResult[];
   [k: string]: unknown;
 }
 /**
- * A call's result as the MCP `CallToolResult`, for every provider. For the `sidecar` provider, `structuredContent` is the tool's JSON result, byte-compatible with the normal-mode result, and `content` carries its plain-text rendering and its files as embedded resources.
+ * A call's result as the MCP `CallToolResult`, for every provider. For the `sidecar` provider, `structuredContent` is the tool's JSON result as the frontend returns it today, byte-compatible with the normal-mode result except that the `fileId` an upload assigns is left out, and `content` carries its plain-text rendering and its files as embedded resources.
  */
 export interface CallToolResult {
   content: ContentBlock[];

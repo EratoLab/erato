@@ -1,9 +1,16 @@
 import { readFile } from "node:fs/promises";
 
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 
-import { SIDECAR_PROVIDER } from "../typescript/src/index.js";
+import {
+  DesktopSidecarClient,
+  HttpTransport,
+  SIDECAR_PROVIDER,
+  type CallToolResult,
+  type JobsStartV1Params,
+} from "../typescript/src/index.js";
 import { validateToolProviderTable } from "../typescript/src/generated/validators.mjs";
+import { MockSidecar, createMockSidecar } from "../test-server/src/index.js";
 
 const document = JSON.parse(
   await readFile(new URL("../openrpc.json", import.meta.url), "utf8"),
@@ -31,6 +38,27 @@ const ADMINISTRATIVE_METHODS = [
 ];
 /** RPCs that exist for non-LLM clients but are not tools. */
 const NON_TOOL_METHODS = ["outlook.list_emails.v1", "outlook.search_emails.v1"];
+const ORIGIN = "https://app.erato.example";
+const activeSidecars: MockSidecar[] = [];
+
+afterEach(async () => {
+  await Promise.all(activeSidecars.splice(0).map((sidecar) => sidecar.stop()));
+});
+
+/** The value an RFC 6901 JSON pointer names, or undefined. */
+function resolvePointer(value: unknown, pointer: string): unknown {
+  return pointer
+    .split("/")
+    .slice(1)
+    .map((token) => token.replace(/~1/g, "/").replace(/~0/g, "~"))
+    .reduce<unknown>(
+      (node, key) =>
+        node !== null && typeof node === "object" && Object.hasOwn(node, key)
+          ? (node as Record<string, unknown>)[key]
+          : undefined,
+      value,
+    );
+}
 
 describe("sidecar provider table", () => {
   it("is a valid provider table and the library exports it unchanged", () => {
@@ -98,5 +126,94 @@ describe("sidecar provider table", () => {
       get_sidecar_document: "content",
       read_sidecar_conversation: "/messages",
     });
+  });
+
+  it("points only into the results the tools return", async () => {
+    const sidecar = await createMockSidecar({ allowedOrigins: [ORIGIN] });
+    activeSidecars.push(sidecar);
+    const client = new DesktopSidecarClient({
+      transport: new HttpTransport(sidecar.address.url, {
+        fetch: (input, init) => {
+          const headers = new Headers(init?.headers);
+          headers.set("Origin", ORIGIN);
+          return fetch(input, { ...init, headers });
+        },
+      }),
+      clientInfo: {
+        name: "erato-test-client",
+        version: "0.1.0",
+        host: { application: "test", runtime: "node" },
+        os: { name: "test" },
+      },
+    });
+    await client.discover();
+    const run = async (name: string, variants: Record<string, unknown>[]) => {
+      const { results } = await client.invoke("jobs.start.v1", {
+        calls: variants.map((args) => ({
+          server: "sidecar",
+          name,
+          arguments: args,
+        })) as JobsStartV1Params["calls"],
+        wait_ms: 5_000,
+      });
+      return (results ?? []).map((entry) => {
+        const { result } = entry as { result?: CallToolResult };
+        if (!result) throw new Error(`${name} failed.`);
+        return result;
+      });
+    };
+    const [mailboxes] = await run("list_sidecar_mailboxes", [{}]);
+    const sourceId = resolvePointer(
+      mailboxes?.structuredContent,
+      "/mailboxes/0/sources/0/sourceId",
+    );
+    // Each tool's result variants, including those that only some calls
+    // return: the folder tool's fallback and the search filter notice.
+    const variants: Record<string, Record<string, unknown>[]> = {
+      list_sidecar_mailboxes: [{}],
+      get_sidecar_search_fields: [{}],
+      get_sidecar_folder_hierarchy: [
+        { sourceId },
+        { sourceId: "9e8d7c6b-5a49-4382-9170-6f5e4d3c2b1a" },
+      ],
+      search_sidecar_index: [
+        { query: "report" },
+        {
+          query: "report",
+          metadata_filters: [
+            { field: "category", operator: "eq", value: "Finance" },
+          ],
+        },
+      ],
+      get_sidecar_document: [
+        { documentId: "2b0f6a43-8f5e-4c79-9d8e-0d6b5e7a9c11" },
+      ],
+      read_sidecar_conversation: [
+        {
+          mailboxId: "8b7d2f4a6c9e1035d8a1b2c3e4f50617",
+          internetMessageId: "<mock-outlook-email@example.com>",
+        },
+      ],
+    };
+    for (const tool of table.tools) {
+      const results = await run(tool.name, variants[tool.name] ?? []);
+      expect(results.length, tool.name).toBeGreaterThan(0);
+      if (!tool.selection) continue;
+      const { items, resultMetadata } = tool.selection;
+      const selected = results.map((result) =>
+        items === "content"
+          ? result.content
+          : resolvePointer(result.structuredContent, items),
+      );
+      expect(selected.some(Array.isArray), `${tool.name}: ${items}`).toBe(true);
+      for (const pointer of resultMetadata)
+        expect(
+          results.some(
+            (result) =>
+              resolvePointer(result.structuredContent, pointer) !== undefined,
+          ),
+          `${tool.name}: ${pointer}`,
+        ).toBe(true);
+    }
   });
 });

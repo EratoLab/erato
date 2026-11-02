@@ -53,7 +53,6 @@ export const SIDECAR_PROVIDER: ToolProviderTable = {
         "items": "/hits",
         "resultMetadata": [
           "/coverage",
-          "/limitReached",
           "/filterNotice"
         ]
       }

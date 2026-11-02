@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://schemas.erato.ai/desktop-sidecar/v1/jobs/call-tool-result.schema.json",
   "title": "CallToolResult",
-  "description": "A call's result as the MCP `CallToolResult`, for every provider. For the `sidecar` provider, `structuredContent` is the tool's JSON result, byte-compatible with the normal-mode result, and `content` carries its plain-text rendering and its files as embedded resources.",
+  "description": "A call's result as the MCP `CallToolResult`, for every provider. For the `sidecar` provider, `structuredContent` is the tool's JSON result as the frontend returns it today, byte-compatible with the normal-mode result except that the `fileId` an upload assigns is left out, and `content` carries its plain-text rendering and its files as embedded resources.",
   "type": "object",
   "properties": {
     "content": {

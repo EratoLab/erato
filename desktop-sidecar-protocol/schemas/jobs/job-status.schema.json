@@ -26,7 +26,7 @@
       ]
     },
     "results": {
-      "description": "One entry per call, in call order. Present whenever the reported state is `completed`, `approved` or `read`.",
+      "description": "One entry per call, in call order. Present whenever the reported state is `completed`, `approved` or `read`. Their serialized size stays within the client's response cap: a call whose result would exceed the remaining budget gets the `sidecar_internal` error with `sourceError: \"export_too_large\"`.",
       "type": "array",
       "items": {
         "$ref": "./job-call-result.schema.json"

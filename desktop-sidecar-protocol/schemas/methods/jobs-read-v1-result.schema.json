@@ -5,6 +5,7 @@
   "type": "object",
   "properties": {
     "results": {
+      "description": "The results `jobs.start.v1` or `jobs.status.v1` delivered, unchanged, so within the same response cap.",
       "type": "array",
       "items": {
         "$ref": "../jobs/job-call-result.schema.json"
