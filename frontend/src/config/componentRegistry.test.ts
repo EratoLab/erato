@@ -34,6 +34,28 @@ describe("componentRegistry", () => {
     vi.resetModules();
   });
 
+  it("leaves chat access optional and installs a compatible policy through the kit interface", async () => {
+    const registry = await loadRegistry();
+    expect(registry.componentRegistry.AddinChatAccessProvider).toBeNull();
+    const policy =
+      component<ComponentPropsFor<"AddinChatAccessProvider">>("ChatPolicy");
+    window.ERATO_COMPONENT_KITS = [
+      {
+        name: "chat-policy",
+        builtAgainstSharedSurfaceMinor: ERATO_SHARED_SURFACE_MINOR,
+        components: [
+          {
+            extensionPoint: "AddinChatAccessProvider",
+            component: policy,
+            priority: 50,
+          },
+        ],
+      },
+    ];
+    registry.applyComponentKitRegistrations();
+    expect(registry.componentRegistry.AddinChatAccessProvider).toBe(policy);
+  });
+
   it("uses lower priority component kit registrations first", async () => {
     const lowPriority =
       component<ComponentPropsFor<"ChatWelcomeScreen">>("LowPriority");

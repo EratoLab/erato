@@ -240,6 +240,21 @@ msgstr "Maksymalny rozmiar pliku: {maxSizeFormatted}"
 #~ msgstr "Nowy czat"
 
 #. js-lingui-explicit-id
+#: src/outlook/OutlookStartViewSwitcher.tsx
+msgid "officeAddin.chatAccess.denied"
+msgstr "Czat nie jest dostępny dla Twojego konta."
+
+#. js-lingui-explicit-id
+#: src/outlook/OutlookStartViewSwitcher.tsx
+msgid "officeAddin.chatAccess.error"
+msgstr "Nie udało się zweryfikować dostępu do czatu. Otwórz ponownie dodatek, aby spróbować jeszcze raz."
+
+#. js-lingui-explicit-id
+#: src/outlook/OutlookStartViewSwitcher.tsx
+msgid "officeAddin.chatAccess.loading"
+msgstr "Sprawdzanie dostępu do czatu..."
+
+#. js-lingui-explicit-id
 #: src/outlook/components/AddinChatInput.tsx
 #~ msgid "officeAddin.chatInput.appointmentContext"
 #~ msgstr "Szczegóły terminu są dołączone jako kontekst"

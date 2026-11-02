@@ -240,6 +240,21 @@ msgstr "Maximum file size: {maxSizeFormatted}"
 #~ msgstr "New Chat"
 
 #. js-lingui-explicit-id
+#: src/outlook/OutlookStartViewSwitcher.tsx
+msgid "officeAddin.chatAccess.denied"
+msgstr "Chat is not available for your account."
+
+#. js-lingui-explicit-id
+#: src/outlook/OutlookStartViewSwitcher.tsx
+msgid "officeAddin.chatAccess.error"
+msgstr "Chat access could not be verified. Reopen the add-in to try again."
+
+#. js-lingui-explicit-id
+#: src/outlook/OutlookStartViewSwitcher.tsx
+msgid "officeAddin.chatAccess.loading"
+msgstr "Checking chat access..."
+
+#. js-lingui-explicit-id
 #: src/outlook/components/AddinChatInput.tsx
 #~ msgid "officeAddin.chatInput.appointmentContext"
 #~ msgstr "Appointment details are included as context"

@@ -5,13 +5,17 @@ import {
   componentRegistry,
 } from "@erato/frontend/library";
 import { t } from "@lingui/core/macro";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { OutlookChatAccess } from "./OutlookChatAccess";
 import { dismissSessionToasts } from "./components/sessionAskToast";
 import { holdSessionPolicy, releaseSessionPolicy } from "./sessionPolicy";
 import { useGraphTokenOptional } from "../core/auth/GraphTokenProvider";
 
-import type { AddinStartViewProps } from "@erato/frontend/library";
+import type {
+  AddinChatAccess,
+  AddinStartViewProps,
+} from "@erato/frontend/library";
 import type { ReactNode } from "react";
 
 /**
@@ -32,17 +36,49 @@ export function OutlookStartViewSwitcher({
   platform: string;
   children: ReactNode;
 }) {
+  return (
+    <OutlookChatAccess platform={platform}>
+      {(chatAccess) => (
+        <StartViewSwitcher platform={platform} chatAccess={chatAccess}>
+          {children}
+        </StartViewSwitcher>
+      )}
+    </OutlookChatAccess>
+  );
+}
+
+function StartViewSwitcher({
+  platform,
+  children,
+  chatAccess,
+}: {
+  platform: string;
+  children: ReactNode;
+  chatAccess: AddinChatAccess;
+}) {
   const StartView = componentRegistry.AddinStartView;
   const graph = useGraphTokenOptional();
   const [view, setView] = useState<"start" | "chat">("start");
+  const chatAllowed = chatAccess.status === "allowed";
+  const chatAllowedRef = useRef(chatAllowed);
+  chatAllowedRef.current = chatAllowed;
+  const inChat = chatAllowed && (!StartView || view === "chat");
 
-  const openChat = useCallback(() => setView("chat"), []);
+  const openChat = useCallback(() => {
+    if (chatAllowedRef.current) setView("chat");
+  }, []);
+
+  // Rendering is gated synchronously above. Clear the remembered selection as
+  // well, so a later grant does not unexpectedly reopen a previously open chat.
+  useEffect(() => {
+    if (!chatAllowed) setView("start");
+  }, [chatAllowed]);
 
   // While the start view is shown, mail-item switches must not surface a
   // session ask toast on top of it (toasts float at z-1000). Same counted
   // gate the history drawer uses: hold defers the anchor policy, releasing
   // re-evaluates the latest state exactly once.
-  const startViewActive = StartView !== null && view === "start";
+  const startViewActive = !inChat;
   useEffect(() => {
     if (!startViewActive) return;
     holdSessionPolicy();
@@ -59,33 +95,58 @@ export function OutlookStartViewSwitcher({
       graph.acquireToken(scopes, { ...options, skipSessionWarm: true });
   }, [graph]);
 
-  if (!StartView) {
+  if (!StartView && inChat) {
     return <>{children}</>;
   }
 
-  const inChat = view === "chat";
+  if (!StartView) {
+    return (
+      <div className="office-shell office-shell--centered" role="status">
+        <p className="office-status">
+          {chatAccess.status === "loading"
+            ? t({
+                id: "officeAddin.chatAccess.loading",
+                message: "Checking chat access...",
+              })
+            : chatAccess.status === "denied"
+              ? t({
+                  id: "officeAddin.chatAccess.denied",
+                  message: "Chat is not available for your account.",
+                })
+              : t({
+                  id: "officeAddin.chatAccess.error",
+                  message:
+                    "Chat access could not be verified. Reopen the add-in to try again.",
+                })}
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="relative flex size-full min-w-0 flex-col">
       {/* A view switcher, not a disclosure — no aria-expanded, and the glyph
           swaps rather than flips — so it borrows the skin, not SidebarToggle. */}
-      <Button
-        variant="sidebar-icon"
-        icon={inChat ? <MailIcon /> : <ChatBubbleIcon />}
-        onClick={() => setView(inChat ? "start" : "chat")}
-        className="absolute right-2 top-2 z-20 floating-control-skin border"
-        aria-label={
-          inChat
-            ? t({
-                id: "officeAddin.startView.openStart",
-                message: "Switch to start view",
-              })
-            : t({
-                id: "officeAddin.startView.openChat",
-                message: "Switch to chat",
-              })
-        }
-        data-testid="addin-start-view-toggle"
-      />
+      {chatAllowed && (
+        <Button
+          variant="sidebar-icon"
+          icon={inChat ? <MailIcon /> : <ChatBubbleIcon />}
+          onClick={() => (inChat ? setView("start") : openChat())}
+          className="absolute right-2 top-2 z-20 floating-control-skin border"
+          aria-label={
+            inChat
+              ? t({
+                  id: "officeAddin.startView.openStart",
+                  message: "Switch to start view",
+                })
+              : t({
+                  id: "officeAddin.startView.openChat",
+                  message: "Switch to chat",
+                })
+          }
+          data-testid="addin-start-view-toggle"
+        />
+      )}
       {inChat ? (
         children
       ) : (
@@ -95,6 +156,7 @@ export function OutlookStartViewSwitcher({
         >
           <StartView
             platform={platform}
+            chatAccess={chatAccess}
             openChat={openChat}
             acquireToken={acquireToken}
           />
