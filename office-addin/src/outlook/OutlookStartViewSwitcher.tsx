@@ -38,8 +38,12 @@ export function OutlookStartViewSwitcher({
 }) {
   return (
     <OutlookChatAccess platform={platform}>
-      {(chatAccess) => (
-        <StartViewSwitcher platform={platform} chatAccess={chatAccess}>
+      {(chatAccess, retryChatAccess) => (
+        <StartViewSwitcher
+          platform={platform}
+          chatAccess={chatAccess}
+          retryChatAccess={retryChatAccess}
+        >
           {children}
         </StartViewSwitcher>
       )}
@@ -51,10 +55,12 @@ function StartViewSwitcher({
   platform,
   children,
   chatAccess,
+  retryChatAccess,
 }: {
   platform: string;
   children: ReactNode;
   chatAccess: AddinChatAccess;
+  retryChatAccess?: () => void;
 }) {
   const StartView = componentRegistry.AddinStartView;
   const graph = useGraphTokenOptional();
@@ -95,6 +101,16 @@ function StartViewSwitcher({
       graph.acquireToken(scopes, { ...options, skipSessionWarm: true });
   }, [graph]);
 
+  const accessErrorMessage = t({
+    id: "officeAddin.chatAccess.error",
+    message: "Chat access could not be verified.",
+  });
+  const retryAction = retryChatAccess ? (
+    <Button variant="secondary" className="mt-2" onClick={retryChatAccess}>
+      {t({ id: "officeAddin.chatAccess.retry", message: "Try Again" })}
+    </Button>
+  ) : null;
+
   if (!StartView && inChat) {
     return <>{children}</>;
   }
@@ -113,18 +129,21 @@ function StartViewSwitcher({
                   id: "officeAddin.chatAccess.denied",
                   message: "Chat is not available for your account.",
                 })
-              : t({
-                  id: "officeAddin.chatAccess.error",
-                  message:
-                    "Chat access could not be verified. Reopen the add-in to try again.",
-                })}
+              : accessErrorMessage}
         </p>
+        {retryAction}
       </div>
     );
   }
 
   return (
     <div className="relative flex size-full min-w-0 flex-col">
+      {retryAction && (
+        <div role="alert" className="p-3">
+          <p>{accessErrorMessage}</p>
+          {retryAction}
+        </div>
+      )}
       {/* A view switcher, not a disclosure — no aria-expanded, and the glyph
           swaps rather than flips — so it borrows the skin, not SidebarToggle. */}
       {chatAllowed && (

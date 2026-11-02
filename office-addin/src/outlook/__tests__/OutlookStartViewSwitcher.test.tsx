@@ -1,5 +1,7 @@
-import { componentRegistry } from "@erato/frontend/library";
-import * as matchers from "@testing-library/jest-dom/matchers";
+import {
+  applyComponentKitRegistrations,
+  componentRegistry,
+} from "@erato/frontend/library";
 import {
   act,
   cleanup,
@@ -7,7 +9,7 @@ import {
   render,
   screen,
 } from "@testing-library/react";
-import { useEffect } from "react";
+import { Component, useEffect } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { OutlookStartViewSwitcher } from "../OutlookStartViewSwitcher";
@@ -18,8 +20,7 @@ import type {
   AddinChatAccessProviderProps,
   AddinStartViewProps,
 } from "@erato/frontend/library";
-
-expect.extend(matchers);
+import type { ReactNode } from "react";
 
 function StubStartView({
   openChat,
@@ -46,6 +47,8 @@ describe("OutlookStartViewSwitcher", () => {
     componentRegistry.AddinStartView = null;
     componentRegistry.AddinChatAccessProvider = null;
     delete window.ERATO_ADDIN_CHAT_ACCESS_POLICY_REQUIRED;
+    delete window.ERATO_COMPONENT_KIT_VERSION_STANCE;
+    delete window.ERATO_COMPONENT_KITS;
     cleanup();
     vi.restoreAllMocks();
   });
@@ -233,6 +236,99 @@ describe("OutlookStartViewSwitcher", () => {
     expect(screen.queryByTestId("chat-surface")).not.toBeInTheDocument();
   });
 
+  it("treats allowed → loading → allowed as a new decision, requiring explicit re-entry", () => {
+    let access: AddinChatAccess = { status: "allowed" };
+    componentRegistry.AddinStartView = StubStartView;
+    componentRegistry.AddinChatAccessProvider = ({ children }) =>
+      children(access);
+    const { rerender } = render(pane());
+    fireEvent.click(screen.getByTestId("stub-open-chat"));
+    expect(screen.getByTestId("chat-surface")).toBeInTheDocument();
+    access = { status: "loading" };
+    rerender(pane());
+    expect(screen.queryByTestId("chat-surface")).not.toBeInTheDocument();
+    expect(screen.getByTestId("stub-chat-access")).toHaveTextContent("loading");
+    fireEvent.click(screen.getByTestId("stub-open-chat"));
+    access = { status: "allowed" };
+    rerender(pane());
+    expect(screen.queryByTestId("chat-surface")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("stub-open-chat"));
+    expect(screen.getByTestId("chat-surface")).toBeInTheDocument();
+  });
+
+  it.each(["start", "chat"] as const)(
+    "lets a throwing %s child reach its own error boundary",
+    (view) => {
+      vi.spyOn(console, "error").mockImplementation(() => {});
+      class PaneBoundary extends Component<
+        { children: ReactNode },
+        { error: Error | null }
+      > {
+        state = { error: null as Error | null };
+        static getDerivedStateFromError(error: Error) {
+          return { error };
+        }
+        render() {
+          return this.state.error ? (
+            <p role="alert">{this.state.error.message}</p>
+          ) : (
+            this.props.children
+          );
+        }
+      }
+      function ThrowingView(): never {
+        throw new Error("pane render failed");
+      }
+      componentRegistry.AddinChatAccessProvider = ({ children }) =>
+        children({ status: "allowed" });
+      if (view === "start") componentRegistry.AddinStartView = ThrowingView;
+      render(
+        <PaneBoundary>
+          <OutlookStartViewSwitcher platform="outlook">
+            <ThrowingView />
+          </OutlookStartViewSwitcher>
+        </PaneBoundary>,
+      );
+      expect(screen.getByRole("alert")).toHaveTextContent("pane render failed");
+      expect(
+        screen.queryByText(/Chat access could not be verified/),
+      ).not.toBeInTheDocument();
+    },
+  );
+
+  it.each([true, false])(
+    "requires a rejected policy only when policy-required is %s",
+    (required) => {
+      vi.spyOn(console, "error").mockImplementation(() => {});
+      window.ERATO_ADDIN_CHAT_ACCESS_POLICY_REQUIRED = required;
+      window.ERATO_COMPONENT_KIT_VERSION_STANCE = "enforce";
+      window.ERATO_COMPONENT_KITS = [
+        {
+          name: "old-policy",
+          builtAgainstSharedSurfaceMinor: 23,
+          components: [
+            {
+              extensionPoint: "AddinChatAccessProvider",
+              component: ({ children }) => children({ status: "denied" }),
+              priority: 50,
+            },
+          ],
+        },
+      ];
+      applyComponentKitRegistrations();
+      expect(componentRegistry.AddinChatAccessProvider).toBeNull();
+      render(pane());
+      if (required) {
+        expect(screen.queryByTestId("chat-surface")).not.toBeInTheDocument();
+        expect(screen.getByRole("status")).toHaveTextContent(
+          "Chat access could not be verified",
+        );
+      } else {
+        expect(screen.getByTestId("chat-surface")).toBeInTheDocument();
+      }
+    },
+  );
+
   it.each(["loading", "denied", "error"] as const)(
     "does not fall through to chat without a start view when %s",
     (status) => {
@@ -286,6 +382,36 @@ describe("OutlookStartViewSwitcher", () => {
     expect(screen.queryByTestId("chat-surface")).not.toBeInTheDocument();
   });
 
+  it.each([true, false])(
+    "retries a throwing policy in place (start view: %s)",
+    (hasStartView) => {
+      vi.spyOn(console, "error").mockImplementation(() => {});
+      let failed = true;
+      if (hasStartView) componentRegistry.AddinStartView = StubStartView;
+      componentRegistry.AddinChatAccessProvider = ({ children }) => {
+        if (failed) throw new Error("temporary policy error");
+        return children({ status: "allowed" });
+      };
+      render(pane());
+      // A second failed attempt must not temporarily grant access.
+      fireEvent.click(screen.getByRole("button", { name: "Try Again" }));
+      expect(screen.queryByTestId("chat-surface")).not.toBeInTheDocument();
+      failed = false;
+      fireEvent.click(screen.getByRole("button", { name: "Try Again" }));
+      expect(
+        screen.queryByRole("button", { name: "Try Again" }),
+      ).not.toBeInTheDocument();
+      if (hasStartView) {
+        expect(screen.getByTestId("stub-chat-access")).toHaveTextContent(
+          "allowed",
+        );
+        expect(screen.queryByTestId("chat-surface")).not.toBeInTheDocument();
+        fireEvent.click(screen.getByTestId("stub-open-chat"));
+      }
+      expect(screen.getByTestId("chat-surface")).toBeInTheDocument();
+    },
+  );
+
   it("keeps chat unavailable while a policy suspends", () => {
     const pending = new Promise(() => {});
     componentRegistry.AddinStartView = StubStartView;
@@ -295,6 +421,48 @@ describe("OutlookStartViewSwitcher", () => {
     render(pane());
     expect(screen.getByTestId("stub-chat-access")).toHaveTextContent("loading");
     fireEvent.click(screen.getByTestId("stub-open-chat"));
+    expect(screen.queryByTestId("chat-surface")).not.toBeInTheDocument();
+  });
+
+  it("clears a prior grant when the policy stops reporting a decision", () => {
+    let reporting = true;
+    componentRegistry.AddinStartView = StubStartView;
+    componentRegistry.AddinChatAccessProvider = function ConditionalPolicy({
+      children,
+    }) {
+      return reporting ? children({ status: "allowed" }) : null;
+    };
+    const { rerender } = render(pane());
+    fireEvent.click(screen.getByTestId("stub-open-chat"));
+    reporting = false;
+    rerender(pane());
+    expect(screen.getByTestId("stub-chat-access")).toHaveTextContent("loading");
+    expect(screen.queryByTestId("chat-surface")).not.toBeInTheDocument();
+  });
+
+  it("invalidates access while a previously resolved policy suspends", async () => {
+    let suspended = false;
+    let resume = () => {};
+    const pending = new Promise<void>((resolve) => {
+      resume = resolve;
+    });
+    componentRegistry.AddinStartView = StubStartView;
+    componentRegistry.AddinChatAccessProvider = ({ children }) => {
+      if (suspended) throw pending;
+      return children({ status: "allowed" });
+    };
+    const { rerender } = render(pane());
+    fireEvent.click(screen.getByTestId("stub-open-chat"));
+    suspended = true;
+    rerender(pane());
+    expect(screen.queryByTestId("chat-surface")).not.toBeInTheDocument();
+    expect(screen.getByTestId("stub-chat-access")).toHaveTextContent("loading");
+    suspended = false;
+    await act(async () => {
+      resume();
+      await pending;
+    });
+    expect(screen.getByTestId("stub-chat-access")).toHaveTextContent("allowed");
     expect(screen.queryByTestId("chat-surface")).not.toBeInTheDocument();
   });
 

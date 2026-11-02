@@ -31,6 +31,8 @@ const loadRegistry = async () => {
 describe("componentRegistry", () => {
   afterEach(() => {
     delete window.ERATO_COMPONENT_KITS;
+    delete window.ERATO_COMPONENT_KIT_VERSION_STANCE;
+    vi.restoreAllMocks();
     vi.resetModules();
   });
 
@@ -55,6 +57,54 @@ describe("componentRegistry", () => {
     registry.applyComponentKitRegistrations();
     expect(registry.componentRegistry.AddinChatAccessProvider).toBe(policy);
   });
+
+  it.each(["warn", "enforce"] as const)(
+    "rejects unknown extension points under %s without losing supported registrations",
+    async (stance) => {
+      const consoleError = vi
+        .spyOn(console, "error")
+        .mockImplementation(() => {});
+      const policy =
+        component<ComponentPropsFor<"AddinChatAccessProvider">>("Policy");
+      const unknownKeys = [
+        "FutureChatPolicy",
+        "__proto__",
+        "constructor",
+        "toString",
+      ];
+      window.ERATO_COMPONENT_KIT_VERSION_STANCE = stance;
+      window.ERATO_COMPONENT_KITS = [
+        {
+          name: "future-kit",
+          builtAgainstSharedSurfaceMinor: ERATO_SHARED_SURFACE_MINOR,
+          components: [
+            ...unknownKeys.map((extensionPoint) => ({
+              extensionPoint,
+              component: policy,
+              priority: 1,
+            })),
+            {
+              extensionPoint: "AddinChatAccessProvider",
+              component: policy,
+              priority: 50,
+            },
+          ],
+        },
+      ] as ComponentKitRegistration[];
+      const { componentRegistry } = await loadRegistry();
+      for (const key of unknownKeys) {
+        expect(
+          Object.prototype.hasOwnProperty.call(componentRegistry, key),
+        ).toBe(false);
+        expect(consoleError).toHaveBeenCalledWith(
+          expect.stringContaining(`unknown extension point "${key}"`),
+        );
+      }
+      expect(Object.getPrototypeOf(componentRegistry)).toBe(Object.prototype);
+      expect(componentRegistry.AddinChatAccessProvider).toBe(policy);
+      consoleError.mockRestore();
+    },
+  );
 
   it("uses lower priority component kit registrations first", async () => {
     const lowPriority =

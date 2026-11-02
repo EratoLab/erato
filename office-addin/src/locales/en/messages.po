@@ -247,12 +247,17 @@ msgstr "Chat is not available for your account."
 #. js-lingui-explicit-id
 #: src/outlook/OutlookStartViewSwitcher.tsx
 msgid "officeAddin.chatAccess.error"
-msgstr "Chat access could not be verified. Reopen the add-in to try again."
+msgstr "Chat access could not be verified."
 
 #. js-lingui-explicit-id
 #: src/outlook/OutlookStartViewSwitcher.tsx
 msgid "officeAddin.chatAccess.loading"
 msgstr "Checking chat access..."
+
+#. js-lingui-explicit-id
+#: src/outlook/OutlookStartViewSwitcher.tsx
+msgid "officeAddin.chatAccess.retry"
+msgstr "Try Again"
 
 #. js-lingui-explicit-id
 #: src/outlook/components/AddinChatInput.tsx

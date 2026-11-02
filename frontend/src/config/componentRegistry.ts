@@ -97,7 +97,12 @@ export interface ChatAddMenuExtraContentProps {
 
 /** Availability of the Outlook chat view; not a server authorization grant. */
 export interface AddinChatAccess {
-  /** Only `allowed` permits entering or rendering the chat view. */
+  /**
+   * Only `allowed` permits entering or rendering Chat. `loading` means there
+   * is no valid decision for the current user, including after a prior grant.
+   * For a background refresh of the same identity, a policy may keep returning
+   * its existing decision until it has a replacement.
+   */
   readonly status: "loading" | "allowed" | "denied" | "error";
 }
 
@@ -429,6 +434,19 @@ const buildComponentRegistry = (
     }
 
     for (const registration of componentKit.components) {
+      // Runtime kits can be newer than this host (or simply misspell a key).
+      // Check own keys so names such as __proto__ cannot mutate the registry.
+      if (
+        !Object.prototype.hasOwnProperty.call(
+          registry,
+          registration.extensionPoint,
+        )
+      ) {
+        console.error(
+          `component kit "${componentKit.name}" registers unknown extension point "${registration.extensionPoint}". This host cannot use it; skipping the registration.`,
+        );
+        continue;
+      }
       const declared =
         registration.builtAgainstSharedSurfaceMinor ??
         componentKit.builtAgainstSharedSurfaceMinor;

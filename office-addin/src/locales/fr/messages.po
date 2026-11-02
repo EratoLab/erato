@@ -247,12 +247,17 @@ msgstr "Le chat n’est pas disponible pour votre compte."
 #. js-lingui-explicit-id
 #: src/outlook/OutlookStartViewSwitcher.tsx
 msgid "officeAddin.chatAccess.error"
-msgstr "L’accès au chat n’a pas pu être vérifié. Rouvrez le complément pour réessayer."
+msgstr "L’accès au chat n’a pas pu être vérifié."
 
 #. js-lingui-explicit-id
 #: src/outlook/OutlookStartViewSwitcher.tsx
 msgid "officeAddin.chatAccess.loading"
 msgstr "Vérification de l’accès au chat..."
+
+#. js-lingui-explicit-id
+#: src/outlook/OutlookStartViewSwitcher.tsx
+msgid "officeAddin.chatAccess.retry"
+msgstr "Réessayer"
 
 #. js-lingui-explicit-id
 #: src/outlook/components/AddinChatInput.tsx

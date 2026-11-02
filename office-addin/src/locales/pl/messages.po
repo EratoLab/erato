@@ -247,12 +247,17 @@ msgstr "Czat nie jest dostępny dla Twojego konta."
 #. js-lingui-explicit-id
 #: src/outlook/OutlookStartViewSwitcher.tsx
 msgid "officeAddin.chatAccess.error"
-msgstr "Nie udało się zweryfikować dostępu do czatu. Otwórz ponownie dodatek, aby spróbować jeszcze raz."
+msgstr "Nie udało się zweryfikować dostępu do czatu."
 
 #. js-lingui-explicit-id
 #: src/outlook/OutlookStartViewSwitcher.tsx
 msgid "officeAddin.chatAccess.loading"
 msgstr "Sprawdzanie dostępu do czatu..."
+
+#. js-lingui-explicit-id
+#: src/outlook/OutlookStartViewSwitcher.tsx
+msgid "officeAddin.chatAccess.retry"
+msgstr "Spróbuj ponownie"
 
 #. js-lingui-explicit-id
 #: src/outlook/components/AddinChatInput.tsx
