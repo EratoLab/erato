@@ -1,6 +1,6 @@
 {
   "name": "@erato/desktop-sidecar-protocol",
-  "version": "0.1.43",
+  "version": "0.1.44",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@11.8.0",
@@ -10,6 +10,7 @@
     "examples",
     "conformance",
     "openrpc.json",
+    "providers",
     "README.md",
     "DISTRIBUTION.md",
     "SPEC.md",

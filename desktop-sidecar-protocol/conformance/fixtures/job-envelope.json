@@ -1,0 +1,196 @@
+{
+  "description": "The job envelope (package 0.1.44). Discovery results for both rollout directions, each taking the live OpenRPC document as its `document`: a previous sidecar reports neither `strict`, `jobs` nor `providers`, so a current client keeps the direct RPCs; a previous client ignores the additive fields. Job statuses cover per-call errors and every MCP content block kind.",
+  "discovery": [
+    {
+      "name": "previous sidecar without the job envelope",
+      "result": {
+        "protocolVersion": "1.0",
+        "serverInfo": { "name": "erato-desktop-sidecar", "version": "0.1.43" },
+        "instanceId": "sidecar-instance-id",
+        "installationId": "sidecar-installation-id-0123456789abcdef"
+      },
+      "jobs": false
+    },
+    {
+      "name": "current sidecar in normal mode",
+      "result": {
+        "protocolVersion": "1.0",
+        "serverInfo": { "name": "erato-desktop-sidecar", "version": "0.1.44" },
+        "instanceId": "sidecar-instance-id",
+        "installationId": "sidecar-installation-id-0123456789abcdef",
+        "strict": false,
+        "jobs": { "maxCalls": 8, "maxWaitMs": 25000 },
+        "providers": [
+          {
+            "id": "sidecar",
+            "tools": [
+              "list_sidecar_mailboxes",
+              "get_sidecar_folder_hierarchy",
+              "get_sidecar_search_fields",
+              "search_sidecar_index",
+              "get_sidecar_document",
+              "read_sidecar_conversation"
+            ],
+            "readOnly": true,
+            "egress": "none",
+            "available": true
+          }
+        ]
+      },
+      "jobs": true
+    },
+    {
+      "name": "current sidecar in strict mode with a future provider field",
+      "result": {
+        "protocolVersion": "1.0",
+        "serverInfo": { "name": "erato-desktop-sidecar", "version": "0.1.44" },
+        "instanceId": "sidecar-instance-id",
+        "strict": true,
+        "jobs": { "maxCalls": 8, "maxWaitMs": 25000, "futureLimit": 1 },
+        "providers": [
+          {
+            "id": "sidecar",
+            "tools": [
+              "list_sidecar_mailboxes",
+              "get_sidecar_folder_hierarchy",
+              "get_sidecar_search_fields",
+              "search_sidecar_index",
+              "get_sidecar_document",
+              "read_sidecar_conversation"
+            ],
+            "readOnly": true,
+            "egress": "none",
+            "available": true,
+            "futureField": { "version": 2 }
+          }
+        ]
+      },
+      "jobs": true
+    }
+  ],
+  "statuses": [
+    {
+      "handle": "job-handle-0123456789abcdefghijklmnopqrstuv",
+      "state": "running"
+    },
+    {
+      "handle": "job-handle-0123456789abcdefghijklmnopqrstuv",
+      "state": "completed",
+      "results": [
+        {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "Quarterly report",
+                "annotations": {
+                  "audience": ["user", "assistant"],
+                  "priority": 0.8,
+                  "lastModified": "2026-10-30T09:15:00Z"
+                },
+                "_meta": { "ai.erato/itemIndex": 0 }
+              },
+              {
+                "type": "resource",
+                "resource": {
+                  "uri": "erato-sidecar:document/2b0f6a43-8f5e-4c79-9d8e-0d6b5e7a9c11",
+                  "mimeType": "application/pdf",
+                  "blob": "JVBERi0xLjQK"
+                }
+              },
+              {
+                "type": "resource",
+                "resource": {
+                  "uri": "erato-sidecar:document/2b0f6a43-8f5e-4c79-9d8e-0d6b5e7a9c11/text",
+                  "text": "Extracted text"
+                }
+              },
+              {
+                "type": "image",
+                "data": "iVBORw0KGgo=",
+                "mimeType": "image/png"
+              },
+              {
+                "type": "audio",
+                "data": "UklGRg==",
+                "mimeType": "audio/wav"
+              },
+              {
+                "type": "resource_link",
+                "uri": "file:///reports/q3.pdf",
+                "name": "q3.pdf",
+                "mimeType": "application/pdf",
+                "size": 1024
+              }
+            ],
+            "structuredContent": { "hits": [] },
+            "isError": false,
+            "_meta": { "modelcontextprotocol.io/example": true }
+          }
+        },
+        {
+          "error": {
+            "code": -32011,
+            "message": "The requested capability is unavailable.",
+            "data": {
+              "kind": "capability_unavailable",
+              "reasonCode": "strict_review_unavailable"
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "invalidStatuses": [
+    {
+      "name": "unknown state",
+      "value": {
+        "handle": "job-handle-0123456789abcdefghijklmnopqrstuv",
+        "state": "done"
+      }
+    },
+    {
+      "name": "a call outcome with both a result and an error",
+      "value": {
+        "handle": "job-handle-0123456789abcdefghijklmnopqrstuv",
+        "state": "completed",
+        "results": [
+          {
+            "result": { "content": [] },
+            "error": { "code": -32016, "message": "Failed." }
+          }
+        ]
+      }
+    },
+    {
+      "name": "an unknown content block type",
+      "value": {
+        "handle": "job-handle-0123456789abcdefghijklmnopqrstuv",
+        "state": "completed",
+        "results": [
+          { "result": { "content": [{ "type": "video", "data": "AAAA" }] } }
+        ]
+      }
+    },
+    {
+      "name": "an embedded resource with neither text nor blob",
+      "value": {
+        "handle": "job-handle-0123456789abcdefghijklmnopqrstuv",
+        "state": "completed",
+        "results": [
+          {
+            "result": {
+              "content": [
+                {
+                  "type": "resource",
+                  "resource": { "uri": "erato-sidecar:document/x" }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "invalidMetaKeys": ["itemIndex", "erato/itemIndex", "ai.erato", "/itemIndex"]
+}

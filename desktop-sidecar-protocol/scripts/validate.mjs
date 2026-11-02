@@ -242,6 +242,42 @@ const validators = {
   "sources.get_folder_hierarchy.v1:params": ajv.getSchema(
     "https://schemas.erato.ai/desktop-sidecar/v1/methods/sources-get-folder-hierarchy-v1-params.schema.json",
   ),
+  "jobs.start.v1:params": ajv.getSchema(
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/jobs-start-v1-params.schema.json",
+  ),
+  "jobs.start.v1:result": ajv.getSchema(
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/jobs-start-v1-result.schema.json",
+  ),
+  "jobs.status.v1:params": ajv.getSchema(
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/jobs-status-v1-params.schema.json",
+  ),
+  "jobs.status.v1:result": ajv.getSchema(
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/jobs-status-v1-result.schema.json",
+  ),
+  "jobs.read.v1:params": ajv.getSchema(
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/jobs-read-v1-params.schema.json",
+  ),
+  "jobs.read.v1:result": ajv.getSchema(
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/jobs-read-v1-result.schema.json",
+  ),
+  "jobs.ack.v1:params": ajv.getSchema(
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/jobs-ack-v1-params.schema.json",
+  ),
+  "jobs.ack.v1:result": ajv.getSchema(
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/jobs-ack-v1-result.schema.json",
+  ),
+  "jobs.cancel.v1:params": ajv.getSchema(
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/jobs-cancel-v1-params.schema.json",
+  ),
+  "jobs.cancel.v1:result": ajv.getSchema(
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/jobs-cancel-v1-result.schema.json",
+  ),
+  "jobs.review.v1:params": ajv.getSchema(
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/jobs-review-v1-params.schema.json",
+  ),
+  "jobs.review.v1:result": ajv.getSchema(
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/jobs-review-v1-result.schema.json",
+  ),
 };
 const validateErrorData = ajv.getSchema(
   "https://schemas.erato.ai/desktop-sidecar/v1/bootstrap/error-data.schema.json",
@@ -317,6 +353,22 @@ for (const exampleFile of await listFiles(
   }
 }
 
+const validateProviderTable = ajv.getSchema(
+  "https://schemas.erato.ai/desktop-sidecar/v1/jobs/provider-table.schema.json",
+);
+for (const providerFile of await listFiles(
+  path.join(root, "providers"),
+  (filePath) => filePath.endsWith(".json"),
+)) {
+  if (!validateProviderTable?.(await readJson(providerFile))) {
+    throw new Error(
+      `${providerFile} is not a valid provider table: ${formatAjvErrors(
+        validateProviderTable?.errors,
+      )}`,
+    );
+  }
+}
+
 for (const fixtureFile of await listFiles(
   path.join(root, "conformance", "fixtures"),
   (filePath) => filePath.endsWith(".json"),
@@ -325,5 +377,5 @@ for (const fixtureFile of await listFiles(
 }
 
 console.log(
-  `Validated ${schemas.length} schemas, openrpc.json, examples, and conformance fixtures.`,
+  `Validated ${schemas.length} schemas, openrpc.json, examples, provider tables, and conformance fixtures.`,
 );

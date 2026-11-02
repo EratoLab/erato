@@ -1,12 +1,193 @@
-# Strict snapshot delegation, contract v1
+# Strict mode and the job envelope
 
-Status: reserved, disabled. Package 0.1.28 extends
-main's 0.1.27 contract, preserving Outlook provenance and the data-directory
-action; 0.1.41 adds the settings methods that stay available. Transport
-protocol remains 1.0. This document is the
-shared design record. It does not certify a security implementation.
+Status: package 0.1.44 adds the job envelope (`jobs.*`) for normal mode and
+reserves its strict review. Strict review on jobs, the egress rules and the
+removal of the transitional strict path are stage 2. Transport protocol remains
+1.0. This document is the shared design record. It does not certify a security
+implementation.
 
-## Execution scope
+## Trust model
+
+The frontend (the web app and the Office add-in) is trusted to relay faithfully;
+hardening against a malicious frontend is out of scope. The perimeter is the
+native sidecar process: content the user has not approved never reaches web
+code. Under strict mode, content RPCs are denied and the job envelope is the
+only content path besides the transitional path below; the native plain-text
+review starts with an empty selection and no RPC can approve it; the tool
+enumeration is closed; and the mode comes only from the installed bootstrap. The
+Origin allowlist is the single trust anchor: bootstrap `allowed_origins` admits
+only canonical `http` or `https` origins without userinfo, path, query, fragment
+or default port, and the `--allow-origin` opt-in stays development-only. Backend
+plan signing, context binding, installed verification keys, `backend_origin`
+pinning and signed receipts belong to the transitional path below and are
+removed in stage 2.
+
+## Job envelope
+
+The six `desktop/*` client tools (`list_sidecar_mailboxes`,
+`get_sidecar_folder_hierarchy`, `get_sidecar_search_fields`,
+`search_sidecar_index`, `get_sidecar_document`, `read_sidecar_conversation`) are
+the tool catalogue in both modes. Strict mode changes how the desktop app runs
+them, never which tools exist or their arguments, results and errors.
+
+`jobs.start.v1` takes a batch of independent calls, each `{server, name,
+arguments}`. `server: "sidecar"` is reserved for the six built-ins; other ids are
+reserved for local MCP servers. The sidecar maps a call to internal read-only
+operations, never by re-entering its RPC dispatcher, through the closed table in
+[`providers/sidecar.json`](providers/sidecar.json) (exported as
+`SIDECAR_PROVIDER`), which lists the RPC methods whose work each tool composes.
+Administrative and operational methods are human-only and never tools:
+`sidecar.configure.v1`, `indexing.*` control and benchmarks,
+`sidecar.restart.v1`, `sidecar.request_permission.v1`,
+`sidecar.open_data_directory.v1`, `sidecar.status.v1`, diagnostics and
+`sidecar.progress.v1`. `outlook.list_emails.v1` and `outlook.search_emails.v1`
+are RPCs, not tools. Opening an item in Outlook stays a human-initiated action.
+
+States: `queued -> running -> completed -> read -> acked`. Under strict, a
+read-only tool's job passes `ready_for_review -> approved` after running, and an
+effectful tool will wait in the reserved `awaiting_approval` before running.
+`declined`, `cancelled`, `expired` and `failed` are terminal. A response that
+reports `completed` or `approved` carries `results`, one entry per call in call
+order, and the job is `read` from then on; `jobs.read.v1` returns them again
+until `jobs.ack.v1` discards them, and answers InvalidParams for a job without
+results. `jobs.cancel.v1` ends a job that has not ended and is idempotent.
+`jobs.review.v1` only opens or focuses the native review of a job in
+`ready_for_review`. An unknown handle, or one issued to another Origin, reports
+`expired`.
+
+`jobs.start.v1` and `jobs.status.v1` take `wait_ms`: the sidecar holds the
+response while the job is pending and answers as soon as it has results or ends,
+up to discovery's `jobs.maxWaitMs`. A normal-mode call keeps one round trip, and a
+status long-poll replaces polling quantization; adaptive polling remains the
+fallback. A call that fails gets an `error`, the JSON-RPC error object a direct
+RPC returns, and the other calls are unaffected. Same-turn sidecar calls may be
+coalesced into one job, with one review under strict. See
+[the example exchange](examples/jobs.json).
+
+Direct content RPCs stay served in normal mode for clients that are not a model
+(the add-in's message fetcher, the settings pane, the CLI). A client runs tools
+as jobs when discovery reports `jobs` and the `sidecar` provider; otherwise it
+keeps its direct-RPC mapping until the supported sidecar floor allows removing
+it. Until stage 2, a strict sidecar fails a call to a content tool (one with a
+selection, below) without running it, with `capability_unavailable` and
+`reasonCode: "strict_review_unavailable"`, and keeps `jobs.review.v1` disabled
+with that reason. Mailboxes and search fields run with the account-level
+reduction under "Settings under strict mode".
+
+## Results and selection
+
+A call's result is the MCP `CallToolResult` for every provider: `content`
+blocks (text, image, audio, embedded resource, resource link) with
+`annotations {audience, priority, lastModified}` and `_meta`, and
+`structuredContent`, `isError` and `_meta`. `_meta` keys are reverse-DNS
+namespaced; MCP reserves its own prefixes such as `modelcontextprotocol.io/`, and
+Erato uses `ai.erato/`. For the built-ins, `structuredContent` is the tool's JSON
+result, byte-compatible with the normal-mode result, and `content` carries the
+plain-text review rendering and the files as embedded resources:
+`get_sidecar_document` bytes become a `resource {blob, mimeType}` block the
+frontend uploads, as it uploads `contentBase64` today.
+
+Each built-in declares its selection in the provider table: `items`, a JSON
+pointer into `structuredContent` or `content`, and `resultMetadata`, pointers to
+result-level metadata. `search_sidecar_index` selects `/hits`,
+`read_sidecar_conversation` `/messages`, `get_sidecar_folder_hierarchy`
+`/nodes` and `get_sidecar_document` its `content`; mailboxes and search fields
+select nothing (account-level). Result-level metadata is account-level for the
+built-ins; another provider's `_meta` crosses only through an organization
+allowlist of keys. Item-level metadata travels only with its approved item and
+drives review headers, file provenance (the general case of
+`outlookProvenance`) and policy input. Job-level metadata is the sidecar's own,
+apart from the tool's `_meta`; policy findings stay native. Under strict,
+`isError` text exports as a code with a fixed message, `priority` orders review
+and windowing, `audience` is honored on export, and a `resource_link` exports as
+a reference only.
+
+## Egress under strict mode (stage 2)
+
+Not implemented in 0.1.44. An export is the normal-mode result filtered to the
+approved items: bytes for files, text bodies for conversation messages and
+metadata for hits. An `.eml` embeds approved attachments and replaces each
+unapproved one with an `X-Erato-Stripped-Attachment` marker; an attachment
+approved alone exports on its own with its parent's provenance; nothing exports
+twice; inline files are separate items, unselected by default. Approval pins a
+digest and export re-reads the source, failing if it changed; the strict store
+keeps no byte copies. Mailboxes and search fields need no review; folders, hits,
+documents and conversations do (organization policy may later tune the folder
+class). Upload policy runs on the selected set, over text extracted on click,
+loaded per item and batched for select-all, after input shaping (formatting
+stripped, a structured metadata preamble, windowing with a stated aggregation
+rule) and before the decision request; the backend checks the received bytes
+again. The current remote demo decision endpoint is a documented exception until
+the embedded model lands. Review starts from catalogue metadata and extracts on
+click; indexing persists no text. `declined`, `cancelled` and `expired` end a
+call with a terminal tool error, shaped like the existing "do not retry" errors.
+
+## Versioning
+
+There is no profile string; `strict_snapshot_v1` has no successor. A client
+reads the protocol package version and the discovery capabilities `strict`,
+`jobs` and `providers` (`{id, tools, readOnly, egress, available}`); distribution
+filters targets by minimum protocol version, replacing the transitional
+`local_delegation_profile` gate. Strict mode is installed by the bootstrap's
+`mode: "strict" | "standard"`; `sidecar.configure.v1` never sets or relaxes it.
+Until stage 2, a strict bootstrap also carries the transitional `content_release:
+"strict_snapshot_v1"`, which the sidecar honors when `mode` is absent, and the
+`local_contexts.*`, `local_tasks.*` and `local_exports.*` methods, deprecated in
+0.1.44, serve the transitional path below.
+
+## Local MCP servers (reserved)
+
+Not implemented. A `server` other than `sidecar` names a local MCP server the
+organization declares; the device adds none to the catalogue on its own. Under
+strict, an effectful tool (one without `readOnlyHint`) waits in
+`awaiting_approval` before it runs, and an open-world server is refused unless
+the organization marks its egress trusted. Its results are `content` blocks, the
+general case of the built-ins' items. Package 0.1.44 reserves `server`,
+`providers` and `awaiting_approval` only.
+
+## Settings under strict mode
+
+Settings stay available through their fixed methods, behind the same Origin
+allowlist: `sidecar.configure.v1`, `indexing.status.v1`, `indexing.reset.v1`,
+`sources.list.v1`, `outlook.list_mailboxes.v1`, `sidecar.status.v1`,
+`sidecar.request_permission.v1` and `sidecar.open_data_directory.v1`. A strict
+sidecar marks exactly these and `jobs.*` (not yet `jobs.review.v1`) enabled in
+its live catalogue. Clients gate each settings view on that availability, so an
+earlier strict sidecar that refuses them keeps a connection-only view. The calls
+are not bound to a local context.
+
+Their results carry account-level data only: account and store names and
+addresses, Teams tenant and user identities, on/off, priority, indexing progress,
+coverage counts and dates, permission status and codes. Message subjects,
+senders, bodies, folder names, search results, documents and conversations never
+appear. Local paths and free-text errors stay native: `indexing.status.v1` omits
+`indexingDirectory` and returns only the documented discovery fields;
+`sources.list.v1` returns the source ID as `sourceKey`, a null `discoveryCursor`
+and a locator reduced to `mailboxId`, `tenantId` and `userId`;
+`outlook.list_mailboxes.v1` reports an unreadable data file with a fixed message
+and no path.
+
+Configuration cannot relax strict mode. Allowed origins, TLS, the mode, the
+transitional content release and the delegation trust policy come only from the
+installed bootstrap; a strict sidecar drops these keys from submitted
+configuration rather than persisting them. `signed_in_user` still selects the
+work-account defaults. `search.*`, `sources.get_document.v1`,
+`sources.get_folder_hierarchy.v1`, `outlook.get_conversation.v1`,
+`outlook.list_emails.v1`, `outlook.search_emails.v1`, `sidecar.progress.v1`,
+`indexing.benchmark.*` and `diagnostics.echo.v1` remain refused, as do the
+unused `indexing.start.v1`, `indexing.stop.v1`, `sidecar.restart.v1` and
+`erato.cancel`.
+
+## Transitional strict snapshot path
+
+The sections below describe the strict path of packages 0.1.28 to 0.1.43:
+`local_contexts.*`, `local_tasks.*` and `local_exports.*`, the
+`local_collect_evidence` tool, backend-signed plans and receipts and context
+binding. It keeps working in stage 1 and is removed in stage 2, when strict
+review on the job envelope replaces it. Where it differs from the sections
+above, the sections above are the design.
+
+### Execution scope
 
 This profile trusts the installed native implementation and does not require a
 new signed macOS sandbox application or OS/process confinement. Enforce exact
@@ -22,7 +203,7 @@ a WASM runtime. Build durable native jobs, native review/export, backend recover
 and the shared frontend in that order. Enable only after consent/ownership,
 immutable export and recovery checks pass.
 
-## Trust and rollout
+### Trust and rollout
 
 Trust the OS, installed native broker/reviewer, pinned backend verification keys,
 and authenticated backend. Source documents and network-facing frontend scripts
@@ -55,10 +236,10 @@ A strict-required installation refuses startup if native consent is unavailable.
 It must never downgrade to legacy on a command-line mode, reset, restart,
 missing helper, signature failure or unsupported OS. The RPC boundary denies
 legacy content, progress, benchmark and diagnostic methods, and every method
-outside the settings list below, before running them. Native code must route every
-public path through these checks, including alternate modes and diagnostic
-serialization. Origin allowlisting or a frontend approval boolean does not
-authorize an export.
+outside the settings list and `jobs.*`, before running them. Native code must
+route every public path through these checks, including alternate modes and
+diagnostic serialization. Origin allowlisting or a frontend approval boolean
+does not authorize an export.
 
 Configuration delivery is an exception: clients do not use `localDelegation` to
 gate `sidecar.configure.v1`. The installed sidecar decides whether it trusts outside
@@ -67,38 +248,7 @@ or ignore them. Sending configuration does not weaken native content/export
 checks, and clients must respect sidecar rejection. See SPEC section 11 for
 configuration replacement and preservation of saved user settings.
 
-## Settings under the strict profile
-
-Settings stay available through their fixed methods, behind the same Origin
-allowlist: `sidecar.configure.v1`, `indexing.status.v1`, `indexing.reset.v1`,
-`sources.list.v1`, `outlook.list_mailboxes.v1`, `sidecar.status.v1`,
-`sidecar.request_permission.v1` and `sidecar.open_data_directory.v1`. A strict
-sidecar marks exactly these enabled in its live catalogue. Clients gate each
-settings view on that availability, so an earlier strict sidecar that refuses
-them keeps a connection-only view. The calls are not bound to a local context.
-
-Their results carry account-level data only: account and store names and
-addresses, Teams tenant and user identities, on/off, priority, indexing progress,
-coverage counts and dates, permission status and codes. Message subjects,
-senders, bodies, folder names, search results, documents and conversations never
-appear. Local paths and free-text errors stay native: `indexing.status.v1` omits
-`indexingDirectory` and returns only the documented discovery fields;
-`sources.list.v1` returns the source ID as `sourceKey`, a null `discoveryCursor`
-and a locator reduced to `mailboxId`, `tenantId` and `userId`;
-`outlook.list_mailboxes.v1` reports an unreadable data file with a fixed message
-and no path.
-
-Configuration cannot relax the profile. Allowed origins, TLS, the content release
-and the delegation trust policy come only from the installed bootstrap; a strict
-sidecar drops these keys from submitted configuration rather than persisting
-them. `signed_in_user` still selects the work-account defaults. `search.*`,
-`sources.get_document.v1`, `sources.get_folder_hierarchy.v1`,
-`outlook.get_conversation.v1`, `outlook.list_emails.v1`,
-`outlook.search_emails.v1`, `sidecar.progress.v1`, `indexing.benchmark.*` and
-`diagnostics.echo.v1` remain refused, as do the unused `indexing.start.v1`,
-`indexing.stop.v1`, `sidecar.restart.v1` and `erato.cancel`.
-
-## Account and device authentication
+### Account and device authentication
 
 `local_contexts.challenge.v1` creates a random 256-bit challenge with a five-minute
 expiry and returns the opaque stable installation device ID: the value discovery
@@ -133,7 +283,7 @@ all context fields on every method. A guessed handle, wrong context, missing job
 or cross-account lookup returns the same fixed permission-denied response.
 Public RPC has no approve, grant creation or account-switch method.
 
-## Start, identity and limits
+### Start, identity and limits
 
 The backend commits a generic operation attempt and the parked assistant
 message before exposing a plan. `LocalTaskBinding` binds canonical backend origin, account, installation,
@@ -184,7 +334,7 @@ artifact member referencing `outlook/file-provenance.schema.json`, so a malforme
 member fails validation like any other; a member that passes the schema but names
 no usable identity is dropped and the export stays valid.
 
-## Native state and consent
+### Native state and consent
 
 Persist acceptance transactionally before returning a handle. Store job records
 and immutable snapshots separately from replaceable search indexes. A killed
@@ -226,7 +376,7 @@ manifest digest, nonce, expiry and recipient. Grant identifiers exposed after
 approval are not bearer authority. Existing always-allow settings never substitute
 for this decision. Native grant validation and read/cancel/expiry must serialize.
 
-## Export, receipt and recovery
+### Export, receipt and recovery
 
 `local_exports.status.v1` returns only the same closed job status. `read.v1`
 requires a valid current context plus the persisted private grant. It returns
@@ -252,7 +402,7 @@ commit, retaining the tombstone. Retain retired receipt verification keys throug
 the maximum job/tombstone lifetime. Receipts are durable facts, not expiring
 bearer tokens; their signatures confer no backend API access.
 
-## Backend continuation authorization decision
+### Backend continuation authorization decision
 
 The task feature supports **one backend replica only**. Multiple concurrent
 backend replicas and their qualification are outside this profile. Reuse the existing task lifecycle and generation ownership;
@@ -297,7 +447,7 @@ client tools remain suppressed. The shared shell coordinator, independent of
 selected chat, reconciles auth/account/focus/reconnect and uses backend claims
 plus native idempotency across browsers and Office views.
 
-## Qualification gate
+### Qualification gate
 
 Require native secret-marker/RPC tests, inert text-only previews and coverage
 of every public content/metadata path. Qualify existing Windows/macOS packaging,
@@ -311,7 +461,7 @@ lost receipts, duplicate uploads, pane closure and single-backend restart recove
 Contract/mock tests alone do not meet these exit conditions. Strict delegation
 stays disabled until the paired implementations and qualification are complete.
 
-## Initial backend execution scope
+### Initial backend execution scope
 
 The first integration offers `local_collect_evidence` only to explicitly opted-in
 asynchronous task children at depth one, with a positive frozen client-call

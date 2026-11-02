@@ -162,6 +162,90 @@ const typeTargets = [
     "LocalExportsAckV1Result",
   ],
 
+  ["schemas/jobs/tool-call.schema.json", "job-tool-call.ts", "JobToolCall"],
+  [
+    "schemas/jobs/call-tool-result.schema.json",
+    "call-tool-result.ts",
+    "CallToolResult",
+  ],
+  [
+    "schemas/jobs/job-call-result.schema.json",
+    "job-call-result.ts",
+    "JobCallResult",
+  ],
+  ["schemas/jobs/job-status.schema.json", "job-status.ts", "JobStatus"],
+  [
+    "schemas/jobs/jobs-capability.schema.json",
+    "jobs-capability.ts",
+    "JobsCapability",
+  ],
+  ["schemas/jobs/provider.schema.json", "tool-provider.ts", "ToolProvider"],
+  [
+    "schemas/jobs/provider-table.schema.json",
+    "tool-provider-table.ts",
+    "ToolProviderTable",
+  ],
+  [
+    "schemas/methods/jobs-start-v1-params.schema.json",
+    "jobs-start-v1-params.ts",
+    "JobsStartV1Params",
+  ],
+  [
+    "schemas/methods/jobs-start-v1-result.schema.json",
+    "jobs-start-v1-result.ts",
+    "JobsStartV1Result",
+  ],
+  [
+    "schemas/methods/jobs-status-v1-params.schema.json",
+    "jobs-status-v1-params.ts",
+    "JobsStatusV1Params",
+  ],
+  [
+    "schemas/methods/jobs-status-v1-result.schema.json",
+    "jobs-status-v1-result.ts",
+    "JobsStatusV1Result",
+  ],
+  [
+    "schemas/methods/jobs-read-v1-params.schema.json",
+    "jobs-read-v1-params.ts",
+    "JobsReadV1Params",
+  ],
+  [
+    "schemas/methods/jobs-read-v1-result.schema.json",
+    "jobs-read-v1-result.ts",
+    "JobsReadV1Result",
+  ],
+  [
+    "schemas/methods/jobs-ack-v1-params.schema.json",
+    "jobs-ack-v1-params.ts",
+    "JobsAckV1Params",
+  ],
+  [
+    "schemas/methods/jobs-ack-v1-result.schema.json",
+    "jobs-ack-v1-result.ts",
+    "JobsAckV1Result",
+  ],
+  [
+    "schemas/methods/jobs-cancel-v1-params.schema.json",
+    "jobs-cancel-v1-params.ts",
+    "JobsCancelV1Params",
+  ],
+  [
+    "schemas/methods/jobs-cancel-v1-result.schema.json",
+    "jobs-cancel-v1-result.ts",
+    "JobsCancelV1Result",
+  ],
+  [
+    "schemas/methods/jobs-review-v1-params.schema.json",
+    "jobs-review-v1-params.ts",
+    "JobsReviewV1Params",
+  ],
+  [
+    "schemas/methods/jobs-review-v1-result.schema.json",
+    "jobs-review-v1-result.ts",
+    "JobsReviewV1Result",
+  ],
+
   [
     "schemas/methods/indexing-benchmark-list-v1-params.schema.json",
     "indexing-benchmark-list-v1-params.ts",
@@ -575,6 +659,33 @@ const validatorTargets = {
   validateLocalExportsAckV1Result:
     "https://schemas.erato.ai/desktop-sidecar/v1/methods/local-exports-ack-v1-result.schema.json",
 
+  validateToolProviderTable:
+    "https://schemas.erato.ai/desktop-sidecar/v1/jobs/provider-table.schema.json",
+  validateJobsStartV1Params:
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/jobs-start-v1-params.schema.json",
+  validateJobsStartV1Result:
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/jobs-start-v1-result.schema.json",
+  validateJobsStatusV1Params:
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/jobs-status-v1-params.schema.json",
+  validateJobsStatusV1Result:
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/jobs-status-v1-result.schema.json",
+  validateJobsReadV1Params:
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/jobs-read-v1-params.schema.json",
+  validateJobsReadV1Result:
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/jobs-read-v1-result.schema.json",
+  validateJobsAckV1Params:
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/jobs-ack-v1-params.schema.json",
+  validateJobsAckV1Result:
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/jobs-ack-v1-result.schema.json",
+  validateJobsCancelV1Params:
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/jobs-cancel-v1-params.schema.json",
+  validateJobsCancelV1Result:
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/jobs-cancel-v1-result.schema.json",
+  validateJobsReviewV1Params:
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/jobs-review-v1-params.schema.json",
+  validateJobsReviewV1Result:
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/jobs-review-v1-result.schema.json",
+
   validateOutlookFileProvenance:
     "https://schemas.erato.ai/desktop-sidecar/v1/outlook/file-provenance.schema.json",
   validateIndexingBenchmarkListV1Params:
@@ -766,5 +877,22 @@ ${Object.keys(validatorTargets)
 await writeFile(
   path.join(outputDirectory, "validators.d.mts"),
   validatorDeclarations,
+  "utf8",
+);
+
+// The built-in provider table is language-neutral data. Clients receive it as
+// a typed constant, so they need no JSON module support.
+const sidecarProvider = await readJson(
+  path.join(root, "providers", "sidecar.json"),
+);
+const providerSource = `/* This file is generated from providers/sidecar.json. Do not edit. */
+import type { ToolProviderTable } from "./tool-provider-table.js";
+
+/** The \`sidecar\` provider: its closed tool enumeration and what each tool composes. */
+export const SIDECAR_PROVIDER: ToolProviderTable = ${JSON.stringify(sidecarProvider, null, 2)};
+`;
+await writeFile(
+  path.join(outputDirectory, "providers.ts"),
+  providerSource,
   "utf8",
 );

@@ -1,0 +1,172 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://schemas.erato.ai/desktop-sidecar/v1/jobs/call-tool-result.schema.json",
+  "title": "CallToolResult",
+  "description": "A call's result as the MCP `CallToolResult`, for every provider. For the `sidecar` provider, `structuredContent` is the tool's JSON result, byte-compatible with the normal-mode result, and `content` carries its plain-text rendering and its files as embedded resources.",
+  "type": "object",
+  "properties": {
+    "content": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/ContentBlock"
+      }
+    },
+    "structuredContent": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "isError": {
+      "type": "boolean"
+    },
+    "_meta": {
+      "$ref": "#/definitions/Meta"
+    }
+  },
+  "required": ["content"],
+  "additionalProperties": true,
+  "definitions": {
+    "Meta": {
+      "title": "ResultMeta",
+      "description": "Metadata under reverse-DNS-namespaced keys, `<prefix>/<name>`. MCP reserves prefixes with a `modelcontextprotocol` or `mcp` label, such as `modelcontextprotocol.io/`; Erato uses `ai.erato/`.",
+      "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "pattern": "^(?:[A-Za-z](?:[A-Za-z0-9-]*[A-Za-z0-9])?\\.)+[A-Za-z](?:[A-Za-z0-9-]*[A-Za-z0-9])?/(?:[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?)?$"
+      },
+      "additionalProperties": true
+    },
+    "Annotations": {
+      "title": "ContentAnnotations",
+      "type": "object",
+      "properties": {
+        "audience": {
+          "type": "array",
+          "items": {
+            "enum": ["user", "assistant"]
+          }
+        },
+        "priority": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "lastModified": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "additionalProperties": true
+    },
+    "Base64": {
+      "type": "string",
+      "pattern": "^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$"
+    },
+    "ContentBlock": {
+      "title": "ContentBlock",
+      "oneOf": [
+        { "$ref": "#/definitions/TextContent" },
+        { "$ref": "#/definitions/ImageContent" },
+        { "$ref": "#/definitions/AudioContent" },
+        { "$ref": "#/definitions/EmbeddedResource" },
+        { "$ref": "#/definitions/ResourceLink" }
+      ]
+    },
+    "TextContent": {
+      "title": "TextContent",
+      "type": "object",
+      "properties": {
+        "type": { "const": "text" },
+        "text": { "type": "string" },
+        "annotations": { "$ref": "#/definitions/Annotations" },
+        "_meta": { "$ref": "#/definitions/Meta" }
+      },
+      "required": ["type", "text"],
+      "additionalProperties": true
+    },
+    "ImageContent": {
+      "title": "ImageContent",
+      "type": "object",
+      "properties": {
+        "type": { "const": "image" },
+        "data": { "$ref": "#/definitions/Base64" },
+        "mimeType": { "type": "string", "minLength": 1 },
+        "annotations": { "$ref": "#/definitions/Annotations" },
+        "_meta": { "$ref": "#/definitions/Meta" }
+      },
+      "required": ["type", "data", "mimeType"],
+      "additionalProperties": true
+    },
+    "AudioContent": {
+      "title": "AudioContent",
+      "type": "object",
+      "properties": {
+        "type": { "const": "audio" },
+        "data": { "$ref": "#/definitions/Base64" },
+        "mimeType": { "type": "string", "minLength": 1 },
+        "annotations": { "$ref": "#/definitions/Annotations" },
+        "_meta": { "$ref": "#/definitions/Meta" }
+      },
+      "required": ["type", "data", "mimeType"],
+      "additionalProperties": true
+    },
+    "EmbeddedResource": {
+      "title": "EmbeddedResource",
+      "type": "object",
+      "properties": {
+        "type": { "const": "resource" },
+        "resource": {
+          "oneOf": [
+            { "$ref": "#/definitions/TextResourceContents" },
+            { "$ref": "#/definitions/BlobResourceContents" }
+          ]
+        },
+        "annotations": { "$ref": "#/definitions/Annotations" },
+        "_meta": { "$ref": "#/definitions/Meta" }
+      },
+      "required": ["type", "resource"],
+      "additionalProperties": true
+    },
+    "TextResourceContents": {
+      "title": "TextResourceContents",
+      "type": "object",
+      "properties": {
+        "uri": { "type": "string", "format": "uri" },
+        "mimeType": { "type": "string", "minLength": 1 },
+        "text": { "type": "string" },
+        "_meta": { "$ref": "#/definitions/Meta" }
+      },
+      "required": ["uri", "text"],
+      "additionalProperties": true
+    },
+    "BlobResourceContents": {
+      "title": "BlobResourceContents",
+      "type": "object",
+      "properties": {
+        "uri": { "type": "string", "format": "uri" },
+        "mimeType": { "type": "string", "minLength": 1 },
+        "blob": { "$ref": "#/definitions/Base64" },
+        "_meta": { "$ref": "#/definitions/Meta" }
+      },
+      "required": ["uri", "blob"],
+      "additionalProperties": true
+    },
+    "ResourceLink": {
+      "title": "ResourceLink",
+      "description": "A reference to a resource the result does not embed. Under strict mode it is exported as a reference only.",
+      "type": "object",
+      "properties": {
+        "type": { "const": "resource_link" },
+        "uri": { "type": "string", "format": "uri" },
+        "name": { "type": "string", "minLength": 1 },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "mimeType": { "type": "string", "minLength": 1 },
+        "size": { "type": "integer", "minimum": 0 },
+        "annotations": { "$ref": "#/definitions/Annotations" },
+        "_meta": { "$ref": "#/definitions/Meta" }
+      },
+      "required": ["type", "uri", "name"],
+      "additionalProperties": true
+    }
+  }
+}

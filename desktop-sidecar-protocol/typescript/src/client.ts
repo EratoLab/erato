@@ -27,6 +27,18 @@ import {
   validateIndexingResetV1Params,
   validateIndexingStatusV1Result,
   validateIndexingStatusV1Params,
+  validateJobsAckV1Params,
+  validateJobsAckV1Result,
+  validateJobsCancelV1Params,
+  validateJobsCancelV1Result,
+  validateJobsReadV1Params,
+  validateJobsReadV1Result,
+  validateJobsReviewV1Params,
+  validateJobsReviewV1Result,
+  validateJobsStartV1Params,
+  validateJobsStartV1Result,
+  validateJobsStatusV1Params,
+  validateJobsStatusV1Result,
   validateDiagnosticsEchoV1Params,
   validateDiagnosticsEchoV1Result,
   validateDiscoverResult,
@@ -98,6 +110,20 @@ import type {
   IndexingResetV1Params,
   IndexingStatusV1Result,
   IndexingStatusV1Params,
+  JobsAckV1Params,
+  JobsAckV1Result,
+  JobsCancelV1Params,
+  JobsCancelV1Result,
+  JobsCapability,
+  JobsReadV1Params,
+  JobsReadV1Result,
+  JobsReviewV1Params,
+  JobsReviewV1Result,
+  JobsStartV1Params,
+  JobsStartV1Result,
+  JobsStatusV1Params,
+  JobsStatusV1Result,
+  ToolProvider,
   DiagnosticsEchoV1Params,
   DiagnosticsEchoV1Result,
   DiscoverParams,
@@ -179,6 +205,12 @@ export interface SidecarSnapshot {
   instanceId: string | null;
   /** The installation's stable id; `null` while unknown or for a sidecar that reports none. */
   installationId: string | null;
+  /** Whether the sidecar runs in strict mode; absent while unknown or for a sidecar from before package 0.1.44. */
+  strict?: boolean;
+  /** The job envelope's limits; absent when the sidecar runs no jobs, so clients use the direct RPCs. */
+  jobs?: JobsCapability;
+  /** The providers whose tools `jobs.start.v1` accepts. */
+  providers?: readonly ToolProvider[];
   catalogue: { revision: string; digest: string } | null;
   /** Discovery extensions, exposed only after schema and digest validation. */
   discoveryExtensions?: Readonly<Record<string, unknown>>;
@@ -233,8 +265,36 @@ interface JsonRpcResponse {
   error?: { code: number; message: string; data?: unknown };
 }
 
+/** Methods that hold their response for up to `wait_ms` while a job is pending. */
+const LONG_POLL_METHODS = new Set(["jobs.start.v1", "jobs.status.v1"]);
+
 const builtInContracts: Readonly<Record<string, SidecarMethodContract>> = {
   ...localDelegationContracts,
+
+  "jobs.start.v1": {
+    validateParams: validateJobsStartV1Params,
+    validateResult: validateJobsStartV1Result,
+  },
+  "jobs.status.v1": {
+    validateParams: validateJobsStatusV1Params,
+    validateResult: validateJobsStatusV1Result,
+  },
+  "jobs.read.v1": {
+    validateParams: validateJobsReadV1Params,
+    validateResult: validateJobsReadV1Result,
+  },
+  "jobs.ack.v1": {
+    validateParams: validateJobsAckV1Params,
+    validateResult: validateJobsAckV1Result,
+  },
+  "jobs.cancel.v1": {
+    validateParams: validateJobsCancelV1Params,
+    validateResult: validateJobsCancelV1Result,
+  },
+  "jobs.review.v1": {
+    validateParams: validateJobsReviewV1Params,
+    validateResult: validateJobsReviewV1Result,
+  },
 
   "diagnostics.echo.v1": {
     validateParams: validateDiagnosticsEchoV1Params,
@@ -443,6 +503,36 @@ export class DesktopSidecarClient {
     options?: InvokeOptions,
   ): Promise<LocalExportsAckV1Result>;
   async invoke(
+    method: "jobs.start.v1",
+    params: JobsStartV1Params,
+    options?: InvokeOptions,
+  ): Promise<JobsStartV1Result>;
+  async invoke(
+    method: "jobs.status.v1",
+    params: JobsStatusV1Params,
+    options?: InvokeOptions,
+  ): Promise<JobsStatusV1Result>;
+  async invoke(
+    method: "jobs.read.v1",
+    params: JobsReadV1Params,
+    options?: InvokeOptions,
+  ): Promise<JobsReadV1Result>;
+  async invoke(
+    method: "jobs.ack.v1",
+    params: JobsAckV1Params,
+    options?: InvokeOptions,
+  ): Promise<JobsAckV1Result>;
+  async invoke(
+    method: "jobs.cancel.v1",
+    params: JobsCancelV1Params,
+    options?: InvokeOptions,
+  ): Promise<JobsCancelV1Result>;
+  async invoke(
+    method: "jobs.review.v1",
+    params: JobsReviewV1Params,
+    options?: InvokeOptions,
+  ): Promise<JobsReviewV1Result>;
+  async invoke(
     method: "diagnostics.echo.v1",
     params: DiagnosticsEchoV1Params,
     options?: InvokeOptions,
@@ -583,9 +673,21 @@ export class DesktopSidecarClient {
         ? this.#startProgressPolling(id, options.progress)
         : undefined;
 
+    // A long-poll's default deadline covers its wait on top of the ordinary budget.
+    const waitMs = LONG_POLL_METHODS.has(method)
+      ? (params as { wait_ms?: number }).wait_ms
+      : undefined;
+    const timeoutMs =
+      options.timeoutMs ??
+      (waitMs === undefined ? undefined : this.#requestTimeoutMs + waitMs);
+
     let result: unknown;
     try {
-      result = await this.#request(method, params, { ...options, id });
+      result = await this.#request(method, params, {
+        ...options,
+        id,
+        timeoutMs,
+      });
     } catch (error) {
       const clientError = this.#asClientError(error);
       if (clientError.kind === "capability_unavailable") {
@@ -619,6 +721,11 @@ export class DesktopSidecarClient {
     this.#setSnapshot({
       localDelegation: this.#snapshot.localDelegation,
       strictLocalDelegation: false,
+      // Keep a known strict mode until discovery replaces it, so nothing
+      // treats the sidecar as standard in between.
+      ...(this.#snapshot.strict === undefined
+        ? {}
+        : { strict: this.#snapshot.strict }),
       state: "discovering",
       protocolVersion: null,
       serverInfo: null,
@@ -679,6 +786,11 @@ export class DesktopSidecarClient {
         serverInfo: result.serverInfo,
         instanceId: result.instanceId,
         installationId: result.installationId ?? null,
+        ...(result.strict === undefined ? {} : { strict: result.strict }),
+        ...(result.jobs === undefined ? {} : { jobs: result.jobs }),
+        ...(result.providers === undefined
+          ? {}
+          : { providers: result.providers }),
         catalogue,
         discoveryExtensions: Object.fromEntries(
           Object.entries(result.document).filter(([key]) =>

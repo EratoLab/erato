@@ -63,7 +63,7 @@ prior exchange. The sidecar does not store or validate client readiness.
 Application requests are invalid in the client until `ready`. The sidecar still
 validates and authorizes every application request independently against its
 current state. Batching is disabled in 1.0; a top-level JSON array is an invalid
-request. JSON request and response bodies MUST NOT exceed 262,144 bytes.
+request. A job's batch of tool calls is the parameters of one request. JSON request and response bodies MUST NOT exceed 262,144 bytes.
 Implementations MUST reject duplicate object keys at their parsing boundary
 when their JSON library exposes that distinction.
 
@@ -99,6 +99,12 @@ Office host, and it survives restarts and updates. Clients use it as the
 routing device of executor bindings they share across their windows on that
 computer. It is not a credential and proves nothing about the caller. A sidecar
 MAY omit it; a client then falls back to an id of its own.
+
+Package 0.1.44 adds `strict`, whether the sidecar runs in strict mode as its
+bootstrap installed it; `jobs`, the job envelope's limits; and `providers`, the
+providers whose tools `jobs.start.v1` accepts ([DELEGATION.md](./DELEGATION.md)).
+A client runs tools as jobs only when `jobs` is present and the `jobs.*` methods
+it needs are enabled; earlier sidecars omit all three and serve the direct RPCs.
 
 ## 4. Capability changes
 
@@ -1128,13 +1134,17 @@ responses without native IDs or parent references. The provenance object's own
 version is independent of the RPC protocol/package version. Consumers MUST reject
 unsupported provenance versions, rather than interpret them as version 1.
 
-## Strict local delegation (reserved)
+## Strict mode and the job envelope
 
-[DELEGATION.md](./DELEGATION.md) defines the strict snapshot profile and its
-closed schemas. Version 0.1.28 reserves these methods with disabled availability;
-shipping their schemas does not qualify any implementation or enable delegation.
-Version 0.1.41 lists the settings methods a strict sidecar keeps and the
-account-level results they return there.
+[DELEGATION.md](./DELEGATION.md) defines strict mode and the job envelope
+(`jobs.*`, package 0.1.44), which carries tool calls in both modes.
+`jobs.start.v1` and `jobs.status.v1` hold their response for up to `wait_ms`
+while a job is pending, a long-poll that needs no server push (§2). Strict
+review on jobs is reserved for a later package. The `local_*` methods that
+version 0.1.28 reserves with disabled availability are the transitional strict
+snapshot path, deprecated in 0.1.44; shipping their schemas does not qualify any
+implementation or enable delegation. Version 0.1.41 lists the settings methods a
+strict sidecar keeps and the account-level results they return there.
 
 ## Platform permissions
 

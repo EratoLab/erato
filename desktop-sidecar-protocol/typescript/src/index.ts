@@ -50,6 +50,25 @@ export type {
   IndexingResetV1Params,
   IndexingStatusV1Result,
   IndexingStatusV1Params,
+  JobToolCall,
+  CallToolResult,
+  JobCallResult,
+  JobStatus,
+  JobsCapability,
+  ToolProvider,
+  ToolProviderTable,
+  JobsStartV1Params,
+  JobsStartV1Result,
+  JobsStatusV1Params,
+  JobsStatusV1Result,
+  JobsReadV1Params,
+  JobsReadV1Result,
+  JobsAckV1Params,
+  JobsAckV1Result,
+  JobsCancelV1Params,
+  JobsCancelV1Result,
+  JobsReviewV1Params,
+  JobsReviewV1Result,
   CancelParams,
   CancelResult,
   DiagnosticsEchoV1Params,
@@ -131,4 +150,5 @@ export type {
   LocalExportsAckV1Result,
 } from "./generated/index.js";
 export { supportsStrictLocalDelegation } from "./localDelegation.js";
+export { SIDECAR_PROVIDER } from "./generated/providers.js";
 export { validateOutlookFileProvenance } from "./generated/validators.mjs";

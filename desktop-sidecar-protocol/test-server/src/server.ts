@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import {
   createServer,
@@ -8,10 +8,15 @@ import {
 
 import {
   MAX_BODY_BYTES,
+  SIDECAR_PROVIDER,
   type CapabilityDescriptor,
   type DiscoverParams,
   type IndexingStatusV1Result,
   type IndexingStatusV1Params,
+  type JobCallResult,
+  type JobStatus,
+  type JobToolCall,
+  type JobsStartV1Params,
   type SidecarConfigureV1Params,
   type DiscoveryDocument,
 } from "../../typescript/src/index.js";
@@ -25,6 +30,12 @@ import {
   validateSearchMetadataFieldsV1Result,
   validateIndexingResetV1Params,
   validateIndexingStatusV1Params,
+  validateJobsAckV1Params,
+  validateJobsCancelV1Params,
+  validateJobsReadV1Params,
+  validateJobsReviewV1Params,
+  validateJobsStartV1Params,
+  validateJobsStatusV1Params,
   validateDiagnosticsEchoV1Params,
   validateDiscoverParams,
   validateOutlookGetConversationV1Params,
@@ -63,6 +74,14 @@ export interface MockSidecarOptions {
    * built before package 0.1.43 does.
    */
   installationId?: string | null;
+  /**
+   * Strict mode as discovery reports it (default false); `null` omits it, as
+   * a sidecar built before package 0.1.44 does. Under strict, a job's content
+   * tools fail closed without running.
+   */
+  strict?: boolean | null;
+  /** How long a job runs before it completes, to exercise `wait_ms`. */
+  jobDelayMs?: number;
 }
 
 export interface MockSidecarAddress {
@@ -91,7 +110,30 @@ interface MockProgressEntry {
   totalDurationMs?: number;
 }
 
+interface MockJob {
+  origin: string;
+  state: JobStatus["state"];
+  results?: JobCallResult[];
+  controller: AbortController;
+  settled: Promise<void>;
+}
+
 const MAX_PROGRESS_ENTRIES = 256;
+const MAX_JOB_CALLS = 8;
+const MAX_JOB_WAIT_MS = 30_000;
+const PENDING_JOB_STATES = new Set<JobStatus["state"]>([
+  "queued",
+  "running",
+  "awaiting_approval",
+  "ready_for_review",
+]);
+const TERMINAL_JOB_STATES = new Set<JobStatus["state"]>([
+  "acked",
+  "declined",
+  "cancelled",
+  "expired",
+  "failed",
+]);
 
 const INSTANCE_ID = "mock-sidecar-instance";
 const INSTALLATION_ID = "mock-sidecar-installation-id-0123456789";
@@ -179,6 +221,7 @@ export class MockSidecar {
   readonly #allowedOrigins: Set<string>;
   readonly #inFlight = new Map<string, AbortController>();
   readonly #progress = new Map<string, MockProgressEntry>();
+  readonly #jobs = new Map<string, MockJob>();
   readonly #httpServer = createServer((request, response) => {
     void this.#handleHttpRequest(request, response).catch((error: unknown) => {
       if (response.headersSent) {
@@ -254,6 +297,8 @@ export class MockSidecar {
     for (const controller of this.#inFlight.values()) controller.abort();
     this.#inFlight.clear();
     this.#progress.clear();
+    for (const job of this.#jobs.values()) job.controller.abort();
+    this.#jobs.clear();
     this.#httpServer.closeAllConnections();
     await new Promise<void>((resolve, reject) => {
       this.#httpServer.close((error) => (error ? reject(error) : resolve()));
@@ -437,13 +482,33 @@ export class MockSidecar {
         this.#options.installationId === undefined
           ? INSTALLATION_ID
           : this.#options.installationId;
+      const strict = this.#options.strict ?? false;
       return rpcResult(message.id, {
         protocolVersion,
         serverInfo: { name: "erato-mock-sidecar", version: "0.1.0" },
         instanceId: INSTANCE_ID,
         ...(installationId === null ? {} : { installationId }),
         document: this.#discoveryDocument(),
+        ...(this.#options.strict === null ? {} : { strict }),
+        ...(this.#options.omitMethods?.includes("jobs.start.v1")
+          ? {}
+          : {
+              jobs: { maxCalls: MAX_JOB_CALLS, maxWaitMs: MAX_JOB_WAIT_MS },
+              providers: [
+                {
+                  id: SIDECAR_PROVIDER.id,
+                  tools: SIDECAR_PROVIDER.tools.map((tool) => tool.name),
+                  readOnly: SIDECAR_PROVIDER.readOnly,
+                  egress: SIDECAR_PROVIDER.egress,
+                  available: true,
+                },
+              ],
+            }),
       });
+    }
+
+    if (message.method.startsWith("jobs.")) {
+      return this.#handleJobRequest(origin, message);
     }
 
     if (message.method === "erato.cancel") {
@@ -907,6 +972,188 @@ export class MockSidecar {
     }
   }
 
+  async #handleJobRequest(
+    origin: string,
+    message: RequestMessage & { id: string | number },
+  ): Promise<unknown> {
+    if (message.method === "jobs.start.v1") {
+      if (!validateJobsStartV1Params(message.params))
+        return rpcError(message.id, -32602, "Invalid method parameters.");
+      const params = message.params as JobsStartV1Params;
+      if (params.calls.length > MAX_JOB_CALLS)
+        return rpcError(message.id, -32602, "Too many calls for one job.");
+      const handle = randomBytes(32).toString("base64url");
+      const controller = new AbortController();
+      const job: MockJob = {
+        origin,
+        state: "queued",
+        controller,
+        settled: Promise.resolve(),
+      };
+      job.settled = this.#runJob(job, params.calls);
+      this.#jobs.set(handle, job);
+      await waitForJob(job, params.wait_ms);
+      return rpcResult(message.id, reportJob(handle, job));
+    }
+
+    const validators: Record<string, (value: unknown) => boolean> = {
+      "jobs.status.v1": validateJobsStatusV1Params,
+      "jobs.read.v1": validateJobsReadV1Params,
+      "jobs.ack.v1": validateJobsAckV1Params,
+      "jobs.cancel.v1": validateJobsCancelV1Params,
+      "jobs.review.v1": validateJobsReviewV1Params,
+    };
+    const validate = validators[message.method];
+    if (!validate) return rpcError(message.id, -32601, "Method not found.");
+    if (!validate(message.params))
+      return rpcError(message.id, -32602, "Invalid method parameters.");
+    const { handle, wait_ms: waitMs } = message.params as {
+      handle: string;
+      wait_ms?: number;
+    };
+    // A handle never issued, issued to another Origin or forgotten reads as
+    // expired, so a guessed handle learns nothing.
+    const found = this.#jobs.get(handle);
+    const job = found?.origin === origin ? found : undefined;
+
+    if (message.method === "jobs.review.v1") {
+      return rpcError(
+        message.id,
+        -32011,
+        "The requested capability is unavailable.",
+        {
+          kind: "capability_unavailable",
+          method: message.method,
+          reasonCode: "strict_review_unavailable",
+        },
+      );
+    }
+    if (message.method === "jobs.read.v1") {
+      if (!job?.results)
+        return rpcError(message.id, -32602, "The job has no results to read.");
+      if (job.state === "completed" || job.state === "approved")
+        job.state = "read";
+      return rpcResult(message.id, { results: job.results });
+    }
+    if (!job) return rpcResult(message.id, { handle, state: "expired" });
+    if (message.method === "jobs.ack.v1") {
+      if (job.results) {
+        job.state = "acked";
+        delete job.results;
+      }
+    } else if (message.method === "jobs.cancel.v1") {
+      if (!TERMINAL_JOB_STATES.has(job.state)) {
+        job.state = "cancelled";
+        delete job.results;
+        job.controller.abort();
+      }
+    } else {
+      await waitForJob(job, waitMs);
+    }
+    return rpcResult(message.id, reportJob(handle, job));
+  }
+
+  /**
+   * Run a job's calls as internal read-only operations, never through the RPC
+   * dispatcher, so a job can reach only the provider table's tools.
+   */
+  async #runJob(job: MockJob, calls: readonly JobToolCall[]): Promise<void> {
+    const signal = job.controller.signal;
+    job.state = "running";
+    if (this.#options.jobDelayMs) {
+      await abortableDelay(this.#options.jobDelayMs, signal);
+    }
+    if (signal.aborted) return;
+    job.results = calls.map((call) => this.#runToolCall(call));
+    job.state = "completed";
+  }
+
+  #runToolCall(call: JobToolCall): JobCallResult {
+    const tool =
+      call.server === SIDECAR_PROVIDER.id
+        ? SIDECAR_PROVIDER.tools.find((entry) => entry.name === call.name)
+        : undefined;
+    if (!tool) {
+      return callError(-32011, "The requested capability is unavailable.", {
+        kind: "capability_unavailable",
+      });
+    }
+    // Stage 1 has no strict review on jobs: content tools fail closed.
+    if (this.#options.strict && tool.selection !== null) {
+      return callError(-32011, "The requested capability is unavailable.", {
+        kind: "capability_unavailable",
+        reasonCode: "strict_review_unavailable",
+      });
+    }
+    const args = call.arguments ?? {};
+    switch (call.name) {
+      case "list_sidecar_mailboxes":
+        return callResult(
+          { mailboxes: [MOCK_OUTLOOK_MAILBOX], warnings: [] },
+          `${MOCK_OUTLOOK_MAILBOX.displayName} <${MOCK_OUTLOOK_MAILBOX.emailAddress}>`,
+        );
+      case "get_sidecar_search_fields":
+        return callResult({ fields: [] }, "No metadata fields.");
+      case "get_sidecar_folder_hierarchy":
+        if (typeof args.sourceId !== "string")
+          return callError(-32602, "Invalid method parameters.");
+        return callResult(
+          { sourceId: args.sourceId, nodes: [] },
+          "No folders.",
+        );
+      case "search_sidecar_index":
+        if (!validateSearchQueryV1Params(args))
+          return callError(-32602, "Invalid method parameters.");
+        return callResult(
+          { hits: [], elapsedMs: 0, blocksRead: 0, candidatesScored: 0 },
+          "No matches.",
+        );
+      case "read_sidecar_conversation": {
+        if (args.mailboxId !== MOCK_OUTLOOK_MAILBOX.id)
+          return callError(-32602, "Unknown Outlook mailbox.");
+        const { attachments: _attachments, ...message } =
+          MOCK_OUTLOOK_CONVERSATION_MESSAGE;
+        return callResult(
+          {
+            state: "ok",
+            mailbox: MOCK_OUTLOOK_MAILBOX,
+            messages: [{ ...message, attachments: [] }],
+            warnings: [],
+          },
+          `${message.subject}\n\n${message.body.content}`,
+        );
+      }
+      case "get_sidecar_document": {
+        if (!validateSourcesGetDocumentV1Params(args))
+          return callError(-32602, "Invalid method parameters.");
+        const { documentId } = args as { documentId: string };
+        return {
+          result: {
+            content: [
+              {
+                type: "resource",
+                resource: {
+                  uri: `erato-sidecar:document/${documentId}`,
+                  mimeType: "text/plain",
+                  blob: Buffer.from("Mock document").toString("base64"),
+                },
+              },
+            ],
+            structuredContent: {
+              filename: "document.txt",
+              mimeType: "text/plain",
+              external_ids: [],
+            },
+          },
+        };
+      }
+      default:
+        return callError(-32011, "The requested capability is unavailable.", {
+          kind: "capability_unavailable",
+        });
+    }
+  }
+
   /**
    * Remember a request's step log so `sidecar.progress.v1` can answer for it,
    * evicting the oldest finished entries beyond a small cap. Finished entries
@@ -1057,6 +1304,50 @@ function isRequestMessage(value: unknown): value is RequestMessage {
 
 function rpcResult(id: string | number, result: unknown): unknown {
   return { jsonrpc: "2.0", id, result };
+}
+
+function callResult(
+  structuredContent: Record<string, unknown>,
+  text: string,
+): JobCallResult {
+  return { result: { content: [{ type: "text", text }], structuredContent } };
+}
+
+function callError(
+  code: number,
+  message: string,
+  data?: Record<string, unknown>,
+): JobCallResult {
+  return { error: { code, message, ...(data === undefined ? {} : { data }) } };
+}
+
+/** Hold the response while the job is pending, for at most `waitMs`. */
+async function waitForJob(job: MockJob, waitMs = 0): Promise<void> {
+  if (!PENDING_JOB_STATES.has(job.state)) return;
+  const boundedMs = Math.min(waitMs, MAX_JOB_WAIT_MS);
+  if (boundedMs <= 0) return;
+  await new Promise<void>((resolve) => {
+    const timer = setTimeout(resolve, boundedMs);
+    void job.settled.then(() => {
+      clearTimeout(timer);
+      resolve();
+    });
+  });
+}
+
+/**
+ * The job's status as a response reports it. A response that reports results
+ * as `completed` or `approved` delivers them, so the job is `read` afterwards.
+ */
+function reportJob(handle: string, job: MockJob): JobStatus {
+  if (!job.results) return { handle, state: job.state };
+  const status: JobStatus = {
+    handle,
+    state: job.state,
+    results: job.results,
+  };
+  if (job.state === "completed" || job.state === "approved") job.state = "read";
+  return status;
 }
 
 function rpcError(

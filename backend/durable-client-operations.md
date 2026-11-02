@@ -23,7 +23,8 @@ A durable attempt is a logged database record, independent of a replica or brows
 pane. The account comes from authentication. Device and host-context identifiers
 come from the installed client, not model arguments. They prevent accidental
 cross-context execution; they are not device attestation. A kind such as native
-local research must additionally verify its own signed binding and native receipt.
+local research must additionally verify its own signed binding and native receipt
+(transitional; see "Local evidence integration").
 Capability registration is an availability check, never authorization.
 
 `operation_id`, `attempt_id`, `base_revision`, `input`, `outcome` and `executor`
@@ -600,6 +601,10 @@ calls. With it off, the stream endpoint answers 404 and no row is written.
   lapses as before.
 
 ## Local evidence integration
+
+Local evidence is the transitional strict path. Stage 2 replaces it with strict
+review on the sidecar's job envelope and removes its signed binding and receipts
+(see `desktop-sidecar-protocol/DELEGATION.md`).
 
 The completed [rebase delta](local-evidence-operations.md) records the removed
 private checkpoint, job lifecycle and continuation paths. The native kind uses the

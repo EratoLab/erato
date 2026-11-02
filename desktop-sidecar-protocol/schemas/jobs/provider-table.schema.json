@@ -1,0 +1,79 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://schemas.erato.ai/desktop-sidecar/v1/jobs/provider-table.schema.json",
+  "title": "ToolProviderTable",
+  "description": "The closed tool enumeration of a built-in provider: each tool, the RPC methods whose work it composes, and what strict review selects from its result.",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_-]{0,63}$"
+    },
+    "readOnly": {
+      "type": "boolean"
+    },
+    "egress": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "tools": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_.-]{1,128}$"
+          },
+          "methods": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+\\.v[1-9][0-9]*$"
+            }
+          },
+          "readOnly": {
+            "type": "boolean"
+          },
+          "selection": {
+            "description": "What strict review offers for selection, or null when the result is account-level and needs no review.",
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "items": {
+                    "description": "A JSON pointer to the array of reviewable items in `structuredContent`, or `content` for the result's content blocks.",
+                    "type": "string",
+                    "pattern": "^(?:content|(?:/(?:[^/~]|~[01])*)+)$"
+                  },
+                  "resultMetadata": {
+                    "description": "JSON pointers into `structuredContent` to result-level, account-level metadata that accompanies the approved items.",
+                    "type": "array",
+                    "uniqueItems": true,
+                    "items": {
+                      "type": "string",
+                      "pattern": "^(?:/(?:[^/~]|~[01])*)+$"
+                    }
+                  }
+                },
+                "required": ["items", "resultMetadata"],
+                "additionalProperties": true
+              }
+            ]
+          }
+        },
+        "required": ["name", "methods", "readOnly", "selection"],
+        "additionalProperties": true
+      }
+    }
+  },
+  "required": ["id", "readOnly", "egress", "tools"],
+  "additionalProperties": true
+}

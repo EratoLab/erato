@@ -968,7 +968,7 @@
     },
     {
       "name": "local_contexts.challenge.v1",
-      "summary": "Reserved strict snapshot delegation method; unavailable until native security and recovery qualification.",
+      "summary": "Deprecated transitional strict snapshot delegation method, superseded by strict review on jobs.* and removed in a later package; unavailable until native security and recovery qualification.",
       "params": [
         {
           "name": "params",
@@ -1012,11 +1012,12 @@
         {
           "$ref": "#/components/errors/SidecarInternal"
         }
-      ]
+      ],
+      "deprecated": true
     },
     {
       "name": "local_contexts.bind.v1",
-      "summary": "Reserved strict snapshot delegation method; unavailable until native security and recovery qualification.",
+      "summary": "Deprecated transitional strict snapshot delegation method, superseded by strict review on jobs.* and removed in a later package; unavailable until native security and recovery qualification.",
       "params": [
         {
           "name": "params",
@@ -1060,11 +1061,12 @@
         {
           "$ref": "#/components/errors/SidecarInternal"
         }
-      ]
+      ],
+      "deprecated": true
     },
     {
       "name": "local_tasks.start.v1",
-      "summary": "Reserved strict snapshot delegation method; unavailable until native security and recovery qualification.",
+      "summary": "Deprecated transitional strict snapshot delegation method, superseded by strict review on jobs.* and removed in a later package; unavailable until native security and recovery qualification.",
       "params": [
         {
           "name": "params",
@@ -1108,11 +1110,12 @@
         {
           "$ref": "#/components/errors/SidecarInternal"
         }
-      ]
+      ],
+      "deprecated": true
     },
     {
       "name": "local_tasks.status.v1",
-      "summary": "Reserved strict snapshot delegation method; unavailable until native security and recovery qualification.",
+      "summary": "Deprecated transitional strict snapshot delegation method, superseded by strict review on jobs.* and removed in a later package; unavailable until native security and recovery qualification.",
       "params": [
         {
           "name": "params",
@@ -1156,11 +1159,12 @@
         {
           "$ref": "#/components/errors/SidecarInternal"
         }
-      ]
+      ],
+      "deprecated": true
     },
     {
       "name": "local_tasks.cancel.v1",
-      "summary": "Reserved strict snapshot delegation method; unavailable until native security and recovery qualification.",
+      "summary": "Deprecated transitional strict snapshot delegation method, superseded by strict review on jobs.* and removed in a later package; unavailable until native security and recovery qualification.",
       "params": [
         {
           "name": "params",
@@ -1204,11 +1208,12 @@
         {
           "$ref": "#/components/errors/SidecarInternal"
         }
-      ]
+      ],
+      "deprecated": true
     },
     {
       "name": "local_tasks.review.v1",
-      "summary": "Reserved strict snapshot delegation method; unavailable until native security and recovery qualification.",
+      "summary": "Deprecated transitional strict snapshot delegation method, superseded by strict review on jobs.* and removed in a later package; unavailable until native security and recovery qualification.",
       "params": [
         {
           "name": "params",
@@ -1252,11 +1257,12 @@
         {
           "$ref": "#/components/errors/SidecarInternal"
         }
-      ]
+      ],
+      "deprecated": true
     },
     {
       "name": "local_exports.status.v1",
-      "summary": "Reserved strict snapshot delegation method; unavailable until native security and recovery qualification.",
+      "summary": "Deprecated transitional strict snapshot delegation method, superseded by strict review on jobs.* and removed in a later package; unavailable until native security and recovery qualification.",
       "params": [
         {
           "name": "params",
@@ -1300,11 +1306,12 @@
         {
           "$ref": "#/components/errors/SidecarInternal"
         }
-      ]
+      ],
+      "deprecated": true
     },
     {
       "name": "local_exports.read.v1",
-      "summary": "Reserved strict snapshot delegation method; unavailable until native security and recovery qualification.",
+      "summary": "Deprecated transitional strict snapshot delegation method, superseded by strict review on jobs.* and removed in a later package; unavailable until native security and recovery qualification.",
       "params": [
         {
           "name": "params",
@@ -1348,11 +1355,12 @@
         {
           "$ref": "#/components/errors/SidecarInternal"
         }
-      ]
+      ],
+      "deprecated": true
     },
     {
       "name": "local_exports.ack.v1",
-      "summary": "Reserved strict snapshot delegation method; unavailable until native security and recovery qualification.",
+      "summary": "Deprecated transitional strict snapshot delegation method, superseded by strict review on jobs.* and removed in a later package; unavailable until native security and recovery qualification.",
       "params": [
         {
           "name": "params",
@@ -1396,7 +1404,8 @@
         {
           "$ref": "#/components/errors/SidecarInternal"
         }
-      ]
+      ],
+      "deprecated": true
     },
     {
       "name": "sidecar.status.v1",
@@ -1473,6 +1482,235 @@
           "state": "enabled"
         }
       }
+    },
+    {
+      "name": "jobs.start.v1",
+      "summary": "Start a job of independent tool calls; within wait_ms, answer with its per-call results.",
+      "params": [
+        {
+          "name": "params",
+          "required": true,
+          "schema": {
+            "$ref": "./schemas/methods/jobs-start-v1-params.schema.json"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "./schemas/methods/jobs-start-v1-result.schema.json"
+        }
+      },
+      "errors": [
+        {
+          "$ref": "#/components/errors/InvalidParams"
+        },
+        {
+          "$ref": "#/components/errors/CapabilityUnavailable"
+        },
+        {
+          "$ref": "#/components/errors/SidecarInternal"
+        }
+      ],
+      "x-erato-capability": {
+        "id": "jobs.start",
+        "major": 1,
+        "method": "jobs.start.v1",
+        "availability": {
+          "state": "enabled"
+        }
+      }
+    },
+    {
+      "name": "jobs.status.v1",
+      "summary": "Report a job's state, holding the response up to wait_ms while it is pending; carries its results once available.",
+      "params": [
+        {
+          "name": "params",
+          "required": true,
+          "schema": {
+            "$ref": "./schemas/methods/jobs-status-v1-params.schema.json"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "./schemas/methods/jobs-status-v1-result.schema.json"
+        }
+      },
+      "errors": [
+        {
+          "$ref": "#/components/errors/InvalidParams"
+        },
+        {
+          "$ref": "#/components/errors/CapabilityUnavailable"
+        },
+        {
+          "$ref": "#/components/errors/SidecarInternal"
+        }
+      ],
+      "x-erato-capability": {
+        "id": "jobs.status",
+        "major": 1,
+        "method": "jobs.status.v1",
+        "availability": {
+          "state": "enabled"
+        }
+      }
+    },
+    {
+      "name": "jobs.read.v1",
+      "summary": "Return a finished job's per-call results again until they are acknowledged.",
+      "params": [
+        {
+          "name": "params",
+          "required": true,
+          "schema": {
+            "$ref": "./schemas/methods/jobs-read-v1-params.schema.json"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "./schemas/methods/jobs-read-v1-result.schema.json"
+        }
+      },
+      "errors": [
+        {
+          "$ref": "#/components/errors/InvalidParams"
+        },
+        {
+          "$ref": "#/components/errors/CapabilityUnavailable"
+        },
+        {
+          "$ref": "#/components/errors/SidecarInternal"
+        }
+      ],
+      "x-erato-capability": {
+        "id": "jobs.read",
+        "major": 1,
+        "method": "jobs.read.v1",
+        "availability": {
+          "state": "enabled"
+        }
+      }
+    },
+    {
+      "name": "jobs.ack.v1",
+      "summary": "Acknowledge a job's results so the sidecar discards them.",
+      "params": [
+        {
+          "name": "params",
+          "required": true,
+          "schema": {
+            "$ref": "./schemas/methods/jobs-ack-v1-params.schema.json"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "./schemas/methods/jobs-ack-v1-result.schema.json"
+        }
+      },
+      "errors": [
+        {
+          "$ref": "#/components/errors/InvalidParams"
+        },
+        {
+          "$ref": "#/components/errors/CapabilityUnavailable"
+        },
+        {
+          "$ref": "#/components/errors/SidecarInternal"
+        }
+      ],
+      "x-erato-capability": {
+        "id": "jobs.ack",
+        "major": 1,
+        "method": "jobs.ack.v1",
+        "availability": {
+          "state": "enabled"
+        }
+      }
+    },
+    {
+      "name": "jobs.cancel.v1",
+      "summary": "Cancel a job that has not ended; idempotent.",
+      "params": [
+        {
+          "name": "params",
+          "required": true,
+          "schema": {
+            "$ref": "./schemas/methods/jobs-cancel-v1-params.schema.json"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "./schemas/methods/jobs-cancel-v1-result.schema.json"
+        }
+      },
+      "errors": [
+        {
+          "$ref": "#/components/errors/InvalidParams"
+        },
+        {
+          "$ref": "#/components/errors/CapabilityUnavailable"
+        },
+        {
+          "$ref": "#/components/errors/SidecarInternal"
+        }
+      ],
+      "x-erato-capability": {
+        "id": "jobs.cancel",
+        "major": 1,
+        "method": "jobs.cancel.v1",
+        "availability": {
+          "state": "enabled"
+        }
+      }
+    },
+    {
+      "name": "jobs.review.v1",
+      "summary": "Open or focus the native review of a strict job that is ready for review; never approves it.",
+      "params": [
+        {
+          "name": "params",
+          "required": true,
+          "schema": {
+            "$ref": "./schemas/methods/jobs-review-v1-params.schema.json"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "./schemas/methods/jobs-review-v1-result.schema.json"
+        }
+      },
+      "errors": [
+        {
+          "$ref": "#/components/errors/InvalidParams"
+        },
+        {
+          "$ref": "#/components/errors/CapabilityUnavailable"
+        },
+        {
+          "$ref": "#/components/errors/SidecarInternal"
+        }
+      ],
+      "x-erato-capability": {
+        "id": "jobs.review",
+        "major": 1,
+        "method": "jobs.review.v1",
+        "availability": {
+          "state": "disabled",
+          "reasonCode": "strict_review_unavailable"
+        }
+      }
     }
   ],
   "components": {
@@ -1526,7 +1764,7 @@
     }
   },
   "x-erato-catalogue": {
-    "revision": "14",
-    "digest": "sha256:7b7e279e10e04239cb4f52d36d39a7aac5c1ed34eb7c05d9e5647a001e3b14cb"
+    "revision": "15",
+    "digest": "sha256:d316cdb0f3d8a3b670b9d7fe4655487fa6adc56e7242cd40388f27e714e81ce7"
   }
 }

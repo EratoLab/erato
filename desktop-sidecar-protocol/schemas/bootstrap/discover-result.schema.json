@@ -24,9 +24,23 @@
     "document": {
       "$ref": "./discovery-document.schema.json"
     },
+    "strict": {
+      "type": "boolean",
+      "description": "Whether this sidecar runs in strict mode, as installed by its bootstrap; configuration never sets or relaxes it. Absent from sidecars built before package 0.1.44."
+    },
+    "jobs": {
+      "$ref": "../jobs/jobs-capability.schema.json"
+    },
+    "providers": {
+      "type": "array",
+      "description": "The providers whose tools `jobs.start.v1` accepts. Absent from sidecars built before package 0.1.44.",
+      "items": {
+        "$ref": "../jobs/provider.schema.json"
+      }
+    },
     "localDelegation": {
       "type": "object",
-      "description": "Opaque security declaration. Unknown profiles remain discoverable but cannot enable delegation or legacy content access.",
+      "description": "Transitional security declaration of the deprecated local_* strict path. Unknown profiles remain discoverable but cannot enable delegation or legacy content access.",
       "additionalProperties": true
     }
   },

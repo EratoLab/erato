@@ -22,6 +22,7 @@ import {
   validateLocalExportsAckV1Result,
 } from "./generated/validators.mjs";
 
+/** The transitional strict path, deprecated in package 0.1.44; see DELEGATION.md. */
 export const localDelegationContracts: Readonly<
   Record<string, SidecarMethodContract>
 > = {

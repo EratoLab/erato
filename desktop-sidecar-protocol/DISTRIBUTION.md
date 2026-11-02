@@ -321,8 +321,8 @@ The bootstrap document is UTF-8 JSON with this versioned, extensible shape:
 `organization_configuration` are extensible: consumers MUST ignore fields they
 do not understand. `organization_configuration.allowed_origins` is required
 and is an array of normalized, non-loopback origins. Each entry MUST be an
-exact lowercase `scheme://host[:non-default-port]` origin, with no path,
-query, fragment, wildcard, or trailing slash. An empty array is valid and
+exact lowercase `http` or `https` `scheme://host[:non-default-port]` origin,
+with no userinfo, path, query, fragment, wildcard, or trailing slash. An empty array is valid and
 refuses every production browser request.
 
 The bootstrap policy takes precedence over every user-writable configuration
@@ -338,6 +338,7 @@ The optional root installation fields are:
 | `directory_suffix` | At most 64 ASCII letters, digits, hyphens or underscores; appended literally                | Empty                 |
 | `display_name`     | Nonempty string, at most 128 UTF-8 bytes, no control characters                             | Erato Desktop Sidecar |
 | `icon`             | Standard base64 PNG (no data URL prefix), 1–256 pixels per dimension, at most 1 MiB encoded | Bundled tray icon     |
+| `mode`             | `strict` or `standard`; strict mode as [DELEGATION.md](./DELEGATION.md) defines it          | `standard`            |
 
 Present invalid fields MUST be rejected before registering desktop integration or
 opening a listener. User configuration MUST NOT override these fields. Explicit
@@ -494,6 +495,11 @@ add signing/integrity fields to this manifest or write derived files into the ar
 The optional compatibility field below does not carry signing or integrity metadata.
 
 ## Strict delegation packaging gate
+
+Transitional: the target profile and `content_release` below belong to the
+strict snapshot path that stage 2 removes. Strict mode itself is the bootstrap
+`mode`; distribution will filter targets by minimum protocol version
+([DELEGATION.md](./DELEGATION.md#versioning)).
 
 The strict snapshot contract in [DELEGATION.md](./DELEGATION.md) does not by
 itself qualify distribution artifacts. Each manifest target MAY declare

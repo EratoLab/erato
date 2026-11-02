@@ -1,0 +1,87 @@
+/* This file is generated from providers/sidecar.json. Do not edit. */
+import type { ToolProviderTable } from "./tool-provider-table.js";
+
+/** The `sidecar` provider: its closed tool enumeration and what each tool composes. */
+export const SIDECAR_PROVIDER: ToolProviderTable = {
+  "id": "sidecar",
+  "readOnly": true,
+  "egress": "none",
+  "tools": [
+    {
+      "name": "list_sidecar_mailboxes",
+      "methods": [
+        "outlook.list_mailboxes.v1",
+        "sources.list.v1"
+      ],
+      "readOnly": true,
+      "selection": null
+    },
+    {
+      "name": "get_sidecar_folder_hierarchy",
+      "methods": [
+        "sources.get_folder_hierarchy.v1",
+        "sources.list.v1"
+      ],
+      "readOnly": true,
+      "selection": {
+        "items": "/nodes",
+        "resultMetadata": [
+          "/sourceId",
+          "/foldersAvailable",
+          "/notice"
+        ]
+      }
+    },
+    {
+      "name": "get_sidecar_search_fields",
+      "methods": [
+        "search.metadata_fields.v1",
+        "sources.list.v1"
+      ],
+      "readOnly": true,
+      "selection": null
+    },
+    {
+      "name": "search_sidecar_index",
+      "methods": [
+        "search.query.v1",
+        "sources.list.v1",
+        "search.metadata_fields.v1"
+      ],
+      "readOnly": true,
+      "selection": {
+        "items": "/hits",
+        "resultMetadata": [
+          "/coverage",
+          "/limitReached",
+          "/filterNotice"
+        ]
+      }
+    },
+    {
+      "name": "get_sidecar_document",
+      "methods": [
+        "sources.get_document.v1",
+        "outlook.list_mailboxes.v1"
+      ],
+      "readOnly": true,
+      "selection": {
+        "items": "content",
+        "resultMetadata": []
+      }
+    },
+    {
+      "name": "read_sidecar_conversation",
+      "methods": [
+        "outlook.get_conversation.v1"
+      ],
+      "readOnly": true,
+      "selection": {
+        "items": "/messages",
+        "resultMetadata": [
+          "/mailbox"
+        ]
+      }
+    }
+  ]
+};

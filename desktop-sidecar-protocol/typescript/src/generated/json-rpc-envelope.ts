@@ -32,12 +32,13 @@ export interface SuccessResponse {
 }
 export interface ErrorResponse {
   jsonrpc: "2.0";
-  error: {
-    code: number;
-    message: string;
-    data?: unknown;
-    [k: string]: unknown;
-  };
+  error: JsonRpcError;
   id: (string | number) | null;
+  [k: string]: unknown;
+}
+export interface JsonRpcError {
+  code: number;
+  message: string;
+  data?: unknown;
   [k: string]: unknown;
 }

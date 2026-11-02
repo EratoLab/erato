@@ -1,0 +1,38 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://schemas.erato.ai/desktop-sidecar/v1/jobs/job-status.schema.json",
+  "title": "JobStatus",
+  "type": "object",
+  "properties": {
+    "handle": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{32,128}$"
+    },
+    "state": {
+      "description": "`awaiting_approval`, `ready_for_review` and `approved` occur only under strict mode; `awaiting_approval` is reserved for effectful tools. `acked`, `declined`, `cancelled`, `expired` and `failed` are terminal.",
+      "enum": [
+        "queued",
+        "running",
+        "awaiting_approval",
+        "ready_for_review",
+        "approved",
+        "completed",
+        "read",
+        "acked",
+        "declined",
+        "cancelled",
+        "expired",
+        "failed"
+      ]
+    },
+    "results": {
+      "description": "One entry per call, in call order. Present whenever the reported state is `completed`, `approved` or `read`.",
+      "type": "array",
+      "items": {
+        "$ref": "./job-call-result.schema.json"
+      }
+    }
+  },
+  "required": ["handle", "state"],
+  "additionalProperties": true
+}

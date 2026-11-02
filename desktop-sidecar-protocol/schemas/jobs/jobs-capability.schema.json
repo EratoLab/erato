@@ -1,0 +1,21 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://schemas.erato.ai/desktop-sidecar/v1/jobs/jobs-capability.schema.json",
+  "title": "JobsCapability",
+  "description": "Present in discovery when the sidecar runs tool calls through the jobs.* envelope, with its limits: the most calls one job carries and the longest `wait_ms` it honors. Absent from sidecars built before package 0.1.44; clients then use the direct RPCs.",
+  "type": "object",
+  "properties": {
+    "maxCalls": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 16
+    },
+    "maxWaitMs": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 30000
+    }
+  },
+  "required": ["maxCalls", "maxWaitMs"],
+  "additionalProperties": true
+}
