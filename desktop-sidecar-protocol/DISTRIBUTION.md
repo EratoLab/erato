@@ -497,8 +497,8 @@ The optional compatibility field below does not carry signing or integrity metad
 ## Strict delegation packaging gate
 
 Transitional: the target profile and `content_release` below belong to the
-strict snapshot path that stage 2 removes. Strict mode itself is the bootstrap
-`mode`; distribution will filter targets by minimum protocol version
+strict snapshot path that a later release removes. Strict mode itself is the
+bootstrap `mode`; distribution will filter targets by minimum protocol version
 ([DELEGATION.md](./DELEGATION.md#versioning)).
 
 The strict snapshot contract in [DELEGATION.md](./DELEGATION.md) does not by

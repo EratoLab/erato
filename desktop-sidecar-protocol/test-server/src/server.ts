@@ -1130,7 +1130,7 @@ export class MockSidecar {
         kind: "capability_unavailable",
       });
     }
-    // Stage 1 has no strict review on jobs: content tools fail closed.
+    // Strict review on jobs is not implemented yet: content tools fail closed.
     if (this.#options.strict && tool.selection !== null) {
       return callError(-32011, "The requested capability is unavailable.", {
         kind: "capability_unavailable",

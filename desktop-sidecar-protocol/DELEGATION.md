@@ -2,9 +2,9 @@
 
 Status: package 0.1.44 adds the job envelope (`jobs.*`) for normal mode and
 reserves its strict review. Strict review on jobs, the egress rules and the
-removal of the transitional strict path are stage 2. Transport protocol remains
-1.0. This document is the shared design record. It does not certify a security
-implementation.
+removal of the transitional strict path come in a later package. Transport
+protocol remains 1.0. This document is the shared design record. It does not
+certify a security implementation.
 
 ## Trust model
 
@@ -20,7 +20,7 @@ only canonical `http` or `https` origins without userinfo, path, query, fragment
 or default port, and the `--allow-origin` opt-in stays development-only. Backend
 plan signing, context binding, installed verification keys, `backend_origin`
 pinning and signed receipts belong to the transitional path below and are
-removed in stage 2.
+removed once strict review on jobs replaces it.
 
 ## Job envelope
 
@@ -75,14 +75,14 @@ Direct content RPCs stay served in normal mode for clients that are not a model
 as jobs when discovery reports `jobs`, a `sidecar` provider with
 `available: true`, and enabled `jobs.start.v1` and `jobs.status.v1`; otherwise
 it keeps its direct-RPC mapping until the supported sidecar floor allows
-removing it. Until stage 2, a strict sidecar fails a call to a content tool
-(one with a selection, below) without running it, with `capability_unavailable`
-and `reasonCode: "strict_review_unavailable"`, and keeps `jobs.review.v1`
-disabled with that reason. Mailboxes and search fields run: the refusals under "Settings
-under strict mode" apply to the direct RPCs, not to the executor's internal
-operations, so `get_sidecar_search_fields` returns its field definitions, which
-are account-level, and both tools reduce their `sources.list.v1` part as listed
-there.
+removing it. Until strict review on jobs exists, a strict sidecar fails a call
+to a content tool (one with a selection, below) without running it, with
+`capability_unavailable` and `reasonCode: "strict_review_unavailable"`, and
+keeps `jobs.review.v1` disabled with that reason. Mailboxes and search fields
+run: the refusals under "Settings under strict mode" apply to the direct RPCs,
+not to the executor's internal operations, so `get_sidecar_search_fields`
+returns its field definitions, which are account-level, and both tools reduce
+their `sources.list.v1` part as listed there.
 
 ## Results and selection
 
@@ -113,7 +113,7 @@ apart from the tool's `_meta`; policy findings stay native. Under strict,
 and windowing, `audience` is honored on export, and a `resource_link` exports as
 a reference only.
 
-## Egress under strict mode (stage 2)
+## Egress under strict mode (planned)
 
 Not implemented in 0.1.44. An export is the normal-mode result filtered to the
 approved items: bytes for files, text bodies for conversation messages and
@@ -141,10 +141,11 @@ reads the protocol package version and the discovery capabilities `strict`,
 filters targets by minimum protocol version, replacing the transitional
 `local_delegation_profile` gate. Strict mode is installed by the bootstrap's
 `mode: "strict" | "standard"`; `sidecar.configure.v1` never sets or relaxes it.
-Until stage 2, a strict bootstrap also carries the transitional `content_release:
-"strict_snapshot_v1"`, which the sidecar honors when `mode` is absent, and the
-`local_contexts.*`, `local_tasks.*` and `local_exports.*` methods, deprecated in
-0.1.44, serve the transitional path below.
+Until strict review on jobs replaces the transitional path, a strict bootstrap
+also carries the transitional `content_release: "strict_snapshot_v1"`, which
+the sidecar honors when `mode` is absent, and the `local_contexts.*`,
+`local_tasks.*` and `local_exports.*` methods, deprecated in 0.1.44, serve the
+transitional path below.
 
 ## Local MCP servers (reserved)
 
@@ -194,9 +195,9 @@ unused `indexing.start.v1`, `indexing.stop.v1`, `sidecar.restart.v1` and
 The sections below describe the strict path of packages 0.1.28 to 0.1.43:
 `local_contexts.*`, `local_tasks.*` and `local_exports.*`, the
 `local_collect_evidence` tool, backend-signed plans and receipts and context
-binding. It keeps working in stage 1 and is removed in stage 2, when strict
-review on the job envelope replaces it. Where it differs from the sections
-above, the sections above are the design.
+binding. It keeps working in 0.1.44 and is removed once strict review on the
+job envelope replaces it. Where it differs from the sections above, the sections
+above are the design.
 
 ### Execution scope
 

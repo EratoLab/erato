@@ -107,7 +107,7 @@ describe("job envelope", () => {
       (name) => name !== "jobs.review.v1",
     ))
       expect(client.supports(method), method).toBe(true);
-    // Review exists only for strict jobs, which stage 2 adds.
+    // Review exists only for strict jobs, which a later package adds.
     expect(client.supports("jobs.review.v1")).toBe(false);
   });
 

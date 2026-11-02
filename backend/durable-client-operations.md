@@ -602,9 +602,9 @@ calls. With it off, the stream endpoint answers 404 and no row is written.
 
 ## Local evidence integration
 
-Local evidence is the transitional strict path. Stage 2 replaces it with strict
-review on the sidecar's job envelope and removes its signed binding and receipts
-(see `desktop-sidecar-protocol/DELEGATION.md`).
+Local evidence is the transitional strict path. A later release replaces it with
+strict review on the sidecar's job envelope and removes its signed binding and
+receipts (see `desktop-sidecar-protocol/DELEGATION.md`).
 
 The completed [rebase delta](local-evidence-operations.md) records the removed
 private checkpoint, job lifecycle and continuation paths. The native kind uses the

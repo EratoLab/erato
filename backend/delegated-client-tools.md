@@ -536,8 +536,8 @@ A host's handlers pass `clientToolHostAdapterConformanceFailures` from
   the task chat's tool output.
 - Strict mode is unchanged for now, and transitional: any local delegation
   declaration keeps the six tools unavailable and the binding unsent, so no task
-  of such a turn gets a grant (`NOT_FROM_HOST`). Stage 2 keeps the six tools as
-  the catalogue under strict and runs them as reviewed jobs (see
+  of such a turn gets a grant (`NOT_FROM_HOST`). A later release keeps the six
+  tools as the catalogue under strict and runs them as reviewed jobs (see
   `desktop-sidecar-protocol/DELEGATION.md`). A switch of the Erato desktop app
   to strict mode during a call uploads nothing more; files the user approved
   that were uploaded before the switch stay. On the slow path, if the user
