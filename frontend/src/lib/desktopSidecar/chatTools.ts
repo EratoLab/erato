@@ -19,6 +19,7 @@ import {
   outlookMailboxReference,
   outlookMessageReference,
 } from "./outlookProvenance";
+import { runSidecarJob, runsAsSidecarJob } from "./sidecarJobs";
 import {
   cachedSourceDirectory,
   lacks,
@@ -46,7 +47,9 @@ import type {
   OutlookMailboxReference,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type {
+  CallToolResult,
   DesktopSidecarClient,
+  OutlookMailbox,
   SearchMetadataFieldsV1Result,
   SearchMetadataFilter,
   SearchQueryV1Params,
@@ -72,7 +75,12 @@ export const SIDECAR_TOOL_NAMESPACE = "desktop";
 export const sidecarQualifiedToolName = (name: string) =>
   `${SIDECAR_TOOL_NAMESPACE}/${name}`;
 
-/** Each sidecar tool and the sidecar method it needs, in display order. */
+/**
+ * Each sidecar tool and the direct RPC method it needs, in display order.
+ * Transitional: a sidecar that runs the tools as jobs (DELEGATION.md, "Job
+ * envelope") serves them through `jobs.*`, and the direct mapping stays for
+ * older sidecars until the supported sidecar floor allows removing it.
+ */
 export const SIDECAR_CHAT_TOOL_METHODS: readonly {
   name: string;
   method: string;
@@ -126,6 +134,36 @@ type SidecarRead = (
   context: ClientToolCallContext | undefined,
   readAt: number,
 ) => Promise<ClientToolExecutionResult>;
+
+/**
+ * How a tool runs when the sidecar runs it as a job, whose
+ * `structuredContent` is the tool's result (DELEGATION.md, "Results and
+ * selection").
+ */
+interface SidecarJobRead {
+  /**
+   * Checks the input as the direct read does, so both fail alike, and returns
+   * the call's arguments; `undefined` keeps a call whose result a job cannot
+   * carry on the direct read.
+   */
+  call: (input: unknown) => Record<string, unknown> | undefined;
+  /**
+   * The outcome for the job's result, as the direct read returns it, keeping
+   * what later calls take from it. Defaults to the result alone.
+   */
+  outcome?: (
+    result: Record<string, unknown>,
+    args: Record<string, unknown>,
+  ) => ClientToolExecutionResult;
+}
+
+/** An `isError` result's text: the error the direct read returns. */
+function callErrorText(result: CallToolResult): string {
+  const text = result.content
+    .flatMap((block) => (block.type === "text" ? [block.text] : []))
+    .join("\n");
+  return text || "The desktop sidecar could not complete this call.";
+}
 
 const LOCAL_ONLY = { ok: true, disposition: "local_only" } as const;
 
@@ -194,6 +232,57 @@ function requiredString(input: Record<string, unknown>, name: string): string {
   return value;
 }
 
+function mailboxListingInput(input: unknown): Record<string, unknown> {
+  const args = objectInput(input);
+  if (Object.keys(args).length !== 0) {
+    throw new Error("Mailbox listing does not accept arguments.");
+  }
+  return args;
+}
+
+function folderHierarchyInput(input: unknown) {
+  const args = objectInput(input);
+  return { ...args, sourceId: requiredString(args, "sourceId") };
+}
+
+function conversationInput(input: unknown) {
+  const args = objectInput(input);
+  const mailboxId = requiredString(args, "mailboxId");
+  const internetMessageId = requiredString(args, "internetMessageId");
+  const maxMessages = args.maxMessages ?? 20;
+  if (
+    typeof maxMessages !== "number" ||
+    !Number.isInteger(maxMessages) ||
+    maxMessages < 1 ||
+    maxMessages > 50
+  ) {
+    throw new Error("maxMessages must be an integer between 1 and 50.");
+  }
+  const { includeAttachments, attachmentNames } = args;
+  if (
+    includeAttachments !== undefined &&
+    typeof includeAttachments !== "boolean"
+  ) {
+    throw new Error("includeAttachments must be a boolean.");
+  }
+  if (
+    attachmentNames !== undefined &&
+    (!Array.isArray(attachmentNames) ||
+      attachmentNames.length > 20 ||
+      !attachmentNames.every((name) => typeof name === "string"))
+  ) {
+    throw new Error("attachmentNames must contain at most 20 file names.");
+  }
+  return {
+    args,
+    mailboxId,
+    internetMessageId,
+    maxMessages,
+    includeAttachments,
+    names: attachmentNames,
+  };
+}
+
 function normalizeMailboxMetadataFilter(
   filter: SearchMetadataFilter,
 ): SearchMetadataFilter {
@@ -209,6 +298,7 @@ function normalizeMailboxMetadataFilter(
   return filter;
 }
 
+type SearchHit = SearchQueryV1Result["hits"][number];
 type RawSearchCoverage = NonNullable<SearchQueryV1Result["coverage"]>;
 type RawCoverageSource = RawSearchCoverage["sources"][number];
 
@@ -565,6 +655,40 @@ export function createSidecarChatTools(
     documentId: string,
     mailbox: OutlookMailboxReference,
   ) => remember(documentMailboxes, documentId, mailbox);
+  const rememberHit = (hit: SearchHit) => {
+    remember(documentThreads, hit.documentId, {
+      kind: hit.kind,
+      ...(hit.sourceId === undefined ? {} : { sourceId: hit.sourceId }),
+      mailboxId: hit.mailboxId,
+      conversationKey: hit.conversationKey,
+    });
+    if (hit.mailboxId) {
+      try {
+        const mailbox = outlookMailboxReference({ id: hit.mailboxId });
+        rememberMailbox(hit.documentId, mailbox);
+        if (hit.topLevelParent?.documentId) {
+          rememberMailbox(hit.topLevelParent.documentId, mailbox);
+        }
+      } catch {
+        // Other index sources need not use Outlook mailbox IDs.
+      }
+    }
+  };
+  /** An attachment's own export resolves in the conversation's mailbox. */
+  const rememberAttachmentParents = (
+    mailbox: OutlookMailboxReference,
+    messages: readonly {
+      attachments: readonly { topLevelParent?: { documentId?: string } }[];
+    }[],
+  ) => {
+    for (const message of messages) {
+      for (const attachment of message.attachments) {
+        if (attachment.topLevelParent?.documentId) {
+          rememberMailbox(attachment.topLevelParent.documentId, mailbox);
+        }
+      }
+    }
+  };
   const knownSources = cachedSourceDirectory(client);
   const knownFields = cachedMetadataFields(client);
   const hitSources = (
@@ -579,14 +703,26 @@ export function createSidecarChatTools(
     name: string,
     method: string,
     execute: SidecarRead,
-  ): SidecarChatTool => ({
-    name,
-    method,
-    // Any delegation declaration blocks legacy content, even if strict support
-    // is unavailable or unknown. Fail closed; never fall back to raw RPCs.
-    isAvailable: () =>
-      !client.getSnapshot().localDelegation && client.supports(method),
-    execute: async (input, context) => {
+    job?: SidecarJobRead,
+  ): SidecarChatTool => {
+    // `supports` holds only while the app is ready.
+    const asJob = () => job !== undefined && runsAsSidecarJob(client, name);
+    const available = () => asJob() || client.supports(method);
+    const read: SidecarRead = async (input, context, readAt) => {
+      const args = job && asJob() ? job.call(input) : undefined;
+      if (!job || !args) return execute(input, context, readAt);
+      const result = await runSidecarJob(client, name, args, context?.signal);
+      context?.signal?.throwIfAborted();
+      if (result.isError) return { ok: false, error: callErrorText(result) };
+      const value = result.structuredContent;
+      if (!value) {
+        throw new Error(
+          "The desktop sidecar returned no result for this call.",
+        );
+      }
+      return job.outcome?.(value, args) ?? { ok: true, result: value };
+    };
+    const executeTool: ClientToolExecutor = async (input, context) => {
       if (client.getSnapshot().localDelegation) return LOCAL_ONLY;
       const grant = context?.hostGrant;
       // Before anything else, so the user is never asked about a call that
@@ -594,8 +730,7 @@ export function createSidecarChatTools(
       if (context?.hostGrant) {
         if (!grantHolds(context.hostGrant, context))
           return contextLoss(GRANT_MISMATCH);
-        // `supports` holds only while the app is ready.
-        if (!client.supports(method)) return contextLoss(SIDECAR_UNAVAILABLE);
+        if (!available()) return contextLoss(SIDECAR_UNAVAILABLE);
       }
       const key = context
         ? `${name}:${context.messageId}:${context.toolCallId}`
@@ -606,12 +741,12 @@ export function createSidecarChatTools(
         const readAt = Date.now();
         try {
           context?.signal?.throwIfAborted();
-          if (!client.supports(method)) {
+          if (!available()) {
             throw new Error(
               "This desktop sidecar capability is unavailable on this device.",
             );
           }
-          const outcome = await execute(input, context, readAt);
+          const outcome = await read(input, context, readAt);
           if (
             !outcome.ok ||
             outcome.disposition === "local_only" ||
@@ -654,8 +789,17 @@ export function createSidecarChatTools(
         });
       }
       return result;
-    },
-  });
+    };
+    return {
+      name,
+      method,
+      // Any delegation declaration blocks legacy content, even if strict
+      // support is unavailable or unknown. Fail closed; never fall back to raw
+      // RPCs or jobs.
+      isAvailable: () => !client.getSnapshot().localDelegation && available(),
+      execute: executeTool,
+    };
+  };
 
   return [
     tool(
@@ -751,25 +895,7 @@ export function createSidecarChatTools(
           }
         }
         const hits = result.hits.map((hit) => {
-          remember(documentThreads, hit.documentId, {
-            kind: hit.kind,
-            ...(hit.sourceId === undefined ? {} : { sourceId: hit.sourceId }),
-            mailboxId: hit.mailboxId,
-            conversationKey: hit.conversationKey,
-          });
-          if (hit.mailboxId) {
-            try {
-              const mailbox = outlookMailboxReference({
-                id: hit.mailboxId,
-              });
-              rememberMailbox(hit.documentId, mailbox);
-              if (hit.topLevelParent?.documentId) {
-                rememberMailbox(hit.topLevelParent.documentId, mailbox);
-              }
-            } catch {
-              // Other index sources need not use Outlook mailbox IDs.
-            }
-          }
+          rememberHit(hit);
           const messageId = hit.external_ids?.find(
             (id) => id.key === "email_message_id",
           )?.value;
@@ -810,40 +936,24 @@ export function createSidecarChatTools(
           },
         };
       },
+      {
+        call: objectInput,
+        outcome: (result) => {
+          if (Array.isArray(result.hits)) {
+            for (const hit of result.hits as (SearchHit | null)[]) {
+              if (typeof hit?.documentId === "string") rememberHit(hit);
+            }
+          }
+          return { ok: true, result };
+        },
+      },
     ),
     tool(
       READ_SIDECAR_CONVERSATION_TOOL,
       "outlook.get_conversation.v1",
       async (input, context, readAt) => {
-        const args = objectInput(input);
-        const mailboxId = requiredString(args, "mailboxId");
-        const internetMessageId = requiredString(args, "internetMessageId");
-        const maxMessages = args.maxMessages ?? 20;
-        if (
-          typeof maxMessages !== "number" ||
-          !Number.isInteger(maxMessages) ||
-          maxMessages < 1 ||
-          maxMessages > 50
-        ) {
-          throw new Error("maxMessages must be an integer between 1 and 50.");
-        }
-        if (
-          args.includeAttachments !== undefined &&
-          typeof args.includeAttachments !== "boolean"
-        ) {
-          throw new Error("includeAttachments must be a boolean.");
-        }
-        if (
-          args.attachmentNames !== undefined &&
-          (!Array.isArray(args.attachmentNames) ||
-            args.attachmentNames.length > 20 ||
-            !args.attachmentNames.every((name) => typeof name === "string"))
-        ) {
-          throw new Error(
-            "attachmentNames must contain at most 20 file names.",
-          );
-        }
-        const names = args.attachmentNames;
+        const { args, mailboxId, internetMessageId, maxMessages, names } =
+          conversationInput(input);
         const conversation = await readSidecarConversation(
           client,
           {
@@ -856,12 +966,10 @@ export function createSidecarChatTools(
         const mailbox = outlookMailboxReference(
           conversation.mailbox ?? { id: mailboxId },
         );
+        rememberAttachmentParents(mailbox, conversation.messages);
         const attachmentProvenance = new Map<object, OutlookFileProvenance>();
         for (const message of conversation.messages) {
           for (const attachment of message.attachments) {
-            if (attachment.topLevelParent?.documentId) {
-              rememberMailbox(attachment.topLevelParent.documentId, mailbox);
-            }
             const provenance = outlookFileProvenance(
               hasMessageIdentity(attachment)
                 ? outlookMessageReference(attachment, mailbox)
@@ -1071,6 +1179,39 @@ export function createSidecarChatTools(
           },
         };
       },
+      {
+        // Package 0.1.44 links no attachment to the embedded resource with
+        // its bytes and carries no identity for the upload's Outlook
+        // provenance, so a call that asks for attachments reads directly.
+        call: (input) => {
+          const { args, mailboxId, includeAttachments } =
+            conversationInput(input);
+          outlookMailboxId(mailboxId);
+          return includeAttachments === true ? undefined : args;
+        },
+        outcome: (result, args) => {
+          const { mailbox, messages } = result as {
+            mailbox?: OutlookMailbox;
+            messages?: unknown;
+          };
+          try {
+            if (Array.isArray(messages)) {
+              rememberAttachmentParents(
+                outlookMailboxReference(
+                  mailbox ?? { id: requiredString(args, "mailboxId") },
+                ),
+                messages.filter((message: { attachments?: unknown } | null) =>
+                  Array.isArray(message?.attachments),
+                ),
+              );
+            }
+          } catch {
+            // A mailbox this device cannot name scopes no later export.
+          }
+          // The direct read reports its uploads; a job's call made none.
+          return { ok: true, fileUploadIds: [], result };
+        },
+      },
     ),
     tool(
       GET_SIDECAR_SEARCH_FIELDS_TOOL,
@@ -1110,15 +1251,13 @@ export function createSidecarChatTools(
           },
         };
       },
+      { call: objectInput },
     ),
     tool(
       LIST_SIDECAR_MAILBOXES_TOOL,
       "outlook.list_mailboxes.v1",
       async (input, context) => {
-        const args = objectInput(input);
-        if (Object.keys(args).length !== 0) {
-          throw new Error("Mailbox listing does not accept arguments.");
-        }
+        mailboxListingInput(input);
         const { mailboxes, warnings } = await client.invoke(
           "outlook.list_mailboxes.v1",
           {},
@@ -1198,18 +1337,19 @@ export function createSidecarChatTools(
           },
         };
       },
+      { call: mailboxListingInput },
     ),
     tool(
       GET_SIDECAR_FOLDER_HIERARCHY_TOOL,
       "sources.get_folder_hierarchy.v1",
       async (input, context) => {
-        const args = objectInput(input);
-        const sourceId = requiredString(args, "sourceId");
+        const params = folderHierarchyInput(input);
+        const { sourceId } = params;
         let result;
         try {
           result = await client.invoke(
             "sources.get_folder_hierarchy.v1",
-            { ...args, sourceId },
+            params,
             { signal: context?.signal },
           );
         } catch (error) {
@@ -1233,7 +1373,11 @@ export function createSidecarChatTools(
           },
         };
       },
+      { call: folderHierarchyInput },
     ),
+    // No job read: package 0.1.44 carries the document's bytes as an embedded
+    // resource, but not the external IDs and parent the upload's Outlook
+    // provenance is built from, so the document keeps its direct RPC.
     tool(
       GET_SIDECAR_DOCUMENT_TOOL,
       "sources.get_document.v1",
