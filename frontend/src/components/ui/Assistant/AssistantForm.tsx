@@ -31,6 +31,7 @@ import {
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import {
   useAssistantsFeature,
+  useChatInputFeature,
   useUserPreferencesFeature,
 } from "@/providers/FeatureConfigProvider";
 import { mergeUniqueFilesById } from "@/utils/file/mergeUniqueFilesById";
@@ -175,6 +176,7 @@ export const AssistantForm: React.FC<AssistantFormProps> = ({
   } = useFilePreviewModal();
   const promptOptimizer = usePromptOptimizer();
   const { data: facetsData } = useFacets({});
+  const { keepToolsDropdownOpen } = useChatInputFeature();
   const { mcpServersTabEnabled } = useUserPreferencesFeature();
   const {
     mcpServersEnabled = mcpServersTabEnabled,
@@ -986,6 +988,7 @@ export const AssistantForm: React.FC<AssistantFormProps> = ({
           >
             <div className="space-y-3">
               <FacetSelector
+                keepOpenOnSelect={keepToolsDropdownOpen}
                 facets={availableFacets}
                 selectedFacetIds={formData.facetIds}
                 onSelectionChange={(facetIds) =>
