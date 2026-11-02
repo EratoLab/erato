@@ -4200,6 +4200,14 @@ pub struct FrontendConfig {
     #[facet(erato_config::introduced_in(version = "0.6.0"))]
     pub disable_chat_input_autofocus: bool,
 
+    // Whether the Tools dropdown stays open after toggling a tool or facet.
+    // Defaults to `false`.
+    #[serde(default)]
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::stability(level = "beta"))]
+    #[facet(erato_config::security_relevance(level = "none"))]
+    pub keep_tools_dropdown_open: bool,
+
     // Layout of the chat input before a conversation has started: "centered" (default)
     // or "bottom".
     #[serde(default = "default_chat_input_empty_state_layout")]
@@ -4322,6 +4330,7 @@ impl Default for FrontendConfig {
             disable_upload: false,
             max_files: default_max_files_per_message(),
             disable_chat_input_autofocus: false,
+            keep_tools_dropdown_open: false,
             chat_input_empty_state_layout: default_chat_input_empty_state_layout(),
             disable_logout: false,
             enable_message_editing: true,
@@ -4346,6 +4355,21 @@ impl Default for FrontendConfig {
 #[cfg(test)]
 mod frontend_config_tests {
     use super::FrontendConfig;
+
+    #[test]
+    fn tools_dropdown_defaults_to_closing_and_can_stay_open() {
+        for config in [
+            FrontendConfig::default(),
+            serde_json::from_str("{}").unwrap(),
+        ] {
+            assert!(!config.keep_tools_dropdown_open);
+        }
+        let config: FrontendConfig = serde_json::from_value(serde_json::json!({
+            "keep_tools_dropdown_open": true
+        }))
+        .unwrap();
+        assert!(config.keep_tools_dropdown_open);
+    }
 
     #[test]
     fn favicon_path_defaults_to_existing_route_and_can_be_overridden() {

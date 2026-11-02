@@ -2932,6 +2932,12 @@
     "security_relevance": "unknown",
     "stability": "unstable"
   },
+  "frontend.keep_tools_dropdown_open": {
+    "default_value_security": "unknown_none",
+    "introduced_in": "unreleased",
+    "security_relevance": "none",
+    "stability": "beta"
+  },
   "frontend.logo_dark_path": {
     "default_value_security": "unknown",
     "introduced_in": "0.7.0",

@@ -263,6 +263,8 @@ chat_provider_ids = ["test-token-limit"]
 # # Whether to disable automatic focusing of the chat input field (default: false)
 # # This prevents unwanted scrolling behavior when navigating to pages with embedded chat
 # disable_chat_input_autofocus = true
+# # Keep the Tools dropdown open after toggling tools/facets (default: false)
+# keep_tools_dropdown_open = true
 # # Layout of the chat input before a conversation starts: "centered" (default) or "bottom"
 # chat_input_empty_state_layout = "bottom"
 # # Whether to hide logout functionality from the UI (default: false)

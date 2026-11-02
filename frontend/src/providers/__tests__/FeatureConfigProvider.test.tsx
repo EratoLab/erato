@@ -41,6 +41,14 @@ function createWrapper(
 }
 
 describe("FeatureConfigProvider", () => {
+  it("maps the Tools dropdown setting from the environment", () => {
+    mockEnv.mockReturnValue({ ...env(), keepToolsDropdownOpen: true });
+    const { result } = renderHook(() => useChatInputFeature(), {
+      wrapper: createWrapper(),
+    });
+    expect(result.current.keepToolsDropdownOpen).toBe(true);
+  });
+
   it("maps deployment UI controls independently from message feedback", () => {
     mockEnv.mockReturnValue({
       ...vi.mocked(env)(),
@@ -156,6 +164,7 @@ describe("FeatureConfigProvider", () => {
         chatInput: {
           mcpServersEnabled: false,
           autofocus: true,
+          keepToolsDropdownOpen: false,
           emptyStateLayout: "centered",
           showUsageAdvisory: true,
           maxFiles: 10,
@@ -330,6 +339,7 @@ describe("FeatureConfigProvider", () => {
       expect(result.current.chatInput).toEqual({
         mcpServersEnabled: false,
         autofocus: true,
+        keepToolsDropdownOpen: false,
         emptyStateLayout: "centered",
         showUsageAdvisory: false,
         maxFiles: 10,
@@ -627,6 +637,7 @@ describe("FeatureConfigProvider", () => {
       expect(result.current).toEqual({
         mcpServersEnabled: false,
         autofocus: true,
+        keepToolsDropdownOpen: false,
         emptyStateLayout: "centered",
         showUsageAdvisory: true,
         maxFiles: 10,

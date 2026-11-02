@@ -550,8 +550,11 @@ export const ChatInput = ({
     },
     [],
   );
-  const { autofocus: shouldAutofocus, maxFiles: maxFilesPerMessage } =
-    useChatInputFeature();
+  const {
+    autofocus: shouldAutofocus,
+    maxFiles: maxFilesPerMessage,
+    keepToolsDropdownOpen,
+  } = useChatInputFeature();
   const aiUsageAdvisory = useOptionalTranslation("chat.ai_usage_advisory");
 
   // Use local model selection hook
@@ -3406,6 +3409,7 @@ export const ChatInput = ({
                       assistantMentionSection !== undefined ||
                       mcpToolsSection !== undefined) && (
                       <FacetSelector
+                        keepOpenOnSelect={keepToolsDropdownOpen}
                         facets={availableFacets}
                         selectedFacetIds={selectedFacetIds}
                         assistantSection={assistantMentionSection}

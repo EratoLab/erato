@@ -51,6 +51,8 @@ export interface DropdownMenuItem {
    * is gone before the dialog takes focus instead of lingering over it.
    */
   closesImmediately?: boolean;
+  /** Keep this menu open after selection; confirmation and dialogs still close it. */
+  keepOpenOnSelect?: boolean;
   /** Group label rendered above this row, opening a new section. */
   sectionHeader?: React.ReactNode;
 }
@@ -218,6 +220,11 @@ export const DropdownMenu = memo(
 
         if (item.closesImmediately) {
           setIsOpen(false);
+          item.onClick();
+          return;
+        }
+
+        if (item.keepOpenOnSelect) {
           item.onClick();
           return;
         }
