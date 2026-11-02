@@ -240,6 +240,26 @@ msgstr "Tamaño máximo de archivo: {maxSizeFormatted}"
 #~ msgstr "Nuevo chat"
 
 #. js-lingui-explicit-id
+#: src/outlook/OutlookStartViewSwitcher.tsx
+msgid "officeAddin.chatAccess.denied"
+msgstr "El chat no está disponible para tu cuenta."
+
+#. js-lingui-explicit-id
+#: src/outlook/OutlookStartViewSwitcher.tsx
+msgid "officeAddin.chatAccess.error"
+msgstr "No se pudo verificar el acceso al chat."
+
+#. js-lingui-explicit-id
+#: src/outlook/OutlookStartViewSwitcher.tsx
+msgid "officeAddin.chatAccess.loading"
+msgstr "Comprobando el acceso al chat..."
+
+#. js-lingui-explicit-id
+#: src/outlook/OutlookStartViewSwitcher.tsx
+msgid "officeAddin.chatAccess.retry"
+msgstr "Volver a intentar"
+
+#. js-lingui-explicit-id
 #: src/outlook/components/AddinChatInput.tsx
 #~ msgid "officeAddin.chatInput.appointmentContext"
 #~ msgstr "Los detalles de la cita se incluyen como contexto"

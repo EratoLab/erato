@@ -1,4 +1,9 @@
-import "@testing-library/jest-dom/vitest";
+import * as matchers from "@testing-library/jest-dom/matchers";
+import { expect } from "vitest";
+
+import type {} from "@testing-library/jest-dom/vitest";
+
+expect.extend(matchers);
 
 // The app injects window.API_ROOT_URL before anything renders (src/app/env.ts).
 // Tests must mirror that invariant: without it, library API-root resolution

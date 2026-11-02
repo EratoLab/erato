@@ -594,6 +594,8 @@ export {
   type HostCardCodeBlockProps,
   type ChatAddMenuExtraContentProps,
   type AddinStartViewProps,
+  type AddinChatAccess,
+  type AddinChatAccessProviderProps,
 } from "@/config/componentRegistry";
 export {
   CLIENT_TOOL_SCOPE_CHANGED,

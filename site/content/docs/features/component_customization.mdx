@@ -63,6 +63,61 @@ window.ERATO_COMPONENT_KITS.push({
 } satisfies ComponentKitRegistration);
 ```
 
+### Outlook Chat availability
+
+Since shared surface **1.24**, a kit can register `AddinChatAccessProvider`
+to control whether users can select Chat in the Outlook add-in. Its props
+are exported from `@erato/frontend/library`:
+
+- `platform`: the host identifier (`outlook`).
+- `children(access)`: report an `AddinChatAccess` decision whose
+  `status` is `loading`, `allowed`, `denied`, or `error`.
+
+The provider stays mounted in both the start view and Chat, beneath Erato's
+`ProfileProvider`. A group policy can read `ProfileContext` from
+`@erato/frontend/shared` and compare the signed-in user's
+`organization_group_ids` with deployment-configured object IDs. Call `children`
+for every state, including loading and errors. Do not base access on the open
+Outlook mailbox, which may belong to someone other than the signed-in user.
+
+`loading` means **no valid decision for the current identity**, not just that a
+request is in flight. Emitting it after `allowed` makes Chat unavailable and
+returns to the start view; a later `allowed` requires the user to select Chat
+again. A policy refreshing the same user's memberships in the background can
+continue returning its last valid decision until it has a replacement. When
+identity changes, it must stop using that prior decision.
+
+Only `allowed` exposes the Chat selector, permits `openChat()`, and renders
+Chat. A revoked grant returns the pane to the start view; a subsequent grant
+does not select Chat automatically. The start view also receives the optional
+read-only `chatAccess` prop, for its own buttons. Without a start view, a blocked
+policy displays an availability message. A throwing policy displays **Try
+Again**, which resets and reruns the policy without reopening the pane. A
+suspended policy reports `loading` until it resolves. These policy boundaries
+wrap only the policy: errors in the start view or Chat retain their normal
+error handling instead of being reported as an access lookup failure.
+
+No provider means Chat remains available by default. To require a provider even
+when a kit is missing, rejected by version enforcement, or fails to load, set:
+
+```toml
+[frontend.additional_environment]
+ERATO_ADDIN_CHAT_ACCESS_POLICY_REQUIRED = "true"
+```
+
+The requirement is opt-in: `false`, `"false"`, or an absent value preserves
+the optional behavior. Other values require a policy. Deploy a host with this
+interface and a compatible kit together; older hosts cannot enforce it.
+Declare `builtAgainstSharedSurfaceMinor: 24` (or later) for the policy.
+
+Unknown extension points are logged and skipped, while supported registrations
+from the same kit are still installed. This guard only helps hosts that include
+it; it cannot make an older host enforce an interface it does not implement.
+
+This extension controls Outlook UI availability. It does not authorize API
+requests, cancel an already running generation, or change access in other
+clients. Use backend authorization for restrictions on chat operations.
+
 ### Two ways an extension point hands work to a kit
 
 An override gets either composed nodes or host components to place, and which

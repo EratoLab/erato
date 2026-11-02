@@ -42,7 +42,7 @@ import type { TeamsConversationViewProps } from "@/components/ui/Teams/TeamsConv
 import type { WelcomeScreenProps } from "@/components/ui/WelcomeScreen";
 import type { ComponentKitVersionStance } from "@/shared/surfaceVersion";
 import type { MessageControlsProps } from "@/types/message-controls";
-import type { ComponentType } from "react";
+import type { ComponentType, ReactNode } from "react";
 
 export interface EratoEmailCodeBlockProps {
   /** The raw text content inside the erato-email code block. */
@@ -95,16 +95,40 @@ export interface ChatAddMenuExtraContentProps {
   isProcessing?: boolean;
 }
 
+/** Availability of the Outlook chat view; not a server authorization grant. */
+export interface AddinChatAccess {
+  /**
+   * Only `allowed` permits entering or rendering Chat. `loading` means there
+   * is no valid decision for the current user, including after a prior grant.
+   * For a background refresh of the same identity, a policy may keep returning
+   * its existing decision until it has a replacement.
+   */
+  readonly status: "loading" | "allowed" | "denied" | "error";
+}
+
+/**
+ * Optional Outlook chat availability policy. Mounted under ProfileProvider
+ * and outside the start/chat switch, so it can keep observing the signed-in
+ * user's profile while either view is open. Call children with the current
+ * decision, including while loading. This controls UI, not API authorization.
+ */
+export interface AddinChatAccessProviderProps {
+  platform: string;
+  children: (access: AddinChatAccess) => ReactNode;
+}
+
 /**
  * Props for a kit/customer-provided start view hosted by the Office add-in
  * shell. When registered, the Outlook task pane opens on this view instead of
- * the chat and the shell renders an affordance to switch between the two.
+ * the chat. The shell offers Chat when the optional access policy allows it.
  * Everything the view may need is injected via props — registry components
  * cannot import add-in-internal hooks.
  */
 export interface AddinStartViewProps {
   /** Switch the task pane to the regular chat view. */
   openChat: () => void;
+  /** Host decision for any kit-owned chat affordances; openChat is also guarded. */
+  chatAccess?: AddinChatAccess;
   /** Host platform identifier (e.g. "outlook"), as stamped on X-Erato-Platform. */
   platform: string;
   /**
@@ -301,6 +325,11 @@ export interface ComponentRegistry {
    * tab never read it.
    */
   AddinStartView: ComponentType<AddinStartViewProps> | null;
+  /**
+   * Optional Outlook chat availability policy, independent of AddinStartView.
+   * With no policy, chat remains available unless the deployment requires one.
+   */
+  AddinChatAccessProvider: ComponentType<AddinChatAccessProviderProps> | null;
 }
 
 type ComponentRegistryComponent<TKey extends keyof ComponentRegistry> = Exclude<
@@ -340,6 +369,12 @@ declare global {
      * runs; anything but `"enforce"` leaves the built-in default in place.
      */
     ERATO_COMPONENT_KIT_VERSION_STANCE?: ComponentKitVersionStance;
+    /**
+     * Require an Outlook chat policy even if its kit fails to load. Inject via
+     * frontend.additional_environment. Defaults to false; any value other than
+     * false, "false", or undefined requires a policy (malformed values fail shut).
+     */
+    ERATO_ADDIN_CHAT_ACCESS_POLICY_REQUIRED?: boolean | string;
   }
 }
 
@@ -373,6 +408,7 @@ const emptyComponentRegistry = (): ComponentRegistry => ({
   EratoAppointmentCodeBlock: null,
   HostCardCodeBlock: null,
   AddinStartView: null,
+  AddinChatAccessProvider: null,
 });
 
 const UNDECLARED_SURFACE_MINOR = 0;
@@ -398,6 +434,19 @@ const buildComponentRegistry = (
     }
 
     for (const registration of componentKit.components) {
+      // Runtime kits can be newer than this host (or simply misspell a key).
+      // Check own keys so names such as __proto__ cannot mutate the registry.
+      if (
+        !Object.prototype.hasOwnProperty.call(
+          registry,
+          registration.extensionPoint,
+        )
+      ) {
+        console.error(
+          `component kit "${componentKit.name}" registers unknown extension point "${registration.extensionPoint}". This host cannot use it; skipping the registration.`,
+        );
+        continue;
+      }
       const declared =
         registration.builtAgainstSharedSurfaceMinor ??
         componentKit.builtAgainstSharedSurfaceMinor;
