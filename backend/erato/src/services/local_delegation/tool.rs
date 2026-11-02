@@ -55,11 +55,7 @@ pub fn eligible(
     allowlist: &[String],
     other_tools: bool,
 ) -> bool {
-    if !config.desktop_sidecar.local_delegation.enabled
-        || !config.delegation.tasks.enabled
-        || other_tools
-        || !allowlist.iter().any(|p| p == QUALIFIED_NAME)
-    {
+    if !config.strict_mode() || other_tools || !allowlist.iter().any(|p| p == QUALIFIED_NAME) {
         return false;
     }
     let Ok(Some(scope)) = crate::models::chat::parse_chat_configuration(chat) else {

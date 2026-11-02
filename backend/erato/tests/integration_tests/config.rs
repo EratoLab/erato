@@ -120,6 +120,71 @@ directory = "/tmp/desktop-sidecar-artifacts"
     );
 }
 
+const STRICT_SIDECAR_BASE: &str = r#"
+[desktop_sidecar]
+strict_mode = true
+"#;
+
+// Synthetic, public test fixture (32-byte seed filled with 7). Never a deployment key.
+const STRICT_SIDECAR_KEYS: &str = r#"
+[desktop_sidecar.local_delegation]
+backend_origin = "https://erato.example"
+signing_key_id = "fixture"
+verification_keys = { fixture = "6kpsY-KcUgq-9VB7Ey7F-ZVHdq6-vnuSQh7qaRRG0iw" }
+signing_private_key_pem = """
+-----BEGIN PRIVATE KEY-----
+MC4CAQAwBQYDK2VwBCIEIAcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcH
+-----END PRIVATE KEY-----
+"""
+"#;
+
+const STRICT_SIDECAR_PREREQUISITES: &str = r#"
+[client_tools]
+durable_operations_enabled = true
+
+[delegation.tasks]
+enabled = true
+"#;
+
+#[test]
+fn test_strict_mode_with_its_prerequisites_installs_strict_downloads() {
+    let config = migrate_config_with_action_facets(&format!(
+        "{STRICT_SIDECAR_BASE}{STRICT_SIDECAR_KEYS}{STRICT_SIDECAR_PREREQUISITES}"
+    ));
+    assert!(config.strict_mode());
+    let fields = config.desktop_sidecar.bootstrap_fields().unwrap();
+    assert_eq!(fields["mode"], "strict");
+    assert_eq!(fields["content_release"], "strict_snapshot_v1");
+}
+
+#[test]
+#[should_panic(
+    expected = "`desktop_sidecar.strict_mode` requires `client_tools.durable_operations_enabled = true`"
+)]
+fn test_strict_mode_requires_durable_operations() {
+    migrate_config_with_action_facets(&format!(
+        "{STRICT_SIDECAR_BASE}{STRICT_SIDECAR_KEYS}\n[delegation.tasks]\nenabled = true\n"
+    ));
+}
+
+#[test]
+#[should_panic(
+    expected = "`desktop_sidecar.strict_mode` requires `desktop_sidecar.local_delegation.backend_origin` (transitional"
+)]
+fn test_strict_mode_requires_transitional_key_material() {
+    migrate_config_with_action_facets(&format!(
+        "{STRICT_SIDECAR_BASE}{STRICT_SIDECAR_PREREQUISITES}"
+    ));
+}
+
+#[test]
+#[should_panic(expected = "unknown field `enabled`")]
+fn test_local_delegation_enabled_switch_is_rejected() {
+    migrate_config_with_action_facets(&format!(
+        "{STRICT_SIDECAR_KEYS}enabled = true\n{STRICT_SIDECAR_BASE}{STRICT_SIDECAR_PREREQUISITES}"
+    ));
+}
+
 /// Tests OpenAI provider configuration parsing.
 ///
 /// # Test Categories

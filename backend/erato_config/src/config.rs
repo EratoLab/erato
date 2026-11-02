@@ -817,8 +817,20 @@ impl ClientToolFileApproval {
 
 #[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
 pub struct DesktopSidecarConfig {
-    /// Native exact-snapshot delegation. Disabled until native, recovery and host
-    /// qualification are complete; independent of legacy file-upload preferences.
+    /// Install downloaded sidecars in strict mode: content leaves the device only
+    /// after native review. The mode is embedded in the bootstrap; browser
+    /// configuration cannot set or relax it. Requires
+    /// `client_tools.durable_operations_enabled`. Transitional: the legacy strict
+    /// path also requires `delegation.tasks.enabled` and the `local_delegation`
+    /// key material until the job-based strict path replaces them.
+    #[serde(default)]
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::stability(level = "alpha"))]
+    #[facet(erato_config::security_relevance(level = "high"))]
+    pub strict_mode: bool,
+
+    /// Transitional key material of the legacy strict path, used only with
+    /// `strict_mode`; independent of legacy file-upload preferences.
     #[serde(default)]
     #[facet(erato_config::introduced_in(version = "0.7.0"))]
     pub local_delegation: LocalDelegationConfig,
@@ -902,11 +914,11 @@ pub struct DesktopSidecarConfig {
     pub organization_configuration: DesktopSidecarOrganizationConfiguration,
 }
 
+/// `desktop_sidecar.strict_mode` is the switch; this section has no `enabled`
+/// key, and a stale one fails to load rather than being ignored.
 #[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
+#[serde(deny_unknown_fields)]
 pub struct LocalDelegationConfig {
-    /// Enable the authenticated local-evidence workflow. Defaults to false.
-    #[serde(default)]
-    pub enabled: bool,
     /// Canonical backend origin (https in production) pinned in the native
     /// installation as the assertion issuer. It must be exactly
     /// `https://host[:port]` or `http://host[:port]`; a plaintext `http`
@@ -965,7 +977,11 @@ impl DesktopSidecarConfig {
             }
         }
         let mut fields = serde_json::Map::new();
-        if self.local_delegation.enabled {
+        if self.strict_mode {
+            fields.insert("mode".into(), "strict".into());
+            // Transitional: sidecars that predate `mode` read strictness from
+            // `content_release`, and the legacy strict path verifies its signed
+            // plans against this trust policy. The job-based strict path removes both.
             let policy = &self.local_delegation;
             let origin = policy
                 .backend_origin
@@ -997,6 +1013,8 @@ impl DesktopSidecarConfig {
                     "verification_keys": policy.verification_keys,
                 }),
             );
+        } else {
+            fields.insert("mode".into(), "standard".into());
         }
         if let Some(port) = self.port {
             eyre::ensure!(
@@ -2173,12 +2191,15 @@ impl AppConfig {
             );
         }
 
+        config
+            .validate_strict_mode()
+            .unwrap_or_else(|error| panic!("Invalid desktop sidecar configuration: {error}"));
         // A plaintext backend origin loads and the sidecar still pins it by
         // exact equality, so this is a warning for development setups (local
         // or non-loopback dev hosts), not an error. bootstrap_fields() rejects
         // an origin that is not canonical.
         let local_delegation = &config.desktop_sidecar.local_delegation;
-        if local_delegation.enabled
+        if config.strict_mode()
             && let Some(origin) = local_delegation.backend_origin.as_deref()
             && let Ok(parsed) = url::Url::parse(origin)
             && parsed.scheme() != "https"
@@ -2484,6 +2505,45 @@ impl AppConfig {
             settings: configuration,
             policy_guides: self.policy_guides.clone(),
         }
+    }
+
+    /// Whether `desktop_sidecar.strict_mode` is on. `validate_strict_mode` checks
+    /// its prerequisites at startup, so callers test only this.
+    pub fn strict_mode(&self) -> bool {
+        self.desktop_sidecar.strict_mode
+    }
+
+    pub fn validate_strict_mode(&self) -> Result<(), Report> {
+        if !self.strict_mode() {
+            return Ok(());
+        }
+        eyre::ensure!(
+            self.client_tools.durable_operations_enabled,
+            "`desktop_sidecar.strict_mode` requires `client_tools.durable_operations_enabled = true`"
+        );
+        const TRANSITIONAL: &str = "(transitional: the legacy strict path needs it until the \
+                                    job-based strict path replaces it)";
+        eyre::ensure!(
+            self.delegation.tasks.enabled,
+            "`desktop_sidecar.strict_mode` requires `delegation.tasks.enabled = true` {TRANSITIONAL}"
+        );
+        let keys = &self.desktop_sidecar.local_delegation;
+        for (key, present) in [
+            ("backend_origin", keys.backend_origin.is_some()),
+            ("signing_key_id", keys.signing_key_id.is_some()),
+            (
+                "signing_private_key_pem",
+                keys.signing_private_key_pem.is_some(),
+            ),
+            ("verification_keys", !keys.verification_keys.is_empty()),
+        ] {
+            eyre::ensure!(
+                present,
+                "`desktop_sidecar.strict_mode` requires `desktop_sidecar.local_delegation.{key}` \
+                 {TRANSITIONAL}"
+            );
+        }
+        Ok(())
     }
 
     /// Returns the list of available chat providers, filtered by the optional allowlist.
@@ -9882,7 +9942,10 @@ mod desktop_sidecar_installation_tests {
     #[test]
     fn installation_defaults_and_endpoint() {
         let mut config = DesktopSidecarConfig::default();
-        assert!(config.bootstrap_fields().unwrap().is_empty());
+        assert_eq!(
+            serde_json::Value::Object(config.bootstrap_fields().unwrap()),
+            serde_json::json!({"mode": "standard"})
+        );
         assert_eq!(config.endpoint(), None);
         assert_eq!(config.windows_launch_scheme(), "erato-launch");
         config.port = Some(23124);
@@ -9909,10 +9972,12 @@ mod desktop_sidecar_installation_tests {
 
     #[test]
     fn strict_bootstrap_contains_only_public_delegation_authority() {
-        let config: DesktopSidecarConfig = serde_json::from_value(serde_json::json!({
-            "local_delegation": {"enabled":true,"backend_origin":"https://erato.example", "signing_key_id":"key", "signing_private_key_pem":"PRIVATE_KEY_MARKER", "verification_keys":{"key":"public"}}
+        let mut config: DesktopSidecarConfig = serde_json::from_value(serde_json::json!({
+            "strict_mode": true,
+            "local_delegation": {"backend_origin":"https://erato.example", "signing_key_id":"key", "signing_private_key_pem":"PRIVATE_KEY_MARKER", "verification_keys":{"key":"public"}}
         })).unwrap();
         let fields = config.bootstrap_fields().unwrap();
+        assert_eq!(fields["mode"], "strict");
         assert_eq!(fields["content_release"], "strict_snapshot_v1");
         assert_eq!(
             fields["local_delegation"]["verification_keys"]["key"],
@@ -9921,11 +9986,86 @@ mod desktop_sidecar_installation_tests {
         let encoded = serde_json::to_string(&fields).unwrap();
         assert!(!encoded.contains("PRIVATE_KEY_MARKER"));
         assert!(!encoded.contains("signing_private_key_pem"));
+
+        // Key material alone never makes a download strict.
+        config.strict_mode = false;
+        assert_eq!(
+            serde_json::Value::Object(config.bootstrap_fields().unwrap()),
+            serde_json::json!({"mode": "standard"})
+        );
+    }
+
+    #[test]
+    fn local_delegation_has_no_enabled_switch() {
+        let error = serde_json::from_value::<DesktopSidecarConfig>(serde_json::json!({
+            "local_delegation": {"enabled": true}
+        }))
+        .unwrap_err();
+        assert!(
+            error.to_string().contains("unknown field `enabled`"),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn strict_mode_requires_durable_operations_and_transitional_prerequisites() {
+        let mut config = AppConfig::default();
+        config.validate_strict_mode().unwrap();
+        config.desktop_sidecar.strict_mode = true;
+        config.desktop_sidecar.local_delegation = serde_json::from_value(serde_json::json!({
+            "backend_origin": "https://erato.example",
+            "signing_key_id": "key",
+            "signing_private_key_pem": "PRIVATE_KEY_MARKER",
+            "verification_keys": {"key": "public"}
+        }))
+        .unwrap();
+        config.delegation.tasks.enabled = true;
+        let error = config.validate_strict_mode().unwrap_err().to_string();
+        assert!(
+            error.contains("`client_tools.durable_operations_enabled = true`")
+                && !error.contains("transitional"),
+            "{error}"
+        );
+        config.client_tools.durable_operations_enabled = true;
+        config.validate_strict_mode().unwrap();
+
+        let mut without_tasks = config.clone();
+        without_tasks.delegation.tasks.enabled = false;
+        let error = without_tasks
+            .validate_strict_mode()
+            .unwrap_err()
+            .to_string();
+        assert!(
+            error.contains("`delegation.tasks.enabled = true`") && error.contains("transitional"),
+            "{error}"
+        );
+        for key in [
+            "backend_origin",
+            "signing_key_id",
+            "signing_private_key_pem",
+            "verification_keys",
+        ] {
+            let mut incomplete = config.clone();
+            let keys = &mut incomplete.desktop_sidecar.local_delegation;
+            match key {
+                "backend_origin" => keys.backend_origin = None,
+                "signing_key_id" => keys.signing_key_id = None,
+                "signing_private_key_pem" => keys.signing_private_key_pem = None,
+                _ => keys.verification_keys.clear(),
+            }
+            let error = incomplete.validate_strict_mode().unwrap_err().to_string();
+            assert!(
+                error.contains(&format!("`desktop_sidecar.local_delegation.{key}`"))
+                    && error.contains("transitional"),
+                "{key}: {error}"
+            );
+        }
     }
 
     fn strict_config_with_origin(origin: &str) -> DesktopSidecarConfig {
         serde_json::from_value(serde_json::json!({
-            "local_delegation": {"enabled":true,"backend_origin":origin, "signing_key_id":"key", "verification_keys":{"key":"public"}}
+            "strict_mode": true,
+            "local_delegation": {"backend_origin":origin, "signing_key_id":"key", "verification_keys":{"key":"public"}}
         }))
         .unwrap()
     }
@@ -10003,7 +10143,10 @@ mod desktop_sidecar_installation_tests {
             "upgrade_code": "e448c4d6-cb15-4d8a-8d1d-94c28d41f286"
         }))
         .unwrap();
-        assert!(config.bootstrap_fields().unwrap().is_empty());
+        assert_eq!(
+            serde_json::Value::Object(config.bootstrap_fields().unwrap()),
+            serde_json::json!({"mode": "standard"})
+        );
     }
 }
 

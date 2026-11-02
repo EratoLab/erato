@@ -18,9 +18,6 @@ impl Signer {
         // Feature unification can enable another crypto implementation in tests
         // or downstream binaries. Select a provider explicitly before signing.
         let _ = jsonwebtoken::crypto::aws_lc::DEFAULT_PROVIDER.install_default();
-        if !config.enabled {
-            return Err(eyre!("Local delegation is disabled"));
-        }
         let origin = config
             .backend_origin
             .as_deref()
@@ -138,7 +135,6 @@ mod tests {
     // Synthetic, public test fixture (32-byte seed filled with 7). Never a deployment key.
     fn fixture() -> LocalDelegationConfig {
         LocalDelegationConfig {
-            enabled: true,
             backend_origin: Some("https://erato.example".into()),
             signing_key_id: Some("fixture".into()),
             signing_private_key_pem: Some(
@@ -189,11 +185,8 @@ mod tests {
         );
     }
     #[test]
-    fn disabled_or_mismatched_keys_cannot_issue_contexts() {
+    fn mismatched_keys_cannot_issue_contexts() {
         let mut config = fixture();
-        config.enabled = false;
-        assert!(Signer::new(&config).is_err());
-        config.enabled = true;
         config
             .verification_keys
             .insert("fixture".into(), URL_SAFE_NO_PAD.encode([0; 32]));

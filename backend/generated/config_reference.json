@@ -1797,12 +1797,6 @@
     "security_relevance": "unknown",
     "stability": "unstable"
   },
-  "desktop_sidecar.local_delegation.enabled": {
-    "default_value_security": "unknown",
-    "introduced_in": "0.7.0",
-    "security_relevance": "unknown",
-    "stability": "unstable"
-  },
   "desktop_sidecar.local_delegation.signing_key_id": {
     "default_value_security": "unknown",
     "introduced_in": "0.7.0",
@@ -1868,6 +1862,12 @@
     "introduced_in": "0.7.0",
     "security_relevance": "unknown",
     "stability": "unstable"
+  },
+  "desktop_sidecar.strict_mode": {
+    "default_value_security": "unknown",
+    "introduced_in": "unreleased",
+    "security_relevance": "high",
+    "stability": "alpha"
   },
   "desktop_sidecar.tls.certificate_pem": {
     "default_value_security": "unknown",

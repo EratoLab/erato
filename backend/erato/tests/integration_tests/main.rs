@@ -191,9 +191,7 @@ async fn test_app_state_internal(
     let reloadable = ReloadableAppState::new(&app_config, mcp_servers);
 
     let local_delegation_signer = app_config
-        .desktop_sidecar
-        .local_delegation
-        .enabled
+        .strict_mode()
         .then(|| {
             erato::services::local_delegation::signing::Signer::new(
                 &app_config.desktop_sidecar.local_delegation,

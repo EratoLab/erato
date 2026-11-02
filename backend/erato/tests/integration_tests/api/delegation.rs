@@ -19790,7 +19790,8 @@ async fn local_research_case(pool: Pool<Postgres>, repeated: bool, cancelled: bo
     config.client_tools.durable_operations_enabled = true;
     config.delegation.tasks.run_modes = vec![erato_config::config::TaskRunMode::Async];
     config.desktop_sidecar.allowed_origins = vec!["https://app.example".into()];
-    config.desktop_sidecar.local_delegation = serde_json::from_value(json!({"enabled":true,"backend_origin":"https://erato.example","signing_key_id":"fixture","signing_private_key_pem":"-----BEGIN PRIVATE KEY-----\nMC4CAQAwBQYDK2VwBCIEIAcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcH\n-----END PRIVATE KEY-----\n","verification_keys":{"fixture":"6kpsY-KcUgq-9VB7Ey7F-ZVHdq6-vnuSQh7qaRRG0iw"}})).unwrap();
+    config.desktop_sidecar.strict_mode = true;
+    config.desktop_sidecar.local_delegation = serde_json::from_value(json!({"backend_origin":"https://erato.example","signing_key_id":"fixture","signing_private_key_pem":"-----BEGIN PRIVATE KEY-----\nMC4CAQAwBQYDK2VwBCIEIAcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcH\n-----END PRIVATE KEY-----\n","verification_keys":{"fixture":"6kpsY-KcUgq-9VB7Ey7F-ZVHdq6-vnuSQh7qaRRG0iw"}})).unwrap();
     for (id, allowlist) in [
         ("plan", vec!["erato/delegate_task"]),
         ("local_research", vec!["erato/local_collect_evidence"]),

@@ -34,7 +34,7 @@ fn conflict(_: impl std::fmt::Display) -> ApiError {
     )
 }
 fn signer(state: &AppState) -> Result<&Signer, ApiError> {
-    if !state.config.client_tools.durable_operations_enabled {
+    if !state.config.strict_mode() {
         return Err(unavailable("disabled"));
     }
     state

@@ -201,20 +201,24 @@ impl std::fmt::Debug for AppState {
 impl AppState {
     pub async fn new(config: AppConfig) -> Result<Self, Report> {
         let prompt_guardrails = Arc::new(CompiledPromptGuardrails::new(&config.guardrails)?);
+        // Transitional: only the legacy strict path signs plans and receipts.
         let local_delegation_signer = config
-            .desktop_sidecar
-            .local_delegation
-            .enabled
+            .strict_mode()
             .then(|| {
                 crate::services::local_delegation::signing::Signer::new(
                     &config.desktop_sidecar.local_delegation,
                 )
                 .map(Arc::new)
+                .map_err(|error| {
+                    eyre::eyre!(
+                        "`desktop_sidecar.strict_mode` requires valid \
+                         `desktop_sidecar.local_delegation` key material (transitional: the \
+                         legacy strict path needs it until the job-based strict path replaces \
+                         it): {error}"
+                    )
+                })
             })
             .transpose()?;
-        if local_delegation_signer.is_some() && !config.delegation.tasks.enabled {
-            return Err(eyre::eyre!("Local delegation requires durable task leases"));
-        }
         let distribution = Arc::new(Distribution::load(&config));
         crate::server::router::ensure_office_addin_manifests_support_launch_events(
             &config.integrations.ms_office.addin,

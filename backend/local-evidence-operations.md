@@ -2,9 +2,12 @@
 
 Local evidence is the first production kind (`local_evidence.v1`, qualified tool
 `erato/local_collect_evidence`) of the merged durable client-operation mechanism.
-Both `client_tools.durable_operations_enabled` and
-`desktop_sidecar.local_delegation.enabled` default off. Keep them off until the
-paired native implementation and supported hosts pass consent/recovery qualification.
+It runs only under `desktop_sidecar.strict_mode`, which requires
+`client_tools.durable_operations_enabled`, plus (transitionally, until the job-based
+strict path replaces this kind) `delegation.tasks.enabled` and the
+`[desktop_sidecar.local_delegation]` key material. Both switches default off. Keep
+them off until the paired native implementation and supported hosts pass
+consent/recovery qualification.
 The sidecar task profile supports one backend replica. It reuses the generic
 chat-generation lease; no separate sidecar scheduler or credential store exists.
 
