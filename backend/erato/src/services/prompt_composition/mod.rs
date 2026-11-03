@@ -7,6 +7,42 @@
 //! 2. **Resolved Phase**: Fetch external resources (files, prompts, messages)
 //! 3. **Concrete Phase**: Convert to final LLM request format (e.g. prompt rendering)
 //!
+//! ## Facet placement contract (ERMAIN-1101)
+//!
+//! Hidden facets belong to the baseline system head, injected once at chat
+//! start (or by the existing deliberate context rebase), then replayed.
+//! Newly activated normal facets and the current request's action facet belong
+//! AFTER selected branch history and BEFORE current user content and files:
+//!
+//! ```text
+//! base / assistant / hidden baseline
+//! U1 -> R1 -> U2 -> R2
+//! normal facet template -> normal facet additional prompt -> action directive
+//! U3 + associated content
+//! ```
+//!
+//! Normal facets are emitted in facet-ID order, template before additional
+//! prompt; the action follows them. Both use User-role reminders so adapters
+//! that collect System messages into a head cannot hoist these new directives.
+//! Role, chronological placement, and lifetime are separate: normal directives
+//! retain their activation/replay lifetime, while action markers are per-request
+//! and stripped from prior-turn replay. Hidden instructions stay System-role.
+//!
+//! This additive placement preserves the baseline and extends history toward
+//! its tip instead of rewriting the prefix preceding already generated replies.
+//! It supports provider prefix-cache stability and chronological history hygiene;
+//! it does not guarantee cache hits or thinking preservation, since tool/settings
+//! changes and replay filters can independently change provider context.
+//!
+//! This is an explicit developer decision. Changing these placement rules
+//! requires explicit developer approval. Legacy snapshots are replayed in their
+//! stored order, subject to existing filters; no migration or retroactive
+//! reordering is required. Hidden-facet platform lifecycle is deferred to
+//! ERMAIN-1102; this contract does not redefine deactivation semantics.
+//!
+//! See `site/content/docs/architecture/prompt_composition.mdx` for the durable
+//! architecture decision and compatibility/continuation checks.
+//!
 //! ## Example Usage
 //!
 //! ```ignore

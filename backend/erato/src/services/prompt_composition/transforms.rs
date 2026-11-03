@@ -258,11 +258,17 @@ pub async fn build_abstract_sequence_with_facet_tool_expansions(
         }
     }
 
+    // Collect tip directives separately: replay must precede them, including
+    // on branches/edits/regeneration. See the placement contract in mod.rs.
+    let mut tip_directives = Vec::new();
+
     // 9.5 Inject facet prompts for newly enabled facets
     let facet_toggle_states =
         detect_facet_toggle_states(&previous_messages, facets, selected_facet_ids);
 
-    for (facet_id, toggle_state) in &facet_toggle_states.states {
+    let mut toggle_states: Vec<_> = facet_toggle_states.states.iter().collect();
+    toggle_states.sort_by_key(|(facet_id, _)| *facet_id);
+    for (facet_id, toggle_state) in toggle_states {
         if !matches!(toggle_state, FacetToggleState::NewlyEnabled) {
             continue;
         }
@@ -285,7 +291,7 @@ pub async fn build_abstract_sequence_with_facet_tool_expansions(
             };
 
             if !template.is_empty() {
-                sequence.push(AbstractChatSequencePart::FacetPromptTemplate {
+                tip_directives.push(AbstractChatSequencePart::FacetPromptTemplate {
                     spec: PromptSpec::Static {
                         content: template.to_string(),
                     },
@@ -301,7 +307,7 @@ pub async fn build_abstract_sequence_with_facet_tool_expansions(
 
         if let Some(prompt) = &facet.additional_system_prompt {
             let prompt = prompt_provider.resolve_prompt_source(prompt).await?;
-            sequence.push(AbstractChatSequencePart::FacetAdditionalSystemPrompt {
+            tip_directives.push(AbstractChatSequencePart::NormalFacetAdditionalPrompt {
                 spec: PromptSpec::Static { content: prompt },
                 facet_id: facet_id.clone(),
             });
@@ -314,7 +320,7 @@ pub async fn build_abstract_sequence_with_facet_tool_expansions(
     if let Some(af) = action_facet
         && action_facet_configs.contains_key(&af.id)
     {
-        sequence.push(AbstractChatSequencePart::ActionFacetPrompt {
+        tip_directives.push(AbstractChatSequencePart::ActionFacetPrompt {
             facet_id: af.id.clone(),
             args: af.args.clone(),
         });
@@ -420,6 +426,11 @@ pub async fn build_abstract_sequence_with_facet_tool_expansions(
 
             match parsed.role {
                 MessageRole::User => {
+                    if prev_msg.id == *previous_message_id {
+                        // Additive directives follow ALL selected ancestry and precede
+                        // current content (including task results and attachments).
+                        sequence.parts.append(&mut tip_directives);
+                    }
                     // A delivered task result is history, not something the
                     // user typed, so it is emitted for EVERY prior turn — the
                     // current-row check below deliberately does not gate it.
@@ -458,6 +469,9 @@ pub async fn build_abstract_sequence_with_facet_tool_expansions(
             }
         }
     }
+
+    // Also support a continuation anchored on an assistant row.
+    sequence.parts.append(&mut tip_directives);
 
     // 11. Add current user input files (as file references)
     let _ = is_first_message;
@@ -551,10 +565,27 @@ pub async fn resolve_sequence(
                 };
 
                 input_messages.push(InputMessage {
-                    role: MessageRole::System,
-                    content: ContentPart::Text(ContentPartText { text: content }),
+                    role: MessageRole::User,
+                    content: ContentPart::Text(ContentPartText {
+                        text: facet_reminder(&content),
+                    }),
                 });
-                has_system_message = true;
+            }
+
+            AbstractChatSequencePart::NormalFacetAdditionalPrompt { spec, facet_id: _ } => {
+                let PromptSpec::Static { content } = spec else {
+                    return Err(eyre::eyre!(
+                        "Langfuse prompt should have been resolved earlier"
+                    ));
+                };
+                // User-role reminders preserve chronology on adapters that hoist
+                // System messages. Normal directives persist; actions do not.
+                input_messages.push(InputMessage {
+                    role: MessageRole::User,
+                    content: ContentPart::Text(ContentPartText {
+                        text: facet_reminder(&content),
+                    }),
+                });
             }
 
             AbstractChatSequencePart::FacetAdditionalSystemPrompt { spec, facet_id: _ } => {
@@ -982,6 +1013,10 @@ pub(crate) fn render_placeholder_template(
     }
     result.push_str(rest);
     result
+}
+
+fn facet_reminder(content: &str) -> String {
+    format!("<system-reminder>\n{content}\n</system-reminder>")
 }
 
 fn render_facet_template(
