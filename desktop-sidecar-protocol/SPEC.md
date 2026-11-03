@@ -240,11 +240,10 @@ The `sidecar.configure.v1` capability replaces the current
 `user_configuration` and `organization_configuration` layers. Both layers are
 extensible objects. For configuration calls accepted by the sidecar's trust
 policy, sidecars MUST preserve unknown properties so that future configuration
-additions do not require a new method major. Clients send configuration independently
-of any `localDelegation` declaration. The sidecar itself decides whether to trust
-outside configuration calls and whether to apply their values; it may reject or
-ignore untrusted configuration. A successful RPC alone is not evidence of policy
-enforcement. Configuration delivery does not authorize content access or export.
+additions do not require a new method major. The sidecar itself decides whether
+to trust outside configuration calls and whether to apply their values; it may
+reject or ignore untrusted configuration. A successful RPC alone is not evidence
+of policy enforcement. Configuration delivery does not authorize content access or export.
 
 Each layer has a nullable `show_tray_icon` property. A non-null user value takes
 precedence over a non-null organization value. When both values are null or
@@ -1045,7 +1044,8 @@ user's address. A profile name alone does not identify a mailbox.
 `OutlookFileProvenance` version 1 contract for subsequent upload/API integration.
 It is not a new field on any existing RPC response and does not itself implement
 upload storage or navigation. Its public TypeScript type and validation function
-are exported by the protocol library.
+are exported by the protocol library. A job result carries it on a file as the
+item metadata `ai.erato/outlookProvenance` ([DELEGATION.md](./DELEGATION.md#results-and-selection)).
 
 The object contains `version: 1` and a nonempty `origins` array. Each origin has
 an optional `document` message reference and an optional `topLevelParent` message
@@ -1140,12 +1140,9 @@ unsupported provenance versions, rather than interpret them as version 1.
 [DELEGATION.md](./DELEGATION.md) defines strict mode and the job envelope
 (`jobs.*`, package 0.1.44), which carries tool calls in both modes.
 `jobs.start.v1` and `jobs.status.v1` hold their response for up to `wait_ms`
-while a job is pending, a long-poll that needs no server push (§2). Strict
-review on jobs is reserved for a later package. The `local_*` methods that
-version 0.1.28 reserves with disabled availability are the transitional strict
-snapshot path, deprecated in 0.1.44; shipping their schemas does not qualify any
-implementation or enable delegation. Version 0.1.41 lists the settings methods a
-strict sidecar keeps and the account-level results they return there.
+while a job is pending, a long-poll that needs no server push (§2). Version
+0.1.41 lists the settings methods a strict sidecar keeps and the account-level
+results they return there.
 
 ## Platform permissions
 

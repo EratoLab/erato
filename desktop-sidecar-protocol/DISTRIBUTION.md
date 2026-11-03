@@ -203,9 +203,6 @@ manifest completely describes the five-target filesystem example in Section 1:
 - `platform.abi` is the relevant ABI or runtime family.
 - `default_file` is the file ID selected when a request does not specify one.
 - `files` lists every file available for this target.
-- `local_delegation_profile` optionally declares `strict_snapshot_v1` support;
-  omitted/null means unsupported. It is a compatibility declaration from the
-  trusted artifact publisher, not a host qualification or integrity assertion.
 
 ### File fields
 
@@ -332,13 +329,18 @@ Development origins remain an explicit local development-mode option.
 
 The optional root installation fields are:
 
-| Field              | Contract                                                                                    | Default                                                                                        |
-| ------------------ | ------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| `port`             | Integer from 1 to 65535                                                                     | 23123                                                                                          |
-| `directory_suffix` | At most 64 ASCII letters, digits, hyphens or underscores; appended literally                | Empty                                                                                          |
-| `display_name`     | Nonempty string, at most 128 UTF-8 bytes, no control characters                             | Erato Desktop Sidecar                                                                          |
-| `icon`             | Standard base64 PNG (no data URL prefix), 1–256 pixels per dimension, at most 1 MiB encoded | Bundled tray icon                                                                              |
-| `mode`             | `strict` or `standard`; strict mode as [DELEGATION.md](./DELEGATION.md) defines it          | `standard`, or strict when the transitional `content_release: "strict_snapshot_v1"` is present |
+| Field              | Contract                                                                                    | Default               |
+| ------------------ | ------------------------------------------------------------------------------------------- | --------------------- |
+| `port`             | Integer from 1 to 65535                                                                     | 23123                 |
+| `directory_suffix` | At most 64 ASCII letters, digits, hyphens or underscores; appended literally                | Empty                 |
+| `display_name`     | Nonempty string, at most 128 UTF-8 bytes, no control characters                             | Erato Desktop Sidecar |
+| `icon`             | Standard base64 PNG (no data URL prefix), 1–256 pixels per dimension, at most 1 MiB encoded | Bundled tray icon     |
+| `mode`             | `strict` or `standard`; strict mode as [DELEGATION.md](./DELEGATION.md) defines it          | `standard`            |
+
+Binaries built before package 0.1.44 ignore `mode`, as bootstrap version 1
+ignores unknown fields, and would run in standard mode. A strict deployment
+MUST distribute only binaries from package 0.1.44 or later; the distribution
+manifest does not record a binary's package version, so nothing enforces this.
 
 Present invalid fields MUST be rejected before registering desktop integration or
 opening a listener. User configuration MUST NOT override these fields. Explicit
@@ -492,39 +494,3 @@ define:
 
 These concerns MAY affect how bytes are produced or verified, but they MUST NOT
 add signing/integrity fields to this manifest or write derived files into the artifact root.
-The optional compatibility field below does not carry signing or integrity metadata.
-
-## Strict delegation packaging gate
-
-Transitional: the target profile and `content_release` below belong to the
-strict snapshot path that stage 2 removes. Strict mode itself is the bootstrap
-`mode`; distribution will filter targets by minimum protocol version
-([DELEGATION.md](./DELEGATION.md#versioning)).
-
-The strict snapshot contract in [DELEGATION.md](./DELEGATION.md) does not by
-itself qualify distribution artifacts. Each manifest target MAY declare
-`local_delegation_profile: "strict_snapshot_v1"`; omitted/null means unsupported.
-Current native Windows/macOS builds declare this implementation profile; Linux
-must not. A strict backend MUST exclude targets without that exact profile.
-This is a compatibility gate, not a statement of host qualification. Deployment
-still verifies the artifact's trusted source and tested behavior.
-
-The personalized bootstrap uses `content_release: "strict_snapshot_v1"` and a
-`local_delegation` object containing `backend_origin` and `verification_keys`
-(public Ed25519 base64url keys by key ID). Backend signing private keys MUST NOT
-be included. Unsupported review platforms or missing/invalid trust policy fail
-startup closed. Do not personalize older bootstrap-v1 binaries with this
-requirement: unknown fields are ignored under bootstrap v1. The trusted manifest
-profile is therefore checked before personalization; strict requirements must
-never be inferred from bootstrap fields injected into an unmarked artifact.
-Supporting binaries recognize these fields and must reject an unsupported
-`content_release` value or invalid `local_delegation` policy before listening.
-
-Native exact-snapshot delegation requires bundled inert review assets, private
-review-to-store communication and tested consent/export/recovery behavior.
-This profile trusts installed native code and does not require OS sandbox
-qualification or a new signed macOS application. Existing installer/personalization
-validation still applies;
-do not broaden archive allowlists to arbitrary contents or strip existing
-signatures. Capability discovery declares trust in installed native code, not
-OS-enforced egress isolation. No rollout setting is enabled by the contract alone.

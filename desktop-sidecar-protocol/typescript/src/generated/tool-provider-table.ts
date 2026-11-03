@@ -27,9 +27,23 @@ export interface ToolProviderTable {
          */
         items: string;
         /**
-         * JSON pointers into `structuredContent` to result-level, account-level metadata that accompanies the approved items.
+         * JSON pointers into `structuredContent` to result-level, account-level metadata that accompanies the approved items. Everything else in `structuredContent` crosses only with the item it belongs to.
          */
         resultMetadata: string[];
+        /**
+         * Arrays in `structuredContent` whose entries each concern the whole result or one item. An entry without the `itemKey` field is result-level and crosses with the approved items; an entry with it crosses only when an approved item has the same value under that key. An entry crosses as its `code` and that key, with a fixed message for the code.
+         */
+        itemMetadata?: {
+          /**
+           * A JSON pointer to the array in `structuredContent`.
+           */
+          pointer: string;
+          /**
+           * The field an entry and an item share when the entry concerns that item.
+           */
+          itemKey: string;
+          [k: string]: unknown;
+        }[];
         [k: string]: unknown;
       };
       [k: string]: unknown;
@@ -50,9 +64,23 @@ export interface ToolProviderTable {
          */
         items: string;
         /**
-         * JSON pointers into `structuredContent` to result-level, account-level metadata that accompanies the approved items.
+         * JSON pointers into `structuredContent` to result-level, account-level metadata that accompanies the approved items. Everything else in `structuredContent` crosses only with the item it belongs to.
          */
         resultMetadata: string[];
+        /**
+         * Arrays in `structuredContent` whose entries each concern the whole result or one item. An entry without the `itemKey` field is result-level and crosses with the approved items; an entry with it crosses only when an approved item has the same value under that key. An entry crosses as its `code` and that key, with a fixed message for the code.
+         */
+        itemMetadata?: {
+          /**
+           * A JSON pointer to the array in `structuredContent`.
+           */
+          pointer: string;
+          /**
+           * The field an entry and an item share when the entry concerns that item.
+           */
+          itemKey: string;
+          [k: string]: unknown;
+        }[];
         [k: string]: unknown;
       };
       [k: string]: unknown;

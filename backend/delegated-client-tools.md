@@ -534,21 +534,19 @@ A host's handlers pass `clientToolHostAdapterConformanceFailures` from
   until the sidecar reports an index position and the items added since. The
   server copies only the contract keys into the task result, so `scope` stays in
   the task chat's tool output.
-- Strict mode is unchanged for now, and transitional: any local delegation
-  declaration keeps the six tools unavailable and the binding unsent, so no task
-  of such a turn gets a grant (`NOT_FROM_HOST`). Stage 2 keeps the six tools as
-  the catalogue under strict and runs them as reviewed jobs (see
-  `desktop-sidecar-protocol/DELEGATION.md`). A switch of the Erato desktop app
-  to strict mode during a call uploads nothing more; files the user approved
-  that were uploaded before the switch stay. On the slow path, if the user
-  answers the device prompt before the next claim renewal, the call fails
-  without content; otherwise the renewal stops, the prompt closes and the call
-  waits until its attempt ends, then expires. On the live path the device posts
-  nothing and the call ends when the run stops waiting for it. A local-evidence
-  task's card in the parent shows its review state while this device knows the
-  job (it forgets the job once acknowledged); otherwise "Replaced by a later
-  report" once a later report of the same task is in the chat, else "Review in
-  the Erato desktop app".
+- Strict mode is unchanged: any local delegation declaration keeps the six tools
+  unavailable and the binding unsent, so no task of such a turn gets a grant
+  (`NOT_FROM_HOST`). A switch of the Erato desktop app to strict mode during a
+  call uploads nothing more; files the user approved that were uploaded before
+  the switch stay. On the slow path, if the user answers the device prompt
+  before the next claim renewal, the call fails without content; otherwise the
+  renewal stops, the prompt closes and the call waits until its attempt ends,
+  then expires. On the live path the device posts nothing and the call ends
+  when the run stops waiting for it. A local-evidence task's
+  card in the parent shows its review state while this device knows the job (it
+  forgets the job once acknowledged); otherwise "Replaced by a later report"
+  once a later report of the same task is in the chat, else "Review in the
+  Erato desktop app".
 
 ## Not in this record
 

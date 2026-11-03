@@ -53,6 +53,7 @@ export type {
   IndexingStatusV1Params,
   JobToolCall,
   CallToolResult,
+  SidecarStructuredContent,
   JobCallResult,
   JobStatus,
   JobsCapability,
@@ -122,34 +123,8 @@ export type {
   SidecarConfigureV1Result,
 } from "./generated/index.js";
 
-export type {
-  LocalTaskBinding,
-  LocalTaskPlan,
-  LocalTaskStatus,
-  LocalDelegationSecurity,
-  ApprovedLocalExport,
-  LocalExportReceiptClaims,
-  LocalContextClaims,
-  LocalJobClaims,
-  LocalContextsChallengeV1Params,
-  LocalContextsChallengeV1Result,
-  LocalContextsBindV1Params,
-  LocalContextsBindV1Result,
-  LocalTasksStartV1Params,
-  LocalTasksStartV1Result,
-  LocalTasksStatusV1Params,
-  LocalTasksStatusV1Result,
-  LocalTasksCancelV1Params,
-  LocalTasksCancelV1Result,
-  LocalTasksReviewV1Params,
-  LocalTasksReviewV1Result,
-  LocalExportsStatusV1Params,
-  LocalExportsStatusV1Result,
-  LocalExportsReadV1Params,
-  LocalExportsReadV1Result,
-  LocalExportsAckV1Params,
-  LocalExportsAckV1Result,
-} from "./generated/index.js";
-export { supportsStrictLocalDelegation } from "./localDelegation.js";
 export { SIDECAR_PROVIDER } from "./generated/providers.js";
-export { validateOutlookFileProvenance } from "./generated/validators.mjs";
+export {
+  validateOutlookFileProvenance,
+  validateSidecarStructuredContent,
+} from "./generated/validators.mjs";

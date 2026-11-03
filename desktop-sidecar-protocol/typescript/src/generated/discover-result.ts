@@ -18,12 +18,6 @@ export interface DiscoverResult {
    * The providers whose tools `jobs.start.v1` accepts. Absent from sidecars built before package 0.1.44.
    */
   providers?: ToolProvider[];
-  /**
-   * Transitional security declaration of the deprecated local_* strict path. Unknown profiles remain discoverable but cannot enable delegation or legacy content access.
-   */
-  localDelegation?: {
-    [k: string]: unknown;
-  };
   [k: string]: unknown;
 }
 export interface ProductInfo {
@@ -95,7 +89,7 @@ export interface ToolProvider {
    */
   egress: string;
   /**
-   * False when the provider cannot run calls at all. A refusal of one tool, such as a content tool under stage-1 strict mode, is a per-call error instead.
+   * False when the provider cannot run calls at all. A refusal of one tool is a per-call error instead.
    */
   available: boolean;
   [k: string]: unknown;

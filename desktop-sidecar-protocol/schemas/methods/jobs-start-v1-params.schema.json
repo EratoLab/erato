@@ -14,7 +14,7 @@
       }
     },
     "wait_ms": {
-      "description": "The longest the sidecar holds the response while the job is pending (queued, running, awaiting_approval or ready_for_review). It answers as soon as the job has results or ends, and reports the current state when the wait elapses. The sidecar honors at most its discovered `jobs.maxWaitMs`.",
+      "description": "The longest the sidecar holds the response while the job is queued or running. It answers as soon as the job is in any other state (for example completed, ready_for_review, awaiting_approval or failed), and otherwise reports the current state when the wait elapses. The sidecar honors at most its discovered `jobs.maxWaitMs`.",
       "type": "integer",
       "minimum": 0,
       "maximum": 30000

@@ -24,11 +24,10 @@ export const SIDECAR_PROVIDER: ToolProviderTable = {
       ],
       "readOnly": true,
       "selection": {
-        "items": "/nodes",
+        "items": "/sources.get_folder_hierarchy.v1/result/nodes",
         "resultMetadata": [
-          "/sourceId",
-          "/foldersAvailable",
-          "/notice"
+          "/sources.get_folder_hierarchy.v1/result/sourceId",
+          "/sources.list.v1"
         ]
       }
     },
@@ -50,10 +49,15 @@ export const SIDECAR_PROVIDER: ToolProviderTable = {
       ],
       "readOnly": true,
       "selection": {
-        "items": "/hits",
+        "items": "/search.query.v1/result/hits",
         "resultMetadata": [
-          "/coverage",
-          "/filterNotice"
+          "/search.query.v1/result/elapsedMs",
+          "/search.query.v1/result/blocksRead",
+          "/search.query.v1/result/candidatesScored",
+          "/search.query.v1/result/coverage",
+          "/search.query.v1/result/limitReached",
+          "/sources.list.v1",
+          "/search.metadata_fields.v1"
         ]
       }
     },
@@ -66,7 +70,9 @@ export const SIDECAR_PROVIDER: ToolProviderTable = {
       "readOnly": true,
       "selection": {
         "items": "content",
-        "resultMetadata": []
+        "resultMetadata": [
+          "/outlook.list_mailboxes.v1"
+        ]
       }
     },
     {
@@ -76,9 +82,16 @@ export const SIDECAR_PROVIDER: ToolProviderTable = {
       ],
       "readOnly": true,
       "selection": {
-        "items": "/messages",
+        "items": "/outlook.get_conversation.v1/result/messages",
         "resultMetadata": [
-          "/mailbox"
+          "/outlook.get_conversation.v1/result/state",
+          "/outlook.get_conversation.v1/result/mailbox"
+        ],
+        "itemMetadata": [
+          {
+            "pointer": "/outlook.get_conversation.v1/result/warnings",
+            "itemKey": "internetMessageId"
+          }
         ]
       }
     }

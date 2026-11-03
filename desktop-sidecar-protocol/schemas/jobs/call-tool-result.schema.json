@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://schemas.erato.ai/desktop-sidecar/v1/jobs/call-tool-result.schema.json",
   "title": "CallToolResult",
-  "description": "A call's result as the MCP `CallToolResult`, for every provider. For the `sidecar` provider, `structuredContent` is the tool's JSON result as the frontend returns it today, byte-compatible with the normal-mode result except that the `fileId` an upload assigns is left out, and `content` carries its plain-text rendering and its files as embedded resources.",
+  "description": "A call's result as the MCP `CallToolResult`, for every provider. For the `sidecar` provider, `structuredContent` is a `SidecarStructuredContent`, the raw outcomes of the RPC methods the tool composed, and `content` carries their files as embedded resources.",
   "type": "object",
   "properties": {
     "content": {
@@ -27,11 +27,22 @@
   "definitions": {
     "Meta": {
       "title": "ResultMeta",
-      "description": "Metadata under reverse-DNS-namespaced keys, `<prefix>/<name>`. MCP reserves prefixes with a `modelcontextprotocol` or `mcp` label, such as `modelcontextprotocol.io/`; Erato uses `ai.erato/`.",
+      "description": "Metadata under reverse-DNS-namespaced keys, `<prefix>/<name>`. MCP reserves prefixes with a `modelcontextprotocol` or `mcp` label, such as `modelcontextprotocol.io/`; Erato uses `ai.erato/`. A content block's metadata is item-level and travels only with its item.",
       "type": "object",
       "propertyNames": {
         "type": "string",
         "pattern": "^(?:[A-Za-z](?:[A-Za-z0-9-]*[A-Za-z0-9])?\\.)+[A-Za-z](?:[A-Za-z0-9-]*[A-Za-z0-9])?/(?:[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?)?$"
+      },
+      "properties": {
+        "ai.erato/item": {
+          "description": "The JSON pointer into `structuredContent` of the object this block belongs to: for a file, the object its bytes were taken from.",
+          "type": "string",
+          "pattern": "^(?:/(?:[^/~]|~[01])*)+$"
+        },
+        "ai.erato/outlookProvenance": {
+          "description": "Where a file came from: the message's own reference as `document`, or an attachment's containing message as `topLevelParent`. A navigation hint for opening the original, never a grant.",
+          "allOf": [{ "$ref": "../outlook/file-provenance.schema.json" }]
+        }
       },
       "additionalProperties": true
     },

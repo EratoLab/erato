@@ -37,11 +37,6 @@
       "items": {
         "$ref": "../jobs/provider.schema.json"
       }
-    },
-    "localDelegation": {
-      "type": "object",
-      "description": "Transitional security declaration of the deprecated local_* strict path. Unknown profiles remain discoverable but cannot enable delegation or legacy content access.",
-      "additionalProperties": true
     }
   },
   "additionalProperties": true

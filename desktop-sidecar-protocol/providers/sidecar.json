@@ -14,8 +14,11 @@
       "methods": ["sources.get_folder_hierarchy.v1", "sources.list.v1"],
       "readOnly": true,
       "selection": {
-        "items": "/nodes",
-        "resultMetadata": ["/sourceId", "/foldersAvailable", "/notice"]
+        "items": "/sources.get_folder_hierarchy.v1/result/nodes",
+        "resultMetadata": [
+          "/sources.get_folder_hierarchy.v1/result/sourceId",
+          "/sources.list.v1"
+        ]
       }
     },
     {
@@ -33,8 +36,16 @@
       ],
       "readOnly": true,
       "selection": {
-        "items": "/hits",
-        "resultMetadata": ["/coverage", "/filterNotice"]
+        "items": "/search.query.v1/result/hits",
+        "resultMetadata": [
+          "/search.query.v1/result/elapsedMs",
+          "/search.query.v1/result/blocksRead",
+          "/search.query.v1/result/candidatesScored",
+          "/search.query.v1/result/coverage",
+          "/search.query.v1/result/limitReached",
+          "/sources.list.v1",
+          "/search.metadata_fields.v1"
+        ]
       }
     },
     {
@@ -43,7 +54,7 @@
       "readOnly": true,
       "selection": {
         "items": "content",
-        "resultMetadata": []
+        "resultMetadata": ["/outlook.list_mailboxes.v1"]
       }
     },
     {
@@ -51,8 +62,17 @@
       "methods": ["outlook.get_conversation.v1"],
       "readOnly": true,
       "selection": {
-        "items": "/messages",
-        "resultMetadata": ["/mailbox"]
+        "items": "/outlook.get_conversation.v1/result/messages",
+        "resultMetadata": [
+          "/outlook.get_conversation.v1/result/state",
+          "/outlook.get_conversation.v1/result/mailbox"
+        ],
+        "itemMetadata": [
+          {
+            "pointer": "/outlook.get_conversation.v1/result/warnings",
+            "itemKey": "internetMessageId"
+          }
+        ]
       }
     }
   ]
