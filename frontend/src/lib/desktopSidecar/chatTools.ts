@@ -1,6 +1,7 @@
 /* eslint-disable lingui/no-unlocalized-strings -- Protocol tool names, statuses, and model-facing results. */
 import {
   checkMethodParams,
+  checkMethodResult,
   SidecarRpcError,
   validateSidecarStructuredContent,
 } from "@erato/desktop-sidecar-protocol";
@@ -289,11 +290,17 @@ function jobReads(outcomes: SidecarStructuredContent): SidecarReads {
       result?: unknown;
       error?: { code: number; message: string; data?: unknown };
     };
-    return error
-      ? Promise.reject(
-          new SidecarRpcError(error.code, error.message, error.data),
-        )
-      : Promise.resolve(result as ComposedMethods[M][1]);
+    if (error) {
+      return Promise.reject(
+        new SidecarRpcError(error.code, error.message, error.data),
+      );
+    }
+    return new Promise((resolve) => {
+      // A composed result is checked against the method's pinned contract
+      // as the direct request checks its response; a mismatch rejects.
+      checkMethodResult(method, result);
+      resolve(result as ComposedMethods[M][1]);
+    });
   };
   // A method the job did not run, or that failed, answers as an older or
   // failing sidecar's would.

@@ -686,6 +686,31 @@ describe("desktop sidecar tools run as jobs", () => {
     }
   });
 
+  it("rejects a malformed composed result as the direct read rejects a malformed response", async () => {
+    for (const [tool, malformed] of [
+      [SEARCH_SIDECAR_INDEX_TOOL, { hits: "none" }],
+      [LIST_SIDECAR_MAILBOXES_TOOL, { mailboxes: [{ id: 42 }] }],
+      [
+        GET_SIDECAR_DOCUMENT_TOOL,
+        { filename: "mock.eml", mimeType: "message/rfc822" },
+      ],
+    ] as const) {
+      const method = methodOf(tool);
+      const { legacy, viaJob, job } = await bothPaths(tool, INPUTS[tool], {
+        ...RPC,
+        [method]: { result: malformed },
+      });
+      expect(legacy).toEqual({
+        ok: false,
+        error: expect.stringContaining(
+          `Result for ${method} does not match the pinned contract.`,
+        ),
+      });
+      expect(viaJob).toEqual(legacy);
+      expect(job.options.uploadAttachment).not.toHaveBeenCalled();
+    }
+  });
+
   it("returns a lost job to a task as the loss of the app", async () => {
     const tool = LIST_SIDECAR_MAILBOXES_TOOL;
     const direct = sidecar({
@@ -980,4 +1005,50 @@ describe("desktop sidecar tools in strict mode", () => {
       expect(path.requests).toEqual([]);
     },
   );
+
+  it("offers a reviewed tool only while the strict sidecar enables jobs.review.v1", async () => {
+    const path = sidecar(RPC, strict);
+    path.supports.mockImplementation((method) => method !== "jobs.review.v1");
+    for (const tool of TOOLS) {
+      // An account-level tool runs without review, so it needs no opener.
+      const offered = !selects(tool);
+      expect(path.tool(tool).isAvailable()).toBe(offered);
+      expect(
+        sidecarToolAvailable(path.client, {
+          name: tool,
+          method: methodOf(tool),
+        }),
+      ).toBe(offered);
+      const outcome = await path
+        .tool(tool)
+        .execute(INPUTS[tool], { ...context, toolCallId: tool });
+      if (offered) {
+        expect(outcome).toMatchObject({ ok: true });
+        continue;
+      }
+      // Unavailable now, not a job that waits for a review nobody can open.
+      expect(outcome).toEqual({
+        ok: false,
+        error: "This desktop sidecar capability is unavailable on this device.",
+      });
+      expect(
+        await path.tool(tool).execute(INPUTS[tool], {
+          ...grantContext,
+          toolCallId: `${tool}-task`,
+        }),
+      ).toMatchObject({
+        ok: false,
+        validationErrors: [{ code: "context_unavailable" }],
+      });
+    }
+    expect(
+      path.requests
+        .filter(({ method }) => method === "jobs.start.v1")
+        .map(({ params }) => (params.calls as JobToolCall[])[0].name),
+    ).toEqual(TOOLS.filter((tool) => !selects(tool)));
+    expect(path.methods()).not.toContain("jobs.review.v1");
+    expect(
+      path.methods().filter((method) => !method.startsWith("jobs.")),
+    ).toEqual([]);
+  });
 });

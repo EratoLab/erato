@@ -87,10 +87,25 @@ it("lists only the tools this sidecar supports, with their stored decision", () 
 it.each([NORMAL_MODE, STRICT_MODE])(
   "lists the tools a %s runs as jobs, as the chat offers them",
   (mode) => {
-    setup(["jobs.start.v1", "jobs.status.v1"], fixtureDiscovery(mode));
+    setup(
+      ["jobs.start.v1", "jobs.status.v1", "jobs.review.v1"],
+      fixtureDiscovery(mode),
+    );
     expect(screen.getAllByRole("radiogroup")).toHaveLength(6);
   },
 );
+
+it("lists only the account-level tools for a strict sidecar without jobs.review.v1", () => {
+  // Without the review opener, a reviewed tool's job could never be decided.
+  setup(["jobs.start.v1", "jobs.status.v1"], fixtureDiscovery(STRICT_MODE));
+  expect(screen.getAllByRole("radiogroup")).toHaveLength(2);
+  expect(
+    screen.getByRole("radiogroup", { name: "List mailboxes on this device" }),
+  ).toBeInTheDocument();
+  expect(
+    screen.queryByRole("radiogroup", { name: "Search local emails and files" }),
+  ).not.toBeInTheDocument();
+});
 
 it("lists no tool for a strict sidecar that runs no jobs", () => {
   const queryClient = new QueryClient();

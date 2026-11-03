@@ -29,16 +29,29 @@ const PENDING_STATES = new Set<JobStatus["state"]>([
 ]);
 
 /**
+ * Whether strict mode reviews `tool`'s results before they leave the device:
+ * its provider entry selects items (DELEGATION.md, "Results and selection").
+ * A tool the table does not know counts as reviewed.
+ */
+export function reviewedUnderStrict(tool: string): boolean {
+  return (
+    SIDECAR_PROVIDER.tools.find(({ name }) => name === tool)?.selection !== null
+  );
+}
+
+/**
  * Whether the sidecar runs `tool` as a job (SPEC §3): discovery reports the
  * job envelope and an available `sidecar` provider that lists the tool, and
- * jobs.start.v1 and jobs.status.v1 are enabled. Otherwise the tool keeps its
- * direct RPCs, outside strict mode.
+ * jobs.start.v1 and jobs.status.v1 are enabled. Under strict mode a reviewed
+ * tool also needs jobs.review.v1, which opens the native review; without it
+ * the job would wait for a decision nobody can make. Otherwise the tool
+ * keeps its direct RPCs, outside strict mode.
  */
 export function runsAsSidecarJob(
   client: DesktopSidecarClient,
   tool: string,
 ): boolean {
-  const { jobs, providers } = client.getSnapshot();
+  const { strict, jobs, providers } = client.getSnapshot();
   return (
     jobs !== undefined &&
     (providers ?? []).some(
@@ -48,7 +61,10 @@ export function runsAsSidecarJob(
         provider.tools.includes(tool),
     ) &&
     client.supports("jobs.start.v1") &&
-    client.supports("jobs.status.v1")
+    client.supports("jobs.status.v1") &&
+    (strict !== true ||
+      !reviewedUnderStrict(tool) ||
+      client.supports("jobs.review.v1"))
   );
 }
 
