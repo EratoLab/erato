@@ -36,3 +36,9 @@ Existing serialized snapshots keep their original order, including previously pr
 Regression coverage in `prompt_composition/tests/test_cases/facet_placement.rs` checks full abstract/resolved ordering, first/later hidden baseline replay, branch/edit/regeneration ancestry, and continuation from a checked-in pre-refactor JSON fixture. Provider tests capture actual adapter HTTP payloads, including tool continuations with thinking content, to detect silent hoisting.
 
 This decision does not settle normal-facet deactivation semantics ([ERMAIN-1100](https://linear.app/erato-labs/issue/ERMAIN-1100)) or hidden-facet applicability when platforms/configuration change ([ERMAIN-1102](https://linear.app/erato-labs/issue/ERMAIN-1102)).
+
+## Baseline preservation regression coverage
+
+The ERMAIN-1099 review found no additional runtime change necessary after ERMAIN-1101: normal facet templates and additional prompts do not set the resolver's system-head flag, and hidden baseline prompts still do. Regression tests cover no selection → alpha → zeta → unchanged selection through serialized snapshots, with combined, template-only and additional-only prompts. They also verify replacement of the old base, assistant and hidden prompts on a context rebase, including a new head containing only hidden instructions. Existing action replay coverage remains in place.
+
+Previously rendered normal directives remain at their original activation boundary when another facet is selected; removing inactive facets is ERMAIN-1100. This preserves an intact historical baseline prospectively and does not reconstruct instructions already missing from a saved snapshot.

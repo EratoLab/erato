@@ -510,3 +510,162 @@ async fn current_attachments_follow_tip_directives_and_user_text() {
         matches!(&messages.messages.last().unwrap().content, ContentPart::TextFilePointer(pointer) if pointer.file_upload_id == file)
     );
 }
+
+#[tokio::test]
+async fn baseline_survives_successive_facet_activations_and_persisted_replay() {
+    // Exercise both prompt arms independently as well as their combination.
+    for (template, additional) in [(true, true), (true, false), (false, true)] {
+        let mut config = config();
+        for id in ["alpha", "zeta"] {
+            let facet = config.facets.facets.get_mut(id).unwrap();
+            facet.disable_facet_prompt_template = !template;
+            if !additional {
+                facet.additional_system_prompt = None;
+            }
+        }
+        let provider = MockPromptProvider::new()
+            .with_system_prompt("base")
+            .with_assistant("Assistant", "persona", vec![]);
+        let mut repo = MockMessageRepository::new();
+        let mut previous = None;
+        let mut expected = baseline();
+        for (turn, selected) in [vec![], vec!["alpha"], vec!["zeta"], vec!["zeta"]]
+            .into_iter()
+            .enumerate()
+        {
+            let user = Uuid::new_v4();
+            let user_text = format!("U{}", turn + 1);
+            repo.add_message(user, previous, MessageRole::User, &user_text);
+            let sequence = build_abstract_sequence(
+                &repo,
+                &provider,
+                &create_test_chat(),
+                &user,
+                vec![],
+                &create_test_chat_provider_config(),
+                &config.facets,
+                &selected
+                    .iter()
+                    .map(|id| (*id).to_string())
+                    .collect::<Vec<_>>(),
+                None,
+            )
+            .await
+            .unwrap();
+            let (_, snapshot) = resolve_sequence(sequence, &repo, &MockFileResolver::new())
+                .await
+                .unwrap();
+            if turn == 1 || turn == 2 {
+                let id = selected[0];
+                if template {
+                    expected.push(reminder(&format!("Enable {id}")));
+                }
+                if additional {
+                    expected.push(reminder(&format!("{id} instructions")));
+                }
+            }
+            expected.push(user_text);
+            assert_eq!(labels(&snapshot), expected);
+            assert!(
+                snapshot.messages[..3]
+                    .iter()
+                    .all(|m| m.role == MessageRole::System)
+            );
+            assert!(
+                snapshot.messages[3..]
+                    .iter()
+                    .all(|m| m.role != MessageRole::System)
+            );
+            let reply = Uuid::new_v4();
+            let reply_text = format!("R{}", turn + 1);
+            repo.add_message(reply, Some(user), MessageRole::Assistant, &reply_text);
+            repo.update_generation_input_messages(reply, &snapshot);
+            let selected = selected
+                .into_iter()
+                .map(|id| (id, true))
+                .collect::<HashMap<_, _>>();
+            repo.set_generation_parameters(reply, serde_json::json!({"selected_facets": selected}));
+            expected.push(reply_text);
+            previous = Some(reply);
+        }
+    }
+}
+
+#[tokio::test]
+async fn context_rebase_replaces_baseline_including_hidden_only_head() {
+    for hidden_only in [false, true] {
+        let mut repo = MockMessageRepository::new();
+        let user = Uuid::new_v4();
+        repo.add_message(user, None, MessageRole::User, "U1");
+        let (_, first) = compose(&repo, user, &["alpha"], Some("old")).await;
+        let reply = Uuid::new_v4();
+        repo.add_message(reply, Some(user), MessageRole::Assistant, "R1");
+        repo.update_generation_input_messages(reply, &first);
+        repo.set_generation_parameters(
+            reply,
+            serde_json::json!({"selected_facets": {"alpha": true}}),
+        );
+        let next_user = Uuid::new_v4();
+        repo.add_message(next_user, Some(reply), MessageRole::User, "U2");
+        let mut chat = create_delegated_test_chat(None, None, true);
+        let mut configuration = crate::models::chat::parse_chat_configuration(&chat)
+            .unwrap()
+            .unwrap();
+        configuration.provenance.as_mut().unwrap().rebase_cutoff =
+            Some(repo.messages[&reply].created_at + chrono::Duration::seconds(1));
+        chat.assistant_configuration = Some(configuration.to_json().unwrap());
+        let mut config = config();
+        config
+            .facets
+            .facets
+            .get_mut("hidden")
+            .unwrap()
+            .additional_system_prompt = Some(PromptSourceSpecification::Static {
+            content: "new hidden".into(),
+        });
+        let provider = if hidden_only {
+            MockPromptProvider::new()
+        } else {
+            MockPromptProvider::new()
+                .with_system_prompt("new base")
+                .with_assistant("New assistant", "new persona", vec![])
+        };
+        let sequence = build_abstract_sequence(
+            &repo,
+            &provider,
+            &chat,
+            &next_user,
+            vec![],
+            &create_test_chat_provider_config(),
+            &config.facets,
+            &["zeta".into()],
+            None,
+        )
+        .await
+        .unwrap();
+        let (_, snapshot) = resolve_sequence(sequence, &repo, &MockFileResolver::new())
+            .await
+            .unwrap();
+        let head = if hidden_only {
+            vec!["new hidden".to_string()]
+        } else {
+            vec!["new base".into(), "new persona".into(), "new hidden".into()]
+        };
+        assert_eq!(
+            labels(&snapshot),
+            [
+                head,
+                vec![
+                    reminder("Enable alpha"),
+                    reminder("alpha instructions"),
+                    "U1".into(),
+                    "R1".into(),
+                    reminder("Enable zeta"),
+                    reminder("zeta instructions"),
+                    "U2".into(),
+                ]
+            ]
+            .concat()
+        );
+    }
+}
