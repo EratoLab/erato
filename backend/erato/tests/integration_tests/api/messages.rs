@@ -915,6 +915,18 @@ async fn test_regenerate_drops_stored_action_facet_that_no_longer_validates(pool
 async fn test_facet_prompt_injection_toggle_behavior(pool: Pool<Postgres>) {
     let (mut app_config, _server) = setup_mock_llm_server(None).await;
 
+    for provider in app_config
+        .chat_providers
+        .as_mut()
+        .unwrap()
+        .providers
+        .values_mut()
+    {
+        provider.system_prompt = Some(PromptSourceSpecification::Static {
+            content: "Answer in German.".to_string(),
+        });
+    }
+
     let mut facets = HashMap::new();
     facets.insert(
         "web_search".to_string(),
@@ -1057,6 +1069,8 @@ async fn test_facet_prompt_injection_toggle_behavior(pool: Pool<Postgres>) {
             .position(|msg| msg["content"]["text"].as_str() == Some(text))
             .unwrap_or_else(|| panic!("Missing {text:?} in {messages:?}"))
     };
+    assert_eq!(position(first_messages, "Answer in German."), 0);
+    assert_eq!(first_messages[0]["role"], "system");
     let template = position(first_messages, &expected_template);
     let additional = position(first_messages, &expected_additional);
     let first_user = position(first_messages, "First turn");
