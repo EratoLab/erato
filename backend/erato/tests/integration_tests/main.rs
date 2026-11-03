@@ -190,27 +190,10 @@ async fn test_app_state_internal(
     let mcp_servers = McpServers::new(&app_config);
     let reloadable = ReloadableAppState::new(&app_config, mcp_servers);
 
-    let local_delegation_signer = app_config
-        .desktop_sidecar
-        .local_delegation
-        .enabled
-        .then(|| {
-            erato::services::local_delegation::signing::Signer::new(
-                &app_config.desktop_sidecar.local_delegation,
-            )
-            .map(Arc::new)
-        })
-        .transpose()
-        .unwrap();
     let app_state = AppState {
         memory_reservation: None,
-        client_operations: erato::services::client_operations::registry(
-            &app_config,
-            local_delegation_signer.as_ref(),
-        )
-        .unwrap(),
+        client_operations: erato::services::client_operations::registry(&app_config).unwrap(),
         executor_streams: Default::default(),
-        local_delegation_signer,
         ms_teams_bot: None,
         entra_group_overage:
             erato::services::entra_group_overage::EntraGroupOverageResolver::from_config(

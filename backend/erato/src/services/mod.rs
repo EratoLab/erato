@@ -10,7 +10,6 @@ pub mod decision;
 pub mod delegated_client_tools;
 pub mod delegation;
 pub mod delegation_trace;
-pub mod local_delegation;
 pub mod submission_correction;
 pub(crate) mod tool_arguments;
 pub(crate) mod tool_call_budget;

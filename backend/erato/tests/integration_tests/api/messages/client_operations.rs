@@ -1419,7 +1419,7 @@ fn install_policy_kind(
 #[sqlx::test(migrator = "crate::MIGRATOR")]
 async fn consent_kinds_cannot_execute_or_submit_through_the_fast_path(pool: Pool<Postgres>) {
     let (mut state, _mock, _recorder, _) = setup(pool, 60_000).await;
-    for consent in [ConsentPolicy::Ask, ConsentPolicy::Native] {
+    for consent in [ConsentPolicy::Ask] {
         install_policy_kind(&mut state, consent);
         let chat_id = seed_origin_chat(&state.db).await;
         let server = app_server(state.clone());
@@ -1485,8 +1485,6 @@ async fn consent_kinds_cannot_execute_or_submit_through_the_fast_path(pool: Pool
             .json(&json!({"binding":binding("device-one"),"user_confirmed":true}))
             .await;
         claimed.assert_status_ok();
-        // Native proof belongs to the kind validator; this fixture tests routing,
-        // not an attestation. Neither consent mode can use unclaimed acceptance.
         server.post(&format!("/api/v1beta/me/client-operations/{}/result", request.attempt_id))
             .with_bearer_token(TEST_JWT_TOKEN).add_header("X-Erato-Client-Tools", "read_document_page")
             .json(&json!({"claim_token":claimed.json::<Value>()["claim_token"],"result":page_result(&request,binding("device-one"))}))

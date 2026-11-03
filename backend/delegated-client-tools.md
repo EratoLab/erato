@@ -361,8 +361,8 @@ parent chat ends its live rows (`chat_archived`); an archived chat's rows are
 never used, and deleting the chat deletes them.
 
 A context approval replaces the server's Ask for covered calls and nothing else
-(CT-9): the host's own prompts, a native release review and local evidence never
-pass through it.
+(CT-9): the host's own prompts and a native release review never pass through
+it.
 
 ## Freshness and the task result
 
@@ -496,10 +496,10 @@ A host's handlers pass `clientToolHostAdapterConformanceFailures` from
   does. An app from before 0.1.43 reports none, and the binding then names this
   Erato client's routing id, as before: a parked call is then picked up only
   by the same browser profile or add-in. A shell
-  sends it only while the app is ready, declares no local delegation and offers
-  one of the six tools, so a turn sent while the app is not running gives its
-  tasks no sidecar tools. Because several windows may hold a stream for the
-  same binding, a claim names its client (`X-Erato-Executor-Claimant`, see
+  sends it only while the app is ready and offers one of the six tools, so a
+  turn sent while the app is not running gives its tasks no sidecar tools.
+  Because several windows may hold a stream for the same binding, a claim
+  names its client (`X-Erato-Executor-Claimant`, see
   `durable-client-operations.md`, "Grant operations"): the window that claimed
   a call renews it, the others wait for the claim to lapse, and a live call
   still goes to the newest pane that serves its tool. A call parked while the
@@ -534,19 +534,19 @@ A host's handlers pass `clientToolHostAdapterConformanceFailures` from
   until the sidecar reports an index position and the items added since. The
   server copies only the contract keys into the task result, so `scope` stays in
   the task chat's tool output.
-- Strict mode is unchanged: any local delegation declaration keeps the six tools
+- Strict mode (discovery `strict: true`): the six tools run only as sidecar
+  jobs. An app in strict mode that does not advertise `jobs` keeps them
   unavailable and the binding unsent, so no task of such a turn gets a grant
-  (`NOT_FROM_HOST`). A switch of the Erato desktop app to strict mode during a
-  call uploads nothing more; files the user approved that were uploaded before
+  (`NOT_FROM_HOST`). Under strict a content tool's call waits for review in the
+  Erato desktop app; only the items the user approves there return, and a
+  decline, cancellation or expiry ends the call with an error that is not
+  retried. A switch of the Erato desktop app to strict mode during a call
+  uploads nothing more; files the user approved that were uploaded before
   the switch stay. On the slow path, if the user answers the device prompt
   before the next claim renewal, the call fails without content; otherwise the
   renewal stops, the prompt closes and the call waits until its attempt ends,
   then expires. On the live path the device posts nothing and the call ends
-  when the run stops waiting for it. A local-evidence task's
-  card in the parent shows its review state while this device knows the job (it
-  forgets the job once acknowledged); otherwise "Replaced by a later report"
-  once a later report of the same task is in the chat, else "Review in the
-  Erato desktop app".
+  when the run stops waiting for it.
 
 ## Not in this record
 

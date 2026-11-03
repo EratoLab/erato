@@ -392,30 +392,6 @@ CREATE TABLE public.file_uploads (
 
 
 --
--- Name: local_evidence_exports; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.local_evidence_exports (
-    attempt_id uuid NOT NULL,
-    binding jsonb NOT NULL,
-    origin text NOT NULL,
-    plan jsonb NOT NULL,
-    receipt text,
-    export_id text,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT local_evidence_exports_check CHECK (((receipt IS NULL) = (export_id IS NULL)))
-);
-
-
---
--- Name: TABLE local_evidence_exports; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON TABLE public.local_evidence_exports IS 'Native immutable binding and durable acknowledgement receipt. No job lifecycle, generation checkpoint, native handles/statuses, or credentials.';
-
-
---
 -- Name: mcp_server_oauth_authorization_states; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -873,22 +849,6 @@ ALTER TABLE ONLY public.client_operation_attempts
 
 ALTER TABLE ONLY public.file_uploads
     ADD CONSTRAINT file_uploads_pkey PRIMARY KEY (id);
-
-
---
--- Name: local_evidence_exports local_evidence_exports_export_id_key; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.local_evidence_exports
-    ADD CONSTRAINT local_evidence_exports_export_id_key UNIQUE (export_id);
-
-
---
--- Name: local_evidence_exports local_evidence_exports_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.local_evidence_exports
-    ADD CONSTRAINT local_evidence_exports_pkey PRIMARY KEY (attempt_id);
 
 
 --
@@ -1569,13 +1529,6 @@ CREATE TRIGGER on_update_set_updated_columns_client_operation_attempts BEFORE UP
 
 
 --
--- Name: local_evidence_exports on_update_set_updated_columns_local_evidence_exports; Type: TRIGGER; Schema: public; Owner: -
---
-
-CREATE TRIGGER on_update_set_updated_columns_local_evidence_exports BEFORE UPDATE ON public.local_evidence_exports FOR EACH ROW EXECUTE FUNCTION public.set_updated_at_column();
-
-
---
 -- Name: mcp_server_oauth_authorization_states on_update_set_updated_columns_mcp_server_oauth_authorization_st; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -1834,14 +1787,6 @@ ALTER TABLE ONLY public.client_operation_attempts
 
 ALTER TABLE ONLY public.client_operation_attempts
     ADD CONSTRAINT client_operation_attempts_message_id_fkey FOREIGN KEY (message_id) REFERENCES public.messages(id) ON DELETE CASCADE;
-
-
---
--- Name: local_evidence_exports local_evidence_exports_attempt_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.local_evidence_exports
-    ADD CONSTRAINT local_evidence_exports_attempt_id_fkey FOREIGN KEY (attempt_id) REFERENCES public.client_operation_attempts(attempt_id) ON DELETE CASCADE;
 
 
 --

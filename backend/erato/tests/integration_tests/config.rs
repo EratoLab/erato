@@ -120,6 +120,32 @@ directory = "/tmp/desktop-sidecar-artifacts"
     );
 }
 
+const STRICT_SIDECAR_BASE: &str = r#"
+[desktop_sidecar]
+strict_mode = true
+"#;
+
+#[test]
+fn test_strict_mode_with_durable_operations_installs_strict_downloads() {
+    let config = migrate_config_with_action_facets(&format!(
+        "{STRICT_SIDECAR_BASE}\n[client_tools]\ndurable_operations_enabled = true\n"
+    ));
+    assert!(config.strict_mode());
+    assert!(!config.delegation.tasks.enabled);
+    assert_eq!(
+        serde_json::Value::Object(config.desktop_sidecar.bootstrap_fields().unwrap()),
+        serde_json::json!({"mode": "strict"})
+    );
+}
+
+#[test]
+#[should_panic(
+    expected = "`desktop_sidecar.strict_mode` requires `client_tools.durable_operations_enabled = true`"
+)]
+fn test_strict_mode_requires_durable_operations() {
+    migrate_config_with_action_facets(STRICT_SIDECAR_BASE);
+}
+
 /// Tests OpenAI provider configuration parsing.
 ///
 /// # Test Categories
@@ -4180,24 +4206,6 @@ description = "Search the local index"
 parameters = '{"type":"object"}'
 child_access = "read"
 host_context = "desktop_sidecar"
-approval_scope = "context"
-"#,
-    );
-}
-
-/// CT-9: local evidence runs its own release review and no configured tool can
-/// take its name, so no context approval ever covers it.
-#[test]
-#[should_panic(expected = "Client tool named 'local_collect_evidence' is reserved.")]
-fn approval_scope_context_never_covers_local_evidence() {
-    migrate_config_with_action_facets(
-        r#"
-[client_tools.tools.evidence]
-name = "local_collect_evidence"
-description = "Collect local evidence"
-parameters = '{ "type": "object" }'
-child_access = "read"
-host_context = "word_document"
 approval_scope = "context"
 "#,
     );

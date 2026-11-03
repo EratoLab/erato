@@ -1100,7 +1100,7 @@ pub enum DelegationRunReason {
     /// Parked on an approval the user has not answered yet.
     ApprovalPending,
     /// Parked on a durable client operation that waits for a client to run
-    /// it: a granted call, or local evidence.
+    /// it: a granted call.
     ClientPending,
     /// Hit a gated call it could not ask about, so it could not continue.
     ///
@@ -1575,8 +1575,8 @@ pub(crate) async fn read_child_approval_request<C: sea_orm::ConnectionTrait>(
 }
 
 /// The granted call a parked child waits for a client to run: its row ends on
-/// a pending `client_tool.v1` operation with call lineage. Other durable stops,
-/// such as local evidence, are never a waiting child.
+/// a pending `client_tool.v1` operation with call lineage. Other durable stops
+/// are never a waiting child.
 pub(crate) async fn read_child_wait<C: sea_orm::ConnectionTrait>(
     conn: &C,
     child_chat_id: Uuid,
