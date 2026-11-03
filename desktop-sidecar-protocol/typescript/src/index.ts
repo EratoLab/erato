@@ -4,6 +4,7 @@ export {
   MAX_RESPONSE_BYTES,
   PROTOCOL_VERSIONS,
   checkMethodParams,
+  checkMethodResult,
   createBrowserClientInfo,
   type DesktopSidecarClientOptions,
   type InvokeOptions,

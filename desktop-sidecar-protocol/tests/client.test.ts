@@ -6,6 +6,7 @@ import {
   HttpTransport,
   SidecarClientError,
   checkMethodParams,
+  checkMethodResult,
   type SidecarClientInfo,
   type SidecarProgressV1Result,
   type DiscoverResult,
@@ -622,6 +623,40 @@ describe("DesktopSidecarClient", () => {
     expect(() =>
       checkMethodParams("search.query.v1", { text: "report" }),
     ).not.toThrow();
+    expect(() => checkMethodParams("no.such.method.v1", {})).toThrow(
+      "No pinned contract for no.such.method.v1.",
+    );
+  });
+
+  it("checks results it did not request with the error invoke throws", async () => {
+    const { client } = await setup({ echoResultOverride: { message: 42 } });
+    await client.discover();
+
+    const received = await client
+      .invoke("diagnostics.echo.v1", { message: "hello" })
+      .catch((error: unknown) => error);
+    let checked: unknown;
+    try {
+      checkMethodResult("diagnostics.echo.v1", { message: 42 });
+    } catch (error) {
+      checked = error;
+    }
+    expect(received).toMatchObject({
+      kind: "invalid_result",
+      message: expect.stringContaining("/message must be string"),
+    });
+    expect(checked).toEqual(received);
+    // The check tolerates additive fields as a direct response does.
+    expect(() =>
+      checkMethodResult("diagnostics.echo.v1", {
+        message: "hello",
+        sidecarInstanceId: "mock-sidecar-instance",
+        futureField: { revision: 2 },
+      }),
+    ).not.toThrow();
+    expect(() => checkMethodResult("no.such.method.v1", {})).toThrow(
+      "No pinned contract for no.such.method.v1.",
+    );
   });
 
   it("observes progress steps while a delayed echo runs and after it settles", async () => {

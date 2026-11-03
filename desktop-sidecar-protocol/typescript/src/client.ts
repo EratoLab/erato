@@ -363,6 +363,12 @@ const builtInContracts: Readonly<Record<string, SidecarMethodContract>> = {
   },
 };
 
+function pinnedContract(method: string): SidecarMethodContract {
+  const contract = builtInContracts[method];
+  if (!contract) throw new Error(`No pinned contract for ${method}.`);
+  return contract;
+}
+
 /**
  * Checks `params` against `method`'s pinned contract and throws the
  * `invalid_params` error `invoke` throws for them. For parameters a client
@@ -370,13 +376,30 @@ const builtInContracts: Readonly<Record<string, SidecarMethodContract>> = {
  * call composes on the sidecar.
  */
 export function checkMethodParams(method: string, params: unknown): void {
-  const contract = builtInContracts[method];
-  if (!contract) throw new Error(`No pinned contract for ${method}.`);
-  if (!contract.validateParams(params)) {
+  const { validateParams } = pinnedContract(method);
+  if (!validateParams(params)) {
     throw validationError(
       "invalid_params",
       `Parameters for ${method} do not match the pinned contract.`,
-      contract.validateParams,
+      validateParams,
+    );
+  }
+}
+
+/**
+ * Checks `result` against `method`'s pinned contract and throws the
+ * `invalid_result` error `invoke` throws for a direct response. For results
+ * a client receives without sending the request itself, such as the composed
+ * outcomes in a job result's `structuredContent`. Unlike `invoke`, it leaves
+ * the client's readiness as it is.
+ */
+export function checkMethodResult(method: string, result: unknown): void {
+  const { validateResult } = pinnedContract(method);
+  if (!validateResult(result)) {
+    throw validationError(
+      "invalid_result",
+      `Result for ${method} does not match the pinned contract.`,
+      validateResult,
     );
   }
 }
