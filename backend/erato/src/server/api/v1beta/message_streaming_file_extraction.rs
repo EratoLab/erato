@@ -644,7 +644,6 @@ mod tests {
         AppState {
             memory_reservation: None,
             db: sea_orm::DatabaseConnection::default(),
-            local_delegation_signer: None,
             ms_teams_bot: None,
             entra_group_overage: None,
             default_file_storage_provider: None,

@@ -286,8 +286,7 @@ pub trait OperationKind: Send + Sync {
         None
     }
     /// Whether this logical turn may offer the operation again after a result
-    /// with this outcome. For example, cancelling native collection must not
-    /// start another search.
+    /// with this outcome.
     fn reoffer_after_result(&self, _outcome: OperationOutcome) -> bool {
         true
     }
@@ -361,13 +360,10 @@ impl OperationRegistry {
     }
 }
 
-/// Local evidence when its signer exists, plus one `client_tool.v1` instance per
-/// configured tool with a `durable` table while durable operations are enabled.
-pub fn registry(
-    config: &crate::config::AppConfig,
-    signer: Option<&Arc<crate::services::local_delegation::signing::Signer>>,
-) -> Result<OperationRegistry, eyre::Report> {
-    let mut registry = crate::services::local_delegation::tool::registry(signer);
+/// One `client_tool.v1` instance per configured tool with a `durable` table
+/// while durable operations are enabled.
+pub fn registry(config: &crate::config::AppConfig) -> Result<OperationRegistry, eyre::Report> {
+    let mut registry = OperationRegistry::default();
     if config.client_tools.durable_operations_enabled {
         for tool in config.client_tools.tools.values() {
             let Some(kind) =

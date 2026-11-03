@@ -89,12 +89,6 @@ fn load_desktop_sidecar(config: &AppConfig) -> Option<Arc<DesktopSidecarDistribu
             );
             Some(Arc::new(distribution))
         }
-        // Downloads install strictness, so a strict deployment must not run
-        // without native-review artifacts to offer.
-        Err(error) if config.strict_mode() => panic!(
-            "`desktop_sidecar.strict_mode` requires a loadable desktop sidecar distribution in {}: {error:#}",
-            config.desktop_sidecar.distribution.directory
-        ),
         Err(error) => {
             tracing::error!(
                 directory = %config.desktop_sidecar.distribution.directory,
@@ -103,21 +97,5 @@ fn load_desktop_sidecar(config: &AppConfig) -> Option<Arc<DesktopSidecarDistribu
             );
             None
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    #[should_panic(expected = "`desktop_sidecar.strict_mode` requires a loadable desktop sidecar")]
-    fn strict_mode_refuses_to_start_without_its_distribution() {
-        let directory = tempfile::tempdir().unwrap();
-        let mut config = AppConfig::default();
-        config.desktop_sidecar.strict_mode = true;
-        config.desktop_sidecar.distribution.enabled = true;
-        config.desktop_sidecar.distribution.directory = directory.path().display().to_string();
-        load_desktop_sidecar(&config);
     }
 }

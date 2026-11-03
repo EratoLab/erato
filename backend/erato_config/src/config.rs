@@ -35,7 +35,6 @@ pub const DELEGATE_TASK_TOOL_NAME: &str = "delegate_task";
 /// async task results are delivered as turns, so nothing polls for them yet,
 /// but the name stays free for that extension.
 pub const COLLECT_TASKS_TOOL_NAME: &str = "collect_tasks";
-pub const LOCAL_COLLECT_EVIDENCE_TOOL_NAME: &str = "local_collect_evidence";
 
 /// Tool names a configured client tool may not take.
 pub const RESERVED_TOOL_NAMES: &[&str] = &[
@@ -43,7 +42,6 @@ pub const RESERVED_TOOL_NAMES: &[&str] = &[
     DELEGATE_TO_ASSISTANT_TOOL_NAME,
     DELEGATE_TASK_TOOL_NAME,
     COLLECT_TASKS_TOOL_NAME,
-    LOCAL_COLLECT_EVIDENCE_TOOL_NAME,
 ];
 
 /// Whether a `tool_call_allowlist` selects a reserved `erato/<name>` tool.
@@ -820,20 +818,12 @@ pub struct DesktopSidecarConfig {
     /// Install downloaded sidecars in strict mode: content leaves the device only
     /// after native review. The mode is embedded in the bootstrap; browser
     /// configuration cannot set or relax it. Requires
-    /// `client_tools.durable_operations_enabled`. Transitional: the legacy strict
-    /// path also requires `delegation.tasks.enabled` and the `local_delegation`
-    /// key material until the job-based strict path replaces them.
+    /// `client_tools.durable_operations_enabled`.
     #[serde(default)]
     #[facet(erato_config::introduced_in(version = "unreleased"))]
     #[facet(erato_config::stability(level = "alpha"))]
     #[facet(erato_config::security_relevance(level = "high"))]
     pub strict_mode: bool,
-
-    /// Transitional key material of the legacy strict path, used only with
-    /// `strict_mode`; independent of legacy file-upload preferences.
-    #[serde(default)]
-    #[facet(erato_config::introduced_in(version = "0.7.0"))]
-    pub local_delegation: LocalDelegationConfig,
 
     /// Default file upload decision. Users may override this in Sidecar settings.
     #[serde(default)]
@@ -914,28 +904,6 @@ pub struct DesktopSidecarConfig {
     pub organization_configuration: DesktopSidecarOrganizationConfiguration,
 }
 
-/// `desktop_sidecar.strict_mode` is the switch; this section has no `enabled`
-/// key, and a stale one fails to load rather than being ignored.
-#[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
-#[serde(deny_unknown_fields)]
-pub struct LocalDelegationConfig {
-    /// Canonical backend origin (https in production) pinned in the native
-    /// installation as the assertion issuer. It must be exactly
-    /// `https://host[:port]` or `http://host[:port]`; a plaintext `http`
-    /// origin is accepted for development setups and logs a startup warning.
-    /// Other schemes are rejected, matching the sidecar's trust policy.
-    pub backend_origin: Option<String>,
-    /// Identifier of the active Ed25519 signing key.
-    pub signing_key_id: Option<String>,
-    /// Backend-only Ed25519 PKCS#8 PEM. Never included in native bootstrap.
-    #[facet(sensitive)]
-    pub signing_private_key_pem: Option<SecretConfigString>,
-    /// Public Ed25519 keys indexed by key ID, encoded as base64url without padding.
-    /// Retain old receipt verification keys for the maximum job/tombstone lifetime.
-    #[serde(default)]
-    pub verification_keys: std::collections::BTreeMap<String, String>,
-}
-
 impl DesktopSidecarConfig {
     /// URI schemes are case-insensitive; normalize the plain configured suffix.
     pub fn windows_launch_scheme(&self) -> String {
@@ -977,45 +945,12 @@ impl DesktopSidecarConfig {
             }
         }
         let mut fields = serde_json::Map::new();
-        if self.strict_mode {
-            fields.insert("mode".into(), "strict".into());
-            // Transitional: sidecars that predate `mode` read strictness from
-            // `content_release`, and the legacy strict path verifies its signed
-            // plans against this trust policy. The job-based strict path removes both.
-            let policy = &self.local_delegation;
-            let origin = policy
-                .backend_origin
-                .as_deref()
-                .ok_or_else(|| eyre::eyre!("Local delegation backend origin required"))?;
-            // The sidecar compares `iss` against this value with exact string
-            // equality, so the pinned value must already be the canonical
-            // `scheme://host[:port]` serialization. Integrity comes from the
-            // installed public key and that exact match, not from the scheme,
-            // which is why a plaintext development origin is allowed here.
-            // Only http and https are accepted: the sidecar rejects other
-            // schemes at startup, so refusing them here surfaces the mistake
-            // as a clear configuration error instead of a failed sidecar start.
-            let parsed = url::Url::parse(origin)?;
-            eyre::ensure!(
-                matches!(parsed.scheme(), "http" | "https")
-                    && parsed.origin().ascii_serialization() == origin,
-                "Local delegation requires a canonical http or https backend origin"
-            );
-            eyre::ensure!(
-                !policy.verification_keys.is_empty() && policy.verification_keys.len() <= 8,
-                "Local delegation requires 1..8 public verification keys"
-            );
-            fields.insert("content_release".into(), "strict_snapshot_v1".into());
-            fields.insert(
-                "local_delegation".into(),
-                serde_json::json!({
-                    "backend_origin": origin,
-                    "verification_keys": policy.verification_keys,
-                }),
-            );
+        let mode = if self.strict_mode {
+            "strict"
         } else {
-            fields.insert("mode".into(), "standard".into());
-        }
+            "standard"
+        };
+        fields.insert("mode".into(), mode.into());
         if let Some(port) = self.port {
             eyre::ensure!(
                 port != 0,
@@ -2194,22 +2129,6 @@ impl AppConfig {
         config
             .validate_strict_mode()
             .unwrap_or_else(|error| panic!("Invalid desktop sidecar configuration: {error}"));
-        // A plaintext backend origin loads and the sidecar still pins it by
-        // exact equality, so this is a warning for development setups (local
-        // or non-loopback dev hosts), not an error. bootstrap_fields() rejects
-        // an origin that is not canonical.
-        let local_delegation = &config.desktop_sidecar.local_delegation;
-        if config.strict_mode()
-            && let Some(origin) = local_delegation.backend_origin.as_deref()
-            && let Ok(parsed) = url::Url::parse(origin)
-            && parsed.scheme() != "https"
-        {
-            startup_log::warn_preinit(format!(
-                "`desktop_sidecar.local_delegation.backend_origin` is `{origin}`, which is not \
-                 an https origin. Strict local delegation over plaintext http is for \
-                 development only; production deployments must pin an https origin."
-            ));
-        }
 
         config
     }
@@ -2521,28 +2440,6 @@ impl AppConfig {
             self.client_tools.durable_operations_enabled,
             "`desktop_sidecar.strict_mode` requires `client_tools.durable_operations_enabled = true`"
         );
-        const TRANSITIONAL: &str = "(transitional: the legacy strict path needs it until the \
-                                    job-based strict path replaces it)";
-        eyre::ensure!(
-            self.delegation.tasks.enabled,
-            "`desktop_sidecar.strict_mode` requires `delegation.tasks.enabled = true` {TRANSITIONAL}"
-        );
-        let keys = &self.desktop_sidecar.local_delegation;
-        for (key, present) in [
-            ("backend_origin", keys.backend_origin.is_some()),
-            ("signing_key_id", keys.signing_key_id.is_some()),
-            (
-                "signing_private_key_pem",
-                keys.signing_private_key_pem.is_some(),
-            ),
-            ("verification_keys", !keys.verification_keys.is_empty()),
-        ] {
-            eyre::ensure!(
-                present,
-                "`desktop_sidecar.strict_mode` requires `desktop_sidecar.local_delegation.{key}` \
-                 {TRANSITIONAL}"
-            );
-        }
         Ok(())
     }
 
@@ -6131,8 +6028,8 @@ pub const ACTION_FACET_GRANT_SCOPES: [&str; 2] = ["device", "session_document"];
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default, Facet, HeapSize)]
 pub struct ClientToolsConfig {
     /// Enable durable escalation for compiled, registered operation kinds:
-    /// native local evidence, and configured tools that opt in with a
-    /// `[client_tools.tools.<id>.durable]` table.
+    /// configured tools that opt in with a `[client_tools.tools.<id>.durable]`
+    /// table.
     #[serde(default)]
     #[facet(erato_config::introduced_in(version = "0.7.0"))]
     pub durable_operations_enabled: bool,
@@ -9971,23 +9868,15 @@ mod desktop_sidecar_installation_tests {
     }
 
     #[test]
-    fn strict_bootstrap_contains_only_public_delegation_authority() {
-        let mut config: DesktopSidecarConfig = serde_json::from_value(serde_json::json!({
-            "strict_mode": true,
-            "local_delegation": {"backend_origin":"https://erato.example", "signing_key_id":"key", "signing_private_key_pem":"PRIVATE_KEY_MARKER", "verification_keys":{"key":"public"}}
-        })).unwrap();
-        let fields = config.bootstrap_fields().unwrap();
-        assert_eq!(fields["mode"], "strict");
-        assert_eq!(fields["content_release"], "strict_snapshot_v1");
+    fn strict_bootstrap_carries_only_the_mode() {
+        let mut config = DesktopSidecarConfig {
+            strict_mode: true,
+            ..Default::default()
+        };
         assert_eq!(
-            fields["local_delegation"]["verification_keys"]["key"],
-            "public"
+            serde_json::Value::Object(config.bootstrap_fields().unwrap()),
+            serde_json::json!({"mode": "strict"})
         );
-        let encoded = serde_json::to_string(&fields).unwrap();
-        assert!(!encoded.contains("PRIVATE_KEY_MARKER"));
-        assert!(!encoded.contains("signing_private_key_pem"));
-
-        // Key material alone never makes a download strict.
         config.strict_mode = false;
         assert_eq!(
             serde_json::Value::Object(config.bootstrap_fields().unwrap()),
@@ -9996,124 +9885,18 @@ mod desktop_sidecar_installation_tests {
     }
 
     #[test]
-    fn local_delegation_has_no_enabled_switch() {
-        let error = serde_json::from_value::<DesktopSidecarConfig>(serde_json::json!({
-            "local_delegation": {"enabled": true}
-        }))
-        .unwrap_err();
-        assert!(
-            error.to_string().contains("unknown field `enabled`"),
-            "{error}"
-        );
-    }
-
-    #[test]
-    fn strict_mode_requires_durable_operations_and_transitional_prerequisites() {
+    fn strict_mode_requires_only_durable_operations() {
         let mut config = AppConfig::default();
         config.validate_strict_mode().unwrap();
         config.desktop_sidecar.strict_mode = true;
-        config.desktop_sidecar.local_delegation = serde_json::from_value(serde_json::json!({
-            "backend_origin": "https://erato.example",
-            "signing_key_id": "key",
-            "signing_private_key_pem": "PRIVATE_KEY_MARKER",
-            "verification_keys": {"key": "public"}
-        }))
-        .unwrap();
-        config.delegation.tasks.enabled = true;
         let error = config.validate_strict_mode().unwrap_err().to_string();
         assert!(
-            error.contains("`client_tools.durable_operations_enabled = true`")
-                && !error.contains("transitional"),
+            error.contains("`client_tools.durable_operations_enabled = true`"),
             "{error}"
         );
         config.client_tools.durable_operations_enabled = true;
+        config.delegation.tasks.enabled = false;
         config.validate_strict_mode().unwrap();
-
-        let mut without_tasks = config.clone();
-        without_tasks.delegation.tasks.enabled = false;
-        let error = without_tasks
-            .validate_strict_mode()
-            .unwrap_err()
-            .to_string();
-        assert!(
-            error.contains("`delegation.tasks.enabled = true`") && error.contains("transitional"),
-            "{error}"
-        );
-        for key in [
-            "backend_origin",
-            "signing_key_id",
-            "signing_private_key_pem",
-            "verification_keys",
-        ] {
-            let mut incomplete = config.clone();
-            let keys = &mut incomplete.desktop_sidecar.local_delegation;
-            match key {
-                "backend_origin" => keys.backend_origin = None,
-                "signing_key_id" => keys.signing_key_id = None,
-                "signing_private_key_pem" => keys.signing_private_key_pem = None,
-                _ => keys.verification_keys.clear(),
-            }
-            let error = incomplete.validate_strict_mode().unwrap_err().to_string();
-            assert!(
-                error.contains(&format!("`desktop_sidecar.local_delegation.{key}`"))
-                    && error.contains("transitional"),
-                "{key}: {error}"
-            );
-        }
-    }
-
-    fn strict_config_with_origin(origin: &str) -> DesktopSidecarConfig {
-        serde_json::from_value(serde_json::json!({
-            "strict_mode": true,
-            "local_delegation": {"backend_origin":origin, "signing_key_id":"key", "verification_keys":{"key":"public"}}
-        }))
-        .unwrap()
-    }
-
-    #[test]
-    fn strict_bootstrap_pins_canonical_https_and_plaintext_development_origins() {
-        // Integrity rests on the pinned key and exact origin equality, so a
-        // plaintext origin (loopback or a non-loopback dev host) is pinned as
-        // written. The scheme itself is not what the sidecar trusts.
-        for origin in [
-            "https://erato.example",
-            "https://erato.example:8443",
-            "http://localhost:3130",
-            "http://devhost:3130",
-            "http://127.0.0.1:3130",
-        ] {
-            let fields = strict_config_with_origin(origin)
-                .bootstrap_fields()
-                .unwrap_or_else(|error| panic!("{origin}: {error}"));
-            assert_eq!(fields["local_delegation"]["backend_origin"], origin);
-        }
-    }
-
-    #[test]
-    fn strict_bootstrap_rejects_non_canonical_origins() {
-        for origin in [
-            "https://erato.example/",
-            "https://erato.example/path",
-            "https://erato.example?query=1",
-            "https://erato.example#fragment",
-            "https://user@erato.example",
-            "https://erato.example:443",
-            "HTTPS://erato.example",
-            "http://devhost:3130/",
-            // Canonical tuple origins, but not web schemes.
-            "ws://devhost:3130",
-            "wss://devhost:3130",
-            "ftp://erato.example",
-            "erato.example",
-            "",
-        ] {
-            assert!(
-                strict_config_with_origin(origin)
-                    .bootstrap_fields()
-                    .is_err(),
-                "{origin:?} was accepted"
-            );
-        }
     }
 
     #[test]

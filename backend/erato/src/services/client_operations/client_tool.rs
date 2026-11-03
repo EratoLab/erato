@@ -795,15 +795,9 @@ mod tests {
         plain.name = "search".into();
         plain.durable = None;
         config.client_tools.tools.insert("search".into(), plain);
-        assert_eq!(
-            super::super::registry(&config, None)
-                .unwrap()
-                .kinds()
-                .count(),
-            0
-        );
+        assert_eq!(super::super::registry(&config).unwrap().kinds().count(), 0);
         config.client_tools.durable_operations_enabled = true;
-        let registry = super::super::registry(&config, None).unwrap();
+        let registry = super::super::registry(&config).unwrap();
         assert_eq!(registry.kinds().count(), 1);
         let kind = registry
             .for_operation("outlook/fetch_availability")

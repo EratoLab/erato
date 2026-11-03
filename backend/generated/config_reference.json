@@ -1791,30 +1791,6 @@
     "security_relevance": "unknown",
     "stability": "unstable"
   },
-  "desktop_sidecar.local_delegation.backend_origin": {
-    "default_value_security": "unknown",
-    "introduced_in": "0.7.0",
-    "security_relevance": "unknown",
-    "stability": "unstable"
-  },
-  "desktop_sidecar.local_delegation.signing_key_id": {
-    "default_value_security": "unknown",
-    "introduced_in": "0.7.0",
-    "security_relevance": "unknown",
-    "stability": "unstable"
-  },
-  "desktop_sidecar.local_delegation.signing_private_key_pem": {
-    "default_value_security": "unknown",
-    "introduced_in": "0.7.0",
-    "security_relevance": "unknown",
-    "stability": "unstable"
-  },
-  "desktop_sidecar.local_delegation.verification_keys.<key>": {
-    "default_value_security": "unknown",
-    "introduced_in": "0.7.0",
-    "security_relevance": "unknown",
-    "stability": "unstable"
-  },
   "desktop_sidecar.organization_configuration.outlook_addin_autopin": {
     "default_value_security": "unknown",
     "introduced_in": "unreleased",

@@ -723,63 +723,14 @@ browser configuration cannot set or relax it. Keep it off until the paired
 native/backend/frontend release passes recovery and host qualification.
 
 Strict mode requires `client_tools.durable_operations_enabled = true`; startup
-fails with an error naming it otherwise. With `desktop_sidecar.distribution`
-enabled, startup also fails unless the distribution loads compatible native-review
-artifacts.
-
-Transitional: until the job-based strict path replaces it, strict mode runs the
-legacy strict path described under `desktop_sidecar.local_delegation`, which also
-requires `delegation.tasks.enabled` and that section's key material. Startup fails
-if either is missing.
+fails with an error naming it otherwise. Distribute only sidecar builds from
+protocol package 0.1.44 or later: earlier builds ignore the mode and run in
+standard mode, and the distribution manifest does not record a build's version,
+so the backend cannot check this.
 
 **Default value:** `false`
 
 **Type:** `boolean`
-
-#### `desktop_sidecar.local_delegation`
-
-{/* erato_toml_config_key: desktop_sidecar.local_delegation.backend_origin */}
-{/* erato_toml_config_key: desktop_sidecar.local_delegation.signing_key_id */}
-{/* erato_toml_config_key: desktop_sidecar.local_delegation.signing_private_key_pem */}
-{/* erato_toml_config_key: desktop_sidecar.local_delegation.verification_keys.<key> */}
-
-Transitional: key material of the legacy strict path, used only while
-`desktop_sidecar.strict_mode` is on; the job-based strict path replaces it. The
-section has no switch of its own. The legacy path's only operation is
-`erato/local_collect_evidence` in an explicitly configured asynchronous delegated
-leaf task with a frozen tool budget; ordinary chats, Office actions, arbitrary
-scripts and local inference are outside this profile.
-
-`backend_origin` is the canonical issuer origin, for example
-`https://erato.example.com`. Use `https` in production; a plaintext `http`
-origin is accepted for development setups and logs a startup warning. The value
-must be exactly `https://host[:port]` or `http://host[:port]` with no path, query
-or trailing slash; other schemes are rejected.
-`signing_key_id` selects an Ed25519 key in
-`verification_keys`, a map of 1–8 key IDs to Ed25519 public keys encoded as
-base64url without padding (32 decoded bytes per key).
-`signing_private_key_pem` is the matching PKCS#8 PEM secret, held only by the single
-backend replica. This task feature supports one backend replica only. Personalized
-native downloads receive only the origin and public verification keys. Retain
-old public keys for at least the maximum seven-day job lifetime plus the
-seven-day receipt/tombstone retention period; update installations before rotation.
-
-The authenticated web/Office shell starts review. Native UI authorizes exactly
-selected bytes from a frozen snapshot. Existing always-allow file preferences do
-not approve these snapshots. Before approval, content and derived metadata remain
-native; the shell holds local handles and coarse status. Installed native code
-and its private storage are trusted. This profile does not provide OS-enforced
-confinement. After approved plaintext reaches the frontend, its scripts and normal
-backend/provider processing can access that plaintext.
-
-Jobs survive pane closure. Approved exports, receipt retries, generic operation
-attempts and the parked message survive process restarts. Cloud continuation requires a fresh normal
-user session and current authorization; no access/refresh token is stored in the
-operation. Cancellation/expiry and generation takeover fence older workers.
-Unreferenced approved blobs from a crash before database acceptance require the
-storage provider's orphan cleanup policy. Strict downloads require the native
-`strict_snapshot_v1` distribution profile (transitional); this declaration does
-not itself qualify an operating system or Office host.
 
 #### `desktop_sidecar.file_upload_approval`
 
@@ -831,9 +782,10 @@ show_settings_tab_office_addin = false
 {/* erato_toml_config_key: desktop_sidecar.allowed_origins */}
 
 Browser origins that are embedded as immutable policy in Windows and macOS
-desktop-sidecar downloads. Entries must be normalized, non-loopback origins in lowercase
-`scheme://host[:port]` form; do not include a path, trailing slash, query, or
-fragment. An empty list is valid and refuses all production browser origins.
+desktop-sidecar downloads. Entries must be normalized, non-loopback `http` or
+`https` origins in lowercase `scheme://host[:port]` form; do not include a path,
+trailing slash, query, or fragment. An empty list is valid and refuses all
+production browser origins.
 
 **Default value:** `[]`
 
@@ -2573,7 +2525,7 @@ map, including disabled entries, metadata and ordered provider IDs, is included
 in `organization_configuration.policy_guides` sent through `sidecar.configure.v1`.
 An empty map clears previously accepted definitions. User-layer policy guides do
 not override organization definitions. Clients send configuration independently
-of `localDelegation`; the sidecar decides whether to trust and apply it. A sidecar
+of strict mode; the sidecar decides whether to trust and apply it. A sidecar
 may retain policy definitions without executing them, reject a call or ignore
 untrusted settings. Clients preserve saved user settings and respect rejection.
 These are startup settings: restart the backend after changes and let the frontend
@@ -6052,19 +6004,15 @@ are not treated as attachments.
 Default: `false`. Enables durable escalation for explicitly registered client
 operation kinds. Each kind must provide server-side input, binding and result
 validation. Enabling this setting does not register an executor or make arbitrary
-client tools durable. Native local evidence (transitional, the legacy strict
-path) is registered only when `desktop_sidecar.strict_mode` is on and its signing
-policy is valid. Its scoped child offer additionally requires an authenticated native
-context and matching executor capability from the submitting frontend. Configured
-client tools become durable only through their own
-[`durable`](#client_toolstoolskeydurable) table.
+client tools durable. Configured client tools become durable only through their
+own [`durable`](#client_toolstoolskeydurable) table.
 
-Eligible `consent: none` calls retain the ordinary in-memory fast path. Native
-review operations enter the durable inbox immediately. On disconnect or timeout,
-they may park in the logged operation inbox and later continue under a fresh
-authenticated request. Existing generation leases coordinate backend replicas;
-no backend credentials are stored with an operation. Kinds may impose narrower
-rollout restrictions, including single-replica execution.
+Eligible `consent: none` calls retain the ordinary in-memory fast path. Operations
+whose kind requires consent enter the durable inbox immediately. On disconnect or
+timeout, they may park in the logged operation inbox and later continue under a
+fresh authenticated request. Existing generation leases coordinate backend
+replicas; no backend credentials are stored with an operation. Kinds may impose
+narrower rollout restrictions.
 
 Turning the setting on also enables the generation lease identity guard and its
 compare-and-set path. After a durable park, a short SSE drop no longer ends the

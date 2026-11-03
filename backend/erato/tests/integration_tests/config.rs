@@ -125,36 +125,17 @@ const STRICT_SIDECAR_BASE: &str = r#"
 strict_mode = true
 "#;
 
-// Synthetic, public test fixture (32-byte seed filled with 7). Never a deployment key.
-const STRICT_SIDECAR_KEYS: &str = r#"
-[desktop_sidecar.local_delegation]
-backend_origin = "https://erato.example"
-signing_key_id = "fixture"
-verification_keys = { fixture = "6kpsY-KcUgq-9VB7Ey7F-ZVHdq6-vnuSQh7qaRRG0iw" }
-signing_private_key_pem = """
------BEGIN PRIVATE KEY-----
-MC4CAQAwBQYDK2VwBCIEIAcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcH
------END PRIVATE KEY-----
-"""
-"#;
-
-const STRICT_SIDECAR_PREREQUISITES: &str = r#"
-[client_tools]
-durable_operations_enabled = true
-
-[delegation.tasks]
-enabled = true
-"#;
-
 #[test]
-fn test_strict_mode_with_its_prerequisites_installs_strict_downloads() {
+fn test_strict_mode_with_durable_operations_installs_strict_downloads() {
     let config = migrate_config_with_action_facets(&format!(
-        "{STRICT_SIDECAR_BASE}{STRICT_SIDECAR_KEYS}{STRICT_SIDECAR_PREREQUISITES}"
+        "{STRICT_SIDECAR_BASE}\n[client_tools]\ndurable_operations_enabled = true\n"
     ));
     assert!(config.strict_mode());
-    let fields = config.desktop_sidecar.bootstrap_fields().unwrap();
-    assert_eq!(fields["mode"], "strict");
-    assert_eq!(fields["content_release"], "strict_snapshot_v1");
+    assert!(!config.delegation.tasks.enabled);
+    assert_eq!(
+        serde_json::Value::Object(config.desktop_sidecar.bootstrap_fields().unwrap()),
+        serde_json::json!({"mode": "strict"})
+    );
 }
 
 #[test]
@@ -162,27 +143,7 @@ fn test_strict_mode_with_its_prerequisites_installs_strict_downloads() {
     expected = "`desktop_sidecar.strict_mode` requires `client_tools.durable_operations_enabled = true`"
 )]
 fn test_strict_mode_requires_durable_operations() {
-    migrate_config_with_action_facets(&format!(
-        "{STRICT_SIDECAR_BASE}{STRICT_SIDECAR_KEYS}\n[delegation.tasks]\nenabled = true\n"
-    ));
-}
-
-#[test]
-#[should_panic(
-    expected = "`desktop_sidecar.strict_mode` requires `desktop_sidecar.local_delegation.backend_origin` (transitional"
-)]
-fn test_strict_mode_requires_transitional_key_material() {
-    migrate_config_with_action_facets(&format!(
-        "{STRICT_SIDECAR_BASE}{STRICT_SIDECAR_PREREQUISITES}"
-    ));
-}
-
-#[test]
-#[should_panic(expected = "unknown field `enabled`")]
-fn test_local_delegation_enabled_switch_is_rejected() {
-    migrate_config_with_action_facets(&format!(
-        "{STRICT_SIDECAR_KEYS}enabled = true\n{STRICT_SIDECAR_BASE}{STRICT_SIDECAR_PREREQUISITES}"
-    ));
+    migrate_config_with_action_facets(STRICT_SIDECAR_BASE);
 }
 
 /// Tests OpenAI provider configuration parsing.
@@ -4245,24 +4206,6 @@ description = "Search the local index"
 parameters = '{"type":"object"}'
 child_access = "read"
 host_context = "desktop_sidecar"
-approval_scope = "context"
-"#,
-    );
-}
-
-/// CT-9: local evidence runs its own release review and no configured tool can
-/// take its name, so no context approval ever covers it.
-#[test]
-#[should_panic(expected = "Client tool named 'local_collect_evidence' is reserved.")]
-fn approval_scope_context_never_covers_local_evidence() {
-    migrate_config_with_action_facets(
-        r#"
-[client_tools.tools.evidence]
-name = "local_collect_evidence"
-description = "Collect local evidence"
-parameters = '{ "type": "object" }'
-child_access = "read"
-host_context = "word_document"
 approval_scope = "context"
 "#,
     );

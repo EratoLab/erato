@@ -102,7 +102,6 @@ pub struct AppState {
     #[doc(hidden)]
     pub memory_reservation: Option<crate::metrics::owned::Reservation>,
     pub db: DatabaseConnection,
-    pub local_delegation_signer: Option<Arc<crate::services::local_delegation::signing::Signer>>,
     /// Teams bot runtime; `None` unless `integrations.ms_office.teams.bot.enabled`.
     pub ms_teams_bot: Option<Arc<crate::ms_teams_bot::TeamsBot>>,
     /// Shared Graph resolver and cache; absent when overage resolution is disabled.
@@ -201,24 +200,6 @@ impl std::fmt::Debug for AppState {
 impl AppState {
     pub async fn new(config: AppConfig) -> Result<Self, Report> {
         let prompt_guardrails = Arc::new(CompiledPromptGuardrails::new(&config.guardrails)?);
-        // Transitional: only the legacy strict path signs plans and receipts.
-        let local_delegation_signer = config
-            .strict_mode()
-            .then(|| {
-                crate::services::local_delegation::signing::Signer::new(
-                    &config.desktop_sidecar.local_delegation,
-                )
-                .map(Arc::new)
-                .map_err(|error| {
-                    eyre::eyre!(
-                        "`desktop_sidecar.strict_mode` requires valid \
-                         `desktop_sidecar.local_delegation` key material (transitional: the \
-                         legacy strict path needs it until the job-based strict path replaces \
-                         it): {error}"
-                    )
-                })
-            })
-            .transpose()?;
         let distribution = Arc::new(Distribution::load(&config));
         crate::server::router::ensure_office_addin_manifests_support_launch_events(
             &config.integrations.ms_office.addin,
@@ -338,12 +319,8 @@ impl AppState {
         let mut state = Self {
             memory_reservation: None,
             db,
-            client_operations: crate::services::client_operations::registry(
-                &config,
-                local_delegation_signer.as_ref(),
-            )?,
+            client_operations: crate::services::client_operations::registry(&config)?,
             executor_streams: Default::default(),
-            local_delegation_signer,
             ms_teams_bot,
             entra_group_overage,
             default_file_storage_provider: config.default_file_storage_provider.clone(),
@@ -1254,7 +1231,6 @@ impl Clone for AppState {
         let mut state = Self {
             memory_reservation: None,
             db: self.db.clone(),
-            local_delegation_signer: self.local_delegation_signer.clone(),
             ms_teams_bot: self.ms_teams_bot.clone(),
             entra_group_overage: self.entra_group_overage.clone(),
             default_file_storage_provider: self.default_file_storage_provider.clone(),
@@ -1362,9 +1338,6 @@ impl AppState {
         }
         if let Some(resolver) = &self.entra_group_overage {
             report.opaque(c, "shared.entra_groups", resolver);
-        }
-        if let Some(signer) = &self.local_delegation_signer {
-            report.opaque(c, "shared.delegation_signer", signer);
         }
         if let Some(client) = &self.genai_client_override {
             report.opaque(c, "shared.genai_override", client);
