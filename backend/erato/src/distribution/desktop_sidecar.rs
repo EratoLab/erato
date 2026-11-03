@@ -977,8 +977,14 @@ pub(crate) mod tests {
     fn bootstrap_mode_follows_strict_mode() {
         let directory = tempdir().unwrap();
         let mut manifest = valid_manifest();
-        // Released manifests still carry this field; no mode filters on it.
-        manifest["targets"][0]["local_delegation_profile"] = json!(null);
+        // Released manifests still carry this field, with a profile name or
+        // null; neither mode filters on it.
+        let mut unprofiled = manifest["targets"][0].clone();
+        unprofiled["id"] = json!("windows-aarch64");
+        unprofiled["platform"]["architecture"] = json!("aarch64");
+        unprofiled["local_delegation_profile"] = json!(null);
+        manifest["targets"][0]["local_delegation_profile"] = json!("strict_snapshot_v1");
+        manifest["targets"].as_array_mut().unwrap().push(unprofiled);
         write_distribution(directory.path(), manifest);
         for (strict_mode, mode) in [(true, "strict"), (false, "standard")] {
             let config = DesktopSidecarConfig {
@@ -992,7 +998,7 @@ pub(crate) mod tests {
             assert_eq!(bootstrap["mode"], mode);
             assert!(bootstrap.get("content_release").is_none());
             assert!(bootstrap.get("local_delegation").is_none());
-            assert_eq!(distribution.targets().len(), 1);
+            assert_eq!(distribution.targets().len(), 2);
         }
     }
 

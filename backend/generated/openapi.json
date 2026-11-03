@@ -6775,8 +6775,7 @@
         "type": "string",
         "enum": [
           "none",
-          "ask",
-          "native"
+          "ask"
         ]
       },
       "ContentPart": {

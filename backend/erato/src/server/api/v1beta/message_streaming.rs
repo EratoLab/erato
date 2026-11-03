@@ -22893,24 +22893,12 @@ pub(crate) async fn run_client_operation_continuation(
     let chat =
         get_chat_by_message_id(&app_state.db, policy, &me_user.to_subject(), &message.id).await?;
     reject_if_archived(&chat).map_err(|(_, message)| eyre!(message))?;
-    let mut parameters: GenerationParameters = serde_json::from_value(
+    let parameters: GenerationParameters = serde_json::from_value(
         message
             .generation_parameters
             .clone()
             .ok_or_else(|| eyre!("Missing generation parameters"))?,
     )?;
-    let request: crate::services::client_operations::OperationRequest =
-        serde_json::from_value(row.request.clone())?;
-    if let Some(kind) = app_state.client_operations.for_request(&request)
-        && let Some(result) = row.result.as_ref()
-        && !kind.reoffer_after_result(crate::services::client_operations::stored_result_outcome(
-            result,
-        )?)
-    {
-        parameters
-            .client_tools
-            .retain(|_, tool| tool.qualified_name() != request.operation_id);
-    }
     let submission_finished = parsed.content.iter().any(|part| match part {
         ContentPart::ToolUse(tool) if tool.tool_call_id == row.tool_call_id => tool
             .output

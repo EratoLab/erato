@@ -108,8 +108,8 @@ An interactive executor continues a settled `consent: none` operation with
 `X-Erato-Client-Tools`. The coordinator consumes this SSE response and answers
 later live calls even without an open chat view. Continuation uses the same
 assistant message, generation pipeline and saved consumption. Clients without
-the SSE Accept header retain detached JSON continuation; native/ask consent
-remains inbox-only.
+the SSE Accept header retain detached JSON continuation; ask consent remains
+inbox-only.
 Expired pending/claimed operations use detached continuation even when the
 original executor is unavailable or the observing pane has a different binding;
 the server authors the expiry without executing the client tool. Ready/continuing
@@ -227,10 +227,9 @@ the original submission limit or removes submission semantics during that turn.
 
 ## Consent, withdrawal and crash accounting
 
-Only `consent: none` can use the in-memory fast path. `ask` and `native`
-operations enter account discovery immediately without a client-call SSE. Neither
-can accept an unclaimed legacy/fast result. `ask` requires claim confirmation;
-`native` additionally requires the kind's proof validator, not a confirmation bit.
+Only `consent: none` can use the in-memory fast path. `ask` operations enter
+account discovery immediately without a client-call SSE, cannot accept an
+unclaimed legacy/fast result and require claim confirmation.
 
 Per-tool decisions (#1268) interact with kinds in two ways. A compiled kind asks
 through its own consent policy, so a saved `ask` decision runs it. A configured
@@ -396,11 +395,10 @@ Every replica must load the same `durable` tables. A replica without the tool's
 kind treats its open attempts as unauthorized and withdraws them at claim.
 
 Rolling deploys (ERMAIN-1034). `OperationRequest` is server-authored and only
-read back, so it accepts keys a newer release adds. A continuation reads only
-the stored result's `outcome` (`stored_result_outcome`, which is all
-`reoffer_after_result` needs), so a row written by a newer release with extra
-keys still continues; `/result` and `clienttoolresult` keep refusing unknown keys
-in client-posted bodies. Every new field on `OperationResult`, `OperationValue`,
+read back, so it accepts keys a newer release adds. A continuation does not read
+the stored result, so a row written by a newer release with extra keys still
+continues; `/result` and `clienttoolresult` keep refusing unknown keys in
+client-posted bodies. Every new field on `OperationResult`, `OperationValue`,
 `OperationRequest` or `ValidatedResult` must be optional and skipped when unset,
 so rows and bodies without it stay byte-identical. What older replicas still
 cannot do: a replica below ERMAIN-1032 cannot parse a request with `lineage`, and
