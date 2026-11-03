@@ -721,14 +721,10 @@ Settings for distributing and configuring the local Erato desktop sidecar.
 {/* erato_toml_config_key: desktop_sidecar.local_delegation.signing_private_key_pem */}
 {/* erato_toml_config_key: desktop_sidecar.local_delegation.verification_keys.<key> */}
 
-Native-reviewed local evidence collection is disabled by default and
-transitional: a later release replaces it with native review of the six
-`desktop/*` tools in the desktop app and removes `local_collect_evidence`, plan
-signing and these keys (see the desktop sidecar protocol's `DELEGATION.md`).
-Keep `enabled` false until the paired native/backend/frontend release passes
-recovery and host qualification. Its only operation is
-`erato/local_collect_evidence` in an explicitly configured asynchronous
-delegated leaf task. It requires
+Native-reviewed local evidence collection is disabled by default. Keep `enabled`
+false until the paired native/backend/frontend release passes recovery and host
+qualification. The initial supported operation is `erato/local_collect_evidence` in an
+explicitly configured asynchronous delegated leaf task. It requires
 `delegation.tasks.enabled`, `client_tools.durable_operations_enabled` and the
 task's frozen tool budget; ordinary chats,
 Office actions, arbitrary scripts and local inference are outside this profile.
@@ -815,9 +811,8 @@ show_settings_tab_office_addin = false
 
 Browser origins that are embedded as immutable policy in Windows and macOS
 desktop-sidecar downloads. Entries must be normalized, non-loopback origins in lowercase
-`http://host[:port]` or `https://host[:port]` form; do not include userinfo, a
-path, trailing slash, query, or fragment. An empty list is valid and refuses all
-production browser origins.
+`scheme://host[:port]` form; do not include a path, trailing slash, query, or
+fragment. An empty list is valid and refuses all production browser origins.
 
 **Default value:** `[]`
 

@@ -1,5 +1,5 @@
 {
-  "description": "The job envelope (package 0.1.44). Discovery results for both rollout directions, each taking the live OpenRPC document as its `document`: a previous sidecar reports neither `strict`, `jobs` nor `providers`, so a current client keeps the direct RPCs; a previous client ignores the additive fields. Job statuses cover per-call errors and every MCP content block kind.",
+  "description": "The job envelope (package 0.1.44). Discovery results for both rollout directions, each taking the live OpenRPC document as its `document`: a previous sidecar reports neither `strict`, `jobs` nor `providers`, so a current client keeps the direct RPCs; a previous client ignores the additive fields. Job statuses cover per-call errors, raw method outcomes, every MCP content block kind and a file's item metadata, including its Outlook provenance.",
   "discovery": [
     {
       "name": "previous sidecar without the job envelope",
@@ -75,8 +75,74 @@
     },
     {
       "handle": "job-handle-0123456789abcdefghijklmnopqrstuv",
+      "state": "ready_for_review"
+    },
+    {
+      "handle": "job-handle-0123456789abcdefghijklmnopqrstuv",
       "state": "completed",
       "results": [
+        {
+          "result": {
+            "content": [
+              {
+                "type": "resource",
+                "resource": {
+                  "uri": "erato-sidecar:document/0f5a8a48-1b2c-4d3e-9f10-a1b2c3d4e5f6",
+                  "mimeType": "message/rfc822",
+                  "blob": "RnJvbTogb3duZXJAZXhhbXBsZS50ZXN0DQo="
+                },
+                "_meta": {
+                  "ai.erato/item": "/sources.get_document.v1/result",
+                  "ai.erato/outlookProvenance": {
+                    "version": 1,
+                    "origins": [
+                      {
+                        "document": {
+                          "documentId": "0f5a8a48-1b2c-4d3e-9f10-a1b2c3d4e5f6",
+                          "external_ids": [
+                            {
+                              "key": "email_message_id",
+                              "value": "<minutes@example.test>"
+                            },
+                            {
+                              "key": "ews_id",
+                              "value": "AQMk/CaseSensitive+EwsId=="
+                            }
+                          ],
+                          "mailbox": {
+                            "mailboxId": "0123456789abcdef0123456789abcdef",
+                            "emailAddress": "owner@example.test"
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            ],
+            "structuredContent": {
+              "sources.get_document.v1": {
+                "result": {
+                  "filename": "minutes.eml",
+                  "mimeType": "message/rfc822",
+                  "external_ids": [
+                    {
+                      "key": "email_message_id",
+                      "value": "<minutes@example.test>"
+                    }
+                  ]
+                }
+              },
+              "outlook.list_mailboxes.v1": {
+                "error": {
+                  "code": -32016,
+                  "message": "The sidecar could not complete the request.",
+                  "data": { "kind": "sidecar_internal" }
+                }
+              }
+            }
+          }
+        },
         {
           "result": {
             "content": [
@@ -88,15 +154,7 @@
                   "priority": 0.8,
                   "lastModified": "2026-10-30T09:15:00Z"
                 },
-                "_meta": { "ai.erato/itemIndex": 0 }
-              },
-              {
-                "type": "resource",
-                "resource": {
-                  "uri": "erato-sidecar:document/2b0f6a43-8f5e-4c79-9d8e-0d6b5e7a9c11",
-                  "mimeType": "application/pdf",
-                  "blob": "JVBERi0xLjQK"
-                }
+                "_meta": { "ai.erato/item": "/hits/0" }
               },
               {
                 "type": "resource",
@@ -123,19 +181,15 @@
                 "size": 1024
               }
             ],
-            "structuredContent": { "hits": [] },
+            "structuredContent": { "hits": [{ "title": "Quarterly report" }] },
             "isError": false,
             "_meta": { "modelcontextprotocol.io/example": true }
           }
         },
         {
           "error": {
-            "code": -32011,
-            "message": "The requested capability is unavailable.",
-            "data": {
-              "kind": "capability_unavailable",
-              "reasonCode": "strict_review_unavailable"
-            }
+            "code": -32602,
+            "message": "Invalid method parameters."
           }
         }
       ]
@@ -192,5 +246,122 @@
       }
     }
   ],
-  "invalidMetaKeys": ["itemIndex", "erato/itemIndex", "ai.erato", "/itemIndex"]
+  "invalidMetaKeys": ["itemIndex", "erato/itemIndex", "ai.erato", "/itemIndex"],
+  "invalidItemMeta": [
+    {
+      "name": "an item that is not a JSON pointer",
+      "value": { "ai.erato/item": "hits/0" }
+    },
+    {
+      "name": "unsupported provenance version",
+      "value": {
+        "ai.erato/outlookProvenance": {
+          "version": 2,
+          "origins": [
+            {
+              "document": {
+                "external_ids": [{ "key": "ews_id", "value": "x" }]
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "provenance without origins",
+      "value": { "ai.erato/outlookProvenance": { "version": 1, "origins": [] } }
+    },
+    {
+      "name": "provenance with an empty origin",
+      "value": {
+        "ai.erato/outlookProvenance": { "version": 1, "origins": [{}] }
+      }
+    },
+    {
+      "name": "provenance reference without identity",
+      "value": {
+        "ai.erato/outlookProvenance": {
+          "version": 1,
+          "origins": [{ "document": { "external_ids": [] } }]
+        }
+      }
+    },
+    {
+      "name": "provenance native id that is not hex bytes",
+      "value": {
+        "ai.erato/outlookProvenance": {
+          "version": 1,
+          "origins": [
+            {
+              "document": {
+                "external_ids": [{ "key": "outlook_entry_id", "value": "xyz" }]
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "provenance mailbox id that is not local",
+      "value": {
+        "ai.erato/outlookProvenance": {
+          "version": 1,
+          "origins": [
+            {
+              "document": {
+                "external_ids": [{ "key": "ews_id", "value": "x" }],
+                "mailbox": { "mailboxId": "local-node" }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "provenance that is not an object",
+      "value": { "ai.erato/outlookProvenance": "provenance" }
+    }
+  ],
+  "sidecarStructuredContent": [
+    {
+      "search.query.v1": {
+        "result": {
+          "hits": [],
+          "elapsedMs": 3,
+          "blocksRead": 1,
+          "candidatesScored": 0
+        }
+      },
+      "sources.list.v1": {
+        "error": {
+          "code": -32016,
+          "message": "The sidecar could not complete the request."
+        }
+      }
+    },
+    {}
+  ],
+  "invalidSidecarStructuredContent": [
+    {
+      "name": "a member that is not a method",
+      "value": { "hits": { "result": {} } }
+    },
+    {
+      "name": "an outcome with both a result and an error",
+      "value": {
+        "search.query.v1": {
+          "result": {},
+          "error": { "code": -32016, "message": "Failed." }
+        }
+      }
+    },
+    {
+      "name": "an outcome with neither a result nor an error",
+      "value": { "search.query.v1": { "hits": [] } }
+    },
+    {
+      "name": "a result that is not an object",
+      "value": { "search.query.v1": { "result": [] } }
+    }
+  ]
 }

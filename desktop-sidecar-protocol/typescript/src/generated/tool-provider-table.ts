@@ -27,7 +27,7 @@ export interface ToolProviderTable {
          */
         items: string;
         /**
-         * JSON pointers into `structuredContent` to result-level, account-level metadata that accompanies the approved items.
+         * JSON pointers into `structuredContent` to result-level, account-level metadata that accompanies the approved items. Everything else in `structuredContent` crosses only with the item it belongs to.
          */
         resultMetadata: string[];
         [k: string]: unknown;
@@ -50,7 +50,7 @@ export interface ToolProviderTable {
          */
         items: string;
         /**
-         * JSON pointers into `structuredContent` to result-level, account-level metadata that accompanies the approved items.
+         * JSON pointers into `structuredContent` to result-level, account-level metadata that accompanies the approved items. Everything else in `structuredContent` crosses only with the item it belongs to.
          */
         resultMetadata: string[];
         [k: string]: unknown;

@@ -39,19 +39,22 @@ It preserves source Outlook data and configuration. See [full reset semantics](S
 
 Package 0.1.44 adds the job envelope: `jobs.start.v1` runs a batch of tool calls
 `{server, name, arguments}` and answers within `wait_ms` with one MCP
-`CallToolResult` or error per call; `jobs.status.v1` long-polls, and
-`jobs.read.v1`, `jobs.ack.v1` and `jobs.cancel.v1` finish a job. Discovery adds
-`strict`, `jobs` and `providers`; [`providers/sidecar.json`](providers/sidecar.json)
-is the closed table of the six built-in tools. Older sidecars report none of
-these, and clients keep the direct RPCs. The `local_*` methods are deprecated.
-See [the job envelope](DELEGATION.md#job-envelope) and the
-[rollout fixture](conformance/fixtures/job-envelope.json).
+`CallToolResult` or error per call; for a built-in tool, the result carries the
+raw outcomes of the RPCs it composed and its files as embedded resources that
+carry their Outlook provenance. `jobs.status.v1` long-polls, `jobs.review.v1` opens
+the native review of a strict job, and `jobs.read.v1`, `jobs.ack.v1` and
+`jobs.cancel.v1` finish a job. Discovery adds `strict`, `jobs` and `providers`;
+[`providers/sidecar.json`](providers/sidecar.json) is the closed table of the
+six built-in tools. Older sidecars report none of these, and clients keep the
+direct RPCs. The package removes the `local_*` methods and the
+`localDelegation` discovery declaration. See [the job envelope](DELEGATION.md#job-envelope)
+and the [rollout fixture](conformance/fixtures/job-envelope.json).
 
 Package 0.1.43 adds the optional `installationId` to the discovery result: one
 stable id per sidecar installation and OS user profile, the same for every page
 and every restart, so the Erato clients on one computer can share one executor
-binding and any of them can continue a waiting call. It is the device ID of the
-transitional strict path. Older sidecars omit it. See [discovery](SPEC.md#3-discovery-and-protocol-negotiation)
+binding and any of them can continue a waiting call. Older sidecars omit it.
+See [discovery](SPEC.md#3-discovery-and-protocol-negotiation)
 and the [rollout fixture](conformance/fixtures/installation-identity.json).
 
 Package 0.1.41 documents the settings that stay available under strict mode:
@@ -59,9 +62,8 @@ the methods, their account-level results and the configuration keys a strict
 sidecar ignores. See [settings under strict mode](DELEGATION.md#settings-under-strict-mode).
 
 Package 0.1.40 adds typed organization policy guides to the existing configuration
-contract. Configuration delivery is independent of `localDelegation`; the sidecar
-decides whether it trusts and applies outside settings. Definitions and metadata
-can be retained without native policy execution. See [policy guides](SPEC.md#policy-guides)
+contract. The sidecar decides whether it trusts and applies outside settings.
+Definitions and metadata can be retained without native policy execution. See [policy guides](SPEC.md#policy-guides)
 and the [configuration fixture](conformance/fixtures/policy-guides.json).
 
 ```sh

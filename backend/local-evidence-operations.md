@@ -8,12 +8,6 @@ paired native implementation and supported hosts pass consent/recovery qualifica
 The sidecar task profile supports one backend replica. It reuses the generic
 chat-generation lease; no separate sidecar scheduler or credential store exists.
 
-This is the transitional strict path. A later release replaces it with strict
-review on the sidecar's job envelope, where the six `desktop/*` tools stay the
-catalogue, and removes `local_collect_evidence`, its task facets, plan signing,
-context binding and signed receipts (see
-`desktop-sidecar-protocol/DELEGATION.md`).
-
 ## Authority and state
 
 The authenticated shell establishes native challenge/context binding before it

@@ -98,9 +98,7 @@ describe("sidecar provider table", () => {
       expect(referenced.has(method), method).toBe(false);
     }
     for (const method of referenced)
-      expect(method, method).not.toMatch(
-        /^(?:rpc|erato|jobs|local_contexts|local_tasks|local_exports)\./,
-      );
+      expect(method, method).not.toMatch(/^(?:rpc|erato|jobs)\./);
     expect([...referenced].sort()).toEqual(
       [
         "outlook.get_conversation.v1",
@@ -121,11 +119,21 @@ describe("sidecar provider table", () => {
     expect(selection).toEqual({
       list_sidecar_mailboxes: null,
       get_sidecar_search_fields: null,
-      get_sidecar_folder_hierarchy: "/nodes",
-      search_sidecar_index: "/hits",
+      get_sidecar_folder_hierarchy:
+        "/sources.get_folder_hierarchy.v1/result/nodes",
+      search_sidecar_index: "/search.query.v1/result/hits",
       get_sidecar_document: "content",
-      read_sidecar_conversation: "/messages",
+      read_sidecar_conversation: "/outlook.get_conversation.v1/result/messages",
     });
+    // Each pointer starts at one of the tool's own methods.
+    for (const tool of table.tools)
+      for (const pointer of [
+        tool.selection?.items,
+        ...(tool.selection?.resultMetadata ?? []),
+      ].filter((value) => value?.startsWith("/")))
+        expect(tool.methods, `${tool.name}: ${pointer}`).toContain(
+          pointer?.split("/")[1],
+        );
   });
 
   it("points only into the results the tools return", async () => {
@@ -165,10 +173,11 @@ describe("sidecar provider table", () => {
     const [mailboxes] = await run("list_sidecar_mailboxes", [{}]);
     const sourceId = resolvePointer(
       mailboxes?.structuredContent,
-      "/mailboxes/0/sources/0/sourceId",
+      "/sources.list.v1/result/sources/0/sourceId",
     );
-    // Each tool's result variants, including those that only some calls
-    // return: the folder tool's fallback and the search filter notice.
+    // Each tool's result variants, including methods that only some calls
+    // run: the source list beside unsupported folders, and the field list
+    // beside a metadata filter.
     const variants: Record<string, Record<string, unknown>[]> = {
       list_sidecar_mailboxes: [{}],
       get_sidecar_search_fields: [{}],

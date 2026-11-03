@@ -12,7 +12,7 @@ export interface ToolProvider {
    */
   egress: string;
   /**
-   * False when the provider cannot run calls at all. A refusal of one tool, such as a content tool under strict mode while strict review on jobs is unavailable, is a per-call error instead.
+   * False when the provider cannot run calls at all. A refusal of one tool is a per-call error instead.
    */
   available: boolean;
   [k: string]: unknown;

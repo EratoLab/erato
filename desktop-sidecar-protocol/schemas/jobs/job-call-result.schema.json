@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://schemas.erato.ai/desktop-sidecar/v1/jobs/job-call-result.schema.json",
   "title": "JobCallResult",
-  "description": "The outcome of one call, at the call's position in `calls`: its `result`, or the JSON-RPC error object a direct request for the same work would have returned.",
+  "description": "The outcome of one call, at the call's position in `calls`: its `result`, or a JSON-RPC error object when the call does not run or its result exceeds the response budget.",
   "oneOf": [
     {
       "type": "object",

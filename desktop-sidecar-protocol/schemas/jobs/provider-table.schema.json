@@ -54,7 +54,7 @@
                     "pattern": "^(?:content|(?:/(?:[^/~]|~[01])*)+)$"
                   },
                   "resultMetadata": {
-                    "description": "JSON pointers into `structuredContent` to result-level, account-level metadata that accompanies the approved items.",
+                    "description": "JSON pointers into `structuredContent` to result-level, account-level metadata that accompanies the approved items. Everything else in `structuredContent` crosses only with the item it belongs to.",
                     "type": "array",
                     "uniqueItems": true,
                     "items": {
