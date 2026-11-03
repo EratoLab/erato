@@ -57,7 +57,7 @@ function DesktopSidecarEntityRow({
   const permissionsId = useId();
   const connected = snapshot.state === "ready";
   const connecting = snapshot.state === "discovering";
-  const strict = Boolean(snapshot.localDelegation);
+  const strict = snapshot.strict === true;
   // A strict sidecar that still refuses the settings methods keeps the
   // connection view; a legacy one explains which update it needs.
   const indexing =
@@ -127,25 +127,19 @@ function DesktopSidecarEntityRow({
                 message: "Tool permissions",
               })}
             </h3>
-            {!strict && (
-              <p className="text-xs text-theme-fg-secondary">
-                {t({
-                  id: "preferences.dialog.desktopSidecar.permissions.description",
-                  message:
-                    "Choose when the assistant may use content from this device. Permission changes are saved automatically.",
-                })}
-              </p>
-            )}
+            <p className="text-xs text-theme-fg-secondary">
+              {t({
+                id: "preferences.dialog.desktopSidecar.permissions.description",
+                message:
+                  "Choose when the assistant may use content from this device. Permission changes are saved automatically.",
+              })}
+            </p>
           </div>
-          {strict ? (
-            <p className="text-sm text-theme-fg-secondary">{t`Evidence sharing requires review in the desktop app for each package.`}</p>
-          ) : (
-            <ClientToolFileApprovalSetting />
+          {strict && (
+            <p className="text-sm text-theme-fg-secondary">{t`Results with content from this device are reviewed in the Erato desktop app before the assistant receives them.`}</p>
           )}
-          {/* Strict mode offers no client tools; the legacy ones stay off (chatTools). */}
-          {connected && !strict && client && (
-            <SidecarToolDecisions client={client} />
-          )}
+          <ClientToolFileApprovalSetting />
+          {connected && client && <SidecarToolDecisions client={client} />}
         </section>
         {indexing ? (
           <SidecarIndexingControls

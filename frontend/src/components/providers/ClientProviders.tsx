@@ -5,6 +5,7 @@ import { GenerationStatusPoller } from "./GenerationStatusPoller";
 import { McpOauthCallbackBoundary } from "./McpOauthCallbackBoundary";
 import { TabChatIndicator } from "./TabChatIndicator";
 import { ThemeProvider } from "./ThemeProvider";
+import { ClientOperationPoller } from "../../providers/ClientOperationPoller";
 import { DesktopSidecarClientTools } from "../../providers/DesktopSidecarClientTools";
 import {
   DesktopSidecarConfigurationSync,
@@ -12,7 +13,6 @@ import {
 } from "../../providers/DesktopSidecarProvider";
 import { FeatureConfigProvider } from "../../providers/FeatureConfigProvider";
 import { I18nProvider } from "../../providers/I18nProvider";
-import { LocalTaskCoordinator } from "../../providers/LocalTaskCoordinator";
 import { McpAuthorizationToasts } from "../ui/Settings/mcpAuthorizationToasts";
 import { Toaster } from "../ui/Toast/Toaster";
 
@@ -33,7 +33,7 @@ export function ClientProviders({ children }: PropsWithChildren) {
           <FeatureConfigProvider>
             <DesktopSidecarClientTools />
             <I18nProvider>
-              <LocalTaskCoordinator />
+              <ClientOperationPoller />
               <>
                 <div
                   className="flex h-screen min-h-screen bg-theme-bg-primary"

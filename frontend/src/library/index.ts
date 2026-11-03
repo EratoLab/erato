@@ -766,7 +766,7 @@ export {
   type TextComparisonView,
 } from "@/components/ui/Message/TextComparison";
 
-export { LocalTaskCoordinator } from "@/providers/LocalTaskCoordinator";
+export { ClientOperationPoller } from "@/providers/ClientOperationPoller";
 
 // Word review: the plan model and the review card, read-only unless a host
 // that can write to the document supplies an adapter.

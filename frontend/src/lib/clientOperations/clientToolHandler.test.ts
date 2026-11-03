@@ -3,7 +3,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   hasClientToolCallBeenAnswered,
   registerClientToolExecutor,
-  registerLocalOnlyClientTools,
   resetClientToolRegistryForTests,
   trackClientToolCallAbort,
 } from "@/hooks/chat/clientToolExecutors";
@@ -143,11 +142,6 @@ describe("toOperationResult", () => {
       { outcome: "failed", error: { code: "execution_failed" } },
     ],
     [
-      "a local-only disposition",
-      { ok: true, disposition: "local_only" },
-      { outcome: "failed", error: { code: "execution_failed" } },
-    ],
-    [
       "uploaded files",
       { ok: true, result: { busy: [] }, fileUploadIds: ["file"] },
       {
@@ -251,7 +245,7 @@ describe("ClientToolOperationHandler", () => {
     expect(
       subject.matches({ ...request, operation_id: "outlook/create_draft" }),
     ).toBe(false);
-    expect(subject.matches({ ...request, kind: "local_evidence.v1" })).toBe(
+    expect(subject.matches({ ...request, kind: "another_kind.v1" })).toBe(
       false,
     );
   });
@@ -392,20 +386,6 @@ describe("ClientToolOperationHandler", () => {
     ).toMatchObject({
       outcome: "rejected",
       error: { code: "validation_failed" },
-    });
-  });
-
-  it("completes without content when strict mode was declared during the prompt", async () => {
-    let declared = false;
-    registerLocalOnlyClientTools(["fetch_availability"], () => declared);
-    const result = await handler(async () => {
-      declared = true;
-      return { ok: true, result: { private: "local" }, fileUploadIds: ["f"] };
-    }).execute(request, claim, new AbortController().signal);
-    expect(result).toEqual({
-      ...identity,
-      outcome: "failed",
-      error: { code: "execution_failed" },
     });
   });
 });

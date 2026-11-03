@@ -5,6 +5,8 @@ import {
   SidecarRpcError,
 } from "@erato/desktop-sidecar-protocol";
 
+import { markAwaitingReview } from "./sidecarReviewStore";
+
 import type {
   CallToolResult,
   DesktopSidecarClient,
@@ -15,8 +17,7 @@ import type {
 /**
  * The shortest time between two job requests. A sidecar that answers a
  * status request at once, instead of holding it for `wait_ms`, is polled at
- * the cadence local tasks use while a native job is about to change state
- * (EratoLab/erato#1456).
+ * this cadence.
  */
 export const JOB_POLL_INTERVAL_MS = 1_500;
 
@@ -31,7 +32,7 @@ const PENDING_STATES = new Set<JobStatus["state"]>([
  * Whether the sidecar runs `tool` as a job (SPEC §3): discovery reports the
  * job envelope and an available `sidecar` provider that lists the tool, and
  * jobs.start.v1 and jobs.status.v1 are enabled. Otherwise the tool keeps its
- * direct RPCs.
+ * direct RPCs, outside strict mode.
  */
 export function runsAsSidecarJob(
   client: DesktopSidecarClient,
@@ -51,6 +52,18 @@ export function runsAsSidecarJob(
   );
 }
 
+/**
+ * A strict job's review that ended without sharing anything: the user
+ * declined it in the Erato desktop app, it was cancelled there, or it expired
+ * before a decision. Retrying the call cannot change that.
+ */
+export class SidecarReviewEndedError extends Error {
+  constructor(readonly state: "declined" | "cancelled" | "expired") {
+    super(`The review of this call ended as ${state}.`);
+    this.name = "SidecarReviewEndedError";
+  }
+}
+
 function pause(ms: number, signal?: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
     const onAbort = () => {
@@ -67,11 +80,20 @@ function pause(ms: number, signal?: AbortSignal): Promise<void> {
 }
 
 /**
- * A job that ended without results. The sidecar reports a handle it no
- * longer knows, as after the app restarted, as expired: the call is lost the
- * way a direct request is when the app goes away.
+ * A job that ended without results. After a review, a decline, cancellation
+ * or expiry is the review's outcome. Otherwise the sidecar reports a handle it
+ * no longer knows, as after the app restarted, as expired: the call is lost
+ * the way a direct request is when the app goes away.
  */
-function endedWithoutResult(state: JobStatus["state"]): SidecarClientError {
+function endedWithoutResult(
+  state: JobStatus["state"],
+  reviewed: boolean,
+): Error {
+  if (
+    state === "declined" ||
+    (reviewed && (state === "cancelled" || state === "expired"))
+  )
+    return new SidecarReviewEndedError(state);
   return state === "expired"
     ? new SidecarClientError(
         "transport_error",
@@ -83,17 +105,25 @@ function endedWithoutResult(state: JobStatus["state"]): SidecarClientError {
       );
 }
 
+export interface SidecarJobOptions {
+  signal?: AbortSignal;
+  /** The chat that made the call, which waits while its review is open. */
+  chatId?: string;
+}
+
 /**
- * Runs one built-in tool call as a job and returns its MCP result. A call
- * that fails throws the error its direct RPC would have thrown, so callers
- * handle both paths alike. Each call is its own job: the client tool runner
- * hands the executors one call at a time.
+ * Runs one built-in tool call as a job and returns its MCP result. A job that
+ * waits for its review in strict mode gets the native review window opened
+ * once and is polled until the user decides there. A call that fails throws
+ * the error its direct RPC would have thrown, so callers handle both paths
+ * alike. Each call is its own job: the client tool runner hands the executors
+ * one call at a time.
  */
 export async function runSidecarJob(
   client: DesktopSidecarClient,
   name: string,
   args: Record<string, unknown>,
-  signal?: AbortSignal,
+  { signal, chatId }: SidecarJobOptions = {},
 ): Promise<CallToolResult> {
   const waitMs = client.getSnapshot().jobs?.maxWaitMs ?? 0;
   const wait = waitMs > 0 ? { wait_ms: waitMs } : {};
@@ -107,8 +137,17 @@ export async function runSidecarJob(
     { signal },
   );
   const { handle } = status;
+  let reviewed = false;
+  let reviewEnded: (() => void) | undefined;
   try {
     while (!status.results && PENDING_STATES.has(status.state)) {
+      if (status.state === "ready_for_review" && !reviewed) {
+        reviewed = true;
+        if (chatId) reviewEnded = markAwaitingReview(chatId);
+        // The decision is made only in the native window; this opens it.
+        if (client.supports("jobs.review.v1"))
+          await client.invoke("jobs.review.v1", { handle }, { signal });
+      }
       const early = JOB_POLL_INTERVAL_MS - (Date.now() - askedAt);
       if (early > 0) await pause(early, signal);
       askedAt = Date.now();
@@ -123,9 +162,11 @@ export async function runSidecarJob(
     // on and keep its results until they expire. Cancelling is idempotent.
     void client.invoke("jobs.cancel.v1", { handle }).catch(() => undefined);
     throw error;
+  } finally {
+    reviewEnded?.();
   }
   const outcome = status.results?.[0];
-  if (!outcome) throw endedWithoutResult(status.state);
+  if (!outcome) throw endedWithoutResult(status.state, reviewed);
   // The sidecar keeps delivered results until they are acknowledged; this
   // client never reads them again.
   void client.invoke("jobs.ack.v1", { handle }).catch(() => undefined);

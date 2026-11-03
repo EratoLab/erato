@@ -1,3 +1,4 @@
+import { SIDECAR_PROVIDER } from "@erato/desktop-sidecar-protocol";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -6,6 +7,7 @@ import {
   fixtureDiscovery,
   JOB_HANDLE,
   NORMAL_MODE,
+  STRICT_MODE,
 } from "./__tests__/sidecarJobTestUtils";
 import {
   createSidecarChatTools,
@@ -18,6 +20,7 @@ import {
   SIDECAR_CHAT_TOOL_METHODS,
   sidecarToolAvailable,
 } from "./chatTools";
+import { JOB_POLL_INTERVAL_MS } from "./sidecarJobs";
 import jobEnvelope from "../../../../desktop-sidecar-protocol/conformance/fixtures/job-envelope.json";
 import jobsExample from "../../../../desktop-sidecar-protocol/examples/jobs.json";
 
@@ -26,14 +29,20 @@ import type {
   SidecarAttachmentUpload,
   SidecarChatToolOptions,
 } from "./chatTools";
-import type { ClientToolExecutionResult } from "@/hooks/chat/clientToolExecutors";
 import type {
+  ClientToolCallContext,
+  ClientToolExecutionResult,
+} from "@/hooks/chat/clientToolExecutors";
+import type {
+  CallToolResult,
   JobCallResult,
   JobToolCall,
   SidecarSnapshot,
 } from "@erato/desktop-sidecar-protocol";
 
-// The reference mock's data (desktop-sidecar-protocol/test-server).
+// The reference mock's data (desktop-sidecar-protocol/test-server), with a
+// coverage report, an HTML body and a preview-only warning, so every shaping
+// step runs.
 const MAILBOX = {
   id: "8b7d2f4a6c9e1035d8a1b2c3e4f50617",
   displayName: "Mock Outlook mailbox",
@@ -63,7 +72,10 @@ const MESSAGE = {
   cc: [],
   sentAtUnixSeconds: 1_774_291_200,
   isDraft: false,
-  body: { contentType: "text/plain", content: "Mock Outlook message body." },
+  body: {
+    contentType: "text/html",
+    content: "<p>Mock Outlook</p><p>message body.</p>",
+  },
   attachments: [
     {
       name: "mock-attachment.pdf",
@@ -91,6 +103,29 @@ const HIT = {
   mimeType: "message/rfc822",
   conversationKey: "mock-conversation",
 };
+const COVERAGE = {
+  sampledAt: "2026-11-02T09:59:00Z",
+  basis: "index",
+  sources: [
+    {
+      sourceId: SOURCE.sourceId,
+      mailboxId: MAILBOX.id,
+      product: "outlook",
+      displayName: MAILBOX.displayName,
+      accountEmail: MAILBOX.emailAddress,
+      from: { at: "2026-01-01T00:00:00Z", inclusive: true },
+      through: null,
+      observedAt: "2026-11-02T09:58:00Z",
+      pendingNewer: 0,
+      olderPending: 2,
+      unsearchable: 1,
+      undated: 0,
+      dateBasis: "receivedAt",
+      inventory: "cacheObservations",
+      unavailableReason: null,
+    },
+  ],
+};
 
 /** The reference mock's direct RPCs, with the catalog source it describes. */
 const RPC: Record<string, SidecarReply> = {
@@ -112,19 +147,44 @@ const RPC: Record<string, SidecarReply> = {
       ],
     },
   },
-  "search.metadata_fields.v1": { result: { fields: [] } },
+  "search.metadata_fields.v1": {
+    result: {
+      fields: [
+        {
+          field: "importance",
+          type: "string",
+          description: "The email's importance.",
+          applicable_kinds: ["email"],
+          operators: ["eq"],
+        },
+      ],
+    },
+  },
   "sources.get_folder_hierarchy.v1": {
     result: { sourceId: SOURCE.sourceId, nodes: [] },
   },
   "search.query.v1": {
-    result: { hits: [HIT], elapsedMs: 0, blocksRead: 0, candidatesScored: 0 },
+    result: {
+      hits: [HIT],
+      elapsedMs: 0,
+      blocksRead: 0,
+      candidatesScored: 0,
+      coverage: COVERAGE,
+      limitReached: true,
+    },
   },
   "outlook.get_conversation.v1": {
     result: {
       state: "ok",
       mailbox: MAILBOX,
       messages: [MESSAGE],
-      warnings: [],
+      warnings: [
+        {
+          code: "body_preview_only",
+          message: "Only the body preview the application cached is available.",
+          internetMessageId: MESSAGE.internetMessageId,
+        },
+      ],
     },
   },
   "sources.get_document.v1": {
@@ -143,99 +203,113 @@ const INPUTS: Record<string, Record<string, unknown>> = {
   [GET_SIDECAR_FOLDER_HIERARCHY_TOOL]: { sourceId: SOURCE.sourceId },
   [SEARCH_SIDECAR_INDEX_TOOL]: {
     query: "report",
+    filters: { dateFrom: 1_767_225_600 },
     metadata_filters: [{ field: "importance", operator: "eq", value: "high" }],
   },
   [READ_SIDECAR_CONVERSATION_TOOL]: {
     mailboxId: MAILBOX.id,
     internetMessageId: MESSAGE.internetMessageId,
+    includeAttachments: true,
+  },
+  [GET_SIDECAR_DOCUMENT_TOOL]: {
+    documentId: PARENT_ID,
+    subject_scope: "subject_with_thread",
   },
 };
-const JOB_TOOLS = Object.keys(INPUTS);
-/** Tools the reference mock answers without `freshness`, which the shared
- * wrapper adds on both paths. */
-const WITHOUT_FRESHNESS = new Set([
-  LIST_SIDECAR_MAILBOXES_TOOL,
-  GET_SIDECAR_SEARCH_FIELDS_TOOL,
-  GET_SIDECAR_FOLDER_HIERARCHY_TOOL,
-]);
+const TOOLS = SIDECAR_PROVIDER.tools.map(({ name }) => name);
 type CallError = Extract<JobCallResult, { error: unknown }>["error"];
 
 const methodOf = (tool: string) =>
   SIDECAR_CHAT_TOOL_METHODS.find(({ name }) => name === tool)?.method ?? "";
+/** Whether strict review selects items of the tool's results. */
+const selects = (tool: string) =>
+  SIDECAR_PROVIDER.tools.find(({ name }) => name === tool)?.selection !== null;
 
 const oversized = {
   code: -32016,
   message: "The sidecar could not complete the request.",
   data: { kind: "sidecar_internal", sourceError: "export_too_large" },
 };
-const { error: strictRefusal } = jobEnvelope.statuses[1]
-  .results?.[1] as Extract<JobCallResult, { error: unknown }>;
-/** Call errors as the direct RPC and the job report them alike. */
-const ERROR_CASES: [string, string, CallError][] = [
-  [
-    "an unknown conversation anchor",
-    READ_SIDECAR_CONVERSATION_TOOL,
-    {
-      code: -32602,
-      message: "Unknown document.",
-      data: { sourceError: "document_not_found" },
-    },
-  ],
-  ...JOB_TOOLS.map((tool): [string, string, CallError] => [
-    "an oversized result",
-    tool,
-    oversized,
-  ]),
-  ...JOB_TOOLS.map((tool): [string, string, CallError] => [
-    "a strict sidecar's refusal",
-    tool,
-    strictRefusal,
-  ]),
-];
+const { error: invalidArguments } = jobEnvelope.statuses[2]
+  .results?.[2] as Extract<JobCallResult, { error: unknown }>;
 
-const context = { toolCallId: "call", messageId: "message", chatId: "chat" };
-const grantContext = {
+const context: ClientToolCallContext = {
+  toolCallId: "call",
+  messageId: "message",
+  chatId: "chat",
+};
+const grantContext: ClientToolCallContext = {
   ...context,
   hostGrant: {
     ownerChatId: "owner-chat",
     ownerMessageId: "owner-message",
-    requestingChatId: context.chatId,
-    requestingMessageId: context.messageId,
+    requestingChatId: "chat",
+    requestingMessageId: "message",
   },
 };
 
-/** A call's result as a 0.1.44 sidecar returns it: the tool result as structured content. */
-function asCallResult(
-  outcome: ClientToolExecutionResult,
+const fileBlock = (item: string, blob: string) => ({
+  type: "resource" as const,
+  resource: { uri: `erato-sidecar:file${item}`, blob },
+  _meta: { "ai.erato/item": item },
+});
+
+/**
+ * A tool's job result as the sidecar composes it from the direct RPCs'
+ * answers in `rpc`: the outcome of each method the provider table lists for
+ * the tool, with file bytes moved into embedded resources (DELEGATION.md,
+ * "Results and selection").
+ */
+function composedCall(
   tool: string,
+  rpc: Record<string, SidecarReply>,
 ): JobCallResult {
-  if (!outcome.ok) {
-    return {
-      result: {
-        content: [{ type: "text", text: outcome.error }],
-        isError: true,
-      },
-    };
+  const methods =
+    SIDECAR_PROVIDER.tools.find(({ name }) => name === tool)?.methods ?? [];
+  const structuredContent: Record<string, unknown> = {};
+  const content: CallToolResult["content"] = [];
+  for (const method of methods) {
+    if (!Object.hasOwn(rpc, method)) continue;
+    const reply = rpc[method];
+    if ("error" in reply) {
+      structuredContent[method] = { error: reply.error };
+      continue;
+    }
+    const result = globalThis.structuredClone(reply.result) as Record<
+      string,
+      unknown
+    >;
+    if (typeof result.contentBase64 === "string") {
+      content.push(fileBlock(`/${method}/result`, result.contentBase64));
+      delete result.contentBase64;
+    }
+    const messages = (result.messages ?? []) as {
+      attachments: Record<string, unknown>[];
+    }[];
+    messages.forEach(({ attachments }, m) =>
+      attachments.forEach((attachment, a) => {
+        if (typeof attachment.contentBytes !== "string") return;
+        content.push(
+          fileBlock(
+            `/${method}/result/messages/${m}/attachments/${a}`,
+            attachment.contentBytes,
+          ),
+        );
+        delete attachment.contentBytes;
+      }),
+    );
+    structuredContent[method] = { result };
   }
-  const structuredContent = { ...(outcome.result as Record<string, unknown>) };
-  if (WITHOUT_FRESHNESS.has(tool)) delete structuredContent.freshness;
-  return {
-    result: {
-      content: [{ type: "text", text: "Plain-text rendering." }],
-      structuredContent,
-    },
-  };
+  return { result: { content, structuredContent } };
 }
 
-function options(): SidecarChatToolOptions & {
-  uploadAttachment: ReturnType<typeof vi.fn<SidecarAttachmentUpload>>;
-} {
+function options() {
   return {
     approveFiles: vi.fn<SidecarChatToolOptions["approveFiles"]>(
       async (files) => new Set(files),
     ),
-    uploadAttachment: vi.fn<SidecarAttachmentUpload>(async () => ({
-      id: "uploaded-file",
+    uploadAttachment: vi.fn<SidecarAttachmentUpload>(async (file) => ({
+      id: `uploaded-${file.name}`,
     })),
     uploadsEnabled: true,
     maxUploadBytes: 1000,
@@ -243,22 +317,39 @@ function options(): SidecarChatToolOptions & {
   };
 }
 
+type ReviewOutcome = "approved" | "declined" | "cancelled" | "expired";
+
 /**
  * A sidecar answering the direct RPCs from `rpc`, and each job call with
- * `call`; with `discovery`, the tools run as jobs.
+ * `call`, by default what a sidecar composes from `rpc`; with `discovery`,
+ * the tools run as jobs. Under strict mode a job whose tool selects items
+ * waits for its review, which ends as `review`.
  */
 function sidecar(
   rpc: Record<string, SidecarReply>,
-  call: (tool: string) => JobCallResult = () => {
-    throw new Error("This sidecar runs no jobs.");
-  },
   discovery: Partial<SidecarSnapshot> = {},
+  call: (tool: string) => JobCallResult = (tool) => composedCall(tool, rpc),
+  review: ReviewOutcome = "approved",
 ) {
+  let calls: JobToolCall[] = [];
+  const results = () => calls.map(({ name }) => call(name));
   const fake = fakeSidecarClient((method, params) => {
-    if (method === "jobs.start.v1")
-      return completedJob(
-        (params.calls as JobToolCall[]).map(({ name }) => call(name)),
-      );
+    if (method === "jobs.start.v1") {
+      calls = params.calls as JobToolCall[];
+      return discovery.strict && calls.some(({ name }) => selects(name))
+        ? { result: { handle: JOB_HANDLE, state: "ready_for_review" } }
+        : completedJob(results());
+    }
+    if (method === "jobs.review.v1")
+      return { result: { handle: JOB_HANDLE, state: "ready_for_review" } };
+    if (method === "jobs.status.v1")
+      return {
+        result: {
+          handle: JOB_HANDLE,
+          state: review,
+          ...(review === "approved" ? { results: results() } : {}),
+        },
+      };
     if (method.startsWith("jobs."))
       return { result: { handle: JOB_HANDLE, state: "acked" } };
     return rpc[method] ?? { error: { code: -32601, message: "Not found." } };
@@ -275,24 +366,55 @@ function sidecar(
 
 const jobSidecar = (
   rpc: Record<string, SidecarReply>,
-  call: (tool: string) => JobCallResult,
-) => sidecar(rpc, call, fixtureDiscovery(NORMAL_MODE));
+  call?: (tool: string) => JobCallResult,
+) => sidecar(rpc, fixtureDiscovery(NORMAL_MODE), call);
+
+/** What the upload callbacks received, with each file by name, type and text. */
+async function uploadsOf(path: ReturnType<typeof sidecar>) {
+  const described = async (file: File) => ({
+    name: file.name,
+    type: file.type,
+    text: await new Promise<unknown>((resolve) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.readAsText(file);
+    }),
+  });
+  const calls = (all: unknown[][]) =>
+    Promise.all(
+      all.map(async ([first, ...rest]) => [
+        Array.isArray(first)
+          ? await Promise.all((first as File[]).map(described))
+          : await described(first as File),
+        ...rest.map((value) =>
+          value instanceof Map
+            ? [...(value as Map<File, unknown>).values()]
+            : value,
+        ),
+      ]),
+    );
+  return {
+    approved: await calls(path.options.approveFiles.mock.calls),
+    uploaded: await calls(path.options.uploadAttachment.mock.calls),
+  };
+}
 
 /**
- * The tool's outcome on a sidecar without jobs, and on one whose job returns
- * what `call` makes of that outcome.
+ * The tool's outcome on a sidecar without jobs, and on one that runs it as a
+ * job whose result `call` makes, by default what a sidecar composes from the
+ * same RPC answers.
  */
 async function bothPaths(
   tool: string,
   input: unknown,
   rpc: Record<string, SidecarReply>,
-  call: (direct: ClientToolExecutionResult) => JobCallResult = (direct) =>
-    asCallResult(direct, tool),
-  callContext: typeof context = context,
+  call?: (tool: string) => JobCallResult,
+  callContext: ClientToolCallContext = context,
+  discovery: Partial<SidecarSnapshot> = fixtureDiscovery(NORMAL_MODE),
 ) {
   const direct = sidecar(rpc);
   const legacy = await direct.tool(tool).execute(input, callContext);
-  const job = jobSidecar(rpc, () => call(legacy));
+  const job = sidecar(rpc, discovery, call);
   const viaJob = await job.tool(tool).execute(input, callContext);
   return { legacy, viaJob, direct, job };
 }
@@ -308,8 +430,8 @@ afterEach(() => {
 });
 
 describe("desktop sidecar tools run as jobs", () => {
-  it.each(JOB_TOOLS)(
-    "%s returns the direct read's result through one job",
+  it.each(TOOLS)(
+    "%s shapes the job's composed results as the direct read shapes its RPCs",
     async (tool) => {
       const { legacy, viaJob, direct, job } = await bothPaths(
         tool,
@@ -318,6 +440,7 @@ describe("desktop sidecar tools run as jobs", () => {
       );
       expect(legacy.ok).toBe(true);
       expect(JSON.stringify(viaJob)).toBe(JSON.stringify(legacy));
+      expect(await uploadsOf(job)).toEqual(await uploadsOf(direct));
       expect(
         direct.methods().some((method) => method.startsWith("jobs.")),
       ).toBe(false);
@@ -331,7 +454,41 @@ describe("desktop sidecar tools run as jobs", () => {
     },
   );
 
-  it("matches the protocol example's mailbox listing", async () => {
+  it.each([READ_SIDECAR_CONVERSATION_TOOL, GET_SIDECAR_DOCUMENT_TOOL])(
+    "%s uploads the same file with the same provenance on both paths",
+    async (tool) => {
+      const { legacy, viaJob, direct, job } = await bothPaths(
+        tool,
+        INPUTS[tool],
+        RPC,
+      );
+      expect(legacy).toMatchObject({
+        ok: true,
+        fileUploadIds: [expect.stringMatching(/^uploaded-/)],
+      });
+      expect(viaJob).toEqual(legacy);
+      const uploads = await uploadsOf(job);
+      expect(uploads).toEqual(await uploadsOf(direct));
+      expect(uploads.uploaded).toEqual([
+        [
+          expect.objectContaining({
+            text:
+              tool === GET_SIDECAR_DOCUMENT_TOOL
+                ? "Mock document"
+                : "mock attachment bytes",
+          }),
+          context.chatId,
+          undefined,
+          tool === GET_SIDECAR_DOCUMENT_TOOL
+            ? EXTERNAL_IDS[1].value
+            : undefined,
+          expect.objectContaining({ version: 1 }),
+        ],
+      ]);
+    },
+  );
+
+  it("shapes the protocol example's results as the direct reads shape the same answers", async () => {
     const start = jobsExample.messages[0].message.params as {
       calls: JobToolCall[];
     };
@@ -342,43 +499,15 @@ describe("desktop sidecar tools run as jobs", () => {
     ).result;
     const example = (name: string) =>
       results[start.calls.findIndex((call) => call.name === name)];
-    const mailboxes = example(LIST_SIDECAR_MAILBOXES_TOOL) as Extract<
-      JobCallResult,
-      { result: unknown }
-    >;
-    const [mailbox] = (
-      mailboxes.result.structuredContent as {
-        mailboxes: (Record<string, unknown> & {
-          sources: Record<string, unknown>[];
-        })[];
-      }
-    ).mailboxes;
-    const { sources, ...listed } = mailbox;
-    const rpc: Record<string, SidecarReply> = {
-      "outlook.list_mailboxes.v1": {
-        result: { mailboxes: [listed], warnings: [] },
-      },
-      "sources.list.v1": {
-        result: {
-          sources: sources.map((source) => ({
-            ...source,
-            sourceKey: "work-ost",
-            locator: { mailboxId: listed.id },
-            discoveryCursor: null,
-            completedScanId: null,
-          })),
-        },
-      },
-      // The example's second call names a mailbox the sidecar does not know.
-      "outlook.get_conversation.v1": {
-        error: (
-          example(READ_SIDECAR_CONVERSATION_TOOL) as Extract<
-            JobCallResult,
-            { error: unknown }
-          >
-        ).error,
-      },
-    };
+    // The direct RPCs answer what the example's calls composed.
+    const rpc: Record<string, SidecarReply> = {};
+    for (const outcome of results) {
+      Object.assign(
+        rpc,
+        (outcome as Extract<JobCallResult, { result: unknown }>).result
+          .structuredContent,
+      );
+    }
     const outcomes: ClientToolExecutionResult[] = [];
     for (const call of start.calls) {
       const { legacy, viaJob } = await bothPaths(
@@ -393,10 +522,19 @@ describe("desktop sidecar tools run as jobs", () => {
     expect(outcomes).toEqual([
       {
         ok: true,
-        result: {
-          ...mailboxes.result.structuredContent,
+        result: expect.objectContaining({
+          mailboxes: [
+            expect.objectContaining({
+              id: "8b7d2f4a6c9e1035d8a1b2c3e4f50617",
+              sources: [
+                expect.objectContaining({
+                  sourceId: "3f2a9c4e-6b1d-4e8f-9a0b-1c2d3e4f5a6b",
+                }),
+              ],
+            }),
+          ],
           freshness: expect.objectContaining({ changes: "unknown" }),
-        },
+        }),
       },
       { ok: false, error: "Unknown Outlook mailbox." },
     ]);
@@ -405,8 +543,9 @@ describe("desktop sidecar tools run as jobs", () => {
   it("matches a folder the sidecar cannot read", async () => {
     const { legacy, viaJob } = await bothPaths(
       GET_SIDECAR_FOLDER_HIERARCHY_TOOL,
-      { sourceId: "00000000-0000-4000-8000-000000000009" },
+      INPUTS[GET_SIDECAR_FOLDER_HIERARCHY_TOOL],
       {
+        ...RPC,
         "sources.get_folder_hierarchy.v1": {
           error: {
             code: -32016,
@@ -421,7 +560,10 @@ describe("desktop sidecar tools run as jobs", () => {
     );
     expect(legacy).toMatchObject({
       ok: true,
-      result: { foldersAvailable: false },
+      result: {
+        foldersAvailable: false,
+        notice: expect.stringContaining("Mock Outlook mailbox"),
+      },
     });
     expect(JSON.stringify(viaJob)).toBe(JSON.stringify(legacy));
   });
@@ -448,22 +590,101 @@ describe("desktop sidecar tools run as jobs", () => {
     expect(viaJob).toEqual(legacy);
   });
 
-  it.each(ERROR_CASES)(
-    "returns %s to %s as the direct read does",
+  it.each([
+    [
+      "fails",
+      { error: { code: -32603, message: "Internal error." } },
+      "Catalog source discovery failed.",
+    ],
+    [
+      "is not offered",
+      undefined,
+      "This sidecar does not support catalog source discovery.",
+    ],
+  ] as const)(
+    "matches mailboxes whose catalog source listing %s",
+    async (_case, sources, notice) => {
+      const rpc = { ...RPC };
+      if (sources) rpc["sources.list.v1"] = sources;
+      else delete rpc["sources.list.v1"];
+      const direct = sidecar(rpc);
+      if (!sources)
+        direct.supports.mockImplementation(
+          (method) => method !== "sources.list.v1",
+        );
+      const legacy = await direct
+        .tool(LIST_SIDECAR_MAILBOXES_TOOL)
+        .execute({}, context);
+      const viaJob = await jobSidecar(rpc)
+        .tool(LIST_SIDECAR_MAILBOXES_TOOL)
+        .execute({}, context);
+      expect(legacy).toMatchObject({
+        ok: true,
+        result: { warnings: [{ message: expect.stringContaining(notice) }] },
+      });
+      expect(JSON.stringify(viaJob)).toBe(JSON.stringify(legacy));
+    },
+  );
+
+  it.each(
+    TOOLS.flatMap((tool): [string, string, CallError][] => [
+      ["an oversized result", tool, oversized],
+      ["arguments the tool does not accept", tool, invalidArguments],
+    ]),
+  )(
+    "returns %s to %s as the direct read does, as a method's or the call's error",
     async (_case, tool, error) => {
       for (const callContext of [context, grantContext]) {
-        const { legacy, viaJob } = await bothPaths(
-          tool,
-          INPUTS[tool],
-          { ...RPC, [methodOf(tool)]: { error } },
-          () => ({ error }),
-          callContext,
-        );
-        expect(legacy.ok).toBe(false);
-        expect(viaJob).toEqual(legacy);
+        const rpc = { ...RPC, [methodOf(tool)]: { error } };
+        for (const call of [undefined, () => ({ error })]) {
+          const { legacy, viaJob } = await bothPaths(
+            tool,
+            INPUTS[tool],
+            rpc,
+            call,
+            callContext,
+          );
+          expect(legacy.ok).toBe(false);
+          expect(viaJob).toEqual(legacy);
+        }
       }
     },
   );
+
+  it("returns an unknown conversation anchor as the direct read does", async () => {
+    const { legacy, viaJob } = await bothPaths(
+      READ_SIDECAR_CONVERSATION_TOOL,
+      INPUTS[READ_SIDECAR_CONVERSATION_TOOL],
+      {
+        "outlook.get_conversation.v1": {
+          error: {
+            code: -32602,
+            message: "Unknown document.",
+            data: { sourceError: "document_not_found" },
+          },
+        },
+      },
+    );
+    expect(legacy).toEqual({
+      ok: false,
+      error: expect.stringContaining("Use get_sidecar_document"),
+    });
+    expect(viaJob).toEqual(legacy);
+  });
+
+  it("reports a job that composed no result for the tool's method", async () => {
+    const job = jobSidecar(RPC, () => ({
+      result: { content: [], structuredContent: {} },
+    }));
+    for (const tool of TOOLS) {
+      await expect(
+        job.tool(tool).execute(INPUTS[tool], { ...context, toolCallId: tool }),
+      ).resolves.toEqual({
+        ok: false,
+        error: "The desktop sidecar returned no result for this call.",
+      });
+    }
+  });
 
   it("returns a lost job to a task as the loss of the app", async () => {
     const tool = LIST_SIDECAR_MAILBOXES_TOOL;
@@ -504,12 +725,37 @@ describe("desktop sidecar tools run as jobs", () => {
         READ_SIDECAR_CONVERSATION_TOOL,
         { ...INPUTS[READ_SIDECAR_CONVERSATION_TOOL], mailboxId: "not-an-id" },
       ],
+      [GET_SIDECAR_DOCUMENT_TOOL, "document"],
+      [GET_SIDECAR_DOCUMENT_TOOL, {}],
     ] as const) {
       const { legacy, viaJob, direct, job } = await bothPaths(tool, input, RPC);
       expect(legacy.ok).toBe(false);
       expect(viaJob).toEqual(legacy);
       expect(direct.methods()).toEqual([]);
       expect(job.methods()).toEqual([]);
+    }
+  });
+
+  it("refuses a document export before it starts a job when the chat takes no upload", async () => {
+    for (const [callContext, uploadsEnabled] of [
+      [{ ...context, chatId: null }, true],
+      [context, false],
+    ] as const) {
+      const paths = [sidecar(RPC), jobSidecar(RPC)];
+      for (const path of paths) path.options.uploadsEnabled = uploadsEnabled;
+      const [legacy, viaJob] = await Promise.all(
+        paths.map((path) =>
+          path
+            .tool(GET_SIDECAR_DOCUMENT_TOOL)
+            .execute(INPUTS[GET_SIDECAR_DOCUMENT_TOOL], callContext),
+        ),
+      );
+      expect(legacy).toEqual({
+        ok: false,
+        error: "Document uploads are unavailable for this chat.",
+      });
+      expect(viaJob).toEqual(legacy);
+      for (const path of paths) expect(path.methods()).toEqual([]);
     }
   });
 
@@ -541,6 +787,12 @@ describe("desktop sidecar tools run as jobs", () => {
       },
       "/anchor/internetMessageId must NOT have more than 32768 characters",
     ],
+    [
+      "a document ID that is not a UUID",
+      GET_SIDECAR_DOCUMENT_TOOL,
+      { documentId: "not-a-uuid" },
+      '/documentId must match format "uuid"',
+    ],
   ])(
     "rejects %s against the pinned contract before it starts a job",
     async (_case, tool, input, detail) => {
@@ -570,81 +822,40 @@ describe("desktop sidecar tools run as jobs", () => {
   ])("keeps what jobs of %s tell a later document export", async (reads) => {
     const run = async (path: ReturnType<typeof sidecar>) => {
       for (const tool of reads)
-        await path.tool(tool).execute(INPUTS[tool], context);
+        await path
+          .tool(tool)
+          .execute(INPUTS[tool], { ...context, toolCallId: tool });
       const outcome = await path
         .tool(GET_SIDECAR_DOCUMENT_TOOL)
-        .execute(
-          { documentId: PARENT_ID, subject_scope: "subject_with_thread" },
-          context,
-        );
-      return { outcome, upload: path.options.uploadAttachment.mock.calls };
+        .execute(INPUTS[GET_SIDECAR_DOCUMENT_TOOL], context);
+      return { outcome, uploads: await uploadsOf(path) };
     };
     const legacy = await run(sidecar(RPC));
-    const outcomes = new Map<string, ClientToolExecutionResult>();
-    for (const tool of reads) {
-      outcomes.set(
-        tool,
-        await sidecar(RPC).tool(tool).execute(INPUTS[tool], context),
-      );
-    }
-    const viaJob = await run(
-      jobSidecar(RPC, (tool) => {
-        const outcome = outcomes.get(tool);
-        if (!outcome) throw new Error(`No job result for ${tool}.`);
-        return asCallResult(outcome, tool);
-      }),
-    );
+    const viaJob = await run(jobSidecar(RPC));
     expect(legacy.outcome).toMatchObject({
       ok: true,
       result: { freshness: { scope: expect.any(Object) } },
     });
     expect(JSON.stringify(viaJob.outcome)).toBe(JSON.stringify(legacy.outcome));
-    // The upload's Outlook provenance carries the mailbox the reads saw.
-    expect(legacy.upload[0][4]).toMatchObject({
+    // The document's upload carries the mailbox the reads saw.
+    expect(legacy.uploads.uploaded.at(-1)?.[4]).toMatchObject({
       origins: [{ document: { mailbox: { mailboxId: MAILBOX.id } } }],
     });
-    expect(viaJob.upload).toEqual(legacy.upload);
+    expect(viaJob.uploads).toEqual(legacy.uploads);
   });
 
-  it("keeps the direct RPCs for document exports and attachment uploads", async () => {
-    const job = jobSidecar(RPC, () => {
-      throw new Error("No job expected.");
-    });
-    const direct = sidecar(RPC);
-    for (const [tool, input] of [
-      [GET_SIDECAR_DOCUMENT_TOOL, { documentId: PARENT_ID }],
-      [
-        READ_SIDECAR_CONVERSATION_TOOL,
-        { ...INPUTS[READ_SIDECAR_CONVERSATION_TOOL], includeAttachments: true },
-      ],
-    ] as const) {
-      const viaJob = await job.tool(tool).execute(input, context);
-      expect(viaJob).toMatchObject({
-        ok: true,
-        fileUploadIds: ["uploaded-file"],
-      });
-      expect(JSON.stringify(viaJob)).toBe(
-        JSON.stringify(await direct.tool(tool).execute(input, context)),
-      );
-    }
-    expect(job.methods()).not.toContain("jobs.start.v1");
-    expect(job.options.uploadAttachment.mock.calls).toEqual(
-      direct.options.uploadAttachment.mock.calls,
-    );
-  });
-
-  it("offers the job tools while their direct RPCs are not enabled", async () => {
-    const job = jobSidecar(RPC, () => ({
-      result: { content: [], structuredContent: {} },
-    }));
+  it("offers every tool as a job while its direct RPC is not enabled", async () => {
+    const job = jobSidecar(RPC);
     job.supports.mockImplementation((method) => method.startsWith("jobs."));
-    for (const tool of JOB_TOOLS) {
+    for (const tool of TOOLS) {
       expect(job.tool(tool).isAvailable()).toBe(true);
       await expect(
-        job.tool(tool).execute(INPUTS[tool], context),
+        job.tool(tool).execute(INPUTS[tool], { ...context, toolCallId: tool }),
       ).resolves.toMatchObject({ ok: true });
     }
-    expect(job.tool(GET_SIDECAR_DOCUMENT_TOOL).isAvailable()).toBe(false);
+    expect(
+      job.methods().filter((method) => !method.startsWith("jobs.")),
+    ).toEqual([]);
     // Settings lists the tools the chat offers.
     for (const { name, method } of SIDECAR_CHAT_TOOL_METHODS) {
       expect(sidecarToolAvailable(job.client, { name, method })).toBe(
@@ -652,57 +863,121 @@ describe("desktop sidecar tools run as jobs", () => {
       );
     }
   });
+});
 
-  it("answers a call that needs a direct RPC the sidecar does not enable as unavailable", async () => {
-    const input = {
-      ...INPUTS[READ_SIDECAR_CONVERSATION_TOOL],
-      includeAttachments: true,
-    };
-    for (const callContext of [context, grantContext]) {
-      const job = jobSidecar(RPC, () => {
-        throw new Error("No job expected.");
-      });
-      job.supports.mockImplementation((method) => method.startsWith("jobs."));
-      const direct = sidecar(RPC);
-      direct.supports.mockReturnValue(false);
-      const viaJob = await job
-        .tool(READ_SIDECAR_CONVERSATION_TOOL)
-        .execute(input, callContext);
-      expect(viaJob).toEqual(
-        await direct
-          .tool(READ_SIDECAR_CONVERSATION_TOOL)
-          .execute(input, callContext),
-      );
-      expect(viaJob).toMatchObject(
-        callContext === grantContext
-          ? { ok: false, submissionFeedback: { terminal: true } }
-          : {
-              ok: false,
-              error:
-                "This desktop sidecar capability is unavailable on this device.",
-            },
-      );
-      expect(job.methods()).toEqual([]);
-    }
+describe("desktop sidecar tools in strict mode", () => {
+  const strict = fixtureDiscovery(STRICT_MODE);
+  beforeEach(() => {
+    // The poll after the review opens waits out the poll interval.
+    vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
+    vi.setSystemTime(new Date("2026-11-02T10:00:00Z"));
   });
+  const settled = async <T>(pending: Promise<T>): Promise<T> => {
+    await vi.advanceTimersByTimeAsync(JOB_POLL_INTERVAL_MS);
+    return pending;
+  };
 
-  it("keeps everything on the device once the sidecar declares local delegation", async () => {
-    const job = sidecar(
-      RPC,
-      () => {
-        throw new Error("No job expected.");
-      },
-      {
-        ...fixtureDiscovery(NORMAL_MODE),
-        localDelegation: { profile: "strict_snapshot_v1" },
-      },
-    );
-    for (const tool of JOB_TOOLS) {
-      expect(job.tool(tool).isAvailable()).toBe(false);
-      await expect(
-        job.tool(tool).execute(INPUTS[tool], context),
-      ).resolves.toEqual({ ok: true, disposition: "local_only" });
-    }
-    expect(job.requests).toEqual([]);
-  });
+  it.each(TOOLS)(
+    "%s runs as a job, reviewed when it selects items, and shapes the approved results as the direct read does",
+    async (tool) => {
+      const { legacy, viaJob, direct, job } = await settled(
+        bothPaths(tool, INPUTS[tool], RPC, undefined, context, strict),
+      );
+      expect(legacy).toMatchObject({ ok: true });
+      expect(JSON.stringify(viaJob)).toBe(JSON.stringify(legacy));
+      expect(await uploadsOf(job)).toEqual(await uploadsOf(direct));
+      await vi.waitFor(() =>
+        expect(job.methods()).toEqual(
+          selects(tool)
+            ? [
+                "jobs.start.v1",
+                "jobs.review.v1",
+                "jobs.status.v1",
+                "jobs.ack.v1",
+              ]
+            : ["jobs.start.v1", "jobs.ack.v1"],
+        ),
+      );
+    },
+  );
+
+  it.each([
+    [
+      "declined",
+      "The user declined sharing this result in the Erato desktop app. Do not retry without their permission.",
+    ],
+    [
+      "cancelled",
+      "The review of this result was cancelled in the Erato desktop app, so nothing was shared. Do not retry without the user's permission.",
+    ],
+    [
+      "expired",
+      "The review of this result in the Erato desktop app ended without a decision, so nothing was shared. Do not retry without the user's permission.",
+    ],
+  ] as const)(
+    "reports a review that ended as %s as an error a retry cannot fix",
+    async (state, error) => {
+      for (const callContext of [context, grantContext]) {
+        const job = sidecar(RPC, strict, undefined, state);
+        const outcome = await settled(
+          job
+            .tool(READ_SIDECAR_CONVERSATION_TOOL)
+            .execute(INPUTS[READ_SIDECAR_CONVERSATION_TOOL], callContext),
+        );
+        // A task's call reports it as declined, as a declined upload does.
+        expect(outcome).toEqual(
+          callContext === grantContext
+            ? {
+                ok: false,
+                error,
+                validationErrors: [
+                  { path: "", code: "declined", message: error },
+                ],
+              }
+            : { ok: false, error },
+        );
+        expect(job.options.approveFiles).not.toHaveBeenCalled();
+        expect(job.options.uploadAttachment).not.toHaveBeenCalled();
+      }
+    },
+  );
+
+  it.each([
+    ["reports no job envelope", { strict: true }],
+    ["offers no sidecar provider", { ...strict, providers: [] }],
+  ] as const)(
+    "offers no tool while the strict sidecar %s, even with its direct RPCs enabled",
+    async (_case, discovery) => {
+      const path = sidecar(RPC, discovery);
+      for (const tool of TOOLS) {
+        expect(path.tool(tool).isAvailable()).toBe(false);
+        expect(
+          sidecarToolAvailable(path.client, {
+            name: tool,
+            method: methodOf(tool),
+          }),
+        ).toBe(false);
+        expect(
+          await path.tool(tool).execute(INPUTS[tool], {
+            ...context,
+            toolCallId: tool,
+          }),
+        ).toEqual({
+          ok: false,
+          error:
+            "This desktop sidecar capability is unavailable on this device.",
+        });
+        expect(
+          await path.tool(tool).execute(INPUTS[tool], {
+            ...grantContext,
+            toolCallId: `${tool}-task`,
+          }),
+        ).toMatchObject({
+          ok: false,
+          validationErrors: [{ code: "context_unavailable" }],
+        });
+      }
+      expect(path.requests).toEqual([]);
+    },
+  );
 });

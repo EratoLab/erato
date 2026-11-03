@@ -7,7 +7,6 @@ import {
   ClientOperationCoordinator,
   clientOperationApi,
 } from "./clientOperations/coordinator";
-import { localTaskApi } from "./desktopSidecar/localTaskCoordinator";
 import { v1betaApiFetch } from "./generated/v1betaApi/v1betaApiFetcher";
 
 describe("v1betaApiFetch optional query parameters", () => {
@@ -28,15 +27,10 @@ describe("v1betaApiFetch optional query parameters", () => {
 
   it.each([
     ["operations", clientOperationApi.list, "/api/v1beta/me/client-operations"],
-    [
-      "receipts",
-      localTaskApi.receipts,
-      "/api/v1beta/me/local-delegation/exports",
-    ],
   ] as const)(
     "omits the first-page cursor for %s and preserves later cursors",
     async (_name, list, endpoint) => {
-      const fetchMock = mockFetch({ jobs: [], operations: [] });
+      const fetchMock = mockFetch({ operations: [] });
       const signal = new AbortController().signal;
       const cursor = "550e8400-e29b-41d4-a716-446655440000";
 

@@ -11,6 +11,7 @@ import { beforeEach, expect, it, vi } from "vitest";
 import {
   fixtureDiscovery,
   NORMAL_MODE,
+  STRICT_MODE,
 } from "@/lib/desktopSidecar/__tests__/sidecarJobTestUtils";
 import {
   fetchProfile,
@@ -83,15 +84,26 @@ it("lists only the tools this sidecar supports, with their stored decision", () 
   ).not.toBeInTheDocument();
 });
 
-it("lists the tools a sidecar runs as jobs, as the chat offers them", () => {
-  setup(["jobs.start.v1", "jobs.status.v1"], fixtureDiscovery(NORMAL_MODE));
-  expect(screen.getAllByRole("radiogroup")).toHaveLength(5);
-  // The document keeps its direct RPC, which this sidecar does not enable.
-  expect(
-    screen.queryByRole("radiogroup", {
-      name: "Retrieve a document or attachment",
-    }),
-  ).not.toBeInTheDocument();
+it.each([NORMAL_MODE, STRICT_MODE])(
+  "lists the tools a %s runs as jobs, as the chat offers them",
+  (mode) => {
+    setup(["jobs.start.v1", "jobs.status.v1"], fixtureDiscovery(mode));
+    expect(screen.getAllByRole("radiogroup")).toHaveLength(6);
+  },
+);
+
+it("lists no tool for a strict sidecar that runs no jobs", () => {
+  const queryClient = new QueryClient();
+  const client = {
+    supports: () => true,
+    getSnapshot: () => ({ state: "ready", strict: true }),
+  } as unknown as DesktopSidecarClient;
+  const { container } = render(
+    <QueryClientProvider client={queryClient}>
+      <SidecarToolDecisions client={client} />
+    </QueryClientProvider>,
+  );
+  expect(container).toBeEmptyDOMElement();
 });
 
 it("merges the new decision into the stored ones and refreshes the profile", async () => {

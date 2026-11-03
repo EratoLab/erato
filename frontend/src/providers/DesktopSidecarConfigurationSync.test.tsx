@@ -13,7 +13,7 @@ const mocks = vi.hoisted(() => ({
   snapshot: {
     state: "ready",
     instanceId: "instance",
-    localDelegation: undefined as { enforcement?: string } | undefined,
+    strict: undefined as boolean | undefined,
   },
   organization: {
     policy_guides: {
@@ -77,7 +77,7 @@ function mount() {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mocks.snapshot.localDelegation = undefined;
+  mocks.snapshot.strict = undefined;
   mocks.snapshot.state = "ready";
   mocks.supports.mockReturnValue(true);
   mocks.invoke.mockImplementation(async (method: string) => {
@@ -90,15 +90,10 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks());
 
 describe("DesktopSidecarConfigurationSync", () => {
-  it.each([
-    undefined,
-    { enforcement: "enforced" },
-    { enforcement: "future-mode" },
-    {},
-  ])(
-    "sends configuration independently of delegation declaration %j",
-    async (declaration) => {
-      mocks.snapshot.localDelegation = declaration;
+  it.each([undefined, false, true])(
+    "sends configuration independently of strict mode %j",
+    async (strict) => {
+      mocks.snapshot.strict = strict;
       mount();
       await waitFor(() => expect(mocks.invalidateQueries).toHaveBeenCalled());
       expect(mocks.invoke).toHaveBeenCalledWith(

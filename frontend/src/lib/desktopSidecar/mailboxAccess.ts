@@ -5,6 +5,7 @@ import type {
   DesktopSidecarClient,
   OutlookConversationWarning,
   OutlookGetConversationV1Params,
+  OutlookGetConversationV1Result,
   OutlookMailbox,
 } from "@erato/desktop-sidecar-protocol";
 
@@ -84,11 +85,22 @@ export async function readSidecarConversation(
   signal?: AbortSignal,
 ) {
   signal?.throwIfAborted();
-  const result = await client.invoke(
-    "outlook.get_conversation.v1",
-    conversationRequest(params),
-    { signal },
+  return conversationWithMessages(
+    await client.invoke(
+      "outlook.get_conversation.v1",
+      conversationRequest(params),
+      { signal },
+    ),
   );
+}
+
+/**
+ * The conversation an outlook.get_conversation.v1 result reports, which must
+ * hold messages; otherwise the error that says why there are none.
+ */
+export function conversationWithMessages(
+  result: OutlookGetConversationV1Result,
+): OutlookGetConversationV1Result {
   if (result.messages.length === 0) {
     if (
       result.warnings?.some((warning) => warning.code === "unsupported_source")

@@ -128,8 +128,8 @@ describe("DesktopSidecarClientTools for delegated tasks", () => {
   };
   beforeEach(() => {
     vi.clearAllMocks();
-    // Each tool is available while the app is ready in normal mode, as the
-    // real tools are.
+    // Each tool is available while the app is ready and, in strict mode, runs
+    // jobs, as the real tools are.
     vi.mocked(createSidecarChatTools).mockImplementation(() =>
       SIDECAR_CHAT_TOOL_METHODS.map(
         ({ name, method }): SidecarChatTool => ({
@@ -137,7 +137,8 @@ describe("DesktopSidecarClientTools for delegated tasks", () => {
           method,
           isAvailable: () =>
             sidecar.snapshot.state === "ready" &&
-            !sidecar.snapshot.localDelegation,
+            (sidecar.snapshot.strict !== true ||
+              sidecar.snapshot.jobs !== undefined),
           execute: vi.fn(),
         }),
       ),
@@ -204,12 +205,8 @@ describe("DesktopSidecarClientTools for delegated tasks", () => {
   it.each<[string, Partial<SidecarSnapshot>]>([
     ["is not running when the user sends", { state: "unavailable" }],
     [
-      "declares strict local delegation",
-      {
-        state: "ready",
-        localDelegation: { enforcement: "unavailable" },
-        strictLocalDelegation: false,
-      },
+      "runs in strict mode without the job envelope",
+      { state: "ready", strict: true },
     ],
   ])("offers no binding and no tool while the app %s", (_name, snapshot) => {
     sidecar.snapshot = snapshot;

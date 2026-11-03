@@ -94,7 +94,6 @@ function activate(activation: Partial<WordCommentReadActivation> = {}) {
 async function read(args: unknown = {}, context = REQUEST) {
   const response = await session.execute(args, context);
   if (!response.ok) throw new Error(response.error);
-  if (response.disposition === "local_only") throw new Error("local only");
   return response.result as WordCommentReadResultJson;
 }
 

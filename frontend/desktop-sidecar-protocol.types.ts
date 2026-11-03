@@ -1,6 +1,6 @@
 import type {
-  LocalTaskPlan,
-  LocalTaskStatus,
+  JobStatus,
+  JobToolCall,
   SourceDescriptor,
   SourcesListV1Result,
 } from "../desktop-sidecar-protocol/typescript/src/generated/index.js";
@@ -42,29 +42,25 @@ const response: SourcesListV1Result = {
   responseRevision: 2,
 };
 
-const plan: LocalTaskPlan = {
-  operation: "collect_evidence",
-  queryVariants: ["quarterly report"],
-  maxHits: 10,
-  maxArtifacts: 3,
-  maxBytes: 1024,
-  executionSeconds: 30,
-  expiresAt: 1800000000,
-  executionExtension: { revision: 2 },
+const call: JobToolCall = {
+  server: "sidecar",
+  name: "search_sidecar_index",
+  arguments: { query: "quarterly report" },
+  callExtension: { revision: 2 },
 };
 
-const status: LocalTaskStatus = {
+const status: JobStatus = {
   handle: "h".repeat(32),
   state: "ready_for_review",
   statusExtension: true,
 };
 
-void [response, plan, status];
+void [response, call, status];
 
 // @ts-expect-error Known fields must keep their declared types.
 const invalidSource: SourceDescriptor = { ...source, enabled: "yes" };
 void invalidSource;
 
 // @ts-expect-error Explicit enum contracts stay restrictive.
-const invalidStatus: LocalTaskStatus = { ...status, state: "future_state" };
+const invalidStatus: JobStatus = { ...status, state: "future_state" };
 void invalidStatus;

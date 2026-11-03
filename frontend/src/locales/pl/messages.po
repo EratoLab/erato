@@ -8311,8 +8311,8 @@ msgid "Approaching Token Limit"
 msgstr "Zbliżanie się do limitu tokenów"
 
 #: src/lib/desktopSidecar/localTaskLabels.ts
-msgid "Approved evidence is ready to upload"
-msgstr "Zatwierdzone materiały źródłowe są gotowe do przesłania"
+#~ msgid "Approved evidence is ready to upload"
+#~ msgstr "Zatwierdzone materiały źródłowe są gotowe do przesłania"
 
 #: src/pages/AssistantsListPage.tsx
 #~ msgid "Archive"
@@ -8534,8 +8534,8 @@ msgstr ""
 #~ msgstr "Anuluj uruchamianie dyktowania"
 
 #: src/providers/LocalTaskCoordinator.tsx
-msgid "Cancel task"
-msgstr "Anuluj zadanie"
+#~ msgid "Cancel task"
+#~ msgstr "Anuluj zadanie"
 
 #: src/components/ui/Chat/ChatInput.tsx
 #~ msgid "Canceled"
@@ -8630,8 +8630,8 @@ msgid "collapse sidebar"
 msgstr "zwiń pasek boczny"
 
 #: src/lib/desktopSidecar/localTaskLabels.ts
-msgid "Collecting evidence on this device"
-msgstr "Zbieranie materiałów źródłowych na tym urządzeniu"
+#~ msgid "Collecting evidence on this device"
+#~ msgstr "Zbieranie materiałów źródłowych na tym urządzeniu"
 
 #: src/components/ui/Chat/ChatInput.tsx
 #~ msgid "Completed"
@@ -8676,8 +8676,8 @@ msgid "Context usage exceeds model capacity. The assistant can't be created like
 msgstr "Wykorzystanie kontekstu przekracza pojemność modelu. Asystent nie może zostać utworzony w tej formie."
 
 #: src/lib/desktopSidecar/localTaskLabels.ts
-msgid "Continuing the original task"
-msgstr "Kontynuowanie pierwotnego zadania"
+#~ msgid "Continuing the original task"
+#~ msgstr "Kontynuowanie pierwotnego zadania"
 
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Conversational"
@@ -8926,8 +8926,8 @@ msgid "Estimating token usage..."
 msgstr "Szacowanie użycia tokenów..."
 
 #: src/components/ui/Settings/DesktopSidecarTabContent.tsx
-msgid "Evidence sharing requires review in the desktop app for each package."
-msgstr "Udostępnianie materiałów źródłowych wymaga sprawdzenia każdego pakietu w aplikacji komputerowej."
+#~ msgid "Evidence sharing requires review in the desktop app for each package."
+#~ msgstr "Udostępnianie materiałów źródłowych wymaga sprawdzenia każdego pakietu w aplikacji komputerowej."
 
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Exit audio mode"
@@ -9130,24 +9130,24 @@ msgid "Loading..."
 msgstr "Ładowanie..."
 
 #: src/lib/desktopSidecar/localTaskLabels.ts
-msgid "Local collection could not finish"
-msgstr "Nie udało się ukończyć lokalnego zbierania materiałów"
+#~ msgid "Local collection could not finish"
+#~ msgstr "Nie udało się ukończyć lokalnego zbierania materiałów"
 
 #: src/providers/LocalTaskCoordinator.tsx
-msgid "Local research"
-msgstr "Lokalne wyszukiwanie informacji"
+#~ msgid "Local research"
+#~ msgstr "Lokalne wyszukiwanie informacji"
 
 #: src/providers/LocalTaskCoordinator.tsx
-msgid "Local research tasks"
-msgstr "Zadania lokalnego wyszukiwania informacji"
+#~ msgid "Local research tasks"
+#~ msgstr "Zadania lokalnego wyszukiwania informacji"
 
 #: src/lib/desktopSidecar/localTaskLabels.ts
-msgid "Local task cancelled"
-msgstr "Zadanie lokalne anulowane"
+#~ msgid "Local task cancelled"
+#~ msgstr "Zadanie lokalne anulowane"
 
 #: src/lib/desktopSidecar/localTaskLabels.ts
-msgid "Local task expired"
-msgstr "Zadanie lokalne wygasło"
+#~ msgid "Local task expired"
+#~ msgstr "Zadanie lokalne wygasło"
 
 #: src/components/ui/Settings/LocaleDetectionTest.tsx
 msgid "Locale Detection Test"
@@ -9309,8 +9309,8 @@ msgid "Open menu"
 msgstr "Otwórz menu"
 
 #: src/providers/LocalTaskCoordinator.tsx
-msgid "Open original task"
-msgstr "Otwórz pierwotne zadanie"
+#~ msgid "Open original task"
+#~ msgstr "Otwórz pierwotne zadanie"
 
 #: src/components/ui/FilePreview/OutlookSourceAction.tsx
 msgid "Opening this source email is unavailable on this device."
@@ -9397,7 +9397,7 @@ msgstr "Odczyt lokalnej skrzynki pocztowej"
 #~ msgid "Ready for review in the desktop app"
 #~ msgstr "Gotowe do sprawdzenia w aplikacji komputerowej"
 
-#: src/lib/desktopSidecar/localTaskLabels.ts
+#: src/components/ui/Trace/steps/TaskResultStep.tsx
 msgid "Ready for review in the Erato desktop app"
 msgstr ""
 
@@ -9485,6 +9485,10 @@ msgstr "Resetuj do wykrywania przeglądarki"
 msgid "Resize sidebar"
 msgstr ""
 
+#: src/components/ui/Settings/DesktopSidecarTabContent.tsx
+msgid "Results with content from this device are reviewed in the Erato desktop app before the assistant receives them."
+msgstr "Wyniki z treściami z tego urządzenia są sprawdzane w aplikacji desktopowej Erato, zanim otrzyma je asystent."
+
 #: src/components/ui/Chat/ChatInput.tsx
 #~ msgid "Retry transcription"
 #~ msgstr "Ponów transkrypcję"
@@ -9494,12 +9498,12 @@ msgstr ""
 #~ msgstr "Ponawianie..."
 
 #: src/providers/LocalTaskCoordinator.tsx
-msgid "Review and choose evidence in the desktop app. Collection continues if this pane closes; uploading and cloud continuation wait until you return signed in."
-msgstr "Sprawdź i wybierz materiały źródłowe w aplikacji komputerowej. Zbieranie trwa nadal po zamknięciu tego panelu; przesyłanie i kontynuacja w chmurze czekają na Twój powrót z aktywną sesją logowania."
+#~ msgid "Review and choose evidence in the desktop app. Collection continues if this pane closes; uploading and cloud continuation wait until you return signed in."
+#~ msgstr "Sprawdź i wybierz materiały źródłowe w aplikacji komputerowej. Zbieranie trwa nadal po zamknięciu tego panelu; przesyłanie i kontynuacja w chmurze czekają na Twój powrót z aktywną sesją logowania."
 
 #: src/providers/LocalTaskCoordinator.tsx
-msgid "Review in desktop app"
-msgstr "Sprawdź w aplikacji komputerowej"
+#~ msgid "Review in desktop app"
+#~ msgstr "Sprawdź w aplikacji komputerowej"
 
 #: src/components/ui/Trace/steps/ToolUseStep.tsx
 #~ msgid "Running"
@@ -9558,8 +9562,8 @@ msgstr ""
 #~ msgstr "Udostępniony czat - {sharedChatTitle}"
 
 #: src/lib/desktopSidecar/localTaskLabels.ts
-msgid "Sharing declined on this device"
-msgstr "Udostępnianie odrzucone na tym urządzeniu"
+#~ msgid "Sharing declined on this device"
+#~ msgstr "Udostępnianie odrzucone na tym urządzeniu"
 
 #: src/components/ui/ToolCall/ToolCallItem.tsx
 msgid "Show"
@@ -10009,12 +10013,12 @@ msgstr "Używam narzędzi"
 #~ msgstr "Oczekiwanie na ponowne połączenie aplikacji komputerowej"
 
 #: src/lib/desktopSidecar/localTaskLabels.ts
-msgid "Waiting for the device that accepted this task"
-msgstr "Oczekiwanie na urządzenie, które przyjęło to zadanie"
+#~ msgid "Waiting for the device that accepted this task"
+#~ msgstr "Oczekiwanie na urządzenie, które przyjęło to zadanie"
 
 #: src/lib/desktopSidecar/localTaskLabels.ts
-msgid "Waiting for the Erato desktop app to reconnect"
-msgstr ""
+#~ msgid "Waiting for the Erato desktop app to reconnect"
+#~ msgstr ""
 
 #: src/pages/assistantHubUtils.tsx
 #~ msgid "Yes"

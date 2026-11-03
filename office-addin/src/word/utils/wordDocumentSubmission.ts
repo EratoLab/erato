@@ -196,10 +196,9 @@ function createSubmissionExecutor(
       if (prepared.ok) {
         session.drafts.accepted = true;
         if (
-          ("draft_id" in input ||
-            "table_cell" in input ||
-            "scoped_edit" in input) &&
-          prepared.disposition !== "local_only"
+          "draft_id" in input ||
+          "table_cell" in input ||
+          "scoped_edit" in input
         )
           result = {
             ...prepared,

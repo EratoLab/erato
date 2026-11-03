@@ -19,7 +19,9 @@ import {
   JOB_POLL_INTERVAL_MS,
   runSidecarJob,
   runsAsSidecarJob,
+  SidecarReviewEndedError,
 } from "./sidecarJobs";
+import { useSidecarReviewStore } from "./sidecarReviewStore";
 import jobEnvelope from "../../../../desktop-sidecar-protocol/conformance/fixtures/job-envelope.json";
 import jobsExample from "../../../../desktop-sidecar-protocol/examples/jobs.json";
 
@@ -32,8 +34,9 @@ const maxWaitMs = normalMode.jobs?.maxWaitMs ?? 0;
 const exampleStart = jobsExample.messages[1].message as {
   result: { results: JobCallResult[] };
 };
-const [mailboxesResult, conversationError] = exampleStart.result.results;
-const strictRefusal = jobEnvelope.statuses[1].results?.[1] as JobCallResult;
+const [mailboxesResult] = exampleStart.result.results;
+const invalidArguments = jobEnvelope.statuses[2].results?.[2] as JobCallResult;
+const strictMode = fixtureDiscovery(STRICT_MODE);
 
 const at = (reply: SidecarReply, ms: number) =>
   new Promise<SidecarReply>((resolve) => setTimeout(() => resolve(reply), ms));
@@ -46,7 +49,7 @@ describe("runsAsSidecarJob", () => {
   it("runs every built-in tool as a job on a sidecar in normal mode", () => {
     const { client } = fakeSidecarClient(() => completedJob([]), normalMode);
     for (const tool of TOOLS) expect(runsAsSidecarJob(client, tool)).toBe(true);
-    expect(runsAsSidecarJob(client, "local_collect_evidence")).toBe(false);
+    expect(runsAsSidecarJob(client, "fetch_availability")).toBe(false);
   });
 
   it("keeps the direct RPCs for a sidecar without the job envelope", () => {
@@ -160,7 +163,7 @@ describe("runSidecarJob", () => {
     });
     await vi.advanceTimersByTimeAsync(2_000);
     await expect(result).resolves.toMatchObject({
-      structuredContent: { warnings: [] },
+      structuredContent: { "outlook.list_mailboxes.v1": expect.any(Object) },
     });
     expect(methods()).toEqual([
       "jobs.start.v1",
@@ -229,7 +232,7 @@ describe("runSidecarJob", () => {
       client,
       "search_sidecar_index",
       { query: "report" },
-      controller.signal,
+      { signal: controller.signal },
     );
     const settled = result.catch((error: unknown) => error);
     await vi.advanceTimersByTimeAsync(JOB_POLL_INTERVAL_MS);
@@ -281,7 +284,7 @@ describe("runSidecarJob", () => {
       client,
       "list_sidecar_mailboxes",
       {},
-      controller.signal,
+      { signal: controller.signal },
     ).catch((error: unknown) => error);
     await vi.advanceTimersByTimeAsync(0);
     controller.abort();
@@ -290,32 +293,32 @@ describe("runSidecarJob", () => {
     expect(methods()).toEqual(["jobs.start.v1", "jobs.cancel.v1"]);
   });
 
-  it.each([
-    ["the protocol example's unknown mailbox", conversationError],
-    ["a strict sidecar's refused content tool", strictRefusal],
-  ])("throws %s as the direct RPC's error", async (_case, outcome) => {
-    const { client, methods } = fakeSidecarClient(
-      (method) =>
-        method === "jobs.start.v1"
-          ? completedJob([outcome])
-          : { result: { handle: JOB_HANDLE, state: "acked" } },
-      normalMode,
-    );
-    const { error } = outcome as Extract<JobCallResult, { error: unknown }>;
-    const thrown = await runSidecarJob(
-      client,
-      "read_sidecar_conversation",
-      {},
-    ).catch((caught: unknown) => caught);
-    expect(thrown).toBeInstanceOf(SidecarRpcError);
-    expect(thrown).toEqual(
-      new SidecarRpcError(error.code, error.message, error.data),
-    );
-    expect((thrown as SidecarRpcError).kind).toBe(
-      new SidecarRpcError(error.code, error.message, error.data).kind,
-    );
-    await vi.waitFor(() => expect(methods()).toContain("jobs.ack.v1"));
-  });
+  it.each([["arguments the tool does not accept", invalidArguments]])(
+    "throws a call's error for %s as the direct RPC's error",
+    async (_case, outcome) => {
+      const { client, methods } = fakeSidecarClient(
+        (method) =>
+          method === "jobs.start.v1"
+            ? completedJob([outcome])
+            : { result: { handle: JOB_HANDLE, state: "acked" } },
+        normalMode,
+      );
+      const { error } = outcome as Extract<JobCallResult, { error: unknown }>;
+      const thrown = await runSidecarJob(
+        client,
+        "read_sidecar_conversation",
+        {},
+      ).catch((caught: unknown) => caught);
+      expect(thrown).toBeInstanceOf(SidecarRpcError);
+      expect(thrown).toEqual(
+        new SidecarRpcError(error.code, error.message, error.data),
+      );
+      expect((thrown as SidecarRpcError).kind).toBe(
+        new SidecarRpcError(error.code, error.message, error.data).kind,
+      );
+      await vi.waitFor(() => expect(methods()).toContain("jobs.ack.v1"));
+    },
+  );
 
   it.each([
     ["expired", "transport_error"],
@@ -334,5 +337,116 @@ describe("runSidecarJob", () => {
     expect(thrown).toBeInstanceOf(SidecarClientError);
     expect(thrown).toMatchObject({ kind });
     expect(methods()).toEqual(["jobs.start.v1"]);
+  });
+
+  describe("in strict mode", () => {
+    const approved = {
+      result: {
+        handle: JOB_HANDLE,
+        state: "approved",
+        results: [mailboxesResult],
+      },
+    };
+    const waiting = () => useSidecarReviewStore.getState().waitingByChatId;
+
+    it("opens the native review once, keeps polling with wait_ms and returns the approved result", async () => {
+      vi.useFakeTimers();
+      let polls = 0;
+      const { client, requests, methods } = fakeSidecarClient((method) => {
+        if (method === "jobs.start.v1") return pendingJob("ready_for_review");
+        if (method === "jobs.review.v1") return pendingJob("ready_for_review");
+        if (method === "jobs.status.v1")
+          return at(
+            ++polls < 3 ? pendingJob("ready_for_review") : approved,
+            maxWaitMs,
+          );
+        return { result: { handle: JOB_HANDLE, state: "acked" } };
+      }, strictMode);
+      const result = runSidecarJob(
+        client,
+        "search_sidecar_index",
+        { query: "report" },
+        { chatId: "task-chat" },
+      );
+      await vi.advanceTimersByTimeAsync(0);
+      expect(waiting()).toEqual(new Map([["task-chat", 1]]));
+      await vi.advanceTimersByTimeAsync(JOB_POLL_INTERVAL_MS + 3 * maxWaitMs);
+      await expect(result).resolves.toEqual(
+        (mailboxesResult as Extract<JobCallResult, { result: unknown }>).result,
+      );
+      expect(methods()).toEqual([
+        "jobs.start.v1",
+        "jobs.review.v1",
+        "jobs.status.v1",
+        "jobs.status.v1",
+        "jobs.status.v1",
+        "jobs.ack.v1",
+      ]);
+      expect(requests[1].params).toEqual({ handle: JOB_HANDLE });
+      for (const poll of requests.filter(
+        ({ method }) => method === "jobs.status.v1",
+      ))
+        expect(poll.params).toEqual({ handle: JOB_HANDLE, wait_ms: maxWaitMs });
+      expect(waiting().size).toBe(0);
+    });
+
+    it.each(["declined", "cancelled", "expired"] as const)(
+      "ends a review that ended as %s without results and stops waiting",
+      async (state) => {
+        vi.useFakeTimers();
+        const { client, methods } = fakeSidecarClient((method) => {
+          if (method === "jobs.status.v1") return pendingJob(state);
+          return pendingJob("ready_for_review");
+        }, strictMode);
+        const settled = runSidecarJob(
+          client,
+          "read_sidecar_conversation",
+          {},
+          { chatId: "task-chat" },
+        ).catch((caught: unknown) => caught);
+        await vi.advanceTimersByTimeAsync(JOB_POLL_INTERVAL_MS);
+        const thrown = await settled;
+        expect(thrown).toBeInstanceOf(SidecarReviewEndedError);
+        expect(thrown).toMatchObject({ state });
+        expect(methods()).toEqual([
+          "jobs.start.v1",
+          "jobs.review.v1",
+          "jobs.status.v1",
+        ]);
+        expect(waiting().size).toBe(0);
+      },
+    );
+
+    it("stops waiting for the review when the call is stopped", async () => {
+      vi.useFakeTimers();
+      const controller = new AbortController();
+      const { client, methods } = fakeSidecarClient(
+        (method) =>
+          method === "jobs.status.v1"
+            ? new Promise<SidecarReply>(() => undefined)
+            : method === "jobs.cancel.v1"
+              ? pendingJob("cancelled")
+              : pendingJob("ready_for_review"),
+        strictMode,
+      );
+      const settled = runSidecarJob(
+        client,
+        "read_sidecar_conversation",
+        {},
+        { signal: controller.signal, chatId: "task-chat" },
+      ).catch((error: unknown) => error);
+      await vi.advanceTimersByTimeAsync(JOB_POLL_INTERVAL_MS);
+      expect(methods()).toEqual([
+        "jobs.start.v1",
+        "jobs.review.v1",
+        "jobs.status.v1",
+      ]);
+      expect(waiting().get("task-chat")).toBe(1);
+      controller.abort();
+      await expect(settled).resolves.toMatchObject({ kind: "aborted" });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(methods()).toContain("jobs.cancel.v1");
+      expect(waiting().size).toBe(0);
+    });
   });
 });

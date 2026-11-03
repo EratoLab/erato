@@ -75,29 +75,29 @@ describe("operation executor registration", () => {
 
   it("lets a strict executor keep the header over a yielding one", () => {
     register("fetch_availability", mailbox, true);
-    register("local_collect_evidence", sidecar);
+    register("exclusive_read", sidecar);
     expect(operationExecutorHeaders()).toEqual({
       "X-Erato-Executor": JSON.stringify(sidecar),
-      "X-Erato-Client-Tools": "local_collect_evidence",
+      "X-Erato-Client-Tools": "exclusive_read",
     });
   });
 
   it("joins a yielding executor that shares the strict binding", () => {
-    register("local_collect_evidence", sidecar);
+    register("exclusive_read", sidecar);
     register("sidecar_extra", sidecar, true);
     expect(operationExecutorHeaders()["X-Erato-Client-Tools"]).toBe(
-      "local_collect_evidence,sidecar_extra",
+      "exclusive_read,sidecar_extra",
     );
   });
 
   it("sends no binding when strict executors conflict", () => {
-    register("local_collect_evidence", sidecar);
+    register("exclusive_read", sidecar);
     register("fetch_availability", mailbox);
     expect(operationExecutorHeaders()).toEqual({});
   });
 
   it("returns one tool's own binding whatever the header carries", () => {
-    register("local_collect_evidence", sidecar);
+    register("exclusive_read", sidecar);
     register("fetch_availability", mailbox, true);
     expect(operationExecutorBinding("fetch_availability")).toEqual(mailbox);
     expect(operationExecutorBinding("unknown_tool")).toBeUndefined();
@@ -120,9 +120,9 @@ describe("additional executors", () => {
       },
     ],
     [
-      "strict local evidence",
+      "an executor that does not yield",
       () => {
-        register("local_collect_evidence", sidecar);
+        register("exclusive_read", sidecar);
         register("fetch_availability", mailbox, true);
       },
     ],

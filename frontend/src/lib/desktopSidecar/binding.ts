@@ -5,18 +5,17 @@ import type { SidecarSnapshot } from "@erato/desktop-sidecar-protocol";
 export const DESKTOP_SIDECAR_HOST_CONTEXT = "desktop_sidecar";
 
 /**
- * The binding a delegated task's sidecar calls wait for, in normal mode only.
- * Its device is the app's installation id, so every Erato window on the
- * computer serves the same binding and any of them continues a waiting call.
- * An app from before protocol 0.1.43 reports none; the binding then names
- * this client alone, as before. Strict mode never gets one: any delegation
- * declaration keeps the sidecar's reads on the device.
+ * The binding a delegated task's sidecar calls wait for. Its device is the
+ * app's installation id, so every Erato window on the computer serves the
+ * same binding and any of them continues a waiting call. An app from before
+ * protocol 0.1.43 reports none; the binding then names this client alone, as
+ * before.
  */
 export function desktopSidecarBinding(
   snapshot: SidecarSnapshot,
   clientId: string | undefined,
 ): ExecutorBinding | undefined {
-  if (snapshot.state !== "ready" || snapshot.localDelegation) return undefined;
+  if (snapshot.state !== "ready") return undefined;
   const deviceId = snapshot.installationId ?? clientId;
   if (!deviceId) return undefined;
   return {

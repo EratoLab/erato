@@ -22,13 +22,6 @@ export type { ClientToolValidationIssue } from "@/lib/generated/v1betaApi/v1beta
 export type ClientToolExecutionResult =
   | {
       ok: true;
-      disposition: "local_only";
-      result?: never;
-      fileUploadIds?: never;
-    }
-  | {
-      ok: true;
-      disposition?: "submit";
       result: unknown;
       /**
        * Uploaded files to attach to the assistant message with rich previews.
@@ -39,7 +32,6 @@ export type ClientToolExecutionResult =
     }
   | {
       ok: false;
-      disposition?: "submit";
       error: string;
       validationErrors?: ClientToolValidationIssue[];
       /** Correction handle and terminal rejection, never a successful artifact. */
@@ -386,33 +378,7 @@ export function abortClientToolCalls(chatId: string): void {
 }
 
 export function resetClientToolRegistryForTests(): void {
-  localOnlyGuards.clear();
   executors.clear();
   answeredToolCallIds.clear();
   abortControllers.clear();
-}
-
-// These predicates carry no content/status upstream. They also protect the
-// missing-executor and exception fallbacks, which otherwise automatically POST.
-const localOnlyGuards = new Set<{
-  names: ReadonlySet<string>;
-  active: () => boolean;
-}>();
-export function registerLocalOnlyClientTools(
-  names: Iterable<string>,
-  active: () => boolean,
-): () => void {
-  const guard = { names: new Set(names), active };
-  localOnlyGuards.add(guard);
-  return () => {
-    localOnlyGuards.delete(guard);
-  };
-}
-export function isClientToolResultLocalOnly(name: string): boolean {
-  return (
-    name === "local_collect_evidence" ||
-    [...localOnlyGuards].some(
-      (guard) => guard.names.has(name) && guard.active(),
-    )
-  );
 }

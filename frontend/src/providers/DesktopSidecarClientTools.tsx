@@ -1,9 +1,6 @@
 import { useEffect } from "react";
 
-import {
-  registerClientToolExecutor,
-  registerLocalOnlyClientTools,
-} from "@/hooks/chat/clientToolExecutors";
+import { registerClientToolExecutor } from "@/hooks/chat/clientToolExecutors";
 import { useClientToolFileApproval } from "@/hooks/chat/useClientToolFileApproval";
 import { ClientToolOperationHandler } from "@/lib/clientOperations/clientToolHandler";
 import { clientOperationDeviceId } from "@/lib/clientOperations/deviceId";
@@ -65,12 +62,6 @@ export function DesktopSidecarClientTools() {
         return uploaded;
       },
     });
-    // Any delegation declaration blocks legacy content, even if strict support
-    // is unavailable or unknown. Fail closed; never fall back to raw RPCs.
-    const unguard = registerLocalOnlyClientTools(
-      tools.map((tool) => tool.name),
-      () => Boolean(client.getSnapshot().localDelegation),
-    );
     // A turn sent while the app is not running carries no binding, so none of
     // its tasks waits for the app.
     const clientId = clientOperationDeviceId();
@@ -93,7 +84,6 @@ export function DesktopSidecarClientTools() {
       ),
     ]);
     return () => {
-      unguard();
       unregister.forEach((cleanup) => cleanup());
     };
   }, [client, enabled, maxSizeBytes, maxFiles, approveFiles]);
@@ -106,7 +96,8 @@ export function DesktopSidecarClientTools() {
     snapshot.state,
     snapshot.instanceId,
     snapshot.installationId,
-    snapshot.localDelegation,
+    snapshot.strict,
+    snapshot.jobs,
   ]);
   return null;
 }

@@ -1568,8 +1568,7 @@ describe("WordChatInput comment context", () => {
         near: { selection: true, above: 3, below: 3 },
         around: "text_before",
       });
-      if (!near.ok || near.disposition === "local_only")
-        throw new Error("the near read failed");
+      if (!near.ok) throw new Error("the near read failed");
       const { threads } = near.result as WordCommentReadResultJson;
       expect(threads.map((t) => t.id)).toContain(refOf("T1"));
       expect(threads.length).toBeLessThanOrEqual(7);
@@ -1627,8 +1626,7 @@ describe("WordChatInput comment context", () => {
       expect((await prepared())?.actionFacet?.id).toBe("word_document_review");
       expect(gestures()).toMatchObject({ document: true });
       const all = await reads()({ status: "all" });
-      if (!all.ok || all.disposition === "local_only")
-        throw new Error("the document read failed");
+      if (!all.ok) throw new Error("the document read failed");
       expect((all.result as WordCommentReadResultJson).threads).toHaveLength(
         14,
       );
@@ -1842,8 +1840,7 @@ describe("WordChatInput comment context", () => {
         { cursor: "map:0" },
         request,
       );
-      if (!later.ok || later.disposition === "local_only")
-        throw new Error("the map read failed");
+      if (!later.ok) throw new Error("the map read failed");
       const rows = (r: {
         index: { id: string; para: number; sec?: string }[];
       }) => r.index.map(({ id, para, sec }) => [id, para, sec]);

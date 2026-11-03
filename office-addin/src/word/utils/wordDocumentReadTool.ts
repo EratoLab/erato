@@ -248,7 +248,6 @@ export class WordDocumentReadSession {
   ): ClientToolExecutionResult {
     if (
       !result.ok ||
-      result.disposition === "local_only" ||
       !result.result ||
       typeof result.result !== "object" ||
       Array.isArray(result.result)
