@@ -1,0 +1,14 @@
+{
+  "messages": [
+    {"role":"system","content":{"content_type":"text","text":"base"}},
+    {"role":"system","content":{"content_type":"text","text":"persona"}},
+    {"role":"system","content":{"content_type":"text","text":"hidden instructions"}},
+    {"role":"system","content":{"content_type":"text","text":"old facet template"}},
+    {"role":"system","content":{"content_type":"text","text":"old facet instructions"}},
+    {"role":"system","content":{"content_type":"text","text":"FOR THIS MESSAGE ONLY: old rendered action"}},
+    {"role":"user","content":{"content_type":"action_facet_marker","facet_id":"action","args":{"value":"old marker"}}},
+    {"role":"user","content":{"content_type":"text","text":"U1"}},
+    {"role":"assistant","content":{"content_type":"text","text":"R1"}},
+    {"role":"user","content":{"content_type":"text","text":"U2"}}
+  ]
+}

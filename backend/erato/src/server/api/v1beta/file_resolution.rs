@@ -583,7 +583,15 @@ pub(crate) fn resolve_directive_markers_in_generation_input(
     app_state: &AppState,
     generation_input_messages: GenerationInputMessages,
 ) -> GenerationInputMessages {
-    let action_facet_configs = &app_state.config.action_facets.facets;
+    resolve_directive_markers_with_config(&app_state.config, generation_input_messages)
+}
+
+/// Configuration-only seam shared by the live resolver and provider contract tests.
+pub(crate) fn resolve_directive_markers_with_config(
+    config: &crate::config::AppConfig,
+    generation_input_messages: GenerationInputMessages,
+) -> GenerationInputMessages {
+    let action_facet_configs = &config.action_facets.facets;
     let resolved_messages = generation_input_messages
         .messages
         .into_iter()
@@ -601,7 +609,7 @@ pub(crate) fn resolve_directive_markers_in_generation_input(
                 }
                 ContentPart::DelegationPreambleMarker(marker) => {
                     crate::services::delegation::render_delegation_preamble(
-                        &app_state.config.delegation.preamble,
+                        &config.delegation.preamble,
                         marker.expected_output.as_deref(),
                         marker.constraints.as_deref(),
                         marker.run_mode.unwrap_or_default(),
@@ -614,7 +622,7 @@ pub(crate) fn resolve_directive_markers_in_generation_input(
                     // untrusted-data frame instead. Wrapping it as a directive
                     // would tell the model the opposite of the truth about it.
                     let rendered = crate::services::delegation::render_task_result(
-                        &app_state.config.delegation.tasks.result_template,
+                        &config.delegation.tasks.result_template,
                         part,
                     );
                     let rendered = rendered.trim();
