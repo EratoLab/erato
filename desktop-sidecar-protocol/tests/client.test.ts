@@ -5,6 +5,8 @@ import {
   DesktopSidecarClient,
   HttpTransport,
   SidecarClientError,
+  checkMethodParams,
+  checkMethodResult,
   type SidecarClientInfo,
   type SidecarProgressV1Result,
   type DiscoverResult,
@@ -597,6 +599,64 @@ describe("DesktopSidecarClient", () => {
       client.invoke("diagnostics.echo.v1", { message: 42 } as never),
     ).rejects.toBeInstanceOf(SidecarClientError);
     expect(client.getSnapshot().state).toBe("ready");
+  });
+
+  it("checks parameters it does not send with the error invoke throws", async () => {
+    const { client } = await setup();
+    await client.discover();
+    const params = { text: "report", limit: 500 };
+
+    const sent = await client
+      .invoke("search.query.v1", params)
+      .catch((error: unknown) => error);
+    let checked: unknown;
+    try {
+      checkMethodParams("search.query.v1", params);
+    } catch (error) {
+      checked = error;
+    }
+    expect(sent).toMatchObject({
+      kind: "invalid_params",
+      message: expect.stringContaining("/limit must be <= 100"),
+    });
+    expect(checked).toEqual(sent);
+    expect(() =>
+      checkMethodParams("search.query.v1", { text: "report" }),
+    ).not.toThrow();
+    expect(() => checkMethodParams("no.such.method.v1", {})).toThrow(
+      "No pinned contract for no.such.method.v1.",
+    );
+  });
+
+  it("checks results it did not request with the error invoke throws", async () => {
+    const { client } = await setup({ echoResultOverride: { message: 42 } });
+    await client.discover();
+
+    const received = await client
+      .invoke("diagnostics.echo.v1", { message: "hello" })
+      .catch((error: unknown) => error);
+    let checked: unknown;
+    try {
+      checkMethodResult("diagnostics.echo.v1", { message: 42 });
+    } catch (error) {
+      checked = error;
+    }
+    expect(received).toMatchObject({
+      kind: "invalid_result",
+      message: expect.stringContaining("/message must be string"),
+    });
+    expect(checked).toEqual(received);
+    // The check tolerates additive fields as a direct response does.
+    expect(() =>
+      checkMethodResult("diagnostics.echo.v1", {
+        message: "hello",
+        sidecarInstanceId: "mock-sidecar-instance",
+        futureField: { revision: 2 },
+      }),
+    ).not.toThrow();
+    expect(() => checkMethodResult("no.such.method.v1", {})).toThrow(
+      "No pinned contract for no.such.method.v1.",
+    );
   });
 
   it("observes progress steps while a delayed echo runs and after it settles", async () => {

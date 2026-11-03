@@ -3,6 +3,8 @@ export {
   MAX_BODY_BYTES,
   MAX_RESPONSE_BYTES,
   PROTOCOL_VERSIONS,
+  checkMethodParams,
+  checkMethodResult,
   createBrowserClientInfo,
   type DesktopSidecarClientOptions,
   type InvokeOptions,
