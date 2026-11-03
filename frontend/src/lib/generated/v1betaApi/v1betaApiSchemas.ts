@@ -194,80 +194,6 @@ export type ApprovalScopeLineage = {
   scope_id: string;
 };
 
-export type ApprovedExport = {
-  /**
-   * @maximum 9007199254740991
-   * @minimum 0
-   */
-  approvedAt: number;
-  artifacts: any[];
-  binding: {
-    /**
-     * @maxLength 128
-     * @minLength 1
-     */
-    accountId: string;
-    /**
-     * @maxLength 128
-     * @minLength 1
-     */
-    attemptId: string;
-    /**
-     * @maxLength 2048
-     * @minLength 1
-     */
-    backendOrigin: string;
-    /**
-     * @pattern ^[A-Za-z0-9_-]{32,128}$
-     */
-    deviceId: string;
-    /**
-     * @maxLength 128
-     * @minLength 1
-     */
-    jobId: string;
-    /**
-     * @pattern ^sha256:[a-f0-9]{64}$
-     */
-    planDigest: string;
-    /**
-     * @maxLength 128
-     * @minLength 1
-     */
-    taskId: string;
-    /**
-     * @maxLength 128
-     * @minLength 1
-     */
-    toolCallId: string;
-  } & {
-    [key: string]: any;
-  };
-  /**
-   * @maximum 9007199254740991
-   * @minimum 0
-   */
-  expiresAt: number;
-  /**
-   * @pattern ^[A-Za-z0-9_-]{32,128}$
-   */
-  exportId: string;
-  /**
-   * @pattern ^[A-Za-z0-9_-]{32,128}$
-   */
-  grantId: string;
-  /**
-   * @pattern ^sha256:[a-f0-9]{64}$
-   */
-  manifestDigest: string;
-  /**
-   * @pattern ^[A-Za-z0-9_-]{32,128}$
-   */
-  snapshotId: string;
-} & {
-  [key: string]: any;
-};
-
 /**
  * Response from the archive all chats endpoint
  */
@@ -320,10 +246,6 @@ export type ArchiveChatResponse = {
    * The ID of the archived chat
    */
   chat_id: string;
-};
-
-export type AssertionResponse = {
-  assertion: string;
 };
 
 /**
@@ -790,18 +712,6 @@ export type AudioTranscriptionMetadata = {
    * Transcript segments derived from completed chunks for timeline-aware UI surfaces.
    */
   transcript_segments?: null | undefined;
-};
-
-export type AuthorizationRequest = {
-  /**
-   * @format uuid
-   */
-  claimToken: string;
-};
-
-export type AuthorizationResponse = {
-  authorization: string;
-  job: NativeJobResponse;
 };
 
 export type BudgetCurrency = "EUR" | "USD";
@@ -1399,15 +1309,7 @@ export type CompleteMcpServerOauthResponse = {
   connection_status: McpServerStatusValue;
 };
 
-export type CompleteRequest = {
-  /**
-   * @format uuid
-   */
-  claimToken: string;
-  package: ApprovedExport;
-};
-
-export type ConsentPolicy = "none" | "ask" | "native";
+export type ConsentPolicy = "none" | "ask";
 
 export type ContentPart =
   | (ContentPartCompactionMarker & {
@@ -1703,11 +1605,6 @@ export type ContentPartToolRejection = {
    * @format uuid
    */
   user_tool_approval_setting_id?: null | undefined;
-};
-
-export type ContextRequest = {
-  challenge: string;
-  deviceId: string;
 };
 
 /**
@@ -2986,104 +2883,6 @@ export type MultipartFormFile = {
   outlook_provenance?: string;
 };
 
-export type NativeJobResponse = {
-  binding: {
-    /**
-     * @maxLength 128
-     * @minLength 1
-     */
-    accountId: string;
-    /**
-     * @maxLength 128
-     * @minLength 1
-     */
-    attemptId: string;
-    /**
-     * @maxLength 2048
-     * @minLength 1
-     */
-    backendOrigin: string;
-    /**
-     * @pattern ^[A-Za-z0-9_-]{32,128}$
-     */
-    deviceId: string;
-    /**
-     * @maxLength 128
-     * @minLength 1
-     */
-    jobId: string;
-    /**
-     * @pattern ^sha256:[a-f0-9]{64}$
-     */
-    planDigest: string;
-    /**
-     * @maxLength 128
-     * @minLength 1
-     */
-    taskId: string;
-    /**
-     * @maxLength 128
-     * @minLength 1
-     */
-    toolCallId: string;
-  } & {
-    [key: string]: any;
-  };
-  /**
-   * @format uuid
-   */
-  chatId: string;
-  /**
-   * @format uuid
-   */
-  id: string;
-  /**
-   * @format uuid
-   */
-  messageId: string;
-  plan: {
-    /**
-     * @maximum 300
-     * @minimum 1
-     */
-    executionSeconds: number;
-    /**
-     * @maximum 9007199254740991
-     * @minimum 0
-     */
-    expiresAt: number;
-    /**
-     * @maximum 20
-     * @minimum 1
-     */
-    maxArtifacts: number;
-    /**
-     * @maximum 12582912
-     * @minimum 1
-     */
-    maxBytes: number;
-    /**
-     * @maximum 100
-     * @minimum 1
-     */
-    maxHits: number;
-    operation: "collect_evidence";
-    /**
-     * @maxItems 8
-     * @minItems 1
-     * @uniqueItems true
-     */
-    queryVariants: string[];
-  } & {
-    [key: string]: any;
-  };
-  receipt?: string;
-  serverOutcome?: {
-    status: "cancelled" | "expired";
-  };
-  state: AttemptState;
-};
-
 /**
  * Body of the `409` answers that mean "not this run".
  *
@@ -3458,20 +3257,6 @@ export type ReactToTaskResultRequest = {
    * @example 00000000-0000-0000-0000-000000000000
    */
   task_result_message_id: string;
-};
-
-export type ReceiptResponse = {
-  receipt: string;
-  result: OperationResult;
-};
-
-export type ReceiptsResponse = {
-  accountId: string;
-  /**
-   * @format uuid
-   */
-  after?: string;
-  jobs: NativeJobResponse[];
 };
 
 export type RecentChat = {

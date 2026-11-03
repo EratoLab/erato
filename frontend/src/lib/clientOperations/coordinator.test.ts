@@ -208,11 +208,8 @@ describe("ClientOperationCoordinator handler registry", () => {
     },
   );
 
-  it.each([
-    { consent: "ask" as const },
-    { consent: "native" as const, kind: "native.v1" },
-  ])("keeps $consent continuations detached", async (overrides) => {
-    const request = operation(overrides);
+  it("keeps ask continuations detached", async () => {
+    const request = operation({ consent: "ask" });
     const { api } = fakeApi(request);
     api.list.mockResolvedValue({
       enabled: true,
