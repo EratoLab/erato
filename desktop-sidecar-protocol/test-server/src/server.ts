@@ -93,6 +93,8 @@ export interface MockSidecarOptions {
    * `MAX_RESPONSE_BYTES`); match the client's `maxResponseBytes`.
    */
   maxResponseBytes?: number;
+  /** The warnings the mock conversation reports (default none). */
+  conversationWarnings?: readonly Record<string, unknown>[];
 }
 
 export interface MockSidecarAddress {
@@ -237,6 +239,18 @@ const MOCK_FOLDER = {
 const FIXED_ERROR_MESSAGES: Record<number, string> = {
   [-32011]: "The requested capability is unavailable.",
   [-32602]: "Invalid method parameters.",
+};
+/** The fixed message an item metadata entry crosses a strict export with. */
+const FIXED_WARNING_MESSAGES: Record<string, string> = {
+  truncated: "The conversation was truncated.",
+  attachment_unavailable: "An attachment could not be read.",
+  embedded_attachments_omitted: "Embedded attachments were omitted.",
+  body_preview_only:
+    "Only the body preview the application cached is available.",
+  body_unavailable: "The message body could not be read.",
+  body_truncated: "The message body was truncated.",
+  unsupported_source:
+    "The mailbox cannot be read as conversations; retrying cannot help.",
 };
 const openRpcUrl = [
   new URL("../../openrpc.json", import.meta.url),
@@ -948,7 +962,7 @@ export class MockSidecar {
         state: "ok",
         mailbox: MOCK_OUTLOOK_MAILBOX,
         messages: [MOCK_OUTLOOK_CONVERSATION_MESSAGE],
-        warnings: [],
+        warnings: [...(this.#options.conversationWarnings ?? [])],
       });
     }
 
@@ -1107,8 +1121,11 @@ export class MockSidecar {
       }
     } else if (message.method === "jobs.status.v1") {
       await waitForJob(job, waitMs);
+    } else {
+      // jobs.review.v1 only reports the state, the mock having no window to
+      // open: it never delivers results, so a finished job stays unread.
+      return rpcResult(message.id, { handle, state: job.state });
     }
-    // jobs.review.v1 only reports the state: the mock has no window to open.
     return rpcResult(message.id, reportJob(handle, job));
   }
 
@@ -1284,7 +1301,7 @@ export class MockSidecar {
                 state: "ok",
                 mailbox: MOCK_OUTLOOK_MAILBOX,
                 messages,
-                warnings: [],
+                warnings: [...(this.#options.conversationWarnings ?? [])],
               },
             },
           },
@@ -1520,7 +1537,8 @@ function sidecarTool(call: JobToolCall | undefined) {
 
 /**
  * A strict export of one call: the frozen result filtered to the approved
- * items, with its result-level metadata and its method errors under a fixed
+ * items, with its result-level metadata, the item metadata entries of the
+ * whole result or an approved item, and its method errors, both under a fixed
  * message. Item pointers in the export refer to the filtered result.
  */
 function exportApproved(
@@ -1553,11 +1571,15 @@ function exportApproved(
     return typeof item === "string" ? item : undefined;
   };
   let content: CallToolResult["content"];
+  let approvedItems: unknown[];
   if (selection.items === "content") {
     content = result.content.filter((_, index) => approved.includes(index));
+    approvedItems = [];
     for (const block of content) {
       const item = itemOf(block);
-      if (item) copyPointer(source, exported, item);
+      if (!item) continue;
+      copyPointer(source, exported, item);
+      approvedItems.push(resolvePointer(source, item));
     }
   } else {
     const items = resolvePointer(source, selection.items);
@@ -1566,12 +1588,11 @@ function exportApproved(
           .filter((index) => index < items.length)
           .sort((a, b) => a - b)
       : [];
+    approvedItems = Array.isArray(items)
+      ? kept.map((index) => items[index])
+      : [];
     if (Array.isArray(items))
-      setPointer(
-        exported,
-        selection.items,
-        kept.map((index) => items[index]),
-      );
+      setPointer(exported, selection.items, approvedItems);
     content = result.content.flatMap((block) => {
       const item = itemOf(block);
       const prefix = `${selection.items}/`;
@@ -1590,7 +1611,40 @@ function exportApproved(
       ];
     });
   }
+  for (const { pointer, itemKey } of selection.itemMetadata ?? []) {
+    const entries = resolvePointer(source, pointer);
+    if (!Array.isArray(entries)) continue;
+    const approvedKeys = new Set(
+      approvedItems.map((item) => fieldOf(item, itemKey)),
+    );
+    setPointer(
+      exported,
+      pointer,
+      entries.flatMap((entry) => {
+        const key = fieldOf(entry, itemKey);
+        if (key !== undefined && !approvedKeys.has(key)) return [];
+        const code = String(fieldOf(entry, "code"));
+        return [
+          {
+            code,
+            message:
+              FIXED_WARNING_MESSAGES[code] ??
+              "Part of the result could not be represented.",
+            ...(key === undefined ? {} : { [itemKey]: key }),
+          },
+        ];
+      }),
+    );
+  }
   return { result: { content, structuredContent: exported } };
+}
+
+function fieldOf(value: unknown, key: string): unknown {
+  return value !== null &&
+    typeof value === "object" &&
+    Object.hasOwn(value, key)
+    ? (value as Record<string, unknown>)[key]
+    : undefined;
 }
 
 /** The value an RFC 6901 JSON pointer names, or undefined. */

@@ -86,6 +86,12 @@ export const SIDECAR_PROVIDER: ToolProviderTable = {
         "resultMetadata": [
           "/outlook.get_conversation.v1/result/state",
           "/outlook.get_conversation.v1/result/mailbox"
+        ],
+        "itemMetadata": [
+          {
+            "pointer": "/outlook.get_conversation.v1/result/warnings",
+            "itemKey": "internetMessageId"
+          }
         ]
       }
     }

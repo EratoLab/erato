@@ -86,6 +86,24 @@ const conversation = (mailboxId = MAILBOX_ID) => ({
 });
 const MAILBOXES = "outlook.list_mailboxes.v1";
 const CONVERSATION = "outlook.get_conversation.v1";
+/** A result-level warning and warnings about the mock message and another. */
+const conversationWarnings = [
+  { code: "truncated", message: "Stopped after 1 of 2 messages." },
+  {
+    code: "body_preview_only",
+    message: "Only the preview of Mock Outlook message is cached.",
+    internetMessageId: "<mock-outlook-email@example.com>",
+  },
+  {
+    code: "attachment_unavailable",
+    message: "Could not read report.pdf.",
+    internetMessageId: "<other-message@example.com>",
+  },
+];
+const TRUNCATED = {
+  code: "truncated",
+  message: "The conversation was truncated.",
+};
 
 function outcome(results: JobCallResult[] | undefined, index: number) {
   const entry = results?.[index];
@@ -326,7 +344,7 @@ describe("job envelope", () => {
   });
 
   it("holds a strict job with a content tool for native review and exports only the approved items", async () => {
-    const client = await setup({ strict: true });
+    const client = await setup({ strict: true, conversationWarnings });
     const sidecar = activeSidecars.at(-1)!;
     expect(client.getSnapshot().strict).toBe(true);
     const started = await client.invoke("jobs.start.v1", {
@@ -358,8 +376,17 @@ describe("job envelope", () => {
         result: { state: "ok", mailbox: { id: MAILBOX_ID }, messages: [{}] },
       },
     });
-    expect(exported.structuredContent?.[CONVERSATION]).not.toHaveProperty(
+    // Result-level warnings and those about an approved message cross.
+    expect(exported.structuredContent?.[CONVERSATION]).toHaveProperty(
       "result.warnings",
+      [
+        TRUNCATED,
+        {
+          code: "body_preview_only",
+          message: "Only the body preview the application cached is available.",
+          internetMessageId: "<mock-outlook-email@example.com>",
+        },
+      ],
     );
     expect(exported.content).toMatchObject([
       {
@@ -378,7 +405,7 @@ describe("job envelope", () => {
   });
 
   it("exports only result-level metadata when no item is approved, and method errors under a fixed message", async () => {
-    const client = await setup({ strict: true });
+    const client = await setup({ strict: true, conversationWarnings });
     const sidecar = activeSidecars.at(-1)!;
     const started = await client.invoke("jobs.start.v1", {
       calls: [
@@ -393,6 +420,10 @@ describe("job envelope", () => {
       wait_ms: 5_000,
     });
     sidecar.decideReview(started.handle, [[], [], []]);
+    // A review call reports the decision without delivering the export.
+    await expect(
+      client.invoke("jobs.review.v1", { handle: started.handle }),
+    ).resolves.toEqual({ handle: started.handle, state: "approved" });
     const { results } = await client.invoke("jobs.status.v1", {
       handle: started.handle,
     });
@@ -404,6 +435,7 @@ describe("job envelope", () => {
             state: "ok",
             mailbox: expect.objectContaining({ id: MAILBOX_ID }),
             messages: [],
+            warnings: [TRUNCATED],
           },
         },
       },

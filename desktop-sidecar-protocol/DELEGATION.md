@@ -113,16 +113,17 @@ none.
 
 Each built-in declares its selection in the provider table: `items`, a JSON
 pointer to an array in `structuredContent`, or `content` for the result's
-content blocks, and `resultMetadata`, pointers to result-level, account-level
-metadata. `search_sidecar_index` selects the search hits,
+content blocks, `resultMetadata`, pointers to result-level, account-level
+metadata, and optionally `itemMetadata`, arrays whose entries each concern the
+whole result or one item. `search_sidecar_index` selects the search hits,
 `read_sidecar_conversation` the messages, `get_sidecar_folder_hierarchy` the
 folder nodes and `get_sidecar_document` its file; mailboxes and search fields
 select nothing (account-level). Item-level metadata travels only with its item:
 a block whose `ai.erato/item` lies within an item belongs to that item, and a
 `content` item brings the object its `ai.erato/item` names. Another provider's
-result `_meta` crosses only through an organization allowlist of keys.
-Job-level metadata is the sidecar's own, apart from the tool's `_meta`; policy
-findings stay native.
+result `_meta` crosses only through an organization allowlist of keys. Job-level
+metadata is the sidecar's own, apart from the tool's `_meta`; policy findings
+stay native.
 
 ## Strict review
 
@@ -135,21 +136,23 @@ and shows no remote resources or document scripts. The selection starts empty.
 Upload-policy checks run on the text of the selected items, not on the whole
 snapshot, and gate "Approve selected". The decision is made only in the window:
 no RPC submits it, repeated `jobs.review.v1` calls focus the open window, and
-closing a pane neither cancels the job nor decides it. Until a decision model
-is embedded, a policy guide may name a remote decision endpoint, which then
-receives the selected items' text.
+closing a pane neither cancels the job nor decides it. A policy guide whose
+decision provider is remote sends it the selected items' text.
 
-Approval exports each call filtered to its approved items: the array at
-`items` keeps only the approved items, the values at `resultMetadata` are kept,
-and nothing else in `structuredContent` crosses. A resource block crosses only
-with its item, and item pointers in the export refer to the filtered result. A
-method's `error` outcome crosses as its `code` and `data` with a fixed message,
-and a tool's `isError` text as a code with a fixed message. Account-level calls
-in the same job, and calls that did not run, are exported unchanged. `priority`
-orders review, `audience` is honored on export, and a `resource_link` exports
-as a reference only. `declined`, `cancelled` and `expired` carry no results; a
-client reports them to the model as errors that a retry cannot fix, shaped like
-the existing "do not retry" errors.
+Approval exports each call filtered to its approved items: the array at `items`
+keeps only the approved items, the values at `resultMetadata` are kept, an
+`itemMetadata` array (the conversation's warnings) keeps its entries without the
+`itemKey` field and those whose `itemKey` value matches an approved item's, each
+as its `code` and that key with a fixed message for the code, and nothing else
+in `structuredContent` crosses. A resource block crosses only with its item, and
+item pointers in the export refer to the filtered result. A method's `error`
+outcome crosses as its `code` and `data` with a fixed message, and a tool's
+`isError` text as a code with a fixed message. Account-level calls in the same
+job, and calls that did not run, are exported unchanged. `priority` orders
+review, `audience` is honored on export, and a `resource_link` exports as a
+reference only. `declined`, `cancelled` and `expired` carry no results; a client
+reports them to the model as errors that a retry cannot fix, shaped like the
+existing "do not retry" errors.
 
 Not implemented yet: snapshots that hold search metadata only and extract text
 when the user opens an item; pinning a digest at approval and re-reading the
@@ -159,9 +162,9 @@ loading for select-all; shaping the decision model's input; and the
 
 ## Versioning
 
-Strict mode has no profile string. A client reads the protocol package version
-and the discovery capabilities `strict`, `jobs` and `providers` (`{id, tools,
-readOnly, egress, available}`). Strict mode is installed by the bootstrap's
+A client reads the protocol package version and the discovery capabilities
+`strict`, `jobs` and `providers` (`{id, tools, readOnly, egress, available}`).
+Strict mode is installed by the bootstrap's
 `mode: "strict" | "standard"`; `sidecar.configure.v1` never sets or relaxes it.
 Binaries before package 0.1.44 ignore `mode`
 ([DISTRIBUTION.md](DISTRIBUTION.md#6-organization-bootstrap-personalization)).

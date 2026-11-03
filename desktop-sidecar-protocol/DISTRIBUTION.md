@@ -338,7 +338,9 @@ The optional root installation fields are:
 | `mode`             | `strict` or `standard`; strict mode as [DELEGATION.md](./DELEGATION.md) defines it          | `standard`            |
 
 Binaries built before package 0.1.44 ignore `mode`, as bootstrap version 1
-ignores unknown fields, so a strict deployment serves only later binaries.
+ignores unknown fields, and would run in standard mode. A strict deployment
+MUST distribute only binaries from package 0.1.44 or later; the distribution
+manifest does not record a binary's package version, so nothing enforces this.
 
 Present invalid fields MUST be rejected before registering desktop integration or
 opening a listener. User configuration MUST NOT override these fields. Explicit

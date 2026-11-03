@@ -130,6 +130,7 @@ describe("sidecar provider table", () => {
       for (const pointer of [
         tool.selection?.items,
         ...(tool.selection?.resultMetadata ?? []),
+        ...(tool.selection?.itemMetadata ?? []).map((entry) => entry.pointer),
       ].filter((value) => value?.startsWith("/")))
         expect(tool.methods, `${tool.name}: ${pointer}`).toContain(
           pointer?.split("/")[1],
@@ -208,7 +209,7 @@ describe("sidecar provider table", () => {
       const results = await run(tool.name, variants[tool.name] ?? []);
       expect(results.length, tool.name).toBeGreaterThan(0);
       if (!tool.selection) continue;
-      const { items, resultMetadata } = tool.selection;
+      const { items, resultMetadata, itemMetadata = [] } = tool.selection;
       const selected = results.map((result) =>
         items === "content"
           ? result.content
@@ -220,6 +221,13 @@ describe("sidecar provider table", () => {
           results.some(
             (result) =>
               resolvePointer(result.structuredContent, pointer) !== undefined,
+          ),
+          `${tool.name}: ${pointer}`,
+        ).toBe(true);
+      for (const { pointer } of itemMetadata)
+        expect(
+          results.some((result) =>
+            Array.isArray(resolvePointer(result.structuredContent, pointer)),
           ),
           `${tool.name}: ${pointer}`,
         ).toBe(true);

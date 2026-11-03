@@ -208,12 +208,13 @@ return errors === 0;
 }
 
 export const validateToolProviderTable = validate14;
-const schema15 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/jobs/provider-table.schema.json","title":"ToolProviderTable","description":"The closed tool enumeration of a built-in provider: each tool, the RPC methods whose work it composes, and what strict review selects from its result.","type":"object","properties":{"id":{"type":"string","pattern":"^[a-z][a-z0-9_-]{0,63}$"},"readOnly":{"type":"boolean"},"egress":{"type":"string","minLength":1,"maxLength":64},"tools":{"type":"array","minItems":1,"items":{"type":"object","properties":{"name":{"type":"string","pattern":"^[A-Za-z0-9_.-]{1,128}$"},"methods":{"type":"array","minItems":1,"uniqueItems":true,"items":{"type":"string","pattern":"^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+\\.v[1-9][0-9]*$"}},"readOnly":{"type":"boolean"},"selection":{"description":"What strict review offers for selection, or null when the result is account-level and needs no review.","oneOf":[{"type":"null"},{"type":"object","properties":{"items":{"description":"A JSON pointer to the array of reviewable items in `structuredContent`, or `content` for the result's content blocks.","type":"string","pattern":"^(?:content|(?:/(?:[^/~]|~[01])*)+)$"},"resultMetadata":{"description":"JSON pointers into `structuredContent` to result-level, account-level metadata that accompanies the approved items. Everything else in `structuredContent` crosses only with the item it belongs to.","type":"array","uniqueItems":true,"items":{"type":"string","pattern":"^(?:/(?:[^/~]|~[01])*)+$"}}},"required":["items","resultMetadata"],"additionalProperties":true}]}},"required":["name","methods","readOnly","selection"],"additionalProperties":true}}},"required":["id","readOnly","egress","tools"],"additionalProperties":true};
+const schema15 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/jobs/provider-table.schema.json","title":"ToolProviderTable","description":"The closed tool enumeration of a built-in provider: each tool, the RPC methods whose work it composes, and what strict review selects from its result.","type":"object","properties":{"id":{"type":"string","pattern":"^[a-z][a-z0-9_-]{0,63}$"},"readOnly":{"type":"boolean"},"egress":{"type":"string","minLength":1,"maxLength":64},"tools":{"type":"array","minItems":1,"items":{"type":"object","properties":{"name":{"type":"string","pattern":"^[A-Za-z0-9_.-]{1,128}$"},"methods":{"type":"array","minItems":1,"uniqueItems":true,"items":{"type":"string","pattern":"^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+\\.v[1-9][0-9]*$"}},"readOnly":{"type":"boolean"},"selection":{"description":"What strict review offers for selection, or null when the result is account-level and needs no review.","oneOf":[{"type":"null"},{"type":"object","properties":{"items":{"description":"A JSON pointer to the array of reviewable items in `structuredContent`, or `content` for the result's content blocks.","type":"string","pattern":"^(?:content|(?:/(?:[^/~]|~[01])*)+)$"},"resultMetadata":{"description":"JSON pointers into `structuredContent` to result-level, account-level metadata that accompanies the approved items. Everything else in `structuredContent` crosses only with the item it belongs to.","type":"array","uniqueItems":true,"items":{"type":"string","pattern":"^(?:/(?:[^/~]|~[01])*)+$"}},"itemMetadata":{"description":"Arrays in `structuredContent` whose entries each concern the whole result or one item. An entry without the `itemKey` field is result-level and crosses with the approved items; an entry with it crosses only when an approved item has the same value under that key. An entry crosses as its `code` and that key, with a fixed message for the code.","type":"array","uniqueItems":true,"items":{"type":"object","properties":{"pointer":{"description":"A JSON pointer to the array in `structuredContent`.","type":"string","pattern":"^(?:/(?:[^/~]|~[01])*)+$"},"itemKey":{"description":"The field an entry and an item share when the entry concerns that item.","type":"string","minLength":1,"maxLength":128}},"required":["pointer","itemKey"],"additionalProperties":true}}},"required":["items","resultMetadata"],"additionalProperties":true}]}},"required":["name","methods","readOnly","selection"],"additionalProperties":true}}},"required":["id","readOnly","egress","tools"],"additionalProperties":true};
 const pattern0 = new RegExp("^[a-z][a-z0-9_-]{0,63}$", "u");
 const pattern1 = new RegExp("^[A-Za-z0-9_.-]{1,128}$", "u");
 const pattern2 = new RegExp("^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+\\.v[1-9][0-9]*$", "u");
 const pattern3 = new RegExp("^(?:content|(?:/(?:[^/~]|~[01])*)+)$", "u");
 const pattern4 = new RegExp("^(?:/(?:[^/~]|~[01])*)+$", "u");
+const func0 = (left, right) => JSON.stringify(left) === JSON.stringify(right);
 
 function validate14(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/jobs/provider-table.schema.json" */;
@@ -634,14 +635,145 @@ vErrors.push(err31);
 errors++;
 }
 }
-}
-else {
-const err32 = {instancePath:instancePath+"/tools/" + i0+"/selection",schemaPath:"#/properties/tools/items/properties/selection/oneOf/1/type",keyword:"type",params:{type: "object"},message:"must be object"};
+if(data9.itemMetadata !== undefined){
+let data13 = data9.itemMetadata;
+if(Array.isArray(data13)){
+const len3 = data13.length;
+for(let i5=0; i5<len3; i5++){
+let data14 = data13[i5];
+if(data14 && typeof data14 == "object" && !Array.isArray(data14)){
+if(data14.pointer === undefined){
+const err32 = {instancePath:instancePath+"/tools/" + i0+"/selection/itemMetadata/" + i5,schemaPath:"#/properties/tools/items/properties/selection/oneOf/1/properties/itemMetadata/items/required",keyword:"required",params:{missingProperty: "pointer"},message:"must have required property '"+"pointer"+"'"};
 if(vErrors === null){
 vErrors = [err32];
 }
 else {
 vErrors.push(err32);
+}
+errors++;
+}
+if(data14.itemKey === undefined){
+const err33 = {instancePath:instancePath+"/tools/" + i0+"/selection/itemMetadata/" + i5,schemaPath:"#/properties/tools/items/properties/selection/oneOf/1/properties/itemMetadata/items/required",keyword:"required",params:{missingProperty: "itemKey"},message:"must have required property '"+"itemKey"+"'"};
+if(vErrors === null){
+vErrors = [err33];
+}
+else {
+vErrors.push(err33);
+}
+errors++;
+}
+if(data14.pointer !== undefined){
+let data15 = data14.pointer;
+if(typeof data15 === "string"){
+if(!pattern4.test(data15)){
+const err34 = {instancePath:instancePath+"/tools/" + i0+"/selection/itemMetadata/" + i5+"/pointer",schemaPath:"#/properties/tools/items/properties/selection/oneOf/1/properties/itemMetadata/items/properties/pointer/pattern",keyword:"pattern",params:{pattern: "^(?:/(?:[^/~]|~[01])*)+$"},message:"must match pattern \""+"^(?:/(?:[^/~]|~[01])*)+$"+"\""};
+if(vErrors === null){
+vErrors = [err34];
+}
+else {
+vErrors.push(err34);
+}
+errors++;
+}
+}
+else {
+const err35 = {instancePath:instancePath+"/tools/" + i0+"/selection/itemMetadata/" + i5+"/pointer",schemaPath:"#/properties/tools/items/properties/selection/oneOf/1/properties/itemMetadata/items/properties/pointer/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(vErrors === null){
+vErrors = [err35];
+}
+else {
+vErrors.push(err35);
+}
+errors++;
+}
+}
+if(data14.itemKey !== undefined){
+let data16 = data14.itemKey;
+if(typeof data16 === "string"){
+if(func2(data16) > 128){
+const err36 = {instancePath:instancePath+"/tools/" + i0+"/selection/itemMetadata/" + i5+"/itemKey",schemaPath:"#/properties/tools/items/properties/selection/oneOf/1/properties/itemMetadata/items/properties/itemKey/maxLength",keyword:"maxLength",params:{limit: 128},message:"must NOT have more than 128 characters"};
+if(vErrors === null){
+vErrors = [err36];
+}
+else {
+vErrors.push(err36);
+}
+errors++;
+}
+if(func2(data16) < 1){
+const err37 = {instancePath:instancePath+"/tools/" + i0+"/selection/itemMetadata/" + i5+"/itemKey",schemaPath:"#/properties/tools/items/properties/selection/oneOf/1/properties/itemMetadata/items/properties/itemKey/minLength",keyword:"minLength",params:{limit: 1},message:"must NOT have fewer than 1 characters"};
+if(vErrors === null){
+vErrors = [err37];
+}
+else {
+vErrors.push(err37);
+}
+errors++;
+}
+}
+else {
+const err38 = {instancePath:instancePath+"/tools/" + i0+"/selection/itemMetadata/" + i5+"/itemKey",schemaPath:"#/properties/tools/items/properties/selection/oneOf/1/properties/itemMetadata/items/properties/itemKey/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(vErrors === null){
+vErrors = [err38];
+}
+else {
+vErrors.push(err38);
+}
+errors++;
+}
+}
+}
+else {
+const err39 = {instancePath:instancePath+"/tools/" + i0+"/selection/itemMetadata/" + i5,schemaPath:"#/properties/tools/items/properties/selection/oneOf/1/properties/itemMetadata/items/type",keyword:"type",params:{type: "object"},message:"must be object"};
+if(vErrors === null){
+vErrors = [err39];
+}
+else {
+vErrors.push(err39);
+}
+errors++;
+}
+}
+let i6 = data13.length;
+let j2;
+if(i6 > 1){
+outer0:
+for(;i6--;){
+for(j2 = i6; j2--;){
+if(func0(data13[i6], data13[j2])){
+const err40 = {instancePath:instancePath+"/tools/" + i0+"/selection/itemMetadata",schemaPath:"#/properties/tools/items/properties/selection/oneOf/1/properties/itemMetadata/uniqueItems",keyword:"uniqueItems",params:{i: i6, j: j2},message:"must NOT have duplicate items (items ## "+j2+" and "+i6+" are identical)"};
+if(vErrors === null){
+vErrors = [err40];
+}
+else {
+vErrors.push(err40);
+}
+errors++;
+break outer0;
+}
+}
+}
+}
+}
+else {
+const err41 = {instancePath:instancePath+"/tools/" + i0+"/selection/itemMetadata",schemaPath:"#/properties/tools/items/properties/selection/oneOf/1/properties/itemMetadata/type",keyword:"type",params:{type: "array"},message:"must be array"};
+if(vErrors === null){
+vErrors = [err41];
+}
+else {
+vErrors.push(err41);
+}
+errors++;
+}
+}
+}
+else {
+const err42 = {instancePath:instancePath+"/tools/" + i0+"/selection",schemaPath:"#/properties/tools/items/properties/selection/oneOf/1/type",keyword:"type",params:{type: "object"},message:"must be object"};
+if(vErrors === null){
+vErrors = [err42];
+}
+else {
+vErrors.push(err42);
 }
 errors++;
 }
@@ -657,12 +789,12 @@ passing0 = 1;
 }
 }
 if(!valid7){
-const err33 = {instancePath:instancePath+"/tools/" + i0+"/selection",schemaPath:"#/properties/tools/items/properties/selection/oneOf",keyword:"oneOf",params:{passingSchemas: passing0},message:"must match exactly one schema in oneOf"};
+const err43 = {instancePath:instancePath+"/tools/" + i0+"/selection",schemaPath:"#/properties/tools/items/properties/selection/oneOf",keyword:"oneOf",params:{passingSchemas: passing0},message:"must match exactly one schema in oneOf"};
 if(vErrors === null){
-vErrors = [err33];
+vErrors = [err43];
 }
 else {
-vErrors.push(err33);
+vErrors.push(err43);
 }
 errors++;
 }
@@ -680,36 +812,36 @@ vErrors = null;
 }
 }
 else {
-const err34 = {instancePath:instancePath+"/tools/" + i0,schemaPath:"#/properties/tools/items/type",keyword:"type",params:{type: "object"},message:"must be object"};
+const err44 = {instancePath:instancePath+"/tools/" + i0,schemaPath:"#/properties/tools/items/type",keyword:"type",params:{type: "object"},message:"must be object"};
 if(vErrors === null){
-vErrors = [err34];
+vErrors = [err44];
 }
 else {
-vErrors.push(err34);
+vErrors.push(err44);
 }
 errors++;
 }
 }
 }
 else {
-const err35 = {instancePath:instancePath+"/tools",schemaPath:"#/properties/tools/type",keyword:"type",params:{type: "array"},message:"must be array"};
+const err45 = {instancePath:instancePath+"/tools",schemaPath:"#/properties/tools/type",keyword:"type",params:{type: "array"},message:"must be array"};
 if(vErrors === null){
-vErrors = [err35];
+vErrors = [err45];
 }
 else {
-vErrors.push(err35);
+vErrors.push(err45);
 }
 errors++;
 }
 }
 }
 else {
-const err36 = {instancePath,schemaPath:"#/type",keyword:"type",params:{type: "object"},message:"must be object"};
+const err46 = {instancePath,schemaPath:"#/type",keyword:"type",params:{type: "object"},message:"must be object"};
 if(vErrors === null){
-vErrors = [err36];
+vErrors = [err46];
 }
 else {
-vErrors.push(err36);
+vErrors.push(err46);
 }
 errors++;
 }
@@ -932,7 +1064,7 @@ return errors === 0;
 }
 
 export const validateJobsStartV1Params = validate24;
-const schema27 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/jobs-start-v1-params.schema.json","title":"JobsStartV1Params","type":"object","properties":{"calls":{"description":"Independent calls; each has its own result or error.","type":"array","minItems":1,"maxItems":16,"items":{"$ref":"../jobs/tool-call.schema.json"}},"wait_ms":{"description":"The longest the sidecar holds the response while the job is pending (queued, running, awaiting_approval or ready_for_review). It answers as soon as the job has results or ends, and reports the current state when the wait elapses. The sidecar honors at most its discovered `jobs.maxWaitMs`.","type":"integer","minimum":0,"maximum":30000}},"required":["calls"],"additionalProperties":true};
+const schema27 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/jobs-start-v1-params.schema.json","title":"JobsStartV1Params","type":"object","properties":{"calls":{"description":"Independent calls; each has its own result or error.","type":"array","minItems":1,"maxItems":16,"items":{"$ref":"../jobs/tool-call.schema.json"}},"wait_ms":{"description":"The longest the sidecar holds the response while the job is queued or running. It answers as soon as the job is in any other state (for example completed, ready_for_review, awaiting_approval or failed), and otherwise reports the current state when the wait elapses. The sidecar honors at most its discovered `jobs.maxWaitMs`.","type":"integer","minimum":0,"maximum":30000}},"required":["calls"],"additionalProperties":true};
 const schema28 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/jobs/tool-call.schema.json","title":"JobToolCall","description":"One tool call of a job. `server` names the provider: `sidecar` is reserved for the desktop app's built-in tools (providers/sidecar.json); other ids are reserved for organization-declared local MCP servers.","type":"object","properties":{"server":{"type":"string","pattern":"^[a-z][a-z0-9_-]{0,63}$"},"name":{"type":"string","pattern":"^[A-Za-z0-9_.-]{1,128}$"},"arguments":{"description":"The tool's arguments, as in MCP `tools/call`. Absent means an empty object.","type":"object","additionalProperties":true}},"required":["server","name"],"additionalProperties":true};
 
 function validate24(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
@@ -1139,7 +1271,7 @@ return errors === 0;
 export const validateJobsStartV1Result = validate25;
 const schema29 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/jobs-start-v1-result.schema.json","title":"JobsStartV1Result","$ref":"../jobs/job-status.schema.json"};
 const schema30 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/jobs/job-status.schema.json","title":"JobStatus","type":"object","properties":{"handle":{"type":"string","pattern":"^[A-Za-z0-9_-]{32,128}$"},"state":{"description":"`awaiting_approval`, `ready_for_review` and `approved` occur only under strict mode; `awaiting_approval` is reserved for effectful tools. `acked`, `declined`, `cancelled`, `expired` and `failed` are terminal.","enum":["queued","running","awaiting_approval","ready_for_review","approved","completed","read","acked","declined","cancelled","expired","failed"]},"results":{"description":"One entry per call, in call order. Present whenever the reported state is `completed`, `approved` or `read`. Their serialized size stays within the client's response cap: a call whose result would exceed the remaining budget gets the `sidecar_internal` error with `sourceError: \"export_too_large\"`.","type":"array","items":{"$ref":"./job-call-result.schema.json"}}},"required":["handle","state"],"additionalProperties":true};
-const pattern8 = new RegExp("^[A-Za-z0-9_-]{32,128}$", "u");
+const pattern9 = new RegExp("^[A-Za-z0-9_-]{32,128}$", "u");
 const schema31 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/jobs/job-call-result.schema.json","title":"JobCallResult","description":"The outcome of one call, at the call's position in `calls`: its `result`, or a JSON-RPC error object when the call does not run or its result exceeds the response budget.","oneOf":[{"type":"object","properties":{"result":{"$ref":"./call-tool-result.schema.json"}},"required":["result"],"additionalProperties":true},{"type":"object","properties":{"error":{"$ref":"../bootstrap/json-rpc-envelope.schema.json#/definitions/ErrorResponse/properties/error"}},"required":["error"],"additionalProperties":true}]};
 const schema32 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/jobs/call-tool-result.schema.json","title":"CallToolResult","description":"A call's result as the MCP `CallToolResult`, for every provider. For the `sidecar` provider, `structuredContent` is a `SidecarStructuredContent`, the raw outcomes of the RPC methods the tool composed, and `content` carries their files as embedded resources.","type":"object","properties":{"content":{"type":"array","items":{"$ref":"#/definitions/ContentBlock"}},"structuredContent":{"type":"object","additionalProperties":true},"isError":{"type":"boolean"},"_meta":{"$ref":"#/definitions/Meta"}},"required":["content"],"additionalProperties":true,"definitions":{"Meta":{"title":"ResultMeta","description":"Metadata under reverse-DNS-namespaced keys, `<prefix>/<name>`. MCP reserves prefixes with a `modelcontextprotocol` or `mcp` label, such as `modelcontextprotocol.io/`; Erato uses `ai.erato/`. A content block's metadata is item-level and travels only with its item.","type":"object","propertyNames":{"type":"string","pattern":"^(?:[A-Za-z](?:[A-Za-z0-9-]*[A-Za-z0-9])?\\.)+[A-Za-z](?:[A-Za-z0-9-]*[A-Za-z0-9])?/(?:[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?)?$"},"properties":{"ai.erato/item":{"description":"The JSON pointer into `structuredContent` of the object this block belongs to: for a file, the object its bytes were taken from.","type":"string","pattern":"^(?:/(?:[^/~]|~[01])*)+$"},"ai.erato/outlookProvenance":{"description":"Where a file came from: the message's own reference as `document`, or an attachment's containing message as `topLevelParent`. A navigation hint for opening the original, never a grant.","allOf":[{"$ref":"../outlook/file-provenance.schema.json"}]}},"additionalProperties":true},"Annotations":{"title":"ContentAnnotations","type":"object","properties":{"audience":{"type":"array","items":{"enum":["user","assistant"]}},"priority":{"type":"number","minimum":0,"maximum":1},"lastModified":{"type":"string","format":"date-time"}},"additionalProperties":true},"Base64":{"type":"string","pattern":"^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$"},"ContentBlock":{"title":"ContentBlock","oneOf":[{"$ref":"#/definitions/TextContent"},{"$ref":"#/definitions/ImageContent"},{"$ref":"#/definitions/AudioContent"},{"$ref":"#/definitions/EmbeddedResource"},{"$ref":"#/definitions/ResourceLink"}]},"TextContent":{"title":"TextContent","type":"object","properties":{"type":{"const":"text"},"text":{"type":"string"},"annotations":{"$ref":"#/definitions/Annotations"},"_meta":{"$ref":"#/definitions/Meta"}},"required":["type","text"],"additionalProperties":true},"ImageContent":{"title":"ImageContent","type":"object","properties":{"type":{"const":"image"},"data":{"$ref":"#/definitions/Base64"},"mimeType":{"type":"string","minLength":1},"annotations":{"$ref":"#/definitions/Annotations"},"_meta":{"$ref":"#/definitions/Meta"}},"required":["type","data","mimeType"],"additionalProperties":true},"AudioContent":{"title":"AudioContent","type":"object","properties":{"type":{"const":"audio"},"data":{"$ref":"#/definitions/Base64"},"mimeType":{"type":"string","minLength":1},"annotations":{"$ref":"#/definitions/Annotations"},"_meta":{"$ref":"#/definitions/Meta"}},"required":["type","data","mimeType"],"additionalProperties":true},"EmbeddedResource":{"title":"EmbeddedResource","type":"object","properties":{"type":{"const":"resource"},"resource":{"oneOf":[{"$ref":"#/definitions/TextResourceContents"},{"$ref":"#/definitions/BlobResourceContents"}]},"annotations":{"$ref":"#/definitions/Annotations"},"_meta":{"$ref":"#/definitions/Meta"}},"required":["type","resource"],"additionalProperties":true},"TextResourceContents":{"title":"TextResourceContents","type":"object","properties":{"uri":{"type":"string","format":"uri"},"mimeType":{"type":"string","minLength":1},"text":{"type":"string"},"_meta":{"$ref":"#/definitions/Meta"}},"required":["uri","text"],"additionalProperties":true},"BlobResourceContents":{"title":"BlobResourceContents","type":"object","properties":{"uri":{"type":"string","format":"uri"},"mimeType":{"type":"string","minLength":1},"blob":{"$ref":"#/definitions/Base64"},"_meta":{"$ref":"#/definitions/Meta"}},"required":["uri","blob"],"additionalProperties":true},"ResourceLink":{"title":"ResourceLink","description":"A reference to a resource the result does not embed. Under strict mode it is exported as a reference only.","type":"object","properties":{"type":{"const":"resource_link"},"uri":{"type":"string","format":"uri"},"name":{"type":"string","minLength":1},"title":{"type":"string"},"description":{"type":"string"},"mimeType":{"type":"string","minLength":1},"size":{"type":"integer","minimum":0},"annotations":{"$ref":"#/definitions/Annotations"},"_meta":{"$ref":"#/definitions/Meta"}},"required":["type","uri","name"],"additionalProperties":true}}};
 const schema33 = {"title":"ContentBlock","oneOf":[{"$ref":"#/definitions/TextContent"},{"$ref":"#/definitions/ImageContent"},{"$ref":"#/definitions/AudioContent"},{"$ref":"#/definitions/EmbeddedResource"},{"$ref":"#/definitions/ResourceLink"}]};
@@ -1147,15 +1279,15 @@ const schema34 = {"title":"TextContent","type":"object","properties":{"type":{"c
 const schema35 = {"title":"ContentAnnotations","type":"object","properties":{"audience":{"type":"array","items":{"enum":["user","assistant"]}},"priority":{"type":"number","minimum":0,"maximum":1},"lastModified":{"type":"string","format":"date-time"}},"additionalProperties":true};
 const formats0 = { validate: (value) => /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/.test(value) && !Number.isNaN(Date.parse(value)) };
 const schema36 = {"title":"ResultMeta","description":"Metadata under reverse-DNS-namespaced keys, `<prefix>/<name>`. MCP reserves prefixes with a `modelcontextprotocol` or `mcp` label, such as `modelcontextprotocol.io/`; Erato uses `ai.erato/`. A content block's metadata is item-level and travels only with its item.","type":"object","propertyNames":{"type":"string","pattern":"^(?:[A-Za-z](?:[A-Za-z0-9-]*[A-Za-z0-9])?\\.)+[A-Za-z](?:[A-Za-z0-9-]*[A-Za-z0-9])?/(?:[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?)?$"},"properties":{"ai.erato/item":{"description":"The JSON pointer into `structuredContent` of the object this block belongs to: for a file, the object its bytes were taken from.","type":"string","pattern":"^(?:/(?:[^/~]|~[01])*)+$"},"ai.erato/outlookProvenance":{"description":"Where a file came from: the message's own reference as `document`, or an attachment's containing message as `topLevelParent`. A navigation hint for opening the original, never a grant.","allOf":[{"$ref":"../outlook/file-provenance.schema.json"}]}},"additionalProperties":true};
-const pattern9 = new RegExp("^(?:[A-Za-z](?:[A-Za-z0-9-]*[A-Za-z0-9])?\\.)+[A-Za-z](?:[A-Za-z0-9-]*[A-Za-z0-9])?/(?:[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?)?$", "u");
+const pattern10 = new RegExp("^(?:[A-Za-z](?:[A-Za-z0-9-]*[A-Za-z0-9])?\\.)+[A-Za-z](?:[A-Za-z0-9-]*[A-Za-z0-9])?/(?:[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?)?$", "u");
 const schema37 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/outlook/file-provenance.schema.json","title":"OutlookFileProvenance","description":"Versioned Outlook source metadata for an uploaded file. Multiple origins preserve distinct containing messages when identical bytes are deduplicated. This standalone contract does not add a field to existing v1 RPC responses.","type":"object","properties":{"version":{"type":"integer","const":1},"origins":{"type":"array","minItems":1,"items":{"type":"object","properties":{"document":{"description":"The uploaded email's own message reference. Omit for an ordinary file attachment with no message identity. For a thread export, identifies the requested subject only.","allOf":[{"$ref":"./message-reference.schema.json"}]},"topLevelParent":{"description":"The outermost containing mailbox message. Never substitute this reference for the uploaded document's own identity.","allOf":[{"$ref":"./message-reference.schema.json"}]}},"additionalProperties":true,"minProperties":1}}},"required":["version","origins"],"additionalProperties":true};
 const schema38 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/outlook/message-reference.schema.json","title":"OutlookMessageReference","description":"A reference to one Outlook message, preserving its own identifiers and mailbox context. This is metadata, not an instruction or proof that the item is accessible.","type":"object","properties":{"documentId":{"description":"Originating sidecar catalog UUID, when indexed. Requires resolution against that catalog and is not portable across devices.","type":"string","format":"uuid"},"external_ids":{"allOf":[{"$ref":"../source/external-ids.schema.json"},{"type":"array","items":{"type":"object","properties":{"key":{},"value":{}},"if":{"properties":{"key":{"enum":["outlook_entry_id","outlook_store_id"]}},"required":["key"],"additionalProperties":true},"then":{"properties":{"value":{"type":"string","pattern":"^(?:[0-9a-fA-F]{2})+$"}},"additionalProperties":true},"additionalProperties":true}}]},"mailbox":{"$ref":"./mailbox-reference.schema.json"}},"required":["external_ids"],"anyOf":[{"required":["documentId"],"properties":{"documentId":{"description":"Originating sidecar catalog UUID, when indexed. Requires resolution against that catalog and is not portable across devices.","type":"string","format":"uuid"}},"additionalProperties":true},{"properties":{"external_ids":{"type":"array","minItems":1}},"additionalProperties":true}],"additionalProperties":true};
 const schema39 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/source/external-ids.schema.json","title":"DocumentExternalIds","description":"Externally relatable identifiers for the document. Identifier keys are open-ended so new identifier kinds do not require a protocol change.","type":"array","items":{"type":"object","properties":{"key":{"type":"string","minLength":1},"value":{"type":"string","minLength":1}},"required":["key","value"],"additionalProperties":true}};
 const schema40 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/outlook/mailbox-reference.schema.json","title":"OutlookMailboxReference","description":"Mailbox context captured with a message reference. Local IDs are scoped to the originating Outlook installation; emailAddress identifies the mailbox owner, including a shared mailbox, not necessarily the signed-in user.","type":"object","properties":{"mailboxId":{"description":"Local sidecar mailbox ID. Both the compact Outlook RPC spelling and the UUID spelling used by search are accepted. Not a Microsoft Graph mailbox ID or a portable device identity.","type":"string","pattern":"^(?:[0-9a-f]{32}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$"},"emailAddress":{"description":"SMTP address of the mailbox owning the referenced item, when known.","type":"string","minLength":1,"maxLength":1024,"pattern":"\\S"},"profileName":{"description":"Name of the originating Outlook profile, when available. A profile name alone does not identify a mailbox.","type":"string","minLength":1,"maxLength":1024,"pattern":"\\S"}},"anyOf":[{"required":["mailboxId"],"properties":{"mailboxId":{"description":"Local sidecar mailbox ID. Both the compact Outlook RPC spelling and the UUID spelling used by search are accepted. Not a Microsoft Graph mailbox ID or a portable device identity.","type":"string","pattern":"^(?:[0-9a-f]{32}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$"}},"additionalProperties":true},{"required":["emailAddress"],"properties":{"emailAddress":{"description":"SMTP address of the mailbox owning the referenced item, when known.","type":"string","minLength":1,"maxLength":1024,"pattern":"\\S"}},"additionalProperties":true}],"additionalProperties":true};
 const formats4 = /^(?:urn:uuid:)?[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
-const pattern11 = new RegExp("^(?:[0-9a-fA-F]{2})+$", "u");
-const pattern12 = new RegExp("^(?:[0-9a-f]{32}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$", "u");
-const pattern13 = new RegExp("\\S", "u");
+const pattern12 = new RegExp("^(?:[0-9a-fA-F]{2})+$", "u");
+const pattern13 = new RegExp("^(?:[0-9a-f]{32}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$", "u");
+const pattern14 = new RegExp("\\S", "u");
 
 function validate33(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/outlook/message-reference.schema.json" */;
@@ -1443,7 +1575,7 @@ if(data7 && typeof data7 == "object" && !Array.isArray(data7)){
 if(data7.value !== undefined){
 let data9 = data7.value;
 if(typeof data9 === "string"){
-if(!pattern11.test(data9)){
+if(!pattern12.test(data9)){
 const err19 = {instancePath:instancePath+"/external_ids/" + i1+"/value",schemaPath:"#/properties/external_ids/allOf/1/items/then/properties/value/pattern",keyword:"pattern",params:{pattern: "^(?:[0-9a-fA-F]{2})+$"},message:"must match pattern \""+"^(?:[0-9a-fA-F]{2})+$"+"\""};
 if(vErrors === null){
 vErrors = [err19];
@@ -1523,7 +1655,7 @@ errors++;
 if(data10.mailboxId !== undefined){
 let data11 = data10.mailboxId;
 if(typeof data11 === "string"){
-if(!pattern12.test(data11)){
+if(!pattern13.test(data11)){
 const err25 = {instancePath:instancePath+"/mailbox/mailboxId",schemaPath:"./mailbox-reference.schema.json/anyOf/0/properties/mailboxId/pattern",keyword:"pattern",params:{pattern: "^(?:[0-9a-f]{32}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$"},message:"must match pattern \""+"^(?:[0-9a-f]{32}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$"+"\""};
 if(vErrors === null){
 vErrors = [err25];
@@ -1584,7 +1716,7 @@ vErrors.push(err29);
 }
 errors++;
 }
-if(!pattern13.test(data12)){
+if(!pattern14.test(data12)){
 const err30 = {instancePath:instancePath+"/mailbox/emailAddress",schemaPath:"./mailbox-reference.schema.json/anyOf/1/properties/emailAddress/pattern",keyword:"pattern",params:{pattern: "\\S"},message:"must match pattern \""+"\\S"+"\""};
 if(vErrors === null){
 vErrors = [err30];
@@ -1635,7 +1767,7 @@ if(data10 && typeof data10 == "object" && !Array.isArray(data10)){
 if(data10.mailboxId !== undefined){
 let data13 = data10.mailboxId;
 if(typeof data13 === "string"){
-if(!pattern12.test(data13)){
+if(!pattern13.test(data13)){
 const err33 = {instancePath:instancePath+"/mailbox/mailboxId",schemaPath:"./mailbox-reference.schema.json/properties/mailboxId/pattern",keyword:"pattern",params:{pattern: "^(?:[0-9a-f]{32}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$"},message:"must match pattern \""+"^(?:[0-9a-f]{32}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$"+"\""};
 if(vErrors === null){
 vErrors = [err33];
@@ -1680,7 +1812,7 @@ vErrors.push(err36);
 }
 errors++;
 }
-if(!pattern13.test(data14)){
+if(!pattern14.test(data14)){
 const err37 = {instancePath:instancePath+"/mailbox/emailAddress",schemaPath:"./mailbox-reference.schema.json/properties/emailAddress/pattern",keyword:"pattern",params:{pattern: "\\S"},message:"must match pattern \""+"\\S"+"\""};
 if(vErrors === null){
 vErrors = [err37];
@@ -1725,7 +1857,7 @@ vErrors.push(err40);
 }
 errors++;
 }
-if(!pattern13.test(data15)){
+if(!pattern14.test(data15)){
 const err41 = {instancePath:instancePath+"/mailbox/profileName",schemaPath:"./mailbox-reference.schema.json/properties/profileName/pattern",keyword:"pattern",params:{pattern: "\\S"},message:"must match pattern \""+"\\S"+"\""};
 if(vErrors === null){
 vErrors = [err41];
@@ -1909,7 +2041,7 @@ if(data && typeof data == "object" && !Array.isArray(data)){
 for(const key0 in data){
 const _errs1 = errors;
 if(typeof key0 === "string"){
-if(!pattern9.test(key0)){
+if(!pattern10.test(key0)){
 const err0 = {instancePath,schemaPath:"#/propertyNames/pattern",keyword:"pattern",params:{pattern: "^(?:[A-Za-z](?:[A-Za-z0-9-]*[A-Za-z0-9])?\\.)+[A-Za-z](?:[A-Za-z0-9-]*[A-Za-z0-9])?/(?:[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?)?$"},message:"must match pattern \""+"^(?:[A-Za-z](?:[A-Za-z0-9-]*[A-Za-z0-9])?\\.)+[A-Za-z](?:[A-Za-z0-9-]*[A-Za-z0-9])?/(?:[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?)?$"+"\"",propertyName:key0};
 if(vErrors === null){
 vErrors = [err0];
@@ -2164,7 +2296,7 @@ return errors === 0;
 
 const schema41 = {"title":"ImageContent","type":"object","properties":{"type":{"const":"image"},"data":{"$ref":"#/definitions/Base64"},"mimeType":{"type":"string","minLength":1},"annotations":{"$ref":"#/definitions/Annotations"},"_meta":{"$ref":"#/definitions/Meta"}},"required":["type","data","mimeType"],"additionalProperties":true};
 const schema42 = {"type":"string","pattern":"^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$"};
-const pattern17 = new RegExp("^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$", "u");
+const pattern18 = new RegExp("^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$", "u");
 
 function validate39(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 let vErrors = null;
@@ -2215,7 +2347,7 @@ errors++;
 if(data.data !== undefined){
 let data1 = data.data;
 if(typeof data1 === "string"){
-if(!pattern17.test(data1)){
+if(!pattern18.test(data1)){
 const err4 = {instancePath:instancePath+"/data",schemaPath:"#/definitions/Base64/pattern",keyword:"pattern",params:{pattern: "^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$"},message:"must match pattern \""+"^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$"+"\""};
 if(vErrors === null){
 vErrors = [err4];
@@ -2438,7 +2570,7 @@ errors++;
 if(data.data !== undefined){
 let data1 = data.data;
 if(typeof data1 === "string"){
-if(!pattern17.test(data1)){
+if(!pattern18.test(data1)){
 const err4 = {instancePath:instancePath+"/data",schemaPath:"#/definitions/Base64/pattern",keyword:"pattern",params:{pattern: "^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$"},message:"must match pattern \""+"^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$"+"\""};
 if(vErrors === null){
 vErrors = [err4];
@@ -2800,7 +2932,7 @@ errors++;
 if(data.blob !== undefined){
 let data2 = data.blob;
 if(typeof data2 === "string"){
-if(!pattern17.test(data2)){
+if(!pattern18.test(data2)){
 const err6 = {instancePath:instancePath+"/blob",schemaPath:"#/definitions/Base64/pattern",keyword:"pattern",params:{pattern: "^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$"},message:"must match pattern \""+"^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$"+"\""};
 if(vErrors === null){
 vErrors = [err6];
@@ -3737,7 +3869,7 @@ errors++;
 if(data.handle !== undefined){
 let data0 = data.handle;
 if(typeof data0 === "string"){
-if(!pattern8.test(data0)){
+if(!pattern9.test(data0)){
 const err2 = {instancePath:instancePath+"/handle",schemaPath:"#/properties/handle/pattern",keyword:"pattern",params:{pattern: "^[A-Za-z0-9_-]{32,128}$"},message:"must match pattern \""+"^[A-Za-z0-9_-]{32,128}$"+"\""};
 if(vErrors === null){
 vErrors = [err2];
@@ -3823,7 +3955,7 @@ return errors === 0;
 }
 
 export const validateJobsStatusV1Params = validate62;
-const schema55 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/jobs-status-v1-params.schema.json","title":"JobsStatusV1Params","type":"object","properties":{"handle":{"type":"string","pattern":"^[A-Za-z0-9_-]{32,128}$"},"wait_ms":{"description":"The longest the sidecar holds the response while the job is pending (queued, running, awaiting_approval or ready_for_review). It answers as soon as the job has results or ends, and reports the current state when the wait elapses. The sidecar honors at most its discovered `jobs.maxWaitMs`.","type":"integer","minimum":0,"maximum":30000}},"required":["handle"],"additionalProperties":true};
+const schema55 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/jobs-status-v1-params.schema.json","title":"JobsStatusV1Params","type":"object","properties":{"handle":{"type":"string","pattern":"^[A-Za-z0-9_-]{32,128}$"},"wait_ms":{"description":"The longest the sidecar holds the response while the job stays in the pending state it had when the request arrived (queued and running count as one). It answers as soon as that state changes, and otherwise reports the current state when the wait elapses. The sidecar honors at most its discovered `jobs.maxWaitMs`.","type":"integer","minimum":0,"maximum":30000}},"required":["handle"],"additionalProperties":true};
 
 function validate62(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/methods/jobs-status-v1-params.schema.json" */;
@@ -3843,7 +3975,7 @@ errors++;
 if(data.handle !== undefined){
 let data0 = data.handle;
 if(typeof data0 === "string"){
-if(!pattern8.test(data0)){
+if(!pattern9.test(data0)){
 const err1 = {instancePath:instancePath+"/handle",schemaPath:"#/properties/handle/pattern",keyword:"pattern",params:{pattern: "^[A-Za-z0-9_-]{32,128}$"},message:"must match pattern \""+"^[A-Za-z0-9_-]{32,128}$"+"\""};
 if(vErrors === null){
 vErrors = [err1];
@@ -3951,7 +4083,7 @@ errors++;
 if(data.handle !== undefined){
 let data0 = data.handle;
 if(typeof data0 === "string"){
-if(!pattern8.test(data0)){
+if(!pattern9.test(data0)){
 const err1 = {instancePath:instancePath+"/handle",schemaPath:"#/properties/handle/pattern",keyword:"pattern",params:{pattern: "^[A-Za-z0-9_-]{32,128}$"},message:"must match pattern \""+"^[A-Za-z0-9_-]{32,128}$"+"\""};
 if(vErrors === null){
 vErrors = [err1];
@@ -4064,7 +4196,7 @@ errors++;
 if(data.handle !== undefined){
 let data0 = data.handle;
 if(typeof data0 === "string"){
-if(!pattern8.test(data0)){
+if(!pattern9.test(data0)){
 const err1 = {instancePath:instancePath+"/handle",schemaPath:"#/properties/handle/pattern",keyword:"pattern",params:{pattern: "^[A-Za-z0-9_-]{32,128}$"},message:"must match pattern \""+"^[A-Za-z0-9_-]{32,128}$"+"\""};
 if(vErrors === null){
 vErrors = [err1];
@@ -4137,7 +4269,7 @@ errors++;
 if(data.handle !== undefined){
 let data0 = data.handle;
 if(typeof data0 === "string"){
-if(!pattern8.test(data0)){
+if(!pattern9.test(data0)){
 const err1 = {instancePath:instancePath+"/handle",schemaPath:"#/properties/handle/pattern",keyword:"pattern",params:{pattern: "^[A-Za-z0-9_-]{32,128}$"},message:"must match pattern \""+"^[A-Za-z0-9_-]{32,128}$"+"\""};
 if(vErrors === null){
 vErrors = [err1];
@@ -4210,7 +4342,7 @@ errors++;
 if(data.handle !== undefined){
 let data0 = data.handle;
 if(typeof data0 === "string"){
-if(!pattern8.test(data0)){
+if(!pattern9.test(data0)){
 const err1 = {instancePath:instancePath+"/handle",schemaPath:"#/properties/handle/pattern",keyword:"pattern",params:{pattern: "^[A-Za-z0-9_-]{32,128}$"},message:"must match pattern \""+"^[A-Za-z0-9_-]{32,128}$"+"\""};
 if(vErrors === null){
 vErrors = [err1];
@@ -4359,7 +4491,7 @@ return errors === 0;
 
 export const validateIndexingBenchmarkListV1Result = validate78;
 const schema66 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/indexing-benchmark-list-v1-result.schema.json","title":"IndexingBenchmarkListV1Result","type":"object","properties":{"runs":{"type":"array","maxItems":100,"items":{"type":"object","properties":{"runId":{"type":"string","format":"uuid"},"mailboxId":{"type":"string","pattern":"^(?:[0-9a-fA-F]{32}|[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})$"},"mode":{"type":"string","enum":["fiveMinutes","fullMailbox"]},"state":{"type":"string","enum":["preparing","running","completed","failed"]},"startedAt":{"type":"string","format":"date-time"},"finishedAt":{"type":["string","null"],"format":"date-time"}},"required":["runId","mailboxId","mode","state","startedAt","finishedAt"],"additionalProperties":true}},"nextOffset":{"type":["integer","null"],"minimum":0,"maximum":9007199254740991}},"required":["runs","nextOffset"],"additionalProperties":true};
-const pattern25 = new RegExp("^(?:[0-9a-fA-F]{32}|[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})$", "u");
+const pattern26 = new RegExp("^(?:[0-9a-fA-F]{32}|[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})$", "u");
 
 function validate78(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/methods/indexing-benchmark-list-v1-result.schema.json" */;
@@ -4491,7 +4623,7 @@ errors++;
 if(data1.mailboxId !== undefined){
 let data3 = data1.mailboxId;
 if(typeof data3 === "string"){
-if(!pattern25.test(data3)){
+if(!pattern26.test(data3)){
 const err11 = {instancePath:instancePath+"/runs/" + i0+"/mailboxId",schemaPath:"#/properties/runs/items/properties/mailboxId/pattern",keyword:"pattern",params:{pattern: "^(?:[0-9a-fA-F]{32}|[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})$"},message:"must match pattern \""+"^(?:[0-9a-fA-F]{32}|[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})$"+"\""};
 if(vErrors === null){
 vErrors = [err11];
@@ -4704,7 +4836,7 @@ errors++;
 if(data.mailboxId !== undefined){
 let data0 = data.mailboxId;
 if(typeof data0 === "string"){
-if(!pattern25.test(data0)){
+if(!pattern26.test(data0)){
 const err1 = {instancePath:instancePath+"/mailboxId",schemaPath:"#/properties/mailboxId/pattern",keyword:"pattern",params:{pattern: "^(?:[0-9a-fA-F]{32}|[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})$"},message:"must match pattern \""+"^(?:[0-9a-fA-F]{32}|[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})$"+"\""};
 if(vErrors === null){
 vErrors = [err1];
@@ -4970,7 +5102,7 @@ errors++;
 if(data.mailboxId !== undefined){
 let data1 = data.mailboxId;
 if(typeof data1 === "string"){
-if(!pattern25.test(data1)){
+if(!pattern26.test(data1)){
 const err19 = {instancePath:instancePath+"/mailboxId",schemaPath:"#/properties/mailboxId/pattern",keyword:"pattern",params:{pattern: "^(?:[0-9a-fA-F]{32}|[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})$"},message:"must match pattern \""+"^(?:[0-9a-fA-F]{32}|[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})$"+"\""};
 if(vErrors === null){
 vErrors = [err19];
@@ -5714,7 +5846,7 @@ errors++;
 if(data.mailboxId !== undefined){
 let data1 = data.mailboxId;
 if(typeof data1 === "string"){
-if(!pattern25.test(data1)){
+if(!pattern26.test(data1)){
 const err19 = {instancePath:instancePath+"/mailboxId",schemaPath:"#/properties/mailboxId/pattern",keyword:"pattern",params:{pattern: "^(?:[0-9a-fA-F]{32}|[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})$"},message:"must match pattern \""+"^(?:[0-9a-fA-F]{32}|[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})$"+"\""};
 if(vErrors === null){
 vErrors = [err19];
@@ -6382,7 +6514,7 @@ if(data0 && typeof data0 == "object" && !Array.isArray(data0)){
 for(const key0 in data0){
 const _errs4 = errors;
 if(typeof key0 === "string"){
-if(!pattern13.test(key0)){
+if(!pattern14.test(key0)){
 const err1 = {instancePath:instancePath+"/policies",schemaPath:"#/properties/policies/propertyNames/pattern",keyword:"pattern",params:{pattern: "\\S"},message:"must match pattern \""+"\\S"+"\"",propertyName:key0};
 if(vErrors === null){
 vErrors = [err1];
@@ -6440,7 +6572,7 @@ if(data1 && typeof data1 == "object" && !Array.isArray(data1)){
 if(data1.question !== undefined){
 let data3 = data1.question;
 if(typeof data3 === "string"){
-if(!pattern13.test(data3)){
+if(!pattern14.test(data3)){
 const err4 = {instancePath:instancePath+"/policies/" + key1.replace(/~/g, "~0").replace(/\//g, "~1")+"/question",schemaPath:"#/definitions/PolicyGuide/then/properties/question/pattern",keyword:"pattern",params:{pattern: "\\S"},message:"must match pattern \""+"\\S"+"\""};
 if(vErrors === null){
 vErrors = [err4];
@@ -6465,7 +6597,7 @@ errors++;
 if(data1.choice_refuse !== undefined){
 let data4 = data1.choice_refuse;
 if(typeof data4 === "string"){
-if(!pattern13.test(data4)){
+if(!pattern14.test(data4)){
 const err6 = {instancePath:instancePath+"/policies/" + key1.replace(/~/g, "~0").replace(/\//g, "~1")+"/choice_refuse",schemaPath:"#/definitions/PolicyGuide/then/properties/choice_refuse/pattern",keyword:"pattern",params:{pattern: "\\S"},message:"must match pattern \""+"\\S"+"\""};
 if(vErrors === null){
 vErrors = [err6];
@@ -6490,7 +6622,7 @@ errors++;
 if(data1.choice_allow !== undefined){
 let data5 = data1.choice_allow;
 if(typeof data5 === "string"){
-if(!pattern13.test(data5)){
+if(!pattern14.test(data5)){
 const err8 = {instancePath:instancePath+"/policies/" + key1.replace(/~/g, "~0").replace(/\//g, "~1")+"/choice_allow",schemaPath:"#/definitions/PolicyGuide/then/properties/choice_allow/pattern",keyword:"pattern",params:{pattern: "\\S"},message:"must match pattern \""+"\\S"+"\""};
 if(vErrors === null){
 vErrors = [err8];
@@ -6529,7 +6661,7 @@ const len0 = data6.length;
 for(let i0=0; i0<len0; i0++){
 let data7 = data6[i0];
 if(typeof data7 === "string"){
-if(!pattern13.test(data7)){
+if(!pattern14.test(data7)){
 const err11 = {instancePath:instancePath+"/policies/" + key1.replace(/~/g, "~0").replace(/\//g, "~1")+"/decision_providers/" + i0,schemaPath:"#/definitions/PolicyGuide/then/properties/decision_providers/items/pattern",keyword:"pattern",params:{pattern: "\\S"},message:"must match pattern \""+"\\S"+"\""};
 if(vErrors === null){
 vErrors = [err11];
@@ -16622,7 +16754,7 @@ validate105.errors = vErrors;
 return errors === 0;
 }
 
-const pattern34 = new RegExp("^(?:/|[A-Za-z]:[\\\\/]|\\\\\\\\)", "u");
+const pattern35 = new RegExp("^(?:/|[A-Za-z]:[\\\\/]|\\\\\\\\)", "u");
 
 function validate85(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/methods/indexing-status-v1-result.schema.json" */;
@@ -17568,7 +17700,7 @@ vErrors.push(err72);
 }
 errors++;
 }
-if(!pattern34.test(data30)){
+if(!pattern35.test(data30)){
 const err73 = {instancePath:instancePath+"/indexingDirectory",schemaPath:"#/properties/indexingDirectory/pattern",keyword:"pattern",params:{pattern: "^(?:/|[A-Za-z]:[\\\\/]|\\\\\\\\)"},message:"must match pattern \""+"^(?:/|[A-Za-z]:[\\\\/]|\\\\\\\\)"+"\""};
 if(vErrors === null){
 vErrors = [err73];
@@ -21346,8 +21478,7 @@ export const validateDiscoverParams = validate126;
 const schema123 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/bootstrap/discover-params.schema.json","title":"DiscoverParams","type":"object","required":["protocolVersions","clientInfo","host","os"],"properties":{"protocolVersions":{"type":"array","minItems":1,"uniqueItems":true,"items":{"$ref":"../common.schema.json#/definitions/ProtocolVersion"}},"clientInfo":{"$ref":"../common.schema.json#/definitions/ProductInfo"},"host":{"type":"object","required":["application","runtime"],"properties":{"application":{"type":"string","minLength":1,"maxLength":128},"applicationVersion":{"type":"string","maxLength":128},"runtime":{"type":"string","minLength":1,"maxLength":128},"runtimeVersion":{"type":"string","maxLength":128}},"additionalProperties":true},"os":{"type":"object","required":["name"],"properties":{"name":{"type":"string","minLength":1,"maxLength":128},"version":{"type":"string","maxLength":128},"architecture":{"type":"string","maxLength":64}},"additionalProperties":true}},"additionalProperties":true};
 const schema124 = {"type":"string","pattern":"^[1-9][0-9]*\\.[0-9]+$"};
 const schema125 = {"type":"object","required":["name","version"],"properties":{"name":{"type":"string","minLength":1,"maxLength":128},"version":{"type":"string","minLength":1,"maxLength":128}},"additionalProperties":true};
-const pattern35 = new RegExp("^[1-9][0-9]*\\.[0-9]+$", "u");
-const func0 = (left, right) => JSON.stringify(left) === JSON.stringify(right);
+const pattern36 = new RegExp("^[1-9][0-9]*\\.[0-9]+$", "u");
 
 function validate126(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/bootstrap/discover-params.schema.json" */;
@@ -21411,7 +21542,7 @@ const len0 = data0.length;
 for(let i0=0; i0<len0; i0++){
 let data1 = data0[i0];
 if(typeof data1 === "string"){
-if(!pattern35.test(data1)){
+if(!pattern36.test(data1)){
 const err5 = {instancePath:instancePath+"/protocolVersions/" + i0,schemaPath:"../common.schema.json#/definitions/ProtocolVersion/pattern",keyword:"pattern",params:{pattern: "^[1-9][0-9]*\\.[0-9]+$"},message:"must match pattern \""+"^[1-9][0-9]*\\.[0-9]+$"+"\""};
 if(vErrors === null){
 vErrors = [err5];
@@ -21856,12 +21987,12 @@ const schema134 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"ht
 const schema135 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/jobs/provider.schema.json","title":"ToolProvider","description":"A provider whose tools this sidecar runs as jobs.","type":"object","properties":{"id":{"type":"string","pattern":"^[a-z][a-z0-9_-]{0,63}$"},"tools":{"type":"array","uniqueItems":true,"items":{"type":"string","pattern":"^[A-Za-z0-9_.-]{1,128}$"}},"readOnly":{"type":"boolean"},"egress":{"description":"Whether the provider's tools reach beyond this device: `none` or `open_world`. Open vocabulary; a client treats any other value as `open_world`.","type":"string","minLength":1,"maxLength":64},"available":{"description":"False when the provider cannot run calls at all. A refusal of one tool is a per-call error instead.","type":"boolean"}},"required":["id","tools","readOnly","egress","available"],"additionalProperties":true};
 const schema129 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/bootstrap/discovery-document.schema.json","title":"DiscoveryDocument","type":"object","required":["openrpc","info","methods","x-erato-catalogue"],"properties":{"openrpc":{"type":"string","pattern":"^1\\.4\\.[0-9]+$"},"info":{"type":"object","required":["title","version"],"properties":{"title":{"type":"string","minLength":1},"version":{"type":"string","minLength":1}},"additionalProperties":true},"methods":{"type":"array","items":{"type":"object","required":["name","params","result"],"properties":{"name":{"type":"string","minLength":1},"params":{"type":"array"},"result":{"type":"object","additionalProperties":true},"x-erato-capability":{"$ref":"../capabilities/capability.schema.json"}},"additionalProperties":true}},"x-erato-catalogue":{"$ref":"../common.schema.json#/definitions/CatalogueIdentity"}},"additionalProperties":true};
 const schema130 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/capabilities/capability.schema.json","title":"CapabilityDescriptor","type":"object","required":["id","major","method","availability"],"properties":{"id":{"type":"string","pattern":"^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$"},"major":{"type":"integer","minimum":1},"method":{"type":"string","pattern":"^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+\\.v[1-9][0-9]*$"},"availability":{"oneOf":[{"type":"object","required":["state"],"properties":{"state":{"const":"enabled"}},"additionalProperties":true},{"type":"object","required":["state","reasonCode"],"properties":{"state":{"const":"disabled"},"reasonCode":{"type":"string","minLength":1,"maxLength":128}},"additionalProperties":true},{"type":"object","required":["state"],"properties":{"state":{"type":"string","not":{"enum":["enabled","disabled"]}}},"additionalProperties":true}]}},"additionalProperties":true};
-const pattern38 = new RegExp("^1\\.4\\.[0-9]+$", "u");
-const pattern39 = new RegExp("^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$", "u");
+const pattern39 = new RegExp("^1\\.4\\.[0-9]+$", "u");
+const pattern40 = new RegExp("^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$", "u");
 const schema131 = {"type":"object","required":["revision","digest"],"properties":{"revision":{"$ref":"#/definitions/Revision"},"digest":{"$ref":"#/definitions/Digest"}},"additionalProperties":true};
 const schema132 = {"type":"string","minLength":1,"maxLength":128};
 const schema133 = {"type":"string","pattern":"^sha256:[a-f0-9]{64}$"};
-const pattern41 = new RegExp("^sha256:[a-f0-9]{64}$", "u");
+const pattern42 = new RegExp("^sha256:[a-f0-9]{64}$", "u");
 
 function validate129(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 let vErrors = null;
@@ -21925,7 +22056,7 @@ errors++;
 if(data.digest !== undefined){
 let data1 = data.digest;
 if(typeof data1 === "string"){
-if(!pattern41.test(data1)){
+if(!pattern42.test(data1)){
 const err5 = {instancePath:instancePath+"/digest",schemaPath:"#/definitions/Digest/pattern",keyword:"pattern",params:{pattern: "^sha256:[a-f0-9]{64}$"},message:"must match pattern \""+"^sha256:[a-f0-9]{64}$"+"\""};
 if(vErrors === null){
 vErrors = [err5];
@@ -22011,7 +22142,7 @@ errors++;
 if(data.openrpc !== undefined){
 let data0 = data.openrpc;
 if(typeof data0 === "string"){
-if(!pattern38.test(data0)){
+if(!pattern39.test(data0)){
 const err4 = {instancePath:instancePath+"/openrpc",schemaPath:"#/properties/openrpc/pattern",keyword:"pattern",params:{pattern: "^1\\.4\\.[0-9]+$"},message:"must match pattern \""+"^1\\.4\\.[0-9]+$"+"\""};
 if(vErrors === null){
 vErrors = [err4];
@@ -22253,7 +22384,7 @@ errors++;
 if(data9.id !== undefined){
 let data10 = data9.id;
 if(typeof data10 === "string"){
-if(!pattern39.test(data10)){
+if(!pattern40.test(data10)){
 const err24 = {instancePath:instancePath+"/methods/" + i0+"/x-erato-capability/id",schemaPath:"../capabilities/capability.schema.json/properties/id/pattern",keyword:"pattern",params:{pattern: "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$"},message:"must match pattern \""+"^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$"+"\""};
 if(vErrors === null){
 vErrors = [err24];
@@ -22670,7 +22801,7 @@ errors++;
 if(data.protocolVersion !== undefined){
 let data0 = data.protocolVersion;
 if(typeof data0 === "string"){
-if(!pattern35.test(data0)){
+if(!pattern36.test(data0)){
 const err4 = {instancePath:instancePath+"/protocolVersion",schemaPath:"../common.schema.json#/definitions/ProtocolVersion/pattern",keyword:"pattern",params:{pattern: "^[1-9][0-9]*\\.[0-9]+$"},message:"must match pattern \""+"^[1-9][0-9]*\\.[0-9]+$"+"\""};
 if(vErrors === null){
 vErrors = [err4];
@@ -22835,7 +22966,7 @@ errors++;
 if(data.installationId !== undefined){
 let data5 = data.installationId;
 if(typeof data5 === "string"){
-if(!pattern8.test(data5)){
+if(!pattern9.test(data5)){
 const err18 = {instancePath:instancePath+"/installationId",schemaPath:"#/properties/installationId/pattern",keyword:"pattern",params:{pattern: "^[A-Za-z0-9_-]{32,128}$"},message:"must match pattern \""+"^[A-Za-z0-9_-]{32,128}$"+"\""};
 if(vErrors === null){
 vErrors = [err18];
@@ -23951,7 +24082,7 @@ const schema148 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"ht
 const schema151 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/outlook/listing-warning.schema.json","title":"OutlookListingWarning","description":"A local Outlook source that could not be inspected without hiding successful results.","type":"object","required":["message"],"properties":{"path":{"type":"string","minLength":1,"maxLength":32768},"message":{"type":"string","minLength":1,"maxLength":4096}},"additionalProperties":true};
 const schema149 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/outlook/mailbox.schema.json","title":"OutlookMailbox","description":"A mailbox or message store available through the local Outlook installation.","type":"object","required":["id","displayName","source"],"properties":{"id":{"description":"Short opaque mailbox identifier. It is unique for the current sidecar runtime and logically stable across restarts while the Outlook profile and store identity remain unchanged.","type":"string","pattern":"^[0-9a-f]{32}$"},"displayName":{"type":"string","minLength":1,"maxLength":1024},"emailAddress":{"type":"string","minLength":1,"maxLength":1024},"profileName":{"description":"Name of the Outlook profile containing this mailbox. Omitted when the platform or standalone store has no profile concept.","type":"string","minLength":1,"maxLength":1024},"source":{"description":"Implementation-defined local Outlook storage source. Known values include pst, ost, macOsProfile, macOsHxAccount (new Outlook for Mac), and windowsNewOutlook (new Outlook for Windows).","type":"string","minLength":1,"maxLength":128},"sourceIds":{"description":"IDs of this mailbox's sources in sources.list.v1. Older sidecars omit it.","type":"array","items":{"type":"string","format":"uuid"},"maxItems":1024},"capabilities":{"$ref":"../source/source-capabilities.schema.json"}},"additionalProperties":true};
 const schema150 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/source/source-capabilities.schema.json","title":"SourceCapabilities","description":"What the sidecar can deliver for one source or mailbox today. An absent object or an absent member means unknown, as from an older sidecar; clients then keep their previous behavior.","type":"object","properties":{"conversations":{"description":"outlook.get_conversation.v1 can read this source's conversations.","type":"boolean"},"attachments":{"description":"Email attachments are known, indexed and exportable for this source.","type":"boolean"},"folders":{"description":"sources.get_folder_hierarchy.v1 returns this source's real folder tree.","type":"boolean"},"recipients":{"description":"To, Cc and Bcc recipients are known for this source's emails, so recipient filters can match them.","type":"boolean"},"openInOutlook":{"description":"Documents carry identifiers that let a local Outlook open them.","type":"boolean"},"documentExport":{"description":"complete when sources.get_document.v1 exports the full stored content; cachedOnly when it can export only what the application cached on this device, so some documents fail with missing_from_local_cache. Extensible; clients treat unknown values as cachedOnly.","type":"string","minLength":1,"maxLength":64},"metadataFields":{"description":"Names from search.metadata_fields.v1 that this source fills. A filter on any other field cannot match this source's documents.","type":"array","items":{"type":"string","minLength":1,"maxLength":128},"uniqueItems":true,"maxItems":512}},"additionalProperties":true};
-const pattern44 = new RegExp("^[0-9a-f]{32}$", "u");
+const pattern45 = new RegExp("^[0-9a-f]{32}$", "u");
 
 function validate146(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/outlook/mailbox.schema.json" */;
@@ -23991,7 +24122,7 @@ errors++;
 if(data.id !== undefined){
 let data0 = data.id;
 if(typeof data0 === "string"){
-if(!pattern44.test(data0)){
+if(!pattern45.test(data0)){
 const err3 = {instancePath:instancePath+"/id",schemaPath:"#/properties/id/pattern",keyword:"pattern",params:{pattern: "^[0-9a-f]{32}$"},message:"must match pattern \""+"^[0-9a-f]{32}$"+"\""};
 if(vErrors === null){
 vErrors = [err3];
@@ -24629,7 +24760,7 @@ errors++;
 if(data.mailboxId !== undefined){
 let data0 = data.mailboxId;
 if(typeof data0 === "string"){
-if(!pattern44.test(data0)){
+if(!pattern45.test(data0)){
 const err1 = {instancePath:instancePath+"/mailboxId",schemaPath:"#/properties/mailboxId/pattern",keyword:"pattern",params:{pattern: "^[0-9a-f]{32}$"},message:"must match pattern \""+"^[0-9a-f]{32}$"+"\""};
 if(vErrors === null){
 vErrors = [err1];
@@ -24968,7 +25099,7 @@ errors++;
 if(data.mailboxId !== undefined){
 let data0 = data.mailboxId;
 if(typeof data0 === "string"){
-if(!pattern44.test(data0)){
+if(!pattern45.test(data0)){
 const err2 = {instancePath:instancePath+"/mailboxId",schemaPath:"#/properties/mailboxId/pattern",keyword:"pattern",params:{pattern: "^[0-9a-f]{32}$"},message:"must match pattern \""+"^[0-9a-f]{32}$"+"\""};
 if(vErrors === null){
 vErrors = [err2];
@@ -25107,7 +25238,7 @@ const schema157 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"ht
 const schema158 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/outlook/message-recipient.schema.json","title":"OutlookMessageRecipient","description":"One recipient of an Outlook message.","type":"object","properties":{"name":{"description":"Display name, when present.","type":"string","maxLength":4096},"emailAddress":{"description":"SMTP address. Omitted when only a non-routable Exchange address is stored locally.","type":"string","maxLength":4096}},"additionalProperties":true};
 const schema161 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/outlook/message-body.schema.json","title":"OutlookMessageBody","description":"A message body carried inline in the JSON-RPC result. The sidecar decodes the stored bytes to text using the message code page before sending.","type":"object","required":["contentType","content"],"properties":{"contentType":{"description":"Media type of the body, for example text/html or text/plain.","type":"string","maxLength":256},"content":{"description":"The decoded body text.","type":"string"}},"additionalProperties":true};
 const schema162 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/outlook/attachment-reference.schema.json","title":"OutlookAttachmentReference","description":"Metadata and inline bytes for one attachment. When the bytes are available they are base64-encoded in contentBytes; otherwise unavailableReason explains why.","type":"object","properties":{"name":{"description":"File name, when present.","type":"string","maxLength":4096},"contentType":{"description":"Media type of the bytes. Embedded messages are reported as message/rfc822.","type":"string","maxLength":256},"size":{"description":"Exact length of the attachment bytes.","type":"integer","minimum":0},"isInline":{"description":"True when the attachment is referenced from the message body by contentId.","type":"boolean"},"contentId":{"description":"Content-ID for an inline attachment, without angle brackets.","type":"string","maxLength":4096},"sha256":{"description":"Lowercase hex SHA-256 of the attachment bytes, useful for de-duplicating attachments repeated across thread messages.","type":"string","pattern":"^[a-f0-9]{64}$"},"contentBytes":{"description":"Base64-encoded attachment bytes, present when the bytes are available.","type":"string"},"unavailableReason":{"description":"Stable code explaining why bytes are not available, present instead of contentBytes. Known values include unsupported_attachment, and sourceError values such as missing_from_local_cache when the bytes are not cached on this device.","type":"string","minLength":1,"maxLength":128},"external_ids":{"$ref":"../source/external-ids.schema.json"},"topLevelParent":{"$ref":"../source/top-level-parent.schema.json"}},"additionalProperties":true};
-const pattern47 = new RegExp("^[a-f0-9]{64}$", "u");
+const pattern48 = new RegExp("^[a-f0-9]{64}$", "u");
 
 function validate155(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/outlook/attachment-reference.schema.json" */;
@@ -25229,7 +25360,7 @@ errors++;
 if(data.sha256 !== undefined){
 let data5 = data.sha256;
 if(typeof data5 === "string"){
-if(!pattern47.test(data5)){
+if(!pattern48.test(data5)){
 const err9 = {instancePath:instancePath+"/sha256",schemaPath:"#/properties/sha256/pattern",keyword:"pattern",params:{pattern: "^[a-f0-9]{64}$"},message:"must match pattern \""+"^[a-f0-9]{64}$"+"\""};
 if(vErrors === null){
 vErrors = [err9];
@@ -26916,7 +27047,7 @@ errors++;
 if(data.mailboxId !== undefined){
 let data0 = data.mailboxId;
 if(typeof data0 === "string"){
-if(!pattern44.test(data0)){
+if(!pattern45.test(data0)){
 const err2 = {instancePath:instancePath+"/mailboxId",schemaPath:"#/properties/mailboxId/pattern",keyword:"pattern",params:{pattern: "^[0-9a-f]{32}$"},message:"must match pattern \""+"^[0-9a-f]{32}$"+"\""};
 if(vErrors === null){
 vErrors = [err2];
@@ -29167,7 +29298,7 @@ errors++;
 if(data.contentBase64 !== undefined){
 let data2 = data.contentBase64;
 if(typeof data2 === "string"){
-if(!pattern17.test(data2)){
+if(!pattern18.test(data2)){
 const err7 = {instancePath:instancePath+"/contentBase64",schemaPath:"#/properties/contentBase64/pattern",keyword:"pattern",params:{pattern: "^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$"},message:"must match pattern \""+"^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$"+"\""};
 if(vErrors === null){
 vErrors = [err7];
