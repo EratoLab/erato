@@ -24,7 +24,165 @@ Typical "Notable changes" categories to copy & paste:
 
 ## [Unreleased]
 
-This draft covers changes merged after 0.6.2, through `e8ea1ff3` (PR #1384). Release date is intentionally unset while 0.7.0 is in preparation. Every listed change should be checked against its individual pending summary before release.
+## [0.8.0] - 2026-11-03
+
+### Notable changes
+
+#### Features and enhancements
+
+**Text-to-speech ("Audio-back") for conversational voice mode.** When enabled, the assistant's reply is now also spoken aloud, streamed sentence-by-sentence as it's generated rather than waiting for the full reply. Configure independently of chat/transcription via a new `[speech_providers.provider.<id>]` registry (kinds: `openai`, `openai_realtime`, `gemini`, `gemini_live`) and switch it on per deployment with `audio_conversational.speech_provider = "<id>"`. Spoken audio is saved as a WAV file attached to the assistant message, so replaying it after a reload doesn't call the provider again; a synthesis failure leaves the text response available. See [`upgrade_guides/0_7_0_to_0_8_0.md`](upgrade_guides/0_7_0_to_0_8_0.md) for configuration examples. [#1431](https://github.com/EratoLab/erato/pull/1431), [#1437](https://github.com/EratoLab/erato/pull/1437), [#1440](https://github.com/EratoLab/erato/pull/1440), [#1442](https://github.com/EratoLab/erato/pull/1442), [#1444](https://github.com/EratoLab/erato/pull/1444)
+
+Operators can archive a retired chat or speech provider while keeping its historical data (display name, historical token prices), and redirect old provider IDs to a successor with `replacement_providers = [{ old = "...", new = "..." }]`; existing permission grants and cost reporting follow the replacement automatically. [#1438](https://github.com/EratoLab/erato/pull/1438)
+
+**Composer context chips.** The composer and sent messages now consistently show what context and tools a send will carry, across Outlook, Word, and Teams: a "sent with" row on sent messages, a locked chip for the facet or transcript a reply carries, and a unified tool-chips row next to the model selector. Includes preview/state-correctness fixes along the way (Outlook draft-row superseded/not-sent states, Word's "Document not included" state, Teams kit attachment removal) and follow-up polish from manual testing (recording-tile cancel/retry wording, shared tile layout, Word's comment picker, Outlook draft re-reading, an i18n catalog-layering bug). [#1406](https://github.com/EratoLab/erato/pull/1406), [#1425](https://github.com/EratoLab/erato/pull/1425), [#1441](https://github.com/EratoLab/erato/pull/1441)
+
+Delegated tasks now run on an explicit, reported model — resolved once at launch from the task facet's configured model or the parent turn's model — instead of silently inheriting whatever the origin assistant's default happened to be; the resolved model is shown on every task envelope/result card and preserved across retries. Configure per facet with `facets.facets.<id>.child_chat_provider`, or a priority list via `child_chat_providers`. [#1407](https://github.com/EratoLab/erato/pull/1407)
+
+**Delegated tasks can call client tools under a server-asserted grant, including waiting durably for a device.** A delegated task that names a child facet can get a read-only grant to the client tools its parent turn was offered, with calls routed live to the pane that serves the binding; a tool can additionally opt into `child_dispatch = "durable"` so a call that finds no pane open parks and resumes automatically once one claims it, instead of failing outright, and a waiting call can now be picked up by any Erato window on the same computer, not only the one that started it. A read tool can also set `approval_scope = "context"` so one approval covers every later task call of that tool against the same open document (Word) or response (Outlook), instead of asking again on every call. A delegated task's result now renders as a step inside the assistant's own turn rather than inside the user's chat bubble. None of this is wired into any shipped facet yet — adopting it means setting the new `child_access`/`host_context`/`child_dispatch`/`approval_scope` fields yourself; see the upgrade guide. [#1410](https://github.com/EratoLab/erato/pull/1410), [#1423](https://github.com/EratoLab/erato/pull/1423), [#1424](https://github.com/EratoLab/erato/pull/1424), [#1455](https://github.com/EratoLab/erato/pull/1455), [#1457](https://github.com/EratoLab/erato/pull/1457), [#1460](https://github.com/EratoLab/erato/pull/1460), [#1468](https://github.com/EratoLab/erato/pull/1468)
+
+**SharePoint/OneDrive filename search.** The upload picker's cloud-file search can now search filenames (and drive/site names) across every configured, delegated-access SharePoint source in one request, instead of only browsing one drive at a time. Disable with `integrations.sharepoint.file_search_enabled = false` if your deployment's forwarded Graph token only grants `Files.Read` — cross-drive search needs the broader `Files.Read.All` or `Sites.Read.All`; see the upgrade guide. [#1432](https://github.com/EratoLab/erato/pull/1432), [#1445](https://github.com/EratoLab/erato/pull/1445)
+
+**Desktop sidecar: Intune distribution, multi-environment installs, and Outlook add-in pinning.** The Windows sidecar installer now packages for Microsoft Intune (`.intunewin`) and supports installing multiple environments (e.g. staging and production) side-by-side via new `desktop_sidecar.launch_suffix`/`product_code`/`upgrade_code` keys. Deployments can opt in to having the sidecar automatically pin the Outlook add-in (and its task panes on classic Outlook for Windows) via three new `desktop_sidecar.organization_configuration` keys. A strict local-evidence sidecar's settings (source selection, indexing speed, status, permissions, connection actions) are now shown in the web Settings tab instead of being hidden, strict local delegation can pin a plaintext `http` backend origin for development setups, and approved local-evidence files from a strict sidecar now carry their source Outlook message's provenance so previews can link back to it. [#1422](https://github.com/EratoLab/erato/pull/1422), [#1430](https://github.com/EratoLab/erato/pull/1430), [#1450](https://github.com/EratoLab/erato/pull/1450), [#1454](https://github.com/EratoLab/erato/pull/1454), [#1462](https://github.com/EratoLab/erato/pull/1462)
+
+Teams transcripts now render as their grouped conversation everywhere they appear in Erato — on sent messages and on sidecar tool output — not only in the Teams add-in's own composer. [#1403](https://github.com/EratoLab/erato/pull/1403)
+
+Teams bot `messaging_endpoint` now accepts a URL with a gateway path prefix, not just a bare origin or the exact messages path, so the bot can sit behind an API gateway. [#1429](https://github.com/EratoLab/erato/pull/1429)
+
+**Word: read large documents section by section.** A document too large to read in one pass can now be read without write access, section by section, guided by an outline that reports each section's size, instead of failing outright. [#1452](https://github.com/EratoLab/erato/pull/1452) (built on a paragraph-mark capture fix, [#1458](https://github.com/EratoLab/erato/pull/1458))
+
+Fixed uploading the Word add-in's manifest to a SharePoint app catalog, which previously triggered a warning for using ribbon commands incompatible with that distribution path; the manifest endpoint now serves a catalog-specific variant on request. [#1434](https://github.com/EratoLab/erato/pull/1434)
+
+The Outlook add-in's Exchange Server/SE manifest is now generated from the same source as the Exchange Online manifest and declares pinning, shared-folder, and no-item-context support — verify these against your specific Exchange SE/Outlook version before relying on them. [#1466](https://github.com/EratoLab/erato/pull/1466)
+
+Assistants can now define a custom welcome message and starter prompts, shown when starting a new chat with that assistant. [#1443](https://github.com/EratoLab/erato/pull/1443)
+
+Chat scrolling: a floating "new messages" indicator appears when new messages arrive while scrolled away from the bottom, and dictated text keeps the input scrolled to the latest chunk. [#1399](https://github.com/EratoLab/erato/pull/1399), [#1400](https://github.com/EratoLab/erato/pull/1400)
+
+Deployments can keep the composer's tools dropdown open after a selection instead of it auto-closing, via `frontend.keep_tools_dropdown_open` (default off); the assistant editor's own selector honors the same setting. [#1469](https://github.com/EratoLab/erato/pull/1469), [#1471](https://github.com/EratoLab/erato/pull/1471)
+
+A new optional `AddinChatAccessProvider` extension point lets a component kit control Outlook Chat availability from the signed-in user's profile or another client-side policy, instead of Chat always being available whenever a kit supplies a start view. [#1470](https://github.com/EratoLab/erato/pull/1470)
+
+#### Stability improvements
+
+- Reduced backend memory overhead: attachment token-counting and file-processing now share one tokenizer instance instead of each allocating its own, and the Linux backend's default memory allocator switched to `tikv-jemallocator` with background purge enabled at startup (new allocated/active/resident/mapped/retained Prometheus gauges; see `backend/README.md` for tuning and rollback). [#1389](https://github.com/EratoLab/erato/pull/1389), [#1391](https://github.com/EratoLab/erato/pull/1391)
+- The periodic sweep that cancels interrupted tool-call parts after a crash or restart now uses a database index instead of scanning full message history at scale. Deploying this release runs a one-time index build that briefly blocks writes to the `messages` table — schedule it in a maintenance window on large installations. [#1397](https://github.com/EratoLab/erato/pull/1397)
+- If preparing a chat for generation fails (for example, a misconfigured or unreachable Langfuse prompt), Erato now persists a failed assistant message with a sanitized explanation instead of leaving the chat with no record of the error after a reload. [#1398](https://github.com/EratoLab/erato/pull/1398)
+- Chat input stays responsive while a reply streams, even in long chats — previously every message re-rendered on every streamed token. [#1435](https://github.com/EratoLab/erato/pull/1435)
+- The "Review in desktop app" prompt and completion after a native approval now appear noticeably faster in the desktop-sidecar strict local-delegation flow, instead of lagging by up to 10 seconds. [#1456](https://github.com/EratoLab/erato/pull/1456)
+
+#### Bug fixes
+
+- Chat input no longer misreads IME composition keys (CJK and other input methods) as Enter/Tab/Escape, no longer pulls focus out of open dialogs when a generation turn ends, and no longer reorders keystrokes typed immediately after picking an `@mention`. [#1393](https://github.com/EratoLab/erato/pull/1393), [#1395](https://github.com/EratoLab/erato/pull/1395)
+- Save and action flows across assistants, sharing, preferences, and chat actions now stay busy until the operation truly finishes and report success/failure where you acted, instead of ending early or silently. [#1436](https://github.com/EratoLab/erato/pull/1436)
+- Word selection-editing fixes: a no-ID paragraph match on legacy (non-M365) Word hosts no longer lands on an identical twin paragraph; plan-card wording is keyed on the actual edit route instead of whether the whole file was read; Word for Mac can open documents that auto-open the Erato pane; Word PC waits for Word's late language tagging after a cold start before capturing, like Mac already did; and Apply/Revert now work on documents using content-control placeholder text. [#1394](https://github.com/EratoLab/erato/pull/1394), [#1396](https://github.com/EratoLab/erato/pull/1396), [#1417](https://github.com/EratoLab/erato/pull/1417), [#1418](https://github.com/EratoLab/erato/pull/1418), [#1419](https://github.com/EratoLab/erato/pull/1419), [#1420](https://github.com/EratoLab/erato/pull/1420)
+- Fixed Word PC showing a sentinel 1899 date for some comment replies, and Word for the web mislabeling every comment thread as a point comment. [#1404](https://github.com/EratoLab/erato/pull/1404)
+- Fixed MCP-generated file attachments (files an assistant tool creates during a turn) showing as unresolved after reloading chat history. [#1401](https://github.com/EratoLab/erato/pull/1401)
+- Extensionless or unsupported-extension file uploads now fall back to a supported MIME type or plain-text extraction instead of staying a reference-only attachment with no text extracted. [#1433](https://github.com/EratoLab/erato/pull/1433)
+- Fixed Word for the web's sign-in hanging when Office reports Nested App Authentication support but provides no bridge for it. [#1392](https://github.com/EratoLab/erato/pull/1392)
+- Opening a chat by direct link now resumes its last-used model/provider and enabled facets, matching the sidebar's recent-chats list. [#1390](https://github.com/EratoLab/erato/pull/1390)
+- Fixed a slow or stalled text-to-speech provider delaying or blocking the text reply from streaming; speech input is now capped at 1 MiB per message, with text delivery unaffected if that cap is hit. [#1448](https://github.com/EratoLab/erato/pull/1448)
+- Activating a facet (normal or action) mid-conversation now inserts its instructions after existing history instead of ahead of (and effectively rewriting) the prefix preceding replies the model had already generated, preserving the chat's baseline system prompt and provider prefix-cache stability. [#1475](https://github.com/EratoLab/erato/pull/1475)
+
+#### Deprecations and upgrade notes
+
+See [`upgrade_guides/0_7_0_to_0_8_0.md`](upgrade_guides/0_7_0_to_0_8_0.md) for before/after examples. [#1402](https://github.com/EratoLab/erato/pull/1402), [#1445](https://github.com/EratoLab/erato/pull/1445)
+- **Outlook add-in default changed**: users without a saved session preference now get "Ask on conversation change" instead of "Resume last chat" when switching between emails. Deployments that want the old default must set `integrations.ms_office.addin.default_settings.mode = "resume"` explicitly. [#1402](https://github.com/EratoLab/erato/pull/1402)
+- Cross-drive SharePoint/OneDrive filename search now defaults on and needs the `Files.Read.All` or `Sites.Read.All` Graph permission; deployments whose forwarded Graph token only grants `Files.Read` should set `integrations.sharepoint.file_search_enabled = false` to keep the previous drive/site-only picker. [#1445](https://github.com/EratoLab/erato/pull/1445)
+
+#### Security
+
+- A delegated task can no longer end up with more MCP tool access than the turn that launched it — facets named in `delegation.tasks.child_facet_ids` are now bounded by the parent turn's tool allowlist instead of additive on top of it. [#1408](https://github.com/EratoLab/erato/pull/1408)
+
+#### Dependency changes
+
+- Bumped Rust TLS root-certificate data crates (RUSTSEC-2026-0382) and other routine backend dependencies, and updated the backend's base container image. [#1426](https://github.com/EratoLab/erato/pull/1426), [#1459](https://github.com/EratoLab/erato/pull/1459), [#1463](https://github.com/EratoLab/erato/pull/1463)
+
+#### Chores & Developer experience
+
+- Removed `windows-aarch64` from the desktop sidecar's distribution contract (unclear whether that target was ever actually built and shipped; confirm before relying on its absence). [#1427](https://github.com/EratoLab/erato/pull/1427)
+- Right-sized three CI runners for a small cost saving. [#1428](https://github.com/EratoLab/erato/pull/1428)
+- Config-reference metadata groundwork: every generated config key now carries `introduced_in`/`stability` fields and placeholder `security_relevance`/`default_value_security` fields, and the config-reference/schema logic moved into its own `erato-config-schema` crate — not yet surfaced anywhere. [#1464](https://github.com/EratoLab/erato/pull/1464), [#1465](https://github.com/EratoLab/erato/pull/1465), [#1467](https://github.com/EratoLab/erato/pull/1467)
+
+#### Full list of changes
+
+
+- Use one shared tiktoken tokenizer across application [#1389](https://github.com/EratoLab/erato/pull/1389)
+- Split recent-chat queris and bound message history queried from DB [#1390](https://github.com/EratoLab/erato/pull/1390)
+- Switch default allocator under linux to tikv-jemallocator [#1391](https://github.com/EratoLab/erato/pull/1391)
+- Word add-in: sign in through the oauth2-proxy popup when Office has no NAA bridge (ERMAIN-991) [#1392](https://github.com/EratoLab/erato/pull/1392)
+- Hotfix: keep keys typed right after an @mention pick in order (ERMAIN-995) [#1393](https://github.com/EratoLab/erato/pull/1393)
+- Word plan card: stop claiming a whole-file reload for in-place edits, and keep the web refusal after a later turn (ERMAIN-998) [#1394](https://github.com/EratoLab/erato/pull/1394)
+- Chat input: ignore IME composition keys and stop stealing focus from dialogs (ERMAIN-997) [#1395](https://github.com/EratoLab/erato/pull/1395)
+- Word: refuse a no-ID paragraph match that lands on an identical twin (ERMAIN-996) [#1396](https://github.com/EratoLab/erato/pull/1396)
+- Optimize interrupted parts cleanup and add index [#1397](https://github.com/EratoLab/erato/pull/1397)
+- Persist failures during generation preparation phase [#1398](https://github.com/EratoLab/erato/pull/1398)
+- Scroll chat input to bottom while streaming dictation text [#1399](https://github.com/EratoLab/erato/pull/1399)
+- feat: show new-message indicator when scrolled away from bottom [#1400](https://github.com/EratoLab/erato/pull/1400)
+- Fix resolution of MCP output file references [#1401](https://github.com/EratoLab/erato/pull/1401)
+- Default Outlook add-in to ask on conversation changes [#1402](https://github.com/EratoLab/erato/pull/1402)
+- Show Teams transcripts as conversations on every surface [#1403](https://github.com/EratoLab/erato/pull/1403)
+- Word comment reads: no 1899 reply dates on PC, no false point-comment label on the web [#1404](https://github.com/EratoLab/erato/pull/1404)
+- Recompile just-in-time translation catalogs when their .po changes [#1405](https://github.com/EratoLab/erato/pull/1405)
+- Composer context: fixes before the lane (ERMAIN-1021) [#1406](https://github.com/EratoLab/erato/pull/1406)
+- Delegated tasks run on a chosen model, never an accidental default (ERMAIN-1031) [#1407](https://github.com/EratoLab/erato/pull/1407)
+- Delegated runs never get more tools than their parent turn (ERMAIN-999) [#1408](https://github.com/EratoLab/erato/pull/1408)
+- Executor stream: push client tool calls from any chat to the pane that serves the binding (ERMAIN-1000) [#1410](https://github.com/EratoLab/erato/pull/1410)
+- Word plan card: name Apply and the Undo receipt after the route, not the full-file read (ERMAIN-1012) [#1417](https://github.com/EratoLab/erato/pull/1417)
+- Word for Mac: read documents that auto-open the Erato pane (ERMAIN-985) [#1418](https://github.com/EratoLab/erato/pull/1418)
+- Word PC: wait for Word's late language tagging after a cold start before capturing (ERMAIN-981) [#1419](https://github.com/EratoLab/erato/pull/1419)
+- Word: Apply and Revert work on documents with content-control placeholder text (ERMAIN-980) [#1420](https://github.com/EratoLab/erato/pull/1420)
+- Implement .intunewin distribution; Rework MSI to support multi-env [#1422](https://github.com/EratoLab/erato/pull/1422)
+- Delegated tasks can call client tools under a server-asserted grant (read-only, live) (ERMAIN-1001) [#1423](https://github.com/EratoLab/erato/pull/1423)
+- Host adapter contract and conformance tests for client tools in delegated tasks (ERMAIN-1002) [#1424](https://github.com/EratoLab/erato/pull/1424)
+- Composer context parity: sent-with chips, edit composer, tool chips (ERMAIN-1027) [#1425](https://github.com/EratoLab/erato/pull/1425)
+- Bump Rust TLS certificate data crates [#1426](https://github.com/EratoLab/erato/pull/1426)
+- Remove windows-aarch64 from sidecar distribution contract [#1427](https://github.com/EratoLab/erato/pull/1427)
+- ci: right-size 3 runners (~$6/month) [#1428](https://github.com/EratoLab/erato/pull/1428)
+- Allow teams bot messaging_endpoint to be configured more freely [#1429](https://github.com/EratoLab/erato/pull/1429)
+- Let deployments opt in to desktop sidecar Outlook add-in pinning [#1430](https://github.com/EratoLab/erato/pull/1430)
+- Add TTS providers; Audio responses for conversational mode [#1431](https://github.com/EratoLab/erato/pull/1431)
+- Extend sharepoint upload with filename search [#1432](https://github.com/EratoLab/erato/pull/1432)
+- Extract file uploads with file extensions but mime_type correctly [#1433](https://github.com/EratoLab/erato/pull/1433)
+- Fix warning for Word Addin-in manifest uploaded to Sharepoint [#1434](https://github.com/EratoLab/erato/pull/1434)
+- Keep typing responsive while a reply streams: re-render only the streamed message and keep markdown elements [#1435](https://github.com/EratoLab/erato/pull/1435)
+- Hotfix: save and action flows stay busy until done and report their outcome where the user acted [#1436](https://github.com/EratoLab/erato/pull/1436)
+- Add support for speech via OpenAI /v1/realtime API [#1437](https://github.com/EratoLab/erato/pull/1437)
+- Add provider replacement mechanism [#1438](https://github.com/EratoLab/erato/pull/1438)
+- Add support for decision providers [#1439](https://github.com/EratoLab/erato/pull/1439)
+- Added new gemini_live speech provider [#1440](https://github.com/EratoLab/erato/pull/1440)
+- Composer chips follow-ups from manual testing: recording tile, chip anatomy, add-in fixes (ERMAIN-1072) [#1441](https://github.com/EratoLab/erato/pull/1441)
+- Fix support for api_key for gemini_live speech_provider [#1442](https://github.com/EratoLab/erato/pull/1442)
+- Add per-assistant welcome message and starter prompts [#1443](https://github.com/EratoLab/erato/pull/1443)
+- Improve voice continuity for gemini_live providers [#1444](https://github.com/EratoLab/erato/pull/1444)
+- Search sharepoint files with single request [#1445](https://github.com/EratoLab/erato/pull/1445)
+- Add general mechanism for policy guides [#1446](https://github.com/EratoLab/erato/pull/1446)
+- Restore the rand dependency the .intunewin build still uses [#1447](https://github.com/EratoLab/erato/pull/1447)
+- Fix audio-back synthesis blocking text streaming [#1448](https://github.com/EratoLab/erato/pull/1448)
+- Show the desktop sidecar settings for a strict sidecar (ERMAIN-1077) [#1450](https://github.com/EratoLab/erato/pull/1450)
+- Add gen file [#1451](https://github.com/EratoLab/erato/pull/1451)
+- Read large Word documents in read-only section pages, guided by an outline with sizes (ERMAIN-1009) [#1452](https://github.com/EratoLab/erato/pull/1452)
+- Accept plaintext backend origins for strict local delegation [#1454](https://github.com/EratoLab/erato/pull/1454)
+- Delegated client calls wait durably for a client and for approvals on the device (ERMAIN-1032) [#1455](https://github.com/EratoLab/erato/pull/1455)
+- Poll local tasks faster while a native job is about to change state [#1456](https://github.com/EratoLab/erato/pull/1456)
+- Draw a delegated task's result as a step in the assistant's turn, not as a user bubble [#1457](https://github.com/EratoLab/erato/pull/1457)
+- Number and locate captured Word paragraphs without the paragraph mark Word for Windows and Mac end getText with (ERMAIN-1078) [#1458](https://github.com/EratoLab/erato/pull/1458)
+- Update backend dependencies [#1459](https://github.com/EratoLab/erato/pull/1459)
+- Tasks read a document or a response under one approval until it changes from outside (ERMAIN-1033) [#1460](https://github.com/EratoLab/erato/pull/1460)
+- Delegated tasks search local mail, files and Teams messages through the desktop sidecar (ERMAIN-1034) [#1461](https://github.com/EratoLab/erato/pull/1461)
+- Store the sidecar's Outlook provenance on approved local evidence files [#1462](https://github.com/EratoLab/erato/pull/1462)
+- Update chainguard-glibc-dynamic base image [#1463](https://github.com/EratoLab/erato/pull/1463)
+- Add introduced_in and stability metadata in config reference [#1464](https://github.com/EratoLab/erato/pull/1464)
+- Extract config schema logic into erato-config-schema crate [#1465](https://github.com/EratoLab/erato/pull/1465)
+- Adjust Outlook Addi-in Exchange SE manifest to support pinning [#1466](https://github.com/EratoLab/erato/pull/1466)
+- Add config attributes `security_relevance` and `default_value_security` [#1467](https://github.com/EratoLab/erato/pull/1467)
+- One installation id for the Erato desktop app: any Erato window on the computer continues a waiting sidecar call (ERMAIN-1086) [#1468](https://github.com/EratoLab/erato/pull/1468)
+- Add option to keep tools drop down open [#1469](https://github.com/EratoLab/erato/pull/1469)
+- Allow component kits to control Outlook Chat availability [#1470](https://github.com/EratoLab/erato/pull/1470)
+- Assistant editor honors `frontend.keep_tools_dropdown_open` [#1471](https://github.com/EratoLab/erato/pull/1471)
+- Refactor prompt composition to inject activated facet at history tip (ERMAIN-1101) [#1475](https://github.com/EratoLab/erato/pull/1475)
+- Add regression test that ensures that facet activation keeps prompt (ERMAIN-1099) [#1476](https://github.com/EratoLab/erato/pull/1476)
+
+## [0.7.0] - 2026-10-15
 
 ### Notable changes
 
