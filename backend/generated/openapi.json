@@ -3037,6 +3037,52 @@
         ]
       }
     },
+    "/api/v1beta/me/messages/clienttoolpark": {
+      "post": {
+        "tags": [],
+        "summary": "Asks the generation that waits for a live client tool call to park it as\nits durable operation now, instead of holding the turn until the tool's\ntimeout. A client sends it when the call waits on the user on the device,\nsuch as a review in the Erato desktop app. Only a call of the user's own\nturn whose tool has a durable operation parks, and only at the request of\nthe call's executor binding (`X-Erato-Executor`). The client still answers\nthe call through `clienttoolresult`, which then settles the parked\noperation, and continues it as for any parked call.",
+        "operationId": "client_tool_park",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClientToolParkRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientToolParkResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "When no valid JWT token is provided"
+          },
+          "403": {
+            "description": "When the user has no access to the chat"
+          },
+          "409": {
+            "description": "The call's operation belongs to another executor binding"
+          },
+          "500": {
+            "description": "When an internal server error occurs"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
     "/api/v1beta/me/messages/clienttoolresult": {
       "post": {
         "tags": [],
@@ -6554,6 +6600,45 @@
           "ask",
           "always_allow"
         ]
+      },
+      "ClientToolParkRequest": {
+        "type": "object",
+        "required": [
+          "chat_id",
+          "message_id",
+          "tool_call_id"
+        ],
+        "properties": {
+          "chat_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The chat whose generation waits for the call.",
+            "example": "00000000-0000-0000-0000-000000000000"
+          },
+          "message_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The assistant message whose generation emitted the client tool call.",
+            "example": "00000000-0000-0000-0000-000000000000"
+          },
+          "tool_call_id": {
+            "type": "string",
+            "description": "The `tool_call_id` from the `client_tool_call` event."
+          }
+        },
+        "additionalProperties": false
+      },
+      "ClientToolParkResponse": {
+        "type": "object",
+        "required": [
+          "requested"
+        ],
+        "properties": {
+          "requested": {
+            "type": "boolean",
+            "description": "True if the generation that waits for the call took the request (on\nanother replica: was sent it); it then parks the call as its durable\noperation. False if no generation waits for the call as an operation\nthat can park, so it stays live. Either way the client answers the\ncall through `clienttoolresult` once it has a result."
+          }
+        }
       },
       "ClientToolPending": {
         "type": "object",

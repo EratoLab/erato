@@ -36,6 +36,8 @@ const SHARED_COMMAND_POLL_INTERVAL: Duration = Duration::from_millis(100);
 const DRAIN_POLL_INTERVAL: Duration = Duration::from_millis(200);
 const CLIENT_TRANSPORT_POLL_INTERVAL: Duration = Duration::from_secs(1);
 const LIVE_SUBMISSION_RECONNECT_GRACE: Duration = Duration::from_secs(15);
+/// Shared command: a client asks the generation to park one of its calls.
+const CLIENT_TOOL_PARK_COMMAND: &str = "client_tool_park";
 
 pub(crate) fn owner_pod() -> String {
     std::env::var("POD_NAME")
@@ -787,6 +789,34 @@ impl BackgroundTaskManager {
                                     "Discarding shared client result with a mismatched executor or consent policy"
                                 );
                             }
+                        } else if command_type == CLIENT_TOOL_PARK_COMMAND {
+                            let tool_call_id =
+                                match command.try_get::<Option<String>>("", "tool_call_id") {
+                                    Ok(Some(value)) => value,
+                                    _ => continue,
+                                };
+                            let executor = command
+                                .try_get::<Option<JsonValue>>("", "payload")
+                                .ok()
+                                .flatten()
+                                .and_then(|payload| {
+                                    serde_json::from_value::<
+                                        crate::services::client_operations::ExecutorBinding,
+                                    >(
+                                        payload["operation_executor"].clone()
+                                    )
+                                    .ok()
+                                });
+                            if task
+                                .request_client_tool_park(&tool_call_id, executor.as_ref())
+                                .await
+                                == ClientToolPark::BindingMismatch
+                            {
+                                tracing::warn!(
+                                    %tool_call_id, generation_id = %task.generation_id,
+                                    "Discarding a shared park request with a mismatched executor"
+                                );
+                            }
                         }
 
                         let consume_statement = named_statement_from_sql_and_values(
@@ -919,6 +949,24 @@ impl BackgroundTaskManager {
             "client_tool_result",
             Some(tool_call_id),
             Some(payload),
+        )
+        .await
+    }
+
+    /// Asks the replica that runs `generation_id` to park `tool_call_id`; see
+    /// [`StreamingTask::request_client_tool_park`]. A replica that does not
+    /// know the command consumes it and keeps waiting for the call.
+    pub async fn enqueue_client_tool_park(
+        &self,
+        generation_id: Uuid,
+        tool_call_id: &str,
+        executor: Option<&crate::services::client_operations::ExecutorBinding>,
+    ) -> Result<(), String> {
+        self.enqueue_command(
+            generation_id,
+            CLIENT_TOOL_PARK_COMMAND,
+            Some(tool_call_id),
+            Some(serde_json::json!({ "operation_executor": executor })),
         )
         .await
     }
@@ -1351,6 +1399,18 @@ impl Drop for TaskCleanupGuard {
     }
 }
 
+/// What became of a client's request to park its call durably.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ClientToolPark {
+    /// The loop that waits for the call parks it.
+    Requested,
+    /// Nothing waits for the call as an operation that can park; it stays as
+    /// it is.
+    NotParkable,
+    /// The call's operation belongs to another executor binding.
+    BindingMismatch,
+}
+
 /// A streaming task that manages event broadcasting and history
 pub struct StreamingTask {
     /// Identity of this generation attempt, distinguishing it from other
@@ -1396,6 +1456,10 @@ pub struct StreamingTask {
     pending_client_tools: Arc<RwLock<HashMap<String, oneshot::Sender<ClientToolOutcome>>>>,
     client_operations:
         RwLock<HashMap<String, crate::services::client_operations::OperationRequest>>,
+    /// Calls whose client asked to park them as their durable operation now
+    /// instead of being waited for inline, and the loop's wake-up for them.
+    client_tool_parks: RwLock<std::collections::HashSet<String>>,
+    client_tool_park_notify: Notify,
     original_transport_id: Uuid,
     original_transport_connected: AtomicBool,
     shared_transport: AtomicBool,
@@ -1442,6 +1506,8 @@ impl StreamingTask {
             abort_notify: Arc::new(Notify::new()),
             pending_client_tools: Arc::new(RwLock::new(HashMap::new())),
             client_operations: RwLock::new(HashMap::new()),
+            client_tool_parks: RwLock::new(std::collections::HashSet::new()),
+            client_tool_park_notify: Notify::new(),
             original_transport_id: Uuid::new_v4(),
             original_transport_connected: AtomicBool::new(false),
             shared_transport: AtomicBool::new(false),
@@ -1790,6 +1856,52 @@ impl StreamingTask {
         call_id: &str,
     ) -> Option<crate::services::client_operations::OperationRequest> {
         self.client_operations.read().await.get(call_id).cloned()
+    }
+
+    /// Asks the loop that waits for `call_id` to park the call as its durable
+    /// operation now, as when its execution window ends. Only a call of the
+    /// user's own turn with a `consent: none` operation parks this way, and
+    /// only at the request of the binding the operation was registered for.
+    pub async fn request_client_tool_park(
+        &self,
+        call_id: &str,
+        executor: Option<&crate::services::client_operations::ExecutorBinding>,
+    ) -> ClientToolPark {
+        let Some(operation) = self.client_operation(call_id).await else {
+            return ClientToolPark::NotParkable;
+        };
+        if operation.lineage.is_some()
+            || operation.consent != crate::services::client_operations::ConsentPolicy::None
+        {
+            return ClientToolPark::NotParkable;
+        }
+        if executor != Some(&operation.binding) {
+            return ClientToolPark::BindingMismatch;
+        }
+        if !self.pending_client_tools.read().await.contains_key(call_id) {
+            return ClientToolPark::NotParkable;
+        }
+        self.client_tool_parks
+            .write()
+            .await
+            .insert(call_id.to_string());
+        self.client_tool_park_notify.notify_waiters();
+        ClientToolPark::Requested
+    }
+
+    /// Returns once the client asked to park `call_id`.
+    pub async fn wait_for_client_tool_park(&self, call_id: &str) {
+        loop {
+            // Registered before the check, as in `wait_for_abort`:
+            // `notify_waiters` stores no permit.
+            let notified = self.client_tool_park_notify.notified();
+            tokio::pin!(notified);
+            notified.as_mut().enable();
+            if self.client_tool_parks.read().await.contains(call_id) {
+                return;
+            }
+            notified.await;
+        }
     }
 
     pub async fn register_executor_call(
@@ -2519,6 +2631,114 @@ mod tests {
             .deliver_client_tool_result("call-1", ClientToolOutcome::Error("x".to_string()))
             .await;
         assert_eq!(delivery, ClientToolDelivery::Unknown);
+    }
+
+    fn sidecar_operation(call_id: &str) -> crate::services::client_operations::OperationRequest {
+        use crate::services::client_operations::*;
+        OperationRequest {
+            attempt_id: Uuid::new_v4(),
+            operation_id: "desktop/search_sidecar_index".into(),
+            kind: client_tool::CLIENT_TOOL_KIND.into(),
+            realm: ExecutionRealm::DesktopSidecar,
+            chat_id: Uuid::new_v4(),
+            message_id: Uuid::new_v4(),
+            tool_call_id: call_id.into(),
+            account_id: Uuid::new_v4(),
+            binding: ExecutorBinding {
+                device_id: "installation".into(),
+                realm: ExecutionRealm::DesktopSidecar,
+                host_context: Some(HostContext {
+                    kind: "desktop_sidecar".into(),
+                    identity: "local".into(),
+                }),
+            },
+            base_revision: None,
+            consent: ConsentPolicy::None,
+            expires_at: chrono::Utc::now(),
+            input: serde_json::json!({}),
+            lineage: None,
+        }
+    }
+
+    #[tokio::test]
+    async fn a_park_request_wakes_only_a_waiting_call_of_its_own_binding() {
+        let task = Arc::new(StreamingTask::new(Uuid::new_v4(), Uuid::new_v4()));
+        let operation = sidecar_operation("call-1");
+        let binding = operation.binding.clone();
+        // A call without an operation stays live.
+        assert_eq!(
+            task.request_client_tool_park("call-1", Some(&binding))
+                .await,
+            ClientToolPark::NotParkable
+        );
+        task.register_client_operation(operation).await.unwrap();
+        // Nothing waits for it yet.
+        assert_eq!(
+            task.request_client_tool_park("call-1", Some(&binding))
+                .await,
+            ClientToolPark::NotParkable
+        );
+        let _rx = task.register_client_tool_call("call-1".to_string()).await;
+        let mut other = binding.clone();
+        other.device_id = "another-installation".into();
+        for executor in [Some(&other), None] {
+            assert_eq!(
+                task.request_client_tool_park("call-1", executor).await,
+                ClientToolPark::BindingMismatch
+            );
+        }
+        let waiting = tokio::spawn({
+            let task = task.clone();
+            async move { task.wait_for_client_tool_park("call-1").await }
+        });
+        tokio::task::yield_now().await;
+        assert!(!waiting.is_finished());
+        assert_eq!(
+            task.request_client_tool_park("call-1", Some(&binding))
+                .await,
+            ClientToolPark::Requested
+        );
+        tokio::time::timeout(Duration::from_secs(1), waiting)
+            .await
+            .expect("the waiting call wakes")
+            .unwrap();
+        // A request that came first is not lost on a later wait.
+        tokio::time::timeout(
+            Duration::from_secs(1),
+            task.wait_for_client_tool_park("call-1"),
+        )
+        .await
+        .expect("the request is kept");
+    }
+
+    #[tokio::test]
+    async fn a_task_call_or_an_ask_operation_never_parks_on_request() {
+        let task = StreamingTask::new(Uuid::new_v4(), Uuid::new_v4());
+        let mut granted = sidecar_operation("granted");
+        granted.lineage = Some(
+            crate::services::client_operations::executor_stream::CallLineage {
+                owner_chat_id: Uuid::new_v4(),
+                owner_message_id: Uuid::new_v4(),
+                requesting_chat_id: Uuid::new_v4(),
+                requesting_message_id: Uuid::new_v4(),
+                context_ref: None,
+                approval_scope: None,
+            },
+        );
+        let mut asking = sidecar_operation("asking");
+        asking.consent = crate::services::client_operations::ConsentPolicy::Ask;
+        for operation in [granted, asking] {
+            let call_id = operation.tool_call_id.clone();
+            let binding = operation.binding.clone();
+            task.register_client_operation(operation).await.unwrap();
+            let _rx = task.register_client_tool_call(call_id.clone()).await;
+            assert_eq!(
+                task.request_client_tool_park(&call_id, Some(&binding))
+                    .await,
+                ClientToolPark::NotParkable,
+                "{call_id}"
+            );
+        }
     }
 
     /// A generation told to stop must not keep its own lease alive.

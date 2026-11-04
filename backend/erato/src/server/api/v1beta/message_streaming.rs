@@ -2947,6 +2947,30 @@ pub struct ClientToolResultResponse {
     stored: bool,
 }
 
+#[derive(serde::Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
+pub struct ClientToolParkRequest {
+    #[schema(example = "00000000-0000-0000-0000-000000000000")]
+    /// The chat whose generation waits for the call.
+    chat_id: Uuid,
+    #[schema(example = "00000000-0000-0000-0000-000000000000")]
+    /// The assistant message whose generation emitted the client tool call.
+    message_id: Uuid,
+    /// The `tool_call_id` from the `client_tool_call` event.
+    tool_call_id: String,
+}
+
+#[derive(Serialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub struct ClientToolParkResponse {
+    /// True if the generation that waits for the call took the request (on
+    /// another replica: was sent it); it then parks the call as its durable
+    /// operation. False if no generation waits for the call as an operation
+    /// that can park, so it stays live. Either way the client answers the
+    /// call through `clienttoolresult` once it has a result.
+    requested: bool,
+}
+
 #[derive(Serialize, ToSchema)]
 #[serde(tag = "message_type")]
 pub enum EditMessageStreamingResponseMessage {
@@ -8565,6 +8589,11 @@ async fn stream_generate_chat_completion<'a>(
                             },
                             _ = task.wait_for_abort() => Park::Aborted,
                             _ = task.wait_for_client_disconnect(), if durable_request.is_some() => Park::TimedOut,
+                            // The client asked to park the call because it now
+                            // waits on the user on the device, such as a review
+                            // in the Erato desktop app: its live window ends
+                            // here, as on a timeout.
+                            _ = task.wait_for_client_tool_park(&call_id), if durable_request.is_some() => Park::TimedOut,
                             _ = task.wait_for_client_transport_loss(), if live_submission => Park::TransportUnavailable,
                             _ = async {
                                 match &handed_over {
@@ -18798,6 +18827,105 @@ pub async fn client_tool_result(
         delivered: matches!(delivery, ClientToolDelivery::Delivered),
         stored: false,
     }))
+}
+
+/// Asks the generation that waits for a live client tool call to park it as
+/// its durable operation now, instead of holding the turn until the tool's
+/// timeout. A client sends it when the call waits on the user on the device,
+/// such as a review in the Erato desktop app. Only a call of the user's own
+/// turn whose tool has a durable operation parks, and only at the request of
+/// the call's executor binding (`X-Erato-Executor`). The client still answers
+/// the call through `clienttoolresult`, which then settles the parked
+/// operation, and continues it as for any parked call.
+#[utoipa::path(
+    post,
+    path = "/me/messages/clienttoolpark",
+    request_body = ClientToolParkRequest,
+    responses(
+        (status = OK, body = ClientToolParkResponse),
+        (status = CONFLICT, description = "The call's operation belongs to another executor binding"),
+        (status = UNAUTHORIZED, description = "When no valid JWT token is provided"),
+        (status = FORBIDDEN, description = "When the user has no access to the chat"),
+        (status = INTERNAL_SERVER_ERROR, description = "When an internal server error occurs")
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
+pub async fn client_tool_park(
+    State(app_state): State<AppState>,
+    Extension(policy): Extension<PolicyEngine>,
+    Extension(me_user): Extension<MeProfile>,
+    headers: HeaderMap,
+    Json(request): Json<ClientToolParkRequest>,
+) -> Result<Json<ClientToolParkResponse>, (axum::http::StatusCode, String)> {
+    // Per-chat ownership gate, as for a result.
+    get_or_create_chat(
+        &app_state.db,
+        &policy,
+        &me_user.to_subject(),
+        Some(&request.chat_id),
+        &me_user.id,
+        None,
+        None,
+        None,
+        None,
+        None,
+        ChatCreatedVia::Legacy, // ignored when loading an existing chat
+    )
+    .await
+    .map_err(|e| {
+        (
+            axum::http::StatusCode::FORBIDDEN,
+            format!("Access denied to chat: {}", e),
+        )
+    })?;
+    let not_requested = Ok(Json(ClientToolParkResponse { requested: false }));
+    if !app_state.config.client_tools.durable_operations_enabled {
+        return not_requested;
+    }
+    let executor = crate::services::client_operations::ExecutorBinding::from_headers(&headers);
+    if let Some(task) = app_state.background_tasks.get_task(&request.chat_id).await {
+        if task.message_id() != request.message_id {
+            return not_requested;
+        }
+        return match task
+            .request_client_tool_park(&request.tool_call_id, executor.as_ref())
+            .await
+        {
+            crate::services::background_tasks::ClientToolPark::Requested => {
+                Ok(Json(ClientToolParkResponse { requested: true }))
+            }
+            crate::services::background_tasks::ClientToolPark::NotParkable => not_requested,
+            crate::services::background_tasks::ClientToolPark::BindingMismatch => Err((
+                axum::http::StatusCode::CONFLICT,
+                "Operation binding mismatch".into(),
+            )),
+        };
+    }
+    // The generation runs on another replica, which checks the call and its
+    // binding itself.
+    let Some((generation_id, message_id)) = app_state
+        .background_tasks
+        .get_shared_generation(&request.chat_id)
+        .await
+    else {
+        return not_requested;
+    };
+    if message_id.is_some_and(|message_id| message_id != request.message_id) {
+        return not_requested;
+    }
+    app_state
+        .background_tasks
+        .enqueue_client_tool_park(generation_id, &request.tool_call_id, executor.as_ref())
+        .await
+        .map_err(|error| {
+            (
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to deliver the park request: {error}"),
+            )
+        })?;
+    Ok(Json(ClientToolParkResponse { requested: true }))
 }
 
 /// Every "you may not have this" answer `/react` gives.
