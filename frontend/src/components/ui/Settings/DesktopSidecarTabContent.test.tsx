@@ -66,7 +66,7 @@ vi.mock("@/providers/DesktopSidecarProvider", () => ({
             invoke: sidecar.invoke,
           }
         : null,
-    snapshot: { state: sidecar.state, localDelegation: sidecar.strict },
+    snapshot: { state: sidecar.state, strict: sidecar.strict },
   }),
 }));
 
@@ -115,20 +115,16 @@ function openStrictRow(supported: string[]) {
   );
 }
 
-it("shows the indexing settings of a strict sidecar that allows the settings methods", () => {
+it("shows the indexing settings and tool permissions of a strict sidecar that allows the settings methods", () => {
   openStrictRow(SETTINGS_METHODS);
   expect(screen.getByTestId("sidecar-indexing")).toBeInTheDocument();
   expect(
     screen.getByText(
-      "Evidence sharing requires review in the desktop app for each package.",
+      "Results with content from this device are reviewed in the Erato desktop app before the assistant receives them.",
     ),
   ).toBeInTheDocument();
-  expect(
-    screen.queryByTestId("client-tool-file-approval"),
-  ).not.toBeInTheDocument();
-  expect(
-    screen.queryByTestId("sidecar-tool-decisions"),
-  ).not.toBeInTheDocument();
+  expect(screen.getByTestId("client-tool-file-approval")).toBeInTheDocument();
+  expect(screen.getByTestId("sidecar-tool-decisions")).toBeInTheDocument();
 });
 
 it("shows permissions and maintenance of a strict sidecar without the indexing settings", async () => {
@@ -174,27 +170,27 @@ it("offers the directory command of a strict sidecar that allows it", () => {
 });
 
 it.each([
-  ["a connected legacy sidecar", "ready", false, true],
-  ["strict consent mode", "ready", true, false],
+  ["a connected sidecar in normal mode", "ready", false, true],
+  ["a connected sidecar in strict mode", "ready", true, true],
   ["a disconnected sidecar", "unavailable", false, false],
-] as const)(
-  "lists per-tool decisions only for %s",
-  (_, state, strict, shown) => {
-    sidecar.state = state;
-    sidecar.strict = strict;
-    render(<DesktopSidecarRow />);
-    fireEvent.click(
-      screen.getByRole("button", { name: /Desktop Sidecar.*this device/ }),
-    );
-    if (shown) {
-      expect(screen.getByTestId("sidecar-tool-decisions")).toBeInTheDocument();
-    } else {
-      expect(
-        screen.queryByTestId("sidecar-tool-decisions"),
-      ).not.toBeInTheDocument();
-    }
-  },
-);
+] as const)("lists per-tool decisions for %s", (_, state, strict, shown) => {
+  sidecar.state = state;
+  sidecar.strict = strict;
+  render(<DesktopSidecarRow />);
+  fireEvent.click(
+    screen.getByRole("button", { name: /Desktop Sidecar.*this device/ }),
+  );
+  if (shown) {
+    expect(screen.getByTestId("sidecar-tool-decisions")).toBeInTheDocument();
+  } else {
+    expect(
+      screen.queryByTestId("sidecar-tool-decisions"),
+    ).not.toBeInTheDocument();
+  }
+  const reviewNote = screen.queryByText(/reviewed in the Erato desktop app/);
+  if (strict) expect(reviewNote).toBeInTheDocument();
+  else expect(reviewNote).not.toBeInTheDocument();
+});
 
 it("introduces the sidecar and distinguishes permission settings from connection actions", () => {
   sidecar.state = "ready";

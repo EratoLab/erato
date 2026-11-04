@@ -1,0 +1,17 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://schemas.erato.ai/desktop-sidecar/v1/methods/jobs-read-v1-result.schema.json",
+  "title": "JobsReadV1Result",
+  "type": "object",
+  "properties": {
+    "results": {
+      "description": "The results `jobs.start.v1` or `jobs.status.v1` delivered, unchanged, so within the same response cap.",
+      "type": "array",
+      "items": {
+        "$ref": "../jobs/job-call-result.schema.json"
+      }
+    }
+  },
+  "required": ["results"],
+  "additionalProperties": true
+}

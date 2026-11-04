@@ -151,7 +151,7 @@ describe("approval scopes", () => {
         yields: true,
       }),
       // A strict executor leads the routing context over a yielding one.
-      registerOperationExecutor("local_collect_evidence", () => ({
+      registerOperationExecutor("exclusive_read", () => ({
         ...paneBinding,
         realm: "desktop-sidecar" as const,
         host_context: undefined,

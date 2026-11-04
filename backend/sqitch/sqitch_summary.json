@@ -63,7 +63,8 @@
     "deploy/0061_add_assistant_welcome.sql",
     "deploy/0062_add_client_executor_streams.sql",
     "deploy/0063_add_client_tool_approval_scopes.sql",
-    "deploy/0064_add_client_operation_claimant.sql"
+    "deploy/0064_add_client_operation_claimant.sql",
+    "deploy/0065_drop_local_evidence_exports.sql"
   ],
-  "latest_change": "66876944be27617a29e7f0867faa15896a8298fb"
+  "latest_change": "83eb0479de1bc2810985ace245c0b8a75149bd0f"
 }

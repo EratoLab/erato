@@ -1,0 +1,79 @@
+{
+  "id": "sidecar",
+  "readOnly": true,
+  "egress": "none",
+  "tools": [
+    {
+      "name": "list_sidecar_mailboxes",
+      "methods": ["outlook.list_mailboxes.v1", "sources.list.v1"],
+      "readOnly": true,
+      "selection": null
+    },
+    {
+      "name": "get_sidecar_folder_hierarchy",
+      "methods": ["sources.get_folder_hierarchy.v1", "sources.list.v1"],
+      "readOnly": true,
+      "selection": {
+        "items": "/sources.get_folder_hierarchy.v1/result/nodes",
+        "resultMetadata": [
+          "/sources.get_folder_hierarchy.v1/result/sourceId",
+          "/sources.list.v1"
+        ]
+      }
+    },
+    {
+      "name": "get_sidecar_search_fields",
+      "methods": ["search.metadata_fields.v1", "sources.list.v1"],
+      "readOnly": true,
+      "selection": null
+    },
+    {
+      "name": "search_sidecar_index",
+      "methods": [
+        "search.query.v1",
+        "sources.list.v1",
+        "search.metadata_fields.v1"
+      ],
+      "readOnly": true,
+      "selection": {
+        "items": "/search.query.v1/result/hits",
+        "resultMetadata": [
+          "/search.query.v1/result/elapsedMs",
+          "/search.query.v1/result/blocksRead",
+          "/search.query.v1/result/candidatesScored",
+          "/search.query.v1/result/coverage",
+          "/search.query.v1/result/limitReached",
+          "/sources.list.v1",
+          "/search.metadata_fields.v1"
+        ]
+      }
+    },
+    {
+      "name": "get_sidecar_document",
+      "methods": ["sources.get_document.v1", "outlook.list_mailboxes.v1"],
+      "readOnly": true,
+      "selection": {
+        "items": "content",
+        "resultMetadata": ["/outlook.list_mailboxes.v1"]
+      }
+    },
+    {
+      "name": "read_sidecar_conversation",
+      "methods": ["outlook.get_conversation.v1"],
+      "readOnly": true,
+      "selection": {
+        "items": "/outlook.get_conversation.v1/result/messages",
+        "resultMetadata": [
+          "/outlook.get_conversation.v1/result/state",
+          "/outlook.get_conversation.v1/result/mailbox"
+        ],
+        "itemMetadata": [
+          {
+            "pointer": "/outlook.get_conversation.v1/result/warnings",
+            "itemKey": "internetMessageId"
+          }
+        ]
+      }
+    }
+  ]
+}

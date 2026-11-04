@@ -192,6 +192,11 @@ request ID. Cancellation remains best effort; the original request still has at
 most one response. Cancellation authorization is evaluated independently using
 the same Origin, OS user, and organization policy as the original request.
 
+`jobs.start.v1` and `jobs.status.v1` hold their response for up to `wait_ms`
+while the job is pending: a long-poll inside one request, not a session or
+server push. The client's deadline for such a request covers the wait. Aborting
+it stops only the wait; `jobs.cancel.v1` cancels the job.
+
 ## Origin, CORS, and loopback security
 
 The production sidecar binds only to loopback and validates the exact request
@@ -207,9 +212,9 @@ used. Private-network access headers are returned only when requested by a
 qualified host and only after the same Host and Origin validation.
 
 The v1 deployment assumption is an installer/MDM-provided list of normalized
-Erato base origins. Each entry is lowercase scheme plus IDNA ASCII host plus
-explicit non-default port, with no path, query, fragment, wildcard, or trailing
-slash. Default ports are omitted. Comparison occurs after standards-compliant
+Erato base origins. Each entry is a lowercase `http` or `https` scheme plus IDNA
+ASCII host plus explicit non-default port, with no userinfo, path, query,
+fragment, wildcard, or trailing slash. Default ports are omitted. Comparison occurs after standards-compliant
 URL parsing and normalization, never by suffix or substring.
 
 An empty production allowlist refuses all requests. `http://localhost` and

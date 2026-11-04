@@ -5,6 +5,7 @@ import type {
   DesktopSidecarClient,
   OutlookConversationWarning,
   OutlookGetConversationV1Params,
+  OutlookGetConversationV1Result,
   OutlookMailbox,
 } from "@erato/desktop-sidecar-protocol";
 
@@ -71,17 +72,35 @@ export class SidecarConversationUnavailableError extends Error {
 export const NO_CONVERSATION_MESSAGES =
   "The local mailbox has no message with this Message-ID. Use get_sidecar_document with the search hit's documentId instead; do not retry this anchor.";
 
+/** The parameters readSidecarConversation sends for `params`. */
+export function conversationRequest(
+  params: OutlookGetConversationV1Params,
+): OutlookGetConversationV1Params {
+  return { ...params, mailboxId: outlookMailboxId(params.mailboxId) };
+}
+
 export async function readSidecarConversation(
   client: DesktopSidecarClient,
   params: OutlookGetConversationV1Params,
   signal?: AbortSignal,
 ) {
   signal?.throwIfAborted();
-  const result = await client.invoke(
-    "outlook.get_conversation.v1",
-    { ...params, mailboxId: outlookMailboxId(params.mailboxId) },
-    { signal },
+  return conversationWithMessages(
+    await client.invoke(
+      "outlook.get_conversation.v1",
+      conversationRequest(params),
+      { signal },
+    ),
   );
+}
+
+/**
+ * The conversation an outlook.get_conversation.v1 result reports, which must
+ * hold messages; otherwise the error that says why there are none.
+ */
+export function conversationWithMessages(
+  result: OutlookGetConversationV1Result,
+): OutlookGetConversationV1Result {
   if (result.messages.length === 0) {
     if (
       result.warnings?.some((warning) => warning.code === "unsupported_source")

@@ -1,0 +1,20 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://schemas.erato.ai/desktop-sidecar/v1/methods/jobs-status-v1-params.schema.json",
+  "title": "JobsStatusV1Params",
+  "type": "object",
+  "properties": {
+    "handle": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{32,128}$"
+    },
+    "wait_ms": {
+      "description": "The longest the sidecar holds the response while the job stays in the pending state it had when the request arrived (queued and running count as one). It answers as soon as that state changes, and otherwise reports the current state when the wait elapses. The sidecar honors at most its discovered `jobs.maxWaitMs`.",
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 30000
+    }
+  },
+  "required": ["handle"],
+  "additionalProperties": true
+}

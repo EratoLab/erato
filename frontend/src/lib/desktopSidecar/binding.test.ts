@@ -40,15 +40,15 @@ describe("desktopSidecarBinding", () => {
     expect(desktopSidecarBinding(older, undefined)).toBeUndefined();
   });
 
-  it("offers none while the app is not ready or declares local delegation", () => {
+  it("offers none while the app is not ready", () => {
     expect(
       desktopSidecarBinding(ready({ state: "unavailable" }), "client-a"),
     ).toBeUndefined();
-    expect(
-      desktopSidecarBinding(
-        ready({ localDelegation: { enforcement: "enforced" } }),
-        "client-a",
-      ),
-    ).toBeUndefined();
+  });
+
+  it("offers the same binding in strict mode", () => {
+    expect(desktopSidecarBinding(ready({ strict: true }), "client-a")).toEqual(
+      desktopSidecarBinding(ready(), "client-a"),
+    );
   });
 });

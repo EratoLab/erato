@@ -15,6 +15,7 @@ const releaseEntries = [
   "DELEGATION.md",
   "TRANSPORT.md",
   "openrpc.json",
+  "providers",
   "schemas",
   "examples",
   "conformance",

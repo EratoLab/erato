@@ -74,7 +74,6 @@ function fakeApi(request: OperationRequest = operation()) {
     continue: vi.fn<ClientOperationApi["continue"]>(async () => {
       state = "completed";
     }),
-    cancel: vi.fn<ClientOperationApi["cancel"]>(async () => {}),
   } satisfies ClientOperationApi;
   return {
     api,
@@ -209,11 +208,8 @@ describe("ClientOperationCoordinator handler registry", () => {
     },
   );
 
-  it.each([
-    { consent: "ask" as const },
-    { consent: "native" as const, kind: "native.v1" },
-  ])("keeps $consent continuations detached", async (overrides) => {
-    const request = operation(overrides);
+  it("keeps ask continuations detached", async () => {
+    const request = operation({ consent: "ask" });
     const { api } = fakeApi(request);
     api.list.mockResolvedValue({
       enabled: true,
@@ -1146,16 +1142,16 @@ describe("ClientOperationCoordinator task calls", () => {
     const ready = operation({
       attempt_id: "00000000-0000-4000-8000-0000000000a2",
     });
-    const evidence = operation({
+    const unhandled = operation({
       attempt_id: "00000000-0000-4000-8000-0000000000a3",
-      kind: "local_evidence.v1",
+      kind: "another_kind.v1",
     });
     const { api } = fakeApi();
     api.list.mockResolvedValue(
       page([
         { request: expired, state: "pending" },
         { request: ready, state: "ready" },
-        { request: evidence, state: "ready" },
+        { request: unhandled, state: "ready" },
       ]),
     );
     const { coordinator } = coordinatorWith(api);

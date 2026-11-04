@@ -368,7 +368,7 @@ async fn accept_result_in(
         return Err(eyre!("Operation identity mismatch"));
     }
     // A late fast-path result may settle only the original, still-unclaimed
-    // attempt. It cannot race a different executor's claim or native approval.
+    // attempt. It cannot race a different executor's claim.
     let binding_matches = if let Some(token) = token {
         row.claim_token == Some(token)
             && row.claim_binding.as_ref() == Some(&serde_json::to_value(&result.executor)?)

@@ -1739,8 +1739,7 @@ mod tests {
                 .client_tools
                 .tools
                 .insert("tool".into(), tool.clone());
-            let registry =
-                crate::services::client_operations::registry(config, None).expect("registry");
+            let registry = crate::services::client_operations::registry(config).expect("registry");
             durable_dispatch(config, &registry, tool)
         };
         let mut config = AppConfig::default();

@@ -5,7 +5,10 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { ConversationMessagesProvider } from "@/components/ui/Message/ConversationMessages";
 import { TaskResultStep } from "@/components/ui/Trace/steps/TaskResultStep";
 import { useGenerationStatusStore } from "@/hooks/chat/store/generationStatusStore";
-import { publishLocalTaskViews } from "@/lib/desktopSidecar/localTaskViewsStore";
+import {
+  useSidecarReviewStore,
+  markAwaitingReview,
+} from "@/lib/desktopSidecar/sidecarReviewStore";
 import { StaticFeatureConfigProvider } from "@/providers/FeatureConfigProvider";
 
 import type { ContentPartTaskResult } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
@@ -260,23 +263,18 @@ describe("TaskResultStep", () => {
     ).toBe("true");
   });
 
-  describe("a local-evidence task waiting for its review", () => {
+  describe("a task whose desktop sidecar call waits for its review", () => {
     const waiting = part({
       status: "input_required",
       reason: "client_pending",
       summary: "",
     });
-    afterEach(() => publishLocalTaskViews([]));
+    afterEach(() =>
+      useSidecarReviewStore.setState({ waitingByChatId: new Map() }),
+    );
 
-    it("shows the state this device knows of the job", () => {
-      publishLocalTaskViews([
-        {
-          id: "job",
-          chatId: waiting.child_chat_id,
-          messageId: "task-message",
-          state: "ready_for_review",
-        },
-      ]);
+    it("says that a call of the task waits for its review on this device", () => {
+      markAwaitingReview(waiting.child_chat_id);
       render(<TaskResultStep part={waiting} />);
       const pill = screen.getByTestId("task-result-status");
       expect(pill).toHaveTextContent(
@@ -288,15 +286,8 @@ describe("TaskResultStep", () => {
       ).toHaveTextContent("Follow it in the task's own chat:");
     });
 
-    it("says only where the review happens on a device that does not know the job", () => {
-      publishLocalTaskViews([
-        {
-          id: "other",
-          chatId: "another-task",
-          messageId: "m",
-          state: "ready_for_review",
-        },
-      ]);
+    it("says only where the review happens on a device where no call of the task waits", () => {
+      markAwaitingReview("another-task");
       render(<TaskResultStep part={waiting} />);
       const card = screen.getByTestId("task-result-step");
       expect(screen.getByTestId("task-result-status")).toHaveTextContent(
@@ -313,8 +304,8 @@ describe("TaskResultStep", () => {
       ).not.toBeInTheDocument();
     });
 
-    // The device forgets a job once it is acknowledged, so after the task
-    // reported again only that later report says how it ended.
+    // A call stops waiting once its review ends, so after the task reported
+    // again only that later report says how it ended.
     describe("once a later report of the same task is in the chat", () => {
       const row = (id: string, result: ContentPartTaskResult): Message => ({
         id,
@@ -359,19 +350,12 @@ describe("TaskResultStep", () => {
         ).toBe("false");
       });
 
-      it("keeps the state this device still knows of the job", () => {
-        publishLocalTaskViews([
-          {
-            id: "job",
-            chatId: waiting.child_chat_id,
-            messageId: "task-message",
-            state: "continuing",
-          },
-        ]);
+      it("still says so while another call of the task waits for its review", () => {
+        markAwaitingReview(waiting.child_chat_id);
         renderBeside([finished]);
 
         expect(screen.getByTestId("task-result-status")).toHaveTextContent(
-          "Continuing the original task",
+          "Ready for review in the Erato desktop app",
         );
       });
 
@@ -391,14 +375,7 @@ describe("TaskResultStep", () => {
     });
 
     it("keeps the decision wording for a task that waits on a question", () => {
-      publishLocalTaskViews([
-        {
-          id: "job",
-          chatId: waiting.child_chat_id,
-          messageId: "m",
-          state: "ready_for_review",
-        },
-      ]);
+      markAwaitingReview(waiting.child_chat_id);
       render(
         <TaskResultStep
           part={part({ status: "input_required", reason: "approval_pending" })}

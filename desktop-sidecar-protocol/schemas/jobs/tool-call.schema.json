@@ -1,0 +1,24 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://schemas.erato.ai/desktop-sidecar/v1/jobs/tool-call.schema.json",
+  "title": "JobToolCall",
+  "description": "One tool call of a job. `server` names the provider: `sidecar` is reserved for the desktop app's built-in tools (providers/sidecar.json); other ids are reserved for organization-declared local MCP servers.",
+  "type": "object",
+  "properties": {
+    "server": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_-]{0,63}$"
+    },
+    "name": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_.-]{1,128}$"
+    },
+    "arguments": {
+      "description": "The tool's arguments, as in MCP `tools/call`. Absent means an empty object.",
+      "type": "object",
+      "additionalProperties": true
+    }
+  },
+  "required": ["server", "name"],
+  "additionalProperties": true
+}

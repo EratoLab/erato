@@ -1,0 +1,122 @@
+{
+  "name": "run two independent tool calls as one job, one of them failing, then acknowledge",
+  "messages": [
+    {
+      "direction": "client-to-sidecar",
+      "message": {
+        "jsonrpc": "2.0",
+        "id": "c-job-start",
+        "method": "jobs.start.v1",
+        "params": {
+          "calls": [
+            {
+              "server": "sidecar",
+              "name": "list_sidecar_mailboxes",
+              "arguments": {}
+            },
+            {
+              "server": "sidecar",
+              "name": "read_sidecar_conversation",
+              "arguments": {
+                "mailboxId": "00000000000000000000000000000000",
+                "internetMessageId": "<message-1@example.com>"
+              }
+            }
+          ],
+          "wait_ms": 10000
+        },
+        "x-erato-deadline-at": "2026-11-02T10:00:20.000Z"
+      }
+    },
+    {
+      "direction": "sidecar-to-client",
+      "message": {
+        "jsonrpc": "2.0",
+        "id": "c-job-start",
+        "result": {
+          "handle": "job-handle-0123456789abcdefghijklmnopqrstuv",
+          "state": "completed",
+          "results": [
+            {
+              "result": {
+                "content": [],
+                "structuredContent": {
+                  "outlook.list_mailboxes.v1": {
+                    "result": {
+                      "mailboxes": [
+                        {
+                          "id": "8b7d2f4a6c9e1035d8a1b2c3e4f50617",
+                          "displayName": "Work",
+                          "emailAddress": "work@example.com",
+                          "profileName": "Work Profile",
+                          "source": "windowsOutlook"
+                        }
+                      ],
+                      "warnings": []
+                    }
+                  },
+                  "sources.list.v1": {
+                    "result": {
+                      "sources": [
+                        {
+                          "sourceId": "3f2a9c4e-6b1d-4e8f-9a0b-1c2d3e4f5a6b",
+                          "sourceKind": "OST",
+                          "sourceKey": "outlook-store:work",
+                          "locator": {
+                            "mailboxId": "8b7d2f4a6c9e1035d8a1b2c3e4f50617"
+                          },
+                          "enabled": true,
+                          "discoveryCursor": null,
+                          "completedScanId": null,
+                          "lastSuccessAt": "2026-11-02T09:55:00Z",
+                          "lastErrorCode": null,
+                          "capabilities": {
+                            "conversations": true,
+                            "folders": true
+                          }
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "result": {
+                "content": [],
+                "structuredContent": {
+                  "outlook.get_conversation.v1": {
+                    "error": {
+                      "code": -32602,
+                      "message": "Unknown Outlook mailbox."
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "direction": "client-to-sidecar",
+      "message": {
+        "jsonrpc": "2.0",
+        "id": "c-job-ack",
+        "method": "jobs.ack.v1",
+        "params": { "handle": "job-handle-0123456789abcdefghijklmnopqrstuv" }
+      }
+    },
+    {
+      "direction": "sidecar-to-client",
+      "message": {
+        "jsonrpc": "2.0",
+        "id": "c-job-ack",
+        "result": {
+          "handle": "job-handle-0123456789abcdefghijklmnopqrstuv",
+          "state": "acked"
+        }
+      }
+    }
+  ]
+}

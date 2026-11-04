@@ -1,0 +1,36 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://schemas.erato.ai/desktop-sidecar/v1/jobs/provider.schema.json",
+  "title": "ToolProvider",
+  "description": "A provider whose tools this sidecar runs as jobs.",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_-]{0,63}$"
+    },
+    "tools": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9_.-]{1,128}$"
+      }
+    },
+    "readOnly": {
+      "type": "boolean"
+    },
+    "egress": {
+      "description": "Whether the provider's tools reach beyond this device: `none` or `open_world`. Open vocabulary; a client treats any other value as `open_world`.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "available": {
+      "description": "False when the provider cannot run calls at all. A refusal of one tool is a per-call error instead.",
+      "type": "boolean"
+    }
+  },
+  "required": ["id", "tools", "readOnly", "egress", "available"],
+  "additionalProperties": true
+}

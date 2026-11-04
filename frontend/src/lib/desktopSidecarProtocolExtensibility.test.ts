@@ -8,9 +8,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   validateDiagnosticsEchoV1Params,
-  validateLocalTaskStatus,
-  validateLocalTasksStartV1Params,
-  validateLocalTasksStatusV1Result,
+  validateJobsStartV1Params,
+  validateJobsStatusV1Result,
   validateOutlookGetConversationV1Result,
   validateSearchQueryV1Result,
   validateSidecarConfigureV1Params,
@@ -229,22 +228,21 @@ describe("desktop sidecar protocol extensibility", () => {
     expect(configure(null)).toBe(true);
     expect(configure({ email: "jane@home.example" })).toBe(false);
 
-    const start = JSON.parse(
-      await readFile(
-        path.join(protocolRoot, "conformance/fixtures/local-delegation.json"),
-        "utf8",
-      ),
-    );
+    const { message: start } = JSON.parse(
+      await readFile(path.join(protocolRoot, "examples/jobs.json"), "utf8"),
+    ).messages[0];
     expect(
-      validateLocalTasksStartV1Params({
-        ...start,
+      validateJobsStartV1Params({
+        ...start.params,
         futureRequestField: { revision: 2 },
-        binding: { ...start.binding, futureBindingField: true },
-        plan: { ...start.plan, futurePlanField: "ignored" },
+        calls: start.params.calls.map((call: object) => ({
+          ...call,
+          futureCallField: true,
+        })),
       }),
     ).toBe(true);
     expect(
-      validateLocalTasksStatusV1Result({
+      validateJobsStatusV1Result({
         handle: "h".repeat(32),
         state: "ready_for_review",
         futureStatusField: "ignored",
@@ -257,7 +255,7 @@ describe("desktop sidecar protocol extensibility", () => {
       validateDiagnosticsEchoV1Params({ message: 42, futureField: true }),
     ).toBe(false);
     expect(
-      validateLocalTaskStatus({
+      validateJobsStatusV1Result({
         handle: "h".repeat(32),
         state: "future_state",
         futureField: true,

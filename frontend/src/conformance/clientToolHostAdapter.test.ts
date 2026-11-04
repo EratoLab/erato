@@ -3,7 +3,6 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   clientToolScopeChanged,
   registerClientToolExecutor,
-  registerLocalOnlyClientTools,
   resetClientToolRegistryForTests,
 } from "@/hooks/chat/clientToolExecutors";
 import { useConfirmationRegistryStore } from "@/hooks/chat/store/confirmationRegistryStore";
@@ -47,8 +46,6 @@ type Flaw =
   | "declines without the declined code"
   | "asks before checking the grant"
   | "hangs on a read"
-  | "keeps its results on the device"
-  | "answers local_only"
   | "reports a context_ref without a context version"
   | "trusts the model's document identity"
   | "does not list its scope check"
@@ -290,9 +287,6 @@ const fakeHost = ({
     if (flaw === "hangs on a read" && !asks) {
       await new Promise<never>(() => {});
     }
-    if (flaw === "answers local_only") {
-      return { ok: true, disposition: "local_only" };
-    }
     if (
       asks &&
       flaw !== "asks before checking the grant" &&
@@ -372,9 +366,6 @@ const fakeHost = ({
   registerClientToolExecutor(WRITE, write, () => true, {
     acceptsGrantCalls: flaw === "advertises its write",
   });
-  if (flaw === "keeps its results on the device") {
-    registerLocalOnlyClientTools([READ], () => true);
-  }
   if (flaw !== "registers no binding for its read") {
     unregister.push(
       registerOperationExecutor(READ, () => ({
@@ -672,16 +663,6 @@ describe("clientToolHostAdapterConformanceFailures", () => {
     [
       "hangs on a read",
       'lineage (fake_host): "fake_read" under a valid grant does not settle within 1000 ms',
-      true,
-    ],
-    [
-      "keeps its results on the device",
-      'registration (fake_host): "fake_read" keeps its results on the device, so a task\'s call is never answered',
-      true,
-    ],
-    [
-      "answers local_only",
-      'lineage (fake_host): "fake_read" under a valid grant keeps its result on the device, so the task gets no answer',
       true,
     ],
     [

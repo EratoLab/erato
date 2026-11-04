@@ -10,11 +10,14 @@ export interface DiscoverResult {
   installationId?: string;
   document: DiscoveryDocument;
   /**
-   * Opaque security declaration. Unknown profiles remain discoverable but cannot enable delegation or legacy content access.
+   * Whether this sidecar runs in strict mode, as installed by its bootstrap; configuration never sets or relaxes it. Absent from sidecars built before package 0.1.44.
    */
-  localDelegation?: {
-    [k: string]: unknown;
-  };
+  strict?: boolean;
+  jobs?: JobsCapability;
+  /**
+   * The providers whose tools `jobs.start.v1` accepts. Absent from sidecars built before package 0.1.44.
+   */
+  providers?: ToolProvider[];
   [k: string]: unknown;
 }
 export interface ProductInfo {
@@ -64,5 +67,30 @@ export interface CapabilityDescriptor {
 export interface CatalogueIdentity {
   revision: string;
   digest: string;
+  [k: string]: unknown;
+}
+/**
+ * Present in discovery when the sidecar runs tool calls through the jobs.* envelope, with its limits: the most calls one job carries and the longest `wait_ms` it honors. Absent from sidecars built before package 0.1.44; clients then use the direct RPCs.
+ */
+export interface JobsCapability {
+  maxCalls: number;
+  maxWaitMs: number;
+  [k: string]: unknown;
+}
+/**
+ * A provider whose tools this sidecar runs as jobs.
+ */
+export interface ToolProvider {
+  id: string;
+  tools: string[];
+  readOnly: boolean;
+  /**
+   * Whether the provider's tools reach beyond this device: `none` or `open_world`. Open vocabulary; a client treats any other value as `open_world`.
+   */
+  egress: string;
+  /**
+   * False when the provider cannot run calls at all. A refusal of one tool is a per-call error instead.
+   */
+  available: boolean;
   [k: string]: unknown;
 }

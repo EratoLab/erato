@@ -1,10 +1,9 @@
 # Durable client operations
 
-Status: dark shared mechanism with two kind families. Native local evidence is a
-compiled kind, registered only when its separate disabled-by-default configuration
-is enabled. The configured `client_tool.v1` kind (ERMAIN-911) is registered once per
-client tool that opts in; its first opt-in is Outlook `fetch_availability`. Both stay
-inactive until `client_tools.durable_operations_enabled` is on.
+Status: dark shared mechanism. The configured `client_tool.v1` kind (ERMAIN-911) is
+registered once per client tool that opts in; its first opt-in is Outlook
+`fetch_availability`. It stays inactive until `client_tools.durable_operations_enabled`
+is on.
 
 ## Boundaries and compatibility
 
@@ -22,8 +21,7 @@ Read-only/idempotent executors may retry; this mechanism does not authorize muta
 A durable attempt is a logged database record, independent of a replica or browser
 pane. The account comes from authentication. Device and host-context identifiers
 come from the installed client, not model arguments. They prevent accidental
-cross-context execution; they are not device attestation. A kind such as native
-local research must additionally verify its own signed binding and native receipt.
+cross-context execution; they are not device attestation.
 Capability registration is an availability check, never authorization.
 
 `operation_id`, `attempt_id`, `base_revision`, `input`, `outcome` and `executor`
@@ -46,9 +44,9 @@ message identify today's logical turn. Result payloads are `value`, `reference` 
 3. Account-scoped discovery is read-only and excludes another account's attempts.
    Claim checks the executor registration, realm and host identity. A permitted
    change of device requires explicit user confirmation even for `consent: none`.
-   Native consent remains the native kind's responsibility. `client_tool.v1` permits
-   no change of device, so only the same device and mailbox can claim it. Claim
-   re-reads the user's decision for the tool; `never_allow` withdraws the call.
+   `client_tool.v1` permits no change of device, so only the same device and
+   mailbox can claim it. Claim re-reads the user's decision for the tool;
+   `never_allow` withdraws the call.
 4. Result acceptance checks the claim fence, expiry, input revision and validator.
    Duplicate identical results are successful no-ops; different replacements fail.
    Committing the result makes continuation durable and discoverable. It does not
@@ -78,16 +76,13 @@ the grant's binding may answer (see "Grant operations" below).
 
 ## Rollout prerequisites and current limits
 
-The generic coordinator is extracted alongside the native local evidence handler.
-See [the sidecar integration record](local-evidence-operations.md) for the
-adapter, trust boundaries and completed rebase checklist. The integration supplies
-account-scoped discovery, claim/result/continuation, executor headers,
-`client_tool_pending` presentation, shell lifecycle handling and native review.
-Real-host qualification is still required before enablement.
+The generic frontend coordinator supplies account-scoped discovery,
+claim/result/continuation, executor headers, `client_tool_pending` presentation and
+shell lifecycle handling. Real-host qualification is still required before enablement.
 
-The coordinator runs its built-in handlers (local evidence) beside a shared handler
-registry that any shell may populate; today only the Outlook add-in registers one,
-for `fetch_availability`. It picks a handler by `kind` and
+The coordinator runs the handlers of a shared registry that any shell may populate;
+today only the Outlook add-in registers one, for `fetch_availability`. It picks a
+handler by `kind` and
 the handler's optional `matches(request)`. The generic handler matches its tool's
 bare name in any namespace, as the live call's executor lookup does, because the
 namespace is deployment configuration. A handler's `defer(request)` skips the
@@ -113,8 +108,8 @@ An interactive executor continues a settled `consent: none` operation with
 `X-Erato-Client-Tools`. The coordinator consumes this SSE response and answers
 later live calls even without an open chat view. Continuation uses the same
 assistant message, generation pipeline and saved consumption. Clients without
-the SSE Accept header retain detached JSON continuation; native/ask consent
-remains inbox-only.
+the SSE Accept header retain detached JSON continuation; ask consent remains
+inbox-only.
 Expired pending/claimed operations use detached continuation even when the
 original executor is unavailable or the observing pane has a different binding;
 the server authors the expiry without executing the client tool. Ready/continuing
@@ -153,7 +148,7 @@ as `context_unavailable`. A recovered owner resets this grace period; result
 delivery, explicit abort and the tool's original timeout remain effective during
 it. Other non-durable calls retain their existing delivery and timeout behavior.
 
-A kind with `requires_binding()` (local evidence and compiled test kinds) makes a
+A kind with `requires_binding()` (compiled test kinds) makes a
 valid `X-Erato-Executor` binding mandatory when the flag is enabled; without one
 the call fails. `client_tool.v1` does not require it. Its call keeps today's
 in-memory path in these cases:
@@ -168,9 +163,8 @@ in-memory path in these cases:
 
 Roll out the coordinator/header support before enabling a kind. The live
 `clienttoolresult` POST carries the tool's own executor header. An executor that
-yields leaves the shared submit header to a non-yielding one, which keeps the
-sidecar binding authoritative for local evidence. Synthetic kinds supply a binding
-through their server-owned offer policy; they must derive it from authenticated
+yields leaves the shared submit header to a non-yielding one. Synthetic kinds supply
+a binding through their server-owned offer policy; they must derive it from authenticated
 context, never model arguments. Kind registration is not permission to invent an
 unbound device.
 
@@ -194,12 +188,12 @@ tools bound to the primary first, then by qualified name.
 
 `user_confirmed` consent and device/host identifiers are client assertions, at the
 same trust level as existing client actions. Kinds requiring stronger proof must
-validate it themselves, as the native kind does with signed binding and receipts.
+validate it themselves.
 The Outlook mailbox binding is client-asserted routing that carries only a digest
 of the mailbox address. Attempt expiry and claim lease are per kind, and the
-lease is bounded by the expiry. Local evidence keeps 24 hours and five minutes,
-which its signed plan requires. Configured tools use `attempt_expiry_secs` and
-`claim_lease_secs` (defaults 3600 and 120; the lease is at least 60 seconds).
+lease is bounded by the expiry. The defaults are 24 hours and five minutes.
+Configured tools use `attempt_expiry_secs` and `claim_lease_secs` (defaults 3600
+and 120; the lease is at least 60 seconds).
 Expiry counts from dispatch, because the identity is persisted before the call
 runs so that a crash resumes it; a timeout park therefore needs an expiry that
 covers `timeout_ms` plus the lease.
@@ -214,7 +208,7 @@ per-call validation feedback, including results racing escalation. Raw payloads
 and validator errors are not echoed to the model. Wrong identities/bindings remain
 HTTP refusals. Claimed durable results of a kind with `settle_invalid_claimed()`,
 which `client_tool.v1` sets, also settle as fixed feedback, so an executor cannot
-loop on its own malformed output. Local evidence keeps refusing them with 400.
+loop on its own malformed output. Other kinds keep refusing them with 400.
 An opted-in call's fast result passes the kind validator too, so the model sees
 the kind's `{"status":"success","result":…}` wrapper on both paths.
 `OperationError.message` (at most 1024 characters, control characters replaced)
@@ -233,10 +227,9 @@ the original submission limit or removes submission semantics during that turn.
 
 ## Consent, withdrawal and crash accounting
 
-Only `consent: none` can use the in-memory fast path. `ask` and `native`
-operations enter account discovery immediately without a client-call SSE. Neither
-can accept an unclaimed legacy/fast result. `ask` requires claim confirmation;
-`native` additionally requires the kind's proof validator, not a confirmation bit.
+Only `consent: none` can use the in-memory fast path. `ask` operations enter
+account discovery immediately without a client-call SSE, cannot accept an
+unclaimed legacy/fast result and require claim confirmation.
 
 Per-tool decisions (#1268) interact with kinds in two ways. A compiled kind asks
 through its own consent policy, so a saved `ask` decision runs it. A configured
@@ -402,11 +395,10 @@ Every replica must load the same `durable` tables. A replica without the tool's
 kind treats its open attempts as unauthorized and withdraws them at claim.
 
 Rolling deploys (ERMAIN-1034). `OperationRequest` is server-authored and only
-read back, so it accepts keys a newer release adds. A continuation reads only
-the stored result's `outcome` (`stored_result_outcome`, which is all
-`reoffer_after_result` needs), so a row written by a newer release with extra
-keys still continues; `/result` and `clienttoolresult` keep refusing unknown keys
-in client-posted bodies. Every new field on `OperationResult`, `OperationValue`,
+read back, so it accepts keys a newer release adds. A continuation does not read
+the stored result, so a row written by a newer release with extra keys still
+continues; `/result` and `clienttoolresult` keep refusing unknown keys in
+client-posted bodies. Every new field on `OperationResult`, `OperationValue`,
 `OperationRequest` or `ValidatedResult` must be optional and skipped when unset,
 so rows and bodies without it stay byte-identical. What older replicas still
 cannot do: a replica below ERMAIN-1032 cannot parse a request with `lineage`, and
@@ -447,8 +439,8 @@ own durable calls, all keyed on `OperationRequest.lineage` (set only for these):
   and a row without a holder (claimed through an older replica) is renewed by
   any client of the binding, which the row then names. After it lapsed a claim
   gets a new token, and a result posted with the old one is refused. The user's
-  own `client_tool.v1` calls renew the same way (ERMAIN-1034); local evidence
-  keeps a same-binding re-claim as it was, whatever the claimants.
+  own `client_tool.v1` calls renew the same way (ERMAIN-1034); other kinds keep
+  a same-binding re-claim as it was, whatever the claimants.
 - **Results** arrive only through a claim: `clienttoolresult` answers 409
   "Operation requires a claim", the cross-replica command path drops them, and the
   park tail never accepts a raced-in fast result for them.
@@ -468,9 +460,8 @@ own durable calls, all keyed on `OperationRequest.lineage` (set only for these):
   retries a renewal lost in transport while the claim holds, and aborts the call
   on a refused renewal, the attempt's end or dispose. Client tool calls of the
   user's own turn run one at a time in a queue beside the sweep, so a device
-  prompt in one never holds up the sweep, its task calls or its streams; local
-  evidence keeps the sequential sweep. Non-lineage operations keep the observer
-  rule and the attached continuation.
+  prompt in one never holds up the sweep, its task calls or its streams.
+  Non-lineage operations keep the observer rule and the attached continuation.
 
 Turning the flag on has costs beyond configured tools. Generation starts take the
 compare-and-set lease path with the lease identity guard. Every abort runs the
@@ -595,28 +586,14 @@ calls. With it off, the stream endpoint answers 404 and no row is written.
   `timeout_ms` starts a local timer that aborts the call's work and any prompt it
   raised when the server stops waiting. The user's own claimed calls renew their
   claim while they run, as task calls do, so a device prompt never outlives the
-  claim its result needs. A renewal that does not move the claim's end (local
-  evidence, or a replica without ERMAIN-1034) ends the renewals, and that claim
-  lapses as before.
+  claim its result needs. A renewal that does not move the claim's end (a
+  replica without ERMAIN-1034) ends the renewals, and that claim lapses as
+  before.
 
-## Local evidence integration
+## References
 
-The completed [rebase delta](local-evidence-operations.md) records the removed
-private checkpoint, job lifecycle and continuation paths. The native kind uses the
-shared attempts table, with a narrow export/binding extension. Its offer policy
-retains the single-replica, async-leaf, exclusive-scope and depth-one restrictions.
-Ordinary configured client tools remain suppressed in delegated children. Only a
-client task's grant offers them, live over the executor stream or as grant
-operations (ERMAIN-1001, ERMAIN-1032, see
-[delegated-client-tools.md](delegated-client-tools.md)). Local evidence keeps its
-own rules: its requests never carry `lineage`.
-
-Protocol 0.1.28 keeps its existing signed fields: native `jobId` is the generic
-attempt UUID; native `attemptId` retains the original generation UUID. No native
-consent, receipt or export format changed for the shared-operation integration.
-
-References: Workflow contract v0 (Linear eb6c078d27a0), Operation attempts v0
-§3.3, §5 and §6, Delegation Foundations (c7ac285ded0d), ERMAIN-854
-counter/selection continuity, ERMAIN-911 configured client-tool kind. This does
-not implement ERMAIN-759's general command queue, ERMAIN-762's orphan parent-card
-reconciliation, or ERMAIN-765's general interrupted-tool reaper.
+Workflow contract v0 (Linear eb6c078d27a0), Operation attempts v0 §3.3, §5 and §6,
+Delegation Foundations (c7ac285ded0d), ERMAIN-854 counter/selection continuity,
+ERMAIN-911 configured client-tool kind. This does not implement ERMAIN-759's
+general command queue, ERMAIN-762's orphan parent-card reconciliation, or
+ERMAIN-765's general interrupted-tool reaper.

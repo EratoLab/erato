@@ -9,6 +9,11 @@ import {
 import { beforeEach, expect, it, vi } from "vitest";
 
 import {
+  fixtureDiscovery,
+  NORMAL_MODE,
+  STRICT_MODE,
+} from "@/lib/desktopSidecar/__tests__/sidecarJobTestUtils";
+import {
   fetchProfile,
   fetchUpdateProfilePreferences,
   useProfile,
@@ -17,7 +22,10 @@ import {
 import { SidecarToolDecisions } from "./SidecarToolDecisions";
 
 import type { UserProfile } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
-import type { DesktopSidecarClient } from "@erato/desktop-sidecar-protocol";
+import type {
+  DesktopSidecarClient,
+  SidecarSnapshot,
+} from "@erato/desktop-sidecar-protocol";
 
 vi.mock("@/lib/generated/v1betaApi/v1betaApiComponents", () => ({
   fetchProfile: vi.fn(),
@@ -41,11 +49,12 @@ beforeEach(() => {
   } as ReturnType<typeof useProfile>);
 });
 
-function setup(supported: string[]) {
+function setup(supported: string[], discovery: Partial<SidecarSnapshot> = {}) {
   const queryClient = new QueryClient();
   const invalidate = vi.spyOn(queryClient, "invalidateQueries");
   const client = {
     supports: (method: string) => supported.includes(method),
+    getSnapshot: () => ({ state: "ready", ...discovery }),
   } as unknown as DesktopSidecarClient;
   render(
     <QueryClientProvider client={queryClient}>
@@ -73,6 +82,43 @@ it("lists only the tools this sidecar supports, with their stored decision", () 
   expect(
     screen.queryByRole("radiogroup", { name: "List mailboxes on this device" }),
   ).not.toBeInTheDocument();
+});
+
+it.each([NORMAL_MODE, STRICT_MODE])(
+  "lists the tools a %s runs as jobs, as the chat offers them",
+  (mode) => {
+    setup(
+      ["jobs.start.v1", "jobs.status.v1", "jobs.review.v1"],
+      fixtureDiscovery(mode),
+    );
+    expect(screen.getAllByRole("radiogroup")).toHaveLength(6);
+  },
+);
+
+it("lists only the account-level tools for a strict sidecar without jobs.review.v1", () => {
+  // Without the review opener, a reviewed tool's job could never be decided.
+  setup(["jobs.start.v1", "jobs.status.v1"], fixtureDiscovery(STRICT_MODE));
+  expect(screen.getAllByRole("radiogroup")).toHaveLength(2);
+  expect(
+    screen.getByRole("radiogroup", { name: "List mailboxes on this device" }),
+  ).toBeInTheDocument();
+  expect(
+    screen.queryByRole("radiogroup", { name: "Search local emails and files" }),
+  ).not.toBeInTheDocument();
+});
+
+it("lists no tool for a strict sidecar that runs no jobs", () => {
+  const queryClient = new QueryClient();
+  const client = {
+    supports: () => true,
+    getSnapshot: () => ({ state: "ready", strict: true }),
+  } as unknown as DesktopSidecarClient;
+  const { container } = render(
+    <QueryClientProvider client={queryClient}>
+      <SidecarToolDecisions client={client} />
+    </QueryClientProvider>,
+  );
+  expect(container).toBeEmptyDOMElement();
 });
 
 it("merges the new decision into the stored ones and refreshes the profile", async () => {

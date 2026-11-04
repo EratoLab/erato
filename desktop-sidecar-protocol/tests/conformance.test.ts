@@ -11,8 +11,6 @@ import {
   validateDiscoverResult,
   validateDiscoveryDocument,
   validateJsonRpcEnvelope,
-  validateLocalTasksStartV1Params,
-  validateLocalTasksStatusV1Result,
   validateOutlookListEmailsV1Params,
   validateOutlookListMailboxesV1Result,
   validateOutlookSearchEmailsV1Params,
@@ -39,13 +37,6 @@ interface InstallationIdentityFixture {
   invalidInstallationIds: string[];
 }
 
-interface LocalDelegationFixture {
-  binding: Record<string, unknown>;
-  plan: Record<string, unknown>;
-  contextHandle: string;
-  authorization: string;
-}
-
 describe("language-neutral conformance fixtures", () => {
   it("rejects every invalid message fixture", async () => {
     const fixture = await readFixture<InvalidMessageFixture>(
@@ -66,28 +57,6 @@ describe("language-neutral conformance fixtures", () => {
       }),
     ).toBe(true);
     expect(validateDiagnosticsEchoV1Params({ message: 42 })).toBe(false);
-  });
-
-  it("accepts additive fields throughout security-sensitive delegation objects", async () => {
-    const fixture = await readFixture<LocalDelegationFixture>(
-      "local-delegation.json",
-    );
-    const start = fixture;
-    expect(
-      validateLocalTasksStartV1Params({
-        ...start,
-        futureRequestField: { version: 2 },
-        binding: { ...start.binding, futureBindingField: true },
-        plan: { ...start.plan, futurePlanField: "ignored" },
-      }),
-    ).toBe(true);
-    expect(
-      validateLocalTasksStatusV1Result({
-        handle: "h".repeat(32),
-        state: "ready_for_review",
-        futureStatusField: { revision: 2 },
-      }),
-    ).toBe(true);
   });
 
   it("accepts discovery results with and without an installation id (both rollout directions)", async () => {

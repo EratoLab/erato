@@ -9,8 +9,7 @@ import {
   resultPreview,
 } from "@/lib/delegation/delegatedRunControls";
 import { delegationReasonLabel } from "@/lib/delegation/delegationLabels";
-import { localTaskLabel } from "@/lib/desktopSidecar/localTaskLabels";
-import { useLocalTaskViewsStore } from "@/lib/desktopSidecar/localTaskViewsStore";
+import { useSidecarReviewStore } from "@/lib/desktopSidecar/sidecarReviewStore";
 import { useDelegatedRunOpener } from "@/providers/DelegatedRunOpenProvider";
 import { hasLaterTaskResult } from "@/utils/chat/taskResultFolds";
 import { getChatUrl } from "@/utils/chat/urlUtils";
@@ -20,7 +19,6 @@ import { railIconFor } from "../icons";
 import { SettledInfoPill, ToolStatusPill } from "./ToolStatusPill";
 
 import type { TraceStepStatus } from "../types";
-import type { LocalTaskViewState } from "@/lib/desktopSidecar/localTaskCoordinator";
 import type { ContentPartTaskResult } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
 const WARNING_TONE = "bg-theme-warning-bg text-theme-warning-fg";
@@ -75,19 +73,16 @@ const statusPill = (status: string) => {
 };
 
 /**
- * A local-evidence task waits for its review in the Erato desktop app, not for
- * an answer in its chat. This device names the native state while it knows
- * the job, which it forgets once the job is acknowledged; otherwise the line
- * claims no wait.
+ * A task whose desktop sidecar call waits on the client waits for the Erato
+ * desktop app, where the call's review happens, not for an answer in its
+ * chat. This device says so while one of the task's calls waits for its
+ * review here; otherwise the line claims no wait.
  */
-const localReviewPill = (
-  state: LocalTaskViewState | undefined,
-  replaced: boolean,
-) => (
+const localReviewPill = (awaitingReview: boolean, replaced: boolean) => (
   <SettledInfoPill
     label={
-      state !== undefined
-        ? localTaskLabel(state)
+      awaitingReview
+        ? t`Ready for review in the Erato desktop app`
         : replaced
           ? t({
               id: "trace.taskResult.replacedByLaterReport",
@@ -98,7 +93,7 @@ const localReviewPill = (
               message: "Review in the Erato desktop app",
             })
     }
-    toneClassName={state === "ready_for_review" ? WARNING_TONE : undefined}
+    toneClassName={awaitingReview ? WARNING_TONE : undefined}
   />
 );
 
@@ -136,11 +131,11 @@ export const TaskResultStep = ({
   const modelName = part.model?.display_name ?? part.model?.chat_provider_id;
   const summary = hasReply ? resultPreview(part.summary) : part.summary.trim();
   // Client tasks always wait for their calls inside the parent's turn, so an
-  // async result that waits on the client comes from a local-evidence task.
+  // async result that waits on the client waits for a desktop sidecar call.
   const localReview =
     part.status === "input_required" && part.reason === "client_pending";
-  const localState = useLocalTaskViewsStore((state) =>
-    localReview ? state.byChatId.get(part.child_chat_id) : undefined,
+  const awaitingReview = useSidecarReviewStore(
+    (state) => localReview && state.waitingByChatId.has(part.child_chat_id),
   );
   const { child_chat_id: childChatId, sequence } = part;
   const selectReplaced = useCallback(
@@ -149,9 +144,9 @@ export const TaskResultStep = ({
     [localReview, childChatId, sequence],
   );
   const replaced = useConversationSelector(selectReplaced, Object.is);
-  const settled = replaced && localState === undefined;
+  const settled = replaced && !awaitingReview;
   const pill = localReview
-    ? localReviewPill(localState, replaced)
+    ? localReviewPill(awaitingReview, replaced)
     : statusPill(part.status);
   const needsAttention = part.status !== "completed" && !settled;
   const railStatus = settled ? "done" : railStatusFor(part.status);

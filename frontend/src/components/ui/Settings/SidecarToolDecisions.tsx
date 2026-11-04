@@ -5,6 +5,7 @@ import { useState } from "react";
 import {
   SIDECAR_CHAT_TOOL_METHODS,
   sidecarQualifiedToolName,
+  sidecarToolAvailable,
 } from "@/lib/desktopSidecar/chatTools";
 import {
   clientToolDecisionOf,
@@ -38,8 +39,8 @@ export function SidecarToolDecisions({
     decision: McpToolDecision;
   } | null>(null);
   const [failed, setFailed] = useState(false);
-  const tools = SIDECAR_CHAT_TOOL_METHODS.filter(({ method }) =>
-    client.supports(method),
+  const tools = SIDECAR_CHAT_TOOL_METHODS.filter((tool) =>
+    sidecarToolAvailable(client, tool),
   );
   if (tools.length === 0) return null;
   const save = async (qualifiedName: string, decision: McpToolDecision) => {

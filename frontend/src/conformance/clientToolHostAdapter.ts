@@ -19,7 +19,6 @@ import {
   clientToolApprovalScopeAnchor,
   getChildClientToolHeaders,
   getClientToolExecutor,
-  isClientToolResultLocalOnly,
 } from "@/hooks/chat/clientToolExecutors";
 import { useConfirmationRegistryStore } from "@/hooks/chat/store/confirmationRegistryStore";
 import {
@@ -261,9 +260,7 @@ const describeOutcome = (outcome: CallOutcome): string => {
       return `throws "${outcome.message}"`;
     case "settled":
       return outcome.result.ok
-        ? outcome.result.disposition === "local_only"
-          ? "keeps its result on the device, so the task gets no answer"
-          : "succeeds"
+        ? "succeeds"
         : `fails with "${outcome.result.error}" and codes [${(
             outcome.result.validationErrors ?? []
           )
@@ -560,11 +557,7 @@ export const clientToolHostAdapterConformanceFailures = async (
     turn: ClientToolHostTurn,
     outcome: CallOutcome,
   ) => {
-    if (
-      outcome.kind === "settled" &&
-      outcome.result.ok &&
-      outcome.result.disposition !== "local_only"
-    ) {
+    if (outcome.kind === "settled" && outcome.result.ok) {
       reads.push({ label, turn, result: outcome.result.result });
       return outcome.result.result;
     }
@@ -609,12 +602,6 @@ export const clientToolHostAdapterConformanceFailures = async (
       fail(
         "registration",
         `"${tool}" is missing from X-Erato-Child-Client-Tools`,
-      );
-    }
-    if (isClientToolResultLocalOnly(tool)) {
-      fail(
-        "registration",
-        `"${tool}" keeps its results on the device, so a task's call is never answered`,
       );
     }
   }

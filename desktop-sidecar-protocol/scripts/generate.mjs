@@ -43,123 +43,93 @@ const typeTargets = [
     "SidecarRequestPermissionV1Result",
   ],
 
-  ["schemas/delegation/binding.schema.json", "binding.ts", "LocalTaskBinding"],
-  ["schemas/delegation/plan.schema.json", "plan.ts", "LocalTaskPlan"],
-  ["schemas/delegation/status.schema.json", "status.ts", "LocalTaskStatus"],
+  ["schemas/jobs/tool-call.schema.json", "job-tool-call.ts", "JobToolCall"],
   [
-    "schemas/delegation/security.schema.json",
-    "security.ts",
-    "LocalDelegationSecurity",
+    "schemas/jobs/call-tool-result.schema.json",
+    "call-tool-result.ts",
+    "CallToolResult",
   ],
   [
-    "schemas/delegation/approved-export.schema.json",
-    "approved-export.ts",
-    "ApprovedLocalExport",
+    "schemas/jobs/sidecar-structured-content.schema.json",
+    "sidecar-structured-content.ts",
+    "SidecarStructuredContent",
   ],
   [
-    "schemas/delegation/receipt-claims.schema.json",
-    "receipt-claims.ts",
-    "LocalExportReceiptClaims",
+    "schemas/jobs/job-call-result.schema.json",
+    "job-call-result.ts",
+    "JobCallResult",
+  ],
+  ["schemas/jobs/job-status.schema.json", "job-status.ts", "JobStatus"],
+  [
+    "schemas/jobs/jobs-capability.schema.json",
+    "jobs-capability.ts",
+    "JobsCapability",
+  ],
+  ["schemas/jobs/provider.schema.json", "tool-provider.ts", "ToolProvider"],
+  [
+    "schemas/jobs/provider-table.schema.json",
+    "tool-provider-table.ts",
+    "ToolProviderTable",
   ],
   [
-    "schemas/delegation/context-claims.schema.json",
-    "context-claims.ts",
-    "LocalContextClaims",
+    "schemas/methods/jobs-start-v1-params.schema.json",
+    "jobs-start-v1-params.ts",
+    "JobsStartV1Params",
   ],
   [
-    "schemas/delegation/job-claims.schema.json",
-    "job-claims.ts",
-    "LocalJobClaims",
+    "schemas/methods/jobs-start-v1-result.schema.json",
+    "jobs-start-v1-result.ts",
+    "JobsStartV1Result",
   ],
   [
-    "schemas/methods/local-contexts-challenge-v1-params.schema.json",
-    "local-contexts-challenge-v1-params.ts",
-    "LocalContextsChallengeV1Params",
+    "schemas/methods/jobs-status-v1-params.schema.json",
+    "jobs-status-v1-params.ts",
+    "JobsStatusV1Params",
   ],
   [
-    "schemas/methods/local-contexts-challenge-v1-result.schema.json",
-    "local-contexts-challenge-v1-result.ts",
-    "LocalContextsChallengeV1Result",
+    "schemas/methods/jobs-status-v1-result.schema.json",
+    "jobs-status-v1-result.ts",
+    "JobsStatusV1Result",
   ],
   [
-    "schemas/methods/local-contexts-bind-v1-params.schema.json",
-    "local-contexts-bind-v1-params.ts",
-    "LocalContextsBindV1Params",
+    "schemas/methods/jobs-read-v1-params.schema.json",
+    "jobs-read-v1-params.ts",
+    "JobsReadV1Params",
   ],
   [
-    "schemas/methods/local-contexts-bind-v1-result.schema.json",
-    "local-contexts-bind-v1-result.ts",
-    "LocalContextsBindV1Result",
+    "schemas/methods/jobs-read-v1-result.schema.json",
+    "jobs-read-v1-result.ts",
+    "JobsReadV1Result",
   ],
   [
-    "schemas/methods/local-tasks-start-v1-params.schema.json",
-    "local-tasks-start-v1-params.ts",
-    "LocalTasksStartV1Params",
+    "schemas/methods/jobs-ack-v1-params.schema.json",
+    "jobs-ack-v1-params.ts",
+    "JobsAckV1Params",
   ],
   [
-    "schemas/methods/local-tasks-start-v1-result.schema.json",
-    "local-tasks-start-v1-result.ts",
-    "LocalTasksStartV1Result",
+    "schemas/methods/jobs-ack-v1-result.schema.json",
+    "jobs-ack-v1-result.ts",
+    "JobsAckV1Result",
   ],
   [
-    "schemas/methods/local-tasks-status-v1-params.schema.json",
-    "local-tasks-status-v1-params.ts",
-    "LocalTasksStatusV1Params",
+    "schemas/methods/jobs-cancel-v1-params.schema.json",
+    "jobs-cancel-v1-params.ts",
+    "JobsCancelV1Params",
   ],
   [
-    "schemas/methods/local-tasks-status-v1-result.schema.json",
-    "local-tasks-status-v1-result.ts",
-    "LocalTasksStatusV1Result",
+    "schemas/methods/jobs-cancel-v1-result.schema.json",
+    "jobs-cancel-v1-result.ts",
+    "JobsCancelV1Result",
   ],
   [
-    "schemas/methods/local-tasks-cancel-v1-params.schema.json",
-    "local-tasks-cancel-v1-params.ts",
-    "LocalTasksCancelV1Params",
+    "schemas/methods/jobs-review-v1-params.schema.json",
+    "jobs-review-v1-params.ts",
+    "JobsReviewV1Params",
   ],
   [
-    "schemas/methods/local-tasks-cancel-v1-result.schema.json",
-    "local-tasks-cancel-v1-result.ts",
-    "LocalTasksCancelV1Result",
-  ],
-  [
-    "schemas/methods/local-tasks-review-v1-params.schema.json",
-    "local-tasks-review-v1-params.ts",
-    "LocalTasksReviewV1Params",
-  ],
-  [
-    "schemas/methods/local-tasks-review-v1-result.schema.json",
-    "local-tasks-review-v1-result.ts",
-    "LocalTasksReviewV1Result",
-  ],
-  [
-    "schemas/methods/local-exports-status-v1-params.schema.json",
-    "local-exports-status-v1-params.ts",
-    "LocalExportsStatusV1Params",
-  ],
-  [
-    "schemas/methods/local-exports-status-v1-result.schema.json",
-    "local-exports-status-v1-result.ts",
-    "LocalExportsStatusV1Result",
-  ],
-  [
-    "schemas/methods/local-exports-read-v1-params.schema.json",
-    "local-exports-read-v1-params.ts",
-    "LocalExportsReadV1Params",
-  ],
-  [
-    "schemas/methods/local-exports-read-v1-result.schema.json",
-    "local-exports-read-v1-result.ts",
-    "LocalExportsReadV1Result",
-  ],
-  [
-    "schemas/methods/local-exports-ack-v1-params.schema.json",
-    "local-exports-ack-v1-params.ts",
-    "LocalExportsAckV1Params",
-  ],
-  [
-    "schemas/methods/local-exports-ack-v1-result.schema.json",
-    "local-exports-ack-v1-result.ts",
-    "LocalExportsAckV1Result",
+    "schemas/methods/jobs-review-v1-result.schema.json",
+    "jobs-review-v1-result.ts",
+    "JobsReviewV1Result",
   ],
 
   [
@@ -522,58 +492,34 @@ const validatorTargets = {
   validateSidecarRequestPermissionV1Result:
     "https://schemas.erato.ai/desktop-sidecar/v1/methods/sidecar-request-permission-v1-result.schema.json",
 
-  validateLocalTaskBinding:
-    "https://schemas.erato.ai/desktop-sidecar/v1/delegation/binding.schema.json",
-  validateLocalTaskPlan:
-    "https://schemas.erato.ai/desktop-sidecar/v1/delegation/plan.schema.json",
-  validateLocalTaskStatus:
-    "https://schemas.erato.ai/desktop-sidecar/v1/delegation/status.schema.json",
-  validateLocalDelegationSecurity:
-    "https://schemas.erato.ai/desktop-sidecar/v1/delegation/security.schema.json",
-  validateApprovedLocalExport:
-    "https://schemas.erato.ai/desktop-sidecar/v1/delegation/approved-export.schema.json",
-  validateLocalExportReceiptClaims:
-    "https://schemas.erato.ai/desktop-sidecar/v1/delegation/receipt-claims.schema.json",
-  validateLocalContextClaims:
-    "https://schemas.erato.ai/desktop-sidecar/v1/delegation/context-claims.schema.json",
-  validateLocalJobClaims:
-    "https://schemas.erato.ai/desktop-sidecar/v1/delegation/job-claims.schema.json",
-  validateLocalContextsChallengeV1Params:
-    "https://schemas.erato.ai/desktop-sidecar/v1/methods/local-contexts-challenge-v1-params.schema.json",
-  validateLocalContextsChallengeV1Result:
-    "https://schemas.erato.ai/desktop-sidecar/v1/methods/local-contexts-challenge-v1-result.schema.json",
-  validateLocalContextsBindV1Params:
-    "https://schemas.erato.ai/desktop-sidecar/v1/methods/local-contexts-bind-v1-params.schema.json",
-  validateLocalContextsBindV1Result:
-    "https://schemas.erato.ai/desktop-sidecar/v1/methods/local-contexts-bind-v1-result.schema.json",
-  validateLocalTasksStartV1Params:
-    "https://schemas.erato.ai/desktop-sidecar/v1/methods/local-tasks-start-v1-params.schema.json",
-  validateLocalTasksStartV1Result:
-    "https://schemas.erato.ai/desktop-sidecar/v1/methods/local-tasks-start-v1-result.schema.json",
-  validateLocalTasksStatusV1Params:
-    "https://schemas.erato.ai/desktop-sidecar/v1/methods/local-tasks-status-v1-params.schema.json",
-  validateLocalTasksStatusV1Result:
-    "https://schemas.erato.ai/desktop-sidecar/v1/methods/local-tasks-status-v1-result.schema.json",
-  validateLocalTasksCancelV1Params:
-    "https://schemas.erato.ai/desktop-sidecar/v1/methods/local-tasks-cancel-v1-params.schema.json",
-  validateLocalTasksCancelV1Result:
-    "https://schemas.erato.ai/desktop-sidecar/v1/methods/local-tasks-cancel-v1-result.schema.json",
-  validateLocalTasksReviewV1Params:
-    "https://schemas.erato.ai/desktop-sidecar/v1/methods/local-tasks-review-v1-params.schema.json",
-  validateLocalTasksReviewV1Result:
-    "https://schemas.erato.ai/desktop-sidecar/v1/methods/local-tasks-review-v1-result.schema.json",
-  validateLocalExportsStatusV1Params:
-    "https://schemas.erato.ai/desktop-sidecar/v1/methods/local-exports-status-v1-params.schema.json",
-  validateLocalExportsStatusV1Result:
-    "https://schemas.erato.ai/desktop-sidecar/v1/methods/local-exports-status-v1-result.schema.json",
-  validateLocalExportsReadV1Params:
-    "https://schemas.erato.ai/desktop-sidecar/v1/methods/local-exports-read-v1-params.schema.json",
-  validateLocalExportsReadV1Result:
-    "https://schemas.erato.ai/desktop-sidecar/v1/methods/local-exports-read-v1-result.schema.json",
-  validateLocalExportsAckV1Params:
-    "https://schemas.erato.ai/desktop-sidecar/v1/methods/local-exports-ack-v1-params.schema.json",
-  validateLocalExportsAckV1Result:
-    "https://schemas.erato.ai/desktop-sidecar/v1/methods/local-exports-ack-v1-result.schema.json",
+  validateToolProviderTable:
+    "https://schemas.erato.ai/desktop-sidecar/v1/jobs/provider-table.schema.json",
+  validateSidecarStructuredContent:
+    "https://schemas.erato.ai/desktop-sidecar/v1/jobs/sidecar-structured-content.schema.json",
+  validateJobsStartV1Params:
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/jobs-start-v1-params.schema.json",
+  validateJobsStartV1Result:
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/jobs-start-v1-result.schema.json",
+  validateJobsStatusV1Params:
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/jobs-status-v1-params.schema.json",
+  validateJobsStatusV1Result:
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/jobs-status-v1-result.schema.json",
+  validateJobsReadV1Params:
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/jobs-read-v1-params.schema.json",
+  validateJobsReadV1Result:
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/jobs-read-v1-result.schema.json",
+  validateJobsAckV1Params:
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/jobs-ack-v1-params.schema.json",
+  validateJobsAckV1Result:
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/jobs-ack-v1-result.schema.json",
+  validateJobsCancelV1Params:
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/jobs-cancel-v1-params.schema.json",
+  validateJobsCancelV1Result:
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/jobs-cancel-v1-result.schema.json",
+  validateJobsReviewV1Params:
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/jobs-review-v1-params.schema.json",
+  validateJobsReviewV1Result:
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/jobs-review-v1-result.schema.json",
 
   validateOutlookFileProvenance:
     "https://schemas.erato.ai/desktop-sidecar/v1/outlook/file-provenance.schema.json",
@@ -766,5 +712,22 @@ ${Object.keys(validatorTargets)
 await writeFile(
   path.join(outputDirectory, "validators.d.mts"),
   validatorDeclarations,
+  "utf8",
+);
+
+// The built-in provider table is language-neutral data. Clients receive it as
+// a typed constant, so they need no JSON module support.
+const sidecarProvider = await readJson(
+  path.join(root, "providers", "sidecar.json"),
+);
+const providerSource = `/* This file is generated from providers/sidecar.json. Do not edit. */
+import type { ToolProviderTable } from "./tool-provider-table.js";
+
+/** The \`sidecar\` provider: its closed tool enumeration and what each tool composes. */
+export const SIDECAR_PROVIDER: ToolProviderTable = ${JSON.stringify(sidecarProvider, null, 2)};
+`;
+await writeFile(
+  path.join(outputDirectory, "providers.ts"),
+  providerSource,
   "utf8",
 );

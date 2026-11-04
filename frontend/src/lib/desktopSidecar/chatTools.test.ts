@@ -1055,19 +1055,18 @@ describe("sidecar document retrieval", () => {
   });
 });
 
-it("blocks legacy tool execution for a present but unavailable delegation declaration", async () => {
+it("offers no tool on a strict sidecar without jobs and never sends its direct RPCs", async () => {
   const f = setup({});
   vi.spyOn(f.client, "getSnapshot").mockReturnValue({
     ...f.client.getSnapshot(),
     state: "ready",
-    localDelegation: { enforcement: "unavailable" },
-    strictLocalDelegation: false,
+    strict: true,
   });
   for (const tool of f.tools()) {
     expect(tool.isAvailable()).toBe(false);
     expect(await tool.execute({}, context)).toEqual({
-      ok: true,
-      disposition: "local_only",
+      ok: false,
+      error: "This desktop sidecar capability is unavailable on this device.",
     });
   }
   expect(f.request).not.toHaveBeenCalled();
@@ -1387,32 +1386,6 @@ describe("a delegated task's calls", () => {
       },
     });
   });
-
-  it.each([GET_SIDECAR_DOCUMENT_TOOL, READ_SIDECAR_CONVERSATION_TOOL])(
-    "%s uploads nothing when strict mode is declared while the user decides",
-    async (name) => {
-      const env = setup({
-        "sources.get_document.v1": document,
-        "outlook.get_conversation.v1": conversation(),
-      });
-      const snapshot = env.client.getSnapshot();
-      env.options.approveFiles.mockImplementation(async (files) => {
-        vi.spyOn(env.client, "getSnapshot").mockReturnValue({
-          ...snapshot,
-          localDelegation: { enforcement: "unavailable" },
-          strictLocalDelegation: false,
-        });
-        return new Set(files);
-      });
-      const tool = byToolName(env, name);
-      const input = { documentId, ...anchor, includeAttachments: true };
-      expect(await tool.execute(input, grantContext())).toEqual({
-        ok: true,
-        disposition: "local_only",
-      });
-      expect(env.uploadAttachment).not.toHaveBeenCalled();
-    },
-  );
 });
 
 const byName = (a: { name: string }, b: { name: string }) =>

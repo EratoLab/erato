@@ -1,11 +1,9 @@
-/* eslint-disable lingui/no-unlocalized-strings -- Internal operation states and fixed errors. */
 import { clientToolAcceptsGrantCalls } from "@/hooks/chat/clientToolExecutors";
 import {
   fetchListClientOperations,
   fetchClaimClientOperation,
   fetchCompleteClientOperation,
   fetchContinueClientOperation,
-  fetchCancelClientOperation,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 
 import { continueAttachedOperation } from "./attachedContinuation";
@@ -56,7 +54,6 @@ export interface ClientOperationApi {
     signal: AbortSignal,
     onCall?: (call: Promise<unknown>) => void,
   ): Promise<unknown>;
-  cancel(id: string, signal: AbortSignal): Promise<unknown>;
 }
 function headers(request: OperationRequest): Record<string, string> {
   const tool = request.operation_id.split("/").at(-1) ?? "";
@@ -99,11 +96,8 @@ export const clientOperationApi: ClientOperationApi = {
     fetchContinueClientOperation({ pathParams: { attemptId: id } }, signal),
   attach: continueAttachedOperation,
   stream: openExecutorStream,
-  cancel: (id, signal) =>
-    fetchCancelClientOperation({ pathParams: { attemptId: id } }, signal),
 };
 
-export type CoordinatorStatus = "unavailable" | "another_device" | "continuing";
 export interface ClientOperationHandler {
   readonly kind: string;
   /** Narrows dispatch within a kind, e.g. to one tool's operation_id. */
@@ -117,15 +111,6 @@ export interface ClientOperationHandler {
     claim: ClaimClientOperationResponse,
     signal: AbortSignal,
   ): Promise<OperationResult | undefined>;
-  settled?(request: OperationRequest, signal: AbortSignal): Promise<void>;
-  recover?(signal: AbortSignal): Promise<void>;
-  review?(
-    request: OperationRequest,
-    claim: ClaimClientOperationResponse,
-    signal: AbortSignal,
-  ): Promise<void>;
-  status?(request: OperationRequest, status: CoordinatorStatus): void;
-  retain?(ids: Set<string>): void;
   reset?(): void;
   dispose?(): void;
 }
@@ -310,10 +295,8 @@ export class ClientOperationCoordinator {
       this.api.attach
     ) {
       // An observer must not race the owning pane with a detached continuation.
-      if (!executor || !sameBinding(executor, request.binding)) {
-        handler.status?.(request, executor ? "another_device" : "unavailable");
+      if (!executor || !sameBinding(executor, request.binding))
         return Promise.resolve();
-      }
       if (!this.#attached.has(request.attempt_id)) {
         this.#attached.add(request.attempt_id);
         void this.api
@@ -441,13 +424,6 @@ export class ClientOperationCoordinator {
           continue;
         }
         if (operation.state === "ready" || operation.state === "continuing") {
-          handler.status?.(request, "continuing");
-          try {
-            await handler.settled?.(request, this.#abort.signal);
-          } catch {
-            /* Receipt recovery can wait for the device. */
-          }
-          this.#check();
           try {
             await this.#continue(request, handler);
           } catch {
@@ -457,13 +433,7 @@ export class ClientOperationCoordinator {
         }
         if (operation.state === "completed") continue;
         const executor = handler.executor();
-        if (!executor || !sameBinding(executor, request.binding)) {
-          handler.status?.(
-            request,
-            executor ? "another_device" : "unavailable",
-          );
-          continue;
-        }
+        if (!executor || !sameBinding(executor, request.binding)) continue;
         if (handler.defer?.(request)) continue;
         if (request.lineage) {
           this.#startGrantRun(request, handler);
@@ -485,15 +455,6 @@ export class ClientOperationCoordinator {
         this.#claims.delete(id);
         this.#retried.delete(id);
       }
-    for (const handler of this.#handlers()) {
-      handler.retain?.(seen);
-      try {
-        await handler.recover?.(this.#abort.signal);
-      } catch {
-        /* Bounded receipt recovery on the next sweep. */
-      }
-      this.#check();
-    }
   }
   async #run(
     request: OperationRequest,
@@ -521,13 +482,6 @@ export class ClientOperationCoordinator {
         this.#abort.signal,
       );
       this.#check();
-      try {
-        await handler.settled?.(request, this.#abort.signal);
-      } catch {
-        /* Recover the durable receipt on reconnect. */
-      }
-      this.#check();
-      handler.status?.(request, "continuing");
       await this.#continue(request, handler);
     } catch {
       this.#claims.delete(
@@ -634,8 +588,8 @@ export class ClientOperationCoordinator {
   }
   /** A client tool call of the user's own turn can hold a prompt on the
    * device for as long as its claim is renewed, so it waits in a queue beside
-   * the sweep, which runs them one at a time. Local evidence never waits on
-   * the user and stays in the sweep, ahead of its receipt recovery. */
+   * the sweep, which runs them one at a time. Other kinds never wait on the
+   * user and run in the sweep. */
   #queueOwnRun(
     request: OperationRequest,
     handler: ClientOperationHandler,
@@ -700,27 +654,5 @@ export class ClientOperationCoordinator {
     } finally {
       held?.release();
     }
-  }
-  async review(id: string): Promise<void> {
-    const operation = this.#operations.get(id);
-    const handler = operation && this.#handlerFor(operation.request);
-    if (!operation || !handler) return;
-    try {
-      const claim = await this.#claim(operation.request, handler, true);
-      this.#check();
-      await handler.review?.(operation.request, claim, this.#abort.signal);
-    } catch {
-      /* Review errors stay local. */
-    }
-    await this.reconcile();
-  }
-  async cancel(id: string): Promise<void> {
-    try {
-      this.#check();
-      await this.api.cancel(id, this.#abort.signal);
-    } catch {
-      return;
-    }
-    await this.reconcile();
   }
 }

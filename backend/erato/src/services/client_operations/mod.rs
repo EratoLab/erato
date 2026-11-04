@@ -116,7 +116,6 @@ const MAX_ADDITIONAL_EXECUTORS_BYTES: usize = 4096;
 pub enum ConsentPolicy {
     None,
     Ask,
-    Native,
 }
 
 /// A parked call as the server stored it. Clients only receive it; it is read
@@ -285,12 +284,6 @@ pub trait OperationKind: Send + Sync {
     fn tool_offer(&self, _context: &OperationOfferContext<'_>) -> Option<OperationToolOffer> {
         None
     }
-    /// Whether this logical turn may offer the operation again after a result
-    /// with this outcome. For example, cancelling native collection must not
-    /// start another search.
-    fn reoffer_after_result(&self, _outcome: OperationOutcome) -> bool {
-        true
-    }
     fn allow_cross_device(&self) -> bool {
         false
     }
@@ -361,13 +354,10 @@ impl OperationRegistry {
     }
 }
 
-/// Local evidence when its signer exists, plus one `client_tool.v1` instance per
-/// configured tool with a `durable` table while durable operations are enabled.
-pub fn registry(
-    config: &crate::config::AppConfig,
-    signer: Option<&Arc<crate::services::local_delegation::signing::Signer>>,
-) -> Result<OperationRegistry, eyre::Report> {
-    let mut registry = crate::services::local_delegation::tool::registry(signer);
+/// One `client_tool.v1` instance per configured tool with a `durable` table
+/// while durable operations are enabled.
+pub fn registry(config: &crate::config::AppConfig) -> Result<OperationRegistry, eyre::Report> {
+    let mut registry = OperationRegistry::default();
     if config.client_tools.durable_operations_enabled {
         for tool in config.client_tools.tools.values() {
             let Some(kind) =
@@ -434,16 +424,6 @@ pub fn pending(content: &[crate::models::message::ContentPart]) -> Option<&Clien
         Some(crate::models::message::ContentPart::ClientToolPending(pending)) => Some(pending),
         _ => None,
     }
-}
-
-/// The outcome of a stored result, whatever other keys a newer release wrote
-/// beside it. A continuation needs nothing else, and reading the whole result
-/// strictly would end a task for good on a key this release does not know.
-pub fn stored_result_outcome(result: &Value) -> Result<OperationOutcome, eyre::Report> {
-    let outcome = result
-        .get("outcome")
-        .ok_or_else(|| eyre::eyre!("Stored operation result has no outcome"))?;
-    Ok(serde_json::from_value(outcome.clone())?)
 }
 
 pub fn from_fast_result(
@@ -651,35 +631,6 @@ mod tests {
         stored["approval_scope"] = json!({"kind": "thread"});
         let newer: OperationRequest = serde_json::from_value(stored).unwrap();
         assert_eq!(newer, plain);
-    }
-
-    #[test]
-    fn a_stored_result_gives_its_outcome_whatever_else_it_carries() {
-        let stored = json!({
-            "attempt_id": Uuid::new_v4(), "operation_id": "desktop/search_sidecar_index",
-            "outcome": "succeeded",
-            "result": {"type": "value", "value": {"hits": []}, "future": 1},
-            "error": null,
-            "executor": binding_json("desktop_sidecar", "client"),
-            "approval_scope": {"kind": "thread"}
-        });
-        assert!(serde_json::from_value::<OperationResult>(stored.clone()).is_err());
-        assert_eq!(
-            stored_result_outcome(&stored).unwrap(),
-            OperationOutcome::Succeeded
-        );
-        let mut rejected = stored.clone();
-        rejected["outcome"] = json!("rejected");
-        assert_eq!(
-            stored_result_outcome(&rejected).unwrap(),
-            OperationOutcome::Rejected
-        );
-        let mut missing = stored.clone();
-        missing.as_object_mut().unwrap().remove("outcome");
-        assert!(stored_result_outcome(&missing).is_err());
-        let mut unknown = stored;
-        unknown["outcome"] = json!("postponed");
-        assert!(stored_result_outcome(&unknown).is_err());
     }
 
     #[test]

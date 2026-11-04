@@ -173,7 +173,6 @@ describe("word_read_comments results read in the Erato web app", () => {
   async function read(args: Record<string, unknown>) {
     const response = await session.execute(args, REQUEST);
     if (!response.ok) throw new Error(response.error);
-    if (response.disposition === "local_only") throw new Error("local only");
     return response.result as WordCommentReadResultJson;
   }
   const rowsOf = (input: Record<string, unknown>, result: unknown) =>

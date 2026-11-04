@@ -13,6 +13,15 @@ afterEach(async () => {
 });
 
 describe("loopback HTTP policy", () => {
+  it.each(["ws://app.erato.example", "ftp://app.erato.example"])(
+    "refuses the allowed origin %s, which is neither http nor https",
+    (origin) => {
+      expect(() => new MockSidecar({ allowedOrigins: [origin] })).toThrow(
+        /exact http or https origin/,
+      );
+    },
+  );
+
   it.each([
     ["an unconfigured Origin", { Origin: "https://attacker.example" }, 403],
     ["Origin: null", { Origin: "null" }, 403],

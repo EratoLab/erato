@@ -967,438 +967,6 @@
       }
     },
     {
-      "name": "local_contexts.challenge.v1",
-      "summary": "Reserved strict snapshot delegation method; unavailable until native security and recovery qualification.",
-      "params": [
-        {
-          "name": "params",
-          "required": true,
-          "schema": {
-            "$ref": "./schemas/methods/local-contexts-challenge-v1-params.schema.json"
-          }
-        }
-      ],
-      "result": {
-        "name": "result",
-        "schema": {
-          "$ref": "./schemas/methods/local-contexts-challenge-v1-result.schema.json"
-        }
-      },
-      "x-erato-capability": {
-        "id": "local_contexts.challenge",
-        "major": 1,
-        "method": "local_contexts.challenge.v1",
-        "availability": {
-          "state": "disabled",
-          "reasonCode": "local_delegation_not_enabled"
-        }
-      },
-      "errors": [
-        {
-          "$ref": "#/components/errors/InvalidParams"
-        },
-        {
-          "$ref": "#/components/errors/CapabilityUnavailable"
-        },
-        {
-          "$ref": "#/components/errors/PermissionDenied"
-        },
-        {
-          "$ref": "#/components/errors/RequestCancelled"
-        },
-        {
-          "$ref": "#/components/errors/Timeout"
-        },
-        {
-          "$ref": "#/components/errors/SidecarInternal"
-        }
-      ]
-    },
-    {
-      "name": "local_contexts.bind.v1",
-      "summary": "Reserved strict snapshot delegation method; unavailable until native security and recovery qualification.",
-      "params": [
-        {
-          "name": "params",
-          "required": true,
-          "schema": {
-            "$ref": "./schemas/methods/local-contexts-bind-v1-params.schema.json"
-          }
-        }
-      ],
-      "result": {
-        "name": "result",
-        "schema": {
-          "$ref": "./schemas/methods/local-contexts-bind-v1-result.schema.json"
-        }
-      },
-      "x-erato-capability": {
-        "id": "local_contexts.bind",
-        "major": 1,
-        "method": "local_contexts.bind.v1",
-        "availability": {
-          "state": "disabled",
-          "reasonCode": "local_delegation_not_enabled"
-        }
-      },
-      "errors": [
-        {
-          "$ref": "#/components/errors/InvalidParams"
-        },
-        {
-          "$ref": "#/components/errors/CapabilityUnavailable"
-        },
-        {
-          "$ref": "#/components/errors/PermissionDenied"
-        },
-        {
-          "$ref": "#/components/errors/RequestCancelled"
-        },
-        {
-          "$ref": "#/components/errors/Timeout"
-        },
-        {
-          "$ref": "#/components/errors/SidecarInternal"
-        }
-      ]
-    },
-    {
-      "name": "local_tasks.start.v1",
-      "summary": "Reserved strict snapshot delegation method; unavailable until native security and recovery qualification.",
-      "params": [
-        {
-          "name": "params",
-          "required": true,
-          "schema": {
-            "$ref": "./schemas/methods/local-tasks-start-v1-params.schema.json"
-          }
-        }
-      ],
-      "result": {
-        "name": "result",
-        "schema": {
-          "$ref": "./schemas/methods/local-tasks-start-v1-result.schema.json"
-        }
-      },
-      "x-erato-capability": {
-        "id": "local_tasks.start",
-        "major": 1,
-        "method": "local_tasks.start.v1",
-        "availability": {
-          "state": "disabled",
-          "reasonCode": "local_delegation_not_enabled"
-        }
-      },
-      "errors": [
-        {
-          "$ref": "#/components/errors/InvalidParams"
-        },
-        {
-          "$ref": "#/components/errors/CapabilityUnavailable"
-        },
-        {
-          "$ref": "#/components/errors/PermissionDenied"
-        },
-        {
-          "$ref": "#/components/errors/RequestCancelled"
-        },
-        {
-          "$ref": "#/components/errors/Timeout"
-        },
-        {
-          "$ref": "#/components/errors/SidecarInternal"
-        }
-      ]
-    },
-    {
-      "name": "local_tasks.status.v1",
-      "summary": "Reserved strict snapshot delegation method; unavailable until native security and recovery qualification.",
-      "params": [
-        {
-          "name": "params",
-          "required": true,
-          "schema": {
-            "$ref": "./schemas/methods/local-tasks-status-v1-params.schema.json"
-          }
-        }
-      ],
-      "result": {
-        "name": "result",
-        "schema": {
-          "$ref": "./schemas/methods/local-tasks-status-v1-result.schema.json"
-        }
-      },
-      "x-erato-capability": {
-        "id": "local_tasks.status",
-        "major": 1,
-        "method": "local_tasks.status.v1",
-        "availability": {
-          "state": "disabled",
-          "reasonCode": "local_delegation_not_enabled"
-        }
-      },
-      "errors": [
-        {
-          "$ref": "#/components/errors/InvalidParams"
-        },
-        {
-          "$ref": "#/components/errors/CapabilityUnavailable"
-        },
-        {
-          "$ref": "#/components/errors/PermissionDenied"
-        },
-        {
-          "$ref": "#/components/errors/RequestCancelled"
-        },
-        {
-          "$ref": "#/components/errors/Timeout"
-        },
-        {
-          "$ref": "#/components/errors/SidecarInternal"
-        }
-      ]
-    },
-    {
-      "name": "local_tasks.cancel.v1",
-      "summary": "Reserved strict snapshot delegation method; unavailable until native security and recovery qualification.",
-      "params": [
-        {
-          "name": "params",
-          "required": true,
-          "schema": {
-            "$ref": "./schemas/methods/local-tasks-cancel-v1-params.schema.json"
-          }
-        }
-      ],
-      "result": {
-        "name": "result",
-        "schema": {
-          "$ref": "./schemas/methods/local-tasks-cancel-v1-result.schema.json"
-        }
-      },
-      "x-erato-capability": {
-        "id": "local_tasks.cancel",
-        "major": 1,
-        "method": "local_tasks.cancel.v1",
-        "availability": {
-          "state": "disabled",
-          "reasonCode": "local_delegation_not_enabled"
-        }
-      },
-      "errors": [
-        {
-          "$ref": "#/components/errors/InvalidParams"
-        },
-        {
-          "$ref": "#/components/errors/CapabilityUnavailable"
-        },
-        {
-          "$ref": "#/components/errors/PermissionDenied"
-        },
-        {
-          "$ref": "#/components/errors/RequestCancelled"
-        },
-        {
-          "$ref": "#/components/errors/Timeout"
-        },
-        {
-          "$ref": "#/components/errors/SidecarInternal"
-        }
-      ]
-    },
-    {
-      "name": "local_tasks.review.v1",
-      "summary": "Reserved strict snapshot delegation method; unavailable until native security and recovery qualification.",
-      "params": [
-        {
-          "name": "params",
-          "required": true,
-          "schema": {
-            "$ref": "./schemas/methods/local-tasks-review-v1-params.schema.json"
-          }
-        }
-      ],
-      "result": {
-        "name": "result",
-        "schema": {
-          "$ref": "./schemas/methods/local-tasks-review-v1-result.schema.json"
-        }
-      },
-      "x-erato-capability": {
-        "id": "local_tasks.review",
-        "major": 1,
-        "method": "local_tasks.review.v1",
-        "availability": {
-          "state": "disabled",
-          "reasonCode": "local_delegation_not_enabled"
-        }
-      },
-      "errors": [
-        {
-          "$ref": "#/components/errors/InvalidParams"
-        },
-        {
-          "$ref": "#/components/errors/CapabilityUnavailable"
-        },
-        {
-          "$ref": "#/components/errors/PermissionDenied"
-        },
-        {
-          "$ref": "#/components/errors/RequestCancelled"
-        },
-        {
-          "$ref": "#/components/errors/Timeout"
-        },
-        {
-          "$ref": "#/components/errors/SidecarInternal"
-        }
-      ]
-    },
-    {
-      "name": "local_exports.status.v1",
-      "summary": "Reserved strict snapshot delegation method; unavailable until native security and recovery qualification.",
-      "params": [
-        {
-          "name": "params",
-          "required": true,
-          "schema": {
-            "$ref": "./schemas/methods/local-exports-status-v1-params.schema.json"
-          }
-        }
-      ],
-      "result": {
-        "name": "result",
-        "schema": {
-          "$ref": "./schemas/methods/local-exports-status-v1-result.schema.json"
-        }
-      },
-      "x-erato-capability": {
-        "id": "local_exports.status",
-        "major": 1,
-        "method": "local_exports.status.v1",
-        "availability": {
-          "state": "disabled",
-          "reasonCode": "local_delegation_not_enabled"
-        }
-      },
-      "errors": [
-        {
-          "$ref": "#/components/errors/InvalidParams"
-        },
-        {
-          "$ref": "#/components/errors/CapabilityUnavailable"
-        },
-        {
-          "$ref": "#/components/errors/PermissionDenied"
-        },
-        {
-          "$ref": "#/components/errors/RequestCancelled"
-        },
-        {
-          "$ref": "#/components/errors/Timeout"
-        },
-        {
-          "$ref": "#/components/errors/SidecarInternal"
-        }
-      ]
-    },
-    {
-      "name": "local_exports.read.v1",
-      "summary": "Reserved strict snapshot delegation method; unavailable until native security and recovery qualification.",
-      "params": [
-        {
-          "name": "params",
-          "required": true,
-          "schema": {
-            "$ref": "./schemas/methods/local-exports-read-v1-params.schema.json"
-          }
-        }
-      ],
-      "result": {
-        "name": "result",
-        "schema": {
-          "$ref": "./schemas/methods/local-exports-read-v1-result.schema.json"
-        }
-      },
-      "x-erato-capability": {
-        "id": "local_exports.read",
-        "major": 1,
-        "method": "local_exports.read.v1",
-        "availability": {
-          "state": "disabled",
-          "reasonCode": "local_delegation_not_enabled"
-        }
-      },
-      "errors": [
-        {
-          "$ref": "#/components/errors/InvalidParams"
-        },
-        {
-          "$ref": "#/components/errors/CapabilityUnavailable"
-        },
-        {
-          "$ref": "#/components/errors/PermissionDenied"
-        },
-        {
-          "$ref": "#/components/errors/RequestCancelled"
-        },
-        {
-          "$ref": "#/components/errors/Timeout"
-        },
-        {
-          "$ref": "#/components/errors/SidecarInternal"
-        }
-      ]
-    },
-    {
-      "name": "local_exports.ack.v1",
-      "summary": "Reserved strict snapshot delegation method; unavailable until native security and recovery qualification.",
-      "params": [
-        {
-          "name": "params",
-          "required": true,
-          "schema": {
-            "$ref": "./schemas/methods/local-exports-ack-v1-params.schema.json"
-          }
-        }
-      ],
-      "result": {
-        "name": "result",
-        "schema": {
-          "$ref": "./schemas/methods/local-exports-ack-v1-result.schema.json"
-        }
-      },
-      "x-erato-capability": {
-        "id": "local_exports.ack",
-        "major": 1,
-        "method": "local_exports.ack.v1",
-        "availability": {
-          "state": "disabled",
-          "reasonCode": "local_delegation_not_enabled"
-        }
-      },
-      "errors": [
-        {
-          "$ref": "#/components/errors/InvalidParams"
-        },
-        {
-          "$ref": "#/components/errors/CapabilityUnavailable"
-        },
-        {
-          "$ref": "#/components/errors/PermissionDenied"
-        },
-        {
-          "$ref": "#/components/errors/RequestCancelled"
-        },
-        {
-          "$ref": "#/components/errors/Timeout"
-        },
-        {
-          "$ref": "#/components/errors/SidecarInternal"
-        }
-      ]
-    },
-    {
       "name": "sidecar.status.v1",
       "summary": "Report platform permission status without prompting.",
       "params": [
@@ -1473,6 +1041,234 @@
           "state": "enabled"
         }
       }
+    },
+    {
+      "name": "jobs.start.v1",
+      "summary": "Start a job of independent tool calls; within wait_ms, answer with its per-call results.",
+      "params": [
+        {
+          "name": "params",
+          "required": true,
+          "schema": {
+            "$ref": "./schemas/methods/jobs-start-v1-params.schema.json"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "./schemas/methods/jobs-start-v1-result.schema.json"
+        }
+      },
+      "errors": [
+        {
+          "$ref": "#/components/errors/InvalidParams"
+        },
+        {
+          "$ref": "#/components/errors/CapabilityUnavailable"
+        },
+        {
+          "$ref": "#/components/errors/SidecarInternal"
+        }
+      ],
+      "x-erato-capability": {
+        "id": "jobs.start",
+        "major": 1,
+        "method": "jobs.start.v1",
+        "availability": {
+          "state": "enabled"
+        }
+      }
+    },
+    {
+      "name": "jobs.status.v1",
+      "summary": "Report a job's state, holding the response up to wait_ms while it is pending; carries its results once available.",
+      "params": [
+        {
+          "name": "params",
+          "required": true,
+          "schema": {
+            "$ref": "./schemas/methods/jobs-status-v1-params.schema.json"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "./schemas/methods/jobs-status-v1-result.schema.json"
+        }
+      },
+      "errors": [
+        {
+          "$ref": "#/components/errors/InvalidParams"
+        },
+        {
+          "$ref": "#/components/errors/CapabilityUnavailable"
+        },
+        {
+          "$ref": "#/components/errors/SidecarInternal"
+        }
+      ],
+      "x-erato-capability": {
+        "id": "jobs.status",
+        "major": 1,
+        "method": "jobs.status.v1",
+        "availability": {
+          "state": "enabled"
+        }
+      }
+    },
+    {
+      "name": "jobs.read.v1",
+      "summary": "Return a finished job's per-call results again until they are acknowledged.",
+      "params": [
+        {
+          "name": "params",
+          "required": true,
+          "schema": {
+            "$ref": "./schemas/methods/jobs-read-v1-params.schema.json"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "./schemas/methods/jobs-read-v1-result.schema.json"
+        }
+      },
+      "errors": [
+        {
+          "$ref": "#/components/errors/InvalidParams"
+        },
+        {
+          "$ref": "#/components/errors/CapabilityUnavailable"
+        },
+        {
+          "$ref": "#/components/errors/SidecarInternal"
+        }
+      ],
+      "x-erato-capability": {
+        "id": "jobs.read",
+        "major": 1,
+        "method": "jobs.read.v1",
+        "availability": {
+          "state": "enabled"
+        }
+      }
+    },
+    {
+      "name": "jobs.ack.v1",
+      "summary": "Acknowledge a job's results so the sidecar discards them.",
+      "params": [
+        {
+          "name": "params",
+          "required": true,
+          "schema": {
+            "$ref": "./schemas/methods/jobs-ack-v1-params.schema.json"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "./schemas/methods/jobs-ack-v1-result.schema.json"
+        }
+      },
+      "errors": [
+        {
+          "$ref": "#/components/errors/InvalidParams"
+        },
+        {
+          "$ref": "#/components/errors/CapabilityUnavailable"
+        },
+        {
+          "$ref": "#/components/errors/SidecarInternal"
+        }
+      ],
+      "x-erato-capability": {
+        "id": "jobs.ack",
+        "major": 1,
+        "method": "jobs.ack.v1",
+        "availability": {
+          "state": "enabled"
+        }
+      }
+    },
+    {
+      "name": "jobs.cancel.v1",
+      "summary": "Cancel a job that has not ended; idempotent.",
+      "params": [
+        {
+          "name": "params",
+          "required": true,
+          "schema": {
+            "$ref": "./schemas/methods/jobs-cancel-v1-params.schema.json"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "./schemas/methods/jobs-cancel-v1-result.schema.json"
+        }
+      },
+      "errors": [
+        {
+          "$ref": "#/components/errors/InvalidParams"
+        },
+        {
+          "$ref": "#/components/errors/CapabilityUnavailable"
+        },
+        {
+          "$ref": "#/components/errors/SidecarInternal"
+        }
+      ],
+      "x-erato-capability": {
+        "id": "jobs.cancel",
+        "major": 1,
+        "method": "jobs.cancel.v1",
+        "availability": {
+          "state": "enabled"
+        }
+      }
+    },
+    {
+      "name": "jobs.review.v1",
+      "summary": "Open or focus the native review of a job that is ready for review, and report its state; never approves it.",
+      "params": [
+        {
+          "name": "params",
+          "required": true,
+          "schema": {
+            "$ref": "./schemas/methods/jobs-review-v1-params.schema.json"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "./schemas/methods/jobs-review-v1-result.schema.json"
+        }
+      },
+      "errors": [
+        {
+          "$ref": "#/components/errors/InvalidParams"
+        },
+        {
+          "$ref": "#/components/errors/CapabilityUnavailable"
+        },
+        {
+          "$ref": "#/components/errors/SidecarInternal"
+        }
+      ],
+      "x-erato-capability": {
+        "id": "jobs.review",
+        "major": 1,
+        "method": "jobs.review.v1",
+        "availability": {
+          "state": "enabled"
+        }
+      }
     }
   ],
   "components": {
@@ -1526,7 +1322,7 @@
     }
   },
   "x-erato-catalogue": {
-    "revision": "14",
-    "digest": "sha256:7b7e279e10e04239cb4f52d36d39a7aac5c1ed34eb7c05d9e5647a001e3b14cb"
+    "revision": "15",
+    "digest": "sha256:a07cdf3d7045420765a022b278c0401fc6bc27bc1dea54a0341c6a98e63ac025"
   }
 }

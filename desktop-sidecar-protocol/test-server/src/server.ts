@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import {
   createServer,
@@ -8,10 +8,19 @@ import {
 
 import {
   MAX_BODY_BYTES,
+  MAX_RESPONSE_BYTES,
+  SIDECAR_PROVIDER,
   type CapabilityDescriptor,
   type DiscoverParams,
   type IndexingStatusV1Result,
   type IndexingStatusV1Params,
+  type CallToolResult,
+  type JobCallResult,
+  type JobStatus,
+  type JobToolCall,
+  type JobsStartV1Params,
+  type SearchQueryV1Params,
+  type ToolProviderTable,
   type SidecarConfigureV1Params,
   type DiscoveryDocument,
 } from "../../typescript/src/index.js";
@@ -25,6 +34,12 @@ import {
   validateSearchMetadataFieldsV1Result,
   validateIndexingResetV1Params,
   validateIndexingStatusV1Params,
+  validateJobsAckV1Params,
+  validateJobsCancelV1Params,
+  validateJobsReadV1Params,
+  validateJobsReviewV1Params,
+  validateJobsStartV1Params,
+  validateJobsStatusV1Params,
   validateDiagnosticsEchoV1Params,
   validateDiscoverParams,
   validateOutlookGetConversationV1Params,
@@ -63,6 +78,23 @@ export interface MockSidecarOptions {
    * built before package 0.1.43 does.
    */
   installationId?: string | null;
+  /**
+   * Strict mode as discovery reports it (default false); `null` omits it, as
+   * a sidecar built before package 0.1.44 does. Under strict, a job with a
+   * content tool waits in `ready_for_review` for `decideReview`.
+   */
+  strict?: boolean | null;
+  /** How long a job runs before it completes, to exercise `wait_ms`. */
+  jobDelayMs?: number;
+  /** Size of the mock document in bytes (default: a short text). */
+  documentBytes?: number;
+  /**
+   * The response cap a job's serialized results stay within (default
+   * `MAX_RESPONSE_BYTES`); match the client's `maxResponseBytes`.
+   */
+  maxResponseBytes?: number;
+  /** The warnings the mock conversation reports (default none). */
+  conversationWarnings?: readonly Record<string, unknown>[];
 }
 
 export interface MockSidecarAddress {
@@ -91,7 +123,41 @@ interface MockProgressEntry {
   totalDurationMs?: number;
 }
 
+interface MockJob {
+  origin: string;
+  calls: readonly JobToolCall[];
+  state: JobStatus["state"];
+  results?: JobCallResult[];
+  /** The frozen results a strict review decides on; never sent. */
+  snapshot?: JobCallResult[];
+  controller: AbortController;
+  /** Long-polls to answer when the job changes state. */
+  waiters: Set<() => void>;
+}
+
+type MethodOutcome =
+  | { result: Record<string, unknown> }
+  | { error: { code: number; message: string; data?: unknown } };
+type ToolSelection = ToolProviderTable["tools"][number]["selection"];
+
 const MAX_PROGRESS_ENTRIES = 256;
+const MAX_JOB_CALLS = 8;
+const MAX_JOB_WAIT_MS = 30_000;
+/** Room a job response needs beside its results: the envelope and errors. */
+const JOB_RESPONSE_RESERVE_BYTES = 16_384;
+const PENDING_JOB_STATES = new Set<JobStatus["state"]>([
+  "queued",
+  "running",
+  "awaiting_approval",
+  "ready_for_review",
+]);
+const TERMINAL_JOB_STATES = new Set<JobStatus["state"]>([
+  "acked",
+  "declined",
+  "cancelled",
+  "expired",
+  "failed",
+]);
 
 const INSTANCE_ID = "mock-sidecar-instance";
 const INSTALLATION_ID = "mock-sidecar-installation-id-0123456789";
@@ -146,6 +212,46 @@ const MOCK_OUTLOOK_CONVERSATION_MESSAGE = {
     },
   ],
 };
+/** The mock mailbox's catalog source, as `sources.list.v1` reports it. */
+const MOCK_SOURCE = {
+  sourceId: "5c1e8f0a-2b3d-4e6f-8a9b-0c1d2e3f4a5b",
+  sourceKind: "mock",
+  sourceKey: "mock-store",
+  locator: { mailboxId: MOCK_OUTLOOK_MAILBOX.id },
+  enabled: true,
+  discoveryCursor: null,
+  completedScanId: null,
+  lastSuccessAt: null,
+  lastErrorCode: null,
+  capabilities: { folders: true, metadataFields: [] as string[] },
+};
+const MOCK_FOLDER = {
+  nodeId: "mock-inbox",
+  parentNodeId: null,
+  name: "Inbox",
+  pathName: "Inbox",
+  artificialRoot: false,
+  directLeafChildren: 1,
+  totalLeafChildren: 1,
+  directChildNodes: 0,
+};
+/** The fixed message a method error crosses a strict export with. */
+const FIXED_ERROR_MESSAGES: Record<number, string> = {
+  [-32011]: "The requested capability is unavailable.",
+  [-32602]: "Invalid method parameters.",
+};
+/** The fixed message an item metadata entry crosses a strict export with. */
+const FIXED_WARNING_MESSAGES: Record<string, string> = {
+  truncated: "The conversation was truncated.",
+  attachment_unavailable: "An attachment could not be read.",
+  embedded_attachments_omitted: "Embedded attachments were omitted.",
+  body_preview_only:
+    "Only the body preview the application cached is available.",
+  body_unavailable: "The message body could not be read.",
+  body_truncated: "The message body was truncated.",
+  unsupported_source:
+    "The mailbox cannot be read as conversations; retrying cannot help.",
+};
 const openRpcUrl = [
   new URL("../../openrpc.json", import.meta.url),
   new URL("../../../openrpc.json", import.meta.url),
@@ -179,6 +285,7 @@ export class MockSidecar {
   readonly #allowedOrigins: Set<string>;
   readonly #inFlight = new Map<string, AbortController>();
   readonly #progress = new Map<string, MockProgressEntry>();
+  readonly #jobs = new Map<string, MockJob>();
   readonly #httpServer = createServer((request, response) => {
     void this.#handleHttpRequest(request, response).catch((error: unknown) => {
       if (response.headersSent) {
@@ -231,6 +338,37 @@ export class MockSidecar {
     return this.#configuration;
   }
 
+  /**
+   * Stand in for the native review window, which no RPC can drive: approve
+   * the given item positions of each call that has a selection, or decline
+   * with `null`.
+   */
+  decideReview(
+    handle: string,
+    approved: readonly (readonly number[])[] | null,
+  ): void {
+    const job = this.#jobs.get(handle);
+    if (job?.state !== "ready_for_review" || !job.snapshot)
+      throw new Error("The job is not ready for review.");
+    const snapshot = job.snapshot;
+    delete job.snapshot;
+    if (approved === null) {
+      settleJob(job, "declined");
+      return;
+    }
+    job.results = withinResponseBudget(
+      snapshot.map((entry, index) =>
+        exportApproved(
+          entry,
+          sidecarTool(job.calls[index])?.selection ?? null,
+          approved[index] ?? [],
+        ),
+      ),
+      this.#jobResponseBudget(),
+    );
+    settleJob(job, "approved");
+  }
+
   async start(): Promise<MockSidecarAddress> {
     if (this.#address) return this.#address;
     await new Promise<void>((resolve, reject) => {
@@ -254,6 +392,8 @@ export class MockSidecar {
     for (const controller of this.#inFlight.values()) controller.abort();
     this.#inFlight.clear();
     this.#progress.clear();
+    for (const job of this.#jobs.values()) job.controller.abort();
+    this.#jobs.clear();
     this.#httpServer.closeAllConnections();
     await new Promise<void>((resolve, reject) => {
       this.#httpServer.close((error) => (error ? reject(error) : resolve()));
@@ -402,18 +542,6 @@ export class MockSidecar {
     if (this.#options.omitMethods?.includes(message.method)) {
       return rpcError(message.id, -32601, "Method not found.");
     }
-    if (/^local_(?:contexts|tasks|exports)\./.test(message.method)) {
-      return rpcError(
-        message.id,
-        -32011,
-        "Strict local delegation is unavailable.",
-        {
-          kind: "capability_unavailable",
-          reasonCode: "local_delegation_not_enabled",
-        },
-      );
-    }
-
     if (message.method === "rpc.discover") {
       if (!validateDiscoverParams(message.params)) {
         return rpcError(message.id, -32602, "Invalid discovery parameters.");
@@ -437,13 +565,33 @@ export class MockSidecar {
         this.#options.installationId === undefined
           ? INSTALLATION_ID
           : this.#options.installationId;
+      const strict = this.#options.strict ?? false;
       return rpcResult(message.id, {
         protocolVersion,
         serverInfo: { name: "erato-mock-sidecar", version: "0.1.0" },
         instanceId: INSTANCE_ID,
         ...(installationId === null ? {} : { installationId }),
         document: this.#discoveryDocument(),
+        ...(this.#options.strict === null ? {} : { strict }),
+        ...(this.#options.omitMethods?.includes("jobs.start.v1")
+          ? {}
+          : {
+              jobs: { maxCalls: MAX_JOB_CALLS, maxWaitMs: MAX_JOB_WAIT_MS },
+              providers: [
+                {
+                  id: SIDECAR_PROVIDER.id,
+                  tools: SIDECAR_PROVIDER.tools.map((tool) => tool.name),
+                  readOnly: SIDECAR_PROVIDER.readOnly,
+                  egress: SIDECAR_PROVIDER.egress,
+                  available: true,
+                },
+              ],
+            }),
       });
+    }
+
+    if (message.method.startsWith("jobs.")) {
+      return this.#handleJobRequest(origin, message);
     }
 
     if (message.method === "erato.cancel") {
@@ -509,7 +657,7 @@ export class MockSidecar {
         filename: "document.txt",
         external_ids: [],
         mimeType: "text/plain",
-        contentBase64: Buffer.from("Mock document").toString("base64"),
+        contentBase64: this.#mockDocumentBase64(),
       });
     }
     if (message.method === "search.query.v1") {
@@ -814,7 +962,7 @@ export class MockSidecar {
         state: "ok",
         mailbox: MOCK_OUTLOOK_MAILBOX,
         messages: [MOCK_OUTLOOK_CONVERSATION_MESSAGE],
-        warnings: [],
+        warnings: [...(this.#options.conversationWarnings ?? [])],
       });
     }
 
@@ -904,6 +1052,292 @@ export class MockSidecar {
       progress.state = "finished";
       progress.totalDurationMs = Date.now() - startedAt;
       this.#inFlight.delete(key);
+    }
+  }
+
+  async #handleJobRequest(
+    origin: string,
+    message: RequestMessage & { id: string | number },
+  ): Promise<unknown> {
+    if (message.method === "jobs.start.v1") {
+      if (!validateJobsStartV1Params(message.params))
+        return rpcError(message.id, -32602, "Invalid method parameters.");
+      const params = message.params as JobsStartV1Params;
+      if (params.calls.length > MAX_JOB_CALLS)
+        return rpcError(message.id, -32602, "Too many calls for one job.");
+      const handle = randomBytes(32).toString("base64url");
+      const job: MockJob = {
+        origin,
+        calls: params.calls,
+        state: "queued",
+        controller: new AbortController(),
+        waiters: new Set(),
+      };
+      this.#jobs.set(handle, job);
+      void this.#runJob(job);
+      await waitForJob(job, params.wait_ms, "running");
+      return rpcResult(message.id, reportJob(handle, job));
+    }
+
+    const validators: Record<string, (value: unknown) => boolean> = {
+      "jobs.status.v1": validateJobsStatusV1Params,
+      "jobs.read.v1": validateJobsReadV1Params,
+      "jobs.ack.v1": validateJobsAckV1Params,
+      "jobs.cancel.v1": validateJobsCancelV1Params,
+      "jobs.review.v1": validateJobsReviewV1Params,
+    };
+    const validate = validators[message.method];
+    if (!validate) return rpcError(message.id, -32601, "Method not found.");
+    if (!validate(message.params))
+      return rpcError(message.id, -32602, "Invalid method parameters.");
+    const { handle, wait_ms: waitMs } = message.params as {
+      handle: string;
+      wait_ms?: number;
+    };
+    // A handle never issued, issued to another Origin or forgotten reads as
+    // expired, so a guessed handle learns nothing.
+    const found = this.#jobs.get(handle);
+    const job = found?.origin === origin ? found : undefined;
+
+    if (message.method === "jobs.read.v1") {
+      if (!job?.results)
+        return rpcError(message.id, -32602, "The job has no results to read.");
+      if (job.state === "completed" || job.state === "approved")
+        job.state = "read";
+      return rpcResult(message.id, { results: job.results });
+    }
+    if (!job) return rpcResult(message.id, { handle, state: "expired" });
+    if (message.method === "jobs.ack.v1") {
+      if (job.results) {
+        job.state = "acked";
+        delete job.results;
+      }
+    } else if (message.method === "jobs.cancel.v1") {
+      if (!TERMINAL_JOB_STATES.has(job.state)) {
+        delete job.results;
+        delete job.snapshot;
+        job.controller.abort();
+        settleJob(job, "cancelled");
+      }
+    } else if (message.method === "jobs.status.v1") {
+      await waitForJob(job, waitMs);
+    } else {
+      // jobs.review.v1 only reports the state, the mock having no window to
+      // open: it never delivers results, so a finished job stays unread.
+      return rpcResult(message.id, { handle, state: job.state });
+    }
+    return rpcResult(message.id, reportJob(handle, job));
+  }
+
+  /**
+   * Run a job's calls as internal read-only operations, never through the RPC
+   * dispatcher, so a job can reach only the provider table's tools. Under
+   * strict, a job with a content tool freezes its results for review.
+   */
+  async #runJob(job: MockJob): Promise<void> {
+    const signal = job.controller.signal;
+    job.state = "running";
+    if (this.#options.jobDelayMs) {
+      await abortableDelay(this.#options.jobDelayMs, signal);
+    }
+    if (signal.aborted) return;
+    const results = job.calls.map((call) => this.#runToolCall(call));
+    if (
+      this.#options.strict &&
+      job.calls.some((call) => sidecarTool(call)?.selection)
+    ) {
+      job.snapshot = results;
+      settleJob(job, "ready_for_review");
+      return;
+    }
+    job.results = withinResponseBudget(results, this.#jobResponseBudget());
+    settleJob(job, "completed");
+  }
+
+  #jobResponseBudget(): number {
+    return (
+      (this.#options.maxResponseBytes ?? MAX_RESPONSE_BYTES) -
+      JOB_RESPONSE_RESERVE_BYTES
+    );
+  }
+
+  #mockDocumentBase64(): string {
+    const bytes =
+      this.#options.documentBytes === undefined
+        ? Buffer.from("Mock document")
+        : Buffer.alloc(this.#options.documentBytes, "m");
+    return bytes.toString("base64");
+  }
+
+  /**
+   * A tool's raw composition: the outcome of each method it ran, as the
+   * direct RPC answers, with file bytes moved into embedded resources.
+   */
+  #runToolCall(call: JobToolCall): JobCallResult {
+    const tool = sidecarTool(call);
+    if (!tool) {
+      return callError(-32011, "The requested capability is unavailable.", {
+        kind: "capability_unavailable",
+      });
+    }
+    const args = call.arguments ?? {};
+    const sources: MethodOutcome = { result: { sources: [MOCK_SOURCE] } };
+    const mailboxes: MethodOutcome = {
+      result: { mailboxes: [MOCK_OUTLOOK_MAILBOX], warnings: [] },
+    };
+    switch (call.name) {
+      case "list_sidecar_mailboxes":
+        if (Object.keys(args).length) return invalidArguments();
+        return composed({
+          "outlook.list_mailboxes.v1": mailboxes,
+          "sources.list.v1": sources,
+        });
+      case "get_sidecar_search_fields":
+        return composed({
+          "search.metadata_fields.v1": { result: { fields: [] } },
+          "sources.list.v1": sources,
+        });
+      case "get_sidecar_folder_hierarchy":
+        if (typeof args.sourceId !== "string") return invalidArguments();
+        // The mock reads the folders of its own source only; the source list
+        // names any other source, whose folders are unsupported.
+        return composed(
+          args.sourceId === MOCK_SOURCE.sourceId
+            ? {
+                "sources.get_folder_hierarchy.v1": {
+                  result: { sourceId: args.sourceId, nodes: [MOCK_FOLDER] },
+                },
+              }
+            : {
+                "sources.get_folder_hierarchy.v1": {
+                  error: {
+                    code: -32016,
+                    message: "The sidecar could not complete the request.",
+                    data: {
+                      kind: "sidecar_internal",
+                      sourceError: "unsupported_source",
+                    },
+                  },
+                },
+                "sources.list.v1": sources,
+              },
+        );
+      case "search_sidecar_index": {
+        if (!validateSearchQueryV1Params(args)) return invalidArguments();
+        const filtered = Boolean(
+          (args as SearchQueryV1Params).metadata_filters?.length,
+        );
+        return composed({
+          "search.query.v1": {
+            result: {
+              hits: [],
+              elapsedMs: 0,
+              blocksRead: 0,
+              candidatesScored: 0,
+              coverage: {
+                sampledAt: new Date().toISOString(),
+                basis: "index",
+                sources: [],
+              },
+              limitReached: false,
+            },
+          },
+          "sources.list.v1": sources,
+          ...(filtered
+            ? { "search.metadata_fields.v1": { result: { fields: [] } } }
+            : {}),
+        });
+      }
+      case "read_sidecar_conversation": {
+        if (
+          typeof args.mailboxId !== "string" ||
+          typeof args.internetMessageId !== "string"
+        )
+          return invalidArguments();
+        if (args.mailboxId !== MOCK_OUTLOOK_MAILBOX.id)
+          return composed({
+            "outlook.get_conversation.v1": {
+              error: { code: -32602, message: "Unknown Outlook mailbox." },
+            },
+          });
+        const mailbox = {
+          mailboxId: MOCK_OUTLOOK_MAILBOX.id,
+          emailAddress: MOCK_OUTLOOK_MAILBOX.emailAddress,
+        };
+        const files: Record<string, unknown>[] = [];
+        const messages = [MOCK_OUTLOOK_CONVERSATION_MESSAGE].map(
+          (message, messageIndex) => ({
+            ...message,
+            attachments: message.attachments.map(
+              ({ contentBytes, ...attachment }, attachmentIndex) => {
+                files.push(
+                  fileBlock(
+                    `erato-sidecar:attachment/${attachment.sha256}`,
+                    `/outlook.get_conversation.v1/result/messages/${messageIndex}/attachments/${attachmentIndex}`,
+                    attachment.contentType,
+                    contentBytes,
+                    {
+                      version: 1,
+                      origins: [
+                        {
+                          topLevelParent: {
+                            ...attachment.topLevelParent,
+                            mailbox,
+                          },
+                        },
+                      ],
+                    },
+                  ),
+                );
+                return attachment;
+              },
+            ),
+          }),
+        );
+        return composed(
+          {
+            "outlook.get_conversation.v1": {
+              result: {
+                state: "ok",
+                mailbox: MOCK_OUTLOOK_MAILBOX,
+                messages,
+                warnings: [...(this.#options.conversationWarnings ?? [])],
+              },
+            },
+          },
+          files,
+        );
+      }
+      case "get_sidecar_document": {
+        if (!validateSourcesGetDocumentV1Params(args))
+          return invalidArguments();
+        const { documentId } = args as { documentId: string };
+        // A plain file with no message identity carries no provenance.
+        return composed(
+          {
+            "sources.get_document.v1": {
+              result: {
+                filename: "document.txt",
+                external_ids: [],
+                mimeType: "text/plain",
+              },
+            },
+            "outlook.list_mailboxes.v1": mailboxes,
+          },
+          [
+            fileBlock(
+              `erato-sidecar:document/${documentId}`,
+              "/sources.get_document.v1/result",
+              "text/plain",
+              this.#mockDocumentBase64(),
+            ),
+          ],
+        );
+      }
+      default:
+        return callError(-32011, "The requested capability is unavailable.", {
+          kind: "capability_unavailable",
+        });
     }
   }
 
@@ -1031,6 +1465,7 @@ async function readRequestBody(
 function normalizeOrigin(value: string): string {
   const url = new URL(value);
   if (
+    (url.protocol !== "http:" && url.protocol !== "https:") ||
     url.origin === "null" ||
     url.username ||
     url.password ||
@@ -1038,7 +1473,7 @@ function normalizeOrigin(value: string): string {
     url.search ||
     url.hash
   ) {
-    throw new Error(`Origin must be an exact hierarchical origin: ${value}`);
+    throw new Error(`Origin must be an exact http or https origin: ${value}`);
   }
   return url.origin;
 }
@@ -1057,6 +1492,287 @@ function isRequestMessage(value: unknown): value is RequestMessage {
 
 function rpcResult(id: string | number, result: unknown): unknown {
   return { jsonrpc: "2.0", id, result };
+}
+
+/** A `sidecar` tool's result: the methods' outcomes and the files they returned. */
+function composed(
+  outcomes: Record<string, MethodOutcome>,
+  files: Record<string, unknown>[] = [],
+): JobCallResult {
+  return {
+    result: {
+      content: files as CallToolResult["content"],
+      structuredContent: outcomes,
+    },
+  };
+}
+
+/** A file as an embedded resource, naming the object its bytes came from. */
+function fileBlock(
+  uri: string,
+  item: string,
+  mimeType: string,
+  blob: string,
+  provenance?: Record<string, unknown>,
+): Record<string, unknown> {
+  return {
+    type: "resource",
+    resource: { uri, mimeType, blob },
+    _meta: {
+      "ai.erato/item": item,
+      ...(provenance ? { "ai.erato/outlookProvenance": provenance } : {}),
+    },
+  };
+}
+
+function invalidArguments(): JobCallResult {
+  return callError(-32602, "Invalid method parameters.");
+}
+
+function sidecarTool(call: JobToolCall | undefined) {
+  return call?.server === SIDECAR_PROVIDER.id
+    ? SIDECAR_PROVIDER.tools.find((entry) => entry.name === call.name)
+    : undefined;
+}
+
+/**
+ * A strict export of one call: the frozen result filtered to the approved
+ * items, with its result-level metadata, the item metadata entries of the
+ * whole result or an approved item, and its method errors, both under a fixed
+ * message. Item pointers in the export refer to the filtered result.
+ */
+function exportApproved(
+  entry: JobCallResult,
+  selection: ToolSelection,
+  approved: readonly number[],
+): JobCallResult {
+  const { result } = entry as { result?: CallToolResult };
+  if (!result || !selection) return entry;
+  const source = result.structuredContent ?? {};
+  const exported: Record<string, unknown> = {};
+  for (const [method, outcome] of Object.entries(source)) {
+    const error = (outcome as { error?: { code: number; data?: unknown } })
+      .error;
+    if (error)
+      exported[method] = {
+        error: {
+          code: error.code,
+          message:
+            FIXED_ERROR_MESSAGES[error.code] ??
+            "The sidecar could not complete the request.",
+          ...(error.data === undefined ? {} : { data: error.data }),
+        },
+      };
+  }
+  for (const pointer of selection.resultMetadata)
+    copyPointer(source, exported, pointer);
+  const itemOf = (block: CallToolResult["content"][number]) => {
+    const item = block._meta?.["ai.erato/item"];
+    return typeof item === "string" ? item : undefined;
+  };
+  let content: CallToolResult["content"];
+  let approvedItems: unknown[];
+  if (selection.items === "content") {
+    content = result.content.filter((_, index) => approved.includes(index));
+    approvedItems = [];
+    for (const block of content) {
+      const item = itemOf(block);
+      if (!item) continue;
+      copyPointer(source, exported, item);
+      approvedItems.push(resolvePointer(source, item));
+    }
+  } else {
+    const items = resolvePointer(source, selection.items);
+    const kept = Array.isArray(items)
+      ? [...new Set(approved)]
+          .filter((index) => index < items.length)
+          .sort((a, b) => a - b)
+      : [];
+    approvedItems = Array.isArray(items)
+      ? kept.map((index) => items[index])
+      : [];
+    if (Array.isArray(items))
+      setPointer(exported, selection.items, approvedItems);
+    content = result.content.flatMap((block) => {
+      const item = itemOf(block);
+      const prefix = `${selection.items}/`;
+      if (!item?.startsWith(prefix)) return [];
+      const [position = "", ...rest] = item.slice(prefix.length).split("/");
+      const to = kept.indexOf(Number(position));
+      if (to === -1) return [];
+      return [
+        {
+          ...block,
+          _meta: {
+            ...block._meta,
+            "ai.erato/item": [`${prefix}${to}`, ...rest].join("/"),
+          },
+        },
+      ];
+    });
+  }
+  for (const { pointer, itemKey } of selection.itemMetadata ?? []) {
+    const entries = resolvePointer(source, pointer);
+    if (!Array.isArray(entries)) continue;
+    const approvedKeys = new Set(
+      approvedItems.map((item) => fieldOf(item, itemKey)),
+    );
+    setPointer(
+      exported,
+      pointer,
+      entries.flatMap((entry) => {
+        const key = fieldOf(entry, itemKey);
+        if (key !== undefined && !approvedKeys.has(key)) return [];
+        const code = String(fieldOf(entry, "code"));
+        return [
+          {
+            code,
+            message:
+              FIXED_WARNING_MESSAGES[code] ??
+              "Part of the result could not be represented.",
+            ...(key === undefined ? {} : { [itemKey]: key }),
+          },
+        ];
+      }),
+    );
+  }
+  return { result: { content, structuredContent: exported } };
+}
+
+function fieldOf(value: unknown, key: string): unknown {
+  return value !== null &&
+    typeof value === "object" &&
+    Object.hasOwn(value, key)
+    ? (value as Record<string, unknown>)[key]
+    : undefined;
+}
+
+/** The value an RFC 6901 JSON pointer names, or undefined. */
+function resolvePointer(value: unknown, pointer: string): unknown {
+  return pointerTokens(pointer).reduce<unknown>(
+    (node, key) =>
+      node !== null && typeof node === "object" && Object.hasOwn(node, key)
+        ? (node as Record<string, unknown>)[key]
+        : undefined,
+    value,
+  );
+}
+
+function setPointer(
+  target: Record<string, unknown>,
+  pointer: string,
+  value: unknown,
+): void {
+  const tokens = pointerTokens(pointer);
+  const last = tokens.pop();
+  if (last === undefined) return;
+  let node = target;
+  for (const token of tokens) {
+    const next = node[token];
+    node[token] =
+      next !== null && typeof next === "object" && !Array.isArray(next)
+        ? next
+        : {};
+    node = node[token] as Record<string, unknown>;
+  }
+  node[last] = value;
+}
+
+function copyPointer(
+  source: Record<string, unknown>,
+  target: Record<string, unknown>,
+  pointer: string,
+): void {
+  const value = resolvePointer(source, pointer);
+  if (value !== undefined) setPointer(target, pointer, value);
+}
+
+function pointerTokens(pointer: string): string[] {
+  return pointer
+    .split("/")
+    .slice(1)
+    .map((token) => token.replace(/~1/g, "/").replace(/~0/g, "~"));
+}
+
+function callError(
+  code: number,
+  message: string,
+  data?: Record<string, unknown>,
+): JobCallResult {
+  return { error: { code, message, ...(data === undefined ? {} : { data }) } };
+}
+
+/**
+ * Keep a job's serialized results within `budget` bytes: a call whose result
+ * would exceed what remains gets the error an oversized direct export
+ * returns, and the other calls keep theirs.
+ */
+function withinResponseBudget(
+  results: JobCallResult[],
+  budget: number,
+): JobCallResult[] {
+  let remaining = budget;
+  return results.map((entry) => {
+    const bytes = Buffer.byteLength(JSON.stringify(entry)) + 1;
+    const kept =
+      bytes <= remaining
+        ? entry
+        : callError(-32016, "The sidecar could not complete the request.", {
+            kind: "sidecar_internal",
+            sourceError: "export_too_large",
+          });
+    remaining -=
+      kept === entry ? bytes : Buffer.byteLength(JSON.stringify(kept)) + 1;
+    return kept;
+  });
+}
+
+/**
+ * Hold the response while the job stays in the pending state `from` (queued
+ * and running count as one), for at most `waitMs`.
+ */
+async function waitForJob(
+  job: MockJob,
+  waitMs = 0,
+  from = phaseOf(job.state),
+): Promise<void> {
+  if (!PENDING_JOB_STATES.has(job.state) || phaseOf(job.state) !== from) return;
+  const boundedMs = Math.min(waitMs, MAX_JOB_WAIT_MS);
+  if (boundedMs <= 0) return;
+  await new Promise<void>((resolve) => {
+    const done = (): void => {
+      clearTimeout(timer);
+      job.waiters.delete(done);
+      resolve();
+    };
+    const timer = setTimeout(done, boundedMs);
+    job.waiters.add(done);
+  });
+}
+
+function phaseOf(state: JobStatus["state"]): JobStatus["state"] {
+  return state === "queued" ? "running" : state;
+}
+
+/** Move the job to a new state and answer the long-polls waiting on it. */
+function settleJob(job: MockJob, state: JobStatus["state"]): void {
+  job.state = state;
+  for (const waiter of [...job.waiters]) waiter();
+}
+
+/**
+ * The job's status as a response reports it. A response that reports results
+ * as `completed` or `approved` delivers them, so the job is `read` afterwards.
+ */
+function reportJob(handle: string, job: MockJob): JobStatus {
+  if (!job.results) return { handle, state: job.state };
+  const status: JobStatus = {
+    handle,
+    state: job.state,
+    results: job.results,
+  };
+  if (job.state === "completed" || job.state === "approved") job.state = "read";
+  return status;
 }
 
 function rpcError(

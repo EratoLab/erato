@@ -2,7 +2,6 @@
 import {
   clientToolAcceptsGrantCalls,
   isClientToolCallInFlight,
-  isClientToolResultLocalOnly,
   markClientToolCallAnswered,
   runClientToolCall,
 } from "@/hooks/chat/clientToolExecutors";
@@ -65,7 +64,6 @@ export function toOperationResult(
   outcome: ClientToolExecutionResult,
 ): OperationResult {
   if (outcome.ok) {
-    if (outcome.disposition === "local_only") return failed(request);
     const files = outcome.fileUploadIds ?? [];
     return settle(request, {
       outcome: "succeeded",
@@ -161,11 +159,6 @@ export class ClientToolOperationHandler implements ClientOperationHandler {
       outcome = undefined;
     }
     signal.throwIfAborted();
-    // Strict mode declared while the tool ran, before the renewal saw it (that
-    // aborts the run and lets the claim lapse until the attempt expires):
-    // fail without content. Files uploaded before the switch stay; the mode
-    // will not change back soon enough to wait for it.
-    if (isClientToolResultLocalOnly(this.toolName)) return failed(request);
     // A task's call whose context this device cannot serve right now keeps
     // waiting for a client that can, rather than ending the task's call.
     if (

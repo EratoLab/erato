@@ -1,7 +1,3 @@
-import {
-  localDelegationContracts,
-  supportsStrictLocalDelegation,
-} from "./localDelegation.js";
 import { SidecarClientError, SidecarRpcError } from "./errors.js";
 import {
   validateSidecarStatusV1Params,
@@ -27,6 +23,18 @@ import {
   validateIndexingResetV1Params,
   validateIndexingStatusV1Result,
   validateIndexingStatusV1Params,
+  validateJobsAckV1Params,
+  validateJobsAckV1Result,
+  validateJobsCancelV1Params,
+  validateJobsCancelV1Result,
+  validateJobsReadV1Params,
+  validateJobsReadV1Result,
+  validateJobsReviewV1Params,
+  validateJobsReviewV1Result,
+  validateJobsStartV1Params,
+  validateJobsStartV1Result,
+  validateJobsStatusV1Params,
+  validateJobsStatusV1Result,
   validateDiagnosticsEchoV1Params,
   validateDiagnosticsEchoV1Result,
   validateDiscoverResult,
@@ -61,24 +69,6 @@ import type {
   SidecarStatusV1Result,
   SidecarRequestPermissionV1Params,
   SidecarRequestPermissionV1Result,
-  LocalContextsChallengeV1Params,
-  LocalContextsChallengeV1Result,
-  LocalContextsBindV1Params,
-  LocalContextsBindV1Result,
-  LocalTasksStartV1Params,
-  LocalTasksStartV1Result,
-  LocalTasksStatusV1Params,
-  LocalTasksStatusV1Result,
-  LocalTasksCancelV1Params,
-  LocalTasksCancelV1Result,
-  LocalTasksReviewV1Params,
-  LocalTasksReviewV1Result,
-  LocalExportsStatusV1Params,
-  LocalExportsStatusV1Result,
-  LocalExportsReadV1Params,
-  LocalExportsReadV1Result,
-  LocalExportsAckV1Params,
-  LocalExportsAckV1Result,
   CapabilityDescriptor,
   IndexingBenchmarkListV1Params,
   IndexingBenchmarkListV1Result,
@@ -98,6 +88,20 @@ import type {
   IndexingResetV1Params,
   IndexingStatusV1Result,
   IndexingStatusV1Params,
+  JobsAckV1Params,
+  JobsAckV1Result,
+  JobsCancelV1Params,
+  JobsCancelV1Result,
+  JobsCapability,
+  JobsReadV1Params,
+  JobsReadV1Result,
+  JobsReviewV1Params,
+  JobsReviewV1Result,
+  JobsStartV1Params,
+  JobsStartV1Result,
+  JobsStatusV1Params,
+  JobsStatusV1Result,
+  ToolProvider,
   DiagnosticsEchoV1Params,
   DiagnosticsEchoV1Result,
   DiscoverParams,
@@ -170,15 +174,18 @@ export interface SidecarCapability {
 }
 
 export interface SidecarSnapshot {
-  /** A validated declaration from discovery; never infer strict support from a single RPC. */
-  localDelegation?: DiscoverResult["localDelegation"];
-  strictLocalDelegation?: boolean;
   state: SidecarReadinessState;
   protocolVersion: string | null;
   serverInfo: { name: string; version: string } | null;
   instanceId: string | null;
   /** The installation's stable id; `null` while unknown or for a sidecar that reports none. */
   installationId: string | null;
+  /** Whether the sidecar runs in strict mode; absent while unknown or for a sidecar from before package 0.1.44. */
+  strict?: boolean;
+  /** The job envelope's limits; absent when the sidecar runs no jobs, so clients use the direct RPCs. */
+  jobs?: JobsCapability;
+  /** The providers whose tools `jobs.start.v1` accepts. */
+  providers?: readonly ToolProvider[];
   catalogue: { revision: string; digest: string } | null;
   /** Discovery extensions, exposed only after schema and digest validation. */
   discoveryExtensions?: Readonly<Record<string, unknown>>;
@@ -233,8 +240,34 @@ interface JsonRpcResponse {
   error?: { code: number; message: string; data?: unknown };
 }
 
+/** Methods that hold their response for up to `wait_ms` while a job is pending. */
+const LONG_POLL_METHODS = new Set(["jobs.start.v1", "jobs.status.v1"]);
+
 const builtInContracts: Readonly<Record<string, SidecarMethodContract>> = {
-  ...localDelegationContracts,
+  "jobs.start.v1": {
+    validateParams: validateJobsStartV1Params,
+    validateResult: validateJobsStartV1Result,
+  },
+  "jobs.status.v1": {
+    validateParams: validateJobsStatusV1Params,
+    validateResult: validateJobsStatusV1Result,
+  },
+  "jobs.read.v1": {
+    validateParams: validateJobsReadV1Params,
+    validateResult: validateJobsReadV1Result,
+  },
+  "jobs.ack.v1": {
+    validateParams: validateJobsAckV1Params,
+    validateResult: validateJobsAckV1Result,
+  },
+  "jobs.cancel.v1": {
+    validateParams: validateJobsCancelV1Params,
+    validateResult: validateJobsCancelV1Result,
+  },
+  "jobs.review.v1": {
+    validateParams: validateJobsReviewV1Params,
+    validateResult: validateJobsReviewV1Result,
+  },
 
   "diagnostics.echo.v1": {
     validateParams: validateDiagnosticsEchoV1Params,
@@ -330,6 +363,47 @@ const builtInContracts: Readonly<Record<string, SidecarMethodContract>> = {
   },
 };
 
+function pinnedContract(method: string): SidecarMethodContract {
+  const contract = builtInContracts[method];
+  if (!contract) throw new Error(`No pinned contract for ${method}.`);
+  return contract;
+}
+
+/**
+ * Checks `params` against `method`'s pinned contract and throws the
+ * `invalid_params` error `invoke` throws for them. For parameters a client
+ * composes but does not send itself, such as those of the RPCs a job's tool
+ * call composes on the sidecar.
+ */
+export function checkMethodParams(method: string, params: unknown): void {
+  const { validateParams } = pinnedContract(method);
+  if (!validateParams(params)) {
+    throw validationError(
+      "invalid_params",
+      `Parameters for ${method} do not match the pinned contract.`,
+      validateParams,
+    );
+  }
+}
+
+/**
+ * Checks `result` against `method`'s pinned contract and throws the
+ * `invalid_result` error `invoke` throws for a direct response. For results
+ * a client receives without sending the request itself, such as the composed
+ * outcomes in a job result's `structuredContent`. Unlike `invoke`, it leaves
+ * the client's readiness as it is.
+ */
+export function checkMethodResult(method: string, result: unknown): void {
+  const { validateResult } = pinnedContract(method);
+  if (!validateResult(result)) {
+    throw validationError(
+      "invalid_result",
+      `Result for ${method} does not match the pinned contract.`,
+      validateResult,
+    );
+  }
+}
+
 const EMPTY_CAPABILITIES = new Map<string, SidecarCapability>();
 
 export class DesktopSidecarClient {
@@ -398,50 +472,35 @@ export class DesktopSidecarClient {
   }
 
   async invoke(
-    method: "local_contexts.challenge.v1",
-    params: LocalContextsChallengeV1Params,
+    method: "jobs.start.v1",
+    params: JobsStartV1Params,
     options?: InvokeOptions,
-  ): Promise<LocalContextsChallengeV1Result>;
+  ): Promise<JobsStartV1Result>;
   async invoke(
-    method: "local_contexts.bind.v1",
-    params: LocalContextsBindV1Params,
+    method: "jobs.status.v1",
+    params: JobsStatusV1Params,
     options?: InvokeOptions,
-  ): Promise<LocalContextsBindV1Result>;
+  ): Promise<JobsStatusV1Result>;
   async invoke(
-    method: "local_tasks.start.v1",
-    params: LocalTasksStartV1Params,
+    method: "jobs.read.v1",
+    params: JobsReadV1Params,
     options?: InvokeOptions,
-  ): Promise<LocalTasksStartV1Result>;
+  ): Promise<JobsReadV1Result>;
   async invoke(
-    method: "local_tasks.status.v1",
-    params: LocalTasksStatusV1Params,
+    method: "jobs.ack.v1",
+    params: JobsAckV1Params,
     options?: InvokeOptions,
-  ): Promise<LocalTasksStatusV1Result>;
+  ): Promise<JobsAckV1Result>;
   async invoke(
-    method: "local_tasks.cancel.v1",
-    params: LocalTasksCancelV1Params,
+    method: "jobs.cancel.v1",
+    params: JobsCancelV1Params,
     options?: InvokeOptions,
-  ): Promise<LocalTasksCancelV1Result>;
+  ): Promise<JobsCancelV1Result>;
   async invoke(
-    method: "local_tasks.review.v1",
-    params: LocalTasksReviewV1Params,
+    method: "jobs.review.v1",
+    params: JobsReviewV1Params,
     options?: InvokeOptions,
-  ): Promise<LocalTasksReviewV1Result>;
-  async invoke(
-    method: "local_exports.status.v1",
-    params: LocalExportsStatusV1Params,
-    options?: InvokeOptions,
-  ): Promise<LocalExportsStatusV1Result>;
-  async invoke(
-    method: "local_exports.read.v1",
-    params: LocalExportsReadV1Params,
-    options?: InvokeOptions,
-  ): Promise<LocalExportsReadV1Result>;
-  async invoke(
-    method: "local_exports.ack.v1",
-    params: LocalExportsAckV1Params,
-    options?: InvokeOptions,
-  ): Promise<LocalExportsAckV1Result>;
+  ): Promise<JobsReviewV1Result>;
   async invoke(
     method: "diagnostics.echo.v1",
     params: DiagnosticsEchoV1Params,
@@ -570,7 +629,7 @@ export class DesktopSidecarClient {
       );
     }
     if (!contract.validateParams(params)) {
-      throw this.#validationError(
+      throw validationError(
         "invalid_params",
         `Parameters for ${method} do not match the pinned contract.`,
         contract.validateParams,
@@ -583,18 +642,28 @@ export class DesktopSidecarClient {
         ? this.#startProgressPolling(id, options.progress)
         : undefined;
 
+    // A long-poll's default deadline covers its wait on top of the ordinary budget.
+    const waitMs = LONG_POLL_METHODS.has(method)
+      ? (params as { wait_ms?: number }).wait_ms
+      : undefined;
+    const timeoutMs =
+      options.timeoutMs ??
+      (waitMs === undefined ? undefined : this.#requestTimeoutMs + waitMs);
+
     let result: unknown;
     try {
-      result = await this.#request(method, params, { ...options, id });
+      result = await this.#request(method, params, {
+        ...options,
+        id,
+        timeoutMs,
+      });
     } catch (error) {
       const clientError = this.#asClientError(error);
       if (clientError.kind === "capability_unavailable") {
         await this.discover().catch(() => undefined);
       } else if (
         clientError.kind === "malformed_message" ||
-        clientError.kind === "invalid_result" ||
-        (method.startsWith("local_") &&
-          ["transport_error", "timeout"].includes(clientError.kind))
+        clientError.kind === "invalid_result"
       ) {
         this.#failReadiness(clientError);
       }
@@ -604,7 +673,7 @@ export class DesktopSidecarClient {
     }
 
     if (!contract.validateResult(result)) {
-      const error = this.#validationError(
+      const error = validationError(
         "invalid_result",
         `Result for ${method} does not match the pinned contract.`,
         contract.validateResult,
@@ -617,8 +686,11 @@ export class DesktopSidecarClient {
 
   async #runDiscovery(signal?: AbortSignal): Promise<void> {
     this.#setSnapshot({
-      localDelegation: this.#snapshot.localDelegation,
-      strictLocalDelegation: false,
+      // Keep a known strict mode until discovery replaces it, so nothing
+      // treats the sidecar as standard in between.
+      ...(this.#snapshot.strict === undefined
+        ? {}
+        : { strict: this.#snapshot.strict }),
       state: "discovering",
       protocolVersion: null,
       serverInfo: null,
@@ -649,7 +721,7 @@ export class DesktopSidecarClient {
         cancelOnAbort: false,
       });
       if (!validateDiscoverResult(rawResult)) {
-        throw this.#validationError(
+        throw validationError(
           "invalid_result",
           "The sidecar returned an invalid discovery result.",
           validateDiscoverResult,
@@ -679,6 +751,11 @@ export class DesktopSidecarClient {
         serverInfo: result.serverInfo,
         instanceId: result.instanceId,
         installationId: result.installationId ?? null,
+        ...(result.strict === undefined ? {} : { strict: result.strict }),
+        ...(result.jobs === undefined ? {} : { jobs: result.jobs }),
+        ...(result.providers === undefined
+          ? {}
+          : { providers: result.providers }),
         catalogue,
         discoveryExtensions: Object.fromEntries(
           Object.entries(result.document).filter(([key]) =>
@@ -686,8 +763,6 @@ export class DesktopSidecarClient {
           ),
         ),
         capabilities,
-        localDelegation: result.localDelegation,
-        strictLocalDelegation: supportsStrictLocalDelegation(result),
         error: null,
       });
     } catch (error) {
@@ -872,7 +947,7 @@ export class DesktopSidecarClient {
       },
     );
     if (!validateCancelResult(rawResult)) {
-      throw this.#validationError(
+      throw validationError(
         "invalid_result",
         "The sidecar returned an invalid cancellation result.",
         validateCancelResult,
@@ -892,7 +967,7 @@ export class DesktopSidecarClient {
       );
     }
     if (!validateJsonRpcEnvelope(message)) {
-      throw this.#validationError(
+      throw validationError(
         "malformed_message",
         "The sidecar returned an invalid JSON-RPC response.",
         validateJsonRpcEnvelope,
@@ -941,23 +1016,6 @@ export class DesktopSidecarClient {
     });
   }
 
-  #validationError(
-    kind: "invalid_params" | "invalid_result" | "malformed_message",
-    message: string,
-    validator: Validator,
-  ): SidecarClientError {
-    const details = (validator.errors ?? [])
-      .map(
-        (error) =>
-          `${error.instancePath || "/"} ${error.message ?? "is invalid"}`,
-      )
-      .join("; ");
-    return new SidecarClientError(
-      kind,
-      details ? `${message} ${details}` : message,
-    );
-  }
-
   #asClientError(error: unknown): SidecarClientError {
     return error instanceof SidecarClientError
       ? error
@@ -972,6 +1030,23 @@ export class DesktopSidecarClient {
     this.#snapshot = snapshot;
     for (const listener of this.#listeners) listener();
   }
+}
+
+function validationError(
+  kind: "invalid_params" | "invalid_result" | "malformed_message",
+  message: string,
+  validator: Validator,
+): SidecarClientError {
+  const details = (validator.errors ?? [])
+    .map(
+      (error) =>
+        `${error.instancePath || "/"} ${error.message ?? "is invalid"}`,
+    )
+    .join("; ");
+  return new SidecarClientError(
+    kind,
+    details ? `${message} ${details}` : message,
+  );
 }
 
 function emptySnapshot(): SidecarSnapshot {

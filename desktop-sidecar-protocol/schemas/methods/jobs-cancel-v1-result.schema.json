@@ -1,0 +1,6 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://schemas.erato.ai/desktop-sidecar/v1/methods/jobs-cancel-v1-result.schema.json",
+  "title": "JobsCancelV1Result",
+  "$ref": "../jobs/job-status.schema.json"
+}
