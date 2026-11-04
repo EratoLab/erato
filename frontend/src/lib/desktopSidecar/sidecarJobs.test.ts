@@ -145,6 +145,26 @@ describe("runSidecarJob", () => {
     expect(requests[1].params).toEqual({ handle: JOB_HANDLE });
   });
 
+  it("never hands the turn off for a job that finishes without a review", async () => {
+    vi.useFakeTimers();
+    const onReview = vi.fn();
+    const { client } = fakeSidecarClient((method) => {
+      if (method === "jobs.start.v1") return pendingJob();
+      if (method === "jobs.status.v1") return completedJob([mailboxesResult]);
+      return { result: { handle: JOB_HANDLE, state: "acked" } };
+    }, normalMode);
+    const result = runSidecarJob(
+      client,
+      "search_sidecar_index",
+      { query: "report" },
+      { chatId: "chat", toolCallId: "call-1", onReview },
+    );
+    await vi.advanceTimersByTimeAsync(JOB_POLL_INTERVAL_MS);
+    await expect(result).resolves.toBeDefined();
+    expect(onReview).not.toHaveBeenCalled();
+    expect(useSidecarReviewStore.getState().waitingByToolCallId.size).toBe(0);
+  });
+
   it("long-polls jobs.status with wait_ms while the job runs", async () => {
     vi.useFakeTimers();
     const { client, requests, methods } = fakeSidecarClient((method) => {
@@ -388,6 +408,47 @@ describe("runSidecarJob", () => {
       ))
         expect(poll.params).toEqual({ handle: JOB_HANDLE, wait_ms: maxWaitMs });
       expect(waiting().size).toBe(0);
+    });
+
+    it("hands the turn off once the review is open and waits for the decision without a deadline", async () => {
+      vi.useFakeTimers();
+      const decided = { now: false };
+      const { client, methods } = fakeSidecarClient((method) => {
+        if (method === "jobs.status.v1")
+          return at(
+            decided.now ? approved : pendingJob("ready_for_review"),
+            maxWaitMs,
+          );
+        if (method === "jobs.ack.v1")
+          return { result: { handle: JOB_HANDLE, state: "acked" } };
+        return pendingJob("ready_for_review");
+      }, strictMode);
+      const onReview = vi.fn(() => {
+        // The window was asked to open before the turn is handed off.
+        expect(methods()).toEqual(["jobs.start.v1", "jobs.review.v1"]);
+      });
+      const result = runSidecarJob(
+        client,
+        "search_sidecar_index",
+        { query: "report" },
+        { chatId: "chat", toolCallId: "call-1", onReview },
+      );
+      await vi.advanceTimersByTimeAsync(0);
+      expect(onReview).toHaveBeenCalledTimes(1);
+      expect(
+        useSidecarReviewStore.getState().waitingByToolCallId.get("call-1"),
+      ).toBe(1);
+      // A quarter of an hour without a decision: still waiting, never cancelled.
+      await vi.advanceTimersByTimeAsync(15 * 60_000);
+      expect(onReview).toHaveBeenCalledTimes(1);
+      expect(methods()).not.toContain("jobs.cancel.v1");
+      decided.now = true;
+      await vi.advanceTimersByTimeAsync(2 * maxWaitMs);
+      await expect(result).resolves.toEqual(
+        (mailboxesResult as Extract<JobCallResult, { result: unknown }>).result,
+      );
+      expect(methods().at(-1)).toBe("jobs.ack.v1");
+      expect(useSidecarReviewStore.getState().waitingByToolCallId.size).toBe(0);
     });
 
     it.each(["declined", "cancelled", "expired"] as const)(

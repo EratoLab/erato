@@ -99,6 +99,15 @@ export interface ClientToolCallContext {
    * `acceptsGrantCalls`. Absent on every call of the user's own turn.
    */
   hostGrant?: ClientToolHostGrant;
+  /**
+   * Set on a live call of the user's own turn that the server may wait for
+   * durably. An executor calls it once the call waits on the user on this
+   * device, such as a review in the Erato desktop app: the server then parks
+   * the turn instead of holding it until the tool's timeout. The executor
+   * still returns its outcome as usual, which resumes the turn. A tool
+   * without a durable operation stays live and keeps its timeout.
+   */
+  park?: () => void;
 }
 
 export type ClientToolExecutor = (

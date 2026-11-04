@@ -5627,6 +5627,52 @@ export const useAbortMessageStream = (
   });
 };
 
+export type ClientToolParkError = Fetcher.ErrorWrapper<undefined>;
+
+export type ClientToolParkVariables = {
+  body: Schemas.ClientToolParkRequest;
+} & V1betaApiContext["fetcherOptions"];
+
+export const fetchClientToolPark = (
+  variables: ClientToolParkVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    Schemas.ClientToolParkResponse,
+    ClientToolParkError,
+    Schemas.ClientToolParkRequest,
+    {},
+    {},
+    {}
+  >({
+    url: "/api/v1beta/me/messages/clienttoolpark",
+    method: "post",
+    ...variables,
+    signal,
+  });
+
+export const useClientToolPark = (
+  options?: Omit<
+    reactQuery.UseMutationOptions<
+      Schemas.ClientToolParkResponse,
+      ClientToolParkError,
+      ClientToolParkVariables
+    >,
+    "mutationFn"
+  >,
+) => {
+  const { fetcherOptions } = useV1betaApiContext();
+  return reactQuery.useMutation<
+    Schemas.ClientToolParkResponse,
+    ClientToolParkError,
+    ClientToolParkVariables
+  >({
+    mutationFn: (variables: ClientToolParkVariables) =>
+      fetchClientToolPark(deepMerge(fetcherOptions, variables)),
+    ...options,
+  });
+};
+
 export type ClientToolResultError = Fetcher.ErrorWrapper<undefined>;
 
 export type ClientToolResultVariables = {

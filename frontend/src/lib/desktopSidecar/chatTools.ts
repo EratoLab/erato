@@ -980,6 +980,9 @@ export function createSidecarChatTools(
       const result = await runSidecarJob(client, name, check(input, context), {
         signal: context?.signal,
         chatId: context?.chatId ?? undefined,
+        toolCallId: context?.toolCallId,
+        // A review waits on the user, so the turn need not wait inline.
+        onReview: context?.park,
       });
       context?.signal?.throwIfAborted();
       if (result.isError) return { ok: false, error: callErrorText(result) };

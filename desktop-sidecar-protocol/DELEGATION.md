@@ -49,10 +49,13 @@ results. A response that reports `completed` or `approved` carries `results`,
 one entry per call in call order, and the job is `read` from then on;
 `jobs.read.v1` returns them again until `jobs.ack.v1` discards them, and answers
 InvalidParams for a job without results. `jobs.cancel.v1` ends a job that has
-not ended and is idempotent. `jobs.review.v1` opens or focuses the native review
-of a job in `ready_for_review` and reports the job's state; for any other job it
-only reports the state. An unknown handle, or one issued to another Origin,
-reports `expired`.
+not ended and is idempotent. `jobs.start.v1` is idempotent for an identical
+pending call: the sidecar returns the existing job instead of starting another,
+so a client that resumes a call after a reload finds the same job and review.
+`jobs.review.v1` opens or focuses the native review of a job in
+`ready_for_review` and reports the job's state; for any other job it only
+reports the state. An unknown handle, or one issued to another Origin, reports
+`expired`.
 
 `jobs.start.v1` and `jobs.status.v1` take `wait_ms`: the sidecar holds the
 response while the job is queued or running, or, for `jobs.status.v1`, while it
@@ -136,8 +139,10 @@ and shows no remote resources or document scripts. The selection starts empty.
 Upload-policy checks run on the text of the selected items, not on the whole
 snapshot, and gate "Approve selected". The decision is made only in the window:
 no RPC submits it, repeated `jobs.review.v1` calls focus the open window, and
-closing a pane neither cancels the job nor decides it. A policy guide whose
-decision provider is remote sends it the selected items' text.
+closing a pane neither cancels the job nor decides it. A review has no
+client-side deadline: a client polls the job until the user decides or the job
+ends. A policy guide whose decision provider is remote sends it the selected
+items' text.
 
 Approval exports each call filtered to its approved items: the array at `items`
 keeps only the approved items, the values at `resultMetadata` are kept, an

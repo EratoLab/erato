@@ -432,6 +432,77 @@ describe("handleClientToolCall", () => {
       expect(fetchMock).not.toHaveBeenCalled();
     });
 
+    it("lets the executor park its call once, with the call's binding, and still posts its result", async () => {
+      registerClientToolExecutor("fetch_availability", async (_input, ctx) => {
+        ctx?.park?.();
+        ctx?.park?.();
+        await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+        return { ok: true, result: { slots: 3 } };
+      });
+      fetchMock
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => ({ requested: true }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => ({ delivered: true, stored: true }),
+        });
+      await handleClientToolCall(makeEvent(), deps);
+      expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
+        "/api/v1beta/me/messages/clienttoolpark",
+        "/api/v1beta/me/messages/clienttoolresult",
+      ]);
+      const [, park] = fetchMock.mock.calls[0] as [string, RequestInit];
+      expect(park.method).toBe("POST");
+      expect(JSON.parse(park.body as string)).toEqual({
+        chat_id: "chat-1",
+        message_id: "msg-1",
+        tool_call_id: "call-1",
+      });
+      const headers = park.headers as Record<string, string>;
+      expect(headers.Authorization).toBe("Bearer tok");
+      expect(headers["X-Erato-Executor"]).toBe(
+        (
+          (fetchMock.mock.calls[1] as [string, RequestInit])[1]
+            .headers as Record<string, string>
+        )["X-Erato-Executor"],
+      );
+      expect(lastPostBody(fetchMock)).toMatchObject({ result: { slots: 3 } });
+      // The stored result is continued from here.
+      expect(sweep).toHaveBeenCalledTimes(1);
+    });
+
+    it.each([
+      ["refuses it", false],
+      ["cannot be reached", true],
+    ])("keeps the call live when the server %s", async (_case, unreachable) => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      registerClientToolExecutor("fetch_availability", async (_input, ctx) => {
+        ctx?.park?.();
+        await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+        return { ok: true, result: 1 };
+      });
+      if (unreachable)
+        fetchMock.mockRejectedValueOnce(new TypeError("offline"));
+      else fetchMock.mockResolvedValueOnce({ ok: false, status: 404 });
+      fetchMock.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ delivered: true, stored: false }),
+      });
+      try {
+        await handleClientToolCall(makeEvent(), deps);
+      } finally {
+        warn.mockRestore();
+      }
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(lastPostBody(fetchMock)).toMatchObject({ result: 1 });
+      expect(sweep).not.toHaveBeenCalled();
+    });
+
     it("keeps a conflicting call answered without requesting a sweep", async () => {
       fetchMock.mockResolvedValueOnce({ ok: false, status: 409 });
       await handleClientToolCall(makeEvent(), deps);
@@ -443,6 +514,63 @@ describe("handleClientToolCall", () => {
       expect(hasClientToolCallBeenAnswered("call-2")).toBe(false);
       expect(sweep).not.toHaveBeenCalled();
     });
+  });
+
+  it("offers no park to an unbound call, a pushed call or a task's call", async () => {
+    const parks: unknown[] = [];
+    registerClientToolExecutor(
+      "fetch_availability",
+      async (_input, ctx) => {
+        parks.push(ctx?.park);
+        return { ok: true, result: null };
+      },
+      undefined,
+      { acceptsGrantCalls: true },
+    );
+    const binding = {
+      device_id: "pane-device-000000",
+      realm: "office-addin" as const,
+      host_context: { kind: "outlook_mailbox", identity: "a".repeat(64) },
+    };
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ delivered: true, stored: false }),
+    });
+    await handleClientToolCall(makeEvent({ tool_call_id: "unbound" }), deps);
+    const unregister = registerOperationExecutor(
+      "fetch_availability",
+      () => binding,
+    );
+    try {
+      await handleClientToolCall(makeEvent({ tool_call_id: "pushed" }), {
+        ...deps,
+        executor: binding,
+      });
+      await handleClientToolCall(makeEvent({ tool_call_id: "task" }), {
+        ...deps,
+        lineage: {
+          owner_chat_id: "chat-0",
+          owner_message_id: "msg-0",
+          requesting_chat_id: "chat-1",
+          requesting_message_id: "msg-1",
+        },
+      });
+      await handleClientToolCall(makeEvent({ tool_call_id: "own" }), deps);
+    } finally {
+      unregister();
+    }
+    expect(parks.map((park) => typeof park)).toEqual([
+      "undefined",
+      "undefined",
+      "undefined",
+      "function",
+    ]);
+    expect(
+      fetchMock.mock.calls.some(([url]) =>
+        String(url).endsWith("/clienttoolpark"),
+      ),
+    ).toBe(false);
   });
 
   it("requests no sweep for an unbound call and lets its conflict retry", async () => {

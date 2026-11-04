@@ -728,6 +728,14 @@ protocol package 0.1.44 or later: earlier builds ignore the mode and run in
 standard mode, and the distribution manifest does not record a build's version,
 so the backend cannot check this.
 
+A review waits on the user, so give the content tools (`search_sidecar_index`,
+`get_sidecar_document` and `read_sidecar_conversation`) `host_context =
+"desktop_sidecar"` and a `durable` table with the same host context, for example
+with `attempt_expiry_secs = 86400`. Once the review opens, the turn parks until
+the user decides there, and the decision resumes it: the wait is bounded by the
+attempt expiry, not by `timeout_ms`. A content tool without the table keeps
+waiting inline, and its review ends at the tool's `timeout_ms`.
+
 **Default value:** `false`
 
 **Type:** `boolean`

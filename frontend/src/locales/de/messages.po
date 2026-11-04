@@ -9397,6 +9397,7 @@ msgstr "Lokales Postfach lesen"
 #~ msgid "Ready for review in the desktop app"
 #~ msgstr "Bereit zur Prüfung in der Desktop-App"
 
+#: src/components/ui/Message/MessageContent.tsx
 #: src/components/ui/Trace/steps/TaskResultStep.tsx
 msgid "Ready for review in the Erato desktop app"
 msgstr "Bereit zur Prüfung in der Erato-Desktop-App"

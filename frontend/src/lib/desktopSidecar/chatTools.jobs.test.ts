@@ -1,6 +1,10 @@
 import { SIDECAR_PROVIDER } from "@erato/desktop-sidecar-protocol";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { ClientToolOperationHandler } from "@/lib/clientOperations/clientToolHandler";
+import { ClientOperationCoordinator } from "@/lib/clientOperations/coordinator";
+import { createClientOperationHandlerRegistry } from "@/lib/clientOperations/handlers";
+
 import {
   completedJob,
   fakeSidecarClient,
@@ -33,6 +37,13 @@ import type {
   ClientToolCallContext,
   ClientToolExecutionResult,
 } from "@/hooks/chat/clientToolExecutors";
+import type { ClientOperationApi } from "@/lib/clientOperations/coordinator";
+import type {
+  AttemptState,
+  ExecutorBinding,
+  OperationPayload,
+  OperationRequest,
+} from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type {
   CallToolResult,
   JobCallResult,
@@ -1003,6 +1014,141 @@ describe("desktop sidecar tools in strict mode", () => {
         });
       }
       expect(path.requests).toEqual([]);
+    },
+  );
+
+  it("hands the turn off once a reviewed tool's review opens, and keeps every other call inline", async () => {
+    for (const discovery of [strict, fixtureDiscovery(NORMAL_MODE)]) {
+      for (const tool of TOOLS) {
+        const path = sidecar(RPC, discovery);
+        const park = vi.fn();
+        const outcome = await settled(
+          path
+            .tool(tool)
+            .execute(INPUTS[tool], { ...context, toolCallId: tool, park }),
+        );
+        // The executor still answers the call once the user decided.
+        expect(outcome).toMatchObject({ ok: true });
+        expect(park).toHaveBeenCalledTimes(
+          discovery === strict && selects(tool) ? 1 : 0,
+        );
+      }
+    }
+  });
+
+  it.each([
+    [
+      "approved",
+      (shaped: ClientToolExecutionResult) => ({
+        outcome: "succeeded",
+        result: {
+          type: "value",
+          value: (shaped as { result: unknown }).result,
+        },
+      }),
+    ],
+    [
+      "declined",
+      () => ({
+        outcome: "failed",
+        error: {
+          code: "execution_failed",
+          message:
+            "The user declined sharing this result in the Erato desktop app. Do not retry without their permission.",
+        },
+      }),
+    ],
+  ] as const)(
+    "resumes a parked review's call through the durable coordinator once the review is %s",
+    async (review, expected) => {
+      const shaped = await settled(
+        sidecar(RPC, strict)
+          .tool(SEARCH_SIDECAR_INDEX_TOOL)
+          .execute(INPUTS[SEARCH_SIDECAR_INDEX_TOOL], context),
+      );
+      // The same read, so the same `readAt`.
+      vi.setSystemTime(new Date("2026-11-02T10:00:00Z"));
+      const path = sidecar(RPC, strict, undefined, review);
+      const tool = path.tool(SEARCH_SIDECAR_INDEX_TOOL);
+      const binding: ExecutorBinding = {
+        device_id: "installation-one",
+        realm: "desktop-sidecar",
+        host_context: { kind: "desktop_sidecar", identity: "local" },
+      };
+      const request: OperationRequest = {
+        attempt_id: "00000000-0000-4000-8000-0000000000a1",
+        operation_id: "desktop/search_sidecar_index",
+        kind: "client_tool.v1",
+        account_id: "00000000-0000-4000-8000-000000000001",
+        chat_id: "00000000-0000-4000-8000-0000000000c1",
+        message_id: "00000000-0000-4000-8000-0000000000e1",
+        tool_call_id: "parked-call",
+        realm: "desktop-sidecar",
+        consent: "none",
+        expires_at: new Date(Date.now() + 86_400_000).toISOString(),
+        input: INPUTS[SEARCH_SIDECAR_INDEX_TOOL] as OperationPayload,
+        binding,
+      };
+      let state: AttemptState = "pending";
+      const api = {
+        list: vi.fn<ClientOperationApi["list"]>(async () => ({
+          enabled: true,
+          executor_stream_enabled: false,
+          account_id: request.account_id,
+          operations: state === "completed" ? [] : [{ request, state }],
+        })),
+        claim: vi.fn<ClientOperationApi["claim"]>(async () => {
+          state = "claimed";
+          return {
+            claim_token: "claim",
+            expires_at: new Date(Date.now() + 120_000).toISOString(),
+          };
+        }),
+        complete: vi.fn<ClientOperationApi["complete"]>(async () => {
+          state = "ready";
+          return { state };
+        }),
+        continue: vi.fn<ClientOperationApi["continue"]>(async () => {
+          state = "completed";
+        }),
+      } satisfies ClientOperationApi;
+      const registry = createClientOperationHandlerRegistry();
+      // After a reload: no live call runs here, so the coordinator claims it.
+      registry.register(
+        new ClientToolOperationHandler(
+          tool.name,
+          tool.execute,
+          () => binding,
+          tool.isAvailable,
+          () => false,
+        ),
+      );
+      const coordinator = new ClientOperationCoordinator(
+        request.account_id,
+        api,
+        [],
+        vi.fn(),
+        registry,
+      );
+      try {
+        await coordinator.reconcile();
+        await vi.advanceTimersByTimeAsync(JOB_POLL_INTERVAL_MS);
+        await vi.waitFor(() => expect(api.continue).toHaveBeenCalledTimes(1));
+      } finally {
+        coordinator.dispose();
+      }
+      expect(api.complete).toHaveBeenCalledTimes(1);
+      expect(api.complete.mock.calls[0][2]).toEqual({
+        attempt_id: request.attempt_id,
+        operation_id: request.operation_id,
+        executor: binding,
+        ...expected(shaped),
+      });
+      expect(path.methods().slice(0, 3)).toEqual([
+        "jobs.start.v1",
+        "jobs.review.v1",
+        "jobs.status.v1",
+      ]);
     },
   );
 
