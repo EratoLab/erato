@@ -1,0 +1,44 @@
+# Prompt composition and facet placement
+
+The backend's `services/prompt_composition` module builds an abstract sequence, resolves stored messages and prompts, then converts the result into a provider request. The following placement contract is an explicit developer decision recorded in [ERMAIN-1101](https://linear.app/erato-labs/issue/ERMAIN-1101). **Changing these placement rules requires explicit developer approval.**
+
+## Placement contract
+
+Hidden facets are baseline System-role instructions. They are injected at conversation start alongside the base and assistant prompts, then replayed from the stored snapshot. The existing deliberate context-rebase mechanism can rebuild that baseline.
+
+When activation triggers injection, normal user-selected facets are added after all existing selected-branch history and before the current user message and associated content. For each facet, the template precedes its additional prompt. Facets are ordered by ID. The current action facet follows all newly activated normal facets, at the same boundary.
+
+For example, enabling two normal facets and invoking an action on turn three produces:
+
+```text
+base system prompt / assistant prompt / hidden-facet baseline
+U1 -> R1 -> U2 -> R2
+normal facet alpha: template -> additional prompt
+normal facet zeta: template -> additional prompt
+current action-facet directive
+U3 + task-result content and/or attached files
+```
+
+Branches, edits and regeneration use the selected message's ancestry and the current request's facet context. A descendant's directive must not appear before shared ancestors. Injection is additive: normal and action facets must never suppress the historical baseline.
+
+## Role, chronology and lifetime
+
+Normal and action directives use User-role messages wrapped in `<system-reminder>` sentinels. This representation preserves chronological position on provider adapters that collect System-role messages into a baseline head. Merely changing a role does not implement recency: the directive must also be physically placed after history in the outbound request. The `additional_system_prompt` configuration key remains supported; normal facets render its content as a reminder, while hidden facets retain System role.
+
+Role and position do not determine lifetime. Normal facets still inject on activation and persist as rendered content under the existing replay behavior. Action facets retain metadata-only markers, render immediately before provider conversion, and are stripped when replayed on later turns. During a tool/thinking continuation of the same request, the composed prefix remains before newly appended assistant/tool content; composition does not re-inject facets. Hidden facets stay baseline instructions.
+
+Ordinary turns should extend history toward its current tip rather than rewrite the prefix preceding already generated replies. This supports provider prefix-cache stability, chronological history hygiene, and avoids an unnecessary change to context preceding prefix-bound thinking. Placement alone does **not** guarantee cache hits or thinking preservation: facet-driven tool/settings changes and existing history filters can independently alter provider context.
+
+## Compatibility and scope
+
+Existing serialized snapshots keep their original order, including previously prepended rendered normal directives. Existing replay filters continue removing old request-scoped action markers and legacy action System messages. No migration or retroactive reordering is required for an old chat to accept a new turn.
+
+Regression coverage in `prompt_composition/tests/test_cases/facet_placement.rs` checks full abstract/resolved ordering, first/later hidden baseline replay, branch/edit/regeneration ancestry, and continuation from a checked-in pre-refactor JSON fixture. Provider tests capture actual adapter HTTP payloads, including tool continuations with thinking content, to detect silent hoisting.
+
+This decision does not settle normal-facet deactivation semantics ([ERMAIN-1100](https://linear.app/erato-labs/issue/ERMAIN-1100)) or hidden-facet applicability when platforms/configuration change ([ERMAIN-1102](https://linear.app/erato-labs/issue/ERMAIN-1102)).
+
+## Baseline preservation regression coverage
+
+The ERMAIN-1099 review found no additional runtime change necessary after ERMAIN-1101: normal facet templates and additional prompts do not set the resolver's system-head flag, and hidden baseline prompts still do. Regression tests cover no selection → alpha → zeta → unchanged selection through serialized snapshots, with combined, template-only and additional-only prompts. They also verify replacement of the old base, assistant and hidden prompts on a context rebase, including a new head containing only hidden instructions. Existing action replay coverage remains in place.
+
+Previously rendered normal directives remain at their original activation boundary when another facet is selected; removing inactive facets is ERMAIN-1100. This preserves an intact historical baseline prospectively and does not reconstruct instructions already missing from a saved snapshot.

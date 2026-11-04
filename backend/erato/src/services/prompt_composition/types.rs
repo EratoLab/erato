@@ -82,7 +82,7 @@ pub enum AbstractChatSequencePart {
     /// Assistant-specific system prompt
     AssistantPrompt { spec: PromptSpec },
 
-    /// Global facet prompt template (rendered with facet metadata)
+    /// Normal facet template, rendered with metadata as a User-role reminder.
     FacetPromptTemplate {
         spec: PromptSpec,
         facet_id: String,
@@ -90,9 +90,12 @@ pub enum AbstractChatSequencePart {
         facet_tools_list: Vec<String>,
     },
 
-    /// Facet-specific additional system prompt. Also used for hidden baseline
-    /// facets (`hidden = true`), which are injected as always-on system prompts
-    /// at conversation start rather than via user selection.
+    /// Newly activated normal facet directive, placed at the current tip as a
+    /// User-role reminder. Persisted as rendered text with the existing lifetime.
+    NormalFacetAdditionalPrompt { spec: PromptSpec, facet_id: String },
+
+    /// Hidden baseline facet prompt, injected as a System-role instruction at
+    /// conversation start (or deliberate rebase), then replayed from history.
     FacetAdditionalSystemPrompt { spec: PromptSpec, facet_id: String },
 
     /// Action-facet directive (request-scoped, parameterized). Carries the

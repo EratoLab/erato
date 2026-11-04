@@ -915,6 +915,18 @@ async fn test_regenerate_drops_stored_action_facet_that_no_longer_validates(pool
 async fn test_facet_prompt_injection_toggle_behavior(pool: Pool<Postgres>) {
     let (mut app_config, _server) = setup_mock_llm_server(None).await;
 
+    for provider in app_config
+        .chat_providers
+        .as_mut()
+        .unwrap()
+        .providers
+        .values_mut()
+    {
+        provider.system_prompt = Some(PromptSourceSpecification::Static {
+            content: "Answer in German.".to_string(),
+        });
+    }
+
     let mut facets = HashMap::new();
     facets.insert(
         "web_search".to_string(),
@@ -1047,81 +1059,52 @@ async fn test_facet_prompt_injection_toggle_behavior(pool: Pool<Postgres>) {
     .expect("Failed to deserialize generation input messages for first turn");
     let first_gen_input_value = serde_json::to_value(&first_gen_input)
         .expect("Failed to serialize generation input messages");
-    let first_system_texts: Vec<String> = first_gen_input_value["messages"]
+    let first_messages = first_gen_input_value["messages"].as_array().unwrap();
+    let reminder = |text: &str| format!("<system-reminder>\n{text}\n</system-reminder>");
+    let expected_template = reminder("Facet Web search tools:\n- web-search-mcp/*");
+    let expected_additional = reminder("Use web search now.");
+    let position = |messages: &[Value], text: &str| {
+        messages
+            .iter()
+            .position(|msg| msg["content"]["text"].as_str() == Some(text))
+            .unwrap_or_else(|| panic!("Missing {text:?} in {messages:?}"))
+    };
+    assert_eq!(position(first_messages, "Answer in German."), 0);
+    assert_eq!(first_messages[0]["role"], "system");
+    let template = position(first_messages, &expected_template);
+    let additional = position(first_messages, &expected_additional);
+    let first_user = position(first_messages, "First turn");
+    assert!(template < additional && additional < first_user);
+    assert_eq!(first_messages[template]["role"], "user");
+    assert_eq!(first_messages[additional]["role"], "user");
+
+    let second_messages = assistant_messages[1]
+        .generation_input_messages
+        .as_ref()
+        .unwrap()["messages"]
         .as_array()
-        .expect("Expected messages array")
-        .iter()
-        .filter(|msg| msg["role"].as_str() == Some("system"))
-        .filter_map(|msg| {
-            if msg["content"]["content_type"].as_str() == Some("text") {
-                msg["content"]["text"].as_str().map(str::to_string)
-            } else {
-                None
-            }
-        })
-        .collect();
-
-    let expected_template = "Facet Web search tools:\n- web-search-mcp/*".to_string();
-    assert!(
-        first_system_texts
-            .iter()
-            .any(|text| text == &expected_template),
-        "Expected facet prompt template for web_search"
+        .unwrap();
+    // Activating a normal facet extends the existing prefix, including its
+    // baseline and previously rendered normal facets. Deactivation semantics
+    // are deferred to ERMAIN-1100, not inferred from System-message suppression.
+    assert_eq!(
+        &second_messages[..first_messages.len()],
+        first_messages.as_slice()
     );
+    let previous_user = position(second_messages, "First turn");
+    let new_directive = position(second_messages, &reminder("Use extended thinking now."));
+    let current_user = position(second_messages, "Second turn");
+    assert!(previous_user < new_directive && new_directive < current_user);
     assert!(
-        first_system_texts
+        second_messages[previous_user + 1..new_directive]
             .iter()
-            .any(|text| text.contains("Use web search now.")),
-        "Expected additional_system_prompt for web_search"
+            .any(|msg| msg["role"] == "assistant")
     );
-
-    let second_gen_input: GenerationInputMessages = serde_json::from_value(
-        assistant_messages[1]
-            .generation_input_messages
-            .clone()
-            .expect("Missing generation_input_messages"),
-    )
-    .expect("Failed to deserialize generation input messages for second turn");
-    let second_gen_input_value = serde_json::to_value(&second_gen_input)
-        .expect("Failed to serialize generation input messages");
-    let second_system_texts: Vec<String> = second_gen_input_value["messages"]
-        .as_array()
-        .expect("Expected messages array")
-        .iter()
-        .filter(|msg| msg["role"].as_str() == Some("system"))
-        .filter_map(|msg| {
-            if msg["content"]["content_type"].as_str() == Some("text") {
-                msg["content"]["text"].as_str().map(str::to_string)
-            } else {
-                None
-            }
-        })
-        .collect();
-
-    assert!(
-        second_system_texts
-            .iter()
-            .any(|text| text.contains("Use extended thinking now.")),
-        "Expected additional_system_prompt for extended_thinking"
-    );
-    assert!(
-        second_system_texts
-            .iter()
-            .all(|text| !text.contains("Facet Web search tools")),
-        "Did not expect web_search template on second turn"
-    );
-    assert!(
-        second_system_texts
-            .iter()
-            .all(|text| !text.contains("Use web search now.")),
-        "Did not expect web_search additional prompt on second turn"
-    );
-    assert!(
-        second_system_texts
-            .iter()
-            .all(|text| !text.contains("Facet Extended thinking tools")),
-        "Did not expect facet prompt template for extended_thinking when disabled"
-    );
+    assert!(!second_messages.iter().any(|msg| {
+        msg["content"]["text"]
+            .as_str()
+            .is_some_and(|text| text.contains("Facet Extended thinking tools"))
+    }));
 }
 
 /// Test token usage estimation with file input.

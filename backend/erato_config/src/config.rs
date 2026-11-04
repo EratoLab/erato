@@ -713,17 +713,17 @@ pub struct AppConfig {
 
     /// Named text-to-speech providers, independent of chat/transcription providers.
     #[serde(default)]
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.8.0"))]
     pub speech_providers: SpeechProvidersConfig,
 
     /// Named decision providers; consumers select a provider explicitly.
     #[serde(default)]
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.8.0"))]
     pub decision_providers: DecisionProvidersConfig,
 
     /// Organization-managed policy definitions, evaluated explicitly by consumers.
     #[serde(default)]
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.8.0"))]
     pub policy_guides: PolicyGuidesConfig,
 
     // If true, enables the data-retention half of the cleanup worker's tick,
@@ -842,19 +842,19 @@ pub struct DesktopSidecarConfig {
 
     /// Appended literally to the Windows launch URI scheme; empty by default.
     /// At most 64 ASCII letters, digits, hyphens, dots or plus signs.
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.8.0"))]
     pub launch_suffix: Option<String>,
 
     /// Windows MSI ProductCode override. A non-nil UUID, with optional braces.
     /// When omitted, derived from the template product code and directory suffix.
     /// Keep stable for repeated downloads; change for a major upgrade.
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.8.0"))]
     pub product_code: Option<String>,
 
     /// Windows MSI UpgradeCode override. A non-nil UUID, with optional braces.
     /// When omitted, derived from the template upgrade code and directory suffix.
     /// Keep stable across releases within one environment.
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.8.0"))]
     pub upgrade_code: Option<String>,
 
     /// Base64-encoded PNG tray icon, up to 256x256 pixels (no data URL prefix).
@@ -1075,7 +1075,7 @@ pub struct DesktopSidecarOrganizationConfiguration {
     /// pinning and leaves existing pins in place.
     #[serde(default)]
     #[schema(nullable = true)]
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.8.0"))]
     pub outlook_addin_autopin: Option<bool>,
 
     /// Whether `outlook_addin_autopin` also pins the add-in's task panes in
@@ -1084,7 +1084,7 @@ pub struct DesktopSidecarOrganizationConfiguration {
     /// When unset, the sidecar uses its user configuration or built-in default.
     #[serde(default)]
     #[schema(nullable = true)]
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.8.0"))]
     pub outlook_addin_autopin_panes: Option<bool>,
 
     /// The Erato Outlook add-in's manifest id, which the sidecar needs to find
@@ -1094,7 +1094,7 @@ pub struct DesktopSidecarOrganizationConfiguration {
     /// `integrations.ms_office.addin.addin_id` while the Office add-in is enabled.
     #[serde(default)]
     #[schema(nullable = true)]
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.8.0"))]
     pub outlook_addin_id: Option<String>,
 }
 
@@ -3148,7 +3148,7 @@ pub struct ChatProvidersConfig {
     #[facet(erato_config::introduced_in(version = "0.6.0"))]
     pub priority_order: Vec<String>,
     #[serde(default)]
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.8.0"))]
     pub replacement_providers: Vec<ProviderReplacement>,
     // Defaults that apply to all chat providers unless a provider-level setting overrides them.
     #[serde(default)]
@@ -3306,7 +3306,7 @@ pub struct PromptOptimizerConfig {
 #[derive(Debug, Default, Deserialize, PartialEq, Clone, Facet, HeapSize)]
 pub struct ChatProviderConfig {
     #[serde(default)]
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.8.0"))]
     pub archived: bool,
     // Overrides the all_providers setting when specified. Defaults to false.
     #[facet(erato_config::introduced_in(version = "0.7.0"))]
@@ -4160,7 +4160,7 @@ pub struct FrontendConfig {
     // Whether the Tools dropdown stays open after toggling a tool or facet.
     // Defaults to `false`.
     #[serde(default)]
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.8.0"))]
     #[facet(erato_config::stability(level = "beta"))]
     #[facet(erato_config::security_relevance(level = "none"))]
     pub keep_tools_dropdown_open: bool,
@@ -5103,7 +5103,7 @@ pub struct DelegationTasksConfig {
     // `client_tools.durable_operations_enabled` is on; every other tool stays
     // live. Defaults to "live".
     #[serde(default)]
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.8.0"))]
     pub child_dispatch: ChildDispatch,
 }
 
@@ -5282,7 +5282,7 @@ pub struct FacetDelegationOverrides {
     pub child_facet_ids: Option<Vec<String>>,
 
     #[serde(default)]
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.8.0"))]
     pub child_chat_providers: Option<Vec<String>>,
 
     #[serde(default)]
@@ -5935,7 +5935,7 @@ pub struct FacetConfig {
     // Applies only to delegated runs. When the user may not use it, the task
     // runs on the parent turn's model instead.
     #[serde(default)]
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.8.0"))]
     pub child_chat_provider: Option<String>,
     // Marks a child facet: a delegated task that names it in `facet_ids` is a
     // client task for this host, runs in wait mode and may read through the
@@ -5943,7 +5943,7 @@ pub struct FacetConfig {
     // facet only carries instructions; it restricts no tools, so it must not
     // be `hidden` or have a `tool_call_allowlist`.
     #[serde(default)]
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.8.0"))]
     pub child_host_context: Option<ClientToolHostContext>,
 }
 
@@ -6039,7 +6039,7 @@ pub struct ClientToolsConfig {
     /// no stream of the calling chat can take them, and new durable operations
     /// for that binding are announced on it.
     #[serde(default)]
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.8.0"))]
     pub executor_stream_enabled: bool,
     /// Client tools keyed by config tool id. The id is the override handle; the
     /// model-facing name is each tool's `name` field.
@@ -6133,28 +6133,28 @@ pub struct ClientToolConfig {
     /// parent's executor, under a grant the server writes at launch. Requires
     /// `host_context`; not allowed together with `submission`. Default: `none`.
     #[serde(default, skip_serializing_if = "ClientToolChildAccess::is_none")]
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.8.0"))]
     pub child_access: ClientToolChildAccess,
 
     /// Host family whose client state this tool reads, e.g. `word_document`.
     /// Required for `child_access = "read"`. Must equal `durable.host_context`
     /// when both are set.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.8.0"))]
     pub host_context: Option<ClientToolHostContext>,
 
     /// The parent turn's action-facet argument that holds its client context
     /// version (Word: `document_snapshot`). Set together with
     /// `child_context_input`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.8.0"))]
     pub child_context_arg: Option<String>,
 
     /// The tool input field the server fills with that context version on a
     /// delegated task's call, replacing whatever the model sent (Word:
     /// `snapshot`). Set together with `child_context_arg`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.8.0"))]
     pub child_context_input: Option<String>,
 
     /// Input fields the host fills on a delegated task's call from the client
@@ -6162,7 +6162,7 @@ pub struct ClientToolConfig {
     /// asked for them, and what it sends anyway is dropped. Requires
     /// `child_access = "read"`.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.8.0"))]
     pub child_host_inputs: Vec<String>,
 
     /// How a delegated task's calls of this tool reach the client: `live` on
@@ -6173,7 +6173,7 @@ pub struct ClientToolConfig {
     /// bounds the wait. Requires `child_access = "read"`. Default:
     /// `delegation.tasks.child_dispatch`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.8.0"))]
     pub child_dispatch: Option<ChildDispatch>,
 
     /// What one approval of a delegated task's call may cover. `call` asks for
@@ -6185,7 +6185,7 @@ pub struct ClientToolConfig {
     /// `child_access = "read"` and a host context that supports it. Default:
     /// `call`.
     #[serde(default, skip_serializing_if = "ClientToolApprovalScope::is_call")]
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.8.0"))]
     pub approval_scope: ClientToolApprovalScope,
 }
 
@@ -6967,7 +6967,7 @@ pub struct AudioConversationalConfig {
     pub transcription: AudioTranscriptionConfig,
     /// Speech provider used for audio-back in conversational mode only.
     #[serde(default)]
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.8.0"))]
     pub speech_provider: Option<String>,
 }
 
@@ -7126,7 +7126,7 @@ pub struct SharepointConfig {
     /// Search filenames across SharePoint/OneDrive using Microsoft Search.
     /// When false, the picker searches drive/site names only. Defaults to true.
     #[serde(default = "default_true")]
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.8.0"))]
     pub file_search_enabled: bool,
 
     // Whether to use the user's existing access token for MS Graph API calls.

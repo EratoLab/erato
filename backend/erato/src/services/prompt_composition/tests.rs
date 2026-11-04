@@ -2,6 +2,8 @@
 mod test_cases {
     #[path = "compaction.rs"]
     mod compaction;
+    #[path = "facet_placement.rs"]
+    mod facet_placement;
     use super::super::replay_policy::{RECEIPT_MARKER_KEY, ToolReplayPolicy};
     use super::super::traits::{FileResolver, MessageRepository, PromptProvider};
     use super::super::transforms::replay_assistant_content;
@@ -3063,11 +3065,11 @@ mod test_cases {
             "Action facet marker should be present in a user message"
         );
 
-        // Full sequence: base_system + action_facet + user1 + assistant + user2
+        // Full sequence: base_system + user1 + assistant + action_facet + user2
         assert_eq!(
             resolved2.messages.len(),
             5,
-            "Expected 5 messages (base_system + action_facet + user1 + assistant + user2), found {}",
+            "Expected 5 messages (base_system + user1 + assistant + action_facet + user2), found {}",
             resolved2.messages.len()
         );
     }
