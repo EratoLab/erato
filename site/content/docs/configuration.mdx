@@ -733,8 +733,12 @@ A review waits on the user, so give the content tools (`search_sidecar_index`,
 "desktop_sidecar"` and a `durable` table with the same host context, for example
 with `attempt_expiry_secs = 86400`. Once the review opens, the turn parks until
 the user decides there, and the decision resumes it: the wait is bounded by the
-attempt expiry, not by `timeout_ms`. A content tool without the table keeps
-waiting inline, and its review ends at the tool's `timeout_ms`.
+attempt expiry, not by `timeout_ms`. A sidecar built before `jobs.start.v1`
+became idempotent for a pending identical call opens a second review when the
+call resumes after a reload; if that window is ignored, the turn ends within
+the sidecar's one-hour job lifetime with a review-expired error. A content tool
+without the table keeps waiting inline, and its review ends at the tool's
+`timeout_ms`.
 
 **Default value:** `false`
 

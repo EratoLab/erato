@@ -3070,7 +3070,7 @@
             "description": "When the user has no access to the chat"
           },
           "409": {
-            "description": "The call's operation belongs to another executor binding"
+            "description": "The call's operation belongs to another executor binding. Checked when the generation runs on the replica that took the request; another replica answers `requested: true` and the owning replica discards the request, as for `clienttoolresult`"
           },
           "500": {
             "description": "When an internal server error occurs"

@@ -52,6 +52,10 @@ InvalidParams for a job without results. `jobs.cancel.v1` ends a job that has
 not ended and is idempotent. `jobs.start.v1` is idempotent for an identical
 pending call: the sidecar returns the existing job instead of starting another,
 so a client that resumes a call after a reload finds the same job and review.
+A sidecar built before this rule starts a second job, and under strict mode a
+second review, for the resumed call; the resumed call then ends within the
+sidecar's job lifetime (one hour) with that review's outcome or `expired`, and
+a decision in the first window reaches no client.
 `jobs.review.v1` opens or focuses the native review of a job in
 `ready_for_review` and reports the job's state; for any other job it only
 reports the state. An unknown handle, or one issued to another Origin, reports

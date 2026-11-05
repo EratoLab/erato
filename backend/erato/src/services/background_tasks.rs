@@ -807,15 +807,25 @@ impl BackgroundTaskManager {
                                     )
                                     .ok()
                                 });
-                            if task
+                            match task
                                 .request_client_tool_park(&tool_call_id, executor.as_ref())
                                 .await
-                                == ClientToolPark::BindingMismatch
                             {
-                                tracing::warn!(
-                                    %tool_call_id, generation_id = %task.generation_id,
-                                    "Discarding a shared park request with a mismatched executor"
-                                );
+                                ClientToolPark::Requested => {}
+                                // The requesting replica answered as taken; the
+                                // call stays live, so leave a trace.
+                                ClientToolPark::NotParkable => {
+                                    tracing::warn!(
+                                        %tool_call_id, generation_id = %task.generation_id,
+                                        "Discarding a shared park request for a call that cannot park; it stays live"
+                                    );
+                                }
+                                ClientToolPark::BindingMismatch => {
+                                    tracing::warn!(
+                                        %tool_call_id, generation_id = %task.generation_id,
+                                        "Discarding a shared park request with a mismatched executor"
+                                    );
+                                }
                             }
                         }
 

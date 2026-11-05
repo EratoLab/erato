@@ -18843,7 +18843,7 @@ pub async fn client_tool_result(
     request_body = ClientToolParkRequest,
     responses(
         (status = OK, body = ClientToolParkResponse),
-        (status = CONFLICT, description = "The call's operation belongs to another executor binding"),
+        (status = CONFLICT, description = "The call's operation belongs to another executor binding. Checked when the generation runs on the replica that took the request; another replica answers `requested: true` and the owning replica discards the request, as for `clienttoolresult`"),
         (status = UNAUTHORIZED, description = "When no valid JWT token is provided"),
         (status = FORBIDDEN, description = "When the user has no access to the chat"),
         (status = INTERNAL_SERVER_ERROR, description = "When an internal server error occurs")
@@ -18880,52 +18880,56 @@ pub async fn client_tool_park(
             format!("Access denied to chat: {}", e),
         )
     })?;
+    use crate::services::background_tasks::{ActiveGeneration, ClientToolPark};
+
     let not_requested = Ok(Json(ClientToolParkResponse { requested: false }));
     if !app_state.config.client_tools.durable_operations_enabled {
         return not_requested;
     }
     let executor = crate::services::client_operations::ExecutorBinding::from_headers(&headers);
-    if let Some(task) = app_state.background_tasks.get_task(&request.chat_id).await {
-        if task.message_id() != request.message_id {
-            return not_requested;
-        }
-        return match task
-            .request_client_tool_park(&request.tool_call_id, executor.as_ref())
-            .await
-        {
-            crate::services::background_tasks::ClientToolPark::Requested => {
-                Ok(Json(ClientToolParkResponse { requested: true }))
-            }
-            crate::services::background_tasks::ClientToolPark::NotParkable => not_requested,
-            crate::services::background_tasks::ClientToolPark::BindingMismatch => Err((
-                axum::http::StatusCode::CONFLICT,
-                "Operation binding mismatch".into(),
-            )),
-        };
-    }
-    // The generation runs on another replica, which checks the call and its
-    // binding itself.
-    let Some((generation_id, message_id)) = app_state
+    // The generation that waits for the call, located as for an abort: this
+    // replica's task, else the generation leased elsewhere.
+    let Some(generation) = app_state
         .background_tasks
-        .get_shared_generation(&request.chat_id)
+        .active_generation(&request.chat_id)
         .await
     else {
         return not_requested;
     };
-    if message_id.is_some_and(|message_id| message_id != request.message_id) {
+    if generation
+        .message_id()
+        .is_some_and(|message_id| message_id != request.message_id)
+    {
         return not_requested;
     }
-    app_state
-        .background_tasks
-        .enqueue_client_tool_park(generation_id, &request.tool_call_id, executor.as_ref())
-        .await
-        .map_err(|error| {
-            (
-                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Failed to deliver the park request: {error}"),
-            )
-        })?;
-    Ok(Json(ClientToolParkResponse { requested: true }))
+    match generation {
+        ActiveGeneration::Local(task) => match task
+            .request_client_tool_park(&request.tool_call_id, executor.as_ref())
+            .await
+        {
+            ClientToolPark::Requested => Ok(Json(ClientToolParkResponse { requested: true })),
+            ClientToolPark::NotParkable => not_requested,
+            ClientToolPark::BindingMismatch => Err((
+                axum::http::StatusCode::CONFLICT,
+                "Operation binding mismatch".into(),
+            )),
+        },
+        // The generation runs on another replica, which checks the call and
+        // its binding itself and discards a request it cannot take.
+        ActiveGeneration::Shared { generation_id, .. } => {
+            app_state
+                .background_tasks
+                .enqueue_client_tool_park(generation_id, &request.tool_call_id, executor.as_ref())
+                .await
+                .map_err(|error| {
+                    (
+                        axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("Failed to deliver the park request: {error}"),
+                    )
+                })?;
+            Ok(Json(ClientToolParkResponse { requested: true }))
+        }
+    }
 }
 
 /// Every "you may not have this" answer `/react` gives.
