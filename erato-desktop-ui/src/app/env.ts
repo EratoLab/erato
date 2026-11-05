@@ -8,7 +8,7 @@
 export function injectFrontendEnv() {
   window.API_ROOT_URL ??= "https://desktop-ui.invalid";
   window.FRONTEND_PLATFORM ??= "common";
-  window.FRONTEND_PUBLIC_BASE_PATH ??= "/public/desktop-ui";
+  window.FRONTEND_PUBLIC_BASE_PATH ??= "/public/common";
   window.COMMON_PUBLIC_BASE_PATH ??= "/public/common";
 }
 
