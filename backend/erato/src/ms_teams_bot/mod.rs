@@ -21,6 +21,7 @@ pub mod graph;
 mod handler;
 pub mod host;
 pub mod inbound_auth;
+pub mod nudge;
 pub mod render;
 pub mod streaming;
 pub mod user_token;

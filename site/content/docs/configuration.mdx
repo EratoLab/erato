@@ -3544,6 +3544,33 @@ When `integrations.ms_office.teams.enabled` is also set, the rendered Teams app 
 
 **Default values:** disabled; `app_id` from the add-in's `msal_client_id`; `tenant_id` from a tenant-specific `msal_authority`; `oauth_connection_name` is `"graph-sso"`; `token_service_url` is `"https://token.botframework.com"`.
 
+##### `integrations.ms_office.teams.bot.inactivity_nudge`
+
+{/* erato_toml_config_key: integrations.ms_office.teams.bot.inactivity_nudge */}
+{/* erato_toml_config_key: integrations.ms_office.teams.bot.inactivity_nudge.enabled */}
+{/* erato_toml_config_key: integrations.ms_office.teams.bot.inactivity_nudge.inactive_after */}
+{/* erato_toml_config_key: integrations.ms_office.teams.bot.inactivity_nudge.repeat */}
+{/* erato_toml_config_key: integrations.ms_office.teams.bot.inactivity_nudge.tips */}
+{/* erato_toml_config_key: integrations.ms_office.teams.bot.inactivity_nudge.pilot_users */}
+{/* erato_toml_config_key: integrations.ms_office.teams.bot.inactivity_nudge.max_per_run */}
+{/* erato_toml_config_key: integrations.ms_office.teams.bot.inactivity_nudge.send_window */}
+{/* erato_toml_config_key: integrations.ms_office.teams.bot.inactivity_nudge.send_window.weekdays */}
+{/* erato_toml_config_key: integrations.ms_office.teams.bot.inactivity_nudge.send_window.start_hour */}
+{/* erato_toml_config_key: integrations.ms_office.teams.bot.inactivity_nudge.send_window.end_hour */}
+{/* erato_toml_config_key: integrations.ms_office.teams.bot.inactivity_nudge.send_window.time_zone */}
+
+A "Did you know…?" tip for users who have not used Erato for a while, sent as a card to their personal chat with the bot. Requires the [`scheduled_deliveries`](#scheduled_deliveries) executor. See the [Teams bot guide](./integrations/ms_teams#inactivity-nudge) for what users see and how they opt out.
+
+- `enabled`: whether tips are sent.
+- `inactive_after`: inactivity (no chat activity on any surface) before a tip, as a duration such as `7d`, `36h` or `90m`.
+- `repeat`: whether another tip follows after each further `inactive_after` of silence. Off, a user gets one tip per inactivity period and the next only after being active again.
+- `send_window`: `weekdays` (`mon`…`sun`), `start_hour` (0–23), `end_hour` (1–24) and the IANA `time_zone`; a tip that becomes due outside the window waits for the next slot inside it.
+- `tips`: the texts, in the order a user first sees them; each user gets the next one in turn. One language per deployment.
+- `pilot_users`: email addresses that get tips; empty means everyone.
+- `max_per_run`: tips scheduled per hourly producer run.
+
+**Default values:** disabled; `inactive_after` is `"7d"`; `repeat` is `false`; Monday to Friday, `8` to `18`, `Europe/Berlin`; no tips; everyone; `200`.
+
 ##### `integrations.ms_office.teams.bot` (optional behavior)
 
 {/* erato_toml_config_key: integrations.ms_office.teams.bot.sso_enabled */}

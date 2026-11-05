@@ -26,6 +26,7 @@ pub struct Model {
     pub client_tool_file_approval: Option<String>,
     #[sea_orm(column_type = "JsonBinary")]
     pub client_tool_decisions: Json,
+    pub teams_nudges_opted_out_at: Option<DateTimeWithTimeZone>,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

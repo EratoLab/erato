@@ -10,7 +10,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict M0LKNZJhhnvbkMl0RfiKvys37qbtdXLZeqdoGXZBUh7XPdaNnAaLD94X4UCQrnQ
+\restrict EaE4yPwbTsr3GjNFOwd5fZMK9HxNTsL4kxoUNHZR6PpplEyIRu8BqNfcx4ffki7
 
 -- Dumped from database version 17.2 (Debian 17.2-1.pgdg120+1)
 -- Dumped by pg_dump version 17.11 (Homebrew)
@@ -809,6 +809,7 @@ CREATE TABLE public.user_preferences (
     starting_assistant_cleared boolean DEFAULT false NOT NULL,
     client_tool_file_approval text,
     client_tool_decisions jsonb DEFAULT '{}'::jsonb NOT NULL,
+    teams_nudges_opted_out_at timestamp with time zone,
     CONSTRAINT user_preferences_client_tool_decisions_check CHECK ((jsonb_typeof(client_tool_decisions) = 'object'::text)),
     CONSTRAINT user_preferences_client_tool_file_approval_check CHECK ((client_tool_file_approval = ANY (ARRAY['never_allow'::text, 'ask'::text, 'always_allow'::text]))),
     CONSTRAINT user_preferences_starting_assistant_single_pick_check CHECK (((starting_hub_assistant_id IS NULL) OR (starting_assistant_id IS NULL))),
@@ -2232,5 +2233,5 @@ ALTER TABLE ONLY public.user_tool_approval_settings
 -- PostgreSQL database dump complete
 --
 
-\unrestrict M0LKNZJhhnvbkMl0RfiKvys37qbtdXLZeqdoGXZBUh7XPdaNnAaLD94X4UCQrnQ
+\unrestrict EaE4yPwbTsr3GjNFOwd5fZMK9HxNTsL4kxoUNHZR6PpplEyIRu8BqNfcx4ffki7
 

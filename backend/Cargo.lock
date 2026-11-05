@@ -2821,6 +2821,7 @@ dependencies = [
  "cab",
  "cbc 0.2.1",
  "chrono",
+ "chrono-tz",
  "color-eyre",
  "console-subscriber",
  "cron",
@@ -2931,12 +2932,14 @@ name = "erato_config"
 version = "0.6.2"
 dependencies = [
  "base64 0.22.1",
+ "chrono-tz",
  "config",
  "cron",
  "erato-config-schema",
  "erato_memory",
  "eyre",
  "facet",
+ "humantime",
  "jsonschema",
  "png",
  "regex",

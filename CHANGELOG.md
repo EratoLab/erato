@@ -30,6 +30,8 @@ Typical "Notable changes" categories to copy & paste:
 
 **Scheduled deliveries.** A shared table and executor for messages Erato owes a user at a due time (reminders, nudges, notifications): producers create rows, the executor claims each row once with a compare-and-set, delivers it through a channel and records the outcome, with retries for throttled or failed transport and crash recovery for claims a dying replica left behind. Off by default; enable with `[scheduled_deliveries] enabled = true`. This is the foundation for the Teams inactivity nudge and for user reminders; it ships no user-facing feature on its own.
 
+**Teams bot: inactivity nudge.** Users who have not used Erato for a while (`inactive_after`, default 7 days, on any surface) get one "Did you know…?" tip as a card in their personal chat with the bot, inside a configurable send window (Mon–Fri 08:00–18:00 Europe/Berlin by default), once per inactivity period. The card offers "Open <app>" and "Don't remind me"; `/reminders off` and `/reminders on` (German: `/erinnerungen aus|an`) do the same. The bot now records the personal conversation when it is added to a user's chat, so people the app was installed for by policy can be reached before they write. Enable with `[integrations.ms_office.teams.bot.inactivity_nudge] enabled = true`, `tips = [...]`, plus `[scheduled_deliveries] enabled = true`; `pilot_users` limits a rollout to listed addresses.
+
 ## [0.8.0] - 2026-11-03
 
 ### Notable changes

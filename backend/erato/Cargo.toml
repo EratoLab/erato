@@ -132,6 +132,7 @@ moka = { version = "0.12.13", features = ["future"] }
 # serde feature declared directly: previously reached only via feature
 # unification from sqlx/sea-orm.
 chrono = { version = "0.4", features = ["serde"] }
+chrono-tz = "0.10"
 url = "2.5.8"
 unicode-normalization = "0.1.25"
 

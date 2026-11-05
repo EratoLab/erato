@@ -12,6 +12,7 @@ use super::graph::{Graph, GraphIdentity, context_markdown};
 use super::host::{
     ActionKind, Completion, GenerationUpdate, Host, RequestState, Session, StartError, TeamsRequest,
 };
+use super::nudge;
 use super::render::{self, Mention};
 use super::streaming::{PROGRESS_INTERVAL, ReplyTarget, StreamingReply, WORKING_STATUS};
 use super::user_token::sign_in_activity;
@@ -77,6 +78,13 @@ async fn process_message(
     {
         return on_control(bot, host, activity, target, submit, allow_sign_in).await;
     }
+    if let Some(submit) = activity
+        .value
+        .as_ref()
+        .and_then(nudge::DeliverySubmit::from_value)
+    {
+        return on_delivery_action(bot, host, activity, target, submit, allow_sign_in).await;
+    }
 
     let text = activity.text_without_bot_mention();
     let files = activity.incoming_files();
@@ -108,6 +116,13 @@ async fn process_message(
         target
             .send_text("Started a new chat. Send your next message when you are ready.")
             .await?;
+        return Ok(());
+    }
+
+    if let Some(tips_on) = nudge::reminders_command(&text) {
+        host.set_teams_nudges_opt_out(user.session.user_id(), !tips_on)
+            .await?;
+        target.send_text(&reminders_text(bot, tips_on)).await?;
         return Ok(());
     }
 
@@ -431,6 +446,52 @@ async fn on_control(
             update_controls(host, target, request.id).await;
             reply_start_error(target, error).await
         }
+    }
+}
+
+/// A button on a delivered card (a tip's "Don't remind me"). The token is
+/// claimed once, for the user who got the card in the conversation it was
+/// sent to, so a forwarded or replayed card does nothing.
+async fn on_delivery_action(
+    bot: &TeamsBot,
+    host: &Host,
+    activity: &Activity,
+    target: &ReplyTarget<'_>,
+    submit: nudge::DeliverySubmit,
+    allow_sign_in: bool,
+) -> Result<(), Report> {
+    let Some(user) = authenticate(bot, host, activity, target, allow_sign_in).await? else {
+        return Ok(());
+    };
+    let conversation_id = activity.conversation_id().unwrap_or_default();
+    if !host
+        .claim_delivery_action(user.session.user_id(), conversation_id, &submit)
+        .await?
+    {
+        return target
+            .send_text("This button was already used or has expired.")
+            .await;
+    }
+    match submit.command.as_str() {
+        nudge::OPT_OUT_COMMAND => {
+            host.set_teams_nudges_opt_out(user.session.user_id(), true)
+                .await?;
+            target.send_text(&reminders_text(bot, false)).await
+        }
+        _ => target.send_text("This button is not supported.").await,
+    }
+}
+
+fn reminders_text(bot: &TeamsBot, tips_on: bool) -> String {
+    let name = &bot.settings.app_name;
+    if tips_on {
+        format!(
+            "{name} will send you tips again when you have not used it for a while. Send /reminders off to stop them."
+        )
+    } else {
+        format!(
+            "All right, {name} will not send you any more tips. Send /reminders on to get them again."
+        )
     }
 }
 
@@ -1202,13 +1263,29 @@ pub(super) async fn on_bot_added(bot: Arc<TeamsBot>, host: Host, activity: Activ
         return;
     };
     let known_user = match activity.from_aad_object_id() {
-        Some(object_id) => matches!(host.find_user(object_id).await, Ok(Some(_))),
-        None => false,
+        Some(object_id) => host.find_user(object_id).await.ok().flatten(),
+        None => None,
     };
+    // Remember the personal conversation now, so a user the app was installed
+    // for by policy can be reached (tips, reminders) before they ever write.
+    if let Some(user) = &known_user
+        && let Ok((conversation_id, service_url, from_id)) = routing(&activity)
+        && let Err(error) = host
+            .upsert_conversation(
+                conversation_id,
+                ConversationKind::Personal,
+                user.id,
+                service_url,
+                from_id,
+            )
+            .await
+    {
+        tracing::warn!(%error, "Could not record the personal Teams conversation on install");
+    }
     let settings = &bot.settings;
     let card = cards::welcome_card(
         &settings.app_name,
-        known_user,
+        known_user.is_some(),
         settings.tab_name.as_deref(),
         settings.public_base_url.as_deref(),
     );
