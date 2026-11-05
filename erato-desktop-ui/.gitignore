@@ -1,0 +1,5 @@
+/dist
+/release
+/node_modules
+src/locales/**/*.json
+src/locales/**/*.ts

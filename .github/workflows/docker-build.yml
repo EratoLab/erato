@@ -134,6 +134,7 @@ jobs:
             ./frontend/pnpm-lock.yaml
             ./component-kit-example/package.json
             ./office-addin/pnpm-lock.yaml
+            ./erato-desktop-ui/pnpm-lock.yaml
 
       - name: "Install desktop sidecar protocol packages"
         working-directory: ./desktop-sidecar-protocol
@@ -172,6 +173,29 @@ jobs:
       - name: "Build office-addin"
         working-directory: ./office-addin
         run: pnpm run build
+
+      - name: "Install erato-desktop-ui packages"
+        working-directory: ./erato-desktop-ui
+        run: pnpm install --no-frozen-lockfile --lockfile=false
+
+      - name: "Build erato-desktop-ui"
+        working-directory: ./erato-desktop-ui
+        run: pnpm run build
+
+      # The tarball the sidecar repository mirrors; fails on source maps or
+      # above the size budget.
+      - name: "Package erato-desktop-ui bundle"
+        working-directory: ./erato-desktop-ui
+        run: pnpm run package
+
+      - name: "Upload erato-desktop-ui bundle"
+        uses: actions/upload-artifact@v4
+        with:
+          name: erato-desktop-ui
+          path: |
+            erato-desktop-ui/release/*.tgz
+            erato-desktop-ui/release/*.sha256
+          if-no-files-found: error
 
       - name: "Served route manifests"
         if: success() || failure()
@@ -296,6 +320,31 @@ jobs:
         working-directory: ./office-addin
         if: success() || failure()
         run: pnpm run office:validate:teams
+
+      - name: "Desktop UI prettier"
+        working-directory: ./erato-desktop-ui
+        if: success() || failure()
+        run: pnpm run format:check
+
+      - name: "Desktop UI i18n catalogs are up-to-date"
+        working-directory: ./erato-desktop-ui
+        if: success() || failure()
+        run: pnpm run i18n:extract:check
+
+      - name: "Desktop UI lint (strict)"
+        working-directory: ./erato-desktop-ui
+        if: success() || failure()
+        run: pnpm run lint:strict
+
+      - name: "Desktop UI typecheck"
+        working-directory: ./erato-desktop-ui
+        if: success() || failure()
+        run: pnpm run typecheck
+
+      - name: "Desktop UI tests"
+        working-directory: ./erato-desktop-ui
+        if: success() || failure()
+        run: pnpm run test
 
   lint-backend:
     timeout-minutes: 10

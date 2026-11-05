@@ -21,6 +21,8 @@ tmp/
 ./frontend/node_modules
 ./office-addin/node_modules
 ./component-kit-example/node_modules
+./erato-desktop-ui/node_modules
+./erato-desktop-ui/release
 
 # Irellevant projects for build
 ./backend

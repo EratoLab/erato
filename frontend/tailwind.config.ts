@@ -11,6 +11,8 @@ export default {
     // the add-in renders unstyled with no build error. A missing directory
     // matches nothing, so a standalone frontend build is unaffected.
     "../office-addin/src/**/*.{js,ts,jsx,tsx}",
+    // The desktop UI (sidecar windows) renders against the same stylesheet.
+    "../erato-desktop-ui/src/**/*.{js,ts,jsx,tsx}",
   ],
   theme: {
     extend: {
