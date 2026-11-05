@@ -17,6 +17,7 @@ import {
 
 import type {
   CallLineage,
+  ClientToolParkRequest,
   ClientToolResultRequest,
   ClientToolResultResponse,
   ExecutorBinding,
@@ -136,6 +137,17 @@ async function runAndPost(
     // until the POST settles, so a parked operation's handler defers its claim.
     const signal = trackClientToolCallAbort(tool_call_id, chatId);
     if (expired()) abortClientToolCall(tool_call_id);
+    // Only a call of the user's own turn from the chat stream, sent with its
+    // binding, can have a durable operation to park.
+    let parkRequested = false;
+    const park =
+      !deps.executor && !deps.lineage && binding
+        ? () => {
+            if (parkRequested) return;
+            parkRequested = true;
+            void requestPark(base, deps, binding);
+          }
+        : undefined;
     try {
       let body: ClientToolResultRequest;
       try {
@@ -143,7 +155,13 @@ async function runAndPost(
           tool_name,
           executor,
           input ?? null,
-          { toolCallId: tool_call_id, messageId: message_id, chatId, signal },
+          {
+            toolCallId: tool_call_id,
+            messageId: message_id,
+            chatId,
+            signal,
+            ...(park ? { park } : {}),
+          },
           deps.lineage,
         );
         body = outcome.ok
@@ -178,6 +196,37 @@ async function runAndPost(
   // A call that can park may already run in another pane of this browser.
   if (submitBinding) await withClientCallLock(message_id, tool_call_id, run);
   else await run();
+}
+
+/**
+ * Asks the server to park a call that now waits on the user on this device.
+ * The call stays live where the server cannot park it (a tool without a
+ * durable operation, or a server without the endpoint); its result is posted
+ * as usual either way.
+ */
+async function requestPark(
+  base: ClientToolParkRequest,
+  deps: HandleClientToolCallDeps,
+  binding: ExecutorBinding,
+): Promise<void> {
+  try {
+    const response = await fetch("/api/v1beta/me/messages/clienttoolpark", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...deps.getAuthHeaders(),
+        ...(deps.extraHeaders ?? {}),
+        "X-Erato-Executor": JSON.stringify(binding),
+      },
+      body: JSON.stringify(base),
+    });
+    if (!response.ok)
+      console.warn(
+        `[client_tool_call] park request returned ${response.status}`,
+      );
+  } catch (error) {
+    console.warn("[client_tool_call] park request failed", error);
+  }
 }
 
 // The executor stream sends a call again only when another stream takes the

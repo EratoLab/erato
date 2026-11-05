@@ -1,7 +1,13 @@
 import { i18n } from "@lingui/core";
 import { I18nProvider } from "@lingui/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import {
@@ -10,6 +16,7 @@ import {
 } from "@/components/providers/ThemeProvider";
 import { componentRegistry } from "@/config/componentRegistry";
 import { useClientToolFileApprovalStore } from "@/hooks/chat/store/clientToolFileApprovalStore";
+import { markAwaitingReview } from "@/lib/desktopSidecar/sidecarReviewStore";
 import { messages as enMessages } from "@/locales/en/messages.json";
 import { StaticFeatureConfigProvider } from "@/providers/FeatureConfigProvider";
 import { FileTypeUtil } from "@/utils/fileTypes";
@@ -2403,6 +2410,32 @@ it("shows a durable app wait in persisted history and hides a consumed marker", 
     />,
   );
   expect(screen.queryByRole("status")).toBeNull();
+});
+
+it("points a turn parked on a sidecar review to the Erato desktop app while the review is open", () => {
+  const pending: ContentPart = {
+    content_type: "client_tool_pending",
+    attempt_id: "attempt",
+    tool_call_id: "call",
+    pending_tool_calls: [],
+  };
+  renderWithTheme(<MessageContent content={[pending]} />);
+  const notice = screen.getByRole("status");
+  expect(notice).toHaveTextContent("waiting for a connected app");
+  let reviewEnded = () => {};
+  act(() => {
+    reviewEnded = markAwaitingReview("chat", "call");
+  });
+  try {
+    expect(notice).toHaveTextContent(
+      "Ready for review in the Erato desktop app",
+    );
+  } finally {
+    act(() => reviewEnded());
+  }
+  expect(screen.getByRole("status")).toHaveTextContent(
+    "waiting for a connected app",
+  );
 });
 
 it("renders persisted speech for explicit replay without autoplay", () => {

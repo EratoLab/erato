@@ -80,16 +80,17 @@ use crate::server::api::v1beta::mcp_servers::{
 };
 use crate::server::api::v1beta::me_profile_middleware::{MeProfile, UserProfile};
 use crate::server::api::v1beta::message_streaming::{
-    __path_abort_message_stream, __path_client_tool_result, __path_continue_message_sse,
-    __path_edit_message_sse, __path_message_submit_sse, __path_react_to_task_result_sse,
-    __path_regenerate_message_sse, __path_resume_message_sse, AbortStreamRequest,
-    AbortStreamResponse, ActionFacetRequest, AlreadyContinuedError, ChildrenWaitingError,
-    ClientToolResultRequest, ClientToolResultResponse, CoveredByParentError, EditMessageRequest,
+    __path_abort_message_stream, __path_client_tool_park, __path_client_tool_result,
+    __path_continue_message_sse, __path_edit_message_sse, __path_message_submit_sse,
+    __path_react_to_task_result_sse, __path_regenerate_message_sse, __path_resume_message_sse,
+    AbortStreamRequest, AbortStreamResponse, ActionFacetRequest, AlreadyContinuedError,
+    ChildrenWaitingError, ClientToolParkRequest, ClientToolParkResponse, ClientToolResultRequest,
+    ClientToolResultResponse, CoveredByParentError, EditMessageRequest,
     EditMessageStreamingResponseMessage, GenerationRunningError, MessageSubmitRequest,
     MessageSubmitStreamingResponseMessage, NothingToReactError, ReactToTaskResultRequest,
-    ResumeStreamRequest, abort_message_stream, client_tool_result, continue_message_sse,
-    edit_message_sse, message_submit_sse, platform_from_headers, react_to_task_result_sse,
-    regenerate_message_sse, resume_message_sse,
+    ResumeStreamRequest, abort_message_stream, client_tool_park, client_tool_result,
+    continue_message_sse, edit_message_sse, message_submit_sse, platform_from_headers,
+    react_to_task_result_sse, regenerate_message_sse, resume_message_sse,
 };
 use crate::server::api::v1beta::share_grants::{
     CreateShareGrantRequest, CreateShareGrantResponse, ListShareGrantsResponse, ShareGrant,
@@ -170,6 +171,7 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         .route("/messages/resumestream", post(resume_message_sse))
         .route("/messages/continuestream", post(continue_message_sse))
         .route("/messages/clienttoolresult", post(client_tool_result))
+        .route("/messages/clienttoolpark", post(client_tool_park))
         .route("/client-operations", get(list_client_operations))
         .route("/client-operations/stream", get(executor_stream))
         .route(
@@ -457,6 +459,7 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         react_to_task_result_sse,
         retry_delegated_run,
         client_tool_result,
+        client_tool_park,
         list_client_operations,
         claim_client_operation,
         complete_client_operation,
@@ -577,6 +580,8 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         ResumeStreamRequest,
         ClientToolResultRequest,
         ClientToolResultResponse,
+        ClientToolParkRequest,
+        ClientToolParkResponse,
         CreateChatRequest,
         CreateChatResponse,
         UpdateChatRequest,

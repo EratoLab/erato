@@ -38,6 +38,7 @@ import {
   taskBriefFromInput,
 } from "@/lib/delegation/taskBrief";
 import { WaitingHostsContext } from "@/lib/delegation/waitingHosts";
+import { useSidecarReviewStore } from "@/lib/desktopSidecar/sidecarReviewStore";
 import {
   WORD_EDITS_FENCE,
   WORD_INSERT_FENCE,
@@ -696,6 +697,24 @@ const rewriteFootnoteValue = (
 
   return value;
 };
+
+/**
+ * A turn parked on a client tool call. A call that waits for its review in
+ * the Erato desktop app on this device points there; the turn resumes once
+ * the user decides.
+ */
+function ClientToolPendingNotice({ toolCallId }: { toolCallId: string }) {
+  const awaitingReview = useSidecarReviewStore((state) =>
+    state.waitingByToolCallId.has(toolCallId),
+  );
+  return (
+    <Alert type="info" role="status" geometryVariant="message">
+      {awaitingReview
+        ? t`Ready for review in the Erato desktop app`
+        : t`This task is waiting for a connected app. You can leave this chat and return later.`}
+    </Alert>
+  );
+}
 
 const isRenderableContentPart = (part: ContentPart): boolean =>
   part.content_type === "text" ||
@@ -1737,14 +1756,10 @@ export const MessageContent = memo(function MessageContent({
         if (part.content_type === "client_tool_pending") {
           if (index !== content.length - 1) return null;
           return (
-            <Alert
+            <ClientToolPendingNotice
               key={`client-operation-${part.attempt_id}`}
-              type="info"
-              role="status"
-              geometryVariant="message"
-            >
-              {t`This task is waiting for a connected app. You can leave this chat and return later.`}
-            </Alert>
+              toolCallId={part.tool_call_id}
+            />
           );
         }
 

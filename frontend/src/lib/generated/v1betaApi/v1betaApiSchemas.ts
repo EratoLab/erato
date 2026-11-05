@@ -1182,6 +1182,38 @@ export type ClientToolDraftReference = {
  */
 export type ClientToolFileApproval = "never_allow" | "ask" | "always_allow";
 
+export type ClientToolParkRequest = {
+  /**
+   * The chat whose generation waits for the call.
+   *
+   * @format uuid
+   * @example 00000000-0000-0000-0000-000000000000
+   */
+  chat_id: string;
+  /**
+   * The assistant message whose generation emitted the client tool call.
+   *
+   * @format uuid
+   * @example 00000000-0000-0000-0000-000000000000
+   */
+  message_id: string;
+  /**
+   * The `tool_call_id` from the `client_tool_call` event.
+   */
+  tool_call_id: string;
+};
+
+export type ClientToolParkResponse = {
+  /**
+   * True if the generation that waits for the call took the request (on
+   * another replica: was sent it); it then parks the call as its durable
+   * operation. False if no generation waits for the call as an operation
+   * that can park, so it stays live. Either way the client answers the
+   * call through `clienttoolresult` once it has a result.
+   */
+  requested: boolean;
+};
+
 /**
  * Metadata-only suspension marker. Input and approved output use the normal
  * ToolUse part; this marker is never replayed as model context.

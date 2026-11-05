@@ -125,21 +125,32 @@ export interface SidecarJobOptions {
   signal?: AbortSignal;
   /** The chat that made the call, which waits while its review is open. */
   chatId?: string;
+  /** The call itself, so a turn parked on it can say where it waits. */
+  toolCallId?: string;
+  /**
+   * Called once when the job waits for its review and the native window has
+   * been asked to open, so the caller can stop holding its turn for the
+   * decision. The job is polled on until the user decides or it ends.
+   */
+  onReview?: () => void;
 }
 
 /**
  * Runs one built-in tool call as a job and returns its MCP result. A job that
  * waits for its review in strict mode gets the native review window opened
- * once and is polled until the user decides there. A call that fails throws
- * the error its direct RPC would have thrown, so callers handle both paths
- * alike. Each call is its own job: the client tool runner hands the executors
- * one call at a time.
+ * once and is polled until the user decides there: a review has no deadline
+ * on this side. A call that fails throws the error its direct RPC would have
+ * thrown, so callers handle both paths alike. Each call is its own job: the
+ * client tool runner hands the executors one call at a time. The sidecar
+ * answers a start of the same call while its job is pending with that job
+ * (DELEGATION.md, "Job envelope"), so a call resumed after a reload finds its
+ * open review.
  */
 export async function runSidecarJob(
   client: DesktopSidecarClient,
   name: string,
   args: Record<string, unknown>,
-  { signal, chatId }: SidecarJobOptions = {},
+  { signal, chatId, toolCallId, onReview }: SidecarJobOptions = {},
 ): Promise<CallToolResult> {
   const waitMs = client.getSnapshot().jobs?.maxWaitMs ?? 0;
   const wait = waitMs > 0 ? { wait_ms: waitMs } : {};
@@ -159,10 +170,11 @@ export async function runSidecarJob(
     while (!status.results && PENDING_STATES.has(status.state)) {
       if (status.state === "ready_for_review" && !reviewed) {
         reviewed = true;
-        if (chatId) reviewEnded = markAwaitingReview(chatId);
+        if (chatId) reviewEnded = markAwaitingReview(chatId, toolCallId);
         // The decision is made only in the native window; this opens it.
         if (client.supports("jobs.review.v1"))
           await client.invoke("jobs.review.v1", { handle }, { signal });
+        onReview?.();
       }
       const early = JOB_POLL_INTERVAL_MS - (Date.now() - askedAt);
       if (early > 0) await pause(early, signal);

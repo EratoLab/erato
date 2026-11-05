@@ -38,9 +38,14 @@ message identify today's logical turn. Result payloads are `value`, `reference` 
    gate runs first, and the binding must carry the kind's host family. Without one,
    the call keeps the in-memory path described under bindings below.
 2. Loss of the originating stream or expiry of its execution window escalates the
-   same attempt. In one transaction, verify generation ownership, persist settled
-   message parts, pending calls and consumption, and insert the attempt. Only then
-   may the generation release its lease as `awaiting_approval`.
+   same attempt. A client ends the window early with `POST
+   /me/messages/clienttoolpark` when the call now waits on the user on its
+   device, such as a strict review in the Erato desktop app; only the call's
+   binding may ask, any replica forwards it to the generation, and a call
+   without a durable operation stays live. In one transaction, verify generation
+   ownership, persist settled message parts, pending calls and consumption, and
+   insert the attempt. Only then may the generation release its lease as
+   `awaiting_approval`.
 3. Account-scoped discovery is read-only and excludes another account's attempts.
    Claim checks the executor registration, realm and host identity. A permitted
    change of device requires explicit user confirmation even for `consent: none`.
@@ -296,6 +301,12 @@ registry builder and the mock LLM:
   claim, at its first claimed result and at a late fast result;
 - a sidecar binding, a missing binding, a tool that does not opt in and the
   disabled flag all keep the in-memory path.
+
+`client_tool_operations::review_park::*` covers a sidecar search whose client
+asks to park it while the review is open: the turn parks for the configured day
+instead of the tool's timeout, the approved or declined result resumes it, the
+request reaches a generation on another replica, another binding is refused,
+and a tool without a `durable` table stays live.
 
 `client_operations::ask_decision_does_not_gate_a_compiled_kind` pins the compiled
 side.
