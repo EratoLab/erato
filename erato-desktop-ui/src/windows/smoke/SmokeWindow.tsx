@@ -4,10 +4,10 @@ import { Trans } from "@lingui/react/macro";
 import { useEffect, useState } from "react";
 
 /** What the page posts to the host once React has mounted the window. */
-export const READY_MESSAGE_TYPE = "ui.ready";
+export const READY_ACTION = "ready";
 
 export const readyMessage = (version: string): string =>
-  JSON.stringify({ type: READY_MESSAGE_TYPE, version });
+  JSON.stringify({ action: READY_ACTION, version });
 
 interface SmokeWindowProps {
   /** The active catalog, shown so a wrong host locale is visible at a glance. */

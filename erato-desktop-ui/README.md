@@ -18,7 +18,8 @@ onto this bundle later (ERDSCAR-93).
 - **Only `window.ipc`.** The page talks to the host through
   `window.ipc.postMessage(JSON.stringify(message))` when the bridge exists,
   and renders without it in a browser. On mount the smoke window posts
-  `{"type":"ui.ready","version":"<package version>"}`.
+  `{"action":"ready","version":"<package version>"}`, the message the
+  sidecar's `--ui-smoke` mode waits for.
 - **Host input.** The host may set `window.ERATO_DESKTOP_UI` before the page
   loads: `{locale?, themeMode?, version?}`. Unknown locales fall back to
   `en`, unknown theme modes to `system`.

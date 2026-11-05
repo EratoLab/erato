@@ -59,7 +59,7 @@ describe("SmokeWindow", () => {
 
     expect(postMessage).toHaveBeenCalledTimes(1);
     expect(JSON.parse(postMessage.mock.calls[0][0])).toEqual({
-      type: "ui.ready",
+      action: "ready",
       version: packageJson.version,
     });
   });
