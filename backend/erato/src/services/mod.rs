@@ -41,6 +41,7 @@ pub mod ms_graph;
 pub mod policy_guides;
 pub mod prompt_composition;
 pub mod prompt_guardrails;
+pub mod scheduled_deliveries;
 pub mod task_delivery;
 pub mod template_rendering;
 

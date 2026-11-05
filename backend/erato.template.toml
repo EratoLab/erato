@@ -416,6 +416,27 @@ chat_provider_ids = ["test-token-limit"]
 # # When not set, no server-side limit is enforced and the frontend defaults to 5000 for UI validation.
 # max_system_prompt_length = 5000
 
+# Executor for scheduled deliveries: messages Erato owes a user at a due time
+# (reminders, the Teams inactivity nudge, notifications). Every replica runs
+# its own tick; a row is delivered at most once. Features that create rows
+# require this to be enabled.
+# [scheduled_deliveries]
+# # Whether the executor runs (default: false)
+# enabled = true
+# # Six-field cron expression (with seconds) for the tick (default: every minute)
+# tick_schedule = "0 * * * * *"
+# # Due rows one tick on one replica claims and delivers (default: 50)
+# batch_size = 50
+# # Seconds after which a claim is treated as abandoned by a dead replica and the
+# # row goes back to pending (default: 300)
+# claim_timeout_seconds = 300
+# # Delivery attempts before a row is marked failed; retryable channel errors
+# # (throttling, transport) put it back to pending until then (default: 5)
+# max_attempts = 5
+# # Seconds until a retryable delivery is tried again, unless the channel asked
+# # for a specific wait such as a Retry-After header (default: 300)
+# retry_delay_seconds = 300
+
 # Delegated runs: shared runtime keys plus the two offer routes.
 # Replaces the deprecated [assistants.delegation] table, which is still read
 # (with a warning) until 0.8.0 but may not be combined with [delegation].

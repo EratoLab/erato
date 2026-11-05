@@ -115,6 +115,8 @@ pub struct AppState {
     pub executor_streams: crate::services::client_operations::executor_stream::ExecutorStreamHub,
     /// Startup-compiled guardrails; each scan clones its selected regexes.
     pub prompt_guardrails: Arc<CompiledPromptGuardrails>,
+    /// Producers and channels of scheduled deliveries (reminders, nudges).
+    pub scheduled_deliveries: Arc<crate::services::scheduled_deliveries::DeliveryRegistry>,
     pub actor_manager: ActorManager,
     pub langfuse_client: LangfuseClient,
     pub global_policy_engine: GlobalPolicyEngine,
@@ -230,7 +232,10 @@ impl AppState {
         // Failures are logged but not fatal
         mcp_servers.check_connectivity().await;
 
-        let actor_manager = ActorManager::new(db.clone(), config.clone()).await;
+        let scheduled_deliveries =
+            Arc::new(crate::services::scheduled_deliveries::DeliveryRegistry::new());
+        let actor_manager =
+            ActorManager::new(db.clone(), config.clone(), scheduled_deliveries.clone()).await;
         let langfuse_client = LangfuseClient::from_config(
             &config.integrations.langfuse,
             Some(config.environment.clone()),
@@ -327,6 +332,7 @@ impl AppState {
             file_storage_providers,
             config,
             prompt_guardrails,
+            scheduled_deliveries,
             actor_manager,
             langfuse_client,
             global_policy_engine,
@@ -1239,6 +1245,7 @@ impl Clone for AppState {
             client_operations: self.client_operations.clone(),
             executor_streams: self.executor_streams.clone(),
             prompt_guardrails: self.prompt_guardrails.clone(),
+            scheduled_deliveries: self.scheduled_deliveries.clone(),
             actor_manager: self.actor_manager.clone(),
             langfuse_client: self.langfuse_client.clone(),
             global_policy_engine: self.global_policy_engine.clone(),

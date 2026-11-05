@@ -654,6 +654,9 @@ mod tests {
                 crate::services::prompt_guardrails::CompiledPromptGuardrails::new(&config.guardrails)
                     .unwrap(),
             ),
+            scheduled_deliveries: Arc::new(
+                crate::services::scheduled_deliveries::DeliveryRegistry::new(),
+            ),
             actor_manager: crate::actors::manager::ActorManager,
             langfuse_client: crate::services::langfuse::LangfuseClient::from_config(
                 &config.integrations.langfuse,

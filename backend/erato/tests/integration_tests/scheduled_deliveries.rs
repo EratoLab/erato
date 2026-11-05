@@ -1,0 +1,721 @@
+//! The scheduled-delivery executor: rows are claimed once, delivered through
+//! a channel, and their outcome recorded, with crash recovery and several
+//! replicas ticking at once.
+
+use crate::MIGRATOR;
+use crate::test_utils::setup_mock_llm_server;
+use chrono::{DateTime, Duration, Utc};
+use erato::actors::supervisor::{WorkerNames, delivery_tick_job};
+use erato::db::entity::prelude::ScheduledDeliveries;
+use erato::db::entity::scheduled_deliveries::{CreatedBy, DeliveryState, Model};
+use erato::db::entity::users;
+use erato::models::user::get_or_create_user;
+use erato::services::scheduled_deliveries::{
+    DeliveryContent, DeliveryOutcome, DeliveryProducer, DeliveryRegistry, ExecutorSettings,
+    NewDelivery, RecordingChannel, ResolvedContent, StillDue, TickOutcome, cancel_open,
+    count_delivered, find, run_delivery_tick, schedule, schedule_once, snooze,
+};
+use eyre::Report;
+use ractor::registry;
+use ractor_actors::time::cron::Job;
+use sea_orm::prelude::Uuid;
+use sea_orm::{ConnectionTrait, DatabaseConnection, EntityTrait, Statement};
+use serde_json::json;
+use sqlx::{Pool, Postgres};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
+use std::time::Duration as StdDuration;
+
+const KIND: &str = "test_note";
+const CHANNEL: &str = "recording";
+
+/// A producer whose answers the test scripts.
+struct TestProducer {
+    kind: String,
+    channel: String,
+    still_due: Mutex<StillDue>,
+    /// When set, `produce` creates one due row for this user on every tick.
+    produce_for: Option<Uuid>,
+    produced: AtomicBool,
+}
+
+impl TestProducer {
+    fn new() -> Self {
+        Self {
+            kind: KIND.into(),
+            channel: CHANNEL.into(),
+            still_due: Mutex::new(StillDue::Yes),
+            produce_for: None,
+            produced: AtomicBool::new(false),
+        }
+    }
+
+    fn refusing(reason: &str) -> Self {
+        let producer = Self::new();
+        *producer.still_due.lock().unwrap() = StillDue::No {
+            reason: reason.into(),
+        };
+        producer
+    }
+}
+
+#[async_trait::async_trait]
+impl DeliveryProducer for TestProducer {
+    fn kind(&self) -> &str {
+        &self.kind
+    }
+
+    async fn produce(&self, db: &DatabaseConnection) -> Result<usize, Report> {
+        let Some(user_id) = self.produce_for else {
+            return Ok(0);
+        };
+        if self.produced.swap(true, Ordering::SeqCst) {
+            return Ok(0);
+        }
+        let created = schedule(db, new_delivery(user_id, Utc::now(), Some("produced"))).await?;
+        Ok(usize::from(created.is_some()))
+    }
+
+    async fn still_due(&self, _db: &DatabaseConnection, _row: &Model) -> Result<StillDue, Report> {
+        Ok(self.still_due.lock().unwrap().clone())
+    }
+
+    async fn resolve_content(
+        &self,
+        _db: &DatabaseConnection,
+        row: &Model,
+    ) -> Result<ResolvedContent, Report> {
+        Ok(ResolvedContent {
+            channel: self.channel.clone(),
+            content: DeliveryContent {
+                text: row.payload["text"].as_str().unwrap_or_default().to_string(),
+                ..Default::default()
+            },
+        })
+    }
+}
+
+fn registry_with(producer: TestProducer, channel: &Arc<RecordingChannel>) -> DeliveryRegistry {
+    let mut registry = DeliveryRegistry::new();
+    registry.register_producer(Arc::new(producer));
+    registry.register_channel(channel.clone());
+    registry
+}
+
+fn settings() -> ExecutorSettings {
+    ExecutorSettings {
+        batch_size: 10,
+        claim_timeout: StdDuration::from_secs(300),
+        max_attempts: 3,
+        retry_delay: StdDuration::from_secs(60),
+    }
+}
+
+fn new_delivery(user_id: Uuid, due_at: DateTime<Utc>, dedupe_key: Option<&str>) -> NewDelivery {
+    NewDelivery {
+        user_id,
+        kind: KIND.into(),
+        due_at,
+        created_by: CreatedBy::System,
+        origin: json!({"test": true}),
+        payload: json!({"text": format!("note {}", dedupe_key.unwrap_or("-"))}),
+        dedupe_key: dedupe_key.map(str::to_owned),
+    }
+}
+
+async fn database(pool: Pool<Postgres>) -> (DatabaseConnection, users::Model) {
+    let db = sea_orm::SqlxPostgresConnector::from_sqlx_postgres_pool(pool);
+    let user = get_or_create_user(&db, "https://issuer.example", "delivery-user", None)
+        .await
+        .expect("user");
+    (db, user)
+}
+
+async fn row(db: &DatabaseConnection, id: Uuid) -> Model {
+    find(db, id).await.expect("lookup").expect("row exists")
+}
+
+async fn make_due(db: &DatabaseConnection, id: Uuid) {
+    db.execute_raw(Statement::from_sql_and_values(
+        sea_orm::DatabaseBackend::Postgres,
+        "UPDATE scheduled_deliveries SET due_at = now() - interval '1 second' WHERE id = $1",
+        [id.into()],
+    ))
+    .await
+    .expect("row made due");
+}
+
+/// Due rows are delivered through the producer's channel exactly once and
+/// the row records how; rows that are not due yet wait.
+///
+/// # Test Categories
+/// - `uses-db`
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn due_rows_are_delivered_once_and_recorded(pool: Pool<Postgres>) {
+    let (db, user) = database(pool).await;
+    let channel = Arc::new(RecordingChannel::new(CHANNEL));
+    let registry = registry_with(TestProducer::new(), &channel);
+
+    let due = schedule(&db, new_delivery(user.id, Utc::now(), Some("now")))
+        .await
+        .unwrap()
+        .expect("row created");
+    let later = schedule(
+        &db,
+        new_delivery(user.id, Utc::now() + Duration::hours(1), Some("later")),
+    )
+    .await
+    .unwrap()
+    .expect("row created");
+    assert_eq!(due.state, DeliveryState::Pending);
+
+    let outcome = run_delivery_tick(&db, &settings(), &registry).await;
+    assert_eq!(
+        outcome,
+        TickOutcome {
+            claimed: 1,
+            delivered: 1,
+            ..Default::default()
+        }
+    );
+    let deliveries = channel.deliveries();
+    assert_eq!(deliveries.len(), 1);
+    assert_eq!(deliveries[0].delivery_id, due.id);
+    assert_eq!(deliveries[0].user_id, user.id);
+    assert_eq!(deliveries[0].content.text, "note now");
+
+    let delivered = row(&db, due.id).await;
+    assert_eq!(delivered.state, DeliveryState::Delivered);
+    assert!(delivered.delivered_at.is_some());
+    assert!(delivered.claim_token.is_none());
+    assert_eq!(delivered.outcome["channel"], CHANNEL);
+    assert_eq!(delivered.outcome["attempts"], 1);
+    assert_eq!(delivered.outcome["delivered"]["recorded"], true);
+    assert_eq!(row(&db, later.id).await.state, DeliveryState::Pending);
+    assert_eq!(count_delivered(&db, user.id, KIND).await.unwrap(), 1);
+
+    // Nothing is due any more: the second tick is a no-op.
+    let outcome = run_delivery_tick(&db, &settings(), &registry).await;
+    assert!(!outcome.touched(), "{outcome:?}");
+    assert_eq!(channel.deliveries().len(), 1);
+}
+
+/// A dedupe key allows one OPEN row per (user, kind, key); `schedule_once`
+/// also refuses a key that was ever used.
+///
+/// # Test Categories
+/// - `uses-db`
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn dedupe_key_blocks_a_second_open_row(pool: Pool<Postgres>) {
+    let (db, user) = database(pool).await;
+    let channel = Arc::new(RecordingChannel::new(CHANNEL));
+    let registry = registry_with(TestProducer::new(), &channel);
+
+    let first = schedule(&db, new_delivery(user.id, Utc::now(), Some("k")))
+        .await
+        .unwrap();
+    assert!(first.is_some());
+    let duplicate = schedule(&db, new_delivery(user.id, Utc::now(), Some("k")))
+        .await
+        .unwrap();
+    assert!(duplicate.is_none(), "an open row with the key exists");
+    // Rows without a key never collide.
+    assert!(
+        schedule(&db, new_delivery(user.id, Utc::now(), None))
+            .await
+            .unwrap()
+            .is_some()
+    );
+    assert!(
+        schedule(&db, new_delivery(user.id, Utc::now(), None))
+            .await
+            .unwrap()
+            .is_some()
+    );
+
+    run_delivery_tick(&db, &settings(), &registry).await;
+
+    let again = schedule(&db, new_delivery(user.id, Utc::now(), Some("k")))
+        .await
+        .unwrap();
+    assert!(again.is_some(), "a delivered row does not block the key");
+    let once = schedule_once(&db, new_delivery(user.id, Utc::now(), Some("k")))
+        .await
+        .unwrap();
+    assert!(
+        once.is_none(),
+        "schedule_once refuses a key used in any state"
+    );
+    let once = schedule_once(&db, new_delivery(user.id, Utc::now(), Some("fresh")))
+        .await
+        .unwrap();
+    assert!(once.is_some());
+    assert!(
+        schedule_once(&db, new_delivery(user.id, Utc::now(), None))
+            .await
+            .is_err(),
+        "schedule_once needs a key"
+    );
+}
+
+/// The producer's send-time guard cancels a row that is no longer owed,
+/// with the reason on the row, and nothing reaches the channel.
+///
+/// # Test Categories
+/// - `uses-db`
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn guard_cancels_rows_no_longer_owed(pool: Pool<Postgres>) {
+    let (db, user) = database(pool).await;
+    let channel = Arc::new(RecordingChannel::new(CHANNEL));
+    let registry = registry_with(TestProducer::refusing("user became active"), &channel);
+    let created = schedule(&db, new_delivery(user.id, Utc::now(), None))
+        .await
+        .unwrap()
+        .unwrap();
+
+    let outcome = run_delivery_tick(&db, &settings(), &registry).await;
+    assert_eq!(
+        outcome,
+        TickOutcome {
+            claimed: 1,
+            cancelled: 1,
+            ..Default::default()
+        }
+    );
+    let cancelled = row(&db, created.id).await;
+    assert_eq!(cancelled.state, DeliveryState::Cancelled);
+    assert_eq!(cancelled.outcome["reason"], "user became active");
+    assert!(channel.deliveries().is_empty());
+}
+
+/// A retryable channel outcome puts the row back to pending with a later due
+/// time and counts the attempt; the last allowed attempt fails the row.
+///
+/// # Test Categories
+/// - `uses-db`
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn retryable_outcomes_requeue_until_max_attempts(pool: Pool<Postgres>) {
+    let (db, user) = database(pool).await;
+    let channel = Arc::new(RecordingChannel::new(CHANNEL));
+    channel.answer_with(DeliveryOutcome::Retry {
+        reason: "throttled".into(),
+        retry_after: Some(StdDuration::from_secs(3600)),
+    });
+    let registry = registry_with(TestProducer::new(), &channel);
+    let created = schedule(&db, new_delivery(user.id, Utc::now(), Some("retry")))
+        .await
+        .unwrap()
+        .unwrap();
+
+    let outcome = run_delivery_tick(&db, &settings(), &registry).await;
+    assert_eq!(
+        outcome,
+        TickOutcome {
+            claimed: 1,
+            retried: 1,
+            ..Default::default()
+        }
+    );
+    let requeued = row(&db, created.id).await;
+    assert_eq!(requeued.state, DeliveryState::Pending);
+    assert!(requeued.claim_token.is_none());
+    assert!(
+        requeued.due_at > (Utc::now() + Duration::minutes(50)).fixed_offset(),
+        "the channel's retry-after wins over the default delay"
+    );
+    assert_eq!(requeued.outcome["attempts"], 1);
+    assert_eq!(requeued.outcome["last_error"], "throttled");
+
+    // Not due yet: untouched.
+    assert!(
+        !run_delivery_tick(&db, &settings(), &registry)
+            .await
+            .touched()
+    );
+
+    make_due(&db, created.id).await;
+    channel.answer_with(DeliveryOutcome::Retry {
+        reason: "transport".into(),
+        retry_after: None,
+    });
+    run_delivery_tick(&db, &settings(), &registry).await;
+    let requeued = row(&db, created.id).await;
+    assert_eq!(requeued.state, DeliveryState::Pending);
+    assert_eq!(requeued.outcome["attempts"], 2);
+    let default_delay = (Utc::now() + Duration::seconds(30)).fixed_offset();
+    assert!(
+        requeued.due_at > default_delay
+            && requeued.due_at < (Utc::now() + Duration::minutes(5)).fixed_offset()
+    );
+
+    make_due(&db, created.id).await;
+    let outcome = run_delivery_tick(&db, &settings(), &registry).await;
+    assert_eq!(outcome.failed, 1, "{outcome:?}");
+    let failed = row(&db, created.id).await;
+    assert_eq!(failed.state, DeliveryState::Failed);
+    assert_eq!(failed.outcome["attempts"], 3);
+    assert_eq!(failed.outcome["reason"], "transport (after 3 attempts)");
+    assert_eq!(channel.deliveries().len(), 3);
+}
+
+/// A channel that reports the user as unreachable fails the row for good.
+///
+/// # Test Categories
+/// - `uses-db`
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn unreachable_outcomes_fail_the_row(pool: Pool<Postgres>) {
+    let (db, user) = database(pool).await;
+    let channel = Arc::new(RecordingChannel::new(CHANNEL));
+    channel.answer_with(DeliveryOutcome::Failed {
+        reason: "blocked by policy".into(),
+    });
+    let registry = registry_with(TestProducer::new(), &channel);
+    let created = schedule(&db, new_delivery(user.id, Utc::now(), None))
+        .await
+        .unwrap()
+        .unwrap();
+
+    let outcome = run_delivery_tick(&db, &settings(), &registry).await;
+    assert_eq!(outcome.failed, 1, "{outcome:?}");
+    let failed = row(&db, created.id).await;
+    assert_eq!(failed.state, DeliveryState::Failed);
+    assert_eq!(failed.outcome["reason"], "blocked by policy");
+    assert_eq!(failed.outcome["attempts"], 1);
+    assert_eq!(count_delivered(&db, user.id, KIND).await.unwrap(), 0);
+}
+
+/// A claim whose holder died is given back once it is older than the claim
+/// timeout, and the row is then delivered by whoever ticks next.
+///
+/// # Test Categories
+/// - `uses-db`
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn stale_claims_are_reclaimed_and_delivered(pool: Pool<Postgres>) {
+    let (db, user) = database(pool).await;
+    let channel = Arc::new(RecordingChannel::new(CHANNEL));
+    let registry = registry_with(TestProducer::new(), &channel);
+    let stranded = schedule(&db, new_delivery(user.id, Utc::now(), Some("stranded")))
+        .await
+        .unwrap()
+        .unwrap();
+    let fresh = schedule(&db, new_delivery(user.id, Utc::now(), Some("fresh")))
+        .await
+        .unwrap()
+        .unwrap();
+    for (id, age) in [(stranded.id, "1 hour"), (fresh.id, "10 seconds")] {
+        db.execute_raw(Statement::from_sql_and_values(
+            sea_orm::DatabaseBackend::Postgres,
+            format!(
+                "UPDATE scheduled_deliveries SET state = 'claimed', claim_token = 'dead-replica',
+                 claimed_at = now() - interval '{age}' WHERE id = $1"
+            ),
+            [id.into()],
+        ))
+        .await
+        .unwrap();
+    }
+
+    let outcome = run_delivery_tick(&db, &settings(), &registry).await;
+    assert_eq!(
+        outcome,
+        TickOutcome {
+            reclaimed: 1,
+            claimed: 1,
+            delivered: 1,
+            ..Default::default()
+        }
+    );
+    let delivered = row(&db, stranded.id).await;
+    assert_eq!(delivered.state, DeliveryState::Delivered);
+    assert_eq!(delivered.outcome["reclaimed"], 1);
+    // The live claim is left to its holder.
+    let held = row(&db, fresh.id).await;
+    assert_eq!(held.state, DeliveryState::Claimed);
+    assert_eq!(held.claim_token.as_deref(), Some("dead-replica"));
+}
+
+/// Several replicas ticking at once deliver every row exactly once.
+///
+/// # Test Categories
+/// - `uses-db`
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn concurrent_ticks_deliver_each_row_once(pool: Pool<Postgres>) {
+    let (db, user) = database(pool).await;
+    let channel = Arc::new(RecordingChannel::new(CHANNEL));
+    let registry = Arc::new(registry_with(TestProducer::new(), &channel));
+    let mut ids = Vec::new();
+    for n in 0..25 {
+        let created = schedule(
+            &db,
+            new_delivery(user.id, Utc::now(), Some(&format!("row-{n}"))),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        ids.push(created.id);
+    }
+
+    let tick = |db: DatabaseConnection, registry: Arc<DeliveryRegistry>| async move {
+        run_delivery_tick(&db, &settings(), &registry).await
+    };
+    let (a, b, c) = tokio::join!(
+        tick(db.clone(), registry.clone()),
+        tick(db.clone(), registry.clone()),
+        tick(db.clone(), registry.clone()),
+    );
+    let delivered = a.delivered + b.delivered + c.delivered;
+    assert_eq!(a.lost + b.lost + c.lost, 0);
+    assert_eq!(delivered, 25, "{a:?} {b:?} {c:?}");
+
+    let deliveries = channel.deliveries();
+    assert_eq!(deliveries.len(), 25);
+    let mut seen: Vec<Uuid> = deliveries.iter().map(|d| d.delivery_id).collect();
+    seen.sort_unstable();
+    seen.dedup();
+    assert_eq!(seen.len(), 25, "no row was delivered twice");
+    let rows = ScheduledDeliveries::find().all(&db).await.unwrap();
+    assert!(rows.iter().all(|row| row.state == DeliveryState::Delivered));
+}
+
+/// Cancellation narrows by kind and dedupe key, leaves other users alone and
+/// records the reason.
+///
+/// # Test Categories
+/// - `uses-db`
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn cancel_open_narrows_by_kind_and_key(pool: Pool<Postgres>) {
+    let (db, user) = database(pool).await;
+    let other = get_or_create_user(&db, "https://issuer.example", "other", None)
+        .await
+        .unwrap();
+    let a1 = schedule(&db, new_delivery(user.id, Utc::now(), Some("k1")))
+        .await
+        .unwrap()
+        .unwrap();
+    let a2 = schedule(&db, new_delivery(user.id, Utc::now(), Some("k2")))
+        .await
+        .unwrap()
+        .unwrap();
+    let b1 = schedule(
+        &db,
+        NewDelivery {
+            kind: "other_kind".into(),
+            ..new_delivery(user.id, Utc::now(), Some("k1"))
+        },
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    let theirs = schedule(&db, new_delivery(other.id, Utc::now(), Some("k1")))
+        .await
+        .unwrap()
+        .unwrap();
+
+    assert_eq!(
+        cancel_open(&db, user.id, Some(KIND), Some("k1"), "test")
+            .await
+            .unwrap(),
+        1
+    );
+    assert_eq!(row(&db, a1.id).await.state, DeliveryState::Cancelled);
+    assert_eq!(row(&db, a1.id).await.outcome["reason"], "test");
+    assert_eq!(row(&db, a2.id).await.state, DeliveryState::Pending);
+    assert_eq!(
+        cancel_open(&db, user.id, Some(KIND), None, "kind")
+            .await
+            .unwrap(),
+        1
+    );
+    assert_eq!(row(&db, a2.id).await.state, DeliveryState::Cancelled);
+    assert_eq!(row(&db, b1.id).await.state, DeliveryState::Pending);
+    assert_eq!(
+        cancel_open(&db, user.id, None, None, "all").await.unwrap(),
+        1
+    );
+    assert_eq!(row(&db, b1.id).await.state, DeliveryState::Cancelled);
+    assert_eq!(row(&db, theirs.id).await.state, DeliveryState::Pending);
+    assert_eq!(
+        cancel_open(&db, user.id, None, None, "again")
+            .await
+            .unwrap(),
+        0
+    );
+}
+
+/// A snoozed row waits for its new time and is then taken like a pending one.
+///
+/// # Test Categories
+/// - `uses-db`
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn snoozed_rows_wait_and_are_then_delivered(pool: Pool<Postgres>) {
+    let (db, user) = database(pool).await;
+    let channel = Arc::new(RecordingChannel::new(CHANNEL));
+    let registry = registry_with(TestProducer::new(), &channel);
+    let created = schedule(&db, new_delivery(user.id, Utc::now(), Some("snooze")))
+        .await
+        .unwrap()
+        .unwrap();
+
+    assert!(
+        snooze(&db, created.id, Utc::now() + Duration::hours(1))
+            .await
+            .unwrap()
+    );
+    let snoozed = row(&db, created.id).await;
+    assert_eq!(snoozed.state, DeliveryState::Snoozed);
+    assert_eq!(snoozed.outcome["snoozed"], 1);
+    assert!(
+        schedule(&db, new_delivery(user.id, Utc::now(), Some("snooze")))
+            .await
+            .unwrap()
+            .is_none(),
+        "a snoozed row still holds its dedupe key"
+    );
+    assert!(
+        !run_delivery_tick(&db, &settings(), &registry)
+            .await
+            .touched()
+    );
+
+    make_due(&db, created.id).await;
+    let outcome = run_delivery_tick(&db, &settings(), &registry).await;
+    assert_eq!(outcome.delivered, 1, "{outcome:?}");
+    assert_eq!(row(&db, created.id).await.state, DeliveryState::Delivered);
+    assert!(
+        !snooze(&db, created.id, Utc::now()).await.unwrap(),
+        "a settled row cannot be snoozed"
+    );
+}
+
+/// A row whose producer or channel is not registered is failed with the
+/// reason, rather than retried forever.
+///
+/// # Test Categories
+/// - `uses-db`
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn unknown_kind_or_channel_fails_the_row(pool: Pool<Postgres>) {
+    let (db, user) = database(pool).await;
+    let channel = Arc::new(RecordingChannel::new("another_channel"));
+    let registry = registry_with(TestProducer::new(), &channel);
+    let unknown_kind = schedule(
+        &db,
+        NewDelivery {
+            kind: "nobody_owns_this".into(),
+            ..new_delivery(user.id, Utc::now(), None)
+        },
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    let unknown_channel = schedule(&db, new_delivery(user.id, Utc::now(), None))
+        .await
+        .unwrap()
+        .unwrap();
+
+    let outcome = run_delivery_tick(&db, &settings(), &registry).await;
+    assert_eq!(outcome.failed, 2, "{outcome:?}");
+    assert_eq!(
+        row(&db, unknown_kind.id).await.outcome["reason"],
+        "no producer registered for kind `nobody_owns_this`"
+    );
+    assert_eq!(
+        row(&db, unknown_channel.id).await.outcome["reason"],
+        "no channel registered as `recording`"
+    );
+    assert!(channel.deliveries().is_empty());
+}
+
+/// Producers run at the start of every tick, so a row they create for now is
+/// delivered in the same tick.
+///
+/// # Test Categories
+/// - `uses-db`
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn producers_run_on_the_tick(pool: Pool<Postgres>) {
+    let (db, user) = database(pool).await;
+    let channel = Arc::new(RecordingChannel::new(CHANNEL));
+    let registry = registry_with(
+        TestProducer {
+            produce_for: Some(user.id),
+            ..TestProducer::new()
+        },
+        &channel,
+    );
+
+    let outcome = run_delivery_tick(&db, &settings(), &registry).await;
+    assert_eq!(
+        outcome,
+        TickOutcome {
+            produced: 1,
+            claimed: 1,
+            delivered: 1,
+            ..Default::default()
+        }
+    );
+    assert_eq!(channel.deliveries()[0].content.text, "note produced");
+}
+
+/// With only `scheduled_deliveries.enabled`, the supervisor starts the
+/// delivery worker (and not the cleanup worker), and the tick job it
+/// schedules reaches that worker.
+///
+/// # Test Categories
+/// - `uses-db`
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn supervisor_runs_the_delivery_worker_on_its_own_switch(pool: Pool<Postgres>) {
+    let (mut app_config, _server) = setup_mock_llm_server(None).await;
+    app_config.cleanup_enabled = false;
+    app_config.scheduled_deliveries.enabled = true;
+    app_config.scheduled_deliveries.batch_size = 5;
+    let (db, user) = database(pool).await;
+    let channel = Arc::new(RecordingChannel::new(CHANNEL));
+    let registry = Arc::new(registry_with(TestProducer::new(), &channel));
+    let created = schedule(&db, new_delivery(user.id, Utc::now(), Some("ticked")))
+        .await
+        .unwrap()
+        .unwrap();
+
+    let supervisor_name = format!("test_sup_{}", Uuid::new_v4());
+    let derived = WorkerNames::derived_from(&supervisor_name);
+    let _manager = erato::actors::manager::ActorManager::new_with_name(
+        db.clone(),
+        app_config,
+        registry,
+        Some(supervisor_name.clone()),
+    )
+    .await;
+
+    let delivery_registered = registry::where_is(derived.delivery_worker.clone()).is_some();
+    let cleanup_registered = registry::where_is(derived.cleanup_worker.clone()).is_some();
+    let cron_registered = registry::where_is(derived.cleanup_worker_cron.clone()).is_some();
+
+    let mut job = delivery_tick_job(&derived);
+    job.work().await.expect("tick job must dispatch");
+    let mut delivered = false;
+    for _ in 0..100 {
+        if row(&db, created.id).await.state == DeliveryState::Delivered {
+            delivered = true;
+            break;
+        }
+        tokio::time::sleep(StdDuration::from_millis(50)).await;
+    }
+
+    if let Some(supervisor) = registry::where_is(supervisor_name) {
+        supervisor.stop(Some("test finished".to_string()));
+    }
+
+    assert!(
+        delivery_registered,
+        "the delivery worker must start on its own switch"
+    );
+    assert!(cron_registered, "the cron manager carries the delivery job");
+    assert!(
+        !cleanup_registered,
+        "the cleanup worker stays off without cleanup or delegation"
+    );
+    assert!(
+        delivered,
+        "a tick addressed to the derived worker name must deliver"
+    );
+    assert_eq!(channel.deliveries().len(), 1);
+}

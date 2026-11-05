@@ -7100,6 +7100,34 @@ file_processing_parallelism = 6
 - The file contents cache is typically more beneficial than the token count cache
 - Cache efficiency depends on file reuse patterns in your workflow
 
+### `scheduled_deliveries`
+
+{/* erato_toml_config_key: scheduled_deliveries */}
+{/* erato_toml_config_key: scheduled_deliveries.enabled */}
+{/* erato_toml_config_key: scheduled_deliveries.tick_schedule */}
+{/* erato_toml_config_key: scheduled_deliveries.batch_size */}
+{/* erato_toml_config_key: scheduled_deliveries.claim_timeout_seconds */}
+{/* erato_toml_config_key: scheduled_deliveries.max_attempts */}
+{/* erato_toml_config_key: scheduled_deliveries.retry_delay_seconds */}
+
+The executor that delivers scheduled messages, which Erato owes a user at a due time: reminders, the Teams inactivity nudge and other notifications. Rows are stored in the `scheduled_deliveries` table; every backend replica runs its own tick, and a row is delivered at most once (claims are compare-and-set, and a claim whose replica died is given back after `claim_timeout_seconds`). Features that create rows require the executor to be enabled.
+
+- `enabled`: whether the executor runs. Rows created while it is off are delivered once it is switched on.
+- `tick_schedule`: six-field cron expression (with seconds) for the tick.
+- `batch_size`: how many due rows one tick on one replica claims and delivers.
+- `claim_timeout_seconds`: seconds after which a claim is treated as abandoned and the row goes back to pending.
+- `max_attempts`: delivery attempts before a row is marked failed. A retryable channel error (throttling, transport failure) puts the row back to pending until then; a channel that reports the user as unreachable fails the row at once.
+- `retry_delay_seconds`: seconds until a retryable delivery is attempted again, unless the channel asked for a specific wait (such as a `Retry-After` header).
+
+**Default values:** disabled; `tick_schedule` is `"0 * * * * *"` (every minute); `batch_size` is `50`; `claim_timeout_seconds` is `300`; `max_attempts` is `5`; `retry_delay_seconds` is `300`.
+
+**Example**
+
+```toml
+[scheduled_deliveries]
+enabled = true
+```
+
 ### `generation_status`
 
 Configuration for the persisted per-chat generation status that powers the chat list's running/finished/error indicators. While a generation runs, the backend periodically refreshes a heartbeat on the chat; generations whose heartbeat goes stale (for example because the process was killed mid-generation) are marked as errored.

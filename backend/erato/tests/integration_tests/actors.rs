@@ -19,6 +19,7 @@ use sea_orm::{
 };
 use serde_json::{Value, json};
 use sqlx::{Pool, Postgres};
+use std::sync::Arc;
 
 /// Test the cleanup worker logic for archived chats.
 ///
@@ -830,6 +831,7 @@ async fn named_supervisor_derives_both_worker_names(pool: Pool<Postgres>) {
     let _manager = erato::actors::manager::ActorManager::new_with_name(
         db.clone(),
         app_config,
+        Arc::new(erato::services::scheduled_deliveries::DeliveryRegistry::new()),
         Some(supervisor_name.clone()),
     )
     .await;
@@ -905,6 +907,7 @@ async fn named_supervisor_spawns_cleanup_worker_when_only_delegation_is_on(pool:
     let _manager = erato::actors::manager::ActorManager::new_with_name(
         db.clone(),
         app_config,
+        Arc::new(erato::services::scheduled_deliveries::DeliveryRegistry::new()),
         Some(supervisor_name.clone()),
     )
     .await;

@@ -66,3 +66,4 @@
 0063_add_client_tool_approval_scopes [0062_add_client_executor_streams] 2026-10-30T12:00:00Z bdart <dfiebig@bdart.de> # Add client tool approval scopes
 0064_add_client_operation_claimant [0062_add_client_executor_streams] 2026-11-01T18:04:30Z Daniel Fiebig <daniel@MacBook-Pro-7.localdomain> # Add the client that holds a client operation claim
 0065_drop_local_evidence_exports [0064_add_client_operation_claimant] 2026-11-03T13:34:02Z bdart <dfiebig@bdart.de> # Drop the unused local evidence exports table
+0066_add_scheduled_deliveries [0065_drop_local_evidence_exports] 2026-11-05T13:30:00Z bdart <dfiebig@bdart.de> # Add scheduled deliveries
