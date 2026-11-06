@@ -595,6 +595,8 @@ async fn approved_ordinary_result(pool: Pool<Postgres>) {
     )
     .await;
 }
+/// A result the server flags with `isError` settles as a failed call; its payload
+/// still reaches the model, which resumes the generation.
 #[sqlx::test(migrator = "crate::MIGRATOR")]
 async fn approved_mcp_error(pool: Pool<Postgres>) {
     check_output(
@@ -604,7 +606,21 @@ async fn approved_mcp_error(pool: Pool<Postgres>) {
         true,
         true,
         false,
-        "success",
+        "error",
+        0,
+    )
+    .await;
+}
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn uninterrupted_mcp_error(pool: Pool<Postgres>) {
+    check_output(
+        pool,
+        json!({"stdout": MARKER, "files": [], "error": "worker failed"}),
+        None,
+        true,
+        true,
+        false,
+        "error",
         0,
     )
     .await;
