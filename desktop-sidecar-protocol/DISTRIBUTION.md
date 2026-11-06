@@ -579,9 +579,11 @@ catalogs: {locales: [...]}, overrides: {present}, kits: [{name}]}`;
 - `digest`: the lowercase hex SHA-256 of the canonical JSON of `files`
   (compact, keys sorted), the identity clients and sidecars compare.
 
-The package budget is 16 MiB (16777216 bytes) of `totalBytes`. A package over
-budget, or one that fails assembly, is logged at assembly time and not served;
-the endpoints then answer 404.
+The package budget is 8 MiB (8388608 bytes) of `totalBytes`, the sidecar's
+acceptance budget (`MAX_TOTAL_BYTES` in `crates/erato-desktop-sidecar-ui`);
+raising it requires raising the sidecar's acceptance budget first. A package
+over budget, or one that fails assembly, is logged at assembly time and not
+served; the endpoints then answer 404.
 
 ### Endpoints
 

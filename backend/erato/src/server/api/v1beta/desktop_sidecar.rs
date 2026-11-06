@@ -495,7 +495,7 @@ fn build_ui_package_response(
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     let mut response = if headers
         .get(IF_NONE_MATCH)
-        .is_some_and(|client_etag| client_etag == etag)
+        .is_some_and(|value| if_none_match_names(value, &etag))
     {
         Response::new(Body::empty())
     } else {
@@ -520,6 +520,16 @@ fn build_ui_package_response(
         .headers_mut()
         .insert(CACHE_CONTROL, HeaderValue::from_static("no-store"));
     Ok(response)
+}
+
+fn if_none_match_names(value: &HeaderValue, etag: &HeaderValue) -> bool {
+    let (Ok(value), Ok(etag)) = (value.to_str(), etag.to_str()) else {
+        return false;
+    };
+    value
+        .split(',')
+        .map(str::trim)
+        .any(|entry| entry == "*" || entry.strip_prefix("W/").unwrap_or(entry) == etag)
 }
 
 #[cfg(test)]
@@ -682,6 +692,27 @@ mod tests {
             .status(),
             StatusCode::OK
         );
+        for value in [
+            format!("W/\"other\", {etag}"),
+            format!("W/{etag}"),
+            "*".to_owned(),
+        ] {
+            let mut headers = bearer(&token);
+            headers.insert(IF_NONE_MATCH, value.parse().unwrap());
+            assert_eq!(
+                build_ui_package_response(
+                    Some(&package),
+                    Some(&key),
+                    &headers,
+                    now,
+                    UiPackagePart::Manifest
+                )
+                .unwrap()
+                .status(),
+                StatusCode::NOT_MODIFIED,
+                "{value}"
+            );
+        }
     }
 
     #[test]

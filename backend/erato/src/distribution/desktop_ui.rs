@@ -32,8 +32,10 @@ use crate::distribution::translations::TranslationDistribution;
 
 pub const FORMAT: u64 = 1;
 pub const HOST_API: u64 = 1;
-/// The assembled package's budget on `totalBytes`.
-pub const PACKAGE_BUDGET_BYTES: u64 = 16 * 1024 * 1024;
+/// The assembled package's budget on `totalBytes`: the sidecar's acceptance
+/// budget (`MAX_TOTAL_BYTES` in `crates/erato-desktop-sidecar-ui`) governs,
+/// so raise that first.
+pub const PACKAGE_BUDGET_BYTES: u64 = 8 * 1024 * 1024;
 pub const APP_MOUNT_PATH: &str = "/public/platform-desktop-ui";
 pub const FRONTEND_PLATFORM: &str = "platform-desktop-ui";
 pub const HEAD_MARKER: &str = "<!--erato:head-->";
@@ -630,6 +632,13 @@ pub fn assemble(
         total_bytes <= budget,
         "the desktop UI package is {total_bytes} bytes; the budget is {budget}"
     );
+    if total_bytes > budget - budget / 4 {
+        tracing::warn!(
+            total_bytes,
+            budget,
+            "The desktop UI package exceeds 75 percent of its budget"
+        );
+    }
     let digest = hex(&Sha256::digest(serde_json::to_vec(&entries)?));
 
     let mut manifest = bundle.manifest.clone();
@@ -719,7 +728,9 @@ struct Assembly<'a> {
 impl Assembly<'_> {
     fn insert(&mut self, path: String, bytes: Vec<u8>) -> Result<()> {
         ensure!(
-            is_plain_relative_path(&path) && !PACKAGE_FILES.contains(&path.as_str()),
+            is_plain_relative_path(&path)
+                && !PACKAGE_FILES.contains(&path.as_str())
+                && !path.ends_with(".map"),
             "desktop UI package path is invalid: {path:?}"
         );
         let content_type = content_type_for(&path).to_owned();
@@ -740,14 +751,21 @@ impl Assembly<'_> {
         self.insert(path, bytes)
     }
 
-    /// Adds every regular file below `root` under `prefix`, earlier roots
-    /// winning; catalogs are compiled from their PO sources in just-in-time
-    /// mode, as the browser receives them. Returns the catalog locales found.
+    /// Adds every file below `root` under `prefix`: earlier roots win, and a
+    /// PO catalog source beats a prebuilt JSON next to it, as just-in-time
+    /// serving does. Symlinks are followed within the root (a ConfigMap mount
+    /// links `theme.json` into `..data/`); Kubernetes' `..` directories and
+    /// links that escape the root are left out. Returns the catalog locales.
     fn add_directory(&mut self, root: &Path, prefix: &str) -> Result<BTreeSet<String>> {
         let mut locales = BTreeSet::new();
-        if !fs::symlink_metadata(root).is_ok_and(|metadata| metadata.is_dir()) {
+        let Ok(canonical_root) = root.canonicalize() else {
+            return Ok(locales);
+        };
+        if !canonical_root.is_dir() {
             return Ok(locales);
         }
+        let mut sources = Vec::new();
+        let mut visited = BTreeSet::from([canonical_root.clone()]);
         let mut pending = vec![(root.to_path_buf(), String::new())];
         while let Some((directory, relative)) = pending.pop() {
             let mut entries = fs::read_dir(&directory)
@@ -755,49 +773,63 @@ impl Assembly<'_> {
                 .collect::<std::io::Result<Vec<_>>>()?;
             entries.sort_by_key(fs::DirEntry::path);
             for entry in entries {
+                let path = entry.path();
                 let Some(name) = entry.file_name().to_str().map(str::to_owned) else {
-                    tracing::warn!(path = %entry.path().display(), "Skipping a non-UTF-8 file name in the desktop UI package sources");
+                    tracing::warn!(path = %path.display(), "Skipping a non-UTF-8 file name in the desktop UI package sources");
                     continue;
                 };
-                let file_type = entry.file_type()?;
+                let Ok(canonical) = path.canonicalize() else {
+                    tracing::debug!(path = %path.display(), "Skipping an unresolvable entry in the desktop UI package sources");
+                    continue;
+                };
+                if !canonical.starts_with(&canonical_root) {
+                    tracing::warn!(path = %path.display(), "Skipping a link outside its root in the desktop UI package sources");
+                    continue;
+                }
                 let relative = if relative.is_empty() {
-                    name
+                    name.clone()
                 } else {
                     format!("{relative}/{name}")
                 };
-                if file_type.is_dir() {
-                    pending.push((entry.path(), relative));
-                    continue;
-                }
-                if !file_type.is_file() || relative.ends_with(".map") {
-                    continue;
-                }
-                let path = format!("{prefix}/{relative}");
-                let locale = catalog_locale(&path).map(str::to_owned);
-                if relative.ends_with(".po") {
-                    if let Some(locale) = locale
-                        && let Some(compiled) = self
-                            .translations
-                            .compile_messages_json_source(&entry.path())
-                    {
-                        let compiled = compiled.wrap_err_with(|| {
-                            format!("Failed to compile {}", entry.path().display())
-                        })?;
-                        self.insert(
-                            format!("{}.json", path.trim_end_matches(".po")),
-                            compiled.body,
-                        )?;
-                        locales.insert(locale);
+                if canonical.is_dir() {
+                    if !name.starts_with("..") && visited.insert(canonical) {
+                        pending.push((path, relative));
                     }
                     continue;
                 }
-                let bytes = fs::read(entry.path())
-                    .wrap_err_with(|| format!("Failed to read {}", entry.path().display()))?;
-                if let Some(locale) = locale {
+                if !canonical.is_file() || relative.ends_with(".map") {
+                    continue;
+                }
+                sources.push((relative, path));
+            }
+        }
+        sources.sort_by_key(|(relative, _)| !relative.ends_with(".po"));
+        for (relative, source) in sources {
+            let path = format!("{prefix}/{relative}");
+            let locale = catalog_locale(&path).map(str::to_owned);
+            if relative.ends_with(".po") {
+                let Some(locale) = locale else {
+                    continue;
+                };
+                let target = format!("{}.json", path.trim_end_matches(".po"));
+                if self.files.contains_key(&target) {
+                    locales.insert(locale);
+                    continue;
+                }
+                if let Some(compiled) = self.translations.compile_messages_json_source(&source) {
+                    let compiled = compiled
+                        .wrap_err_with(|| format!("Failed to compile {}", source.display()))?;
+                    self.insert(target, compiled.body)?;
                     locales.insert(locale);
                 }
-                self.add_if_absent(path, bytes)?;
+                continue;
             }
+            let bytes = fs::read(&source)
+                .wrap_err_with(|| format!("Failed to read {}", source.display()))?;
+            if let Some(locale) = locale {
+                locales.insert(locale);
+            }
+            self.add_if_absent(path, bytes)?;
         }
         Ok(locales)
     }
@@ -909,12 +941,15 @@ impl PackageTokenKey {
 
     #[must_use]
     pub fn verify(&self, token: &str, now: DateTime<Utc>) -> bool {
-        let Some((expiry, tag)) = token.split_once('.') else {
+        let Some((expiry_text, tag)) = token.split_once('.') else {
             return false;
         };
-        let Ok(expiry) = expiry.parse::<i64>() else {
+        let Ok(expiry) = expiry_text.parse::<i64>() else {
             return false;
         };
+        if expiry.to_string() != expiry_text {
+            return false;
+        }
         let Ok(tag) = URL_SAFE_NO_PAD.decode(tag) else {
             return false;
         };
@@ -1057,10 +1092,15 @@ pub(crate) mod tests {
             &web.join("public/common/custom-theme/acme/locales/de/messages.po"),
             b"msgid \"t\"\nmsgstr \"T\"\n",
         );
+        write(
+            &web.join("locales/en/messages.po"),
+            b"msgid \"a\"\nmsgstr \"A (later root)\"\n",
+        );
         write(&web.join("custom-theme/acme/theme.json"), b"runtime");
         write(&web.join("custom-theme/acme/logo.svg"), b"<svg/>");
         write(&web.join("favicon.svg"), b"<svg>favicon</svg>");
         write(&web.join("typed.svg"), b"<svg>typed</svg>");
+        write(&web.join("sources.map"), b"map");
         let kits = dir.join("kits");
         write(&kits.join("example/index-abc.js"), b"kit");
         write(&kits.join("example/style.css"), b"kit css");
@@ -1076,6 +1116,7 @@ pub(crate) mod tests {
         config.frontend.theme = Some("acme".into());
         config.frontend.logo_path = Some("/typed.svg".into());
         config.frontend.logo_dark_path = Some("/public/common/custom-theme/acme/logo.svg".into());
+        config.frontend.sidebar_logo_path = Some("/sources.map".into());
         config.frontend.translation_po_compilation_mode = TranslationPoCompilationMode::JustInTime;
         config.frontend.additional_environment.insert(
             "THEME_PATH".into(),
@@ -1253,6 +1294,7 @@ pub(crate) mod tests {
         );
         assert_eq!(text("favicon.svg"), "<svg>favicon</svg>");
         assert_eq!(text("typed.svg"), "<svg>typed</svg>");
+        assert!(served.file_bytes("sources.map").is_none());
 
         let composition = &manifest["composition"];
         assert_eq!(composition["env"]["FRONTEND_PLATFORM"], FRONTEND_PLATFORM);
@@ -1340,8 +1382,63 @@ pub(crate) mod tests {
         );
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn packs_a_configmap_mounted_theme_at_its_logical_paths() {
+        use std::os::unix::fs::symlink;
+        let dir = tempfile::tempdir().unwrap();
+        let web = dir.path().join("web");
+        let theme = web.join("custom-theme/acme");
+        let data = theme.join("..2026_01_01_00_00_00.000000000");
+        write(&data.join("theme.json"), b"mounted");
+        write(
+            &data.join("locales/de/messages.json"),
+            br#"{"messages":{"t":"T"}}"#,
+        );
+        symlink(data.file_name().unwrap(), theme.join("..data")).unwrap();
+        symlink("..data/theme.json", theme.join("theme.json")).unwrap();
+        symlink("..data/locales", theme.join("locales")).unwrap();
+        write(&dir.path().join("secret.json"), b"secret");
+        symlink(dir.path().join("secret.json"), theme.join("leak.json")).unwrap();
+        symlink(".", theme.join("loop")).unwrap();
+        symlink("missing.json", theme.join("dangling.json")).unwrap();
+
+        let mut config = AppConfig::default();
+        config.frontend.web_frontend_bundle_path = web.to_string_lossy().into_owned();
+        config.frontend.component_kits.directory =
+            dir.path().join("no-kits").to_string_lossy().into_owned();
+        config.frontend.theme = Some("acme".into());
+        let distribution = Distribution::load(&config);
+        let package = assemble(
+            &fixture_artifact(),
+            &config,
+            &distribution,
+            &DistributionBundle::default(),
+            PACKAGE_BUDGET_BYTES,
+        )
+        .unwrap();
+        let served = DesktopUiBundle::from_archive(&package.archive).unwrap();
+        let theme_files = served
+            .file_paths()
+            .into_iter()
+            .filter(|path| path.starts_with("public/common/custom-theme/"))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            theme_files,
+            [
+                "public/common/custom-theme/acme/locales/de/messages.json",
+                "public/common/custom-theme/acme/theme.json",
+            ]
+        );
+        assert_eq!(
+            served.file_bytes("public/common/custom-theme/acme/theme.json"),
+            Some(b"mounted".as_slice())
+        );
+    }
+
     #[test]
     fn a_package_over_budget_is_an_error() {
+        assert_eq!(PACKAGE_BUDGET_BYTES, 8_388_608);
         let dir = tempfile::tempdir().unwrap();
         let (config, distribution) = deployment(dir.path());
         let error = assemble(
@@ -1367,6 +1464,9 @@ pub(crate) mod tests {
         assert!(!key.verify(&token, expires_at));
         assert!(!key.verify(&format!("{token}x"), now));
         assert!(!key.verify(&token.replacen('.', "0.", 1), now));
+        let (expiry, tag) = token.split_once('.').unwrap();
+        assert!(!key.verify(&format!("+{expiry}.{tag}"), now));
+        assert!(!key.verify(&format!("0{expiry}.{tag}"), now));
         assert!(!key.verify("", now));
         assert!(!key.verify("not-a-token", now));
         assert!(!PackageTokenKey::from_bytes([8; 32]).verify(&token, now));
