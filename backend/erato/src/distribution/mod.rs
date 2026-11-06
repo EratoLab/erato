@@ -11,6 +11,7 @@ use crate::config::AppConfig;
 pub mod branding;
 pub mod component_kits;
 pub mod desktop_sidecar;
+pub mod desktop_ui;
 pub mod experience_policy;
 pub mod frontend_bundles;
 pub mod runtime;

@@ -11,6 +11,7 @@ export {
   type InvokeProgressOptions,
   type SidecarCapability,
   type SidecarClientInfo,
+  type SidecarDesktopUi,
   type SidecarReadinessState,
   type SidecarMethodContract,
   type SidecarSnapshot,

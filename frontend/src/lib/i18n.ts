@@ -5,6 +5,7 @@ import { env } from "@/app/env";
 
 import { loadBundledLocaleMessages } from "./bundledLocaleMessages";
 
+import type { FrontendPlatform } from "@/app/env";
 import type { Messages } from "@lingui/core";
 
 export const defaultLocale = "en";
@@ -115,7 +116,7 @@ async function loadMergedMessages({
   locale,
 }: {
   commonPublicBasePath: string;
-  frontendPlatform: "common" | "platform-office-addin";
+  frontendPlatform: FrontendPlatform;
   frontendPublicBasePath: string;
   locale: string;
 }): Promise<Messages> {

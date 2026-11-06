@@ -155,3 +155,36 @@ tests:
       - equal:
           path: spec.rules[1].matches[0].path.value
           value: /
+
+  - it: should route the desktop UI package endpoints directly to the backend
+    set:
+      ingress.enabled: false
+      gatewayApi.enabled: true
+      gatewayApi.parentRefs:
+        - name: shared-gateway
+      desktopSidecar.uiPackage.directRoute.enabled: true
+    asserts:
+      - equal:
+          path: spec.rules[0].matches[0].path.type
+          value: Exact
+      - equal:
+          path: spec.rules[0].matches[0].path.value
+          value: /api/v1beta/desktop-sidecar/ui-package
+      - equal:
+          path: spec.rules[0].matches[1].path.type
+          value: Exact
+      - equal:
+          path: spec.rules[0].matches[1].path.value
+          value: /api/v1beta/desktop-sidecar/ui-package/manifest.json
+      - equal:
+          path: spec.rules[0].backendRefs[0].name
+          value: RELEASE-NAME-erato-app
+      - equal:
+          path: spec.rules[0].backendRefs[0].port
+          value: 3130
+      - equal:
+          path: spec.rules[1].matches[0].path.value
+          value: /
+      - lengthEqual:
+          path: spec.rules
+          count: 2

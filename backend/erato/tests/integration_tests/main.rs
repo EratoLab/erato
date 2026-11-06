@@ -195,7 +195,7 @@ async fn test_app_state_internal(
         .with_executor_stream_cleanup(app_config.client_tools.executor_stream_enabled);
     let distribution = Arc::new(erato::distribution::Distribution::load(&app_config));
     let mcp_servers = McpServers::new(&app_config);
-    let reloadable = ReloadableAppState::new(&app_config, mcp_servers);
+    let reloadable = ReloadableAppState::new(&app_config, &distribution, mcp_servers);
 
     let app_state = AppState {
         memory_reservation: None,

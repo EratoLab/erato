@@ -383,6 +383,30 @@ msTeamsBot:
             kubernetes.io/metadata.name: ingress-nginx
 ```
 
+### Desktop UI package
+
+Desktop sidecars that host the desktop UI download the deployment's UI package from
+`/api/v1beta/desktop-sidecar/ui-package` and `/api/v1beta/desktop-sidecar/ui-package/manifest.json`
+with a package token in the `Authorization` header, which oauth2-proxy strips. Enable
+the direct route, which adds exact-path rules for the two endpoints to the Ingress or
+HTTPRoute that target the Erato application Service, and allow the ingress controller
+or Gateway pods through the backend NetworkPolicy (the peers default to
+`msTeamsBot.directRoute.ingressFrom`):
+
+```yaml
+desktopSidecar:
+  uiPackage:
+    directRoute:
+      enabled: true
+      ingressFrom:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+```
+
+The backend verifies the package token itself and serves the endpoints only while
+its desktop sidecar distribution ships a `ui` artifact.
+
 {{ template "chart.requirementsSection" . }}
 
 {{ template "chart.valuesSection" . }}

@@ -143,3 +143,47 @@ tests:
       - lengthEqual:
           path: spec.rules[0].http.paths
           count: 1
+
+  - it: should route the desktop UI package endpoints directly to the backend
+    set:
+      desktopSidecar.uiPackage.directRoute.enabled: true
+    asserts:
+      - equal:
+          path: spec.rules[0].http.paths[0].path
+          value: /api/v1beta/desktop-sidecar/ui-package
+      - equal:
+          path: spec.rules[0].http.paths[0].pathType
+          value: Exact
+      - equal:
+          path: spec.rules[0].http.paths[0].backend.service.name
+          value: RELEASE-NAME-erato-app
+      - equal:
+          path: spec.rules[0].http.paths[0].backend.service.port.number
+          value: 3130
+      - equal:
+          path: spec.rules[0].http.paths[1].path
+          value: /api/v1beta/desktop-sidecar/ui-package/manifest.json
+      - equal:
+          path: spec.rules[0].http.paths[1].pathType
+          value: Exact
+      - equal:
+          path: spec.rules[0].http.paths[1].backend.service.name
+          value: RELEASE-NAME-erato-app
+      - equal:
+          path: spec.rules[0].http.paths[2].path
+          value: /
+      - lengthEqual:
+          path: spec.rules[0].http.paths
+          count: 3
+
+  - it: should not add the desktop UI package routes when oauth2-proxy is disabled
+    set:
+      desktopSidecar.uiPackage.directRoute.enabled: true
+      oauth2Proxy.enabled: false
+    asserts:
+      - equal:
+          path: spec.rules[0].http.paths[0].path
+          value: /
+      - lengthEqual:
+          path: spec.rules[0].http.paths
+          count: 1

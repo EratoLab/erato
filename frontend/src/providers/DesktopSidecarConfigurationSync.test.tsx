@@ -10,10 +10,14 @@ const mocks = vi.hoisted(() => ({
   invoke: vi.fn(),
   supports: vi.fn(() => true),
   invalidateQueries: vi.fn(),
+  fetchUiPackageToken: vi.fn(),
   snapshot: {
     state: "ready",
     instanceId: "instance",
     strict: undefined as boolean | undefined,
+    ui: undefined as
+      | { host_apis: number[]; seed: null; installed: null }
+      | undefined,
   },
   organization: {
     policy_guides: {
@@ -50,6 +54,7 @@ vi.mock("@/hooks/profile/useProfileApi", () => ({
 }));
 vi.mock("@/lib/generated/v1betaApi/v1betaApiComponents", () => ({
   useOrganizationConfiguration: () => ({ data: mocks.organization }),
+  fetchUiPackageToken: mocks.fetchUiPackageToken,
 }));
 vi.mock("@tanstack/react-query", () => ({
   useQueryClient: () => queryClient,
@@ -75,11 +80,21 @@ function mount() {
   );
 }
 
+const packageToken = {
+  url: "/api/v1beta/desktop-sidecar/ui-package",
+  token: "1762560000.signature",
+  digest: "9c56cc51b374c3ba189210d5b6d4bf57790d351c96c47c02190ecf1e430635ab",
+  host_api: 1,
+  expires_at: "2026-11-07T12:00:00Z",
+};
+
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.snapshot.strict = undefined;
+  mocks.snapshot.ui = undefined;
   mocks.snapshot.state = "ready";
   mocks.supports.mockReturnValue(true);
+  mocks.fetchUiPackageToken.mockResolvedValue(packageToken);
   mocks.invoke.mockImplementation(async (method: string) => {
     if (method === "indexing.status.v1") return { configuration: saved };
     if (method === "outlook.list_mailboxes.v1") return { mailboxes: [] };
@@ -165,6 +180,56 @@ describe("DesktopSidecarConfigurationSync", () => {
         ),
       ).toBe(false);
       expect(mocks.invalidateQueries).not.toHaveBeenCalled();
+    },
+  );
+
+  it("sends the deployment's package reference to a sidecar that hosts the desktop UI", async () => {
+    mocks.snapshot.ui = { host_apis: [1], seed: null, installed: null };
+    mount();
+    await waitFor(() => expect(mocks.invalidateQueries).toHaveBeenCalled());
+    expect(mocks.fetchUiPackageToken).toHaveBeenCalledWith(
+      {},
+      expect.any(AbortSignal),
+    );
+    expect(mocks.invoke).toHaveBeenCalledWith(
+      "sidecar.configure.v1",
+      expect.objectContaining({
+        ui_package: {
+          url: `${window.location.origin}/api/v1beta/desktop-sidecar/ui-package`,
+          token: packageToken.token,
+          digest: packageToken.digest,
+          host_api: 1,
+        },
+      }),
+      expect.anything(),
+    );
+  });
+
+  it("sends no package reference to a sidecar that reports no desktop UI", async () => {
+    mount();
+    await waitFor(() => expect(mocks.invalidateQueries).toHaveBeenCalled());
+    expect(mocks.fetchUiPackageToken).not.toHaveBeenCalled();
+    const [, params] = mocks.invoke.mock.calls.find(
+      ([method]) => method === "sidecar.configure.v1",
+    )!;
+    expect(params).not.toHaveProperty("ui_package");
+  });
+
+  it.each([
+    ["serves no package", { status: 404, payload: "" }],
+    ["fails", new Error("network")],
+  ])(
+    "still configures without a package reference when the deployment %s",
+    async (_name, failure) => {
+      mocks.snapshot.ui = { host_apis: [1], seed: null, installed: null };
+      mocks.fetchUiPackageToken.mockRejectedValue(failure);
+      mount();
+      await waitFor(() => expect(mocks.invalidateQueries).toHaveBeenCalled());
+      const [, params] = mocks.invoke.mock.calls.find(
+        ([method]) => method === "sidecar.configure.v1",
+      )!;
+      expect(params).not.toHaveProperty("ui_package");
+      expect(params).toHaveProperty("user_configuration");
     },
   );
 

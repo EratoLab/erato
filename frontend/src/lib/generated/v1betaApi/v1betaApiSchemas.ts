@@ -1880,6 +1880,34 @@ export type DesktopSidecarOrganizationConfigurationResponse =
     policy_guides: PolicyGuidesConfig;
   };
 
+export type DesktopSidecarUiPackageTokenResponse = {
+  /**
+   * Manifest digest of the package currently served.
+   */
+  digest: string;
+  /**
+   * RFC 3339 expiry of the token.
+   */
+  expires_at: string;
+  /**
+   * The host API the package targets.
+   *
+   * @format int64
+   * @minimum 0
+   */
+  host_api: number;
+  /**
+   * Bearer token for both package requests. Deployment-level, not a user
+   * credential; authorizes nothing else.
+   */
+  token: string;
+  /**
+   * Root-relative URL of the package archive; `<url>/manifest.json` is the
+   * manifest. Resolve it against the origin this response came from.
+   */
+  url: string;
+};
+
 export type DisconnectMcpServerOauthResponse = {
   connection_status: McpServerStatusValue;
 };

@@ -19,6 +19,22 @@ export interface SidecarConfigureV1Params {
     user_principal_name?: string | null;
     [k: string]: unknown;
   } | null;
+  /**
+   * The deployment's desktop UI package: where the sidecar downloads it, the bearer token both package requests need, the package digest and the host API it targets, as the backend's token endpoint returned them. Clients send it only when discovery reports `ui`, with a fresh token on every configure; sidecars that report no `ui` ignore it. The token is deployment-level, authorizes nothing but the package download, and expires.
+   */
+  ui_package?: {
+    /**
+     * Absolute URL of the package archive; `<url>/manifest.json` is its manifest.
+     */
+    url: string;
+    token: string;
+    /**
+     * The manifest digest of the package the backend currently serves; a sidecar whose installed package carries it skips the download.
+     */
+    digest: string;
+    host_api: number;
+    [k: string]: unknown;
+  };
   [k: string]: unknown;
 }
 /**

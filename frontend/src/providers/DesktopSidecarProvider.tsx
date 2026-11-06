@@ -10,10 +10,14 @@ import { createContext, useContext, useEffect, useMemo, useState } from "react";
 
 import { useProfileApi } from "@/hooks/profile/useProfileApi";
 import { initializeMailboxConfiguration } from "@/lib/desktopSidecar/indexingConfiguration";
-import { useOrganizationConfiguration } from "@/lib/generated/v1betaApi/v1betaApiComponents";
+import {
+  fetchUiPackageToken,
+  useOrganizationConfiguration,
+} from "@/lib/generated/v1betaApi/v1betaApiComponents";
 
 import type {
   SidecarClientInfo,
+  SidecarConfigureV1Params,
   SidecarSnapshot,
 } from "@erato/desktop-sidecar-protocol";
 import type { PropsWithChildren } from "react";
@@ -170,6 +174,43 @@ export function signedInUser(
     : null;
 }
 
+export type UiPackageReference = NonNullable<
+  SidecarConfigureV1Params["ui_package"]
+>;
+
+/**
+ * The deployment's desktop UI package for a sidecar that hosts the desktop
+ * UI: the token endpoint's values with the archive URL made absolute. Null
+ * when the deployment serves no package (404) or the request fails; the
+ * configure call then carries no `ui_package`.
+ */
+export async function uiPackageReference(
+  signal: AbortSignal,
+): Promise<UiPackageReference | null> {
+  try {
+    const token = await fetchUiPackageToken({}, signal);
+    return {
+      url: new URL(token.url, window.location.origin).toString(),
+      token: token.token,
+      digest: token.digest,
+      host_api: token.host_api,
+    };
+  } catch (error: unknown) {
+    if (signal.aborted) throw error;
+    const status =
+      typeof error === "object" && error !== null && "status" in error
+        ? error.status
+        : undefined;
+    if (status !== 404) {
+      console.warn(
+        "The desktop UI package is not available to the desktop sidecar:",
+        error,
+      );
+    }
+    return null;
+  }
+}
+
 export function DesktopSidecarConfigurationSync() {
   const { client, snapshot } = useDesktopSidecar();
   const { profile } = useProfileApi();
@@ -218,14 +259,21 @@ export function DesktopSidecarConfigurationSync() {
             )
             .catch(() => ({ mailboxes: [] }))
         : { mailboxes: [] };
+      // Only a sidecar that hosts the desktop UI receives the package.
+      const uiPackage = snapshot.ui
+        ? await uiPackageReference(controller.signal)
+        : null;
       controller.signal.throwIfAborted();
       await client.invoke(
         "sidecar.configure.v1",
-        initializeMailboxConfiguration(
-          configuration,
-          mailboxes,
-          profile?.email,
-        ),
+        {
+          ...initializeMailboxConfiguration(
+            configuration,
+            mailboxes,
+            profile?.email,
+          ),
+          ...(uiPackage ? { ui_package: uiPackage } : {}),
+        },
         { signal: controller.signal },
       );
       await queryClient.invalidateQueries({
@@ -246,6 +294,7 @@ export function DesktopSidecarConfigurationSync() {
     queryClient,
     snapshot.instanceId,
     snapshot.state,
+    snapshot.ui,
   ]);
 
   return null;

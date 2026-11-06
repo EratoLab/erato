@@ -153,6 +153,28 @@ describe("DesktopSidecarClient", () => {
     expect(client.getSnapshot().state).toBe("error");
   });
 
+  it("exposes the desktop UI a sidecar reports and none for a sidecar hosting none", async () => {
+    const { client } = await setup();
+    await client.discover();
+    expect(client.getSnapshot().ui).toEqual({
+      host_apis: [1],
+      seed: { version: "0.1.0" },
+      installed: null,
+    });
+
+    const previous = await setup({ ui: null });
+    await previous.client.discover();
+    expect(previous.client.getSnapshot().state).toBe("ready");
+    expect("ui" in previous.client.getSnapshot()).toBe(false);
+
+    const malformed = await setup({
+      ui: { host_apis: [], seed: null, installed: null },
+    });
+    await expect(malformed.client.discover()).rejects.toMatchObject({
+      kind: "invalid_result",
+    });
+  });
+
   it("supports outlook.get_conversation.v1 with inline body and attachment bytes", async () => {
     const { client } = await setup();
     await client.discover();

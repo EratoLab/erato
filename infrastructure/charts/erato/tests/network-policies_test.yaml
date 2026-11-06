@@ -223,3 +223,49 @@ tests:
     asserts:
       - failedTemplate:
           errorMessage: msTeamsBot.directRoute.ingressFrom must list the ingress controller or Gateway pods while backend.networkPolicy.enabled is true
+
+  - it: should admit the configured peers for the desktop UI package direct route
+    set:
+      desktopSidecar.uiPackage.directRoute.enabled: true
+      desktopSidecar.uiPackage.directRoute.ingressFrom:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+    documentSelector:
+      path: metadata.name
+      value: RELEASE-NAME-backend-network-policy
+    asserts:
+      - equal:
+          path: spec.ingress[1].from[0].namespaceSelector.matchLabels["kubernetes.io/metadata.name"]
+          value: ingress-nginx
+      - equal:
+          path: spec.ingress[1].ports[0].port
+          value: 3130
+      - equal:
+          path: spec.ingress[2].ports[0].port
+          value: 3131
+
+  - it: should fall back to the Teams bot peers for the desktop UI package direct route
+    set:
+      desktopSidecar.uiPackage.directRoute.enabled: true
+      msTeamsBot.directRoute.ingressFrom:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-shared
+    documentSelector:
+      path: metadata.name
+      value: RELEASE-NAME-backend-network-policy
+    asserts:
+      - equal:
+          path: spec.ingress[1].from[0].namespaceSelector.matchLabels["kubernetes.io/metadata.name"]
+          value: ingress-shared
+      - equal:
+          path: spec.ingress[1].ports[0].port
+          value: 3130
+
+  - it: should refuse the desktop UI package direct route without NetworkPolicy peers
+    set:
+      desktopSidecar.uiPackage.directRoute.enabled: true
+    asserts:
+      - failedTemplate:
+          errorMessage: desktopSidecar.uiPackage.directRoute.ingressFrom or msTeamsBot.directRoute.ingressFrom must list the ingress controller or Gateway pods while backend.networkPolicy.enabled is true

@@ -38,6 +38,18 @@ spec:
         - protocol: TCP
           port: 3130
     {{- end }}
+    {{- if and .Values.desktopSidecar.uiPackage.directRoute.enabled .Values.oauth2Proxy.enabled }}
+    {{- $uiPackagePeers := .Values.desktopSidecar.uiPackage.directRoute.ingressFrom | default .Values.msTeamsBot.directRoute.ingressFrom }}
+    {{- if not $uiPackagePeers }}
+    {{- fail "desktopSidecar.uiPackage.directRoute.ingressFrom or msTeamsBot.directRoute.ingressFrom must list the ingress controller or Gateway pods while backend.networkPolicy.enabled is true" }}
+    {{- end }}
+    # Desktop UI package routed directly by the ingress controller or Gateway
+    - from:
+        {{- toYaml $uiPackagePeers | nindent 8 }}
+      ports:
+        - protocol: TCP
+          port: 3130
+    {{- end }}
     - ports:
         - protocol: TCP
           port: {{ .Values.backend.metrics.port }}

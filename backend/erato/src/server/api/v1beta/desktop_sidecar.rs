@@ -3,6 +3,7 @@ use crate::distribution::desktop_sidecar::{
     BootstrapTransport, DesktopSidecarDistribution, DistributionArtifact, DistributionTarget,
     EMBEDDED_BOOTSTRAP_SLOT_CAPACITY, encode_executable_bootstrap_slot,
 };
+use crate::distribution::desktop_ui::{DesktopUiPackage, PackageTokenKey};
 use crate::policy::engine::{PolicyEngine, authorize};
 use crate::policy::types::{Action, Resource};
 use crate::server::api::v1beta::me_profile_middleware::MeProfile;
@@ -10,14 +11,39 @@ use crate::services::file_storage::{ContentDispositionKind, build_content_dispos
 use crate::state::AppState;
 use axum::body::Body;
 use axum::extract::{Query, State};
-use axum::http::header::{CACHE_CONTROL, CONTENT_DISPOSITION, CONTENT_LENGTH, CONTENT_TYPE};
-use axum::http::{HeaderValue, StatusCode};
+use axum::http::header::{
+    AUTHORIZATION, CACHE_CONTROL, CONTENT_DISPOSITION, CONTENT_LENGTH, CONTENT_TYPE, ETAG,
+    IF_NONE_MATCH,
+};
+use axum::http::{HeaderMap, HeaderValue, StatusCode};
 use axum::response::Response;
 use axum::{Extension, Json};
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::io::{Read, Seek, SeekFrom};
+use std::sync::Arc;
 use tokio_util::io::ReaderStream;
 use utoipa::{IntoParams, ToSchema};
+
+/// The package archive's path below the API root; `<path>/manifest.json` is
+/// its manifest. Clients resolve it against the origin they are served from.
+pub const UI_PACKAGE_PATH: &str = "/api/v1beta/desktop-sidecar/ui-package";
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct DesktopSidecarUiPackageTokenResponse {
+    /// Root-relative URL of the package archive; `<url>/manifest.json` is the
+    /// manifest. Resolve it against the origin this response came from.
+    url: String,
+    /// Bearer token for both package requests. Deployment-level, not a user
+    /// credential; authorizes nothing else.
+    token: String,
+    /// Manifest digest of the package currently served.
+    digest: String,
+    /// The host API the package targets.
+    host_api: u64,
+    /// RFC 3339 expiry of the token.
+    expires_at: String,
+}
 
 #[derive(Debug, Serialize, ToSchema)]
 pub struct DesktopSidecarDistributionResponse {
@@ -323,6 +349,189 @@ fn personalization_bootstrap(
     })
 }
 
+#[utoipa::path(
+    get,
+    path = "/me/desktop-sidecar/ui-package-token",
+    responses(
+        (status = OK, body = DesktopSidecarUiPackageTokenResponse),
+        (status = UNAUTHORIZED, description = "When no valid JWT token is provided"),
+        (status = NOT_FOUND, description = "The deployment serves no desktop UI package"),
+        (status = SERVICE_UNAVAILABLE, description = "The deployment has no server.encryption_key to sign package tokens with")
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
+pub async fn ui_package_token(
+    State(app_state): State<AppState>,
+    Extension(me_user): Extension<MeProfile>,
+    Extension(policy): Extension<PolicyEngine>,
+) -> Result<Json<DesktopSidecarUiPackageTokenResponse>, StatusCode> {
+    policy
+        .rebuild_data_if_needed_req(&app_state.db, &app_state.config)
+        .await?;
+    authorize!(
+        policy,
+        &me_user.to_subject(),
+        &Resource::DesktopSidecarConfigurationSingleton,
+        Action::Read
+    )
+    .map_err(|error| {
+        tracing::warn!(%error, "Desktop sidecar UI package token authorization failed");
+        StatusCode::UNAUTHORIZED
+    })?;
+    let package = current_ui_package(&app_state).await;
+    Ok(Json(build_ui_package_token_response(
+        package.as_deref(),
+        PackageTokenKey::from_config(&app_state.config).as_ref(),
+        Utc::now(),
+    )?))
+}
+
+fn build_ui_package_token_response(
+    package: Option<&DesktopUiPackage>,
+    key: Option<&PackageTokenKey>,
+    now: DateTime<Utc>,
+) -> Result<DesktopSidecarUiPackageTokenResponse, StatusCode> {
+    let package = package.ok_or(StatusCode::NOT_FOUND)?;
+    let Some(key) = key else {
+        tracing::warn!(
+            "server.encryption_key is not configured; desktop UI package tokens cannot be issued"
+        );
+        return Err(StatusCode::SERVICE_UNAVAILABLE);
+    };
+    let (token, expires_at) = key.issue(now);
+    Ok(DesktopSidecarUiPackageTokenResponse {
+        url: UI_PACKAGE_PATH.to_owned(),
+        token,
+        digest: package.digest.clone(),
+        host_api: package.host_api,
+        expires_at: expires_at.to_rfc3339(),
+    })
+}
+
+#[utoipa::path(
+    get,
+    path = "/desktop-sidecar/ui-package/manifest.json",
+    responses(
+        (status = OK, description = "Desktop UI package manifest", body = Vec<u8>, content_type = "application/json"),
+        (status = UNAUTHORIZED, description = "No valid package token in the Authorization header"),
+        (status = NOT_FOUND, description = "The deployment serves no desktop UI package")
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
+pub async fn ui_package_manifest(
+    State(app_state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Response, StatusCode> {
+    let package = current_ui_package(&app_state).await;
+    build_ui_package_response(
+        package.as_deref(),
+        PackageTokenKey::from_config(&app_state.config).as_ref(),
+        &headers,
+        Utc::now(),
+        UiPackagePart::Manifest,
+    )
+}
+
+#[utoipa::path(
+    get,
+    path = "/desktop-sidecar/ui-package",
+    responses(
+        (status = OK, description = "Desktop UI package archive (gzip tar); the ETag is the package digest", body = Vec<u8>, content_type = "application/gzip"),
+        (status = NOT_MODIFIED, description = "If-None-Match names the current package digest"),
+        (status = UNAUTHORIZED, description = "No valid package token in the Authorization header"),
+        (status = NOT_FOUND, description = "The deployment serves no desktop UI package")
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
+pub async fn ui_package_archive(
+    State(app_state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Response, StatusCode> {
+    let package = current_ui_package(&app_state).await;
+    build_ui_package_response(
+        package.as_deref(),
+        PackageTokenKey::from_config(&app_state.config).as_ref(),
+        &headers,
+        Utc::now(),
+        UiPackagePart::Archive,
+    )
+}
+
+async fn current_ui_package(app_state: &AppState) -> Option<Arc<DesktopUiPackage>> {
+    app_state.reloadable.read().await.desktop_ui_package.clone()
+}
+
+#[derive(Clone, Copy)]
+enum UiPackagePart {
+    Manifest,
+    Archive,
+}
+
+fn build_ui_package_response(
+    package: Option<&DesktopUiPackage>,
+    key: Option<&PackageTokenKey>,
+    headers: &HeaderMap,
+    now: DateTime<Utc>,
+    part: UiPackagePart,
+) -> Result<Response, StatusCode> {
+    let token = headers
+        .get(AUTHORIZATION)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.split_once(' '))
+        .filter(|(scheme, _)| scheme.eq_ignore_ascii_case("bearer"))
+        .map(|(_, token)| token.trim())
+        .ok_or(StatusCode::UNAUTHORIZED)?;
+    if !key.is_some_and(|key| key.verify(token, now)) {
+        return Err(StatusCode::UNAUTHORIZED);
+    }
+    let package = package.ok_or(StatusCode::NOT_FOUND)?;
+    let etag = HeaderValue::from_str(&format!("\"{}\"", package.digest))
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let mut response = if headers
+        .get(IF_NONE_MATCH)
+        .is_some_and(|value| if_none_match_names(value, &etag))
+    {
+        Response::new(Body::empty())
+    } else {
+        let (body, content_type) = match part {
+            UiPackagePart::Manifest => (package.manifest.clone(), "application/json"),
+            UiPackagePart::Archive => (package.archive.clone(), "application/gzip"),
+        };
+        let mut response = Response::new(Body::from(body.clone()));
+        response
+            .headers_mut()
+            .insert(CONTENT_TYPE, HeaderValue::from_static(content_type));
+        response
+            .headers_mut()
+            .insert(CONTENT_LENGTH, HeaderValue::from(body.len()));
+        response
+    };
+    if response.headers().get(CONTENT_TYPE).is_none() {
+        *response.status_mut() = StatusCode::NOT_MODIFIED;
+    }
+    response.headers_mut().insert(ETAG, etag);
+    response
+        .headers_mut()
+        .insert(CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    Ok(response)
+}
+
+fn if_none_match_names(value: &HeaderValue, etag: &HeaderValue) -> bool {
+    let (Ok(value), Ok(etag)) = (value.to_str(), etag.to_str()) else {
+        return false;
+    };
+    value
+        .split(',')
+        .map(str::trim)
+        .any(|entry| entry == "*" || entry.strip_prefix("W/").unwrap_or(entry) == etag)
+}
+
 #[cfg(test)]
 mod tests {
     use std::fs;
@@ -332,6 +541,204 @@ mod tests {
     use tempfile::tempdir;
 
     use super::*;
+
+    fn ui_package() -> DesktopUiPackage {
+        let config = crate::config::AppConfig::default();
+        let distribution = crate::distribution::Distribution::load(&config);
+        let artifact = crate::distribution::desktop_ui::DesktopUiArtifact {
+            version: "0.1.0".into(),
+            bundle: crate::distribution::desktop_ui::DesktopUiBundle::from_archive(
+                &crate::distribution::desktop_ui::tests::fixture_archive(),
+            )
+            .unwrap(),
+        };
+        crate::distribution::desktop_ui::assemble(
+            &artifact,
+            &config,
+            &distribution,
+            &Default::default(),
+            crate::distribution::desktop_ui::PACKAGE_BUDGET_BYTES,
+        )
+        .unwrap()
+    }
+
+    fn bearer(token: &str) -> HeaderMap {
+        let mut headers = HeaderMap::new();
+        headers.insert(AUTHORIZATION, format!("Bearer {token}").parse().unwrap());
+        headers
+    }
+
+    #[tokio::test]
+    async fn ui_package_requests_need_the_token_and_answer_with_the_digest_as_etag() {
+        let package = ui_package();
+        let key = PackageTokenKey::from_bytes([3; 32]);
+        let now = Utc::now();
+        let (token, _) = key.issue(now);
+        let etag = format!("\"{}\"", package.digest);
+
+        for (headers, name) in [
+            (HeaderMap::new(), "no header"),
+            (bearer("not-a-token"), "garbage"),
+            (
+                bearer(&PackageTokenKey::from_bytes([4; 32]).issue(now).0),
+                "other key",
+            ),
+            (bearer(&token.replacen('.', "1.", 1)), "tampered"),
+        ] {
+            for part in [UiPackagePart::Manifest, UiPackagePart::Archive] {
+                let response =
+                    build_ui_package_response(Some(&package), Some(&key), &headers, now, part);
+                assert!(matches!(response, Err(StatusCode::UNAUTHORIZED)), "{name}");
+            }
+        }
+        assert!(matches!(
+            build_ui_package_response(
+                Some(&package),
+                None,
+                &bearer(&token),
+                now,
+                UiPackagePart::Archive
+            ),
+            Err(StatusCode::UNAUTHORIZED)
+        ));
+        assert!(matches!(
+            build_ui_package_response(
+                Some(&package),
+                Some(&key),
+                &bearer(&token),
+                now + chrono::TimeDelta::days(2),
+                UiPackagePart::Archive
+            ),
+            Err(StatusCode::UNAUTHORIZED)
+        ));
+        assert!(matches!(
+            build_ui_package_response(
+                None,
+                Some(&key),
+                &bearer(&token),
+                now,
+                UiPackagePart::Archive
+            ),
+            Err(StatusCode::NOT_FOUND)
+        ));
+
+        let response = build_ui_package_response(
+            Some(&package),
+            Some(&key),
+            &bearer(&token),
+            now,
+            UiPackagePart::Archive,
+        )
+        .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(response.headers()[CONTENT_TYPE], "application/gzip");
+        assert_eq!(response.headers()[ETAG], etag.as_str());
+        assert_eq!(response.headers()[CACHE_CONTROL], "no-store");
+        let length: usize = response.headers()[CONTENT_LENGTH]
+            .to_str()
+            .unwrap()
+            .parse()
+            .unwrap();
+        let body = to_bytes(response.into_body(), 64 * 1024 * 1024)
+            .await
+            .unwrap();
+        assert_eq!(body.len(), length);
+        assert_eq!(body, package.archive);
+
+        let response = build_ui_package_response(
+            Some(&package),
+            Some(&key),
+            &bearer(&token),
+            now,
+            UiPackagePart::Manifest,
+        )
+        .unwrap();
+        assert_eq!(response.headers()[CONTENT_TYPE], "application/json");
+        let body = to_bytes(response.into_body(), 1_000_000).await.unwrap();
+        let manifest: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(manifest["digest"], package.digest);
+
+        let mut headers = bearer(&token);
+        headers.insert(IF_NONE_MATCH, etag.parse().unwrap());
+        let response = build_ui_package_response(
+            Some(&package),
+            Some(&key),
+            &headers,
+            now,
+            UiPackagePart::Archive,
+        )
+        .unwrap();
+        assert_eq!(response.status(), StatusCode::NOT_MODIFIED);
+        assert_eq!(response.headers()[ETAG], etag.as_str());
+        assert_eq!(response.headers()[CACHE_CONTROL], "no-store");
+        assert!(response.headers().get(CONTENT_TYPE).is_none());
+        assert!(
+            to_bytes(response.into_body(), 1_000)
+                .await
+                .unwrap()
+                .is_empty()
+        );
+        let mut stale = bearer(&token);
+        stale.insert(IF_NONE_MATCH, "\"other\"".parse().unwrap());
+        assert_eq!(
+            build_ui_package_response(
+                Some(&package),
+                Some(&key),
+                &stale,
+                now,
+                UiPackagePart::Archive
+            )
+            .unwrap()
+            .status(),
+            StatusCode::OK
+        );
+        for value in [
+            format!("W/\"other\", {etag}"),
+            format!("W/{etag}"),
+            "*".to_owned(),
+        ] {
+            let mut headers = bearer(&token);
+            headers.insert(IF_NONE_MATCH, value.parse().unwrap());
+            assert_eq!(
+                build_ui_package_response(
+                    Some(&package),
+                    Some(&key),
+                    &headers,
+                    now,
+                    UiPackagePart::Manifest
+                )
+                .unwrap()
+                .status(),
+                StatusCode::NOT_MODIFIED,
+                "{value}"
+            );
+        }
+    }
+
+    #[test]
+    fn ui_package_token_response_names_the_package_and_a_verifiable_token() {
+        let package = ui_package();
+        let key = PackageTokenKey::from_bytes([5; 32]);
+        let now = Utc::now();
+        let response = build_ui_package_token_response(Some(&package), Some(&key), now).unwrap();
+        assert_eq!(response.url, "/api/v1beta/desktop-sidecar/ui-package");
+        assert_eq!(response.digest, package.digest);
+        assert_eq!(response.host_api, 1);
+        assert!(key.verify(&response.token, now));
+        let expires_at = DateTime::parse_from_rfc3339(&response.expires_at).unwrap();
+        assert_eq!(
+            expires_at.timestamp(),
+            now.timestamp() + crate::distribution::desktop_ui::TOKEN_TTL_SECONDS
+        );
+        assert!(matches!(
+            build_ui_package_token_response(None, Some(&key), now),
+            Err(StatusCode::NOT_FOUND)
+        ));
+        assert!(matches!(
+            build_ui_package_token_response(Some(&package), None, now),
+            Err(StatusCode::SERVICE_UNAVAILABLE)
+        ));
+    }
 
     #[tokio::test]
     async fn intunewin_download_is_derived_from_msi_and_safe_for_concurrent_requests() {

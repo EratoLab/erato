@@ -381,6 +381,30 @@ msTeamsBot:
             kubernetes.io/metadata.name: ingress-nginx
 ```
 
+### Desktop UI package
+
+Desktop sidecars that host the desktop UI download the deployment's UI package from
+`/api/v1beta/desktop-sidecar/ui-package` and `/api/v1beta/desktop-sidecar/ui-package/manifest.json`
+with a package token in the `Authorization` header, which oauth2-proxy strips. Enable
+the direct route, which adds exact-path rules for the two endpoints to the Ingress or
+HTTPRoute that target the Erato application Service, and allow the ingress controller
+or Gateway pods through the backend NetworkPolicy (the peers default to
+`msTeamsBot.directRoute.ingressFrom`):
+
+```yaml
+desktopSidecar:
+  uiPackage:
+    directRoute:
+      enabled: true
+      ingressFrom:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+```
+
+The backend verifies the package token itself and serves the endpoints only while
+its desktop sidecar distribution ships a `ui` artifact.
+
 ## Requirements
 
 | Repository | Name | Version |
@@ -468,6 +492,8 @@ msTeamsBot:
 | backend.service.type | string | `"ClusterIP"` | Backend service type |
 | commonAnnotations | object | `{}` | Annotations to add to all deployed objects |
 | commonLabels | object | `{}` | Labels to add to all deployed objects |
+| desktopSidecar.uiPackage.directRoute.enabled | bool | `false` | Route the desktop UI package endpoints (`/api/v1beta/desktop-sidecar/ui-package` and `/api/v1beta/desktop-sidecar/ui-package/manifest.json`, exact paths) straight to the backend Service instead of through oauth2-proxy, which strips the sidecar's `Authorization` header. The backend verifies the package token itself. Only relevant while oauth2-proxy is enabled; required for desktop sidecars that host the desktop UI. |
+| desktopSidecar.uiPackage.directRoute.ingressFrom | list | `[]` | NetworkPolicy peers (for example the ingress controller or Gateway pods) allowed to reach the backend port for this direct route. Empty falls back to `msTeamsBot.directRoute.ingressFrom`; one of the two is required while `backend.networkPolicy.enabled` is true, and these peers reach every backend route on that port. Example: ingressFrom:   - namespaceSelector:       matchLabels:         kubernetes.io/metadata.name: ingress-nginx |
 | gatewayApi.annotations | object | `{}` | Additional annotations for the HTTPRoute resource |
 | gatewayApi.enabled | bool | `false` | Enable Gateway API HTTPRoute generation. Requires an existing Gateway API v1 Gateway. |
 | gatewayApi.extraRules | list | `[]` | Additional HTTPRoute rules, rendered with tpl for advanced matches, filters, redirects, rewrites, or backends. Example: extraRules:   - matches:       - path:           type: PathPrefix           value: /custom-path |
@@ -495,7 +521,7 @@ msTeamsBot:
 | msTeamsBot.publicIngress.tls.secretName | string | `""` | Secret containing the TLS certificate |
 | nameOverride | string | `""` | String to partially override common.names.fullname |
 | namespaceOverride | string | `""` | String to fully override the namespace for all chart resources |
-| oauth2Proxy.config | string | `"# Example configuration - replace with your own\n# http_address = \"0.0.0.0:4180\"\n# upstreams = [\"http://localhost:8080\"]\n# email_domains = [\"*\"]\n# cookie_secret = \"\"\n# cookie_secure = true\n# skip_auth_regex = [\"^/health\", \"^/metrics\"]\n# The Teams bot endpoint cannot be exempted here (oauth2-proxy strips the\n# Authorization header on every route); use `msTeamsBot.directRoute` instead.\n"` | Full configuration file content for oauth2-proxy |
+| oauth2Proxy.config | string | `"# Example configuration - replace with your own\n# http_address = \"0.0.0.0:4180\"\n# upstreams = [\"http://localhost:8080\"]\n# email_domains = [\"*\"]\n# cookie_secret = \"\"\n# cookie_secure = true\n# skip_auth_regex = [\"^/health\", \"^/metrics\"]\n# The Teams bot and desktop UI package endpoints cannot be exempted here\n# (oauth2-proxy strips the Authorization header on every route); use\n# `msTeamsBot.directRoute` and `desktopSidecar.uiPackage.directRoute` instead.\n"` | Full configuration file content for oauth2-proxy |
 | oauth2Proxy.deploymentAnnotations | object | `{}` | Annotations to add to the oauth2-proxy deployment |
 | oauth2Proxy.deploymentStrategy | object | `{}` | Optional deployment strategy for oauth2-proxy (e.g., RollingUpdate/Recreate). Example: deploymentStrategy:   type: RollingUpdate   rollingUpdate:     maxUnavailable: 25%     maxSurge: 25% |
 | oauth2Proxy.enabled | bool | `true` | Enable OAuth2 Proxy for authentication |

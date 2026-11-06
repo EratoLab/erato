@@ -35,6 +35,19 @@ spec:
         - name: {{ printf "%s-erato-app" .Release.Name }}
           port: 3130
     {{- end }}
+    {{- if and .Values.desktopSidecar.uiPackage.directRoute.enabled .Values.oauth2Proxy.enabled }}
+    # Desktop UI package: authenticated by the backend's package token, not oauth2-proxy
+    - matches:
+        - path:
+            type: Exact
+            value: /api/v1beta/desktop-sidecar/ui-package
+        - path:
+            type: Exact
+            value: /api/v1beta/desktop-sidecar/ui-package/manifest.json
+      backendRefs:
+        - name: {{ printf "%s-erato-app" .Release.Name }}
+          port: 3130
+    {{- end }}
     - matches:
         - path:
             type: PathPrefix

@@ -21,6 +21,7 @@ mod tls;
 #[path = "desktop_sidecar_msi.rs"]
 mod windows_msi;
 
+use crate::distribution::desktop_ui::DesktopUiArtifact;
 use erato_config::config::{DesktopSidecarConfig, DesktopSidecarTlsConfig};
 use tls::BootstrapTls;
 
@@ -37,6 +38,7 @@ pub struct DesktopSidecarDistribution {
     targets: Vec<DistributionTarget>,
     bootstrap: Arc<[u8]>,
     tls: Option<BootstrapTls>,
+    ui: Option<Arc<DesktopUiArtifact>>,
 }
 
 #[derive(Clone, Debug)]
@@ -81,6 +83,13 @@ pub enum BootstrapTransport {
 #[derive(Debug, Deserialize)]
 struct DistributionManifest {
     targets: Vec<ManifestTarget>,
+    ui: Option<ManifestUi>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ManifestUi {
+    path: String,
+    version: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -292,16 +301,33 @@ impl DesktopSidecarDistribution {
             });
         }
 
+        let ui = manifest
+            .ui
+            .map(|ui| {
+                validate_ui_path(&ui.path)?;
+                let path = validate_artifact_path(root, &ui.path)?;
+                open_regular_file(&path, "desktop UI archive")?;
+                DesktopUiArtifact::load(&path, &ui.version).map(Arc::new)
+            })
+            .transpose()?;
+
         Ok(Self {
             targets,
             bootstrap,
             tls,
+            ui,
         })
     }
 
     #[must_use]
     pub fn targets(&self) -> &[DistributionTarget] {
         &self.targets
+    }
+
+    /// The generic desktop UI bundle the artifact set ships, if any.
+    #[must_use]
+    pub fn ui(&self) -> Option<&Arc<DesktopUiArtifact>> {
+        self.ui.as_ref()
     }
 
     #[must_use]
@@ -764,6 +790,17 @@ fn validate_media_type(media_type: &str) -> Result<()> {
     Ok(())
 }
 
+fn validate_ui_path(manifest_path: &str) -> Result<()> {
+    ensure!(
+        matches!(
+            manifest_path.split('/').collect::<Vec<_>>().as_slice(),
+            ["ui", file] if file.len() > ".tgz".len() && file.ends_with(".tgz")
+        ),
+        "Desktop UI archive path must be ui/<file>.tgz: {manifest_path}"
+    );
+    Ok(())
+}
+
 fn validate_artifact_path(root: &Path, manifest_path: &str) -> Result<PathBuf> {
     ensure!(
         !manifest_path.is_empty()
@@ -1189,6 +1226,66 @@ pub(crate) mod tests {
                 .to_le_bytes(),
         );
         binary
+    }
+
+    #[test]
+    fn loads_the_desktop_ui_artifact_the_manifest_names() {
+        let archive = crate::distribution::desktop_ui::tests::fixture_archive();
+        let with_ui = |path: &str, version: &str| {
+            let directory = tempdir().unwrap();
+            let mut manifest = valid_manifest();
+            manifest["ui"] = json!({ "path": path, "version": version });
+            write_distribution(directory.path(), manifest);
+            fs::create_dir_all(directory.path().join("ui")).unwrap();
+            fs::write(
+                directory.path().join("ui/erato-desktop-ui-0.1.0.tgz"),
+                &archive,
+            )
+            .unwrap();
+            directory
+        };
+
+        let directory = with_ui("ui/erato-desktop-ui-0.1.0.tgz", "0.1.0");
+        let distribution = DesktopSidecarDistribution::load(directory.path()).unwrap();
+        let ui = distribution.ui().unwrap();
+        assert_eq!(ui.version, "0.1.0");
+        assert_eq!(ui.bundle.version, "0.1.0");
+        assert!(ui.bundle.file_paths().contains(&"smoke.html"));
+
+        let directory = tempdir().unwrap();
+        write_distribution(directory.path(), valid_manifest());
+        assert!(
+            DesktopSidecarDistribution::load(directory.path())
+                .unwrap()
+                .ui()
+                .is_none()
+        );
+
+        for (path, version, message) in [
+            ("ui/erato-desktop-ui-0.1.0.tgz", "0.2.0", "is version 0.1.0"),
+            (
+                "erato-desktop-ui-0.1.0.tgz",
+                "0.1.0",
+                "must be ui/<file>.tgz",
+            ),
+            (
+                "ui/nested/erato-desktop-ui-0.1.0.tgz",
+                "0.1.0",
+                "must be ui/<file>.tgz",
+            ),
+            (
+                "ui/erato-desktop-ui-0.1.0.zip",
+                "0.1.0",
+                "must be ui/<file>.tgz",
+            ),
+            ("ui/missing.tgz", "0.1.0", "missing.tgz"),
+        ] {
+            let directory = with_ui(path, version);
+            let error = DesktopSidecarDistribution::load(directory.path())
+                .unwrap_err()
+                .to_string();
+            assert!(error.contains(message), "{path}: {error}");
+        }
     }
 
     #[test]

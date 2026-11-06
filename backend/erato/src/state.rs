@@ -210,6 +210,7 @@ impl AppState {
         let mcp_servers = McpServers::new(&config);
         let reloadable = Arc::new(RwLock::new(ReloadableAppState::new(
             &config,
+            &distribution,
             mcp_servers.clone(),
         )));
 

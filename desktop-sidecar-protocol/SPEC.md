@@ -107,6 +107,16 @@ A client runs tools as jobs only when `jobs` is present, a `sidecar` provider
 reports `available: true`, and `jobs.start.v1` and `jobs.status.v1` are
 enabled; earlier sidecars omit all three and serve the direct RPCs.
 
+Package 0.1.46 adds `ui`, present when the sidecar hosts the desktop UI in its
+own windows: `host_apis`, the host API numbers it implements; `seed`, the
+package compiled into its binary (`version`, optional `digest`) or null; and
+`installed`, the deployment package it currently serves (`version`, `digest`)
+or null while it serves the seed. A client that sees `ui` fetches the
+deployment's package token from its backend and sends `ui_package` with
+`sidecar.configure.v1` ([section 11](#desktop-ui-package)). Sidecars that do
+not report `ui` ignore `ui_package`; clients send `ui_package` only when
+discovery reports `ui`.
+
 ## 4. Capability changes
 
 Protocol 1.0 has no capability-change push notification. The sidecar evaluates
@@ -364,6 +374,29 @@ and one slot; independent extraction/reweighting work consumes its own.
 
 `indexing.status.v1.effectiveConfiguration` reports the resolved values. Existing
 `sidecar.configure.v1` retains its empty success result for compatibility.
+
+### Desktop UI package
+
+`ui_package` (package 0.1.46) is an optional object `{url, token, digest,
+host_api}` beside the two layers: the absolute URL of the deployment's desktop
+UI package archive, whose manifest is at `<url>/manifest.json`; the bearer
+token both requests carry; the manifest digest of the package the backend
+currently serves; and the host API the package targets, as the backend's token
+endpoint returned them ([DISTRIBUTION.md](./DISTRIBUTION.md#8-desktop-ui-package)).
+Sidecars that do not report `ui` ignore `ui_package`; clients send `ui_package`
+only when discovery reports `ui`, with a freshly fetched token on every
+configure. Older clients that do not send the field remain compatible.
+
+The token is deployment-level: it authorizes the two package requests and
+nothing else, is no user credential, and expires (24 hours in the reference
+backend). A sidecar MUST NOT persist it beyond the download, log it, or return
+it through `indexing.status.v1.configuration`. The sidecar downloads the
+package when `digest` differs from the digest of its installed package and
+`host_api` is one it lists in `ui.host_apis`; it verifies the archive against
+its manifest and installs it atomically. A failed download or verification
+keeps the installed package, or the seed, and does not fail the configure
+request. Delivery of `ui_package` is not evidence that the package was
+installed; the next discovery reports `installed`.
 
 ## 12. Sidecar actions
 
