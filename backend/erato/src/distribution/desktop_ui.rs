@@ -1455,7 +1455,7 @@ pub(crate) mod tests {
 
     #[test]
     fn the_package_token_round_trips_and_expires() {
-        let key = PackageTokenKey::from_bytes([7; 32]);
+        let key = PackageTokenKey::from_bytes(rand::random());
         let now = Utc::now();
         let (token, expires_at) = key.issue(now);
         assert_eq!(expires_at - now, TimeDelta::seconds(TOKEN_TTL_SECONDS));
@@ -1469,7 +1469,7 @@ pub(crate) mod tests {
         assert!(!key.verify(&format!("0{expiry}.{tag}"), now));
         assert!(!key.verify("", now));
         assert!(!key.verify("not-a-token", now));
-        assert!(!PackageTokenKey::from_bytes([8; 32]).verify(&token, now));
+        assert!(!PackageTokenKey::from_bytes(rand::random()).verify(&token, now));
 
         let mut config = AppConfig::default();
         assert!(PackageTokenKey::from_config(&config).is_none());
