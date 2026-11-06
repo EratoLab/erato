@@ -3,7 +3,8 @@
 use crate::config::{AppConfig, ConfigSourceFile, McpRuntimeConfig};
 use crate::db::entity::prelude::RuntimeConfiguration;
 use crate::db::entity::runtime_configuration;
-use crate::distribution::experience_policy;
+use crate::distribution::desktop_ui::{self, DesktopUiPackage};
+use crate::distribution::{Distribution, experience_policy};
 use crate::models::runtime_configuration::{
     ERATO_BACKEND_SOURCE_SERVICE, ERATO_TOML_SOURCE_TYPE, EXPERIENCE_POLICY_SOURCE_TYPE,
 };
@@ -14,6 +15,7 @@ use axum::body::Bytes;
 use eyre::{Report, WrapErr, eyre};
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder};
 use std::collections::HashMap;
+use std::sync::Arc;
 
 pub const ADMIN_PANEL_SOURCE_SERVICE: &str = "erato_admin_panel";
 const TRANSLATION_PO_SOURCE_TYPE: &str = "translation_po";
@@ -57,7 +59,7 @@ impl DistributionBundle {
 
     // Compile once per replacement bundle, before publishing it. Cache failures
     // too, preserving per-catalog HTTP errors without retrying on every request.
-    fn from_files(files: Vec<DistributionFile>) -> Self {
+    pub(crate) fn from_files(files: Vec<DistributionFile>) -> Self {
         let compiler = TranslationPoCache::default();
         let mut compiled_translations = HashMap::new();
         for file in &files {
@@ -111,13 +113,23 @@ pub struct ReloadableAppState {
     /// bundle above, whose files are served unauthenticated.
     pub experience_policy: Option<experience_policy::ExperiencePolicyDocument>,
     pub mcp: McpAppState,
+    /// The desktop UI package served to sidecars; `None` without a `ui`
+    /// artifact or when assembly failed. Rebuilt with the bundle, whose
+    /// translation overrides it carries.
+    pub desktop_ui_package: Option<Arc<DesktopUiPackage>>,
 }
 
 impl ReloadableAppState {
     #[must_use]
-    pub fn new(config: &AppConfig, mcp_servers: McpServers) -> Self {
+    pub fn new(config: &AppConfig, distribution: &Distribution, mcp_servers: McpServers) -> Self {
+        let distribution_bundle = DistributionBundle::default();
         Self {
-            distribution_bundle: DistributionBundle::default(),
+            desktop_ui_package: desktop_ui::assemble_for_state(
+                config,
+                distribution,
+                &distribution_bundle,
+            ),
+            distribution_bundle,
             experience_policy: None,
             mcp: McpAppState {
                 config: McpRuntimeConfig::from_app_config(config),
@@ -169,10 +181,17 @@ impl ReloadableAppState {
             });
         }
 
-        let distribution_bundle =
-            tokio::task::spawn_blocking(move || DistributionBundle::from_files(files))
-                .await
-                .wrap_err("Runtime translation compilation task failed")?;
+        let (distribution_bundle, desktop_ui_package) = {
+            let config = app_state.config.clone();
+            let distribution = app_state.distribution.clone();
+            tokio::task::spawn_blocking(move || {
+                let bundle = DistributionBundle::from_files(files);
+                let package = desktop_ui::assemble_for_state(&config, &distribution, &bundle);
+                (bundle, package)
+            })
+            .await
+            .wrap_err("Runtime translation compilation task failed")?
+        };
 
         // A malformed policy must not take the translation bundle down: carry
         // the previous policy forward so the swap stays one complete write. On
@@ -208,6 +227,7 @@ impl ReloadableAppState {
                 config: mcp_config,
                 servers: previous_mcp.servers,
             },
+            desktop_ui_package,
         })
     }
 }

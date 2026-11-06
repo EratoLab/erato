@@ -44,6 +44,8 @@ image = { version = "0.25.10", default-features = false, features = ["png", "jpe
 cab = "0.6.0"
 msi = "0.10.0"
 zip = { version = "9.1.0", default-features = false, features = ["deflate"] }
+tar = "0.4.46"
+flate2 = "1.1.8"
 
 # Dependencies: Outgoing HTTP
 reqwest = { version = "0.13.1", default-features = false, features = ["rustls", "charset", "http2", "system-proxy", "multipart", "stream", "json"] }

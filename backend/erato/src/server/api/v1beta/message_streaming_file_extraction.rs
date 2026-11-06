@@ -639,6 +639,7 @@ mod tests {
         let distribution = Arc::new(crate::distribution::Distribution::load(&config));
         let reloadable = crate::distribution::runtime::ReloadableAppState::new(
             &config,
+            &distribution,
             crate::services::mcp_manager::McpServers::new(&config),
         );
         AppState {

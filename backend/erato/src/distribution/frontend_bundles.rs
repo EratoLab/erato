@@ -254,7 +254,7 @@ fn load_import_map_json(bundle_root: &Path, mount_path: &str) -> Option<String> 
 
 /// Converts bundle-relative manifest entries to their public URLs. Absolute
 /// entries pass through unchanged.
-fn serialize_import_map(
+pub(crate) fn serialize_import_map(
     imports: &serde_json::Map<String, serde_json::Value>,
     mount_path: &str,
 ) -> String {

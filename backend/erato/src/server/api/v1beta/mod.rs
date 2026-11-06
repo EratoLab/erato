@@ -249,6 +249,10 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
             get(desktop_sidecar::organization_configuration),
         )
         .route(
+            "/desktop-sidecar/ui-package-token",
+            get(desktop_sidecar::ui_package_token),
+        )
+        .route(
             "/organization/users",
             get(entra_id::list_organization_users),
         )
@@ -425,6 +429,16 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
             "/desktop-sidecar/distribution/download",
             get(desktop_sidecar::download_distribution_artifact),
         )
+        // Sidecars download the desktop UI package with the package token,
+        // outside the user session.
+        .route(
+            "/desktop-sidecar/ui-package",
+            get(desktop_sidecar::ui_package_archive),
+        )
+        .route(
+            "/desktop-sidecar/ui-package/manifest.json",
+            get(desktop_sidecar::ui_package_manifest),
+        )
         .nest("/me", me_routes)
         .merge(authenticated_routes)
         .fallback(fallback);
@@ -490,6 +504,9 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         desktop_sidecar::organization_configuration,
         desktop_sidecar::distribution,
         desktop_sidecar::download_distribution_artifact,
+        desktop_sidecar::ui_package_token,
+        desktop_sidecar::ui_package_manifest,
+        desktop_sidecar::ui_package_archive,
         assistant_usage::get_assistant_usage,
         assistants::create_assistant,
         assistants::list_assistants,
@@ -655,6 +672,7 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         desktop_sidecar::DesktopSidecarDistributionTargetResponse,
         desktop_sidecar::DesktopSidecarDistributionPlatformResponse,
         desktop_sidecar::DesktopSidecarDistributionFileResponse,
+        desktop_sidecar::DesktopSidecarUiPackageTokenResponse,
         crate::config::BudgetCurrency,
         sharepoint::Drive,
         sharepoint::DriveItem,

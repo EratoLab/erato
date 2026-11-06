@@ -1272,6 +1272,81 @@
         }
       }
     },
+    "/api/v1beta/desktop-sidecar/ui-package": {
+      "get": {
+        "tags": [
+          "desktop_sidecar"
+        ],
+        "operationId": "ui_package_archive",
+        "responses": {
+          "200": {
+            "description": "Desktop UI package archive (gzip tar); the ETag is the package digest",
+            "content": {
+              "application/gzip": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "integer",
+                    "format": "int32",
+                    "minimum": 0
+                  }
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "If-None-Match names the current package digest"
+          },
+          "401": {
+            "description": "No valid package token in the Authorization header"
+          },
+          "404": {
+            "description": "The deployment serves no desktop UI package"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/api/v1beta/desktop-sidecar/ui-package/manifest.json": {
+      "get": {
+        "tags": [
+          "desktop_sidecar"
+        ],
+        "operationId": "ui_package_manifest",
+        "responses": {
+          "200": {
+            "description": "Desktop UI package manifest",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "integer",
+                    "format": "int32",
+                    "minimum": 0
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid package token in the Authorization header"
+          },
+          "404": {
+            "description": "The deployment serves no desktop UI package"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
     "/api/v1beta/files/{file_id}": {
       "get": {
         "tags": [],
@@ -2354,6 +2429,40 @@
           },
           "401": {
             "description": "When no valid JWT token is provided"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/api/v1beta/me/desktop-sidecar/ui-package-token": {
+      "get": {
+        "tags": [
+          "desktop_sidecar"
+        ],
+        "operationId": "ui_package_token",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DesktopSidecarUiPackageTokenResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "When no valid JWT token is provided"
+          },
+          "404": {
+            "description": "The deployment serves no desktop UI package"
+          },
+          "503": {
+            "description": "The deployment has no server.encryption_key to sign package tokens with"
           }
         },
         "security": [
@@ -8048,6 +8157,40 @@
           }
         ],
         "description": "Derived wire configuration; policy guides have only one configuration source."
+      },
+      "DesktopSidecarUiPackageTokenResponse": {
+        "type": "object",
+        "required": [
+          "url",
+          "token",
+          "digest",
+          "host_api",
+          "expires_at"
+        ],
+        "properties": {
+          "digest": {
+            "type": "string",
+            "description": "Manifest digest of the package currently served."
+          },
+          "expires_at": {
+            "type": "string",
+            "description": "RFC 3339 expiry of the token."
+          },
+          "host_api": {
+            "type": "integer",
+            "format": "int64",
+            "description": "The host API the package targets.",
+            "minimum": 0
+          },
+          "token": {
+            "type": "string",
+            "description": "Bearer token for both package requests. Deployment-level, not a user\ncredential; authorizes nothing else."
+          },
+          "url": {
+            "type": "string",
+            "description": "Root-relative URL of the package archive; `<url>/manifest.json` is the\nmanifest. Resolve it against the origin this response came from."
+          }
+        }
       },
       "DisconnectMcpServerOauthResponse": {
         "type": "object",
