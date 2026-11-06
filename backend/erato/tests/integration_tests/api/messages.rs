@@ -4718,7 +4718,8 @@ async fn continuestream_resumes_a_parked_tool_approval(
     assert_eq!(approval_request["tool_name"], "publish_approval_probe");
     assert_eq!(approval_request["mcp_server_id"], "mock_mcp_approval");
     assert_eq!(approval_request["display"]["server_name"], "Approval Probe");
-    assert_eq!(approval_request["display"]["label"]["source"], "generic");
+    assert_eq!(approval_request["display"]["label"]["source"], "rules");
+    assert_eq!(approval_request["display"]["label"]["action"], "send");
     assert_eq!(approval_request["preset"], "restrictive");
     // The gated call is also recorded as a decision the client can name.
     assert_eq!(approval_request["kind"], "mcp_tool");
@@ -5239,9 +5240,10 @@ async fn park_a_turn_and_keep_its_events(
 
 /// Every MCP call is stored with a label, the call that ran without asking as
 /// well as the gated one, and a call's live update carries the display its row
-/// is stored with. With no better source the label is generic, and its
-/// readable view names the gated call's arguments by path without copying
-/// their values; the approval fields stay what the gate decided.
+/// is stored with. The rules label the gated call from its name and
+/// arguments; the read gives them nothing to say and stays generic. The
+/// readable view names the arguments by path without copying their values,
+/// and the approval fields stay what the gate decided.
 ///
 /// # Test Categories
 /// - `uses-db`
@@ -5250,7 +5252,7 @@ async fn park_a_turn_and_keep_its_events(
 /// - `uses-mocked-llm`
 /// - `uses-mock-mcp`
 #[sqlx::test(migrator = "crate::MIGRATOR")]
-async fn every_mcp_call_is_stored_with_a_generic_label(pool: Pool<Postgres>) {
+async fn every_mcp_call_is_stored_with_a_label(pool: Pool<Postgres>) {
     let arguments = json!({
         "destination": {"page_id": "9b1d5f2e-3c4a-4f88-a1b2-0c1d2e3f4a5b"},
         "pages": [{"title": "Quarterly plan", "body": "Line one.\nLine two."}],
@@ -5300,7 +5302,15 @@ async fn every_mcp_call_is_stored_with_a_generic_label(pool: Pool<Postgres>) {
     assert_eq!(request["input"], arguments);
     assert_eq!(request["preset"], "restrictive");
     let label = &request["display"]["label"];
-    assert_eq!(label["source"], "generic");
+    assert_eq!(
+        (&label["source"], &label["action"]),
+        (&json!("rules"), &json!("send"))
+    );
+    let item = &label["items"][0];
+    assert_eq!(item["title"]["pointer"], "/pages/*/title");
+    assert_eq!(item["title"]["values"][0]["text"], "Quarterly plan");
+    assert_eq!(item["target"]["pointer"], "/destination/page_id");
+    assert_eq!(item["after"]["pointer"], "/pages/*/body");
     fn walk<'a>(node: &'a Value, out: &mut Vec<(&'a str, &'a str)>) {
         out.push((
             node["path"].as_str().unwrap(),
@@ -5325,7 +5335,7 @@ async fn every_mcp_call_is_stored_with_a_generic_label(pool: Pool<Postgres>) {
             ("/notify", "value"),
         ]
     );
-    let stored = serde_json::to_string(label).unwrap();
+    let stored = serde_json::to_string(&label["arguments"]).unwrap();
     assert!(
         !stored.contains("Quarterly plan") && !stored.contains("9b1d5f2e"),
         "the view holds paths, the values stay in the input: {stored}"
@@ -7006,10 +7016,7 @@ async fn test_continuestream_numbers_deltas_after_the_decision_and_call_parts(
             .map(|part| part["content_type"].as_str().unwrap())
             .collect();
         let settled = &resumed.raw_message["content"][3];
-        assert_eq!(
-            settled["display"]["label"]["source"], "generic",
-            "{decision}"
-        );
+        assert_eq!(settled["display"]["label"]["source"], "rules", "{decision}");
         assert_eq!(
             tool_updates[0]["display"], settled["display"],
             "{decision}: the live update carries the display the row is stored with"

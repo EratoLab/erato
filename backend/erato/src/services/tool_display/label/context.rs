@@ -326,7 +326,7 @@ fn own_id<'a>(
 }
 
 /// `opportunityid`, `page_id` or `recordId` holding an ID; not `paid: "yes"`.
-fn is_id_member(member: &str, value: &Value) -> bool {
+pub(super) fn is_id_member(member: &str, value: &Value) -> bool {
     member.len() > 2
         && member.to_ascii_lowercase().ends_with("id")
         && match value {
@@ -452,12 +452,10 @@ fn clean(text: &str) -> String {
 /// name and the table or type it lives in, such as a lookup
 /// `{recordId, relatedTable, name}` or `{page_id}`. Its name is whatever the
 /// model typed. `{id, fields: {...}}` carries data: it is the record itself.
-fn is_link(object: &Map<String, Value>) -> bool {
+pub(super) fn is_link(object: &Map<String, Value>) -> bool {
     let mut ids = 0;
     for (member, value) in object {
-        if (member.eq_ignore_ascii_case("id") && id_key(value).is_some())
-            || is_id_member(member, value)
-        {
+        if is_link_id(member, value) {
             ids += 1;
         } else if !NAME_KEYS
             .iter()
@@ -468,6 +466,35 @@ fn is_link(object: &Map<String, Value>) -> bool {
         }
     }
     ids == 1
+}
+
+/// A link that says it is one: it names the table or type it points into, or
+/// its ID member is a bare `id` or `recordId`. `{name, parentaccountid}` may
+/// as well be a record's own name next to its parent.
+pub(super) fn is_lookup(object: &Map<String, Value>) -> bool {
+    is_link(object)
+        && object.keys().any(|member| {
+            is_reference_member(member)
+                || LINK_TYPE_KEYS
+                    .iter()
+                    .any(|key| member.eq_ignore_ascii_case(key))
+        })
+}
+
+/// The member of a link that holds the ID of the record it points at.
+pub(super) fn link_id_member(object: &Map<String, Value>) -> Option<&str> {
+    is_link(object)
+        .then(|| {
+            object
+                .iter()
+                .find(|(member, value)| is_link_id(member, value))
+        })
+        .flatten()
+        .map(|(member, _)| member.as_str())
+}
+
+fn is_link_id(member: &str, value: &Value) -> bool {
+    (member.eq_ignore_ascii_case("id") && id_key(value).is_some()) || is_id_member(member, value)
 }
 
 fn is_reference_member(member: &str) -> bool {
@@ -533,7 +560,7 @@ fn is_create(tool: &ToolUse) -> bool {
 }
 
 /// `notion-create-pages`, `create_record` and `createIssue` all hold `create`.
-fn name_words(name: &str) -> Vec<String> {
+pub(super) fn name_words(name: &str) -> Vec<String> {
     let mut words = Vec::new();
     let mut word = String::new();
     let mut after_lower = false;
