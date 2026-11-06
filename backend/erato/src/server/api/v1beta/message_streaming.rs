@@ -514,6 +514,9 @@ mod generation_tool_call_id_tests {
     }
 }
 
+/// Trace annotation for a result the MCP server itself flagged as failed.
+const MCP_TOOL_REPORTED_ERROR: &str = "MCP tool reported an error";
+
 /// What the approval gate does with one MCP or client tool call once the
 /// policy and the user's own decision are combined.
 #[derive(Debug, PartialEq)]
@@ -9397,6 +9400,10 @@ async fn stream_generate_chat_completion<'a>(
                     let tool_response = post_processed.tool_response;
                     let output_value = post_processed.output_value;
                     let file_content_parts = post_processed.file_content_parts;
+                    // The server's own verdict. A run it flagged with `isError`
+                    // settles as an error, and its payload still goes back to the
+                    // model for recovery.
+                    let tool_failed = tool_call_result.is_error == Some(true);
 
                     persist_otel_tool_call(
                         tracing_client.as_ref(),
@@ -9407,7 +9414,7 @@ async fn stream_generate_chat_completion<'a>(
                         tool_call_parent_observation_id.clone(),
                         assistant_id,
                         &langfuse_trace_enrichment.platform,
-                        None,
+                        tool_failed.then_some(MCP_TOOL_REPORTED_ERROR),
                     )
                     .await;
 
@@ -9421,7 +9428,11 @@ async fn stream_generate_chat_completion<'a>(
                             tool_call_id: finished_tool_call.call_id.clone(),
                             tool_name: finished_tool_call.fn_name.clone(),
                             input: Some(finished_tool_call.fn_arguments.clone()),
-                            status: ToolCallStatus::Success,
+                            status: if tool_failed {
+                                ToolCallStatus::Error
+                            } else {
+                                ToolCallStatus::Success
+                            },
                             progress_message: None,
                             progress: None,
                             total: None,
@@ -9437,7 +9448,11 @@ async fn stream_generate_chat_completion<'a>(
                                     tool_call_id: finished_tool_call.call_id,
                                     tool_name: finished_tool_call.fn_name,
                                     input: Some(finished_tool_call.fn_arguments),
-                                    status: BgToolCallStatus::Success,
+                                    status: if tool_failed {
+                                        BgToolCallStatus::Error
+                                    } else {
+                                        BgToolCallStatus::Success
+                                    },
                                     progress_message: None,
                                     progress: None,
                                     total: None,
@@ -9457,7 +9472,11 @@ async fn stream_generate_chat_completion<'a>(
                             &mut current_message_content,
                             ToolUse {
                                 tool_call_id: finished_tool_call.call_id,
-                                status: MessageToolCallStatus::Success,
+                                status: if tool_failed {
+                                    MessageToolCallStatus::Error
+                                } else {
+                                    MessageToolCallStatus::Success
+                                },
                                 tool_name: finished_tool_call.fn_name,
                                 input: Some(finished_tool_call.fn_arguments),
                                 progress_message: None,
@@ -21640,9 +21659,15 @@ pub(crate) async fn run_continuation(
                         {
                             Ok(processed) => {
                                 file_content_parts = processed.file_content_parts;
-                                // Like the normal path, non-filter MCP error payloads
-                                // are returned to the model for recovery.
-                                (MessageToolCallStatus::Success, processed.output_value)
+                                // Like the normal path: a run the server flagged with
+                                // `isError` settles as an error, and its payload still
+                                // goes back to the model for recovery.
+                                let status = if result.is_error == Some(true) {
+                                    MessageToolCallStatus::Error
+                                } else {
+                                    MessageToolCallStatus::Success
+                                };
+                                (status, processed.output_value)
                             }
                             Err(error) => (
                                 MessageToolCallStatus::Error,
