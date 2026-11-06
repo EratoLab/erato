@@ -98,12 +98,7 @@ pub fn checked_label(
     if mapping.source == ToolCallLabelSource::Generic {
         return generic_label(arguments);
     }
-    let flags = rules::cross_check(
-        &tool.name,
-        arguments,
-        tool.annotations.as_ref(),
-        mapping.action,
-    );
+    let flags = rules::cross_check(tool, arguments, mapping.action);
     if !flags.is_empty() {
         let reasons = flags
             .iter()
@@ -589,5 +584,28 @@ mod tests {
             checked_label("notion", &tool, &arguments, &generic),
             generic_label(&arguments)
         );
+
+        let changes = json!({"changes": [{"op": "delete", "thread": "t_1"}]});
+        let schema = json!({"type": "object", "properties": {"changes": {
+            "type": "array",
+            "items": {"type": "object", "properties": {"op": {"type": "string"}, "thread": {"type": "string"}}},
+        }}});
+        let word = rmcp::model::Tool::new(
+            "word_submit_comment_changes",
+            "Changes comments.",
+            schema.as_object().unwrap().clone(),
+        );
+        let creating = ToolCallLabelMapping {
+            action: ToolCallAction::Create,
+            object_kind: ToolCallObjectKind::Comment,
+            items: vec![ToolCallLabelItemMapping {
+                id: Some("/changes/*/thread".into()),
+                ..Default::default()
+            }],
+            source: ToolCallLabelSource::Model,
+        };
+        let (label, log) = logged(|| checked_label("word", &word, &changes, &creating));
+        assert_eq!(label, generic_label(&changes));
+        assert!(log.contains("field_verb"), "{log}");
     }
 }

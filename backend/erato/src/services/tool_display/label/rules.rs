@@ -12,16 +12,19 @@ use super::context::{is_id_member, is_link, is_lookup, link_id_member, name_word
 use super::pointer::{self, escape};
 use super::{MAX_LABEL_FIELDS, ToolCallLabelItemMapping, ToolCallLabelMapping};
 use crate::models::message::{ToolCallAction, ToolCallLabelSource, ToolCallObjectKind};
-use rmcp::model::ToolAnnotations;
+use rmcp::model::{JsonObject, Tool, ToolAnnotations};
 use serde_json::Value;
 use std::collections::{HashMap, VecDeque};
 
 /// Members whose value names the operation (`command: "update_content"`,
 /// `op: "add"`), read up to four levels deep. A verb they give wins over the
-/// tool's name.
+/// tool's name when the tool's input schema declares them.
 pub const VERB_FIELDS: [&str; 6] = ["command", "op", "kind", "action", "mode", "operation"];
 /// Objects below the arguments' top whose verb fields still count.
 const VERB_FIELD_DEPTH: usize = 3;
+/// A verb field's value counts only when it reads as an identifier, such as
+/// `update_content` or `word.apply_edits`, never as free text.
+const MAX_VERB_VALUE_CHARS: usize = 40;
 /// Values one search visits, so a large batch costs no more than this.
 const MAX_SEARCH_VALUES: usize = 5_000;
 const MAX_SEARCH_DEPTH: usize = 6;
@@ -207,10 +210,12 @@ pub enum CrossCheckFlag {
     ReadOnlyAnnotation,
     /// The resolved `destructiveHint` is true, but the label only adds.
     DestructiveAnnotation,
-    /// The tool's name reads, but the label creates, deletes, moves or sends.
+    /// The tool's name reads, but the label does more than read.
     ReadName,
     /// The tool's name has verbs, and none of them is the label's.
     NameVerb,
+    /// A verb field in the arguments names another verb than the label's.
+    FieldVerb,
 }
 
 impl CrossCheckFlag {
@@ -220,6 +225,7 @@ impl CrossCheckFlag {
             Self::DestructiveAnnotation => "destructive_annotation",
             Self::ReadName => "read_name",
             Self::NameVerb => "name_verb",
+            Self::FieldVerb => "field_verb",
         }
     }
 }
@@ -266,7 +272,7 @@ pub fn rules_label(
     }
     item.fields = fields(arguments, action, &item, table.as_deref());
 
-    let read = name.iter().any(|word| READ_VERBS.contains(&word.as_str()));
+    let read = has(&name, &READ_VERBS);
     let unsure = if action == ToolCallAction::Other {
         (!read && annotations.and_then(|hints| hints.read_only_hint) != Some(true))
             .then_some(RulesUnsure::NoClearVerb)
@@ -297,17 +303,16 @@ pub fn rules_label(
 
 /// Holds a label's verb against the tool's name and its resolved
 /// annotations, operator overrides included; an absent hint says nothing.
-/// Any flag means the card shows the generic label. When a verb field in the
-/// arguments set the verb, the name steps back: it describes the tool, the
-/// field this call.
-pub fn cross_check(
-    tool_name: &str,
-    arguments: &Value,
-    annotations: Option<&ToolAnnotations>,
-    action: ToolCallAction,
-) -> Vec<CrossCheckFlag> {
-    let hint = |get: fn(&ToolAnnotations) -> Option<bool>| annotations.and_then(get) == Some(true);
-    let name = name_words(tool_name);
+/// Any flag means the card shows the generic label. When verb fields the
+/// tool's input schema declares set the verb, the name steps back: it
+/// describes the tool, the fields this call. The label must then agree with
+/// the fields.
+pub fn cross_check(tool: &Tool, arguments: &Value, action: ToolCallAction) -> Vec<CrossCheckFlag> {
+    let hint = |get: fn(&ToolAnnotations) -> Option<bool>| {
+        tool.annotations.as_ref().and_then(get) == Some(true)
+    };
+    let name = name_words(&tool.name);
+    let verb = verb(&name, Some(arguments));
     let mut flags = Vec::new();
     if hint(|hints| hints.read_only_hint) && action != ToolCallAction::Other {
         flags.push(CrossCheckFlag::ReadOnlyAnnotation);
@@ -323,29 +328,43 @@ pub fn cross_check(
     {
         flags.push(CrossCheckFlag::DestructiveAnnotation);
     }
-    if name.iter().any(|word| READ_VERBS.contains(&word.as_str()))
-        && matches!(
-            action,
-            ToolCallAction::Create
-                | ToolCallAction::Delete
-                | ToolCallAction::Move
-                | ToolCallAction::Send
-        )
-    {
+    if verb.source == VerbSource::Field && verb.action != action {
+        flags.push(CrossCheckFlag::FieldVerb);
+    }
+    // A member the schema does not declare may be one the model made up.
+    let declared = verb.source == VerbSource::Field
+        && verb_fields(arguments)
+            .into_iter()
+            .all(|(member, _)| declares(&tool.input_schema, member));
+    if declared {
+        return flags;
+    }
+    if action != ToolCallAction::Other && has(&name, &READ_VERBS) {
         flags.push(CrossCheckFlag::ReadName);
     }
-    if verb(&name, Some(arguments)).source != VerbSource::Field {
-        let named = name_verbs(&name);
-        if !named.is_empty() && !named.contains(&action) {
-            flags.push(CrossCheckFlag::NameVerb);
-        }
+    let named = name_verbs(&name);
+    if !named.is_empty() && !named.contains(&action) {
+        flags.push(CrossCheckFlag::NameVerb);
     }
     flags
 }
 
-/// The string values of the verb fields, top first.
+/// The values of the verb fields, top first.
 pub fn verb_field_values(arguments: &Value) -> Vec<&str> {
-    fn walk<'a>(value: &'a Value, depth: usize, budget: &mut usize, out: &mut Vec<&'a str>) {
+    verb_fields(arguments)
+        .into_iter()
+        .map(|(_, value)| value)
+        .collect()
+}
+
+/// The verb fields with an identifier for a value, as (member, value).
+fn verb_fields(arguments: &Value) -> Vec<(&str, &str)> {
+    fn walk<'a>(
+        value: &'a Value,
+        depth: usize,
+        budget: &mut usize,
+        out: &mut Vec<(&'a str, &'a str)>,
+    ) {
         if depth > VERB_FIELD_DEPTH || *budget == 0 {
             return;
         }
@@ -356,7 +375,8 @@ pub fn verb_field_values(arguments: &Value) -> Vec<&str> {
                     members
                         .iter()
                         .filter(|(member, _)| is_one_of(member, &VERB_FIELDS))
-                        .filter_map(|(_, value)| value.as_str()),
+                        .filter_map(|(member, value)| Some((member.as_str(), value.as_str()?)))
+                        .filter(|(_, value)| is_identifier(value)),
                 );
                 for child in members.values().filter(|child| is_container(child)) {
                     walk(child, depth + 1, budget, out);
@@ -374,6 +394,39 @@ pub fn verb_field_values(arguments: &Value) -> Vec<&str> {
     let mut budget = MAX_SEARCH_VALUES;
     walk(arguments, 0, &mut budget, &mut out);
     out
+}
+
+fn is_identifier(text: &str) -> bool {
+    !text.chars().any(char::is_whitespace) && text.chars().nth(MAX_VERB_VALUE_CHARS).is_none()
+}
+
+/// Whether the schema has a property named `member` at any depth.
+fn declares(schema: &JsonObject, member: &str) -> bool {
+    let mut objects = vec![schema];
+    let mut budget = MAX_SEARCH_VALUES;
+    while let Some(object) = objects.pop() {
+        if object
+            .get("properties")
+            .and_then(Value::as_object)
+            .is_some_and(|properties| properties.contains_key(member))
+        {
+            return true;
+        }
+        for value in object.values() {
+            if budget == 0 {
+                return false;
+            }
+            budget -= 1;
+            match value {
+                Value::Object(inner) => objects.push(inner),
+                Value::Array(entries) => {
+                    objects.extend(entries.iter().filter_map(Value::as_object))
+                }
+                _ => {}
+            }
+        }
+    }
+    false
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -480,11 +533,13 @@ fn has(words: &[String], any: &[&str]) -> bool {
     words.iter().any(|word| any.contains(&word.as_str()))
 }
 
+/// A parent's or folder's ID says where an item goes, not that it exists.
 fn holds_an_id(arguments: &Value) -> bool {
-    find(arguments, Skip::Nothing, |pointer, member, values| {
-        (names_an_id(member) && values.iter().copied().any(is_text_or_number))
-            .then(|| pointer.to_string())
-    })
+    find(
+        arguments,
+        Skip::Targets,
+        id_member(|member| names_an_id(member) && !is_one_of(member, &TARGET_MEMBERS)),
+    )
     .is_some()
 }
 
@@ -907,10 +962,12 @@ fn is_short_scalar(value: &Value) -> bool {
 }
 
 /// `hasUserApproved: true` or `user_confirmed: true` says what the model
-/// claims about the user, never what the call does.
+/// claims about the user, never what the call does. `approved: true` on an
+/// expense is the change itself.
 fn is_consent(member: &str, values: &[&Value]) -> bool {
     let lower = member.to_ascii_lowercase();
-    (lower.contains("approv") || lower.contains("confirm"))
+    lower.contains("user")
+        && (lower.contains("approv") || lower.contains("confirm"))
         && values.iter().any(|value| value.is_boolean())
 }
 
