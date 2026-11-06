@@ -277,6 +277,28 @@ fn a_create_names_the_one_id_in_its_short_result_from_its_own_arguments() {
         ),
         None
     );
+    // The record's own name is not under a name member: the lookup's is the
+    // only candidate, and it is the model's.
+    for lookup in [
+        json!({ "accountid": ACCOUNT, "name": "Typed by the model" }),
+        json!({ "page_id": "page-1", "title": "Typed by the model" }),
+    ] {
+        let contact =
+            json!({ "item": { "firstname": "Ana", "lastname": "Example", "company": lookup } });
+        assert_eq!(
+            created("create_record", contact, confirmation.clone()),
+            None
+        );
+    }
+    assert_eq!(
+        created(
+            "create_page",
+            json!({ "parent_page_id": "page-1", "title": "Kick-off" }),
+            confirmation.clone()
+        )
+        .as_deref(),
+        Some("Kick-off")
+    );
 
     let mut labelled = call(
         "add",
@@ -303,12 +325,14 @@ fn a_create_names_the_one_id_in_its_short_result_from_its_own_arguments() {
 fn old_values_are_read_by_the_items_one_id_and_only_on_updates() {
     let read = read_query(
         "read",
-        "SELECT name, opportunityid, parentcontactid, risklevel FROM opportunity",
+        "SELECT name, opportunityid, parentcontactid, customerid, risklevel, priority FROM opportunity",
         json!([{
             "name": "Line 4 retrofit",
             "opportunityid": OPPORTUNITY,
             "parentcontactid": CONTACT,
+            "customerid": ACCOUNT,
             "risklevel": 1,
+            "priority": "high",
         }]),
     );
     let contacts = read_query(
@@ -316,19 +340,20 @@ fn old_values_are_read_by_the_items_one_id_and_only_on_updates() {
         "SELECT fullname, contactid FROM contact",
         json!([{ "fullname": "Ana Example", "contactid": CONTACT }]),
     );
-    let numbered = call(
-        "numbered",
-        "list_projects",
+    let priorities = call(
+        "priorities",
+        "list_priorities",
         json!({}),
-        json!([{ "id": 1, "name": "Project one" }]),
+        json!([{ "id": "high", "name": "Priority high" }]),
     );
-    let context = after(vec![read, contacts, numbered]);
+    let context = after(vec![read, contacts, priorities]);
     let arguments = json!({
         "recordId": OPPORTUNITY,
         "item": {
             "risklevel": 3,
             "parentcontactid": { "recordId": OTHER_CONTACT, "relatedTable": "contact", "name": "Typed" },
-            "description": "New",
+            "priority": "low",
+            "customerid": OTHER_CONTACT,
         },
     });
     let mapping = ToolCallLabelItemMapping {
@@ -336,7 +361,9 @@ fn old_values_are_read_by_the_items_one_id_and_only_on_updates() {
         fields: vec![
             "/item/risklevel".into(),
             "/item/parentcontactid/recordId".into(),
-            "/item/description".into(),
+            "/item/priority".into(),
+            // The earlier account was never read: no raw ID as its old value.
+            "/item/customerid".into(),
         ],
         ..Default::default()
     };
@@ -349,9 +376,14 @@ fn old_values_are_read_by_the_items_one_id_and_only_on_updates() {
     };
     assert_eq!(
         fields(&context, ToolCallAction::Update),
-        [Some("1".to_string()), Some("Ana Example".to_string()), None]
+        [
+            Some("1".to_string()),
+            Some("Ana Example".to_string()),
+            Some("high".to_string()),
+            None,
+        ]
     );
-    assert_eq!(fields(&context, ToolCallAction::Delete), [None, None, None]);
+    assert_eq!(fields(&context, ToolCallAction::Delete), vec![None; 4]);
 
     let arguments = json!({ "recordIds": [OPPORTUNITY, OPPORTUNITY], "item": { "risklevel": 3 } });
     let both = item(
@@ -393,8 +425,14 @@ fn a_later_call_naming_the_record_retires_its_old_values_but_a_link_does_not() {
         json!({ "item": { "subject": "Call", "regardingobjectid": { "recordId": OPPORTUNITY } } }),
         json!(format!("Created record with ID {TASK}.")),
     );
+    let page_link = call(
+        "page",
+        "notion-create-pages",
+        json!({ "parent": { "type": "page_id", "page_id": OPPORTUNITY }, "pages": [{ "title": "Notes" }] }),
+        json!("Created 1 page."),
+    );
 
-    let context = after(vec![read.clone(), link]);
+    let context = after(vec![read.clone(), link, page_link]);
     assert_eq!(
         earlier(&context, OPPORTUNITY, "risklevel", json!(3)).as_deref(),
         Some("1")
@@ -420,6 +458,77 @@ fn a_later_call_naming_the_record_retires_its_old_values_but_a_link_does_not() {
         earlier(&context, OPPORTUNITY, "risklevel", json!(3)).as_deref(),
         Some("1")
     );
+}
+
+#[test]
+fn a_write_carrying_the_records_data_or_naming_it_in_text_retires_its_old_values() {
+    let airtable_read = call(
+        "read",
+        "list_records",
+        json!({ "table": "Tasks" }),
+        json!({ "records": [{ "id": "recTask1", "fields": { "Name": "Ship", "Status": "Open" } }] }),
+    );
+    let airtable_update = call(
+        "update",
+        "update_records",
+        json!({ "records": [{ "id": "recTask1", "fields": { "Status": "Done" } }] }),
+        json!("Updated 1 record."),
+    );
+    let issue_read = call(
+        "issue",
+        "get_issue",
+        json!({ "key": "ENG-5" }),
+        json!({ "id": "ENG-5", "title": "Crash on save", "state": "open" }),
+    );
+    let issue_update = call(
+        "close",
+        "update_issue",
+        json!({ "issue": { "id": "ENG-5", "state": "closed" } }),
+        json!("Issue updated."),
+    );
+    let context = after(vec![airtable_read.clone(), issue_read.clone()]);
+    assert_eq!(
+        earlier(&context, "recTask1", "Status", json!("Blocked")).as_deref(),
+        Some("Open")
+    );
+    assert_eq!(
+        earlier(&context, "ENG-5", "state", json!("done")).as_deref(),
+        Some("open")
+    );
+    let context = after(vec![
+        airtable_read,
+        issue_read,
+        airtable_update,
+        issue_update,
+    ]);
+    assert_eq!(
+        earlier(&context, "recTask1", "Status", json!("Blocked")),
+        None
+    );
+    assert_eq!(earlier(&context, "ENG-5", "state", json!("done")), None);
+
+    let read = read_query(
+        "read",
+        "SELECT name, opportunityid, risklevel FROM opportunity",
+        json!([{ "name": "Line 4 retrofit", "opportunityid": OPPORTUNITY, "risklevel": 1 }]),
+    );
+    for text in [
+        format!("UPDATE opportunity SET risklevel = 3 WHERE opportunityid = '{OPPORTUNITY}'"),
+        format!("update page {} set Status", OPPORTUNITY.replace('-', "")),
+    ] {
+        let write = call(
+            "write",
+            "execute",
+            json!({ "statement": text }),
+            json!("Done."),
+        );
+        let context = after(vec![read.clone(), write]);
+        assert_eq!(
+            earlier(&context, OPPORTUNITY, "risklevel", json!(3)),
+            None,
+            "{text}"
+        );
+    }
 }
 
 #[test]
@@ -465,7 +574,7 @@ fn the_running_turn_is_read_once_per_call_and_only_once_settled() {
 }
 
 #[test]
-fn ids_match_in_any_uuid_spelling_and_short_ids_that_name_two_things_miss() {
+fn ids_match_in_any_uuid_spelling_and_numbers_or_short_ids_that_name_two_things_miss() {
     let braced = format!("{{{}}}", OPPORTUNITY.to_uppercase());
     let context = after(vec![call(
         "read",
@@ -481,35 +590,42 @@ fn ids_match_in_any_uuid_spelling_and_short_ids_that_name_two_things_miss() {
     assert_eq!(name(&context, json!("Line 4 retrofit")), None);
 
     let context = after(vec![
+        // Comment 7 on another server is not project 7.
         call(
             "a",
             "list_projects",
             json!({}),
-            json!([{ "id": 7, "name": "Alpha" }]),
+            json!([{ "id": 7, "name": "Alpha", "workspace_id": "ws_1" }]),
         ),
         call(
             "b",
             "list_labels",
             json!({}),
-            json!([{ "id": "7", "name": "Beta" }]),
+            json!([{ "id": "8", "name": "Beta" }]),
         ),
         call(
             "c",
             "list_labels",
             json!({}),
-            json!([{ "id": "7", "name": "Gamma" }]),
+            json!([{ "id": "lbl_7", "name": "Beta" }]),
         ),
         call(
             "d",
-            "list_projects",
+            "list_labels",
             json!({}),
-            json!([{ "id": 8, "name": "Delta" }]),
+            json!([{ "id": "lbl_7", "name": "Gamma" }]),
         ),
         call(
             "e",
             "list_projects",
             json!({}),
-            json!([{ "id": 8, "name": "Delta" }]),
+            json!([{ "id": "prj_8", "name": "Delta" }]),
+        ),
+        call(
+            "e2",
+            "list_projects",
+            json!({}),
+            json!([{ "id": "prj_8", "name": "Delta" }]),
         ),
         call(
             "f",
@@ -524,8 +640,16 @@ fn ids_match_in_any_uuid_spelling_and_short_ids_that_name_two_things_miss() {
             json!({ "id": OPPORTUNITY, "name": "New name" }),
         ),
     ]);
-    assert_eq!(name(&context, json!(7)), None);
-    assert_eq!(name(&context, json!(8)).as_deref(), Some("Delta"));
+    for missed in [
+        json!(7),
+        json!("7"),
+        json!("8"),
+        json!("ws_1"),
+        json!("lbl_7"),
+    ] {
+        assert_eq!(name(&context, missed.clone()), None, "{missed}");
+    }
+    assert_eq!(name(&context, json!("prj_8")).as_deref(), Some("Delta"));
     assert_eq!(
         name(&context, json!(OPPORTUNITY)).as_deref(),
         Some("New name")
@@ -554,7 +678,7 @@ fn names_are_cleaned_and_results_and_the_index_are_capped() {
         None
     );
 
-    let pages: Vec<_> = (0..3)
+    let mut pages: Vec<_> = (0..3)
         .map(|page| {
             let rows: Vec<_> = (0..MAX_RECORDS_PER_RESULT)
                 .map(|i| json!({ "id": format!("p{page}-{i}"), "name": "Row" }))
@@ -562,9 +686,17 @@ fn names_are_cleaned_and_results_and_the_index_are_capped() {
             call(&format!("page{page}"), "list_rows", json!({}), json!(rows))
         })
         .collect();
+    let reread = call(
+        "reread",
+        "fetch",
+        json!({}),
+        json!({ "id": "p0-0", "name": "Row" }),
+    );
+    pages.insert(2, reread);
     let context = after(pages);
     assert_eq!(context.records.len(), MAX_RECORDS);
-    assert_eq!(name(&context, json!("p0-0")), None);
+    assert_eq!(name(&context, json!("p0-0")).as_deref(), Some("Row"));
+    assert_eq!(name(&context, json!("p0-1")), None);
     assert_eq!(name(&context, json!("p2-0")).as_deref(), Some("Row"));
 
     let wide: Map<String, Value> = (0..MAX_FIELDS_PER_RECORD + 10)

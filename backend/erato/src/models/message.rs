@@ -665,7 +665,8 @@ pub struct ToolCallLabelValue {
     /// What earlier results in the chat say about this value, never what the
     /// call itself says: on `id`, `target` and `before` the name of the record
     /// the value identifies; on a field of an update, the value the field held
-    /// in the record the item's `id` names. Absent when no result has it.
+    /// in the record the item's `id` names, where an earlier link shows as its
+    /// record's name and never as a raw ID. Absent when no result has it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false)]
     pub resolved: Option<String>,

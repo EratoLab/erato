@@ -15,7 +15,7 @@ use crate::services::display_text::{MAX_DISPLAY_NAME_CHARS, sanitize_display_tex
 use serde_json::{Map, Value};
 use std::collections::{HashMap, HashSet, VecDeque};
 
-/// Records kept for one turn; the oldest go first.
+/// Records kept for one turn; the ones seen least recently go first.
 pub const MAX_RECORDS: usize = 500;
 pub const MAX_RECORDS_PER_RESULT: usize = 200;
 pub const MAX_FIELDS_PER_RECORD: usize = 32;
@@ -25,6 +25,8 @@ const MAX_DEPTH: usize = 8;
 /// Longer text is not the short confirmation the create rule reads.
 pub const MAX_CREATE_RESULT_CHARS: usize = 500;
 const NAME_KEYS: [&str; 4] = ["name", "title", "subject", "fullname"];
+/// Where a link says its record lives.
+const LINK_TYPE_KEYS: [&str; 4] = ["relatedTable", "LogicalName", "type", "@odata.type"];
 
 /// Names and field values by ID, from the successful tool results of a chat.
 #[derive(Debug, Clone, Default)]
@@ -101,13 +103,14 @@ impl ToolResultContext {
                 for value in &mut field.values {
                     value.resolved = field_member(&value.path).and_then(|member| {
                         let earlier = record.fields.get(&member)?;
-                        // Only a link's earlier ID becomes a name, not a status `1`.
-                        let linked = (looks_like_a_uuid(earlier) || names_an_id(&member))
-                            .then(|| text_key(earlier))
-                            .flatten()
-                            .and_then(|key| self.record(&key))
-                            .and_then(|lookup| lookup.name.clone());
-                        Some(linked.unwrap_or_else(|| earlier.clone()))
+                        // A status `1` is a value; a link's earlier ID only
+                        // shows as its record's name, never as the raw ID.
+                        if looks_like_a_uuid(earlier) || names_an_id(&member) {
+                            let lookup = self.record(&text_key(earlier)?)?;
+                            lookup.name.clone()
+                        } else {
+                            Some(earlier.clone())
+                        }
                     });
                 }
             }
@@ -195,12 +198,7 @@ impl ToolResultContext {
         if text.chars().nth(MAX_CREATE_RESULT_CHARS).is_some() || !is_create(tool) {
             return;
         }
-        let mut ids = text
-            .split(|c: char| !(c.is_ascii_hexdigit() || matches!(c, '-' | '{' | '}')))
-            .filter(|token| looks_like_a_uuid(token))
-            .filter_map(text_key)
-            .collect::<HashSet<_>>()
-            .into_iter();
+        let mut ids = uuid_keys(text).collect::<HashSet<_>>().into_iter();
         let (Some(key), None, Some(name)) = (
             ids.next(),
             ids.next(),
@@ -212,7 +210,16 @@ impl ToolResultContext {
     }
 
     fn merge(&mut self, key: String, name: Option<String>, fields: HashMap<String, String>) {
+        // Every server numbers its own records, and `ToolUse` does not say
+        // which server a result came from, so `7` could be anything.
+        if key.bytes().all(|byte| byte.is_ascii_digit()) {
+            return;
+        }
         if let Some(record) = self.records.get_mut(&key) {
+            if let Some(at) = self.order.iter().position(|seen| *seen == key) {
+                let seen = self.order.remove(at);
+                self.order.extend(seen);
+            }
             if record.ambiguous {
                 return;
             }
@@ -441,12 +448,26 @@ fn clean(text: &str) -> String {
     sanitize_display_text(text, MAX_LABEL_VALUE_CHARS).text
 }
 
-/// An object that points at a record by its own ID, such as a lookup
-/// `{recordId, relatedTable, name}`. Its `name` is whatever the model typed.
-fn is_reference(object: &Map<String, Value>) -> bool {
-    object
-        .iter()
-        .any(|(member, value)| is_reference_member(member) && id_key(value).is_some())
+/// An object that only points at a record: one ID member plus at most its
+/// name and the table or type it lives in, such as a lookup
+/// `{recordId, relatedTable, name}` or `{page_id}`. Its name is whatever the
+/// model typed. `{id, fields: {...}}` carries data: it is the record itself.
+fn is_link(object: &Map<String, Value>) -> bool {
+    let mut ids = 0;
+    for (member, value) in object {
+        if (member.eq_ignore_ascii_case("id") && id_key(value).is_some())
+            || is_id_member(member, value)
+        {
+            ids += 1;
+        } else if !NAME_KEYS
+            .iter()
+            .chain(&LINK_TYPE_KEYS)
+            .any(|key| member.eq_ignore_ascii_case(key))
+        {
+            return false;
+        }
+    }
+    ids == 1
 }
 
 fn is_reference_member(member: &str) -> bool {
@@ -454,15 +475,16 @@ fn is_reference_member(member: &str) -> bool {
     bare.eq_ignore_ascii_case("id") || bare.eq_ignore_ascii_case("recordid")
 }
 
-/// The IDs a call may have changed: every ID its arguments hold, except
-/// those inside a reference, which only links to its record.
+/// The IDs a call may have changed: every ID its arguments hold, UUIDs
+/// written inside text included (`WHERE opportunityid = '…'`), except those
+/// of links, which only point at their records.
 fn changed_ids(value: &Value, keys: &mut Vec<String>, nodes: &mut usize, depth: usize) {
     if *nodes == 0 || depth > MAX_DEPTH {
         return;
     }
     *nodes -= 1;
     match value {
-        Value::Object(object) if depth > 0 && is_reference(object) => {}
+        Value::Object(object) if depth > 0 && is_link(object) => {}
         Value::Object(object) => {
             for child in object.values() {
                 changed_ids(child, keys, nodes, depth + 1);
@@ -473,8 +495,19 @@ fn changed_ids(value: &Value, keys: &mut Vec<String>, nodes: &mut usize, depth: 
                 changed_ids(entry, keys, nodes, depth + 1);
             }
         }
+        Value::String(text) => {
+            keys.extend(id_key(value));
+            keys.extend(uuid_keys(text));
+        }
         value => keys.extend(id_key(value)),
     }
+}
+
+/// The UUIDs written anywhere in `text`, as lookup keys.
+fn uuid_keys(text: &str) -> impl Iterator<Item = String> + '_ {
+    text.split(|c: char| !(c.is_ascii_hexdigit() || matches!(c, '-' | '{' | '}')))
+        .filter(|token| looks_like_a_uuid(token))
+        .filter_map(text_key)
 }
 
 /// What a field is called in the record: its last member, or for a
@@ -518,13 +551,13 @@ fn name_words(name: &str) -> Vec<String> {
 }
 
 /// The one name a create call gave its record. Lists (several records) and
-/// references to other records are left out; two candidates give none.
+/// links to other records are left out; two candidates give none.
 fn created_name(arguments: &Value) -> Option<String> {
     fn collect(value: &Value, names: &mut HashSet<String>, depth: usize) {
         let Value::Object(object) = value else {
             return;
         };
-        if depth > 3 || is_reference(object) {
+        if depth > 3 || (depth > 0 && is_link(object)) {
             return;
         }
         names.extend(name_of(object));
