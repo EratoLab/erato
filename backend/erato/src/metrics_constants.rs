@@ -43,6 +43,19 @@ pub const POSTGRES_QUERY_INTERRUPTED_PARTS_LIVE_CHILDREN: &str = "interrupted_pa
 pub const POSTGRES_QUERY_WAITING_PARENTS_SCAN: &str = "waiting_parents_scan";
 pub const POSTGRES_QUERY_WAITING_PARENT_SYNC: &str = "waiting_parent_sync";
 pub const POSTGRES_QUERY_DELIVERY_REARM: &str = "delivery_rearm";
+pub const POSTGRES_QUERY_SCHEDULED_DELIVERY_SCHEDULE: &str = "scheduled_delivery_schedule";
+pub const POSTGRES_QUERY_SCHEDULED_DELIVERY_SCHEDULE_ONCE: &str =
+    "scheduled_delivery_schedule_once";
+pub const POSTGRES_QUERY_SCHEDULED_DELIVERY_CANCEL: &str = "scheduled_delivery_cancel";
+pub const POSTGRES_QUERY_SCHEDULED_DELIVERY_SNOOZE: &str = "scheduled_delivery_snooze";
+pub const POSTGRES_QUERY_SCHEDULED_DELIVERY_COUNT_DELIVERED: &str =
+    "scheduled_delivery_count_delivered";
+pub const POSTGRES_QUERY_SCHEDULED_DELIVERY_RECLAIM: &str = "scheduled_delivery_reclaim";
+pub const POSTGRES_QUERY_SCHEDULED_DELIVERY_CLAIM: &str = "scheduled_delivery_claim";
+pub const POSTGRES_QUERY_SCHEDULED_DELIVERY_TOUCH: &str = "scheduled_delivery_touch";
+pub const POSTGRES_QUERY_SCHEDULED_DELIVERY_SETTLE: &str = "scheduled_delivery_settle";
+pub const POSTGRES_QUERY_SCHEDULED_DELIVERY_RETRY: &str = "scheduled_delivery_retry";
+pub const POSTGRES_QUERY_SCHEDULED_DELIVERY_DEFER: &str = "scheduled_delivery_defer";
 /// Terminal outcome of ONE delegated run, using the listing's own expression.
 pub const POSTGRES_QUERY_DELEGATED_RUN_OUTCOME: &str = "delegated_run_outcome";
 /// Whether a retry of a given failed run is already working.
@@ -96,4 +109,14 @@ pub const KNOWN_POSTGRES_QUERY_IDS: &[&str] = &[
     POSTGRES_QUERY_DELEGATED_RUN_OUTCOME,
     POSTGRES_QUERY_DELEGATION_RETRY_IN_FLIGHT,
     POSTGRES_QUERY_DELEGATION_TOOL_CALL,
+    POSTGRES_QUERY_SCHEDULED_DELIVERY_SCHEDULE,
+    POSTGRES_QUERY_SCHEDULED_DELIVERY_SCHEDULE_ONCE,
+    POSTGRES_QUERY_SCHEDULED_DELIVERY_CANCEL,
+    POSTGRES_QUERY_SCHEDULED_DELIVERY_SNOOZE,
+    POSTGRES_QUERY_SCHEDULED_DELIVERY_COUNT_DELIVERED,
+    POSTGRES_QUERY_SCHEDULED_DELIVERY_RECLAIM,
+    POSTGRES_QUERY_SCHEDULED_DELIVERY_CLAIM,
+    POSTGRES_QUERY_SCHEDULED_DELIVERY_TOUCH,
+    POSTGRES_QUERY_SCHEDULED_DELIVERY_SETTLE,
+    POSTGRES_QUERY_SCHEDULED_DELIVERY_RETRY,
 ];

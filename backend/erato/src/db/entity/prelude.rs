@@ -18,6 +18,7 @@ pub use super::ms_teams_pending_sign_ins::Entity as MsTeamsPendingSignIns;
 pub use super::ms_teams_requests::Entity as MsTeamsRequests;
 pub use super::ms_teams_token_exchanges::Entity as MsTeamsTokenExchanges;
 pub use super::runtime_configuration::Entity as RuntimeConfiguration;
+pub use super::scheduled_deliveries::Entity as ScheduledDeliveries;
 pub use super::share_grants::Entity as ShareGrants;
 pub use super::share_links::Entity as ShareLinks;
 pub use super::user_preferences::Entity as UserPreferences;

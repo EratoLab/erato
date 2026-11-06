@@ -27,6 +27,7 @@ mod config;
 mod db;
 mod llm;
 mod ms_teams_bot;
+mod scheduled_deliveries;
 mod test_utils;
 
 // Using a (possibly brittle?) life-before-main method to set the DATABASE_URL before any tests run.
@@ -106,9 +107,15 @@ async fn test_app_state_internal(
         );
     }
 
-    let actor_manager =
-        erato::actors::manager::ActorManager::new_with_name(db.clone(), app_config.clone(), None)
-            .await;
+    let scheduled_deliveries =
+        Arc::new(erato::services::scheduled_deliveries::DeliveryRegistry::new());
+    let actor_manager = erato::actors::manager::ActorManager::new_with_name(
+        db.clone(),
+        app_config.clone(),
+        scheduled_deliveries.clone(),
+        None,
+    )
+    .await;
 
     // Create a disabled Langfuse client for testing
     let langfuse_config = LangfuseConfig {
@@ -210,6 +217,7 @@ async fn test_app_state_internal(
             .unwrap(),
         ),
         config: app_config,
+        scheduled_deliveries,
         actor_manager,
         langfuse_client,
         global_policy_engine,

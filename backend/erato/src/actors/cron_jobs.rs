@@ -3,6 +3,7 @@ use ractor::registry;
 use ractor_actors::time::cron::Job;
 
 use crate::actors::cleanup_worker::CleanupWorkerMessage;
+use crate::actors::delivery_worker::DeliveryWorkerMessage;
 
 /// Ticks one supervisor's cleanup worker.
 ///
@@ -32,6 +33,32 @@ impl Job for CleanupTickJob {
             }
         } else {
             tracing::warn!("cleanup_worker_cron not found in registry. Tick skipped.");
+        }
+        Ok(())
+    }
+}
+
+/// Ticks one supervisor's scheduled-delivery worker; same shape and reasons
+/// as [`CleanupTickJob`].
+pub struct DeliveryTickJob {
+    pub worker_name: String,
+}
+
+#[async_trait::async_trait]
+impl Job for DeliveryTickJob {
+    fn id<'a>(&self) -> &'a str {
+        "delivery_tick_job"
+    }
+
+    async fn work(&mut self) -> Result<(), ractor::ActorProcessingErr> {
+        tracing::debug!("Running delivery_worker tick");
+        if let Some(actor_cell) = registry::where_is(self.worker_name.clone()) {
+            let worker: ActorRef<DeliveryWorkerMessage> = actor_cell.into();
+            if let Err(e) = worker.cast(DeliveryWorkerMessage::Tick) {
+                tracing::error!("Failed to send Tick to delivery_worker: {e}");
+            }
+        } else {
+            tracing::warn!("delivery_worker not found in registry. Tick skipped.");
         }
         Ok(())
     }

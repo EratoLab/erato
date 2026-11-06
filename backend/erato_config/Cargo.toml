@@ -15,6 +15,7 @@ erato_memory = { path = "../erato_memory" }
 base64 = "0.22.1"
 png = "0.18.0"
 config = "0.15.6"
+cron = "0.16.0"
 eyre = "0.6.12"
 facet = "0.44.3"
 regex = "1.12.3"

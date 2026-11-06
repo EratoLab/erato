@@ -21,6 +21,7 @@ pub mod ms_teams_pending_sign_ins;
 pub mod ms_teams_requests;
 pub mod ms_teams_token_exchanges;
 pub mod runtime_configuration;
+pub mod scheduled_deliveries;
 pub mod share_grants;
 pub mod share_links;
 pub mod user_preferences;

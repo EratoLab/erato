@@ -746,6 +746,12 @@ pub struct AppConfig {
     #[facet(erato_config::introduced_in(version = "0.6.0"))]
     pub cleanup_archived_max_age_days: u32,
 
+    // The executor that delivers scheduled messages (reminders, nudges and
+    // other notifications) to users once they are due.
+    #[serde(default)]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
+    pub scheduled_deliveries: ScheduledDeliveriesConfig,
+
     // **Deprecated**: Please use `chat_providers` instead for multiple provider support and better flexibility.
     #[facet(erato_config::hide_in_docs(hidden = true))]
     pub chat_provider: Option<ChatProviderConfig>,
@@ -1363,6 +1369,10 @@ impl AppConfig {
 
         if let Err(e) = config.generation.validate() {
             panic!("Invalid generation configuration: {}", e);
+        }
+
+        if let Err(e) = config.scheduled_deliveries.validate() {
+            panic!("Invalid scheduled deliveries configuration: {}", e);
         }
 
         if let Err(e) = config.frontend.validate() {
@@ -6594,6 +6604,109 @@ impl Default for GenerationStatusConfig {
             shutdown_drain_secs: default_generation_status_shutdown_drain_secs(),
             provider_idle_timeout_secs: default_generation_status_provider_idle_timeout_secs(),
         }
+    }
+}
+
+/// The executor that drains the `scheduled_deliveries` table: messages Erato
+/// owes a user at a due time (reminders, nudges, notifications). Every
+/// replica runs its own tick; the table's compare-and-set claims keep a row
+/// from being delivered twice while its claim holds. A claim that outlives
+/// `claim_timeout_seconds` is given back and counts as an attempt, so a
+/// channel cut off mid-call is retried, which can repeat a message that did
+/// go out, at most `max_attempts` times in all.
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
+pub struct ScheduledDeliveriesConfig {
+    // Whether the executor runs. Producers can still create rows while it is
+    // off; they are delivered once it is switched on. Features that create
+    // rows (such as the Teams inactivity nudge) require it.
+    // Defaults to `false`.
+    #[serde(default)]
+    pub enabled: bool,
+    // Cron expression (six fields, with seconds) for the executor tick.
+    // Defaults to `0 * * * * *`, once a minute.
+    #[serde(default = "default_scheduled_deliveries_tick_schedule")]
+    pub tick_schedule: String,
+    // How many due rows one tick on one replica claims and delivers.
+    // Defaults to `50`.
+    #[serde(default = "default_scheduled_deliveries_batch_size")]
+    pub batch_size: u32,
+    // Seconds after which a claim is considered abandoned (the replica that
+    // took it died or hung mid-delivery) and the row goes back to `pending`;
+    // the abandoned claim counts as an attempt. A channel call is cut off
+    // shortly before this. Defaults to `300`.
+    #[serde(default = "default_scheduled_deliveries_claim_timeout_seconds")]
+    pub claim_timeout_seconds: u64,
+    // How many claims a row gets before it is marked `failed`. Every claim
+    // counts: a retryable channel error (throttling, transport failure) or a
+    // producer or lookup error puts the row back to `pending` with a later
+    // due time, and a claim that went stale is counted when it is given
+    // back. Defaults to `5`.
+    #[serde(default = "default_scheduled_deliveries_max_attempts")]
+    pub max_attempts: u32,
+    // Seconds until a retryable delivery is attempted again, unless the
+    // channel asked for a specific wait (such as a `Retry-After` header).
+    // Defaults to `300`.
+    #[serde(default = "default_scheduled_deliveries_retry_delay_seconds")]
+    pub retry_delay_seconds: u64,
+}
+
+fn default_scheduled_deliveries_tick_schedule() -> String {
+    "0 * * * * *".to_string()
+}
+
+fn default_scheduled_deliveries_batch_size() -> u32 {
+    50
+}
+
+fn default_scheduled_deliveries_claim_timeout_seconds() -> u64 {
+    300
+}
+
+fn default_scheduled_deliveries_max_attempts() -> u32 {
+    5
+}
+
+fn default_scheduled_deliveries_retry_delay_seconds() -> u64 {
+    300
+}
+
+impl Default for ScheduledDeliveriesConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            tick_schedule: default_scheduled_deliveries_tick_schedule(),
+            batch_size: default_scheduled_deliveries_batch_size(),
+            claim_timeout_seconds: default_scheduled_deliveries_claim_timeout_seconds(),
+            max_attempts: default_scheduled_deliveries_max_attempts(),
+            retry_delay_seconds: default_scheduled_deliveries_retry_delay_seconds(),
+        }
+    }
+}
+
+impl ScheduledDeliveriesConfig {
+    pub fn validate(&self) -> Result<(), Report> {
+        if self.tick_schedule.trim().parse::<cron::Schedule>().is_err() {
+            return Err(eyre!(
+                "Scheduled deliveries `tick_schedule` is not a valid cron expression (six fields, with seconds): `{}`",
+                self.tick_schedule
+            ));
+        }
+        if self.batch_size == 0 {
+            return Err(eyre!(
+                "Scheduled deliveries `batch_size` must be at least 1."
+            ));
+        }
+        if self.claim_timeout_seconds == 0 {
+            return Err(eyre!(
+                "Scheduled deliveries `claim_timeout_seconds` must be at least 1."
+            ));
+        }
+        if self.max_attempts == 0 {
+            return Err(eyre!(
+                "Scheduled deliveries `max_attempts` must be at least 1."
+            ));
+        }
+        Ok(())
     }
 }
 

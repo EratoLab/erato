@@ -1,4 +1,5 @@
 use std::str::FromStr;
+use std::sync::Arc;
 
 use cron::Schedule;
 use ractor::{Actor, ActorProcessingErr, ActorRef, SupervisionEvent};
@@ -6,8 +7,10 @@ use ractor_actors::time::cron::{CronManager, CronManagerMessage, CronSettings};
 use sea_orm::DatabaseConnection;
 
 use crate::actors::cleanup_worker::{CleanupWorker, CleanupWorkerArgs};
-use crate::actors::cron_jobs::CleanupTickJob;
+use crate::actors::cron_jobs::{CleanupTickJob, DeliveryTickJob};
+use crate::actors::delivery_worker::{DeliveryWorker, DeliveryWorkerArgs};
 use crate::config::AppConfig;
+use crate::services::scheduled_deliveries::{DeliveryRegistry, ExecutorSettings};
 
 /// The registry names this supervisor's timed children run under. Derived from
 /// the supervisor's own name because `ractor`'s registry is process-global and
@@ -17,7 +20,10 @@ use crate::config::AppConfig;
 #[derive(Clone, Debug)]
 pub struct WorkerNames {
     pub cleanup_worker: String,
+    /// The one cron manager both tick jobs are scheduled on. The name predates
+    /// the second job and is kept so that nothing observing it changes.
     pub cleanup_worker_cron: String,
+    pub delivery_worker: String,
 }
 
 impl WorkerNames {
@@ -25,6 +31,7 @@ impl WorkerNames {
         Self {
             cleanup_worker: format!("{supervisor_name}.cleanup_worker"),
             cleanup_worker_cron: format!("{supervisor_name}.cleanup_worker_cron"),
+            delivery_worker: format!("{supervisor_name}.delivery_worker"),
         }
     }
 }
@@ -44,15 +51,33 @@ pub fn cleanup_tick_job(names: &WorkerNames) -> CleanupTickJob {
     }
 }
 
+/// The delivery tick job, for the same reason as [`cleanup_tick_job`].
+pub fn delivery_tick_job(names: &WorkerNames) -> DeliveryTickJob {
+    DeliveryTickJob {
+        worker_name: names.delivery_worker.clone(),
+    }
+}
+
 pub struct WorkerSupervisorArgs {
     pub db: DatabaseConnection,
     pub config: AppConfig,
+    pub deliveries: Arc<DeliveryRegistry>,
     /// `None` for an unnamed supervisor, which then starts NO timed children.
     pub workers: Option<WorkerNames>,
 }
 
 pub struct WorkerSupervisorState {
     pub cleanup: Option<(WorkerNames, CleanupWorkerArgs)>,
+    pub deliveries: Option<(WorkerNames, DeliveryWorkerArgs)>,
+}
+
+impl WorkerSupervisorState {
+    fn idle() -> Self {
+        Self {
+            cleanup: None,
+            deliveries: None,
+        }
+    }
 }
 
 pub struct WorkerSupervisor;
@@ -70,6 +95,7 @@ impl Actor for WorkerSupervisor {
         let WorkerSupervisorArgs {
             db,
             config,
+            deliveries,
             workers,
         } = args;
 
@@ -78,35 +104,27 @@ impl Actor for WorkerSupervisor {
         // collision-free, and it also keeps a real `0 */5 * * * *` cron out of a
         // test process whose sqlx database is dropped at test end.
         let Some(names) = workers else {
-            return Ok(WorkerSupervisorState { cleanup: None });
+            return Ok(WorkerSupervisorState::idle());
         };
 
-        // The worker's tick has two halves with different gating. The retention
-        // half is the operator's opt-in to deleting data; the delivery backstop
-        // deletes nothing and exists so that a crashed replica cannot lose a
-        // finished task's result, which must not be behind that opt-in.
+        // The cleanup worker's tick has two halves with different gating. The
+        // retention half is the operator's opt-in to deleting data; the delivery
+        // backstop deletes nothing and exists so that a crashed replica cannot
+        // lose a finished task's result, which must not be behind that opt-in.
         //
         // `any_route_enabled` rather than `tasks.run_modes ∋ async`: facet
         // overrides can widen list-valued keys at request time, so the config
         // read here is not the last word on whether a run is async. The sweep
         // self-gates cheaply instead — its scan matches nothing when nothing
         // async was ever dispatched.
-        if !config.cleanup_enabled && !config.delegation.any_route_enabled() {
-            tracing::info!("Neither cleanup nor delegation is enabled. Supervisor will be idle.");
-            return Ok(WorkerSupervisorState { cleanup: None });
+        let cleanup_needed = config.cleanup_enabled || config.delegation.any_route_enabled();
+        let deliveries_needed = config.scheduled_deliveries.enabled;
+        if !cleanup_needed && !deliveries_needed {
+            tracing::info!(
+                "Neither cleanup, delegation nor scheduled deliveries are enabled. Supervisor will be idle."
+            );
+            return Ok(WorkerSupervisorState::idle());
         }
-
-        let args = CleanupWorkerArgs {
-            db: db.clone(),
-            cleanup_enabled: config.cleanup_enabled,
-            cleanup_archived_max_age_days: config.cleanup_archived_max_age_days,
-            delegated_run_auto_archive_after_days: config.delegation.auto_archive_after_days,
-            generation_stale_after_secs: config.generation_status.stale_after_secs,
-            result_max_chars: config.delegation.result_max_chars,
-            durable_operations_enabled: config.client_tools.durable_operations_enabled,
-            app_config: std::sync::Arc::new(config.clone()),
-            waiting_parents_cursor: Default::default(),
-        };
 
         // Start the cron manager
         let (cron_manager, cron_manager_handle) = Actor::spawn_linked(
@@ -121,36 +139,88 @@ impl Actor for WorkerSupervisor {
             cron_manager_handle.await.unwrap();
         });
 
-        // Schedule the cleanup tick job. The job is handed the worker's registry
-        // name rather than looking up a literal: that turns a rename into a
-        // compile error instead of a tick that is silently skipped forever.
-        // Built through `cleanup_tick_job` so that the name it carries is the
-        // one a test can observe — the boxed job itself is unobservable once it
-        // is inside the cron manager.
-        let schedule = Schedule::from_str("0 */5 * * * *").expect("Failed to parse cron schedule");
-        let settings = CronSettings {
-            schedule,
-            job: Box::new(cleanup_tick_job(&names)),
-        };
-        cron_manager
-            .call(|prt| CronManagerMessage::Start(settings, prt), None)
-            .await
-            .expect("Failed to send Start to CronManager")
-            .expect("CronManager timed out starting job")
-            .expect("Failed to start CleanupTickJob");
+        let cleanup = if cleanup_needed {
+            let args = CleanupWorkerArgs {
+                db: db.clone(),
+                cleanup_enabled: config.cleanup_enabled,
+                cleanup_archived_max_age_days: config.cleanup_archived_max_age_days,
+                delegated_run_auto_archive_after_days: config.delegation.auto_archive_after_days,
+                generation_stale_after_secs: config.generation_status.stale_after_secs,
+                result_max_chars: config.delegation.result_max_chars,
+                durable_operations_enabled: config.client_tools.durable_operations_enabled,
+                app_config: Arc::new(config.clone()),
+                waiting_parents_cursor: Default::default(),
+            };
 
-        // Start and supervise the cleanup worker
-        let (_cleanup_actor, _cleanup_handle) = Actor::spawn_linked(
-            Some(names.cleanup_worker.clone()),
-            CleanupWorker,
-            args.clone(),
-            myself.get_cell(),
-        )
-        .await
-        .expect("Failed to spawn CleanupWorker");
+            // Schedule the cleanup tick job. The job is handed the worker's
+            // registry name rather than looking up a literal: that turns a rename
+            // into a compile error instead of a tick that is silently skipped
+            // forever. Built through `cleanup_tick_job` so that the name it
+            // carries is the one a test can observe — the boxed job itself is
+            // unobservable once it is inside the cron manager.
+            let schedule =
+                Schedule::from_str("0 */5 * * * *").expect("Failed to parse cron schedule");
+            let settings = CronSettings {
+                schedule,
+                job: Box::new(cleanup_tick_job(&names)),
+            };
+            cron_manager
+                .call(|prt| CronManagerMessage::Start(settings, prt), None)
+                .await
+                .expect("Failed to send Start to CronManager")
+                .expect("CronManager timed out starting job")
+                .expect("Failed to start CleanupTickJob");
+
+            // Start and supervise the cleanup worker
+            let (_cleanup_actor, _cleanup_handle) = Actor::spawn_linked(
+                Some(names.cleanup_worker.clone()),
+                CleanupWorker,
+                args.clone(),
+                myself.get_cell(),
+            )
+            .await
+            .expect("Failed to spawn CleanupWorker");
+            Some((names.clone(), args))
+        } else {
+            None
+        };
+
+        let deliveries = if deliveries_needed {
+            let args = DeliveryWorkerArgs {
+                db,
+                settings: ExecutorSettings::from(&config.scheduled_deliveries),
+                registry: deliveries,
+            };
+            // Validated at config load; a failure here is a bug, not an input.
+            let schedule = Schedule::from_str(config.scheduled_deliveries.tick_schedule.trim())
+                .expect("Failed to parse the scheduled deliveries tick schedule");
+            let settings = CronSettings {
+                schedule,
+                job: Box::new(delivery_tick_job(&names)),
+            };
+            cron_manager
+                .call(|prt| CronManagerMessage::Start(settings, prt), None)
+                .await
+                .expect("Failed to send Start to CronManager")
+                .expect("CronManager timed out starting job")
+                .expect("Failed to start DeliveryTickJob");
+
+            let (_delivery_actor, _delivery_handle) = Actor::spawn_linked(
+                Some(names.delivery_worker.clone()),
+                DeliveryWorker,
+                args.clone(),
+                myself.get_cell(),
+            )
+            .await
+            .expect("Failed to spawn DeliveryWorker");
+            Some((names, args))
+        } else {
+            None
+        };
 
         Ok(WorkerSupervisorState {
-            cleanup: Some((names, args)),
+            cleanup,
+            deliveries,
         })
     }
 
@@ -180,6 +250,19 @@ impl Actor for WorkerSupervisor {
                     let (_restarted_actor, _handle) = Actor::spawn_linked(
                         who.get_name(),
                         CleanupWorker,
+                        worker_args.clone(),
+                        myself.get_cell(),
+                    )
+                    .await
+                    .expect("Failed to restart actor");
+
+                    tracing::info!("Restarted '{name}'.");
+                } else if let Some((names, worker_args)) = state.deliveries.as_ref()
+                    && name == names.delivery_worker
+                {
+                    let (_restarted_actor, _handle) = Actor::spawn_linked(
+                        who.get_name(),
+                        DeliveryWorker,
                         worker_args.clone(),
                         myself.get_cell(),
                     )

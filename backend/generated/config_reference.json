@@ -4329,6 +4329,42 @@
     "security_relevance": "unknown",
     "stability": "unstable"
   },
+  "scheduled_deliveries.batch_size": {
+    "default_value_security": "unknown",
+    "introduced_in": "0.9.0",
+    "security_relevance": "unknown",
+    "stability": "unstable"
+  },
+  "scheduled_deliveries.claim_timeout_seconds": {
+    "default_value_security": "unknown",
+    "introduced_in": "0.9.0",
+    "security_relevance": "unknown",
+    "stability": "unstable"
+  },
+  "scheduled_deliveries.enabled": {
+    "default_value_security": "unknown",
+    "introduced_in": "0.9.0",
+    "security_relevance": "unknown",
+    "stability": "unstable"
+  },
+  "scheduled_deliveries.max_attempts": {
+    "default_value_security": "unknown",
+    "introduced_in": "0.9.0",
+    "security_relevance": "unknown",
+    "stability": "unstable"
+  },
+  "scheduled_deliveries.retry_delay_seconds": {
+    "default_value_security": "unknown",
+    "introduced_in": "0.9.0",
+    "security_relevance": "unknown",
+    "stability": "unstable"
+  },
+  "scheduled_deliveries.tick_schedule": {
+    "default_value_security": "unknown",
+    "introduced_in": "0.9.0",
+    "security_relevance": "unknown",
+    "stability": "unstable"
+  },
   "sentry_dsn": {
     "default_value_security": "unknown",
     "deprecated": {

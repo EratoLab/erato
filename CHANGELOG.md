@@ -24,6 +24,12 @@ Typical "Notable changes" categories to copy & paste:
 
 ## [Unreleased]
 
+### Notable changes
+
+#### Features and enhancements
+
+**Scheduled deliveries.** A shared table and executor for messages Erato owes a user at a due time (reminders, nudges, notifications): producers create rows, the executor claims each row once with a compare-and-set, delivers it through a channel and records the outcome, with retries for throttled or failed transport and crash recovery for claims a dying replica left behind. Off by default; enable with `[scheduled_deliveries] enabled = true`. This is the foundation for the Teams inactivity nudge and for user reminders; it ships no user-facing feature on its own.
+
 ## [0.8.0] - 2026-11-03
 
 ### Notable changes

@@ -1,19 +1,32 @@
 use crate::actors::supervisor::{WorkerNames, WorkerSupervisor, WorkerSupervisorArgs};
 use crate::config::AppConfig;
+use crate::services::scheduled_deliveries::DeliveryRegistry;
 use ractor::Actor;
 use sea_orm::DatabaseConnection;
+use std::sync::Arc;
 
 #[derive(Clone, Debug)]
 pub struct ActorManager;
 
 impl ActorManager {
-    pub async fn new(db: DatabaseConnection, config: AppConfig) -> Self {
-        Self::new_with_name(db, config, Some("worker_supervisor".to_string())).await
+    pub async fn new(
+        db: DatabaseConnection,
+        config: AppConfig,
+        deliveries: Arc<DeliveryRegistry>,
+    ) -> Self {
+        Self::new_with_name(
+            db,
+            config,
+            deliveries,
+            Some("worker_supervisor".to_string()),
+        )
+        .await
     }
 
     pub async fn new_with_name(
         db: DatabaseConnection,
         config: AppConfig,
+        deliveries: Arc<DeliveryRegistry>,
         supervisor_name: Option<String>,
     ) -> Self {
         // The supervisor's own name is the derivation root for its children's
@@ -25,6 +38,7 @@ impl ActorManager {
             workers: supervisor_name.as_deref().map(WorkerNames::derived_from),
             db,
             config,
+            deliveries,
         };
         // Spawn the top-level supervisor
         let (_supervisor, supervisor_handle) =
