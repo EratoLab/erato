@@ -571,7 +571,7 @@ mod tests {
     #[tokio::test]
     async fn ui_package_requests_need_the_token_and_answer_with_the_digest_as_etag() {
         let package = ui_package();
-        let key = PackageTokenKey::from_bytes([3; 32]);
+        let key = PackageTokenKey::from_bytes(rand::random());
         let now = Utc::now();
         let (token, _) = key.issue(now);
         let etag = format!("\"{}\"", package.digest);
@@ -580,7 +580,7 @@ mod tests {
             (HeaderMap::new(), "no header"),
             (bearer("not-a-token"), "garbage"),
             (
-                bearer(&PackageTokenKey::from_bytes([4; 32]).issue(now).0),
+                bearer(&PackageTokenKey::from_bytes(rand::random()).issue(now).0),
                 "other key",
             ),
             (bearer(&token.replacen('.', "1.", 1)), "tampered"),
@@ -718,7 +718,7 @@ mod tests {
     #[test]
     fn ui_package_token_response_names_the_package_and_a_verifiable_token() {
         let package = ui_package();
-        let key = PackageTokenKey::from_bytes([5; 32]);
+        let key = PackageTokenKey::from_bytes(rand::random());
         let now = Utc::now();
         let response = build_ui_package_token_response(Some(&package), Some(&key), now).unwrap();
         assert_eq!(response.url, "/api/v1beta/desktop-sidecar/ui-package");
