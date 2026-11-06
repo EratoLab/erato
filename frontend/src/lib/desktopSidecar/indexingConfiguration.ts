@@ -367,6 +367,22 @@ function indexingSummary(
   enabled: boolean,
 ): IndexingSummary {
   const { rows, discovery, complete } = statistics;
+  const lifecycles = discovery.map((source) => source.lifecycle);
+  const hasLifecycle =
+    lifecycles.length > 0 &&
+    lifecycles.every(
+      (state) =>
+        typeof state === "string" &&
+        [
+          "scanning",
+          "indexing",
+          "current",
+          "disabled",
+          "stopped",
+          "unavailable",
+          "blocked",
+        ].includes(state),
+    );
   const counter = (key: CoverageCounter) =>
     statistics.available
       ? sum(
@@ -418,7 +434,20 @@ function indexingSummary(
     status.resetInProgress === true
   )
     state = "stopped";
-  else if (discovery.some((source) => !source.accessible))
+  else if (hasLifecycle) {
+    // The sidecar persists the enumeration milestone and scan recovery evidence.
+    // The row's existing translated labels consume this stable primary state.
+    if (lifecycles.includes("disabled")) state = "disabled";
+    else if (lifecycles.includes("stopped")) state = "stopped";
+    else if (lifecycles.includes("unavailable")) state = "sourceUnavailable";
+    else if (lifecycles.includes("blocked"))
+      state = rows.some((row) => (row.backlog.blocked ?? 0) > 0)
+        ? "indexingUnavailable"
+        : "scanFailed";
+    else if (lifecycles.includes("scanning")) state = "scanning";
+    else if (lifecycles.includes("indexing")) state = "indexing";
+    else state = "current";
+  } else if (discovery.some((source) => !source.accessible))
     state = "sourceUnavailable";
   else if (discovery.some((source) => source.state === "failed"))
     state = "scanFailed";
@@ -460,7 +489,9 @@ function indexingSummary(
   // The status pill already says when a source is being or was never scanned.
   const notScanned: IndexingRange | null =
     state === "notScanned" ||
-    discovery.some((source) => source.state === "scanning")
+    (hasLifecycle
+      ? state === "scanning"
+      : discovery.some((source) => source.state === "scanning"))
       ? null
       : // eslint-disable-next-line lingui/no-unlocalized-strings -- Internal range kind.
         { kind: "notScanned" };

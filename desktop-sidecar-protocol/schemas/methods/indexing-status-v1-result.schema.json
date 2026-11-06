@@ -1408,6 +1408,53 @@
         },
         "indexedRange": {
           "$ref": "#/definitions/IndexedRange"
+        },
+        "lifecycle": {
+          "type": "string",
+          "enum": [
+            "scanning",
+            "indexing",
+            "current",
+            "disabled",
+            "stopped",
+            "unavailable",
+            "blocked"
+          ],
+          "description": "Stable source lifecycle, independent of current scan attempts and worker occupancy. Optional for older v1 implementations; clients fall back to legacy derivation."
+        },
+        "lastEnumeratedAt": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "date-time"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Durable inventory milestone. Enumeration reached the end; deletion reconciliation may still be deferred. Retained across scans and process restarts, cleared with a fresh catalog."
+        },
+        "health": {
+          "type": "object",
+          "properties": {
+            "failureSince": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "consecutiveFailures": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "required": ["failureSince", "consecutiveFailures"],
+          "additionalProperties": true
         }
       },
       "required": [

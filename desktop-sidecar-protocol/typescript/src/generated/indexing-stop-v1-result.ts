@@ -358,6 +358,19 @@ export interface DiscoverySource {
   accessible: boolean;
   lastErrorCode: string | null;
   indexedRange?: IndexedRange;
+  /**
+   * Stable source lifecycle, independent of current scan attempts and worker occupancy. Optional for older v1 implementations; clients fall back to legacy derivation.
+   */
+  lifecycle?: "scanning" | "indexing" | "current" | "disabled" | "stopped" | "unavailable" | "blocked";
+  /**
+   * Durable inventory milestone. Enumeration reached the end; deletion reconciliation may still be deferred. Retained across scans and process restarts, cleared with a fresh catalog.
+   */
+  lastEnumeratedAt?: string | null;
+  health?: {
+    failureSince: string | null;
+    consecutiveFailures: number;
+    [k: string]: unknown;
+  };
   [k: string]: unknown;
 }
 /**

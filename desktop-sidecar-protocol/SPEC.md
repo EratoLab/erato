@@ -1161,3 +1161,59 @@ keys or requests for a different platform return InvalidParams. Status polling
 must never itself open a permission dialog. macOS has no public Full Disk Access
 status API; implementations use a best-effort protected-file access check and
 return `unknown` if it cannot determine access.
+
+### Source lifecycle and source scans
+
+`indexing.status.v1.discovery` retains its legacy name for compatibility. Its
+`state`, `discoveryComplete`, error code and timestamps describe the current or
+latest **source scan**, not source discovery (finding stores/accounts on disk).
+New implementations additionally report optional `lifecycle`, `lastEnumeratedAt`
+and `health` fields. Clients use `lifecycle` for the primary source label and
+retain the legacy derivation when it is absent. Existing translated row labels
+map `scanning` to Scanning, `indexing` to Indexing and `current` to Up to date.
+
+The durable initial milestone is a completed enumeration, including an inventory
+that changed only at final validation. An early failure or a partial batch does
+not establish this milestone. The milestone survives attempts and process
+restart; a deliberate catalog reset establishes a new initial enumeration.
+Rebuilding only the search generation retains catalog inventory evidence.
+Until the milestone the lifecycle remains `scanning`, even when extraction runs.
+After it, outstanding revisions, worker gaps, pacing, document retry delays and
+routine rescans remain `indexing`. `current` additionally requires no pending
+revisions/deletions and a stable successful inventory verified in the last two
+minutes. A running background scan may reuse that evidence; an enumeration that
+changed at final validation cannot establish a current claim. Range and coverage
+claims remain independent and conservative.
+
+Disabled/stopped/unavailable sources have explicit lifecycle states. Five
+consecutive failed scans spanning at least fifteen minutes escalate to `blocked`,
+including recoverable store-change failures. These counters survive restart and
+are cleared by a successful authoritative scan. Detailed attempt errors remain
+available immediately; transient errors do not replace Scanning or Indexing.
+Document work blocked by the indexer also escalates. A later successful scan
+recovers automatically. An active source scan without a durable attempt
+checkpoint for fifteen minutes is also blocked; a subsequent checkpoint
+recovers it. Batch commits advance the checkpoint, so a large progressing scan
+can run longer than fifteen minutes without being marked blocked.
+
+Source scan requests are currently an in-process sidecar API:
+`IndexingService::request_source_scan(source_id, ScanTrigger::{User,LocalChange})`.
+No cross-process RPC/capability is advertised. Other processes must not assume an
+unadvertised method exists. The existing mailbox-addressed action adapter routes
+through this same scheduler. Outcomes are Accepted, Coalesced, Disabled, Unknown,
+Stopped and Unavailable. Acceptance acknowledges scheduling, not completed
+scanning/indexing, remote fetching, or source enablement.
+
+The scheduler wakes immediately, permits two independent physical stores, and
+serializes all accounts of a shared Teams cache or Hx store set. Requests during
+a scan mark it dirty for a follow-up; bursts coalesce. Requested work takes the
+next eligible slot ahead of periodic work, then configured priority and due
+time, without preempting running work. A job overdue by a full polling interval
+takes precedence over new requests so event storms cannot starve it. Every completion has at least a one-second cooldown;
+failed attempts back off 60/120/240/300 seconds, and requests cannot bypass it.
+Each accepted request includes two delayed cache rechecks, five seconds apart
+(or later under backoff), for hints preceding local writes. Unchanged stores may
+reuse reliable freshness evidence. New batches wake the document work queue
+under the existing indexing policy. Bounded tracing records request outcomes,
+trigger and scheduling time; attempt history associates the trigger with the
+resulting scan. External signal providers are future integrations.

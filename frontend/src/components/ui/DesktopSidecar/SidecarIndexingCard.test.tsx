@@ -617,6 +617,34 @@ describe("Teams and Outlook source controls", () => {
     return { status, ...view };
   }
 
+  it("renders the durable lifecycle through initial scanning, worker gaps and transient scan failures", () => {
+    const { status, rerender } = renderSources();
+    const source = status.discovery[1];
+    const row = () => within(screen.getAllByRole("listitem")[1]);
+    source.lifecycle = "scanning";
+    source.state = "failed";
+    source.lastErrorCode = "source_changed";
+    rerender(<SidecarIndexingControls />);
+    expect(row().getByText("Scanning")).toBeInTheDocument();
+    source.lifecycle = "indexing";
+    for (const state of ["scanning", "failed", "complete"] as const) {
+      source.state = state;
+      for (const inProgress of [0, 1, 0]) {
+        status.generations[0].segments
+          .filter((segment) => segment.sourceId === source.sourceId)
+          .forEach((segment) => {
+            segment.backlog.inProgress = inProgress;
+          });
+        rerender(<SidecarIndexingControls />);
+        expect(row().getByText("Indexing")).toBeInTheDocument();
+        expect(row().queryByText("Scan failed")).not.toBeInTheDocument();
+      }
+    }
+    source.lifecycle = "current";
+    rerender(<SidecarIndexingControls />);
+    expect(row().getByText("Up-to-date")).toBeInTheDocument();
+  });
+
   it("shows separate status for equally named Teams caches alongside Outlook", () => {
     const { status, rerender } = renderSources();
     status.discovery[1].state = "failed";
