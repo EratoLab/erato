@@ -7452,7 +7452,15 @@ async fn stream_generate_chat_completion<'a>(
                         tool_call_id: unfinished_tool_call.call_id.clone(),
                         status: MessageToolCallStatus::Error,
                         tool_name: unfinished_tool_call.fn_name.clone(),
-                        display: None,
+                        display: available_mcp_tools_by_name
+                            .get(unfinished_tool_call.fn_name.as_str())
+                            .map(|managed| {
+                                crate::services::tool_display::mcp_tool_call_display(
+                                    &mcp.config,
+                                    &managed.server_id,
+                                    &managed.tool,
+                                )
+                            }),
                         input: Some(unfinished_tool_call.fn_arguments.clone()),
                         progress_message: None,
                         progress: None,
@@ -12833,7 +12841,7 @@ mod tests {
     use crate::models::message::{ApprovalItem, ToolApprovalKind};
     use crate::models::user_tool_approval_setting::UserToolDecision;
     use crate::services::mcp_tool_approval::evaluate_mcp_tool_approval;
-    use crate::services::tool_display::{mcp_tool_call_display, tool_display_metadata};
+    use crate::services::tool_display::mcp_tool_call_display;
     use genai::chat::ToolCall;
     use rmcp::model::{Tool, ToolAnnotations};
     use sea_orm::prelude::Uuid;
@@ -13191,7 +13199,7 @@ mod tests {
         );
     }
 
-    /// The gate as the call site drives it, with the tool's own descriptor.
+    /// The gate as the call site drives it, with no server configured by name.
     fn gate_call(
         config: &McpToolApprovalConfig,
         server_id: &str,
@@ -13203,7 +13211,7 @@ mod tests {
             config,
             server_id,
             tool,
-            &tool_display_metadata(tool),
+            &mcp_tool_call_display(&crate::config::McpRuntimeConfig::default(), server_id, tool),
             call,
             user_decision,
         )

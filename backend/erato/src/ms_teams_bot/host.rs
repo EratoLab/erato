@@ -1114,6 +1114,35 @@ mod tests {
         );
         let approvals = completion.approvals.unwrap();
         assert_eq!(approvals.items[0].source.as_deref(), Some("Desktop Search"));
+
+        let ContentPart::ToolApprovalRequest(mut mixed) = mixed_approval(ToolApprovalKind::McpTool)
+        else {
+            unreachable!()
+        };
+        let completion = completion_from_content(
+            Uuid::nil(),
+            Uuid::nil(),
+            &[ContentPart::ToolApprovalRequest(mixed.clone())],
+        );
+        assert_eq!(
+            completion.approvals.unwrap().items[1].source.as_deref(),
+            Some("wiki")
+        );
+        mixed.approvals[1].child.as_mut().unwrap().display =
+            Some(crate::models::message::ToolDisplayMetadata {
+                title: "Publish page".into(),
+                description: None,
+                description_truncated: false,
+                server_name: Some("Team Wiki".into()),
+            });
+        let completion = completion_from_content(
+            Uuid::nil(),
+            Uuid::nil(),
+            &[ContentPart::ToolApprovalRequest(mixed)],
+        );
+        let approvals = completion.approvals.unwrap();
+        assert_eq!(approvals.items[1].tool_name, "publish_page");
+        assert_eq!(approvals.items[1].source.as_deref(), Some("Team Wiki"));
     }
 
     #[test]

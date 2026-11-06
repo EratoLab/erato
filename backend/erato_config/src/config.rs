@@ -90,10 +90,10 @@ pub fn validate_mcp_server_ids(
         if server
             .display_name
             .as_deref()
-            .is_some_and(|name| !is_valid_display_name(name))
+            .is_some_and(|name| !is_valid_display_name(name) || name.chars().any(is_bidi_control))
         {
             return Err(eyre!(
-                "MCP server '{id}': display_name must not be blank, must be at most 128 bytes and must not contain control characters"
+                "MCP server '{id}': display_name must not be blank, must be at most 128 bytes and must not contain control or bidi formatting characters"
             ));
         }
     }
@@ -103,6 +103,15 @@ pub fn validate_mcp_server_ids(
 
 fn is_valid_display_name(name: &str) -> bool {
     !name.trim().is_empty() && name.len() <= 128 && !name.chars().any(char::is_control)
+}
+
+/// The bidi marks, embeddings, overrides and isolates that tool text from MCP
+/// servers is stripped of; the server name is shown right next to that text.
+fn is_bidi_control(c: char) -> bool {
+    matches!(
+        c,
+        '\u{200E}' | '\u{200F}' | '\u{202A}'..='\u{202E}' | '\u{2066}'..='\u{2069}'
+    )
 }
 
 /// `web_access` reads as "Web access": separators become spaces and the first
@@ -3818,7 +3827,8 @@ pub enum McpProtocolMode {
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
 pub struct McpServerConfig {
     /// Name shown to users for this server, at most 128 bytes without control
-    /// characters. When omitted, the server id is shown tidied up.
+    /// or bidi formatting characters. When omitted, the server id is shown
+    /// tidied up.
     #[serde(default)]
     #[facet(erato_config::introduced_in(version = "unreleased"))]
     pub display_name: Option<String>,

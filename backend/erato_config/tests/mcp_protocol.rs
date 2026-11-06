@@ -51,6 +51,7 @@ fn display_names_are_optional_validated_and_fall_back_to_the_tidied_id() {
         "display_name = '   '".to_string(),
         "display_name = \"bad\\nname\"".to_string(),
         format!("display_name = '{}'", "ä".repeat(65)),
+        "display_name = \"CRM\u{202E}evil\"".to_string(),
     ] {
         let server = parse(&invalid).unwrap();
         assert!(

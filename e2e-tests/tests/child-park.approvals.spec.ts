@@ -38,9 +38,12 @@ const PLANNING_FACET = "Plan & delegate";
 /** Its configured id, which is what the selected-facet chip is keyed by. */
 const PLANNING_FACET_ID = "plan";
 
-/** The child's gated tool, and the server it lives on. */
+/**
+ * The child's gated tool, and the name its server `mock_mcp_approval` is
+ * configured to show.
+ */
 const GATED_TOOL = "publish_approval_probe";
-const GATED_SERVER = "mock_mcp_approval";
+const GATED_SERVER_NAME = "Approval Probe";
 
 /** What a refused call leaves in the child's context, and so in its answer. */
 const DENIAL_TEXT = "The user denied this tool call.";
@@ -182,7 +185,7 @@ test("denies a parked child, which finishes in prose, and the origin turn comple
   const item = approval.getByTestId("delegated-task-approval-item");
   await expect(item).toHaveCount(1);
   await expect(item).toContainText(GATED_TOOL);
-  await expect(item).toContainText(GATED_SERVER);
+  await expect(item).toContainText(GATED_SERVER_NAME);
   // Matched as an id rather than as "not empty", which an attribute that had
   // been dropped altogether would also satisfy.
   await expect(item).toHaveAttribute(

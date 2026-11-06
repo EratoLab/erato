@@ -45,9 +45,12 @@ const PLANNING_FACET = "Plan & delegate";
 /** Its configured id, which is what the selected-facet chip is keyed by. */
 const PLANNING_FACET_ID = "plan";
 
-/** The child's gated tool, and the server it lives on. */
+/**
+ * The child's gated tool, and the name its server `mock_mcp_approval` is
+ * configured to show.
+ */
 const GATED_TOOL = "publish_approval_probe";
-const GATED_SERVER = "mock_mcp_approval";
+const GATED_SERVER_NAME = "Approval Probe";
 
 /** What the origin says on the turn that launched a detached task. */
 const DISPATCH_ANSWER = "ASYNC-DISPATCH-PARENT-ANSWER";
@@ -397,7 +400,7 @@ const decideOnChildCard = async (
   const childCard = page.getByTestId("mcp-tool-approval");
   await expect(childCard).toBeVisible({ timeout: DELIVERY_TIMEOUT_MS });
   await expect(childCard).toHaveAttribute("data-tool-name", GATED_TOOL);
-  await expect(childCard).toContainText(GATED_SERVER);
+  await expect(childCard).toContainText(GATED_SERVER_NAME);
 
   await childCard.getByRole("button", { name: button, exact: true }).click();
 
