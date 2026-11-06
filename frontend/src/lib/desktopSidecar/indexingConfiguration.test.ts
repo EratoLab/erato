@@ -864,3 +864,45 @@ describe("indexed range", () => {
     expect(summary(status).range).toBeNull();
   });
 });
+
+describe("durable source lifecycle", () => {
+  it("keeps initial scanning and then indexing across worker gaps and background failures", () => {
+    const status = indexingStatusFixture();
+    const summary = () =>
+      mailboxIndexingSummary(status, fixtureMailboxId, true);
+    status.state = "running";
+    status.discovery[0].lifecycle = "scanning";
+    status.discovery[0].state = "failed";
+    status.discovery[0].lastErrorCode = "source_changed";
+    expect(summary().state).toBe("scanning");
+    status.discovery[0].lifecycle = "indexing";
+    for (const state of ["scanning", "failed", "complete"] as const) {
+      status.discovery[0].state = state;
+      for (const inProgress of [0, 1, 0]) {
+        status.generations[0].segments.forEach((row) => {
+          row.backlog.inProgress = inProgress;
+        });
+        expect(summary().state).toBe("indexing");
+      }
+    }
+    status.discovery[0].lifecycle = "current";
+    expect(summary().state).toBe("current");
+  });
+  it("honors explicit health states and service stop over the established milestone", () => {
+    const status = indexingStatusFixture();
+    status.state = "running";
+    status.discovery[0].lifecycle = "blocked";
+    expect(mailboxIndexingSummary(status, fixtureMailboxId, true).state).toBe(
+      "scanFailed",
+    );
+    status.discovery[0].lifecycle = "unavailable";
+    expect(mailboxIndexingSummary(status, fixtureMailboxId, true).state).toBe(
+      "sourceUnavailable",
+    );
+    status.discovery[0].lifecycle = "indexing";
+    status.state = "stopped";
+    expect(mailboxIndexingSummary(status, fixtureMailboxId, true).state).toBe(
+      "stopped",
+    );
+  });
+});
