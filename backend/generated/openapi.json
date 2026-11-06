@@ -10276,7 +10276,7 @@
           },
           "display": {
             "$ref": "#/components/schemas/ToolDisplayMetadata",
-            "description": "The same display, label included, that the stored `ToolUse` part gets."
+            "description": "The same display, label included, that the stored `ToolUse` part gets.\nOf a call's progress updates only the first carries it."
           },
           "input": {
             "oneOf": [
@@ -12391,7 +12391,7 @@
       },
       "ToolArgumentNode": {
         "type": "object",
-        "description": "One argument in the readable view. A member's name is the last segment of\nits path; the value is read from `input` at `path`.",
+        "description": "One argument in the readable view. A member's name is the last segment of\nits path; the value is read from `input` at `path`. Both are raw: the\nreader unescapes the segment and cleans and caps both like other server text.",
         "required": [
           "path",
           "kind"

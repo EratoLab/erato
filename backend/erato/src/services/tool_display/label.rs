@@ -350,6 +350,20 @@ mod tests {
     }
 
     #[test]
+    fn a_huge_key_cannot_make_the_label_larger_than_the_key() {
+        let huge = "k".repeat(10_000);
+        let row: serde_json::Map<_, _> = (0..9).map(|i| (format!("{huge}{i}"), json!(i))).collect();
+        let mut nested = json!(vec![Value::Object(row); 25]);
+        for _ in 0..3 {
+            nested = Value::Object([(huge.clone(), nested)].into_iter().collect());
+        }
+        let label = generic_label(&json!({ "a": nested, "query": "q" }));
+        let stored = serde_json::to_string(&label).unwrap();
+        assert!(stored.len() < huge.len(), "{} bytes", stored.len());
+        assert_eq!(label.warnings, [ToolCallLabelWarning::ArgumentsTruncated]);
+    }
+
+    #[test]
     fn stored_labels_round_trip_and_tolerate_newer_values() {
         let label = resolve_label(&create_rows(), &notion_batch()).unwrap();
         let display = ToolDisplayMetadata {

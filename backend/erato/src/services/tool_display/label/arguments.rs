@@ -4,10 +4,14 @@
 
 use super::pointer::escape;
 use crate::models::message::{ToolArgumentKind, ToolArgumentNode};
+use crate::services::display_text::MAX_DISPLAY_NAME_CHARS;
 use serde_json::Value;
 
 /// Nodes in one view; the rest are counted as omitted.
 pub const MAX_VIEW_NODES: usize = 250;
+/// Bytes of all paths in one view: each path repeats its parents' keys, so
+/// the node cap alone lets long keys grow the view far past its input.
+pub const MAX_VIEW_PATH_BYTES: usize = 16 * 1024;
 pub const MAX_VIEW_DEPTH: usize = 8;
 pub const MAX_GROUP_MEMBERS: usize = 50;
 pub const MAX_LIST_ENTRIES: usize = 25;
@@ -19,6 +23,7 @@ const MAX_ID_CHARS: usize = 128;
 pub fn readable_arguments(arguments: &Value) -> (ToolArgumentNode, bool) {
     let mut view = View {
         budget: MAX_VIEW_NODES,
+        path_bytes: MAX_VIEW_PATH_BYTES,
         truncated: false,
     };
     let root = view.node(arguments, String::new(), None, 0);
@@ -27,6 +32,7 @@ pub fn readable_arguments(arguments: &Value) -> (ToolArgumentNode, bool) {
 
 struct View {
     budget: usize,
+    path_bytes: usize,
     truncated: bool,
 }
 
@@ -50,8 +56,15 @@ impl View {
         match value {
             Value::Object(members) => {
                 let shown = self.shown(members.len(), MAX_GROUP_MEMBERS, depth);
-                for (name, member) in members.iter().take(shown) {
+                // A name too long to show is left out, so it cannot crowd out the rest.
+                let nameable = members
+                    .iter()
+                    .filter(|(name, _)| name.chars().nth(MAX_DISPLAY_NAME_CHARS).is_none());
+                for (name, member) in nameable.take(shown) {
                     let path = format!("{}/{}", node.path, escape(name));
+                    if !self.charge(&path) {
+                        break;
+                    }
                     node.children
                         .push(self.node(member, path, Some(name), depth + 1));
                     if self.budget == 0 {
@@ -64,6 +77,9 @@ impl View {
                 let shown = self.shown(entries.len(), MAX_LIST_ENTRIES, depth);
                 for (index, entry) in entries.iter().enumerate().take(shown) {
                     let path = format!("{}/{index}", node.path);
+                    if !self.charge(&path) {
+                        break;
+                    }
                     node.children.push(self.node(entry, path, key, depth + 1));
                     if self.budget == 0 {
                         break;
@@ -82,6 +98,14 @@ impl View {
         } else {
             len.min(cap).min(self.budget)
         }
+    }
+
+    fn charge(&mut self, path: &str) -> bool {
+        let Some(left) = self.path_bytes.checked_sub(path.len()) else {
+            return false;
+        };
+        self.path_bytes = left;
+        true
     }
 
     fn omitted(&mut self, len: usize, shown: usize) -> u32 {
@@ -246,6 +270,39 @@ mod tests {
         let last = view.children.last().unwrap();
         assert_eq!(last.children.len() + last.omitted as usize, 20);
         assert!(last.omitted > 0);
+    }
+
+    fn path_bytes(node: &ToolArgumentNode) -> usize {
+        node.path.len() + node.children.iter().map(path_bytes).sum::<usize>()
+    }
+
+    #[test]
+    fn long_keys_are_left_out_and_all_paths_share_one_budget() {
+        let mut members = serde_json::Map::new();
+        members.insert("k".repeat(MAX_DISPLAY_NAME_CHARS + 1), json!(1));
+        members.insert("query".into(), json!("q"));
+        let (view, truncated) = readable_arguments(&Value::Object(members));
+        assert!(truncated);
+        assert_eq!(view.omitted, 1);
+        assert_eq!(
+            kinds(&view)[1..],
+            [("/query".to_string(), ToolArgumentKind::Value)]
+        );
+
+        let key = "k".repeat(MAX_DISPLAY_NAME_CHARS - 1);
+        let mut nested = json!("leaf");
+        for _ in 0..MAX_VIEW_DEPTH {
+            nested = Value::Object(
+                ["a", "b"]
+                    .iter()
+                    .map(|side| (format!("{side}{key}"), nested.clone()))
+                    .collect(),
+            );
+        }
+        let (view, truncated) = readable_arguments(&nested);
+        assert!(truncated);
+        assert!(path_bytes(&view) <= MAX_VIEW_PATH_BYTES);
+        assert!(kinds(&view).len() < MAX_VIEW_NODES);
     }
 
     #[test]

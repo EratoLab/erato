@@ -670,7 +670,8 @@ pub struct ToolCallLabelValue {
 }
 
 /// One argument in the readable view. A member's name is the last segment of
-/// its path; the value is read from `input` at `path`.
+/// its path; the value is read from `input` at `path`. Both are raw: the
+/// reader unescapes the segment and cleans and caps both like other server text.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema, erato_memory::HeapSize)]
 pub struct ToolArgumentNode {
     /// A JSON pointer into `input`; the empty pointer is the whole input.

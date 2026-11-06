@@ -5182,6 +5182,24 @@ async fn park_a_turn_on_the_approval_gate_with_config(
     mocks: MockSet,
     configure: impl FnOnce(&mut erato::config::AppConfig),
 ) -> (erato::state::AppState, TestServer, Uuid, Uuid, Value) {
+    let (app_state, server, chat_id, assistant_message_id, content, _events) =
+        park_a_turn_and_keep_its_events(pool, mocks, configure).await;
+    (app_state, server, chat_id, assistant_message_id, content)
+}
+
+/// The same park, for a test that also reads what the turn streamed.
+async fn park_a_turn_and_keep_its_events(
+    pool: Pool<Postgres>,
+    mocks: MockSet,
+    configure: impl FnOnce(&mut erato::config::AppConfig),
+) -> (
+    erato::state::AppState,
+    TestServer,
+    Uuid,
+    Uuid,
+    Value,
+    Vec<crate::test_utils::Event>,
+) {
     let (mut app_config, _llm) = setup_mock_llm_server_with_mocks(mocks).await;
     with_approval_probe_server(&mut app_config);
     configure(&mut app_config);
@@ -5209,11 +5227,19 @@ async fn park_a_turn_on_the_approval_gate_with_config(
     let content = parked.raw_message["content"].clone();
     // The mock server is deliberately left out of the return: every test below
     // drops it and reads the row instead.
-    (app_state, server, chat_id, assistant_message_id, content)
+    (
+        app_state,
+        server,
+        chat_id,
+        assistant_message_id,
+        content,
+        events,
+    )
 }
 
 /// Every MCP call is stored with a label, the call that ran without asking as
-/// well as the gated one. With no better source the label is generic, and its
+/// well as the gated one, and a call's live update carries the display its row
+/// is stored with. With no better source the label is generic, and its
 /// readable view names the gated call's arguments by path without copying
 /// their values; the approval fields stay what the gate decided.
 ///
@@ -5244,8 +5270,8 @@ async fn every_mcp_call_is_stored_with_a_generic_label(pool: Pool<Postgres>) {
             );
         });
     }
-    let (_app_state, _server, _chat_id, _assistant_message_id, content) =
-        park_a_turn_on_the_approval_gate(pool, mocks).await;
+    let (_app_state, _server, _chat_id, _assistant_message_id, content, events) =
+        park_a_turn_and_keep_its_events(pool, mocks, |_| {}).await;
     let content = content.as_array().unwrap();
     assert_eq!(content.len(), 2, "{content:?}");
 
@@ -5261,6 +5287,12 @@ async fn every_mcp_call_is_stored_with_a_generic_label(pool: Pool<Postgres>) {
             "source": "generic",
         })
     );
+    let read_updates: Vec<_> = terminal_tool_call_update_events(&events)
+        .into_iter()
+        .filter(|update| update["tool_call_id"] == read["tool_call_id"])
+        .collect();
+    assert_eq!(read_updates.len(), 1, "{read_updates:?}");
+    assert_eq!(read_updates[0]["display"], read["display"]);
 
     let request = &content[1];
     assert_eq!(request["content_type"], "tool_approval_request");
