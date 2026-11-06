@@ -20,9 +20,14 @@ export type AssistantToolsMenuDescriptionDisplay =
   | "truncated"
   | "full";
 
+export type FrontendPlatform =
+  | "common"
+  | "platform-office-addin"
+  | "platform-desktop-ui";
+
 export type Env = {
   apiRootUrl: string;
-  frontendPlatform: "common" | "platform-office-addin";
+  frontendPlatform: FrontendPlatform;
   frontendPublicBasePath: string;
   commonPublicBasePath: string;
   themeCustomerName: string | null;
@@ -193,6 +198,25 @@ const DEFAULT_MAX_BODY_LIMIT_BYTES = 50 * 1024 * 1024;
 const COMMON_PUBLIC_BASE_PATH = "/public/common";
 // eslint-disable-next-line lingui/no-unlocalized-strings
 const OFFICE_ADDIN_PUBLIC_BASE_PATH = "/public/platform-office-addin";
+// eslint-disable-next-line lingui/no-unlocalized-strings
+const DESKTOP_UI_PUBLIC_BASE_PATH = "/public/platform-desktop-ui";
+
+function asFrontendPlatform(value: string | undefined): FrontendPlatform {
+  return value === "platform-office-addin" || value === "platform-desktop-ui"
+    ? value
+    : "common";
+}
+
+function defaultFrontendPublicBasePath(platform: FrontendPlatform): string {
+  switch (platform) {
+    case "platform-office-addin":
+      return OFFICE_ADDIN_PUBLIC_BASE_PATH;
+    case "platform-desktop-ui":
+      return DESKTOP_UI_PUBLIC_BASE_PATH;
+    case "common":
+      return COMMON_PUBLIC_BASE_PATH;
+  }
+}
 // A browser URL, not a user-facing string.
 // eslint-disable-next-line lingui/no-unlocalized-strings
 const DEFAULT_FAVICON_PATH = "/favicon.svg";
@@ -228,18 +252,13 @@ export const env = (): Env => {
       "API_ROOT_URL not set (checked VITE_API_ROOT_URL and window.API_ROOT_URL)",
     );
   }
-  const frontendPlatform =
-    (import.meta.env.VITE_FRONTEND_PLATFORM ??
-      window.FRONTEND_PLATFORM ??
-      "common") === "platform-office-addin"
-      ? "platform-office-addin"
-      : "common";
+  const frontendPlatform = asFrontendPlatform(
+    import.meta.env.VITE_FRONTEND_PLATFORM ?? window.FRONTEND_PLATFORM,
+  );
   const frontendPublicBasePath =
     import.meta.env.VITE_FRONTEND_PUBLIC_BASE_PATH ??
     window.FRONTEND_PUBLIC_BASE_PATH ??
-    (frontendPlatform === "platform-office-addin"
-      ? OFFICE_ADDIN_PUBLIC_BASE_PATH
-      : COMMON_PUBLIC_BASE_PATH);
+    defaultFrontendPublicBasePath(frontendPlatform);
   const commonPublicBasePath =
     import.meta.env.VITE_COMMON_PUBLIC_BASE_PATH ??
     window.COMMON_PUBLIC_BASE_PATH ??

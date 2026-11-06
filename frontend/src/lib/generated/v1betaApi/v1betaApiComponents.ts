@@ -2273,6 +2273,193 @@ export const useDownloadDistributionArtifact = <
   });
 };
 
+export type UiPackageArchiveError = Fetcher.ErrorWrapper<undefined>;
+
+export type UiPackageArchiveVariables = V1betaApiContext["fetcherOptions"];
+
+export const fetchUiPackageArchive = (
+  variables: UiPackageArchiveVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<undefined, UiPackageArchiveError, undefined, {}, {}, {}>({
+    url: "/api/v1beta/desktop-sidecar/ui-package",
+    method: "get",
+    ...variables,
+    signal,
+  });
+
+export function uiPackageArchiveQuery(variables: UiPackageArchiveVariables): {
+  queryKey: reactQuery.QueryKey;
+  queryFn: (options: QueryFnOptions) => Promise<undefined>;
+};
+
+export function uiPackageArchiveQuery(
+  variables: UiPackageArchiveVariables | reactQuery.SkipToken,
+): {
+  queryKey: reactQuery.QueryKey;
+  queryFn:
+    | ((options: QueryFnOptions) => Promise<undefined>)
+    | reactQuery.SkipToken;
+};
+
+export function uiPackageArchiveQuery(
+  variables: UiPackageArchiveVariables | reactQuery.SkipToken,
+) {
+  return {
+    queryKey: queryKeyFn({
+      path: "/api/v1beta/desktop-sidecar/ui-package",
+      operationId: "uiPackageArchive",
+      variables,
+    }),
+    queryFn:
+      variables === reactQuery.skipToken
+        ? reactQuery.skipToken
+        : ({ signal }: QueryFnOptions) =>
+            fetchUiPackageArchive(variables, signal),
+  };
+}
+
+export const useSuspenseUiPackageArchive = <TData = undefined,>(
+  variables: UiPackageArchiveVariables,
+  options?: Omit<
+    reactQuery.UseQueryOptions<undefined, UiPackageArchiveError, TData>,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useSuspenseQuery<undefined, UiPackageArchiveError, TData>({
+    ...uiPackageArchiveQuery(deepMerge(fetcherOptions, variables)),
+    ...options,
+    ...queryOptions,
+  });
+};
+
+export const useUiPackageArchive = <TData = undefined,>(
+  variables: UiPackageArchiveVariables | reactQuery.SkipToken,
+  options?: Omit<
+    reactQuery.UseQueryOptions<undefined, UiPackageArchiveError, TData>,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useQuery<undefined, UiPackageArchiveError, TData>({
+    ...uiPackageArchiveQuery(
+      variables === reactQuery.skipToken
+        ? variables
+        : deepMerge(fetcherOptions, variables),
+    ),
+    ...options,
+    ...queryOptions,
+  });
+};
+
+export type UiPackageManifestError = Fetcher.ErrorWrapper<undefined>;
+
+export type UiPackageManifestResponse = number[];
+
+export type UiPackageManifestVariables = V1betaApiContext["fetcherOptions"];
+
+export const fetchUiPackageManifest = (
+  variables: UiPackageManifestVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    UiPackageManifestResponse,
+    UiPackageManifestError,
+    undefined,
+    {},
+    {},
+    {}
+  >({
+    url: "/api/v1beta/desktop-sidecar/ui-package/manifest.json",
+    method: "get",
+    ...variables,
+    signal,
+  });
+
+export function uiPackageManifestQuery(variables: UiPackageManifestVariables): {
+  queryKey: reactQuery.QueryKey;
+  queryFn: (options: QueryFnOptions) => Promise<UiPackageManifestResponse>;
+};
+
+export function uiPackageManifestQuery(
+  variables: UiPackageManifestVariables | reactQuery.SkipToken,
+): {
+  queryKey: reactQuery.QueryKey;
+  queryFn:
+    | ((options: QueryFnOptions) => Promise<UiPackageManifestResponse>)
+    | reactQuery.SkipToken;
+};
+
+export function uiPackageManifestQuery(
+  variables: UiPackageManifestVariables | reactQuery.SkipToken,
+) {
+  return {
+    queryKey: queryKeyFn({
+      path: "/api/v1beta/desktop-sidecar/ui-package/manifest.json",
+      operationId: "uiPackageManifest",
+      variables,
+    }),
+    queryFn:
+      variables === reactQuery.skipToken
+        ? reactQuery.skipToken
+        : ({ signal }: QueryFnOptions) =>
+            fetchUiPackageManifest(variables, signal),
+  };
+}
+
+export const useSuspenseUiPackageManifest = <
+  TData = UiPackageManifestResponse,
+>(
+  variables: UiPackageManifestVariables,
+  options?: Omit<
+    reactQuery.UseQueryOptions<
+      UiPackageManifestResponse,
+      UiPackageManifestError,
+      TData
+    >,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useSuspenseQuery<
+    UiPackageManifestResponse,
+    UiPackageManifestError,
+    TData
+  >({
+    ...uiPackageManifestQuery(deepMerge(fetcherOptions, variables)),
+    ...options,
+    ...queryOptions,
+  });
+};
+
+export const useUiPackageManifest = <TData = UiPackageManifestResponse,>(
+  variables: UiPackageManifestVariables | reactQuery.SkipToken,
+  options?: Omit<
+    reactQuery.UseQueryOptions<
+      UiPackageManifestResponse,
+      UiPackageManifestError,
+      TData
+    >,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useQuery<
+    UiPackageManifestResponse,
+    UiPackageManifestError,
+    TData
+  >({
+    ...uiPackageManifestQuery(
+      variables === reactQuery.skipToken
+        ? variables
+        : deepMerge(fetcherOptions, variables),
+    ),
+    ...options,
+    ...queryOptions,
+  });
+};
+
 export type GetFilePathParams = {
   /**
    * The ID of the file to retrieve
@@ -4250,6 +4437,117 @@ export const useOrganizationConfiguration = <
     TData
   >({
     ...organizationConfigurationQuery(
+      variables === reactQuery.skipToken
+        ? variables
+        : deepMerge(fetcherOptions, variables),
+    ),
+    ...options,
+    ...queryOptions,
+  });
+};
+
+export type UiPackageTokenError = Fetcher.ErrorWrapper<undefined>;
+
+export type UiPackageTokenVariables = V1betaApiContext["fetcherOptions"];
+
+export const fetchUiPackageToken = (
+  variables: UiPackageTokenVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    Schemas.DesktopSidecarUiPackageTokenResponse,
+    UiPackageTokenError,
+    undefined,
+    {},
+    {},
+    {}
+  >({
+    url: "/api/v1beta/me/desktop-sidecar/ui-package-token",
+    method: "get",
+    ...variables,
+    signal,
+  });
+
+export function uiPackageTokenQuery(variables: UiPackageTokenVariables): {
+  queryKey: reactQuery.QueryKey;
+  queryFn: (
+    options: QueryFnOptions,
+  ) => Promise<Schemas.DesktopSidecarUiPackageTokenResponse>;
+};
+
+export function uiPackageTokenQuery(
+  variables: UiPackageTokenVariables | reactQuery.SkipToken,
+): {
+  queryKey: reactQuery.QueryKey;
+  queryFn:
+    | ((
+        options: QueryFnOptions,
+      ) => Promise<Schemas.DesktopSidecarUiPackageTokenResponse>)
+    | reactQuery.SkipToken;
+};
+
+export function uiPackageTokenQuery(
+  variables: UiPackageTokenVariables | reactQuery.SkipToken,
+) {
+  return {
+    queryKey: queryKeyFn({
+      path: "/api/v1beta/me/desktop-sidecar/ui-package-token",
+      operationId: "uiPackageToken",
+      variables,
+    }),
+    queryFn:
+      variables === reactQuery.skipToken
+        ? reactQuery.skipToken
+        : ({ signal }: QueryFnOptions) =>
+            fetchUiPackageToken(variables, signal),
+  };
+}
+
+export const useSuspenseUiPackageToken = <
+  TData = Schemas.DesktopSidecarUiPackageTokenResponse,
+>(
+  variables: UiPackageTokenVariables,
+  options?: Omit<
+    reactQuery.UseQueryOptions<
+      Schemas.DesktopSidecarUiPackageTokenResponse,
+      UiPackageTokenError,
+      TData
+    >,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useSuspenseQuery<
+    Schemas.DesktopSidecarUiPackageTokenResponse,
+    UiPackageTokenError,
+    TData
+  >({
+    ...uiPackageTokenQuery(deepMerge(fetcherOptions, variables)),
+    ...options,
+    ...queryOptions,
+  });
+};
+
+export const useUiPackageToken = <
+  TData = Schemas.DesktopSidecarUiPackageTokenResponse,
+>(
+  variables: UiPackageTokenVariables | reactQuery.SkipToken,
+  options?: Omit<
+    reactQuery.UseQueryOptions<
+      Schemas.DesktopSidecarUiPackageTokenResponse,
+      UiPackageTokenError,
+      TData
+    >,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useQuery<
+    Schemas.DesktopSidecarUiPackageTokenResponse,
+    UiPackageTokenError,
+    TData
+  >({
+    ...uiPackageTokenQuery(
       variables === reactQuery.skipToken
         ? variables
         : deepMerge(fetcherOptions, variables),
@@ -8268,6 +8566,16 @@ export type QueryOperation =
       variables: DownloadDistributionArtifactVariables | reactQuery.SkipToken;
     }
   | {
+      path: "/api/v1beta/desktop-sidecar/ui-package";
+      operationId: "uiPackageArchive";
+      variables: UiPackageArchiveVariables | reactQuery.SkipToken;
+    }
+  | {
+      path: "/api/v1beta/desktop-sidecar/ui-package/manifest.json";
+      operationId: "uiPackageManifest";
+      variables: UiPackageManifestVariables | reactQuery.SkipToken;
+    }
+  | {
       path: "/api/v1beta/files/{fileId}";
       operationId: "getFile";
       variables: GetFileVariables | reactQuery.SkipToken;
@@ -8326,6 +8634,11 @@ export type QueryOperation =
       path: "/api/v1beta/me/desktop-sidecar/organization-configuration";
       operationId: "organizationConfiguration";
       variables: OrganizationConfigurationVariables | reactQuery.SkipToken;
+    }
+  | {
+      path: "/api/v1beta/me/desktop-sidecar/ui-package-token";
+      operationId: "uiPackageToken";
+      variables: UiPackageTokenVariables | reactQuery.SkipToken;
     }
   | {
       path: "/api/v1beta/me/facets";
