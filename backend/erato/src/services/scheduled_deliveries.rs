@@ -27,11 +27,13 @@ use crate::query_metrics::named_statement_from_sql_and_values;
 use chrono::{DateTime, FixedOffset, Utc};
 use erato_config::config::ScheduledDeliveriesConfig;
 use eyre::Report;
+use futures::FutureExt;
 use sea_orm::prelude::Uuid;
 use sea_orm::{ConnectionTrait, DatabaseConnection, DbBackend, EntityTrait, FromQueryResult};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::collections::HashMap;
+use std::panic::AssertUnwindSafe;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -127,6 +129,12 @@ pub trait DeliveryProducer: Send + Sync {
 pub trait DeliveryChannel: Send + Sync {
     fn name(&self) -> &str;
 
+    /// Carry the content to the user. Must return within the executor's claim
+    /// timeout: a channel bounds its own I/O (the Teams connector uses a 30 s
+    /// HTTP timeout) and maps transport errors to an outcome. A call the
+    /// executor has to cut off leaves it unknown whether the message went
+    /// out; the row is then retried after the claim timeout, which can repeat
+    /// it.
     async fn deliver(
         &self,
         db: &DatabaseConnection,
@@ -168,6 +176,13 @@ impl DeliveryRegistry {
         let mut kinds: Vec<&str> = self.producers.keys().map(String::as_str).collect();
         kinds.sort_unstable();
         kinds
+    }
+
+    /// Producers in kind order, so every tick runs them the same way.
+    pub fn producers(&self) -> Vec<&Arc<dyn DeliveryProducer>> {
+        let mut producers: Vec<_> = self.producers.values().collect();
+        producers.sort_by(|a, b| a.kind().cmp(b.kind()));
+        producers
     }
 
     pub fn channel_names(&self) -> Vec<&str> {
@@ -331,11 +346,7 @@ fn insert_values(new: &NewDelivery) -> Vec<sea_orm::Value> {
         new.user_id.into(),
         new.kind.clone().into(),
         DateTime::<FixedOffset>::from(new.due_at).into(),
-        match new.created_by {
-            CreatedBy::System => "system",
-            CreatedBy::User => "user",
-        }
-        .into(),
+        new.created_by.into(),
         new.origin.clone().into(),
         new.payload.clone().into(),
         new.dedupe_key.clone().into(),
@@ -465,13 +476,12 @@ pub async fn run_delivery_tick(
 ) -> TickOutcome {
     let mut outcome = TickOutcome::default();
 
-    for kind in registry.producer_kinds() {
-        let Some(producer) = registry.producer(kind) else {
-            continue;
-        };
+    for producer in registry.producers() {
         match producer.produce(db).await {
             Ok(produced) => outcome.produced += produced,
-            Err(error) => tracing::warn!(%error, kind, "A delivery producer failed"),
+            Err(error) => {
+                tracing::warn!(%error, kind = producer.kind(), "A delivery producer failed")
+            }
         }
     }
 
@@ -491,8 +501,14 @@ pub async fn run_delivery_tick(
         }
     }
 
+    // Only rows this replica can finish: during a rolling update the older
+    // replica leaves a newer kind to the replica that owns it.
+    let kinds = registry.producer_kinds();
+    if kinds.is_empty() {
+        return outcome;
+    }
     let claim_token = Uuid::new_v4().to_string();
-    let rows = match claim_due(db, settings.batch_size, &claim_token).await {
+    let rows = match claim_due(db, settings.batch_size, &claim_token, &kinds).await {
         Ok(rows) => rows,
         Err(error) => {
             tracing::warn!(%error, "The delivery executor could not claim due rows");
@@ -502,7 +518,22 @@ pub async fn run_delivery_tick(
     outcome.claimed = rows.len();
 
     for row in rows {
-        match deliver_claimed(db, settings, registry, &row, &claim_token).await {
+        // One row's bug must not take the batch with it: a panic leaves the
+        // row claimed, the reclaim counts it as an attempt, and the loop goes on.
+        let disposition = AssertUnwindSafe(deliver_claimed(
+            db,
+            settings,
+            registry,
+            &row,
+            &claim_token,
+        ))
+        .catch_unwind()
+        .await
+        .unwrap_or_else(|_| {
+            tracing::error!(delivery_id = %row.id, kind = %row.kind, "Delivering a scheduled row panicked; it stays claimed until the claim timeout");
+            Disposition::Lost
+        });
+        match disposition {
             Disposition::Delivered => outcome.delivered += 1,
             Disposition::Retried => outcome.retried += 1,
             Disposition::Failed => outcome.failed += 1,
@@ -521,13 +552,18 @@ enum Disposition {
     Lost,
 }
 
+/// A stale claim counts as an attempt: its holder may have died or hung
+/// inside the channel call, and a row that keeps doing that to its holder
+/// must run out of attempts like any other.
 async fn reclaim_stale(db: &DatabaseConnection, claim_timeout: Duration) -> Result<u64, Report> {
     let result = db
         .execute_raw(statement(
             POSTGRES_QUERY_SCHEDULED_DELIVERY_RECLAIM,
             "UPDATE scheduled_deliveries
              SET state = 'pending', claim_token = NULL, claimed_at = NULL,
-                 outcome = outcome || jsonb_build_object('reclaimed', COALESCE((outcome->>'reclaimed')::int, 0) + 1)
+                 outcome = outcome || jsonb_build_object(
+                     'reclaimed', COALESCE((outcome->>'reclaimed')::int, 0) + 1,
+                     'attempts', COALESCE((outcome->>'attempts')::int, 0) + 1)
              WHERE state = 'claimed' AND claimed_at < now() - make_interval(secs => $1::double precision)",
             vec![claim_timeout.as_secs_f64().into()],
         ))
@@ -539,15 +575,20 @@ async fn claim_due(
     db: &DatabaseConnection,
     batch_size: u32,
     claim_token: &str,
+    kinds: &[&str],
 ) -> Result<Vec<Model>, Report> {
     // `SKIP LOCKED` keeps concurrent ticks from waiting on each other; the
     // repeated state predicate on the update keeps a row that changed between
     // the select and the update from being taken anyway.
-    Ok(Model::find_by_statement(statement(
-        POSTGRES_QUERY_SCHEDULED_DELIVERY_CLAIM,
+    let kind_placeholders = (0..kinds.len())
+        .map(|index| format!("${}", index + 3))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let sql = format!(
         "WITH due AS (
              SELECT id FROM scheduled_deliveries
              WHERE state IN ('pending', 'snoozed') AND due_at <= now()
+               AND kind IN ({kind_placeholders})
              ORDER BY due_at ASC
              LIMIT $1
              FOR UPDATE SKIP LOCKED
@@ -556,8 +597,18 @@ async fn claim_due(
          SET state = 'claimed', claim_token = $2, claimed_at = now()
          FROM due
          WHERE d.id = due.id AND d.state IN ('pending', 'snoozed')
-         RETURNING d.*",
-        vec![(batch_size as i64).into(), claim_token.into()],
+         RETURNING d.*"
+    );
+    let mut values: Vec<sea_orm::Value> = vec![(batch_size as i64).into(), claim_token.into()];
+    values.extend(
+        kinds
+            .iter()
+            .map(|kind| sea_orm::Value::from(kind.to_string())),
+    );
+    Ok(Model::find_by_statement(statement(
+        POSTGRES_QUERY_SCHEDULED_DELIVERY_CLAIM,
+        &sql,
+        values,
     ))
     .all(db)
     .await?)
@@ -593,12 +644,7 @@ async fn settle(
                  delivered_at = CASE WHEN $3 = 'delivered' THEN now() ELSE delivered_at END,
                  outcome = outcome || $4::jsonb
              WHERE id = $1 AND claim_token = $2 AND state = 'claimed'",
-            vec![
-                id.into(),
-                claim_token.into(),
-                state.as_str().into(),
-                outcome.into(),
-            ],
+            vec![id.into(), claim_token.into(), state.into(), outcome.into()],
         ))
         .await?;
     Ok(result.rows_affected() > 0)
@@ -690,8 +736,38 @@ async fn deliver_claimed(
         }
     };
 
+    if attempt > settings.max_attempts {
+        // Only stale claims bring a row here; every other path settles or
+        // requeues under the cap. Its holders died or hung in the channel call
+        // `max_attempts` times, so nothing is tried again.
+        let prior = attempt - 1;
+        tracing::warn!(delivery_id = %row.id, kind = %row.kind, attempts = prior, "Scheduled delivery gave up after stale claims");
+        return match settle(
+            db,
+            row.id,
+            claim_token,
+            DeliveryState::Failed,
+            json!({"reason": format!("no delivery after {prior} attempts"), "attempts": prior}),
+        )
+        .await
+        {
+            Ok(true) => Disposition::Failed,
+            Ok(false) => Disposition::Lost,
+            Err(error) => {
+                tracing::warn!(%error, delivery_id = %row.id, "Could not mark a scheduled delivery failed");
+                Disposition::Lost
+            }
+        };
+    }
+
     let Some(producer) = registry.producer(&row.kind) else {
-        return fail(format!("no producer registered for kind `{}`", row.kind)).await;
+        // Claims are filtered by this replica's kinds, so this is a registry
+        // bug rather than an older replica; bounded all the same.
+        return retry(
+            format!("no producer registered for kind `{}`", row.kind),
+            None,
+        )
+        .await;
     };
     match producer.still_due(db, row).await {
         Ok(StillDue::Yes) => {}
@@ -720,7 +796,14 @@ async fn deliver_claimed(
         Err(error) => return retry(format!("content resolution failed: {error}"), None).await,
     };
     let Some(channel) = registry.channel(&resolved.channel) else {
-        return fail(format!("no channel registered as `{}`", resolved.channel)).await;
+        // Another replica may run the channel this one lacks (a rolling
+        // update, or a channel behind a feature switch): leave it the
+        // remaining attempts instead of failing the row for everyone.
+        return retry(
+            format!("no channel registered as `{}`", resolved.channel),
+            None,
+        )
+        .await;
     };
     let user = match Users::find_by_id(row.user_id).one(db).await {
         Ok(Some(user)) => user,
@@ -732,7 +815,25 @@ async fn deliver_claimed(
         Ok(false) => return Disposition::Lost,
         Err(error) => return retry(format!("claim renewal failed: {error}"), None).await,
     }
-    match channel.deliver(db, &user, row, &resolved.content).await {
+    // Channels bound their own I/O (see `DeliveryChannel::deliver`); this is
+    // the backstop that keeps a hanging call from outliving the claim it
+    // holds, after which another replica would send again, and from stalling
+    // the rest of the batch. Whether the message went out is unknown, so the
+    // row keeps its claim: the reclaim counts it as an attempt and retries.
+    let deadline = settings.claim_timeout - settings.claim_timeout / 10;
+    let outcome = match tokio::time::timeout(
+        deadline,
+        channel.deliver(db, &user, row, &resolved.content),
+    )
+    .await
+    {
+        Ok(outcome) => outcome,
+        Err(_) => {
+            tracing::error!(delivery_id = %row.id, channel = %resolved.channel, "A delivery channel did not answer within the claim timeout; the row stays claimed");
+            return Disposition::Lost;
+        }
+    };
+    match outcome {
         DeliveryOutcome::Delivered { details } => {
             match settle(
                 db,

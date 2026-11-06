@@ -11,9 +11,9 @@ use erato::db::entity::scheduled_deliveries::{CreatedBy, DeliveryState, Model};
 use erato::db::entity::users;
 use erato::models::user::get_or_create_user;
 use erato::services::scheduled_deliveries::{
-    DeliveryContent, DeliveryOutcome, DeliveryProducer, DeliveryRegistry, ExecutorSettings,
-    NewDelivery, RecordingChannel, ResolvedContent, StillDue, TickOutcome, cancel_open,
-    count_delivered, find, run_delivery_tick, schedule, schedule_once, snooze,
+    DeliveryChannel, DeliveryContent, DeliveryOutcome, DeliveryProducer, DeliveryRegistry,
+    ExecutorSettings, NewDelivery, RecordingChannel, ResolvedContent, StillDue, TickOutcome,
+    cancel_open, count_delivered, find, run_delivery_tick, schedule, schedule_once, snooze,
 };
 use eyre::Report;
 use ractor::registry;
@@ -593,7 +593,7 @@ async fn snoozed_rows_wait_and_are_then_delivered(pool: Pool<Postgres>) {
 /// # Test Categories
 /// - `uses-db`
 #[sqlx::test(migrator = "MIGRATOR")]
-async fn unknown_kind_or_channel_fails_the_row(pool: Pool<Postgres>) {
+async fn unknown_kind_is_left_alone_and_unknown_channel_retries(pool: Pool<Postgres>) {
     let (db, user) = database(pool).await;
     let channel = Arc::new(RecordingChannel::new("another_channel"));
     let registry = registry_with(TestProducer::new(), &channel);
@@ -613,16 +613,41 @@ async fn unknown_kind_or_channel_fails_the_row(pool: Pool<Postgres>) {
         .unwrap();
 
     let outcome = run_delivery_tick(&db, &settings(), &registry).await;
-    assert_eq!(outcome.failed, 2, "{outcome:?}");
     assert_eq!(
-        row(&db, unknown_kind.id).await.outcome["reason"],
-        "no producer registered for kind `nobody_owns_this`"
+        outcome,
+        TickOutcome {
+            claimed: 1,
+            retried: 1,
+            ..Default::default()
+        }
     );
+    // A kind this replica has no producer for stays for the replica that has
+    // one (a rolling update), untouched.
+    let left = row(&db, unknown_kind.id).await;
+    assert_eq!(left.state, DeliveryState::Pending);
+    assert!(left.claim_token.is_none());
+    assert_eq!(left.outcome, json!({}));
+    // A channel this replica lacks gets the bounded retries, not a failure.
+    let requeued = row(&db, unknown_channel.id).await;
+    assert_eq!(requeued.state, DeliveryState::Pending);
+    assert_eq!(requeued.outcome["attempts"], 1);
     assert_eq!(
-        row(&db, unknown_channel.id).await.outcome["reason"],
+        requeued.outcome["last_error"],
         "no channel registered as `recording`"
     );
     assert!(channel.deliveries().is_empty());
+
+    // With nothing registered, nothing is claimed at all.
+    make_due(&db, unknown_channel.id).await;
+    assert!(
+        !run_delivery_tick(&db, &settings(), &DeliveryRegistry::new())
+            .await
+            .touched()
+    );
+    assert_eq!(
+        row(&db, unknown_channel.id).await.state,
+        DeliveryState::Pending
+    );
 }
 
 /// Producers run at the start of every tick, so a row they create for now is
@@ -717,5 +742,210 @@ async fn supervisor_runs_the_delivery_worker_on_its_own_switch(pool: Pool<Postgr
         delivered,
         "a tick addressed to the derived worker name must deliver"
     );
+    assert_eq!(channel.deliveries().len(), 1);
+}
+
+/// A channel that never answers: the executor cuts the call off before the
+/// claim can go stale under it, and leaves the row claimed for the reclaim.
+struct HangingChannel;
+
+#[async_trait::async_trait]
+impl DeliveryChannel for HangingChannel {
+    fn name(&self) -> &str {
+        CHANNEL
+    }
+
+    async fn deliver(
+        &self,
+        _db: &DatabaseConnection,
+        _user: &users::Model,
+        _row: &Model,
+        _content: &DeliveryContent,
+    ) -> DeliveryOutcome {
+        tokio::time::sleep(StdDuration::from_secs(30)).await;
+        DeliveryOutcome::Delivered { details: json!({}) }
+    }
+}
+
+/// A channel with a bug in it.
+struct PanickingChannel;
+
+#[async_trait::async_trait]
+impl DeliveryChannel for PanickingChannel {
+    fn name(&self) -> &str {
+        "panicking"
+    }
+
+    async fn deliver(
+        &self,
+        _db: &DatabaseConnection,
+        _user: &users::Model,
+        _row: &Model,
+        _content: &DeliveryContent,
+    ) -> DeliveryOutcome {
+        panic!("channel bug");
+    }
+}
+
+async fn strand_claim(db: &DatabaseConnection, id: Uuid, outcome: serde_json::Value) {
+    db.execute_raw(Statement::from_sql_and_values(
+        sea_orm::DatabaseBackend::Postgres,
+        "UPDATE scheduled_deliveries SET state = 'claimed', claim_token = 'dead-replica',
+         claimed_at = now() - interval '1 hour', outcome = $2 WHERE id = $1",
+        [id.into(), outcome.into()],
+    ))
+    .await
+    .expect("claim stranded");
+}
+
+/// A claim that went stale counts as an attempt, so a row whose holders keep
+/// dying or hanging in the channel call runs out of attempts instead of
+/// coming back every claim timeout forever.
+///
+/// # Test Categories
+/// - `uses-db`
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn stale_claims_count_as_attempts(pool: Pool<Postgres>) {
+    let (db, user) = database(pool).await;
+    let channel = Arc::new(RecordingChannel::new(CHANNEL));
+    let registry = registry_with(TestProducer::new(), &channel);
+    let poison = schedule(&db, new_delivery(user.id, Utc::now(), Some("poison")))
+        .await
+        .unwrap()
+        .unwrap();
+    let unlucky = schedule(&db, new_delivery(user.id, Utc::now(), Some("unlucky")))
+        .await
+        .unwrap()
+        .unwrap();
+    // settings(): three attempts. Two holders died on the poison row, one on
+    // the unlucky row; both are stranded in a third and second claim.
+    strand_claim(&db, poison.id, json!({"attempts": 2, "reclaimed": 2})).await;
+    strand_claim(&db, unlucky.id, json!({"attempts": 1, "reclaimed": 1})).await;
+
+    let outcome = run_delivery_tick(&db, &settings(), &registry).await;
+    assert_eq!(
+        outcome,
+        TickOutcome {
+            reclaimed: 2,
+            claimed: 2,
+            delivered: 1,
+            failed: 1,
+            ..Default::default()
+        }
+    );
+    let given_up = row(&db, poison.id).await;
+    assert_eq!(given_up.state, DeliveryState::Failed);
+    assert_eq!(given_up.outcome["attempts"], 3);
+    assert_eq!(given_up.outcome["reclaimed"], 3);
+    assert_eq!(given_up.outcome["reason"], "no delivery after 3 attempts");
+    let delivered = row(&db, unlucky.id).await;
+    assert_eq!(delivered.state, DeliveryState::Delivered);
+    assert_eq!(delivered.outcome["attempts"], 3);
+    assert_eq!(delivered.outcome["reclaimed"], 2);
+    assert_eq!(channel.deliveries().len(), 1);
+    assert_eq!(channel.deliveries()[0].delivery_id, unlucky.id);
+}
+
+/// A channel that does not answer within the claim timeout is cut off; the
+/// row keeps its claim, is reclaimed later as a counted attempt, and a
+/// healthy replica then delivers it.
+///
+/// # Test Categories
+/// - `uses-db`
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn hanging_channel_is_cut_off_and_the_row_keeps_its_claim(pool: Pool<Postgres>) {
+    let (db, user) = database(pool).await;
+    let mut hanging = DeliveryRegistry::new();
+    hanging.register_producer(Arc::new(TestProducer::new()));
+    hanging.register_channel(Arc::new(HangingChannel));
+    let short_claims = ExecutorSettings {
+        claim_timeout: StdDuration::from_secs(1),
+        ..settings()
+    };
+    let created = schedule(&db, new_delivery(user.id, Utc::now(), Some("slow")))
+        .await
+        .unwrap()
+        .unwrap();
+
+    let outcome = run_delivery_tick(&db, &short_claims, &hanging).await;
+    assert_eq!(
+        outcome,
+        TickOutcome {
+            claimed: 1,
+            lost: 1,
+            ..Default::default()
+        }
+    );
+    let held = row(&db, created.id).await;
+    assert_eq!(held.state, DeliveryState::Claimed);
+    assert!(held.claim_token.is_some());
+    assert!(held.outcome.get("attempts").is_none());
+
+    // The claim ages past the timeout; a healthy replica reclaims and delivers.
+    tokio::time::sleep(StdDuration::from_millis(1200)).await;
+    let channel = Arc::new(RecordingChannel::new(CHANNEL));
+    let healthy = registry_with(TestProducer::new(), &channel);
+    let outcome = run_delivery_tick(&db, &short_claims, &healthy).await;
+    assert_eq!(
+        outcome,
+        TickOutcome {
+            reclaimed: 1,
+            claimed: 1,
+            delivered: 1,
+            ..Default::default()
+        }
+    );
+    let delivered = row(&db, created.id).await;
+    assert_eq!(delivered.state, DeliveryState::Delivered);
+    assert_eq!(delivered.outcome["attempts"], 2);
+    assert_eq!(delivered.outcome["reclaimed"], 1);
+}
+
+/// A panic in one row's delivery leaves that row claimed and the rest of the
+/// batch still gets delivered.
+///
+/// # Test Categories
+/// - `uses-db`
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn a_panicking_row_does_not_take_the_batch_with_it(pool: Pool<Postgres>) {
+    let (db, user) = database(pool).await;
+    let channel = Arc::new(RecordingChannel::new(CHANNEL));
+    let mut registry = registry_with(TestProducer::new(), &channel);
+    registry.register_producer(Arc::new(TestProducer {
+        kind: "boom_kind".into(),
+        channel: "panicking".into(),
+        still_due: Mutex::new(StillDue::Yes),
+        produce_for: None,
+        produced: AtomicBool::new(false),
+    }));
+    registry.register_channel(Arc::new(PanickingChannel));
+    // Due first, so it is delivered first and would stall everything behind it.
+    let boom = schedule(
+        &db,
+        NewDelivery {
+            kind: "boom_kind".into(),
+            ..new_delivery(user.id, Utc::now() - Duration::seconds(5), None)
+        },
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    let fine = schedule(&db, new_delivery(user.id, Utc::now(), Some("fine")))
+        .await
+        .unwrap()
+        .unwrap();
+
+    let outcome = run_delivery_tick(&db, &settings(), &registry).await;
+    assert_eq!(
+        outcome,
+        TickOutcome {
+            claimed: 2,
+            delivered: 1,
+            lost: 1,
+            ..Default::default()
+        }
+    );
+    assert_eq!(row(&db, boom.id).await.state, DeliveryState::Claimed);
+    assert_eq!(row(&db, fine.id).await.state, DeliveryState::Delivered);
     assert_eq!(channel.deliveries().len(), 1);
 }

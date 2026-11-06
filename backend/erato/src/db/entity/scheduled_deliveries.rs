@@ -18,17 +18,6 @@ pub enum DeliveryState {
 }
 
 impl DeliveryState {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::Pending => "pending",
-            Self::Claimed => "claimed",
-            Self::Delivered => "delivered",
-            Self::Cancelled => "cancelled",
-            Self::Snoozed => "snoozed",
-            Self::Failed => "failed",
-        }
-    }
-
     /// States the executor still takes a row from once it is due.
     pub fn is_open(self) -> bool {
         matches!(self, Self::Pending | Self::Snoozed)

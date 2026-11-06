@@ -6610,7 +6610,10 @@ impl Default for GenerationStatusConfig {
 /// The executor that drains the `scheduled_deliveries` table: messages Erato
 /// owes a user at a due time (reminders, nudges, notifications). Every
 /// replica runs its own tick; the table's compare-and-set claims keep a row
-/// from being delivered twice.
+/// from being delivered twice while its claim holds. A claim that outlives
+/// `claim_timeout_seconds` is given back and counts as an attempt, so a
+/// channel cut off mid-call is retried, which can repeat a message that did
+/// go out, at most `max_attempts` times in all.
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
 pub struct ScheduledDeliveriesConfig {
     // Whether the executor runs. Producers can still create rows while it is
@@ -6628,14 +6631,16 @@ pub struct ScheduledDeliveriesConfig {
     #[serde(default = "default_scheduled_deliveries_batch_size")]
     pub batch_size: u32,
     // Seconds after which a claim is considered abandoned (the replica that
-    // took it died mid-delivery) and the row goes back to `pending`.
-    // Defaults to `300`.
+    // took it died or hung mid-delivery) and the row goes back to `pending`;
+    // the abandoned claim counts as an attempt. A channel call is cut off
+    // shortly before this. Defaults to `300`.
     #[serde(default = "default_scheduled_deliveries_claim_timeout_seconds")]
     pub claim_timeout_seconds: u64,
-    // How often a delivery is attempted before the row is marked `failed`.
-    // A retryable channel error (throttling, transport failure) puts the row
-    // back to `pending` with a later due time until this many attempts were
-    // made. Defaults to `5`.
+    // How many claims a row gets before it is marked `failed`. Every claim
+    // counts: a retryable channel error (throttling, transport failure) or a
+    // producer or lookup error puts the row back to `pending` with a later
+    // due time, and a claim that went stale is counted when it is given
+    // back. Defaults to `5`.
     #[serde(default = "default_scheduled_deliveries_max_attempts")]
     pub max_attempts: u32,
     // Seconds until a retryable delivery is attempted again, unless the

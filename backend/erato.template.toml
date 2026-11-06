@@ -418,8 +418,9 @@ chat_provider_ids = ["test-token-limit"]
 
 # Executor for scheduled deliveries: messages Erato owes a user at a due time
 # (reminders, the Teams inactivity nudge, notifications). Every replica runs
-# its own tick; a row is delivered at most once. Features that create rows
-# require this to be enabled.
+# its own tick; a row is delivered at most once per claim, and a claim left
+# behind by a dead or hanging replica is retried after the claim timeout.
+# Features that create rows require this to be enabled.
 # [scheduled_deliveries]
 # # Whether the executor runs (default: false)
 # enabled = true
@@ -427,11 +428,13 @@ chat_provider_ids = ["test-token-limit"]
 # tick_schedule = "0 * * * * *"
 # # Due rows one tick on one replica claims and delivers (default: 50)
 # batch_size = 50
-# # Seconds after which a claim is treated as abandoned by a dead replica and the
-# # row goes back to pending (default: 300)
+# # Seconds after which a claim is treated as abandoned by a dead or hanging
+# # replica and the row goes back to pending; that claim counts as an attempt
+# # (default: 300)
 # claim_timeout_seconds = 300
-# # Delivery attempts before a row is marked failed; retryable channel errors
-# # (throttling, transport) put it back to pending until then (default: 5)
+# # Claims a row gets before it is marked failed. Every claim counts: retryable
+# # channel errors (throttling, transport), producer or lookup errors, and
+# # claims that went stale (default: 5)
 # max_attempts = 5
 # # Seconds until a retryable delivery is tried again, unless the channel asked
 # # for a specific wait such as a Retry-After header (default: 300)
