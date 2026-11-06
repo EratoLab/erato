@@ -18,10 +18,11 @@ use crate::db::entity::scheduled_deliveries::{CreatedBy, DeliveryState, Model};
 use crate::db::entity::users;
 use crate::metrics_constants::{
     POSTGRES_QUERY_SCHEDULED_DELIVERY_CANCEL, POSTGRES_QUERY_SCHEDULED_DELIVERY_CLAIM,
-    POSTGRES_QUERY_SCHEDULED_DELIVERY_COUNT_DELIVERED, POSTGRES_QUERY_SCHEDULED_DELIVERY_RECLAIM,
-    POSTGRES_QUERY_SCHEDULED_DELIVERY_RETRY, POSTGRES_QUERY_SCHEDULED_DELIVERY_SCHEDULE,
-    POSTGRES_QUERY_SCHEDULED_DELIVERY_SCHEDULE_ONCE, POSTGRES_QUERY_SCHEDULED_DELIVERY_SETTLE,
-    POSTGRES_QUERY_SCHEDULED_DELIVERY_SNOOZE, POSTGRES_QUERY_SCHEDULED_DELIVERY_TOUCH,
+    POSTGRES_QUERY_SCHEDULED_DELIVERY_COUNT_DELIVERED, POSTGRES_QUERY_SCHEDULED_DELIVERY_DEFER,
+    POSTGRES_QUERY_SCHEDULED_DELIVERY_RECLAIM, POSTGRES_QUERY_SCHEDULED_DELIVERY_RETRY,
+    POSTGRES_QUERY_SCHEDULED_DELIVERY_SCHEDULE, POSTGRES_QUERY_SCHEDULED_DELIVERY_SCHEDULE_ONCE,
+    POSTGRES_QUERY_SCHEDULED_DELIVERY_SETTLE, POSTGRES_QUERY_SCHEDULED_DELIVERY_SNOOZE,
+    POSTGRES_QUERY_SCHEDULED_DELIVERY_TOUCH,
 };
 use crate::query_metrics::named_statement_from_sql_and_values;
 use chrono::{DateTime, FixedOffset, Utc};
@@ -71,7 +72,14 @@ pub struct DeliveryAction {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum StillDue {
     Yes,
-    No { reason: String },
+    No {
+        reason: String,
+    },
+    /// Still owed, but not now: the row goes back to `pending` for `due_at`
+    /// without using an attempt (a send window, a quiet hour).
+    Later {
+        due_at: DateTime<Utc>,
+    },
 }
 
 /// What a producer resolved a row to: the channel that carries it and the
@@ -114,7 +122,10 @@ pub trait DeliveryProducer: Send + Sync {
         Ok(0)
     }
 
-    /// Whether the row is still owed at send time.
+    /// Whether the row is still owed at send time. `Later` moves it to a
+    /// better time without using an attempt; retries and reclaims land here
+    /// too, so a producer with a send window checks it here, not only when
+    /// it creates the row.
     async fn still_due(&self, db: &DatabaseConnection, row: &Model) -> Result<StillDue, Report>;
 
     /// The channel and content for the row, resolved at send time.
@@ -457,6 +468,8 @@ pub struct TickOutcome {
     pub retried: usize,
     pub failed: usize,
     pub cancelled: usize,
+    /// Rows a producer moved to a later time at send time.
+    pub deferred: usize,
     /// Rows whose claim was lost between claiming and delivering.
     pub lost: usize,
 }
@@ -538,6 +551,7 @@ pub async fn run_delivery_tick(
             Disposition::Retried => outcome.retried += 1,
             Disposition::Failed => outcome.failed += 1,
             Disposition::Cancelled => outcome.cancelled += 1,
+            Disposition::Deferred => outcome.deferred += 1,
             Disposition::Lost => outcome.lost += 1,
         }
     }
@@ -549,6 +563,7 @@ enum Disposition {
     Retried,
     Failed,
     Cancelled,
+    Deferred,
     Lost,
 }
 
@@ -676,6 +691,31 @@ async fn retry_later(
     Ok(result.rows_affected() > 0)
 }
 
+/// Give the row back for a later time, with the deferral counted but no
+/// attempt used.
+async fn defer_until(
+    db: &DatabaseConnection,
+    id: Uuid,
+    claim_token: &str,
+    due_at: DateTime<Utc>,
+) -> Result<bool, Report> {
+    let result = db
+        .execute_raw(statement(
+            POSTGRES_QUERY_SCHEDULED_DELIVERY_DEFER,
+            "UPDATE scheduled_deliveries
+             SET state = 'pending', claim_token = NULL, claimed_at = NULL, due_at = $3,
+                 outcome = outcome || jsonb_build_object('deferred', COALESCE((outcome->>'deferred')::int, 0) + 1)
+             WHERE id = $1 AND claim_token = $2 AND state = 'claimed'",
+            vec![
+                id.into(),
+                claim_token.into(),
+                DateTime::<FixedOffset>::from(due_at).into(),
+            ],
+        ))
+        .await?;
+    Ok(result.rows_affected() > 0)
+}
+
 fn attempts(row: &Model) -> u32 {
     row.outcome
         .get("attempts")
@@ -785,6 +825,26 @@ async fn deliver_claimed(
                 Ok(false) => Disposition::Lost,
                 Err(error) => {
                     tracing::warn!(%error, delivery_id = %row.id, "Could not cancel a scheduled delivery");
+                    Disposition::Lost
+                }
+            };
+        }
+        Ok(StillDue::Later { due_at }) => {
+            // Not an attempt: the producer only asked for a better time. A
+            // time that is not in the future would spin the executor, so it
+            // is pushed by the retry delay instead.
+            let now = Utc::now();
+            let due_at = if due_at > now {
+                due_at
+            } else {
+                now + chrono::TimeDelta::from_std(settings.retry_delay)
+                    .unwrap_or_else(|_| chrono::TimeDelta::zero())
+            };
+            return match defer_until(db, row.id, claim_token, due_at).await {
+                Ok(true) => Disposition::Deferred,
+                Ok(false) => Disposition::Lost,
+                Err(error) => {
+                    tracing::warn!(%error, delivery_id = %row.id, "Could not defer a scheduled delivery");
                     Disposition::Lost
                 }
             };

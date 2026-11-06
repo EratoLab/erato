@@ -949,3 +949,75 @@ async fn a_panicking_row_does_not_take_the_batch_with_it(pool: Pool<Postgres>) {
     assert_eq!(row(&db, fine.id).await.state, DeliveryState::Delivered);
     assert_eq!(channel.deliveries().len(), 1);
 }
+
+/// A producer can say "not now": the row goes back to pending for the time
+/// it names, no attempt is used, and it is delivered once that time comes.
+///
+/// # Test Categories
+/// - `uses-db`
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn guard_can_defer_a_row_without_using_an_attempt(pool: Pool<Postgres>) {
+    let (db, user) = database(pool).await;
+    let channel = Arc::new(RecordingChannel::new(CHANNEL));
+    let later = Utc::now() + Duration::hours(1);
+    let deferring = TestProducer {
+        still_due: Mutex::new(StillDue::Later { due_at: later }),
+        ..TestProducer::new()
+    };
+    let registry = registry_with(deferring, &channel);
+    let created = schedule(&db, new_delivery(user.id, Utc::now(), Some("later")))
+        .await
+        .unwrap()
+        .unwrap();
+
+    let outcome = run_delivery_tick(&db, &settings(), &registry).await;
+    assert_eq!(
+        outcome,
+        TickOutcome {
+            claimed: 1,
+            deferred: 1,
+            ..Default::default()
+        }
+    );
+    let waiting = row(&db, created.id).await;
+    assert_eq!(waiting.state, DeliveryState::Pending);
+    assert!(waiting.claim_token.is_none());
+    assert!(waiting.outcome.get("attempts").is_none());
+    assert_eq!(waiting.outcome["deferred"], 1);
+    assert!(
+        (waiting.due_at.with_timezone(&Utc) - later)
+            .num_seconds()
+            .abs()
+            < 2
+    );
+    assert!(channel.deliveries().is_empty());
+    assert!(
+        !run_delivery_tick(&db, &settings(), &registry)
+            .await
+            .touched(),
+        "not due until the named time"
+    );
+
+    // A deferral into the past is pushed by the retry delay rather than spun on.
+    let spinning = TestProducer {
+        still_due: Mutex::new(StillDue::Later {
+            due_at: Utc::now() - Duration::hours(1),
+        }),
+        ..TestProducer::new()
+    };
+    let registry = registry_with(spinning, &channel);
+    make_due(&db, created.id).await;
+    let outcome = run_delivery_tick(&db, &settings(), &registry).await;
+    assert_eq!(outcome.deferred, 1, "{outcome:?}");
+    let pushed = row(&db, created.id).await;
+    assert!(pushed.due_at > (Utc::now() + Duration::seconds(30)).fixed_offset());
+    assert_eq!(pushed.outcome["deferred"], 2);
+
+    // When the time comes, the first real attempt delivers it.
+    make_due(&db, created.id).await;
+    let registry = registry_with(TestProducer::new(), &channel);
+    let outcome = run_delivery_tick(&db, &settings(), &registry).await;
+    assert_eq!(outcome.delivered, 1, "{outcome:?}");
+    assert_eq!(row(&db, created.id).await.outcome["attempts"], 1);
+    assert_eq!(channel.deliveries().len(), 1);
+}

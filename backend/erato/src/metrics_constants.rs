@@ -55,6 +55,7 @@ pub const POSTGRES_QUERY_SCHEDULED_DELIVERY_CLAIM: &str = "scheduled_delivery_cl
 pub const POSTGRES_QUERY_SCHEDULED_DELIVERY_TOUCH: &str = "scheduled_delivery_touch";
 pub const POSTGRES_QUERY_SCHEDULED_DELIVERY_SETTLE: &str = "scheduled_delivery_settle";
 pub const POSTGRES_QUERY_SCHEDULED_DELIVERY_RETRY: &str = "scheduled_delivery_retry";
+pub const POSTGRES_QUERY_SCHEDULED_DELIVERY_DEFER: &str = "scheduled_delivery_defer";
 /// Terminal outcome of ONE delegated run, using the listing's own expression.
 pub const POSTGRES_QUERY_DELEGATED_RUN_OUTCOME: &str = "delegated_run_outcome";
 /// Whether a retry of a given failed run is already working.
