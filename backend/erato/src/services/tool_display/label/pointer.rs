@@ -70,11 +70,21 @@ pub fn resolve<'a>(document: &'a Value, pointer: &str) -> Vec<Reached<'a>> {
 /// The last segment of `pointer` that names a member, unescaped: what a field
 /// is called on the card.
 pub fn last_name(pointer: &str) -> Option<Cow<'_, str>> {
+    member_names(pointer).pop()
+}
+
+/// The segments of `pointer` that name members, unescaped, in order.
+pub fn member_names(pointer: &str) -> Vec<Cow<'_, str>> {
     pointer
-        .strip_prefix('/')?
-        .rsplit('/')
-        .find(|token| *token != "*" && array_index(token).is_none())
-        .map(unescape)
+        .strip_prefix('/')
+        .map(|tokens| {
+            tokens
+                .split('/')
+                .filter(|token| *token != "*" && array_index(token).is_none())
+                .map(unescape)
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 pub fn escape(key: &str) -> Cow<'_, str> {
@@ -182,5 +192,9 @@ mod tests {
         assert_eq!(last_name("/a~1b").unwrap(), "a/b");
         assert_eq!(last_name("/*"), None);
         assert_eq!(last_name("name"), None);
+        assert_eq!(
+            member_names("/item/a~1b/*/recordId/0"),
+            ["item", "a/b", "recordId"]
+        );
     }
 }

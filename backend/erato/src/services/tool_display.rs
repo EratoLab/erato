@@ -36,17 +36,21 @@ pub fn tool_display_metadata(tool: &rmcp::model::Tool) -> ToolDisplayMetadata {
 }
 
 /// What a call of an MCP tool shows wherever it appears: the tool's descriptor,
-/// the server's name from the live config and the call's label, stored with
-/// the call's parts.
+/// the server's name from the live config and the call's label, with the IDs
+/// it names resolved from earlier results in the chat, stored with the call's
+/// parts.
 pub fn mcp_tool_call_display(
     config: &McpRuntimeConfig,
     server_id: &str,
     tool: &rmcp::model::Tool,
     arguments: &serde_json::Value,
+    context: &label::ToolResultContext,
 ) -> ToolDisplayMetadata {
+    let mut label = label::generic_label(arguments);
+    context.resolve(&mut label, arguments);
     ToolDisplayMetadata {
         server_name: Some(config.mcp_server_display_name(server_id)),
-        label: Some(label::generic_label(arguments)),
+        label: Some(label),
         ..tool_display_metadata(tool)
     }
 }
@@ -104,19 +108,32 @@ mod tests {
         .unwrap();
         let tool = Tool::new("create_record", "Creates a record.", JsonObject::new());
         let arguments = serde_json::json!({});
-        let display = mcp_tool_call_display(&config, "dynamics", &tool, &arguments);
+        let display =
+            mcp_tool_call_display(&config, "dynamics", &tool, &arguments, &Default::default());
         assert_eq!(display.server_name.as_deref(), Some("Dynamics 365"));
         assert_eq!(display.title, "create_record");
         assert_eq!(
-            mcp_tool_call_display(&config, "web_access", &tool, &arguments)
-                .server_name
-                .as_deref(),
+            mcp_tool_call_display(
+                &config,
+                "web_access",
+                &tool,
+                &arguments,
+                &Default::default()
+            )
+            .server_name
+            .as_deref(),
             Some("Web access")
         );
         assert_eq!(
-            mcp_tool_call_display(&config, "removed-since", &tool, &arguments)
-                .server_name
-                .as_deref(),
+            mcp_tool_call_display(
+                &config,
+                "removed-since",
+                &tool,
+                &arguments,
+                &Default::default()
+            )
+            .server_name
+            .as_deref(),
             Some("Removed since")
         );
         assert_eq!(tool_display_metadata(&tool).server_name, None);
@@ -129,8 +146,13 @@ mod tests {
             "tablename": "account",
             "item": {"name": "Contoso", "parentaccountid": "9b1d5f2e-3c4a-4f88-a1b2-0c1d2e3f4a5b"},
         });
-        let display =
-            mcp_tool_call_display(&McpRuntimeConfig::default(), "dynamics", &tool, &arguments);
+        let display = mcp_tool_call_display(
+            &McpRuntimeConfig::default(),
+            "dynamics",
+            &tool,
+            &arguments,
+            &Default::default(),
+        );
         assert_eq!(display.label, Some(label::generic_label(&arguments)));
         let paths: Vec<_> = display
             .label
