@@ -12,6 +12,7 @@ import {
   SIDECAR_PROVIDER,
   type CapabilityDescriptor,
   type DiscoverParams,
+  type DiscoverResult,
   type IndexingStatusV1Result,
   type IndexingStatusV1Params,
   type CallToolResult,
@@ -84,6 +85,12 @@ export interface MockSidecarOptions {
    * content tool waits in `ready_for_review` for `decideReview`.
    */
   strict?: boolean | null;
+  /**
+   * The desktop UI discovery reports (default: host API 1, a seed and no
+   * installed package); `null` omits it, as a sidecar built before package
+   * 0.1.46 or one hosting no desktop UI does.
+   */
+  ui?: DiscoverResult["ui"] | null;
   /** How long a job runs before it completes, to exercise `wait_ms`. */
   jobDelayMs?: number;
   /** Size of the mock document in bytes (default: a short text). */
@@ -161,6 +168,11 @@ const TERMINAL_JOB_STATES = new Set<JobStatus["state"]>([
 
 const INSTANCE_ID = "mock-sidecar-instance";
 const INSTALLATION_ID = "mock-sidecar-installation-id-0123456789";
+const MOCK_UI: NonNullable<DiscoverResult["ui"]> = {
+  host_apis: [1],
+  seed: { version: "0.1.0" },
+  installed: null,
+};
 const MOCK_OUTLOOK_MAILBOX = {
   id: "8b7d2f4a6c9e1035d8a1b2c3e4f50617",
   displayName: "Mock Outlook mailbox",
@@ -566,6 +578,7 @@ export class MockSidecar {
           ? INSTALLATION_ID
           : this.#options.installationId;
       const strict = this.#options.strict ?? false;
+      const ui = this.#options.ui === undefined ? MOCK_UI : this.#options.ui;
       return rpcResult(message.id, {
         protocolVersion,
         serverInfo: { name: "erato-mock-sidecar", version: "0.1.0" },
@@ -573,6 +586,7 @@ export class MockSidecar {
         ...(installationId === null ? {} : { installationId }),
         document: this.#discoveryDocument(),
         ...(this.#options.strict === null ? {} : { strict }),
+        ...(ui === null ? {} : { ui }),
         ...(this.#options.omitMethods?.includes("jobs.start.v1")
           ? {}
           : {

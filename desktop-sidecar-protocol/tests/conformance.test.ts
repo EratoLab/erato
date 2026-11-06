@@ -16,6 +16,7 @@ import {
   validateOutlookSearchEmailsV1Params,
   validateOutlookSearchEmailsV1Result,
   validateSearchQueryV1Result,
+  validateSidecarConfigureV1Params,
   validateSidecarProgressV1Params,
   validateSidecarProgressV1Result,
 } from "../typescript/src/generated/validators.mjs";
@@ -35,6 +36,16 @@ interface InstallationIdentityFixture {
     installationId: string | null;
   }[];
   invalidInstallationIds: string[];
+}
+
+interface DesktopUiPackageFixture {
+  discovery: {
+    name: string;
+    result: Record<string, unknown>;
+    ui: Record<string, unknown> | null;
+  }[];
+  invalidUi: Record<string, unknown>[];
+  configure: { name: string; params: unknown; valid: boolean }[];
 }
 
 describe("language-neutral conformance fixtures", () => {
@@ -79,6 +90,33 @@ describe("language-neutral conformance fixtures", () => {
         validateDiscoverResult({ ...current, document, installationId }),
         installationId,
       ).toBe(false);
+    }
+  });
+
+  it("accepts discovery results and configure parameters with and without the desktop UI package (both rollout directions)", async () => {
+    const document = JSON.parse(
+      await readFile(new URL("../openrpc.json", import.meta.url), "utf8"),
+    );
+    const fixture = await readFixture<DesktopUiPackageFixture>(
+      "desktop-ui-package.json",
+    );
+    for (const testCase of fixture.discovery) {
+      const result = { ...testCase.result, document };
+      expect(validateDiscoverResult(result), testCase.name).toBe(true);
+      expect(testCase.result.ui ?? null, testCase.name).toEqual(testCase.ui);
+    }
+    const current = fixture.discovery.at(-1)!.result;
+    for (const ui of fixture.invalidUi) {
+      expect(
+        validateDiscoverResult({ ...current, document, ui }),
+        JSON.stringify(ui),
+      ).toBe(false);
+    }
+    for (const testCase of fixture.configure) {
+      expect(
+        validateSidecarConfigureV1Params(testCase.params),
+        testCase.name,
+      ).toBe(testCase.valid);
     }
   });
 

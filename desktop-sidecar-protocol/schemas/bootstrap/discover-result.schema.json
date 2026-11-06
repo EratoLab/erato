@@ -37,6 +37,40 @@
       "items": {
         "$ref": "../jobs/provider.schema.json"
       }
+    },
+    "ui": {
+      "type": "object",
+      "description": "The desktop UI this sidecar hosts in its own windows: the host APIs it implements, the package compiled into its binary and the deployment package it has installed. Absent from sidecars built before package 0.1.46 and from sidecars that host no desktop UI; clients send `ui_package` with `sidecar.configure.v1` only when this is present.",
+      "required": ["host_apis", "seed", "installed"],
+      "properties": {
+        "host_apis": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "integer", "minimum": 1 },
+          "description": "The host API numbers this sidecar implements; a package names the one it targets."
+        },
+        "seed": {
+          "type": ["object", "null"],
+          "description": "The package compiled into the binary, used until a deployment package is installed and whenever none verifies.",
+          "required": ["version"],
+          "properties": {
+            "version": { "type": "string", "minLength": 1, "maxLength": 128 },
+            "digest": { "$ref": "../common.schema.json#/definitions/Sha256Hex" }
+          },
+          "additionalProperties": true
+        },
+        "installed": {
+          "type": ["object", "null"],
+          "description": "The deployment package the sidecar currently serves, by its version and manifest digest; null while it serves the seed.",
+          "required": ["version", "digest"],
+          "properties": {
+            "version": { "type": "string", "minLength": 1, "maxLength": 128 },
+            "digest": { "$ref": "../common.schema.json#/definitions/Sha256Hex" }
+          },
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": true
     }
   },
   "additionalProperties": true

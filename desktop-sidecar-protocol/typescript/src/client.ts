@@ -165,6 +165,8 @@ export type SidecarReadinessState =
   | "ready"
   | "error";
 
+export type SidecarDesktopUi = NonNullable<DiscoverResult["ui"]>;
+
 export interface SidecarCapability {
   id: string;
   major: number;
@@ -186,6 +188,8 @@ export interface SidecarSnapshot {
   jobs?: JobsCapability;
   /** The providers whose tools `jobs.start.v1` accepts. */
   providers?: readonly ToolProvider[];
+  /** The desktop UI the sidecar hosts; absent for a sidecar from before package 0.1.46 or one hosting none. Present, clients send `ui_package` on configure. */
+  ui?: SidecarDesktopUi;
   catalogue: { revision: string; digest: string } | null;
   /** Discovery extensions, exposed only after schema and digest validation. */
   discoveryExtensions?: Readonly<Record<string, unknown>>;
@@ -756,6 +760,7 @@ export class DesktopSidecarClient {
         ...(result.providers === undefined
           ? {}
           : { providers: result.providers }),
+        ...(result.ui === undefined ? {} : { ui: result.ui }),
         catalogue,
         discoveryExtensions: Object.fromEntries(
           Object.entries(result.document).filter(([key]) =>

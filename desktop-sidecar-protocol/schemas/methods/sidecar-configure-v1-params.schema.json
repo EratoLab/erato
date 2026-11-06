@@ -32,6 +32,34 @@
       },
       "required": ["user_id"],
       "additionalProperties": true
+    },
+    "ui_package": {
+      "type": "object",
+      "description": "The deployment's desktop UI package: where the sidecar downloads it, the bearer token both package requests need, the package digest and the host API it targets, as the backend's token endpoint returned them. Clients send it only when discovery reports `ui`, with a fresh token on every configure; sidecars that report no `ui` ignore it. The token is deployment-level, authorizes nothing but the package download, and expires.",
+      "required": ["url", "token", "digest", "host_api"],
+      "properties": {
+        "url": {
+          "type": "string",
+          "format": "uri",
+          "minLength": 1,
+          "maxLength": 2048,
+          "description": "Absolute URL of the package archive; `<url>/manifest.json` is its manifest."
+        },
+        "token": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096
+        },
+        "digest": {
+          "$ref": "../common.schema.json#/definitions/Sha256Hex",
+          "description": "The manifest digest of the package the backend currently serves; a sidecar whose installed package carries it skips the download."
+        },
+        "host_api": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "additionalProperties": true
     }
   },
   "additionalProperties": true

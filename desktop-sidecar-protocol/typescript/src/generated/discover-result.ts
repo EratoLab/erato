@@ -18,6 +18,34 @@ export interface DiscoverResult {
    * The providers whose tools `jobs.start.v1` accepts. Absent from sidecars built before package 0.1.44.
    */
   providers?: ToolProvider[];
+  /**
+   * The desktop UI this sidecar hosts in its own windows: the host APIs it implements, the package compiled into its binary and the deployment package it has installed. Absent from sidecars built before package 0.1.46 and from sidecars that host no desktop UI; clients send `ui_package` with `sidecar.configure.v1` only when this is present.
+   */
+  ui?: {
+    /**
+     * The host API numbers this sidecar implements; a package names the one it targets.
+     *
+     * @minItems 1
+     */
+    host_apis: [number, ...number[]];
+    /**
+     * The package compiled into the binary, used until a deployment package is installed and whenever none verifies.
+     */
+    seed: {
+      version: string;
+      digest?: string;
+      [k: string]: unknown;
+    } | null;
+    /**
+     * The deployment package the sidecar currently serves, by its version and manifest digest; null while it serves the seed.
+     */
+    installed: {
+      version: string;
+      digest: string;
+      [k: string]: unknown;
+    } | null;
+    [k: string]: unknown;
+  };
   [k: string]: unknown;
 }
 export interface ProductInfo {

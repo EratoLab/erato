@@ -219,6 +219,28 @@ unmodified downloads that size is also the response `Content-Length`.
 Personalized downloads MUST use the actual personalized output length instead;
 distribution metadata continues to report the source template size.
 
+### Desktop UI entry
+
+The manifest MAY carry one top-level `ui` object beside `targets`, naming the
+desktop UI package archive the artifact set ships ([Section 8](#8-desktop-ui-package)):
+
+```json
+{
+  "targets": [],
+  "ui": {
+    "path": "ui/erato-desktop-ui-0.1.0.tgz",
+    "version": "0.1.0"
+  }
+}
+```
+
+- `path` is relative to the artifact root and MUST be `ui/<file>.tgz`.
+- `version` MUST equal the `version` of the archive's `package/manifest.json`.
+
+A manifest without `ui` describes an artifact set without a desktop UI
+package; the backend then serves no package and clients send no `ui_package`.
+As for every other field, consumers ignore unknown manifest fields.
+
 ## 4. Backend interpretation and validation
 
 The backend MUST load and validate the complete artifact set before making it
@@ -494,3 +516,106 @@ define:
 
 These concerns MAY affect how bytes are produced or verified, but they MUST NOT
 add signing/integrity fields to this manifest or write derived files into the artifact root.
+
+## 8. Desktop UI package
+
+The sidecar hosts the Erato desktop UI in its own webview windows, served as a
+local mirror of the backend's public paths with no network access. The
+generic build of that app lives in the sidecar repository (`desktop-ui/`) and
+ships as the artifact set's `ui` entry (Section 3); the sidecar repository's
+`crates/erato-desktop-sidecar-ui/README.md` is the authoritative layout
+contract. In short, the archive is a gzip tar rooted at `package/` with
+`package/package.json` (`name`, `version`) and `package/manifest.json`:
+`{"format": 1, "hostApi": 1, "name", "version", "commit", "library":
+{"commit"}, "windows": [{"name", "entry"}], "files": [{"path", "sha256",
+"bytes", "contentType"}], "totalBytes"}`. Each window entry is an `.html` file
+at the package root carrying the `<!--erato:head-->` and `<!--erato:kits-->`
+markers in that order; the app's assets live under
+`public/platform-desktop-ui/assets/`, its catalogs at
+`public/platform-desktop-ui/locales/<locale>/messages.json` and its import-map
+manifest at `public/platform-desktop-ui/import-map.manifest.json`. Paths are
+relative to `package/`; `files` lists every file except the two package files
+with its SHA-256, size and content type, and `totalBytes` is their sum.
+
+### Backend validation
+
+Together with the targets, the backend loads the `ui` archive: the path MUST
+be `ui/<file>.tgz` below the artifact root and a regular file, the archive
+MUST unpack to the layout above with `format` 1 and `hostApi` 1, every listed
+file MUST match its digest and size, nothing unlisted ships, and the manifest
+`version` MUST equal the root manifest's `ui.version`. A failing archive
+rejects the artifact set like any other validation failure.
+
+### The deployment package
+
+From the generic archive and the parts it already holds, the backend assembles
+one **desktop UI package** per deployment, at startup and on every runtime
+configuration reload. The package keeps the archive's files verbatim and adds,
+under the paths the browser fetches them from:
+
+- the common catalogs of every locale the web bundle ships, compiled as the
+  browser receives them, at `public/common/locales/<locale>/messages.json`;
+- the runtime translation overrides at `public/common/overrides/index.json`
+  and `public/common/overrides/<locale>.json`;
+- the active theme at `public/common/custom-theme/<name>/**` (regular files
+  only, catalogs compiled; nothing remote);
+- every discovered component kit at `public/component-kits/<name>/**` with
+  its catalogs.
+
+`manifest.json` keeps the archive's fields and adds:
+
+- `composition.env`: `FRONTEND_PLATFORM` (`platform-desktop-ui`),
+  `FRONTEND_PUBLIC_BASE_PATH` (`/public/platform-desktop-ui`),
+  `COMMON_PUBLIC_BASE_PATH` (`/public/common`), `THEME_CUSTOMER_NAME` and the
+  theme, logo and favicon path values the browser injection sets;
+- `composition.importMap`: `{"imports": {...}}`, the app's import-map manifest
+  with every entry mounted under `/public/platform-desktop-ui/`, as the browser
+  import map is built;
+- `composition.kits`: `[{name, script, stylesheet, locales}]`, the kits every
+  window loads, the consent window included;
+- `composition.windows`: the archive's `windows`;
+- `parts`: `{app: {version, commit, library}, theme: {name} | null,
+catalogs: {locales: [...]}, overrides: {present}, kits: [{name}]}`;
+- `digest`: the lowercase hex SHA-256 of the canonical JSON of `files`
+  (compact, keys sorted), the identity clients and sidecars compare.
+
+The package budget is 16 MiB (16777216 bytes) of `totalBytes`. A package over
+budget, or one that fails assembly, is logged at assembly time and not served;
+the endpoints then answer 404.
+
+### Endpoints
+
+Both package endpoints are outside the user session: they require
+`Authorization: Bearer <package token>` and reject other requests with 401.
+
+```text
+GET /api/v1beta/desktop-sidecar/ui-package/manifest.json
+GET /api/v1beta/desktop-sidecar/ui-package
+```
+
+The first answers the package manifest as `application/json`. The second
+answers the archive as `application/gzip` with `ETag: "<digest>"` and
+`Cache-Control: no-store`; a request whose `If-None-Match` names the current
+digest receives 304. Both answer 404 while the deployment ships no `ui`
+artifact or its package failed assembly.
+
+The token comes from the session-authenticated endpoint
+
+```text
+GET /api/v1beta/me/desktop-sidecar/ui-package-token
+```
+
+which returns `{url, token, digest, host_api, expires_at}`: the archive's
+root-relative URL, the token, the current package digest, the host API the
+package targets and the token's RFC 3339 expiry. The token is an HMAC-SHA256
+over the purpose `desktop-ui-package` and its expiry, keyed from the
+deployment's `server.encryption_key`; it is valid for 24 hours,
+deployment-level, and authorizes nothing but the two package requests. Without
+`server.encryption_key` the endpoint answers 503 and clients send no
+`ui_package`. The client resolves `url` against the origin it is served from
+and passes the four values on as `ui_package` of `sidecar.configure.v1`
+([SPEC.md](./SPEC.md#desktop-ui-package)).
+
+A deployment that fronts the backend with an authenticating proxy MUST route
+the two package paths past it, because such proxies strip the `Authorization`
+header; the Helm chart's `desktopSidecar.uiPackage.directRoute` does this.

@@ -1,0 +1,152 @@
+{
+  "description": "The desktop UI package (package 0.1.46). Discovery results for both rollout directions, each taking the live OpenRPC document as its `document`: a previous sidecar reports no `ui`, so a current client sends no `ui_package`; a current sidecar reports the host APIs it implements, its seed and the installed package, so the client fetches the deployment's package token and sends `ui_package` with `sidecar.configure.v1`. The configure cases cover both directions and the malformed parameters a client never sends.",
+  "discovery": [
+    {
+      "name": "previous sidecar hosting no desktop UI",
+      "result": {
+        "protocolVersion": "1.0",
+        "serverInfo": { "name": "erato-desktop-sidecar", "version": "0.1.45" },
+        "instanceId": "sidecar-instance-id"
+      },
+      "ui": null
+    },
+    {
+      "name": "current sidecar serving its seed",
+      "result": {
+        "protocolVersion": "1.0",
+        "serverInfo": { "name": "erato-desktop-sidecar", "version": "0.1.46" },
+        "instanceId": "sidecar-instance-id",
+        "ui": {
+          "host_apis": [1],
+          "seed": { "version": "0.1.0" },
+          "installed": null
+        }
+      },
+      "ui": {
+        "host_apis": [1],
+        "seed": { "version": "0.1.0" },
+        "installed": null
+      }
+    },
+    {
+      "name": "current sidecar serving an installed deployment package",
+      "result": {
+        "protocolVersion": "1.0",
+        "serverInfo": { "name": "erato-desktop-sidecar", "version": "0.1.46" },
+        "instanceId": "sidecar-instance-id",
+        "ui": {
+          "host_apis": [1, 2],
+          "seed": {
+            "version": "0.1.0",
+            "digest": "3f3d61ceab5fd9c2ff9bba2a2f3bb0fed2fb1c57b2d4d9f0a3b2f1c0d9e8f7a6"
+          },
+          "installed": {
+            "version": "0.1.0",
+            "digest": "9c56cc51b374c3ba189210d5b6d4bf57790d351c96c47c02190ecf1e430635ab"
+          }
+        }
+      },
+      "ui": {
+        "host_apis": [1, 2],
+        "seed": {
+          "version": "0.1.0",
+          "digest": "3f3d61ceab5fd9c2ff9bba2a2f3bb0fed2fb1c57b2d4d9f0a3b2f1c0d9e8f7a6"
+        },
+        "installed": {
+          "version": "0.1.0",
+          "digest": "9c56cc51b374c3ba189210d5b6d4bf57790d351c96c47c02190ecf1e430635ab"
+        }
+      }
+    }
+  ],
+  "invalidUi": [
+    { "host_apis": [], "seed": null, "installed": null },
+    { "host_apis": [0], "seed": null, "installed": null },
+    { "host_apis": [1], "seed": null },
+    { "host_apis": [1], "seed": { "digest": "abc" }, "installed": null },
+    {
+      "host_apis": [1],
+      "seed": null,
+      "installed": { "version": "0.1.0", "digest": "sha256:abc" }
+    }
+  ],
+  "configure": [
+    {
+      "name": "client that saw no ui sends no ui_package",
+      "params": {
+        "user_configuration": {},
+        "organization_configuration": {}
+      },
+      "valid": true
+    },
+    {
+      "name": "client that saw ui sends the deployment's package reference",
+      "params": {
+        "user_configuration": {},
+        "organization_configuration": {},
+        "ui_package": {
+          "url": "https://chat.example.com/api/v1beta/desktop-sidecar/ui-package",
+          "token": "1762560000.dGhpcyBpcyBub3QgYSByZWFsIHNpZ25hdHVyZQ",
+          "digest": "9c56cc51b374c3ba189210d5b6d4bf57790d351c96c47c02190ecf1e430635ab",
+          "host_api": 1
+        }
+      },
+      "valid": true
+    },
+    {
+      "name": "a package reference without a token",
+      "params": {
+        "user_configuration": {},
+        "organization_configuration": {},
+        "ui_package": {
+          "url": "https://chat.example.com/api/v1beta/desktop-sidecar/ui-package",
+          "digest": "9c56cc51b374c3ba189210d5b6d4bf57790d351c96c47c02190ecf1e430635ab",
+          "host_api": 1
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "a package reference with a prefixed digest",
+      "params": {
+        "user_configuration": {},
+        "organization_configuration": {},
+        "ui_package": {
+          "url": "https://chat.example.com/api/v1beta/desktop-sidecar/ui-package",
+          "token": "1762560000.dGhpcyBpcyBub3QgYSByZWFsIHNpZ25hdHVyZQ",
+          "digest": "sha256:9c56cc51b374c3ba189210d5b6d4bf57790d351c96c47c02190ecf1e430635ab",
+          "host_api": 1
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "a package reference targeting no host API",
+      "params": {
+        "user_configuration": {},
+        "organization_configuration": {},
+        "ui_package": {
+          "url": "https://chat.example.com/api/v1beta/desktop-sidecar/ui-package",
+          "token": "1762560000.dGhpcyBpcyBub3QgYSByZWFsIHNpZ25hdHVyZQ",
+          "digest": "9c56cc51b374c3ba189210d5b6d4bf57790d351c96c47c02190ecf1e430635ab",
+          "host_api": 0
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "a package reference with a relative url",
+      "params": {
+        "user_configuration": {},
+        "organization_configuration": {},
+        "ui_package": {
+          "url": "/api/v1beta/desktop-sidecar/ui-package",
+          "token": "1762560000.dGhpcyBpcyBub3QgYSByZWFsIHNpZ25hdHVyZQ",
+          "digest": "9c56cc51b374c3ba189210d5b6d4bf57790d351c96c47c02190ecf1e430635ab",
+          "host_api": 1
+        }
+      },
+      "valid": false
+    }
+  ]
+}

@@ -37,6 +37,17 @@ It preserves source Outlook data and configuration. See [full reset semantics](S
 
 ## Quick start
 
+Package 0.1.46 carries the deployment's desktop UI package to the sidecar:
+discovery adds the optional `ui` (the host APIs a sidecar implements, its seed
+and its installed package), and `sidecar.configure.v1` gains the optional
+`ui_package` `{url, token, digest, host_api}`, which a client sends only when
+discovery reported `ui`. The backend assembles the package from the
+distribution's `ui` artifact and serves it under a deployment-level token.
+See [discovery](SPEC.md#3-discovery-and-protocol-negotiation),
+[the configure field](SPEC.md#desktop-ui-package),
+[the package contract](DISTRIBUTION.md#8-desktop-ui-package) and the
+[rollout fixture](conformance/fixtures/desktop-ui-package.json).
+
 Package 0.1.44 adds the job envelope: `jobs.start.v1` runs a batch of tool calls
 `{server, name, arguments}` and answers within `wait_ms` with one MCP
 `CallToolResult` or error per call; for a built-in tool, the result carries the
