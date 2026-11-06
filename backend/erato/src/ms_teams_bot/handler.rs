@@ -83,7 +83,7 @@ async fn process_message(
         .as_ref()
         .and_then(nudge::DeliverySubmit::from_value)
     {
-        return on_delivery_action(bot, host, activity, target, submit, allow_sign_in).await;
+        return on_delivery_action(bot, host, activity, target, submit).await;
     }
 
     let text = activity.text_without_bot_mention();
@@ -93,6 +93,16 @@ async fn process_message(
             target
                 .send_text("Send me a message to start a chat with Erato.")
                 .await?;
+        }
+        return Ok(());
+    }
+
+    // An unsubscribe must not depend on Graph consent: the activity is
+    // verified at the route, and the sender is known by Entra object id.
+    if let Some(tips_on) = nudge::reminders_command(&text) {
+        if let Some(user) = known_user(bot, host, activity, target).await? {
+            host.set_teams_nudges_opt_out(user.id, !tips_on).await?;
+            target.send_text(&reminders_text(bot, tips_on)).await?;
         }
         return Ok(());
     }
@@ -116,13 +126,6 @@ async fn process_message(
         target
             .send_text("Started a new chat. Send your next message when you are ready.")
             .await?;
-        return Ok(());
-    }
-
-    if let Some(tips_on) = nudge::reminders_command(&text) {
-        host.set_teams_nudges_opt_out(user.session.user_id(), !tips_on)
-            .await?;
-        target.send_text(&reminders_text(bot, tips_on)).await?;
         return Ok(());
     }
 
@@ -451,35 +454,55 @@ async fn on_control(
 
 /// A button on a delivered card (a tip's "Don't remind me"). The token is
 /// claimed once, for the user who got the card in the conversation it was
-/// sent to, so a forwarded or replayed card does nothing.
+/// sent to, so a forwarded or replayed card does nothing. No sign-in: an
+/// unsubscribe must work for someone whose Graph consent never completes,
+/// and the token already binds recipient and conversation.
 async fn on_delivery_action(
     bot: &TeamsBot,
     host: &Host,
     activity: &Activity,
     target: &ReplyTarget<'_>,
     submit: nudge::DeliverySubmit,
-    allow_sign_in: bool,
 ) -> Result<(), Report> {
-    let Some(user) = authenticate(bot, host, activity, target, allow_sign_in).await? else {
+    let Some(command) = submit.command() else {
+        return target.send_text("This button is not supported.").await;
+    };
+    let Some(user) = known_user(bot, host, activity, target).await? else {
         return Ok(());
     };
     let conversation_id = activity.conversation_id().unwrap_or_default();
     if !host
-        .claim_delivery_action(user.session.user_id(), conversation_id, &submit)
+        .claim_delivery_action(user.id, conversation_id, &submit)
         .await?
     {
         return target
             .send_text("This button was already used or has expired.")
             .await;
     }
-    match submit.command.as_str() {
-        nudge::OPT_OUT_COMMAND => {
-            host.set_teams_nudges_opt_out(user.session.user_id(), true)
-                .await?;
+    match command {
+        nudge::DeliveryCommand::OptOut => {
+            host.set_teams_nudges_opt_out(user.id, true).await?;
             target.send_text(&reminders_text(bot, false)).await
         }
-        _ => target.send_text("This button is not supported.").await,
     }
+}
+
+/// The sender as Erato knows them, by Entra object id alone: enough for
+/// settings that must not depend on a Graph token.
+async fn known_user(
+    bot: &TeamsBot,
+    host: &Host,
+    activity: &Activity,
+    target: &ReplyTarget<'_>,
+) -> Result<Option<crate::db::entity::users::Model>, Report> {
+    let Some(entra_object_id) = activity.from_aad_object_id() else {
+        return Ok(None);
+    };
+    let Some(user) = host.find_user(entra_object_id).await? else {
+        target.send_text(&unknown_user_text(bot)).await?;
+        return Ok(None);
+    };
+    Ok(Some(user))
 }
 
 fn reminders_text(bot: &TeamsBot, tips_on: bool) -> String {

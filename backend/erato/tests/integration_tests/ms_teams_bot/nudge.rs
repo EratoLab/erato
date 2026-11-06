@@ -2,7 +2,7 @@
 //! what stops it at send time.
 
 use super::*;
-use chrono::Utc;
+use chrono::{Timelike, Utc};
 use erato::db::entity::scheduled_deliveries::DeliveryState;
 use erato::models::user_preference::{set_teams_nudges_opt_out, teams_nudges_opted_out};
 use erato::ms_teams_bot::nudge::{CHANNEL, DeliverySubmit, InactivityNudgeProducer, KIND};
@@ -234,6 +234,7 @@ async fn one_tip_per_period_with_rotating_tips(pool: Pool<Postgres>) {
     // registry's producer is still inside its hourly gate, so the rule is
     // driven directly and the tick only delivers.
     last_activity_hours_ago(&db, user.id, 2.5).await;
+    age_rows(&db, user.id, 3.0).await;
     assert_eq!(producer.schedule_due(&db).await.unwrap(), 1, "a new period");
     let outcome = run_delivery_tick(&db, &settings(), &registry).await;
     assert_eq!(outcome.delivered, 1, "{outcome:?}");
@@ -268,6 +269,12 @@ async fn repeat_sends_one_tip_per_further_interval(pool: Pool<Postgres>) {
 
     // Time passes (modelled as the same silence seen from later).
     last_activity_hours_ago(&db, user.id, 3.5).await;
+    assert_eq!(
+        producer.schedule_due(&db).await.unwrap(),
+        0,
+        "the last tip is less than an interval old: no burst"
+    );
+    age_rows(&db, user.id, 1.5).await;
     assert_eq!(producer.schedule_due(&db).await.unwrap(), 1);
     let rows = open_rows(&db, user.id).await;
     assert_eq!(rows.len(), 2);
@@ -422,6 +429,7 @@ async fn card_buttons_are_single_use_and_bound_to_their_recipient(pool: Pool<Pos
         .unwrap();
     assert!(teams_nudges_opted_out(&db, &recipient.id).await.unwrap());
     last_activity_hours_ago(&db, recipient.id, 2.5).await;
+    age_rows(&db, recipient.id, 3.0).await;
     let producer = producer(&config());
     assert_eq!(producer.schedule_due(&db).await.unwrap(), 0, "opted out");
     host.set_teams_nudges_opt_out(recipient.id, false)
@@ -433,4 +441,102 @@ async fn card_buttons_are_single_use_and_bound_to_their_recipient(pool: Pool<Pos
         1,
         "tips on again"
     );
+}
+
+/// Backdate the user's tip rows, modelling the time since they were sent.
+async fn age_rows(db: &DatabaseConnection, user_id: Uuid, hours_ago: f64) {
+    sql(
+        db,
+        "UPDATE scheduled_deliveries
+         SET created_at = now() - make_interval(secs => $2 * 3600),
+             delivered_at = CASE WHEN delivered_at IS NULL THEN NULL
+                            ELSE now() - make_interval(secs => $2 * 3600) END
+         WHERE user_id = $1 AND kind = $3",
+        vec![user_id.into(), hours_ago.into(), KIND.into()],
+    )
+    .await;
+}
+
+/// Housekeeping writes to a chat (archiving moves `updated_at`) are not
+/// activity; a new message is.
+///
+/// # Test Categories
+/// - `uses-db`
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn only_messages_count_as_activity(pool: Pool<Postgres>) {
+    let db = sea_orm::SqlxPostgresConnector::from_sqlx_postgres_pool(pool);
+    let user = user(&db, "housekept", "housekept@example.com").await;
+    personal_conversation(&db, user.id, "a:housekept").await;
+    last_activity_hours_ago(&db, user.id, 3.0).await;
+    sql(
+        &db,
+        "UPDATE chats SET archived_at = now() WHERE owner_user_id = $1",
+        vec![user.id.to_string().into()],
+    )
+    .await;
+
+    let producer = producer(&config());
+    assert_eq!(
+        producer.schedule_due(&db).await.unwrap(),
+        1,
+        "archiving is not activity"
+    );
+    let row = open_rows(&db, user.id).await.remove(0);
+    assert_eq!(producer.still_due(&db, &row).await.unwrap(), StillDue::Yes);
+
+    sql(
+        &db,
+        "INSERT INTO messages (chat_id, raw_message, created_at)
+         SELECT id, '{\"role\": \"user\", \"content\": \"hi\"}'::jsonb, now() - interval '10 minutes'
+         FROM chats WHERE owner_user_id = $1",
+        vec![user.id.to_string().into()],
+    )
+    .await;
+    assert_eq!(
+        producer.still_due(&db, &row).await.unwrap(),
+        StillDue::No {
+            reason: "user became active".into()
+        }
+    );
+}
+
+/// A tip that comes up outside the send window (a retry, a restart that
+/// straddled the window) waits for the next slot instead of going out late
+/// or being dropped.
+///
+/// # Test Categories
+/// - `uses-db`
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn tips_outside_the_send_window_wait_for_the_next_slot(pool: Pool<Postgres>) {
+    let db = sea_orm::SqlxPostgresConnector::from_sqlx_postgres_pool(pool);
+    let user = user(&db, "after-hours", "after-hours@example.com").await;
+    personal_conversation(&db, user.id, "a:after-hours").await;
+    last_activity_hours_ago(&db, user.id, 3.0).await;
+    // Scheduled by the all-day rule; delivered by one whose window is closed now.
+    assert_eq!(producer(&config()).schedule_due(&db).await.unwrap(), 1);
+    let start = ((Utc::now().hour() + 2) % 24) as u8;
+    let closed = producer_with(|config| {
+        config.send_window.start_hour = start;
+        config.send_window.end_hour = start + 1;
+    });
+    let expected = closed.window().next_slot(Utc::now());
+    assert!(expected > Utc::now());
+
+    let row = open_rows(&db, user.id).await.remove(0);
+    assert_eq!(
+        closed.still_due(&db, &row).await.unwrap(),
+        StillDue::Later { due_at: expected }
+    );
+
+    let channel = Arc::new(RecordingChannel::new(CHANNEL));
+    let mut registry = DeliveryRegistry::new();
+    registry.register_producer(Arc::new(closed));
+    registry.register_channel(channel.clone());
+    let outcome = run_delivery_tick(&db, &settings(), &registry).await;
+    assert_eq!((outcome.deferred, outcome.delivered), (1, 0), "{outcome:?}");
+    let waiting = find(&db, row.id).await.unwrap().unwrap();
+    assert_eq!(waiting.state, DeliveryState::Pending);
+    assert_eq!(waiting.due_at.with_timezone(&Utc), expected);
+    assert!(waiting.outcome.get("attempts").is_none());
+    assert!(channel.deliveries().is_empty());
 }

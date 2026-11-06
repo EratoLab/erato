@@ -4,8 +4,10 @@
 use super::*;
 use crate::config::AppConfig;
 use crate::models::user::{get_or_create_user, record_entra_object_id};
+use crate::models::user_preference::teams_nudges_opted_out;
 use crate::ms_teams_bot::activity::{Activity, ConversationKind};
-use crate::ms_teams_bot::handler::on_bot_added;
+use crate::ms_teams_bot::handler::{on_bot_added, on_message};
+use crate::services::scheduled_deliveries::{NewDelivery, find, schedule};
 use crate::state::AppState;
 use axum::{
     Json, Router,
@@ -248,4 +250,160 @@ async fn installing_the_app_records_the_personal_conversation_of_known_users(poo
     assert_eq!(rows[0].service_url, base);
     // Both got their welcome card.
     assert_eq!(shared.lock().unwrap().outgoing.len(), 2);
+}
+
+async fn replies(shared: &Shared, expected: usize) -> Vec<Value> {
+    for _ in 0..100 {
+        let outgoing: Vec<Value> = shared
+            .lock()
+            .unwrap()
+            .outgoing
+            .iter()
+            .map(|(_, activity)| activity.clone())
+            .collect();
+        if outgoing.len() >= expected {
+            return outgoing;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+    panic!("expected {expected} replies");
+}
+
+/// "Don't remind me" and `/reminders off` work for a user whose bot sign-in
+/// never completes: the sender is matched by Entra object id alone, and an
+/// unknown button command does not burn the single-use token. The harness
+/// has no token service, so any sign-in attempt would fail loudly.
+///
+/// # Test Categories
+/// - `uses-db`
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn opting_out_needs_no_sign_in(pool: sqlx::PgPool) {
+    let (state, bot, shared, base) = harness(pool).await;
+    let host = Host::new(state.clone());
+    let user = get_or_create_user(&state.db, "https://issuer.example", "quiet", None)
+        .await
+        .unwrap();
+    const OID: &str = "4a1b3c5d-0000-4000-8000-00000000cafe";
+    record_entra_object_id(&state.db, &user, OID).await.unwrap();
+    host.upsert_conversation(
+        "a:personal",
+        ConversationKind::Personal,
+        user.id,
+        &base,
+        "29:user",
+    )
+    .await
+    .unwrap();
+    let message = |text: Option<&str>, value: Option<Value>| -> Activity {
+        let mut activity = json!({
+            "type": "message", "id": "m1", "serviceUrl": base,
+            "from": {"id": "29:user", "aadObjectId": OID}, "recipient": {"id": "28:bot"},
+            "conversation": {"id": "a:personal", "conversationType": "personal", "tenantId": "tenant"}
+        });
+        if let Some(text) = text {
+            activity["text"] = json!(text);
+        }
+        if let Some(value) = value {
+            activity["value"] = value;
+        }
+        serde_json::from_value(activity).unwrap()
+    };
+    let off_text = format!(
+        "All right, {} will not send you any more tips. Send /reminders on to get them again.",
+        bot.settings.app_name
+    );
+
+    on_message(
+        bot.clone(),
+        host.clone(),
+        message(Some("/reminders off"), None),
+    )
+    .await;
+    let sent = replies(&shared, 1).await;
+    assert_eq!(sent.len(), 1, "one reply, no sign-in card");
+    assert_eq!(sent[0]["text"], off_text);
+    assert!(teams_nudges_opted_out(&state.db, &user.id).await.unwrap());
+    on_message(
+        bot.clone(),
+        host.clone(),
+        message(Some("/reminders on"), None),
+    )
+    .await;
+    replies(&shared, 2).await;
+    assert!(!teams_nudges_opted_out(&state.db, &user.id).await.unwrap());
+
+    // A delivered card. The button works without sign-in; an unknown command
+    // leaves the token unclaimed; the token is claimed once.
+    let row = schedule(
+        &state.db,
+        NewDelivery {
+            user_id: user.id,
+            kind: KIND.into(),
+            due_at: Utc::now(),
+            created_by: CreatedBy::System,
+            origin: json!({}),
+            payload: json!({}),
+            dedupe_key: None,
+        },
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    let token = Uuid::new_v4();
+    state
+        .db
+        .execute_raw(statement(
+            "test.mark_delivered",
+            "UPDATE scheduled_deliveries
+             SET state = 'delivered', delivered_at = now(),
+                 outcome = jsonb_build_object(
+                     'action_token', $2::text,
+                     'action_expires_at', (now() + interval '1 day')::text,
+                     'delivered', jsonb_build_object('conversation_id', 'a:personal'))
+             WHERE id = $1",
+            vec![row.id.into(), token.to_string().into()],
+        ))
+        .await
+        .unwrap();
+    let press = |command: &str| json!({"action": ACTION, "delivery_id": row.id, "command": command, "token": token});
+
+    on_message(
+        bot.clone(),
+        host.clone(),
+        message(None, Some(press("something_else"))),
+    )
+    .await;
+    let sent = replies(&shared, 3).await;
+    assert_eq!(sent[2]["text"], "This button is not supported.");
+    assert!(
+        find(&state.db, row.id)
+            .await
+            .unwrap()
+            .unwrap()
+            .outcome
+            .get("action_claimed_at")
+            .is_none(),
+        "an unknown command leaves the token unclaimed"
+    );
+
+    on_message(
+        bot.clone(),
+        host.clone(),
+        message(None, Some(press(OPT_OUT_COMMAND))),
+    )
+    .await;
+    let sent = replies(&shared, 4).await;
+    assert_eq!(sent[3]["text"], off_text);
+    assert!(teams_nudges_opted_out(&state.db, &user.id).await.unwrap());
+    on_message(
+        bot.clone(),
+        host.clone(),
+        message(None, Some(press(OPT_OUT_COMMAND))),
+    )
+    .await;
+    let sent = replies(&shared, 5).await;
+    assert_eq!(
+        sent[4]["text"],
+        "This button was already used or has expired."
+    );
 }

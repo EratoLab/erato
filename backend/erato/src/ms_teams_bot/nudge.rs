@@ -16,7 +16,7 @@ use super::render;
 use crate::db::entity::prelude::MsTeamsConversations;
 use crate::db::entity::scheduled_deliveries::{CreatedBy, Model};
 use crate::db::entity::{ms_teams_conversations, users};
-use crate::models::user_preference::{set_teams_nudges_opt_out, teams_nudges_opted_out};
+use crate::models::user_preference::set_teams_nudges_opt_out;
 use crate::query_metrics::named_statement_from_sql_and_values;
 use crate::services::scheduled_deliveries::{
     DeliveryAction, DeliveryChannel, DeliveryContent, DeliveryLink, DeliveryOutcome,
@@ -153,6 +153,7 @@ struct ActivityRow {
     last_activity: DateTime<FixedOffset>,
     email: Option<String>,
     personal_conversations: i64,
+    opted_out: bool,
 }
 
 impl InactivityNudgeProducer {
@@ -205,7 +206,14 @@ impl InactivityNudgeProducer {
     /// the pilot when one is configured, and has not opted out. The dedupe
     /// key names the inactivity period (last activity plus, with `repeat`,
     /// the number of intervals elapsed), so a period is nudged once and a new
-    /// period begins only when the user is active again.
+    /// period begins only when the user is active again. At least one
+    /// interval lies between two tips for the same user whatever the sequence
+    /// says, so enabling `repeat` after a long silence does not catch up in a
+    /// burst.
+    ///
+    /// Activity is the newest message in a chat the user owns, or the chat's
+    /// creation when it has none: `chats.updated_at` also moves on
+    /// housekeeping writes such as archiving, which must not reset a period.
     pub async fn schedule_due(&self, db: &DatabaseConnection) -> Result<usize, Report> {
         let candidates = Candidate::find_by_statement(statement(
             "teams_nudge.candidates",
@@ -214,7 +222,8 @@ impl InactivityNudgeProducer {
                         COALESCE(a.last_activity, u.created_at) AS last_activity
                  FROM users u
                  JOIN LATERAL (
-                     SELECT max(c.updated_at) AS last_activity
+                     SELECT max(GREATEST(c.created_at,
+                                (SELECT max(m.created_at) FROM messages m WHERE m.chat_id = c.id))) AS last_activity
                      FROM chats c WHERE c.owner_user_id = u.id::text
                  ) a ON true
                  WHERE EXISTS (
@@ -238,6 +247,12 @@ impl InactivityNudgeProducer {
                  WHERE d.user_id = due.user_id AND d.kind = $5
                    AND (d.origin->>'last_activity')::timestamptz >= due.last_activity
                    AND COALESCE((d.origin->>'sequence')::int, 1) >= due.sequence
+             )
+             AND NOT EXISTS (
+                 SELECT 1 FROM scheduled_deliveries d
+                 WHERE d.user_id = due.user_id AND d.kind = $5
+                   AND d.state <> 'cancelled'
+                   AND d.created_at > now() - make_interval(secs => $1::double precision)
              )
              ORDER BY last_activity ASC
              LIMIT $3",
@@ -288,10 +303,13 @@ impl InactivityNudgeProducer {
             "SELECT COALESCE(a.last_activity, u.created_at) AS last_activity,
                     u.email,
                     (SELECT count(*) FROM ms_teams_conversations t
-                     WHERE t.user_id = u.id AND t.conversation_type = 'personal') AS personal_conversations
+                     WHERE t.user_id = u.id AND t.conversation_type = 'personal') AS personal_conversations,
+                    EXISTS (SELECT 1 FROM user_preferences p
+                            WHERE p.user_id = u.id AND p.teams_nudges_opted_out_at IS NOT NULL) AS opted_out
              FROM users u
              JOIN LATERAL (
-                 SELECT max(c.updated_at) AS last_activity
+                 SELECT max(GREATEST(c.created_at,
+                            (SELECT max(m.created_at) FROM messages m WHERE m.chat_id = c.id))) AS last_activity
                  FROM chats c WHERE c.owner_user_id = u.id::text
              ) a ON true
              WHERE u.id = $1",
@@ -309,14 +327,18 @@ impl DeliveryProducer for InactivityNudgeProducer {
     }
 
     async fn produce(&self, db: &DatabaseConnection) -> Result<usize, Report> {
+        if self
+            .last_run
+            .lock()
+            .expect("nudge producer gate")
+            .is_some_and(|at| at.elapsed() < PRODUCE_INTERVAL)
         {
-            let mut last_run = self.last_run.lock().expect("nudge producer gate");
-            if last_run.is_some_and(|at| at.elapsed() < PRODUCE_INTERVAL) {
-                return Ok(0);
-            }
-            *last_run = Some(Instant::now());
+            return Ok(0);
         }
-        self.schedule_due(db).await
+        let result = self.schedule_due(db).await;
+        // A failed run is retried on the next tick rather than in an hour.
+        *self.last_run.lock().expect("nudge producer gate") = result.is_ok().then(Instant::now);
+        result
     }
 
     async fn still_due(&self, db: &DatabaseConnection, row: &Model) -> Result<StillDue, Report> {
@@ -336,7 +358,7 @@ impl DeliveryProducer for InactivityNudgeProducer {
         if activity.last_activity > recorded {
             return Ok(no("user became active"));
         }
-        if teams_nudges_opted_out(db, &row.user_id).await? {
+        if activity.opted_out {
             return Ok(no("user opted out"));
         }
         if activity.personal_conversations == 0 {
@@ -349,6 +371,14 @@ impl DeliveryProducer for InactivityNudgeProducer {
                 .is_some_and(|email| self.pilot_users.contains(&email.to_ascii_lowercase()))
         {
             return Ok(no("not a pilot user"));
+        }
+        let now = Utc::now();
+        let slot = self.window.next_slot(now);
+        if slot > now {
+            // Retries, reclaims and a restart that straddled the window's end
+            // all come through here: the tip waits for the next slot instead
+            // of going out late, and no attempt is used.
+            return Ok(StillDue::Later { due_at: slot });
         }
         Ok(StillDue::Yes)
     }
@@ -429,10 +459,24 @@ pub struct DeliverySubmit {
     pub token: Uuid,
 }
 
+/// What a card button asks for. Parsed before the token is claimed, so an
+/// unknown command cannot burn a single-use token.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DeliveryCommand {
+    OptOut,
+}
+
 impl DeliverySubmit {
     pub fn from_value(value: &Value) -> Option<Self> {
         let submit: Self = serde_json::from_value(value.clone()).ok()?;
         (submit.action == ACTION).then_some(submit)
+    }
+
+    pub fn command(&self) -> Option<DeliveryCommand> {
+        match self.command.as_str() {
+            OPT_OUT_COMMAND => Some(DeliveryCommand::OptOut),
+            _ => None,
+        }
     }
 }
 
